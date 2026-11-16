@@ -82,7 +82,12 @@ pub enum EmissionFrame {
     },
 }
 
-fn made(d: &deep_gpu::counted::Wgpu, label: &str, size: [u32; 2], format: wgpu::TextureFormat) -> Target {
+fn made(
+    d: &deep_gpu::counted::Wgpu,
+    label: &str,
+    size: [u32; 2],
+    format: wgpu::TextureFormat,
+) -> Target {
     let texture = texture2d(
         d,
         label,

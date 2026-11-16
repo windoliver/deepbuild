@@ -78,6 +78,8 @@ struct Stub {
 
 struct Args {
     look: Look3,
+    /// #462: the looks the fixtures' shots and regions name.
+    looks: BTreeMap<String, crate::regions::Named>,
     writer: String,
     store: PathBuf,
     scene: PathBuf,
@@ -93,6 +95,62 @@ struct Args {
     display: Option<f64>,
     environment: Option<Value>,
     delay_ms: Option<u64>,
+    /// #177: the scene presents through the main display's HDR surface (`screen: main`,
+    /// `hdr: auto`).
+    hdr_screen: bool,
+}
+
+/// #177: the main display's HDR surface the scene presents through, and the headroom its tone map
+/// rolls off to; made on the main thread, used on the GPU worker.
+struct Screen {
+    #[cfg(target_os = "macos")]
+    layer: deep_app::hdr_layer::ScreenLayer,
+    headroom: f32,
+}
+
+// SAFETY: the window is only touched on the main thread, where it is made and dropped; the worker
+// uses the wgpu surface alone.
+unsafe impl Send for Screen {}
+unsafe impl Sync for Screen {}
+
+impl Screen {
+    #[cfg(target_os = "macos")]
+    fn open(app: &App, size: [u32; 2]) -> Result<Screen, Value> {
+        let gpu = app.worker.call(|state| state.gpu.clone());
+        let instance = gpu.seam().map(|c| c.instance.clone()).ok_or_else(|| {
+            refused("unsupported_platform", "the noop backend has no display")
+        })?;
+        let layer = deep_app::hdr_layer::ScreenLayer::main(&instance)
+            .map_err(|e| refused("unsupported_platform", e))?;
+        // Configured here, the surface asks the display for EDR before the headroom is read, so
+        // the frames roll off to what the display gives once it does.
+        layer.layer.configure(&gpu.device().device, size, false);
+        let headroom = layer.headroom().1;
+        Ok(Screen { layer, headroom })
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    fn open(_: &App, _: [u32; 2]) -> Result<Screen, Value> {
+        Err(refused("unsupported_platform", "an HDR screen is macOS's"))
+    }
+
+    /// The next frame's HDR surface, configured at the scene's size when the screen opened.
+    #[cfg(target_os = "macos")]
+    fn frame(&self) -> Option<wgpu::SurfaceTexture> {
+        match self.layer.layer.surface.get_current_texture() {
+            wgpu::CurrentSurfaceTexture::Success(t)
+            | wgpu::CurrentSurfaceTexture::Suboptimal(t) => Some(t),
+            other => {
+                eprintln!("envelope: the HDR screen gave no frame: {other:?}");
+                None
+            }
+        }
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    fn frame(&self) -> Option<wgpu::SurfaceTexture> {
+        None
+    }
 }
 
 fn bad(what: &str) -> Value {
@@ -154,6 +212,7 @@ fn parse(call: &Value) -> Result<Args, Value> {
         ));
     };
     let look = Look3::read(&call["look"]).map_err(|e| bad(&format!("look: {e}")))?;
+    let looks = crate::regions::looks_of(call, None)?;
     let separate = match call.get("separate_items") {
         None => None,
         Some(s) => match (s["doc"].as_str(), s["instanced"].as_str()) {
@@ -197,6 +256,7 @@ fn parse(call: &Value) -> Result<Args, Value> {
     };
     Ok(Args {
         look,
+        looks,
         writer: writer.to_string(),
         store: PathBuf::from(store),
         scene: PathBuf::from(scene),
@@ -212,6 +272,12 @@ fn parse(call: &Value) -> Result<Args, Value> {
         display,
         environment: test_only(call, "stub_environment")?.cloned(),
         delay_ms: test_only(call, "stub_pipeline_delay_ms")?.and_then(Value::as_u64),
+        hdr_screen: match (call.get("hdr"), call.get("screen")) {
+            (None, None) => false,
+            (Some(h), Some(s)) if s == "main" && (h == "auto" || h == "off") => h == "auto",
+            (Some(h), None) if h == "auto" || h == "off" => false,
+            _ => return Err(bad("hdr is auto or off, and screen is main")),
+        },
     })
 }
 
@@ -271,6 +337,9 @@ struct Played {
     log: Vec<Value>,
     inputs: Vec<Value>,
     input_p95s: Vec<Option<f64>>,
+    /// #177: the timed frames, and those that presented through the HDR surface.
+    timed_frames: u64,
+    hdr_frames: u64,
 }
 
 /// The check of `path` as the writer's revision, with its warm-up.
@@ -300,6 +369,7 @@ fn checked(
         labels,
         Some((&raw, plants)),
         planted,
+        None,
     )
     .map_err(|issues| json!({"code": "refused", "issues": issues}))?;
     Ok((raw, a))
@@ -308,10 +378,12 @@ fn checked(
 /// The revision's view, opened at check with its warm-up compiled, as the app's window opens it:
 /// its slots, and the internal scale and history window its class's memory fits, with the
 /// upscale's pipelines when that scale is below 1.
+#[allow(clippy::too_many_arguments)]
 fn opened(
     device: &Device,
     kit: &mut Kit,
     look: &Look3,
+    looks: &BTreeMap<String, crate::regions::Named>,
     a: Admitted,
     labels: &mut Labels,
     plants: &Plants,
@@ -343,6 +415,17 @@ fn opened(
         kit.upscale = Some(Arc::new(compile_upscale(device)));
     }
     view.warm(device, look, &warm.scenes);
+    // #462: the looks its shots and regions name, each rendered whole and mixed into the frame.
+    let independent = planted == Some(Planted::RegionSidesClipIndependently);
+    view.set_regions(
+        device,
+        &doc,
+        look,
+        looks,
+        labels,
+        crate::session3::msaa_planted(planted),
+        independent,
+    )?;
     let (options, check) = plants.ops;
     view.ops = DocOps::new(device, &doc, options, check, &[]);
     view.want_targets(&doc, plants.builds_unread_targets);
@@ -404,10 +487,10 @@ fn draw(
         0,
     )
     .map_err(|r| refused(r.code, r.path))?;
-    timer.resolve(&mut encoder);
     let cpu = began.elapsed().as_secs_f64() * 1e3;
     device.queue.submit([encoder.finish()]);
     memory::drain(device);
+    timer.resolve_after(device);
     Ok((cpu, timer.read(device)))
 }
 
@@ -447,6 +530,7 @@ fn play(
     plants: &Plants,
     planted: Option<Planted>,
     display: Option<Display>,
+    screen: Option<&Screen>,
 ) -> Result<Played, Value> {
     let stub = match &args.stub {
         Some(s) => Some(
@@ -469,7 +553,16 @@ fn play(
     let estimate_bytes = a.fit.bytes();
     let window = a.fit.history;
     let mut kit = Kit::new(device);
-    let mut view = opened(device, &mut kit, &args.look, a, labels, plants, planted)?;
+    let mut view = opened(
+        device,
+        &mut kit,
+        &args.look,
+        &args.looks,
+        a,
+        labels,
+        plants,
+        planted,
+    )?;
     let mut timer = Timer::new(device);
     let rate = display.map_or(60.0, |d| d.rate);
     // Frame history beside every other pass (#173), its grid a frame of the play.
@@ -502,6 +595,8 @@ fn play(
         log: Vec::new(),
         inputs: Vec::new(),
         input_p95s: Vec::new(),
+        timed_frames: 0,
+        hdr_frames: 0,
     };
     let mut peak: Option<u64> = Some(0);
     for run in 0..=RUNS as u64 {
@@ -534,13 +629,27 @@ fn play(
                         labels,
                         None,
                         planted,
+                        None,
                     )
                     .map_err(|issues| json!({"code": "refused", "issues": issues}))?;
                     view.set_frames(a.into_frames());
                 }
             }
             let t = (k as f64 * FLICKS_PER_SECOND / rate).round() as i64;
+            // #177: the frame through the main display's HDR surface, beside every other pass.
+            let hdr = screen.and_then(|s| Some((s.frame()?, s.headroom)));
+            view.hdr = hdr.as_ref().map(|(t, headroom)| deep_scene3d_render::HdrFrame {
+                into: t.texture.create_view(&Default::default()),
+                headroom: *headroom,
+            });
             let (cpu, resolved) = draw(device, &kit, &args.look, &mut view, t, labels, &mut timer)?;
+            if timed {
+                played.timed_frames += 1;
+                played.hdr_frames += u64::from(hdr.is_some());
+            }
+            if let Some((t, _)) = hdr {
+                device.queue.present(t);
+            }
             let marks = passes_of(&view, &timer);
             let lost = device.is_lost();
             let (gpu, passes, cpu_ms) = match stub {
@@ -1041,6 +1150,10 @@ pub fn opens(app: &mut App, call: &Value) -> Value {
         Ok(l) => l,
         Err(e) => return bad(&format!("look: {e}")),
     };
+    let looks = match crate::regions::looks_of(call, None) {
+        Ok(l) => l,
+        Err(e) => return e,
+    };
     let delay = match test_only(call, "stub_pipeline_delay_ms") {
         Ok(d) => d.and_then(Value::as_u64),
         Err(e) => return e,
@@ -1070,7 +1183,16 @@ pub fn opens(app: &mut App, call: &Value) -> Value {
                     planted,
                 )?;
                 let mut kit = Kit::new(&device);
-                let mut view = opened(&device, &mut kit, &look, a, &mut labels, &plants, planted)?;
+                let mut view = opened(
+                    &device,
+                    &mut kit,
+                    &look,
+                    &looks,
+                    a,
+                    &mut labels,
+                    &plants,
+                    planted,
+                )?;
                 // The planted meter starts its clock once the check's warm-up is done.
                 if planted == Some(Planted::WaitClockAfterWarmup) {
                     start = (Instant::now(), device.device.counts().read());
@@ -1107,7 +1229,7 @@ fn peak_rss() -> Option<f64> {
 }
 
 pub fn call(app: &mut App, out: &str, call: &Value) -> Value {
-    let args = match parse(call) {
+    let mut args = match parse(call) {
         Ok(a) => a,
         Err(e) => return e,
     };
@@ -1120,7 +1242,22 @@ pub fn call(app: &mut App, out: &str, call: &Value) -> Value {
         None
     };
     let planted = app.planted;
-    app.worker.call(move |state| {
+    let screen = if args.hdr_screen {
+        match Screen::open(app, args.size) {
+            Ok(s) => Some(std::sync::Arc::new(s)),
+            Err(e) => return e,
+        }
+    } else {
+        None
+    };
+    // On the main display (#177) frames latch and show on its own refresh.
+    #[cfg(target_os = "macos")]
+    if let (None, Some(s)) = (args.display, &screen) {
+        args.display = Some(s.layer.refresh_hz());
+    }
+    let on_screen = screen.clone();
+    let mut reply = app.worker.call(move |state| {
+        let screen = on_screen;
         let device = match state.gpu.recover() {
             Ok(d) => d,
             Err(e) => return refused("no_device", e),
@@ -1134,7 +1271,7 @@ pub fn call(app: &mut App, out: &str, call: &Value) -> Value {
             rate,
             held: matches!(planted, Some(Planted::HoldsInput | Planted::HeldInputMeterAtEncode)),
         });
-        let scene = match play(&device, &args, SCENE, &args.scene, &mut labels, &plants, planted, display) {
+        let scene = match play(&device, &args, SCENE, &args.scene, &mut labels, &plants, planted, display, screen.as_deref()) {
             Ok(p) => p,
             Err(e) => return e,
         };
@@ -1143,8 +1280,8 @@ pub fn call(app: &mut App, out: &str, call: &Value) -> Value {
         let separate = match separate {
             None => None,
             Some((doc, instanced)) => {
-                let one = play(&device, &args, SEPARATE, doc, &mut labels, &plants, planted, display);
-                let two = play(&device, &args, INSTANCED, instanced, &mut labels, &plants, planted, display);
+                let one = play(&device, &args, SEPARATE, doc, &mut labels, &plants, planted, display, None);
+                let two = play(&device, &args, INSTANCED, instanced, &mut labels, &plants, planted, display, None);
                 match (one, two) {
                     (Ok(a), Ok(b)) => Some((a, b)),
                     (Err(e), _) | (_, Err(e)) => return e,
@@ -1230,8 +1367,21 @@ pub fn call(app: &mut App, out: &str, call: &Value) -> Value {
         if args.report_inputs {
             reply["inputs"] = json!(scene.inputs);
         }
+        if screen.is_some() {
+            let on = scene.timed_frames > 0 && scene.hdr_frames == scene.timed_frames;
+            reply["hdr"] = json!({"state": if on { "on" } else { "off" }});
+        }
         reply
-    })
+    });
+    // #177: the main display's headroom, read on the main thread once the runs end with the HDR
+    // surface still on screen.
+    #[cfg(target_os = "macos")]
+    if let (Some(s), Some(h)) = (&screen, reply.get_mut("hdr")) {
+        let (potential, current) = s.layer.headroom();
+        h["potential_headroom"] = json!(potential);
+        h["headroom"] = json!(current);
+    }
+    reply
 }
 
 /// `envelope_counts`: what the device creates and uploads in each frame of a document's play on
@@ -1248,6 +1398,10 @@ pub fn counts(app: &mut App, call: &Value) -> Value {
     let look = match Look3::read(&call["look"]) {
         Ok(l) => l,
         Err(e) => return bad(&format!("look: {e}")),
+    };
+    let looks = match crate::regions::looks_of(call, None) {
+        Ok(l) => l,
+        Err(e) => return e,
     };
     let fps = call["fps"].as_f64().filter(|f| *f > 0.0).unwrap_or(60.0);
     let mut patches = BTreeMap::new();
@@ -1283,7 +1437,16 @@ pub fn counts(app: &mut App, call: &Value) -> Value {
         };
         let mut stamped = a.doc.clone();
         let mut kit = Kit::new(&device);
-        let mut view = match opened(&device, &mut kit, &look, a, &mut labels, &plants, planted) {
+        let mut view = match opened(
+            &device,
+            &mut kit,
+            &look,
+            &looks,
+            a,
+            &mut labels,
+            &plants,
+            planted,
+        ) {
             Ok(v) => v,
             Err(e) => return e,
         };
@@ -1310,6 +1473,7 @@ pub fn counts(app: &mut App, call: &Value) -> Value {
                     &mut labels,
                     Some((&payload, &plants)),
                     planted,
+                    None,
                 ) {
                     Ok(a) => a,
                     Err(issues) => return json!({"code": "refused", "issues": issues}),

@@ -144,7 +144,12 @@ impl Inputs {
             if let Some(&Some(s)) = control.shots.get(control.default) {
                 let shot = &motion.shots[s];
                 cameras[shot.camera].start = shot.target;
-                staged[shot.camera].push(Staged { t: i64::MIN, shot: s, span: 0, ease: feel.ease });
+                staged[shot.camera].push(Staged {
+                    t: i64::MIN,
+                    shot: s,
+                    span: 0,
+                    ease: feel.ease,
+                });
             }
         }
         let mut entries: Vec<&Entry> = track.iter().collect();
@@ -177,10 +182,19 @@ impl Inputs {
                 let shot = &motion.shots[s];
                 let ease = shot.ease.unwrap_or(feel.ease);
                 cameras[shot.camera].push(e.t, shot.target, shot.glide, ease);
-                staged[shot.camera].push(Staged { t: e.t, shot: s, span: shot.glide, ease });
+                staged[shot.camera].push(Staged {
+                    t: e.t,
+                    shot: s,
+                    span: shot.glide,
+                    ease,
+                });
             }
         }
-        Some(Inputs { follows, cameras, staged })
+        Some(Inputs {
+            follows,
+            cameras,
+            staged,
+        })
     }
 
     /// The earliest time after `t` at which anything the track moves may differ.
@@ -188,7 +202,9 @@ impl Inputs {
         // A stage shot's glide moves its whole pose, whether or not its target moves.
         let staged = self.staged.iter().filter_map(|list| {
             let i = list.partition_point(|s| s.t <= t);
-            let gliding = i.checked_sub(1).is_some_and(|k| t.saturating_sub(list[k].t) < list[k].span);
+            let gliding = i
+                .checked_sub(1)
+                .is_some_and(|k| t.saturating_sub(list[k].t) < list[k].span);
             if gliding {
                 Some(t + 1)
             } else {

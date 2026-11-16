@@ -1,0 +1,87 @@
+{
+  "id": "verbs.broadcast_twin",
+  "version": "1.0",
+  "title": "Broadcast, planted twin",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "The planted twin of broadcast: a wrong curve, timing or end state its fixture must catch.",
+  "inputs": {
+    "copies": {
+      "type": "integer",
+      "default": 5,
+      "min": 1,
+      "max": 32,
+      "about": "how many outlines spread out"
+    }
+  },
+  "steps": {
+    "echo": {
+      "op": "mark",
+      "kind": "rect@1",
+      "repeat": {
+        "count": "copies",
+        "as": "j"
+      },
+      "params": {
+        "box": [
+          "x0 - cx",
+          "y0 - cy",
+          "w",
+          "h"
+        ],
+        "paint": {
+          "stroke": {
+            "role": "accent",
+            "width": 2
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          "cx",
+          "cy",
+          0
+        ]
+      }
+    },
+    "hide": {
+      "op": "cue",
+      "params": {
+        "on": "echo",
+        "set": {
+          "adjust/opacity": 0
+        },
+        "until": 0
+      }
+    },
+    "spread": {
+      "op": "cue",
+      "params": {
+        "on": "echo",
+        "from": {
+          "adjust/opacity": 0.8
+        },
+        "set": {
+          "at/scale": [
+            "now[0] * 3",
+            "now[1] * 3",
+            "now[2]"
+          ],
+          "adjust/opacity": 0
+        }
+      }
+    },
+    "lift": {
+      "op": "cue",
+      "params": {
+        "set": {
+          "adjust/brightness": {
+            "pulse": {
+              "amount": 0.3
+            }
+          }
+        }
+      }
+    }
+  }
+}

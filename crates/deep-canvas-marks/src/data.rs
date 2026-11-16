@@ -23,6 +23,7 @@ use crate::scene::{
     Refused, TextSpec,
 };
 use crate::story::{self, Rows};
+use crate::ticks::{step_param, time_label};
 
 /// The most rows a mark set holds (Mark set: "exceed 1M rows per set" it can never).
 const MAX_ROWS: u64 = 1_000_000;
@@ -66,6 +67,10 @@ pub(crate) fn column_of(c: &Value, n: usize, path: &str) -> Result<Column, Refus
     };
     if let Some(v) = c.get("const") {
         return Ok(Column::Const(v.clone()));
+    }
+    // #538: a copy column no frame has looked up yet shows nothing; a frame rewrites it.
+    if crate::copy::is_copy_column(&Value::Object(c.clone())) {
+        return Ok(Column::Texts(vec![String::new(); n]));
     }
     // A table column reaches the module inlined by whoever holds the evidence store, and a
     // column-view source by the build's column view; one still unread names what's missing.
@@ -157,6 +162,8 @@ pub struct Scale {
     pub range: [f64; 2],
     /// The tick step: data units for linear, milliseconds for time.
     pub step: f64,
+    /// The step `ticks` states, which every domain the scale takes keeps (#233).
+    pub ticks: Option<f64>,
     /// An ordinal scale's categories.
     pub categories: Vec<String>,
     /// The palette roles of an ordinal or a quantize scale's range, or the stops of a continuous
@@ -336,7 +343,11 @@ pub fn log_rows(id: &str, items: &Map<String, Value>) -> Result<Vec<String>, Ref
 }
 
 impl Scale {
-    fn read(id: &str, item: &Value, items: &Map<String, Value>) -> Result<Scale, Refused> {
+    pub(crate) fn read(
+        id: &str,
+        item: &Value,
+        items: &Map<String, Value>,
+    ) -> Result<Scale, Refused> {
         let path = format!("items/{id}/params");
         let p = item.get("params").and_then(Value::as_object);
         let get = |k: &str| p.and_then(|p| p.get(k));
@@ -377,6 +388,7 @@ impl Scale {
                 domain: [0.0, 0.0],
                 range: [0.0, 0.0],
                 step: 1.0,
+                ticks: None,
                 categories: strings("domain")?,
                 roles: strings("range")?,
                 from: None,
@@ -389,6 +401,8 @@ impl Scale {
             }
         }
         let nice = get("nice").and_then(Value::as_bool).unwrap_or(true);
+        let ticks = step_param(get("ticks"), &path)?;
+        let step_of = |kind, d| ticks.unwrap_or_else(|| step_of(kind, d));
         // Palette roles as a continuous scale's range make it a colormap.
         let ramp = kind != ScaleKind::Quantize
             && get("range")
@@ -396,6 +410,9 @@ impl Scale {
                 .is_some_and(|r| r.first().is_some_and(Value::is_string));
         let (range, roles) = if kind == ScaleKind::Quantize || ramp {
             ([0.0, 0.0], strings("range")?)
+        } else if matches!(get("range").and_then(Value::as_str), Some("x" | "y" | "z")) {
+            // #226: a range naming a view axis spans that axis, which its reader places: the unit.
+            ([0.0, 1.0], Vec::new())
         } else {
             (pair("range")?, Vec::new())
         };
@@ -445,6 +462,7 @@ impl Scale {
                 domain,
                 range,
                 step: step_of(kind, domain),
+                ticks,
                 categories: Vec::new(),
                 roles,
                 from: None,
@@ -484,6 +502,7 @@ impl Scale {
             domain,
             range,
             step,
+            ticks,
             categories: Vec::new(),
             roles,
             from,
@@ -495,7 +514,7 @@ impl Scale {
     fn resting(&self, domain: [f64; 2]) -> Scale {
         Scale {
             domain,
-            step: step_of(self.kind, domain),
+            step: self.ticks.unwrap_or_else(|| step_of(self.kind, domain)),
             follows: None,
             ..self.clone()
         }
@@ -632,34 +651,6 @@ impl Scale {
     }
 }
 
-/// A UTC civil date from days since the epoch (Howard Hinnant's `civil_from_days`).
-fn civil(days: i64) -> (i64, u32, u32) {
-    let z = days + 719_468;
-    let era = z.div_euclid(146_097);
-    let doe = z.rem_euclid(146_097);
-    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
-    (yoe + era * 400 + i64::from(m <= 2), m, d)
-}
-
-/// A time tick's label at its step: seconds, minutes or the date.
-fn time_label(ms: i64, step: f64) -> String {
-    let secs = ms.div_euclid(1000);
-    let (days, day_secs) = (secs.div_euclid(86_400), secs.rem_euclid(86_400));
-    let (h, m, s) = (day_secs / 3600, day_secs % 3600 / 60, day_secs % 60);
-    if step >= 864e5 {
-        let (y, mo, d) = civil(days);
-        format!("{y:04}-{mo:02}-{d:02}")
-    } else if step >= 6e4 {
-        format!("{h:02}:{m:02}")
-    } else {
-        format!("{h:02}:{m:02}:{s:02}")
-    }
-}
-
 /// Whether a bar or an area reads scale `id`.
 fn bars_through(id: &str, items: &Map<String, Value>) -> bool {
     items.values().any(|item| {
@@ -683,7 +674,22 @@ pub fn scale_of(id: &str, item: &Value) -> Result<Scale, Refused> {
     Scale::read(id, item, &Map::new())
 }
 
-fn scale_named(items: &Map<String, Value>, id: &str, path: &str) -> Result<Scale, Refused> {
+/// [`scale_named`], following the keys of a channel on its domain (#226).
+fn keyed_named(
+    items: &Map<String, Value>,
+    channels: Option<&Value>,
+    id: &str,
+    path: &str,
+) -> Result<Scale, Refused> {
+    let scale = scale_named(items, id, path)?;
+    Ok(crate::follow::keyed(scale, id, &items[id], items, channels))
+}
+
+pub(crate) fn scale_named(
+    items: &Map<String, Value>,
+    id: &str,
+    path: &str,
+) -> Result<Scale, Refused> {
     match items.get(id) {
         Some(item) if item.get("kind").and_then(Value::as_str) == Some("scale@1") => {
             Scale::read(id, item, items)
@@ -911,13 +917,17 @@ pub fn domain_report(id: &str, item: &Value, items: &Map<String, Value>) -> Resu
 
 /// What `geometry` answers of an axis at t: every tick its scale holds at any period, with its
 /// opacity.
-pub fn ticks_report(id: &str, item: &Value, items: &Map<String, Value>) -> Result<Value, Refused> {
+pub fn ticks_report(
+    id: &str,
+    item: &Value,
+    (items, channels): (&Map<String, Value>, Option<&Value>),
+) -> Result<Value, Refused> {
     let path = format!("items/{id}/params/scale");
     let scale = item.pointer("/params/scale").and_then(Value::as_str);
     let Some(scale) = scale else {
         return refuse("bad_axis", path);
     };
-    let ticks = scale_named(items, scale, &path)?.faded_ticks();
+    let ticks = keyed_named(items, channels, scale, &path)?.faded_ticks();
     Ok(ticks
         .into_iter()
         .map(|(value, _, opacity)| json!({"value": value, "opacity": opacity}))
@@ -1124,7 +1134,11 @@ pub fn mark_set(
             }
             let mut at = vec![0.0; n];
             for (r, i) in rank.into_iter().enumerate() {
-                at[i] = if n > 1 { r as f64 / (n - 1) as f64 } else { 0.0 };
+                at[i] = if n > 1 {
+                    r as f64 / (n - 1) as f64
+                } else {
+                    0.0
+                };
             }
             Some((stops, at))
         }
@@ -1303,6 +1317,8 @@ pub fn mark_set(
                     align: Align::Start,
                     bound: false,
                     spans: Vec::new(),
+                    gap: 0.0,
+                    indent: 0.0,
                 },
                 origin: at,
                 role: None,
@@ -1862,24 +1878,13 @@ fn cross_zero(id: &str, items: &Map<String, Value>, path: &str) -> Result<(bool,
     refuse("bad_axis", path)
 }
 
-/// One axis, generated from its scale: the line along the scale's range, a tick per step and its
-/// label; labels that would crowd thin by parity, keeping the first and the last. With `grid`, a
-/// grid line per tick under them, from the line across the plot to the frame's far edge
-/// (`frame`, the document's size in u).
-pub fn axis(
-    id: &str,
-    item: &Value,
+/// Where an axis runs: its side, whether it lies flat, and where it crosses the other way.
+pub(crate) fn axis_line<'a>(
+    scale_id: &str,
+    p: &'a Map<String, Value>,
     items: &Map<String, Value>,
-    palette: &Palette,
-    pos: [f64; 2],
-    frame: [f64; 2],
-) -> Result<Drawing, Refused> {
-    let path = format!("items/{id}/params");
-    let p = object_or_empty(item.get("params"));
-    let Some(scale_id) = p.get("scale").and_then(Value::as_str) else {
-        return refuse("bad_axis", format!("{path}/scale"));
-    };
-    let scale = scale_named(items, scale_id, &format!("{path}/scale"))?;
+    path: &str,
+) -> Result<(&'a str, bool, f64), Refused> {
     let side = p.get("side").and_then(Value::as_str).unwrap_or("bottom");
     let through_zero = match side {
         "zero" => Some(cross_zero(scale_id, items, &format!("{path}/side"))?),
@@ -1893,6 +1898,28 @@ pub fn axis(
     };
     let cross = p.get("at").and_then(Value::as_f64).unwrap_or(0.0)
         + through_zero.map_or(0.0, |(_, cross)| cross);
+    Ok((side, horizontal, cross))
+}
+
+/// One axis, generated from its scale: the line along the scale's range, a tick per step and its
+/// label; labels that would crowd thin by parity, keeping the first and the last. With `grid`, a
+/// grid line per tick under them, from the line across the plot to the frame's far edge
+/// (`frame`, the document's size in u).
+pub fn axis(
+    id: &str,
+    item: &Value,
+    (items, channels): (&Map<String, Value>, Option<&Value>),
+    palette: &Palette,
+    pos: [f64; 2],
+    frame: [f64; 2],
+) -> Result<Drawing, Refused> {
+    let path = format!("items/{id}/params");
+    let p = object_or_empty(item.get("params"));
+    let Some(scale_id) = p.get("scale").and_then(Value::as_str) else {
+        return refuse("bad_axis", format!("{path}/scale"));
+    };
+    let scale = keyed_named(items, channels, scale_id, &format!("{path}/scale"))?;
+    let (side, horizontal, cross) = axis_line(scale_id, p, items, &path)?;
     let color = role(
         palette,
         p.get("role").and_then(Value::as_str).unwrap_or("muted"),
@@ -1917,7 +1944,11 @@ pub fn axis(
     // Grid lines first, under the line, the ticks and the labels: each from the line to the
     // frame's edge on the side away from the labels.
     if p.get("grid").and_then(Value::as_bool) == Some(true) {
-        let at = if horizontal { cross + pos[1] } else { cross + pos[0] };
+        let at = if horizontal {
+            cross + pos[1]
+        } else {
+            cross + pos[0]
+        };
         let far = if out_dir > 0.0 {
             0.0
         } else if horizontal {
@@ -1939,13 +1970,12 @@ pub fn axis(
             ));
         }
     }
-    marks.push(rule(
-        format!("{id}#line"),
-        point(scale.range[0], 0.0),
-        point(scale.range[1], 0.0),
-        1.0,
-        color,
-    ));
+    let width = crate::ticks::width(p);
+    // #233: an axis that states its ticks draws them and its line as stroked open paths.
+    let rule: fn(String, [f64; 2], [f64; 2], f64, [u8; 3]) -> Mark =
+        if p.contains_key("tick") { crate::ticks::line } else { rule };
+    let (from, to) = (point(scale.range[0], 0.0), point(scale.range[1], 0.0));
+    marks.push(rule(format!("{id}#line"), from, to, width, color));
     let ticks: Vec<(f64, String)> = faded.iter().map(|(v, l, _)| (*v, l.clone())).collect();
     // Thin by parity until labels clear each other: every 2nd, then every 4th, first and last kept.
     let est = |l: &str| 0.6 * LABEL_SIZE * l.chars().count() as f64 + 4.0;
@@ -1981,14 +2011,11 @@ pub fn axis(
             fades.insert(format!("{id}#tick{k}"), alpha);
             fades.insert(format!("{id}#label{k}"), alpha);
         }
-        marks.push(rule(
-            format!("{id}#tick{k}"),
-            point(along, 0.0),
-            point(along, out_dir * TICK),
-            1.0,
-            color,
-        ));
-        if !kept.contains(&k) {
+        let [a, b] = crate::ticks::span(p, *v, out_dir * TICK);
+        let tick = format!("{id}#tick{k}");
+        marks.push(rule(tick, point(along, a), point(along, b), width, color));
+        // #233: `labels: false` leaves them to items placed onto the ticks (`#tick:<value>`).
+        if !kept.contains(&k) || p.get("labels") == Some(&Value::Bool(false)) {
             continue;
         }
         let (origin, align) = if horizontal {
@@ -2020,6 +2047,8 @@ pub fn axis(
                 align,
                 bound: false,
                 spans: Vec::new(),
+                gap: 0.0,
+                indent: 0.0,
             },
             origin,
             role: None,
@@ -2064,6 +2093,8 @@ pub fn axis(
                 align,
                 bound: false,
                 spans: Vec::new(),
+                gap: 0.0,
+                indent: 0.0,
             },
             origin,
             role: None,
@@ -2198,6 +2229,8 @@ pub fn legend(
                 align: Align::Start,
                 bound: false,
                 spans: Vec::new(),
+                gap: 0.0,
+                indent: 0.0,
             },
             origin: [x, mid - line / 2.0],
             role: None,
@@ -2259,7 +2292,7 @@ mod tests {
             let drawn = super::axis(
                 "a",
                 &axis,
-                all.as_object().unwrap(),
+                (all.as_object().unwrap(), None),
                 &palette,
                 [0.0, 0.0],
                 [640.0, 480.0],
@@ -2352,7 +2385,7 @@ mod tests {
         let marks = axis(
             "ax",
             &json!({"params": {"scale": "x", "side": "bottom", "at": 50}}),
-            items,
+            (items, None),
             &palette,
             [0.0, 0.0],
             [640.0, 480.0],
@@ -2371,7 +2404,7 @@ mod tests {
         let marks = axis(
             "ax",
             &json!({"params": {"scale": "x"}}),
-            items.as_object().unwrap(),
+            (items.as_object().unwrap(), None),
             &palette,
             [0.0, 0.0],
             [640.0, 480.0],
@@ -2399,7 +2432,7 @@ mod tests {
         let marks = axis(
             "ax",
             &json!({"params": {"scale": "y", "side": "left", "at": 48, "title": "Sales"}}),
-            items.as_object().unwrap(),
+            (items.as_object().unwrap(), None),
             &palette,
             [0.0, 0.0],
             [640.0, 480.0],

@@ -1,6 +1,9 @@
 //! Issue #1454: the app as a device you paired (design: The trusted path is a device you paired). Its first answer
-//! makes an Ed25519 key, kept under the hub's root and readable only by you, and pairs it with the hub, which has the
-//! OS confirm you. From then on the app signs what it sends.
+//! makes an Ed25519 key and pairs it with the hub, which has the OS confirm you. From then on the app signs what it sends.
+//!
+//! Issue #1606: the key lives in the OS secret store (keystore.rs), never in a file, and is taken out of it only to make
+//! one signature. A key an older app kept in `~/.deepbuild/app/device.json` moves there once, at the app's next start,
+//! and the file is deleted.
 //!
 //! Issue #1579: a signature says what it's for, as the hub's one verifier checks it (packages/hub/src/trusted.ts):
 //! `signature: {signed: {device, method, hub, at, once, params}, sig}`, Ed25519 over the RFC 8785 bytes of `signed`,
@@ -21,26 +24,60 @@ const KEY_BYTES: usize = 32;
 /// A once-only ID's random bytes: 22 base64url characters.
 const ONCE_BYTES: usize = 16;
 
-/// The device the app paired as: its ID at the hub and its key.
+/// The device the app paired as: its ID at the hub. Its key stays in the OS secret store.
 pub struct Device {
     id: String,
-    key: SigningKey,
 }
 
-/// Where the app keeps its device: `{ "device", "seed" }`, only you can read it.
+/// Where an older app kept its device, `{ "device", "seed" }`, before #1606.
 fn file() -> PathBuf {
     crate::hub::root().join("app").join("device.json")
+}
+
+/// The device as the store keeps it, `{ "device", "seed" }`: its ID and its key.
+fn read(text: &str) -> Option<(String, SigningKey)> {
+    let kept: Value = serde_json::from_str(text).ok()?;
+    let seed = decode(kept["seed"].as_str()?)?;
+    Some((
+        kept["device"].as_str()?.to_owned(),
+        SigningKey::from_bytes(&<[u8; KEY_BYTES]>::try_from(seed).ok()?),
+    ))
 }
 
 impl Device {
     /// The device this home paired, if any.
     fn kept() -> Option<Device> {
-        let kept: Value = serde_json::from_str(&std::fs::read_to_string(file()).ok()?).ok()?;
-        let seed = decode(kept["seed"].as_str()?)?;
-        Some(Device {
-            id: kept["device"].as_str()?.to_owned(),
-            key: SigningKey::from_bytes(&<[u8; KEY_BYTES]>::try_from(seed).ok()?),
-        })
+        let (id, _) = read(&crate::keystore::get()?)?;
+        Some(Device { id })
+    }
+
+    /// Moves a key an older app kept in a file into the store, once, and deletes the file. Called as the app starts.
+    pub fn moved() {
+        // The planted wrong program keeps its key in that file, as the base did, and never moves one.
+        if cfg!(feature = "plant-key-in-file") {
+            return;
+        }
+        let path = file();
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            return;
+        };
+        // A file that holds no key, or one the store already replaced, only goes; a key goes into the store first.
+        if read(&text).is_some() && crate::keystore::get().is_none() {
+            if let Err(error) = crate::keystore::set(&text) {
+                eprintln!(
+                    "deep-app: {} still holds the device key: {error}",
+                    path.display()
+                );
+                return;
+            }
+        }
+        match std::fs::remove_file(&path) {
+            Ok(()) => eprintln!(
+                "deep-app: moved the device key from {} into the OS secret store and deleted the file",
+                path.display()
+            ),
+            Err(error) => eprintln!("deep-app: couldn't delete {}: {error}", path.display()),
+        }
     }
 
     /// Makes a key and pairs it: the hub has the OS confirm you first, so a key alone never pairs.
@@ -57,8 +94,9 @@ impl Device {
             .as_str()
             .ok_or_else(|| HubError::Protocol(format!("no device in {reply}")))?
             .to_owned();
-        keep(&json!({ "device": id, "seed": encode(&seed) }).to_string())?;
-        Ok(Device { id, key })
+        crate::keystore::set(&json!({ "device": id, "seed": encode(&seed) }).to_string())?;
+        drop(key);
+        Ok(Device { id })
     }
 
     /// The device, paired now if this home has none.
@@ -71,7 +109,7 @@ impl Device {
 
     /// Lets go of a device the hub no longer knows, as after a restore: the next answer pairs again.
     pub fn forget() {
-        let _ = std::fs::remove_file(file());
+        crate::keystore::delete();
     }
 
     /// `params` with a signature for `method` on the hub `hub`, over exactly those params, now and once.
@@ -86,52 +124,43 @@ impl Device {
         let at = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_or(0, |since| since.as_millis() as u64);
-        Ok(self.signed(method, hub, at, &encode(&once), params))
-    }
-
-    fn signed(
-        &self,
-        method: &str,
-        hub: &str,
-        at: u64,
-        once: &str,
-        mut params: Map<String, Value>,
-    ) -> Value {
-        let mut body = String::new();
-        canonical(&Value::Object(params.clone()), &mut body);
-        let signed = json!({
-            "device": self.id,
-            "method": method,
-            "hub": hub,
-            "at": at,
-            "once": once,
-            "params": format!("{:x}", Sha256::digest(body.as_bytes())),
-        });
-        let mut bytes = String::new();
-        canonical(&signed, &mut bytes);
-        let sig = encode(&self.key.sign(bytes.as_bytes()).to_bytes());
-        params.insert("signature".into(), json!({ "signed": signed, "sig": sig }));
-        Value::Object(params)
+        // The key comes out of the store for this one signature and is dropped, zeroed, with it.
+        let (id, key) = crate::keystore::get()
+            .as_deref()
+            .and_then(read)
+            .filter(|(id, _)| *id == self.id)
+            .ok_or_else(|| {
+                HubError::Protocol(format!("the OS secret store holds no key for {}", self.id))
+            })?;
+        Ok(signed(&key, &id, method, hub, at, &encode(&once), params))
     }
 }
 
-/// Writes the device file, readable only by you from its first byte, as the control token is.
-fn keep(text: &str) -> std::io::Result<()> {
-    use std::io::Write as _;
-    use std::os::unix::fs::OpenOptionsExt as _;
-    let path = file();
-    if let Some(folder) = path.parent() {
-        std::fs::create_dir_all(folder)?;
-    }
-    let spare = path.with_extension("tmp");
-    let mut out = std::fs::OpenOptions::new()
-        .create(true)
-        .truncate(true)
-        .write(true)
-        .mode(0o600)
-        .open(&spare)?;
-    out.write_all(text.as_bytes())?;
-    std::fs::rename(spare, path)
+/// `params` with `key`'s signature as the device `id`, for `method` on the hub `hub`, at `at`, once as `once`.
+fn signed(
+    key: &SigningKey,
+    id: &str,
+    method: &str,
+    hub: &str,
+    at: u64,
+    once: &str,
+    mut params: Map<String, Value>,
+) -> Value {
+    let mut body = String::new();
+    canonical(&Value::Object(params.clone()), &mut body);
+    let signed = json!({
+        "device": id,
+        "method": method,
+        "hub": hub,
+        "at": at,
+        "once": once,
+        "params": format!("{:x}", Sha256::digest(body.as_bytes())),
+    });
+    let mut bytes = String::new();
+    canonical(&signed, &mut bytes);
+    let sig = encode(&key.sign(bytes.as_bytes()).to_bytes());
+    params.insert("signature".into(), json!({ "signed": signed, "sig": sig }));
+    Value::Object(params)
 }
 
 /// RFC 8785 for what an answer's params hold: strings, integers, lists and objects, keys by UTF-16 code unit.
@@ -230,14 +259,12 @@ mod tests {
     #[test]
     fn a_signature_covers_the_method_the_hub_the_time_the_once_and_the_params() {
         let key = SigningKey::from_bytes(&[7; KEY_BYTES]);
-        let device = Device {
-            id: "device:01ABC".into(),
-            key: key.clone(),
-        };
         let mut params = Map::new();
         params.insert("ask".into(), json!("ask:01A"));
         params.insert("option".into(), json!("yes"));
-        let sent = device.signed(
+        let sent = signed(
+            &key,
+            "device:01ABC",
             "ask.answer",
             "abc",
             1_700_000_000_000,

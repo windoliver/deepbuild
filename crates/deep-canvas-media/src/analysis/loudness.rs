@@ -73,7 +73,10 @@ pub fn measure(samples: &[f32], weights: &[f64], rate: i64, oversample: u32) -> 
     // One channel at a time, as f64, with the interpolator's reach of zeros on either side.
     let mut padded = vec![0.0f64; frames + TAPS];
     for (c, weight) in weights.iter().enumerate() {
-        for (dst, src) in padded[BEFORE..BEFORE + frames].iter_mut().zip(samples[c..].iter().step_by(channels)) {
+        for (dst, src) in padded[BEFORE..BEFORE + frames]
+            .iter_mut()
+            .zip(samples[c..].iter().step_by(channels))
+        {
             *dst = f64::from(*src);
         }
         let x = &padded[BEFORE..BEFORE + frames];
@@ -82,18 +85,29 @@ pub fn measure(samples: &[f32], weights: &[f64], rate: i64, oversample: u32) -> 
         }
         let peak = x.iter().fold(0.0f64, |m, v| m.max(v.abs()));
         sample_peak = sample_peak.max(peak);
-        true_peak = true_peak.max(peak).max(interpolated_peak(&padded, frames, &phases));
+        true_peak = true_peak
+            .max(peak)
+            .max(interpolated_peak(&padded, frames, &phases));
     }
 
     let window = |len: usize| -> Vec<f64> {
         (1..=subblocks)
             .map(|k| {
-                let samples = if k >= len { bounds[k] - bounds[k - len] } else { bound(len) };
+                let samples = if k >= len {
+                    bounds[k] - bounds[k - len]
+                } else {
+                    bound(len)
+                };
                 energy[k.saturating_sub(len)..k].iter().sum::<f64>() / samples as f64
             })
             .collect()
     };
-    readings(window(MOMENTARY), window(SHORT_TERM), sample_peak, true_peak)
+    readings(
+        window(MOMENTARY),
+        window(SHORT_TERM),
+        sample_peak,
+        true_peak,
+    )
 }
 
 /// Sub-blocks in a momentary window (400 ms).
@@ -104,10 +118,18 @@ const SHORT_TERM: usize = 300;
 const BLOCK_HOP: usize = 10;
 
 /// Builds the readings from the mean weighted powers of each momentary and short-term window.
-fn readings(momentary: Vec<f64>, short_term: Vec<f64>, sample_peak: f64, true_peak: f64) -> Loudness {
+fn readings(
+    momentary: Vec<f64>,
+    short_term: Vec<f64>,
+    sample_peak: f64,
+    true_peak: f64,
+) -> Loudness {
     // Integrated loudness and range read only whole windows.
     let full = |list: &[f64], len: usize| list.get(len - 1..).unwrap_or_default().to_vec();
-    let blocks: Vec<f64> = full(&momentary, MOMENTARY).into_iter().step_by(BLOCK_HOP).collect();
+    let blocks: Vec<f64> = full(&momentary, MOMENTARY)
+        .into_iter()
+        .step_by(BLOCK_HOP)
+        .collect();
     let integrated = integrated(&blocks);
     let range = range(&full(&short_term, SHORT_TERM));
     let momentary: Vec<f64> = momentary.into_iter().map(lufs).collect();
@@ -141,7 +163,11 @@ fn mean(z: &[f64]) -> f64 {
 /// BS.1770-4 integrated loudness of the 400 ms block powers: −70 LUFS absolute exclusion, then
 /// the −10 LU relative threshold.
 fn integrated(blocks: &[f64]) -> f64 {
-    let above: Vec<f64> = blocks.iter().copied().filter(|z| lufs(*z) > -70.0).collect();
+    let above: Vec<f64> = blocks
+        .iter()
+        .copied()
+        .filter(|z| lufs(*z) > -70.0)
+        .collect();
     if above.is_empty() {
         return f64::NEG_INFINITY;
     }
@@ -153,13 +179,21 @@ fn integrated(blocks: &[f64]) -> f64 {
 /// EBU Tech 3342 loudness range of the short-term powers: −70 LUFS absolute exclusion, the
 /// −20 LU relative threshold, then the 95th minus the 10th percentile.
 fn range(short_term: &[f64]) -> f64 {
-    let above: Vec<f64> = short_term.iter().copied().filter(|z| lufs(*z) >= -70.0).collect();
+    let above: Vec<f64> = short_term
+        .iter()
+        .copied()
+        .filter(|z| lufs(*z) >= -70.0)
+        .collect();
     if above.is_empty() {
         return 0.0;
     }
     let threshold = lufs(mean(&above)) - 20.0;
     // Never empty: the loudest entry is at least the mean, 20 LU over the threshold.
-    let mut kept: Vec<f64> = above.into_iter().map(lufs).filter(|l| *l >= threshold).collect();
+    let mut kept: Vec<f64> = above
+        .into_iter()
+        .map(lufs)
+        .filter(|l| *l >= threshold)
+        .collect();
     kept.sort_by(f64::total_cmp);
     let at = |p: f64| kept[((kept.len() - 1) as f64 * p + 0.5) as usize];
     at(0.95) - at(0.10)
@@ -192,7 +226,11 @@ struct Biquad {
 /// so at 48 kHz they give BS.1770's published coefficients.
 fn k_weighting(rate: f64) -> [Biquad; 2] {
     // High shelf: f0, gain in dB and Q of the analog prototype.
-    let (f0, gain, q) = (1_681.974_450_955_533, 3.999_843_853_973_347, 0.707_175_236_955_419_6);
+    let (f0, gain, q) = (
+        1_681.974_450_955_533,
+        3.999_843_853_973_347,
+        0.707_175_236_955_419_6,
+    );
     let k = ops::tan(ops::PI * f0 / rate);
     let vh = ops::pow(10.0, gain / 20.0);
     let vb = ops::pow(vh, 0.499_666_774_154_541_6);
@@ -208,7 +246,13 @@ fn k_weighting(rate: f64) -> [Biquad; 2] {
     let (f0, q) = (38.135_470_876_024_44, 0.500_327_037_323_877_3);
     let k = ops::tan(ops::PI * f0 / rate);
     let a0 = 1.0 + k / q + k * k;
-    let high_pass = Biquad { b0: 1.0, b1: -2.0, b2: 1.0, a1: 2.0 * (k * k - 1.0) / a0, a2: (1.0 - k / q + k * k) / a0 };
+    let high_pass = Biquad {
+        b0: 1.0,
+        b1: -2.0,
+        b2: 1.0,
+        a1: 2.0 * (k * k - 1.0) / a0,
+        a2: (1.0 - k / q + k * k) / a0,
+    };
     [shelf, high_pass]
 }
 
@@ -232,6 +276,107 @@ fn channel_energy(x: &[f64], stages: &[Biquad; 2], bounds: &[usize]) -> Vec<f64>
         .collect()
 }
 
+/// #509: a bus's power bake, made as its samples arrive: f64 K-weighted energy Σ y² per channel
+/// per 10 ms sub-block, sub-block k from sample ⌊k × rate ÷ 100⌋, the filters from zero state at
+/// sample 0. Samples before 0 or already read are skipped, and a gap reads as silence, so one pass
+/// from the start gives the same bake whatever renders it.
+pub struct Power {
+    rate: i64,
+    channels: usize,
+    stages: [Biquad; 2],
+    state: Vec<[[f64; 2]; 2]>,
+    next: i64,
+    acc: Vec<f64>,
+    /// Each whole sub-block's energies, channel by channel.
+    pub energy: Vec<f64>,
+}
+
+impl Power {
+    pub fn new(rate: i64, channels: usize) -> Power {
+        Power {
+            rate,
+            channels,
+            stages: k_weighting(rate as f64),
+            state: vec![[[0.0; 2]; 2]; channels],
+            next: 0,
+            acc: vec![0.0; channels],
+            energy: Vec::new(),
+        }
+    }
+
+    fn bound(&self, k: usize) -> i64 {
+        (k as i128 * self.rate as i128 / 100) as i64
+    }
+
+    fn frame(&mut self, f: &[f32]) {
+        for c in 0..self.channels {
+            let mut y = f64::from(f.get(c).copied().unwrap_or(0.0));
+            for (s, b) in self.state[c].iter_mut().zip(&self.stages) {
+                let out = b.b0 * y + s[0];
+                s[0] = b.b1 * y - b.a1 * out + s[1];
+                s[1] = b.b2 * y - b.a2 * out;
+                y = out;
+            }
+            self.acc[c] += y * y;
+        }
+        self.next += 1;
+        let k = self.energy.len() / self.channels.max(1);
+        if self.next == self.bound(k + 1) {
+            self.energy.append(&mut self.acc.clone());
+            self.acc.iter_mut().for_each(|a| *a = 0.0);
+        }
+    }
+
+    /// Adds interleaved `frames`, the first at sample `at`.
+    pub fn push(&mut self, at: i64, frames: &[f32]) {
+        let ch = self.channels.max(1);
+        let silent = vec![0.0f32; ch];
+        while self.next < at {
+            self.frame(&silent);
+        }
+        for (i, f) in frames.chunks_exact(ch).enumerate() {
+            if at + i as i64 == self.next {
+                self.frame(f);
+            }
+        }
+    }
+
+    /// The sub-blocks that end at or before `frames`.
+    pub fn subblocks(&self, frames: i64) -> usize {
+        let mut k = (self.energy.len() / self.channels.max(1))
+            .min((frames.max(0) as i128 * 100 / self.rate as i128) as usize + 1);
+        while k > 0 && self.bound(k) > frames {
+            k -= 1;
+        }
+        k
+    }
+
+    /// The bake's bytes up to `frames`: each energy as f64 little-endian, sub-block by sub-block.
+    pub fn bytes(&self, frames: i64) -> Vec<u8> {
+        self.energy[..self.subblocks(frames) * self.channels]
+            .iter()
+            .flat_map(|e| e.to_le_bytes())
+            .collect()
+    }
+}
+
+/// The loudness (LUFS) of sub-blocks [from, to) of power bakes summed, each of `channels`
+/// channels at weight 1, at `rate`: −0.691 + 10 log10 of the mean square.
+pub fn loudness_of(bakes: &[&[f64]], channels: usize, rate: i64, from: usize, to: usize) -> f64 {
+    let bound = |k: usize| (k as i128 * rate as i128 / 100) as i64;
+    let samples = (bound(to) - bound(from)).max(1) as f64;
+    let sum: f64 = bakes
+        .iter()
+        .map(|b| {
+            b.get(from * channels..to * channels)
+                .unwrap_or_default()
+                .iter()
+                .sum::<f64>()
+        })
+        .sum();
+    lufs(sum / samples)
+}
+
 /// Taps per interpolator phase: each point between samples i and i + 1 reads x[i − 7] to x[i + 8].
 pub(crate) const TAPS: usize = 16;
 /// Zeros before a channel's first sample in the padded buffer.
@@ -252,7 +397,8 @@ pub(crate) fn interpolator(oversample: u32) -> Vec<[f64; TAPS]> {
             for (j, tap) in taps.iter_mut().enumerate() {
                 let t = j as f64 - BEFORE as f64 - f;
                 let r = t / half;
-                *tap = ops::sinc(ops::PI * t) * bessel_i0(BETA * ops::sqrt((1.0 - r * r).max(0.0))) / i0_beta;
+                *tap = ops::sinc(ops::PI * t) * bessel_i0(BETA * ops::sqrt((1.0 - r * r).max(0.0)))
+                    / i0_beta;
             }
             let sum: f64 = taps.iter().sum();
             taps.map(|v| v / sum)
@@ -324,7 +470,10 @@ mod tests {
             (high_pass.a2, 0.990_072_250_366_21),
         ];
         for (i, (got, want)) in table.iter().enumerate() {
-            assert!((got - want).abs() < 1e-8, "coefficient {i}: {got} vs BS.1770's {want}");
+            assert!(
+                (got - want).abs() < 1e-8,
+                "coefficient {i}: {got} vs BS.1770's {want}"
+            );
         }
     }
 
@@ -332,17 +481,32 @@ mod tests {
     fn stereo_tone_at_minus_23_dbfs_reads_minus_23_lufs() {
         let l = measure(&tone(&[(-23.0, 20.0)], 997.0, 0.0, 2), &[1.0; 2], RATE, 4);
         assert_eq!((l.momentary.len(), l.short_term.len()), (2000, 2000));
-        assert!((l.integrated + 23.0).abs() <= 0.1, "integrated {}", l.integrated);
-        for (name, list, len) in [("momentary", &l.momentary, 40), ("short-term", &l.short_term, 300)] {
+        assert!(
+            (l.integrated + 23.0).abs() <= 0.1,
+            "integrated {}",
+            l.integrated
+        );
+        for (name, list, len) in [
+            ("momentary", &l.momentary, 40),
+            ("short-term", &l.short_term, 300),
+        ] {
             for (i, v) in list.iter().enumerate().skip(len - 1) {
                 assert!((v + 23.0).abs() <= 0.1, "{name}[{i}] reads {v}");
             }
             // A window starting before the tone reads its missing part as silence.
             let half = list[len / 2 - 1];
-            assert!((half + 23.0 + 3.01).abs() <= 0.1, "{name}[{}] reads {half}", len / 2 - 1);
+            assert!(
+                (half + 23.0 + 3.01).abs() <= 0.1,
+                "{name}[{}] reads {half}",
+                len / 2 - 1
+            );
         }
         assert!((l.momentary_max + 23.0).abs() <= 0.1 && (l.short_term_max + 23.0).abs() <= 0.1);
-        assert!(l.range.abs() <= 0.1, "a steady tone has no range: {}", l.range);
+        assert!(
+            l.range.abs() <= 0.1,
+            "a steady tone has no range: {}",
+            l.range
+        );
     }
 
     #[test]
@@ -361,23 +525,43 @@ mod tests {
         for oversample in [4, 8] {
             let l = measure(&x, &[1.0], RATE, oversample);
             let sample = -6.0 - 20.0 * ops::log10(ops::sqrt(2.0));
-            assert!((l.sample_peak - sample).abs() < 1e-3, "sample peak {}", l.sample_peak);
-            assert!((l.true_peak + 6.0).abs() < 0.05, "{oversample}x true peak {} vs −6.0", l.true_peak);
+            assert!(
+                (l.sample_peak - sample).abs() < 1e-3,
+                "sample peak {}",
+                l.sample_peak
+            );
+            assert!(
+                (l.true_peak + 6.0).abs() < 0.05,
+                "{oversample}x true peak {} vs −6.0",
+                l.true_peak
+            );
         }
     }
 
     #[test]
     fn surrounds_weigh_1_41_and_the_front_1() {
-        assert_eq!([30.0, -30.0, 0.0, 110.0, -110.0].map(|a| weight(a, 0.0)), [1.0, 1.0, 1.0, 1.41, 1.41]);
+        assert_eq!(
+            [30.0, -30.0, 0.0, 110.0, -110.0].map(|a| weight(a, 0.0)),
+            [1.0, 1.0, 1.0, 1.41, 1.41]
+        );
         assert_eq!(weight(110.0, 45.0), 1.0);
     }
 
     #[test]
     fn integrated_excludes_blocks_under_the_relative_threshold() {
         // EBU Tech 3341 signal 3: the quiet ends lie more than 10 LU under the tone.
-        let x = tone(&[(-36.0, 10.0), (-23.0, 60.0), (-36.0, 10.0)], 1000.0, 0.0, 2);
+        let x = tone(
+            &[(-36.0, 10.0), (-23.0, 60.0), (-36.0, 10.0)],
+            1000.0,
+            0.0,
+            2,
+        );
         let l = measure(&x, &[1.0; 2], RATE, 4);
-        assert!((l.integrated + 23.0).abs() <= 0.1, "integrated {}", l.integrated);
+        assert!(
+            (l.integrated + 23.0).abs() <= 0.1,
+            "integrated {}",
+            l.integrated
+        );
     }
 
     #[test]

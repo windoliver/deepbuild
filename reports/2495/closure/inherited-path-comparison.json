@@ -1,0 +1,477 @@
+[
+  {
+    "log": "lint-scripts-canvas-closures-mjs.log",
+    "findings": 1,
+    "namedFileComparisons": []
+  },
+  {
+    "log": "lint-scripts-canvas-lint-mjs.log",
+    "findings": 53,
+    "namedFileComparisons": [
+      {
+        "path": "crates/deep-canvas-cells/src/recording.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-canvas-effects/src/chrome_fx.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-canvas-effects/src/fx.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-canvas-effects/src/graph.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-canvas-graph/src/module.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-canvas-marks/src/check.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-canvas-marks/src/scene.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-canvas-marks/src/story.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-canvas-marks/src/warp.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-canvas-media/src/heard/mod.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-canvas-media/src/heard/normalizer.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-canvas-media/src/lib.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-canvas-sandbox/src/check.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-canvas-scene3d/src/geom.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-canvas-scene3d/src/lod.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-canvas-scene3d/src/look.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-canvas-scene3d/src/sets.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-canvas-scene3d/src/shore.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-canvas-scene3d/src/terrain.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-canvas/src/craft.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-canvas/src/document/check.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-canvas/src/document/packs/tests.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-canvas/src/schedule/tests.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-canvas/src/streams.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-text/src/cache.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-text/src/fonts.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-text/src/lib.rs",
+        "equal": true
+      }
+    ]
+  },
+  {
+    "log": "lint-scripts-conformance-lint-mjs.log",
+    "findings": 27,
+    "namedFileComparisons": []
+  },
+  {
+    "log": "lint-scripts-known-failures-check-mjs.log",
+    "findings": 7,
+    "namedFileComparisons": [
+      {
+        "path": "packages/hub/test/memory-overrule.test.ts",
+        "equal": true
+      },
+      {
+        "path": "tests/acceptance/56/decision.test.mjs",
+        "equal": true
+      },
+      {
+        "path": "tests/acceptance/882/lint.test.mjs",
+        "equal": true
+      },
+      {
+        "path": "tests/preflight.test.mjs",
+        "equal": true
+      }
+    ]
+  },
+  {
+    "log": "lint-scripts-record-reader-guard-mjs.log",
+    "findings": 1,
+    "namedFileComparisons": [
+      {
+        "path": "crates/deep-app/src/hub.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-app/src/record.rs",
+        "equal": true
+      }
+    ]
+  },
+  {
+    "log": "lint-scripts-repo-rules-mjs.log",
+    "findings": 51,
+    "namedFileComparisons": [
+      {
+        "path": "crates/deep-canvas-export/Cargo.toml",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-canvas-loop/Cargo.toml",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-lottie-reader/Cargo.toml",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-lottie/Cargo.toml",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-show/Cargo.toml",
+        "equal": true
+      },
+      {
+        "path": "packages/contracts/fixtures/staged.undone@1/01.json",
+        "equal": true
+      },
+      {
+        "path": "scripts/repo-rules.json",
+        "equal": true
+      },
+      {
+        "path": "spikes/2435/Cargo.toml",
+        "equal": true
+      },
+      {
+        "path": "tests/acceptance/12/twins/build-without-cargo/package.json",
+        "equal": true
+      },
+      {
+        "path": "tests/acceptance/12/twins/no-deep-bin/package.json",
+        "equal": true
+      },
+      {
+        "path": "tests/acceptance/12/twins/release-check-local/package.json",
+        "equal": true
+      },
+      {
+        "path": "tests/acceptance/533/wat/Cargo.toml",
+        "equal": true
+      }
+    ]
+  },
+  {
+    "log": "lint-scripts-size-ratchet-mjs.log",
+    "findings": 58,
+    "namedFileComparisons": [
+      {
+        "path": "benchmarks/canvas.mjs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-app/src/views.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-canvas-effects/src/check.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-canvas-effects/src/emit.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-canvas-effects/src/graph.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-canvas-effects/src/interp.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-canvas-input/src/session.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-canvas-marks/src/animator.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-canvas-marks/src/data.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-canvas-marks/src/modules.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-canvas-marks/src/pathops.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-canvas-marks/src/scene.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-canvas-media/src/mix.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-canvas-motion/src/doc.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-canvas-motion/src/program.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-canvas-motion/src/shots.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-canvas-physics/src/doc.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-canvas-scene3d/src/builders.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-canvas-scene3d/src/distribute.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-canvas-scene3d/src/scene.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-canvas-scene3d/src/spec.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-canvas-scene3d/src/stack.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-canvas-vector/src/svg.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-canvas/src/document/check.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-canvas/src/document/mod.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-canvas/src/document/packs.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-canvas/src/expr.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-canvas/src/registry/mod.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-canvas/src/schedule/mod.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-canvas/src/scope.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-canvas/src/steps.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-effects-render/src/docops.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-gpu-layer/src/groups.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-gpu-layer/src/live.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-gpu-layer/src/view3d.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-hook/src/main.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-hook/src/matcher.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-hook/src/shell.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-logic/src/lib.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-logic/src/piece.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-logic/src/world.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-marks-render/src/macos.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-marks-render/src/raster.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-replica/src/drive/mod.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-scene3d-render/src/lib.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-scene3d-render/src/scene3d.wgsl",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-show/src/export.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-show/src/frames.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-show/src/hub.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-show/src/kinds.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-show/src/kit/modules.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-show/src/main.rs",
+        "equal": true
+      },
+      {
+        "path": "crates/deep-show/src/shared.rs",
+        "equal": true
+      },
+      {
+        "path": "packages/asks/src/index.ts",
+        "equal": true
+      },
+      {
+        "path": "packages/hub/src/core.ts",
+        "equal": true
+      },
+      {
+        "path": "packages/hub/src/server.ts",
+        "equal": false
+      },
+      {
+        "path": "tests/acceptance/1856/twins/missing-rules-always-unreadable/crates/deep-hook/src/main.rs",
+        "equal": true
+      },
+      {
+        "path": "tests/acceptance/2204/twins/rules-read-on-every-event/crates/deep-hook/src/main.rs",
+        "equal": true
+      }
+    ]
+  },
+  {
+    "log": "lint-scripts-slots-check-mjs.log",
+    "findings": 4,
+    "namedFileComparisons": []
+  },
+  {
+    "log": "lint-scripts-vendor-rebase-mjs.log",
+    "findings": 18,
+    "namedFileComparisons": [
+      {
+        "path": "vendor/gpui-pre-apple/src/metal_renderer.rs",
+        "equal": true
+      },
+      {
+        "path": "vendor/gpui-pre-apple/src/metal_renderer/ycbcr_surface.rs",
+        "equal": true
+      },
+      {
+        "path": "vendor/gpui-pre/src/arena.rs",
+        "equal": true
+      }
+    ]
+  }
+]

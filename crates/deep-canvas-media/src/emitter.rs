@@ -83,16 +83,27 @@ fn norm(a: [f64; 3]) -> f64 {
 
 /// The cone gain of a source at `source` facing `forward`, heard at `listener`. `reversed` is the
 /// planted cone that takes the angle from source minus listener.
-pub fn cone_gain(c: &Cone, forward: [f64; 3], source: [f64; 3], listener: [f64; 3], reversed: bool) -> f64 {
+pub fn cone_gain(
+    c: &Cone,
+    forward: [f64; 3],
+    source: [f64; 3],
+    listener: [f64; 3],
+    reversed: bool,
+) -> f64 {
     if c.inner >= 360.0 && c.outer >= 360.0 {
         return 1.0;
     }
-    let to = if reversed { sub(source, listener) } else { sub(listener, source) };
+    let to = if reversed {
+        sub(source, listener)
+    } else {
+        sub(listener, source)
+    };
     let (nf, nt) = (norm(forward), norm(to));
     if nf == 0.0 || nt == 0.0 {
         return 1.0;
     }
-    let cos = ((forward[0] * to[0] + forward[1] * to[1] + forward[2] * to[2]) / (nf * nt)).clamp(-1.0, 1.0);
+    let cos = ((forward[0] * to[0] + forward[1] * to[1] + forward[2] * to[2]) / (nf * nt))
+        .clamp(-1.0, 1.0);
     let angle = ops::deg(ops::acos(cos));
     let (inner, outer) = (c.inner / 2.0, c.outer / 2.0);
     if angle <= inner {

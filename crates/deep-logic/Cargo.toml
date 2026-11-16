@@ -15,13 +15,13 @@ publish = false
 deep-canvas = { path = "../deep-canvas" }
 deep-canvas-sandbox = { path = "../deep-canvas-sandbox" }
 deep-sandbox-wasmtime = { path = "../deep-sandbox-wasmtime" }
-wasmtime = { version = "=49.0.2", default-features = false, features = ["cranelift", "runtime", "std", "addr2line"] }
+wasmtime = { version = "=49.0.5", default-features = false, features = ["cranelift", "runtime", "std", "addr2line"] }
 wasmparser = { version = "=0.258.3", default-features = false, features = ["std", "validate", "features", "simd"] }
 addr2line = { version = "=0.26.1", default-features = false }
 gimli = { version = "=0.33.0", default-features = false, features = ["read", "std", "endian-reader"] }
 base64 = "0.22"
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
-sha2 = "0.10"
+sha2 = "0.11"
 wat = "=1.263.0"
 libc = "0.2"
 

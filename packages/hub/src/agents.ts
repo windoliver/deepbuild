@@ -20,19 +20,19 @@ import { homedir } from 'node:os';
 import { basename, dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFacts } from '@deepbuild/adapters';
-import { keychainStore, type SecretStore } from '@deepbuild/extension-host';
+import { scrubText } from '@deepbuild/evidence';
 import { CANT_UNDO } from '@deepbuild/asks';
 import { ulid } from '@deepbuild/record';
 import { keepOriginal, noteWritten, saveRecord, setupRecord, strictObject, target } from './agent-files.js';
 import { tomlTables } from './codex-settings.js';
-import { ownHome } from './keychain.js';
+import { hubSecrets as secretStore } from './held.js';
 import { lastingNode } from './paths.js';
 import type { Plant } from './plant.js';
 import { syncPath, type Durable } from './vfs.js';
 import { refuse } from './wire.js';
+import { isRecord as isObj } from '@deepbuild/contracts';
 
 type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 const sha = (bytes: Buffer | string): string => createHash('sha256').update(bytes).digest('hex');
 const canonical = (v: unknown): string => JSON.stringify(v, (_, x: unknown) => (isObj(x) ? Object.fromEntries(Object.keys(x).sort().map((k) => [k, x[k]])) : x));
 /** The agents a sync knows, by their facts files' names. */
@@ -67,14 +67,18 @@ function agentFacts(): AgentFacts[] {
   }));
 }
 const factsOf = (id: string): AgentFacts | undefined => agentFacts().find((a) => a.id === id);
-/** The agents whose sessions reach DeepBuild through hooks, by their facts: those that map hook events and name the agent (#2019). */
-export function hookedAgents(): { id: string; name: string }[] {
-  return AGENT_IDS.flatMap((id) => {
+let hookedCache: readonly { id: string; name: string }[] | undefined;
+/**
+ * The agents whose sessions reach DeepBuild through hooks, by their facts: those that map hook events and name the
+ * agent (#2019). Read once, as agentFacts reads them: the hub asks every second, and the shipped facts don't change under it.
+ */
+export function hookedAgents(): readonly { id: string; name: string }[] {
+  return (hookedCache ??= AGENT_IDS.flatMap((id) => {
     let f: Obj;
     try { f = readFacts<Obj>(`${id}.facts.json`); } catch { return []; }
     const e = isObj(f.entries) ? f.entries : {};
     return isObj(f.mapping) && typeof e.name === 'string' ? [{ id, name: e.name }] : [];
-  });
+  }));
 }
 const expand = (p: string): string => (p.startsWith('~/') ? join(homedir(), p.slice(2)) : p);
 /** A path as you'd read it: under your home as ~/... */
@@ -311,7 +315,8 @@ function entryFor(agent: AgentFacts, s: ServerSpec): Obj {
 
 /** Lines that fetch a remote file and run it, or send a secret away: each stops an install until you approve. */
 const AUDIT: { why: string; re: RegExp }[] = [
-  { why: 'fetches a remote file and runs it', re: /\b(curl|wget|fetch)\b[^\n|]*\|\s*(sudo\s+)?(ba|z|da|k)?sh\b/ },
+  { why: 'fetches a remote file and runs it', re: /\b(curl|wget|fetch)\b[^\n|]*\|&?\s*(sudo\s+(-\S+\s+)*)?(env\s+)?(\S*\/)?(ba|z|da|k)?sh\b/ },
+  { why: 'fetches a remote file and runs it', re: /(?:\bsource|(?:^|\s)\.)\s+<\(\s*(curl|wget)\b/ },
   { why: 'fetches a remote file and runs it', re: /\b(curl|wget)\b[^\n|]*\|\s*(sudo\s+)?(python3?|node|perl|ruby)\b/ },
   { why: 'fetches a remote file and runs it', re: /\b(ba|z)?sh\s+(-c\s+)?["']?(<\(|\$\()\s*(curl|wget)\b/ },
   { why: 'fetches a remote file and runs it', re: /\beval\s+["']?\$\(\s*(curl|wget)\b/ },
@@ -326,7 +331,7 @@ function readSkill(source: Obj, staged: string): SkillItem {
   if (!NAME.test(name)) throw refuse('pattern', '/params/skill/path', 'A skill\'s folder name is its name: letters, digits, - and _.', name);
   let listed: string;
   try {
-    listed = execFileSync('git', ['-C', repo!, 'ls-tree', '-r', '--full-tree', commit!, '--', path!], { encoding: 'utf8', env: gitEnv(), maxBuffer: 64 << 20 });
+    listed = execFileSync('git', ['-C', repo!, 'ls-tree', '-r', '-z', '--full-tree', commit!, '--', path!], { encoding: 'utf8', env: gitEnv(), maxBuffer: 64 << 20 });
   } catch (error) {
     throw refuse('not_found', '/params/skill', `${repo} has no ${path} at ${commit}: ${error instanceof Error ? error.message.split('\n')[0] : String(error)}`, source);
   }
@@ -334,9 +339,10 @@ function readSkill(source: Obj, staged: string): SkillItem {
   const findings: string[] = [];
   const scripts: string[] = [];
   let license = 'none found';
-  for (const row of listed.split('\n').filter(Boolean)) {
-    const m = /^(\d+) blob ([0-9a-f]+)\t(.+)$/.exec(row);
+  for (const row of listed.split('\0').filter(Boolean)) {
+    const m = /^(\d+) blob ([0-9a-f]+)\t(.+)$/s.exec(row);
     if (!m) continue;
+    if (m[1] === '120000') throw refuse('type', '/params/skill/path', `${m[3]} is a symbolic link; skills can sync only regular files.`, m[3]);
     const rel = relative(path!, m[3]!);
     const bytes = execFileSync('git', ['-C', repo!, 'cat-file', 'blob', m[2]!], { env: gitEnv(), maxBuffer: 64 << 20 });
     const mode = m[1] === '100755' ? 0o755 : 0o644;
@@ -356,22 +362,6 @@ function readSkill(source: Obj, staged: string): SkillItem {
   return { name, repo: repo!, commit: commit!, path: path!, digest: sha(canonical(files.map((f) => [f.rel, f.sha, f.mode]))), files, license, scripts, findings };
 }
 
-// ---- The secret store: the platform's, or the file a test names.
-
-function secretStore(): SecretStore | undefined {
-  const file = process.env.DEEP_HUB_TEST_SECRETS;
-  if (file) {
-    const all = (): Obj => { try { return JSON.parse(readFileSync(file, 'utf8')) as Obj; } catch { return {}; } };
-    const save = (v: Obj) => writeFileSync(file, `${JSON.stringify(v)}\n`, { mode: 0o600 });
-    return {
-      get: (k) => Promise.resolve(typeof all()[k] === 'string' ? all()[k] as string : undefined),
-      set: (k, v) => Promise.resolve(save({ ...all(), [k]: v })),
-      delete: (k) => { const v = all(); delete v[k]; save(v); return Promise.resolve(); },
-    };
-  }
-  // A hub under a test's temp HOME never touches your Keychain.
-  return process.platform === 'darwin' && ownHome() ? keychainStore() : undefined;
-}
 const secretKey = (server: string, variable: string): string => `mcp.${server}.${variable}`;
 
 // ---- The syncs.
@@ -430,7 +420,8 @@ export class Agents {
   }
 
   // -- Who is installed: the command each agent's facts name, on your login shell's PATH.
-  private loginPath(): string {
+  /** The login PATH setup recorded, or the hub's own: where an agent's program is found, as DeepBuild's jobs find it. */
+  loginPath(): string {
     try {
       const c = JSON.parse(readFileSync(join(this.o.root, 'config.json'), 'utf8')) as Obj;
       const p = isObj(c.runner) ? c.runner.login_path : undefined;
@@ -450,48 +441,60 @@ export class Agents {
     this.recover();
     const via = typeof params.via === 'string' ? params.via : 'app';
     if (!['app', 'words', 'link', 'restore'].includes(via)) throw refuse('enum', '/params/via', 'A sync comes from the app, your words, a pasted link or a restore.', via);
-    const id = ulid(this.o.now());
-    const staged = this.stagedDir(id);
-    let items: { item: Item; agents: string[] }[];
-    const chosen = (v: unknown): string[] => {
-      const list = Array.isArray(v) ? v.filter((a): a is string => typeof a === 'string') : [];
-      const unknown = list.filter((a) => !factsOf(a));
-      if (unknown.length) throw refuse('enum', '/params/agents', `No facts name the agent ${unknown.join(', ')}; the agents are ${AGENT_IDS.join(', ')}.`, unknown);
-      if (!list.length) throw refuse('required', '/params/agents', 'Choose the agents to sync it to.', v);
-      return [...new Set(list)];
-    };
-    if (via === 'restore') {
-      // The record put back holds what you approved: each item planned again, every entry checked as for a new one.
-      const wanted = await this.o.wanted();
-      const last = new Map<string, { item: Item; agents: string[] }>();
-      for (const w of wanted) if (isObj(w.item) && Array.isArray(w.agents)) last.set(`${String((w.item as Obj).kind)}:${itemName(w.item as unknown as Item)}`, { item: w.item as unknown as Item, agents: (w.agents as string[]).filter((a) => factsOf(a)) });
-      items = [...last.values()];
-      if (!items.length) throw refuse('not_found', '/params/via', 'The record holds no sync to plan again.', via);
-    } else if (params.skill !== undefined) {
-      items = [{ item: { kind: 'skill', skill: readSkill(isObj(params.skill) ? params.skill : {}, staged) }, agents: chosen(params.agents) }];
-    } else {
-      let raw: unknown = params.server;
-      if (via === 'link') {
-        const link = typeof params.link === 'string' ? params.link : '';
-        const m = /^deepbuild:mcp\/add\?server=([A-Za-z0-9_-]+)$/.exec(link);
-        if (!m) throw refuse('pattern', '/params/link', 'A link adds a server as deepbuild:mcp/add?server=<base64url of its spec>.', link);
-        try { raw = JSON.parse(Buffer.from(m[1]!, 'base64url').toString('utf8')); } catch { throw refuse('type', '/params/link', 'The link\'s server isn\'t JSON.', link); }
+    let id = ulid(this.o.now());
+    try {
+      let items: { item: Item; agents: string[] }[];
+      const chosen = (v: unknown): string[] => {
+        const list = Array.isArray(v) ? v.filter((a): a is string => typeof a === 'string') : [];
+        const unknown = list.filter((a) => !factsOf(a));
+        if (unknown.length) throw refuse('enum', '/params/agents', `No facts name the agent ${unknown.join(', ')}; the agents are ${AGENT_IDS.join(', ')}.`, unknown);
+        if (!list.length) throw refuse('required', '/params/agents', 'Choose the agents to sync it to.', v);
+        return [...new Set(list)];
+      };
+      if (via === 'restore') {
+        // Each recorded item has its own approval, journal and installed entry.
+        const wanted = await this.o.wanted();
+        const last = new Map<string, { item: Item; agents: string[] }>();
+        for (const w of wanted) if (isObj(w.item) && Array.isArray(w.agents)) last.set(`${String((w.item as Obj).kind)}:${itemName(w.item as unknown as Item)}`, { item: w.item as unknown as Item, agents: (w.agents as string[]).filter((a) => factsOf(a)) });
+        items = [...last.values()];
+        if (!items.length) throw refuse('not_found', '/params/via', 'The record holds no sync to plan again.', via);
+      } else if (params.skill !== undefined) {
+        items = [{ item: { kind: 'skill', skill: readSkill(isObj(params.skill) ? params.skill : {}, this.stagedDir(id)) }, agents: chosen(params.agents) }];
+      } else {
+        let raw: unknown = params.server;
+        if (via === 'link') {
+          const link = typeof params.link === 'string' ? params.link : '';
+          const m = /^deepbuild:mcp\/add\?server=([A-Za-z0-9_-]+)$/.exec(link);
+          if (!m) throw refuse('pattern', '/params/link', 'A link adds a server as deepbuild:mcp/add?server=<base64url of its spec>.', link);
+          try { raw = JSON.parse(Buffer.from(m[1]!, 'base64url').toString('utf8')); } catch { throw refuse('type', '/params/link', 'The link\'s server isn\'t JSON.', link); }
+        }
+        items = [{ item: { kind: 'server', server: await this.serverOf(raw) }, agents: chosen(params.agents) }];
       }
-      items = [{ item: { kind: 'server', server: await this.serverOf(raw) }, agents: chosen(params.agents) }];
+      const plans: Obj[] = [];
+      for (const [i, { item, agents }] of items.entries()) {
+        if (i > 0) id = ulid(this.o.now());
+        const checked = item.kind === 'skill' && via === 'restore' ? { kind: 'skill' as const, skill: readSkill(item.skill as unknown as Obj, this.stagedDir(id)) } : item;
+        const sync = this.plan(id, via, checked, agents);
+        // The plan shows every file it writes, each with its diff, and each agent it can't write the entry for.
+        const question = this.question(sync);
+        const plan = { steps: sync.targets.map((t) => ({ does: `Write ${shownPath(t.path)} for ${t.agents.map((a) => factsOf(a)?.name ?? a).join(' and ')}`, changes: [t.path], undo: `deep undo sync:${id}`, public: false, cost: 0 })), diff: sha(sync.targets.map((t) => t.diff).join('\n')) };
+        // A pin or sync record still changes when every agent file already has the wanted bytes.
+        if (!plan.steps.length) plan.steps.push({ does: `Record ${itemName(sync.item)} as synced; no agent file needs writing`, changes: [join(this.dir, sync.item.kind === 'skill' ? 'skills.json' : 'servers.json')], undo: `deep undo sync:${id}`, public: false, cost: 0 });
+        // The per-file diff itself is the Agents page's to show (agents.read); the plan binds its digest.
+        sync.ask = await this.o.raise('agents.sync', {
+          kind: 'authority', question, options: [{ id: 'apply', label: 'Apply it', decision: 'allow' }, { id: 'keep', label: 'Leave the agents as they are', decision: 'deny' }],
+          recommended: null, deadline: this.o.now() + 7 * 86_400_000, fallback: 'you', default: 'keep', provisional: false, owner: 'you',
+          key: sha(canonical({ kind: 'agents.sync', sync: id })), pinned_to: { kind: 'evidence', ref: sha(canonical({ kind: 'agents.sync', sync: id })) },
+        }, plan);
+        this.save(sync);
+        this.asks.set(sync.ask, { sync: id });
+        plans.push(this.shown(sync));
+      }
+      return plans.length === 1 ? plans[0]! : { syncs: plans };
+    } catch (error) {
+      rmSync(this.stagedDir(id), { recursive: true, force: true });
+      throw error;
     }
-    const sync = this.plan(id, via, items);
-    // The plan shows every file it writes, each with its diff, and each agent it can't write the entry for.
-    const question = this.question(sync);
-    const plan = { steps: sync.targets.map((t) => ({ does: `Write ${shownPath(t.path)} for ${t.agents.map((a) => factsOf(a)?.name ?? a).join(' and ')}`, changes: [t.path], undo: `deep undo sync:${id}`, public: false, cost: 0 })), diff: sha(sync.targets.map((t) => t.diff).join('\n')) };
-    // The per-file diff itself is the Agents page's to show (agents.read); the plan binds its digest.
-    sync.ask = await this.o.raise('agents.sync', {
-      kind: 'authority', question, options: [{ id: 'apply', label: 'Apply it', decision: 'allow' }, { id: 'keep', label: 'Leave the agents as they are', decision: 'deny' }],
-      recommended: null, deadline: this.o.now() + 7 * 86_400_000, fallback: 'you', default: 'keep', provisional: false, owner: 'you',
-      key: sha(canonical({ kind: 'agents.sync', sync: id })), pinned_to: { kind: 'evidence', ref: sha(canonical({ kind: 'agents.sync', sync: id })) },
-    }, plan.steps.length ? plan : undefined);
-    this.save(sync);
-    this.asks.set(sync.ask, { sync: id });
-    return this.shown(sync);
   }
   /** A server spec from the app, your words or a link, its secrets moved into the secret store at once. */
   private async serverOf(raw: unknown): Promise<ServerSpec> {
@@ -524,40 +527,38 @@ export class Agents {
     }
     return spec;
   }
-  /** Every target file of every item for every agent chosen, planned in memory from the bytes there now. */
-  private plan(id: string, via: string, items: { item: Item; agents: string[] }[]): Sync {
+  /** Every target file of one item for every agent chosen, planned in memory from the bytes there now. */
+  private plan(id: string, via: string, item: Item, chosen: string[]): Sync {
     const installed = this.installed();
     const targets = new Map<string, Target>();
     const refused: Sync['refused'] = [];
     const agents = new Set<string>();
-    for (const { item, agents: chosen } of items) {
-      for (const a of chosen) {
-        const facts = factsOf(a)!;
-        agents.add(a);
-        if (item.kind === 'server') {
-          // The planted wrong program writes every entry without checking it against the agent's facts.
-          const no = this.o.plant === 'skips-entry-check' ? undefined : refusedField(facts, item.server);
-          if (no) { refused.push({ agent: a, field: no.field, reason: no.reason }); continue; }
-          const mcp = facts.mcp!;
-          const path = expand(mcp.file);
-          const t = targets.get(path) ?? { path, agents: [], before: null, after: '', diff: '', config: { format: mcp.format, key: mcp.key, ...(mcp.perProject ? { perProject: mcp.perProject } : {}), entries: [] }, status: 'planned' };
-          if (!t.agents.includes(a)) t.agents.push(a);
-          const value = entryFor(facts, item.server);
-          // Where an agent keeps per-project entries in its own user config, a scoped server goes there, for each repo.
-          if (item.server.scope?.repos.length && mcp.perProject) for (const project of item.server.scope.repos) t.config!.entries.push({ agent: a, name: item.server.name, value, project });
-          else t.config!.entries.push({ agent: a, name: item.server.name, value });
+    for (const a of chosen) {
+      const facts = factsOf(a)!;
+      agents.add(a);
+      if (item.kind === 'server') {
+        // The planted wrong program writes every entry without checking it against the agent's facts.
+        const no = this.o.plant === 'skips-entry-check' ? undefined : refusedField(facts, item.server);
+        if (no) { refused.push({ agent: a, field: no.field, reason: no.reason }); continue; }
+        const mcp = facts.mcp!;
+        const path = expand(mcp.file);
+        const t = targets.get(path) ?? { path, agents: [], before: null, after: '', diff: '', config: { format: mcp.format, key: mcp.key, ...(mcp.perProject ? { perProject: mcp.perProject } : {}), entries: [] }, status: 'planned' };
+        if (!t.agents.includes(a)) t.agents.push(a);
+        const value = entryFor(facts, item.server);
+        // Where an agent keeps per-project entries in its own user config, a scoped server goes there, for each repo.
+        if (item.server.scope?.repos.length && mcp.perProject) for (const project of item.server.scope.repos) t.config!.entries.push({ agent: a, name: item.server.name, value, project });
+        else t.config!.entries.push({ agent: a, name: item.server.name, value });
+        targets.set(path, t);
+      } else {
+        if (!facts.skills) { refused.push({ agent: a, field: 'skills', reason: `${facts.name}'s facts name no folder it reads skills from` }); continue; }
+        const folder = expand(facts.skills.write);
+        // A folder another installed agent reads too reaches it as well, and the plan names both.
+        const readers = [a, ...installed.filter((o) => o.id !== a && o.skills?.readFrom.some((r) => expand(r) === folder)).map((o) => o.id)];
+        for (const f of item.skill.files) {
+          const path = join(folder, item.skill.name, f.rel);
+          const t = targets.get(path) ?? { path, agents: [], before: null, after: f.sha, diff: '', file: { sha: f.sha, mode: f.mode }, status: 'planned' };
+          for (const r of readers) { if (!t.agents.includes(r)) t.agents.push(r); agents.add(r); }
           targets.set(path, t);
-        } else {
-          if (!facts.skills) { refused.push({ agent: a, field: 'skills', reason: `${facts.name}'s facts name no folder it reads skills from` }); continue; }
-          const folder = expand(facts.skills.write);
-          // A folder another installed agent reads too reaches it as well, and the plan names both.
-          const readers = [a, ...installed.filter((o) => o.id !== a && o.skills?.readFrom.some((r) => expand(r) === folder)).map((o) => o.id)];
-          for (const f of item.skill.files) {
-            const path = join(folder, item.skill.name, f.rel);
-            const t = targets.get(path) ?? { path, agents: [], before: null, after: f.sha, diff: '', file: { sha: f.sha, mode: f.mode }, status: 'planned' };
-            for (const r of readers) { if (!t.agents.includes(r)) t.agents.push(r); agents.add(r); }
-            targets.set(path, t);
-          }
         }
       }
     }
@@ -567,13 +568,12 @@ export class Agents {
       const next = this.next(id, t, current);
       if ('refused' in next) throw refuse('conflict', '/params', `Nothing was planned: ${next.refused}. Fix the file, then add it again.`, t.path);
       if ('conflict' in next) throw refuse('conflict', '/params', `Nothing was planned: ${next.conflict}. Rename one of them, then add it again.`, t.path);
-      if (current !== null && next.bytes.equals(current)) continue;
+      if (current !== null && next.bytes.equals(current) && (!t.file || (statSync(target(t.path)).mode & 0o777) === t.file.mode)) continue;
       // The plan's bytes, kept as shown to you.
       writeSyncedFile(join(this.stagedDir(id), sha(next.bytes)), next.bytes);
       planned.push({ ...t, before: digestOf(current), after: sha(next.bytes), diff: lineDiff(t.path, current, next.bytes) });
     }
-    const item = items.length === 1 ? items[0]!.item : items[0]!.item;
-    return { id, created: this.o.now(), via, item, agents: [...agents], targets: planned, refused, ask: '', status: 'proposed', ...(items.length > 1 ? { reason: `${items.length} items planned again from the record` } : {}) };
+    return { id, created: this.o.now(), via, item, agents: [...agents], targets: planned, refused, ask: '', status: 'proposed' };
   }
   /** A target's next bytes, from what the file holds now. */
   private next(id: string, t: Target, current: Buffer | null): Rendered {
@@ -634,7 +634,7 @@ export class Agents {
   }
   private decline(id: string): Promise<void> {
     const s = this.load(id);
-    if (s?.status === 'proposed') { s.status = 'declined'; this.save(s); }
+    if (s?.status === 'proposed') { s.status = 'declined'; this.save(s); rmSync(this.stagedDir(id), { recursive: true, force: true }); }
     return Promise.resolve();
   }
 
@@ -656,6 +656,7 @@ export class Agents {
         s.reason = `Nothing was written: ${'refused' in next ? next.refused : next.conflict}.`;
         t.status = 'refused';
         this.save(s);
+        rmSync(this.stagedDir(id), { recursive: true, force: true });
         return;
       }
       planned.push({ t, current, bytes: next.bytes });
@@ -668,9 +669,9 @@ export class Agents {
       if (current !== null) writeSyncedFile(join(staged, `before-${i}`), current);
       return { path: t.path, before: digestOf(current), after: sha(bytes) };
     });
+    this.writeJson(join('journal', `${id}.json`), { sync: id, files: journal });
     s.status = 'applying';
     this.save(s);
-    this.writeJson(join('journal', `${id}.json`), { sync: id, files: journal });
     this.o.durable.point('sync_intent');
     const record = setupRecord(this.o.root);
     for (const [i, { t }] of planned.entries()) {
@@ -689,6 +690,7 @@ export class Agents {
         this.writeJson(join('journal', `${id}.json`), { sync: id, files: journal });
       }
       if (!ok) continue;
+      t.before = journal[i]!.before;
       this.write(s, record, t, bytes);
     }
     this.finish(s, journal);
@@ -715,7 +717,7 @@ export class Agents {
     for (let d = dirname(real); !existsSync(d); d = dirname(d)) made.unshift(d);
     mkdirSync(dirname(real), { recursive: true });
     const tmp = join(dirname(real), `.${basename(real)}.deepbuild-${process.pid}.tmp`);
-    const keep = existsSync(real) ? statSync(real).mode & 0o777 : mode ?? 0o600;
+    const keep = mode ?? (existsSync(real) ? statSync(real).mode & 0o777 : 0o600);
     rmSync(tmp, { force: true });
     writeFileSync(tmp, bytes, { mode: keep });
     chmodSync(tmp, keep);
@@ -749,7 +751,10 @@ export class Agents {
       this.writeJson('servers.json', servers);
     } else {
       const skills = this.skillState();
-      skills[s.item.skill.name] = { repo: s.item.skill.repo, commit: s.item.skill.commit, path: s.item.skill.path, digest: s.item.skill.digest, agents: [...new Set(s.targets.flatMap((t) => t.agents))], files: s.targets.map((t) => ({ path: t.path, after: t.after })), sync: s.id };
+      const previous = skills[s.item.skill.name];
+      const files = new Map((previous?.files ?? []).map((f) => [f.path, f]));
+      for (const t of s.targets) files.set(t.path, { path: t.path, after: t.after });
+      skills[s.item.skill.name] = { repo: s.item.skill.repo, commit: s.item.skill.commit, path: s.item.skill.path, digest: s.item.skill.digest, agents: [...new Set([...(previous?.agents as string[] ?? []), ...s.targets.flatMap((t) => t.agents)])], files: [...files.values()], sync: s.id };
       this.writeJson('skills.json', skills);
     }
     void this.o.synced({ sync: `sync:${s.id}`, item: s.item as unknown as Obj, agents: s.agents }).catch((error: unknown) => process.stderr.write(`deep hub: sync:${s.id} wasn't recorded: ${error instanceof Error ? error.message : String(error)}\n`));
@@ -798,14 +803,15 @@ export class Agents {
         for (const t of s.targets) t.status = 'unchanged';
         this.save(s);
         rmSync(join(this.dir, 'journal', n), { force: true });
+        rmSync(this.stagedDir(id), { recursive: true, force: true });
         continue;
       }
       const record = setupRecord(this.o.root);
       for (const [i, f] of files.entries()) {
         const t = s.targets.find((x) => x.path === f.path);
         if (!t) continue;
-        if (now[i] === f.after) { t.status = 'written'; noteWritten(record, t.path); if (t.config) this.manage(t.path, t.config.entries, true); continue; }
-        if (now[i] === f.before) { this.write(s, record, t, readFileSync(join(this.stagedDir(id), `after-${i}`))); continue; }
+        if (now[i] === f.after) { t.before = f.before; t.after = f.after; t.status = 'written'; noteWritten(record, t.path); if (t.config) this.manage(t.path, t.config.entries, true); continue; }
+        if (now[i] === f.before) { t.before = f.before; this.write(s, record, t, readFileSync(join(this.stagedDir(id), `after-${i}`))); continue; }
         // Someone changed it since: never written over. Valid and already holding DeepBuild's entry, it counts as written.
         const current = read(f.path);
         const next = this.next(id, { ...t, before: now[i] ?? null }, current);
@@ -867,6 +873,7 @@ export class Agents {
         if (skills[s.item.skill.name]?.sync === s.id) delete skills[s.item.skill.name];
         this.writeJson('skills.json', skills);
       }
+      rmSync(staged, { recursive: true, force: true });
       return { sync: handle, undone: s.targets.filter((t) => t.status === 'undone').map((t) => t.path), notes };
     });
   }
@@ -954,14 +961,19 @@ export class Agents {
     this.restarting.set(agent, ask);
     this.saveAsks();
     // The planted wrong program restarts it as soon as it asks.
-    if (this.o.plant === 'restarts-without-answer') await this.runRestart(agent);
+    if (this.o.plant === 'restarts-without-answer') await this.runRestart(agent).catch(() => undefined);
     return { ask, sessions: served.map((s) => s.id) };
   }
   /** The agent's own restart command, as its facts name it, never a signal. */
   private runRestart(agent: string): Promise<void> {
     const facts = factsOf(agent)!;
     const bin = this.which(facts.binary);
-    if (!bin || !facts.daemon?.restart) return Promise.resolve();
-    return new Promise((done) => execFile(bin, facts.daemon!.restart!, { env: { ...process.env, PATH: this.loginPath() }, timeout: 60_000 }, () => done()));
+    if (!bin) return Promise.reject(Error(`${facts.binary} is missing from the login PATH; its daemon wasn't restarted.`));
+    if (!facts.daemon?.restart) return Promise.reject(Error(`${facts.name}'s facts name no daemon restart command.`));
+    return new Promise((done, fail) => execFile(bin, facts.daemon!.restart!, { env: { ...process.env, PATH: this.loginPath() }, timeout: 60_000 }, (error, _stdout, stderr) => {
+      if (!error) { done(); return; }
+      const reason = error.message.includes(stderr.trim()) ? error.message : `${error.message}: ${stderr}`;
+      fail(Error(scrubText(reason, { held: this.o.held }).replace(/[\r\n]+/g, ' ').trim()));
+    }));
   }
 }

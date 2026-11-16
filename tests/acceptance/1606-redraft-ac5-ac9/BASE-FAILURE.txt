@@ -1,0 +1,26 @@
+#1606 AC5 and AC9, redraft, at the base: commit 1c4d1f0e2 with tests/acceptance/1606 and this folder added, on macOS,
+Node 24.22.0 (fnm), Rust 1.99.1, from the Bash tool of an agent session with no Accessibility or Screen Recording.
+The base has no [[test]] acceptance_1606, so for this run one was added to crates/deep-app/Cargo.toml in a scratch copy
+(README, Surface) and hidden from the merge-base check with `git update-index --assume-unchanged`. Both were undone
+after. Without the entry every test reads "BLOCKED: crates/deep-app/Cargo.toml has no [[test]] acceptance_1606 ...".
+
+  NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/1606-redraft-ac5-ac9 --testTimeout=1800000 --no-file-parallelism
+
+3 tests, 264 s: 2 fail for the expected reason, 1 reads BLOCKED (its plant doesn't exist yet). Every line was observed.
+
+ x AC5 #1606.1b905924 after the app paired and its card's answer counted once, no file under ~/.deepbuild holds the device's private key (no window)
+     "/private/tmp/dh16-bHfUcI/h/.deepbuild/app/device.json holds the private key of device:01M7942YWEB1P2W8DDFCC6H3JG, the app's device"
+     (the card's answer itself counted: one ask.answered, the option pressed, via card. The driver ran the base's
+     test-confirm build, since the crate has no test-secrets and its code is the merge base's own.)
+ x AC5 #1606.1b905924 wrong program: an app that keeps its key in a file (plant-key-in-file) fails, naming the path (no window)
+     BLOCKED: crates/deep-app/Cargo.toml has no feature plant-key-in-file (../1606/README.md, Surfaces)
+ x AC9 #1606.21a4b991 after the real app moves an older app's key out of ~/.deepbuild/app/device.json at its start, an answer on its card counts once, signed with that key (no window)
+     "/private/tmp/dh16-GR5BLT/h/.deepbuild/app/device.json is still there two minutes after the app started: the app didn't move the key"
+
+Against a throwaway app change, since reverted: with test-secrets the app's device key kept in the file
+DEEP_APP_TEST_SECRETS names, an older device.json moved there and deleted at the app's start, and plant-key-in-file keeping
+the base's file. All 3 tests passed (3 passed, 3), the plant's test failing its judge naming
+<home>/.deepbuild/app/device.json as it should. With the same change, tests/acceptance/1606/stolen.test.ts (AC6) passed too
+(1 passed, 1): the first run of AC6 against an app that moves its key.
+
+Type check: node node_modules/typescript/bin/tsc -p tests/acceptance/1606-redraft-ac5-ac9/tsconfig.json, clean.

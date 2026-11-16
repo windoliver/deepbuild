@@ -462,6 +462,45 @@ pub fn mapped(read: &Read, array: &Value, t: i64, last: Option<&Mapped>) -> Opti
     Some(m)
 }
 
+/// #538: a reader's array path, `<logic>.<name>` or `<logic>.<name>[index]`: the array's form
+/// and the element it names (0 without an index); `None` for a malformed index.
+pub fn element_path(path: &str) -> Option<(&str, usize)> {
+    match path.strip_suffix(']').and_then(|p| p.rsplit_once('[')) {
+        Some((form, i)) => Some((form, i.trim().parse().ok()?)),
+        None => Some((path, 0)),
+    }
+}
+
+/// #538: element `index` of the scalar `array` (baked) as a frame at `t` reads it, with the
+/// frame's step; `None` past its count or for a vector array.
+pub fn element_at(array: &Value, index: usize, t: i64) -> Option<(f64, i64)> {
+    let read = Read::of(&Value::Null, array["type"].as_str()?)?;
+    let m = mapped(&read, array, t, None)?;
+    Some((*m.values.get(index)?, m.step))
+}
+
+/// #538: element `index` of the scalar `array` (baked) at step 0, whether or not step 0 wrote it,
+/// then at each later step that wrote it: `(step, value)`, by the baked steps alone.
+pub fn element_steps(array: &Value, index: usize) -> Vec<(i64, f64)> {
+    let mut out = vec![(0, 0.0)];
+    let mut one = [0.0];
+    for s in array["steps"].as_array().into_iter().flatten() {
+        let step = s["step"].as_i64().unwrap_or(0);
+        for run in s["values"].as_array().into_iter().flatten() {
+            let start = run[0].as_u64().unwrap_or(0) as usize;
+            let Some(v) = index.checked_sub(start).and_then(|j| run[1].get(j)) else {
+                continue;
+            };
+            numbers(v, &mut one);
+            match out.last_mut() {
+                Some(last) if last.0 == step => last.1 = one[0],
+                _ => out.push((step, one[0])),
+            }
+        }
+    }
+    out
+}
+
 /// The rows a mapped column hides: those that can't narrow, and for `alive` those whose value is
 /// false.
 pub fn hidden_rows(m: &Mapped, alive: bool) -> Vec<usize> {
@@ -691,28 +730,28 @@ pub fn source<'a>(
     id: &str,
     path: &str,
     form: &str,
-) -> Result<&'a Value, Issue> {
+) -> Result<&'a Value, Box<Issue>> {
     let world = world_source(worlds, form, entries);
     if world == Some(None) {
-        return Err(physics_missing(id, path.to_string(), form));
+        return Err(Box::new(physics_missing(id, path.to_string(), form)));
     }
     if world.is_none() && resolve(form, entries, true).is_none() {
-        return Err(Issue::error(
+        return Err(Box::new(Issue::error(
             "module_missing",
             id,
             path.to_string(),
             json!({"module": ARRAY_MODULE, "array": form}),
             &format!("this column reads an array the {ARRAY_MODULE} module fills, which this build lacks"),
-        ));
+        )));
     }
     arrays.get(form).ok_or_else(|| {
-        Issue::error(
+        Box::new(Issue::error(
             "ref_unresolved",
             id,
             path.to_string(),
             json!(form),
             "no logic item or world in the document writes this array",
-        )
+        ))
     })
 }
 
@@ -759,7 +798,7 @@ fn arrays_of(
         ) {
             Ok(baked) => baked,
             Err(issue) => {
-                issues.push(issue);
+                issues.push(*issue);
                 continue;
             }
         };

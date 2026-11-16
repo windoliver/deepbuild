@@ -1,0 +1,42 @@
+
+ RUN  v5.0.5 <change>
+
+ ❯ packages/hub/test/eval-report.test.ts (2 tests | 1 failed | 1 skipped) 698ms
+   × never labels a caller-supplied report as already redacted or licensed for sharing 632ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/hub/test/eval-report.test.ts > never labels a caller-supplied report as already redacted or licensed for sharing
+AssertionError: expected { …(10) } to match object { redaction: 'unknown', …(1) }
+(8 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+    "license": {
+      "allows": [],
+-     "name": "session",
++     "name": "own",
+    },
+-   "redaction": "unknown",
++   "redaction": "complete",
+  }
+
+ ❯ packages/hub/test/eval-report.test.ts:58:61
+     56|     expect(reply.error).toBeUndefined();
+     57|     const store = await openEvidenceStore({ root: join(root, 'evidence…
+     58|     expect(await store.get(reply.result!.handle!.slice(3))).toMatchObj…
+       |                                                             ^
+     59|       redaction: 'unknown', license: { name: 'session', allows: [] },
+     60|     });
+ ❯ withHub packages/hub/test/hub.ts:95:5
+ ❯ packages/hub/test/eval-report.test.ts:52:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 skipped (2)
+   Start at  22:43:40
+   Duration  857ms (tests 91%, transform 5%, import 3%, setup 1%)

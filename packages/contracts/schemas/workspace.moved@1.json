@@ -3,6 +3,9 @@
   "description": "A workspace moved to a folder you picked, keeping its id, files and history (#67). Only the core appends it.",
   "x-since": "R2",
   "x-stability": "preview",
+  "x-tracking": "#67",
+  "x-preview_since": "R2",
+  "x-decide_by": "R5",
   "x-feeds": [],
   "type": "object",
   "properties": {

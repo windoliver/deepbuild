@@ -207,7 +207,8 @@ fn a_line_its_clip_cuts_is_still_audited_past_its_frame() {
     let mut drive = Drive::start("cut-line");
     let file = "crates/deep-replica/tests/fixtures/cut-line-panel/main.js";
     let panel = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/cut-line-panel");
-    let reply = drive.call(json!({"call": "ui_check", "ui_check": {"changed": [file], "panel": panel}}));
+    let reply =
+        drive.call(json!({"call": "ui_check", "ui_check": {"changed": [file], "panel": panel}}));
     assert_eq!(reply["ok"], true, "{reply}");
     let findings = reply["findings"].as_array().unwrap();
     assert_eq!(findings.len(), 4, "one in each render: {findings:?}");

@@ -149,6 +149,36 @@ impl Relation {
             Relation::Edge { .. } => &Target::Frame,
         }
     }
+
+    /// #233: a target that names a pack instance, which the drawn document holds only as its
+    /// derived items, read as the group its parts hang from (`<id>.all`), and `<id>[i]` as part i:
+    /// that group's i-th child in draw order.
+    fn through_parts(&mut self, items: &Map<String, Value>) {
+        let (Relation::Beside { target, .. } | Relation::Onto { target, .. } | Relation::Align { to: target, .. }) = self
+        else {
+            return;
+        };
+        let Target::Item { id, .. } = target else { return };
+        if items.contains_key(id.as_str()) {
+            return;
+        }
+        let part = |base: &str, i: &str| -> Option<String> {
+            let all = format!("{base}.all");
+            let mut kids: Vec<(&str, &str)> = (items.iter())
+                .filter(|(_, v)| v.get("parent").and_then(Value::as_str) == Some(all.as_str()))
+                .map(|(k, v)| (v.get("order").and_then(Value::as_str).unwrap_or(""), k.as_str()))
+                .collect();
+            kids.sort_by(|a, b| a.0.cmp(b.0).then_with(|| crate::grid_rules::natural(a.1, b.1)));
+            kids.get(i.parse::<usize>().ok()?).map(|k| k.1.to_string())
+        };
+        let found = match id.strip_suffix(']').and_then(|b| b.split_once('[')) {
+            Some((base, i)) => part(base, i),
+            None => Some(format!("{id}.all")).filter(|all| items.contains_key(all.as_str())),
+        };
+        if let Some(found) = found {
+            *id = found;
+        }
+    }
 }
 
 /// Why a document's relations can't be read or solved: its code, the path that names it and,
@@ -485,7 +515,7 @@ pub fn own_box(kind: &str, params: &Map<String, Value>) -> Option<Box4> {
     match kind {
         "rect@1" | "image@1" | "frame@1" => four(params.get("box")),
         "circle@1" => {
-            let [x, y] = center()?;
+            let [x, y] = crate::scene::circle_center(params.get("center"))?;
             let r = num(params.get("r")).unwrap_or(0.0);
             Some([x - r, y - r, 2.0 * r, 2.0 * r])
         }
@@ -592,7 +622,8 @@ impl Graph {
                     .or_default()
                     .push(id.clone());
             }
-            let r = read(id, item, safe)?;
+            let mut r = read(id, item, safe)?;
+            r.iter_mut().for_each(|r| r.through_parts(items));
             if !r.is_empty() {
                 g.relations.insert(id.clone(), r);
             }
@@ -838,9 +869,12 @@ pub fn place_planted(
                     id: t,
                     part: Some(part),
                 } => {
+                    // #233: an axis's tick, `<axis>#tick:<value>`, from its scale at t.
+                    let tick = || crate::ticks::tick_box(t, items, part);
                     match items
                         .get(t)
                         .and_then(|item| bounds.own(t, item, Some(part)))
+                        .or_else(tick)
                     {
                         Some(b) => b,
                         None => continue,

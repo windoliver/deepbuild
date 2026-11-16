@@ -20,12 +20,21 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde_json::{json, Map, Value};
 
 use super::pack_kinds::check_kinds;
+pub(super) use inputs::input_fault;
 use super::{member, Issue};
+use crate::expr::MAX_NEST;
 use crate::ops;
 use crate::registry::{self, Range, Sealed, Semver};
 use crate::schedule::{canonical, Hasher};
 
+mod aliases;
+pub mod census;
 pub mod deps;
+mod entries;
+mod inputs;
+mod parts;
+mod place;
+mod refused;
 pub mod module_fields;
 pub mod retired;
 
@@ -56,10 +65,20 @@ pub struct Planted {
     pub each_per_triangle: bool,
     /// #1956: the pack check of a kind's migration stops at its first fault.
     pub migration_first_fault: bool,
+    /// #1959: the loader takes one saved major, the lowest a pack-kind item holds, for the whole document.
+    pub migrate_one_major: bool,
+    /// #1959: the migrator treats a param set to 0 as one the document leaves out.
+    pub migrate_zero_as_absent: bool,
+    /// #1960: the migrator renames params only, and carries no path that names one.
+    pub migrate_params_only: bool,
+    /// #1960: the migrator carries channel targets, and no other path that names a param.
+    pub migrate_channels_only: bool,
     /// #1961: a load under a version that no longer derives a broken-out ID drops the item.
     pub orphan_drops: bool,
     /// #1961: that load hands the broken-out ID to the new expansion, which writes it.
     pub orphan_hands_id: bool,
+    /// #222: a canvas module's planted wrong expansion of its own kind, by name.
+    pub expander: Option<&'static str>,
 }
 
 /// A planted expander's walk over an instance's inputs (#202).
@@ -134,6 +153,9 @@ pub struct Step {
     pub lets: Vec<(String, Template)>,
     /// `{count, as}`; `None` makes one item.
     pub repeat: Option<(Template, String)>,
+    /// `{over, as}`: a list the repeat runs over, each element under `as` and its index under
+    /// `i`, such as a film recipe's cues (#142).
+    pub over: Option<Template>,
     /// A repeat along a curve (#420): the curve (an input naming a `curve@1` item, or literal
     /// points) and the spacing that counts the copies when no count does.
     pub along: Option<(Template, Option<Template>)>,
@@ -147,6 +169,10 @@ pub struct Step {
     /// Its own channels, each targeting a field of its items (`params/size/0`), written into the
     /// document as `<item>.<channel>` as it expands (#429).
     pub channels: Vec<(String, Value)>,
+    /// The group each item hangs from and its own adjustments (opacity and the rest), each an
+    /// expression, so a recipe nests what it derives (#142).
+    pub parent: Option<Template>,
+    pub adjust: Option<Template>,
 }
 
 /// What a repeat over elements reads (Recipe: repeat over elements): `part` is
@@ -174,6 +200,8 @@ pub struct Recipe {
     /// Its kind rules (#490), read by the core's `kind_rules` check at rest: each instance
     /// whose params make one read 0 raises the rule's code.
     pub rules: Vec<KindRule>,
+    /// The parameters it refuses by name, each with its fix (#233).
+    pub refuses: BTreeMap<String, String>,
 }
 
 /// A recipe's kind rule: `<pack>.<rule>`, an expression of the closed function list over the
@@ -184,6 +212,10 @@ pub struct KindRule {
     pub expr: crate::expr::Expr,
     pub at: At,
     pub fix: String,
+    /// `over: <input>` (#142): a rule over a cue list input, its expression a recipe
+    /// expression read once per cue (`cue`), or once per pair (`cue` and an earlier `other`)
+    /// when it reads `other`, after the list's times resolve.
+    pub over: Option<(String, Template)>,
 }
 
 /// When a kind rule reads its instance (Pack: kind rules): at rest, at each of its times in
@@ -253,16 +285,50 @@ pub struct Pack {
     /// A familiar-names pack's words (Pack: math@1's `aliases`): each word, the kind it maps to
     /// and the conversion the pack states for it, `{target, conversion, renamed_from?}`, by word.
     pub aliases: BTreeMap<String, Value>,
+    /// Its census (#1493): each name of its reference, and each parameter of a name it maps,
+    /// mapped, refused or open.
+    pub census: Vec<census::Row>,
     /// Its kinds backed by recipes, by `<pack>.<name>@<major>`, each with its kit's result (#202).
     pub kinds: BTreeMap<String, super::pack_kinds::PackKind>,
 }
 
 /// The step ops this slice expands: a mark or an item of a kind the build registers.
-const STEP_OPS: &[&str] = &["mark", "item", "builder", "recipe"];
+/// `cue` writes a cue over the calling cue's targets; only a `cue.kind@1` verb runs it (#222).
+/// A film recipe's `shot`, `marker`, `strip` and `transition` each write an entry of the
+/// document's map of that kind, its params the entry's fields (Recipe; #142).
+const STEP_OPS: &[&str] = &[
+    "mark",
+    "item",
+    "builder",
+    "recipe",
+    "cue",
+    "shot",
+    "marker",
+    "strip",
+    "transition",
+    "driver",
+    "place",
+    "value",
+];
 /// The input types this slice reads.
 const INPUT_TYPES: &[&str] = &[
-    "number", "integer", "bool", "choice", "vec3", "range", "text", "ID", "records", "record",
+    "number", "integer", "bool", "choice", "vec3", "range", "text", "asset", "ID", "records",
+    "record", "word",
 ];
+
+/// The document map a film recipe's step op writes into, for the ops that write no item.
+pub fn section_of(op: &str) -> Option<&'static str> {
+    match op {
+        "shot" => Some("shots"),
+        "marker" => Some("markers"),
+        "strip" => Some("strips"),
+        "transition" => Some("transitions"),
+        "driver" => Some("drivers"),
+        // #233: a named value, such as a ValueTracker's, which formulas read and cues key.
+        "value" => Some("data"),
+        _ => None,
+    }
+}
 
 /// The pack check (Pack: checked once per version). Refuses with the issues at the manifest's
 /// paths; a module the build lacks is `module_missing` naming it.
@@ -440,11 +506,10 @@ pub fn check_pack(manifest: &Value, sealed: &Sealed, planted: Planted) -> Result
         .unwrap_or_default();
     let entries = match fields.get("entries") {
         None => Vec::new(),
-        Some(e) => check_entries(&id, e, &assets, sealed, &mut issues),
-    };
-    let aliases = match fields.get("aliases") {
-        None => BTreeMap::new(),
-        Some(a) => check_aliases(a, &mut issues),
+        Some(e) => {
+            let recipes = fields.get("recipes");
+            check_entries(&id, e, &assets, recipes, sealed, &mut issues)
+        }
     };
     let kinds = check_kinds(
         &id,
@@ -454,6 +519,18 @@ pub fn check_pack(manifest: &Value, sealed: &Sealed, planted: Planted) -> Result
         (sealed, planted),
         &mut issues,
     );
+    let aliases = match fields.get("aliases") {
+        None => BTreeMap::new(),
+        Some(a) => {
+            let (pack, requires) = (id.name.as_str(), requires_packs.as_slice());
+            let holds = aliases::Holds { pack, recipes: &recipes, kinds: &kinds, requires, sealed };
+            aliases::check(a, &holds, &mut issues)
+        }
+    };
+    let census = match fields.get("census") {
+        None => Vec::new(),
+        Some(c) => census::read(c, &aliases, &mut issues),
+    };
     for key in fields.keys().filter(|k| !PACK_KEYS.contains(&k.as_str())) {
         issues.extend(module_fields::check(sealed, manifest, key));
     }
@@ -468,43 +545,9 @@ pub fn check_pack(manifest: &Value, sealed: &Sealed, planted: Planted) -> Result
         digest: digest(manifest),
         entries,
         aliases,
+        census,
         kinds,
     })
-}
-
-/// A pack's `aliases`: each word maps to a kind as `name@major`, with the conversion the pack
-/// states as text; anything else is refused at `aliases/<word>`, so no mapping is inferred.
-fn check_aliases(aliases: &Value, issues: &mut Vec<Issue>) -> BTreeMap<String, Value> {
-    let mut out = BTreeMap::new();
-    let Some(words) = aliases.as_object() else {
-        issues.push(Issue::envelope(
-            "out_of_range",
-            "aliases".into(),
-            aliases.clone(),
-            "not an object",
-        ));
-        return out;
-    };
-    for (word, alias) in words {
-        let target = alias.get("target").and_then(Value::as_str);
-        let conversion = alias.get("conversion").and_then(Value::as_str);
-        let keys_ok = alias.as_object().is_some_and(|a| {
-            a.keys()
-                .all(|k| matches!(k.as_str(), "target" | "conversion" | "renamed_from"))
-        });
-        match (target.and_then(crate::kinds::parse_kind), conversion) {
-            (Some(_), Some(_)) if keys_ok => {
-                out.insert(word.clone(), alias.clone());
-            }
-            _ => issues.push(Issue::envelope(
-                "out_of_range",
-                format!("aliases/{word}"),
-                alias.clone(),
-                "an alias is {target: name@major, conversion: text, renamed_from?}",
-            )),
-        }
-    }
-    out
 }
 
 /// A pack's registry entries (Registry and seal: registries), each checked at the pack check: in
@@ -515,6 +558,7 @@ fn check_entries(
     id: &PackId,
     entries: &Value,
     assets: &[Value],
+    recipes: Option<&Value>,
     sealed: &Sealed,
     issues: &mut Vec<Issue>,
 ) -> Vec<registry::lists::SealedEntry> {
@@ -573,8 +617,10 @@ fn check_entries(
                 ));
                 continue;
             };
+            // An entry that names one of the pack's recipes carries it, for its kit and its use.
+            let value = &entries::with_recipes(value, recipes);
             let own = format!("{}.", id.name);
-            if !entry.starts_with(&own) {
+            if !entry.starts_with(&own) && !entries::bare(id, reg, entry) {
                 let what = match reg.entry(entry) {
                     Some(first) => format!(
                         "`{entry}` would take the first-party entry `{entry}` of `{name}` (`{}`'s); a pack's entry is named `{}{entry}`",
@@ -674,6 +720,7 @@ const PACK_KEYS: &[&str] = &[
     "recipes",
     "entries",
     "aliases",
+    "census",
     "assets",
     "providers",
     "layouts",
@@ -702,10 +749,12 @@ const RECIPE_KEYS: &[&str] = &[
     "channels",
     "rules",
     "twins",
+    "refuses",
 ];
 /// A step's keys in this slice.
 const STEP_KEYS: &[&str] = &[
-    "op", "kind", "params", "at", "material", "repeat", "let", "when", "channels",
+    "op", "kind", "params", "at", "material", "repeat", "let", "when", "channels", "parent",
+    "adjust",
 ];
 
 fn check_recipe(
@@ -846,12 +895,17 @@ fn check_recipe(
                 }
                 let op = s.get("op").and_then(Value::as_str).unwrap_or_default();
                 if !STEP_OPS.contains(&op) {
-                    let what = "not a step op of this slice (mark, item, builder, recipe)";
+                    let what = "not a step op of this slice (mark, item, builder, recipe, cue, shot, marker, strip, transition)";
                     issues.push(bad(&format!("{at}/op"), json!(op), what));
                     continue;
                 }
                 let kind = s.get("kind").and_then(Value::as_str).unwrap_or_default();
-                let Some((kind_name, _)) = crate::kinds::parse_kind(kind) else {
+                let parsed = match op {
+                    "cue" | "place" => Some((String::new(), 0)),
+                    _ if section_of(op).is_some() => Some((String::new(), 0)),
+                    _ => crate::kinds::parse_kind(kind),
+                };
+                let Some((kind_name, _)) = parsed else {
                     issues.push(bad(
                         &format!("{at}/kind"),
                         json!(kind),
@@ -891,6 +945,7 @@ fn check_recipe(
                 };
                 let mut along = None;
                 let mut each = None;
+                let mut over = None;
                 let repeat = match s.get("repeat") {
                     None => None,
                     Some(r) => {
@@ -901,10 +956,20 @@ fn check_recipe(
                             .map(|o| o.keys().collect())
                             .unwrap_or_default();
                         if keys.iter().any(|k| {
-                            !["count", "as", "along", "spacing", "each"].contains(&k.as_str())
+                            !["count", "as", "along", "spacing", "each", "over"]
+                                .contains(&k.as_str())
                         }) {
-                            issues.push(bad(&format!("{at}/repeat"), r.clone(), "a repeat is `{count, as}`, `{along, count | spacing, as}` or `{each: {part, domain}, as}`; over, on and pack land later"));
+                            issues.push(bad(&format!("{at}/repeat"), r.clone(), "a repeat is `{count, as}`, `{over, as}`, `{along, count | spacing, as}` or `{each: {part, domain}, as}`; on and pack land later"));
                             continue;
+                        }
+                        // Over a list the recipe's inputs and lets fix: its count is its length.
+                        if let Some(o) = member(r, "over") {
+                            if count.is_some() || unfixed(o) {
+                                issues.push(bad(&format!("{at}/repeat/over"), o.clone(), &format!("step `{step_id}` repeats over a list of the recipe's inputs and lets, without a count")));
+                                continue;
+                            }
+                            over = Some(Template::of(o));
+                            count = Some(json!(0));
                         }
                         if let Some(e) = member(r, "each") {
                             // The part: `<input>#<part>`, an ID input holding a builder item.
@@ -992,9 +1057,18 @@ fn check_recipe(
                         }
                     }
                 };
+                // Over a list, the condition may read each element (#142).
+                let element = |n: &String| {
+                    over.is_some() && repeat.as_ref().is_some_and(|(_, a)| a == n || n == "i")
+                };
+                let unfixed_when = |v: &Value| {
+                    Template::of(v).reads().0.iter().any(|n| {
+                        !inputs.contains_key(n) && !lets.iter().any(|(l, _)| l == n) && !element(n)
+                    })
+                };
                 let when = match s.get("when") {
                     None => None,
-                    Some(w) if unfixed(w) => {
+                    Some(w) if unfixed_when(w) => {
                         issues.push(bad(&format!("{at}/when"), w.clone(), &format!("step `{step_id}`'s condition reads more than the recipe's inputs and lets, so no check can fix it")));
                         continue;
                     }
@@ -1043,11 +1117,14 @@ fn check_recipe(
                     at: s.get("at").map(Template::of),
                     lets: step_lets,
                     repeat,
+                    over,
                     along,
                     each,
                     when,
                     material,
                     channels: own,
+                    parent: s.get("parent").map(Template::of),
+                    adjust: s.get("adjust").map(Template::of),
                 });
             }
         }
@@ -1080,6 +1157,7 @@ fn check_recipe(
         Some(other) => issues.push(bad("channels", other.clone(), "not an object")),
     }
     let rules = read_rules(pack, fields, &inputs, sealed, path, &mut issues);
+    let refuses = refused::read(fields, &inputs, path, &mut issues);
     if !issues.is_empty() {
         return Err(issues);
     }
@@ -1092,6 +1170,7 @@ fn check_recipe(
         steps,
         channels,
         rules,
+        refuses,
     })
 }
 
@@ -1240,6 +1319,44 @@ pub(super) fn read_rule_list(
             ));
             continue;
         };
+        // A rule over a cue list (#142): a recipe expression over its cues' rows.
+        if let Some(over) = r.get("over") {
+            let list = over
+                .as_str()
+                .filter(|n| inputs.get(*n).is_some_and(|i| i.ty == "records"));
+            let Some(list) = list else {
+                issues.push(bad(
+                    &format!("{at}/over"),
+                    over.clone(),
+                    &format!("rule `{code}` runs over a records input of the recipe, its cue list"),
+                ));
+                continue;
+            };
+            if !matches!(when, At::Rest) || Expr::parse(text).is_err() {
+                issues.push(bad(
+                    &format!("{at}/expr"),
+                    json!(text),
+                    &format!("rule `{code}` over a cue list reads it at rest, by an expression"),
+                ));
+                continue;
+            }
+            let Ok(mut expr) = crate::expr::Expr::compile("1", &RuleScope(sealed), 256) else {
+                continue;
+            };
+            expr.text = text.to_string();
+            rules.push(KindRule {
+                code: code.to_string(),
+                expr,
+                at: when,
+                fix: r
+                    .get("fix")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string(),
+                over: Some((list.to_string(), Template::of(&json!(text)))),
+            });
+            continue;
+        }
         let expr = match crate::expr::Expr::compile(text, &RuleScope(sealed), 256) {
             Ok(e) => e,
             Err(e) => {
@@ -1273,6 +1390,7 @@ pub(super) fn read_rule_list(
                 .and_then(Value::as_str)
                 .unwrap_or_default()
                 .to_string(),
+            over: None,
         });
     }
     rules
@@ -1326,49 +1444,103 @@ fn read_lets(
     }
 }
 
-/// Why `value` is no value of `input`, if it isn't.
-pub(super) fn input_fault(input: &Input, value: &Value) -> Option<String> {
-    let range = |n: f64| -> Option<String> {
-        let below = input.min.is_some_and(|min| n < min);
-        let above = input.max.is_some_and(|max| n > max);
-        (below || above || !n.is_finite()).then(|| {
-            format!(
-                "outside {} to {}",
-                input.min.unwrap_or(f64::NEG_INFINITY),
-                input.max.unwrap_or(f64::INFINITY)
-            )
+/// A pack folder's manifest as the pack check reads it (#142, moved from the hub so every host
+/// reads a folder alike): `pack.json` with its `id`, each asset's bytes in hex once its sha256
+/// and size match what the manifest lists (network assets are fetched on first use, never here),
+/// and each recipe file read in place of its name. `read` gives a file's bytes by its path in the
+/// folder; the core reads no file itself.
+pub fn manifest_of(
+    id: &str,
+    read: &dyn Fn(&str) -> Result<Vec<u8>, String>,
+) -> Result<Value, Vec<Issue>> {
+    let json = |path: &str| -> Result<Value, Vec<Issue>> {
+        let bytes = read(path).map_err(|e| {
+            vec![Issue::envelope(
+                "ref_unresolved",
+                path.to_string(),
+                json!(path),
+                &format!("can't read the pack file: {e}"),
+            )]
+        })?;
+        serde_json::from_slice(&bytes).map_err(|e| {
+            vec![Issue::envelope(
+                "out_of_range",
+                path.to_string(),
+                json!(path),
+                &format!("not JSON: {e}"),
+            )]
         })
     };
-    match input.ty.as_str() {
-        "number" => match value.as_f64() {
-            Some(n) => range(n),
-            None => Some("not a number".into()),
-        },
-        "integer" => match value.as_f64() {
-            Some(n) if n.fract() == 0.0 => range(n),
-            _ => Some("not an integer".into()),
-        },
-        "bool" => (!value.is_boolean()).then(|| "not a bool".to_string()),
-        "choice" => match value.as_str() {
-            Some(s) if input.options.iter().any(|o| o == s) => None,
-            _ => Some(format!("not one of {}", input.options.join(", "))),
-        },
-        "vec3" | "range" => {
-            let (len, what) = match input.ty.as_str() {
-                "vec3" => (3, "not three numbers"),
-                _ => (2, "not two numbers"),
-            };
-            let ok = value.as_array().is_some_and(|a| {
-                a.len() == len && a.iter().all(|v| v.as_f64().is_some_and(f64::is_finite))
-            });
-            (!ok).then(|| what.to_string())
+    let mut manifest = json("pack.json")?;
+    let Some(fields) = manifest.as_object_mut() else {
+        return Err(vec![Issue::envelope(
+            "out_of_range",
+            "pack.json".into(),
+            manifest.clone(),
+            "a pack is an object",
+        )]);
+    };
+    fields.insert("id".into(), json!(id));
+    // #238: each asset's bytes, in hex, for the programs and data the sandbox module runs at
+    // the pack check.
+    if let Some(Value::Array(assets)) = fields.get_mut("assets") {
+        for (i, a) in assets.iter_mut().enumerate() {
+            if a.get("url").and_then(Value::as_str).is_some() {
+                continue;
+            }
+            let path = a
+                .get("path")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string();
+            let bytes = read(&path).ok();
+            let sha = bytes.as_deref().map(crate::schedule::sha256_hex);
+            let listed = a.get("sha256").and_then(Value::as_str);
+            let size = a.get("size").and_then(Value::as_u64);
+            match bytes {
+                Some(b) if sha.as_deref() == listed && size == Some(b.len() as u64) => {
+                    a["hex"] = json!(b.iter().map(|x| format!("{x:02x}")).collect::<String>());
+                }
+                _ => {
+                    return Err(vec![Issue::envelope(
+                        "ref_unresolved",
+                        format!("assets/{i}"),
+                        a.clone(),
+                        &format!(
+                            "the asset `{path}` isn't there with the sha256 and size the pack lists"
+                        ),
+                    )])
+                }
+            }
         }
-        "text" | "ID" => (!value.is_string()).then(|| "not a string".to_string()),
-        // A list of rows, such as points, and one row, such as another tool's mesh (#433).
-        "records" => (!value.is_array()).then(|| "not a list".to_string()),
-        "record" => (!value.is_object()).then(|| "not an object".to_string()),
-        _ => None,
     }
+    if let Some(Value::Object(recipes)) = fields.get_mut("recipes") {
+        for (kind, entry) in recipes.iter_mut() {
+            if let Some(file) = entry.as_str() {
+                *entry = json(file).map_err(|mut issues| {
+                    for i in &mut issues {
+                        i.path = format!("recipes/{kind}");
+                    }
+                    issues
+                })?;
+            }
+        }
+    }
+    // #1493: a familiar-names pack's census, read in place of its file's name.
+    if let Some(file) = fields
+        .get("census")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+    {
+        let census = json(&file).map_err(|mut issues| {
+            for i in &mut issues {
+                i.path = "census".into();
+            }
+            issues
+        })?;
+        fields.insert("census".into(), census);
+    }
+    Ok(manifest)
 }
 
 /// The pack versions a build admitted, keyed `owner/name@version`.
@@ -1433,9 +1605,21 @@ impl Packs {
         // checks documents of the pack beside the versions it requires.
         let checked = check_pack(manifest, sealed, self.planted).and_then(|mut pack| {
             deps::cycle(self, &pack)?;
-            if !pack.kinds.is_empty() {
-                let alone = deps::store(self, &pack);
-                super::pack_kinds::kit(&mut pack, sealed, alone)?;
+            if !pack.kinds.is_empty() || !pack.census.is_empty() {
+                let mut alone = deps::store(self, &pack);
+                // A pack's kit checks its kinds as shipped: a planted cue-list expander (#142) or
+                // load migrator (#1959) is a document's wrong program, never the kit's.
+                alone.planted.expander = None;
+                alone.planted.migrate_one_major = false;
+                alone.planted.migrate_zero_as_absent = false;
+                alone.planted.migrate_params_only = false;
+                alone.planted.migrate_channels_only = false;
+                // #1493: a parameter a pack's census maps must reach the frame, so each meets
+                // field.effect on its recipe as a kind's field does.
+                super::pack_kinds::alias_effect(&pack, sealed, &alone)?;
+                if !pack.kinds.is_empty() {
+                    super::pack_kinds::kit(&mut pack, sealed, alone)?;
+                }
             }
             Ok(pack)
         });
@@ -1494,6 +1678,8 @@ pub struct Resolved<'a> {
     elements: BTreeMap<String, registry::Elements>,
     /// The listed versions this build lacks, whose instances are kept and skipped (#1958).
     pub missing: Vec<retired::Missing>,
+    /// The document's design size in u, which a recipe reads as `fw` and `fh` (#233).
+    pub frame: [f64; 2],
 }
 
 impl<'a> Resolved<'a> {
@@ -1538,7 +1724,11 @@ pub fn resolve<'a>(
     sealed: Option<&Sealed>,
     issues: &mut Vec<Issue>,
 ) -> Resolved<'a> {
-    let mut out = Resolved::default();
+    let (fw, fh) = super::check::frame_of(doc).unwrap_or((1920, 1080));
+    let mut out = Resolved {
+        frame: [f64::from(fw), f64::from(fh)],
+        ..Resolved::default()
+    };
     if let Some(sealed) = sealed {
         for m in &sealed.modules {
             for (kind, f) in &m.shapes.elements {
@@ -1653,6 +1843,11 @@ pub struct Expansion {
     pub orphaned: Vec<(usize, String)>,
     /// The recipe's channels, each targeting a derived item, by `<instance>.<channel>[.<k>]`.
     pub channels: Map<String, Value>,
+    /// The section entries an expansion wrote, by section: a module kind's (#222), or a film
+    /// recipe's shots, markers, strips and transitions (#142).
+    pub sections: Map<String, Value>,
+    /// The items it placed by relation or parent, in order: its parts (#233).
+    pub placed: Vec<String>,
 }
 
 impl Expansion {
@@ -1662,7 +1857,7 @@ impl Expansion {
             .iter()
             .map(|d| (d.id.clone(), json!(format!("{:016x}", d.seed))))
             .collect();
-        json!({
+        let mut row = json!({
             "instance": self.instance,
             "kind": self.kind,
             "pack": self.pack,
@@ -1671,7 +1866,12 @@ impl Expansion {
             "seeds": seeds,
             "broken_out": self.broken_out,
             "channels": self.channels,
-        })
+        });
+        // A module kind's expansion lists its sections beside its derived items (#222).
+        for (section, entries) in &self.sections {
+            row[section.as_str()] = entries.clone();
+        }
+        row
     }
 }
 
@@ -1719,6 +1919,7 @@ pub fn expand(
         };
         out.push(expansion);
     }
+    parts::resolve(items, &out);
     out
 }
 
@@ -1966,6 +2167,11 @@ fn expand_one(
             continue;
         }
         let Some(input) = recipe.inputs.get(name) else {
+            if let Some(fix) = recipe.refuses.get(name) {
+                issues.push(refused::refusal(id, &recipe.id, name, value, fix));
+                ok = false;
+                continue;
+            }
             issues.push(Issue::error(
                 "unknown_field",
                 id,
@@ -1982,7 +2188,7 @@ fn expand_one(
                 id,
                 at(&format!("params/{name}")),
                 value.clone(),
-                &what,
+                &format!("{what}: {}'s input `{name}`", recipe.id),
             ));
             ok = false;
         }
@@ -2093,8 +2299,14 @@ fn expand_one(
         key.bytes(&canonical(s));
     }
     let key = key.finish().hex();
-    let mut env: Vec<(String, Value)> =
-        inputs.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+    // The instance's own ID first, so a film recipe's shots, transitions and cue list can name
+    // the items it derives (#142); an input of that name shadows it.
+    let [fw, fh] = resolved.frame;
+    let scope = [("instance", json!(id)), ("fw", json!(fw)), ("fh", json!(fh))];
+    let mut env: Vec<(String, Value)> = (scope.into_iter().map(|(k, v)| (k.to_string(), v)))
+        .chain(inputs.iter().map(|(k, v)| (k.clone(), v.clone())))
+        .chain(inputs::named(recipe, &inputs, items))
+        .collect();
     for (name, expr) in &recipe.lets {
         match expr.eval(&env) {
             Ok(v) => env.push((name.clone(), v)),
@@ -2111,14 +2323,18 @@ fn expand_one(
         }
     }
     let mut derived = Vec::new();
+    let mut placed = Vec::new();
     let mut derived_items = Map::new();
     // Each step's derived IDs, which the recipe's channels target, and the channels.
     let mut ids_of: BTreeMap<String, Vec<String>> = BTreeMap::new();
     let mut channels = Map::new();
+    // A film recipe's entries of the document's maps (shots, markers, strips, transitions), by
+    // map, then ID (#142).
+    let mut sections = Map::new();
     // One scope for every derived item: the inputs and lets, then each item's own names.
     let base = env.len();
     let mut scope = env;
-    for step in &recipe.steps {
+    for step in recipe.steps.iter().filter(|s| s.op != "cue") {
         // A repeat along a curve: its points, and its count from the spacing when it has one.
         let curve = match &step.along {
             None => None,
@@ -2222,8 +2438,36 @@ fn expand_one(
                 }
             }
         };
+        // A repeat over a list (#142): its elements, fixed by the inputs and lets.
+        let listed = match &step.over {
+            None => None,
+            Some(list) => match list.eval(&scope[..base]) {
+                Ok(Value::Array(a)) if a.len() as u64 <= MAX_REPEAT => Some(a),
+                Ok(other) => {
+                    issues.push(Issue::error(
+                        "out_of_range",
+                        id,
+                        at(&format!("steps/{}/repeat/over", step.id)),
+                        other,
+                        &format!("a repeat runs over a list of at most {MAX_REPEAT} elements"),
+                    ));
+                    return None;
+                }
+                Err(what) => {
+                    issues.push(Issue::error(
+                        "out_of_range",
+                        id,
+                        at(&format!("steps/{}/repeat/over", step.id)),
+                        list.source().clone(),
+                        &what,
+                    ));
+                    return None;
+                }
+            },
+        };
         let count: Option<u64> = match &step.repeat {
             None => None,
+            Some(_) if listed.is_some() => listed.as_ref().map(|e| e.len() as u64),
             Some(_) if elements.is_some() => elements.as_ref().map(|e| e.len() as u64),
             Some(_) if spaced.is_some() => match spaced {
                 Some((n, _)) if n <= MAX_REPEAT as f64 => Some(n as u64),
@@ -2266,8 +2510,9 @@ fn expand_one(
                 }
             },
         };
-        // A condition false at check leaves the step out: it derives nothing.
-        if let Some(when) = &step.when {
+        // A condition false at check leaves the step out: it derives nothing. Over a list, it is
+        // read once per element instead.
+        if let Some(when) = step.when.as_ref().filter(|_| listed.is_none()) {
             match when.eval(&scope[..base]) {
                 Ok(v) if !truthy(&v) => continue,
                 Ok(_) => {}
@@ -2317,11 +2562,34 @@ fn expand_one(
             scope.truncate(base);
             if let Some((_, as_)) = &step.repeat {
                 // Over elements, the name reads the element: `e.i`, `e.center` and the rest.
-                let value = match &elements {
-                    Some(list) => list[index as usize].clone(),
-                    None => json!(index),
+                let value = match (&elements, &listed) {
+                    (Some(list), _) | (None, Some(list)) => list[index as usize].clone(),
+                    (None, None) => json!(index),
                 };
                 scope.push((as_.clone(), value));
+                if listed.is_some() {
+                    scope.push(("i".into(), json!(index)));
+                }
+            }
+            // Over a list, the condition reads the element: false leaves that element out.
+            if let (Some(when), Some(_)) = (&step.when, &listed) {
+                match when.eval(&scope) {
+                    Ok(v) if !truthy(&v) => {
+                        derived.retain(|d| d.id != derived_id);
+                        continue;
+                    }
+                    Ok(_) => {}
+                    Err(what) => {
+                        issues.push(Issue::error(
+                            "out_of_range",
+                            id,
+                            at(&format!("steps/{}/when", step.id)),
+                            when.source().clone(),
+                            &what,
+                        ));
+                        return None;
+                    }
+                }
             }
             scope.push(("seed".into(), json!(seed)));
             for (name, expr) in &step.lets {
@@ -2356,6 +2624,27 @@ fn expand_one(
                         return None;
                     }
                 }
+            }
+            // A film recipe's shot, marker, strip or transition: an entry of that map, its params
+            // its fields, at the derived ID.
+            if let Some(section) = section_of(&step.op) {
+                let held = sections
+                    .entry(section.to_string())
+                    .or_insert_with(|| Value::Object(Map::new()));
+                if let Some(map) = held.as_object_mut() {
+                    map.insert(derived_id.clone(), Value::Object(params));
+                }
+                // An entry, not a derived item.
+                derived.retain(|d| d.id != derived_id);
+                continue;
+            }
+            // #233: an item the document holds, placed by relation or parent: no derived item.
+            if step.op == "place" {
+                let (target, item) = place::apply(items, id, &step.id, &params, issues)?;
+                derived_items.insert(target.clone(), item);
+                placed.push(target);
+                derived.retain(|d| d.id != derived_id);
+                continue;
             }
             if items.contains_key(&derived_id) && !broken_out.contains(&derived_id) {
                 issues.push(Issue::error(
@@ -2394,6 +2683,25 @@ fn expand_one(
                 }
             }
             fields.insert("params".into(), Value::Object(params));
+            // Its own parent and adjustments over the instance's (#142).
+            for (key, t) in [("parent", &step.parent), ("adjust", &step.adjust)] {
+                let Some(t) = t else { continue };
+                match t.eval(&scope) {
+                    Ok(v) => {
+                        fields.insert(key.into(), v);
+                    }
+                    Err(what) => {
+                        issues.push(Issue::error(
+                            "out_of_range",
+                            id,
+                            at(&format!("steps/{}/{key}", step.id)),
+                            t.source().clone(),
+                            &what,
+                        ));
+                        return None;
+                    }
+                }
+            }
             if let Some(m) = &step.material {
                 fields.insert("material".into(), m.clone());
             }
@@ -2542,6 +2850,14 @@ fn expand_one(
                 }
                 derived.extend(inner.items);
                 channels.extend(inner.channels);
+                for (section, entries) in inner.sections {
+                    let held = sections
+                        .entry(section)
+                        .or_insert_with(|| Value::Object(Map::new()));
+                    if let (Some(map), Value::Object(entries)) = (held.as_object_mut(), entries) {
+                        map.extend(entries);
+                    }
+                }
                 ids_of.entry(step.id.clone()).or_default().push(derived_id);
                 continue;
             }
@@ -2611,6 +2927,8 @@ fn expand_one(
         broken_out,
         orphaned,
         channels,
+        sections,
+        placed,
     })
 }
 
@@ -2648,6 +2966,8 @@ enum Form {
     Expr(Expr),
     /// A number, a bool, null, or text the grammar doesn't read (`"a b"`, `"#fff"`).
     Literal,
+    /// Text the grammar refuses for one of its caps, never a literal: evaluating it fails.
+    Refused(String),
     List(Vec<Template>),
     Map(Vec<(String, Template)>),
     /// `{"repeat": {count | over, as, let?, of}}`: a list of `of`, once per index (or element),
@@ -2702,18 +3022,49 @@ impl ListRepeat {
     }
 }
 
+/// What every refusal for one of the grammar's caps says, so a capped text is never a literal.
+const CAPPED: &str = "past the cap of";
+
+/// A cap's refusal of a repeat's `count`, `over` or `let` text, if one has it.
+fn capped_in(r: &Value) -> Option<String> {
+    let o = r.as_object()?;
+    let lets = o
+        .get("let")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten();
+    o.get("count")
+        .into_iter()
+        .chain(o.get("over"))
+        .chain(lets.map(|(_, v)| v))
+        .filter_map(Value::as_str)
+        .find_map(|t| Expr::parse(t).err().filter(|e| e.contains(CAPPED)))
+}
+
 impl Template {
     pub fn of(value: &Value) -> Template {
+        // A string led by `\\` is its text without it, never an expression: what a recipe writes
+        // for another reader, such as a warp's formula (#142).
+        if let Some(text) = value.as_str().and_then(|t| t.strip_prefix('\\')) {
+            return Template {
+                source: json!(text),
+                form: Form::Literal,
+            };
+        }
         let form = match value {
             Value::String(text) => match Expr::parse(text) {
                 Ok(expr) => Form::Expr(expr),
+                Err(e) if e.contains(CAPPED) => Form::Refused(e),
                 Err(_) => Form::Literal,
             },
             Value::Array(list) => Form::List(list.iter().map(Template::of).collect()),
             Value::Object(map) => match map.get("repeat").filter(|_| map.len() == 1) {
                 Some(r) => match ListRepeat::of(r) {
                     Some(r) => Form::Repeat(Box::new(r)),
-                    None => Form::Literal,
+                    None => match capped_in(r) {
+                        Some(e) => Form::Refused(e),
+                        None => Form::Literal,
+                    },
                 },
                 None => Form::Map(
                     map.iter()
@@ -2752,7 +3103,7 @@ impl Template {
     fn walk(&self, bound: &mut Vec<String>, out: &mut Vec<String>, words: &mut Vec<String>) {
         match &self.form {
             Form::Expr(e) => e.free(bound, out, words),
-            Form::Literal => {}
+            Form::Literal | Form::Refused(_) => {}
             Form::List(l) => l.iter().for_each(|t| t.walk(bound, out, words)),
             Form::Map(m) => m.iter().for_each(|(_, t)| t.walk(bound, out, words)),
             Form::Repeat(r) => {
@@ -2779,6 +3130,7 @@ impl Template {
             }
             Form::Expr(expr) => expr.value(scope),
             Form::Literal => Ok(self.source.clone()),
+            Form::Refused(e) => Err(e.clone()),
             Form::List(list) => list
                 .iter()
                 .map(|t| t.eval(scope))
@@ -2867,7 +3219,21 @@ pub fn postfix(text: &str) -> Result<Vec<ExprStep>, String> {
                 walk(b, out)?;
                 out.push(ExprStep::Bin(*op));
             }
-            Expr::Call(name, args) if !matches!(name.as_str(), "len" | "sum" | "unmapped") => {
+            Expr::Call(name, args)
+                if !matches!(
+                    name.as_str(),
+                    "len"
+                        | "sum"
+                        | "unmapped"
+                        | "has"
+                        | "id"
+                        | "at"
+                        | "path"
+                        | "polyline"
+                        | "find"
+                        | "pair"
+                ) =>
+            {
                 for a in args {
                     walk(a, out)?;
                 }
@@ -2908,17 +3274,19 @@ enum Expr {
 
 /// The most terms a bounded sum adds (The closed function list: bounded sums).
 const MAX_SUM: f64 = 256.0;
-/// The most tokens an expression has, and the deepest its parentheses, indexes, arguments,
-/// branches and signs nest: the parser and the tree's readers recurse, so both bound the stack.
-const MAX_TOKENS: usize = 1024;
-const MAX_NESTING: usize = 64;
 
 impl Expr {
     fn parse(text: &str) -> Result<Expr, String> {
-        let tokens = tokenize(text)?;
-        if tokens.len() > MAX_TOKENS {
-            return Err(format!("an expression has at most {MAX_TOKENS} tokens"));
+        match Expr::parse_capped(text) {
+            Err(e) if e.contains(CAPPED) && !could_be_expression(text) => {
+                Err("isn't an expression".into())
+            }
+            parsed => parsed,
         }
+    }
+
+    fn parse_capped(text: &str) -> Result<Expr, String> {
+        let tokens = tokenize(text)?;
         let mut p = Parser {
             tokens,
             at: 0,
@@ -2961,6 +3329,21 @@ impl Expr {
                 c.free(bound, out, words);
                 word(a, bound, out, words);
                 word(b, bound, out, words);
+            }
+            // `has(record, name)`: its name is a field's, never a read (#142).
+            Expr::Call(name, args) if name == "has" && args.len() == 2 => {
+                args[0].free(bound, out, words);
+            }
+            // `find(list, name, value)`: its name is a field's, and its value may be a word.
+            Expr::Call(name, args) if name == "find" && args.len() == 3 => {
+                args[0].free(bound, out, words);
+                word(&args[2], bound, out, words);
+            }
+            // `id(…)` and `at(…)`: a bare name nothing binds is its own text (#142).
+            Expr::Call(name, args) if matches!(name.as_str(), "id" | "at" | "path" | "part" | "cat") => {
+                for a in args {
+                    word(a, bound, out, words);
+                }
             }
             Expr::Call(name, args) if name == "sum" && args.len() == 4 => {
                 args[1].free(bound, out, words);
@@ -3023,6 +3406,10 @@ impl Expr {
             Expr::Cond(c, a, b) => {
                 let picked = if c.eval(scope)? != 0.0 { a } else { b };
                 match &**picked {
+                    // A bare `null` is null, so a branch can leave a field unset (#142).
+                    Expr::Name(w) if w == "null" && !scope.iter().any(|(k, _)| k == w) => {
+                        Ok(Value::Null)
+                    }
                     // A bare name nothing binds is its own text, such as a choice's word.
                     Expr::Name(w) if !scope.iter().any(|(k, _)| k == w) => Ok(json!(w)),
                     e => e.value(scope),
@@ -3075,6 +3462,118 @@ impl Expr {
             Expr::Call(name, args) if name == "unmapped" && args.is_empty() => {
                 Err("the pack maps no such value: refused, never guessed".into())
             }
+            // An ID joined from its parts, `id(instance, shot, i)` → `film.shot.3`, a time
+            // anchored on a marker, `at(cues, c.id, end)` → `@cues.c3.end`, and a document path,
+            // `path(items, id(instance, row0), at, pos, 0)` → `items/film.row0/at/pos/0` (#142).
+            Expr::Call(name, args) if matches!(name.as_str(), "id" | "at" | "path" | "part" | "cat") => {
+                let mut parts = Vec::new();
+                for a in args {
+                    let part = match a {
+                        Expr::Name(w) if !scope.iter().any(|(k, _)| k == w) => w.clone(),
+                        e => match e.value(scope)? {
+                            Value::String(t) => t,
+                            Value::Number(x) if x.as_f64().is_some_and(|f| f.fract() == 0.0) => {
+                                format!("{}", x.as_f64().unwrap_or(0.0) as i64)
+                            }
+                            Value::Number(x) if name == "part" || name == "cat" => x.to_string(),
+                            other => {
+                                return Err(format!("`{}` is no part of an ID", shown(&other)))
+                            }
+                        },
+                    };
+                    parts.push(part);
+                }
+                Ok(json!(match name.as_str() {
+                    "at" => format!("@{}", parts.join(".")),
+                    "path" => parts.join("/"),
+                    // #233: a part of an item, `part(axis, tick, 3)` → `axis#tick:3`.
+                    "part" => format!("{}#{}", parts[0], parts[1..].join(":")),
+                    // #233: text joined, such as a label and its unit: `cat(shown(30, 0), deg)`.
+                    "cat" => parts.concat(),
+                    _ => parts.join("."),
+                }))
+            }
+            // Path data through points, `polyline(x0, y0, x1, y1, …)` → `M x0 y0 L x1 y1 …`, so a
+            // recipe draws a line from numbers it computes (#142).
+            // #233: or through a list of [x, y] points, as a repeat writes them.
+            Expr::Call(name, args) if name == "polyline" && args.len() == 1 => {
+                let points = args[0].value(scope)?;
+                let held: Option<Vec<Expr>> = points.as_array().and_then(|l| {
+                    let xy = l.iter().flat_map(|p| [p.get(0), p.get(1)]);
+                    xy.map(|v| v?.as_f64().map(Expr::Num)).collect()
+                });
+                let held = held.filter(|h| h.len() >= 4 && h.len() % 2 == 0);
+                let held = held.ok_or("polyline(points) takes a list of two or more [x, y]")?;
+                Expr::Call(name.clone(), held).value(scope)
+            }
+            Expr::Call(name, args) if name == "polyline" => {
+                if args.len() < 4 || args.len() % 2 != 0 {
+                    return Err("polyline(x0, y0, x1, y1, …) takes two or more points".into());
+                }
+                let mut d = String::new();
+                for (k, pair) in args.chunks(2).enumerate() {
+                    let (x, y) = (pair[0].eval(scope)?, pair[1].eval(scope)?);
+                    if !x.is_finite() || !y.is_finite() {
+                        return Err("a polyline's points are finite".into());
+                    }
+                    d.push_str(&format!("{}{} {}", if k == 0 { "M " } else { " L " }, x, y));
+                }
+                Ok(json!(d))
+            }
+            // The index of the first row of a list whose field holds a value, such as the vector
+            // a cue names by its ID (#142).
+            Expr::Call(name, args) if name == "find" && args.len() == 3 => {
+                let Expr::Name(field) = &args[1] else {
+                    return Err("find(list, name, value) names a field".into());
+                };
+                let list = args[0].value(scope)?;
+                let want = match &args[2] {
+                    Expr::Name(w) if !scope.iter().any(|(k, _)| k == w) => json!(w),
+                    e => e.value(scope)?,
+                };
+                list.as_array()
+                    .and_then(|l| l.iter().position(|r| r.get(field) == Some(&want)))
+                    .map(|i| number(i as f64))
+                    .ok_or_else(|| {
+                        format!(
+                            "no row of `{}` has {field} `{}`",
+                            shown(&list),
+                            shown(&want)
+                        )
+                    })
+            }
+            // #233: a number as a label shows it, `shown(-3, 0)` → `−3`, at its decimal places.
+            Expr::Call(name, args) if name == "shown" && args.len() == 2 => {
+                let (v, places) = (args[0].eval(scope)?, args[1].eval(scope)?);
+                let text = format!("{:.*}", places.clamp(0.0, 12.0) as usize, v);
+                Ok(json!(text.replace('-', "\u{2212}")))
+            }
+            // #233: a function of x in the closed function list at a number, `value_at(f, 2)`.
+            Expr::Call(name, args) if name == "value_at" && args.len() == 2 => {
+                let (f, x) = (args[0].value(scope)?, args[1].eval(scope)?);
+                let f = f.as_str().ok_or("value_at(f, x) takes f as text")?;
+                let e = crate::expr::Expr::compile(f, &crate::expr::Nothing, 256)
+                    .map_err(|e| format!("`{f}`: {}", e.why))?;
+                if let Some(v) = e.vars.iter().find(|v| *v != "x") {
+                    return Err(format!("`{f}` reads `{v}`; a function here reads only x"));
+                }
+                n(e.eval_num(&vec![x; e.vars.len()]))
+            }
+            // A point's coordinates as text, `pair(1, 2)` → `(1, 2)` (#142).
+            Expr::Call(name, args) if name == "pair" && args.len() == 2 => {
+                let (x, y) = (args[0].eval(scope)?, args[1].eval(scope)?);
+                Ok(json!(format!("({x}, {y})")))
+            }
+            // Whether a record holds a field, such as a cue's `sub` (#142).
+            Expr::Call(name, args) if name == "has" && args.len() == 2 => {
+                let Expr::Name(field) = &args[1] else {
+                    return Err("has(record, name) names a field".into());
+                };
+                let record = args[0].value(scope)?;
+                n(f64::from(u8::from(
+                    record.get(field).is_some_and(|v| !v.is_null()),
+                )))
+            }
             Expr::Call(name, args) if name == "len" && args.len() == 1 => {
                 match args[0].value(scope)? {
                     Value::Array(a) => n(a.len() as f64),
@@ -3121,6 +3620,14 @@ impl Expr {
                     ("acos", [a]) => ops::acos(*a),
                     ("atan", [a]) => ops::atan(*a),
                     ("atan2", [a, b]) => ops::atan2(*a, *b),
+                    // #233: whole numbers' greatest common divisor, as a fraction's label reduces.
+                    ("gcd", [a, b]) => {
+                        let (mut x, mut y) = (a.abs().round() as u64, b.abs().round() as u64);
+                        while y != 0 {
+                            (x, y) = (y, x % y);
+                        }
+                        x.max(1) as f64
+                    }
                     ("deg", [a]) => ops::deg(*a),
                     ("rad", [a]) => ops::rad(*a),
                     _ => return Err(format!("no function `{name}` of {} arguments", vals.len())),
@@ -3142,41 +3649,175 @@ fn shown(v: &Value) -> String {
     }
 }
 
+/// The most tokens an expression takes. Each node takes one at least, so walking, evaluating and
+/// dropping a tree recurse at most this deep; it is twice the most nodes the core compiles an
+/// expression to (512, for a path function).
+const MAX_TOKENS: usize = 1024;
+
 fn tokenize(text: &str) -> Result<Vec<String>, String> {
     let mut out = Vec::new();
-    let chars: Vec<char> = text.chars().collect();
-    let mut i = 0;
-    while i < chars.len() {
-        let c = chars[i];
-        let next = chars.get(i + 1).copied();
-        if c.is_whitespace() {
+    for t in Tokens::of(text) {
+        if out.len() == MAX_TOKENS {
+            return Err(format!("runs past the cap of {MAX_TOKENS} tokens"));
+        }
+        out.push(t?);
+    }
+    Ok(out)
+}
+
+/// A text's tokens, one at a time.
+struct Tokens {
+    chars: Vec<char>,
+    i: usize,
+}
+
+impl Tokens {
+    fn of(text: &str) -> Tokens {
+        Tokens {
+            chars: text.chars().collect(),
+            i: 0,
+        }
+    }
+}
+
+impl Iterator for Tokens {
+    type Item = Result<String, String>;
+
+    fn next(&mut self) -> Option<Result<String, String>> {
+        let chars = &self.chars;
+        let mut i = self.i;
+        while chars.get(i).is_some_and(|c| c.is_whitespace()) {
             i += 1;
-        } else if c.is_ascii_digit() || (c == '.' && next.is_some_and(|d| d.is_ascii_digit())) {
-            let start = i;
+        }
+        let c = *chars.get(i)?;
+        let next = chars.get(i + 1).copied();
+        let start = i;
+        let t = if c.is_ascii_digit() || (c == '.' && next.is_some_and(|d| d.is_ascii_digit())) {
             while i < chars.len() && (chars[i].is_ascii_digit() || chars[i] == '.') {
                 i += 1;
             }
-            out.push(chars[start..i].iter().collect());
-        } else if c.is_ascii_alphabetic() || c == '_' {
-            let start = i;
+            // A word that starts with a digit, such as `3d` or `0.5s`, is one token (#142).
             while i < chars.len() && (chars[i].is_ascii_alphanumeric() || chars[i] == '_') {
                 i += 1;
             }
-            out.push(chars[start..i].iter().collect());
+            Ok(chars[start..i].iter().collect())
+        } else if c.is_ascii_alphabetic() || c == '_' {
+            while i < chars.len() && (chars[i].is_ascii_alphanumeric() || chars[i] == '_') {
+                i += 1;
+            }
+            Ok(chars[start..i].iter().collect())
         } else if let Some(two) = next
             .map(|d| format!("{c}{d}"))
             .filter(|t| ["==", "!=", "<=", ">=", "&&", "||"].contains(&t.as_str()))
         {
-            out.push(two);
             i += 2;
+            Ok(two)
         } else if "+-*/%(),[].?:<>!".contains(c) {
-            out.push(c.to_string());
             i += 1;
+            Ok(c.to_string())
         } else {
-            return Err(format!("unexpected `{c}`"));
-        }
+            i = chars.len();
+            Err(format!("unexpected `{c}`"))
+        };
+        self.i = i;
+        Some(t)
     }
-    Ok(out)
+}
+
+/// Whether `text` could be an expression, read flat in one pass: an operand after each
+/// operator, open brackets closed in order, a comma only between a call's arguments, a `:` for
+/// each `?`, at most one comparison between them, nothing left over. It reads more than the
+/// grammar does, never less, so text a cap stops is refused only when the grammar might read it.
+fn could_be_expression(text: &str) -> bool {
+    /// One open bracket (or the whole text): its closer, whether it is a call's, its `?`s
+    /// waiting for their `:` and whether its current operand has compared already.
+    struct Open {
+        close: Option<char>,
+        call: bool,
+        asks: usize,
+        compared: bool,
+    }
+    let open = |close, call| Open {
+        close: Some(close),
+        call,
+        asks: 0,
+        compared: false,
+    };
+    let mut stack = vec![Open {
+        close: None,
+        call: false,
+        asks: 0,
+        compared: false,
+    }];
+    // Whether the next token must be an operand.
+    let mut operand = true;
+    let mut tokens = Tokens::of(text).peekable();
+    while let Some(t) = tokens.next() {
+        let Ok(t) = t else { return false };
+        let Some(top) = stack.last_mut() else {
+            return false;
+        };
+        operand = match (operand, t.as_str()) {
+            (true, "-" | "!") => true,
+            (true, "(") => {
+                stack.push(open(')', false));
+                true
+            }
+            // A number's name (`pi`, `inf`) is read as the number, as atom reads it.
+            (true, _) if t.parse::<f64>().is_ok() || t == "pi" || t == "tau" => false,
+            (true, _) if well_named_member(&t) => {
+                if matches!(tokens.peek(), Some(Ok(p)) if p == "(") {
+                    tokens.next();
+                    if matches!(tokens.peek(), Some(Ok(p)) if p == ")") {
+                        tokens.next();
+                        false
+                    } else {
+                        stack.push(open(')', true));
+                        true
+                    }
+                } else {
+                    false
+                }
+            }
+            (true, _) => return false,
+            (false, ")" | "]") => {
+                if top.close != t.chars().next() || top.asks > 0 {
+                    return false;
+                }
+                stack.pop();
+                false
+            }
+            (false, "[") => {
+                stack.push(open(']', false));
+                true
+            }
+            (false, ".") => match tokens.next() {
+                Some(Ok(m)) if well_named_member(&m) => false,
+                _ => return false,
+            },
+            (false, "+" | "-" | "*" | "/" | "%") => true,
+            (false, "==" | "!=" | "<" | "<=" | ">" | ">=") => {
+                if top.compared {
+                    return false;
+                }
+                top.compared = true;
+                true
+            }
+            (false, "&&" | "||" | "?" | ":" | ",") => {
+                match t.as_str() {
+                    "?" => top.asks += 1,
+                    ":" if top.asks == 0 => return false,
+                    ":" => top.asks -= 1,
+                    "," if !top.call || top.asks > 0 => return false,
+                    _ => {}
+                }
+                top.compared = false;
+                true
+            }
+            _ => return false,
+        };
+    }
+    !operand && stack.len() == 1 && stack[0].asks == 0
 }
 
 struct Parser {
@@ -3187,6 +3828,17 @@ struct Parser {
 }
 
 impl Parser {
+    /// `f` one level deeper, refused past the closed function list's nesting cap.
+    fn nest<T>(&mut self, f: impl FnOnce(&mut Self) -> Result<T, String>) -> Result<T, String> {
+        if self.depth == MAX_NEST {
+            return Err(format!("nests past the cap of {MAX_NEST} levels"));
+        }
+        self.depth += 1;
+        let e = f(self);
+        self.depth -= 1;
+        e
+    }
+
     fn peek(&self) -> Option<&str> {
         self.tokens.get(self.at).map(String::as_str)
     }
@@ -3197,33 +3849,17 @@ impl Parser {
         t
     }
 
-    /// `parse`, one level deeper: refused past the deepest an expression nests.
-    fn nested(&mut self, parse: fn(&mut Self) -> Result<Expr, String>) -> Result<Expr, String> {
-        if self.depth == MAX_NESTING {
-            return Err(format!("an expression nests at most {MAX_NESTING} deep"));
-        }
-        self.depth += 1;
-        let e = parse(self);
-        self.depth -= 1;
-        e
-    }
-
     fn cond(&mut self) -> Result<Expr, String> {
-        self.nested(Self::choice)
-    }
-
-    /// `c ? a : b`, or what stands alone.
-    fn choice(&mut self) -> Result<Expr, String> {
         let c = self.or()?;
         if self.peek() != Some("?") {
             return Ok(c);
         }
         self.at += 1;
-        let a = self.cond()?;
+        let a = self.nest(Self::cond)?;
         if self.take().as_deref() != Some(":") {
             return Err("missing `:`".into());
         }
-        let b = self.cond()?;
+        let b = self.nest(Self::cond)?;
         Ok(Expr::Cond(Box::new(c), Box::new(a), Box::new(b)))
     }
 
@@ -3286,11 +3922,11 @@ impl Parser {
         match self.peek() {
             Some("-") => {
                 self.at += 1;
-                Ok(Expr::Neg(Box::new(self.nested(Self::unary)?)))
+                Ok(Expr::Neg(Box::new(self.nest(Self::unary)?)))
             }
             Some("!") => {
                 self.at += 1;
-                Ok(Expr::Not(Box::new(self.nested(Self::unary)?)))
+                Ok(Expr::Not(Box::new(self.nest(Self::unary)?)))
             }
             _ => self.postfix(),
         }
@@ -3303,7 +3939,7 @@ impl Parser {
             match self.peek() {
                 Some("[") => {
                     self.at += 1;
-                    let i = self.cond()?;
+                    let i = self.nest(Self::cond)?;
                     if self.take().as_deref() != Some("]") {
                         return Err("missing `]`".into());
                     }
@@ -3328,7 +3964,7 @@ impl Parser {
             return Err("expression ends early".into());
         };
         if t == "(" {
-            let e = self.cond()?;
+            let e = self.nest(Self::cond)?;
             if self.take().as_deref() != Some(")") {
                 return Err("missing `)`".into());
             }
@@ -3336,6 +3972,13 @@ impl Parser {
         }
         if let Ok(n) = t.parse::<f64>() {
             return Ok(Expr::Num(n));
+        }
+        // A word led by a digit, such as a stage's `3d` or a time's `0.5s`: a bare word (#142).
+        if t.starts_with(|c: char| c.is_ascii_digit())
+            && t.chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.')
+        {
+            return Ok(Expr::Name(t));
         }
         match t.as_str() {
             "pi" => return Ok(Expr::Num(std::f64::consts::PI)),
@@ -3345,24 +3988,29 @@ impl Parser {
         if well_named_member(&t) {
             if self.peek() == Some("(") {
                 self.at += 1;
-                let mut args = Vec::new();
-                if self.peek() != Some(")") {
-                    loop {
-                        args.push(self.cond()?);
-                        match self.take().as_deref() {
-                            Some(",") => continue,
-                            Some(")") => break,
-                            _ => return Err("missing `)`".into()),
-                        }
-                    }
-                } else {
-                    self.at += 1;
-                }
+                let args = self.nest(Self::args)?;
                 return Ok(Expr::Call(t, args));
             }
             return Ok(Expr::Name(t));
         }
         Err(format!("unexpected `{t}`"))
+    }
+
+    /// A call's arguments after its `(`, through its `)`.
+    fn args(&mut self) -> Result<Vec<Expr>, String> {
+        let mut args = Vec::new();
+        if self.peek() == Some(")") {
+            self.at += 1;
+            return Ok(args);
+        }
+        loop {
+            args.push(self.cond()?);
+            match self.take().as_deref() {
+                Some(",") => continue,
+                Some(")") => return Ok(args),
+                _ => return Err("missing `)`".into()),
+            }
+        }
     }
 }
 
@@ -3374,634 +4022,4 @@ fn well_named_member(t: &str) -> bool {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// The pack format's contract entry (#200) holds the keys and lists the pack check reads, so
-    /// the contract diff sees a change to either.
-    #[test]
-    fn the_pack_schema_holds_the_checks_keys_and_lists() {
-        let schema: Value = serde_json::from_str(include_str!(
-            "../../../../packages/contracts/canvas-schemas/pack@1.json"
-        ))
-        .expect("JSON");
-        let keys = |v: &Value| -> Vec<String> {
-            let mut k: Vec<String> = v["properties"]
-                .as_object()
-                .expect("properties")
-                .keys()
-                .cloned()
-                .collect();
-            k.sort();
-            k
-        };
-        let sorted = |l: &[&str]| -> Vec<String> {
-            let mut k: Vec<String> = l.iter().map(|s| s.to_string()).collect();
-            k.sort();
-            k
-        };
-        let list = |v: &Value| -> Vec<String> {
-            v["enum"]
-                .as_array()
-                .expect("enum")
-                .iter()
-                .filter_map(Value::as_str)
-                .map(str::to_string)
-                .collect()
-        };
-        let defs = &schema["$defs"];
-        assert_eq!(keys(&schema), sorted(PACK_KEYS), "a pack's keys");
-        assert_eq!(
-            keys(&defs["recipe"]),
-            sorted(RECIPE_KEYS),
-            "a recipe's keys"
-        );
-        assert_eq!(keys(&defs["step"]), sorted(STEP_KEYS), "a step's keys");
-        assert_eq!(
-            keys(&defs["kind"]),
-            sorted(super::super::pack_kinds::KIND_KEYS),
-            "a pack kind's keys"
-        );
-        assert_eq!(
-            list(&defs["step"]["properties"]["op"]),
-            STEP_OPS,
-            "step ops"
-        );
-        assert_eq!(
-            list(&defs["input"]["properties"]["type"]),
-            INPUT_TYPES,
-            "input types"
-        );
-    }
-
-    fn scope() -> Vec<(String, Value)> {
-        vec![("n".into(), json!(5)), ("i".into(), json!(2))]
-    }
-
-    #[test]
-    fn expressions_evaluate_over_scope() {
-        let e = |t: &str| Expr::parse(t).unwrap().eval(&scope()).unwrap();
-        assert_eq!(e("i * 20 + 4"), 44.0);
-        assert_eq!(e("(n - i) / 3"), 1.0);
-        assert_eq!(e("-i"), -2.0);
-        assert_eq!(e("max(i, n)"), 5.0);
-        assert_eq!(e("7 % 3"), 1.0);
-        assert!(Expr::parse("i +").is_err());
-        assert!(Expr::parse("x").unwrap().eval(&scope()).is_err());
-        // A result that is not a finite number is an error, never a null.
-        for t in ["sqrt(0 - 1)", "pow(10, 400)"] {
-            let value = Expr::parse(t).unwrap().value(&scope());
-            assert!(value.is_err(), "{t}: {value:?}");
-        }
-        let eval = |v: &Value, s: &[(String, Value)]| Template::of(v).eval(s);
-        assert_eq!(eval(&json!("i * 2"), &scope()).unwrap(), json!(4));
-        assert_eq!(
-            eval(&json!(["i", 1.5, "ink", {"role": "muted"}]), &scope()).unwrap(),
-            json!([2, 1.5, "ink", {"role": "muted"}])
-        );
-    }
-
-    #[test]
-    fn a_sum_ends_where_adding_one_changes_nothing() {
-        let e = |t: &str| Expr::parse(t).unwrap().eval(&scope()).unwrap();
-        // Past 2^53 adding one changes nothing, so a sum that only counts up never ends here.
-        assert_eq!(e("sum(k, 9007199254740992, 9007199254740992, 1)"), 1.0);
-        assert_eq!(e("sum(k, 1, 4, k)"), 10.0);
-        assert_eq!(e("sum(k, 4, 1, k)"), 0.0);
-    }
-
-    #[test]
-    fn an_expression_past_the_parser_bounds_is_refused() {
-        assert!(Expr::parse(&"(".repeat(100_000)).is_err());
-        assert!(Expr::parse(&"-".repeat(100_000)).is_err());
-        assert!(Expr::parse(&vec!["1"; 100_000].join("+")).is_err());
-        let nested = |n: usize| format!("{}1{}", "(".repeat(n), ")".repeat(n));
-        assert!(Expr::parse(&nested(MAX_NESTING)).is_err());
-        // The deepest nesting and the longest chain the bounds admit still evaluate.
-        let e = |t: &str| Expr::parse(t).unwrap().eval(&scope()).unwrap();
-        assert_eq!(e(&nested(MAX_NESTING - 1)), 1.0);
-        assert_eq!(e(&vec!["1"; MAX_TOKENS / 2].join("+")), 512.0);
-    }
-
-    #[test]
-    fn pack_ids_parse_whole_versions_only() {
-        let id = PackId::parse("alice/foley@1.0.0").unwrap();
-        assert_eq!((id.id.as_str(), id.name.as_str()), ("alice/foley", "foley"));
-        assert_eq!(id.text(), "alice/foley@1.0.0");
-        assert!(PackId::parse("alice/foley@1.0").is_none());
-        assert!(PackId::parse("Alice/foley@1.0.0").is_none());
-        assert!(PackId::parse("chart@1.0.0").is_none());
-    }
-
-    #[test]
-    fn seeds_come_from_instance_step_and_index() {
-        assert_eq!(
-            seed_of("c1", "bars", Some(2)),
-            seed_of("c1", "bars", Some(2))
-        );
-        assert_ne!(
-            seed_of("c1", "bars", Some(2)),
-            seed_of("c2", "bars", Some(2))
-        );
-        assert_ne!(
-            seed_of("c1", "bars", Some(2)),
-            seed_of("c1", "bars", Some(3))
-        );
-        assert_ne!(seed_of("c1", "bars", None), seed_of("c1", "bars", Some(0)));
-    }
-
-    fn chart_pack(wide: u32) -> Value {
-        json!({
-            "id": "test/chart", "name": "chart", "version": "1.0.0", "license": "MIT",
-            "description": "bars",
-            "requires": {"core": ">=0.0.0", "modules": {}},
-            "recipes": {"chart.bars@1": {
-                "id": "chart.bars", "version": "1.0",
-                "inputs": {"n": {"type": "integer", "default": 3, "min": 1, "max": 12}},
-                "steps": {"bars": {
-                    "op": "mark", "kind": "test.rect@1",
-                    "repeat": {"count": "n", "as": "i"},
-                    "params": {"w": wide, "h": "40 + 8 * i"},
-                    "at": {"pos": ["24 * i", 0, 0]}
-                }}
-            }}
-        })
-    }
-
-    fn packs_with(manifest: &Value) -> Packs {
-        let mut packs = Packs::default();
-        packs
-            .admit(manifest, &registry::core())
-            .expect("the chart pack checks");
-        packs
-    }
-
-    fn board(items: Value) -> Value {
-        json!({
-            "format": 1, "id": "doc-1", "profile": "figure", "title": "T", "description": "D",
-            "size": [640, 360], "packs": ["test/chart@1.0.0"],
-            "layers": {"main": {"writer": "agent-a", "title": "Main", "order": "a0"}},
-            "items": items
-        })
-    }
-
-    fn instance(id: &str, n: u32) -> Value {
-        json!({"id": id, "kind": "chart.bars@1", "layer": "main", "name": id, "order": "a0",
-            "params": {"n": n}, "at": {"pos": [40, 40, 0]}})
-    }
-
-    #[test]
-    fn instances_expand_at_check_with_shared_keys_and_derived_items_that_draw() {
-        let packs = packs_with(&chart_pack(16));
-        let doc = board(json!({"c1": instance("c1", 5), "c2": instance("c2", 5)}));
-        let result = super::super::check_packed(&doc, &registry::core(), &packs);
-        assert!(result.ok, "{:?}", result.issues);
-        let ids: Vec<String> = (0..5).map(|i| format!("c1.bars.{i}")).collect();
-        let [c1, c2] = result.expansions.as_slice() else {
-            panic!("two expansions, got {}", result.expansions.len())
-        };
-        assert_eq!(c1.derived.keys().cloned().collect::<Vec<_>>(), ids);
-        assert_eq!(c1.key, c2.key, "equal inputs share the key");
-        assert_eq!(c1.derived["c1.bars.2"]["params"], json!({"w": 16, "h": 56}));
-        assert_eq!(c1.derived["c1.bars.2"]["at"], json!({"pos": [88, 40, 0]}));
-        assert!(result.draws.contains(&"c1.bars.4".to_string()));
-        assert!(
-            !result.draws.contains(&"c1".to_string()),
-            "the instance draws nothing itself"
-        );
-        // Rebuilt with the same inputs: the same IDs, bytes and seeds.
-        let again = super::super::check_packed(&doc, &registry::core(), &packs);
-        assert_eq!(again.expansions, result.expansions);
-        // Out of range, naming n at the instance's params.
-        let bad = board(json!({"c3": instance("c3", 20)}));
-        let result = super::super::check_packed(&bad, &registry::core(), &packs);
-        let range: Vec<_> = result
-            .issues
-            .iter()
-            .filter(|i| i.code == "out_of_range")
-            .collect();
-        assert_eq!(range[0].path, "items/c3/params/n");
-        assert_eq!(range[0].ids, vec!["c3"]);
-        assert!(
-            result.expansions.is_empty(),
-            "an instance with an issue writes nothing"
-        );
-    }
-
-    #[test]
-    fn a_missing_pack_version_keeps_and_skips_its_instances_and_two_of_a_name_are_refused() {
-        let packs = packs_with(&chart_pack(16));
-        let mut doc = board(json!({"c1": instance("c1", 5)}));
-        doc["packs"] = json!(["test/chart@2.0.0"]);
-        let result = super::super::check_packed(&doc, &registry::core(), &packs);
-        // The document opens (#1958): no error, one notice naming the pack, the version and c1,
-        // and c1 neither expands with 1.0.0 nor draws.
-        assert!(
-            result.issues.iter().all(|i| i.severity != "error"),
-            "{:?}",
-            result.issues
-        );
-        let missing = result
-            .notices
-            .iter()
-            .find(|n| n.code == "pack_missing")
-            .expect("pack_missing");
-        assert_eq!(
-            missing.actual,
-            json!({"pack": "test/chart", "version": "2.0.0"})
-        );
-        assert_eq!(missing.ids, vec!["c1"]);
-        assert!(result.notices.iter().all(|n| n.code != "unknown_kind"));
-        assert!(result.expansions.is_empty() && result.draws.is_empty());
-        doc["packs"] = json!(["test/chart@1.0.0", "other/chart@1.0.0"]);
-        let result = super::super::check_packed(&doc, &registry::core(), &packs);
-        let both = result
-            .issues
-            .iter()
-            .find(|i| i.path == "packs/1")
-            .expect("refused");
-        assert!(both.what.contains("test/chart@1.0.0") && both.what.contains("other/chart@1.0.0"));
-        // The same version published again with other contents is refused.
-        let mut packs = packs;
-        let err = packs
-            .admit(&chart_pack(18), &registry::core())
-            .expect_err("refused");
-        assert!(err[0].what.contains("never changes"));
-        assert!(packs.admit(&chart_pack(16), &registry::core()).is_ok());
-    }
-
-    #[test]
-    fn a_derived_item_is_no_patch_target_until_broken_out_and_undo_hands_it_back() {
-        let packs = packs_with(&chart_pack(16));
-        let mut doc = board(json!({"c1": instance("c1", 5), "c2": instance("c2", 5)}));
-        let knows = |k: &str| {
-            !matches!(
-                crate::kinds::lookup(&crate::kinds::registry(), k),
-                crate::kinds::Lookup::UnknownKind
-            )
-        };
-        let writing = super::super::Writing {
-            layer: "main",
-            writer: "agent-a",
-            you: false,
-            base: None,
-            knows: &knows,
-            packs: Some(&packs),
-        };
-        let patch = |ops: Value| json!({"patch": "01J9Z00000000000000000AC96", "doc": "doc-1", "base": 0, "reason": "r", "ops": ops});
-        let set = patch(
-            json!([{"op": "set", "id": "c1.bars.1", "path": "items/c1.bars.1/params/w", "value": 3}]),
-        );
-        let err = super::super::apply_ops(&mut doc, &set, "patch", "doc-1", &writing)
-            .expect_err("refused");
-        assert_eq!(
-            (err.code, err.ids.clone()),
-            ("derived_item", vec!["c1.bars.1".to_string()])
-        );
-        let before = doc.clone();
-        let out = patch(json!([{"op": "break_out", "instance": "c1", "item": "c1.bars.2"}]));
-        let done =
-            super::super::apply_ops(&mut doc, &out, "patch", "doc-1", &writing).expect("applies");
-        let undo = patch(json!(done.undo(&doc)));
-        let broken = doc.clone();
-        assert_eq!(doc["items"]["c1"]["broken_out"], json!(["c1.bars.2"]));
-        assert_eq!(
-            doc["items"]["c1.bars.2"]["params"],
-            json!({"w": 16, "h": 56})
-        );
-        assert_eq!(doc["items"]["c1.bars.2"]["layer"], json!("main"));
-        let result = super::super::check_packed(&doc, &registry::core(), &packs);
-        assert!(result.ok, "{:?}", result.issues);
-        let c1 = &result.expansions[0];
-        assert_eq!(c1.broken_out, vec!["c1.bars.2"]);
-        assert!(
-            !c1.derived.contains_key("c1.bars.2"),
-            "the instance stops writing it"
-        );
-        assert_ne!(c1.key, result.expansions[1].key, "broken_out joins the key");
-        // Now the writer's own: a set applies, and a change of n re-expands the others around it.
-        let own = patch(
-            json!([{"op": "set", "id": "c1.bars.2", "path": "items/c1.bars.2/params/w", "value": 3},
-            {"op": "set", "id": "c1", "path": "items/c1/params/n", "value": 6}]),
-        );
-        super::super::apply_ops(&mut doc, &own, "patch", "doc-1", &writing).expect("applies");
-        let result = super::super::check_packed(&doc, &registry::core(), &packs);
-        assert!(result.ok, "{:?}", result.issues);
-        assert_eq!(
-            result.lowered["items"]["c1.bars.2"]["params"]["w"],
-            json!(3)
-        );
-        assert!(result.expansions[0].derived.contains_key("c1.bars.5"));
-        // The planted re-expansion writes over it.
-        let planted = Packs {
-            planted: Planted {
-                overwrite_broken_out: true,
-                ..Planted::default()
-            },
-            ..packs_with(&chart_pack(16))
-        };
-        let result = super::super::check_packed(&doc, &registry::core(), &planted);
-        assert_eq!(
-            result.lowered["items"]["c1.bars.2"]["params"]["w"],
-            json!(16)
-        );
-        // The undo of the break-out, from `Patched::undo`, hands the item back as expanded.
-        let mut doc = broken;
-        super::super::apply_ops(&mut doc, &undo, "patch", "doc-1", &writing).expect("undo applies");
-        assert_eq!(doc, before);
-    }
-
-    #[test]
-    fn a_pack_whose_module_the_build_lacks_is_refused_naming_it_unless_planted() {
-        let mut manifest = chart_pack(16);
-        manifest["requires"]["modules"] = json!({"scene3d": ">=0.0.0"});
-        let err =
-            check_pack(&manifest, &registry::core(), Planted::default()).expect_err("refused");
-        assert_eq!(err[0].code, "module_missing");
-        assert!(err[0].what.contains("scene3d"));
-        let planted = Planted {
-            skip_requires_modules: true,
-            ..Planted::default()
-        };
-        assert!(check_pack(&manifest, &registry::core(), planted).is_ok());
-    }
-    // ---- #420: nesting, conditions, repeats along a curve, channels, lights in the budget ----
-
-    fn nest_pack(recipes: Value) -> Value {
-        json!({
-            "id": "test/nest", "name": "nest", "version": "1.0.0", "license": "MIT",
-            "description": "recipes in recipes",
-            "requires": {"core": ">=0.0.0", "modules": {}},
-            "recipes": recipes
-        })
-    }
-
-    fn rect_step() -> Value {
-        json!({"op": "mark", "kind": "test.rect@1", "params": {"w": 10, "h": 10}})
-    }
-
-    fn nested(name: &str, child: &str) -> Value {
-        json!({"id": format!("nest.{name}"), "version": "1.0",
-               "steps": {"inner": {"op": "recipe", "kind": format!("nest.{child}@1")}}})
-    }
-
-    fn nest_doc(kind: &str, extra: Value) -> Value {
-        let mut doc = json!({
-            "format": 1, "id": "doc-1", "profile": "figure", "title": "T", "description": "D",
-            "size": [640, 360], "packs": ["test/nest@1.0.0"],
-            "layers": {"main": {"writer": "agent-a", "title": "Main", "order": "a0"}},
-            "items": {"n1": {"id": "n1", "kind": kind, "layer": "main", "name": "n1", "order": "a0",
-                             "at": {"pos": [10, 0, 0]}}}
-        });
-        if let (Some(d), Some(e)) = (doc.as_object_mut(), extra.as_object()) {
-            for (k, v) in e {
-                if k == "items" {
-                    let items = d
-                        .get_mut("items")
-                        .and_then(Value::as_object_mut)
-                        .expect("items");
-                    items.extend(v.as_object().cloned().unwrap_or_default());
-                } else {
-                    d.insert(k.clone(), v.clone());
-                }
-            }
-        }
-        doc
-    }
-
-    fn checked(recipes: Value, kind: &str, extra: Value) -> crate::document::CheckResult {
-        let packs = packs_with(&nest_pack(recipes));
-        super::super::check_packed(&nest_doc(kind, extra), &registry::core(), &packs)
-    }
-
-    #[test]
-    fn a_recipe_step_nests_its_recipe_under_its_own_derived_id() {
-        let result = checked(
-            json!({
-                "nest.leaf@1": {"id": "nest.leaf", "version": "1.0", "steps": {"r": rect_step()}},
-                "nest.box@1": nested("box", "leaf"),
-            }),
-            "nest.box@1",
-            json!({}),
-        );
-        assert!(result.ok, "{:?}", result.issues);
-        let derived: Vec<&String> = result.expansions[0].derived.keys().collect();
-        assert_eq!(derived, ["n1.inner", "n1.inner.r"]);
-        assert_eq!(
-            result.expansions[0].derived["n1.inner"]["kind"],
-            json!("nest.leaf@1")
-        );
-    }
-
-    #[test]
-    fn recipes_nest_four_deep_and_a_fifth_is_refused_naming_its_step() {
-        let chain = |deep: usize| {
-            let mut recipes = Map::new();
-            for k in 1..deep {
-                recipes.insert(
-                    format!("nest.d{k}@1"),
-                    nested(&format!("d{k}"), &format!("d{}", k + 1)),
-                );
-            }
-            recipes.insert(
-                format!("nest.d{deep}@1"),
-                json!({"id": format!("nest.d{deep}"), "version": "1.0", "steps": {"r": rect_step()}}),
-            );
-            Value::Object(recipes)
-        };
-        let four = checked(chain(4), "nest.d1@1", json!({}));
-        assert!(four.ok, "{:?}", four.issues);
-        assert!(four.expansions[0]
-            .derived
-            .contains_key("n1.inner.inner.inner.r"));
-        let five = checked(chain(5), "nest.d1@1", json!({}));
-        assert!(!five.ok);
-        assert!(
-            five.issues.iter().any(|i| i.code == "out_of_range"
-                && i.path == "items/n1.inner.inner.inner/steps/inner/kind"),
-            "{:?}",
-            five.issues
-        );
-        assert!(
-            five.expansions.is_empty(),
-            "a refused nesting writes nothing"
-        );
-    }
-
-    #[test]
-    fn a_recipe_that_nests_itself_is_refused_as_a_cycle() {
-        let result = checked(
-            json!({"nest.a@1": nested("a", "b"), "nest.b@1": nested("b", "a")}),
-            "nest.a@1",
-            json!({}),
-        );
-        assert!(
-            result.issues.iter().any(|i| i.code == "cycle"),
-            "{:?}",
-            result.issues
-        );
-        assert!(result.expansions.is_empty());
-    }
-
-    #[test]
-    fn a_false_condition_leaves_its_step_out_and_one_reading_t_is_refused_at_the_pack_check() {
-        let recipes = |when: &str| {
-            json!({"nest.opt@1": {
-                "id": "nest.opt", "version": "1.0",
-                "inputs": {"lamp": {"type": "bool", "default": false}},
-                "steps": {"base": rect_step(),
-                          "lamp": {"op": "mark", "kind": "test.rect@1", "when": when, "params": {"w": 2, "h": 2}}}
-            }})
-        };
-        let off = checked(recipes("lamp"), "nest.opt@1", json!({}));
-        assert!(off.ok, "{:?}", off.issues);
-        assert_eq!(
-            off.expansions[0].derived.keys().collect::<Vec<_>>(),
-            ["n1.base"]
-        );
-        let lit = json!({"items": {"n1": {"id": "n1", "kind": "nest.opt@1", "layer": "main", "name": "n1",
-                                          "order": "a0", "params": {"lamp": true}}}});
-        let on = checked(recipes("lamp"), "nest.opt@1", lit);
-        assert_eq!(
-            on.expansions[0].derived.keys().collect::<Vec<_>>(),
-            ["n1.base", "n1.lamp"]
-        );
-        let mut packs = Packs::default();
-        let refused = packs
-            .admit(&nest_pack(recipes("t * 2")), &registry::core())
-            .expect_err("a condition reading t is refused");
-        assert!(
-            refused.iter().any(|i| i.path.ends_with("steps/lamp/when")),
-            "{refused:?}"
-        );
-    }
-
-    #[test]
-    fn copies_along_a_curve_stand_at_their_arc_lengths_turned_to_it() {
-        let recipes = |repeat: Value| {
-            json!({"nest.row@1": {
-                "id": "nest.row", "version": "1.0",
-                "inputs": {"rail": {"type": "ID", "default": "rail"}},
-                "steps": {"post": {"op": "mark", "kind": "test.rect@1", "repeat": repeat, "params": {"w": 1, "h": 1}}}
-            }})
-        };
-        let rail = json!({"items": {"rail": {"id": "rail", "kind": "test.rect@1", "layer": "main",
-            "name": "rail", "order": "a1", "params": {"points": [[0, 0, 0], [4, 0, 0], [4, 0, -2]]}}}});
-        let counted = checked(
-            recipes(json!({"along": "rail", "count": 4, "as": "i"})),
-            "nest.row@1",
-            rail.clone(),
-        );
-        let at = |r: &crate::document::CheckResult, k: usize| {
-            r.expansions[0].derived[&format!("n1.post.{k}")]["at"].clone()
-        };
-        // Six metres in four copies: 0, 2, 4 (the corner) and 6, each from the instance's origin.
-        assert_eq!(at(&counted, 0)["pos"], json!([10, 0, 0]));
-        assert_eq!(at(&counted, 1)["pos"], json!([12, 0, 0]));
-        assert_eq!(at(&counted, 3)["pos"], json!([14, 0, -2]));
-        assert_eq!(at(&counted, 1)["rot"], json!([0, 0, 0]));
-        // Past the corner it runs along −z: a quarter turn about +Y.
-        assert_eq!(at(&counted, 3)["rot"], json!([0, 90, 0]));
-        let spaced = checked(
-            recipes(json!({"along": "rail", "spacing": 1.5, "as": "i"})),
-            "nest.row@1",
-            rail,
-        );
-        assert_eq!(
-            spaced.expansions[0].derived.len(),
-            5,
-            "floor(6 / 1.5) + 1 copies"
-        );
-        assert_eq!(
-            spaced.expansions[0].derived["n1.post.3"]["at"]["pos"],
-            json!([14, 0, -0.5])
-        );
-        let mut packs = Packs::default();
-        let refused = packs
-            .admit(
-                &nest_pack(recipes(json!({"along": "rail", "spacing": "t", "as": "i"}))),
-                &registry::core(),
-            )
-            .expect_err("a spacing reading t is refused");
-        assert!(
-            refused
-                .iter()
-                .any(|i| i.path.ends_with("steps/post/repeat/spacing")),
-            "{refused:?}"
-        );
-    }
-
-    #[test]
-    fn a_recipes_channels_join_the_document_targeting_the_items_it_derived() {
-        let result = checked(
-            json!({"nest.grow@1": {
-                "id": "nest.grow", "version": "1.0",
-                "steps": {"bars": {"op": "mark", "kind": "test.rect@1", "repeat": {"count": 2, "as": "i"},
-                                   "params": {"w": 4, "h": 4}}},
-                "channels": {"rise": {"target": "step:bars/params/h", "type": "f32",
-                    "keys": {"k0": {"t": "0s", "value": 4, "interp": "linear"}, "k1": {"t": "1s", "value": 8}}}}
-            }}),
-            "nest.grow@1",
-            json!({}),
-        );
-        assert!(result.ok, "{:?}", result.issues);
-        let channels = &result.lowered["channels"];
-        assert_eq!(
-            channels["n1.rise.0"]["target"],
-            json!("items/n1.bars.0/params/h")
-        );
-        assert_eq!(
-            channels["n1.rise.1"]["target"],
-            json!("items/n1.bars.1/params/h")
-        );
-        let bad = json!({"nest.bad@1": {"id": "nest.bad", "version": "1.0",
-            "steps": {"bars": rect_step()},
-            "channels": {"rise": {"target": "step:nothing/params/h"}}}});
-        let mut packs = Packs::default();
-        let refused = packs
-            .admit(&nest_pack(bad), &registry::core())
-            .expect_err("a channel on no step is refused");
-        assert!(
-            refused
-                .iter()
-                .any(|i| i.path.ends_with("channels/rise/target")),
-            "{refused:?}"
-        );
-    }
-
-    #[test]
-    fn lights_a_recipe_derives_count_against_the_documents_light_cap() {
-        let recipes = json!({"nest.lamps@1": {
-            "id": "nest.lamps", "version": "1.0",
-            "steps": {"lamp": {"op": "item", "kind": "light.sun@1", "repeat": {"count": 3, "as": "i"}}}
-        }});
-        let over = checked(
-            recipes.clone(),
-            "nest.lamps@1",
-            json!({"budget": {"lights": 2}}),
-        );
-        let issue = over.issues.iter().find(|i| i.path == "budget/lights");
-        assert!(
-            issue.is_some_and(|i| i.code == "over_budget" && i.ids.len() == 3),
-            "{:?}",
-            over.issues
-        );
-        // A cap that is no whole number at or above 0 is refused, never read as no cap.
-        for cap in [json!(-1), json!(2.5), json!("2")] {
-            let budget = json!({"budget": {"lights": cap}});
-            let bad = checked(recipes.clone(), "nest.lamps@1", budget);
-            let issue = bad.issues.iter().find(|i| i.path == "budget/lights");
-            assert!(
-                issue.is_some_and(|i| i.code == "out_of_range"),
-                "{:?}",
-                bad.issues
-            );
-        }
-        let fits = checked(recipes, "nest.lamps@1", json!({"budget": {"lights": 3}}));
-        assert!(
-            !fits.issues.iter().any(|i| i.path == "budget/lights"),
-            "{:?}",
-            fits.issues
-        );
-    }
-}
+mod tests;

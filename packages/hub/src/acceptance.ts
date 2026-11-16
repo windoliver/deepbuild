@@ -18,6 +18,7 @@ import { readSince, ulid, type Connection, type RecordStore } from '@deepbuild/r
 import type { JobInput, JobRecord, Runner } from '@deepbuild/runner';
 import type { Host, Supervisor } from '@deepbuild/supervisor';
 import { criteriaOf, ISSUE_LINK, type Reading } from './github-source.js';
+import { shellQuote as quoted } from './shell.js';
 
 const MODEL = 'opus';
 const JOB_MS = 30 * 60_000;
@@ -61,7 +62,6 @@ interface AcceptanceOptions {
 }
 
 const sha256 = (bytes: string | Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
-const quoted = (text: string): string => `'${text.replaceAll("'", `'\\''`)}'`;
 function git(cwd: string, args: string[], o: { input?: Uint8Array | string; env?: NodeJS.ProcessEnv; raw?: true } = {}): Promise<string> {
   return new Promise((done, failed) => {
     const child = execFile('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', ...args], { cwd, encoding: 'utf8', maxBuffer: 256 << 20, env: { ...gitEnv(), ...IDENTITY, ...o.env } }, (error, stdout, stderr) => {
@@ -172,7 +172,12 @@ export class Acceptance {
     if (!criterion) throw Error(`${test} names no criterion of ${e.issue}`);
     const d: Dispute = { test, work, why: String(p.why), criterion: criterion.tag, jobs: [], drafts: [], outcome: null, commit: null, refused: [] };
     e.disputes.push(d);
-    await this.redraft(e, d);
+    try {
+      await this.redraft(e, d);
+    } catch (error) {
+      e.disputes.splice(e.disputes.indexOf(d), 1);
+      throw error;
+    }
     this.settling(e, d);
     return { job: d.jobs[0]! };
   }
@@ -395,6 +400,7 @@ export class Acceptance {
   /** Draft by draft to an outcome: a redraft that fails on the work sides with the test; two that pass decide against it. */
   private async settle(e: Entry, d: Dispute): Promise<void> {
     const file = d.test.split(' › ')[0]!;
+    if (!d.jobs.length || (d.jobs.length === 1 && d.drafts.length === 1 && d.drafts[0]!.on_work === 'passes')) await this.redraft(e, d);
     while (d.drafts.length < d.jobs.length) {
       const draft = await this.draft(e, d, d.jobs.at(-1)!);
       d.drafts.push(draft);

@@ -1,0 +1,210 @@
+{
+  "id": "math.area",
+  "version": "1.0",
+  "title": "Axes.get_area",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "ax.get_area(graph, x_range) as path@1 fn filled to the x axis (or to bounded_graph's f) on the axes' scales. a unit is the frame's short side ÷ 8 in u (fw, fh), so the frame is 14.22 × 8 units at 16:9; y flips and the origin moves to the frame's center; radians become degrees; a stroke width w becomes w × unit ÷ 100 u; font_size f is an em of f ÷ 96 units.",
+  "inputs": {
+    "axes": {
+      "type": "ID",
+      "default": "none",
+      "about": "the ID of the math.axes instance it is drawn on, as ax.plot is"
+    },
+    "f": {
+      "type": "text",
+      "default": "x",
+      "about": "the graph's function of x"
+    },
+    "x_range": {
+      "type": "records",
+      "default": [],
+      "about": "x_range: [min, max]; unwritten, the x axis's range"
+    },
+    "samples": {
+      "type": "integer",
+      "default": 600,
+      "about": "the points its edge is drawn through, 2 to 2,000, evenly in x",
+      "min": 2,
+      "max": 2000
+    },
+    "bounded_graph": {
+      "type": "text",
+      "default": "none",
+      "about": "a second function of x the area lies between, or none for the x axis"
+    },
+    "color": {
+      "type": "choice",
+      "options": [
+        "default",
+        "BLACK",
+        "BLUE_A",
+        "BLUE_B",
+        "BLUE_C",
+        "BLUE_D",
+        "BLUE_E",
+        "DARK_BROWN",
+        "GOLD_A",
+        "GOLD_B",
+        "GOLD_C",
+        "GOLD_D",
+        "GOLD_E",
+        "GRAY_A",
+        "GRAY_B",
+        "GRAY_BROWN",
+        "GRAY_C",
+        "GRAY_D",
+        "GRAY_E",
+        "GREEN_A",
+        "GREEN_B",
+        "GREEN_C",
+        "GREEN_D",
+        "GREEN_E",
+        "LIGHT_BROWN",
+        "LIGHT_PINK",
+        "MAROON_A",
+        "MAROON_B",
+        "MAROON_C",
+        "MAROON_D",
+        "MAROON_E",
+        "ORANGE",
+        "PINK",
+        "PURPLE_A",
+        "PURPLE_B",
+        "PURPLE_C",
+        "PURPLE_D",
+        "PURPLE_E",
+        "RED_A",
+        "RED_B",
+        "RED_C",
+        "RED_D",
+        "RED_E",
+        "TEAL_A",
+        "TEAL_B",
+        "TEAL_C",
+        "TEAL_D",
+        "TEAL_E",
+        "WHITE",
+        "YELLOW_A",
+        "YELLOW_B",
+        "YELLOW_C",
+        "YELLOW_D",
+        "YELLOW_E",
+        "BLUE",
+        "DARKER_GRAY",
+        "DARK_BLUE",
+        "DARK_GRAY",
+        "GOLD",
+        "GRAY",
+        "GREEN",
+        "GREY",
+        "LIGHTER_GRAY",
+        "LIGHT_GRAY",
+        "MAROON",
+        "PURPLE",
+        "RED",
+        "TEAL",
+        "YELLOW"
+      ],
+      "default": "default",
+      "about": "the area's color; unwritten, the accent role"
+    },
+    "opacity": {
+      "type": "number",
+      "default": 0.3,
+      "about": "the area's fill opacity",
+      "min": 0,
+      "max": 1
+    }
+  },
+  "let": {
+    "unit": "min(fw, fh) / 8",
+    "ys": -1,
+    "ox": "fw / 2",
+    "oy": "fh / 2",
+    "role": "color == default ? accent : color",
+    "axr_def": [
+      -7,
+      7,
+      1
+    ],
+    "ayr_def": [
+      -4,
+      4,
+      1
+    ],
+    "amove_def": [
+      0,
+      0,
+      0
+    ],
+    "axr": "has(axes_params, x_range) ? axes_params.x_range : axr_def",
+    "ayr": "has(axes_params, y_range) ? axes_params.y_range : ayr_def",
+    "axl": "has(axes_params, x_length) ? axes_params.x_length : 12",
+    "ayl": "has(axes_params, y_length) ? axes_params.y_length : 6",
+    "amove": "has(axes_params, move_to) ? axes_params.move_to : amove_def",
+    "acx": "ox + amove[0] * unit",
+    "acy": "oy + ys * amove[1] * unit",
+    "axm": "(axr[0] + axr[1]) / 2",
+    "aym": "(ayr[0] + ayr[1]) / 2",
+    "xu_per": "axl * unit / (axr[1] - axr[0])",
+    "yu_per": "ayl * unit / (ayr[1] - ayr[0])",
+    "graph_at": {
+      "pos": [
+        "acx - axm * xu_per",
+        "acy - ys * aym * yu_per",
+        0
+      ],
+      "scale": [
+        "xu_per",
+        "ys * yu_per",
+        1
+      ]
+    },
+    "over_xr": "len(x_range) >= 2 ? x_range : axr",
+    "over": [
+      "over_xr[0]",
+      "over_xr[1]"
+    ],
+    "to": "bounded_graph == none ? axis : bounded_graph"
+  },
+  "steps": {
+    "all": {
+      "op": "item",
+      "kind": "group@1",
+      "params": {}
+    },
+    "area": {
+      "op": "mark",
+      "kind": "path@1",
+      "at": "graph_at",
+      "params": {
+        "fn": {
+          "y": "f",
+          "over": "over",
+          "samples": "samples"
+        },
+        "fill": {
+          "to": "to"
+        },
+        "paint": {
+          "fill": {
+            "role": "role",
+            "opacity": "opacity"
+          }
+        }
+      },
+      "parent": "id(instance, all)"
+    }
+  },
+  "refuses": {
+    "use_vectorized": "Leave it out: every math@1 shape is a path the renderer strokes and fills on its own.",
+    "sheen_factor": "Leave it out: a flat fill has no sheen; use a gradient fill through the look.",
+    "sheen_direction": "Leave it out: a flat fill has no sheen; use a gradient fill through the look.",
+    "background_stroke_width": "Leave it out, or draw a second, wider copy beneath in the background color.",
+    "background_stroke_color": "Leave it out, or draw a second, wider copy beneath in the background color.",
+    "joint_type": "Leave it out: paths join by the look's line style.",
+    "cap_style": "Leave it out: paths cap by the look's line style.",
+    "shade_in_3d": "Leave it out: 2D shapes draw flat; for a lit shape use math.surface."
+  }
+}

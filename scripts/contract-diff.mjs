@@ -2,7 +2,7 @@
 // The contract step (#139): every published contract entry with its history, diffed against every earlier release.
 //   node scripts/contract-diff.mjs <dump|record|check|notes|old-load|corpus|document <file>> [--release <R>] [--root <tree>]
 // A tree holds packages/contracts/ (the published data) and contracts/ (releases/, breaks/, fixtures/, shipped.json,
-// corpus.json, corpus-decisions.json). Entries are keyed <kind>:<name>: api (extension-api.json), rpc
+// corpus.json, corpus-decisions.json, extensions.json). Entries are keyed <kind>:<name>: api (extension-api.json), rpc
 // (rpc-methods.json), schema (schemas/: event kinds, document kinds, sidecar formats and every other shape), interface
 // (slots/), slot (hub-slots.json rows) and registry (canvas-registries.json); canvas-schemas/ joins schema (#200). A change against an earlier release is a
 // break unless it is additive in a minor or the entry is preview; a break passes only with
@@ -39,6 +39,7 @@ function entriesOf(base) {
   const add = (kind, name, fields, shape) => {
     entries[`${kind}:${name}`] = {
       kind, name, since: fields.since ?? null, stability: fields.stability ?? null, tracking: fields.tracking ?? null,
+      preview_since: fields.preview_since ?? null, decide_by: fields.decide_by ?? null,
       deprecated_since: fields.deprecated_since ?? null, replaced_by: fields.replaced_by ?? null, stops_serving: fields.stops_serving ?? null,
       digest: shape === undefined ? null : contracts.d1Digest(shape), shape: shape ?? null,
     };
@@ -49,7 +50,7 @@ function entriesOf(base) {
     if (!existsSync(dir)) return;
     for (const file of readdirSync(dir).filter((f) => f.endsWith('.json')).sort()) {
       const s = JSON.parse(readFileSync(join(dir, file), 'utf8'));
-      add(kind, file.slice(0, -5), { since: s['x-since'], stability: s['x-stability'], tracking: s['x-tracking'], deprecated_since: s['x-deprecated_since'], replaced_by: s['x-replaced_by'] }, s);
+      add(kind, file.slice(0, -5), { since: s['x-since'], stability: s['x-stability'], tracking: s['x-tracking'], preview_since: s['x-preview_since'], decide_by: s['x-decide_by'], deprecated_since: s['x-deprecated_since'], replaced_by: s['x-replaced_by'] }, s);
     }
   };
   schemas(data('schemas'), 'schema');
@@ -78,7 +79,7 @@ function shapeChanges(before, after, pointer = '') {
   }
   const keys = new Set([...Object.keys(before), ...Object.keys(after)]);
   for (const key of [...keys].sort()) {
-    if (['title', 'description', 'examples', '$comment', 'x-closure', 'x-rules', 'x-since', 'x-stability', 'x-tracking', 'x-deprecated_since', 'x-replaced_by'].includes(key)) continue;
+    if (['title', 'description', 'examples', '$comment', 'x-closure', 'x-rules', 'x-since', 'x-stability', 'x-tracking', 'x-preview_since', 'x-decide_by', 'x-deprecated_since', 'x-replaced_by'].includes(key)) continue;
     const b = before[key];
     const a = after[key];
     const here = `${pointer}/${key}`;
@@ -118,6 +119,8 @@ function shapeChanges(before, after, pointer = '') {
 function historyProblems(entries, shipped) {
   const problems = [];
   const calls = new Set((shipped.pieces ?? []).flatMap((p) => p.calls ?? []));
+  const last = lastRecorded();
+  const extended = extensions();
   for (const [key, e] of Object.entries(entries)) {
     if (!covered(e.kind)) continue;
     if (typeof e.since !== 'string' || !e.since) problems.push(`${key}: published without since, the release it arrived in`);
@@ -125,6 +128,7 @@ function historyProblems(entries, shipped) {
     if (e.deprecated_since && !e.replaced_by) problems.push(`${key}: deprecated since ${e.deprecated_since} and names nothing as replaced_by`);
     if (e.replaced_by && !entries[`${e.kind}:${e.replaced_by}`]) problems.push(`${key}: replaced_by ${e.replaced_by}, which this release doesn't publish`);
     if (e.stability === 'preview' && !e.tracking) problems.push(`${key}: a preview entry with no tracking issue`);
+    if (e.stability === 'preview') problems.push(...previewProblems(key, e, last[key]?.decide_by, extended.filter((x) => x.entry === key)));
     // An entry no shipped piece of its release calls is published as preview or not at all.
     if (e.kind === 'api' && e.stability === 'stable' && !calls.has(e.name)) problems.push(`${key}: stable, and no shipped piece of ${candidate} calls it (contracts/shipped.json); publish it as preview`);
   }
@@ -135,6 +139,27 @@ const arrived = (entries, problem) => { const e = entries[problem.split(': ')[0]
 // ---- The releases a tree records: contracts/releases/<R>.json, in release order.
 const order = (a, b) => a.localeCompare(b, undefined, { numeric: true });
 const releasesOf = (base) => (existsSync(join(base, 'contracts/releases')) ? readdirSync(join(base, 'contracts/releases')).filter((f) => /^[^.]+\.json$/.test(f)).map((f) => f.slice(0, -5)).sort(order) : []);
+const earlierReleases = () => releasesOf(root).filter((r) => r !== candidate);
+/** The newest earlier release's entries: what the candidate's preview entries are held against. */
+const lastRecorded = () => { const last = earlierReleases().at(-1); return last ? readJson(at('contracts/releases', `${last}.json`)).entries : {}; };
+// A decide_by names a release not cut yet, so releases are counted by the n of R<n>; `next` is the one after the newest recorded.
+const numberOf = (release) => { const n = /^R([1-9]\d*)$/.exec(release ?? ''); return n ? Number(n[1]) : null; };
+const candidateNumber = () => numberOf(candidate) ?? Math.max(0, ...earlierReleases().map(numberOf)) + 1;
+
+// ---- A preview ends (#1802): each preview entry is promoted, removed or extended once by its decide_by.
+const CAP = 3;
+const EXTENSION = 2;
+const extensions = () => readJson(at('contracts/extensions.json'), []);
+/** One preview entry against `was`, its decide_by in the newest earlier release, and `mine`, its extensions on record. */
+function previewProblems(key, e, was, mine) {
+  const [since, by] = [numberOf(e.preview_since), numberOf(e.decide_by)];
+  if (since === null || by === null) return [`${key}: a preview entry with no ${since === null ? 'preview_since' : 'decide_by'}`];
+  if (mine.length > 1) return [`${key}: extended ${mine.length} times on record (contracts/extensions.json), and a preview entry is extended once`];
+  const first = mine[0]?.to === e.decide_by ? numberOf(mine[0].from) ?? by : by;
+  if (first - since > CAP || by - first > EXTENSION) return [`${key}: decide_by ${e.decide_by} is ${by - since} releases after its preview_since ${e.preview_since}; the most is ${CAP}, and ${EXTENSION} more by its one extension`];
+  if (was && was !== e.decide_by && !(mine[0]?.from === was && mine[0].to === e.decide_by)) return [`${key}: decide_by moved from ${was} to ${e.decide_by} with no extension on record (contracts/extensions.json); only an ask a person answers moves it`];
+  return by <= candidateNumber() ? [`${key}: still a preview in ${candidate}, at its decide_by ${e.decide_by}: promote it to stable, remove it with its migration, or extend it once by an ask a person answers`] : [];
+}
 
 /** A break file's quoted lines and its workaround, or null when it isn't one. */
 function breakFile(path) {
@@ -147,14 +172,14 @@ const breakFiles = (from, to) => {
   return existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith('.txt')).sort().map((f) => ({ ...breakFile(join(dir, f)), issue: f.slice(0, -4) })) : [];
 };
 
-/** Every break of the candidate against one earlier release: { entry, field, what, lines }. */
-function breaksAgainst(earlier, entries, from) {
+/** Every break of the candidate against one earlier release, `newest` when no later one is recorded: { entry, field, what, lines }. */
+function breaksAgainst(earlier, entries, from, newest) {
   const found = [];
   for (const [key, was] of Object.entries(earlier.entries)) {
     if (!covered(was.kind)) continue;
     const now = entries[key];
-    // A preview entry is outside the break diff, whatever it was or became.
-    if (plant !== 'diff-preview' && (was.stability === 'preview' || now?.stability === 'preview')) continue;
+    // A preview entry is outside the break diff. Promoted to stable, it enters it at the shape the newest earlier release froze (#1802).
+    if (plant !== 'diff-preview' && (now?.stability === 'preview' || (was.stability === 'preview' && !(now && newest)))) continue;
     const line = (pointer, what) => `diff: ${from}_${candidate} ${key} ${pointer} ${what}`;
     if (!now) { found.push({ key, entry: was, field: '', what: 'removed', lines: [line('/', 'removed')] }); continue; }
     if (was.digest === now.digest) continue;
@@ -166,27 +191,45 @@ function breaksAgainst(earlier, entries, from) {
   return found;
 }
 
-/** The candidate against every earlier release: the breaks no reviewed break file covers, and the accepted ones. */
+/**
+ * The candidate against every earlier release: the breaks no reviewed break file covers, the accepted ones, and each
+ * of the candidate's break files with the lines it quotes that neither its pair's diff nor a corpus decision holds,
+ * and what the step used it for (#1802).
+ */
 function diffAll(entries) {
   const open = [];
   const accepted = [];
-  for (const from of releasesOf(root).filter((r) => r !== candidate)) {
-    const earlier = readJson(at('contracts/releases', `${from}.json`));
+  const reviewed = [];
+  const earlier = earlierReleases();
+  const decided = corpusDecided();
+  const pairs = existsSync(at('contracts/breaks')) ? readdirSync(at('contracts/breaks')).filter((d) => d.endsWith(`_${candidate}`)).map((d) => d.slice(0, -candidate.length - 1)) : [];
+  for (const from of new Set([...earlier, ...pairs])) {
+    const breaks = earlier.includes(from) ? breaksAgainst(readJson(at('contracts/releases', `${from}.json`)), entries, from, from === earlier.at(-1)) : [];
     const files = breakFiles(from, candidate);
-    for (const b of breaksAgainst(earlier, entries, from)) {
+    for (const b of breaks) {
       const covering = files.find((f) => f.workaround && (plant === 'any-break-file' || b.lines.every((l) => f.quoted.has(l))));
       if (covering) accepted.push({ ...b, from, file: covering });
       else open.push({ ...b, from, files });
     }
+    const current = new Set(breaks.flatMap((b) => b.lines));
+    for (const f of files) {
+      const corpus = decided.filter((d) => d.file === f.path && f.workaround && f.quoted.has(d.line));
+      const held = new Set(corpus.map((d) => d.line));
+      reviewed.push({ path: relative(root, f.path), from, stale: plant === 'any-break-file' ? [] : [...f.quoted].filter((l) => !current.has(l) && !held.has(l)), corpus: corpus.map((d) => d.member), used: corpus.length > 0 || accepted.some((b) => b.file === f) });
+    }
   }
-  return { open, accepted };
+  return { open, accepted, reviewed };
 }
 
 function check() {
   const entries = entriesOf(root);
   const shipped = readJson(at('contracts/shipped.json'), { pieces: [] });
   const problems = historyProblems(entries, shipped);
-  const { open, accepted } = diffAll(entries);
+  const { open, accepted, reviewed } = diffAll(entries);
+  for (const f of reviewed) {
+    for (const l of f.stale) problems.push(`${f.path}: a break file that quotes a line in neither ${f.from}_${candidate}'s current diff nor a corpus decision's line: ${l}`);
+    if (!f.stale.length && !f.used) problems.push(`${f.path}: a break file the step didn't use: it covers no break of ${f.from}_${candidate} and no corpus decision`);
+  }
   for (const p of problems) out(`FAIL contracts: ${p}`);
   for (const b of open) {
     const unquoted = b.files.length ? `; ${b.files.map((f) => relative(root, f.path)).join(', ')} ${b.files.some((f) => !f.workaround) ? 'gives no workaround or ' : ''}quotes none of these lines` : ` with no break file contracts/breaks/${b.from}_${candidate}/<issue>.txt`;
@@ -194,16 +237,18 @@ function check() {
     for (const l of b.lines) out(l);
   }
   for (const b of accepted) out(`ACCEPTED contracts: ${b.entry.name}: ${b.from}_${candidate}, reviewed in ${relative(root, b.file.path)}`);
+  for (const f of reviewed) for (const member of f.corpus) out(`ACCEPTED contracts: corpus ${member}: reviewed in ${f.path}`);
   if (problems.length || open.length) {
-    out(`  Fix: give each entry since and stability, a replaced entry its replaced_by and a preview one its tracking issue; a break takes a new major, or a reviewed contracts/breaks/<from>_<to>/<issue>.txt quoting each diff line above and a workaround: line`);
+    out(`  Fix: give each entry since and stability, a replaced entry its replaced_by and a preview one its tracking issue, preview_since and decide_by; at its decide_by promote it, remove it with its migration or extend it once; a break takes a new major, or a reviewed contracts/breaks/<from>_<to>/<issue>.txt quoting each diff line above and a workaround: line; drop a quoted line no diff holds, and a break file nothing uses`);
     return 1;
   }
-  out(`PASS contracts: ${Object.keys(entries).length} entries of ${candidate} against ${releasesOf(root).filter((r) => r !== candidate).join(', ') || 'no earlier release'}${accepted.length ? `, ${accepted.length} reviewed break${accepted.length > 1 ? 's' : ''}` : ''}`);
+  out(`PASS contracts: ${Object.keys(entries).length} entries of ${candidate} against ${earlierReleases().join(', ') || 'no earlier release'}${accepted.length ? `, ${accepted.length} reviewed break${accepted.length > 1 ? 's' : ''}` : ''}`);
   return 0;
 }
 
 function notes() {
-  const { accepted } = diffAll(entriesOf(root));
+  const entries = entriesOf(root);
+  const { accepted } = diffAll(entries);
   out(`Release notes for ${candidate}: contract changes that break an earlier release`);
   if (!accepted.length) out('  none');
   for (const b of accepted) {
@@ -211,6 +256,22 @@ function notes() {
     for (const l of b.lines) out(`  ${l}`);
     out(`  workaround: ${b.file.workaround}`);
   }
+  // #1802: each preview entry the candidate promoted, removed or extended, with the shipped pieces that name it.
+  const last = lastRecorded();
+  const pieces = readJson(at('contracts/shipped.json'), { pieces: [] }).pieces ?? [];
+  const previews = (set) => Object.values(set).filter((e) => e.stability === 'preview');
+  out(`Preview entries ${candidate} decided`);
+  for (const was of previews(last)) {
+    const key = `${was.kind}:${was.name}`;
+    const now = entries[key];
+    const moved = extensions().find((x) => x.entry === key && x.from === was.decide_by && x.to === now?.decide_by);
+    const what = !now ? 'removed' : now.stability === 'stable' ? 'promoted to stable' : moved ? `extended from ${moved.from} to ${moved.to} by ${moved.ask}: ${moved.reason}` : null;
+    if (!what) continue;
+    out(`- ${was.name}: ${what}`);
+    const named = pieces.filter((p) => (p.requires?.preview ?? []).includes(was.name)).map((p) => p.piece);
+    if (named.length) out(`  named by ${named.join(', ')}`);
+  }
+  out(`Preview entries: ${previews(entries).length} in ${candidate}${earlierReleases().length ? `, ${previews(last).length} in ${earlierReleases().at(-1)}` : ''}`);
   return 0;
 }
 
@@ -333,16 +394,27 @@ function corpusRun() {
     return { ...m, failure: null };
   });
 }
-function corpus() {
-  const runs = corpusRun();
-  const previous = releasesOf(root).filter((r) => r !== candidate && existsSync(at('contracts/releases', `${r}.corpus.json`))).pop();
+/** The corpus as the candidate runs it: each member, the release whose failures are known, and a new failure's diff line. */
+function corpusNow() {
+  const previous = earlierReleases().filter((r) => existsSync(at('contracts/releases', `${r}.corpus.json`))).pop();
   const known = new Set(previous ? readJson(at('contracts/releases', `${previous}.corpus.json`)).failing : []);
+  return { runs: corpusRun(), previous, known, lineOf: (m) => `diff: ${previous ?? 'none'}_${candidate} corpus:${m.name} ${m.failure.path} ${m.failure.what}` };
+}
+/** Each new corpus failure the owner accepted with a break file: its member, its diff line and the file. */
+function corpusDecided() {
+  const decisions = readJson(at('contracts/corpus-decisions.json'), []).filter((d) => d.release === candidate && d.decision === 'accepted' && d.break);
+  if (!decisions.length) return [];
+  const { runs, known, lineOf } = corpusNow();
+  return runs.filter((m) => m.failure && !known.has(m.name)).flatMap((m) => decisions.filter((d) => d.member === m.name).map((d) => ({ member: m.name, line: lineOf(m), file: at(d.break) })));
+}
+function corpus() {
+  const { runs, previous, known, lineOf } = corpusNow();
   const decisions = readJson(at('contracts/corpus-decisions.json'), []);
   let held = 0;
   for (const m of runs) {
     if (!m.failure) { out(`OK contracts: corpus ${m.name}`); continue; }
     if (known.has(m.name)) { out(`KNOWN contracts: corpus ${m.name}: already failing in ${previous}: ${m.failure.what}`); continue; }
-    const line = `diff: ${previous ?? 'none'}_${candidate} corpus:${m.name} ${m.failure.path} ${m.failure.what}`;
+    const line = lineOf(m);
     const decision = decisions.find((d) => d.member === m.name && d.release === candidate);
     // Accepted counts only with its break file quoting this line and a workaround; fixed counts only once it passes, which it doesn't.
     const file = decision?.decision === 'accepted' && decision.break && existsSync(at(decision.break)) ? breakFile(at(decision.break)) : null;

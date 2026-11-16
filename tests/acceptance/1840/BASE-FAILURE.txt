@@ -1,0 +1,77 @@
+#1840 acceptance tests on the base, 2ded12b8a (Merge pull request #2346), Nov 12 2026.
+macOS (Darwin 27.2.0), Node v24.22.0, cargo 1.99.1: npm ci; npm run build --workspaces;
+CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 cargo build --locked -q -p deep-hook;
+NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1840 --no-file-parallelism --testTimeout=600000
+node node_modules/typescript/bin/tsc -p tests/acceptance/1840/tsconfig.json   (exit 0)
+
+The run below is the one that counts. Three runs before it each read BLOCKED before the criterion's assertion, and
+each led to a fix of the scene, never of the judgment: deep-hook wasn't built (the hub refuses to start without it);
+maya's settings declared no deadline for a choice ask, which deep_ask needs (the scene now writes her config.json's
+asks block); and bob's Claude Code session, whose transcript is in his own home, was never a live session on the hub,
+so his deep mcp bound to none (bob's session is now a Codex one whose hooks carry no transcript path: README, Values
+the issue leaves open, 2). After the counted run, a comment and an unused field's name changed in search.test.ts,
+moving no line. Home paths are written ~.
+
+Reading: the main test FAILS on its assertion that bob's search holds no decision maya saved at her personal scope.
+It returned both of hers: the one she saved for all her repos (scope all) and the one from her own repo maya/notes
+(scope repo:notes…). Every precondition before it held: each decision saved at the scope the README says, bob's
+session his and in acme/shop's project, his deep mcp bound to it. The planted test reads BLOCKED: the base doesn't
+list the plant search-decisions-unfiltered, so the hub refuses to start.
+
+---- Output
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/synthetic-discovering-hellman/agent-a771c3ffc0a91041c/tests/acceptance/1840
+
+ ❯ search.test.ts (2 tests | 2 failed) 1831ms
+   ❯ AC1 #1840.5abd3b51 deep_search from a person's session filters decisions by scope (2)
+     × AC1 #1840.5abd3b51 bob's deep_search returns the decision saved at acme/shop's scope and neither of maya's personal ones 1401ms
+     × AC1 #1840.5abd3b51 (wrong program) a search with no scope filter on decisions fails, naming the decision 329ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  search.test.ts > AC1 #1840.5abd3b51 deep_search from a person's session filters decisions by scope > AC1 #1840.5abd3b51 bob's deep_search returns the decision saved at acme/shop's scope and neither of maya's personal ones
+AssertionError: bob's deep_search "qbb3baed97" from his session 01a1581d-7310-7b62-8f4f-5bf0acf92505 returned a decision maya saved at her personal scope:
+decision:01M78V1A40TVJZWBC18MNG2P1N ("Store every qbb3baed97 logq75a7168 on SQLite or plain files?", saved by maya for all her repos: her personal scope, scope all) as {"source":"decision:01M78V1A40TVJZWBC18MNG2P1N","quote":"Store every qbb3baed97 logq75a7168 on SQLite or plain files? → files (all)"}
+decision:01M78V1B7F8Q06E22G50GJ7TAC ("Store the qbb3baed97 indexq4275c4d on SQLite or plain files?", saved from maya's session in maya/notes, her own repo outside the project: her personal scope, scope repo:notesbecf32a9) as {"source":"decision:01M78V1B7F8Q06E22G50GJ7TAC","quote":"Store the qbb3baed97 indexq4275c4d on SQLite or plain files? → files (repo:notesbecf32a9)"}: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "decision:01M78V1A40TVJZWBC18MNG2P1N (\"Store every qbb3baed97 logq75a7168 on SQLite or plain files?\", saved by maya for all her repos: her personal scope, scope all) as {\"source\":\"decision:01M78V1A40TVJZWBC18MNG2P1N\",\"quote\":\"Store every qbb3baed97 logq75a7168 on SQLite or plain files? → files (all)\"}",
++   "decision:01M78V1B7F8Q06E22G50GJ7TAC (\"Store the qbb3baed97 indexq4275c4d on SQLite or plain files?\", saved from maya's session in maya/notes, her own repo outside the project: her personal scope, scope repo:notesbecf32a9) as {\"source\":\"decision:01M78V1B7F8Q06E22G50GJ7TAC\",\"quote\":\"Store the qbb3baed97 indexq4275c4d on SQLite or plain files? → files (repo:notesbecf32a9)\"}",
++ ]
+
+ ❯ judge search.test.ts:205:103
+
+ ❯ search.test.ts:211:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  search.test.ts > AC1 #1840.5abd3b51 deep_search from a person's session filters decisions by scope > AC1 #1840.5abd3b51 (wrong program) a search with no scope filter on decisions fails, naming the decision
+Error: BLOCKED: the hub didn't start (deep hub run): exit {"code":1,"signal":null}; stderr: file://~/dev/claude-worktrees/synthetic-discovering-hellman/agent-a771c3ffc0a91041c/packages/hub/dist/plant.js:112
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=search-decisions-unfiltered names no planted program
+    at plantOf (file://~/dev/claude-worktrees/synthetic-discovering-hellman/agent-a771c3ffc0a91041c/packages/hub/dist/plant.js:112:15)
+    at runHub (file://~/dev/claude-worktrees/synthetic-discovering-hellman/agent-a771c3ffc0a91041c/packages/hub/dist/server.js:1672:19)
+    at hubCommand (file://~/dev/claude-worktrees/synthetic-discovering-hellman/agent-a771c3ffc0a91041c/packages/hub/dist/hub-command.js:31:28)
+    at file://~/dev/claude-worktrees/synthetic-discovering-hellman/agent-a771c3ffc0a91041c/packages/cli/dist/main.js:341:30
+
+Node.js v24.22.0
+
+ ❯ startHub ../16/helpers.ts:249:11
+
+ ❯ world ../1337/helpers.ts:128:15
+ ❯ scenario search.test.ts:138:13
+ ❯ search.test.ts:215:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  13:36:17
+   Duration  1.99s (tests 95%, import 3%, transform 3%)

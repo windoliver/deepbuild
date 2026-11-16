@@ -9,18 +9,24 @@
 //! is discarded once; Shift is 1/20 speed (1/10 for `turn`) and a Shift change moves the anchor;
 //! past a limit the anchor moves by the overshoot; ⌘ snaps to `increment`.
 
+mod scrolls;
+
 use std::collections::BTreeMap;
 
 use deep_canvas::grammar::FLICKS_PER_SECOND;
 use deep_canvas::ops;
+use deep_canvas_motion::doc::Feel;
 use deep_canvas_motion::follow::{Follow, Model, Segment};
 use serde_json::{json, Map, Value};
 
+use crate::tour::{Drawn, Layout, Run, Tour};
 use crate::track::{Entry, Sample, Track, Writer};
 
 const F: i64 = FLICKS_PER_SECOND;
 /// Motion inside this many px of the press is discarded, once, at the start of a drag.
 pub const THRESHOLD_PX: f64 = 3.0;
+/// The planted tour pointer that takes hits takes them within this many px of its tip.
+const POINTER_HIT_PX: f64 = 12.0;
 
 /// How a control kind takes input and what its value is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -83,6 +89,16 @@ pub struct Planted {
     pub no_keyboard: bool,
     /// An agent's pointer input writes an entry.
     pub agent_input: bool,
+    /// #542: a scroll control rounds each frame's share of a delta on its own.
+    pub scroll_rounds_each_frame: bool,
+    /// #542: a snapping scroll control ends a gesture on the nearest snap point.
+    pub scroll_snaps_to_nearest: bool,
+    /// #903: the tour pointer moves by the frames played, so a seek leaves it where it was.
+    pub pointer_frame_clock: bool,
+    /// #903: every glide of the tour pointer starts `glide` before its key.
+    pub pointer_glide_before_key: bool,
+    /// #903: the tour pointer is a hit target, and a press on it reaches no control.
+    pub pointer_takes_hits: bool,
 }
 
 impl Planted {
@@ -100,6 +116,11 @@ impl Planted {
             "tour_writes_during_drag" => p.tour_ignores_you = true,
             "smoothing_fall_from_peak" => p.smoothing_from_peak = true,
             "scanning_lookup" => p.scanning_lookup = true,
+            "scroll_rounds_each_frame" => p.scroll_rounds_each_frame = true,
+            "scroll_snaps_to_nearest" => p.scroll_snaps_to_nearest = true,
+            "tour_pointer_frame_clock" => p.pointer_frame_clock = true,
+            "tour_pointer_glide_before_key" => p.pointer_glide_before_key = true,
+            "tour_pointer_takes_hits" => p.pointer_takes_hits = true,
             _ => return None,
         }
         Some(p)
@@ -182,14 +203,6 @@ enum Gesture {
     },
 }
 
-#[derive(Clone, Debug)]
-struct Tour {
-    keys: Vec<(String, Vec<(i64, Value)>)>,
-    idle_after: i64,
-    resume_after: i64,
-    period: i64,
-}
-
 /// What a follow channel built so far: its source's changes and its segments.
 #[derive(Clone, Debug, Default)]
 struct Channel {
@@ -219,8 +232,16 @@ pub struct Session {
     interrupted: bool,
     frozen_origin: Option<i64>,
     tour: Option<Tour>,
+    /// #903: the runs of the tour your gestures stopped, in time order.
+    runs: Vec<Run>,
+    /// #903: where the tour pointer starts the tour's next run: where your gesture stopped it.
+    home: [f64; 2],
+    /// The time the session last played to, which a seek leaves as it is.
+    played_to: i64,
     hover: BTreeMap<usize, (bool, Vec<(i64, f64)>)>,
     built: BTreeMap<String, Channel>,
+    /// #542: the document's scroll controls.
+    scrolls: scrolls::Scrolls,
 }
 
 /// A refusal: the code and what it names.
@@ -234,17 +255,6 @@ fn refused(code: &'static str, path: impl Into<String>) -> Refused {
     Refused {
         code,
         path: path.into(),
-    }
-}
-
-fn flicks(seconds: f64) -> i64 {
-    // Whole flicks for the decimal seconds a document writes.
-    let x = seconds * F as f64;
-    let r = x as i64;
-    if x - r as f64 >= 0.5 {
-        r + 1
-    } else {
-        r
     }
 }
 
@@ -270,10 +280,7 @@ impl Session {
                 }
             }
         }
-        let tour = match doc.get("tour") {
-            Some(t) => tour_of(t)?,
-            None => None,
-        };
+        let tour = doc.get("tour").map(Tour::of).transpose()?;
         let frame = (i64::from(fps.1) * F) / i64::from(fps.0.max(1));
         Ok(Session {
             controls,
@@ -298,8 +305,12 @@ impl Session {
             interrupted: false,
             frozen_origin: None,
             tour,
+            runs: Vec::new(),
+            home: [viewport[0] / 2.0, viewport[1] / 2.0],
+            played_to: 0,
             hover: BTreeMap::new(),
             built: BTreeMap::new(),
+            scrolls: scrolls::Scrolls::of(doc),
         })
     }
 
@@ -314,6 +325,14 @@ impl Session {
         [
             self.target[0] + (px[0] - self.viewport[0] / 2.0) * self.scale,
             self.target[1] + (px[1] - self.viewport[1] / 2.0) * self.scale,
+        ]
+    }
+
+    /// The viewport px a point in u is drawn at.
+    fn px(&self, w: [f64; 2]) -> [f64; 2] {
+        [
+            (w[0] - self.target[0]) / self.scale + self.viewport[0] / 2.0,
+            (w[1] - self.target[1]) / self.scale + self.viewport[1] / 2.0,
         ]
     }
 
@@ -357,7 +376,7 @@ impl Session {
     fn current(&self, i: usize) -> Value {
         let c = &self.controls[i];
         match self.track.last_at(&c.id, self.playhead) {
-            Some(e) => e.value.clone(),
+            Some(e) => e.value_at(self.playhead),
             None => c.default.clone(),
         }
     }
@@ -376,7 +395,7 @@ impl Session {
         } else {
             self.track.last_at(&c.id, t)
         };
-        let mut v = e.map_or_else(|| c.default.clone(), |e| e.value.clone());
+        let mut v = e.map_or_else(|| c.default.clone(), |e| e.value_at(t));
         if self.planted.recompute {
             let px = e.and_then(|e| e.samples.as_ref()?.last()?.px);
             if let Some(px) = px {
@@ -388,7 +407,9 @@ impl Session {
         }
         match c.behavior {
             Behavior::Choice => {
-                let at = v.as_str().and_then(|s| c.options.iter().position(|o| o == s));
+                let at = v
+                    .as_str()
+                    .and_then(|s| c.options.iter().position(|o| o == s));
                 json!(at.map_or(-1, |k| k as i64))
             }
             _ => v,
@@ -416,7 +437,11 @@ impl Session {
     fn knob(&self, c: &Control, v: f64) -> Option<Rect> {
         let (item, along) = c.handle.as_ref()?;
         let r = *self.items.get(item)?;
-        let f = if c.max > c.min { (v - c.min) / (c.max - c.min) } else { 0.0 };
+        let f = if c.max > c.min {
+            (v - c.min) / (c.max - c.min)
+        } else {
+            0.0
+        };
         let centre = match along {
             Along::Axis(k, travel) => {
                 let mut p = [r[0] + r[2] / 2.0, r[1] + r[3] / 2.0];
@@ -436,7 +461,9 @@ impl Session {
         };
         match c.smoothing {
             Some(model) => {
-                Follow::with(model, start, changes, self.planted.smoothing_from_peak).at(t).value
+                Follow::with(model, start, changes, self.planted.smoothing_from_peak)
+                    .at(t)
+                    .value
             }
             None => changes
                 .iter()
@@ -465,17 +492,34 @@ impl Session {
         if self.gesturing() {
             return None;
         }
-        let wait = if self.interrupted { tour.resume_after } else { tour.idle_after };
+        let wait = if self.interrupted {
+            tour.resume_after
+        } else {
+            tour.idle_after
+        };
         Some(self.last_end + wait)
     }
 
-    /// A gesture of yours starts at `t`: a tour under way yields to it.
+    /// A gesture of yours starts at `t`: a tour under way yields to it, and its pointer stops
+    /// where it is, to fade there and to start the tour's next run from there.
     fn begin(&mut self, t: i64) {
         if self.frozen_origin.is_some() {
             return;
         }
-        if self.origin().is_some_and(|o| o <= t) {
+        if let Some(origin) = self.origin().filter(|o| *o <= t) {
             self.interrupted = true;
+            let run = Run {
+                origin,
+                home: self.home,
+                end: None,
+            };
+            if let Some(stopped) = self.pointer_in(&run, t) {
+                self.home = stopped.tip;
+            }
+            self.runs.push(Run {
+                end: Some(t),
+                ..run
+            });
         }
     }
 
@@ -494,53 +538,45 @@ impl Session {
         let frames = t.div_euclid(self.frame) - p0.div_euclid(self.frame);
         let mut appended = 0;
         if let (Some(origin), Some(tour)) = (self.origin(), self.tour.clone()) {
-            let mut due: Vec<(i64, usize, Value)> = Vec::new();
-            let looping = tour.period > 0;
-            let first = if looping { ((p0 - origin) / tour.period - 1).max(0) } else { 0 };
-            let mut k = first;
-            loop {
-                let base = origin + k * tour.period;
-                if base > t {
-                    break;
-                }
-                for (ci, (_, keys)) in tour.keys.iter().enumerate() {
-                    for (kt, v) in keys {
-                        if looping && *kt >= tour.period {
-                            continue;
-                        }
-                        let at = base + kt;
-                        if at > p0 && (at < t || (inclusive && at == t)) {
-                            due.push((at, ci, v.clone()));
-                        }
-                    }
-                }
-                if !looping {
-                    break;
-                }
-                k += 1;
-            }
-            due.sort_by_key(|a| (a.0, a.1));
-            for (at, ci, value) in due {
-                if self.track.last_t().is_some_and(|last| at < last) {
+            let first = (tour.lap(origin, p0) - 1).max(0);
+            let stops = match origin <= t {
+                true => tour.stops(origin, first, tour.lap(origin, t)),
+                false => Vec::new(),
+            };
+            let due = |at: i64| at > p0 && (at < t || (inclusive && at == t));
+            for stop in stops.iter().filter(|s| due(s.t)) {
+                if self.track.last_t().is_some_and(|last| stop.t < last) {
                     continue;
                 }
                 if self.planted.tour_ignores_you && self.frozen_origin.is_none() {
                     self.frozen_origin = Some(origin);
                 }
-                self.track.append(Entry {
-                    t: at,
-                    seq: 0,
-                    control: tour.keys[ci].0.clone(),
-                    value,
-                    samples: None,
-                    writer: Writer::Tour,
-                    serial: None,
-                });
+                self.track.append(tour.entry(stop));
                 appended += 1;
             }
         }
+        self.played_to = t;
         self.playhead = t;
         (frames, appended as u64, appended)
+    }
+
+    /// #903: the tour pointer a frame at `t` draws in `run`.
+    fn pointer_in(&self, run: &Run, t: i64) -> Option<Drawn> {
+        let eager = self.planted.pointer_glide_before_key;
+        let tour = self.tour.as_ref()?;
+        tour.pointer(run, t, self, Feel::default().ease, eager)
+    }
+
+    /// #903: the tour pointer a frame at `t` draws: in the run under way, or in the last one
+    /// your gesture stopped, where it fades.
+    fn pointer_at(&self, t: i64) -> Option<Drawn> {
+        let under_way = self.origin().filter(|o| *o <= t).map(|origin| Run {
+            origin,
+            home: self.home,
+            end: None,
+        });
+        let stopped = self.runs.iter().rev().find(|r| r.origin <= t).copied();
+        self.pointer_in(&under_way.or(stopped)?, t)
     }
 
     // -------------------------------------------------------------------------------- entries
@@ -549,7 +585,14 @@ impl Session {
         self.track.append(e)
     }
 
-    fn yours(&mut self, control: usize, t: i64, value: Value, samples: Option<Vec<Sample>>, serial: u32) -> usize {
+    fn yours(
+        &mut self,
+        control: usize,
+        t: i64,
+        value: Value,
+        samples: Option<Vec<Sample>>,
+        serial: u32,
+    ) -> usize {
         let id = self.controls[control].id.clone();
         self.append(Entry {
             t,
@@ -600,13 +643,28 @@ impl Session {
             }
             "seek" => {
                 let t = need_t()?;
-                let dropped = if self.planted.forks_on_scrub { self.track.cut_after(t) } else { 0 };
+                let dropped = if self.planted.forks_on_scrub {
+                    self.track.cut_after(t)
+                } else {
+                    0
+                };
                 self.playhead = t;
                 Ok(json!({"dropped": dropped}))
             }
+            "scroll" => self.scroll(op, need_t()?),
             "advance" => {
                 let (frames, work, appended) = self.advance(need_t()?, true);
                 Ok(json!({"frames": frames, "input_work": work, "appended": appended}))
+            }
+            "tour_pointer" => {
+                // Planted: the pointer as the last frame played left it.
+                let at = match self.planted.pointer_frame_clock {
+                    true => self.played_to.div_euclid(self.frame) * self.frame,
+                    false => self.playhead,
+                };
+                let drawn = self.pointer_at(at);
+                let opacity = drawn.map_or(0.0, |d| d.opacity);
+                Ok(json!({"tip": drawn.map(|d| d.tip), "opacity": opacity}))
             }
             "drag" => {
                 if let Some(t) = t {
@@ -628,7 +686,9 @@ impl Session {
                 let control = op.get("control").and_then(Value::as_str).unwrap_or("");
                 let i = self.index(control)?;
                 let mode = op.get("mode").and_then(Value::as_str).unwrap_or("live");
-                Ok(json!({"value": self.read_value(i, t, mode), "count": self.track.count_at(control, t)}))
+                Ok(
+                    json!({"value": self.read_value(i, t, mode), "count": self.track.count_at(control, t)}),
+                )
             }
             _ => Err(refused("bad_input", "op")),
         }
@@ -642,8 +702,10 @@ impl Session {
             self.track.last_at(control, t)
         };
         match e {
-            Some(e) => e.value.clone(),
-            None => self.index(control).map_or(Value::Null, |i| self.controls[i].default.clone()),
+            Some(e) => e.value_at(t),
+            None => self
+                .index(control)
+                .map_or(Value::Null, |i| self.controls[i].default.clone()),
         }
     }
 
@@ -653,6 +715,12 @@ impl Session {
             "down" => {
                 self.advance(t, false);
                 if self.gesture.is_some() {
+                    return Ok(json!({"appended": 0, "dropped": 0}));
+                }
+                // Planted: a press on the tour pointer is the pointer's.
+                let on_pointer =
+                    |d: Drawn| ops::hypot(d.tip[0] - px[0], d.tip[1] - px[1]) <= POINTER_HIT_PX;
+                if self.planted.pointer_takes_hits && self.pointer_at(t).is_some_and(on_pointer) {
                     return Ok(json!({"appended": 0, "dropped": 0}));
                 }
                 let Some(g) = self.press(w, px, t, mods)? else {
@@ -687,13 +755,26 @@ impl Session {
                             self.gesture = Some(Gesture::Drag(d));
                             return Ok(json!({"value": v, "appended": 0, "dropped": 0}));
                         }
-                        let dropped = self.yours(d.control, d.t0, json!(v), Some(d.samples), d.serial);
+                        let dropped =
+                            self.yours(d.control, d.t0, json!(v), Some(d.samples), d.serial);
                         self.end(t);
                         Ok(json!({"value": v, "appended": 1, "dropped": dropped}))
                     }
-                    Some(Gesture::Pick { control, option, item, serial, t0 }) => {
+                    Some(Gesture::Pick {
+                        control,
+                        option,
+                        item,
+                        serial,
+                        t0,
+                    }) => {
                         if !up {
-                            self.gesture = Some(Gesture::Pick { control, option, item, serial, t0 });
+                            self.gesture = Some(Gesture::Pick {
+                                control,
+                                option,
+                                item,
+                                serial,
+                                t0,
+                            });
                             return Ok(json!({"appended": 0, "dropped": 0}));
                         }
                         self.end(t);
@@ -713,7 +794,13 @@ impl Session {
     }
 
     /// What a press at `w` grabs: a handle, the track under it, or a target to pick.
-    fn press(&mut self, w: [f64; 2], px: [f64; 2], t: i64, mods: Mods) -> Result<Option<Gesture>, Refused> {
+    fn press(
+        &mut self,
+        w: [f64; 2],
+        px: [f64; 2],
+        t: i64,
+        mods: Mods,
+    ) -> Result<Option<Gesture>, Refused> {
         for i in 0..self.controls.len() {
             let c = self.controls[i].clone();
             if c.class != Class::Document {
@@ -722,7 +809,9 @@ impl Session {
             match c.behavior {
                 Behavior::Number | Behavior::Turn | Behavior::Path => {
                     let v = self.number(&c, &self.current(i));
-                    let Some(knob) = self.knob(&c, v) else { continue };
+                    let Some(knob) = self.knob(&c, v) else {
+                        continue;
+                    };
                     let on_knob = contains(&knob, w);
                     let on_track = !on_knob && self.on_track(&c, w);
                     if !on_knob && !on_track {
@@ -755,7 +844,9 @@ impl Session {
                         }
                     }
                     if c.behavior == Behavior::Path && at.is_none() {
-                        at = self.knob(&c, d.value).map(|r| [r[0] + r[2] / 2.0, r[1] + r[3] / 2.0]);
+                        at = self
+                            .knob(&c, d.value)
+                            .map(|r| [r[0] + r[2] / 2.0, r[1] + r[3] / 2.0]);
                     }
                     d.samples.push(Sample {
                         t: self.stamp(t),
@@ -802,8 +893,12 @@ impl Session {
     }
 
     fn on_track(&self, c: &Control, w: [f64; 2]) -> bool {
-        let Some((item, along)) = &c.handle else { return false };
-        let Some(r) = self.items.get(item) else { return false };
+        let Some((item, along)) = &c.handle else {
+            return false;
+        };
+        let Some(r) = self.items.get(item) else {
+            return false;
+        };
         match along {
             Along::Axis(k, travel) => {
                 let j = 1 - k;
@@ -821,7 +916,13 @@ impl Session {
     }
 
     /// The drag grammar: the value a drag reaches at `w`.
-    fn drag_to(&self, c: &Control, d: &mut Drag, w: [f64; 2], mods: Mods) -> (f64, Option<[f64; 2]>) {
+    fn drag_to(
+        &self,
+        c: &Control,
+        d: &mut Drag,
+        w: [f64; 2],
+        mods: Mods,
+    ) -> (f64, Option<[f64; 2]>) {
         if c.behavior == Behavior::Path {
             let (v, p) = self.place(c, w).unwrap_or((d.value, None));
             d.value = v;
@@ -869,7 +970,11 @@ impl Session {
         if mods.cmd {
             if let Some(inc) = c.increment.filter(|i| *i > 0.0) {
                 let steps = (v - c.min) / inc;
-                let r = if steps - steps.floor() >= 0.5 { steps.floor() + 1.0 } else { steps.floor() };
+                let r = if steps - steps.floor() >= 0.5 {
+                    steps.floor() + 1.0
+                } else {
+                    steps.floor()
+                };
                 v = (c.min + r * inc).clamp(c.min, c.max);
             }
         }
@@ -901,7 +1006,15 @@ impl Session {
         out
     }
 
-    fn key(&mut self, control: &str, key: &str, phase: &str, repeat: bool, mods: Mods, t: i64) -> Result<Value, Refused> {
+    fn key(
+        &mut self,
+        control: &str,
+        key: &str,
+        phase: &str,
+        repeat: bool,
+        mods: Mods,
+        t: i64,
+    ) -> Result<Value, Refused> {
         let i = self.index(control)?;
         let c = self.controls[i].clone();
         let press_down = phase == "down" && !repeat;
@@ -965,9 +1078,16 @@ impl Session {
             cmd: mods.contains(&"cmd"),
         };
         // A press with no keys of its own takes Enter and Space, as `key` reads it.
-        let press = |c: &Control| c.behavior == Behavior::Press && c.keys.is_empty() && (key == "Enter" || key == " ");
+        let press = |c: &Control| {
+            c.behavior == Behavior::Press && c.keys.is_empty() && (key == "Enter" || key == " ")
+        };
         let takes = |(i, c): &(usize, &Control)| press(c) || self.keyed(*i, key, mods).is_some();
-        self.controls.iter().enumerate().filter(takes).map(|(_, c)| c.id.clone()).collect()
+        self.controls
+            .iter()
+            .enumerate()
+            .filter(takes)
+            .map(|(_, c)| c.id.clone())
+            .collect()
     }
 
     /// The value key `key` gives control `i`: its own `keys` first, then the default keys.
@@ -1027,12 +1147,22 @@ impl Session {
             Behavior::Toggle => {
                 (key == " " || key == "Enter").then(|| json!(!now.as_bool().unwrap_or(false)))
             }
-            Behavior::Choice => (dir != 0).then(|| step(dir)).flatten().map(|k| json!(c.options[k])),
+            Behavior::Choice => (dir != 0)
+                .then(|| step(dir))
+                .flatten()
+                .map(|k| json!(c.options[k])),
             Behavior::Stages => {
-                if let Some((id, _)) = c.stages.iter().find(|(_, keys)| keys.iter().any(|k| k == key)) {
+                if let Some((id, _)) = c
+                    .stages
+                    .iter()
+                    .find(|(_, keys)| keys.iter().any(|k| k == key))
+                {
                     return Some(json!(id));
                 }
-                (dir != 0).then(|| step(dir)).flatten().map(|k| json!(c.stages[k].0))
+                (dir != 0)
+                    .then(|| step(dir))
+                    .flatten()
+                    .map(|k| json!(c.stages[k].0))
             }
             Behavior::Press | Behavior::Hover => None,
         }
@@ -1058,7 +1188,10 @@ impl Session {
         let i = self.index(control)?;
         self.advance(t, true);
         let c = &self.controls[i];
-        let parameter = matches!(c.behavior, Behavior::Number | Behavior::Turn | Behavior::Path | Behavior::Toggle);
+        let parameter = matches!(
+            c.behavior,
+            Behavior::Number | Behavior::Turn | Behavior::Path | Behavior::Toggle
+        );
         if c.class != Class::Document || !parameter {
             return Ok(json!({"appended": 0, "dropped": 0, "refused": "not_a_parameter"}));
         }
@@ -1068,7 +1201,15 @@ impl Session {
         } else {
             (Writer::Agent, None)
         };
-        let dropped = self.append(Entry { t, seq: 0, control: id, value, samples: None, writer, serial });
+        let dropped = self.append(Entry {
+            t,
+            seq: 0,
+            control: id,
+            value,
+            samples: None,
+            writer,
+            serial,
+        });
         Ok(json!({"appended": 1, "dropped": dropped}))
     }
 
@@ -1080,15 +1221,31 @@ impl Session {
             return Ok(0);
         }
         let c = self.controls[i].clone();
-        let v = self.place(&c, self.world(px)).map_or_else(|| self.current(i), |x| json!(x.0));
-        self.append(Entry { t, seq: 0, control: c.id, value: v, samples: None, writer: Writer::Agent, serial: None });
+        let v = self
+            .place(&c, self.world(px))
+            .map_or_else(|| self.current(i), |x| json!(x.0));
+        self.append(Entry {
+            t,
+            seq: 0,
+            control: c.id,
+            value: v,
+            samples: None,
+            writer: Writer::Agent,
+            serial: None,
+        });
         Ok(1)
     }
 
     fn read_channel(&mut self, id: &str, t: i64) -> Result<Value, Refused> {
         let path = format!("channels/{id}");
-        let ch = self.channels.get(id).ok_or_else(|| refused("ref_unresolved", path.clone()))?;
-        let f = ch.get("follow").and_then(Value::as_object).ok_or_else(|| refused("bad_doc", path.clone()))?;
+        let ch = self
+            .channels
+            .get(id)
+            .ok_or_else(|| refused("ref_unresolved", path.clone()))?;
+        let f = ch
+            .get("follow")
+            .and_then(Value::as_object)
+            .ok_or_else(|| refused("bad_doc", path.clone()))?;
         let spec = deep_canvas_motion::doc::follow_spec(f, &format!("{path}/follow"))
             .map_err(|r| refused(r.code, r.path))?;
         let deep_canvas_motion::follow::Source::Control(control) = &spec.source else {
@@ -1121,15 +1278,49 @@ impl Session {
             let from = follow.segments.len() - 1;
             for &(ct, target) in &changes[from..] {
                 let start = follow.at(ct);
-                follow.segments.push(Segment { t: ct, target, start });
+                follow.segments.push(Segment {
+                    t: ct,
+                    target,
+                    start,
+                });
                 built.solves += 1;
             }
             built.follow = Some(follow);
             built.changes = changes;
         }
-        let f = built.follow.as_ref().map(|f| f.at(t).value).unwrap_or(initial);
+        let f = built
+            .follow
+            .as_ref()
+            .map(|f| f.at(t).value)
+            .unwrap_or(initial);
         let segments = built.follow.as_ref().map_or(0, |f| f.segments.len() - 1);
         Ok(json!({"value": f, "solves": built.solves, "segments": segments}))
+    }
+}
+
+/// #903: what the tour pointer reads of a session's layout: a number control's handle where its
+/// value puts it, and the item a press, a toggle, a choice or a stages control is hit through.
+impl Layout for Session {
+    fn anchor(&self, control: &str, value: &Value, _: i64) -> Option<[f64; 2]> {
+        let c = self.controls.iter().find(|c| c.id == control)?;
+        let r = match c.behavior {
+            Behavior::Number | Behavior::Turn | Behavior::Path => {
+                self.knob(c, self.number(c, value))?
+            }
+            Behavior::Hover => return None,
+            Behavior::Choice | Behavior::Toggle | Behavior::Press | Behavior::Stages => {
+                // A choice's or a stage's key lands on the target of the option it picks.
+                let picks = |(o, _): &&(String, String)| Some(o.as_str()) == value.as_str();
+                let (_, item) = c.targets.iter().find(picks).or(c.targets.first())?;
+                *self.items.get(item)?
+            }
+        };
+        Some(self.px([r[0] + r[2] / 2.0, r[1] + r[3] / 2.0]))
+    }
+
+    fn presses(&self, control: &str) -> bool {
+        let pressed = |c: &Control| matches!(c.behavior, Behavior::Press | Behavior::Toggle);
+        self.controls.iter().any(|c| c.id == control && pressed(c))
     }
 }
 
@@ -1148,7 +1339,10 @@ struct Mods {
 }
 
 fn mods_of(v: Option<&Value>) -> Mods {
-    let has = |m: &str| v.and_then(Value::as_array).is_some_and(|a| a.iter().any(|x| x.as_str() == Some(m)));
+    let has = |m: &str| {
+        v.and_then(Value::as_array)
+            .is_some_and(|a| a.iter().any(|x| x.as_str() == Some(m)))
+    };
     Mods {
         shift: has("shift"),
         cmd: has("cmd"),
@@ -1157,7 +1351,9 @@ fn mods_of(v: Option<&Value>) -> Mods {
 
 fn items_of(doc: &Value) -> BTreeMap<String, Rect> {
     let mut out = BTreeMap::new();
-    let Some(items) = doc.get("items").and_then(Value::as_object) else { return out };
+    let Some(items) = doc.get("items").and_then(Value::as_object) else {
+        return out;
+    };
     for (id, item) in items {
         let pos = pair(item.get("at").and_then(|a| a.get("pos"))).unwrap_or([0.0, 0.0]);
         let params = item.get("params");
@@ -1192,13 +1388,22 @@ fn camera_of(doc: &Value) -> ([f64; 2], Option<f64>) {
         (Some(t), _) => (t, width),
         (None, size) => {
             let s = pair(size).unwrap_or([0.0, 0.0]);
-            ([s[0] / 2.0, s[1] / 2.0], width.or(Some(s[0]).filter(|w| *w > 0.0)))
+            (
+                [s[0] / 2.0, s[1] / 2.0],
+                width.or(Some(s[0]).filter(|w| *w > 0.0)),
+            )
         }
     }
 }
 
 fn control_of(id: &str, c: &Value, extra: &[(&str, Behavior)]) -> Result<Option<Control>, Refused> {
-    let Some(kind) = c.get("kind").and_then(Value::as_str) else { return Ok(None) };
+    let Some(kind) = c.get("kind").and_then(Value::as_str) else {
+        return Ok(None);
+    };
+    // #542: a scroll control's steps are `scrolls`'; a text control takes no pointer here.
+    if matches!(kind, "scroll" | "text") {
+        return Ok(None);
+    }
     let Some(behavior) = KINDS
         .iter()
         .chain(extra.iter())
@@ -1214,8 +1419,17 @@ fn control_of(id: &str, c: &Value, extra: &[(&str, Behavior)]) -> Result<Option<
         None => Class::Document,
     };
     let range = c.get("range").and_then(Value::as_array);
-    let r = |k: usize, d: f64| range.and_then(|a| a.get(k)).and_then(Value::as_f64).unwrap_or(d);
-    let top = if behavior == Behavior::Turn { 360.0 } else { 1.0 };
+    let r = |k: usize, d: f64| {
+        range
+            .and_then(|a| a.get(k))
+            .and_then(Value::as_f64)
+            .unwrap_or(d)
+    };
+    let top = if behavior == Behavior::Turn {
+        360.0
+    } else {
+        1.0
+    };
     let (min, max) = (r(0, 0.0), r(1, top));
     // A value is clamped into the range, which panics on a range that runs high to low.
     if min > max {
@@ -1224,7 +1438,11 @@ fn control_of(id: &str, c: &Value, extra: &[(&str, Behavior)]) -> Result<Option<
     let options: Vec<String> = c
         .get("options")
         .and_then(Value::as_array)
-        .map(|a| a.iter().filter_map(|o| o.as_str().map(str::to_string)).collect())
+        .map(|a| {
+            a.iter()
+                .filter_map(|o| o.as_str().map(str::to_string))
+                .collect()
+        })
         .unwrap_or_default();
     let stages: Vec<(String, Vec<String>)> = c
         .get("stages")
@@ -1235,7 +1453,11 @@ fn control_of(id: &str, c: &Value, extra: &[(&str, Behavior)]) -> Result<Option<
                     let keys = s
                         .get("keys")
                         .and_then(Value::as_array)
-                        .map(|a| a.iter().filter_map(|k| k.as_str().map(str::to_string)).collect())
+                        .map(|a| {
+                            a.iter()
+                                .filter_map(|k| k.as_str().map(str::to_string))
+                                .collect()
+                        })
                         .unwrap_or_default();
                     (sid.clone(), keys)
                 })
@@ -1253,7 +1475,11 @@ fn control_of(id: &str, c: &Value, extra: &[(&str, Behavior)]) -> Result<Option<
     };
     let handle = match c.get("handle") {
         Some(h) => {
-            let item = h.get("item").and_then(Value::as_str).unwrap_or("").to_string();
+            let item = h
+                .get("item")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
             let along = match h.get("along") {
                 Some(Value::String(a)) => {
                     let travel = num(h.get("travel")).unwrap_or(100.0);
@@ -1266,11 +1492,19 @@ fn control_of(id: &str, c: &Value, extra: &[(&str, Behavior)]) -> Result<Option<
                         .map(|a| a.iter().filter_map(|p| pair(Some(p))).collect())
                         .unwrap_or_default();
                     if points.len() < 2 {
-                        return Err(refused("out_of_range", format!("controls/{id}/handle/along")));
+                        return Err(refused(
+                            "out_of_range",
+                            format!("controls/{id}/handle/along"),
+                        ));
                     }
                     Along::Path(points)
                 }
-                _ => return Err(refused("out_of_range", format!("controls/{id}/handle/along"))),
+                _ => {
+                    return Err(refused(
+                        "out_of_range",
+                        format!("controls/{id}/handle/along"),
+                    ))
+                }
             };
             Some((item, along))
         }
@@ -1279,7 +1513,11 @@ fn control_of(id: &str, c: &Value, extra: &[(&str, Behavior)]) -> Result<Option<
     let targets = c
         .get("targets")
         .and_then(Value::as_object)
-        .map(|m| m.iter().filter_map(|(k, v)| Some((k.clone(), v.as_str()?.to_string()))).collect())
+        .map(|m| {
+            m.iter()
+                .filter_map(|(k, v)| Some((k.clone(), v.as_str()?.to_string())))
+                .collect()
+        })
         .unwrap_or_default();
     let smoothing = match c.get("smoothing") {
         Some(Value::Object(o)) => match o.get("follow") {
@@ -1287,8 +1525,11 @@ fn control_of(id: &str, c: &Value, extra: &[(&str, Behavior)]) -> Result<Option<
                 let mut f = Map::new();
                 f.insert("source".into(), json!(format!("controls/{id}/value")));
                 f.insert("model".into(), model.clone());
-                let spec = deep_canvas_motion::doc::follow_spec(&f, &format!("controls/{id}/smoothing/follow"))
-                    .map_err(|r| refused(r.code, r.path))?;
+                let spec = deep_canvas_motion::doc::follow_spec(
+                    &f,
+                    &format!("controls/{id}/smoothing/follow"),
+                )
+                .map_err(|r| refused(r.code, r.path))?;
                 Some(spec.model)
             }
             None => None,
@@ -1305,49 +1546,32 @@ fn control_of(id: &str, c: &Value, extra: &[(&str, Behavior)]) -> Result<Option<
         increment: num(c.get("increment")),
         options,
         stages,
-        keys: c.get("keys").and_then(Value::as_object).cloned().unwrap_or_default(),
+        keys: c
+            .get("keys")
+            .and_then(Value::as_object)
+            .cloned()
+            .unwrap_or_default(),
         handle,
         targets,
         smoothing,
     }))
 }
 
-fn tour_of(t: &Value) -> Result<Option<Tour>, Refused> {
-    let Some(keys) = t.get("keys").and_then(Value::as_object) else {
-        return Err(refused("bad_doc", "tour/keys"));
-    };
-    let mut out = Vec::new();
-    let mut last = 0;
-    for (control, list) in keys {
-        let mut ks = Vec::new();
-        for (i, k) in list.as_array().into_iter().flatten().enumerate() {
-            let a = k.as_array().ok_or_else(|| refused("bad_doc", format!("tour/keys/{control}/{i}")))?;
-            let s = a.first().and_then(Value::as_f64).ok_or_else(|| refused("bad_doc", format!("tour/keys/{control}/{i}")))?;
-            let at = flicks(s);
-            last = last.max(at);
-            ks.push((at, a.get(1).cloned().unwrap_or(Value::Null)));
-        }
-        out.push((control.clone(), ks));
-    }
-    let secs = |k: &str, d: f64| num(t.get(k)).unwrap_or(d);
-    let looping = t.get("loop").and_then(Value::as_bool).unwrap_or(true);
-    Ok(Some(Tour {
-        keys: out,
-        idle_after: flicks(secs("idle_after", 1.4)),
-        resume_after: flicks(secs("resume_after", 3.6)),
-        period: if looping { last } else { 0 },
-    }))
-}
-
 /// The point at fraction `f` of a polyline's arc length.
 fn point_at(points: &[[f64; 2]], f: f64) -> [f64; 2] {
-    let total: f64 = points.windows(2).map(|w| ops::hypot(w[1][0] - w[0][0], w[1][1] - w[0][1])).sum();
+    let total: f64 = points
+        .windows(2)
+        .map(|w| ops::hypot(w[1][0] - w[0][0], w[1][1] - w[0][1]))
+        .sum();
     let mut d = f.clamp(0.0, 1.0) * total;
     for w in points.windows(2) {
         let len = ops::hypot(w[1][0] - w[0][0], w[1][1] - w[0][1]);
         if d <= len && len > 0.0 {
             let u = d / len;
-            return [w[0][0] + (w[1][0] - w[0][0]) * u, w[0][1] + (w[1][1] - w[0][1]) * u];
+            return [
+                w[0][0] + (w[1][0] - w[0][0]) * u,
+                w[0][1] + (w[1][1] - w[0][1]) * u,
+            ];
         }
         d -= len;
     }
@@ -1356,13 +1580,20 @@ fn point_at(points: &[[f64; 2]], f: f64) -> [f64; 2] {
 
 /// The nearest point of a polyline to `p`: its fraction of the arc length, and the point.
 fn project(points: &[[f64; 2]], p: [f64; 2]) -> (f64, [f64; 2]) {
-    let total: f64 = points.windows(2).map(|w| ops::hypot(w[1][0] - w[0][0], w[1][1] - w[0][1])).sum();
+    let total: f64 = points
+        .windows(2)
+        .map(|w| ops::hypot(w[1][0] - w[0][0], w[1][1] - w[0][1]))
+        .sum();
     let mut best = (f64::INFINITY, 0.0, points[0]);
     let mut run = 0.0;
     for w in points.windows(2) {
         let (dx, dy) = (w[1][0] - w[0][0], w[1][1] - w[0][1]);
         let len2 = dx * dx + dy * dy;
-        let u = if len2 > 0.0 { (((p[0] - w[0][0]) * dx + (p[1] - w[0][1]) * dy) / len2).clamp(0.0, 1.0) } else { 0.0 };
+        let u = if len2 > 0.0 {
+            (((p[0] - w[0][0]) * dx + (p[1] - w[0][1]) * dy) / len2).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
         let q = [w[0][0] + dx * u, w[0][1] + dy * u];
         let d = ops::hypot(p[0] - q[0], p[1] - q[1]);
         let len = ops::sqrt(len2);
@@ -1406,7 +1637,15 @@ mod tests {
             "sound": {"kind": "toggle", "keys": {"m": "toggle"}},
             "go": {"kind": "press"},
         }});
-        let s = Session::new(&doc, [640.0, 360.0], (60, 1), false, Planted::default(), &[]).unwrap();
+        let s = Session::new(
+            &doc,
+            [640.0, 360.0],
+            (60, 1),
+            false,
+            Planted::default(),
+            &[],
+        )
+        .unwrap();
         assert_eq!(s.holders("m", &[]), ["sound"]);
         assert_eq!(s.holders("ArrowRight", &["alt"]), ["speed"]);
         assert_eq!(s.holders(" ", &[]), ["sound", "go"]);

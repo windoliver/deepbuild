@@ -1,0 +1,5 @@
+Before: unit lane requested under timed grant (wait cap 5 min):
+INCONCLUSIVE no grant: no timed grant came within 5 min
+After: unit lane requested under timed grant (wait cap 5 min):
+INCONCLUSIVE no grant: no timed grant came within 5 min
+Neither unit command ran; these are grant-wait outcomes, not wall-time readings. No PASS and no speedup claim. Full same-commit before/after unit readings remain unrun.

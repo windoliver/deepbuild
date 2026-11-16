@@ -2,11 +2,11 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "r2",
-  "set_digest": "50630e09acb4e83c6639ac4ca169f8f56282a5c649169a438099aa137284edb1",
+  "set_digest": "3adf72f78f75f74752fdaabc9bcc738d1fdda6b8c559d80f4fc8f195f27c0b46",
   "runtime_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
   "interfaces": {
     "cells@1": {
-      "digest": "5135370a4e353acec15fa8b5b3964084440a827188dea0bca29c796669a50bad",
+      "digest": "2b72c9757df0c5cc3a578bbc5ba4595714c8e291458c26958bd777c880549049",
       "reference": "cells",
       "kit": [
         "fixtures",
@@ -35,7 +35,7 @@
       }
     },
     "data@1": {
-      "digest": "b2095ca927d1a61295a9c0ceccafba49b656370fa1ddf538afb199b7a212a959",
+      "digest": "75d055f587754b84d7405262fad9f52dbb0b16a8560d1534e1875f49df412e97",
       "reference": "data",
       "kit": [
         "fixtures",
@@ -64,7 +64,7 @@
       }
     },
     "effects@1": {
-      "digest": "d45a9a5ad3664b3c5a5849ae6bf54992cadea2d518fac39a4a5cc16c936dce78",
+      "digest": "47efff0e92f65196c99d6ba9bbe39a782aa62eb4e031e5cb60132976c8fd9a7b",
       "reference": "effects",
       "kit": [
         "fixtures",
@@ -93,7 +93,7 @@
       }
     },
     "graph@1": {
-      "digest": "42cebb9cb1568a4ae30c1e1163bb021d0efd2393630840e50167520dc92c646c",
+      "digest": "8245f5f5ac084732c688dcedafe59f7d7e3931a37df0533426b5a1388932cd24",
       "reference": "graph",
       "kit": [
         "fixtures",
@@ -122,7 +122,7 @@
       }
     },
     "look@1": {
-      "digest": "73684d66474313667ea24e7012a44acca516326247a214ea2c0a3070961fdeea",
+      "digest": "6e85fd95006b91596f17c25bd0c3070dce4f3f1ac38a5f3c521422d4f9338001",
       "reference": "look",
       "kit": [
         "fixtures",
@@ -151,7 +151,7 @@
       }
     },
     "marks2d@1": {
-      "digest": "22c7f31ba14211509ab4750264aba6d121993e871b48845c8cca0702a6fec2c3",
+      "digest": "bacf98ca04edf98558b5e2b1980eb586ba97ae3486a5738c779b8a80950bc4e9",
       "reference": "marks2d",
       "kit": [
         "fixtures",
@@ -180,7 +180,7 @@
       }
     },
     "motion@1": {
-      "digest": "60cb0840ac72c7be382c16b565feae36201ba624c61e8eac0fb75b46263c9829",
+      "digest": "fa3b261d76b2aca520756953c1fc8418f32938f08a296c000cda6ca24d18c14e",
       "reference": "motion",
       "kit": [
         "fixtures",
@@ -238,7 +238,7 @@
       }
     },
     "scene3d@1": {
-      "digest": "0abe3ca95c1b76308bfdf1f2cd73178bdd2590b6396db3bbd581eef2fc04928a",
+      "digest": "734bbdf586002e6672af9efdac8e7dfd67a721aa68f8799fb3ab0154e94ea41b",
       "reference": "scene3d",
       "kit": [
         "fixtures",
@@ -296,7 +296,7 @@
       }
     },
     "text@1": {
-      "digest": "d0fa45f80320dad79a56bf5abe27513ede63bb9084ab6ac0c87c56f9de47048f",
+      "digest": "adc297495eb1a9be4918d0a7e9620be4f459deb800ea168ecd3ca5a995d98350",
       "reference": "text",
       "kit": [
         "fixtures",
@@ -325,7 +325,7 @@
       }
     },
     "vector@1": {
-      "digest": "f717e7c51b21a2e1afbd6af9237dfca270f86117be776bb9f4e04b568428c4a1",
+      "digest": "0de50548636508ccbcf2ee8a4efd85632b4bd29f4da366e88350cdf4b0df4f62",
       "reference": "vector",
       "kit": [
         "fixtures",
@@ -431,7 +431,8 @@
           "self",
           "look",
           "t",
-          "reading"
+          "reading",
+          "refs"
         ],
         "writes": [
           "cells.grid"
@@ -489,6 +490,32 @@
         "per": "item"
       },
       {
+        "operator": "data.follow_stream",
+        "module": "data",
+        "version": "1.0.0",
+        "reads": [
+          "refs",
+          "t"
+        ],
+        "writes": [
+          "data.follow"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "data.vector_field",
+        "module": "data",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "t"
+        ],
+        "writes": [
+          "data.vector_field"
+        ],
+        "per": "item"
+      },
+      {
         "operator": "look.palette",
         "module": "look",
         "version": "1.0.0",
@@ -511,6 +538,19 @@
         ],
         "writes": [
           "look.finish"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "marks2d.warp",
+        "module": "marks2d",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "t"
+        ],
+        "writes": [
+          "marks2d.warp"
         ],
         "per": "item"
       },
@@ -545,42 +585,6 @@
         "per": "item"
       },
       {
-        "operator": "data.decimate",
-        "module": "data",
-        "version": "1.0.0",
-        "reads": [
-          "core.fields"
-        ],
-        "writes": [
-          "data.decimated"
-        ],
-        "per": "item"
-      },
-      {
-        "operator": "data.scale",
-        "module": "data",
-        "version": "1.0.0",
-        "reads": [
-          "core.fields"
-        ],
-        "writes": [
-          "data.scale"
-        ],
-        "per": "item"
-      },
-      {
-        "operator": "graph.layout",
-        "module": "graph",
-        "version": "1.0.0",
-        "reads": [
-          "core.fields"
-        ],
-        "writes": [
-          "graph.layout"
-        ],
-        "per": "item"
-      },
-      {
         "operator": "motion.clock",
         "module": "motion",
         "version": "1.0.0",
@@ -594,6 +598,20 @@
         "per": "document"
       },
       {
+        "operator": "motion.flip",
+        "module": "motion",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "refs",
+          "t"
+        ],
+        "writes": [
+          "motion.flip"
+        ],
+        "per": "item"
+      },
+      {
         "operator": "motion.placed",
         "module": "motion",
         "version": "1.0.0",
@@ -602,18 +620,6 @@
         ],
         "writes": [
           "motion.placed"
-        ],
-        "per": "item"
-      },
-      {
-        "operator": "record.salience",
-        "module": "record",
-        "version": "1.0.0",
-        "reads": [
-          "core.fields"
-        ],
-        "writes": [
-          "record.level"
         ],
         "per": "item"
       },
@@ -739,6 +745,70 @@
         "per": "item"
       },
       {
+        "operator": "text.copy_columns",
+        "module": "text",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "refs",
+          "t",
+          "view(locale)",
+          "table:text.plurals"
+        ],
+        "writes": [
+          "text.columns"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "data.decimate",
+        "module": "data",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields"
+        ],
+        "writes": [
+          "data.decimated"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "data.scale",
+        "module": "data",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields"
+        ],
+        "writes": [
+          "data.scale"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "graph.layout",
+        "module": "graph",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields"
+        ],
+        "writes": [
+          "graph.layout"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "record.salience",
+        "module": "record",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields"
+        ],
+        "writes": [
+          "record.level"
+        ],
+        "per": "item"
+      },
+      {
         "operator": "sheet.place",
         "module": "sheet",
         "version": "1.0.0",
@@ -751,6 +821,22 @@
         "per": "item"
       },
       {
+        "operator": "text.copy",
+        "module": "text",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields",
+          "refs",
+          "t",
+          "view(locale)",
+          "table:text.plurals"
+        ],
+        "writes": [
+          "text.copy"
+        ],
+        "per": "item"
+      },
+      {
         "operator": "text.counter",
         "module": "text",
         "version": "1.0.0",
@@ -758,7 +844,8 @@
           "core.fields",
           "refs",
           "reading",
-          "view(locale)"
+          "view(locale)",
+          "text.copy"
         ],
         "writes": [
           "text.counter"
@@ -773,7 +860,8 @@
           "core.fields",
           "text.counter",
           "view(locale)",
-          "table:text.fonts"
+          "table:text.fonts",
+          "look"
         ],
         "writes": [
           "text.run"
@@ -911,7 +999,11 @@
   "contributions": {
     "core.fields": [
       "data.columns",
-      "motion.fields"
+      "data.vector_field",
+      "marks2d.warp",
+      "motion.fields",
+      "motion.flip",
+      "text.columns"
     ],
     "core.glyphs": [
       "vector.glyphs"
@@ -920,6 +1012,7 @@
       "look.status"
     ],
     "core.transform": [
+      "data.follow",
       "motion.at",
       "motion.placed",
       "scene3d.rested"

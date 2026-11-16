@@ -33,7 +33,7 @@ import { refuse, Refused, refusal, ulid, type CoreOptions } from './wire.js';
 import { DAY, ghToken, SECRETS_TTL, type Obj, isObj, misjudged } from "./hub-shared.js";
 
 export interface HubReadingsOptions {
- settings: CoreOptions;
+ settings: CoreOptions & { forge: string };
  services: {
 readonly wikiWritten: KnowledgeProvider['writtenOf'];
 readonly root: Root;
@@ -108,15 +108,16 @@ export class HubReadings {
     await this.options.services.asks.notifications(false);
   }
 
-  async health(): Promise<Obj> {
+  /** `seen` is given for a person's read (#1337): the events they may see, as SQL; they read the sessions with one, and no settings readings. */
+  async health(seen?: string): Promise<Obj> {
     const network = Object.values(networkInterfaces()).flat().some((i) => i && !i.internal) ? 'reachable' : 'unreachable';
     // The timing relations our entries in Claude Code's settings keep, and what the settings watch and recheck put back.
-    const claude = { relations: relations(this.options.services.root.dir).map((r) => ({ name: r.name, holds: r.holds, reading: r.text })), readings: [...this.options.services.claudeSettings.readings] };
-    const codex = { relations: codexRelations(this.options.services.root.dir).map((r) => ({ name: r.name, holds: r.holds, reading: r.text })), readings: [...modified(this.options.services.root.dir), ...trustProblems(this.options.services.root.dir).map((p) => `Codex's hook list reports ${p}`)], trust: readTrust(this.options.services.root.dir) ?? null };
+    const claude = { relations: relations(this.options.services.root.dir).map((r) => ({ name: r.name, holds: r.holds, reading: r.text })), ...(seen === undefined ? { readings: [...this.options.services.claudeSettings.readings] } : {}) };
+    const codex = { relations: codexRelations(this.options.services.root.dir).map((r) => ({ name: r.name, holds: r.holds, reading: r.text })), ...(seen === undefined ? { readings: [...modified(this.options.services.root.dir), ...trustProblems(this.options.services.root.dir).map((p) => `Codex's hook list reports ${p}`)] } : {}), trust: readTrust(this.options.services.root.dir) ?? null };
     // The newest sessions, each closed once an end is on record since its last start (#1023); as `deep status` does, this
     // reads a watch-only session's unverified events too, or its own SessionEnd would leave it open here for good.
     const sessions = ((await this.options.services.record.raw(`SELECT s.id, COALESCE((SELECT e.kind <> 'session.start' FROM events e WHERE e.session_id = s.id AND e.kind IN ('session.start', 'session.end', 'session.archived') ORDER BY e.log_pos DESC LIMIT 1), 0) AS closed
-      FROM sessions s WHERE s.last_seen IS NOT NULL ORDER BY s.last_seen DESC LIMIT 100`)) as { id: string; closed: number }[]).map((s) => ({ id: s.id, closed: s.closed === 1 }));
+      FROM sessions s WHERE s.last_seen IS NOT NULL${seen ? ` AND EXISTS (SELECT 1 FROM events WHERE session_id = s.id${seen})` : ''} ORDER BY s.last_seen DESC LIMIT 100`)) as { id: string; closed: number }[]).map((s) => ({ id: s.id, closed: s.closed === 1 }));
     return { gates: { watch_only: this.options.kernel.blocked !== undefined, reason: this.options.kernel.blocked ?? null }, notifications: this.notifications, secrets: await this.secretStore(), network, claude, codex, sessions, jobs: Object.fromEntries([...this.options.kernel.jobs].map(([name, failing]) => [name, { failing }])), packs: await this.options.services.libraries?.packs.shipped() ?? [] };
   }
 
@@ -151,7 +152,7 @@ export class HubReadings {
       const line = verdictLine(state.state);
       const url = await this.options.judging().prOf(state.session);
       const pr = url ? parsePrUrl(url) : undefined;
-      const forge = pr ? new Forge(this.options.settings.forge ?? 'https://api.github.com', process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken()) : undefined;
+      const forge = pr ? new Forge(this.options.settings.forge, process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken()) : undefined;
       const pulled = pr && forge ? await forge.pull(pr) : undefined;
       const files = state.session ? ((await this.options.services.record.raw(`SELECT path FROM session_files WHERE session = ? AND kind IN ('edit', 'write') ORDER BY last`, [state.session])) as { path: string }[]).map((r) => r.path) : [];
       const next_issue = pr && forge && pulled?.closes !== undefined && state.state.outcome === 'PASS' ? await forge.nextIssue(pr, pulled.closes) : null;

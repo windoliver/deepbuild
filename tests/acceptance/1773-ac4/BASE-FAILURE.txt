@@ -1,0 +1,84 @@
+Base commit: e0c90a5a5c11453bc41dfd4846703d054fa4a4d8 (Merge pull request #2455 from windoliver/worktree-github-issue-540-9fc29b), origin/main, detached
+Built first: npm ci; workspaces built (no fix present)
+Command: NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/1773-ac4
+Typecheck: npx tsc -p tests/acceptance/1773-ac4/tsconfig.json  -> exit 0
+Date: 2026-11-13  Machine: Linux 7.0.0-1024-nvidia aarch64 (Spark, 20 cores), 1-minute load about 45 (other runs)
+Node: v24.22.0  vitest 5.0.5
+Exit code: 1
+Result: Test Files 1 failed (1); Tests 1 failed (1).
+
+Fails for the expected reason. The third-party server notes was started and listed (the BLOCKED guard did not
+trip), and both deep-actions judgments failed (expect.soft, so both show):
+  "toolLists started deep-actions (deep-hook mcp actions), DeepBuild's own server: expected true to be false"
+  "toolLists returned a list for deep-actions: expected [ { server: 'deep-actions', …(3) } ] to deeply equal []"
+    (received scope user, version 1.0.0, tools [deep-actions_tool])
+At this base toolLists deletes only the name 'deep' (packages/hub/src/mcp-servers.ts), so it also starts and lists
+deepbuild; this test judges deep-actions only (deepbuild is criterion 2).
+
+Full output:
+
+ RUN  v5.0.5 /tmp/claude-1000/-home-jing-deepbuild--claude-worktrees-musing-hermann-0d8805/2c780d8c-8cec-4713-bd2b-5f438dca09e9/scratchpad/base1773
+
+ ❯ tests/acceptance/1773-ac4/deep-actions.test.ts (1 test | 1 failed) 679ms
+   ❯ #1773.260e61bd With `deep-actions` registered in `~/.claude.json` beside `deepbuild`, as `deep setup` writes it, `toolLists` neither starts that server nor returns a list for it. The merge base lists `deep-actions` (1)
+     × AC4 #1773.260e61bd toolLists neither starts nor lists deep-actions, while the third-party server beside it is started and listed 132ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1773-ac4/deep-actions.test.ts > #1773.260e61bd With `deep-actions` registered in `~/.claude.json` beside `deepbuild`, as `deep setup` writes it, `toolLists` neither starts that server nor returns a list for it. The merge base lists `deep-actions` > AC4 #1773.260e61bd toolLists neither starts nor lists deep-actions, while the third-party server beside it is started and listed
+AssertionError: toolLists started deep-actions (deep-hook mcp actions), DeepBuild's own server: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ tests/acceptance/1773-ac4/deep-actions.test.ts:63:109
+     61|
+     62|     const started = existsSync(join(markers, 'deep-actions.started'));
+     63|     expect.soft(started, 'toolLists started deep-actions (deep-hook mc…
+       |                                                                                                             ^
+     64|     expect.soft(lists.filter((l) => l.server === 'deep-actions'), 'too…
+     65|   }, 60_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/acceptance/1773-ac4/deep-actions.test.ts > #1773.260e61bd With `deep-actions` registered in `~/.claude.json` beside `deepbuild`, as `deep setup` writes it, `toolLists` neither starts that server nor returns a list for it. The merge base lists `deep-actions` > AC4 #1773.260e61bd toolLists neither starts nor lists deep-actions, while the third-party server beside it is started and listed
+AssertionError: toolLists returned a list for deep-actions: expected [ { server: 'deep-actions', …(3) } ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "scope": "user",
++     "server": "deep-actions",
++     "tools": [
++       {
++         "digest": "a2c799262a3ce3c19ef5cdd983bf3d12b43ab3c426227091b909dcb7054738c0",
++         "hints": {},
++         "name": "deep-actions_tool",
++       },
++     ],
++     "version": "1.0.0",
++   },
++ ]
+
+ ❯ tests/acceptance/1773-ac4/deep-actions.test.ts:64:113
+     62|     const started = existsSync(join(markers, 'deep-actions.started'));
+     63|     expect.soft(started, 'toolLists started deep-actions (deep-hook mc…
+     64|     expect.soft(lists.filter((l) => l.server === 'deep-actions'), 'too…
+       |                                                                                                                 ^
+     65|   }, 60_000);
+     66| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  20:52:14
+   Duration  1.11s (tests 81%, transform 10%, import 7%, setup 2%)
+

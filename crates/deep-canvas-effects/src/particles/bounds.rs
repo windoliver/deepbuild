@@ -147,9 +147,11 @@ pub fn bounds(b: &Baked, t: f64) -> Option<Box3> {
             } + push;
             if turns {
                 let r = fastest * k1 + len(*gravity) * k2;
-                for k in 0..3 {
-                    bx[0][k] -= r;
-                    bx[1][k] += r;
+                for v in &mut bx[0] {
+                    *v -= r;
+                }
+                for v in &mut bx[1] {
+                    *v += r;
                 }
                 for p in s.bounce.iter().flat_map(|b| &b.planes) {
                     clamp_by(&mut bx, &e, p, false);
@@ -165,6 +167,13 @@ pub fn bounds(b: &Baked, t: f64) -> Option<Box3> {
                 }
             }
         }
+        // #451: every curve of a flow, grown by its sideways offset.
+        Motion::Along { many: Some(m), .. } => {
+            let pts: Vec<V3> = b.flows.iter().flat_map(|c| c.points.clone()).collect();
+            bx = curve_box(&pts).unwrap_or(e);
+            bx[0].iter_mut().for_each(|v| *v -= m.lateral);
+            bx[1].iter_mut().for_each(|v| *v += m.lateral);
+        }
         Motion::Along { .. } => {
             bx = curve_box(&b.curve).unwrap_or(e);
         }
@@ -176,9 +185,11 @@ pub fn bounds(b: &Baked, t: f64) -> Option<Box3> {
             ];
         }
         Motion::Drift { amplitude, .. } => {
-            for k in 0..3 {
-                bx[0][k] -= amplitude;
-                bx[1][k] += amplitude;
+            for v in &mut bx[0] {
+                *v -= amplitude;
+            }
+            for v in &mut bx[1] {
+                *v += amplitude;
             }
         }
     }
@@ -204,9 +215,11 @@ pub fn bounds(b: &Baked, t: f64) -> Option<Box3> {
     }
     if let (Some(table), Some(tb)) = (&b.turbulence, s.turbulence) {
         let r = tb.strength * table.reach();
-        for k in 0..3 {
-            bx[0][k] -= r;
-            bx[1][k] += r;
+        for v in &mut bx[0] {
+            *v -= r;
+        }
+        for v in &mut bx[1] {
+            *v += r;
         }
     }
     Some(bx)
@@ -236,7 +249,9 @@ pub fn speed(b: &Baked, t: f64) -> f64 {
             };
             v + push + len(*gravity) * k1
         }
-        Motion::Along { speed, .. } => speed.abs(),
+        Motion::Along { speed, many, .. } => many
+            .as_ref()
+            .map_or(speed.abs(), |m| m.speed[0].abs().max(m.speed[1].abs())),
         Motion::Orbit { spin, .. } => spin.abs() * radius(b, &e),
         Motion::Drift {
             amplitude,

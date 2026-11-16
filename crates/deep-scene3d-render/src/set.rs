@@ -40,10 +40,20 @@ pub(crate) struct Set {
     pub(crate) elements: Vec<u32>,
     pub(crate) models: Vec<[[f64; 4]; 3]>,
     pub(crate) cull: Option<cull::Culled>,
-    /// The records [`Set::write`] changed and hasn't uploaded: the first and one past the last.
+    /// The bytes [`Set::write`] changed and hasn't uploaded, from the first changed word to one
+    /// past the last.
     pub(crate) run: Option<(usize, usize)>,
     /// The records the last [`Set::finish`] wrote, by index (#1921).
     pub(crate) uploaded: Vec<usize>,
+}
+
+/// The bytes from the first word `new` changes in `old` to one past the last, none when it
+/// changes none: only these go up, since the rest is on the device already (#2496).
+fn changed(new: &[u8], old: &[u8]) -> Option<std::ops::Range<usize>> {
+    let words = || new.chunks(4).zip(old.chunks(4));
+    let first = words().position(|(a, b)| a != b)?;
+    let last = words().rposition(|(a, b)| a != b)?;
+    Some(first * 4..(last + 1) * 4)
 }
 
 impl Set {
@@ -85,12 +95,18 @@ impl Set {
         self.uploaded.clear();
         if members_changed {
             if self.buffer.is_none() || self.capacity < self.count {
-                self.capacity = self.count.max(1);
+                // A set no record has reached yet has no stride: its stand-in buffer holds none,
+                // so its first record allocates again (#450: a trail that starts with no segment).
+                self.capacity = if self.stride == 0 {
+                    0
+                } else {
+                    self.count.max(1)
+                };
                 *next_generation += 1;
                 self.generation = *next_generation;
                 self.buffer = Some(device.device.create_buffer(&wgpu::BufferDescriptor {
                     label: Some("scene3d instances"),
-                    size: (stride * self.capacity) as u64,
+                    size: (stride * self.capacity.max(1)) as u64,
                     // A culled batch's vertex stage reads its records from storage (#484).
                     usage: wgpu::BufferUsages::VERTEX
                         | wgpu::BufferUsages::STORAGE
@@ -113,24 +129,39 @@ impl Set {
                 .buffer
                 .as_ref()
                 .expect("a set with members has a buffer");
-            // Each run of adjacent changed records goes in one write: a write per record made
-            // a staging buffer per record, and a set that moves moves whole.
+            // Changes less than a record apart go up in one write, from the first changed word
+            // to the last: a write per record made a staging buffer per record, and a set that
+            // moves moves whole. Changes a record or more apart are writes of their own, so a
+            // moved solid's place and the tie rank it gives the solid beside it go up as their
+            // words alone (#2496).
             let n = (self.next.len() / stride).min(self.records.len() / stride);
-            let mut run: Option<usize> = None;
+            let mut run: Option<(usize, usize)> = None;
             for i in 0..=n {
                 let at = i * stride..(i + 1) * stride;
-                if i < n && self.next[at.clone()] != self.records[at] {
+                let words = if i < n {
+                    changed(&self.next[at.clone()], &self.records[at])
+                } else {
+                    None
+                };
+                if words.is_some() {
                     *written += 1;
                     self.uploaded.push(i);
                     self.revision += 1;
-                    run.get_or_insert(i);
-                } else if let Some(first) = run.take() {
-                    let bytes = &self.next[first * stride..i * stride];
-                    deep_gpu::alloc::outside(|| {
-                        device
-                            .queue
-                            .write_buffer(buffer, (first * stride) as u64, bytes)
-                    });
+                }
+                let span = words.map(|w| (i * stride + w.start, i * stride + w.end));
+                match (run, span) {
+                    (Some((start, end)), Some((from, to))) if from < end + stride => {
+                        run = Some((start, to))
+                    }
+                    (last, span) => {
+                        if let Some((start, end)) = last {
+                            let bytes = &self.next[start..end];
+                            deep_gpu::alloc::outside(|| {
+                                device.queue.write_buffer(buffer, start as u64, bytes)
+                            });
+                        }
+                        run = span;
+                    }
                 }
             }
         }
@@ -139,35 +170,36 @@ impl Set {
     }
 
     /// Takes record `i` when it changed, the set's members as they were. [`Set::flush`] uploads
-    /// it, with the neighbours that changed beside it in one write.
+    /// its changed words, in one write with changes less than a record before them, as
+    /// [`Set::finish`] does.
     pub(crate) fn write(&mut self, device: &Device, i: usize, record: &[u8], written: &mut u32) {
         let at = i * self.stride;
         let Some(old) = self.records.get_mut(at..at + record.len()) else {
             return;
         };
-        if old != record {
-            old.copy_from_slice(record);
-            match self.run {
-                Some((first, end)) if end == i => self.run = Some((first, i + 1)),
-                _ => {
-                    self.flush(device);
-                    self.run = Some((i, i + 1));
-                }
+        let Some(words) = changed(record, old) else {
+            return;
+        };
+        old.copy_from_slice(record);
+        let (from, to) = (at + words.start, at + words.end);
+        match self.run {
+            Some((start, end)) if (end..end + self.stride).contains(&from) => {
+                self.run = Some((start, to))
             }
-            *written += 1;
-            self.revision += 1;
+            _ => {
+                self.flush(device);
+                self.run = Some((from, to));
+            }
         }
+        *written += 1;
+        self.revision += 1;
     }
 
-    /// Uploads the run of changed records [`Set::write`] gathered.
+    /// Uploads the changed words [`Set::write`] gathered.
     pub(crate) fn flush(&mut self, device: &Device) {
-        if let (Some((first, end)), Some(buffer)) = (self.run.take(), &self.buffer) {
-            let bytes = &self.records[first * self.stride..end * self.stride];
-            deep_gpu::alloc::outside(|| {
-                device
-                    .queue
-                    .write_buffer(buffer, (first * self.stride) as u64, bytes)
-            });
+        if let (Some((start, end)), Some(buffer)) = (self.run.take(), &self.buffer) {
+            let bytes = &self.records[start..end];
+            deep_gpu::alloc::outside(|| device.queue.write_buffer(buffer, start as u64, bytes));
         }
     }
 
@@ -244,6 +276,49 @@ impl Set {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use deep_gpu::device::{Backend, Gpu};
+
+    /// #2496: item-0000 moves half a metre against item-0001, the next record, which takes tie
+    /// rank 1. A frame's diff and the moved path each upload the two words that changed, the
+    /// mover's x and the neighbour's rank, not the two 144-byte records.
+    #[test]
+    fn a_move_and_the_rank_it_changes_upload_their_words() {
+        let gpu = Gpu::open(Backend::Noop).expect("the noop backend gives a device");
+        let device = gpu.device();
+        let solid = |x: f32, tie| crate::SolidRecord {
+            rows: [
+                [1.0, 0.0, 0.0, x],
+                [0.0, 1.0, 0.0, 0.5],
+                [0.0, 0.0, 1.0, 0.0],
+            ],
+            tie,
+            ..bytemuck::Zeroable::zeroed()
+        };
+        let apart = [solid(-59.25, 0), solid(-57.75, 0)];
+        let together = [solid(-58.75, 0), solid(-57.75, 1)];
+        let (mut set, mut generation, mut written) = (Set::default(), 0, 0);
+        let mut uploads = |records: &[crate::SolidRecord; 2], moved_path: bool| {
+            let before = device.device.counts().read();
+            if moved_path {
+                for (i, r) in records.iter().enumerate() {
+                    set.write(&device, i, bytemuck::bytes_of(r), &mut written);
+                }
+                set.flush(&device);
+            } else {
+                set.begin();
+                for (i, r) in records.iter().enumerate() {
+                    set.push(&format!("item-000{i}"), bytemuck::bytes_of(r));
+                }
+                set.finish(&device, &mut generation, &mut written);
+            }
+            let made = device.device.counts().read().since(before);
+            (made.writes, made.uploaded)
+        };
+        uploads(&apart, false);
+        assert_eq!(uploads(&together, false), (2, 8), "a frame's diff");
+        uploads(&apart, true);
+        assert_eq!(uploads(&together, true), (2, 8), "the moved path");
+    }
 
     /// Two records pushed out of slot order land at their slots among four, the rest zero, and
     /// the owners name each slot; laid again the same way, the members hold.

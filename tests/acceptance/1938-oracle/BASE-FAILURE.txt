@@ -1,0 +1,7 @@
+At base 23baa43b4 (an arm64 Mac, 18 cores), on 2026-11-13, no Rust was built: the one-minute load was 155 to 233 and `cargo` isn't on this shell's PATH. Lines marked "read" come from the base's code. Lines marked "observed" are what running the test file here, without cargo, showed.
+
+- contrast.test.ts
+  - Observed: the port's self-checks ran first and passed (black on white 21:1, white on white 1:1, either order alike, #767676 on white 4.54 passes and #777777 4.48 fails), and so did the fixture's premise read from crates/deep-canvas-marks/looks/clean.json (muted on ground 3.24:1, under 4.5; ink on ground 16.86:1). The test then failed with "INCONCLUSIVE: cargo could not run: spawnSync cargo ENOENT; this is not a pass".
+  - With cargo on PATH, read: no module registers render.contrast, so the verdict's row is BLOCKED {code: module_missing, kind: render.contrast, ids: []}, and the test fails at "render.contrast on the caption in muted": expected 'BLOCKED' to be 'FAIL'.
+
+Type-check (observed): `npx tsc -p tests/acceptance/1938-oracle/tsconfig.json` exits 0.

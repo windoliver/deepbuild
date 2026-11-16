@@ -51,7 +51,9 @@ pub fn order(nodes: &[Node], whole_items: bool) -> Result<Vec<usize>, Vec<usize>
     let mut after: Vec<BTreeSet<usize>> = vec![BTreeSet::new(); n];
     for (i, node) in nodes.iter().enumerate() {
         for &s in &node.reads {
-            let Some(list) = writers.get(&s) else { continue };
+            let Some(list) = writers.get(&s) else {
+                continue;
+            };
             match list.iter().position(|&w| w == i) {
                 // A slot it also writes: only its earlier writers.
                 Some(at) => after[i].extend(&list[..at]),

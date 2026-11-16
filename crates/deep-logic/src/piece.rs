@@ -4,7 +4,7 @@
 //! own array, a read of nothing declared, a write region past the end of memory and a program
 //! whose `regions_digest` isn't its item's layout digest.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
 use deep_canvas::budget::Class;
@@ -14,20 +14,84 @@ use serde_json::{json, Map, Value};
 use wasmparser::{ExternalKind, Operator, Parser, Payload};
 
 use crate::lines::Lines;
+use crate::links::{self, Functions, Lib};
 use crate::Planted;
 
 pub const PAGE: u64 = 65_536;
 const MIB: u64 = 1024 * 1024;
+/// The most memory a logic item's budget may give it.
+pub const MAX_MEMORY: u64 = 64 * MIB;
 /// The most entries a control hands a step (Logic `logic@1`: Semantics); any more wait.
 pub const PER_STEP: usize = 16;
 /// A control's slot: a u32 count and 4 zero bytes, then each entry as a u32 player, 4 zero
 /// bytes and a slider's f64 value.
-pub const SLOT: u32 = 8 + PER_STEP as u32 * 16;
+pub const SLOT: u32 = slot(8);
+
+/// The slot of a control whose value takes `value` bytes.
+pub const fn slot(value: u32) -> u32 {
+    8 + PER_STEP as u32 * (8 + value)
+}
+
+/// A read control's slot in a read region and its type there, by the form of its entries'
+/// values: a pick on rows' `{set, key}` in 24 B (Control: picks on rows and grid focus), a
+/// point's 248 B (Control: point), an action's, a stick's or a look's 16 B (Control: actions,
+/// key repeat and gamepads), a scroll's 8 B (Control: scroll), else a number's f64. A text
+/// control's one commit a step reserves its `u32` length and up to `max_bytes`, rounded up to a
+/// multiple of 8 (Control: text).
+pub fn form(control: &Value) -> (u32, &'static str) {
+    let rows = control.get("verb").and_then(Value::as_str) == Some("pick")
+        && control.get("rows").is_some();
+    match control.get("kind").and_then(Value::as_str) {
+        _ if rows => (slot(24), "pick"),
+        // A point's 248 B record and room for a box release's unit keys (`u32 n, u32 truncated`
+        // and up to 256 × 8 B), entries packed end to end.
+        Some("point") => (slot(248 + 8 + 8 * crate::point::MAX_UNITS as u32), "point"),
+        Some("actions") => (slot(16), "action"),
+        // #542: a scroll's `i32 position, i32 delta`.
+        Some("scroll") => (slot(8), "scroll"),
+        Some("text") => {
+            let max = control
+                .pointer("/text/max_bytes")
+                .and_then(Value::as_u64)
+                .unwrap_or(256);
+            (align8(4 + max.min(16_384) as u32), "text")
+        }
+        _ => (SLOT, "control"),
+    }
+}
+
+/// A logic item's budgets (Logic `logic@1`: `budget`): `(default, most)` of its fuel a step,
+/// memory in MiB and stack in KiB.
+pub const FUEL: (u64, u64) = (1_000_000, 10_000_000);
+pub const MEMORY_MIB: (u64, u64) = (4, MAX_MEMORY / MIB);
+pub const STACK_KIB: (u64, u64) = (64, 256);
+
+/// The exports a logic program may add to its role's (Logic `logic@1`: Exports), each with when.
+pub const OPTIONAL_EXPORTS: [(&str, &str); 5] = [
+    ("assets_at", "with assets"),
+    ("emits_at", "with emits"),
+    ("preview", "with preview: preview(k: i64)"),
+    ("preview_at", "with preview"),
+    ("regions_digest", "optional: the layout digest, which check compares"),
+];
+
+/// What `deep_kinds` lists of `logic@1` (#548): its exports, the one subset and its budgets.
+pub fn listing() -> Value {
+    use deep_canvas_sandbox::check::{role_exports, MAX_PROGRAM, MAX_TABLE};
+    let required: Vec<&str> = role_exports("logic").into_iter().flatten().map(|(n, _)| *n).collect();
+    let optional: Vec<Value> = OPTIONAL_EXPORTS.iter().map(|(n, when)| json!({"name": n, "when": when})).collect();
+    json!({
+        "exports": {"required": required, "optional": optional, "imports": "none once its libraries are linked"},
+        "subset": {"features": "WebAssembly 2.0 without vector instructions", "memory": "one, whose maximum is its minimum",
+            "tables": "never change", "segments": "no passive segments", "imports": "none",
+            "max_program_bytes": MAX_PROGRAM, "max_table_entries": MAX_TABLE},
+        "budgets": {"fuel": {"default": FUEL.0, "most": FUEL.1}, "memory_mib": {"default": MEMORY_MIB.0, "most": MEMORY_MIB.1},
+            "stack_kib": {"default": STACK_KIB.0, "most": STACK_KIB.1}},
+    })
+}
 
 /// One field of a logic item this task doesn't build yet: refused by name, never ignored.
-const LATER: [&str; 7] = [
-    "fires", "links", "preview", "pages", "parallel", "services", "mirrors",
-];
+const LATER: [&str; 3] = ["fires", "pages", "parallel"];
 /// A row's own columns: no declared field can take one of these names, so a reader can name each
 /// field beside them.
 const ROW_COLUMNS: [&str; 5] = ["step", "t", "kind", "a", "b"];
@@ -36,11 +100,11 @@ const ROW_COLUMNS: [&str; 5] = ["step", "t", "kind", "a", "b"];
 #[derive(Debug)]
 pub struct Refused(pub Value);
 
-fn logic_refused(item: &str, refusals: Vec<Value>) -> Refused {
+pub(crate) fn logic_refused(item: &str, refusals: Vec<Value>) -> Refused {
     Refused(json!({"ok": false, "code": "logic_refused", "item": item, "refusals": refusals}))
 }
 
-fn refusal(rule: &str, what: String, extra: Value) -> Value {
+pub(crate) fn refusal(rule: &str, what: String, extra: Value) -> Value {
     let mut out = json!({"rule": rule, "what": what});
     if let (Some(o), Value::Object(e)) = (out.as_object_mut(), extra) {
         o.extend(e);
@@ -60,7 +124,7 @@ pub enum Ty {
 }
 
 impl Ty {
-    fn named(s: &str) -> Option<Ty> {
+    pub(crate) fn named(s: &str) -> Option<Ty> {
         Some(match s {
             "bool" => Ty::Bool,
             "i32" => Ty::I32,
@@ -151,12 +215,20 @@ pub struct Region {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Read {
     Control,
+    /// A reading (Logic: readings): with `each`, every value recorded since the step before, at
+    /// most `max` a step, any more waiting; else the last value recorded.
+    Reading {
+        each: bool,
+        max: u32,
+    },
     /// Another item's array: its index in the piece, and the bytes of its write region it is.
     Array {
         item: usize,
         offset: u32,
     },
     Seed,
+    /// Mirror j's range list (Logic: mirror reads).
+    Mirror(usize),
     /// A write entry.
     None,
 }
@@ -244,6 +316,111 @@ impl Emit {
     }
 }
 
+/// An item's preview (Logic: preview): from `preview_at`, its read region (each read's value as
+/// its control lays one entry out, in declaration order), then its write region.
+#[derive(Clone, Debug)]
+pub struct Preview {
+    pub reads: Vec<Region>,
+    pub writes: Vec<Write>,
+    /// The write entries, offsets within the write region.
+    pub entries: Vec<Region>,
+    pub at: u32,
+    /// Where the write region starts, after the read region.
+    pub writes_at: u32,
+    refused: Vec<Value>,
+}
+
+impl Preview {
+    fn of(
+        reads: &[String],
+        writes: &[Write],
+        controls: &BTreeMap<String, (u32, &'static str)>,
+        at: Option<u32>,
+    ) -> Preview {
+        let mut refused = Vec::new();
+        let mut entries = Vec::new();
+        let mut off = 0;
+        for r in reads {
+            // A point's hover fills its 248 B record, a pick's its row; a view control its value.
+            let size = match r.split_once('.') {
+                Some((c, "hover")) => match controls.get(c).map(|(_, ty)| *ty) {
+                    Some("point") => Some(crate::point::SIZE as u32),
+                    Some("pick") => Some(24),
+                    _ => None,
+                },
+                Some(_) => None,
+                None => match controls.get(r.as_str()).map(|(_, ty)| *ty) {
+                    Some("control") => Some(8),
+                    Some("pick") => Some(24),
+                    Some("action") => Some(16),
+                    _ => None,
+                },
+            };
+            let Some(size) = size else {
+                refused.push(refusal(
+                    "preview",
+                    format!("preview reads {r}, which is no view control or point or pick control's hover of this piece"),
+                    json!({"read": r}),
+                ));
+                continue;
+            };
+            let ty = if r.ends_with(".hover") { "hover" } else { "control" };
+            entries.push(Region { region: "preview.reads", name: r.clone(), offset: off, size, ty: ty.into(), read: Read::Control });
+            off = align8(off + size);
+        }
+        let reads_size = off;
+        let mut written = Vec::new();
+        let mut off = 0;
+        for w in writes {
+            written.push(Region { region: "preview.writes", name: w.name.clone(), offset: off, size: w.ty.size() * w.count, ty: w.ty.name().into(), read: Read::None });
+            off = align8(off + w.ty.size() * w.count);
+        }
+        if at.is_none() {
+            refused.push(refusal(
+                "region",
+                "an item with a preview exports preview_at, an immutable i32 global holding an address, and preview(k: i64)".into(),
+                json!({"field": "preview"}),
+            ));
+        }
+        let at = at.unwrap_or(0);
+        Preview { reads: entries, writes: writes.to_vec(), entries: written, at, writes_at: at + reads_size, refused }
+    }
+
+    /// Bytes of the preview's read and write regions together.
+    pub fn size(&self) -> u32 {
+        (self.writes_at - self.at) + self.entries.iter().map(|e| e.offset + e.size).max().unwrap_or(0)
+    }
+
+    /// Refusals: a program without `preview(i64)`, a region past memory or over another region.
+    fn check(&self, given: &[u8], memory: u64, regions: &[(&str, u32, u32)]) -> Vec<Value> {
+        let mut out = self.refused.clone();
+        if !exports_func(given, "preview") {
+            out.push(refusal("region", "an item with a preview exports preview(k: i64)".into(), json!({"field": "preview"})));
+        }
+        let (start, end) = (u64::from(self.at), u64::from(self.at) + u64::from(self.size()));
+        if end > memory {
+            out.push(refusal("region", format!("the preview region, {} bytes at {}, passes the end of memory at {memory}", self.size(), self.at), json!({"region": "preview"})));
+        } else if let Some((name, r, n)) = regions
+            .iter()
+            .find(|(_, r, n)| *n > 0 && start < u64::from(*r) + u64::from(*n) && u64::from(*r) < end)
+        {
+            out.push(refusal("region", format!("the preview region, {} bytes at {}, overlaps {name}, {n} bytes at {r}", self.size(), self.at), json!({"region": "preview"})));
+        }
+        out
+    }
+}
+
+/// Whether the program exports a function of this name.
+fn exports_func(bytes: &[u8], name: &str) -> bool {
+    Parser::new(0).parse_all(bytes).any(|p| match p {
+        Ok(Payload::ExportSection(s)) => s
+            .into_iter()
+            .flatten()
+            .any(|e| e.name == name && e.kind == ExternalKind::Func),
+        _ => false,
+    })
+}
+
 /// A checked logic item: everything a step needs.
 #[derive(Clone, Debug)]
 pub struct Item {
@@ -273,18 +450,190 @@ pub struct Item {
     /// The data assets it names, in order, by hash, and where they're copied: `assets_at`.
     pub assets: Vec<(String, Vec<u8>)>,
     pub assets_at: u32,
+    /// Its linked libraries in link order, the merged program's library functions, whether it was
+    /// linked and the link's time (#190).
+    pub libraries: Vec<Lib>,
+    pub functions: Functions,
+    /// `given` is the linker's output (#190).
+    pub linked: bool,
+    pub link_ns: u64,
+    /// Each library's fixture records, by its hash, as the logic module ran them.
+    pub fixtures: BTreeMap<String, Value>,
     /// The kinds it emits, in declaration order, and where its emit region starts: `emits_at`.
     pub emits: Vec<Emit>,
     pub emits_at: u32,
+    /// The services it asks between steps, in declaration order, from `services_at`.
+    pub services: Vec<crate::services::Asked>,
+    pub services_at: u32,
+    /// Its mirrors of other items' arrays, in declaration order (Logic: mirror reads).
+    pub mirrors: Vec<crate::mirrors::Mirror>,
+    pub preview: Option<Preview>,
     /// What the item's bake key covers of it: its rewritten program, its fields as given and
     /// its assets' hashes (Logic: checkpoints and bake).
     pub content: String,
+    pub saves: Option<Saves>,
+}
+
+/// A logic item's saves (Logic: saves): its slots, where its `request` and `ends` arrays sit in
+/// its write region, and its migrations.
+#[derive(Clone, Debug)]
+pub struct Saves {
+    pub slots: i32,
+    pub request: u32,
+    pub ends: Option<u32>,
+    pub migrate: Vec<Migration>,
+}
+
+/// A declared migration (Logic: saves across changes): the save's `{layout, content, modules}` it
+/// migrates from, its program by asset ID, rewritten at check in the role `migration`, and the
+/// remap table's bytes.
+#[derive(Clone, Debug)]
+pub struct Migration {
+    pub from: [String; 3],
+    pub by: String,
+    pub bytes: Vec<u8>,
+    pub remap: Option<Vec<u8>>,
+}
+
+/// A migration's fuel: 8 per byte of the old and the new memories together, at least 10,000,000.
+pub fn migration_fuel(bytes: u64) -> i64 {
+    (8 * bytes as i64).max(10_000_000)
+}
+
+/// The item's `saves`, checked: slots 1 to 8, `request` and `ends` its own i32 arrays, and each
+/// migration's program under the one subset with a budget scaled to memory.
+fn saves_of(
+    v: &Value,
+    layout: &Layout,
+    memory: u64,
+    asset: &dyn Fn(&str) -> Option<Vec<u8>>,
+    planted: &Planted,
+) -> Result<Saves, Value> {
+    let bad = |what: String| refusal("saves", what, json!({"field": "saves"}));
+    if let Some(k) = v
+        .as_object()
+        .into_iter()
+        .flat_map(Map::keys)
+        .find(|k| !["slots", "request", "ends", "migrate"].contains(&k.as_str()))
+    {
+        return Err(bad(format!("saves has no field {k}")));
+    }
+    let slots = v
+        .get("slots")
+        .map_or(Some(1), Value::as_i64)
+        .filter(|n| (1..=8).contains(n))
+        .ok_or_else(|| bad("saves.slots is 1 to 8".into()))?;
+    let array = |k: &str| -> Result<Option<u32>, Value> {
+        let Some(n) = v.get(k) else { return Ok(None) };
+        layout
+            .entries
+            .iter()
+            .find(|e| e.region == "writes" && n.as_str() == Some(&e.name) && e.ty == "i32")
+            .map(|e| Some(e.offset))
+            .ok_or_else(|| bad(format!("saves.{k} names one of the item's own i32 arrays")))
+    };
+    let request = array("request")?
+        .ok_or_else(|| bad("saves.request names the item's request array".into()))?;
+    let ends = array("ends")?;
+    let missing = |sha: &str| {
+        refusal(
+            "asset",
+            format!("the piece carries no migration asset {sha}"),
+            json!({"asset": sha}),
+        )
+    };
+    let mut migrate = Vec::new();
+    let list = match v.get("migrate") {
+        None => &[][..],
+        Some(Value::Array(a)) => a.as_slice(),
+        Some(_) => return Err(bad("saves.migrate is a list of migrations".into())),
+    };
+    for m in list {
+        let from = ["layout", "content", "modules"].map(|k| {
+            m.get("from")
+                .and_then(|f| f.get(k))
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        });
+        let ([Some(layout), Some(content), Some(modules)], Some(by)) =
+            (from, m.get("by").and_then(Value::as_str))
+        else {
+            return Err(bad(
+                "a migration names from: {layout, content, modules} and its program by asset ID"
+                    .into(),
+            ));
+        };
+        let given = asset(by).ok_or_else(|| missing(by))?;
+        let remap = match m.get("remap").and_then(Value::as_str) {
+            None => None,
+            Some(r) => Some(asset(r).ok_or_else(|| missing(r))?),
+        };
+        // The migration's budget: memory the new memory plus the old plus 4 MiB, stack 256 KiB.
+        // The old memory is a save's, so check admits the largest one; the run holds it to the save's.
+        let budget = Budget {
+            fuel: migration_fuel(2 * memory),
+            stack: 262_144,
+            memory: memory + MAX_MEMORY + 4 * MIB,
+        };
+        let sandbox = Sandbox {
+            planted: deep_sandbox_wasmtime::service::Planted {
+                rewrite: planted.rewrite,
+                ..Default::default()
+            },
+        };
+        let bytes = match sandbox.rewrite(&given, "migration", &budget) {
+            Ok((out, _)) => out.bytes,
+            Err(Ok(r)) => {
+                return Err(refusal(
+                    "migration",
+                    format!("the migration {by} is outside the one subset"),
+                    json!({"asset": by, "refusals": refusals_json(&r)}),
+                ))
+            }
+            Err(Err(e)) => return Err(refusal("migration", e, json!({"asset": by}))),
+        };
+        migrate.push(Migration {
+            from: [layout, content, modules],
+            by: by.into(),
+            bytes,
+            remap,
+        });
+    }
+    Ok(Saves {
+        slots: slots as i32,
+        request,
+        ends,
+        migrate,
+    })
 }
 
 impl Item {
     pub fn checked(&self) -> Value {
-        json!({"program": self.program, "hash": self.hash, "layout": self.layout.to_json(), "assets_at": self.assets_at,
-            "pipelined": crate::budget::pipelined(self)})
+        let b = &self.given;
+        let linked = if self.linked {
+            json!({"sha256": hash(b), "size": b.len(), "bytes": B64.encode(b)})
+        } else {
+            Value::Null
+        };
+        let libraries: Vec<Value> = self
+            .libraries
+            .iter()
+            .map(|l| json!({"name": l.label, "hash": l.hash, "pack": l.pack, "fixtures": self.fixtures.get(&l.hash).cloned().unwrap_or(json!([]))}))
+            .collect();
+        let mut out = json!({"program": self.program, "hash": self.hash, "layout": self.layout.to_json(), "assets_at": self.assets_at,
+            "linked": linked, "libraries": libraries, "link_ns": self.link_ns,
+            "pipelined": crate::budget::pipelined(self)});
+        if !self.services.is_empty() {
+            out["services"] = crate::services::listed(self);
+        }
+        if !self.mirrors.is_empty() {
+            out["mirrors"] = self
+                .mirrors
+                .iter()
+                .map(|m| json!({"array": m.array, "at": m.at, "size": m.size()}))
+                .collect();
+        }
+        out
     }
     /// The assets as memory holds them from `assets_at`: each after a u32 of its length.
     pub fn asset_bytes(&self) -> Vec<u8> {
@@ -308,19 +657,84 @@ impl Item {
     }
 }
 
+/// The fixture canvas module whose carried state is of the `same_machine` class (#534).
+pub const MACHINE: &str = "same_machine.counter@1";
+
+/// #542: what a control's entries may hold: a text control's commit within `max` bytes, LF line
+/// ends and, with `many` false, none (Control: text); a scroll control's position within its
+/// range, `from` its default clamped there, which its first entry's delta counts from (Control:
+/// scroll).
+#[derive(Clone, Debug, PartialEq)]
+pub enum Limit {
+    Text { max: u32, many: bool },
+    Scroll { range: [i32; 2], from: i32 },
+}
+
+impl Limit {
+    fn of(control: &Value) -> Option<Limit> {
+        let i32_at = |p: &str| {
+            control
+                .pointer(p)
+                .and_then(Value::as_i64)
+                .and_then(|n| i32::try_from(n).ok())
+        };
+        match control.get("kind").and_then(Value::as_str)? {
+            "text" => Some(Limit::Text {
+                max: control
+                    .pointer("/text/max_bytes")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(256)
+                    .min(16_384) as u32,
+                many: control.pointer("/text/lines").and_then(Value::as_str) == Some("many"),
+            }),
+            "scroll" => {
+                let (a, b) = (i32_at("/scroll/range/0")?, i32_at("/scroll/range/1")?);
+                let range = [a.min(b), a.max(b)];
+                let from = control.get("default").and_then(Value::as_i64).unwrap_or(0);
+                let from = from.clamp(range[0].into(), range[1].into()) as i32;
+                Some(Limit::Scroll { range, from })
+            }
+            _ => None,
+        }
+    }
+
+    /// Whether an entry's value is one the control may hold.
+    pub fn admits(&self, value: &crate::world::Given) -> bool {
+        use crate::world::Given;
+        match (self, value) {
+            (Limit::Text { max, many }, Given::Text(t)) => {
+                t.len() <= *max as usize && !t.contains('\r') && (*many || !t.contains('\n'))
+            }
+            (Limit::Scroll { range, .. }, Given::Number(n)) => {
+                n.fract() == 0.0 && *n >= f64::from(range[0]) && *n <= f64::from(range[1])
+            }
+            _ => false,
+        }
+    }
+}
+
 /// A piece: its seed, controls, tour and checked logic items in order.
 #[derive(Clone, Debug)]
 pub struct Piece {
     pub seed: i64,
     /// Its budget class (Budget classes): `class`, figure when it names none.
     pub class: Class,
-    pub controls: BTreeSet<String>,
+    /// Each control by ID, with its slot's size and type in a read region ([`form`]).
+    pub controls: BTreeMap<String, (u32, &'static str)>,
+    /// #542: what each text and scroll control's entries may hold.
+    pub limits: BTreeMap<String, Limit>,
+    /// The sources its items' readings come from, each `reading:<source>`.
+    pub sources: BTreeMap<String, Read>,
     pub tour: Option<Value>,
     pub items: Vec<Item>,
+    /// The `same_machine.counter@1` items, by ID.
+    pub machine: Vec<String>,
+    /// The document by hash, which a save names but isn't bound to.
+    pub document: String,
 }
 
 /// An item's immutable i32 global's value, by its export name.
-fn global_at(bytes: &[u8], name: &str) -> Option<u32> {
+pub(crate) fn global_at(bytes: &[u8], name: &str) -> Option<u32> {
     let mut inits = Vec::new();
     let mut index = None;
     for payload in Parser::new(0).parse_all(bytes) {
@@ -349,10 +763,13 @@ fn global_at(bytes: &[u8], name: &str) -> Option<u32> {
     inits.get(index?).copied().flatten()
 }
 
-/// The exported immutable i64 global `regions_digest`, if any: `Err` when it isn't one.
+/// The exported immutable global `regions_digest`, if any: an i64 holding the digest, or, as a
+/// Rust `static` exports it, an i32 holding the address of its 8 bytes in an active data segment
+/// (#548). `Err` when it is neither.
 fn regions_digest(bytes: &[u8]) -> Result<Option<u64>, String> {
     let mut globals = Vec::new();
     let mut index = None;
+    let mut data = Vec::new();
     for payload in Parser::new(0).parse_all(bytes) {
         match payload.map_err(|e| e.to_string())? {
             Payload::GlobalSection(s) => {
@@ -360,10 +777,22 @@ fn regions_digest(bytes: &[u8]) -> Result<Option<u64>, String> {
                     let g = g.map_err(|e| e.to_string())?;
                     let mut ops = g.init_expr.get_operators_reader();
                     let v = match ops.read().map_err(|e| e.to_string())? {
-                        Operator::I64Const { value } if !g.ty.mutable => Some(value as u64),
+                        Operator::I64Const { value } if !g.ty.mutable => Some(Ok(value as u64)),
+                        Operator::I32Const { value } if !g.ty.mutable => Some(Err(value as u32)),
                         _ => None,
                     };
                     globals.push(v);
+                }
+            }
+            Payload::DataSection(s) => {
+                for d in s.into_iter().flatten() {
+                    if let wasmparser::DataKind::Active { offset_expr, .. } = d.kind {
+                        if let Ok(Operator::I32Const { value }) =
+                            offset_expr.get_operators_reader().read()
+                        {
+                            data.push((u64::from(value as u32), d.data.to_vec()));
+                        }
+                    }
                 }
             }
             Payload::ExportSection(s) => {
@@ -380,19 +809,26 @@ fn regions_digest(bytes: &[u8]) -> Result<Option<u64>, String> {
             _ => {}
         }
     }
+    let at = |a: u32| {
+        let a = u64::from(a);
+        data.iter().find_map(|(start, b)| {
+            let o = a.checked_sub(*start)? as usize;
+            Some(u64::from_le_bytes(b.get(o..o + 8)?.try_into().ok()?))
+        })
+    };
+    let wrong = || "regions_digest is an immutable i64 global, or a static of 8 bytes".to_string();
     match index {
         None => Ok(None),
-        Some(i) => globals
-            .get(i)
-            .copied()
-            .flatten()
-            .map(Some)
-            .ok_or_else(|| "regions_digest is an immutable i64 global".into()),
+        Some(i) => match globals.get(i).copied().flatten() {
+            Some(Ok(v)) => Ok(Some(v)),
+            Some(Err(a)) => at(a).map(Some).ok_or_else(wrong),
+            None => Err(wrong()),
+        },
     }
 }
 
 /// The program's one memory, in bytes.
-fn memory_bytes(bytes: &[u8]) -> u64 {
+pub fn memory_bytes(bytes: &[u8]) -> u64 {
     for payload in Parser::new(0).parse_all(bytes) {
         if let Ok(Payload::MemorySection(s)) = payload {
             if let Some(Ok(m)) = s.into_iter().next() {
@@ -410,7 +846,7 @@ fn own_name(n: &str) -> bool {
         && c.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
 }
 
-fn align8(n: u32) -> u32 {
+pub(crate) fn align8(n: u32) -> u32 {
     n.div_ceil(8) * 8
 }
 
@@ -433,7 +869,12 @@ struct Declared {
     every: i64,
     ring: u64,
     assets: Vec<String>,
+    links: Vec<(String, String)>,
+    saves: Option<Value>,
     emits: Vec<Emit>,
+    services: Vec<(String, u32)>,
+    mirrors: Vec<(String, String)>,
+    preview: Option<(Vec<String>, Vec<Write>)>,
     /// The item's fields as given, for its bake key.
     given: String,
 }
@@ -540,7 +981,12 @@ fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared, Refused> 
             "budget",
             "checkpoint",
             "assets",
+            "links",
+            "saves",
             "emits",
+            "services",
+            "mirrors",
+            "preview",
         ]
         .contains(&k.as_str())
         {
@@ -636,6 +1082,23 @@ fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared, Refused> 
         refused.extend(r);
         Vec::new()
     });
+    let preview = match params.get("preview") {
+        None => None,
+        Some(p) => preview_of(p).map_or_else(
+            |r| {
+                refused.extend(r);
+                None
+            },
+            Some,
+        ),
+    };
+    if preview.is_some() && writes.iter().any(|w| w.name == "preview") {
+        refused.push(refusal(
+            "write",
+            "an item with a preview can't write an array named preview: <logic ID>.preview.<name> are its preview arrays".into(),
+            json!({"write": "preview"}),
+        ));
+    }
     if !emits.is_empty() && writes.iter().any(|w| w.name == "occurrences") {
         refused.push(refusal(
             "write",
@@ -682,9 +1145,9 @@ fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared, Refused> 
             }),
         }
     };
-    let fuel = num("fuel", 1_000_000, 10_000_000)? as i64;
-    let memory = num("memory", 4, 64)? * MIB;
-    let stack = num("stack", 64, 256)? as i32 * 1024;
+    let fuel = num("fuel", FUEL.0, FUEL.1)? as i64;
+    let memory = num("memory", MEMORY_MIB.0, MEMORY_MIB.1)? * MIB;
+    let stack = num("stack", STACK_KIB.0, STACK_KIB.1)? as i32 * 1024;
     let every = match get(params.get("checkpoint"), "every") {
         None => 60,
         Some(v) => v.as_i64().filter(|n| *n >= 1).ok_or_else(|| {
@@ -712,7 +1175,13 @@ fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared, Refused> 
             .ok_or_else(|| bad("assets", "assets is a list of asset IDs".into()))?,
         Some(_) => return Err(bad("assets", "assets is a list of asset IDs".into())),
     };
+    let links = links::declared(params.get("links"))
+        .ok_or_else(|| bad("links", "links is a list of {name, asset}".into()))?;
+    let services =
+        crate::services::declared(params.get("services")).map_err(|e| bad("services", e))?;
+    let mirrors = crate::mirrors::declared(params.get("mirrors")).map_err(|e| bad("mirrors", e))?;
     Ok(Declared {
+        links,
         program,
         debug,
         step,
@@ -726,53 +1195,259 @@ fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared, Refused> 
         every,
         ring,
         assets,
+        saves: params.get("saves").cloned(),
         emits,
+        services,
+        mirrors,
+        preview,
         given: Value::Object(params.clone()).to_string(),
     })
 }
 
-/// Checks every item of a piece in order: the first refusal answers.
-pub fn check(piece: &Value, planted: &Planted, history: &mut History) -> Result<Piece, Refused> {
-    let assets = piece
-        .get("assets")
-        .and_then(Value::as_object)
-        .cloned()
-        .unwrap_or_default();
-    check_in(piece, planted, history, &|sha| {
-        B64.decode(assets.get(sha)?.as_str()?).ok()
-    })
+/// A preview's declared reads and writes (Logic: preview): control IDs or a control's `hover`,
+/// and arrays of bool, i32, f64, vec2 or vec3, never quat or interpolated.
+fn preview_of(v: &Value) -> Result<(Vec<String>, Vec<Write>), Vec<Value>> {
+    let what = |w: String| refusal("preview", w, json!({"field": "preview"}));
+    let Some(o) = v.as_object() else {
+        return Err(vec![what("preview is {reads, writes}".into())]);
+    };
+    if let Some(k) = o.keys().find(|k| !["reads", "writes"].contains(&k.as_str())) {
+        return Err(vec![what(format!("preview has no field {k}"))]);
+    }
+    let reads: Vec<String> = o
+        .get("reads")
+        .and_then(Value::as_array)
+        .and_then(|a| a.iter().map(|r| r.as_str().map(str::to_string)).collect())
+        .ok_or_else(|| vec![what("preview.reads is a list of control IDs".into())])?;
+    let mut writes = Vec::new();
+    let mut refused = Vec::new();
+    for (name, w) in o.get("writes").and_then(Value::as_object).into_iter().flatten() {
+        let ty = w.get("type").and_then(Value::as_str).and_then(Ty::named);
+        let count = w
+            .get("count")
+            .map_or(Some(1), Value::as_u64)
+            .filter(|c| *c >= 1 && *c <= u32::MAX as u64);
+        let extra = w.as_object().into_iter().flatten().any(|(k, _)| k != "type" && k != "count");
+        match (ty, count) {
+            (Some(ty), Some(count)) if own_name(name) && ty != Ty::Quat && !extra => {
+                writes.push(Write { name: name.clone(), ty, count: count as u32, linear: false })
+            }
+            _ => refused.push(what(format!(
+                "preview write {name} is an own name with a type of bool, i32, f64, vec2 or vec3 and a count of at least 1"
+            ))),
+        }
+    }
+    if refused.is_empty() {
+        Ok((reads, writes))
+    } else {
+        Err(refused)
+    }
 }
 
-/// [`check`], each asset's bytes read by `stored` (a document's from the evidence store, #544)
-/// rather than from the piece's `assets`; bytes that don't hash to their ID are none.
-pub fn check_in(
-    piece: &Value,
+/// Item `idx`'s region map (Logic `logic@1`: Region map) from the declarations alone, before
+/// its program is read: reads, each mirror's range list, the step's seed, writes, then the kinds
+/// it emits, each in declaration order; the refusals of reads and mirrors that name nothing it
+/// may read; and its mirrors, resolved (Logic: mirror reads).
+fn region_map(
+    idx: usize,
+    decls: &[(String, Declared)],
+    controls: &Controls,
+    sources: &Sources,
     planted: &Planted,
-    history: &mut History,
-    stored: &dyn Fn(&str) -> Option<Vec<u8>>,
-) -> Result<Piece, Refused> {
-    let bad = || Refused(json!({"ok": false, "code": "bad_input"}));
-    let seed = piece.get("seed").and_then(Value::as_i64).ok_or_else(bad)?;
-    let class = match piece.get("class") {
-        None => Class::Figure,
-        Some(c) => c.as_str().and_then(Class::parse).ok_or_else(bad)?,
+) -> (Layout, Vec<Value>, Vec<crate::mirrors::Mirror>) {
+    let d = &decls[idx].1;
+    let mut entries = Vec::new();
+    let mut at = 0u32;
+    let mut refused = Vec::new();
+    let writers: Vec<(&str, &[Write])> = decls
+        .iter()
+        .map(|(id, d)| (id.as_str(), d.writes.as_slice()))
+        .collect();
+    let mirrors = crate::mirrors::resolved(&d.mirrors, idx, &writers, &mut refused);
+    if planted.mirror_lists_first {
+        at = crate::mirrors::listed(&mirrors, at, &mut entries);
+    }
+    // The planted map lays the reads out by name rather than in declaration order.
+    let mut reads = d.reads.clone();
+    if planted.map_reads_by_name {
+        reads.sort();
+    }
+    for r in &reads {
+        let (size, ty, read) = if let Some((size, ty)) = controls.get(r) {
+            (*size, ty.to_string(), Read::Control)
+        } else if let Some(read) = sources.get(r) {
+            let Read::Reading { max, .. } = read else {
+                unreachable!()
+            };
+            (8 + max * 16, "reading".to_string(), read.clone())
+        } else if let Some((other, "hover")) =
+            r.split_once('.').filter(|(c, _)| controls.contains_key(*c))
+        {
+            // Control: point: hover is viewer state, never a step's read.
+            refused.push(refusal(
+                "read",
+                format!("{r} is the pointer's hover over {other}, viewer state a logic step never reads"),
+                json!({"read": r}),
+            ));
+            continue;
+        } else if let Some((other, name)) = r.split_once('.') {
+            match decls.iter().position(|(o, _)| o == other) {
+                Some(_) if name.starts_with("preview.") => {
+                    refused.push(refusal(
+                        "read",
+                        format!("{r} is a preview array: session state no step reads"),
+                        json!({"read": r}),
+                    ));
+                    continue;
+                }
+                Some(i) if i == idx => {
+                    refused.push(refusal(
+                        "read",
+                        format!("{r} is this item's own array: a cycle"),
+                        json!({"read": r}),
+                    ));
+                    continue;
+                }
+                Some(i) => {
+                    let ws = &decls[i].1.writes;
+                    let mut off = 0;
+                    let mut found = None;
+                    for w in ws {
+                        if w.name == name {
+                            found = Some((
+                                w.ty.size() * w.count,
+                                w.ty.name().to_string(),
+                                Read::Array {
+                                    item: i,
+                                    offset: off,
+                                },
+                            ));
+                        }
+                        off = align8(off + w.ty.size() * w.count);
+                    }
+                    match found {
+                        Some(f) => f,
+                        None => {
+                            refused.push(refusal(
+                                "read",
+                                format!("{other} declares no array {name}"),
+                                json!({"read": r}),
+                            ));
+                            continue;
+                        }
+                    }
+                }
+                None => {
+                    refused.push(refusal(
+                        "read",
+                        format!("{r} names no control or logic item of this piece"),
+                        json!({"read": r}),
+                    ));
+                    continue;
+                }
+            }
+        } else {
+            refused.push(refusal(
+                "read",
+                format!("{r} names no control or logic item of this piece"),
+                json!({"read": r}),
+            ));
+            continue;
+        };
+        // A read region past what a u32 addresses fits no memory, and leaves the seed 8 bytes.
+        let Some(end) = at.checked_add(size).filter(|n| *n <= u32::MAX - 15) else {
+            refused.push(refusal(
+                "read",
+                format!("{r} takes the read region past 4 GiB"),
+                json!({"read": r}),
+            ));
+            continue;
+        };
+        entries.push(Region {
+            region: "reads",
+            name: r.clone(),
+            offset: at,
+            size,
+            ty,
+            read,
+        });
+        at = align8(end);
+    }
+    if !planted.mirror_lists_first {
+        at = crate::mirrors::listed(&mirrors, at, &mut entries);
+    }
+    entries.push(Region {
+        region: "reads",
+        name: "seed".into(),
+        offset: at,
+        size: 8,
+        ty: "i64".into(),
+        read: Read::Seed,
+    });
+    let mut at = 0u32;
+    for w in &d.writes {
+        entries.push(Region {
+            region: "writes",
+            name: w.name.clone(),
+            offset: at,
+            size: w.ty.size() * w.count,
+            ty: w.ty.name().into(),
+            read: Read::None,
+        });
+        at = align8(at + w.ty.size() * w.count);
+    }
+    // Then each kind it emits: its u32 count and max_per_step rows, end to end from emits_at.
+    let mut at = 0u32;
+    for e in &d.emits {
+        entries.push(Region {
+            region: "emits",
+            name: e.kind.clone(),
+            offset: at,
+            size: e.size(),
+            ty: "rows".into(),
+            read: Read::None,
+        });
+        at += e.size();
+    }
+    let text: String = entries
+        .iter()
+        .map(|e| format!("{}|{}|{}|{}|{}\n", e.region, e.name, e.offset, e.size, e.ty))
+        .collect();
+    let layout = Layout {
+        digest: h64(text.as_bytes()),
+        entries,
     };
-    let controls: BTreeSet<String> = piece
+    (layout, refused, mirrors)
+}
+
+/// A piece's controls, its logic items' declared fields by ID, and the IDs of its same-machine
+/// fixture items.
+type Declarations = (Controls, Vec<(String, Declared)>, Vec<String>);
+
+/// A piece's controls, each with its slot's size and type in a read region, and every item's
+/// declared fields, so a read can name a later item's array.
+fn declarations(piece: &Value) -> Result<Declarations, Refused> {
+    let controls: Controls = piece
         .get("controls")
         .and_then(Value::as_object)
-        .map(|c| c.keys().cloned().collect())
+        .map(|c| c.iter().map(|(k, v)| (k.clone(), form(v))).collect())
         .unwrap_or_default();
-    let asset = |sha: &str| -> Option<Vec<u8>> {
-        let bytes = stored(sha)?;
-        (hash(&bytes) == sha).then_some(bytes)
-    };
     let items_in = piece
         .get("items")
         .and_then(Value::as_object)
-        .ok_or_else(bad)?;
-    // Every item's declared fields first, so a read can name a later item's array.
+        .ok_or_else(|| Refused(json!({"ok": false, "code": "bad_input"})))?;
     let mut decls = Vec::new();
+    let mut machine = Vec::new();
     for (id, item) in items_in {
+        // The fixture module whose carried state is same-machine: a counter of the steps it's seen.
+        if item.get("kind").and_then(Value::as_str) == Some(MACHINE)
+            && item
+                .get("params")
+                .is_none_or(|p| p.as_object().is_some_and(Map::is_empty))
+        {
+            machine.push(id.clone());
+            continue;
+        }
         if item.get("kind").and_then(Value::as_str) != Some("logic@1") {
             return Err(logic_refused(
                 id,
@@ -790,6 +1465,90 @@ pub fn check_in(
             .unwrap_or_default();
         decls.push((id.clone(), declared(id, &params)?));
     }
+    Ok((controls, decls, machine))
+}
+
+/// Each item's region map and the kinds it emits, from the piece's declarations alone: what a
+/// program is built against before it exists (#548's bindings).
+pub fn region_maps(piece: &Value, planted: &Planted) -> Result<Vec<(String, Layout, Vec<Emit>)>, Refused> {
+    let (controls, decls, _) = declarations(piece)?;
+    let sources = sources_of(piece)?;
+    let mut out = Vec::new();
+    for (idx, (id, d)) in decls.iter().enumerate() {
+        let (layout, refused, _) = region_map(idx, &decls, &controls, &sources, planted);
+        if !refused.is_empty() {
+            return Err(logic_refused(id, refused));
+        }
+        out.push((id.clone(), layout, d.emits.clone()));
+    }
+    Ok(out)
+}
+
+type Controls = BTreeMap<String, (u32, &'static str)>;
+/// A piece's sources by the reading each delivers, `reading:<source>` (#533).
+type Sources = BTreeMap<String, Read>;
+
+fn sources_of(piece: &Value) -> Result<Sources, Refused> {
+    let mut sources = BTreeMap::new();
+    for (name, src) in piece
+        .get("sources")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+    {
+        sources.insert(format!("reading:{name}"), source(name, src)?);
+    }
+    Ok(sources)
+}
+
+/// Checks every item of a piece in order: the first refusal answers.
+pub fn check(piece: &Value, planted: &Planted, history: &mut History) -> Result<Piece, Refused> {
+    check_bound(piece, planted, history, &[])
+}
+
+/// [`check`], with the between-step services this build binds (Logic: between-step services).
+pub fn check_bound(
+    piece: &Value,
+    planted: &Planted,
+    history: &mut History,
+    services: &[crate::services::Service],
+) -> Result<Piece, Refused> {
+    let assets = piece
+        .get("assets")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    check_in(
+        piece,
+        planted,
+        history,
+        &|sha| B64.decode(assets.get(sha)?.as_str()?).ok(),
+        services,
+    )
+}
+
+/// [`check`], each asset's bytes read by `stored` (a document's from the evidence store, #544)
+/// rather than from the piece's `assets`; bytes that don't hash to their ID are none. `services`:
+/// the between-step services this build binds (Logic: between-step services).
+pub fn check_in(
+    piece: &Value,
+    planted: &Planted,
+    history: &mut History,
+    stored: &dyn Fn(&str) -> Option<Vec<u8>>,
+    services: &[crate::services::Service],
+) -> Result<Piece, Refused> {
+    let bad = || Refused(json!({"ok": false, "code": "bad_input"}));
+    let seed = piece.get("seed").and_then(Value::as_i64).ok_or_else(bad)?;
+    let class = match piece.get("class") {
+        None => Class::Figure,
+        Some(c) => c.as_str().and_then(Class::parse).ok_or_else(bad)?,
+    };
+    let sources = sources_of(piece)?;
+    let asset = |sha: &str| -> Option<Vec<u8>> {
+        let bytes = stored(sha)?;
+        (hash(&bytes) == sha).then_some(bytes)
+    };
+    let (controls, decls, machine) = declarations(piece)?;
     let mut items = Vec::new();
     for (idx, (id, d)) in decls.iter().enumerate() {
         let missing = |what: &str, sha: &str| {
@@ -803,6 +1562,34 @@ pub fn check_in(
             )
         };
         let given = asset(&d.program).ok_or_else(|| missing("program", &d.program))?;
+        // The linker first, before the subset check and the rewrite (#190); an item without links
+        // is never linked.
+        let (mut given, mut libraries, mut functions, mut lib_data, mut link_ns) =
+            (given, Vec::new(), Functions::new(), None, 0);
+        if !d.links.is_empty() {
+            let packs = links::packs(piece).ok_or_else(bad)?;
+            let link_refused = |refusals| {
+                Refused(
+                    json!({"ok": false, "code": "link_refused", "item": id, "refusals": refusals}),
+                )
+            };
+            let started = std::time::Instant::now();
+            libraries = links::resolve(&d.links, &packs, stored, planted).map_err(link_refused)?;
+            let (bytes, f, data) =
+                links::merge(&given, &libraries, planted).map_err(link_refused)?;
+            link_ns = started.elapsed().as_nanos() as u64;
+            given = bytes;
+            functions = f;
+            lib_data = data;
+            if d.debug.is_some() {
+                // A sidecar's DWARF stands for the program object, not the merged module.
+                return Err(logic_refused(id, vec![refusal("debug", "a debug sidecar isn't read for an item with links yet: its offsets stand for the program before the link".into(), json!({"field": "debug"}))]));
+            }
+        }
+        if planted.linker_adds_linking_section {
+            given = links::empty_linking(given);
+        }
+        let linked = !d.links.is_empty() || planted.linker_adds_linking_section;
         let lines = match &d.debug {
             None => None,
             Some(sha) => {
@@ -841,116 +1628,7 @@ pub fn check_in(
                 }
             }
         };
-        // The region map, in declaration order: reads, the step's seed, then writes.
-        let mut entries = Vec::new();
-        let mut at = 0u32;
-        let mut refused = Vec::new();
-        for r in &d.reads {
-            let (size, ty, read) = if controls.contains(r) {
-                (SLOT, "control".to_string(), Read::Control)
-            } else if let Some((other, name)) = r.split_once('.') {
-                match decls.iter().position(|(o, _)| o == other) {
-                    Some(i) if i == idx => {
-                        refused.push(refusal(
-                            "read",
-                            format!("{r} is this item's own array: a cycle"),
-                            json!({"read": r}),
-                        ));
-                        continue;
-                    }
-                    Some(i) => {
-                        let ws = &decls[i].1.writes;
-                        let mut off = 0;
-                        let mut found = None;
-                        for w in ws {
-                            if w.name == name {
-                                found = Some((
-                                    w.ty.size() * w.count,
-                                    w.ty.name().to_string(),
-                                    Read::Array {
-                                        item: i,
-                                        offset: off,
-                                    },
-                                ));
-                            }
-                            off = align8(off + w.ty.size() * w.count);
-                        }
-                        match found {
-                            Some(f) => f,
-                            None => {
-                                refused.push(refusal(
-                                    "read",
-                                    format!("{other} declares no array {name}"),
-                                    json!({"read": r}),
-                                ));
-                                continue;
-                            }
-                        }
-                    }
-                    None => {
-                        refused.push(refusal(
-                            "read",
-                            format!("{r} names no control or logic item of this piece"),
-                            json!({"read": r}),
-                        ));
-                        continue;
-                    }
-                }
-            } else {
-                refused.push(refusal(
-                    "read",
-                    format!("{r} names no control or logic item of this piece"),
-                    json!({"read": r}),
-                ));
-                continue;
-            };
-            // A read region past what a u32 addresses fits no memory, and leaves the seed 8 bytes.
-            let Some(end) = at.checked_add(size).filter(|n| *n <= u32::MAX - 15) else {
-                refused.push(refusal(
-                    "read",
-                    format!("{r} takes the read region past 4 GiB"),
-                    json!({"read": r}),
-                ));
-                continue;
-            };
-            entries.push(Region {
-                region: "reads",
-                name: r.clone(),
-                offset: at,
-                size,
-                ty,
-                read,
-            });
-            at = align8(end);
-        }
-        entries.push(Region {
-            region: "reads",
-            name: "seed".into(),
-            offset: at,
-            size: 8,
-            ty: "i64".into(),
-            read: Read::Seed,
-        });
-        let mut at = 0u32;
-        for w in &d.writes {
-            entries.push(Region {
-                region: "writes",
-                name: w.name.clone(),
-                offset: at,
-                size: w.ty.size() * w.count,
-                ty: w.ty.name().into(),
-                read: Read::None,
-            });
-            at = align8(at + w.ty.size() * w.count);
-        }
-        let text: String = entries
-            .iter()
-            .map(|e| format!("{}|{}|{}|{}|{}\n", e.region, e.name, e.offset, e.size, e.ty))
-            .collect();
-        let layout = Layout {
-            digest: h64(text.as_bytes()),
-            entries,
-        };
+        let (layout, mut refused, mut mirrors) = region_map(idx, &decls, &controls, &sources, planted);
         let past = history.entry(id.clone()).or_default();
         if !past.iter().any(|l| l.digest == layout.digest) {
             past.push(layout.clone());
@@ -992,15 +1670,7 @@ pub fn check_in(
                 )),
                 Some(at) => {
                     let (start, end) = (u64::from(at), u64::from(at) + size);
-                    let why = if end > memory {
-                        Some(format!("passes the end of memory at {memory}"))
-                    } else {
-                        regions
-                            .iter()
-                            .find(|(_, r, n)| *n > 0 && start < u64::from(*r) + u64::from(*n) && u64::from(*r) < end)
-                            .map(|(name, r, n)| format!("overlaps {name}, {n} bytes at {r}"))
-                    };
-                    if let Some(why) = why {
+                    if let Some(why) = clash(start, end, memory, &regions, &[]) {
                         refused.push(refusal(
                             "region",
                             format!("the emit region, {size} bytes at {at}, {why}"),
@@ -1008,6 +1678,25 @@ pub fn check_in(
                         ));
                     }
                     regions.push(("the emit region", at, size as u32));
+                }
+            }
+        }
+        let services_at = global_at(&given, "services_at");
+        let asked =
+            crate::services::asked(&d.services, services, services_at, memory, &mut regions)
+                .unwrap_or_else(|r| {
+                    refused.extend(r);
+                    Vec::new()
+                });
+        // The libraries' data, placed after the program's, must keep clear of its regions and its services' (#190).
+        if let Some((start, end)) = lib_data {
+            for (name, at, n) in &regions {
+                if *at < end && u64::from(start) < u64::from(*at) + u64::from(*n) {
+                    refused.push(refusal(
+                        "links",
+                        format!("the libraries' data, bytes {start} to {end}, overlaps {name}, {n} bytes at {at}"),
+                        json!({"region": name}),
+                    ));
                 }
             }
         }
@@ -1025,9 +1714,24 @@ pub fn check_in(
                 )),
                 Some(at) => {
                     refused.extend(placed(&assets, at, memory, &regions, &data_segments(&given)));
+                    let len: usize = assets.iter().map(|(_, b)| 4 + b.len()).sum();
+                    regions.push(("the assets", at, len as u32));
                 }
             }
         }
+        let preview = d.preview.as_ref().map(|(reads, writes)| {
+            let p = Preview::of(reads, writes, &controls, global_at(&given, "preview_at"));
+            refused.extend(p.check(&given, memory, &regions));
+            p
+        });
+        let segments = data_segments(&given);
+        refused.extend(crate::mirrors::placed(
+            &mut mirrors,
+            &given,
+            memory,
+            &mut regions,
+            &segments,
+        ));
         match regions_digest(&given) {
             Err(e) => refused.push(refusal("regions_digest", e, json!({}))),
             Ok(Some(v)) if v != layout.digest => {
@@ -1035,6 +1739,18 @@ pub fn check_in(
             }
             Ok(_) => {}
         }
+        let saves = match d
+            .saves
+            .as_ref()
+            .map(|v| saves_of(v, &layout, memory, &asset, planted))
+        {
+            None => None,
+            Some(Ok(s)) => Some(s),
+            Some(Err(r)) => {
+                refused.push(r);
+                None
+            }
+        };
         if !refused.is_empty() {
             return Err(logic_refused(id, refused));
         }
@@ -1077,31 +1793,104 @@ pub fn check_in(
             content,
             assets,
             assets_at: assets_at.unwrap_or(0),
+            libraries: std::mem::take(&mut libraries),
+            functions: std::mem::take(&mut functions),
+            linked,
+            link_ns,
+            fixtures: BTreeMap::new(),
+            saves,
             emits: d.emits.clone(),
             emits_at: emits_at.unwrap_or(0),
+            services: asked,
+            services_at: services_at.unwrap_or(0),
+            mirrors,
+            preview,
         });
     }
+    // A save holds every item at one instant, so a piece with saves steps at one rate.
+    if items.iter().any(|i| i.saves.is_some()) && !items.windows(2).all(|w| w[0].step == w[1].step)
+    {
+        let id = items
+            .iter()
+            .find(|i| i.saves.is_some())
+            .map_or("", |i| i.id.as_str());
+        return Err(logic_refused(
+            id,
+            vec![refusal(
+                "saves",
+                "a piece with saves has every logic item at one step rate".into(),
+                json!({"field": "saves"}),
+            )],
+        ));
+    }
+    let limits = piece
+        .get("controls")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+        .filter_map(|(id, c)| Some((id.clone(), Limit::of(c)?)))
+        .collect();
     Ok(Piece {
         seed,
         class,
         controls,
+        limits,
+        sources,
         tour: piece.get("tour").cloned(),
         items,
+        machine,
+        document: hash(piece.to_string().as_bytes()),
     })
+}
+
+/// A source as the piece declares it (Logic: readings): scalar values, delivered `latest` (a
+/// step reads the last one) or `each` (every one since the step before, at most `max_per_step`).
+fn source(name: &str, src: &Value) -> Result<Read, Refused> {
+    let refused = |what: String| {
+        Refused(json!({"ok": false, "code": "bad_input", "what": what, "source": name}))
+    };
+    if src.get("shape").map_or(Some("scalar"), Value::as_str) != Some("scalar") {
+        return Err(refused(format!(
+            "{name}: only scalar sources are built yet"
+        )));
+    }
+    let max = src
+        .get("max_per_step")
+        .map_or(Some(PER_STEP as u64), Value::as_u64)
+        .filter(|n| (1..=PER_STEP as u64).contains(n))
+        .ok_or_else(|| refused(format!("{name}: max_per_step is 1 to {PER_STEP}")))?;
+    match src.get("delivery").map_or(Some("latest"), Value::as_str) {
+        Some("latest") => Ok(Read::Reading {
+            each: false,
+            max: 1,
+        }),
+        Some("each") => Ok(Read::Reading {
+            each: true,
+            max: max as u32,
+        }),
+        _ => Err(refused(format!("{name}: delivery is latest or each"))),
+    }
 }
 
 /// Each active data segment's bytes in memory, `[start, end)`.
 fn data_segments(bytes: &[u8]) -> Vec<(u64, u64)> {
+    segments(bytes)
+        .into_iter()
+        .map(|(_, at, b)| (at, at + b.len() as u64))
+        .collect()
+}
+
+/// Each active data segment: its index in the data section, its address and its bytes.
+pub fn segments(bytes: &[u8]) -> Vec<(usize, u64, Vec<u8>)> {
     let mut out = Vec::new();
     for payload in Parser::new(0).parse_all(bytes) {
         if let Ok(Payload::DataSection(s)) = payload {
-            for d in s.into_iter().flatten() {
+            for (i, d) in s.into_iter().flatten().enumerate() {
                 if let wasmparser::DataKind::Active { offset_expr, .. } = d.kind {
                     if let Ok(Operator::I32Const { value }) =
                         offset_expr.get_operators_reader().read()
                     {
-                        let start = u64::from(value as u32);
-                        out.push((start, start + d.data.len() as u64));
+                        out.push((i, u64::from(value as u32), d.data.to_vec()));
                     }
                 }
             }
@@ -1123,21 +1912,7 @@ fn placed(
     let mut start = u64::from(at);
     for (sha, bytes) in assets {
         let end = start + 4 + bytes.len() as u64;
-        let overlaps = |a: u64, b: u64| a < b && start < b && a < end;
-        let why = if end > memory {
-            Some(format!("passes the end of memory at {memory}"))
-        } else if let Some((name, r, n)) = regions
-            .iter()
-            .find(|(_, r, n)| overlaps(u64::from(*r), u64::from(*r) + u64::from(*n)))
-        {
-            Some(format!("overlaps {name}, {n} bytes at {r}"))
-        } else {
-            segments
-                .iter()
-                .find(|(a, b)| overlaps(*a, *b))
-                .map(|(a, b)| format!("overlaps an active data segment, bytes {a} to {b}"))
-        };
-        if let Some(why) = why {
+        if let Some(why) = clash(start, end, memory, regions, segments) {
             out.push(refusal(
                 "assets",
                 format!("asset {sha}, copied to bytes {start} to {end} from assets_at, {why}"),
@@ -1147,6 +1922,31 @@ fn placed(
         start = end;
     }
     out
+}
+
+/// Why bytes `[start, end)` can't be placed: past the end of memory, or over a region or an active
+/// data segment, naming the first it overlaps; none when they fit.
+pub(crate) fn clash(
+    start: u64,
+    end: u64,
+    memory: u64,
+    regions: &[(&str, u32, u32)],
+    segments: &[(u64, u64)],
+) -> Option<String> {
+    let overlaps = |a: u64, b: u64| a < b && start < b && a < end;
+    if end > memory {
+        return Some(format!("passes the end of memory at {memory}"));
+    }
+    if let Some((name, r, n)) = regions
+        .iter()
+        .find(|(_, r, n)| overlaps(u64::from(*r), u64::from(*r) + u64::from(*n)))
+    {
+        return Some(format!("overlaps {name}, {n} bytes at {r}"));
+    }
+    segments
+        .iter()
+        .find(|(a, b)| overlaps(*a, *b))
+        .map(|(a, b)| format!("overlaps an active data segment, bytes {a} to {b}"))
 }
 
 /// A program built for another layout of the item: the first entry, in the item's declaration
@@ -1258,6 +2058,58 @@ mod tests {
                 json!(["e", "emits"]),
                 "{emits}"
             );
+        }
+    }
+
+    /// #539: each read control's slot is its form's, and a step's read of a control's hover is
+    /// refused, naming the read.
+    #[test]
+    fn read_controls_take_their_forms_slots_and_hover_is_refused() {
+        let bytes = wat::parse_str(EMPTY).expect("a program");
+        let sha = hash(&bytes);
+        let controls = json!({
+            "place": {"kind": "choice", "verb": "pick", "rows": ["board"]},
+            "aim": {"kind": "point"}, "moves": {"kind": "actions"},
+            "name": {"kind": "text", "text": {"max_bytes": 13}}, "speed": {"kind": "slider"},
+        });
+        let piece = |reads: Value| {
+            json!({"seed": 0, "assets": {&sha: B64.encode(&bytes)}, "controls": controls,
+                   "items": {"e": {"kind": "logic@1", "params": {"program": sha, "reads": reads}}}})
+        };
+        let p = check(
+            &piece(json!(["place", "aim", "moves", "name", "speed"])),
+            &Planted::default(),
+            &mut History::new(),
+        )
+        .expect("checked");
+        let sizes: Vec<(String, u32, String)> = p.items[0]
+            .layout
+            .entries
+            .iter()
+            .filter(|e| e.read == Read::Control)
+            .map(|e| (e.name.clone(), e.size, e.ty.clone()))
+            .collect();
+        let want = [
+            ("place", 8 + 16 * 32, "pick"),
+            ("aim", 8 + 16 * (8 + 248 + 8 + 8 * 256), "point"),
+            ("moves", 8 + 16 * 24, "action"),
+            ("name", 24, "text"),
+            ("speed", SLOT, "control"),
+        ];
+        assert_eq!(
+            sizes,
+            want.map(|(n, s, t)| (n.to_string(), s, t.to_string()))
+        );
+        match check(
+            &piece(json!(["place.hover"])),
+            &Planted::default(),
+            &mut History::new(),
+        ) {
+            Err(Refused(v)) => assert_eq!(
+                (&v["refusals"][0]["rule"], &v["refusals"][0]["read"]),
+                (&json!("read"), &json!("place.hover"))
+            ),
+            Ok(_) => panic!("a hover read was taken"),
         }
     }
 

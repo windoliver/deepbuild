@@ -7,6 +7,7 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
 use deep_canvas_effects::particles::bake::{self, Inputs};
+use deep_canvas_effects::particles::draws::Ribbon;
 use deep_canvas_effects::particles::eval::{self, Baked};
 use deep_canvas_effects::particles::pack::{self, Tables};
 use deep_canvas_effects::particles::{
@@ -51,7 +52,7 @@ pub(crate) fn plants(p: Option<Planted>) -> (Plants, u32, Option<u32>) {
 }
 
 /// The check's issues as the reply holds them.
-fn issues_json(issues: &[deep_canvas::document::Issue]) -> Vec<Value> {
+pub(crate) fn issues_json(issues: &[deep_canvas::document::Issue]) -> Vec<Value> {
     issues
         .iter()
         .map(|i| {
@@ -109,6 +110,10 @@ fn answer(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     let mut doc: Value = serde_json::from_str(&text).map_err(|e| bad(&format!("doc: {e}")))?;
     if doc.get("size").is_none() {
         doc["size"] = json!([320, 240]);
+    }
+    // #451: a document with 2D particles places them along curves laid out at each time.
+    if crate::flows2d::any(&doc) {
+        return crate::flows2d::answer(&doc, call, app.planted);
     }
     crate::physics::bake(&mut doc)?;
     let (plants, flags, every) = plants(app.planted);
@@ -354,11 +359,60 @@ pub(crate) fn baked(
         planted: plants,
     };
     let spec = closed::spec::read(doc, id, p)?;
-    let key = format!("{}{:?}", bake::key(&inputs, &spec), plants);
+    // #451: a world-space emitter reads its anchor at every birth bucket, so its bake is keyed by
+    // the whole document that moves the anchor, and a flow by the curves it runs along.
+    let world = p["emit"]["anchor"]
+        .as_str()
+        .filter(|_| spec.space == closed::spec::Space::World);
+    // #451: a flow along many curves, each as the scene lays it out.
+    let flows = match &spec.motion {
+        closed::spec::Motion::Along { many: Some(m), .. } => {
+            let names: Vec<String> = match &m.collection {
+                Some(c) => doc["collections"][c]["members"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(Value::as_str)
+                    .map(str::to_string)
+                    .collect(),
+                None => m.curves.clone(),
+            };
+            names
+                .iter()
+                .map(|n| {
+                    scene
+                        .curves
+                        .get(n)
+                        .map(|pts| closed::flows::Curve::new(pts.clone()))
+                        .ok_or_else(|| {
+                            Refusal::new(
+                                "ref_unresolved",
+                                format!("items/{id}/params/motion/along/curves"),
+                                format!("{id}: along.curves names {n}, which is no curve"),
+                            )
+                        })
+                })
+                .collect::<Result<Vec<_>, _>>()?
+        }
+        _ => Vec::new(),
+    };
+    let mut h = deep_canvas::schedule::Hasher::new("particles.flows");
+    if world.is_some() {
+        h.bytes(doc.to_string().as_bytes());
+    }
+    for x in flows.iter().flat_map(|c| c.points.iter().flatten()) {
+        h.bytes(&x.to_le_bytes());
+    }
+    let moved = h.finish().hex();
+    let key = format!("{}{:?}{moved}", bake::key(&inputs, &spec), plants);
     if let Some(h) = BAKED.lock().unwrap_or_else(|e| e.into_inner()).get(&key) {
         return Ok(h.clone());
     }
-    let b = bake::bake(&inputs)?;
+    let mut b = bake::bake(&inputs)?;
+    b.flows = flows;
+    if let Some(anchor) = world {
+        b.anchors = Some(anchors(doc, id, anchor, spec.span)?);
+    }
     let tables = pack::tables(&b);
     let held: Held = Arc::new((b, tables));
     let mut kept = BAKED.lock().unwrap_or_else(|e| e.into_inner());
@@ -367,6 +421,47 @@ pub(crate) fn baked(
     }
     kept.insert(key, held.clone());
     Ok(held)
+}
+
+/// A world-space emitter's anchor at each birth bucket of the document's span: the scene
+/// evaluated at each whole multiple of its frame interval, through the chain a trail reads
+/// (channels, drivers, constraints, a physics bake's outputs), never a pose kept from a frame.
+fn anchors(doc: &Value, id: &str, anchor: &str, emits: f64) -> Result<eval::Anchors, Refusal> {
+    let (p, q) = doc
+        .get("transport")
+        .and_then(deep_canvas::document::frame_rate_of)
+        .unwrap_or((60, 1));
+    let per = i64::from(q) * FLICKS as i64 / i64::from(p);
+    let span = doc
+        .pointer("/transport/span")
+        .and_then(|v| deep_canvas::document::duration(doc, v).ok())
+        .map_or(10.0, |f| f as f64 / FLICKS)
+        .min(emits);
+    let step = per as f64 / FLICKS;
+    let n = ((span / step).ceil() as usize + 1).min(1 << 16);
+    let bad = |what: String| {
+        Refusal::new(
+            "ref_unresolved",
+            format!("items/{id}/params/emit/anchor"),
+            what,
+        )
+    };
+    let look = Look3::read(&closed::neutral_look(doc)).map_err(|e| bad(format!("{id}: {e}")))?;
+    let mut at = Vec::with_capacity(n);
+    for k in 0..n {
+        let scene = evaluate(doc, k as i64 * per, &look, &mut Labels::new()).map_err(|r| {
+            bad(format!(
+                "{id}: its anchor's scene at bucket {k}: {}",
+                r.path
+            ))
+        })?;
+        at.push(item_pos(&scene, anchor).ok_or_else(|| {
+            bad(format!(
+                "{id}: emit.anchor names {anchor}, which isn't placed"
+            ))
+        })?);
+    }
+    Ok(eval::Anchors { step, at })
 }
 
 /// Whether `bx`, grown by `reach` m and by `pad` px across the view, lies wholly outside what
@@ -402,20 +497,31 @@ fn outside(scene: &Scene, bx: [[f64; 3]; 2], reach: f64, pad: f64) -> bool {
 
 /// The evaluated-data hash of an item at t (tests/acceptance/449/README.md: view3d's
 /// `particles`): SHA-256 over its rows, a live row as the byte 1 then its CPU f64 position as
-/// three little-endian f64, an empty row as the byte 0; with how many rows are live.
-fn evaluated(b: &Baked, t: f64, now: Option<&[[f64; 3]]>) -> (String, usize) {
+/// three little-endian f64, an empty row as the byte 0; with how many rows are live. A ribbon's
+/// live row holds its ribbon's points in place of its position (tests/acceptance/450/README.md).
+fn evaluated(
+    b: &Baked,
+    t: f64,
+    now: Option<&[[f64; 3]]>,
+    ribbon: Option<&Ribbon>,
+) -> (String, usize) {
     let cpu = eval::columns_on(b, t, now);
     let mut bytes = Vec::with_capacity(cpu.len() * 4);
     let mut live = 0;
-    for row in cpu.chunks(eval::FLOATS) {
+    for (e, row) in cpu.chunks(eval::FLOATS).enumerate() {
         if row[3] < 0.0 {
             bytes.push(0);
-        } else {
-            live += 1;
-            bytes.push(1);
-            for x in &row[..3] {
-                bytes.extend(x.to_le_bytes());
-            }
+            continue;
+        }
+        live += 1;
+        bytes.push(1);
+        let points = match ribbon {
+            Some(r) => closed::draws::ribbon(b, r, e as u32, (t * FLICKS).round() as i64, now)
+                .unwrap_or_default(),
+            None => vec![[row[0], row[1], row[2]]],
+        };
+        for x in points.iter().flatten() {
+            bytes.extend(x.to_le_bytes());
         }
     }
     (crate::frames::hex(&bytes), live)
@@ -469,40 +575,104 @@ pub(crate) fn frame(
             .as_ref()
             .and_then(|h| h.0.surface.as_ref().filter(|_| h.0.spec.follow))
             .map(|sf| sf.now(scene));
+        // #450: a ribbon's rows back along its length, one dispatch a segment end.
+        let ribbon = closed::draws::read(&sp.item, &o.params)
+            .map_err(|r| refusal(&r))?
+            .ribbon;
         if let Some(h) = &held {
             let (b, tables) = &**h;
             if extended {
                 sp.count = b.spec.count;
-                sp.closed = Some((
-                    pack::uniform(b, t, tables, flags),
-                    tables.words.clone(),
-                    flat(now.as_deref()),
-                ));
+                let uniforms = match &ribbon {
+                    Some(r) => pack::ribbon(b, r, t, tables, flags, true),
+                    None => vec![pack::uniform(b, t, tables, flags)],
+                };
+                sp.ribbon = ribbon.map(|r| (r.segments, r.width, r.taper, r.fade));
+                // Its rows draw as a ribbon's quads, never as sprites (particles.wgsl: kind 4).
+                if sp.ribbon.is_some() {
+                    sp.draw = 4;
+                }
+                sp.closed = Some((uniforms, tables.words.clone(), flat(now.as_deref())));
             }
             if cull {
                 let pad = 0.5 * sp.size[0].max(sp.size[1]).max(1.0) * sp.size_px + 2.0;
-                let reach = if sp.draw == 3 {
-                    bounds::speed(b, t) / 30.0
-                } else {
-                    0.0
+                // A streak reaches a 30th of a second ahead, a ribbon its length behind (#450).
+                let reach = match (&ribbon, sp.draw) {
+                    (Some(r), _) => {
+                        bounds::speed(b, t).max(bounds::speed(b, t - r.length)) * r.length
+                    }
+                    (None, 3) => bounds::speed(b, t) / 30.0,
+                    _ => 0.0,
                 };
                 culled = bounds::bounds(b, t).is_none_or(|bx| outside(scene, bx, reach, pad));
             }
             if asked.contains(&sp.item.as_str()) {
-                let (hash, live) = evaluated(b, t, now.as_deref());
+                let (hash, live) = evaluated(b, t, now.as_deref(), ribbon.as_ref());
                 report.insert(
                     sp.item.clone(),
                     json!({"hash": hash, "live": live, "culled": culled}),
                 );
             }
         }
-        if !culled {
+        // A mesh draw's particles draw as its instancer's elements (#450), never as sprites.
+        let mesh = closed::draws::read(&sp.item, &o.params).is_ok_and(|d| d.mesh.is_some());
+        if !culled && !mesh {
             kept.push(sp);
         }
     }
     settings.sparks = kept;
     DRAWN.lock().unwrap_or_else(|e| e.into_inner()).push(t);
     Ok((!asked.is_empty()).then_some(Value::Object(report)))
+}
+
+/// #450: the document with each `draw: mesh` particles item's live particles at `t` (s) as the
+/// columns of an instancer of its prototypes, `<item>_mesh`, in the item's layer and order: its
+/// rows each live particle's slot, place, rotation and scale from the f64 closed form. `None`
+/// when no item draws meshes, so the scene drawn first stands.
+pub(crate) fn meshes(
+    doc: &Value,
+    scene: &Scene,
+    t: f64,
+    planted: Option<Planted>,
+) -> Result<Option<Value>, Value> {
+    let (plants, _, _) = plants(planted);
+    let doc_seed = doc["seed"].as_u64().unwrap_or(0);
+    let mut out: Option<Value> = None;
+    for (id, item) in rule::items(doc) {
+        let Some(m) = closed::draws::read(id, &item["params"])
+            .map_err(|r| refusal(&r))?
+            .mesh
+        else {
+            continue;
+        };
+        let held = baked(
+            doc,
+            scene,
+            id,
+            item_seed(doc_seed, id),
+            plants,
+            &mut Vec::new(),
+        )
+        .map_err(|r| refusal(&r))?;
+        let b = &held.0;
+        let now = b
+            .surface
+            .as_ref()
+            .filter(|_| b.spec.follow)
+            .map(|sf| sf.now(scene));
+        let rows: Vec<(u32, closed::draws::Instance)> = (0..b.spec.count)
+            .filter_map(|e| Some((e, closed::draws::instance(b, &m, e, t, now.as_deref())?)))
+            .collect();
+        let col = |f: &dyn Fn(&closed::draws::Instance) -> Value| {
+            rows.iter().map(|(_, i)| f(i)).collect::<Vec<_>>()
+        };
+        let instancer = json!({"id": format!("{id}_mesh"), "kind": "instance@1", "layer": item["layer"], "order": item["order"],
+            "params": {"of": m.of, "ids": rows.iter().map(|(e, _)| e).collect::<Vec<_>>(), "pos": col(&|i| json!(i.pos)),
+                       "rot": col(&|i| json!(i.rot)), "scale": col(&|i| json!(i.scale)), "proto": col(&|i| json!(i.proto))}});
+        let fed = out.get_or_insert_with(|| doc.clone());
+        fed["items"][format!("{id}_mesh")] = instancer;
+    }
+    Ok(out)
 }
 
 /// The check's refusal of a document's particles before anything draws: `{"code": "refused",

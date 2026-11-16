@@ -33,7 +33,11 @@ impl Hub<'_> {
     /// else `pack`.
     fn pack_entries(&self) -> Vec<SealedEntry> {
         // #415: a pack's admitted layouts are data.layout@1 entries beside its `entries`.
-        let layouts = self.sandbox.layout_entries.iter().filter(|e| self.packs.all().any(|p| p.id.text() == e.pack));
+        let layouts = self
+            .sandbox
+            .layout_entries
+            .iter()
+            .filter(|e| self.packs.all().any(|p| p.id.text() == e.pack));
         self.packs
             .all()
             .flat_map(|p| p.entries.iter())
@@ -205,6 +209,25 @@ impl Hub<'_> {
         }
         out
     }
+}
+
+/// #213: a plug-in's entry as the listing shows it: in a registry whose fill doesn't name plug-ins,
+/// such as `logic.service@1`, which only first-party canvas modules fill, it is unavailable and
+/// refused, naming the registry and its fill.
+pub(crate) fn fill_checked(mut e: Value, registry: &Value) -> Value {
+    let fill = &registry["fill"];
+    if !fill
+        .as_array()
+        .is_some_and(|f| f.contains(&json!("plugin")))
+    {
+        let name = &registry["name"];
+        let what =
+            format!("{name} is filled by {fill}, not by plug-ins; a plug-in adds no entry to it");
+        e["available"] = json!(false);
+        e["refused"] =
+            json!({"code": "fill_refused", "registry": name, "fill": fill, "what": what});
+    }
+    e
 }
 
 #[cfg(test)]

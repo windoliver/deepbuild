@@ -75,7 +75,7 @@ fn modules_of(hub: &Hub<'_>) -> Map<String, Value> {
         .collect()
 }
 
-fn drawn_json(d: &Drawn) -> (Value, Value) {
+pub(super) fn drawn_json(d: &Drawn) -> (Value, Value) {
     let values: Map<String, Value> = d
         .values
         .iter()
@@ -123,30 +123,36 @@ impl<'a> Hub<'a> {
         cause: &str,
         decision: &str,
     ) -> Result<(), String> {
-        let path = corpus.join(format!("{name}.json"));
-        let bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
-        let mut file: Value = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
-        let times: Vec<i64> = file["times"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(Value::as_i64)
-            .collect();
-        let drawn = draw(self, &file["document"].clone(), &times);
-        let (values, snapshots) = drawn_json(&drawn);
-        let entry = json!({"cause": cause, "decision": decision, "set_digest": self.startup.sealed.set_digest,
-                           "values": values, "snapshots": snapshots});
-        if !file["accepted"].is_array() {
-            file["accepted"] = json!([]);
-        }
-        file["accepted"].as_array_mut().expect("a list").push(entry);
-        std::fs::write(&path, serde_json::to_vec_pretty(&file).unwrap_or_default())
-            .map_err(|e| e.to_string())
+        accept_into(&corpus.join(format!("{name}.json")), |file| {
+            let times: Vec<i64> = file["times"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_i64)
+                .collect();
+            let drawn = draw(self, &file["document"], &times);
+            let (values, snapshots) = drawn_json(&drawn);
+            json!({"cause": cause, "decision": decision, "set_digest": self.startup.sealed.set_digest,
+                   "values": values, "snapshots": snapshots})
+        })
     }
 }
 
+/// Keeps the accepted result `entry` makes of a corpus file beside what its release recorded.
+pub(super) fn accept_into(path: &Path, entry: impl FnOnce(&Value) -> Value) -> Result<(), String> {
+    let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
+    let mut file: Value = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+    let entry = entry(&file);
+    if !file["accepted"].is_array() {
+        file["accepted"] = json!([]);
+    }
+    file["accepted"].as_array_mut().expect("a list").push(entry);
+    std::fs::write(path, serde_json::to_vec_pretty(&file).unwrap_or_default())
+        .map_err(|e| e.to_string())
+}
+
 /// The corpus documents in a folder, by name.
-fn corpus_files(dir: &Path) -> Vec<(String, Value)> {
+pub(super) fn corpus_files(dir: &Path) -> Vec<(String, Value)> {
     let mut out = Vec::new();
     let Ok(read) = std::fs::read_dir(dir) else {
         return out;
@@ -171,7 +177,7 @@ fn corpus_files(dir: &Path) -> Vec<(String, Value)> {
 
 /// Whether a document holds an item of one of `module`'s kinds, or for motion, anything that
 /// moves: a document of bare kinds would otherwise reach no module, and pass unread.
-fn uses(hub: &Hub<'_>, doc: &Value, module: &str) -> bool {
+pub(super) fn uses(hub: &Hub<'_>, doc: &Value, module: &str) -> bool {
     let moves = |section: &str| doc[section].as_object().is_some_and(|m| !m.is_empty());
     if module == "motion" && (moves("placements") || moves("channels")) {
         return true;
@@ -210,6 +216,23 @@ fn migrated_field(saved: &Value, lowered: &Value) -> String {
 /// seeded param sets.
 pub fn run(hub: &mut Hub<'_>, ctx: &mut Ctx<'_>) -> Option<PartRun> {
     let module = ctx.module;
+    // The preview kinds the module removed: a document that lists one in `requires.preview` is
+    // the module's too, and must open through the removal's migration (#1802).
+    let removed: Vec<String> = hub
+        .startup
+        .sealed
+        .modules
+        .iter()
+        .filter(|m| m.name == module)
+        .flat_map(|m| m.shapes.removed.iter().map(|r| r.kind.clone()))
+        .collect();
+    let lists_removed = |doc: &Value| {
+        doc["requires"]["preview"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .any(|p| p.as_str().is_some_and(|p| removed.iter().any(|r| r == p)))
+    };
     let corpus: Vec<(String, Value)> = ctx
         .call
         .corpus
@@ -217,7 +240,7 @@ pub fn run(hub: &mut Hub<'_>, ctx: &mut Ctx<'_>) -> Option<PartRun> {
         .map(corpus_files)
         .unwrap_or_default()
         .into_iter()
-        .filter(|(_, f)| uses(hub, &f["document"], module))
+        .filter(|(_, f)| uses(hub, &f["document"], module) || lists_removed(&f["document"]))
         .collect();
     let migrated: Vec<deep_canvas::kinds::Entry> = hub
         .startup
@@ -370,7 +393,7 @@ fn param_set(
                 let (lo, hi) = (p.min.unwrap_or(-100.0), p.max.unwrap_or(100.0));
                 json!((rng.range(lo, hi) * 100.0).round() / 100.0)
             }
-            (ParamType::Json, _) if p.name == "box" => json!([10, 10, 40, 30]),
+            (ParamType::Json(_), _) if p.name == "box" => json!([10, 10, 40, 30]),
             _ => p.default.clone(),
         };
         if value.is_null() {

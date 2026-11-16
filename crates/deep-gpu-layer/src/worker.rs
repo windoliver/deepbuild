@@ -30,6 +30,8 @@ pub struct Session {
 pub struct Scene3Session {
     pub view: View,
     pub shared: Arc<std::sync::Mutex<deep_scene3d_render::Shared>>,
+    /// The stub display's HDR surface, off screen (#177).
+    pub hdr: Option<wgpu::Texture>,
 }
 
 pub struct State {
@@ -46,6 +48,8 @@ pub struct State {
     pub vello2d: Option<deep_marks_render::gpu::Vello2d>,
     pub groups: Option<crate::groups::Groups>,
     pub view2d: Option<View>,
+    /// #462: the look regions' composite, for `view3d`'s read-back renders.
+    pub regions: Option<crate::regions::Composite>,
 }
 
 /// The slot count every surface takes.
@@ -139,6 +143,7 @@ impl Worker {
                     vello2d: None,
                     groups: None,
                     view2d: None,
+                    regions: None,
                 };
                 for work in rx {
                     work(&mut state);

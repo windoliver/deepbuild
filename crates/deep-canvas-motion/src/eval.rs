@@ -30,7 +30,10 @@ pub fn position(motion: &Motion, t: i64) -> (i64, i64) {
         }
         // #157: each odd pass plays the span backwards.
         Some(span) if tr.ping_pong => {
-            let (d, pass) = ((t - tr.start).rem_euclid(span), (t - tr.start).div_euclid(span));
+            let (d, pass) = (
+                (t - tr.start).rem_euclid(span),
+                (t - tr.start).div_euclid(span),
+            );
             (tr.start + if pass % 2 == 0 { d } else { span - d }, pass)
         }
         _ => (t, 0),
@@ -109,9 +112,17 @@ impl Placement {
 
     /// With `policy: overlap`, the starts of every run still going at `p`, oldest first, each a
     /// write of its own; none for any other placement.
-    pub(crate) fn overlapping<'a>(&'a self, motion: &Motion, p: i64, delay: i64) -> impl Iterator<Item = i64> + 'a {
+    pub(crate) fn overlapping<'a>(
+        &'a self,
+        motion: &Motion,
+        p: i64,
+        delay: i64,
+    ) -> impl Iterator<Item = i64> + 'a {
         let t = &self.timing;
-        let overlaps = t.start_on.as_ref().is_some_and(|s| s.policy == Policy::Overlap);
+        let overlaps = t
+            .start_on
+            .as_ref()
+            .is_some_and(|s| s.policy == Policy::Overlap);
         let active = self.active_span(motion);
         (0..if overlaps { t.runs.len() } else { 0 })
             .map(move |i| t.runs[i] + self.run_delay(i, delay))
@@ -188,7 +199,10 @@ impl Placement {
         let rate = t.rate.0 as f64 / t.rate.1 as f64;
         let parent = t.trim + floor_rate(d, t.rate);
         let (scale, child) = match t.remap {
-            Some(r) => (motion.remaps[r].rate(parent), motion.remaps[r].child(parent).max(0)),
+            Some(r) => (
+                motion.remaps[r].rate(parent),
+                motion.remaps[r].child(parent).max(0),
+            ),
             None => (1.0, parent),
         };
         if child >= self.total(clip_span) || t.quantize.is_some() {
@@ -261,12 +275,17 @@ impl Placement {
 
     /// [`Placement::next_change`] for `start_on`: every flick of a run, then the next run.
     fn next_run_change(&self, p: i64, delay: i64, active: i64) -> Option<i64> {
-        let running = self.run_start(p, delay).is_some_and(|start| p < start + active);
+        let running = self
+            .run_start(p, delay)
+            .is_some_and(|start| p < start + active);
         if running {
             return Some(p + 1);
         }
         let runs = &self.timing.runs;
-        (0..runs.len()).map(|i| runs[i] + self.run_delay(i, delay)).filter(|r| *r > p).min()
+        (0..runs.len())
+            .map(|i| runs[i] + self.run_delay(i, delay))
+            .filter(|r| *r > p)
+            .min()
     }
 }
 
@@ -343,8 +362,16 @@ fn write(item: &mut Value, field: &[String], value: Value) {
     };
     let mut at = item;
     for (depth, name) in rest.iter().enumerate() {
-        if depth == 3 && rest[0] == "params" && rest[1] == "ops" {
+        // `ops/<i>/end` reaches through the op's one key; `ops/<i>/trim/end` names it (#222).
+        let named = at
+            .as_object()
+            .is_some_and(|m| m.contains_key(name.as_str()));
+        if depth == 3 && rest[0] == "params" && rest[1] == "ops" && !named {
             at = through_op(at);
+        }
+        // #222: an index into a list the item doesn't hold yet starts that list.
+        if at.is_null() && name.parse::<usize>().is_ok() {
+            *at = Value::Array(Vec::new());
         }
         at = match at {
             Value::Array(list) => match name.parse::<usize>() {
@@ -408,8 +435,10 @@ fn through_op(op: &mut Value) -> &mut Value {
 
 /// The frame's `valid_until`: the earliest `t` at which anything it shows changes next, over the
 /// channels and placements `counts` keeps (#1487: those a view shows; every one otherwise).
+/// `follows` holds each channel's #489 follow, which it takes in place of its curve.
 pub(crate) fn valid_until(
     motion: &Motion,
+    follows: &[Option<crate::follow::Follow>],
     t: i64,
     doc_t: i64,
     validity: Validity,
@@ -422,13 +451,15 @@ pub(crate) fn valid_until(
     let kept = |list: Option<&[bool]>, i: usize| list.is_none_or(|l| l[i]);
     let channels = motion.channels.iter().enumerate();
     let channels = channels.filter(|(i, _)| kept(counts.channels, *i));
-    let channels = channels.filter_map(|(_, c)| {
+    let channels = channels.filter_map(|(i, c)| {
         // A modified channel may change at every flick, and so may a remapped one, whose
         // child time runs other than the timeline.
-        if c.modifiers.is_empty() && !motion.remapped(&c.target.owner) {
-            c.curve.next_change(doc_t)
-        } else {
-            Some(doc_t + 1)
+        if !c.modifiers.is_empty() || motion.remapped(&c.target.owner) {
+            return Some(doc_t + 1);
+        }
+        match follows.get(i).and_then(Option::as_ref) {
+            Some(follow) => follow.next_change(doc_t),
+            None => c.curve.next_change(doc_t),
         }
     });
     let placements = motion
@@ -470,6 +501,8 @@ pub fn items(doc: &Map<String, Value>, program: &Program, state: &State) -> Map<
     };
     let mut items = evaluated(items, program, state);
     crate::held::apply(doc, program, state, &mut items);
+    // #450: a 2D path's trail, drawn from its source evaluated at earlier times.
+    crate::trail::flat(doc, program, state, &mut items);
     items
 }
 
@@ -491,6 +524,8 @@ pub fn items_where(
     };
     let mut items = evaluated(items, program, state);
     crate::held::apply(doc, program, state, &mut items);
+    // #450: a 2D path's trail, drawn from its source evaluated at earlier times.
+    crate::trail::flat(doc, program, state, &mut items);
     items
 }
 
@@ -498,6 +533,17 @@ pub fn items_where(
 /// item is the document's own with `at` from its slots, which a reader can take from the state
 /// without copying the item.
 pub fn written(doc: &Map<String, Value>, program: &Program, state: &State) -> Map<String, Value> {
+    written_with(doc, program, state, |_| false)
+}
+
+/// [`written`] with the items `also` takes too, each as [`items`] gives it: #462's motifs move
+/// the items a scene binds, so a 3D frame reads them as evaluated copies.
+pub fn written_with(
+    doc: &Map<String, Value>,
+    program: &Program,
+    state: &State,
+    also: impl Fn(&str) -> bool,
+) -> Map<String, Value> {
     let named: BTreeSet<&str> = program
         .fields
         .iter()
@@ -508,7 +554,7 @@ pub fn written(doc: &Map<String, Value>, program: &Program, state: &State) -> Ma
     let items = match doc.get("items") {
         Some(Value::Object(items)) => items
             .iter()
-            .filter(|(id, item)| named.contains(id.as_str()) || reads_data(item))
+            .filter(|(id, item)| named.contains(id.as_str()) || reads_data(item) || also(id))
             .map(|(id, item)| (id.clone(), item.clone()))
             .collect(),
         _ => Map::new(),
@@ -550,7 +596,9 @@ pub(crate) fn evaluated(
                 if field.path == ["path"] {
                     if let Some(params) = item.get_mut("params").and_then(Value::as_object_mut) {
                         let d = json!(crate::morph::d_of(&shape));
-                        if let Some(outline) = params.get_mut("outline").and_then(Value::as_object_mut) {
+                        if let Some(outline) =
+                            params.get_mut("outline").and_then(Value::as_object_mut)
+                        {
                             outline.insert("d".into(), d);
                             outline.remove("svg");
                         } else {
@@ -582,7 +630,11 @@ pub(crate) fn evaluated(
     };
     for item in items.values_mut().filter(|i| reads_data(i)) {
         for (name, value) in data() {
-            write(item, &["params".into(), "data".into(), name.clone()], json!(value));
+            write(
+                item,
+                &["params".into(), "data".into(), name.clone()],
+                json!(value),
+            );
         }
     }
     items
@@ -600,9 +652,17 @@ pub fn shown_values(doc: &Map<String, Value>, program: &Program, state: &State) 
         .filter(|f| f.written)
         .filter_map(|f| Some((f.data.clone()?, json!(state.slots[f.slot]))))
         .collect();
-    let assemblies: Map<String, Value> =
-        program.assemblies.iter().map(|a| (a.id.clone(), json!(a.held(state.slots[a.slot])))).collect();
-    let mut entries: Vec<&crate::input::Entry> = program.options.input.iter().filter(|e| e.t <= state.t).collect();
+    let assemblies: Map<String, Value> = program
+        .assemblies
+        .iter()
+        .map(|a| (a.id.clone(), json!(a.held(state.slots[a.slot]))))
+        .collect();
+    let mut entries: Vec<&crate::input::Entry> = program
+        .options
+        .input
+        .iter()
+        .filter(|e| e.t <= state.t)
+        .collect();
     entries.sort_by_key(|e| e.key());
     let controls: Map<String, Value> = doc
         .get("controls")
@@ -610,7 +670,11 @@ pub fn shown_values(doc: &Map<String, Value>, program: &Program, state: &State) 
         .into_iter()
         .flatten()
         .map(|(id, c)| {
-            let last = entries.iter().rev().find(|e| e.control == *id).map(|e| e.value.clone());
+            let last = entries
+                .iter()
+                .rev()
+                .find(|e| e.control == *id)
+                .map(|e| e.value.clone());
             let default = || c.get("default").or_else(|| c.pointer("/range/0")).cloned();
             (id.clone(), last.or_else(default).unwrap_or(Value::Null))
         })

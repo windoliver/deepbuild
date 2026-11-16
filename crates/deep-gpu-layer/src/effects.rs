@@ -278,6 +278,7 @@ fn sparks_of(
         draw,
         half: draw == 2 && p["resolution"].as_str() != Some("full"),
         closed: None,
+        ribbon: None,
     }
 }
 
@@ -385,7 +386,33 @@ pub fn settings(
         dirt,
         roles,
         t,
+        strokes: look.strokes.as_ref().map(|s| {
+            Arc::new(gpu_strokes(&deep_canvas_scene3d::strokes::lay(
+                scene,
+                s,
+                &scene.camera,
+            )))
+        }),
     }
+}
+
+/// #462: the strokes a frame laid, as the effects chain's draw reads them (colors linear).
+pub fn gpu_strokes(
+    laid: &[deep_canvas_scene3d::strokes::Dab],
+) -> Vec<deep_effects_render::strokes::Dab> {
+    laid.iter()
+        .map(|d| deep_effects_render::strokes::Dab {
+            at: d.at,
+            near: d.near,
+            angle: d.angle,
+            length: d.length,
+            width: d.width,
+            color: d
+                .color
+                .map(|c| deep_canvas::color::srgb_decode(f64::from(c) / 255.0) * d.shade),
+            seed: f64::from(d.seed) / f64::from(u32::MAX),
+        })
+        .collect()
 }
 
 /// The shipped operators: each one's kind, effect, determinism (the weakest of its stages'),
@@ -920,11 +947,16 @@ pub fn check_operator(app: &mut App, out: &str, call: &Value) -> Value {
         Ok(f) => f,
         Err(e) => return e,
     };
-    let op = match graph::inline_functions(
-        &call["operator"],
-        &functions,
-        !check_options.no_divergence_rule,
-    ) {
+    // #466: a pack's operator as its pack.json holds it carries `grow`, which the pack check
+    // takes off before the operator check reads the graph.
+    let mut operator = call["operator"].clone();
+    if operator["origin"] == "pack" {
+        if let Some(o) = operator.as_object_mut() {
+            o.remove("grow");
+        }
+    }
+    let op = match graph::inline_functions(&operator, &functions, !check_options.no_divergence_rule)
+    {
         Ok(op) => op,
         Err(issues) => {
             return json!({"outcome": "refused", "issues": issues.iter().map(graph::Issue::to_json).collect::<Vec<_>>(), "reached": {"naga": false, "pipeline": false, "gpu": false}})

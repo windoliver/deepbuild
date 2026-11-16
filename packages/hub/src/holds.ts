@@ -200,11 +200,17 @@ export class Holds {
     const rows = (await this.o.raw(`SELECT id FROM sessions WHERE COALESCE(thread_id, id) = (SELECT COALESCE(thread_id, id) FROM sessions WHERE id = ?) ORDER BY id`, [session])) as { id: string }[];
     return rows.length ? rows.map((r) => r.id) : [session];
   }
-  /** What the prompts typed in these sessions name, read by each prompt's `from` (#303): your words alone authorize. */
+  /**
+   * What the prompts typed in these sessions name, read by each prompt's `from` (#303): your words alone authorize. A
+   * session a work run you approved started (#1332) is also named its push and its PR: that approval said each of its
+   * sessions pushes its own branch and opens a PR, which lands only on its own PASS.
+   */
   private async named(sessions: string[]): Promise<Set<Named>> {
     const everyFrom = this.o.plant === 'reads-every-from';
     const rows = (await this.o.raw(`SELECT json_extract(data, '$.text') AS text, json_extract(data, '$.from') AS origin FROM events WHERE kind = 'user.ask' AND unverified = 0 AND session_id IN (${sessions.map(() => '?').join(',')})`, sessions)) as { text: string; origin: string }[];
-    const named = new Set<Named>();
+    const [run] = (await this.o.raw(`SELECT 1 AS x FROM events s JOIN events t ON t.kind = 'start.started' AND t.subject = json_extract(s.data, '$.run')
+      JOIN events w ON w.kind = 'work.run' AND w.subject = json_extract(t.data, '$.ask') WHERE s.kind = 'start.session' AND json_extract(s.data, '$.session') IN (${sessions.map(() => '?').join(',')}) LIMIT 1`, sessions)) as unknown[];
+    const named = new Set<Named>(run ? ['push', 'pr'] : []);
     for (const row of rows) if (everyFrom || row.origin === 'person' || row.origin === 'app') for (const n of namedIn(String(row.text))) named.add(n);
     return named;
   }
@@ -213,12 +219,15 @@ export class Holds {
     const [row] = (await this.o.raw(`SELECT c.commit_sha AS commit_sha FROM verdicts v JOIN claims c ON c.id = v.claim_id WHERE v.outcome = 'PASS' AND c.session_id IN (${sessions.map(() => '?').join(',')}) ORDER BY v.created DESC LIMIT 1`, sessions)) as { commit_sha: string | null }[];
     return row?.commit_sha ?? undefined;
   }
-  /** The merges armed with `--auto` the thread hasn't disarmed: each pull request's branch. */
+  /**
+   * The merges armed with `--auto` the thread hasn't disarmed: each pull request's branch, by its number, or by '' for
+   * one armed with none (the branch's own).
+   */
   private async armed(sessions: string[]): Promise<Map<string, string>> {
     const rows = (await this.o.raw(`SELECT json_extract(data, '$.reading') AS reading FROM events WHERE kind = 'session.reading' AND json_extract(data, '$.reading') LIKE 'Merge of pull request %' AND session_id IN (${sessions.map(() => '?').join(',')}) ORDER BY log_pos`, sessions)) as { reading: string }[];
     const armed = new Map<string, string>();
     for (const { reading } of rows) {
-      const m = /^Merge of pull request (\S+) (?:armed with --auto on branch (\S*)|disarmed)/.exec(reading);
+      const m = /^Merge of pull request (\S*) (?:armed with --auto on branch (\S*)|disarmed)/.exec(reading);
       if (m?.[2] !== undefined) armed.set(m[1]!, m[2]);
       else if (m) armed.delete(m[1]!);
     }
@@ -271,14 +280,15 @@ export class Holds {
     }
     const pr = call.merge?.pr ?? '';
     if (call.merge?.auto && !unpinned) await this.o.reading(meta.session, meta.agent, `Merge of pull request ${pr} armed with --auto on branch ${await this.branch(meta.cwd)}`);
-    if (call.merge?.disable) for (const armed of (await this.armed(sessions)).keys()) if (!pr || armed === pr) await this.o.reading(meta.session, meta.agent, `Merge of pull request ${armed} disarmed`);
+    // A disarm with no number, or one of a merge armed with none, may be the same pull request's: each such is disarmed.
+    if (call.merge?.disable) for (const armed of (await this.armed(sessions)).keys()) if (!pr || !armed || armed === pr) await this.o.reading(meta.session, meta.agent, `Merge of pull request ${armed} disarmed`);
     if (call.named!.some((n) => n.effect === 'push') && !unpinned) {
       const armed = await this.armed(sessions);
       if (armed.size) {
         const current = await this.branch(meta.cwd);
         const input = meta.call?.input ?? {};
         const targets = typeof input.branch === 'string' ? [input.branch] : pushBranches(String(input.command ?? ''), current);
-        for (const [number, branch] of armed) if (targets.includes(branch) || targets.includes('*')) return `DeepBuild denied this (guard ${rule}): a merge of pull request ${number} armed with --auto is pending, so \`${call.label}\` to ${branch} would change what it merges. Run gh pr merge --disable-auto ${number} first; the new head needs its own verdict.`;
+        for (const [number, branch] of armed) if (targets.includes(branch) || targets.includes('*')) return `DeepBuild denied this (guard ${rule}): a merge of ${number ? `pull request ${number}` : `${branch}'s pull request`} armed with --auto is pending, so \`${call.label}\` to ${branch} would change what it merges. Run gh pr merge --disable-auto${number ? ` ${number}` : ''} first; the new head needs its own verdict.`;
       }
     }
     return undefined;

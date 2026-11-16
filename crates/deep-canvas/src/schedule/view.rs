@@ -11,7 +11,7 @@ use serde_json::Value;
 
 use super::core_ops::Edits;
 use super::{
-    view_input, Access, Bound, Key, Loaded, Node, OpError, Outside, Session, Tokens, Val,
+    view_input, Access, Bound, Key, Loaded, Node, OpError, Outside, Pool, Session, Tokens, Val,
     VIEW_INPUTS,
 };
 use crate::registry::{Sealed, SealedOp, TableValue};
@@ -44,6 +44,8 @@ pub struct View<'a> {
     forgets_changes: bool,
     /// A canvas module's planted wrong program by name.
     planted: Option<&'a str>,
+    /// The host's worker threads, which an operator may lend its own blocks (#224).
+    pool: Option<&'a Arc<dyn Pool>>,
 }
 
 /// What an operator left when its view finished: its writes, its reads, what a step noted and
@@ -67,6 +69,7 @@ impl<'a> View<'a> {
         step: Option<StepCtx<'a>>,
         forgets_changes: bool,
         planted: Option<&'a str>,
+        pool: Option<&'a Arc<dyn Pool>>,
     ) -> View<'a> {
         let sop = &sealed.ops[node.op];
         View {
@@ -84,7 +87,15 @@ impl<'a> View<'a> {
             tails: Vec::new(),
             forgets_changes,
             planted,
+            pool,
         }
+    }
+
+    /// The host's worker threads and the session's thread count, when the host lends a pool
+    /// (#224): an operator runs its own fixed blocks on them, joined in block order, so its
+    /// result never depends on the count.
+    pub fn pool(&self) -> Option<(Arc<dyn Pool>, usize)> {
+        self.pool.map(|p| (p.clone(), self.session.threads()))
     }
 
     /// The canvas module's planted wrong program, when one is: reachable only through a proof
@@ -190,6 +201,11 @@ impl<'a> View<'a> {
     /// A module's item saved one or more majors back, migrated: the build's kinds again.
     pub fn migrated(&self, item: &Value) -> Option<Value> {
         self.sealed.migrated(item)
+    }
+
+    /// An item of a preview kind its module removed, as the kind its migration gives.
+    pub fn unremoved(&self, item: &Value) -> Option<Value> {
+        self.sealed.unremoved(item)
     }
 
     /// Whether a sealed canvas module registered this kind: the build's kinds again.
@@ -503,6 +519,12 @@ impl<'a> View<'a> {
         &self.sealed.outlines
     }
 
+    /// The build's module fills (#226): the deforms and kinds scene3d runs and draws for the
+    /// modules that fill them, without naming those modules.
+    pub fn fills(&self) -> &'a [crate::contributed::Sealed] {
+        &self.sealed.fills
+    }
+
     /// `table:<name>`: a table's value.
     pub fn table<T: Any + Send + Sync>(&mut self, name: &str) -> Result<Arc<T>, OpError> {
         self.declared(&format!("table:{name}"))?;
@@ -556,6 +578,13 @@ pub(super) fn slot_at<'v>(base: &'v mut Value, path: &[String]) -> &'v mut Value
             .ok()
             .filter(|i| at.as_array().is_some_and(|list| *i < list.len()));
         if let Some(i) = index {
+            at = &mut at.as_array_mut().expect("an array")[i];
+            continue;
+        }
+        // #222: a channel keying an entry of a list the item doesn't hold yet (a path build's
+        // `ops/0/trim/end` on a shape with no ops) starts that list.
+        if let (Value::Null, Ok(i)) = (&*at, step.parse::<usize>()) {
+            *at = Value::Array(vec![Value::Null; i + 1]);
             at = &mut at.as_array_mut().expect("an array")[i];
             continue;
         }

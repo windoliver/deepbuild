@@ -107,25 +107,40 @@ pub fn cycle_through(kind: &str) -> Value {
     let constraint = |owner: &str, other: &str| match kind {
         "child_of" => json!({"owner": owner, "kind": kind, "parent": other}),
         "copy" => json!({"owner": owner, "kind": kind, "what": "location", "target": other}),
-        "reach2" => json!({"owner": owner, "kind": kind, "chain": [owner, other, other], "target": other}),
+        "reach2" => {
+            json!({"owner": owner, "kind": kind, "chain": [owner, other, other], "target": other})
+        }
         "follow_tip" => json!({"owner": owner, "kind": kind, "item": other}),
-        "limit" => json!({"owner": owner, "kind": kind, "what": "location", "bounds": [[0, 10], null, null]}),
-        "follow_path" => json!({"owner": owner, "kind": kind, "path": [[0, 0], [10, 0]], "fraction": 0.5}),
+        "limit" => {
+            json!({"owner": owner, "kind": kind, "what": "location", "bounds": [[0, 10], null, null]})
+        }
+        "follow_path" => {
+            json!({"owner": owner, "kind": kind, "path": [[0, 0], [10, 0]], "fraction": 0.5})
+        }
         "spring_chain" => json!({"owner": owner, "kind": kind, "bones": [owner]}),
         "rest_on" => json!({"owner": owner, "kind": kind}),
         _ => json!({"owner": owner, "kind": kind, "target": other}),
     };
     // b's position follows what a's constraint writes, so the constraint's read of b (or, for
     // a kind that reads no other item, a's position a third driver sets from b) closes a loop.
-    let written = if matches!(kind, "look_at" | "reach2") { "rot/2" } else { "pos/0" };
+    let written = if matches!(kind, "look_at" | "reach2") {
+        "rot/2"
+    } else {
+        "pos/0"
+    };
     constraints.insert("a".into(), constraint("a", "b"));
     drivers.insert("b".into(), json!({"target": "items/b/at/pos/0", "expr": "v + 1", "vars": {"v": format!("items/a/at/{written}")}}));
     if !reads_other {
-        drivers.insert("c".into(), json!({"target": "items/a/at/pos/1", "expr": "v", "vars": {"v": "items/b/at/pos/0"}}));
+        drivers.insert(
+            "c".into(),
+            json!({"target": "items/a/at/pos/1", "expr": "v", "vars": {"v": "items/b/at/pos/0"}}),
+        );
     }
     let doc = json!({"items": {"a": item("a", 1.0), "b": item("b", 2.0)},
                      "constraints": constraints, "drivers": drivers});
-    let Value::Object(doc) = doc else { return json!({}) };
+    let Value::Object(doc) = doc else {
+        return json!({});
+    };
     match Program::compile(&doc) {
         Err(r) if r.code == "cycle" => {
             // Each step reads `<entry> (<item>)`: the chain is its items.
@@ -158,6 +173,12 @@ fn register_compiling(
     // #489: motion's kinds in the core's `constraint@1`, each with its kit fixture.
     for (name, value) in crate::kit::entries(planted, cycle_through) {
         r.entry("constraint@1", name, value, "R6");
+    }
+    // #450: a trail on a 3D line or a 2D path reads its source's chain at earlier times: each
+    // frame's evaluations count in the budget estimate, and its fields are checked here.
+    for kind in ["mark.line", "path"] {
+        r.cost(kind, crate::trail::cost)
+            .rule(kind, crate::trail::rule);
     }
     r.array("motion.program", "program", "document", "geometry", "plan");
     r.contribution(
@@ -198,6 +219,10 @@ fn register_compiling(
     .run(channels);
     register_arrange(r);
     register_score(r);
+    // #222: cue lists, expanded at check through the verbs of `cue.kind@1`.
+    crate::cues::register(r);
+    // #538: a flip by array in the frame the hub draws.
+    crate::held::register(r);
     r.code(
         "bad_doc",
         "A motion section, or a field of one, that isn't the shape motion reads.",
@@ -226,6 +251,24 @@ fn register_compiling(
         "bad_marker_kind",
         "A marker of a kind motion doesn't land.",
         "Use the marker kind cue, shot, section or record.",
+        false,
+    );
+    r.code(
+        "marker_order",
+        "A then or goto that names a marker at or before its own, or a loop that replays from one at or after its stage: paths only go forward (#507).",
+        "Name a later marker; to go back, press back in present mode.",
+        false,
+    );
+    r.code(
+        "waits_for_class",
+        "A marker that waits for a control of class view or viewer, whose entries never reach the input track (#507).",
+        "Wait for a control of class document.",
+        false,
+    );
+    r.code(
+        "too_many_paths",
+        "A film whose waits and branches make more than 64 paths, more than the film audit runs on (#507).",
+        "Join branches, or let some options play on, so the film makes 64 paths or fewer.",
         false,
     );
     r.code(
@@ -289,24 +332,39 @@ fn has_motion(doc: &Value, _: &str, _: &Value) -> bool {
 
 /// A `rest_on` that names `on` (#2013): it rests its owner on true shapes at check.
 pub fn rests_at_check(constraint: &Value) -> bool {
-    constraint.get("kind").and_then(Value::as_str) == Some("rest_on") && constraint.get("on").is_some()
+    constraint.get("kind").and_then(Value::as_str) == Some("rest_on")
+        && constraint.get("on").is_some()
 }
 
-/// A document with motion a frame's time can change: any section's entry but a rest solved at
-/// check, which alone gives a frame nothing to evaluate (Constraint: rest_on).
+/// A constraint motion solves each frame: not a rest solved at check, nor a kind the core gives
+/// another module (#225: `follow_stream`, the data module's), which that module solves.
+fn solves(constraint: &Value) -> bool {
+    !rests_at_check(constraint)
+        && constraint
+            .get("kind")
+            .and_then(Value::as_str)
+            .and_then(deep_canvas::registry::core_lists::constraint_owner)
+            .is_none()
+}
+
+/// A document with motion a frame's time can change: any section's entry but a constraint
+/// motion doesn't solve each frame, which alone gives a frame nothing to evaluate.
 fn has_clock(doc: &Value, _: &str, _: &Value) -> bool {
     SECTIONS.iter().any(|s| {
         doc.get(*s)
             .and_then(Value::as_object)
-            .is_some_and(|m| m.values().any(|entry| *s != "constraints" || !rests_at_check(entry)))
+            .is_some_and(|m| m.values().any(|entry| *s != "constraints" || solves(entry)))
     })
 }
 
-/// An item a document channel or driver targets, a limit constraint holds or a placement binds.
+/// An item a document channel or driver targets, a constraint moves (but a rest solved at check)
+/// or a placement binds.
 fn is_target(doc: &Value, id: &str, item: &Value) -> bool {
     // #493: a parallax group moves with the camera's pose and its drift.
     if item.get("kind").and_then(Value::as_str) == Some("group@1")
-        && item.pointer("/params/parallax").is_some_and(Value::is_object)
+        && item
+            .pointer("/params/parallax")
+            .is_some_and(Value::is_object)
         && doc.get("camera").is_some()
     {
         return true;
@@ -328,15 +386,14 @@ fn is_target(doc: &Value, id: &str, item: &Value) -> bool {
         || !keyed_data(doc, item).is_empty()
         || counter_data(doc, item).is_some()
         || reads_moving(doc, item);
+    // #162: every constraint's owner, not only a limit's, so an item a follow_path or a child_of
+    // alone moves draws where the program puts it.
     let held = doc
         .get("constraints")
         .and_then(Value::as_object)
         .into_iter()
         .flatten()
-        .any(|(_, c)| {
-            c.get("kind").and_then(Value::as_str) == Some("limit")
-                && c.get("owner").and_then(Value::as_str) == Some(id)
-        });
+        .any(|(_, c)| c.get("owner").and_then(Value::as_str) == Some(id) && solves(c));
     let bound = doc
         .get("placements")
         .and_then(Value::as_object)
@@ -364,16 +421,39 @@ fn reads_moving(doc: &Value, item: &Value) -> bool {
         return false;
     };
     let written = |slot: &str| {
-        let drivers = doc.get("drivers").and_then(Value::as_object).into_iter().flatten();
-        let set = doc.get("controls").and_then(Value::as_object).into_iter().flatten().flat_map(|(_, c)| {
-            c.get("stages").and_then(Value::as_object).into_iter().flatten().filter_map(|(_, s)| s.get("set")?.as_object())
-        });
-        drivers.into_iter().any(|(_, d)| d.get("target").and_then(Value::as_str) == Some(slot)) || set.into_iter().any(|s| s.contains_key(slot))
+        let drivers = doc
+            .get("drivers")
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten();
+        let set = doc
+            .get("controls")
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten()
+            .flat_map(|(_, c)| {
+                c.get("stages")
+                    .and_then(Value::as_object)
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|(_, s)| s.get("set")?.as_object())
+            });
+        drivers
+            .into_iter()
+            .any(|(_, d)| d.get("target").and_then(Value::as_str) == Some(slot))
+            || set.into_iter().any(|s| s.contains_key(slot))
     };
-    deep_canvas::template::parts(template).unwrap_or_default().into_iter().any(|p| match p {
-        deep_canvas::template::Part::Slot(s) => s.starts_with("controls/") || s.starts_with("assemblies/") || (s.starts_with("data/") && written(s)),
-        deep_canvas::template::Part::Words(_) => false,
-    })
+    deep_canvas::template::parts(template)
+        .unwrap_or_default()
+        .into_iter()
+        .any(|p| match p {
+            deep_canvas::template::Part::Slot(s) => {
+                s.starts_with("controls/")
+                    || s.starts_with("assemblies/")
+                    || (s.starts_with("data/") && written(s))
+            }
+            deep_canvas::template::Part::Words(_) => false,
+        })
 }
 
 /// The data value a counter's driver writes (`data/<name>`), which its text shows at t.
@@ -388,7 +468,10 @@ fn data_slots(template: &str) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     for part in deep_canvas::template::parts(template).unwrap_or_default() {
         if let deep_canvas::template::Part::Slot(slot) = part {
-            if let Some(name) = slot.strip_prefix("data/").filter(|n| !out.iter().any(|o| o == n)) {
+            if let Some(name) = slot
+                .strip_prefix("data/")
+                .filter(|n| !out.iter().any(|o| o == n))
+            {
                 out.push(name.to_string());
             }
         }
@@ -408,11 +491,16 @@ fn keyed_data(doc: &Value, item: &Value) -> Vec<(String, String)> {
     let channels = doc.get("channels").and_then(Value::as_object);
     let mut out = Vec::new();
     for part in parts {
-        let deep_canvas::template::Part::Slot(slot) = part else { continue };
-        let Some(name) = slot.strip_prefix("data/") else { continue };
-        let keyed = channels.into_iter().flatten().find(|(_, c)| {
-            c.get("target").and_then(Value::as_str) == Some(slot)
-        });
+        let deep_canvas::template::Part::Slot(slot) = part else {
+            continue;
+        };
+        let Some(name) = slot.strip_prefix("data/") else {
+            continue;
+        };
+        let keyed = channels
+            .into_iter()
+            .flatten()
+            .find(|(_, c)| c.get("target").and_then(Value::as_str) == Some(slot));
         if let Some((channel, _)) = keyed {
             if !out.iter().any(|(n, _)| n == name) {
                 out.push((name.to_string(), channel.clone()));
@@ -427,7 +515,15 @@ fn keyed_data(doc: &Value, item: &Value) -> Vec<(String, String)> {
 pub const UNDECLARED_KIND_ACCEPTED: &str = "undeclared_kind_accepted";
 
 /// #504's wrong programs a scenario names, each compiled into the program.
-pub const PLANTED: [&str; 3] = ["slider_entries_ignored", "stage_sets_nothing", "stage_shot_cuts"];
+pub const PLANTED: [&str; 4] = [
+    "slider_entries_ignored",
+    "stage_sets_nothing",
+    "stage_shot_cuts",
+    DIP_CROSS_FADES,
+];
+
+/// #466's planted dip: its two sides cross-fade under its color at half weight.
+pub const DIP_CROSS_FADES: &str = "dip_cross_fades_under_ink";
 
 /// The revision's motion, compiled once at check.
 fn compile(v: &mut View<'_>) -> Result<(), OpError> {
@@ -444,11 +540,18 @@ fn compile(v: &mut View<'_>) -> Result<(), OpError> {
         Some("slider_entries_ignored") => crate::program::Planted::SliderEntriesIgnored,
         Some("stage_sets_nothing") => crate::program::Planted::StageSetIgnored,
         Some("stage_shot_cuts") => crate::program::Planted::StageShotCuts,
+        Some(DIP_CROSS_FADES) => crate::program::Planted::DipCrossFadesUnderInk,
         _ => Default::default(),
     };
-    let options = crate::program::Options { planted, ..Default::default() };
+    let options = crate::program::Options {
+        planted,
+        ..Default::default()
+    };
     // What a refusal names past its path (#544: the reader, the undeclared name, close names).
-    let program = Program::compile_with(doc, options).map_err(|r| OpError { actual: r.detail, ..OpError::new(r.code, r.path) })?;
+    let program = Program::compile_with(doc, options).map_err(|r| OpError {
+        actual: r.detail,
+        ..OpError::new(r.code, r.path)
+    })?;
     v.write("motion.program", Val::typed(Arc::new(program)))
 }
 
@@ -499,7 +602,11 @@ fn channels(v: &mut View<'_>) -> Result<(), OpError> {
         .map(str::to_string);
     for name in template.iter().flat_map(|t| data_slots(t)) {
         let owner = format!("data/{name}");
-        let keyed = program.motion.channels.iter().find(|c| c.target.owner == owner);
+        let keyed = program
+            .motion
+            .channels
+            .iter()
+            .find(|c| c.target.owner == owner);
         if let Some(x) = keyed.and_then(|c| program.channel_value(&state, &c.id)) {
             fields.push((vec!["params".into(), "data".into(), name], Datum::Num(x)));
         }
@@ -507,33 +614,71 @@ fn channels(v: &mut View<'_>) -> Result<(), OpError> {
     // #504: a slot on a data value a driver or a stage writes, on a control's value or on an
     // assembly's shows it at t too: data rides as `params/data/<name>`, a control's or an
     // assembly's as `params/shown/<section>/<id>/value`, which the template reads first.
-    for slot in template.iter().flat_map(|t| deep_canvas::template::parts(t).unwrap_or_default()) {
-        let deep_canvas::template::Part::Slot(slot) = slot else { continue };
+    for slot in template
+        .iter()
+        .flat_map(|t| deep_canvas::template::parts(t).unwrap_or_default())
+    {
+        let deep_canvas::template::Part::Slot(slot) = slot else {
+            continue;
+        };
         if let Some(name) = slot.strip_prefix("data/") {
-            let field = program.fields.iter().find(|f| f.written && f.data.as_deref() == Some(name));
-            if let Some(f) = field.filter(|_| !fields.iter().any(|(p, _)| p.last().map(String::as_str) == Some(name))) {
-                fields.push((vec!["params".into(), "data".into(), name.to_string()], Datum::Num(state.slots[f.slot])));
+            let field = program
+                .fields
+                .iter()
+                .find(|f| f.written && f.data.as_deref() == Some(name));
+            if let Some(f) = field.filter(|_| {
+                !fields
+                    .iter()
+                    .any(|(p, _)| p.last().map(String::as_str) == Some(name))
+            }) {
+                fields.push((
+                    vec!["params".into(), "data".into(), name.to_string()],
+                    Datum::Num(state.slots[f.slot]),
+                ));
             }
-        } else if let Some(id) = slot.strip_prefix("assemblies/").and_then(|r| r.strip_suffix("/value")) {
+        } else if let Some(id) = slot
+            .strip_prefix("assemblies/")
+            .and_then(|r| r.strip_suffix("/value"))
+        {
             if let Some(a) = program.assemblies.iter().find(|a| a.id == id) {
-                let path = ["params", "shown", "assemblies", id, "value"].map(String::from).to_vec();
+                let path = ["params", "shown", "assemblies", id, "value"]
+                    .map(String::from)
+                    .to_vec();
                 fields.push((path, Datum::Num(a.held(state.slots[a.slot]))));
             }
-        } else if let Some(id) = slot.strip_prefix("controls/").and_then(|r| r.strip_suffix("/value")) {
-            let last = program.options.input.iter().filter(|e| e.control == id && e.t <= t).max_by_key(|e| e.key());
+        } else if let Some(id) = slot
+            .strip_prefix("controls/")
+            .and_then(|r| r.strip_suffix("/value"))
+        {
+            let last = program
+                .options
+                .input
+                .iter()
+                .filter(|e| e.control == id && e.t <= t)
+                .max_by_key(|e| e.key());
             if let Some(x) = last.and_then(|e| e.value.as_f64()) {
-                let path = ["params", "shown", "controls", id, "value"].map(String::from).to_vec();
+                let path = ["params", "shown", "controls", id, "value"]
+                    .map(String::from)
+                    .to_vec();
                 fields.push((path, Datum::Num(x)));
             }
         }
     }
     // A counter on a driver of a data value shows it at t the same way.
-    let source = v.item()?.pointer("/params/text/counter/source").and_then(Value::as_str);
+    let source = v
+        .item()?
+        .pointer("/params/text/counter/source")
+        .and_then(Value::as_str);
     let driver = source.and_then(|d| program.motion.drivers.iter().find(|x| x.id == d));
     let name = driver.and_then(|d| d.target.owner.strip_prefix("data/"));
-    if let Some(field) = name.and_then(|n| program.fields.iter().find(|f| f.data.as_deref() == Some(n))) {
+    if let Some(field) =
+        name.and_then(|n| program.fields.iter().find(|f| f.data.as_deref() == Some(n)))
+    {
         let name = field.data.clone().unwrap_or_default();
-        fields.push((vec!["params".into(), "data".into(), name], Datum::Num(state.slots[field.slot])));
+        fields.push((
+            vec!["params".into(), "data".into(), name],
+            Datum::Num(state.slots[field.slot]),
+        ));
     }
     let set = |name: &str, from: usize| Edit {
         add: false,
@@ -585,9 +730,9 @@ fn slide() -> Value {
 fn register_arrange(r: &mut Registrar) {
     use crate::arrange;
     use deep_canvas::kinds::{Entry, Param, ParamType, Version};
-    let json_param = |name: &'static str| Param {
+    let json_param = |name: &'static str, form: &'static str| Param {
         name,
-        ty: ParamType::Json,
+        ty: ParamType::Json(form),
         unit: "",
         default: json!([]),
         min: None,
@@ -604,9 +749,12 @@ fn register_arrange(r: &mut Registrar) {
                 major: 1,
                 minor: 0,
                 params: vec![
-                    json_param("items"),
-                    json_param("relations"),
-                    json_param("broken_out"),
+                    json_param("items", "[item ID]"),
+                    json_param(
+                        "relations",
+                        "[{a: ID, rel: on | inside | next_to | against | facing | near | apart, b: ID, d?: m}]",
+                    ),
+                    json_param("broken_out", "[item ID]"),
                 ],
             }],
             migrations: Vec::new(),
@@ -669,7 +817,9 @@ fn register_arrange(r: &mut Registrar) {
 /// arrangement places.
 /// Whether the document holds an arrangement (asked once per document).
 fn has_arrangement(doc: &Value, _: &str, _: &Value) -> bool {
-    doc.get("items").and_then(Value::as_object).is_some_and(|items| items.values().any(crate::arrange::is_arrangement))
+    doc.get("items")
+        .and_then(Value::as_object)
+        .is_some_and(|items| items.values().any(crate::arrange::is_arrangement))
 }
 
 fn is_arranged(_: &Value, _: &str, item: &Value) -> bool {
@@ -745,20 +895,18 @@ fn register_score(r: &mut Registrar) {
         "sound_lock",
         "any",
         &["sound_lock.off_palette", "score.check_unread"],
-        |l, i| {
-            let out = crate::score::sound_lock(l, i);
-            out.raised.into_iter().map(|(id, r, _)| (id, r)).collect()
-        },
+        |l, i| crate::score::issues_of(l, crate::score::sound_lock(l, i)),
     )
     .check_report(crate::score::sound_lock);
-    r.check("mix.balance", "any", &["score.check_unread"], |_, _| {
-        Vec::new()
+    r.check("mix.balance", "any", &["score.check_unread"], |l, i| {
+        crate::score::issues_of(l, crate::score::mix_balance(l, i))
     })
     .check_report(crate::score::mix_balance);
+    // `score.far_from_sample` reads a library's zones, which only `deep show`'s check of the
+    // installed packs can (deep-show's score_plan), so it isn't this catalog's (#2362).
     for (code, meaning, fix) in [
         ("score.pad_too_low", "A note on a sustained pad below MIDI 48, on an instrument not marked bass.", "Raise the note to MIDI 48 or above, or mark the instrument bass."),
         ("score.note_too_long", "A note held over 60 s.", "Shorten the note to 60 s or less, or write it as notes that follow one another."),
-        ("score.far_from_sample", "A sampled note more than 4 semitones from its zone's root.", "Use a preset with a zone nearer the note, or move the note."),
         ("score.unknown_source", "An instrument whose source isn't sampled, pluck or synth.", "Write the source as sampled {library, preset}, pluck {preset} or synth {preset}."),
         ("score.unknown_preset", "An instrument naming a preset its source doesn't have.", "Name a pluck preset (nylon, steel, harp), a synth preset (sine, triangle, saw, square, pad) or a preset of the library's samples."),
         ("score.unknown_instrument", "An event naming an instrument the score doesn't hold.", "Name one of the score's instruments."),
@@ -771,6 +919,101 @@ fn register_score(r: &mut Registrar) {
     ] {
         r.code(code, meaning, fix, false);
     }
+    // #2362: each code a planted film that raises exactly it, which the kit proves and the
+    // `fixtures` call leaves out (#2085).
+    for (code, change, checks) in planted_scores() {
+        r.fixture(
+            &code.replace(['.', '_'], "-"),
+            score_film(code, change),
+            None,
+        )
+        .planted()
+        .sidecar(json!({"codes": [code], "checks": checks}));
+    }
+}
+
+/// Each score code, how its film differs from a clean one, and the check inputs that raise it.
+fn planted_scores() -> Vec<(&'static str, Value, Value)> {
+    vec![
+        (
+            "score.pad_too_low",
+            json!({"instruments": {"lead": {"source": {"synth": {"preset": "pad"}}, "stem": "lead"}}, "events": {"a": {"at": "1:1", "inst": "lead", "pitch": 40, "dur": 1}}}),
+            json!([]),
+        ),
+        (
+            "score.note_too_long",
+            json!({"events": {"a": {"at": "1:1", "inst": "lead", "pitch": 60, "dur": "61s"}}}),
+            json!([]),
+        ),
+        (
+            "score.unknown_source",
+            json!({"instruments": {"lead": {"source": {"organ": {"preset": "full"}}, "stem": "lead"}}, "events": {}}),
+            json!([]),
+        ),
+        (
+            "score.unknown_preset",
+            json!({"instruments": {"lead": {"source": {"pluck": {"preset": "banjo"}}, "stem": "lead"}}}),
+            json!([]),
+        ),
+        (
+            "score.unknown_instrument",
+            json!({"events": {"a": {"at": "1:1", "inst": "drums", "pitch": 60, "dur": 1}}}),
+            json!([]),
+        ),
+        (
+            "score.bad_pitch",
+            json!({"events": {"a": {"at": "1:1", "inst": "lead", "pitch": "middle", "dur": 1}}}),
+            json!([]),
+        ),
+        (
+            "score.time_unresolved",
+            json!({"events": {"a": {"inst": "lead", "pitch": 60, "dur": 1}}}),
+            json!([]),
+        ),
+        (
+            "score.bad_duration",
+            json!({"events": {"a": {"at": "1:1", "inst": "lead", "pitch": 60, "dur": "0s"}}}),
+            json!([]),
+        ),
+        (
+            "score.bad_loop",
+            json!({"loop": {"from": "3:1", "to": "2:1"}}),
+            json!([]),
+        ),
+        (
+            "sound_lock.off_palette",
+            json!({}),
+            json!([{"kind": "sound_lock", "instruments": ["strings"]}]),
+        ),
+        (
+            "score.check_unread",
+            json!({}),
+            json!([{"kind": "mix.balance"}]),
+        ),
+    ]
+}
+
+/// A film with a tempo map and one score of a lead sine note, its params changed by `change`.
+fn score_film(code: &str, change: Value) -> Value {
+    let mut params = json!({
+        "instruments": {"lead": {"source": {"synth": {"preset": "sine"}}, "stem": "lead"}},
+        "events": {"a": {"at": "1:1", "inst": "lead", "pitch": 60, "dur": 1}},
+    });
+    for (k, v) in change.as_object().into_iter().flatten() {
+        params[k] = v.clone();
+    }
+    json!({
+        "format": 1, "profile": "film", "title": format!("Planted {code}"),
+        "description": format!("A score the kit proves raises {code} alone."),
+        "size": [64, 64], "camera": "cam",
+        "transport": {"span": "4s", "frame_rate": [24, 1], "sample_rate": 48000},
+        "tempo_map": {"segments": [{"at": "0s", "bpm": 120, "meter": [4, 4], "span": 16, "ramp": "none"}]},
+        "items": {
+            "cam": {"id": "cam", "kind": "camera@1", "name": "Camera", "order": "a0",
+                    "params": {"projection": "orthographic", "target": [32, 32, 0], "view_width": 64}},
+            "s": {"id": "s", "kind": "score.music@1", "name": "Score", "order": "a1", "params": params}
+        }
+    })
 }
 
 /// A library pack's `samples`: `{preset → {sustained, zones: [{lo, hi, root, takes: [asset path]}]}}`,

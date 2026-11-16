@@ -52,6 +52,8 @@ pub(super) fn read(value: &Value, own: &PackId, issues: &mut Vec<Issue>) -> Vec<
         let parsed = entry
             .as_str()
             .and_then(|t| t.rsplit_once('@'))
+            // A pack's full ID, `owner/name@version`, names it as its name does (#142).
+            .map(|(name, v)| (name.rsplit_once('/').map_or(name, |(_, n)| n), v))
             .and_then(|(name, v)| {
                 Some(Dep {
                     name: well_named(name).then(|| name.to_string())?,

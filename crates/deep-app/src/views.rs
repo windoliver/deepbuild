@@ -52,6 +52,11 @@ const AGENTS_TICK: Duration = Duration::from_secs(2);
 /// The diff lines the Agents page shows of each file, and the width a line is cut to, in points.
 const DIFF_LINES: usize = 8;
 const DIFF_WIDTH: f32 = 1060.;
+/// The list as last built, with the reading of the record it was built from.
+type Built = (
+    std::rc::Rc<(Vec<crate::list::Ask>, Vec<crate::list::Session>)>,
+    Vec<crate::list::Item>,
+);
 /// In no shipped build (#1457). What a replica's fixture panels read through `deepbuild.needs_you`, and its virtual clock: the inbox projection at
 /// a log position. The replica, the live capture and the registry checks set it before opening the shell. No view
 /// reads it: every view draws the record through the one reader, with the same tree in the app and in a replica
@@ -256,10 +261,7 @@ pub struct Shipped {
     /// The row a press went down on and when: a press on a row that just moved is dropped (#1461).
     pressed: Option<(String, u64)>,
     /// The list as last built, with the reading of the record it was built from.
-    built: Option<(
-        std::rc::Rc<(Vec<crate::list::Ask>, Vec<crate::list::Session>)>,
-        Vec<crate::list::Item>,
-    )>,
+    built: Option<Built>,
     /// What you typed in the list, and when the last key came: typing moves to the first row it starts (#1462).
     typed: (String, u64),
     /// The first of the list's items drawn: the drawn rows follow the keyboard, so the row it's on is in view (#2021).
@@ -369,7 +371,8 @@ impl Shipped {
     /// the name you gave it, through the hub, and the field going out of focus leaves the name as it was.
     fn start_rename(&mut self, session: String, window: &mut Window, cx: &mut Context<Self>) {
         use gpui_kit::base::input::{InputEvent, InputState};
-        let name = crate::record::with_view(|view| view.table().title(&session)).unwrap_or_default();
+        let name =
+            crate::record::with_view(|view| view.table().title(&session)).unwrap_or_default();
         let input = cx.new(|cx| InputState::new(window, cx).default_value(name));
         let entered = cx.subscribe_in(
             &input,
@@ -1213,8 +1216,9 @@ struct Record {
     /// What a session's page shows by its real names (#1348): the session, its issue and branch, and its newest
     /// run's failure whole, its trace included. On a session's page only.
     details: Vec<String>,
-    /// The sidebar's running jobs (#1925), in the list's order: each row's ID, its words and why it is there.
-    jobs: Vec<(String, String, String)>,
+    /// The sidebar's running jobs (#1925), in the list's order: each row's ID, its words, why it is there, and the
+    /// status-map entry its row names (#1349: a job waiting on you is blocked, not running).
+    jobs: Vec<(String, String, String, &'static str)>,
 }
 
 /// What the sidebar draws: every session, in the order each first appears, with its task's title and its state.
@@ -1387,6 +1391,7 @@ fn read(view: &crate::record::View, kind: Kind, opened: Option<&str>) -> Record 
                     text(row, "id"),
                     states::job_words(row, now()),
                     text(row, "why"),
+                    states::entry_of(row["entry"].as_str().unwrap_or("running")),
                 )
             })
             .collect(),
@@ -2151,7 +2156,7 @@ impl Render for Shipped {
                 }
                 // #1461's planted list draws each agent waiting for a first session as a row.
                 if crate::plain::planted("agent-as-row") && items.is_empty() {
-                    items.push(crate::list::Item::Row(crate::list::Row {
+                    items.push(crate::list::Item::Row(Box::new(crate::list::Row {
                         id: "session:claude-code".to_owned(),
                         address: Address::session("claude-code"),
                         title: "Claude Code".to_owned(),
@@ -2165,7 +2170,7 @@ impl Render for Shipped {
                         doing: None,
                         hooks: (0, None),
                         flag: None,
-                    }));
+                    })));
                 }
                 let popped = crate::open::popped(cx) == Some(Kind::NeedsYou);
                 let replaced = NEEDS_YOU_VIEW.with(|view| view.borrow().clone());
@@ -2434,38 +2439,30 @@ impl Render for Shipped {
                 // Each running job's row (#1925), after the sessions as the list orders it: its mark, its kind and
                 // its count from its tool's own counter, its time at the right edge, and why under it, quieter. A job
                 // has no page, so the row opens nothing.
-                drawn.extend(
-                    record
-                        .jobs
-                        .iter()
-                        .enumerate()
-                        .map(|(index, (id, words, why))| {
-                            div()
-                                .flex()
-                                .flex_col()
-                                .flex_none()
-                                .child(
-                                    marked(
-                                        ElementId::Name(id.clone().into()),
-                                        "running",
-                                        words.clone(),
-                                    )
+                drawn.extend(record.jobs.iter().enumerate().map(
+                    |(index, (id, words, why, entry))| {
+                        div()
+                            .flex()
+                            .flex_col()
+                            .flex_none()
+                            .child(
+                                marked(ElementId::Name(id.clone().into()), entry, words.clone())
                                     .h(s.space(4))
                                     .pl(s.space(2))
                                     .pr(s.space(0)),
-                                )
-                                .child(
-                                    label(("sidebar-job-why", index), why.clone())
-                                        .block()
-                                        .typed(s.small)
-                                        .h(s.small.line)
-                                        .pl(s.space(3))
-                                        .text_color(chrome.ink_secondary)
-                                        .truncate(),
-                                )
-                                .into_any_element()
-                        }),
-                );
+                            )
+                            .child(
+                                label(("sidebar-job-why", index), why.clone())
+                                    .block()
+                                    .typed(s.small)
+                                    .h(s.small.line)
+                                    .pl(s.space(3))
+                                    .text_color(chrome.ink_secondary)
+                                    .truncate(),
+                            )
+                            .into_any_element()
+                    },
+                ));
                 // #1461's planted plug-in adds a section to the list, its own heading over it.
                 if crate::plain::planted("sidebar-panel-in-list") {
                     for name in page_names() {
@@ -2742,30 +2739,38 @@ impl Render for Shipped {
                     Option<crate::list::Doing>,
                     Option<String>,
                 );
-                let (problem, readings, listed, doing, flagged): Read = crate::record::with_view(|view| {
-                    let table = view.table();
-                    let problem = crate::plain::problem(&table, &session)
-                        .map(|(happened, next)| vec![happened, next])
-                        .unwrap_or_default();
-                    let row = table.row_of(&format!("session:{session}"));
-                    let listed = row.map(|row| {
-                        ["word", "entry", "why"]
-                            .map(|key| row[key].as_str().unwrap_or_default().to_owned())
-                    });
-                    let doing = row.and_then(|row| crate::list::doing_of(view, row, &session, now));
-                    let flagged = row.and_then(|row| {
-                        let flag = &row["flag"];
-                        let code = flag["code"].as_str()?;
-                        let fix = flag["fix"].as_str().filter(|fix| !fix.is_empty());
-                        Some(format!(
-                            "{code}: {}{}",
-                            flag["text"].as_str().unwrap_or_default(),
-                            fix.map(|fix| format!(". {fix}")).unwrap_or_default()
-                        ))
-                    });
-                    (problem, table.readings(&session).to_vec(), listed, doing, flagged)
-                })
-                .unwrap_or_default();
+                let (problem, readings, listed, doing, flagged): Read =
+                    crate::record::with_view(|view| {
+                        let table = view.table();
+                        let problem = crate::plain::problem(&table, &session)
+                            .map(|(happened, next)| vec![happened, next])
+                            .unwrap_or_default();
+                        let row = table.row_of(&format!("session:{session}"));
+                        let listed = row.map(|row| {
+                            ["word", "entry", "why"]
+                                .map(|key| row[key].as_str().unwrap_or_default().to_owned())
+                        });
+                        let doing =
+                            row.and_then(|row| crate::list::doing_of(view, row, &session, now));
+                        let flagged = row.and_then(|row| {
+                            let flag = &row["flag"];
+                            let code = flag["code"].as_str()?;
+                            let fix = flag["fix"].as_str().filter(|fix| !fix.is_empty());
+                            Some(format!(
+                                "{code}: {}{}",
+                                flag["text"].as_str().unwrap_or_default(),
+                                fix.map(|fix| format!(". {fix}")).unwrap_or_default()
+                            ))
+                        });
+                        (
+                            problem,
+                            table.readings(&session).to_vec(),
+                            listed,
+                            doing,
+                            flagged,
+                        )
+                    })
+                    .unwrap_or_default();
                 let reads = |id: &'static str, name: &str| match &listed {
                     Some([word, entry, _]) => {
                         marked(id, states::entry_of(entry), format!("{name} · {word}"))
@@ -3306,28 +3311,31 @@ fn agents_page(
     if crate::plain::planted("agents-title-only") {
         return page;
     }
-    page.child(section("agents-reach-title", "How each agent reaches DeepBuild"))
-        .children(reach)
-        .child(label(
-            "agents-installed",
-            format!("Installed: {}", named(true)),
-        ))
-        .child(
-            label(
-                "agents-missing",
-                format!("Not installed here: {}", named(false)),
-            )
-            .text_color(chrome.ink_secondary),
+    page.child(section(
+        "agents-reach-title",
+        "How each agent reaches DeepBuild",
+    ))
+    .children(reach)
+    .child(label(
+        "agents-installed",
+        format!("Installed: {}", named(true)),
+    ))
+    .child(
+        label(
+            "agents-missing",
+            format!("Not installed here: {}", named(false)),
         )
-        .child(section("agents-servers-title", "MCP servers"))
-        .children(servers)
-        .child(section("agents-skills-title", "Skills"))
-        .children(skills)
-        .child(section("agents-yours-title", "Already in each agent"))
-        .children(yours)
-        .child(section("agents-waiting-title", "Waiting for you"))
-        .children(rows)
-        .children(review)
+        .text_color(chrome.ink_secondary),
+    )
+    .child(section("agents-servers-title", "MCP servers"))
+    .children(servers)
+    .child(section("agents-skills-title", "Skills"))
+    .children(skills)
+    .child(section("agents-yours-title", "Already in each agent"))
+    .children(yours)
+    .child(section("agents-waiting-title", "Waiting for you"))
+    .children(rows)
+    .children(review)
 }
 
 /// One sync's diff, file by file, each with the agents that read it, then Apply, which opens its ask.

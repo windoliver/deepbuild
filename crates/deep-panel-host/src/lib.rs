@@ -4,8 +4,8 @@
 //! reported, and undone unless the app grants the move.
 
 use std::{
-    collections::VecDeque,
     cell::Cell,
+    collections::VecDeque,
     hash::{DefaultHasher, Hash as _, Hasher as _},
     io::{BufRead as _, Write as _},
     path::Path,
@@ -158,7 +158,9 @@ impl Panel {
         }
         self.frames += 1;
         self.frames_since_invalidate += 1;
-        Ok(Some(json!({ "frame": { "panel": self.id, "hash": hash, "tree": tree } })))
+        Ok(Some(
+            json!({ "frame": { "panel": self.id, "hash": hash, "tree": tree } }),
+        ))
     }
 
     /// One invalidation: the script's one render, and its tree. Answers the tree and the nanoseconds the render took.

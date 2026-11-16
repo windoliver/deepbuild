@@ -1,0 +1,46 @@
+{
+  "v": 5,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+  "kind": "ask.created",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "kind": "authority",
+    "question": "Approve a budget of $4.00 for task:item42?",
+    "options": [
+      {
+        "id": "approve",
+        "label": "Approve $4.00",
+        "decision": "allow"
+      },
+      {
+        "id": "decline",
+        "label": "Do not fund it",
+        "decision": "deny"
+      }
+    ],
+    "recommended": null,
+    "deadline": 1760099851123,
+    "fallback": "you",
+    "default": "decline",
+    "provisional": false,
+    "owner": "you",
+    "key": "aa25bab5b110ee4a5581c310577d1d3b7ad363d77eafb502b243e6f02ee27bba",
+    "pinned_to": {
+      "kind": "commit",
+      "ref": "1b9d9ab15d6372fa7f019e1632f27774fd80212a"
+    },
+    "action": {
+      "kind": "budget.issue",
+      "scope": {
+        "kind": "issue",
+        "ref": "task:item42"
+      },
+      "runs": 1,
+      "cap_usd": 4,
+      "ends": 1760618251123
+    }
+  }
+}

@@ -71,8 +71,13 @@
     "interface": "asset.library@1",
     "digest": "d1:889afc00dc974a58c31dbb9ac6c3f33bab43813a4c8285c78973b82fa5c70cc0",
     "fills": "many",
-    "kit": null,
-    "planted": [],
+    "kit": "asset.library@1",
+    "planted": [
+      "measures-by-download",
+      "reports-cc0",
+      "keeps-unsized",
+      "drops-sidecars"
+    ],
     "since": "R6"
   },
   {

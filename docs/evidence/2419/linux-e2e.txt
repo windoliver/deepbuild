@@ -1,0 +1,47 @@
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/351
+
+=== commit 4b53ec85e443c02881c2bf99941f58ad381609c1
+=== linux 7.0.0-1024-nvidia arm64, node v24.22.0, python3 Python 3.12.3
+
+=== The guide's typescript example ===
+ ✓ zz-e2e-demo.test.ts > says what ran where 79ms
+1 build     copied docs/extension-guide/typescript, stamped digest d1:c228f86b1dc8534b…
+2 install   example/paths@1.0.0 (built by: no agent)
+3 conform   passed=true reasons=[]
+4 load      {"status":"loaded","id":"example/paths","version":"1.0.0","place":"sandbox","run":"run:01M7DWAW10VW1SP955Q0MRG40P"}
+            its process: pid 3224422, 3224427, 3224429, started and tracked by the supervisor; this test's own pid 3223827
+5 in use    [{"kind":"ext.paths.relative","extension":"example/paths"}]
+6 run       inputs ["src/cart.mjs","spec/cart.test.mjs"]
+            -> outcome=passed testsRun=2 (example.json expects passed/2)
+6 run       inputs ["src/cart.mjs","../secrets.env","/etc/hosts"]
+            -> outcome=failed testsRun=3 (example.json expects failed/3)
+               failure: ../secrets.env is outside the checkout
+               failure: /etc/hosts is outside the checkout
+
+ ✓ zz-e2e-demo.test.ts > walks the guide's TypeScript example 1483ms
+=== The guide's json-rpc example ===
+1 build     copied docs/extension-guide/json-rpc, stamped digest d1:6f956c4be7695e46…, main's first line #!/usr/bin/python3.12
+2 install   example/rpcpaths@1.0.0 (built by: no agent)
+3 conform   passed=true reasons=[]
+4 load      {"status":"loaded","id":"example/rpcpaths","version":"1.0.0","place":"sandbox","run":"run:01M7DWAWN9F7FTGDJ1K7Z26FVP"}
+            its process: pid 3224694, 3224696, 3224700, 3224718, started and tracked by the supervisor; this test's own pid 3223827
+5 in use    [{"kind":"ext.rpcpaths.relative","extension":"example/rpcpaths"}]
+6 run       inputs ["src/cart.mjs","spec/cart.test.mjs"]
+            -> outcome=passed testsRun=2 (example.json expects passed/2)
+6 run       inputs ["src/cart.mjs","../secrets.env","/etc/hosts"]
+            -> outcome=failed testsRun=3 (example.json expects failed/3)
+               failure: ../secrets.env is outside the checkout
+               failure: /etc/hosts is outside the checkout
+
+ ✓ zz-e2e-demo.test.ts > walks the guide's JSON-RPC example 284ms
+=== node scripts/guide.mjs --check ===
+PASS guide: docs/extension-guide.md has one entry per published method (42) and slot (16), each as the contract has it
+exit 0
+ ✓ zz-e2e-demo.test.ts > runs the guide's drift test 33ms
+
+ Test Files  1 passed (1)
+      Tests  4 passed (4)
+   Start at  12:35:10
+   Duration  2.53s (tests 82%, transform 14%, import 3%)
+

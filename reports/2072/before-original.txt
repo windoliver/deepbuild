@@ -1,0 +1,674 @@
+
+ RUN  v5.0.5 <worktree>
+
+ × tests/acceptance/2072/held-action.test.ts > #2072 AC1 A send held under r1 with input A, answered yes: r1 with input B is refused and A alone runs > AC1 r1 with input B is refused naming r1, nothing runs and no action.entered is written; r1 with input A then runs once 4691ms
+   → the call with r1 and another input is refused, but it ran: the call with r1 and input B {"to":"b@example.invalid"} answered {"jsonrpc":"2.0","id":"deep-actions#4","result":{"content":[{"type":"text","text":"{\"status\":\"done\",\"output\":{\"to\":\"b@example.invalid\",\"alerts\":0},\"report\":{\"call\":\"01M7953S1EMB01C8T49E2GXR55\",\"changed\":[],\"verified\":\"unverified\",\"checked\":\"the digest was handed over; no answer read\"}}"}],"isError":false,"structuredContent":{"status":"done","output":{"to":"b@example.invalid","alerts":0},"report":{"call":"01M7953S1EMB01C8T49E2GXR55","changed":[],"verified":"unverified","checked":"the digest was handed over; no answer read"}}}}; action.entered for r1: [{"to":"b@example.invalid"}]: expected false to be true // Object.is equality
+   → the refusal names the request ID req-cd6509885889a8b0: the call with r1 and input B {"to":"b@example.invalid"} answered {"jsonrpc":"2.0","id":"deep-actions#4","result":{"content":[{"type":"text","text":"{\"status\":\"done\",\"output\":{\"to\":\"b@example.invalid\",\"alerts\":0},\"report\":{\"call\":\"01M7953S1EMB01C8T49E2GXR55\",\"changed\":[],\"verified\":\"unverified\",\"checked\":\"the digest was handed over; no answer read\"}}"}],"isError":false,"structuredContent":{"status":"done","output":{"to":"b@example.invalid","alerts":0},"report":{"call":"01M7953S1EMB01C8T49E2GXR55","changed":[],"verified":"unverified","checked":"the digest was handed over; no answer read"}}}}; action.entered for r1: [{"to":"b@example.invalid"}]: expected '{"jsonrpc":"2.0","id":"deep-actions#4…' to contain 'req-cd6509885889a8b0'
+   → input B ran under r1 on the strength of the yes for input A: the call with r1 and input B {"to":"b@example.invalid"} answered {"jsonrpc":"2.0","id":"deep-actions#4","result":{"content":[{"type":"text","text":"{\"status\":\"done\",\"output\":{\"to\":\"b@example.invalid\",\"alerts\":0},\"report\":{\"call\":\"01M7953S1EMB01C8T49E2GXR55\",\"changed\":[],\"verified\":\"unverified\",\"checked\":\"the digest was handed over; no answer read\"}}"}],"isError":false,"structuredContent":{"status":"done","output":{"to":"b@example.invalid","alerts":0},"report":{"call":"01M7953S1EMB01C8T49E2GXR55","changed":[],"verified":"unverified","checked":"the digest was handed over; no answer read"}}}}; action.entered for r1: [{"to":"b@example.invalid"}]: expected [ { v: 1, …(13) } ] to deeply equal []
+   → a refused call writes no action.entered: the call with r1 and input B {"to":"b@example.invalid"} answered {"jsonrpc":"2.0","id":"deep-actions#4","result":{"content":[{"type":"text","text":"{\"status\":\"done\",\"output\":{\"to\":\"b@example.invalid\",\"alerts\":0},\"report\":{\"call\":\"01M7953S1EMB01C8T49E2GXR55\",\"changed\":[],\"verified\":\"unverified\",\"checked\":\"the digest was handed over; no answer read\"}}"}],"isError":false,"structuredContent":{"status":"done","output":{"to":"b@example.invalid","alerts":0},"report":{"call":"01M7953S1EMB01C8T49E2GXR55","changed":[],"verified":"unverified","checked":"the digest was handed over; no answer read"}}}}; action.entered for r1: [{"to":"b@example.invalid"}]: expected [ { v: 1, …(13) } ] to deeply equal []
+   → a refused call writes nothing to the record: the call with r1 and input B {"to":"b@example.invalid"} answered {"jsonrpc":"2.0","id":"deep-actions#4","result":{"content":[{"type":"text","text":"{\"status\":\"done\",\"output\":{\"to\":\"b@example.invalid\",\"alerts\":0},\"report\":{\"call\":\"01M7953S1EMB01C8T49E2GXR55\",\"changed\":[],\"verified\":\"unverified\",\"checked\":\"the digest was handed over; no answer read\"}}"}],"isError":false,"structuredContent":{"status":"done","output":{"to":"b@example.invalid","alerts":0},"report":{"call":"01M7953S1EMB01C8T49E2GXR55","changed":[],"verified":"unverified","checked":"the digest was handed over; no answer read"}}}}; action.entered for r1: [{"to":"b@example.invalid"}]: expected 24 to be 22 // Object.is equality
+   → nothing ran for input B: the call with r1 and input B {"to":"b@example.invalid"} answered {"jsonrpc":"2.0","id":"deep-actions#4","result":{"content":[{"type":"text","text":"{\"status\":\"done\",\"output\":{\"to\":\"b@example.invalid\",\"alerts\":0},\"report\":{\"call\":\"01M7953S1EMB01C8T49E2GXR55\",\"changed\":[],\"verified\":\"unverified\",\"checked\":\"the digest was handed over; no answer read\"}}"}],"isError":false,"structuredContent":{"status":"done","output":{"to":"b@example.invalid","alerts":0},"report":{"call":"01M7953S1EMB01C8T49E2GXR55","changed":[],"verified":"unverified","checked":"the digest was handed over; no answer read"}}}}; action.entered for r1: [{"to":"b@example.invalid"}]: expected 1 to be +0 // Object.is equality
+   → the call with r1 and input A runs on the yes: {"jsonrpc":"2.0","id":"deep-actions#6","result":{"content":[{"type":"text","text":"{\"code\":\"unavailable\",\"retryable\":false,\"remediation\":\"the request ID req-cd6509885889a8b0 was used for another call; nothing was run or written for this one; nothing ran.\",\"path\":\"/params/arguments/action\",\"actual\":\"ext.stocks.send_digest\",\"evidence\":[]}"}],"isError":true}}: expected true to be false // Object.is equality
+   → the call with r1 and input A is done: {"code":"unavailable","retryable":false,"remediation":"the request ID req-cd6509885889a8b0 was used for another call; nothing was run or written for this one; nothing ran.","path":"/params/arguments/action","actual":"ext.stocks.send_digest","evidence":[]}: expected undefined to be 'done' // Object.is equality
+   → input A ran once under r1, and only A: expected [ { to: 'b@example.invalid' } ] to deeply equal [ { to: 'a@example.invalid' } ]
+ × tests/acceptance/2072/held-action.test.ts > #2072 AC2 A send held under r1, answered yes: r1 naming another change or send action is refused > AC2 a held send, then r1 naming a change action: refused naming r1, the change does not run 1957ms
+   → a call with r1 that names another action is refused, but it ran: the call with r1 naming ext.stocks.set_alert answered {"jsonrpc":"2.0","id":"deep-actions#11","result":{"content":[{"type":"text","text":"{\"status\":\"done\",\"output\":{\"symbol\":\"NVDA\",\"above\":200,\"created\":true},\"report\":{\"call\":\"01M7953TYMR0S9Z67GD4D46FYS\",\"changed\":[\"ext.stocks.alert:NVDA\"],\"verified\":\"true\",\"checked\":\"read NVDA back from ext.stocks.alert: above 200\"}}"}],"isError":false,"structuredContent":{"status":"done","output":{"symbol":"NVDA","above":200,"created":true},"report":{"call":"01M7953TYMR0S9Z67GD4D46FYS","changed":["ext.stocks.alert:NVDA"],"verified":"true","checked":"read NVDA back from ext.stocks; action.entered for r1: ["ext.stocks.set_alert"]: expected false to be true // Object.is equality
+   → the refusal names the request ID req-83ba51d06cf6c0b6: the call with r1 naming ext.stocks.set_alert answered {"jsonrpc":"2.0","id":"deep-actions#11","result":{"content":[{"type":"text","text":"{\"status\":\"done\",\"output\":{\"symbol\":\"NVDA\",\"above\":200,\"created\":true},\"report\":{\"call\":\"01M7953TYMR0S9Z67GD4D46FYS\",\"changed\":[\"ext.stocks.alert:NVDA\"],\"verified\":\"true\",\"checked\":\"read NVDA back from ext.stocks.alert: above 200\"}}"}],"isError":false,"structuredContent":{"status":"done","output":{"symbol":"NVDA","above":200,"created":true},"report":{"call":"01M7953TYMR0S9Z67GD4D46FYS","changed":["ext.stocks.alert:NVDA"],"verified":"true","checked":"read NVDA back from ext.stocks; action.entered for r1: ["ext.stocks.set_alert"]: expected '{"jsonrpc":"2.0","id":"deep-actions#1…' to contain 'req-83ba51d06cf6c0b6'
+   → ext.stocks.set_alert ran under r1 on the yes for ext.stocks.send_digest: the call with r1 naming ext.stocks.set_alert answered {"jsonrpc":"2.0","id":"deep-actions#11","result":{"content":[{"type":"text","text":"{\"status\":\"done\",\"output\":{\"symbol\":\"NVDA\",\"above\":200,\"created\":true},\"report\":{\"call\":\"01M7953TYMR0S9Z67GD4D46FYS\",\"changed\":[\"ext.stocks.alert:NVDA\"],\"verified\":\"true\",\"checked\":\"read NVDA back from ext.stocks.alert: above 200\"}}"}],"isError":false,"structuredContent":{"status":"done","output":{"symbol":"NVDA","above":200,"created":true},"report":{"call":"01M7953TYMR0S9Z67GD4D46FYS","changed":["ext.stocks.alert:NVDA"],"verified":"true","checked":"read NVDA back from ext.stocks; action.entered for r1: ["ext.stocks.set_alert"]: expected [ { v: 1, …(13) } ] to deeply equal []
+   → a refused call writes no action.entered: the call with r1 naming ext.stocks.set_alert answered {"jsonrpc":"2.0","id":"deep-actions#11","result":{"content":[{"type":"text","text":"{\"status\":\"done\",\"output\":{\"symbol\":\"NVDA\",\"above\":200,\"created\":true},\"report\":{\"call\":\"01M7953TYMR0S9Z67GD4D46FYS\",\"changed\":[\"ext.stocks.alert:NVDA\"],\"verified\":\"true\",\"checked\":\"read NVDA back from ext.stocks.alert: above 200\"}}"}],"isError":false,"structuredContent":{"status":"done","output":{"symbol":"NVDA","above":200,"created":true},"report":{"call":"01M7953TYMR0S9Z67GD4D46FYS","changed":["ext.stocks.alert:NVDA"],"verified":"true","checked":"read NVDA back from ext.stocks; action.entered for r1: ["ext.stocks.set_alert"]: expected [ { v: 1, …(13) } ] to deeply equal []
+   → the change wrote no store item: the call with r1 naming ext.stocks.set_alert answered {"jsonrpc":"2.0","id":"deep-actions#11","result":{"content":[{"type":"text","text":"{\"status\":\"done\",\"output\":{\"symbol\":\"NVDA\",\"above\":200,\"created\":true},\"report\":{\"call\":\"01M7953TYMR0S9Z67GD4D46FYS\",\"changed\":[\"ext.stocks.alert:NVDA\"],\"verified\":\"true\",\"checked\":\"read NVDA back from ext.stocks.alert: above 200\"}}"}],"isError":false,"structuredContent":{"status":"done","output":{"symbol":"NVDA","above":200,"created":true},"report":{"call":"01M7953TYMR0S9Z67GD4D46FYS","changed":["ext.stocks.alert:NVDA"],"verified":"true","checked":"read NVDA back from ext.stocks; action.entered for r1: ["ext.stocks.set_alert"]: expected [ { v: 1, …(13) } ] to deeply equal []
+   → a refused call writes nothing to the record: the call with r1 naming ext.stocks.set_alert answered {"jsonrpc":"2.0","id":"deep-actions#11","result":{"content":[{"type":"text","text":"{\"status\":\"done\",\"output\":{\"symbol\":\"NVDA\",\"above\":200,\"created\":true},\"report\":{\"call\":\"01M7953TYMR0S9Z67GD4D46FYS\",\"changed\":[\"ext.stocks.alert:NVDA\"],\"verified\":\"true\",\"checked\":\"read NVDA back from ext.stocks.alert: above 200\"}}"}],"isError":false,"structuredContent":{"status":"done","output":{"symbol":"NVDA","above":200,"created":true},"report":{"call":"01M7953TYMR0S9Z67GD4D46FYS","changed":["ext.stocks.alert:NVDA"],"verified":"true","checked":"read NVDA back from ext.stocks; action.entered for r1: ["ext.stocks.set_alert"]: expected 25 to be 20 // Object.is equality
+   → the change's handler did not run: the call with r1 naming ext.stocks.set_alert answered {"jsonrpc":"2.0","id":"deep-actions#11","result":{"content":[{"type":"text","text":"{\"status\":\"done\",\"output\":{\"symbol\":\"NVDA\",\"above\":200,\"created\":true},\"report\":{\"call\":\"01M7953TYMR0S9Z67GD4D46FYS\",\"changed\":[\"ext.stocks.alert:NVDA\"],\"verified\":\"true\",\"checked\":\"read NVDA back from ext.stocks.alert: above 200\"}}"}],"isError":false,"structuredContent":{"status":"done","output":{"symbol":"NVDA","above":200,"created":true},"report":{"call":"01M7953TYMR0S9Z67GD4D46FYS","changed":["ext.stocks.alert:NVDA"],"verified":"true","checked":"read NVDA back from ext.stocks; action.entered for r1: ["ext.stocks.set_alert"]: expected 1 to be +0 // Object.is equality
+   → the held send then runs on its yes: {"jsonrpc":"2.0","id":"deep-actions#13","result":{"content":[{"type":"text","text":"{\"code\":\"unavailable\",\"retryable\":false,\"remediation\":\"the request ID req-83ba51d06cf6c0b6 was used for another call; nothing was run or written for this one; nothing ran.\",\"path\":\"/params/arguments/action\",\"actual\":\"ext.stocks.send_digest\",\"evidence\":[]}"}],"isError":true}}: expected undefined to be 'done' // Object.is equality
+   → the send ran once and the change never: expected { set_alert: 1, send_digest: +0 } to deeply equal { set_alert: +0, send_digest: 1 }
+ × tests/acceptance/2072/held-action.test.ts > #2072 AC2 A send held under r1, answered yes: r1 naming another change or send action is refused > AC2 a held change, then r1 naming a send action: refused naming r1, the send does not run 1798ms
+   → a call with r1 that names another action is refused, but it ran: the call with r1 naming ext.stocks.send_digest answered {"jsonrpc":"2.0","id":"deep-actions#18","result":{"content":[{"type":"text","text":"{\"status\":\"done\",\"output\":{\"to\":\"a@example.invalid\",\"alerts\":0},\"report\":{\"call\":\"01M7953WQCN0DQJHEZHWHFQFE0\",\"changed\":[],\"verified\":\"unverified\",\"checked\":\"the digest was handed over; no answer read\"}}"}],"isError":false,"structuredContent":{"status":"done","output":{"to":"a@example.invalid","alerts":0},"report":{"call":"01M7953WQCN0DQJHEZHWHFQFE0","changed":[],"verified":"unverified","checked":"the digest was handed over; no answer read"}}}}; action.entered for r1: ["ext.stocks.send_digest"]: expected false to be true // Object.is equality
+   → the refusal names the request ID req-545e27b02b0174b8: the call with r1 naming ext.stocks.send_digest answered {"jsonrpc":"2.0","id":"deep-actions#18","result":{"content":[{"type":"text","text":"{\"status\":\"done\",\"output\":{\"to\":\"a@example.invalid\",\"alerts\":0},\"report\":{\"call\":\"01M7953WQCN0DQJHEZHWHFQFE0\",\"changed\":[],\"verified\":\"unverified\",\"checked\":\"the digest was handed over; no answer read\"}}"}],"isError":false,"structuredContent":{"status":"done","output":{"to":"a@example.invalid","alerts":0},"report":{"call":"01M7953WQCN0DQJHEZHWHFQFE0","changed":[],"verified":"unverified","checked":"the digest was handed over; no answer read"}}}}; action.entered for r1: ["ext.stocks.send_digest"]: expected '{"jsonrpc":"2.0","id":"deep-actions#1…' to contain 'req-545e27b02b0174b8'
+   → a refused call writes no action.entered: the call with r1 naming ext.stocks.send_digest answered {"jsonrpc":"2.0","id":"deep-actions#18","result":{"content":[{"type":"text","text":"{\"status\":\"done\",\"output\":{\"to\":\"a@example.invalid\",\"alerts\":0},\"report\":{\"call\":\"01M7953WQCN0DQJHEZHWHFQFE0\",\"changed\":[],\"verified\":\"unverified\",\"checked\":\"the digest was handed over; no answer read\"}}"}],"isError":false,"structuredContent":{"status":"done","output":{"to":"a@example.invalid","alerts":0},"report":{"call":"01M7953WQCN0DQJHEZHWHFQFE0","changed":[],"verified":"unverified","checked":"the digest was handed over; no answer read"}}}}; action.entered for r1: ["ext.stocks.send_digest"]: expected [ { v: 1, …(13) } ] to deeply equal []
+   → a refused call writes nothing to the record: the call with r1 naming ext.stocks.send_digest answered {"jsonrpc":"2.0","id":"deep-actions#18","result":{"content":[{"type":"text","text":"{\"status\":\"done\",\"output\":{\"to\":\"a@example.invalid\",\"alerts\":0},\"report\":{\"call\":\"01M7953WQCN0DQJHEZHWHFQFE0\",\"changed\":[],\"verified\":\"unverified\",\"checked\":\"the digest was handed over; no answer read\"}}"}],"isError":false,"structuredContent":{"status":"done","output":{"to":"a@example.invalid","alerts":0},"report":{"call":"01M7953WQCN0DQJHEZHWHFQFE0","changed":[],"verified":"unverified","checked":"the digest was handed over; no answer read"}}}}; action.entered for r1: ["ext.stocks.send_digest"]: expected 30 to be 23 // Object.is equality
+   → the send's handler did not run: the call with r1 naming ext.stocks.send_digest answered {"jsonrpc":"2.0","id":"deep-actions#18","result":{"content":[{"type":"text","text":"{\"status\":\"done\",\"output\":{\"to\":\"a@example.invalid\",\"alerts\":0},\"report\":{\"call\":\"01M7953WQCN0DQJHEZHWHFQFE0\",\"changed\":[],\"verified\":\"unverified\",\"checked\":\"the digest was handed over; no answer read\"}}"}],"isError":false,"structuredContent":{"status":"done","output":{"to":"a@example.invalid","alerts":0},"report":{"call":"01M7953WQCN0DQJHEZHWHFQFE0","changed":[],"verified":"unverified","checked":"the digest was handed over; no answer read"}}}}; action.entered for r1: ["ext.stocks.send_digest"]: expected 1 to be +0 // Object.is equality
+ × tests/acceptance/2072/held-action.test.ts > #2072 AC3 An input longer than the question shows is marked as cut, with its length > AC3 an input of 2,000 characters shows on the ask as cut, with its length 1116ms
+   → the ask gives the input's length, 2,000: Let this session send with test/stocks's ext.stocks.send_digest, given {"to":"HEADOFINPUTxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx?: expected 'Let this session send with test/stock…' to match /2,?000/
+ × tests/acceptance/2072/digest-binding.test.ts > #2072 scope: the ask is kept with the digest of the action, its plug-in and version, and the whole input > the whole input: B, equal to A in its first 500 characters and in length, is refused after A's yes, and A alone then runs once 1277ms
+   → B (the same ext.stocks.send_digest and request ID, input differing past the 500-character preview) must be refused, not held, done or run: {"jsonrpc":"2.0","id":"deep-actions#3","result":{"content":[{"type":"text","text":"{\"status\":\"done\",\"output\":{\"to\":\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx: expected false to be true // Object.is equality
+ ✓ tests/acceptance/2072/digest-binding.test.ts > #2072 scope: the ask is kept with the digest of the action, its plug-in and version, and the whole input > positive control: the same input as A in other JSON formatting is A, so it runs once and enters no second call 1298ms
+ × tests/acceptance/2072/digest-binding.test.ts > #2072 scope: the ask is kept with the digest of the action, its plug-in and version, and the whole input > the plug-in version: the same action, request ID and input from another version is refused after the yes at the first, which alone then runs once 1552ms
+   → the same call offered by stocks 2.0.0 (approved at 1.0.0) must be refused, not held, done or run: {"jsonrpc":"2.0","id":"deep-actions#10","result":{"content":[{"type":"text","text":"{\"status\":\"done\",\"output\":{\"to\":\"you@example.invalid\",\"alerts\":0},\"report\":{\"call\":\"01M79545GTBVHHRGZ5W5CYT2SX\",\"changed\":[],\"verified\":\"unverified\",\"checked\":\"the digest was handed over; no answer read\"}}"}],"isError":false,"structuredContent":{"status":"done","output":{"to":"you@example.invalid","alerts":0},"report":{"call":"01M79545GTBVHHRGZ5W5CYT2SX","changed":[],"verified":"unverified","checked":"the digest was handed over; no answer read"}}}}: expected false to be true // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2072/digest-binding.test.ts > #2072 scope: the ask is kept with the digest of the action, its plug-in and version, and the whole input > the whole input: B, equal to A in its first 500 characters and in length, is refused after A's yes, and A alone then runs once
+AssertionError: B (the same ext.stocks.send_digest and request ID, input differing past the 500-character preview) must be refused, not held, done or run: {"jsonrpc":"2.0","id":"deep-actions#3","result":{"content":[{"type":"text","text":"{\"status\":\"done\",\"output\":{\"to\":\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ expectRefused tests/acceptance/2072/digest-binding.test.ts:72:114
+     70| /** The refusal: an error result naming the request ID; nothing ran, n…
+     71| async function expectRefused(w: HubWorld, o: Outcome, request: string,…
+     72|   expect(o.isError, `${what} must be refused, not held, done or run: $…
+       |                                                                                                                  ^
+     73|   expect(JSON.stringify(o.reply), `${what}: the refusal names the requ…
+     74|   await sleep(500);
+ ❯ tests/acceptance/2072/digest-binding.test.ts:98:11
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/26]⎯
+
+ FAIL  tests/acceptance/2072/digest-binding.test.ts > #2072 scope: the ask is kept with the digest of the action, its plug-in and version, and the whole input > the plug-in version: the same action, request ID and input from another version is refused after the yes at the first, which alone then runs once
+AssertionError: the same call offered by stocks 2.0.0 (approved at 1.0.0) must be refused, not held, done or run: {"jsonrpc":"2.0","id":"deep-actions#10","result":{"content":[{"type":"text","text":"{\"status\":\"done\",\"output\":{\"to\":\"you@example.invalid\",\"alerts\":0},\"report\":{\"call\":\"01M79545GTBVHHRGZ5W5CYT2SX\",\"changed\":[],\"verified\":\"unverified\",\"checked\":\"the digest was handed over; no answer read\"}}"}],"isError":false,"structuredContent":{"status":"done","output":{"to":"you@example.invalid","alerts":0},"report":{"call":"01M79545GTBVHHRGZ5W5CYT2SX","changed":[],"verified":"unverified","checked":"the digest was handed over; no answer read"}}}}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ expectRefused tests/acceptance/2072/digest-binding.test.ts:72:114
+     70| /** The refusal: an error result naming the request ID; nothing ran, n…
+     71| async function expectRefused(w: HubWorld, o: Outcome, request: string,…
+     72|   expect(o.isError, `${what} must be refused, not held, done or run: $…
+       |                                                                                                                  ^
+     73|   expect(JSON.stringify(o.reply), `${what}: the refusal names the requ…
+     74|   await sleep(500);
+ ❯ tests/acceptance/2072/digest-binding.test.ts:132:11
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/26]⎯
+
+ FAIL  tests/acceptance/2072/held-action.test.ts > #2072 AC1 A send held under r1 with input A, answered yes: r1 with input B is refused and A alone runs > AC1 r1 with input B is refused naming r1, nothing runs and no action.entered is written; r1 with input A then runs once
+AssertionError: the call with r1 and another input is refused, but it ran: the call with r1 and input B {"to":"b@example.invalid"} answered {"jsonrpc":"2.0","id":"deep-actions#4","result":{"content":[{"type":"text","text":"{\"status\":\"done\",\"output\":{\"to\":\"b@example.invalid\",\"alerts\":0},\"report\":{\"call\":\"01M7953S1EMB01C8T49E2GXR55\",\"changed\":[],\"verified\":\"unverified\",\"checked\":\"the digest was handed over; no answer read\"}}"}],"isError":false,"structuredContent":{"status":"done","output":{"to":"b@example.invalid","alerts":0},"report":{"call":"01M7953S1EMB01C8T49E2GXR55","changed":[],"verified":"unverified","checked":"the digest was handed over; no answer read"}}}}; action.entered for r1: [{"to":"b@example.invalid"}]: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/acceptance/2072/held-action.test.ts:59:102
+     57|     const entered = enteredFor(all, request);
+     58|     const fate = `the call with r1 and input B ${JSON.stringify(B)} an…
+     59|     expect.soft(other.isError, `the call with r1 and another input is …
+       |                                                                                                      ^
+     60|     expect.soft(JSON.stringify(other.reply), `the refusal names the re…
+     61|     expect.soft(entered.filter((e) => JSON.stringify(e.data?.input) ==…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/26]⎯
+
+ FAIL  tests/acceptance/2072/held-action.test.ts > #2072 AC1 A send held under r1 with input A, answered yes: r1 with input B is refused and A alone runs > AC1 r1 with input B is refused naming r1, nothing runs and no action.entered is written; r1 with input A then runs once
+AssertionError: the refusal names the request ID req-cd6509885889a8b0: the call with r1 and input B {"to":"b@example.invalid"} answered {"jsonrpc":"2.0","id":"deep-actions#4","result":{"content":[{"type":"text","text":"{\"status\":\"done\",\"output\":{\"to\":\"b@example.invalid\",\"alerts\":0},\"report\":{\"call\":\"01M7953S1EMB01C8T49E2GXR55\",\"changed\":[],\"verified\":\"unverified\",\"checked\":\"the digest was handed over; no answer read\"}}"}],"isError":false,"structuredContent":{"status":"done","output":{"to":"b@example.invalid","alerts":0},"report":{"call":"01M7953S1EMB01C8T49E2GXR55","changed":[],"verified":"unverified","checked":"the digest was handed over; no answer read"}}}}; action.entered for r1: [{"to":"b@example.invalid"}]: expected '{"jsonrpc":"2.0","id":"deep-actions#4…' to contain 'req-cd6509885889a8b0'
+
+Expected: "req-cd6509885889a8b0"
+Received: "{"jsonrpc":"2.0","id":"deep-actions#4","result":{"content":[{"type":"text","text":"{\"status\":\"done\",\"output\":{\"to\":\"b@example.invalid\",\"alerts\":0},\"report\":{\"call\":\"01M7953S1EMB01C8T49E2GXR55\",\"changed\":[],\"verified\":\"unverified\",\"checked\":\"the digest was handed over; no answer read\"}}"}],"isError":false,"structuredContent":{"status":"done","output":{"to":"b@example.invalid","alerts":0},"report":{"call":"01M7953S1EMB01C8T49E2GXR55","changed":[],"verified":"unverified","checked":"the digest was handed over; no answer read"}}}}"
+
+ ❯ tests/acceptance/2072/held-action.test.ts:60:102
+     58|     const fate = `the call with r1 and input B ${JSON.stringify(B)} an…
+     59|     expect.soft(other.isError, `the call with r1 and another input is …
+     60|     expect.soft(JSON.stringify(other.reply), `the refusal names the re…
+       |                                                                                                      ^
+     61|     expect.soft(entered.filter((e) => JSON.stringify(e.data?.input) ==…
+     62|     expect.soft(entered, `a refused call writes no action.entered: ${f…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/26]⎯
+
+ FAIL  tests/acceptance/2072/held-action.test.ts > #2072 AC1 A send held under r1 with input A, answered yes: r1 with input B is refused and A alone runs > AC1 r1 with input B is refused naming r1, nothing runs and no action.entered is written; r1 with input A then runs once
+AssertionError: input B ran under r1 on the strength of the yes for input A: the call with r1 and input B {"to":"b@example.invalid"} answered {"jsonrpc":"2.0","id":"deep-actions#4","result":{"content":[{"type":"text","text":"{\"status\":\"done\",\"output\":{\"to\":\"b@example.invalid\",\"alerts\":0},\"report\":{\"call\":\"01M7953S1EMB01C8T49E2GXR55\",\"changed\":[],\"verified\":\"unverified\",\"checked\":\"the digest was handed over; no answer read\"}}"}],"isError":false,"structuredContent":{"status":"done","output":{"to":"b@example.invalid","alerts":0},"report":{"call":"01M7953S1EMB01C8T49E2GXR55","changed":[],"verified":"unverified","checked":"the digest was handed over; no answer read"}}}}; action.entered for r1: [{"to":"b@example.invalid"}]: expected [ { v: 1, …(13) } ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "actor": "you",
++     "agent": "claude-code",
++     "data": {
++       "action": "ext.stocks.send_digest",
++       "call": "01M7953S1EMB01C8T49E2GXR55",
++       "input": {
++         "to": "b@example.invalid",
++       },
++       "plugin": "test/stocks",
++       "request": "req-cd6509885889a8b0",
++     },
++     "evidence": [],
++     "id": "01M7953S1EX64RJ8JB2DJF55RP",
++     "kind": "action.entered",
++     "log_pos": 23,
++     "project": "workb620015f",
++     "scope": "you",
++     "session": "560c404c-e9a8-4c58-945e-4753b45651fd",
++     "ts": 1794529944622,
++     "v": 1,
++     "verified": true,
++     "writer": "core",
++   },
++ ]
+
+ ❯ tests/acceptance/2072/held-action.test.ts:61:165
+     59|     expect.soft(other.isError, `the call with r1 and another input is …
+     60|     expect.soft(JSON.stringify(other.reply), `the refusal names the re…
+     61|     expect.soft(entered.filter((e) => JSON.stringify(e.data?.input) ==…
+       |                                                                                                                                                                     ^
+     62|     expect.soft(entered, `a refused call writes no action.entered: ${f…
+     63|     expect.soft(all.length, `a refused call writes nothing to the reco…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/26]⎯
+
+ FAIL  tests/acceptance/2072/held-action.test.ts > #2072 AC1 A send held under r1 with input A, answered yes: r1 with input B is refused and A alone runs > AC1 r1 with input B is refused naming r1, nothing runs and no action.entered is written; r1 with input A then runs once
+AssertionError: a refused call writes no action.entered: the call with r1 and input B {"to":"b@example.invalid"} answered {"jsonrpc":"2.0","id":"deep-actions#4","result":{"content":[{"type":"text","text":"{\"status\":\"done\",\"output\":{\"to\":\"b@example.invalid\",\"alerts\":0},\"report\":{\"call\":\"01M7953S1EMB01C8T49E2GXR55\",\"changed\":[],\"verified\":\"unverified\",\"checked\":\"the digest was handed over; no answer read\"}}"}],"isError":false,"structuredContent":{"status":"done","output":{"to":"b@example.invalid","alerts":0},"report":{"call":"01M7953S1EMB01C8T49E2GXR55","changed":[],"verified":"unverified","checked":"the digest was handed over; no answer read"}}}}; action.entered for r1: [{"to":"b@example.invalid"}]: expected [ { v: 1, …(13) } ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "actor": "you",
++     "agent": "claude-code",
++     "data": {
++       "action": "ext.stocks.send_digest",
++       "call": "01M7953S1EMB01C8T49E2GXR55",
++       "input": {
++         "to": "b@example.invalid",
++       },
++       "plugin": "test/stocks",
++       "request": "req-cd6509885889a8b0",
++     },
++     "evidence": [],
++     "id": "01M7953S1EX64RJ8JB2DJF55RP",
++     "kind": "action.entered",
++     "log_pos": 23,
++     "project": "workb620015f",
++     "scope": "you",
++     "session": "560c404c-e9a8-4c58-945e-4753b45651fd",
++     "ts": 1794529944622,
++     "v": 1,
++     "verified": true,
++     "writer": "core",
++   },
++ ]
+
+ ❯ tests/acceptance/2072/held-action.test.ts:62:78
+     60|     expect.soft(JSON.stringify(other.reply), `the refusal names the re…
+     61|     expect.soft(entered.filter((e) => JSON.stringify(e.data?.input) ==…
+     62|     expect.soft(entered, `a refused call writes no action.entered: ${f…
+       |                                                                              ^
+     63|     expect.soft(all.length, `a refused call writes nothing to the reco…
+     64|     expect.soft((await ran(w)).send_digest, `nothing ran for input B: …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/26]⎯
+
+ FAIL  tests/acceptance/2072/held-action.test.ts > #2072 AC1 A send held under r1 with input A, answered yes: r1 with input B is refused and A alone runs > AC1 r1 with input B is refused naming r1, nothing runs and no action.entered is written; r1 with input A then runs once
+AssertionError: a refused call writes nothing to the record: the call with r1 and input B {"to":"b@example.invalid"} answered {"jsonrpc":"2.0","id":"deep-actions#4","result":{"content":[{"type":"text","text":"{\"status\":\"done\",\"output\":{\"to\":\"b@example.invalid\",\"alerts\":0},\"report\":{\"call\":\"01M7953S1EMB01C8T49E2GXR55\",\"changed\":[],\"verified\":\"unverified\",\"checked\":\"the digest was handed over; no answer read\"}}"}],"isError":false,"structuredContent":{"status":"done","output":{"to":"b@example.invalid","alerts":0},"report":{"call":"01M7953S1EMB01C8T49E2GXR55","changed":[],"verified":"unverified","checked":"the digest was handed over; no answer read"}}}}; action.entered for r1: [{"to":"b@example.invalid"}]: expected 24 to be 22 // Object.is equality
+
+- Expected
++ Received
+
+- 22
++ 24
+
+ ❯ tests/acceptance/2072/held-action.test.ts:63:85
+     61|     expect.soft(entered.filter((e) => JSON.stringify(e.data?.input) ==…
+     62|     expect.soft(entered, `a refused call writes no action.entered: ${f…
+     63|     expect.soft(all.length, `a refused call writes nothing to the reco…
+       |                                                                                     ^
+     64|     expect.soft((await ran(w)).send_digest, `nothing ran for input B: …
+     65|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/26]⎯
+
+ FAIL  tests/acceptance/2072/held-action.test.ts > #2072 AC1 A send held under r1 with input A, answered yes: r1 with input B is refused and A alone runs > AC1 r1 with input B is refused naming r1, nothing runs and no action.entered is written; r1 with input A then runs once
+AssertionError: nothing ran for input B: the call with r1 and input B {"to":"b@example.invalid"} answered {"jsonrpc":"2.0","id":"deep-actions#4","result":{"content":[{"type":"text","text":"{\"status\":\"done\",\"output\":{\"to\":\"b@example.invalid\",\"alerts\":0},\"report\":{\"call\":\"01M7953S1EMB01C8T49E2GXR55\",\"changed\":[],\"verified\":\"unverified\",\"checked\":\"the digest was handed over; no answer read\"}}"}],"isError":false,"structuredContent":{"status":"done","output":{"to":"b@example.invalid","alerts":0},"report":{"call":"01M7953S1EMB01C8T49E2GXR55","changed":[],"verified":"unverified","checked":"the digest was handed over; no answer read"}}}}; action.entered for r1: [{"to":"b@example.invalid"}]: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ tests/acceptance/2072/held-action.test.ts:64:81
+     62|     expect.soft(entered, `a refused call writes no action.entered: ${f…
+     63|     expect.soft(all.length, `a refused call writes nothing to the reco…
+     64|     expect.soft((await ran(w)).send_digest, `nothing ran for input B: …
+       |                                                                                 ^
+     65|
+     66|     // Your yes still stands for the first call alone: A runs, once, w…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/26]⎯
+
+ FAIL  tests/acceptance/2072/held-action.test.ts > #2072 AC1 A send held under r1 with input A, answered yes: r1 with input B is refused and A alone runs > AC1 r1 with input B is refused naming r1, nothing runs and no action.entered is written; r1 with input A then runs once
+AssertionError: the call with r1 and input A runs on the yes: {"jsonrpc":"2.0","id":"deep-actions#6","result":{"content":[{"type":"text","text":"{\"code\":\"unavailable\",\"retryable\":false,\"remediation\":\"the request ID req-cd6509885889a8b0 was used for another call; nothing was run or written for this one; nothing ran.\",\"path\":\"/params/arguments/action\",\"actual\":\"ext.stocks.send_digest\",\"evidence\":[]}"}],"isError":true}}: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ tests/acceptance/2072/held-action.test.ts:68:126
+     66|     // Your yes still stands for the first call alone: A runs, once, w…
+     67|     const first = await callAction(w, 'ext.stocks.send_digest', reques…
+     68|     expect.soft(first.isError, `the call with r1 and input A runs on t…
+       |                                                                                                                              ^
+     69|     expect.soft(first.value?.status, `the call with r1 and input A is …
+     70|     const after = await w.events();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/26]⎯
+
+ FAIL  tests/acceptance/2072/held-action.test.ts > #2072 AC1 A send held under r1 with input A, answered yes: r1 with input B is refused and A alone runs > AC1 r1 with input B is refused naming r1, nothing runs and no action.entered is written; r1 with input A then runs once
+AssertionError: the call with r1 and input A is done: {"code":"unavailable","retryable":false,"remediation":"the request ID req-cd6509885889a8b0 was used for another call; nothing was run or written for this one; nothing ran.","path":"/params/arguments/action","actual":"ext.stocks.send_digest","evidence":[]}: expected undefined to be 'done' // Object.is equality
+
+- Expected:
+"done"
+
++ Received:
+undefined
+
+ ❯ tests/acceptance/2072/held-action.test.ts:69:110
+     67|     const first = await callAction(w, 'ext.stocks.send_digest', reques…
+     68|     expect.soft(first.isError, `the call with r1 and input A runs on t…
+     69|     expect.soft(first.value?.status, `the call with r1 and input A is …
+       |                                                                                                              ^
+     70|     const after = await w.events();
+     71|     expect.soft(enteredFor(after, request).map((e) => e.data?.input), …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/26]⎯
+
+ FAIL  tests/acceptance/2072/held-action.test.ts > #2072 AC1 A send held under r1 with input A, answered yes: r1 with input B is refused and A alone runs > AC1 r1 with input B is refused naming r1, nothing runs and no action.entered is written; r1 with input A then runs once
+AssertionError: input A ran once under r1, and only A: expected [ { to: 'b@example.invalid' } ] to deeply equal [ { to: 'a@example.invalid' } ]
+
+- Expected
++ Received
+
+  [
+    {
+-     "to": "a@example.invalid",
++     "to": "b@example.invalid",
+    },
+  ]
+
+ ❯ tests/acceptance/2072/held-action.test.ts:71:112
+     69|     expect.soft(first.value?.status, `the call with r1 and input A is …
+     70|     const after = await w.events();
+     71|     expect.soft(enteredFor(after, request).map((e) => e.data?.input), …
+       |                                                                                                                ^
+     72|     expect.soft((await ran(w)).send_digest, 'the send ran once').toBe(…
+     73|     expect.soft(asksOf(after, w).length, 'the refusal raised no second…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/26]⎯
+
+ FAIL  tests/acceptance/2072/held-action.test.ts > #2072 AC2 A send held under r1, answered yes: r1 naming another change or send action is refused > AC2 a held send, then r1 naming a change action: refused naming r1, the change does not run
+AssertionError: a call with r1 that names another action is refused, but it ran: the call with r1 naming ext.stocks.set_alert answered {"jsonrpc":"2.0","id":"deep-actions#11","result":{"content":[{"type":"text","text":"{\"status\":\"done\",\"output\":{\"symbol\":\"NVDA\",\"above\":200,\"created\":true},\"report\":{\"call\":\"01M7953TYMR0S9Z67GD4D46FYS\",\"changed\":[\"ext.stocks.alert:NVDA\"],\"verified\":\"true\",\"checked\":\"read NVDA back from ext.stocks.alert: above 200\"}}"}],"isError":false,"structuredContent":{"status":"done","output":{"symbol":"NVDA","above":200,"created":true},"report":{"call":"01M7953TYMR0S9Z67GD4D46FYS","changed":["ext.stocks.alert:NVDA"],"verified":"true","checked":"read NVDA back from ext.stocks; action.entered for r1: ["ext.stocks.set_alert"]: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/acceptance/2072/held-action.test.ts:88:108
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/26]⎯
+
+ FAIL  tests/acceptance/2072/held-action.test.ts > #2072 AC2 A send held under r1, answered yes: r1 naming another change or send action is refused > AC2 a held send, then r1 naming a change action: refused naming r1, the change does not run
+AssertionError: the refusal names the request ID req-83ba51d06cf6c0b6: the call with r1 naming ext.stocks.set_alert answered {"jsonrpc":"2.0","id":"deep-actions#11","result":{"content":[{"type":"text","text":"{\"status\":\"done\",\"output\":{\"symbol\":\"NVDA\",\"above\":200,\"created\":true},\"report\":{\"call\":\"01M7953TYMR0S9Z67GD4D46FYS\",\"changed\":[\"ext.stocks.alert:NVDA\"],\"verified\":\"true\",\"checked\":\"read NVDA back from ext.stocks.alert: above 200\"}}"}],"isError":false,"structuredContent":{"status":"done","output":{"symbol":"NVDA","above":200,"created":true},"report":{"call":"01M7953TYMR0S9Z67GD4D46FYS","changed":["ext.stocks.alert:NVDA"],"verified":"true","checked":"read NVDA back from ext.stocks; action.entered for r1: ["ext.stocks.set_alert"]: expected '{"jsonrpc":"2.0","id":"deep-actions#1…' to contain 'req-83ba51d06cf6c0b6'
+
+Expected: "req-83ba51d06cf6c0b6"
+Received: "{"jsonrpc":"2.0","id":"deep-actions#11","result":{"content":[{"type":"text","text":"{\"status\":\"done\",\"output\":{\"symbol\":\"NVDA\",\"above\":200,\"created\":true},\"report\":{\"call\":\"01M7953TYMR0S9Z67GD4D46FYS\",\"changed\":[\"ext.stocks.alert:NVDA\"],\"verified\":\"true\",\"checked\":\"read NVDA back from ext.stocks.alert: above 200\"}}"}],"isError":false,"structuredContent":{"status":"done","output":{"symbol":"NVDA","above":200,"created":true},"report":{"call":"01M7953TYMR0S9Z67GD4D46FYS","changed":["ext.stocks.alert:NVDA"],"verified":"true","checked":"read NVDA back from ext.stocks.alert: above 200"}}}}"
+
+ ❯ tests/acceptance/2072/held-action.test.ts:89:102
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/26]⎯
+
+ FAIL  tests/acceptance/2072/held-action.test.ts > #2072 AC2 A send held under r1, answered yes: r1 naming another change or send action is refused > AC2 a held send, then r1 naming a change action: refused naming r1, the change does not run
+AssertionError: ext.stocks.set_alert ran under r1 on the yes for ext.stocks.send_digest: the call with r1 naming ext.stocks.set_alert answered {"jsonrpc":"2.0","id":"deep-actions#11","result":{"content":[{"type":"text","text":"{\"status\":\"done\",\"output\":{\"symbol\":\"NVDA\",\"above\":200,\"created\":true},\"report\":{\"call\":\"01M7953TYMR0S9Z67GD4D46FYS\",\"changed\":[\"ext.stocks.alert:NVDA\"],\"verified\":\"true\",\"checked\":\"read NVDA back from ext.stocks.alert: above 200\"}}"}],"isError":false,"structuredContent":{"status":"done","output":{"symbol":"NVDA","above":200,"created":true},"report":{"call":"01M7953TYMR0S9Z67GD4D46FYS","changed":["ext.stocks.alert:NVDA"],"verified":"true","checked":"read NVDA back from ext.stocks; action.entered for r1: ["ext.stocks.set_alert"]: expected [ { v: 1, …(13) } ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "actor": "you",
++     "agent": "claude-code",
++     "data": {
++       "action": "ext.stocks.set_alert",
++       "call": "01M7953TYMR0S9Z67GD4D46FYS",
++       "input": {
++         "above": 200,
++         "symbol": "NVDA",
++       },
++       "plugin": "test/stocks",
++       "request": "req-83ba51d06cf6c0b6",
++     },
++     "evidence": [],
++     "id": "01M7953TYMC1RSY1K6KHZJAC9P",
++     "kind": "action.entered",
++     "log_pos": 21,
++     "project": "work566851b2",
++     "scope": "you",
++     "session": "afc7556c-c0d0-4fb7-ab06-4f45f8814b78",
++     "ts": 1794529946580,
++     "v": 1,
++     "verified": true,
++     "writer": "core",
++   },
++ ]
+
+ ❯ tests/acceptance/2072/held-action.test.ts:90:184
+     88|     expect.soft(other.isError, `a call with r1 that names another acti…
+     89|     expect.soft(JSON.stringify(other.reply), `the refusal names the re…
+     90|     expect.soft(enteredFor(all, request).filter((e) => e.data?.action …
+       |                                                                                                                                                                                        ^
+     91|     expect.soft(enteredFor(all, request), `a refused call writes no ac…
+     92|     expect.soft(all.filter((e) => e.kind === ALERT), `the change wrote…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/26]⎯
+
+ FAIL  tests/acceptance/2072/held-action.test.ts > #2072 AC2 A send held under r1, answered yes: r1 naming another change or send action is refused > AC2 a held send, then r1 naming a change action: refused naming r1, the change does not run
+AssertionError: a refused call writes no action.entered: the call with r1 naming ext.stocks.set_alert answered {"jsonrpc":"2.0","id":"deep-actions#11","result":{"content":[{"type":"text","text":"{\"status\":\"done\",\"output\":{\"symbol\":\"NVDA\",\"above\":200,\"created\":true},\"report\":{\"call\":\"01M7953TYMR0S9Z67GD4D46FYS\",\"changed\":[\"ext.stocks.alert:NVDA\"],\"verified\":\"true\",\"checked\":\"read NVDA back from ext.stocks.alert: above 200\"}}"}],"isError":false,"structuredContent":{"status":"done","output":{"symbol":"NVDA","above":200,"created":true},"report":{"call":"01M7953TYMR0S9Z67GD4D46FYS","changed":["ext.stocks.alert:NVDA"],"verified":"true","checked":"read NVDA back from ext.stocks; action.entered for r1: ["ext.stocks.set_alert"]: expected [ { v: 1, …(13) } ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "actor": "you",
++     "agent": "claude-code",
++     "data": {
++       "action": "ext.stocks.set_alert",
++       "call": "01M7953TYMR0S9Z67GD4D46FYS",
++       "input": {
++         "above": 200,
++         "symbol": "NVDA",
++       },
++       "plugin": "test/stocks",
++       "request": "req-83ba51d06cf6c0b6",
++     },
++     "evidence": [],
++     "id": "01M7953TYMC1RSY1K6KHZJAC9P",
++     "kind": "action.entered",
++     "log_pos": 21,
++     "project": "work566851b2",
++     "scope": "you",
++     "session": "afc7556c-c0d0-4fb7-ab06-4f45f8814b78",
++     "ts": 1794529946580,
++     "v": 1,
++     "verified": true,
++     "writer": "core",
++   },
++ ]
+
+ ❯ tests/acceptance/2072/held-action.test.ts:91:95
+     89|     expect.soft(JSON.stringify(other.reply), `the refusal names the re…
+     90|     expect.soft(enteredFor(all, request).filter((e) => e.data?.action …
+     91|     expect.soft(enteredFor(all, request), `a refused call writes no ac…
+       |                                                                                               ^
+     92|     expect.soft(all.filter((e) => e.kind === ALERT), `the change wrote…
+     93|     expect.soft(all.length, `a refused call writes nothing to the reco…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/26]⎯
+
+ FAIL  tests/acceptance/2072/held-action.test.ts > #2072 AC2 A send held under r1, answered yes: r1 naming another change or send action is refused > AC2 a held send, then r1 naming a change action: refused naming r1, the change does not run
+AssertionError: the change wrote no store item: the call with r1 naming ext.stocks.set_alert answered {"jsonrpc":"2.0","id":"deep-actions#11","result":{"content":[{"type":"text","text":"{\"status\":\"done\",\"output\":{\"symbol\":\"NVDA\",\"above\":200,\"created\":true},\"report\":{\"call\":\"01M7953TYMR0S9Z67GD4D46FYS\",\"changed\":[\"ext.stocks.alert:NVDA\"],\"verified\":\"true\",\"checked\":\"read NVDA back from ext.stocks.alert: above 200\"}}"}],"isError":false,"structuredContent":{"status":"done","output":{"symbol":"NVDA","above":200,"created":true},"report":{"call":"01M7953TYMR0S9Z67GD4D46FYS","changed":["ext.stocks.alert:NVDA"],"verified":"true","checked":"read NVDA back from ext.stocks; action.entered for r1: ["ext.stocks.set_alert"]: expected [ { v: 1, …(13) } ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "actor": "you",
++     "agent": "claude-code",
++     "data": {
++       "call": "01M7953TYMR0S9Z67GD4D46FYS",
++       "generation": 1,
++       "key": "NVDA",
++       "value": {
++         "above": 200,
++         "symbol": "NVDA",
++       },
++     },
++     "evidence": [],
++     "id": "01M7953TYPSJ6QQGBX3D2VMB0J",
++     "kind": "ext.stocks.alert",
++     "log_pos": 22,
++     "project": "work566851b2",
++     "scope": "you",
++     "session": "afc7556c-c0d0-4fb7-ab06-4f45f8814b78",
++     "ts": 1794529946582,
++     "v": 1,
++     "verified": true,
++     "writer": "ext:test/stocks",
++   },
++ ]
+
+ ❯ tests/acceptance/2072/held-action.test.ts:92:97
+     90|     expect.soft(enteredFor(all, request).filter((e) => e.data?.action …
+     91|     expect.soft(enteredFor(all, request), `a refused call writes no ac…
+     92|     expect.soft(all.filter((e) => e.kind === ALERT), `the change wrote…
+       |                                                                                                 ^
+     93|     expect.soft(all.length, `a refused call writes nothing to the reco…
+     94|     expect.soft((await ran(w)).set_alert, `the change's handler did no…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/26]⎯
+
+ FAIL  tests/acceptance/2072/held-action.test.ts > #2072 AC2 A send held under r1, answered yes: r1 naming another change or send action is refused > AC2 a held send, then r1 naming a change action: refused naming r1, the change does not run
+AssertionError: a refused call writes nothing to the record: the call with r1 naming ext.stocks.set_alert answered {"jsonrpc":"2.0","id":"deep-actions#11","result":{"content":[{"type":"text","text":"{\"status\":\"done\",\"output\":{\"symbol\":\"NVDA\",\"above\":200,\"created\":true},\"report\":{\"call\":\"01M7953TYMR0S9Z67GD4D46FYS\",\"changed\":[\"ext.stocks.alert:NVDA\"],\"verified\":\"true\",\"checked\":\"read NVDA back from ext.stocks.alert: above 200\"}}"}],"isError":false,"structuredContent":{"status":"done","output":{"symbol":"NVDA","above":200,"created":true},"report":{"call":"01M7953TYMR0S9Z67GD4D46FYS","changed":["ext.stocks.alert:NVDA"],"verified":"true","checked":"read NVDA back from ext.stocks; action.entered for r1: ["ext.stocks.set_alert"]: expected 25 to be 20 // Object.is equality
+
+- Expected
++ Received
+
+- 20
++ 25
+
+ ❯ tests/acceptance/2072/held-action.test.ts:93:85
+     91|     expect.soft(enteredFor(all, request), `a refused call writes no ac…
+     92|     expect.soft(all.filter((e) => e.kind === ALERT), `the change wrote…
+     93|     expect.soft(all.length, `a refused call writes nothing to the reco…
+       |                                                                                     ^
+     94|     expect.soft((await ran(w)).set_alert, `the change's handler did no…
+     95|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/26]⎯
+
+ FAIL  tests/acceptance/2072/held-action.test.ts > #2072 AC2 A send held under r1, answered yes: r1 naming another change or send action is refused > AC2 a held send, then r1 naming a change action: refused naming r1, the change does not run
+AssertionError: the change's handler did not run: the call with r1 naming ext.stocks.set_alert answered {"jsonrpc":"2.0","id":"deep-actions#11","result":{"content":[{"type":"text","text":"{\"status\":\"done\",\"output\":{\"symbol\":\"NVDA\",\"above\":200,\"created\":true},\"report\":{\"call\":\"01M7953TYMR0S9Z67GD4D46FYS\",\"changed\":[\"ext.stocks.alert:NVDA\"],\"verified\":\"true\",\"checked\":\"read NVDA back from ext.stocks.alert: above 200\"}}"}],"isError":false,"structuredContent":{"status":"done","output":{"symbol":"NVDA","above":200,"created":true},"report":{"call":"01M7953TYMR0S9Z67GD4D46FYS","changed":["ext.stocks.alert:NVDA"],"verified":"true","checked":"read NVDA back from ext.stocks; action.entered for r1: ["ext.stocks.set_alert"]: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ tests/acceptance/2072/held-action.test.ts:94:88
+     92|     expect.soft(all.filter((e) => e.kind === ALERT), `the change wrote…
+     93|     expect.soft(all.length, `a refused call writes nothing to the reco…
+     94|     expect.soft((await ran(w)).set_alert, `the change's handler did no…
+       |                                                                                        ^
+     95|
+     96|     // The yes still stands for the send alone.
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/26]⎯
+
+ FAIL  tests/acceptance/2072/held-action.test.ts > #2072 AC2 A send held under r1, answered yes: r1 naming another change or send action is refused > AC2 a held send, then r1 naming a change action: refused naming r1, the change does not run
+AssertionError: the held send then runs on its yes: {"jsonrpc":"2.0","id":"deep-actions#13","result":{"content":[{"type":"text","text":"{\"code\":\"unavailable\",\"retryable\":false,\"remediation\":\"the request ID req-83ba51d06cf6c0b6 was used for another call; nothing was run or written for this one; nothing ran.\",\"path\":\"/params/arguments/action\",\"actual\":\"ext.stocks.send_digest\",\"evidence\":[]}"}],"isError":true}}: expected undefined to be 'done' // Object.is equality
+
+- Expected:
+"done"
+
++ Received:
+undefined
+
+ ❯ tests/acceptance/2072/held-action.test.ts:98:122
+     96|     // The yes still stands for the send alone.
+     97|     const first = await callAction(w, 'ext.stocks.send_digest', reques…
+     98|     expect.soft(first.value?.status, `the held send then runs on its y…
+       |                                                                                                                          ^
+     99|     expect.soft(await ran(w), 'the send ran once and the change never'…
+    100|   }, 360_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/26]⎯
+
+ FAIL  tests/acceptance/2072/held-action.test.ts > #2072 AC2 A send held under r1, answered yes: r1 naming another change or send action is refused > AC2 a held send, then r1 naming a change action: refused naming r1, the change does not run
+AssertionError: the send ran once and the change never: expected { set_alert: 1, send_digest: +0 } to deeply equal { set_alert: +0, send_digest: 1 }
+
+- Expected
++ Received
+
+  {
+-   "send_digest": 1,
+-   "set_alert": 0,
++   "send_digest": 0,
++   "set_alert": 1,
+  }
+
+ ❯ tests/acceptance/2072/held-action.test.ts:99:73
+     97|     const first = await callAction(w, 'ext.stocks.send_digest', reques…
+     98|     expect.soft(first.value?.status, `the held send then runs on its y…
+     99|     expect.soft(await ran(w), 'the send ran once and the change never'…
+       |                                                                         ^
+    100|   }, 360_000);
+    101|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/26]⎯
+
+ FAIL  tests/acceptance/2072/held-action.test.ts > #2072 AC2 A send held under r1, answered yes: r1 naming another change or send action is refused > AC2 a held change, then r1 naming a send action: refused naming r1, the send does not run
+AssertionError: a call with r1 that names another action is refused, but it ran: the call with r1 naming ext.stocks.send_digest answered {"jsonrpc":"2.0","id":"deep-actions#18","result":{"content":[{"type":"text","text":"{\"status\":\"done\",\"output\":{\"to\":\"a@example.invalid\",\"alerts\":0},\"report\":{\"call\":\"01M7953WQCN0DQJHEZHWHFQFE0\",\"changed\":[],\"verified\":\"unverified\",\"checked\":\"the digest was handed over; no answer read\"}}"}],"isError":false,"structuredContent":{"status":"done","output":{"to":"a@example.invalid","alerts":0},"report":{"call":"01M7953WQCN0DQJHEZHWHFQFE0","changed":[],"verified":"unverified","checked":"the digest was handed over; no answer read"}}}}; action.entered for r1: ["ext.stocks.send_digest"]: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/acceptance/2072/held-action.test.ts:112:108
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/26]⎯
+
+ FAIL  tests/acceptance/2072/held-action.test.ts > #2072 AC2 A send held under r1, answered yes: r1 naming another change or send action is refused > AC2 a held change, then r1 naming a send action: refused naming r1, the send does not run
+AssertionError: the refusal names the request ID req-545e27b02b0174b8: the call with r1 naming ext.stocks.send_digest answered {"jsonrpc":"2.0","id":"deep-actions#18","result":{"content":[{"type":"text","text":"{\"status\":\"done\",\"output\":{\"to\":\"a@example.invalid\",\"alerts\":0},\"report\":{\"call\":\"01M7953WQCN0DQJHEZHWHFQFE0\",\"changed\":[],\"verified\":\"unverified\",\"checked\":\"the digest was handed over; no answer read\"}}"}],"isError":false,"structuredContent":{"status":"done","output":{"to":"a@example.invalid","alerts":0},"report":{"call":"01M7953WQCN0DQJHEZHWHFQFE0","changed":[],"verified":"unverified","checked":"the digest was handed over; no answer read"}}}}; action.entered for r1: ["ext.stocks.send_digest"]: expected '{"jsonrpc":"2.0","id":"deep-actions#1…' to contain 'req-545e27b02b0174b8'
+
+Expected: "req-545e27b02b0174b8"
+Received: "{"jsonrpc":"2.0","id":"deep-actions#18","result":{"content":[{"type":"text","text":"{\"status\":\"done\",\"output\":{\"to\":\"a@example.invalid\",\"alerts\":0},\"report\":{\"call\":\"01M7953WQCN0DQJHEZHWHFQFE0\",\"changed\":[],\"verified\":\"unverified\",\"checked\":\"the digest was handed over; no answer read\"}}"}],"isError":false,"structuredContent":{"status":"done","output":{"to":"a@example.invalid","alerts":0},"report":{"call":"01M7953WQCN0DQJHEZHWHFQFE0","changed":[],"verified":"unverified","checked":"the digest was handed over; no answer read"}}}}"
+
+ ❯ tests/acceptance/2072/held-action.test.ts:113:102
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/26]⎯
+
+ FAIL  tests/acceptance/2072/held-action.test.ts > #2072 AC2 A send held under r1, answered yes: r1 naming another change or send action is refused > AC2 a held change, then r1 naming a send action: refused naming r1, the send does not run
+AssertionError: a refused call writes no action.entered: the call with r1 naming ext.stocks.send_digest answered {"jsonrpc":"2.0","id":"deep-actions#18","result":{"content":[{"type":"text","text":"{\"status\":\"done\",\"output\":{\"to\":\"a@example.invalid\",\"alerts\":0},\"report\":{\"call\":\"01M7953WQCN0DQJHEZHWHFQFE0\",\"changed\":[],\"verified\":\"unverified\",\"checked\":\"the digest was handed over; no answer read\"}}"}],"isError":false,"structuredContent":{"status":"done","output":{"to":"a@example.invalid","alerts":0},"report":{"call":"01M7953WQCN0DQJHEZHWHFQFE0","changed":[],"verified":"unverified","checked":"the digest was handed over; no answer read"}}}}; action.entered for r1: ["ext.stocks.send_digest"]: expected [ { v: 1, …(13) } ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "actor": "you",
++     "agent": "claude-code",
++     "data": {
++       "action": "ext.stocks.send_digest",
++       "call": "01M7953WQCN0DQJHEZHWHFQFE0",
++       "input": {
++         "to": "a@example.invalid",
++       },
++       "plugin": "test/stocks",
++       "request": "req-545e27b02b0174b8",
++     },
++     "evidence": [],
++     "id": "01M7953WQC97WQN32FK2SMN9SV",
++     "kind": "action.entered",
++     "log_pos": 24,
++     "project": "workefe135bc",
++     "scope": "you",
++     "session": "f37e4f89-f7d3-44a9-86f3-7af49a9b1f91",
++     "ts": 1794529948396,
++     "v": 1,
++     "verified": true,
++     "writer": "core",
++   },
++ ]
+
+ ❯ tests/acceptance/2072/held-action.test.ts:114:95
+    112|     expect.soft(other.isError, `a call with r1 that names another acti…
+    113|     expect.soft(JSON.stringify(other.reply), `the refusal names the re…
+    114|     expect.soft(enteredFor(all, request), `a refused call writes no ac…
+       |                                                                                               ^
+    115|     expect.soft(all.length, `a refused call writes nothing to the reco…
+    116|     expect.soft((await ran(w)).send_digest, `the send's handler did no…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/26]⎯
+
+ FAIL  tests/acceptance/2072/held-action.test.ts > #2072 AC2 A send held under r1, answered yes: r1 naming another change or send action is refused > AC2 a held change, then r1 naming a send action: refused naming r1, the send does not run
+AssertionError: a refused call writes nothing to the record: the call with r1 naming ext.stocks.send_digest answered {"jsonrpc":"2.0","id":"deep-actions#18","result":{"content":[{"type":"text","text":"{\"status\":\"done\",\"output\":{\"to\":\"a@example.invalid\",\"alerts\":0},\"report\":{\"call\":\"01M7953WQCN0DQJHEZHWHFQFE0\",\"changed\":[],\"verified\":\"unverified\",\"checked\":\"the digest was handed over; no answer read\"}}"}],"isError":false,"structuredContent":{"status":"done","output":{"to":"a@example.invalid","alerts":0},"report":{"call":"01M7953WQCN0DQJHEZHWHFQFE0","changed":[],"verified":"unverified","checked":"the digest was handed over; no answer read"}}}}; action.entered for r1: ["ext.stocks.send_digest"]: expected 30 to be 23 // Object.is equality
+
+- Expected
++ Received
+
+- 23
++ 30
+
+ ❯ tests/acceptance/2072/held-action.test.ts:115:85
+    113|     expect.soft(JSON.stringify(other.reply), `the refusal names the re…
+    114|     expect.soft(enteredFor(all, request), `a refused call writes no ac…
+    115|     expect.soft(all.length, `a refused call writes nothing to the reco…
+       |                                                                                     ^
+    116|     expect.soft((await ran(w)).send_digest, `the send's handler did no…
+    117|   }, 360_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[24/26]⎯
+
+ FAIL  tests/acceptance/2072/held-action.test.ts > #2072 AC2 A send held under r1, answered yes: r1 naming another change or send action is refused > AC2 a held change, then r1 naming a send action: refused naming r1, the send does not run
+AssertionError: the send's handler did not run: the call with r1 naming ext.stocks.send_digest answered {"jsonrpc":"2.0","id":"deep-actions#18","result":{"content":[{"type":"text","text":"{\"status\":\"done\",\"output\":{\"to\":\"a@example.invalid\",\"alerts\":0},\"report\":{\"call\":\"01M7953WQCN0DQJHEZHWHFQFE0\",\"changed\":[],\"verified\":\"unverified\",\"checked\":\"the digest was handed over; no answer read\"}}"}],"isError":false,"structuredContent":{"status":"done","output":{"to":"a@example.invalid","alerts":0},"report":{"call":"01M7953WQCN0DQJHEZHWHFQFE0","changed":[],"verified":"unverified","checked":"the digest was handed over; no answer read"}}}}; action.entered for r1: ["ext.stocks.send_digest"]: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ tests/acceptance/2072/held-action.test.ts:116:88
+    114|     expect.soft(enteredFor(all, request), `a refused call writes no ac…
+    115|     expect.soft(all.length, `a refused call writes nothing to the reco…
+    116|     expect.soft((await ran(w)).send_digest, `the send's handler did no…
+       |                                                                                        ^
+    117|   }, 360_000);
+    118| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[25/26]⎯
+
+ FAIL  tests/acceptance/2072/held-action.test.ts > #2072 AC3 An input longer than the question shows is marked as cut, with its length > AC3 an input of 2,000 characters shows on the ask as cut, with its length
+AssertionError: the ask gives the input's length, 2,000: Let this session send with test/stocks's ext.stocks.send_digest, given {"to":"HEADOFINPUTxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx?: expected 'Let this session send with test/stock…' to match /2,?000/
+
+- Expected:
+/2,?000/
+
++ Received:
+"Let this session send with test/stocks's ext.stocks.send_digest, given {\"to\":\"HEADOFINPUTxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx?"
+
+ ❯ tests/acceptance/2072/held-action.test.ts:137:78
+    135|     expect(question, `the ask still shows the start of the input: ${qu…
+    136|     expect(question, `the ask does not show the whole input: ${questio…
+    137|     expect(question, `the ask gives the input's length, 2,000: ${quest…
+       |                                                                              ^
+    138|     expect(question, `the ask says the input is cut: ${question}`).toM…
+    139|   }, 240_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[26/26]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  6 failed | 1 passed (7)
+   Start at  16:32:20
+   Duration  20.18s (tests 99%, import 1%)
+
+
+BASELINE_EXIT=1

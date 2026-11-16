@@ -1,0 +1,26 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "title": "Graphic Element",
+    "description": "Element used to display vector data in a shape layer",
+    "allOf": [
+        {
+            "$ref": "#/$defs/helpers/visual-object"
+        },
+        {
+            "type": "object",
+            "properties": {
+                "hd": {
+                    "title": "Hidden",
+                    "description": "Whether the shape is hidden",
+                    "type": "boolean"
+                },
+                "ty": {
+                    "title": "Shape Type",
+                    "type": "string"
+                }
+            },
+            "required": ["ty"]
+        }
+    ]
+}

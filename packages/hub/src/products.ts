@@ -21,12 +21,12 @@ import { parse } from 'yaml';
 import { DISK_FLOOR, freeBytes } from './disk.js';
 import { repoOf } from './paths.js';
 import { writeSynced } from './vfs.js';
+import { isRecord as isObj } from '@deepbuild/contracts';
 
 /** One entry of `environment.products`. */
 interface Product { name: string; path: string; key: string[]; key_values: string[]; build: string }
 
 type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 const isText = (v: unknown): v is string => typeof v === 'string' && v.length > 0;
 /** A path inside the checkout: relative, with no `..` or empty segment. */
 const inside = (p: string): boolean => !p.startsWith('/') && p.split('/').every((s) => s !== '' && s !== '..' && s !== '.');
@@ -380,6 +380,7 @@ export class Products {
       const entry: Entry = { repo, name, path, key, commit: '', built: now, finished: now, used: now, served: 0, bytes: await sizeOf(dst) };
       mkdirSync(join(this.store, repo), { recursive: true });
       if (this.found(repo, name, key)) { this.found(repo, name, key)!.used = now; this.save(); return; }
+      rmSync(this.entryDir(entry), { recursive: true, force: true });
       renameSync(stage, this.entryDir(entry));
       this.index.entries = [...this.index.entries, entry];
       this.save();
@@ -464,6 +465,7 @@ export class Products {
       const entry: Entry = { repo, name: p.name, path: p.path, key, commit, built, finished: this.o.now(), used: this.o.now(), served: 0, bytes: await sizeOf(join(src, p.path)) };
       mkdirSync(join(this.store, repo), { recursive: true });
       rmSync(join(stage, 'index'), { force: true });
+      rmSync(this.entryDir(entry), { recursive: true, force: true });
       renameSync(stage, this.entryDir(entry));
       this.index.entries = [...this.index.entries.filter((e) => !(e.repo === repo && e.name === p.name && e.key === key)), entry];
       this.save();
@@ -569,8 +571,12 @@ export class Products {
   }
 
   /** Every hook of a session: when it worked, which calls are open, and its end; a call's end checks the store. */
-  hook(meta: { event: string; session: string; toolUse?: string | undefined }): void {
-    const s = this.sessions.get(meta.session);
+  async hook(meta: { event: string; session: string; cwd: string; toolUse?: string | undefined }): Promise<void> {
+    let s = this.sessions.get(meta.session);
+    if (!s && meta.cwd) {
+      const repo = await this.repoAt(meta.cwd);
+      if (repo) s = this.seen(meta.session, repo.top);
+    }
     if (!s) return;
     const now = this.o.now();
     s.last = now;

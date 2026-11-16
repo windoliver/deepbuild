@@ -260,10 +260,13 @@ fn noop(desc: &wgpu::DeviceDescriptor<'_>) -> (wgpu::Device, wgpu::Queue) {
     let mut instance = wgpu::InstanceDescriptor::new_without_display_handle();
     instance.backends = wgpu::Backends::NOOP;
     instance.backend_options.noop = wgpu::NoopBackendOptions::enabled();
-    instance.flags.remove(wgpu::InstanceFlags::VALIDATION_INDIRECT_CALL);
+    instance
+        .flags
+        .remove(wgpu::InstanceFlags::VALIDATION_INDIRECT_CALL);
     let instance = wgpu::Instance::new(instance);
-    let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))
-        .expect("the noop backend has an adapter");
+    let adapter =
+        pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))
+            .expect("the noop backend has an adapter");
     pollster::block_on(adapter.request_device(desc)).expect("the noop adapter opens a device")
 }
 

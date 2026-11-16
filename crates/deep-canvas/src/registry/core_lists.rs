@@ -615,21 +615,40 @@ fn service_fixture(v: &Value) -> Result<(), String> {
     }
 }
 
+/// The index of the first fixture case whose answer isn't its check kind's: the request it names.
+fn service_request(v: &Value) -> Value {
+    let cases = v.get("fixture").and_then(Value::as_array);
+    let first = cases
+        .into_iter()
+        .flatten()
+        .position(|c| c.get("answer") != c.get("check"));
+    first.map_or(Value::Null, |i| json!({"request": i}))
+}
+
+/// Every fixture case's answer is its check kind's on the state the case's step read.
 fn service_same_step(v: &Value) -> Result<(), String> {
-    match v.get("answers_from").and_then(Value::as_str) {
-        Some("step") => Ok(()),
-        other => Err(format!(
-            "it answers from the world at {other:?}, not the step it serves"
+    let cases = v.get("fixture").and_then(Value::as_array);
+    match cases.into_iter().flatten().find(|c| c.get("answer") != c.get("check")) {
+        None => Ok(()),
+        Some(c) => Err(format!(
+            "its answer to {} after step {} is {}; its check kind's on the state that step read is {}",
+            c["request"], c["step"], c["answer"], c["check"]
         )),
     }
 }
 
+/// Between-step services (Logic: between-step services): native code a first-party canvas module
+/// registers, answering a logic item between its steps; no pack, plug-in or agent fills it.
 fn logic_service() -> RegistryDef {
+    let layout = json!({"type": "object", "properties": {"bytes": {"type": "integer", "minimum": 1}}, "required": ["bytes"]});
     RegistryDef::new(
         "logic.service@1",
         obj(
-            json!({"answers_from": {"type": "string"}, "fixture": {"type": "array"}}),
-            &["answers_from"],
+            json!({"request": layout, "result": layout,
+                   "max_per_step": {"type": "integer", "minimum": 1, "maximum": 1024},
+                   "fuel_per_request": {"type": "integer", "minimum": 0},
+                   "fixture": {"type": "array"}}),
+            &["request", "result", "max_per_step", "fuel_per_request"],
         ),
         &["module"],
         SINCE,
@@ -640,11 +659,17 @@ fn logic_service() -> RegistryDef {
         "a service that answers from the world after its next step",
         service_same_step,
     )
+    .reported(service_request)
     .planted(
         "answers_after_next_step",
-        json!({"answers_from": "next_step", "fixture": [{"ask": "nearest", "at": 3}]}),
+        json!({"request": {"bytes": 8}, "result": {"bytes": 8}, "max_per_step": 1, "fuel_per_request": 0,
+               "fixture": [{"request": {"ray": {"from": [0, 0, 0], "dir": [1, 0, 0]}}, "step": 30,
+                            "answer": {"hits": 1, "distance": 9.991_666_666_666_667}, "check": {"hits": 1, "distance": 10.0}}]}),
     )
-    .planted("no_fixture", json!({"answers_from": "step"}))
+    .planted(
+        "no_fixture",
+        json!({"request": {"bytes": 8}, "result": {"bytes": 8}, "max_per_step": 1, "fuel_per_request": 0}),
+    )
 }
 
 // ---- constraint@1
@@ -741,6 +766,19 @@ fn constraint_cycle(v: &Value) -> Result<(), String> {
             "a two-item cycle through it is answered {code:?} naming {chain:?}, not refused `{RELATION_CYCLE}` or `{CYCLE}` naming both"
         ))
     }
+}
+
+/// The `constraint@1` entries the design gives a module other than motion, with that module
+/// (#225): a build without it refuses a document holding one with `module_missing`, naming it,
+/// and motion compiles past one, so motion names no other module's kind.
+pub const CONSTRAINT_OWNERS: [(&str, &str); 1] = [("follow_stream", "data")];
+
+/// The module the design gives a `constraint@1` kind outside motion, if any.
+pub fn constraint_owner(kind: &str) -> Option<&'static str> {
+    CONSTRAINT_OWNERS
+        .iter()
+        .find(|(k, _)| *k == kind)
+        .map(|(_, m)| *m)
 }
 
 fn constraint() -> RegistryDef {
@@ -1040,7 +1078,11 @@ fn outline_source() -> RegistryDef {
 
 /// The verdicts `judged` holds, by asset, for each sha256 in `at`; a missing one is an error.
 fn verdicts<'a>(v: &'a Value, at: &str, judged: &str) -> Result<Vec<(&'a str, &'a Value)>, String> {
-    let list = v.get(judged).and_then(Value::as_array).map(Vec::as_slice).unwrap_or(&[]);
+    let list = v
+        .get(judged)
+        .and_then(Value::as_array)
+        .map(Vec::as_slice)
+        .unwrap_or(&[]);
     strings(v, at)
         .into_iter()
         .map(|sha| {

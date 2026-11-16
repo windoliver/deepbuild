@@ -171,7 +171,8 @@ impl<'a> Doc<'a> {
         let children = children
             .into_iter()
             .map(|(parent, mut kids)| {
-                kids.sort();
+                // #233: numbers in tied IDs read whole, so a recipe's derived cells flow in order.
+                kids.sort_by(|a, b| a.0.cmp(b.0).then_with(|| crate::grid_rules::natural(a.1, b.1)));
                 (parent, kids.into_iter().map(|(_, id)| id).collect())
             })
             .collect();
@@ -441,8 +442,18 @@ impl Tree<'_, '_, '_> {
                     item: r.path.trim_start_matches("items/").to_string(),
                 }
             })?;
+        // #1966: a list lays out as it draws, its items `indent` in and `gap` apart.
+        let list =
+            crate::lines::list(params, f64::from(size), &format!("items/{id}")).map_err(|r| {
+                Refusal {
+                    code: r.code,
+                    item: r.path.trim_start_matches("items/").to_string(),
+                }
+            })?;
         let shaped = self.shaper.shape(&Spec {
             spans: &spans,
+            gap: list.map_or(0., |l| l.gap as f32),
+            indent: list.map_or(0., |l| l.indent as f32),
             family: role.family(),
             fallback: &[],
             lang: None,

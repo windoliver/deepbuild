@@ -9,7 +9,6 @@ use std::collections::BTreeMap;
 use deep_canvas_scene3d::geom::Mesh;
 use deep_canvas_scene3d::scene::{Scene, Shape};
 use deep_gpu::device::Device;
-use wgpu::util::DeviceExt as _;
 
 const SOURCE: &str = include_str!("sway.wgsl");
 /// Vertices a workgroup moves.
@@ -29,6 +28,8 @@ struct Params {
 /// One swaying solid's buffers: its params, and the gust the pass last used.
 struct Mover {
     params: wgpu::Buffer,
+    /// The params its buffer holds.
+    moved: Option<Params>,
     reading: wgpu::Buffer,
     bind: wgpu::BindGroup,
     vertices: u32,
@@ -121,6 +122,7 @@ impl Sways {
             shape,
             Mover {
                 params,
+                moved: None,
                 reading,
                 bind,
                 vertices,
@@ -137,8 +139,9 @@ impl Sways {
         Some(f32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
     }
 
-    /// Writes every swaying solid's vertices at this frame's t, in one submission.
-    pub fn move_all(&self, device: &Device, scene: &Scene) {
+    /// Writes every swaying solid's vertices at this frame's t, in one submission. A solid whose
+    /// params hold uploads none again.
+    pub fn move_all(&mut self, device: &Device, scene: &Scene) {
         let Some((pipeline, _)) = &self.pipeline else {
             return;
         };
@@ -147,7 +150,7 @@ impl Sways {
             let (Some(at), Some(sway), Some(mover)) = (
                 s.sway,
                 s.mesh.as_ref().and_then(|m| m.sway.as_ref()),
-                self.movers.get(&s.shape),
+                self.movers.get_mut(&s.shape),
             ) else {
                 continue;
             };
@@ -169,12 +172,16 @@ impl Sways {
                 time: [at.t as f32, 0.0, 0.0, 0.0],
                 counts: [mover.vertices, at.seed as u32, (at.seed >> 32) as u32, 0],
             };
-            deep_gpu::alloc::outside(|| {
-                device
-                    .queue
-                    .write_buffer(&mover.params, 0, bytemuck::bytes_of(&p))
-            });
-            moving.push(mover);
+            let held = mover.moved.as_ref();
+            if !held.is_some_and(|m| bytemuck::bytes_of(m) == bytemuck::bytes_of(&p)) {
+                mover.moved = Some(p);
+                deep_gpu::alloc::outside(|| {
+                    device
+                        .queue
+                        .write_buffer(&mover.params, 0, bytemuck::bytes_of(&p))
+                });
+            }
+            moving.push((mover.bind.clone(), mover.vertices));
         }
         if moving.is_empty() {
             return;
@@ -192,9 +199,9 @@ impl Sways {
                     timestamp_writes: None,
                 });
                 pass.set_pipeline(pipeline);
-                for mover in moving {
-                    pass.set_bind_group(0, &mover.bind, &[]);
-                    pass.dispatch_workgroups(mover.vertices.div_ceil(WORKGROUP).max(1), 1, 1);
+                for (bind, vertices) in moving {
+                    pass.set_bind_group(0, &bind, &[]);
+                    pass.dispatch_workgroups(vertices.div_ceil(WORKGROUP).max(1), 1, 1);
                 }
             }
             device.queue.submit([encoder.finish()]);
@@ -221,4 +228,72 @@ fn inverse(m: &[[f64; 4]; 3]) -> [[f32; 4]; 3] {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::tests::{orbiting_camera, stamped};
+    use crate::{Planted, Renderer};
+    use deep_canvas_scene3d::frames::Frames;
+    use deep_canvas_scene3d::look::Look3;
+    use deep_canvas_scene3d::scene::Labels;
+    use deep_gpu::device::{Backend, Gpu};
+    use serde_json::json;
+
+    /// A swaying tree and a subsurface slab under a still camera.
+    fn doc() -> serde_json::Value {
+        stamped(
+            &[
+                ("cam", orbiting_camera().0),
+                (
+                    "needles",
+                    json!({"kind": "material@1", "params": {"base_color": [0.1, 0.4, 0.2, 1], "roughness": 0.8}}),
+                ),
+                (
+                    "wax",
+                    json!({"kind": "material@1", "params": {"base_color": [0.8, 0.7, 0.6, 1], "subsurface": {"weight": 1}}}),
+                ),
+                (
+                    "tree",
+                    json!({"kind": "lathe@1", "params": {"outline": [[0.15, 0, false], [0.15, 1, false], [1, 1, false], [0, 3, false]], "segments": 8}, "material": "needles", "modifiers": [{"kind": "mod.sway@1", "params": {"amount": 0.3, "wind": {"direction": 0, "speed": 5, "gust": {"scale": 20}}, "seed": 7}}], "at": {"pos": [0, 0, 0]}}),
+                ),
+                (
+                    "slab",
+                    json!({"kind": "mark.box@1", "params": {"size": [1, 1, 1]}, "at": {"pos": [3, 0.5, 0]}, "material": "wax"}),
+                ),
+            ],
+            json!({}),
+        )
+    }
+
+    fn look() -> Look3 {
+        Look3::read(&json!({"roles": {"accent": "#1aa3c8", "ground": "#000000"}})).unwrap()
+    }
+
+    /// Canvas primitives, Frame budget: a still view draws nothing. A frame whose scene holds,
+    /// a swaying tree and a subsurface slab in it, writes nothing to the queue; a later t
+    /// writes the tree's params again.
+    #[test]
+    fn a_frame_whose_scene_holds_writes_nothing_for_a_swaying_and_a_subsurface_part() {
+        let gpu = Gpu::open(Backend::Noop).expect("the noop backend gives a device");
+        let device = gpu.device();
+        let (doc, look) = (doc(), look());
+        let mut labels = Labels::new();
+        let mut frames = Frames::new(&doc, &look, &mut labels).unwrap();
+        let mut renderer = Renderer::new(&device, Planted::default());
+        let mut writes = |t: i64| {
+            frames
+                .at(t, [128, 96], &Default::default(), &mut labels)
+                .unwrap();
+            let before = device.device.counts().read();
+            renderer.prepare(&device, frames.scene(), &look);
+            device.device.counts().read().since(before).writes
+        };
+        let first = writes(0);
+        assert!(first > 0, "the first frame writes its uniforms");
+        assert_eq!(writes(0), 0, "the same frame again");
+        assert!(writes(211_680_000) > 0, "the tree 0.3 s on");
+        let raised = device.take_raised();
+        assert!(raised.is_empty(), "the device raised: {raised:?}");
+    }
 }

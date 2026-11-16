@@ -2,7 +2,7 @@
 //! with its extra (the round a claim was sent back in, the checks' expected time, when a quiet session was last
 //! seen), and draws the look's status-map entry and glyph for it. The state comes from the record alone.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::sync::OnceLock;
 
 use serde_json::Value;
@@ -177,7 +177,8 @@ pub fn job_words(row: &Value, now: u64) -> String {
         Some(progress) => format!("{title} · {progress}"),
         None => {
             let ran = now.saturating_sub(row["since"].as_u64().unwrap_or(now));
-            format!("{title} · running {}", span(ran))
+            // A job's own word, such as a new project's working (#1342); running for one that names none.
+            format!("{title} · {} {}", row["word"].as_str().unwrap_or("running"), span(ran))
         }
     }
 }
@@ -398,6 +399,11 @@ pub struct Table {
     projects: HashMap<String, String>,
     /// Each agent the Agents page lists, as its newest agent.reach says it (#2019), in the order the record first names them.
     agents: Vec<(String, Value)>,
+    /// The asks each ask showed beside in its newest showing of several, the core's, in batch order (#1345).
+    batches: HashMap<String, Vec<String>>,
+    /// Every ask a showing of the core's held, and whether the record holds any showing at all (#1345).
+    shown: HashSet<String>,
+    showings: bool,
 }
 
 /// What a start says of the session it became (#1348): the approval ask of the work run it's part of, and the real
@@ -489,6 +495,22 @@ impl Table {
             {
                 let as_of = data["as_of"].as_u64().unwrap_or(0);
                 self.values.insert(reading.to_owned(), (value, as_of));
+            }
+        }
+        // A showing of several asks is one card's, and one notification's (#1345).
+        if kind == "ask.batched" && event["writer"] == "core" {
+            let asks: Vec<String> = event["data"]["asks"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|item| item["ask"].as_str().map(str::to_owned))
+                .collect();
+            self.showings = true;
+            self.shown.extend(asks.iter().cloned());
+            if asks.len() > 1 {
+                for ask in &asks {
+                    self.batches.insert(ask.clone(), asks.clone());
+                }
             }
         }
         if kind == "start.started" {
@@ -750,13 +772,7 @@ impl Table {
                 .list()
                 .into_iter()
                 .filter_map(|row| row["id"].as_str()?.strip_prefix("session:"))
-                .map(|session| {
-                    (
-                        session.to_owned(),
-                        self.title(session),
-                        self.state(session),
-                    )
-                })
+                .map(|session| (session.to_owned(), self.title(session), self.state(session)))
                 .collect();
         }
         self.order
@@ -788,6 +804,16 @@ impl Table {
     }
 
     /// When the ask's default applies: the deadline the core last gave it, else its own.
+    /// The asks `handle` showed beside in its newest showing of several, itself among them; empty when it showed alone (#1345).
+    pub fn batch(&self, handle: &str) -> &[String] {
+        self.batches.get(handle).map_or(&[], Vec::as_slice)
+    }
+
+    /// Whether a showing of the core's held `handle`; `None` for a record that holds no showing at all (#1345).
+    pub fn shown(&self, handle: &str) -> Option<bool> {
+        self.showings.then(|| self.shown.contains(handle))
+    }
+
     pub fn deadline(&self, ask: &Value) -> Option<u64> {
         self.readings
             .get(&handle(ask))
@@ -1133,7 +1159,8 @@ mod tests {
     /// how long it has run, in the row's time slot, never a count it wasn't given.
     #[test]
     fn a_job_row_counts_only_from_its_tools_counter() {
-        let counted = json!({"title": "test.encode", "progress": "300 of 600 · 40 s left", "since": 0});
+        let counted =
+            json!({"title": "test.encode", "progress": "300 of 600 · 40 s left", "since": 0});
         assert_eq!(
             job_words(&counted, 45_000),
             "test.encode · 300 of 600 · 40 s left"
@@ -1141,10 +1168,7 @@ mod tests {
         let bare = json!({"title": "test.encode", "since": 1_000});
         let words = job_words(&bare, 41_000);
         assert_eq!(words, "test.encode · running 40 s");
-        assert_eq!(
-            time_at_end(&words),
-            ("test.encode · running", Some("40 s"))
-        );
+        assert_eq!(time_at_end(&words), ("test.encode · running", Some("40 s")));
     }
 
     /// #1546: an age's next tick is the first ms its span reads differently, never later, never earlier.

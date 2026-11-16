@@ -4,11 +4,10 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { canonicalize, type JsonValue } from '@deepbuild/contracts';
+import { canonicalize, isRecord as object, type JsonValue } from '@deepbuild/contracts';
 import { checkPacks, type Canvas } from './canvas.js';
 
 type Obj = Record<string, unknown>;
-const object = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 const hash = (v: string | Uint8Array) => createHash('sha256').update(v).digest('hex');
 const ID = /^[a-z0-9][a-z0-9_-]*\/[a-z0-9][a-z0-9_-]*$/;
 const VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
@@ -68,6 +67,8 @@ export function readPack(from: string, shipped = false): PackVersion {
     }
   }
   if (object(m.recipes)) for (const [key, value] of Object.entries(m.recipes)) if (typeof value === 'string') m.recipes[key] = JSON.parse(local(from, value).toString('utf8')) as unknown;
+  // #1493: a familiar-names pack's census, read in place of its file's name, as the canvas core reads it.
+  if (typeof m.census === 'string') m.census = JSON.parse(local(from, m.census).toString('utf8')) as unknown;
   return { id: m.id, version: m.version, ref: `${m.id}@${m.version}`, digest: hash(canonicalize(m as JsonValue)), manifest: m, assets };
 }
 

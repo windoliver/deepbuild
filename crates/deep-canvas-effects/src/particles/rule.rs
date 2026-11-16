@@ -35,7 +35,7 @@ fn class_budget(class: &str) -> (Option<f64>, u64) {
 
 /// The canvas core's issue for a refusal of item `id`.
 pub fn issue(id: &str, r: &Refusal) -> Issue {
-    let mut i = Issue::error(r.code, id, r.path.clone(), r.actual.clone(), &r.what);
+    let mut i = Issue::error(r.code, id, r.path.clone(), (*r.actual).clone(), &r.what);
     i.ids.extend(r.also.iter().filter(|a| *a != id).cloned());
     i
 }
@@ -86,6 +86,11 @@ pub fn issues(doc: &Value, every: Option<u32>) -> Vec<Issue> {
                 out.push(issue(id, &r));
             }
         }
+        if s.space == spec::Space::World {
+            if let Some(r) = live_anchor(doc, id, p) {
+                out.push(issue(id, &r));
+            }
+        }
         if let Some(land) = &s.land {
             let members: Vec<&str> = doc["collections"][&land.on]["members"]
                 .as_array()
@@ -101,6 +106,40 @@ pub fn issues(doc: &Value, every: Option<u32>) -> Vec<Issue> {
     }
     out.extend(over_budget(doc));
     out
+}
+
+/// A world-space emitter's anchor that a logic array or a live drag moves (Particles
+/// `particles@1`: space and paths): its pose at an earlier birth bucket can't be read again, so
+/// the check refuses it, naming the anchor.
+fn live_anchor(doc: &Value, id: &str, p: &Value) -> Option<Refusal> {
+    let anchor = p["emit"]["anchor"].as_str()?;
+    let item = anchor.split('#').next().unwrap_or(anchor);
+    let kind = |i: &str| doc["items"][i]["kind"].as_str().unwrap_or("").to_string();
+    let by_logic = kind(item).starts_with("logic")
+        || shore::reads_logic(&doc["items"][item]["params"], &|owner| {
+            kind(owner).starts_with("logic")
+        });
+    let dragged = doc["controls"]
+        .as_object()
+        .into_iter()
+        .flatten()
+        .any(|(_, c)| c["handle"]["item"].as_str() == Some(item));
+    let how = match (by_logic, dragged) {
+        (true, _) => "a logic array moves it",
+        (false, true) => "a live drag moves it",
+        _ => return None,
+    };
+    Some(
+        Refusal::new(
+            "out_of_range",
+            format!("items/{id}/params/emit/anchor"),
+            format!(
+                "{id}: a world-space emitter's anchor {anchor} can't be read at earlier birth buckets: {how}"
+            ),
+        )
+        .with(Value::from(anchor))
+        .naming(item),
+    )
 }
 
 /// One item's share of the estimate: its elements, its operator time and its scratch.

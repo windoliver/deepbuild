@@ -9,9 +9,8 @@
 //! `deep-hook <agent> waiter`, Claude Code's background Stop entry, it waits for an answer to its session and
 //! wakes the session with it (#25). As `deep-hook mcp actions`, it is the deep-actions MCP server (actions.rs).
 
-use std::fs::{self, DirBuilder, File, OpenOptions};
+use std::fs;
 use std::io::{BufRead, BufReader, ErrorKind, Read, Write};
-use std::os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt};
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
@@ -27,6 +26,8 @@ use deep_hook::matcher;
 mod actions;
 mod heavy;
 mod remote;
+mod spool_file;
+mod tool_paths;
 
 /// How long the hub has to acknowledge a request, from the hook's start: the 20 ms the hub has to acknowledge
 /// once it reads it. The rest of the design's 50 ms is for the process to start, decide, spool and exit.
@@ -215,9 +216,12 @@ struct Rules {
     standing: Vec<String>,
 }
 
+/// Why rules.json can't be read when it is missing though setup finished (#1856): setup wrote it, so it was removed.
+const REMOVED: &str = "was removed after setup (`deep setup` writes it again)";
+
 /// ~/.deepbuild/rules.json, `{"v": 1, "entries": {<name>: guard@1}, "classes": {<tool>: <class>}}`; nothing when it
-/// is missing, and why not when it can't be read or isn't that shape. Other members, such as each entry's planted
-/// call and twin, are the hub's.
+/// is missing before setup has finished, and why not when it was removed since, can't be read or isn't that shape.
+/// Other members, such as each entry's planted call and twin, are the hub's.
 fn rules() -> Result<Rules, String> {
     // The planted wrong program for #304's AC1 reads no entry: its one rule is compiled in.
     if cfg!(feature = "plant-compiled-rule") {
@@ -225,7 +229,12 @@ fn rules() -> Result<Rules, String> {
     }
     let text = match fs::read_to_string(home().join("rules.json")) {
         Ok(text) => text,
-        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Rules::default()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            return match home().join("setup-finished.json").exists() {
+                true => Err(REMOVED.to_string()),
+                false => Ok(Rules::default()),
+            };
+        }
         Err(error) => return Err(format!("can't be read: {error}")),
     };
     let rules = parse(&text).map_err(|_| "isn't JSON".to_string())?;
@@ -370,64 +379,10 @@ const READ_TOOLS: &[&str] = &[
     "Grep",
 ];
 
-/// A path as pi's file tools open it (pi's `normalizePath`): its unicode spaces plain, without one leading `@`, a bare
-/// `~` the home folder, and a `file://` URL the path it names.
-fn pi_path(path: &str) -> String {
-    let spaced: String = path
-        .chars()
-        .map(|c| match c {
-            '\u{00A0}' | '\u{2000}'..='\u{200A}' | '\u{202F}' | '\u{205F}' | '\u{3000}' => ' ',
-            c => c,
-        })
-        .collect();
-    let bare = spaced.strip_prefix('@').unwrap_or(&spaced);
-    if bare == "~" {
-        return "~/".to_string();
-    }
-    match bare.strip_prefix("file://") {
-        Some(url) => file_url_path(url),
-        None => bare.to_string(),
-    }
-}
-
-/// What Node's `fileURLToPath` makes of a `file://` URL's rest: the URL parser ends it at a `?` or `#`, drops tabs and
-/// newlines and what trails it and reads `\` as `/`; then it is percent-decoded. Any host is passed over: Node opens the
-/// path under one that decodes to `localhost` however it is spelled, and throws on the rest, so nothing else opens.
-fn file_url_path(url: &str) -> String {
-    let clean: String = url
-        .trim_end_matches(|c: char| c <= ' ')
-        .chars()
-        .filter(|c| !matches!(c, '\t' | '\n' | '\r'))
-        .map(|c| if c == '\\' { '/' } else { c })
-        .collect();
-    let path = clean.split(['?', '#']).next().unwrap_or("");
-    let path = path.find('/').map_or(path, |slash| &path[slash..]);
-    let bytes = path.as_bytes();
-    let mut out = Vec::with_capacity(bytes.len());
-    let mut i = 0;
-    while i < bytes.len() {
-        let hex = (bytes[i] == b'%')
-            .then(|| path.get(i + 1..i + 3))
-            .flatten()
-            .and_then(|h| u8::from_str_radix(h, 16).ok());
-        match hex {
-            Some(byte) => {
-                out.push(byte);
-                i += 3;
-            }
-            None => {
-                out.push(bytes[i]);
-                i += 1;
-            }
-        }
-    }
-    String::from_utf8_lossy(&out).into_owned()
-}
-
 /// The call a tool hook makes, as guards read it: a shell command (Bash's `tool_input.command`), a file tool's
-/// path (Edit, MultiEdit, Write, NotebookEdit; Read and Grep read theirs) or a patch's (Codex's apply_patch), and
-/// for every tool, what it counts as: the class `classes` gives it, else change, and destructive for a tool whose
-/// name starts with `delete_`, whatever it is given. None for a payload that names no tool.
+/// path (Edit, MultiEdit, Write, NotebookEdit; Read and Grep read theirs), a patch's (Codex's apply_patch) or an MCP
+/// call's path arguments (#1848), and for every tool, what it counts as: the class `classes` gives it, else change, and
+/// destructive for a tool whose name starts with `delete_`, whatever it is given. None for a payload that names no tool.
 fn call(payload: &Value, classes: &[(String, String)]) -> Option<matcher::Call> {
     let Some(Value::String(tool)) = member(payload, "tool_name") else {
         return None;
@@ -452,12 +407,14 @@ fn call(payload: &Value, classes: &[(String, String)]) -> Option<matcher::Call> 
         "bash" => (field("command"), Vec::new(), false),
         "edit" | "write" => (
             None,
-            field("path").map(pi_path).into_iter().collect(),
+            field("path").map(tool_paths::pi_path).into_iter().collect(),
             false,
         ),
-        "read" | "grep" | "find" | "ls" => {
-            (None, field("path").map(pi_path).into_iter().collect(), true)
-        }
+        "read" | "grep" | "find" | "ls" => (
+            None,
+            field("path").map(tool_paths::pi_path).into_iter().collect(),
+            true,
+        ),
         _ => (None, Vec::new(), false),
     };
     let cwd = match member(payload, "cwd") {
@@ -465,16 +422,8 @@ fn call(payload: &Value, classes: &[(String, String)]) -> Option<matcher::Call> 
         _ => None,
     };
     let home = PathBuf::from(env::var_os("HOME").unwrap_or_default());
-    let mut call = matcher::Call::new(
-        tool,
-        command,
-        (&paths, read),
-        cwd.as_deref(),
-        &home,
-        &address(),
-    );
     let named = tool.rsplit("__").next().unwrap_or(tool);
-    call.counts =
+    let counts =
         if cfg!(feature = "plant-listed-kinds-only") && !READ_TOOLS.contains(&tool.as_str()) {
             None
         } else if named.starts_with("delete_") {
@@ -488,6 +437,32 @@ fn call(payload: &Value, classes: &[(String, String)]) -> Option<matcher::Call> 
                     .to_string(),
             )
         };
+    // An MCP call reads the paths its arguments name, and writes them too unless its tool counts as read.
+    use matcher::Names::{Both, Reads, Writes};
+    let (args, paths, names) = match tool_paths::mcp(tool, input, cwd.as_deref(), &home) {
+        Some(mcp) => {
+            let (args, paths) = mcp.into_iter().unzip();
+            (
+                args,
+                paths,
+                if counts.as_deref() == Some("read") {
+                    Reads
+                } else {
+                    Both
+                },
+            )
+        }
+        None => (Vec::new(), paths, if read { Reads } else { Writes }),
+    };
+    let mut call = matcher::Call::new(
+        tool,
+        command,
+        (&paths, &args, names),
+        cwd.as_deref(),
+        &home,
+        &address(),
+    );
+    call.counts = counts;
     Some(call)
 }
 
@@ -521,6 +496,17 @@ fn heavy_call(
         }
     };
     hit.map(|hit| (hit, command.clone()))
+}
+
+/// `deep-hook peer`: the PID of the process at the other end of the Unix socket on stdin, by the OS's peer
+/// credentials, or `null` where the OS reports none. The hub hands it a deep mcp's connection to learn who opened
+/// it (#2070); stdin is never read.
+fn peer() -> ExitCode {
+    match deep_hook::matcher::peer_of(0) {
+        Some(pid) => println!("{pid}"),
+        None => println!("null"),
+    }
+    ExitCode::SUCCESS
 }
 
 /// `deep-hook heavy`: the heavy.command@1 entry a command line on stdin matches in the current folder (#1016), as
@@ -772,6 +758,18 @@ fn shaped(value: &Value, fields: &[&str]) -> bool {
         && integer(member(value, "v")) == Some(1.0)
 }
 
+/// How long a hub has to put a removed rules.json back and say hello (#1856): it writes the file synced first.
+const PUT_BACK: Duration = Duration::from_millis(250);
+
+/// Whether the hub on this machine says hello by `deadline`; nothing is sent to it.
+fn hub_said_hello(deadline: Instant) -> bool {
+    let Ok(stream) = UnixStream::connect(address()) else {
+        return false;
+    };
+    let mut reader = BufReader::new(remote::Stream::Unix(stream));
+    matches!(read_line(&mut reader, Some(deadline)), Got::Line(_))
+}
+
 /// One exchange with the hub: its hello, the request `id`, its acknowledgement and its reply. Returns the line
 /// sent, the outcome, and the last line the hub wrote (only a planted build prints it).
 fn exchange(
@@ -789,13 +787,18 @@ fn exchange(
     let ack_deadline = (!cfg!(feature = "plant-connect-timeout-only")).then_some(ack_due);
     let late = Outcome::Down { late: true };
     let down = Outcome::Down { late: false };
+    // A joined project's route that doesn't connect is late, as a hub reached here that doesn't acknowledge is.
+    REACHED.store(joined.is_some(), Ordering::SeqCst);
     let stream = match joined {
         Some(joined) => match remote::connect(&home(), joined, ack_due) {
             Some(stream) => stream,
             None => return (None, late, String::new()),
         },
         None => match UnixStream::connect(address()) {
-            Ok(stream) => remote::Stream::Unix(stream),
+            Ok(stream) => {
+                REACHED.store(true, Ordering::SeqCst);
+                remote::Stream::Unix(stream)
+            }
             Err(_) => return (None, down, String::new()),
         },
     };
@@ -945,7 +948,7 @@ fn spool(request: &str, written: &mut dyn FnMut()) -> io::Result<()> {
         Some(joined) => remote::spool_folder(&home(), &joined.hub),
         None => home().join("spool"),
     };
-    let upto = append(&folder, request, &mut || {})?;
+    let upto = spool_file::append(&folder, request, &mut || {})?;
     written();
     let synced = Command::new(env::current_exe()?)
         .arg("spool-sync")
@@ -963,161 +966,9 @@ fn spool(request: &str, written: &mut dyn FnMut()) -> io::Result<()> {
     Ok(())
 }
 
-/// `deep-hook spool-sync <folder> <file|folder|parent>`: syncs the spool file and, as far up as `upto` says, the
-/// folder that names it and the folder's parent. One runs at a time for a spool, holding a lock on its folder, so
-/// hooks on a stalled disk leave at most one sync behind. One that finds the lock held leaves its line to the
-/// holder, which syncs the file again until it stops changing, and looks once more after letting go: a line
-/// written as it let go is synced by it or by the next holder. The write that made the file or the folder waits
-/// for the lock instead, since a holder syncs only the file; that's one write per spool file, not one per hook.
-fn sync(folder: &Path, upto: &str) -> io::Result<()> {
-    let path = folder.join("spool.jsonl");
-    let state = || fs::symlink_metadata(&path).ok().map(|m| (m.ino(), m.len()));
-    let mut names = upto != "file";
-    loop {
-        let lock = File::open(folder)?;
-        if names {
-            lock.lock()?;
-        } else {
-            match lock.try_lock() {
-                Ok(()) => {}
-                Err(fs::TryLockError::WouldBlock) => return Ok(()),
-                Err(fs::TryLockError::Error(error)) => return Err(error),
-            }
-        }
-        let mut seen;
-        loop {
-            seen = state();
-            if seen.is_some() {
-                OpenOptions::new()
-                    .read(true)
-                    .custom_flags(NOFOLLOW)
-                    .open(&path)?
-                    .sync_data()?;
-            }
-            if names {
-                lock.sync_all()?;
-                if upto == "parent" {
-                    if let Some(parent) = folder.parent() {
-                        File::open(parent)?.sync_all()?;
-                    }
-                }
-                names = false;
-            }
-            if state() == seen {
-                break;
-            }
-        }
-        drop(lock);
-        if state() == seen {
-            return Ok(());
-        }
-    }
-}
-
-/// The spool's one append, with `opened` run between opening the file and writing to it (a test moves it there).
-/// Returns how far up the line's sync must reach: the folder too when the file was made, and the folder's parent
-/// when the folder was.
-fn append(folder: &Path, request: &str, opened: &mut dyn FnMut()) -> io::Result<&'static str> {
-    let path = folder.join("spool.jsonl");
-    for _ in 0..3 {
-        // Made by this write, exactly: only one write makes the folder, and only one makes each spool file.
-        let made = match DirBuilder::new().mode(0o700).create(folder) {
-            Ok(()) => true,
-            Err(error) if error.kind() == ErrorKind::AlreadyExists => false,
-            Err(_) => {
-                DirBuilder::new()
-                    .recursive(true)
-                    .mode(0o700)
-                    .create(folder)?;
-                true
-            }
-        };
-        // The spool is a folder of its own and one file in it, never a link to somewhere else: deep-hook only appends.
-        let dir = fs::symlink_metadata(folder)?;
-        if !dir.is_dir() || dir.mode() & 0o022 != 0 {
-            return Err(io::Error::other(
-                "the spool folder is a link, or others can write it",
-            ));
-        }
-        let (mut file, fresh) = match OpenOptions::new()
-            .create_new(true)
-            .append(true)
-            .mode(0o600)
-            .custom_flags(NOFOLLOW)
-            .open(&path)
-        {
-            Ok(file) => (file, true),
-            Err(error) if error.kind() == ErrorKind::AlreadyExists => {
-                match OpenOptions::new()
-                    .append(true)
-                    .custom_flags(NOFOLLOW)
-                    .open(&path)
-                {
-                    Ok(file) => (file, false),
-                    // The hub moved it aside since: make the next one.
-                    Err(error) if error.kind() == ErrorKind::NotFound => continue,
-                    Err(error) => return Err(error),
-                }
-            }
-            Err(error) => return Err(error),
-        };
-        let made_file = file.metadata()?;
-        if !made_file.is_file() || made_file.nlink() != 1 {
-            return Err(io::Error::other("the spool file is a link to another file"));
-        }
-        opened();
-        #[cfg(debug_assertions)]
-        if let Some(n) = stall() {
-            file.write_all(&request.as_bytes()[..n.min(request.len())])?;
-            loop {
-                std::thread::sleep(Duration::from_secs(3600));
-            }
-        }
-        // One write call, never write_all's retries: a second call could land after another hook's line. A short
-        // write leaves a cut line, which the hub skips, and the next try writes the whole line again.
-        if file.write(request.as_bytes())? < request.len() {
-            continue;
-        }
-        let written = file.metadata()?;
-        match fs::symlink_metadata(&path) {
-            Ok(now) if now.dev() == written.dev() && now.ino() == written.ino() => {}
-            _ => continue,
-        }
-        return Ok(if made {
-            "parent"
-        } else if fresh {
-            "folder"
-        } else {
-            "file"
-        });
-    }
-    Err(io::Error::other(
-        "the spool line was cut or moved in each of three tries",
-    ))
-}
-
-/// O_NOFOLLOW, which std doesn't name: opening a symlink fails rather than following it.
-#[cfg(target_os = "macos")]
-const NOFOLLOW: i32 = 0x0100;
-#[cfg(all(
-    target_os = "linux",
-    not(any(target_arch = "aarch64", target_arch = "arm"))
-))]
-const NOFOLLOW: i32 = 0o400000;
-// arm64 and arm number it otherwise; 0o400000 there is O_LARGEFILE, which follows the link.
-#[cfg(all(target_os = "linux", any(target_arch = "aarch64", target_arch = "arm")))]
-const NOFOLLOW: i32 = 0o100000;
-
-/// DEEP_HOOK_TEST_SPOOL_STALL in a debug build: spool only this many bytes of the line, then wait to be killed.
-#[cfg(debug_assertions)]
-fn stall() -> Option<usize> {
-    env::var("DEEP_HOOK_TEST_SPOOL_STALL")
-        .ok()
-        .and_then(|text| text.parse::<usize>().ok())
-}
-
-/// How long after the hook's start deep-hook stops waiting for its spool write and exits with its decision: a
-/// filesystem that stalls loses the spooled copy, never the 50 ms.
+/// How long after its spool thread starts deep-hook stops waiting for the write and exits with its decision: a
+/// filesystem that stalls the write loses the spooled copy. It isn't counted from the hook's start: a hook the machine
+/// gave no time would lose its line on a disk that was fine.
 const SPOOL_DEADLINE: Duration = Duration::from_millis(45);
 
 /// How long after the hook's start deep-hook waits for a written line's sync. The line is in the spool already, and
@@ -1125,18 +976,20 @@ const SPOOL_DEADLINE: Duration = Duration::from_millis(45);
 /// machine no time to exit within the 50 ms.
 const SYNC_DEADLINE: Duration = Duration::from_millis(25);
 
-/// How a spool on its own thread is going: its line written, then its sync done or failed.
+/// How a spool on its own thread is going: the thread running, its line written, then its sync done or failed.
 enum Spooling {
+    Begun,
     Written,
     Done(io::Result<()>),
 }
 
-/// Spools on a thread of its own and waits for its write only until SPOOL_DEADLINE after `start`, and for the
-/// sync of a written line only until SYNC_DEADLINE, in steps (see sleep_until). Says whether a write that ran out
-/// of time had its line in the spool, so it will be replayed.
+/// Spools on a thread of its own and waits for its write only until SPOOL_DEADLINE after the thread is seen running,
+/// and for the sync of a written line only until SYNC_DEADLINE after `start`, in steps (see sleep_until). Says
+/// whether a write that ran out of time had its line in the spool, so it will be replayed.
 fn spool_by(request: String, id: &str, start: Instant) {
     let (tell, told) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
+        let _ = tell.send(Spooling::Begun);
         let written = tell.clone();
         let result = spool(&request, &mut || {
             let _ = written.send(Spooling::Written);
@@ -1144,23 +997,25 @@ fn spool_by(request: String, id: &str, start: Instant) {
         let _ = tell.send(Spooling::Done(result));
     });
     #[cfg(debug_assertions)]
-    let forever = stall().is_some();
+    let forever = spool_file::stall().is_some();
     #[cfg(not(debug_assertions))]
     let forever = false;
+    // A thread the machine hasn't run yet holds no write up: its deadline starts once it runs.
+    let mut begun: Option<Instant> = None;
     let mut written = false;
     let result = loop {
-        let due = if written {
-            SYNC_DEADLINE
-        } else {
-            SPOOL_DEADLINE
+        let left = match (written, begun) {
+            (true, _) => SYNC_DEADLINE.saturating_sub(start.elapsed()),
+            (false, Some(begun)) => SPOOL_DEADLINE.saturating_sub(begun.elapsed()),
+            (false, None) => STEP,
         };
-        let left = due.saturating_sub(start.elapsed());
         let step = if forever {
             Duration::MAX
         } else {
             left.min(STEP)
         };
         match told.recv_timeout(step) {
+            Ok(Spooling::Begun) => begun = Some(Instant::now()),
             Ok(Spooling::Written) => written = true,
             Ok(Spooling::Done(result)) => break Some(result),
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) if forever || !left.is_zero() => {}
@@ -1192,6 +1047,12 @@ fn sleep_until(start: Instant, after: Duration) {
     }
 }
 
+/// Marks a request line late: a call let through because the hub was late is spooled so.
+fn mark_late(request: &mut String) {
+    request.truncate(request.len() - 2);
+    request.push_str(",\"late\":true}\n");
+}
+
 fn forward(agent: &str, event: &str) -> ExitCode {
     let start = Instant::now();
     let agent = caller(agent);
@@ -1213,12 +1074,28 @@ fn forward(agent: &str, event: &str) -> ExitCode {
     let now = wall_clock_ns();
     let seq = now.min(i64::MAX as u128).to_string();
     let id = ulid(now / 1_000_000);
-    let rules = if ruling {
+    let mut rules = if ruling {
         rules()
     } else {
         Ok(Rules::default())
     };
-    // Guards that can't be read may hold a call: with the hub away it is denied, never let through unguarded.
+    // A running hub puts a removed rules.json back before it says hello (#1856): the call is matched against that
+    // one, and the hub's time to acknowledge it runs from then, the watchdog's with it. No hub there costs no wait.
+    let mut asked = start;
+    if rules.as_ref().is_err_and(|why| why == REMOVED) {
+        WATCH_MS.store((PUT_BACK + WATCHDOG).as_millis() as u64, Ordering::SeqCst);
+        if hub_said_hello(start + PUT_BACK) {
+            rules = self::rules();
+        }
+        asked = Instant::now();
+        WATCH_MS.store(
+            (start.elapsed() + WATCHDOG).as_millis() as u64,
+            Ordering::SeqCst,
+        );
+    }
+    // Guards that can't be read may hold a call: it is denied, never let through unguarded. The hub decides only from
+    // the entries deep-hook matched, so the denial is deep-hook's own, with the hub away and with it answering (#2204).
+    let unread = rules.as_ref().err().cloned();
     match &rules {
         Err(why) => {
             let _ = DENIAL.set(format!(
@@ -1234,8 +1111,27 @@ fn forward(agent: &str, event: &str) -> ExitCode {
         Ok(_) => {}
     }
     READ_RULES.store(true, Ordering::SeqCst);
-    let mut input = String::new();
-    let _ = io::stdin().read_to_string(&mut input);
+    // The call is one JSON object: read up to its end, or stdin's. An agent the machine gives no time may close stdin
+    // well after it wrote the call. Not UTF-8, it reads as nothing, as read_to_string leaves it.
+    let mut bytes = Vec::new();
+    let mut chunk = [0u8; 8192];
+    loop {
+        match io::stdin().read(&mut chunk) {
+            Ok(0) => break,
+            Ok(n) => {
+                bytes.extend_from_slice(&chunk[..n]);
+                let whole = bytes.trim_ascii_end().ends_with(b"}")
+                    && std::str::from_utf8(&bytes)
+                        .is_ok_and(|text| matches!(parse(text.trim()), Ok(Value::Object(_))));
+                if whole {
+                    break;
+                }
+            }
+            Err(error) if error.kind() == ErrorKind::Interrupted => {}
+            Err(_) => break,
+        }
+    }
+    let mut input = String::from_utf8(bytes).unwrap_or_default();
     let parsed = parse(&input).ok();
     if let Some(Value::String(cwd)) = parsed.as_ref().and_then(|p| member(p, "cwd")) {
         let _ = CWD.set(PathBuf::from(cwd));
@@ -1362,7 +1258,13 @@ fn forward(agent: &str, event: &str) -> ExitCode {
             agent_pid(),
         )
     };
-    let (sent, outcome, last) = exchange(start, &id, line);
+    let _ = PENDING.set((line(&[]), id.clone()));
+    let (sent, outcome, last) = exchange(asked, &id, line);
+    // From here the hub's answer says whether the call is late, should the watchdog decide it first.
+    REACHED.store(
+        matches!(outcome, Outcome::Down { late: true }),
+        Ordering::SeqCst,
+    );
     let late = match outcome {
         Outcome::Reply {
             exit,
@@ -1374,6 +1276,10 @@ fn forward(agent: &str, event: &str) -> ExitCode {
                 remote::send_later(&home(), &joined.hub);
             }
             decide();
+            if let Some(why) = unread {
+                eprintln!("DeepBuild blocked this: ~/.deepbuild/rules.json {why}, so deep-hook matched this call against no guard. Retry it; if this comes again, fix that file.");
+                return ExitCode::from(2);
+            }
             print!("{stdout}");
             eprint!("{stderr}");
             return ExitCode::from(exit);
@@ -1396,9 +1302,7 @@ fn forward(agent: &str, event: &str) -> ExitCode {
     }
     let mut request = sent.unwrap_or_else(|| line(&[]));
     if late {
-        // A call let through because the hub was late is spooled marked late.
-        request.truncate(request.len() - 2);
-        request.push_str(",\"late\":true}\n");
+        mark_late(&mut request);
     }
     decide();
     // Before an acknowledgement the 50 ms run from the hook's start; after a hold the hub acknowledged ran out or
@@ -1494,6 +1398,10 @@ static RULING: AtomicBool = AtomicBool::new(false);
 static RULED: AtomicBool = AtomicBool::new(false);
 /// Set once rules.json is read, before the call is.
 static READ_RULES: AtomicBool = AtomicBool::new(false);
+/// The request line as the hook would send it and its ID, once the call is read and matched: what the watchdog spools.
+static PENDING: OnceLock<(String, String)> = OnceLock::new();
+/// Set once a hub was reached, or a joined project's route tried: a call the watchdog decides from then is late.
+static REACHED: AtomicBool = AtomicBool::new(false);
 /// When, after the hook's start, the watchdog decides for a hook the hub hasn't acknowledged.
 const WATCHDOG: Duration = Duration::from_millis(48);
 /// The watchdog's time on this hook's route, in ms: WATCHDOG, or the network route's (#1338).
@@ -1514,16 +1422,19 @@ fn decide() {
     let _ = std::panic::take_hook();
 }
 
-/// Keeps the 50 ms whatever holds the hook up before the hub acknowledges it (a stdin that never ends, a slow
-/// disk under rules.json): at WATCHDOG it exits with the decision for the hub away, deny when a fail_closed entry
-/// has matched and allow otherwise; while rules.json or, with a fail_closed entry installed, the call is still being
-/// read or matched, it waits for that until RULING_LIMIT and then denies. That call isn't spooled; a turn of its tool calls then reads as not reaching the hub. The builds that must hang for a test (a connect timeout only, a stalled spool write) run without it.
+/// Keeps the 50 ms whatever holds the hook up before the hub acknowledges it, once the hook has made its request: at
+/// WATCHDOG it spools that request, as with the hub away, and exits with the decision for the hub away, deny when a
+/// fail_closed entry has matched and allow otherwise. Until the request is made it waits for it, until RULING_LIMIT: a
+/// hook or agent the machine gave no time is slow, not held up, and its call is spooled, never let through unrecorded.
+/// Past that, a call still unread or unmatched while a fail_closed entry is installed, or while rules.json is still
+/// being read, is denied, and any other is allowed; neither is spooled, and a turn of its tool calls then reads as not
+/// reaching the hub. The builds that must hang for a test (a connect timeout only, a stalled spool write) run without it.
 fn watchdog(start: Instant) {
     if cfg!(feature = "plant-connect-timeout-only") {
         return;
     }
     #[cfg(debug_assertions)]
-    if stall().is_some() {
+    if spool_file::stall().is_some() {
         return;
     }
     std::thread::spawn(move || {
@@ -1537,11 +1448,12 @@ fn watchdog(start: Instant) {
             std::thread::sleep((due - start.elapsed()).min(Duration::from_millis(5)));
         }
         // A call a fail_closed entry may hold is decided by its match, not the clock: the watchdog gives the hook
-        // until RULING_LIMIT to read the call and match it, and only past that denies it unchecked.
-        while RULING.load(Ordering::SeqCst)
-            && !RULED.load(Ordering::SeqCst)
-            && !ACKED.load(Ordering::SeqCst)
+        // until RULING_LIMIT to read the call and match it, and only past that denies it unchecked. Any hook gets
+        // until then to make its request, so a call that came is spooled, not lost.
+        while !ACKED.load(Ordering::SeqCst)
             && start.elapsed() < RULING_LIMIT
+            && (RULING.load(Ordering::SeqCst) && !RULED.load(Ordering::SeqCst)
+                || PENDING.get().is_none())
         {
             std::thread::sleep(STEP);
         }
@@ -1557,6 +1469,14 @@ fn watchdog(start: Instant) {
 fn unanswered() -> ! {
     // RULED first: the hook sets a denial before it sets RULED, so once RULED is read as set, DENIAL is final.
     let ruled = RULED.load(Ordering::SeqCst);
+    if let Some((request, id)) = PENDING.get() {
+        let mut request = request.clone();
+        if REACHED.load(Ordering::SeqCst) {
+            mark_late(&mut request);
+        }
+        // The hook has had its 50 ms already: the spool's time runs from now.
+        spool_by(request, id, Instant::now());
+    }
     match DENIAL.get() {
         Some(denial) => {
             eprintln!("{denial}");
@@ -2024,11 +1944,12 @@ fn main() -> ExitCode {
     match args.as_slice() {
         [arg] if arg == "--version" => println!("{}", env!("CARGO_PKG_VERSION")),
         [arg] if arg == "--help" => println!(
-            "Usage: deep-hook [--help | --version]\n       deep-hook <agent> <event>    the hook's JSON on stdin\n       deep-hook statusline         Claude Code's status line JSON on stdin\n       deep-hook <agent> waiter     the background Stop entry: the hook's JSON on stdin\n       deep-hook mcp actions        the deep-actions MCP server, on stdin and stdout\n       deep-hook check              an entry and a call as JSON on stdin: whether the entry matches\n       deep-hook match              a tool hook's JSON per line on stdin: what guards match, per line\n       deep-hook heavy              a command line on stdin: the heavy command entry it matches here\n       deep-hook clone <from> <to>  a copy-on-write clone, for staging a destructive command"
+            "Usage: deep-hook [--help | --version]\n       deep-hook <agent> <event>    the hook's JSON on stdin\n       deep-hook statusline         Claude Code's status line JSON on stdin\n       deep-hook <agent> waiter     the background Stop entry: the hook's JSON on stdin\n       deep-hook mcp actions        the deep-actions MCP server, on stdin and stdout\n       deep-hook check              an entry and a call as JSON on stdin: whether the entry matches\n       deep-hook match              a tool hook's JSON per line on stdin: what guards match, per line\n       deep-hook heavy              a command line on stdin: the heavy command entry it matches here\n       deep-hook peer               a Unix socket on stdin: the PID at its other end\n       deep-hook clone <from> <to>  a copy-on-write clone, for staging a destructive command"
         ),
         [arg] if arg == "statusline" => return statusline(),
         [arg] if arg == "check" => return check(),
         [arg] if arg == "heavy" => return heavy_entry(),
+        [arg] if arg == "peer" => return peer(),
         [arg] if arg == "match" => return matching(),
         [arg, from, to] if arg == "clone" => return clone(Path::new(from), Path::new(to)),
         [arg, line] if arg == "statusline-send" => {
@@ -2036,7 +1957,7 @@ fn main() -> ExitCode {
             return ExitCode::SUCCESS;
         }
         [arg, folder, upto] if arg == "spool-sync" => {
-            return match sync(Path::new(folder), upto) {
+            return match spool_file::sync(Path::new(folder), upto) {
                 Ok(()) => ExitCode::SUCCESS,
                 Err(_) => ExitCode::from(1),
             };
@@ -2055,8 +1976,8 @@ fn main() -> ExitCode {
 
 #[cfg(test)]
 mod tests {
-    use super::append;
-    use super::pi_path;
+    use super::spool_file::append;
+    use crate::tool_paths::pi_path;
     use deep_hook::shell::glob;
     use std::fs::{self, DirBuilder};
     use std::os::unix::fs::DirBuilderExt;

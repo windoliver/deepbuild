@@ -496,6 +496,17 @@ For a check runner: a canvas revision's evaluated values by stable ID at the tim
 | `doc` | string | yes |
 | `query` | object | yes |
 
+### `deep.canvas.play`
+
+Arrives in R6 · preview · `d1:3dfbdac3821e50ffa753bfa63103a9a73f8ba880acc84c15f5f7efc5c5211072`
+
+For a check runner: a piece played headless in a replica on its virtual clock, a step at a time, from a seed and entries the running check's input gives (its seed or hash(it, i) for one of its runs, one of its bots, or a track it gives or a play of this run recorded), as the writer bot, and only for the documents its grant names. It answers the recorded track by hash, the values at the paths asked for at each step, any trap, each step's time and fuel and the frames asked for by hash; frames are evidence, never values. A pass built on plays holds only with every run played, its track among its evidence and values read.
+
+| Parameter | Type | Required |
+|---|---|---|
+| `doc` | string | yes |
+| `run` | object | yes |
+
 ## Slots
 
 Each kind of thing a package registers fills a slot: its interface with a frozen digest, how many pieces may fill it, its kit in the conformance package and the planted wrong fills that kit must fail. A second fill of a slot that takes one is refused at install unless its manifest says it replaces the first.
@@ -507,7 +518,7 @@ Each kind of thing a package registers fills a slot: its interface with a frozen
 | `deep.registerSource` | `stream` | `source@1` | many | `source@1` | `skips-first-after-resume` | R1 |
 | `deep.registerSource` | `polled` | `reading.source@1` | many | `reading.source@1` | `cache-as-of` | R2 |
 | `deep.registerSource` | `mcp` | `reading.source@1` | many | `reading.source@1` | `stale-mcp-digest` | R2 |
-| `deep.registerSource` | `library` | `asset.library@1` | many | none | none | R6 |
+| `deep.registerSource` | `library` | `asset.library@1` | many | `asset.library@1` | `measures-by-download`, `reports-cc0`, `keeps-unsized`, `drops-sidecars` | R6 |
 | `deep.registerEnvironment` | - | `environment@1` | one | `environment@1` | `ready-before-health`, `unleased-port`, `leaves-grandchild`, `starts-in-worktree` | R1 |
 | `deep.registerView` | - | `panel@1` | many | `panel@1` | `reaches-network`, `runs-a-program`, `moves-focus-unasked`, `draws-outside`, `covers-the-card` | R1 |
 | `deep.registerAdapter` | - | `adapter@1` | one per agent | `adapter@1` | `duplicate-event-id`, `event-after-stop`, `answer-to-other-session`, `steer-outlives-interrupt`, `acknowledged-without-sign` | R1 |

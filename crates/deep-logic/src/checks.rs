@@ -8,13 +8,15 @@
 //! that differ are named.
 
 use std::collections::BTreeMap;
+use std::f64::consts::FRAC_1_SQRT_2;
 use std::rc::Rc;
 
 use serde_json::{json, Map, Value};
 
 use crate::bake::{self, Player};
 use crate::piece::{h64, Piece, Read};
-use crate::world::{track_of, Entry, Record, StepRow, World};
+use crate::point::Point;
+use crate::world::{track_of, Entry, Given, Record, StepRow, World};
 use crate::Planted;
 
 /// Steps a continuation probe runs on for.
@@ -38,8 +40,40 @@ fn probe_entries(piece: &Piece, s: i64) -> Vec<(String, Vec<Entry>)> {
             let mut b = piece.seed.to_le_bytes().to_vec();
             b.extend(control.as_bytes());
             b.extend(s.to_le_bytes());
-            // A value in (0, 1]: a press or a slider's move, never a release to 0.
-            let value = ((h64(&b) >> 11) as f64 + 1.0) / (1u64 << 53) as f64;
+            // A value in (0, 1]: a press or a slider's move, never a release to 0; for a pick,
+            // a row of its first set; for a point, a press on the ground under a ray from above.
+            let h = h64(&b);
+            let value = match piece.controls.get(&control) {
+                Some((_, "pick")) => Given::Pick {
+                    set: 0,
+                    key: [(h & 0xff) as i64, (h >> 8 & 0xff) as i64],
+                },
+                Some((_, "point")) => {
+                    let (x, z) = ((h & 0xff) as f64, (h >> 8 & 0xff) as f64);
+                    let down = [0.0, -FRAC_1_SQRT_2, -FRAC_1_SQRT_2];
+                    let press = json!({"phase": "press", "button": "primary", "ground": [x, 0.0, z],
+                        "ray": {"origin": [x, 10.0, z + 10.0], "dir": down}});
+                    Given::Point(Point::parse(&press).expect("a seeded press is a point"))
+                }
+                // A commit and a position the control may hold.
+                Some((_, "text")) => {
+                    let max = match piece.limits.get(&control) {
+                        Some(crate::piece::Limit::Text { max, .. }) => *max as usize,
+                        _ => 0,
+                    };
+                    let mut t = format!("{:x}", h & 0xffff);
+                    t.truncate(max);
+                    Given::Text(t)
+                }
+                Some((_, "scroll")) => match piece.limits.get(&control) {
+                    Some(crate::piece::Limit::Scroll { range, .. }) => {
+                        let span = i64::from(range[1]) - i64::from(range[0]) + 1;
+                        Given::Number((i64::from(range[0]) + (h % span as u64) as i64) as f64)
+                    }
+                    _ => Given::Number(0.0),
+                },
+                _ => Given::Number(((h >> 11) as f64 + 1.0) / (1u64 << 53) as f64),
+            };
             let entry = Entry {
                 t: s * len,
                 seq: 0,
@@ -47,6 +81,8 @@ fn probe_entries(piece: &Piece, s: i64) -> Vec<(String, Vec<Entry>)> {
                 value,
                 writer: "you".into(),
                 player: 1,
+                as_of: None,
+                arrived: 0,
             };
             (control, vec![entry])
         })
@@ -70,13 +106,15 @@ fn probe(w: &mut World, entries: &[Entry]) -> Result<Probed, Value> {
     })
 }
 
-/// A run's first step whose step hash differs, and the first step and array where an array does.
-type Parts = (Option<i64>, Option<(i64, String)>);
+/// A run's first step whose step hash differs, the first step and array where an array does, and
+/// the first step and region the module filled differently before a step (#213: a mirror's range
+/// list in the read region, or a service's results).
+type Parts = (Option<i64>, Option<(i64, String)>, Option<(i64, String)>);
 
 /// What a check that compares step hashes alone sees of a run: no full-state hash, no array.
 fn seen(hashes_only: bool, deep: Option<i64>, rows: Parts) -> (Option<i64>, Parts) {
     if hashes_only {
-        (None, (rows.0, None))
+        (None, (rows.0, None, None))
     } else {
         (deep, rows)
     }
@@ -86,7 +124,7 @@ fn seen(hashes_only: bool, deep: Option<i64>, rows: Parts) -> (Option<i64>, Part
 /// array where one of its arrays differs.
 fn parts(a: &BTreeMap<i64, StepRow>, b: &BTreeMap<i64, StepRow>, id: &str, from: i64) -> Parts {
     let prefix = format!("{id}.");
-    let (mut hash, mut array) = (None, None);
+    let (mut hash, mut array, mut region) = (None, None, None);
     for (k, (ia, aa)) in a.range(from..) {
         let Some((ib, ab)) = b.get(k) else {
             hash = hash.or(Some(*k));
@@ -105,16 +143,32 @@ fn parts(a: &BTreeMap<i64, StepRow>, b: &BTreeMap<i64, StepRow>, id: &str, from:
                 array = Some((*k, n.clone()));
             }
         }
-        if hash.is_some() && array.is_some() {
+        if region.is_none() {
+            let filled = |i: &Map<String, Value>| i.get(id).and_then(|x| x.get("filled")).cloned();
+            let (fa, fb) = (filled(ia), filled(ib));
+            if fa != fb {
+                let (fa, fb) = (fa.unwrap_or_default(), fb.unwrap_or_default());
+                let keys = fa
+                    .as_object()
+                    .into_iter()
+                    .chain(fb.as_object())
+                    .flat_map(|o| o.keys());
+                let name = keys
+                    .into_iter()
+                    .find(|n| fa.get(n.as_str()) != fb.get(n.as_str()));
+                region = name.map(|n| (*k, n.clone()));
+            }
+        }
+        if hash.is_some() && array.is_some() && region.is_some() {
             break;
         }
     }
-    (hash, array)
+    (hash, array, region)
 }
 
 /// One run's failure for item `id`, or none: the first checkpoint whose full-state hash differs
-/// (`deep`), the first step whose step hash or arrays differ, and the field first in the order
-/// deep_hash, step_hash, array.
+/// (`deep`), the first step whose step hash, arrays or filled regions differ, the region, and the
+/// field first in the order deep_hash, step_hash, array, region.
 fn failure(
     id: &str,
     run: &str,
@@ -124,23 +178,29 @@ fn failure(
     rows: Parts,
     control: Option<&str>,
 ) -> Option<Value> {
-    let (hash, array) = rows;
+    let (hash, array, region) = rows;
     let field = if deep.is_some() {
         "deep_hash"
     } else if hash.is_some() {
         "step_hash"
     } else if array.is_some() {
         "array"
+    } else if region.is_some() {
+        "region"
     } else {
         return None;
     };
-    let step = match (hash, &array) {
-        (Some(h), Some((a, _))) => Some(h.min(*a)),
-        (h, a) => h.or(a.as_ref().map(|x| x.0)),
-    };
+    let step = [
+        hash,
+        array.as_ref().map(|x| x.0),
+        region.as_ref().map(|x| x.0),
+    ]
+    .into_iter()
+    .flatten()
+    .min();
     Some(
         json!({"item": id, "run": run, "from": from, "at": at, "checkpoint": deep, "step": step, "field": field,
-        "array": array.map(|x| x.1), "element": null, "control": control}),
+        "array": array.map(|x| x.1), "region": region.map(|x| x.1), "element": null, "control": control}),
     )
 }
 
@@ -195,7 +255,7 @@ pub fn determinism(
         return Err(e);
     }
     for t in &a.traps {
-        failures.push(json!({"item": t.get("item"), "run": "twice", "from": null, "at": null, "checkpoint": null, "step": t.get("step"), "field": "trap", "array": null, "element": null, "control": null}));
+        failures.push(json!({"item": t.get("item"), "run": "twice", "from": null, "at": null, "checkpoint": null, "step": t.get("step"), "field": "trap", "array": null, "region": null, "element": null, "control": null}));
     }
     // The second run from step 0, a bake as the first is, so its ring doubles its spacing where
     // the first one's did and takes the same checkpoints; and the straight run's bake played back
@@ -226,7 +286,7 @@ pub fn determinism(
             };
             if let Some((array, element)) = differs {
                 played.push(json!({"item": item.id, "run": "playback", "from": null, "at": null, "checkpoint": null,
-                    "step": k - 1, "field": "array", "array": array, "element": element, "control": null}));
+                    "step": k - 1, "field": "array", "array": array, "region": null, "element": element, "control": null}));
                 players[i] = None;
             }
         }

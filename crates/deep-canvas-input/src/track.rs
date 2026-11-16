@@ -49,12 +49,32 @@ pub struct Entry {
 }
 
 impl Entry {
+    /// The value a read at `t` takes from this entry: its own, but for a tour's linear key
+    /// (#903), whose value moves along its polyline from the entry's flick to the segment's end.
+    pub(crate) fn value_at(&self, t: i64) -> Value {
+        let ends = match (self.writer, self.samples.as_deref()) {
+            (Writer::Tour, Some([a, b])) => Some((a, b)),
+            _ => None,
+        };
+        let moved = ends.and_then(|(a, b)| {
+            let (from, to) = (a.value.as_f64()?, b.value.as_f64()?);
+            let share = (t.clamp(a.t, b.t) - a.t) as f64 / (b.t - a.t) as f64;
+            Some(json!(from + (to - from) * share))
+        });
+        moved.unwrap_or_else(|| self.value.clone())
+    }
+
     pub fn to_json(&self) -> Value {
         let mut o = Map::new();
         o.insert("t".into(), json!(self.t));
         o.insert("seq".into(), json!(self.seq));
-        o.insert("control".into(), json!(self.control));
-        o.insert("value".into(), self.value.clone());
+        // #507: a present-mode entry (advance, back, blank or a stage) names no control.
+        if self.control.is_empty() {
+            o.insert("present".into(), self.value.clone());
+        } else {
+            o.insert("control".into(), json!(self.control));
+            o.insert("value".into(), self.value.clone());
+        }
         if let Some(samples) = &self.samples {
             let list: Vec<Value> = samples
                 .iter()
@@ -170,9 +190,9 @@ impl Track {
 
     /// How many of `control`'s entries are at or before `t`.
     pub fn count_at(&self, control: &str, t: i64) -> usize {
-        self.by_control.get(control).map_or(0, |list| {
-            list.partition_point(|&i| self.entries[i].t <= t)
-        })
+        self.by_control
+            .get(control)
+            .map_or(0, |list| list.partition_point(|&i| self.entries[i].t <= t))
     }
 
     /// `control`'s entries, in time order.

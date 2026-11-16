@@ -1,0 +1,174 @@
+GPU lease acquired for the pixel check (not a timing grant).
+
+ RUN  v5.0.5 <work>/work/tests/acceptance/2516
+
+stdout | taste.test.ts > AC7 the room and the castle with ao on, as main draws them and after, and the one taste call on them > AC7 the run writes #418's room and the castle as main draws them and after the change, from the renderer's own output, each after-picture differs from main's, and the recorded taste call on exactly those says the corners look right
+AC7: pictures written from this run's pixels (main = 1c4d1f0e, after = b85c4522b):
+  docs/evidence/2516/room-main.png  204d54bafd9587824f7e0487e2222520996592987bcf97ca465dcf1dbca4a25f
+  docs/evidence/2516/room-after.png  ff92aa5206e60f0d9cbb8ae2cdcd1367e82fc4785b1f6afd5aeeecfd5c728293
+  docs/evidence/2516/castle-main.png  01faceed3304adffe44d3f0fa4c21232337c661fc19d507eda10ec3e2712cd22
+  docs/evidence/2516/castle-after.png  706f8df0eaa0761fdfacc42847cb64ab2e6115319353fee2652306ebe81c32fb
+AC7: taste call recorded by owner at 2026-11-15T07:41:02Z: the corners look right at the default radius and strength
+
+ ✓ taste.test.ts > AC7 the room and the castle with ao on, as main draws them and after, and the one taste call on them > AC7 the run writes #418's room and the castle as main draws them and after the change, from the renderer's own output, each after-picture differs from main's, and the recorded taste call on exactly those says the corners look right 127402ms
+stdout | cube.test.ts > AC4 an occluder smaller than the radius is held to the CPU reference > AC4 5 and 10 cm in front of the middle of a face the reading is within 0.1 of the 4,096-ray CPU reference, from a camera facing the face and from one 90° around it, at every setting
+#2516 cube, camera facing the face, 8 samples, half resolution: 5 cm 0.741, 10 cm 0.838; CPU reference 5 cm 0.692, 10 cm 0.817
+#2516 cube, camera facing the face, 8 samples, full resolution: 5 cm 0.683, 10 cm 0.837; CPU reference 5 cm 0.692, 10 cm 0.817
+#2516 cube, camera facing the face, 16 samples, half resolution: 5 cm 0.731, 10 cm 0.834; CPU reference 5 cm 0.692, 10 cm 0.817
+#2516 cube, camera facing the face, 16 samples, full resolution: 5 cm 0.689, 10 cm 0.835; CPU reference 5 cm 0.692, 10 cm 0.817
+#2516 cube, camera 90° around, 8 samples, half resolution: 5 cm 0.752, 10 cm 0.848; CPU reference 5 cm 0.692, 10 cm 0.817
+#2516 cube, camera 90° around, 8 samples, full resolution: 5 cm 0.718, 10 cm 0.820; CPU reference 5 cm 0.692, 10 cm 0.817
+#2516 cube, camera 90° around, 16 samples, half resolution: 5 cm 0.740, 10 cm 0.848; CPU reference 5 cm 0.692, 10 cm 0.817
+#2516 cube, camera 90° around, 16 samples, full resolution: 5 cm 0.711, 10 cm 0.817; CPU reference 5 cm 0.692, 10 cm 0.817
+
+stdout | cube.test.ts > AC4 an occluder smaller than the radius is held to the CPU reference > AC4 a loop that puts every one of main's points at the full radius passes the wall fixture (full resolution, 8 and 16 samples, both cameras), reads above 0.99 on the cube and fails, naming the camera
+#2516 wall, camera A (square on) (--planted ao_full_radius), 8 samples, full resolution: 5 cm 0.578, 10 cm 0.660, 15 cm 0.686, 20 cm 0.763, 30 cm 0.862, 40 cm 0.938
+#2516 wall, camera A (square on) (--planted ao_full_radius), 16 samples, full resolution: 5 cm 0.580, 10 cm 0.658, 15 cm 0.688, 20 cm 0.760, 30 cm 0.864, 40 cm 0.940
+#2516 wall, camera B (30° around A) (--planted ao_full_radius), 8 samples, full resolution: 5 cm 0.600, 10 cm 0.654, 15 cm 0.706, 20 cm 0.746, 30 cm 0.858, 40 cm 0.950
+#2516 wall, camera B (30° around A) (--planted ao_full_radius), 16 samples, full resolution: 5 cm 0.605, 10 cm 0.653, 15 cm 0.706, 20 cm 0.751, 30 cm 0.857, 40 cm 0.950
+#2516 cube, camera facing the face (--planted ao_full_radius), 8 samples, half resolution: 5 cm 0.993, 10 cm 1.000; CPU reference 5 cm 0.692, 10 cm 0.817
+#2516 cube, camera 90° around (--planted ao_full_radius), 8 samples, half resolution: 5 cm 1.000, 10 cm 1.000; CPU reference 5 cm 0.692, 10 cm 0.817
+
+ ✓ cube.test.ts > AC4 an occluder smaller than the radius is held to the CPU reference > AC4 5 and 10 cm in front of the middle of a face the reading is within 0.1 of the 4,096-ray CPU reference, from a camera facing the face and from one 90° around it, at every setting 6959ms
+ ✓ cube.test.ts > AC4 an occluder smaller than the radius is held to the CPU reference > AC4 a loop that puts every one of main's points at the full radius passes the wall fixture (full resolution, 8 and 16 samples, both cameras), reads above 0.99 on the cube and fails, naming the camera 5370ms
+stdout | wall.test.ts > AC1 the wall's foot is held to its closed form > AC1 at 5, 10, 15, 20, 30 and 40 cm the reading is within 0.05 of the closed form, at 8 and 16 samples, half and full resolution, from camera A and from B 30° around it
+#2516 wall, camera A (square on), 8 samples, half resolution: 5 cm 0.583, 10 cm 0.638, 15 cm 0.665, 20 cm 0.759, 30 cm 0.857, 40 cm 0.957, 60 cm 1.000, 100 cm 1.000
+#2516 wall, camera A (square on), 8 samples, full resolution: 5 cm 0.552, 10 cm 0.651, 15 cm 0.681, 20 cm 0.761, 30 cm 0.861, 40 cm 0.938, 60 cm 1.000, 100 cm 1.000
+#2516 wall, camera A (square on), 16 samples, half resolution: 5 cm 0.576, 10 cm 0.634, 15 cm 0.669, 20 cm 0.755, 30 cm 0.859, 40 cm 0.963, 60 cm 1.000, 100 cm 1.000
+#2516 wall, camera A (square on), 16 samples, full resolution: 5 cm 0.554, 10 cm 0.649, 15 cm 0.684, 20 cm 0.758, 30 cm 0.863, 40 cm 0.940, 60 cm 1.000, 100 cm 1.000
+#2516 wall, camera B (30° around A), 8 samples, half resolution: 5 cm 0.569, 10 cm 0.634, 15 cm 0.691, 20 cm 0.743, 30 cm 0.860, 40 cm 0.948, 60 cm 1.000, 100 cm 1.000
+#2516 wall, camera B (30° around A), 8 samples, full resolution: 5 cm 0.556, 10 cm 0.630, 15 cm 0.694, 20 cm 0.742, 30 cm 0.858, 40 cm 0.951, 60 cm 1.000, 100 cm 1.000
+#2516 wall, camera B (30° around A), 16 samples, half resolution: 5 cm 0.571, 10 cm 0.632, 15 cm 0.687, 20 cm 0.747, 30 cm 0.859, 40 cm 0.947, 60 cm 1.000, 100 cm 1.000
+#2516 wall, camera B (30° around A), 16 samples, full resolution: 5 cm 0.561, 10 cm 0.629, 15 cm 0.694, 20 cm 0.746, 30 cm 0.857, 40 cm 0.950, 60 cm 1.000, 100 cm 1.000
+
+stdout | wall.test.ts > AC1 the wall's foot is held to its closed form > AC1 the loop as it is on main, planted, fails, naming the first point and its reading
+#2516 wall, main's loop (planted), camera A (square on), 8 samples, half resolution: 5 cm 0.708, 10 cm 0.839, 15 cm 0.894, 20 cm 0.938, 30 cm 0.980, 40 cm 0.998, 60 cm 1.000, 100 cm 1.000
+
+ ✓ wall.test.ts > AC1 the wall's foot is held to its closed form > AC1 at 5, 10, 15, 20, 30 and 40 cm the reading is within 0.05 of the closed form, at 8 and 16 samples, half and full resolution, from camera A and from B 30° around it 6326ms
+stdout | wall.test.ts > AC2 the open floor past the radius reads 1, and strength can't buy the wall's foot > AC2 main's loop with its strength raised until the 10 cm point passes fails at 5 cm, naming the point and its reading
+#2516 main's loop, strength 1.0: 5 cm 0.708, 10 cm 0.839, 15 cm 0.894, 20 cm 0.938, 30 cm 0.980, 40 cm 0.998, 60 cm 1.000, 100 cm 1.000
+#2516 main's loop, strength 1.5: 5 cm 0.562, 10 cm 0.759, 15 cm 0.841, 20 cm 0.907, 30 cm 0.970, 40 cm 0.997, 60 cm 1.000, 100 cm 1.000
+#2516 main's loop, strength 2.0: 5 cm 0.417, 10 cm 0.679, 15 cm 0.789, 20 cm 0.876, 30 cm 0.960, 40 cm 0.996, 60 cm 1.000, 100 cm 1.000
+#2516 main's loop, strength 2.5: 5 cm 0.301, 10 cm 0.599, 15 cm 0.736, 20 cm 0.845, 30 cm 0.950, 40 cm 0.996, 60 cm 1.000, 100 cm 1.000
+#2516 main's loop, strength 3.0: 5 cm 0.223, 10 cm 0.524, 15 cm 0.683, 20 cm 0.814, 30 cm 0.941, 40 cm 0.995, 60 cm 1.000, 100 cm 1.000
+#2516 main's loop, strength 3.5: 5 cm 0.165, 10 cm 0.453, 15 cm 0.630, 20 cm 0.783, 30 cm 0.931, 40 cm 0.994, 60 cm 1.000, 100 cm 1.000
+#2516 main's loop, strength 4.0: 5 cm 0.107, 10 cm 0.382, 15 cm 0.578, 20 cm 0.752, 30 cm 0.921, 40 cm 0.993, 60 cm 1.000, 100 cm 1.000
+#2516 main's loop, strength 4.5: 5 cm 0.095, 10 cm 0.345, 15 cm 0.538, 20 cm 0.723, 30 cm 0.911, 40 cm 0.992, 60 cm 1.000, 100 cm 1.000
+#2516 main's loop, strength 5.0: 5 cm 0.084, 10 cm 0.308, 15 cm 0.499, 20 cm 0.695, 30 cm 0.901, 40 cm 0.991, 60 cm 1.000, 100 cm 1.000
+#2516 main's loop, strength 5.5: 5 cm 0.072, 10 cm 0.272, 15 cm 0.460, 20 cm 0.666, 30 cm 0.891, 40 cm 0.990, 60 cm 1.000, 100 cm 1.000
+#2516 main's loop, strength 6.0: 5 cm 0.061, 10 cm 0.235, 15 cm 0.421, 20 cm 0.637, 30 cm 0.882, 40 cm 0.990, 60 cm 1.000, 100 cm 1.000
+#2516 the strengthened plant at strength 2.5: wall, main's loop at strength 2.5, camera A (square on), 8 samples, half resolution: at 5 cm the reading is 0.301, outside the closed form 0.5636 ± 0.05; wall, main's loop at strength 2.5, camera A (square on), 8 samples, half resolution: at 20 cm the reading is 0.845, outside the closed form 0.7477 ± 0.05; wall, main's loop at strength 2.5, camera A (square on), 8 samples, half resolution: at 30 cm the reading is 0.950, outside the closed form 0.8576 ± 0.05
+
+ ✓ wall.test.ts > AC1 the wall's foot is held to its closed form > AC1 the loop as it is on main, planted, fails, naming the first point and its reading 1107ms
+ ✓ wall.test.ts > AC2 the open floor past the radius reads 1, and strength can't buy the wall's foot > AC2 at 60 cm and 1 m the reading is 1 within 0.01, at every setting from both cameras 1ms
+ ✓ wall.test.ts > AC2 the open floor past the radius reads 1, and strength can't buy the wall's foot > AC2 main's loop with its strength raised until the 10 cm point passes fails at 5 cm, naming the point and its reading 2951ms
+stdout | redraft-ac4/cube.test.ts > AC4 the cube: the floor in front of a face reads the CPU reference's visibility within 0.1 > AC4 at radius 0.5 m, 5 and 10 cm in front of the middle of a face, the reading is within 0.1 of the reference (0.68 and 0.81), from a camera facing the face and one 90° around it, at 8 and 16 samples and half and full resolution
+the build  cube, camera facing the face, 8 samples, half resolution, 5 cm: 0.7373 over 216 px
+the build  cube, camera facing the face, 8 samples, full resolution, 5 cm: 0.7080 over 216 px
+the build  cube, camera facing the face, 16 samples, half resolution, 5 cm: 0.7275 over 216 px
+the build  cube, camera facing the face, 16 samples, full resolution, 5 cm: 0.7092 over 216 px
+the build  cube, camera facing the face, 8 samples, half resolution, 10 cm: 0.8296 over 220 px
+the build  cube, camera facing the face, 8 samples, full resolution, 10 cm: 0.8079 over 220 px
+the build  cube, camera facing the face, 16 samples, half resolution, 10 cm: 0.8302 over 220 px
+the build  cube, camera facing the face, 16 samples, full resolution, 10 cm: 0.8150 over 220 px
+the build  cube, camera 90° around it, 8 samples, half resolution, 5 cm: 0.7102 over 216 px
+the build  cube, camera 90° around it, 8 samples, full resolution, 5 cm: 0.7005 over 216 px
+the build  cube, camera 90° around it, 16 samples, half resolution, 5 cm: 0.7306 over 216 px
+the build  cube, camera 90° around it, 16 samples, full resolution, 5 cm: 0.6965 over 216 px
+the build  cube, camera 90° around it, 8 samples, half resolution, 10 cm: 0.8291 over 199 px
+the build  cube, camera 90° around it, 8 samples, full resolution, 10 cm: 0.8114 over 199 px
+the build  cube, camera 90° around it, 16 samples, half resolution, 10 cm: 0.8364 over 199 px
+the build  cube, camera 90° around it, 16 samples, full resolution, 10 cm: 0.8109 over 199 px
+
+stdout | redraft-ac4/cube.test.ts > AC4 the cube: the floor in front of a face reads the CPU reference's visibility within 0.1 > AC4 the planted loop (ao_points_at_radius: every one of main's points at the full radius) reads above 0.99 here and fails, naming the camera
+ao_points_at_radius  cube, camera facing the face, 8 samples, half resolution, 5 cm: 1.0000 over 216 px
+ao_points_at_radius  cube, camera facing the face, 8 samples, full resolution, 5 cm: 1.0000 over 216 px
+ao_points_at_radius  cube, camera facing the face, 16 samples, half resolution, 5 cm: 1.0000 over 216 px
+ao_points_at_radius  cube, camera facing the face, 16 samples, full resolution, 5 cm: 1.0000 over 216 px
+ao_points_at_radius  cube, camera facing the face, 8 samples, half resolution, 10 cm: 1.0000 over 220 px
+ao_points_at_radius  cube, camera facing the face, 8 samples, full resolution, 10 cm: 1.0000 over 220 px
+ao_points_at_radius  cube, camera facing the face, 16 samples, half resolution, 10 cm: 1.0000 over 220 px
+ao_points_at_radius  cube, camera facing the face, 16 samples, full resolution, 10 cm: 1.0000 over 220 px
+ao_points_at_radius  cube, camera 90° around it, 8 samples, half resolution, 5 cm: 1.0000 over 216 px
+ao_points_at_radius  cube, camera 90° around it, 8 samples, full resolution, 5 cm: 1.0000 over 216 px
+ao_points_at_radius  cube, camera 90° around it, 16 samples, half resolution, 5 cm: 1.0000 over 216 px
+ao_points_at_radius  cube, camera 90° around it, 16 samples, full resolution, 5 cm: 1.0000 over 216 px
+ao_points_at_radius  cube, camera 90° around it, 8 samples, half resolution, 10 cm: 1.0000 over 199 px
+ao_points_at_radius  cube, camera 90° around it, 8 samples, full resolution, 10 cm: 1.0000 over 199 px
+ao_points_at_radius  cube, camera 90° around it, 16 samples, half resolution, 10 cm: 1.0000 over 199 px
+ao_points_at_radius  cube, camera 90° around it, 16 samples, full resolution, 10 cm: 1.0000 over 199 px
+ao_points_at_radius on the cube fails: camera facing the face (8 samples, half resolution) at 5 cm: reads 1.0000 where the CPU reference is 0.6905, off by more than 0.1; camera facing the face (8 samples, full resolution) at 5 cm: reads 1.0000 where the CPU reference is 0.6905, off by more than 0.1; camera facing the face (16 samples, half resolution) at 5 cm: reads 1.0000 where the CPU reference is 0.6905, off by more than 0.1; camera facing the face (16 samples, full resolution) at 5 cm: reads 1.0000 where the CPU reference is 0.6905, off by more than 0.1; camera facing the face (8 samples, half resolution) at 10 cm: reads 1.0000 where the CPU reference is 0.8156, off by more than 0.1; camera facing the face (8 samples, full resolution) at 10 cm: reads 1.0000 where the CPU reference is 0.8156, off by more than 0.1; camera facing the face (16 samples, half resolution) at 10 cm: reads 1.0000 where the CPU reference is 0.8156, off by more than 0.1; camera facing the face (16 samples, full resolution) at 10 cm: reads 1.0000 where the CPU reference is 0.8156, off by more than 0.1; camera 90° around it (8 samples, half resolution) at 5 cm: reads 1.0000 where the CPU reference is 0.6905, off by more than 0.1; camera 90° around it (8 samples, full resolution) at 5 cm: reads 1.0000 where the CPU reference is 0.6905, off by more than 0.1; camera 90° around it (16 samples, half resolution) at 5 cm: reads 1.0000 where the CPU reference is 0.6905, off by more than 0.1; camera 90° around it (16 samples, full resolution) at 5 cm: reads 1.0000 where the CPU reference is 0.6905, off by more than 0.1; camera 90° around it (8 samples, half resolution) at 10 cm: reads 1.0000 where the CPU reference is 0.8156, off by more than 0.1; camera 90° around it (8 samples, full resolution) at 10 cm: reads 1.0000 where the CPU reference is 0.8156, off by more than 0.1; camera 90° around it (16 samples, half resolution) at 10 cm: reads 1.0000 where the CPU reference is 0.8156, off by more than 0.1; camera 90° around it (16 samples, full resolution) at 10 cm: reads 1.0000 where the CPU reference is 0.8156, off by more than 0.1
+
+ ✓ redraft-ac4/cube.test.ts > AC4 the cube: the floor in front of a face reads the CPU reference's visibility within 0.1 > AC4 at radius 0.5 m, 5 and 10 cm in front of the middle of a face, the reading is within 0.1 of the reference (0.68 and 0.81), from a camera facing the face and one 90° around it, at 8 and 16 samples and half and full resolution 4048ms
+stdout | redraft-ac4/cube.test.ts > AC4 the cube: the floor in front of a face reads the CPU reference's visibility within 0.1 > AC4 the same planted loop (ao_points_at_radius) passes the wall fixture: the original suite's wall, within 0.05 of the closed form at 5 to 40 cm, from both of its cameras, at 8 and 16 samples at full resolution
+ao_points_at_radius  wall, camera A (square on), 8 samples, full resolution: 5 cm 0.578, 10 cm 0.660, 15 cm 0.686, 20 cm 0.763, 30 cm 0.862, 40 cm 0.938
+ao_points_at_radius  wall, camera A (square on), 16 samples, full resolution: 5 cm 0.580, 10 cm 0.658, 15 cm 0.688, 20 cm 0.760, 30 cm 0.864, 40 cm 0.940
+ao_points_at_radius  wall, camera B (30° around A), 8 samples, full resolution: 5 cm 0.600, 10 cm 0.654, 15 cm 0.706, 20 cm 0.746, 30 cm 0.858, 40 cm 0.950
+ao_points_at_radius  wall, camera B (30° around A), 16 samples, full resolution: 5 cm 0.605, 10 cm 0.653, 15 cm 0.706, 20 cm 0.751, 30 cm 0.857, 40 cm 0.950
+
+ ✓ redraft-ac4/cube.test.ts > AC4 the cube: the floor in front of a face reads the CPU reference's visibility within 0.1 > AC4 the planted loop (ao_points_at_radius: every one of main's points at the full radius) reads above 0.99 here and fails, naming the camera 1415ms
+ ✓ redraft-ac4/cube.test.ts > AC4 the cube: the floor in front of a face reads the CPU reference's visibility within 0.1 > AC4 the same planted loop (ao_points_at_radius) passes the wall fixture: the original suite's wall, within 0.05 of the closed form at 5 to 40 cm, from both of its cameras, at 8 and 16 samples at full resolution 2964ms
+stdout | slab.test.ts > AC3 the floor under a slab is held to (h ÷ radius)² > AC3 under the slab at 0.25 m the reading is within 0.05 of 0.25, and at 0.375 m of 0.5625, at every setting
+#2516 slab at 0.25 m: 8 samples, half resolution 0.248, 8 samples, full resolution 0.245, 16 samples, half resolution 0.248, 16 samples, full resolution 0.245 (closed form 0.25)
+#2516 slab at 0.375 m: 8 samples, half resolution 0.555, 8 samples, full resolution 0.555, 16 samples, half resolution 0.555, 16 samples, full resolution 0.555 (closed form 0.5625)
+
+stdout | slab.test.ts > AC3 the floor under a slab is held to (h ÷ radius)² > AC3 the loop as it is on main reads above 0.8 under the slab at 0.25 m and fails, naming the height
+#2516 slab at 0.25 m (--planted ao_main_loop): 8 samples, half resolution 0.867 (closed form 0.25)
+
+ ✓ slab.test.ts > AC3 the floor under a slab is held to (h ÷ radius)² > AC3 under the slab at 0.25 m the reading is within 0.05 of 0.25, and at 0.375 m of 0.5625, at every setting 6057ms
+stdout | slab.test.ts > AC3 the floor under a slab is held to (h ÷ radius)² > AC3 a loop that weights its directions evenly over the hemisphere reads 0.5 under the slab at 0.25 m and fails
+#2516 slab at 0.25 m (--planted ao_uniform_hemisphere): 8 samples, half resolution 0.502 (closed form 0.25)
+
+ ✓ slab.test.ts > AC3 the floor under a slab is held to (h ÷ radius)² > AC3 the loop as it is on main reads above 0.8 under the slab at 0.25 m and fails, naming the height 1358ms
+ ✓ slab.test.ts > AC3 the floor under a slab is held to (h ÷ radius)² > AC3 a loop that weights its directions evenly over the hemisphere reads 0.5 under the slab at 0.25 m and fails 1100ms
+ ✓ unedited-418.test.ts > AC5 #418's three occlusion tests, unedited, pass > AC5 #418's ao.test.ts, its helpers and its tsconfig are byte-for-byte as at the base commit 47ms
+ ✓ unedited-418.test.ts > AC5 #418's three occlusion tests, unedited, pass > AC5 run as they are, #418's three occlusion tests pass: direct light within 0.5%, no occlusion depth from a see-through item, one pixel hash for a still frame 7415ms
+stdout | redraft-ac4/reference.test.ts > AC4 the CPU reference: 4,096 cosine-weighted rays in f64, out to the radius > AC4 the reference reproduces every stated fixture (wall, slab, cube) within 0.01, and reads exactly 1 at 60 cm and 1 m from the wall
+reference  wall at 5 cm: 0.5645 (expected 0.5640)
+reference  wall at 10 cm: 0.6260 (expected 0.6260)
+reference  wall at 15 cm: 0.6885 (expected 0.6880)
+reference  wall at 20 cm: 0.7478 (expected 0.7480)
+reference  wall at 30 cm: 0.8582 (expected 0.8580)
+reference  wall at 40 cm: 0.9480 (expected 0.9480)
+reference  wall at 60 cm: 1.0000 (expected 1.0000)
+reference  wall at 100 cm: 1.0000 (expected 1.0000)
+reference  slab at 0.25 m: 0.2500 (expected 0.2500)
+reference  slab at 0.375 m: 0.5625 (expected 0.5625)
+reference  cube at 5 cm (the issue's value): 0.6821 (expected 0.6800)
+reference  cube at 5 cm (the face's closed form): 0.6821 (expected 0.6825)
+reference  cube band at 5 cm (the closed form averaged): 0.6905 (expected 0.6910)
+reference  cube at 10 cm (the issue's value): 0.8101 (expected 0.8100)
+reference  cube at 10 cm (the face's closed form): 0.8101 (expected 0.8099)
+reference  cube band at 10 cm (the closed form averaged): 0.8156 (expected 0.8157)
+reference  cube band at 5 cm: 0.6905 (closed form 0.6910); this is what cube.test.ts compares the GPU's reading to
+reference  cube band at 10 cm: 0.8156 (closed form 0.8157); this is what cube.test.ts compares the GPU's reading to
+
+stdout | redraft-ac4/reference.test.ts > AC4 the CPU reference: 4,096 cosine-weighted rays in f64, out to the radius > AC4 the planted twin that weights its directions evenly fails the qualification, naming the slab at 0.25 m (it reads 0.5 there)
+uniform_twin misses: wall at 5 cm: reads 0.5500 where 0.5640 is expected within 0.01; wall at 10 cm: reads 0.6001 where 0.6260 is expected within 0.01; wall at 15 cm: reads 0.6501 where 0.6880 is expected within 0.01; wall at 20 cm: reads 0.7007 where 0.7480 is expected within 0.01; wall at 30 cm: reads 0.8010 where 0.8580 is expected within 0.01; wall at 40 cm: reads 0.8999 where 0.9480 is expected within 0.01; slab at 0.25 m: reads 0.5000 where 0.2500 is expected within 0.01; slab at 0.375 m: reads 0.7500 where 0.5625 is expected within 0.01; cube at 5 cm (the issue's value): reads 0.6653 where 0.6800 is expected within 0.01; cube at 5 cm (the face's closed form): reads 0.6653 where 0.6825 is expected within 0.01; cube band at 5 cm (the closed form averaged): reads 0.6742 where 0.6910 is expected within 0.01; cube at 10 cm (the issue's value): reads 0.7820 where 0.8100 is expected within 0.01; cube at 10 cm (the face's closed form): reads 0.7820 where 0.8099 is expected within 0.01; cube band at 10 cm (the closed form averaged): reads 0.7878 where 0.8157 is expected within 0.01
+
+stdout | redraft-ac4/reference.test.ts > AC4 the CPU reference: 4,096 cosine-weighted rays in f64, out to the radius > AC4 the planted twin whose rays run past the radius fails the qualification, naming the wall at 40 cm
+uncut_twin misses: wall at 5 cm: reads 0.5059 where 0.5640 is expected within 0.01; wall at 10 cm: reads 0.5125 where 0.6260 is expected within 0.01; wall at 15 cm: reads 0.5186 where 0.6880 is expected within 0.01; wall at 20 cm: reads 0.5264 where 0.7480 is expected within 0.01; wall at 30 cm: reads 0.5383 where 0.8580 is expected within 0.01; wall at 40 cm: reads 0.5508 where 0.9480 is expected within 0.01; wall at 60 cm: reads 0.5754 where 1.0000 is expected within 0; wall at 100 cm: reads 0.6230 where 1.0000 is expected within 0; slab at 0.25 m: reads 0.0005 where 0.2500 is expected within 0.01; slab at 0.375 m: reads 0.0012 where 0.5625 is expected within 0.01
+
+ ✓ redraft-ac4/reference.test.ts > AC4 the CPU reference: 4,096 cosine-weighted rays in f64, out to the radius > AC4 its directions are 4,096 unit vectors over the floor's hemisphere with the cosine density (mean cos θ = 2/3), where the even twin's mean is 1/2 3ms
+ ✓ redraft-ac4/reference.test.ts > AC4 the CPU reference: 4,096 cosine-weighted rays in f64, out to the radius > AC4 the closed forms it is held to reproduce the issue's stated values: the wall's six, the slab's two and the cube's 0.68 and 0.81 0ms
+ ✓ redraft-ac4/reference.test.ts > AC4 the CPU reference: 4,096 cosine-weighted rays in f64, out to the radius > AC4 the reference reproduces every stated fixture (wall, slab, cube) within 0.01, and reads exactly 1 at 60 cm and 1 m from the wall 25ms
+ ✓ redraft-ac4/reference.test.ts > AC4 the CPU reference: 4,096 cosine-weighted rays in f64, out to the radius > AC4 the planted twin that weights its directions evenly fails the qualification, naming the slab at 0.25 m (it reads 0.5 there) 13ms
+ ✓ redraft-ac4/reference.test.ts > AC4 the CPU reference: 4,096 cosine-weighted rays in f64, out to the radius > AC4 the planted twin whose rays run past the radius fails the qualification, naming the wall at 40 cm 10ms
+stdout | reference.test.ts > the expected values: closed forms and the qualified CPU reference > AC4 the 4,096-ray cosine-weighted f64 reference reproduces the wall's and the slab's closed forms and the cube's stated numbers, so it counts as the cube's oracle
+#2516 cube CPU reference at 5 cm (4,096 cosine-weighted rays to 0.5 m): point 0.6899 (the issue states 0.68, the face's closed form 0.6825); middle 10 cm of the face 0.6922 (the closed form averaged 0.6930), which the GPU is compared with
+#2516 cube CPU reference at 10 cm (4,096 cosine-weighted rays to 0.5 m): point 0.8096 (the issue states 0.81, the face's closed form 0.8099); middle 10 cm of the face 0.8169 (the closed form averaged 0.8169), which the GPU is compared with
+
+ ✓ reference.test.ts > the expected values: closed forms and the qualified CPU reference > AC1 AC2 AC3 the closed forms reproduce the issue's numbers to the digits it states 1ms
+ ✓ reference.test.ts > the expected values: closed forms and the qualified CPU reference > AC4 the 4,096-ray cosine-weighted f64 reference reproduces the wall's and the slab's closed forms and the cube's stated numbers, so it counts as the cube's oracle 12ms
+ ✓ reference.test.ts > the expected values: closed forms and the qualified CPU reference > AC4 the reference's planted twin (rays weighted evenly over the hemisphere) reads 0.5 under the slab at 0.25 m and fails the qualification 1ms
+ ✓ reference.test.ts > each fixture states its camera, which keeps every surface within the radius of a read point in the frame > AC1 AC3 AC4 wall, camera A (square on): every surface point within 0.5 m of a read point lands inside the frame 8ms
+ ✓ reference.test.ts > each fixture states its camera, which keeps every surface within the radius of a read point in the frame > AC1 AC3 AC4 wall, camera B (30° around A): every surface point within 0.5 m of a read point lands inside the frame 7ms
+ ✓ reference.test.ts > each fixture states its camera, which keeps every surface within the radius of a read point in the frame > AC1 AC3 AC4 slab at 0.25 m: every surface point within 0.5 m of a read point lands inside the frame 2ms
+ ✓ reference.test.ts > each fixture states its camera, which keeps every surface within the radius of a read point in the frame > AC1 AC3 AC4 slab at 0.375 m: every surface point within 0.5 m of a read point lands inside the frame 2ms
+ ✓ reference.test.ts > each fixture states its camera, which keeps every surface within the radius of a read point in the frame > AC1 AC3 AC4 cube, camera facing the face: every surface point within 0.5 m of a read point lands inside the frame 0ms
+ ✓ reference.test.ts > each fixture states its camera, which keeps every surface within the radius of a read point in the frame > AC1 AC3 AC4 cube, camera 90° around: every surface point within 0.5 m of a read point lands inside the frame 1ms
+
+ Test Files  8 passed (8)
+      Tests  29 passed (29)
+   Start at  01:20:31
+   Duration  183.39s (tests 100%)

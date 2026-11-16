@@ -21,8 +21,15 @@ pub const OUTPUT_PASS: &str = "scene3d.output";
 pub const MIRROR_PASS: &str = "scene3d.mirror";
 /// #465: the flare, added into the linear image before tone mapping.
 pub const FLARE_PASS: &str = "scene3d.flare";
+/// #468: depth of field over the linear image, after the geometry and before bloom.
+pub const DOF_PASS: &str = "scene3d.dof";
 /// #166: the water's parts, drawn after the geometry and the mirror's view.
 pub const WATER_PASS: &str = "scene3d.water";
+/// #506: each view inset's own view, drawn whole before the frame's geometry reads its picture: in
+/// the shadows place, beside the other passes that draw the scene from another eye first.
+pub const INSET_VIEW_PASS: &str = "scene3d.inset_view";
+/// #506: the unlit projected insets, after tone mapping, the grade and the upscale.
+pub const INSET_UNLIT_PASS: &str = "scene3d.inset_unlit";
 /// The key light's shadow map: the solids' vertex stage under the light's clip matrix, depth
 /// only (the core's shadow pass, in the frame's shadows place).
 pub const SHADOW_PASS: &str = "scene3d.shadow";
@@ -104,8 +111,9 @@ fn param(name: &'static str, ty: ParamType, default: Value) -> Param {
     }
 }
 
-fn json_param(name: &'static str) -> Param {
-    param(name, ParamType::Json, Value::Null)
+/// A structured param with the forms its reader takes (#1973), as spec.rs declares the same field.
+fn json_param(name: &'static str, form: &'static str) -> Param {
+    param(name, ParamType::Json(form), Value::Null)
 }
 
 fn str_param(name: &'static str, default: &str) -> Param {
@@ -129,9 +137,9 @@ fn kind(name: &'static str, params: Vec<Param>) -> Entry {
 /// it loads by reference once it is large enough on screen (Level of detail; #383).
 fn common(mut params: Vec<Param>) -> Vec<Param> {
     params.push(str_param("size_space", "screen"));
-    params.push(json_param("paint"));
-    params.push(json_param("status"));
-    params.push(json_param("open"));
+    params.push(json_param("paint", crate::spec::PAINT));
+    params.push(json_param("status", crate::spec::STATUS));
+    params.push(json_param("open", crate::spec::OPEN));
     params
 }
 
@@ -187,7 +195,14 @@ fn lit(v: &mut View<'_>, tie: Tie) -> Result<(), OpError> {
         .collect();
     let doc = v.document()?;
     let look = crate::look::Look3::from_roles(roles);
-    let scene = crate::scene::evaluate(doc, t, &look, &mut crate::scene::Labels::new())
+    let fills = crate::contributed::Fills {
+        outlines: v.outlines(),
+        module: v.fills(),
+        planted: v.planted(),
+        memo: None,
+    };
+    let labels = &mut crate::scene::Labels::new();
+    let scene = crate::scene::evaluate_any(doc, t, &look, labels, None, fills)
         .map_err(|r| OpError::new(r.code, r.path))?;
     let policy = light::policy_by(&scene.lights, &scene.camera, tie);
     v.write(
@@ -215,23 +230,27 @@ fn lit_by_order(v: &mut View<'_>) -> Result<(), OpError> {
 /// module, by registration order in #421's planted implementation of scene3d@1.
 pub fn register_with(r: &mut Registrar, tie: Tie) {
     for solid in ["box", "cylinder", "sphere"] {
-        r.kind(kind(solid, common(vec![json_param("size")])), &[], "");
+        r.kind(
+            kind(solid, common(vec![json_param("size", crate::spec::SIZE)])),
+            &[],
+            "",
+        );
     }
     r.kind(
         kind(
             "line",
             common(vec![
-                json_param("points"),
+                json_param("points", crate::spec::POINTS),
                 str_param("mode", "strip"),
-                json_param("width"),
-                json_param("dash"),
-                json_param("ends"),
-                json_param("cap"),
-                json_param("join"),
+                json_param("width", "px | [px]"),
+                json_param("dash", "[px] ≤ 2"),
+                json_param("ends", crate::spec::ENDS),
+                json_param("cap", "butt | round | square"),
+                json_param("join", "miter | round | bevel"),
                 // A line of a mesh's edges in place of points (Marks in 3D: mesh edges; #420).
-                json_param("edges"),
+                json_param("edges", crate::spec::EDGES),
                 // Marks in 3D: whether the sky's fog applies to it (#537's live lines set false).
-                json_param("fog"),
+                json_param("fog", "bool"),
             ]),
         ),
         &[],
@@ -240,7 +259,15 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
     r.kind(
         kind(
             "point",
-            common(vec![json_param("size"), str_param("shape", "dot")]),
+            common(vec![
+                json_param("size", "px"),
+                str_param("shape", "dot"),
+                // A set from a depth video's frame at t (Marks in 3D: from video; #503).
+                json_param(
+                    "from",
+                    "video {asset, frames, depth: luma | r, near, far, fov: [deg, deg], step}",
+                ),
+            ]),
         ),
         &[],
         "",
@@ -251,7 +278,7 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
             common(vec![
                 str_param("text", ""),
                 str_param("font", "body"),
-                json_param("size"),
+                json_param("size", "px | m"),
                 str_param("facing", "camera"),
             ]),
         ),
@@ -270,34 +297,34 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
                 major: 1,
                 minor: 2,
                 params: vec![
-                    param("illuminance", ParamType::Json, json!(10_000)),
-                    param("shadow", ParamType::Json, json!(false)),
-                    param("angle", ParamType::Json, json!(0.53)),
-                    json_param("color"),
-                    param("priority", ParamType::Json, json!(0)),
+                    param("illuminance", ParamType::Json("lux"), json!(10_000)),
+                    param("shadow", ParamType::Json("bool"), json!(false)),
+                    param("angle", ParamType::Json("deg"), json!(0.53)),
+                    json_param("color", crate::spec::COLOR),
+                    param("priority", ParamType::Json("integer"), json!(0)),
                     Param {
                         minor: 1,
-                        ..json_param("temperature")
+                        ..json_param("temperature", "K")
                     },
                     Param {
                         minor: 1,
-                        ..json_param("flicker")
+                        ..json_param("flicker", "f32 | channel")
                     },
                     Param {
                         minor: 2,
-                        ..param("cascades", ParamType::Json, json!(3))
+                        ..param("cascades", ParamType::Json("1 to 4"), json!(3))
                     },
                     Param {
                         minor: 2,
-                        ..param("split", ParamType::Json, json!(0.5))
+                        ..param("split", ParamType::Json("f32"), json!(0.5))
                     },
                     Param {
                         minor: 2,
-                        ..param("shadow_far", ParamType::Json, json!("auto"))
+                        ..param("shadow_far", ParamType::Json("m | auto"), json!("auto"))
                     },
                     Param {
                         minor: 2,
-                        ..param("fade", ParamType::Json, json!(true))
+                        ..param("fade", ParamType::Json("bool"), json!(true))
                     },
                 ],
             }],
@@ -319,6 +346,9 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
         }
         if spec.kind == "mesh.asset@1" {
             r.kind(crate::spec::entry(&spec, "mesh", "asset"), &[], "");
+        }
+        if spec.kind == "mesh.sequence@1" {
+            r.kind(crate::spec::entry(&spec, "mesh", "sequence"), &[], "");
         }
         // The local and area lights and the material (#421).
         for (kind, family, name) in [
@@ -354,10 +384,27 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
             versions: vec![Version {
                 major: 1,
                 minor: 0,
-                params: ["step_hz", "span", "gravity", "floor", "restitution", "bodies", "buoyancy", "inputs", "paint"]
-                    .into_iter()
-                    .map(json_param)
-                    .collect(),
+                // The forms `fixtures::bake` reads, and its paint as the solids'.
+                params: [
+                    ("step_hz", "Hz"),
+                    ("span", "s | time"),
+                    ("gravity", "number (m/s²)"),
+                    ("floor", "m"),
+                    ("restitution", "f32"),
+                    (
+                        "bodies",
+                        "{ID → {radius: m, pos: [x, y, z], vel: [x, y, z], density: f32}}",
+                    ),
+                    ("buoyancy", "{level: m, density: f32}"),
+                    (
+                        "inputs",
+                        "[{step: u32, kind: poke, target: ID, data: {push: [x, y, z]}}]",
+                    ),
+                    ("paint", crate::spec::PAINT),
+                ]
+                .into_iter()
+                .map(|(name, form)| json_param(name, form))
+                .collect(),
             }],
             migrations: Vec::new(),
         },
@@ -402,6 +449,9 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
         .pass_steps(OBJECT_ID_STEPS);
     r.pass(MIRROR_PASS, "geometry");
     r.pass(WATER_PASS, "geometry");
+    r.pass(DOF_PASS, "effects");
+    r.pass(INSET_VIEW_PASS, "shadows");
+    r.pass(INSET_UNLIT_PASS, "upscale");
     r.pass(FLARE_PASS, "bloom");
     r.pass(OUTPUT_PASS, "tone_mapping");
     // Headless, the kit proves what reaches the check: the figure's kinds and fields pass it
@@ -436,10 +486,12 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
         "covers": {"kinds": ["instance@1"], "fields": ["instance@1/params/of", "instance@1/params/from"]},
     }));
     // #2013: a ball told to rest on a shelf it doesn't stand over, which raises `no_support`.
-    r.fixture("rest-no-support", unsupported(), None).sidecar(json!({
-        "codes": ["no_support"],
-        "covers": {"kinds": ["mark.sphere@1"], "fields": ["mark.sphere@1/params/size"]},
-    }));
+    r.fixture("rest-no-support", unsupported(), None)
+        .planted()
+        .sidecar(json!({
+            "codes": ["no_support"],
+            "covers": {"kinds": ["mark.sphere@1"], "fields": ["mark.sphere@1/params/size"]},
+        }));
     // #486: the lobe outputs, occlusion and normal in gpu.output@1, core.bump@1 in gpu.function@1.
     crate::gpu::register(r);
 }
@@ -447,13 +499,35 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
 /// A 10 × 10 m plate with bushes and flowers scattered over it at least 0.5 m apart, none in
 /// the table or passing into another, and a vase written above the table that rests on its top.
 pub fn garden() -> Value {
-    let part = |id: &str, name: &str, order: &str, kind: &str, params: Value, pos: [f64; 3], role: &str| {
+    let part = |id: &str,
+                name: &str,
+                order: &str,
+                kind: &str,
+                params: Value,
+                pos: [f64; 3],
+                role: &str| {
         let mut params = params;
         params["paint"] = json!({"fill": {"role": role}});
         json!({"id": id, "kind": kind, "name": name, "order": order, "params": params, "at": {"pos": pos}})
     };
-    let mut bush = part("bush", "Bush", "a4", "slab@1", json!({"size": [0.9, 0.7, 0.9]}), [0.0; 3], "accent");
-    let mut flower = part("flower", "Flower", "a5", "slab@1", json!({"size": [0.2, 0.3, 0.2]}), [0.0; 3], "ink");
+    let mut bush = part(
+        "bush",
+        "Bush",
+        "a4",
+        "slab@1",
+        json!({"size": [0.9, 0.7, 0.9]}),
+        [0.0; 3],
+        "accent",
+    );
+    let mut flower = part(
+        "flower",
+        "Flower",
+        "a5",
+        "slab@1",
+        json!({"size": [0.2, 0.3, 0.2]}),
+        [0.0; 3],
+        "ink",
+    );
     bush["visible"] = json!(false);
     flower["visible"] = json!(false);
     json!({

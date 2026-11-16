@@ -23,8 +23,11 @@ const ONCE = /^[A-Za-z0-9_-]{16,128}$/;
 interface Unsigned { field: string; reason: string }
 /** What a call expects its signature to cover. */
 interface Expect { method: string; hub: string; params: Obj; now: number }
-/** The planted wrong programs a verifier can be: #65's, which keeps an unpaired key, and #1579's, which skips the time. */
-interface Lapses { unpairedToo?: boolean; skipsTime?: boolean }
+/**
+ * The planted wrong programs a verifier can be: #65's, which keeps an unpaired key, and #1579's, which skips the time.
+ * `spentAfter`: the write running now, which spends the once-only ID as it ends, so a crash first spends none (#1577).
+ */
+interface Lapses { unpairedToo?: boolean; skipsTime?: boolean; spentAfter?: (() => void)[] }
 
 /** The lower-case hex SHA-256 of the params' RFC 8785 bytes, with `signature` left out: what `signed.params` holds. */
 function paramsHash(params: Obj): string {
@@ -47,6 +50,8 @@ export function checkKey(key: unknown): string {
 
 export class Devices {
   private db: Database.Database | undefined;
+  /** The once-only IDs writes running now hold, until each ends (#1577). */
+  private readonly held = new Set<string>();
   constructor(private readonly file: string) {}
 
   private all(): Device[] {
@@ -115,15 +120,28 @@ export class Devices {
     if (signed.params !== paramsHash(expect.params)) return { field: 'params', reason: 'it signs other params than the ones sent' };
     const why = more?.();
     if (why) return why;
-    if (!this.spend(device, signed.once, signed.at, expect.now)) return { field: 'once', reason: `its once-only ID ${signed.once} was spent already, so it counts once` };
+    if (!this.spend(device, signed.once, signed.at, expect.now, lapses.spentAfter)) return { field: 'once', reason: `its once-only ID ${signed.once} was spent already, so it counts once` };
     return undefined;
   }
 
-  /** Spends a once-only ID: false when it was spent already. IDs past their 10 minutes go, as none of them can count. */
-  private spend(device: string, once: string, at: number, now: number): boolean {
-    this.db ??= open(join(dirname(this.file), 'spent.db'));
-    this.db.prepare('DELETE FROM spent WHERE at < ?').run(now - SIGNED_WITHIN_MS);
-    return this.db.prepare('INSERT INTO spent (device, once, at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING').run(device, once, at).changes === 1;
+  /**
+   * Spends a once-only ID: false when it was spent already, or a write running now holds it. IDs past their 10 minutes
+   * go, as none of them can count. `after`: held until the write ends, then spent, so a crash first spends nothing.
+   */
+  private spend(device: string, once: string, at: number, now: number, after?: (() => void)[]): boolean {
+    const db = this.db ??= open(join(dirname(this.file), 'spent.db'));
+    db.prepare('DELETE FROM spent WHERE at < ?').run(now - SIGNED_WITHIN_MS);
+    const key = `${device}\n${once}`;
+    const put = () => db.prepare('INSERT INTO spent (device, once, at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING').run(device, once, at).changes === 1;
+    if (this.held.has(key)) return false;
+    if (!after) return put();
+    if (db.prepare('SELECT 1 FROM spent WHERE device = ? AND once = ?').get(device, once)) return false;
+    this.held.add(key);
+    after.push(() => {
+      this.held.delete(key);
+      put();
+    });
+    return true;
   }
 }
 

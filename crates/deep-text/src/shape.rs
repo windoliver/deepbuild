@@ -56,6 +56,11 @@ pub struct Spec<'a> {
     pub mask: bool,
     /// #1964: styled spans of the one run, shaped with it.
     pub spans: &'a [Span],
+    /// #1966: the space after each paragraph a `\n` ends, in logical pixels (a list's `gap`).
+    pub gap: f32,
+    /// #1966: how far in every line starts, in logical pixels (a list's `indent`): lines break
+    /// at `width` less it, so a wrapped line starts under the text, not at the run's edge.
+    pub indent: f32,
 }
 
 /// #1964: a styled span's shift off the baseline (`shift: sub | super | u`).
@@ -111,6 +116,18 @@ impl std::hash::Hash for Span {
     }
 }
 
+/// #538: the advance of `family`'s `0` in ems: a monospace face's cell at size 1, which a cell
+/// grid spaces its rows to so each glyph sits in its own cell.
+pub fn advance_em(family: &str) -> Option<f32> {
+    use skrifa::MetadataProvider;
+    let face = FACES.iter().find(|f| f.family == family)?;
+    let font = skrifa::FontRef::new(face.bytes).ok()?;
+    let em = f32::from(font.head().ok()?.units_per_em().max(1));
+    let glyph = font.charmap().map('0')?;
+    let metrics = font.glyph_metrics(skrifa::instance::Size::unscaled(), skrifa::instance::LocationRef::default());
+    Some(metrics.advance_width(glyph)? / em)
+}
+
 /// The `[size, rise]` ratios of an em a face sets its subscripts or superscripts at, from its
 /// OS/2 table; `None` for a face without one.
 fn script_metrics(family: &str, shift: Shift) -> Option<[f32; 2]> {
@@ -144,6 +161,8 @@ impl<'a> Spec<'a> {
             tabular: false,
             mask: false,
             spans: &[],
+            gap: 0.,
+            indent: 0.,
         }
     }
 
@@ -192,6 +211,10 @@ pub struct Shaped {
     /// The lines' heights summed.
     pub height: f32,
     pub lines: usize,
+    /// #1966: the height of a line, and the space after each paragraph a `\n` ends, so a row
+    /// is found from a glyph's baseline.
+    pub line_height: f32,
+    pub gap: f32,
     /// True when the text was cut to fit its box with an ellipsis (never for a bound value).
     pub ellipsized: bool,
     /// The text as drawn: the spec's text, or its cut with an ellipsis.
@@ -343,7 +366,8 @@ impl Shaper {
         }
         let mut layout = builder.build(text);
         // A bound value is never wrapped: it stays on one line, past its box if it must.
-        layout.break_all_lines(if spec.bound { None } else { spec.width });
+        let width = spec.width.map(|w| (w - spec.indent).max(0.));
+        layout.break_all_lines(if spec.bound { None } else { width });
         let alignment = match spec.align {
             Align::Start => Alignment::Start,
             Align::Center => Alignment::Center,
@@ -353,20 +377,36 @@ impl Shaper {
         layout
     }
 
-    fn collect(layout: &Layout<()>, max_lines: Option<u16>, shown: &str) -> Shaped {
+    fn collect(
+        layout: &Layout<()>,
+        spec: &Spec<'_>,
+        max_lines: Option<u16>,
+        shown: &str,
+    ) -> Shaped {
         let mut shaped = Shaped {
             shown: shown.to_owned(),
+            line_height: spec.line_height(),
+            gap: spec.gap,
             ..Shaped::default()
         };
         let starts = grapheme_starts(shown);
         let grapheme = |byte: usize| starts.partition_point(|&s| s <= byte).saturating_sub(1);
+        // #1966: the paragraphs before each line's start, each moving it down by the gap.
+        let ends: Vec<usize> = shown.match_indices('\n').map(|(i, _)| i).collect();
+        let mut down = 0.;
         for (index, line) in layout.lines().enumerate() {
             if max_lines.is_some_and(|max| index >= usize::from(max)) {
                 break;
             }
             let metrics = line.metrics();
+            if spec.gap > 0. {
+                let before = ends.partition_point(|&i| i < line.text_range().start);
+                let gap = before as f32 * spec.gap;
+                shaped.height += gap - down;
+                down = gap;
+            }
             shaped.lines += 1;
-            shaped.width = shaped.width.max(metrics.advance);
+            shaped.width = shaped.width.max(metrics.advance + spec.indent);
             shaped.height += metrics.line_height;
             for item in line.items() {
                 let PositionedLayoutItem::GlyphRun(run) = item else {
@@ -398,8 +438,8 @@ impl Shaper {
                 for (offset, thickness) in lines.into_iter().flatten() {
                     shaped.decorations.push(Decoration {
                         rect: [
-                            run.offset(),
-                            run.baseline() - offset,
+                            run.offset() + spec.indent,
+                            run.baseline() - offset + down,
                             run.advance(),
                             thickness,
                         ],
@@ -416,8 +456,8 @@ impl Shaper {
                         font: font.clone(),
                         size,
                         id: glyph.id,
-                        x: glyph.x,
-                        y: glyph.y,
+                        x: glyph.x + spec.indent,
+                        y: glyph.y + down,
                         advance: glyph.advance,
                         grapheme: grapheme(byte),
                         coords: coords.clone(),
@@ -443,7 +483,7 @@ impl Shaper {
     /// `text` shaped in the spec's style, past the cache, the shaping recorded.
     fn shape_now(&mut self, spec: &Spec<'_>, text: &str, key: &Key) -> Shaped {
         let layout = self.layout(spec, text);
-        let run = Self::collect(&layout, None, text);
+        let run = Self::collect(&layout, spec, None, text);
         cache::shaped(key, run.glyphs.len());
         run
     }

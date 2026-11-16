@@ -1,0 +1,53 @@
+Twin run: the base (72fe11a11) with twins/missing-rules-always-unreadable/crates/deep-hook/src/main.rs laid over
+crates/deep-hook/src/main.rs, deep-hook rebuilt (cargo build --locked -p deep-hook). November 14, 2026, Linux, under load.
+Command: npx vitest run --root tests/acceptance/1856 --no-file-parallelism hub-away.test.ts
+Expected on the twin: AC2 (#1856.e52ea188, 2 tests) fails at its expect, `ls` denied. AC1 (1 test) passed on it.
+
+
+ RUN  v5.0.5 <scratch>/tests/acceptance/1856
+
+ ❯ hub-away.test.ts (3 tests | 2 failed) 138ms
+   ❯ #1856.e52ea188 before setup, no ~/.deepbuild/rules.json (2)
+     × #1856.e52ea188 a home with no ~/.deepbuild at all, no hub: `ls` runs 38ms
+     × #1856.e52ea188 a ~/.deepbuild with neither rules.json nor setup-finished.json, no hub: `ls` runs 39ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  hub-away.test.ts > #1856.e52ea188 before setup, no ~/.deepbuild/rules.json > #1856.e52ea188 a home with no ~/.deepbuild at all, no hub: `ls` runs
+AssertionError: before setup, with no ~/.deepbuild/rules.json, `ls` must run: exit 2 after 28.7 ms, stdout "", stderr "DeepBuild blocked this: ~/.deepbuild/rules.json can't be read: No such file or directory (os error 2), so deep-hook can't check its guards while the hub doesn't answer. Fix that file, then retry.\n": expected 'deny' to be 'allow' // Object.is equality
+
+Expected: "allow"
+Received: "deny"
+
+ ❯ hub-away.test.ts:41:104
+     39|     if (existsSync(rootOf(home))) throw Error(`BLOCKED: the fresh home…
+     40|     const r = await hook(home, s, 'ls');
+     41|     expect(decision(r), `before setup, with no ~/.deepbuild/rules.json…
+       |                                                                                                        ^
+     42|   }, 180_000);
+     43|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  hub-away.test.ts > #1856.e52ea188 before setup, no ~/.deepbuild/rules.json > #1856.e52ea188 a ~/.deepbuild with neither rules.json nor setup-finished.json, no hub: `ls` runs
+AssertionError: before setup, with no ~/.deepbuild/rules.json, `ls` must run: exit 2 after 35.6 ms, stdout "", stderr "deep-hook: spooled 01M7EB4JQ566673YAWCKPM360D, but its sync didn't finish within the hook's 50 ms\nDeepBuild blocked this: ~/.deepbuild/rules.json can't be read: No such file or directory (os error 2), so deep-hook can't check its guards while the hub doesn't answer. Fix that file, then retry.\n": expected 'deny' to be 'allow' // Object.is equality
+
+Expected: "allow"
+Received: "deny"
+
+ ❯ hub-away.test.ts:49:104
+     47|     const s = newSession(home);
+     48|     const r = await hook(home, s, 'ls');
+     49|     expect(decision(r), `before setup, with no ~/.deepbuild/rules.json…
+       |                                                                                                        ^
+     50|   }, 180_000);
+     51| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 1 passed (3)
+   Start at  16:53:54
+   Duration  333ms (tests 66%, transform 25%, import 8%, worker 1%)
+

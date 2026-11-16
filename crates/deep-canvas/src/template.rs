@@ -80,13 +80,27 @@ pub fn value(doc: &Value, path: &str) -> Option<Shown> {
         let id = path.strip_prefix(section)?.strip_suffix("/value")?;
         let entry = doc.get(section.trim_end_matches('/'))?.get(id)?;
         let first = entry.get("range").and_then(|r| r.get(0));
-        Some(entry.get(field).or_else(|| entry.get("default")).or(first).and_then(Value::as_f64))
+        Some(
+            entry
+                .get(field)
+                .or_else(|| entry.get("default"))
+                .or(first)
+                .and_then(Value::as_f64),
+        )
     };
     if let Some(v) = moved("assemblies/", "value") {
-        return Some(Shown { text: number(v.unwrap_or(0.0)), source: None, number: true });
+        return Some(Shown {
+            text: number(v.unwrap_or(0.0)),
+            source: None,
+            number: true,
+        });
     }
     if let Some(v) = moved("controls/", "value") {
-        return Some(Shown { text: number(v?), source: None, number: true });
+        return Some(Shown {
+            text: number(v?),
+            source: None,
+            number: true,
+        });
     }
     let name = path.strip_prefix("data/")?;
     let constant = doc.get("data")?.get(name)?;

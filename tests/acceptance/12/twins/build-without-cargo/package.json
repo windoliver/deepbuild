@@ -1,0 +1,32 @@
+{
+  "name": "deepbuild",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=24.22.0"
+  },
+  "workspaces": [
+    "packages/*"
+  ],
+  "bin": {
+    "deep": "packages/cli/dist/main.js"
+  },
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "preflight": "scripts/preflight",
+    "release:check": "DEEP_PREFLIGHT=release scripts/preflight"
+  },
+  "devDependencies": {
+    "@microsoft/api-extractor": "7.60.0",
+    "@stryker-mutator/core": "10.0.0",
+    "@types/better-sqlite3": "7.6.13",
+    "@types/node": "24.19.2",
+    "fast-check": "4.10.2",
+    "gpt-tokenizer": "4.0.0",
+    "jest": "30.5.2",
+    "typescript": "5.9.3",
+    "vitest": "5.0.5"
+  }
+}

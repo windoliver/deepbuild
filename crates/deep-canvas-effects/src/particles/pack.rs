@@ -36,13 +36,21 @@ pub struct Tables {
     pub tris: u32,
     pub cdf: u32,
     pub poses: u32,
+    /// A world-space emitter's anchor at each birth bucket (#451).
+    pub anchors: u32,
+    /// A flow's curves (#451): a header of four words a curve (its points' offset, their count,
+    /// its length and its pick's running weight), then each curve's points with their length so
+    /// far, four words a point.
+    pub flows: u32,
 }
 
 /// The bake's tables, as words.
 pub fn tables(b: &Baked) -> Tables {
     let mut w: Vec<u32> = vec![0; 4];
-    let mut out = Tables::default();
-    out.curve = w.len() as u32;
+    let mut out = Tables {
+        curve: w.len() as u32,
+        ..Tables::default()
+    };
     for p in &b.curve {
         w.extend(p.iter().map(|x| f(*x)));
     }
@@ -83,11 +91,7 @@ pub fn tables(b: &Baked) -> Tables {
     }
     out.map = w.len() as u32;
     if let Some(m) = b.map.as_ref() {
-        w.extend(
-            m.heights
-                .iter()
-                .map(|h| h.map_or(EMPTY.to_bits(), |y| f(y))),
-        );
+        w.extend(m.heights.iter().map(|h| h.map_or(EMPTY.to_bits(), f)));
     }
     out.births = w.len() as u32;
     for p in b.births.iter().flat_map(|bt| &bt.pieces) {
@@ -104,8 +108,61 @@ pub fn tables(b: &Baked) -> Tables {
             w.extend(verts.iter().flatten().map(|x| f(*x)));
         }
     }
+    out.flows = w.len() as u32;
+    if let Motion::Along { many: Some(m), .. } = &b.spec.motion {
+        let n = b.flows.len();
+        let weights: Vec<f64> = match &m.pick {
+            super::flows::Pick::Hash => vec![1.0; n],
+            super::flows::Pick::Weights(ws) => (0..n)
+                .map(|k| ws.get(k).copied().unwrap_or(0.0).max(0.0))
+                .collect(),
+        };
+        let total: f64 = weights.iter().sum();
+        let mut acc = 0.0;
+        let mut at = out.flows + 4 * n as u32;
+        for (k, c) in b.flows.iter().enumerate() {
+            acc += if total > 0.0 {
+                weights[k] / total
+            } else {
+                1.0 / n as f64
+            };
+            w.extend([at, c.points.len() as u32, f(c.len()), f(acc)]);
+            at += 4 * c.points.len() as u32;
+        }
+        for c in &b.flows {
+            for (p, s) in c.points.iter().zip(c.lengths()) {
+                w.extend([f(p[0]), f(p[1]), f(p[2]), f(*s)]);
+            }
+        }
+    }
+    out.anchors = w.len() as u32;
+    for p in b.anchors.iter().flat_map(|a| &a.at) {
+        w.extend(p.iter().map(|x| f(*x)));
+    }
     out.words = std::sync::Arc::new(w);
     out
+}
+
+/// #450: a ribbon's uniform blocks at t, one a segment end j = 0 to segments: the particle
+/// evaluated j × length ÷ segments back along its age, written j × count rows on (`placed`), or
+/// at row 0 as a capture reads them one at a time.
+pub fn ribbon(
+    b: &Baked,
+    r: &super::draws::Ribbon,
+    t: f64,
+    tables: &Tables,
+    flags: u32,
+    placed: bool,
+) -> Vec<Vec<u32>> {
+    (0..=r.segments)
+        .map(|j| {
+            let mut u = uniform(b, t, tables, flags);
+            let step = (r.length * 705_600_000.0 / f64::from(r.segments)).floor();
+            u[29 * 4] = f(f64::from(j) * step / 705_600_000.0);
+            u[29 * 4 + 1] = if placed { j * b.spec.count } else { 0 };
+            u
+        })
+        .collect()
 }
 
 /// One frame's uniform block at t, `SLOTS × 4` words, with the tables' offsets.
@@ -153,6 +210,7 @@ pub fn uniform(b: &Baked, t: f64, tables: &Tables, flags: u32) -> Vec<u32> {
             Launch::Cone(r) => (0, 0, *drag, [r[0], r[1], 0.0], *gravity),
             Launch::Vector(v) => (0, 1, *drag, *v, *gravity),
         },
+        Motion::Along { many: Some(_), .. } => (4, 0, 0.0, [0.0; 3], [0.0; 3]),
         Motion::Along { .. } => (1, 0, 0.0, [0.0; 3], [0.0; 3]),
         Motion::Orbit { .. } => (2, 0, 0.0, [0.0; 3], [0.0; 3]),
         Motion::Drift { .. } => (3, 0, 0.0, [0.0; 3], [0.0; 3]),
@@ -222,7 +280,13 @@ pub fn uniform(b: &Baked, t: f64, tables: &Tables, flags: u32) -> Vec<u32> {
         [f(s.inherit[0]), f(s.inherit[1]), n_int as u32, m_int as u32],
     );
     let (speed, axis, spin, amplitude, frequency) = match &s.motion {
-        Motion::Along { speed, .. } => (*speed, [0.0; 3], 0.0, 0.0, 0.0),
+        Motion::Along { speed, many, .. } => (
+            many.as_ref().map_or(*speed, |m| m.speed[0]),
+            [0.0; 3],
+            0.0,
+            0.0,
+            0.0,
+        ),
         Motion::Orbit { axis, spin } => (0.0, *axis, *spin, 0.0, 0.0),
         Motion::Drift {
             amplitude,
@@ -261,6 +325,19 @@ pub fn uniform(b: &Baked, t: f64, tables: &Tables, flags: u32) -> Vec<u32> {
         );
         let planted = u32::from(b.planted.inherit_previous_frame);
         put(28, [f(sf.half_step), planted, 0, 0]);
+    }
+    // #451: a flow along many curves: its curves, its speed range and its sideways offset.
+    if let Motion::Along { many: Some(m), .. } = &s.motion {
+        u[31 * 4..31 * 4 + 4].copy_from_slice(&[
+            tables.flows,
+            b.flows.len() as u32,
+            f(m.speed[1]),
+            f(m.lateral),
+        ]);
+    }
+    // #451: a world-space emitter's birth reads its anchor at its bucket.
+    if let Some(a) = &b.anchors {
+        u[30 * 4..30 * 4 + 4].copy_from_slice(&[tables.anchors, a.at.len() as u32, f(a.step), 1]);
     }
     u
 }

@@ -45,6 +45,11 @@ plant-row-title-only = []
 # Issue #1454: a file stands in for the OS's prompt, in no shipped build: a test can't be you, and an environment variable
 # in the shipped app would let an agent answer for you.
 test-confirm = []
+# Issue #1606: the file DEEP_APP_TEST_SECRETS names stands in for the OS secret store the device key lives in, in no
+# shipped build: no test touches your Keychain. Its wrong program (tests/acceptance/1606) keeps the key in
+# ~/.deepbuild/app/device.json, as the base did, and never moves one.
+test-secrets = []
+plant-key-in-file = []
 # Issue #1455: the app draws the bound values of the file DEEP_APP_TEST_BOUND names, as `deep-replica --bound` does, in no
 # shipped build: its pictures need a bound panel from the real app.
 test-bound = ["fixtures"]
@@ -63,6 +68,9 @@ fixtures = []
 # wrong programs DEEP_CHROME_PLANT selects, in no shipped build. Unlike env-plants it builds in release, which the
 # budget run needs.
 chrome-fixture = []
+# Issue #177: `--hdr <scenario.json>`, the live HDR fixture its acceptance tests drive, in no shipped build; it draws a
+# scene document, so it brings the scene3d renderer.
+hdr-fixture = ["dep:deep-scene3d-render", "dep:deep-canvas-scene3d", "dep:wgpu-profiler"]
 # Issue #1485: the canvas panel in the app's real window, fed a scenario's revisions and its frames timed (`deep-app
 # --canvas`), with the planted decode its acceptance tests time and the wrong program DEEP_CANVAS_PLANT selects, in no
 # shipped build. It builds in release, which the frame-time run needs.
@@ -144,16 +152,18 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
+# Issue #1606: the device key is a Keychain item only the app that made it reads (the version already in the tree).
+security-framework = { version = "3", default-features = false }
 # Issue #1462: the window forwards an assistive client's question of what is focused to gpui's view, so the row or
 # control the keys are on is what VoiceOver and Full Keyboard Access follow (the version gpui uses, vendored).
 accesskit_macos = "0.26"
 # Issue #79 adds NSData, NSImage, NSImageRep, NSBitmapImageRep and NSCell: the dock icon and the
 # menu-bar template from the kit's bytes.
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSData", "NSGeometry", "NSError", "NSURL", "NSArray", "NSBundle", "NSEnumerator", "NSDictionary", "NSValue"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSData", "NSGeometry", "NSError", "NSURL", "NSArray", "NSBundle", "NSEnumerator", "NSDictionary", "NSValue", "NSNotification", "NSOperation", "NSDate", "NSRunLoop", "block2"] }
 # Issue #883: `--notification-center` reads what Notification Center holds from the app (the version gpui uses).
 objc2-user-notifications = { version = "0.3", default-features = false, features = ["std", "block2", "UNUserNotificationCenter", "UNNotification", "UNNotificationRequest", "UNNotificationContent", "UNNotificationSettings"] }
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "objc2-core-foundation", "objc2-core-graphics", "block2", "NSStatusBar", "NSStatusItem", "NSStatusBarButton", "NSButton", "NSControl", "NSView", "NSResponder", "NSEvent", "NSApplication", "NSWindow", "NSImage", "NSImageRep", "NSBitmapImageRep", "NSCell", "NSScreen", "NSGraphics", "NSSound", "NSWorkspace", "NSMenu", "NSMenuItem"] }
-objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFArray", "CFBase", "CFCGTypes", "CFData", "CFDictionary", "CFString"] }
+objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFArray", "CFBase", "CFCGTypes", "CFData", "CFDictionary", "CFString", "CFRunLoop"] }
 objc2-core-graphics = { version = "0.3", default-features = false, features = ["std", "CGColorSpace", "CGError", "CGEvent", "CGEventSource", "CGEventTypes", "CGWindow", "CGDirectDisplay", "CGImage", "CGDataProvider", "CGGeometry", "CGRemoteOperation", "CGDisplayConfiguration", "CGSession", "libc"] }
 block2 = "0.6"
 raw-window-handle = "0.6"
@@ -169,9 +179,12 @@ deep-effects-render = { path = "../deep-effects-render" }
 libc = "0.2"
 # Issue #140: the color seam tags every Metal layer the app presents through, a surface wgpu
 # configures among them (the versions already in the tree).
-objc2-quartz-core = { version = "0.3", default-features = false, features = ["std", "CALayer", "CAMetalLayer", "objc2-core-foundation", "objc2-core-graphics"] }
+objc2-quartz-core = { version = "0.3", default-features = false, features = ["std", "CALayer", "CAMetalLayer", "CATransaction", "objc2-core-foundation", "objc2-core-graphics"] }
 wgpu = { version = "30", default-features = false, features = ["std", "metal"] }
 pollster = "0.4"
+deep-scene3d-render = { path = "../deep-scene3d-render", optional = true }
+deep-canvas-scene3d = { path = "../deep-canvas-scene3d", optional = true }
+wgpu-profiler = { version = "0.28", optional = true }
 
 [dev-dependencies]
 deep-app = { path = ".", features = ["spike", "fixtures"] }
@@ -218,12 +231,13 @@ path = "../../tests/acceptance/1510/app/card.rs"
 name = "acceptance_1738"
 path = "../../tests/acceptance/1738/app/titles.rs"
 
-# Issue #995: the canvas panel's acceptance test, written blind in tests/acceptance/995. A binary of its own, so its
-# process holds the one panel and nothing another test allocated; it draws the panel in a headless window, and AppKit
-# needs the main thread, so no libtest harness.
+# Issue #995: the canvas panel's acceptance test, redrafted blind in tests/acceptance/995/redraft, which runs in the
+# first draft's place (tests/acceptance/995/app). A binary of its own, so its process holds the one panel and nothing
+# another test allocated; it draws the panel in a headless window, and AppKit needs the main thread, so no libtest
+# harness.
 [[test]]
 name = "acceptance_995"
-path = "../../tests/acceptance/995/app/panel.rs"
+path = "../../tests/acceptance/995/redraft/panel.rs"
 harness = false
 
 # Issue #1477: the long lists and tables bench, and the calls its acceptance tests make of our table (README in
@@ -238,4 +252,11 @@ harness = false
 [[test]]
 name = "acceptance_2117"
 path = "../../tests/acceptance/2117/app/panel.rs"
+harness = false
+
+# Issue #1606: AC5 and AC9 redrafted blind in tests/acceptance/1606-redraft-ac5-ac9, the app's card answered with no
+# window. card.test.ts runs it with an ask and an option; with none, as in a workspace run, it answers nothing.
+[[test]]
+name = "acceptance_1606"
+path = "../../tests/acceptance/1606-redraft-ac5-ac9/app/card.rs"
 harness = false

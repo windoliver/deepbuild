@@ -1,0 +1,26 @@
+[
+  {
+    "file": "crates/deep-canvas-marks/src/paint.rs",
+    "from": "Some(Value::String(s)) if s == \"parent\" => Span::Parent,",
+    "to": "Some(Value::String(s)) if s == \"parent\" => Span::Item,",
+    "testFile": "paint.test.ts",
+    "testTitle": "AC1 with span: parent over three squares in a row",
+    "assertion": "the left sample (70, 70) reads the one gradient"
+  },
+  {
+    "file": "crates/deep-canvas-marks/src/scene.rs",
+    "from": "deep_canvas::ops::sqrt((place.scale[0] * place.scale[1]).abs())",
+    "to": "1.0",
+    "testFile": "stroke.test.ts",
+    "testTitle": "AC2 a circle with a 4 u stroke scaled 3× by its parent",
+    "assertion": "with scale_stroke true the stroke is"
+  },
+  {
+    "file": "crates/deep-canvas-marks/src/scene.rs",
+    "from": "n => rank as f64 / (n - 1) as f64,",
+    "to": "n => rank as f64 / n as f64,",
+    "testFile": "steps.test.ts",
+    "testTitle": "AC3 steps {over: children, stops:",
+    "assertion": "the last square reads exactly the last role"
+  }
+]

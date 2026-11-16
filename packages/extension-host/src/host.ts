@@ -27,7 +27,7 @@
 // once a period while a view that binds its source is shown, as the app reports it; and a series call lands as one
 // batch file named by one reading.batch event, its windows' rollups as files named by reading.rollup events
 // (./series.ts), so a bound value resolves at a frame's pinned log position.
-import { createPublicKey, randomUUID, verify as verifySignature } from 'node:crypto';
+import { createHash, createPublicKey, randomUUID, verify as verifySignature } from 'node:crypto';
 import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createServer, type AddressInfo, type Socket } from 'node:net';
@@ -66,7 +66,7 @@ import { SeriesStore, type BoundValue, type Rollup, type Span } from './series.j
 import { Sends, Notices, type SendRow, type SendRule, type NoticeRow } from './sends.js';
 export type { NoticeRow } from './sends.js';
 import { WorkSources, type Added, type DeliveryRow, type WorkEvent, type WorkKitFixture, type WorkPage, type WorkResult, type WorkTask } from './work.js';
-import { declareSource, handleOf, nodeHttp, osSecrets, Sources, HostSources, type HttpClient, type KeyTest, type Polled, type Reading, type Recording, type SecretStore, type SourceRead, type StreamRead } from './sources.js';
+import { AnswerTooLarge, declareSource, handleOf, nodeFetch, nodeHttp, osSecrets, Sources, HostSources, type HttpClient, type KeyTest, type Polled, type Reading, type Recording, type SecretStore, type SourceRead, type StreamRead } from './sources.js';
 import { TERMINAL_PLANTS, TERMINAL_PROTOCOL, Terminals, type OpenSpec, type TerminalPlant, type TerminalTab } from './terminals.js';
 import type { ProjectTrust } from './trust.js';
 
@@ -92,7 +92,9 @@ export type Plant = 'hub-unless-agent-built' | 'grants-only-in-record-query' | '
   // #989's hosted terminals: hosts that keep the start size, drop the bottom rows, keep every byte, read a FIFO or
   // block their output on input; hubs that leave a closed terminal's files, throw once input is full, or stop or
   // read as ended a host of another protocol version.
-  | TerminalPlant;
+  | TerminalPlant
+  // #184's: a host that plays any seed a check runner passes to deep.canvas.play.
+  | 'plays-any-seed';
 
 /** One hook request to every loaded handler of its kind (#350). */
 export interface HookRequest {
@@ -180,6 +182,11 @@ export interface ExtensionHostOptions {
    * its reply. Without one, a read is refused.
    */
   canvas?: (call: Record<string, unknown>) => Promise<Record<string, unknown>>;
+  /**
+   * The replica `deep.canvas.play` plays through (#184): the hub's own, which takes a play call naming the piece by
+   * `<doc>@<rev>` and answers the replica's reply. Without one, a play is refused.
+   */
+  replica?: (call: Record<string, unknown>) => Promise<Record<string, unknown>>;
   /**
    * The first-party pieces the hub runs itself, env-local among them (#103): each a provider in the composition graph,
    * whose users are the pieces whose runs used what it provides. A version the host last saw otherwise is a new one.
@@ -513,6 +520,24 @@ function schemaBreak(name: string, schema: unknown, value: unknown): string | un
     return `/ (its schema can't be read: ${message(e)})`;
   }
 }
+/**
+ * What a check's input gives `deep.canvas.play` (Check input: plug-in reads, #184): the piece, the seed, the runs (20
+ * by default), the bots and the recorded tracks it may play; a playtest's input holds more, which the host ignores.
+ */
+interface PlayInput { piece?: unknown; seed?: unknown; runs?: unknown; bots?: unknown; tracks?: unknown }
+/** One play a running check made: its seed, its bot, its track's hash and whether it read values. */
+interface Played { seed: number; bot: unknown; track: string; values: boolean }
+/** JSON with every object's keys sorted, so two values parsed apart compare. */
+const canonical = (v: unknown): string => JSON.stringify(v, (_k, x: unknown) => (isPlain(x) ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) : x));
+/** Run i's seed: hash(the check's seed, i), the first 8 bytes of SHA-256(seed as u64 LE, i as u32 LE) big-endian, shifted right 11 bits to stay a JSON-safe integer. */
+function runSeed(seed: number, i: number): number {
+  const b = Buffer.alloc(12);
+  b.writeBigUInt64LE(BigInt(seed));
+  b.writeUInt32LE(i, 8);
+  return Number(createHash('sha256').update(b).digest().readBigUInt64BE(0) >> 11n);
+}
+/** A bot as a play runs it: its policy or logic, without the names and authorship a check's input adds. */
+const botOf = (bot: unknown): unknown => (isPlain(bot) ? Object.fromEntries(Object.entries(bot).filter(([k]) => k === 'policy' || k === 'logic')) : bot);
 const nothing = (outcome: CheckResult['outcome'], failure?: string): CheckResult => ({
   outcome, testsRun: 0, evidence: [], read: [], mask: null,
   failures: failure ? [{ test: 'extension host', file: '', line: 0, stack: null, assertion: false, message: failure }] : [],
@@ -548,6 +573,8 @@ class Host implements ExtensionHost {
   private readonly exts = new Map<string, Ext>();
   /** The content keys each running check's `deep.canvas.read` calls returned, by the package running it (#411). */
   private readonly canvasKeys = new Map<Ext, string[]>();
+  /** Each running check's input and the plays its `deep.canvas.play` calls made, by the package running it (#184). */
+  private readonly plays = new Map<Ext, { input: PlayInput | undefined; played: Played[]; tracks: Set<string> }>();
   /** The packages you approved run-as-you for, by ID. */
   private runAsYou: Record<string, boolean>;
   private readonly terminals: Terminals;
@@ -1045,30 +1072,14 @@ class Host implements ExtensionHost {
       .flatMap((e) => (manifestOf(e.folder).uses ?? []).filter((u) => dropped.includes(u.interface)).map((u) => ({ user: e.id, uses: u.interface })));
     if (!users.length) return;
     if (this.options.plant === 'rewires-to-newest') return;
-    const asks = this.options.asks;
     const named = users.map((u) => `${u.user} uses ${u.uses}`).join('; ');
-    if (!asks) throw Error(`${m.id}@${m.version} no longer provides what installed pieces use (${named}), and this host has no asks core to ask you; nothing was installed`);
-    const now = this.options.now();
-    const key = sha256Hex(canonicalize({ update: m.id, version: m.version, users } as unknown as JsonValue));
+    if (!this.options.asks) throw Error(`${m.id}@${m.version} no longer provides what installed pieces use (${named}), and this host has no asks core to ask you; nothing was installed`);
     const question = `Install ${m.id} ${m.version}? It no longer provides ${[...new Set(users.map((u) => u.uses))].join(', ')}, which ${[...new Set(users.map((u) => u.user))].join(', ')} use${users.length > 1 ? '' : 's'}, and keeps no adapter for it.`;
-    const ask = await asks.raise({ writer: 'core', actor: 'you', scope: 'you' }, 'extension.update', {
-      kind: 'authority', question,
-      options: [{ id: 'approve', label: `Install ${m.version}`, decision: 'allow' }, { id: 'decline', label: `Keep ${before.version}`, decision: 'deny' }],
-      recommended: null, deadline: now + 86_400_000, fallback: 'you', default: 'decline', provisional: false, owner: 'you', key,
-      pinned_to: { kind: 'evidence', ref: key },
-    }, { steps: users.map((u) => ({ does: `Install ${m.id} ${m.version}, leaving ${u.user}'s use of ${u.uses} with no provider`, changes: [`${u.user} uses ${u.uses}`], undo: `Install ${m.id} ${before.version} again`, public: false, cost: 0 })), diff: key });
-    // Installs nothing until you answer: the install waits on the ask's close, and goes on only on your yes on record.
-    for (;;) {
-      const row = (await asks.inbox()).find((r) => r.ask === ask);
-      if (row?.status === 'closed') {
-        const answered = await this.options.record.read({ after: 0, kinds: ['ask.answered'], limit: 100_000 });
-        const yes = row.outcome === 'answered' && answered.some((e) => e.subject === ask && (e.data as { decision?: unknown }).decision === 'allow');
-        if (yes) return;
-        throw Error(`${m.id}@${m.version} isn't installed: you kept ${before.version}, so ${named} keep${users.length > 1 ? '' : 's'} their provider`);
-      }
-      if (this.closed) throw Error(`${m.id}@${m.version} isn't installed: the host closed before you answered`);
-      await sleep(50);
-    }
+    const yes = await this.yours('extension.update', question, { update: m.id, version: m.version, users } as unknown as JsonValue, `Install ${m.version}`, `Keep ${before.version}`,
+      users.map((u) => ({ does: `Install ${m.id} ${m.version}, leaving ${u.user}'s use of ${u.uses} with no provider`, changes: [`${u.user} uses ${u.uses}`], undo: `Install ${m.id} ${before.version} again` })));
+    if (yes) return;
+    if (yes === undefined) throw Error(`${m.id}@${m.version} isn't installed: the host closed before you answered`);
+    throw Error(`${m.id}@${m.version} isn't installed: you kept ${before.version}, so ${named} keep${users.length > 1 ? '' : 's'} their provider`);
   }
   async trustKey(connection: Connection, id: string, key: string): Promise<void> {
     if (connection.writer !== 'app' && connection.writer !== 'cli') throw Error(`a publisher key is trusted only by your answer on the trusted path, the app or the CLI, not by ${connection.writer}`);
@@ -1513,7 +1524,8 @@ class Host implements ExtensionHost {
       reasons.push(`its deepbuild.json can't be read: ${message(e)}`);
     }
     if (manifest) {
-      const held = checkManifest(manifest);
+      const released = entry.builtBy === null && this.options.release.some((r) => r.id === entry.id && r.version === entry.version && r.digest === digest);
+      const held = checkManifest(manifest, released);
       if (!held.ok) for (const i of held.issues) reasons.push(`its manifest fails extension.manifest@1 at ${i.path || '/'}: ${i.code} ${i.actual}`);
       else if (manifest.id !== entry.id || manifest.version !== entry.version) reasons.push(`its manifest names ${manifest.id}@${manifest.version}, not ${entry.id}@${entry.version}`);
       else if (manifest.digest !== digest) reasons.push(`its manifest's digest ${manifest.digest} isn't its files' digest ${digest}`);
@@ -1789,10 +1801,10 @@ class Host implements ExtensionHost {
       // Its connection gone, it is gone: a load still running is unloaded.
       socket.once('close', () => { if (this.exts.get(ext.entry.id) === ext) void this.unload(ext); });
       ext.ask = (method, params) => wire.call(method, params);
-      ext.stop = async () => {
-        socket.end();
-        ext.cleaned = await supervisor.cleanup(run).catch(() => undefined);
-      };
+      ext.stop = async () => { socket.end(); ext.cleaned = await supervisor.cleanup(run).catch(() => undefined); };
+      // On Linux the package's process is the launcher's child: a scan, within the load's time, tracks it before the load answers.
+      if (process.platform === 'linux') await within(LOAD_MS, `${ext.entry.id}'s start`, supervisor.lives(run));
+      if (!ext.ask) throw Error('it exited before it could load');
     } finally {
       server.close();
       rmSync(dir, { recursive: true, force: true });
@@ -1890,9 +1902,9 @@ class Host implements ExtensionHost {
   }
   /**
    * One authority ask of yours, raised once, waiting for your answer: true on your yes on record, false on anything
-   * else; a host with no asks core can't ask, so it refuses.
+   * else; undefined if the host closed while it still waited. A host with no asks core can't ask, so it refuses.
    */
-  private async yours(source: string, question: string, about: JsonValue, allow: string, deny: string, steps: { does: string; changes: string[]; undo: string | null }[]): Promise<boolean> {
+  private async yours(source: string, question: string, about: JsonValue, allow: string, deny: string, steps: { does: string; changes: string[]; undo: string | null }[]): Promise<boolean | undefined> {
     const asks = this.options.asks;
     if (!asks) throw Error(`${question} needs your yes, and this host has no asks core to ask you`);
     const key = sha256Hex(canonicalize(about));
@@ -1906,7 +1918,7 @@ class Host implements ExtensionHost {
       const [row] = (await this.options.record.raw('SELECT status, decision FROM asks WHERE id = ?', [ask.slice(4)])) as { status: string; decision: string | null }[];
       if (row?.decision === 'allow') return true;
       if (row?.decision === 'deny' || (row && row.status !== 'open' && row.status !== 'later')) return false;
-      if (this.closed) return false;
+      if (this.closed) return undefined;
       await sleep(50);
     }
   }
@@ -1916,9 +1928,9 @@ class Host implements ExtensionHost {
     await this.serial(id, async () => {
       const ext = this.exts.get(id);
       if (!ext) return;
-      // AC9's wrong program: its handlers stop while it's still published and its users still read through it.
+      // AC9's wrong program: its handlers stop while it's still published; ending its process here would unload it.
       if (this.options.plant === 'stop-provider-first') {
-        await this.stopHandlers(ext);
+        delete ext.ask;
         await sleep(200);
       }
       await this.unload(ext);
@@ -2003,6 +2015,41 @@ class Host implements ExtensionHost {
         });
         const keys = Object.values((reply.keys ?? {}) as Record<string, unknown>).flatMap((list) => (Array.isArray(list) ? list.filter((k): k is string => typeof k === 'string') : []));
         this.canvasKeys.get(ext)?.push(...keys);
+        return reply;
+      }
+      case 'deep.canvas.play': {
+        // A piece played headless in a replica, from the seed and entries the running check's input gives, as the
+        // writer bot (#184): never a piece outside the grant, a seed, bot or track the input doesn't give.
+        const [target, run] = args;
+        const at = typeof target === 'string' ? target.lastIndexOf('@') : -1;
+        const rev = at > 0 ? Number((target as string).slice(at + 1)) : NaN;
+        if (typeof target !== 'string' || !Number.isSafeInteger(rev) || rev < 0) throw Error('deep.canvas.play takes "<doc>@<rev>" first');
+        if (!(ext.entry.grant.docs ?? []).includes(target.slice(0, at))) throw Error(`deep.canvas.play: ${id}'s grant doesn't name the piece ${target}`);
+        const r = (isPlain(run) ? run : {}) as Record<string, unknown>;
+        const running = this.plays.get(ext);
+        const input = running?.input;
+        if (!running || !input) throw Error(`deep.canvas.play: ${id} plays only from a running check's input, and none gives one`);
+        if (input.piece !== undefined && input.piece !== target) throw Error(`deep.canvas.play: ${id}'s check input gives the piece ${String(input.piece)}, not ${target}`);
+        const seed = r.seed;
+        const runs = typeof input.runs === 'number' ? input.runs : 20;
+        const given = typeof input.seed === 'number' && (seed === input.seed || Array.from({ length: runs }, (_, i) => runSeed(input.seed as number, i)).includes(seed as number));
+        if (!given && this.options.plant !== 'plays-any-seed') throw Error(`deep.canvas.play: seed ${String(seed)} isn't one ${id}'s check input gives`);
+        const bots = Array.isArray(input.bots) ? input.bots.map((b) => canonical(botOf(b))) : [];
+        if (r.bot !== undefined && !bots.includes(canonical(botOf(r.bot)))) throw Error(`deep.canvas.play: the bot ${canonical(r.bot).slice(0, 200)} isn't one ${id}'s check input gives`);
+        if (r.track !== undefined) {
+          const tracks = Array.isArray(input.tracks) ? input.tracks.map(canonical) : [];
+          const track = canonical(r.track);
+          if (!tracks.includes(track) && !running.tracks.has(track)) throw Error(`deep.canvas.play: the track isn't one ${id}'s check input gives or a play of this run recorded`);
+        }
+        if (!this.options.replica) throw Error('deep.canvas.play: this hub has no replica');
+        const reply = await this.options.replica({ ...r, call: 'play', piece: target });
+        if (reply.ok !== true) {
+          const e = (isPlain(reply.error) ? reply.error : {}) as Record<string, unknown>;
+          throw Error(`deep.canvas.play: ${String(e.code ?? 'refused')}: ${String(e.message ?? '')}${e.control !== undefined ? ` (control ${String(e.control)})` : ''}`);
+        }
+        const values = isPlain(reply.values) && Object.values(reply.values).some((v) => Array.isArray(v) && v.length > 0);
+        running.played.push({ seed: seed as number, bot: r.bot === undefined ? undefined : canonical(botOf(r.bot)), track: String(reply.track), values });
+        if (Array.isArray(reply.entries)) running.tracks.add(canonical(reply.entries));
         return reply;
       }
       case 'deep.registerCheck': {
@@ -2549,6 +2596,40 @@ class Host implements ExtensionHost {
     if (!this.reaches(ext, e.kind) || (!ext.released && projects && !projects.includes(e.project ?? ''))) return undefined;
     return JSON.parse(toJson(text || ext.released ? e : contentFree(e)));
   }
+  /**
+   * What a passed run of a check whose input gives a seed lacks (Check input: plug-in reads, #184): each run its input
+   * asks (each bot's run i, at hash(seed, i)) played, its track's hash in the evidence and values read, and testsRun
+   * counting them all; each lack names the run and its seed.
+   */
+  private unplayed(ext: Ext, result: CheckResult): string[] {
+    const running = this.plays.get(ext);
+    const input = running?.input;
+    if (!running || typeof input?.seed !== 'number') return [];
+    const runs = typeof input.runs === 'number' ? input.runs : 20;
+    const bots: (string | undefined)[] = Array.isArray(input.bots) && input.bots.length ? input.bots.map((b) => canonical(botOf(b))) : [undefined];
+    const lacks: string[] = [];
+    // Each run's track, one copy a run: runs that recorded the same track need as many copies among the evidence.
+    const byTrack = new Map<string, string[]>();
+    bots.forEach((bot, b) => {
+      for (let i = 0; i < runs; i++) {
+        const seed = runSeed(input.seed as number, i);
+        const name = `${bots.length > 1 || bot !== undefined ? `bot ${b} ` : ''}run ${i} (seed ${seed})`;
+        const plays = running.played.filter((p) => p.seed === seed && (bot === undefined || p.bot === bot));
+        if (!plays.length) lacks.push(`${name}: it was never played`);
+        else if (!plays.some((p) => p.values)) lacks.push(`${name}'s values: its play read none`);
+        else byTrack.set(plays[0]!.track, [...(byTrack.get(plays[0]!.track) ?? []), name]);
+      }
+    });
+    for (const [track, names] of byTrack) {
+      const copies = result.evidence.filter((e) => e === track).length;
+      if (copies >= names.length) continue;
+      // Runs that recorded one track can't be told apart by it: each is named as one that may lack its copy.
+      if (!copies) lacks.push(...names.map((n) => `${n}'s track among its evidence`));
+      else lacks.push(`a copy of its track for each of ${names.join(', ')}, which recorded the same track: ${copies} of ${names.length} among its evidence`);
+    }
+    if (result.testsRun !== runs * bots.length) lacks.push(`counting its ${runs * bots.length} runs: it counted ${result.testsRun}`);
+    return lacks;
+  }
   private kindOwner(kind: string): Ext | undefined {
     for (const ext of this.exts.values()) if (ext.kinds.includes(kind)) return ext;
     return undefined;
@@ -2676,21 +2757,13 @@ class Host implements ExtensionHost {
     }
     this.quotas.set(key, [...times, now]);
     const headers = typeof r.headers === 'object' && r.headers !== null ? Object.fromEntries(Object.entries(r.headers).filter(([, v]) => typeof v === 'string')) as Record<string, string> : {};
-    const answer = await globalThis.fetch(url!, {
-      method: typeof r.method === 'string' ? r.method : 'GET', headers, ...(typeof r.body === 'string' ? { body: r.body } : {}),
-      // A redirect would reach a host the grant may not name.
-      redirect: 'manual', signal: AbortSignal.timeout(CALL_MS),
-    });
-    // Read up to the cap, never all of it: an answer past it fails, and the package gets none of it.
-    const chunks: Uint8Array[] = [];
-    let size = 0;
-    for await (const chunk of answer.body ?? []) {
-      size += chunk.byteLength;
-      // Leaving the loop cancels the rest of the stream.
-      if (size > ANSWER) throw Error(`deep.fetch: ${grant.host}'s answer is over ${ANSWER} bytes`);
-      chunks.push(chunk);
+    try {
+      const answer = await nodeFetch({ url: url!.href, method: typeof r.method === 'string' ? r.method : 'GET', headers, ...(typeof r.body === 'string' ? { body: r.body } : {}) }, AbortSignal.timeout(CALL_MS));
+      return { status: answer.status, body: answer.body };
+    } catch (error) {
+      if (error instanceof AnswerTooLarge) throw Error(`deep.fetch: ${grant.host}'s answer is over ${ANSWER} bytes`);
+      throw error;
     }
-    return { status: answer.status, body: Buffer.concat(chunks).toString('utf8') };
   }
 
   /**
@@ -2753,8 +2826,9 @@ class Host implements ExtensionHost {
       const context: string[] = [];
       let deny: { reason: string } | undefined;
       // Late by the host's own clock, whatever the package's said: the grace is for the trip back, so what came after
-      // the deadline fails and its context goes, though a deny it carries still stands.
-      let failure: string | undefined = performance.now() - asked > deadline ? `${id} missed the hook's deadline of ${deadline} ms` : undefined;
+      // the deadline fails and its context goes, though a deny it carries still stands. The same for a version removed
+      // or replaced while its handler ran: its context reaches no one, and its deny still stops the call.
+      let failure: string | undefined = this.exts.get(id) !== ext || !ext.live ? `${id} was removed while its ${kind} handler ran` : performance.now() - asked > deadline ? `${id} missed the hook's deadline of ${deadline} ms` : undefined;
       for (const reply of Array.isArray(replies) ? replies : [replies]) {
         // The runtime's marker for one handler that threw or missed the deadline: it fails, its siblings still count.
         const marker = typeof reply === 'object' && reply !== null && Object.keys(reply).length === 1 ? (reply as { $handler?: unknown }).$handler : undefined;
@@ -2771,9 +2845,8 @@ class Host implements ExtensionHost {
         deny ??= checked.deny;
       }
       // A failed reply takes all its package's context with it, but no handler's failure removes a deny that stands.
-      if (failure !== undefined) fail(failure);
-      const kept = failure === undefined ? context : [];
-      if (kept.length || deny) contributions.push({ extension: id, firstParty: ext.released, context: kept, ...(deny ? { deny } : {}) });
+      if (failure !== undefined) { fail(failure); context.length = 0; }
+      if (context.length || deny) contributions.push({ extension: id, firstParty: ext.released, context, ...(deny ? { deny } : {}) });
     }));
     const plant = this.options.plant === 'join-by-id-alone' || this.options.plant === 'cut-in-join-order' ? this.options.plant : undefined;
     return { ...joinReplies(contributions, request.bound, plant), failed: failed.sort((a, b) => (a.extension < b.extension ? -1 : a.extension > b.extension ? 1 : 0)) };
@@ -2999,11 +3072,17 @@ class Host implements ExtensionHost {
     const bad = badDeadline('deadline', ctx.deadline);
     if (bad) throw Error(`a check run's ${bad}`);
     const ext = this.kindOwner(kind);
-    if (!ext?.ask || (await this.revoked(ext))) return nothing('missing', `no loaded extension registered the check kind ${kind}`);
+    if (!ext?.ask || (await this.revoked(ext))) {
+      // A kind an installed package holds but no load registered names that package (#184): its plug-in is off.
+      const off = Object.values(this.entries).find((e) => e.holds.includes(kind));
+      return nothing('missing', off ? `the check kind ${kind} is ${off.id}'s, which is installed but not loaded` : `no loaded extension registered the check kind ${kind}`);
+    }
     // A run in a first-party piece's output, such as env-local's environment, makes the check's piece its user (#103).
     if (ctx.environment !== undefined) await this.usedFirstParty(ext.entry.id, ctx.environment);
     try {
       this.canvasKeys.set(ext, []);
+      const input = (spec as CheckSpec & { play?: unknown }).play;
+      this.plays.set(ext, { input: isPlain(input) ? input as PlayInput : undefined, played: [], tracks: new Set() });
       const result = await this.checkRun(ext, ctx, (context) => this.ask(ext, ctx.deadline, kind, 'run', { type: kind, spec, ctx: context }));
       const read = this.canvasKeys.get(ext) ?? [];
       const { isCheckResult } = await import('@deepbuild/conformance');
@@ -3013,12 +3092,15 @@ class Host implements ExtensionHost {
       // A pass built on canvas reads holds only with their content keys as its evidence (Check input: plug-in reads).
       const missing = read.filter((k) => !result.evidence.includes(k));
       if (result.outcome === 'passed' && missing.length) return nothing('failed', `${ext.entry.id}'s ${kind} reported passed without the content keys its deep.canvas.read calls returned as evidence (${missing.length} missing, first ${missing[0]})`);
+      const unplayed = result.outcome === 'passed' ? this.unplayed(ext, result) : [];
+      if (unplayed.length) return { ...nothing('failed'), failures: unplayed.map((m) => ({ test: 'extension host', file: '', line: 0, stack: null, assertion: false, message: `${ext.entry.id}'s ${kind} reported passed without ${m}` })) };
       return result;
     } catch (e) {
       if (e instanceof Overran) return nothing('overran', `${ext.entry.id}'s ${kind} ran past its deadline of ${ctx.deadline} ms${ext.place === 'sandbox' ? ', and was stopped' : ''}`);
       throw e;
     } finally {
       this.canvasKeys.delete(ext);
+      this.plays.delete(ext);
     }
   }
   async deliver(events: Event[]): Promise<void> {

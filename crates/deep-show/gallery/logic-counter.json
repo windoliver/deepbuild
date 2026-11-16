@@ -1,0 +1,17 @@
+{
+  "format": 1,
+  "profile": "figure",
+  "title": "Logic: a counter and its preview",
+  "description": "A logic@1 item at its smallest: it counts the presses of a control, and its preview writes what the count would be after one more, on a throwaway copy, never stored. Its program's source is logic-counter.wat.",
+  "size": [320, 180],
+  "seed": 7,
+  "camera": "cam",
+  "transport": {"span": "2s", "frame_rate": [60, 1]},
+  "requires": {"modules": {"input": "^1", "logic": "^1"}},
+  "controls": {"press": {"kind": "slider", "class": "document", "label": "Press", "role": "slider", "range": [0, 1], "default": 0, "increment": 1}},
+  "items": {
+    "cam": {"id": "cam", "kind": "camera@1", "name": "Camera", "order": "a0", "params": {"projection": "orthographic", "target": [160, 90, 0], "view_width": 320}},
+    "counter": {"id": "counter", "kind": "logic@1", "name": "Counter", "order": "a9", "params": {"program": "1fde3632ec7b1a3d4f5c169f4b582b26c25d3577641f44130a91eb4b8d7bf559", "reads": ["press"], "writes": {"count": {"type": "i32"}}, "preview": {"reads": [], "writes": {"next": {"type": "i32"}}}}}
+  },
+  "assets": {"counter_program": {"sha256": "1fde3632ec7b1a3d4f5c169f4b582b26c25d3577641f44130a91eb4b8d7bf559", "license": {"id": "CC0-1.0", "terms": "Public domain dedication.", "shareable": true, "credit": "The deep_kinds gallery's logic example."}}}
+}

@@ -31,7 +31,7 @@ import { execFile } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
-import { ADAPTERS, shipped } from '@deepbuild/adapters';
+import { ADAPTERS, readFacts, shipped } from '@deepbuild/adapters';
 import type { AdapterRegistry } from '@deepbuild/adapters';
 import { canonicalize, sha256Hex, validate } from '@deepbuild/contracts';
 import type { JsonValue } from '@deepbuild/contracts';
@@ -117,6 +117,12 @@ export interface AsksOptions {
    */
   network?: { read(): { host: string; reached: boolean; at: number } | null };
   /**
+   * A sign-in task's check (#1349), once per tick for each agent with one open: the agent's probe, with when it started,
+   * when one has finished since the last call for that agent, and null otherwise. `signedIn` is null when the probe
+   * couldn't run; `account` is the account the agent records then. Left out, a sign-in task closes as any block's.
+   */
+  signIn?: { read(agent: string): { signedIn: boolean | null; account: string | null; at: number } | null };
+  /**
    * Whether an agent's adapter has a hook for a turn that ends in an error (its `errorTurnHook` cap): without one no
    * automatic continue could reach the session, so none starts. The hub passes its own adapter registry's answer;
    * left out, the shipped adapters' caps answer, and an agent no adapter knows has none.
@@ -181,6 +187,12 @@ export interface Asks {
   inbox(): Promise<InboxRow[]>;
   /** A task's check, run again on your "I did it", still fails (#323): each open task it proves says what's missing. */
   stillFails(check: string, reasons: string[]): Promise<void>;
+  /**
+   * The agent's one sign-in task (#1349), for work that needs the agent while its probe reads not signed in: the one
+   * open, which every session, job and folder stopped on that agent's sign-in shares, or a new one the core raises,
+   * unblocking `unblocks`. Its handle.
+   */
+  signIn(connection: Connection, agent: string, unblocks: string): Promise<string>;
   /** The core consults each resolver on every ask raised, before the ask reaches you; returns how to drop it. */
   registerResolver(name: string, resolver: Resolver): () => void;
   /** Your answer to a closed ask, saved as a decision at a scope, on the trusted path: its handle. */
@@ -345,7 +357,19 @@ const CONTINUE_WINDOW = 10 * 60_000;
 /** The causes that pass by themselves when the service owns the block: a dropped connection, an overloaded service. */
 const TRANSIENT = new Set(['timed_out', 'rate_limited']);
 /** The ask.moot reasons ask.moot@2 added. */
-const MOOT_V2 = new Set(['window_reset', 'thread_replied', 'network_reached']);
+const MOOT_V2 = new Set(['window_reset', 'thread_replied', 'network_reached', 'signed_in']);
+/** The stop causes a sign-in clears (#1349): one task per agent, closed only by the agent's sign-in probe. */
+const SIGN_IN = new Set(['sign_in_required', 'token_refresh_failed']);
+/** A sign-in's block signature: the same for every session, job and folder of one agent (#1349). */
+export const signInSignature = (agent: string): string => `sig:${sha256Hex(new TextEncoder().encode(`sign-in:${agent}`)).slice(0, 16)}`;
+/** What proves a sign-in task: the agent's own sign-in probe, never a claim. */
+const signInProbe = (agent: string): string => `${agent} sign-in probe`;
+/** The agent a sign-in task's data names by its probe, or undefined for any other ask (#1349). */
+export const signInAgentOf = (data: unknown): string | undefined => {
+  const proves = isObj(data) && data.kind === 'unblock' && typeof data.proves === 'string' ? data.proves : '';
+  const agent = proves.endsWith(' sign-in probe') ? proves.slice(0, -' sign-in probe'.length) : '';
+  return /^[a-z0-9-]+$/.test(agent) ? agent : undefined;
+};
 /** The trusted path: the question card and `deep inbox answer`. Every other writer is an agent's or the core's. */
 const TRUSTED: Readonly<Record<string, 'card' | 'inbox'>> = { app: 'card', cli: 'inbox' };
 /** The kinds a channel's account link may answer (#65): "I did it", a taste call and a choice, each that ask alone. */
@@ -358,7 +382,12 @@ const TYPED_KINDS = new Set(['taste', 'choice', 'exception', 'definition']);
 const CORE = { writer: 'core' } as const;
 /** Writers that speak for an agent: none of them closes an ask. */
 const isAgent = (writer: string): boolean => writer === 'hook' || writer.startsWith('mcp:');
-const PAGE = 1000;
+/**
+ * The events the core reads from the log at a time. A page lives until its last event is applied, and one the hub's
+ * threads can't hold in their young generation is promoted whole: at 1,000 a month's log grew the heap by tens of MB
+ * of garbage at each start.
+ */
+const PAGE = 100;
 /** Time the hub didn't run, down or with the Mac asleep, moves deadlines once it is longer than this (#908). */
 const AWAY = 10_000;
 /** How many ended sessions' closed asks stay in memory; the record keeps them all. */
@@ -398,6 +427,10 @@ class AsksCore implements Asks {
   /** Each block's signature by the key its task is raised under, and the open task of each signature. */
   private readonly signatures = new Map<string, string>();
   private readonly blockTasks = new Map<string, Ask>();
+  /** Each agent by its sign-in signature (#1349), so a sign-in task the hub raised before any stop is a block task too. */
+  private readonly signInAgents = new Map<string, string>();
+  /** Each agent's newest sign-in probe reading. */
+  private readonly probed = new Map<string, { signedIn: boolean | null; account: string | null; at: number }>();
   /** The stops a task covers, so a session's stop raises or joins one task once. */
   private readonly covered = new Set<string>();
   /** Sessions whose newest stop the core hasn't read yet, and block tasks closed on their check whose sessions resume. */
@@ -435,6 +468,11 @@ class AsksCore implements Asks {
   private readonly showing: Showing;
 
   constructor(private readonly options: AsksOptions) {
+    for (const agent of Object.keys(ADAPTERS)) {
+      const signature = signInSignature(agent);
+      this.signInAgents.set(signature, agent);
+      this.signatures.set(blockKey(signature), signature);
+    }
     this.keys = new DecisionKeys({
       session: (session) => this.sessions.get(session), byKey: (key) => this.byKey.get(key) ?? [],
       byNear: (key) => this.byNear.get(key) ?? [], get plant() { return options.plant; },
@@ -504,8 +542,8 @@ class AsksCore implements Asks {
       const input = isObj(filled) && isObj(filled.subject) && SUBJECT_KINDS.has(String(filled.kind)) ? { ...filled, key: subjectKey(filled, this.threadOf(connection.session)) } : filled;
       const subjected = isObj(input) && 'subject' in input;
       // An unblock task is held to @3: at least one step and one thing it unblocks, and its price when you pay one.
-      // An ask that names its subject is held to @4.
-      const v = subjected ? 4 : isObj(input) && input.kind === 'unblock' ? 3 : isObj(input) && 'dropped' in input ? 2 : 1;
+      // An ask that names its subject is held to @4; a core-owned done-gate action is recorded with it at @5.
+      const v = isObj(input) && 'action' in input ? 5 : subjected ? 4 : isObj(input) && input.kind === 'unblock' ? 3 : isObj(input) && 'dropped' in input ? 2 : 1;
       const event = { v, id, kind: 'ask.created', writer: connection.writer, actor: connection.actor, scope: connection.scope, ts: now, data: input as JsonValue };
       const checked = validate(`ask.created@${v}`, event);
       if (!checked.ok) {
@@ -590,7 +628,7 @@ class AsksCore implements Asks {
       // A channel's answer with an account link you made (#65) answers that ask alone: never with authority, never a decision.
       const via = TRUSTED[connection.writer] ?? (connection.writer === 'channel' ? 'channel' as const : undefined);
       if (via === undefined) throw new AskRefused(`an answer counts only on the trusted path, not from ${connection.writer}`, { field: 'writer' });
-      const v = via === 'channel' ? 5 : 4;
+      const v = 6;
       if (!isObj(input)) throw new AskRefused('an answer is an object', { field: 'input' });
       // The decision comes from the option you chose, never from the request.
       if ('decision' in input) throw new AskRefused('an answer carries no decision: it comes from the option you chose', { field: 'decision' });
@@ -621,6 +659,13 @@ class AsksCore implements Asks {
         });
         await this.sync();
         throw new AskRefused(`${ask.handle} closed as ${outcome} at ${new Date(at).toISOString()}`, { ask: ask.handle, outcome, closed_at: at });
+      }
+      // A sign-in task closes only on its probe (#1349): "I did it", or any other answer, leaves it open, saying what the
+      // probe reads; a signed-in reading closes it at the next tick. With no probe, it is any block's task.
+      const agent = this.options.signIn ? this.signInAgent(ask) : undefined;
+      if (agent !== undefined) {
+        ask.missing = { check: String(ask.data.proves), reasons: [`your answer doesn't close a sign-in: ${this.probeSays(agent, ask.created)}`], link: null };
+        return null;
       }
       const chosen = option === undefined ? undefined : ask.options.find((o) => o.id === option);
       if (option !== undefined && !chosen) throw new AskRefused(`${ask.handle} has no option ${option}`, { option });
@@ -667,7 +712,7 @@ class AsksCore implements Asks {
       for (const { a, option: o } of together) {
         await this.options.record.append(asCore(connection), {
           v, id: ulid(now), kind: 'ask.answered', subject: a.handle, ts: now,
-          data: { answer: o.id, plan_hash: null, decision: o.decision, via, verified: true, on: a.data.pinned_to!, token: null, words: null, image: null },
+          data: { answer: o.id, option: o.id, plan_hash: null, decision: o.decision, via, verified: true, on: a.data.pinned_to!, token: null, words: null, image: null },
         });
         await this.sync();
         this.hand(a, o.id, null, false, o.decision);
@@ -678,7 +723,7 @@ class AsksCore implements Asks {
       await this.options.record.append(asCore(connection), {
         v, id: ulid(now), kind: 'ask.answered', subject: ask.handle, ts: now,
         data: {
-          answer: option ?? (words as string | undefined) ?? (image as string), plan_hash: decision === 'allow' ? ask.plan?.hash ?? null : null, decision,
+          answer: option ?? (words as string | undefined) ?? (image as string), option: chosen?.id ?? null, plan_hash: decision === 'allow' ? ask.plan?.hash ?? null : null, decision,
           via, verified: true, on: ask.data.pinned_to!, token: token ?? null, words: (words as string | undefined) ?? null, image: (image as string | undefined) ?? null,
         },
       });
@@ -687,7 +732,7 @@ class AsksCore implements Asks {
       for (const rider of riders) {
         await this.options.record.append(asCore({ ...connection, ...rider.who }), {
           v, id: ulid(now), kind: 'ask.answered', subject: rider.handle, ts: now,
-          data: { answer: chosen!.id, plan_hash: null, decision, via, verified: true, on: rider.data.pinned_to!, token: null, words: null, image: null },
+          data: { answer: chosen!.id, option: chosen!.id, plan_hash: null, decision, via, verified: true, on: rider.data.pinned_to!, token: null, words: null, image: null },
         });
         await this.sync();
         this.hand(rider, chosen!.id, null, false, decision);
@@ -696,7 +741,7 @@ class AsksCore implements Asks {
       for (const { member, allow } of others) {
         await this.options.record.append(asCore({ ...connection, ...member.who }), {
           v, id: ulid(now), kind: 'ask.answered', subject: member.handle, ts: now,
-          data: { answer: allow.id, plan_hash: member.plan?.hash ?? null, decision: allow.decision, via, verified: true, on: member.data.pinned_to!, token: token ?? null, words: null, image: null },
+          data: { answer: allow.id, option: allow.id, plan_hash: member.plan?.hash ?? null, decision: allow.decision, via, verified: true, on: member.data.pinned_to!, token: token ?? null, words: null, image: null },
         });
         await this.sync();
         this.hand(member, allow.id, null, false, allow.decision);
@@ -838,6 +883,29 @@ class AsksCore implements Asks {
     return this.exclusive(async () => {
       await this.sync();
       for (const a of this.open()) if (a.data.kind === 'unblock' && a.data.proves === check) a.missing = { check, reasons: [...reasons], link: null };
+    });
+  }
+
+  signIn(connection: Connection, agent: string, unblocks: string): Promise<string> {
+    return this.exclusive(async () => {
+      await this.sync();
+      const signature = signInSignature(agent);
+      const open = this.blockTasks.get(signature);
+      if (open) return open.handle;
+      const now = this.options.now();
+      const template = askSources().find((r) => r.source === BLOCK_SOURCE)!.fixture.ask as Obj;
+      const { deadline: _deadline, ...rest } = template;
+      const data = this.fill(undefined, {
+        ...rest, ...signInText(agent, false), owner: connection.actor, key: blockKey(signature), pinned_to: { kind: 'evidence', ref: sha256Hex(new TextEncoder().encode(signature)) },
+        unblocks: [unblocks], proves: signInProbe(agent),
+      }, now) as Obj;
+      const id = ulid(now);
+      const checked = validate('ask.created@3', { v: 3, id, kind: 'ask.created', writer: 'core', actor: connection.actor, scope: connection.scope, ts: now, data });
+      if (!checked.ok) throw new AskRefused(`ask.created@3 refuses the sign-in task at ${checked.issues[0]!.path}: ${checked.issues[0]!.remediation}`, { field: checked.issues[0]!.path, source: BLOCK_SOURCE });
+      await this.options.record.append({ ...CORE, actor: connection.actor, scope: connection.scope }, { v: 3, id, kind: 'ask.created', ts: now, data });
+      await this.sync();
+      await this.settle();
+      return `ask:${id}`;
     });
   }
 
@@ -1648,6 +1716,7 @@ class AsksCore implements Asks {
     // Each open chat-app task's thread, read once a call through the connector.
     await this.readThreads();
     this.readNetwork();
+    this.readSignIn();
     for (let acted = true; acted;) {
       // A block someone else owns gets its request drafted first, so the request shows when the block is raised.
       acted = false;
@@ -1870,9 +1939,11 @@ class AsksCore implements Asks {
   private async raiseBlock(stop: Stop, now: number): Promise<boolean> {
     const template = askSources().find((r) => r.source === BLOCK_SOURCE)!.fixture.ask as Obj;
     const { deadline: _deadline, ...rest } = template;
+    // A lapsed sign-in is the agent's one sign-in task, proved by its probe (#1349).
+    const agent = SIGN_IN.has(stop.cause) ? this.sessions.get(stop.session)?.agent || undefined : undefined;
     const unfilled: Obj = {
-      ...rest, ...blockText(stop), owner: stop.who.actor, key: blockKey(stop.signature), pinned_to: { kind: 'evidence', ref: sha256Hex(new TextEncoder().encode(stop.signature)) },
-      unblocks: [`session:${letters(stop.session)}`], proves: `${stop.cause}@${stop.signature}`,
+      ...rest, ...blockText(stop, agent), owner: stop.who.actor, key: blockKey(stop.signature), pinned_to: { kind: 'evidence', ref: sha256Hex(new TextEncoder().encode(stop.signature)) },
+      unblocks: [`session:${letters(stop.session)}`], proves: agent ? signInProbe(agent) : `${stop.cause}@${stop.signature}`,
     };
     let data: Obj;
     try {
@@ -1914,6 +1985,39 @@ class AsksCore implements Asks {
       if (tried.reached) task.pending.moot ??= { because: 'network_reached', host: tried.host };
       else task.missing = { check: String(task.data.proves), reasons: [`${tried.host} can't be reached yet`], link: null };
     }
+  }
+
+  /**
+   * Each open sign-in task's check (#1349): its agent's probe. The first reading of signed in taken after the task was
+   * raised closes it, naming the account the agent then records; any other is what's missing. Nothing else closes it.
+   */
+  private readSignIn(): void {
+    const probe = this.options.signIn;
+    if (!probe) return;
+    for (const task of this.blockTasks.values()) {
+      const agent = this.signInAgent(task);
+      if (agent === undefined || task.pending.moot) continue;
+      const read = probe.read(agent);
+      if (read) this.probed.set(agent, read);
+      // A reading from before the task says nothing of the sign-in that raised it.
+      if (!read || read.at < task.created) continue;
+      if (read.signedIn === true) task.pending.moot = { because: 'signed_in', agent, account: read.account };
+      else task.missing = { check: String(task.data.proves), reasons: [this.probeSays(agent, task.created)], link: null };
+    }
+  }
+  /** The agent whose sign-in a block task waits on: by its agent's sign-in signature, or a stop it covers whose cause is a sign-in. */
+  private signInAgent(ask: Ask): string | undefined {
+    if (!ask.block) return undefined;
+    const known = this.signInAgents.get(ask.block.signature);
+    if (known !== undefined) return known;
+    for (const [session, id] of ask.block.stops) if (SIGN_IN.has(this.stopIds.get(id)?.cause ?? '')) return this.sessions.get(session)?.agent || undefined;
+    return undefined;
+  }
+  /** What the agent's probe read last, since `since`, in words. */
+  private probeSays(agent: string, since: number): string {
+    const read = this.probed.get(agent);
+    if (!read || read.at < since) return `${signInProbe(agent)} hasn't read signed in yet`;
+    return read.signedIn === null ? `${signInProbe(agent)} couldn't run` : read.signedIn ? `${signInProbe(agent)} reads signed in` : `${signInProbe(agent)} reads not signed in`;
   }
 
   /**
@@ -2029,19 +2133,52 @@ function shippedErrorTurnHook(agent: string): boolean {
   }
 }
 /** What a block's task says, by its cause: the words on the card. The task's identity is the block's structure, never these words. */
-function blockText(stop: Stop): { question: string; steps: string[]; where: string; why: string } {
+function blockText(stop: Stop, agent?: string): { question: string; steps: string[]; where: string; why: string } {
+  // A lapsed sign-in is one plain line, the same task as a first sign-in (#1349).
+  if (agent !== undefined && SIGN_IN.has(stop.cause)) return signInText(agent, true);
   const WORDS: Readonly<Record<string, [question: string, step: string, where: string]>> = {
-    sign_in_required: ['Sign in again? The sign-in the sessions used was revoked.', 'Sign in again where the agent runs (Claude Code: /login)', 'your terminal'],
-    token_refresh_failed: ["Sign in again? The sessions' token couldn't be refreshed.", 'Sign in again where the agent runs (Claude Code: /login)', 'your terminal'],
+    sign_in_required: ['Sign in again? Your sign-in lapsed. The work waits, and nothing is lost.', "Sign in again in the agent's own window or browser page", "the agent's own window or browser page"],
+    token_refresh_failed: ['Sign in again? Your sign-in lapsed. The work waits, and nothing is lost.', "Sign in again in the agent's own window or browser page", "the agent's own window or browser page"],
     rate_limited: ['Raise the spend limit the sessions ran into?', 'Raise the limit, or wait it out, at the service', 'the service account'],
     timed_out: ['Reconnect the network the sessions reach the service through?', 'Reconnect the network (a VPN, a proxy) the sessions need', 'your machine'],
-    plan_window_spent: [`Wait for the plan window to reset${stop.resets === null ? '' : ` at ${new Date(stop.resets).toISOString()}`}?`, 'Nothing: the task closes by itself at the reset', 'nowhere'],
+    plan_window_spent: [`Your plan's limit is reached. The work waits for it to reset${stop.resets === null ? '' : ` at ${new Date(stop.resets).toISOString()}`}, and nothing is lost.`, 'Nothing: the task closes by itself at the reset', 'nowhere'],
   };
   const [question, step, where] = WORDS[stop.cause] ?? [`Clear the block that stopped session ${stop.session} (${stop.cause})?`, `Clear the block (${stop.cause})`, 'outside DeepBuild'];
   const why = stop.cause === 'plan_window_spent'
     ? `session ${stop.session} stopped: its plan window is spent; the reset time is the check`
     : `session ${stop.session} stopped: ${stop.cause}, block ${stop.signature}, which only you can clear`;
   return { question, steps: [step, 'Its check passes, the task closes by itself, and every session it unblocks resumes'], where, why };
+}
+
+/**
+ * A sign-in task's words (#1349): one plain line, the steps (Sign in opens the agent's own window or browser page, and
+ * the plan line), where you do it and why. The agent's name comes from its facts, and the plan line from install.json,
+ * a price only with the date it was read and the maker's page as a plain host.
+ */
+function signInText(agent: string, lapsed: boolean): { question: string; steps: string[]; where: string; why: string } {
+  let name = agent;
+  try {
+    const entries = readFacts<Obj>(`${agent}.facts.json`).entries;
+    if (isObj(entries) && typeof entries.name === 'string') name = entries.name;
+  } catch { /* no facts: its id */ }
+  let plan: Obj | undefined;
+  try {
+    const of = readFacts<Obj>('install.json').agents;
+    const entry = isObj(of) ? of[agent] : undefined;
+    if (isObj(entry) && isObj(entry.plan)) plan = entry.plan;
+  } catch { /* none */ }
+  const steps = [`Press Sign in: ${name} opens its own window or browser page, and you sign in there. DeepBuild never sees your password and never picks a plan for you.`];
+  if (plan?.paid === true) {
+    const price = typeof plan.price === 'string' && typeof plan.read === 'string' ? ` ${plan.price}, as read on ${plan.read}.` : '';
+    let page = '';
+    try { if (typeof plan.page === 'string') { const url = new URL(plan.page); page = ` Its plans: ${url.host}${url.pathname.replace(/\/$/, '')}`; } } catch { /* not a URL: none */ }
+    steps.push(`${name} needs a paid plan.${price}${page}`);
+  }
+  steps.push(`Once ${name} reads signed in, this closes by itself and the work goes on`);
+  return {
+    question: lapsed ? `Sign in to ${name} again? Your sign-in lapsed. The work waits, and nothing is lost.` : `Sign in to ${name}? Your words wait for it, and nothing is lost.`,
+    steps, where: `${name}'s own window or browser page`, why: lapsed ? `${name} stopped: its sign-in lapsed` : `Your first request needs ${name}, which reads not signed in`,
+  };
 }
 
 export async function openAsks(options: AsksOptions): Promise<Asks> {
@@ -2052,7 +2189,7 @@ export async function openAsks(options: AsksOptions): Promise<Asks> {
     raise: core.raise.bind(core), answer: core.answer.bind(core), tick: core.tick.bind(core), away: core.away.bind(core), notifications: core.notifications.bind(core), card: core.card.bind(core),
     needsYou: core.needsYou.bind(core), holds: core.holds.bind(core), authorized: core.authorized.bind(core),
     beforeStep: core.beforeStep.bind(core), batch: core.batch.bind(core), approveBatch: core.approveBatch.bind(core),
-    later: core.later.bind(core), laterBefore: core.laterBefore.bind(core), undo: core.undo.bind(core), inbox: core.inbox.bind(core), stillFails: core.stillFails.bind(core),
+    later: core.later.bind(core), laterBefore: core.laterBefore.bind(core), undo: core.undo.bind(core), inbox: core.inbox.bind(core), stillFails: core.stillFails.bind(core), signIn: core.signIn.bind(core),
     registerResolver: core.registerResolver.bind(core), saveDecision: core.saveDecision.bind(core), revokeDecision: core.revokeDecision.bind(core), refusals: core.refusals.bind(core),
     overrule: core.overrule.bind(core), widen: core.widen.bind(core), judged: core.judged.bind(core),
   };

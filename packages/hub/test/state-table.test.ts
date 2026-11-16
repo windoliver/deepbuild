@@ -155,3 +155,30 @@ it('why is the same reading: a session by the start of its ID, its row\'s word a
     expect(await whyOf(w.query, w.now() + 1, 'ffff', rows)).toHaveProperty('refused');
   });
 });
+
+it('sessions with no name of their own are named from their first prompts in one read, however many they are', async () => {
+  await world(async (w) => {
+    const ids = Array.from({ length: 12 }, (_, i) => `9e6f${String(i).padStart(4, '0')}-2018-4222-8333-444455552018`);
+    for (const [i, session] of ids.entries()) {
+      await w.hook('session.start', 1, data('session.start@1'), session);
+      // A subagent's prompt and a blank one come first, and name nothing.
+      await w.hook('user.ask', 1, { ...prompt('explore the repo'), from: 'subagent' }, session);
+      await w.hook('user.ask', 1, prompt('   '), session);
+      await w.hook('user.ask', 1, prompt(`fix test ${i}\nand say why`), session);
+      // Its turn over, so its row reads no tool call of its own.
+      await w.hook('agent.stop', 1, stop(), session);
+    }
+    const read = async (sessions: readonly string[]) => {
+      const texts: string[] = [];
+      const readings = (await sessionStates(w.query, w.now() + 1)).filter((r) => sessions.includes(r.id));
+      const rows = await buildRows((sql) => { texts.push(sql); return w.query(sql); }, readings, []);
+      return { statements: texts.length, titles: Object.fromEntries(rows.map((r) => [r.session, r.title])) };
+    };
+    const two = await read(ids.slice(0, 2));
+    const all = await read(ids);
+    expect(all.titles).toEqual(Object.fromEntries(ids.map((id, i) => [id, `fix test ${i}`])));
+    // A statement per session is a text of its own each: a month of sessions compiled 600 at every pass, and the
+    // record kept its 256 newest compiled for good.
+    expect(all.statements, `the statements that name 12 sessions, against those that name 2 (${two.statements})`).toBe(two.statements);
+  });
+});

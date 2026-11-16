@@ -1,0 +1,20 @@
+{
+  "base_new": 96,
+  "fixed_new": 83,
+  "fixed_only": [],
+  "unrun_global_lints": [
+    "NEW FAIL scripts/vendor-rebase.mjs: exited null: ",
+    "NEW FAIL scripts/canvas-lint.mjs: exited null: ",
+    "NEW FAIL scripts/size-ratchet.mjs: exited null: ",
+    "NEW FAIL scripts/render-lint.mjs: exited null: ",
+    "NEW FAIL scripts/plant-lint.mjs: exited null: ",
+    "NEW FAIL scripts/blocking-call-guard.mjs: exited null: ",
+    "NEW FAIL scripts/keymap-guard.mjs: exited null: ",
+    "NEW FAIL scripts/panel-catalog.mjs: exited null: ",
+    "NEW FAIL scripts/known-failures-check.mjs: exited null: ",
+    "NEW FAIL scripts/fetch-lock.mjs: exited null: "
+  ],
+  "interpretation": "The 10 unstarted lint jobs were stopped by owned PID after the complete test reports; they are INCONCLUSIVE, not passing. All 73 executed fixed-side failures also occur on the base.",
+  "wide_lines": [],
+  "inconclusive_lines": []
+}

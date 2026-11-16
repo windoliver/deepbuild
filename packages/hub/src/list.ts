@@ -10,6 +10,7 @@ import { hubAddress, installedRoot, rootOf } from './paths.js';
 import { activePlant } from './plant.js';
 import { elapsed } from './promises.js';
 import type { Row, Why } from './rows.js';
+import { SECTION } from './sections.js';
 import { visible } from './visible.js';
 
 /** What deep status shows under a session's row (status.ts: StatusRow, less what the row holds). */
@@ -17,20 +18,16 @@ export interface Detail { note?: string; verdict?: string; readings?: string[]; 
 /** A read of the list: its rows at a log_pos, each session's detail when asked, and when the hub stopped answering if it did. */
 interface Read { log_pos: number; rows: Row[]; detail?: Record<string, Detail>; down?: number; explained?: Why }
 
-/**
- * The list's sections, as deep status has always listed them (#19): what needs you, is stuck or is flagged, then what
- * works, then what finished, then the quiet ones, so no number of working sessions pushes one that needs you down.
- */
-export const SECTION: Record<string, number> = {
-  'needs you': 0, stuck: 0, flagged: 0, BLOCKED: 0, INVALID: 0, INCONCLUSIVE: 0, stale: 0,
-  'sent back': 1, 'says done': 1, working: 1, queued: 1, PASS: 2, finished: 2, quiet: 3,
-};
-
 /** The one count sentence, as the app says it (crates/deep-app/src/views.rs: asks_need_you). */
 export const asksNeedYou = (n: number): string => (n === 1 ? '1 ask needs you' : `${n} asks need you`);
 
 /** `at` as a clock time in your time zone: 16:40. */
-const clock = (at: number): string => new Date(at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
+const clock = (at: number): string => {
+  const d = new Date(at);
+  return Number.isNaN(d.getTime()) ? 'Invalid Date' : `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+};
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec'];
 /**
  * When `at` comes, as the app's notification says it (crates/deep-app/src/notify.rs: clock_time): "at 16:40" today,
  * "tomorrow at 16:40", else "on Wed 11 Nov at 16:40".
@@ -42,7 +39,7 @@ export function when(at: number, now = Date.now()): string {
   tomorrow.setDate(tomorrow.getDate() + 1);
   if (day(at) === tomorrow.toDateString()) return `tomorrow at ${clock(at)}`;
   const d = new Date(at);
-  return `on ${d.toLocaleDateString('en-GB', { weekday: 'short' })} ${d.getDate()} ${d.toLocaleDateString('en-GB', { month: 'short' })} at ${clock(at)}`;
+  return `on ${WEEKDAYS[d.getDay()] ?? 'Invalid Date'} ${d.getDate()} ${MONTHS[d.getMonth()] ?? 'Invalid Date'} at ${clock(at)}`;
 }
 
 /** The rows as the planted wrong programs read them; as they are otherwise. */
@@ -98,8 +95,10 @@ export function listText(rows: readonly Row[], o: { detail?: Record<string, Deta
   }
   const byRepo = [...new Set(quiet.map((r) => r.project ?? 'no repo'))].sort().map((p) => `${p} ${quiet.filter((r) => (r.project ?? 'no repo') === p).length}`);
   if (quiet.length) out.push(`${quiet.length} quiet, by repo: ${byRepo.join(', ')}`);
+  // A new project from your words (#1342): its heading, your first words, over its one row until its card is ready.
+  for (const r of rows.filter((x) => x.id.startsWith('job:brief-'))) out.push(r.title, `  New project  ${r.word} · ${r.why}${age(r)}`);
   // Each running job (#1925): its count from its tool's own counter, or with none how long it has run, and why.
-  const jobs = rows.filter((r) => r.id.startsWith('job:'));
+  const jobs = rows.filter((r) => r.id.startsWith('job:') && !r.id.startsWith('job:brief-'));
   if (jobs.length) out.push('Running jobs:');
   for (const r of jobs) out.push(`  ${r.word.padEnd(9)}  ${r.title}${r.progress ? ` · ${r.progress}` : age(r)}`, `      ${r.why}`);
   if (asks.length) out.push('Needs you');

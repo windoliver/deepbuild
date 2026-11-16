@@ -1,0 +1,12 @@
+Base bcd02c238, 2026-11-11, one run:
+node scripts/throttle.mjs test --wait 60 -- scripts/lease node node_modules/vitest/vitest.mjs run tests/acceptance/1906/exit
+
+4 tests, 4 failed, each at the criterion's assertion (`expect(outside(children)).toEqual([])`): a child at its exit,
+in no table of children.ts, whose tables then read {"waiting":[]}. In each fixture the children children.ts runs
+(`git rev-list`, `ps`) were in `waiting` at their exit first.
+
+ x the first fork: git diff (open-items.ts) and git ls-files (open-items.ts) in no table
+ x the second fork: git log --first-parent (scope.ts) in no table
+ x a child started through another package: git rev-parse, diff --numstat, ls-tree, show, diff -U0 (packages/gate measure) in no table
+ x 1000 seeded runs: Property failed after 1 tests, { seed: 1906, path: "0:0:0:0", endOnFailure: true }
+   Counterexample: [[{"call":"accepted","kind":"feature","at":0}]], shrunk 3 times: git log --first-parent in no table

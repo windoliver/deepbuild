@@ -322,8 +322,8 @@ impl Cells {
             return None;
         }
         let mut k = 0;
-        for a in 0..3 {
-            let d = c[a]
+        for (a, &ca) in c.iter().enumerate() {
+            let d = ca
                 .checked_sub(self.lo[a])
                 .filter(|d| (0..self.size[a]).contains(d))?;
             k = k * self.size[a] + d;
@@ -468,8 +468,8 @@ impl Covered {
     /// The bit of the cube at index `c`; none past the bounds.
     fn bit(&self, c: [i64; 3]) -> Option<usize> {
         let mut k = 0;
-        for a in 0..3 {
-            let d = c[a]
+        for (a, &ca) in c.iter().enumerate() {
+            let d = ca
                 .checked_sub(self.lo[a])
                 .filter(|d| (0..self.size[a]).contains(d))?;
             k = k * self.size[a] + d;

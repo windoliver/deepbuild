@@ -76,6 +76,8 @@ pub struct Store {
     table: Written,
     /// The rows this frame wrote, by `<plate>/<layer>`.
     rows: BTreeMap<String, Vec<[u32; 2]>>,
+    /// #538: this frame's upload time per plate, in ms.
+    pub upload_ms: BTreeMap<String, f64>,
 }
 
 fn buffer(d: &deep_gpu::counted::Wgpu, words: usize) -> wgpu::Buffer {
@@ -95,6 +97,7 @@ impl Store {
             held: Vec::new(),
             table: Written::default(),
             rows: BTreeMap::new(),
+            upload_ms: BTreeMap::new(),
         }
     }
 
@@ -104,6 +107,7 @@ impl Store {
     /// whose step is neither the one it holds nor the next, so a seek keeps the earlier grid.
     pub fn upload(&mut self, device: &Device, tints: &[Tint], keeps_grid_on_seek: bool) -> bool {
         self.rows.clear();
+        self.upload_ms.clear();
         let same = self.held.len() == tints.len()
             && self
                 .held
@@ -129,6 +133,7 @@ impl Store {
             self.buffer = buffer(&device.device, at);
         }
         for (t, h) in tints.iter().zip(&mut self.held) {
+            let started = std::time::Instant::now();
             let seek = t.step != h.step && t.step != h.step + 1;
             h.step = t.step;
             if keeps_grid_on_seek && seek && !h.cells.is_empty() {
@@ -152,6 +157,7 @@ impl Store {
             if !runs.is_empty() {
                 self.rows.insert(h.key.clone(), runs);
             }
+            *self.upload_ms.entry(t.plate.clone()).or_default() += started.elapsed().as_secs_f64() * 1000.0;
         }
         !same
     }

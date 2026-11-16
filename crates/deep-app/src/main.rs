@@ -76,6 +76,9 @@ mod chrome;
 #[cfg(target_os = "macos")]
 #[path = "probes/color_check.rs"]
 mod color_check;
+#[cfg(all(feature = "hdr-fixture", target_os = "macos"))]
+#[path = "probes/hdr.rs"]
+mod hdr;
 #[cfg(target_os = "macos")]
 #[path = "probes/notification_center.rs"]
 mod notification_center;
@@ -106,6 +109,12 @@ fn main() {
     #[cfg(all(feature = "chrome-fixture", target_os = "macos"))]
     if std::env::args().nth(1).as_deref() == Some("--chrome") {
         chrome::run(std::env::args().skip(2).collect());
+        return;
+    }
+    // Issue #177: `--hdr <scenario.json>`, in an hdr-fixture build.
+    #[cfg(all(feature = "hdr-fixture", target_os = "macos"))]
+    if std::env::args().nth(1).as_deref() == Some("--hdr") {
+        hdr::run(std::env::args().nth(2));
         return;
     }
     // Issue #1485: `--canvas <scenario.json>`, in a canvas-fixture build.
@@ -212,6 +221,8 @@ fn main() {
                 eprintln!("deep-app: couldn't claim the app, so no notifications: {error}")
             }
         }
+        // A key an older app kept in a file moves into the OS secret store, once, as the app starts (#1606).
+        deep_app::device::Device::moved();
     }
     // A `deepbuild://` link the OS hands the app waits for the tick, which can open it (#1460).
     let (links, linked) = std::sync::mpsc::channel::<String>();

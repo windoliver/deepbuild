@@ -12,16 +12,19 @@ import { realpathSync } from 'node:fs';
 import { Numbers } from './numbers.js';
 import { homedir } from 'node:os';
 
-import { type Asks } from '@deepbuild/asks';
+import { signInAgentOf, type Asks } from '@deepbuild/asks';
 
 import { type Evidence, type EvidenceStore, type PutResult } from '@deepbuild/evidence';
 import { type ExtensionHost, type ViewShown } from '@deepbuild/extension-host';
-import { type RecordStore } from '@deepbuild/record';
+import { type RecordStore, ulid } from '@deepbuild/record';
+import type { JsonValue } from '@deepbuild/contracts';
+import { orderOf } from './rows.js';
 
 import { type Checkouts } from '@deepbuild/gate';
 
 import { Acceptance } from './acceptance.js';
 import type { Landing } from './landing.js';
+import type { Work } from './work.js';
 import { type JobSpec, type Runner, type WindowReport } from '@deepbuild/runner';
 
 import { ClaudeSettings } from './claude-settings.js';
@@ -44,7 +47,7 @@ import { Agents } from './agents.js';
 import { Box } from './box.js';
 
 import { Channels, type ChannelAsk } from './channels.js';
-import type { WorkspaceService } from './workspaces-port.js';
+import type { WorkspaceService, WorkspacesProvider } from './workspaces-port.js';
 import { Devices } from './trusted.js';
 
 import { OpenItems } from './open-items.js';
@@ -65,13 +68,17 @@ import { Libraries } from './libraries.js';
 import { type Durable } from './vfs.js';
 import { refuse, Refused, refusal, type CoreOptions } from './wire.js';
 import { reported } from './setup-steps.js';
+import { openSignIn, probeOnPath } from './sign-in.js';
 import type { CallContext } from './session-types.js';
 import { HubCanvas } from './hub-canvas.js';
+import { Writes } from './receipts.js';
 
-import { type Obj } from "./hub-shared.js";
+import { ghToken, type Obj, isObj } from "./hub-shared.js";
+import type { Delivery } from '@deepbuild/asks';
+import type { IntakeService } from './intake-port.js';
 
 export interface HubControlOptions {
-  settings: CoreOptions;
+  settings: CoreOptions & { forge: string };
   services: {
     readonly wikiWritten: KnowledgeProvider['writtenOf'];
     readonly log: LogReads;
@@ -92,6 +99,7 @@ export interface HubControlOptions {
     readonly now: () => number;
     readonly acceptance: Acceptance;
     readonly landing: Landing;
+    readonly work: Work;
     readonly runner: Runner;
     readonly checkKinds: CheckKinds;
     readonly canvasSide: HubCanvas;
@@ -110,6 +118,8 @@ export interface HubControlOptions {
     readonly jobKinds: Jobs | undefined;
     readonly durable: Durable;
     readonly stacks: Stacks;
+    /** Builds the one input (#1342); the composition root holds the concrete intake. */
+    readonly intakeOf: WorkspacesProvider['intake'];
   };
   delivery: () => Pick<AnswerDeliveryPort, "note" | "openOffers" | "placed" | "saveOffered" | "sendBack" | "stopWaiting" | "switches" | "waitAnswer">;
   judging: () => Pick<StopJudgingPort, "lastMessage" | "prOf" | "reachOfSession" | "runEnded" | "stateOf" | "testVerdict" | "turnTaskOf">;
@@ -143,10 +153,17 @@ export class HubControl {
   /** A promotion's drain (#1334): no session starts until the hub restarts on the new build. */
   private draining = false;
 
-  async dispatch(method: string, params: Obj, context: CallContext): Promise<unknown> {
+  /** Every app or CLI write with an effect runs once per request ID, and its reply names its log position (#1577). */
+  private readonly writes = new Writes({ record: () => this.options.services.record, plant: () => this.options.settings.plant });
+
+  dispatch(method: string, params: Obj, context: CallContext): Promise<unknown> {
+    return this.writes.run(method, params, context, () => this.route(method, params, context));
+  }
+
+  private async route(method: string, params: Obj, context: CallContext): Promise<unknown> {
     switch (method) {
       case 'hub.health':
-      case 'health': return this.health();
+      case 'health': return this.health(context.role);
       case 'session.wait': return this.options.delivery().waitAnswer(params, context);
       case 'session.delivered': return this.options.delivery().placed(params, context);
       case 'session.stop_waiting': return this.options.delivery().stopWaiting(context);
@@ -181,16 +198,38 @@ export class HubControl {
       case 'numbers.sample': await this.options.state().notAnAgent(context, method); return this.options.services.numbers.sample(Number(params.before), typeof params.manifest === 'string' ? params.manifest : undefined);
       case 'changes.read': return this.readings.change(params);
       case 'evidence.read': return this.evidence.evidence(params);
+      case 'eval.report': {
+        // Keep the report's exact serialization, not an outcome asserted by its caller. replayCheck reads its runs.
+        let report: unknown;
+        try { report = typeof params.report === 'string' ? JSON.parse(params.report) : undefined; } catch { /* refused below */ }
+        if (!isObj(report) || !isObj(report.plan) || !Array.isArray(report.runs)) throw refuse('type', '/params/report', 'Send the finished eval report as JSON text holding its frozen plan and runs.');
+        const put = await this.options.services.store.connect({ role: 'deepbuild', via: 'job' }).put({
+          bytes: Buffer.from(params.report as string), kind: 'replay', source: 'config-eval',
+          redaction: 'unknown', license: { name: 'session', allows: [] },
+        });
+        if (put.status !== 'stored') throw refuse('unavailable', '', `The evidence store refused the eval report: ${put.reason}`, '', true);
+        const ev = put.evidence;
+        await this.options.events.appendCore('evidence.stored', { sha256: ev.sha256, kind: ev.kind, type: ev.type, size: ev.size, origin: ev.origin, redaction: ev.redaction, license: ev.license.name, derived_from: [...ev.derivedFrom], step_times: [] });
+        return { handle: `ev:${ev.sha256}` };
+      }
       case 'ask.answer': return this.answer(params, context);
       case 'ask.card': return this.human.askCard(params);
       case 'decision.overrule': return this.human.overrule(params, context);
       case 'ask.undo': return this.human.undo(params, context);
       case 'ask.take_over': return this.human.takeOver(params, context);
       case 'offer.save': return this.options.delivery().saveOffered(params, context);
-      case 'staged.undo': return this.options.services.staging.undo(params);
+      case 'staged.undo': return this.options.services.staging.undo(params, this.options.events.connection(context.role === 'app' ? 'app' : 'cli'));
       case 'agents.propose': await this.options.kernel.ready; return this.options.services.agents.propose(params);
       case 'agents.read': return this.options.services.agents.read();
-      case 'box.say': await this.options.kernel.ready; return this.options.services.box.say(String(params.words ?? ''), typeof params.repo === 'string' ? params.repo : undefined);
+      case 'box.say': {
+        await this.options.kernel.ready;
+        const said = await this.options.services.box.say(String(params.words ?? ''), typeof params.repo === 'string' ? params.repo : undefined);
+        // In the box with no project shown, words that ask for no change of the box's are the one input (#1342): a new
+        // project's brief, from you, never an agent.
+        if (said.other !== true || params.repo !== undefined) return said;
+        await this.options.state().notAnAgent(context, method);
+        return this.briefs().say(String(params.words ?? ''), Array.isArray(params.files) ? params.files.filter((s): s is string => typeof s === 'string') : []);
+      }
       case 'agents.restart': await this.options.kernel.ready; return this.options.services.agents.restart(params);
       case 'agents.undo': return this.options.services.agents.undo(params);
       case 'mcp.exec': return this.options.services.agents.exec(params);
@@ -241,6 +280,7 @@ export class HubControl {
       case 'host.plan': return this.options.services.hosts.plan(params.ask);
       case 'host.ran': return this.options.services.hosts.ran(params.ask, params.run);
       case 'host.changes': return this.options.services.hosts.changes(params.host);
+      case 'host.remove': return this.options.services.hosts.remove(params.host);
       case 'start.approve': return this.options.services.sessionStarts.approve(params, context);
       case 'start.session':
         if (this.draining) throw refuse('unavailable', '/method', 'A promotion is draining the hub: no session starts until it restarts on the new build. Start it again then.', method, true);
@@ -275,8 +315,8 @@ export class HubControl {
       case 'rules.sync':
         this.options.schedule.replayLate();
         return (this.options.schedule.replaying ?? Promise.resolve()).then(() => this.options.schedule.queue(() => this.options.memory().syncRules()));
-      case 'rules.reach': return ruleReach((sql, p) => this.options.services.record.raw(sql, p), realpathSync(String(params.repo)), String(params.scope), reachSince(this.options.services.now(), 30));
-      case 'rules.credit': return { sessions: await creditOf((sql, p) => this.options.services.record.raw(sql, p), String(params.rule)) };
+      case 'rules.reach': return ruleReach(this.options.services.raw, realpathSync(String(params.repo)), String(params.scope), reachSince(this.options.services.now(), 30));
+      case 'rules.credit': return { sessions: await creditOf(this.options.services.raw, String(params.rule)) };
       case 'session.rules': return this.options.memory().sessionRules(params);
       case 'acceptance.start': return this.options.services.acceptance.start(params);
       case 'acceptance.status': return this.options.services.acceptance.status(params);
@@ -285,6 +325,10 @@ export class HubControl {
       // Landing in turn (#1331): `deep land judge`, `deep land` and `deep work --once`, from your own terminal.
       case 'land.judge': return this.work.workspaceCall(() => this.options.services.landing.judgeAll(String(params.repo ?? '')));
       case 'land.round': return this.work.workspaceCall(() => this.options.services.landing.land(String(params.repo ?? '')));
+      // The work run (#1332): `deep work "<scope>"` raises its one approval, `deep work show` and `deep work pause`.
+      case 'work.approve': return this.options.services.work.approve(params, context);
+      case 'work.show': return this.options.services.work.show(params);
+      case 'work.pause': return this.options.services.work.pause(params);
       case 'work.once': return this.work.workspaceCall(() => this.options.services.landing.workOnce(String(params.repo ?? ''), Array.isArray(params.issues) ? params.issues.map(Number).filter((n) => Number.isSafeInteger(n) && n > 0) : []));
       case 'job.submit': return this.options.services.runner.submit(params.spec as JobSpec);
       case 'job.status': return this.options.services.runner.status(String(params.job));
@@ -300,7 +344,8 @@ export class HubControl {
       case 'work.fix': return await this.work.workspaceCall(() => this.work.fixItem(String(params.id ?? ''), typeof params.cwd === 'string' ? params.cwd : homedir()));
       case 'workspace.new': return await this.work.workspaceCall(() => this.options.services.spaces.make(String(params.topic ?? ''), typeof params.folder === 'string' ? params.folder : undefined));
       case 'workspace.move': return await this.work.workspaceCall(() => this.options.services.spaces.move(String(params.id), String(params.folder)));
-      case 'workspace.revert': return await this.work.workspaceCall(() => this.options.services.spaces.revert(String(params.id), String(params.commit)));
+      case 'workspace.revert': return await this.work.workspaceCall(() => (params.commit === undefined ? this.options.services.spaces.back(String(params.id)) : this.options.services.spaces.revert(String(params.id), String(params.commit))));
+      case 'workspace.task': return await this.work.workspaceCall(() => this.options.services.spaces.task(String(params.id), params));
       case 'workspace.diff': return await this.work.workspaceCall(() => this.options.services.spaces.diff(String(params.id)));
       case 'workspace.drift': return await this.work.workspaceCall(() => this.options.services.spaces.drift(String(params.id)));
       case 'project.views': return { views: this.options.services.extensions!.projectViews() };
@@ -322,12 +367,30 @@ export class HubControl {
         await this.options.services.asks.notifications(setting !== 'allowed');
         return { reported: true };
       }
+      // The sign-in task's one button (#1349): the agent's own sign-in command, started on the trusted path; it closes nothing.
+      case 'signin.open': {
+        if (context.role !== 'app') throw refuse('role', '/method', 'Only the app starts an agent\'s sign-in.', method);
+        const handle = params.ask;
+        if (typeof handle !== 'string' || !/^ask:[0-9A-Za-z]+$/.test(handle)) throw refuse('handle_syntax', '/params/ask', 'Name the sign-in task by its handle, ask:<id>.', handle);
+        const [task] = (await this.options.services.raw(`SELECT data FROM events WHERE id = ? AND kind = 'ask.created'`, [handle.slice(4)])) as { data: string }[];
+        const agent = task ? signInAgentOf(JSON.parse(task.data)) : undefined;
+        if (!agent) throw refuse('not_found', '/params/ask', `${handle} is no agent's sign-in task.`, handle);
+        if (!openSignIn(agent, this.options.services.agents.loginPath(), this.options.settings.plant)) {
+          throw refuse('not_found', '/params/ask', `No sign-in command for ${agent} is on your login shell's PATH.`, handle);
+        }
+        return { started: true };
+      }
       case 'windows.report': return this.options.services.runner.report(params as unknown as WindowReport).then(() => { this.options.services.tasks.windowChanged(); this.options.state().sessionWindow(params); return { reported: true }; });
       default: throw new Refused(refusal('unknown_method', '/method', `The hub serves no method ${method}.`, method));
     }
   }
 
-  async answer(params: Obj, context: CallContext, channel?: { channel: string; proof: 'device' | 'account_link'; plan_hash: string | null }): Promise<Obj> { return this.human.answer(params, context, channel); }
+  async answer(params: Obj, context: CallContext, channel?: { channel: string; proof: 'device' | 'account_link'; plan_hash: string | null }): Promise<Obj> {
+    const result = await this.human.answer(params, context, channel);
+    // Acknowledging the answer also settles its card/session rows; they must not trail into the next call's effects.
+    await this.options.state().statesSettled();
+    return result;
+  }
 
   async onSwitchedTree(claim: string): Promise<string | undefined> { return this.human.onSwitchedTree(claim); }
 
@@ -355,9 +418,28 @@ export class HubControl {
 
   async notifierGone(): Promise<void> { return this.readings.notifierGone(); }
 
-  async health(): Promise<Obj> { return this.readings.health(); }
+  async health(role: string): Promise<Obj> { return this.readings.health(role.startsWith('person:') ? this.options.state().seenBy(role) : undefined); }
 
   async forgeRepos(): Promise<string[]> { return this.readings.forgeRepos(); }
+
+  /** The one input (#1342), built on first use. */
+  private intake: IntakeService | undefined;
+  private briefs(): IntakeService {
+    const s = this.options.services;
+    return this.intake ??= s.intakeOf({
+      root: s.root.dir, now: s.now, plant: this.options.settings.plant, forge: this.options.settings.forge,
+      token: async () => process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken(),
+      raw: s.raw, appendCore: (kind, data, extra) => this.options.events.appendCore(kind, data, extra), keep: (bytes, source) => this.keep(bytes, source),
+      runner: () => s.runner, asks: () => s.asks, spaces: () => s.spaces, signedIn: (agent) => probeOnPath(agent, s.agents.loginPath()),
+      start: (ask, folder, scope) => s.work.under(ask, folder, scope),
+      row: async (id, row) => {
+        const ts = s.now();
+        await this.options.events.append(this.options.events.connection('core'), { v: 2, id: ulid(ts), kind: 'row.set', ts, data: row ? { listed: true, order: orderOf(row), ...row } as unknown as JsonValue : { id, listed: false } });
+      },
+    });
+  }
+  briefAnswered(delivery: Delivery): boolean { return this.briefs().answered(delivery); }
+  briefsDue(): Promise<void> { return this.briefs().due(); }
 
   async enteredProject(session: string, cwd: string): Promise<void> { return this.work.enteredProject(session, cwd); }
 

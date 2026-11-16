@@ -831,6 +831,195 @@
     }
   },
   {
+    "source": "brief.approve",
+    "kind": "authority",
+    "fixture": {
+      "ask": {
+        "kind": "authority",
+        "question": "# Plan a five-day trip for four people under $4,000\n\n**What it makes:** a plan, in a folder of its own.\n\n**Tasks:**\n1. Draft the day-by-day route\n2. Price every day (after Draft the day-by-day route)\n\n**Held for you, asked when it is due:**\n- Book the rail passes ($1240.00), after Price every day\n",
+        "options": [
+          {
+            "id": "allow",
+            "label": "Make it and start",
+            "decision": "allow"
+          },
+          {
+            "id": "there",
+            "label": "Add it to Trips instead",
+            "decision": "allow"
+          },
+          {
+            "id": "deny",
+            "label": "Don't",
+            "decision": "deny"
+          }
+        ],
+        "recommended": null,
+        "deadline": 1760099851123,
+        "fallback": "you",
+        "default": "deny",
+        "provisional": false,
+        "owner": "you",
+        "key": "7a1c3e5f7092b4d6f8a0c2e4f6a8b0d2e4f6a8c0e2a4c6e8a0b2d4f6a8c0e2a4",
+        "pinned_to": {
+          "kind": "evidence",
+          "ref": "7a1c3e5f7092b4d6f8a0c2e4f6a8b0d2e4f6a8c0e2a4c6e8a0b2d4f6a8c0e2a4"
+        }
+      },
+      "at_deadline": {
+        "decision": "deny"
+      }
+    }
+  },
+  {
+    "source": "brief.held",
+    "kind": "authority",
+    "fixture": {
+      "ask": {
+        "kind": "authority",
+        "question": "Buy four Lisboa Cards, for $240 at https://shop.example/buy, due 2026-11-20T10:00:00.000Z. It's due now for \"plan a five-day trip to Lisbon\". Your yes to its brief didn't cover it, so nothing is bought, booked, posted or sent until you say so here; you pay or send it yourself.",
+        "options": [
+          {
+            "id": "allow",
+            "label": "Go ahead",
+            "decision": "allow"
+          },
+          {
+            "id": "deny",
+            "label": "Not now",
+            "decision": "deny"
+          }
+        ],
+        "recommended": null,
+        "deadline": 1760099851123,
+        "fallback": "you",
+        "default": "deny",
+        "provisional": false,
+        "owner": "you",
+        "key": "3b5d7f9a1c3e5a7b9d1f3a5c7e9b1d3f5a7c9e1b3d5f7a9c1e3b5d7f9a1c3e5a",
+        "pinned_to": {
+          "kind": "evidence",
+          "ref": "7a1c3e5f7092b4d6f8a0c2e4f6a8b0d2e4f6a8c0e2a4c6e8a0b2d4f6a8c0e2a4"
+        }
+      },
+      "at_deadline": {
+        "decision": "deny"
+      }
+    }
+  },
+  {
+    "source": "work.breaker",
+    "kind": "exception",
+    "fixture": {
+      "ask": {
+        "kind": "exception",
+        "question": "Issue #104's last 3 attempts were replaced: attempt 1: claude-code, its default model, crashed or interrupted; attempt 2: codex, its default model, stalled; attempt 3: claude-code, its default model, sent back past its rounds, FAIL: R2 FAIL. Start another attempt, or leave it waiting?",
+        "options": [
+          {
+            "id": "again",
+            "label": "Start another attempt",
+            "decision": "none"
+          },
+          {
+            "id": "leave",
+            "label": "Leave it waiting",
+            "decision": "none"
+          }
+        ],
+        "recommended": "leave",
+        "deadline": 1760186251123,
+        "fallback": "you",
+        "default": "leave",
+        "provisional": false,
+        "owner": "you",
+        "key": "7a3d9e2f1c0b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b4a39",
+        "pinned_to": {
+          "kind": "evidence",
+          "ref": "7a3d9e2f1c0b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b4a39"
+        }
+      },
+      "at_deadline": {
+        "decision": "none"
+      }
+    }
+  },
+  {
+    "source": "work.run_breaker",
+    "kind": "exception",
+    "fixture": {
+      "ask": {
+        "kind": "exception",
+        "question": "The standing run ask:01JQ4N1TZ6M5V0YB8K2D3F7G9H is paused: the last 5 attempts in a row ended without a landing: #104 attempt 1 in Claude Code, stalled; #105 attempt 1 in Claude Code, stalled; #106 attempt 1 in Codex, crashed or interrupted; #104 attempt 2 in Codex, stalled; #107 attempt 1 in Claude Code, sent back past its rounds. Go on, or keep it paused?",
+        "options": [
+          {
+            "id": "resume",
+            "label": "Go on",
+            "decision": "none"
+          },
+          {
+            "id": "stay",
+            "label": "Keep it paused",
+            "decision": "none"
+          }
+        ],
+        "recommended": "stay",
+        "deadline": 1760186251123,
+        "fallback": "you",
+        "default": "stay",
+        "provisional": false,
+        "owner": "you",
+        "key": "5c2e8f1a0d9b7c6e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e",
+        "pinned_to": {
+          "kind": "evidence",
+          "ref": "5c2e8f1a0d9b7c6e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e"
+        }
+      },
+      "at_deadline": {
+        "decision": "none"
+      }
+    }
+  },
+  {
+    "source": "work.call",
+    "kind": "taste",
+    "fixture": {
+      "ask": {
+        "kind": "taste",
+        "question": "Is \"the look of #100's change is right to you\" true of #100's change? Before: main at 0123456789ab; after: PR #7 at 89abcdef0123, which lands now and Send back reverts.",
+        "options": [
+          {
+            "id": "yes",
+            "label": "Yes",
+            "decision": "none"
+          },
+          {
+            "id": "send_back",
+            "label": "Send back",
+            "decision": "none"
+          }
+        ],
+        "recommended": "yes",
+        "deadline": 1760186251123,
+        "fallback": "you",
+        "default": "yes",
+        "provisional": false,
+        "owner": "you",
+        "key": "3f1e9a7c5b2d8e0f4a6c1b3d5e7f9a2c4b6d8e0f1a3c5e7b9d2f4a6c8e0b1d3f",
+        "pinned_to": {
+          "kind": "commit",
+          "ref": "89abcdef0123456789abcdef0123456789abcdef"
+        },
+        "subject": {
+          "screen": "acme/shop#100",
+          "element": "the look of #100's change is right to you"
+        }
+      },
+      "at_deadline": {
+        "decision": "none"
+      }
+    }
+  },
+  {
     "source": "deep_ask.taste",
     "kind": "taste",
     "fixture": {
@@ -2198,6 +2387,42 @@
       },
       "at_deadline": {
         "decision": "none"
+      }
+    }
+  },
+  {
+    "source": "contract.extension",
+    "kind": "authority",
+    "fixture": {
+      "ask": {
+        "kind": "authority",
+        "question": "Extend the preview api:deep.on from R4 to R6? Its replacement lands in R6.",
+        "options": [
+          {
+            "id": "approve",
+            "label": "Extend it to R6",
+            "decision": "allow"
+          },
+          {
+            "id": "decline",
+            "label": "Keep R4",
+            "decision": "deny"
+          }
+        ],
+        "recommended": null,
+        "deadline": 1760099851123,
+        "fallback": "you",
+        "default": "decline",
+        "provisional": false,
+        "owner": "you",
+        "key": "721381b14d0e51f152e1b21caa585c12259fa853bf31eea70e706d54fca25a02",
+        "pinned_to": {
+          "kind": "evidence",
+          "ref": "721381b14d0e51f152e1b21caa585c12259fa853bf31eea70e706d54fca25a02"
+        }
+      },
+      "at_deadline": {
+        "decision": "deny"
       }
     }
   }

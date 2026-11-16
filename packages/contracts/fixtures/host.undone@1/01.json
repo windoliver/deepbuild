@@ -1,0 +1,35 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T7X",
+  "kind": "host.undone",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013551123,
+  "data": {
+    "host": "build-01",
+    "grant": "you",
+    "undone": [
+      {
+        "id": "01K74FKZVK8Q2X5R7M3N9P4T6W",
+        "change": "Write and enable the user service web.service",
+        "undo": "systemctl --user disable --now web.service && rm -f /home/you/.config/systemd/user/web.service"
+      }
+    ],
+    "left": [
+      {
+        "id": "01K74FKZVK8Q2X5R7M3N9P4T6V",
+        "change": "Write the user unit edit.service",
+        "undo": "rm -f /home/you/.config/systemd/user/edit.service"
+      }
+    ],
+    "partial": true,
+    "stopped": {
+      "change": "Write the user unit edit.service",
+      "target": "/home/you/.config/systemd/user/edit.service",
+      "backup": "/home/you/.deepbuild/backups/01K74FKZVK8Q2X5R7M3N9P4T7Y/_home_you_.config_systemd_user_edit.service",
+      "why": "it changed since it was written: its SHA-256 isn't the one recorded, so it was kept and its undo didn't run"
+    },
+    "run": null
+  }
+}

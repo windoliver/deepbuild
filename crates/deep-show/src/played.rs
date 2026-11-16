@@ -13,7 +13,7 @@ use std::collections::BTreeMap;
 
 use deep_canvas::document::variants;
 use deep_canvas::schedule::{Scheduler, Session as DocSession};
-use deep_canvas_input::track::{Entry, Track, Writer};
+use deep_canvas_input::track::{Entry, Writer};
 use serde_json::{json, Value};
 
 use crate::hub::Hub;
@@ -24,6 +24,8 @@ pub(crate) fn class_of(control: &Value) -> &str {
     match control.get("class").and_then(Value::as_str) {
         Some(c) => c,
         None if control.get("variant").is_some() => "view",
+        // #542: a scroll control is class view unless it says document (Control: scroll).
+        None if control.get("kind").and_then(Value::as_str) == Some("scroll") => "view",
         None => "document",
     }
 }
@@ -32,11 +34,22 @@ pub(crate) fn class_of(control: &Value) -> &str {
 /// longer offers, stays on the track and is left out of the form, so a revision that renames a
 /// stage never refuses the document for what you picked before it.
 pub(crate) fn reads(form: &Value, entry: &Value) -> bool {
-    let Some(c) = form.get("controls").and_then(|c| c.get(entry["control"].as_str().unwrap_or_default())) else {
+    // #507: present mode's own entries steer the timeline, whatever the form's controls.
+    if entry.get("present").is_some() {
+        return true;
+    }
+    let Some(c) = form
+        .get("controls")
+        .and_then(|c| c.get(entry["control"].as_str().unwrap_or_default()))
+    else {
         return false;
     };
     let options = variants::option_names(form, c);
-    !entry["value"].is_string() || options.is_empty() || options.iter().any(|o| Some(o.as_str()) == entry["value"].as_str())
+    !entry["value"].is_string()
+        || options.is_empty()
+        || options
+            .iter()
+            .any(|o| Some(o.as_str()) == entry["value"].as_str())
 }
 
 /// `form` with `entries` inlined as its `track`; `form` itself when there are none.
@@ -54,17 +67,21 @@ pub(crate) fn with_track(form: &Value, entries: &[Value]) -> Value {
 pub(crate) fn picks_at(form: &Value, t: i64) -> BTreeMap<String, String> {
     let entries = form.get("track").and_then(Value::as_array);
     let mut out = BTreeMap::new();
-    for (id, c) in form.get("controls").and_then(Value::as_object).into_iter().flatten() {
+    for (id, c) in form
+        .get("controls")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+    {
         let Some(set) = c.get("variant").and_then(Value::as_str) else {
             continue;
         };
         let entry = (class_of(c) == "document")
             .then(|| {
                 // Entries stay in time order, so the last one at or before `t` is the pick.
-                entries?
-                    .iter()
-                    .filter(|e| e["control"] == id.as_str() && e["t"].as_i64().is_some_and(|et| et <= t))
-                    .next_back()
+                entries?.iter().rfind(|e| {
+                    e["control"] == id.as_str() && e["t"].as_i64().is_some_and(|et| et <= t)
+                })
             })
             .flatten();
         let pick = entry.map(|e| &e["value"]).or_else(|| c.get("default"));
@@ -116,16 +133,35 @@ fn load_columns(
 impl Hub<'_> {
     /// The document's input track as entries a form inlines.
     pub(crate) fn track_json(&self, doc: &str) -> Vec<Value> {
-        self.tracks.get(doc).map(|t| t.entries().iter().map(Entry::to_json).collect()).unwrap_or_default()
+        self.tracks
+            .get(doc)
+            .map(|t| t.entries().iter().map(Entry::to_json).collect())
+            .unwrap_or_default()
     }
 
     /// `form` played: its track inlined, and each view-class control's value from the
     /// document's session state written as that control's default.
     pub(crate) fn played(&self, doc: &str, form: &Value) -> Value {
-        let entries: Vec<Value> = self.track_json(doc).into_iter().filter(|e| reads(form, e)).collect();
+        let entries: Vec<Value> = self
+            .track_json(doc)
+            .into_iter()
+            .filter(|e| reads(form, e))
+            .collect();
         let mut out = with_track(form, &entries);
-        let view = self.session_state.get(doc).and_then(|s| s.get("view")).and_then(Value::as_object);
-        if let (Some(view), Some(controls)) = (view, out.get_mut("controls").and_then(Value::as_object_mut)) {
+        // #903: where no one gives input, the document's tour plays.
+        crate::tour::inline(&mut out);
+        // #507: present mode's span, which a stage marker holds through.
+        if let Some(present) = self.present_field(doc) {
+            out["present"] = present;
+        }
+        let view = self
+            .session_state
+            .get(doc)
+            .and_then(|s| s.get("view"))
+            .and_then(Value::as_object);
+        if let (Some(view), Some(controls)) =
+            (view, out.get_mut("controls").and_then(Value::as_object_mut))
+        {
             for (id, c) in controls.iter_mut() {
                 if let Some(v) = view.get(id).filter(|_| class_of(c) == "view") {
                     c["default"] = v.clone();
@@ -186,14 +222,47 @@ impl Hub<'_> {
     /// document-class control appends one entry, stamped as yours; a view-class one changes the
     /// session's view state and never the document; a viewer-class one changes nothing here.
     /// Then the session replays what it holds. The entry it appended, if any.
-    pub(crate) fn enter(&mut self, doc: &str, control: &str, value: Value, t: i64, serial: u64) -> Result<Option<Value>, Value> {
-        let form = self.forms.get(doc).ok_or_else(|| json!({"code": "no_revision"}))?;
+    pub(crate) fn enter(
+        &mut self,
+        doc: &str,
+        control: &str,
+        value: Value,
+        t: i64,
+        serial: u64,
+    ) -> Result<Option<Value>, Value> {
+        let appended = self.enter_quiet(doc, control, value, t, serial)?;
+        self.replay(doc, t);
+        Ok(appended)
+    }
+
+    /// [`Hub::enter`] without the replay, for an input that writes several values (#542: a
+    /// scroll's steps), which replays once after them.
+    pub(crate) fn enter_quiet(
+        &mut self,
+        doc: &str,
+        control: &str,
+        value: Value,
+        t: i64,
+        serial: u64,
+    ) -> Result<Option<Value>, Value> {
+        let form = self
+            .forms
+            .get(doc)
+            .ok_or_else(|| json!({"code": "no_revision"}))?;
         let c = form
             .get("controls")
             .and_then(|c| c.get(control))
             .ok_or_else(|| json!({"code": "unknown_control", "control": control}))?;
+        // #542: a text control takes a string within its cap and line rule, a scroll control a
+        // position within its range, however the value arrives.
+        if !crate::fields::admits(c, &value) {
+            return Err(json!({"code": "out_of_range", "control": control, "value": value}));
+        }
         let options = variants::option_names(form, c);
-        if value.is_string() && !options.is_empty() && !options.iter().any(|o| Some(o.as_str()) == value.as_str()) {
+        if value.is_string()
+            && !options.is_empty()
+            && !options.iter().any(|o| Some(o.as_str()) == value.as_str())
+        {
             return Err(json!({"code": "not_an_option", "control": control, "value": value}));
         }
         let mut appended = None;
@@ -209,12 +278,19 @@ impl Hub<'_> {
                     serial: Some(serial as u32),
                 };
                 appended = Some(entry.to_json());
-                self.tracks.entry(doc.to_string()).or_insert_with(Track::default).append(entry);
+                self.tracks
+                    .entry(doc.to_string())
+                    .or_default()
+                    .append(entry);
             }
-            "view" if self.planted(crate::hub::Planted::VariantPickWritesRevision) && c.get("variant").is_some() => {
+            "view"
+                if self.planted(crate::hub::Planted::VariantPickWritesRevision)
+                    && c.get("variant").is_some() =>
+            {
                 // Planted (#504): the pick written into the document as a revision.
                 let set = c["variant"].as_str().unwrap_or_default().to_string();
-                let picked = BTreeMap::from([(set, value.as_str().unwrap_or_default().to_string())]);
+                let picked =
+                    BTreeMap::from([(set, value.as_str().unwrap_or_default().to_string())]);
                 if let Some(row) = self.current(doc).map(|r| r.doc.clone()) {
                     self.push_revision(doc, variants::applied(&row, &picked));
                 }
@@ -228,7 +304,6 @@ impl Hub<'_> {
             }
             _ => {}
         }
-        self.replay(doc, t);
         Ok(appended)
     }
 
@@ -284,9 +359,17 @@ mod tests {
             "controls": {"stage": {"kind": "stages", "role": "group", "default": "peak", "stages": {"peak": {"label": "Peak", "shot": "peak-shot"}}}}
         });
         // `top` was the stage's name in the revision you picked it in.
-        let entries = vec![json!({"t": 0, "seq": 0, "control": "stage", "value": "top"}), json!({"t": 1, "seq": 0, "control": "gone", "value": 1})];
-        let compiles = |f: &Value| deep_canvas_motion::program::Program::compile(f.as_object().expect("an object")).is_ok();
-        assert!(!compiles(&with_track(&form, &entries)), "the fixture: motion refuses an entry naming no stage");
+        let entries = vec![
+            json!({"t": 0, "seq": 0, "control": "stage", "value": "top"}),
+            json!({"t": 1, "seq": 0, "control": "gone", "value": 1}),
+        ];
+        let compiles = |f: &Value| {
+            deep_canvas_motion::program::Program::compile(f.as_object().expect("an object")).is_ok()
+        };
+        assert!(
+            !compiles(&with_track(&form, &entries)),
+            "the fixture: motion refuses an entry naming no stage"
+        );
         let kept: Vec<Value> = entries.into_iter().filter(|e| reads(&form, e)).collect();
         assert!(kept.is_empty());
         assert!(compiles(&with_track(&form, &kept)));
@@ -294,8 +377,14 @@ mod tests {
 
     #[test]
     fn a_choice_naming_a_set_is_view_class_unless_it_says_otherwise() {
-        assert_eq!(class_of(&json!({"kind": "choice", "variant": "color"})), "view");
+        assert_eq!(
+            class_of(&json!({"kind": "choice", "variant": "color"})),
+            "view"
+        );
         assert_eq!(class_of(&json!({"kind": "stages"})), "document");
-        assert_eq!(class_of(&json!({"kind": "choice", "variant": "c", "class": "document"})), "document");
+        assert_eq!(
+            class_of(&json!({"kind": "choice", "variant": "c", "class": "document"})),
+            "document"
+        );
     }
 }

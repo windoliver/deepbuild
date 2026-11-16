@@ -824,7 +824,12 @@ fn structural(name: &str, a: &[V], env: &Value, twin: &str) -> Result<V, String>
             let size: Vec<usize> = env
                 .get("size")
                 .and_then(Value::as_array)
-                .map(|s| s.iter().filter_map(Value::as_u64).map(|x| x as usize).collect())
+                .map(|s| {
+                    s.iter()
+                        .filter_map(Value::as_u64)
+                        .map(|x| x as usize)
+                        .collect()
+                })
                 .ok_or_else(|| format!("{name}'s fixture names no size"))?;
             if size.len() != 3 || raw.len() != size[0] * size[1] * size[2] {
                 return Err(format!("{name}'s texture isn't its size"));

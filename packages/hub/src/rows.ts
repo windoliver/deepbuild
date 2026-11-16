@@ -3,7 +3,8 @@
 // app and the replica fold those events, and deep, deep status and deep inbox read the `rows` table they project, from
 // the hub or, with it down, from its database. So every reader holds the same rows, words and order at one log_pos.
 import { basename } from 'node:path';
-import { SECTION } from './list.js';
+import { SECTION } from './sections.js';
+import { ISSUE_UNREAD } from './github-source.js';
 import { repoOf, sessionStates, WORDS, type Fact, type Flag, type Reading } from './status.js';
 
 /** A row as every reader shows it (row.set's data, less `listed` and `order`): @1 for a session or an ask, @2 for a running job (#1925). */
@@ -91,7 +92,7 @@ const ENTRY: Record<Reading['state'], string> = {
   'needs you': 'needs_you', stuck: 'blocked', flagged: 'fail', 'sent back': 'fail', BLOCKED: 'blocked', INVALID: 'invalid', INCONCLUSIVE: 'inconclusive', stale: 'stale',
   'says done': 'running', working: 'running', queued: 'idle', PASS: 'pass', finished: 'idle', quiet: 'idle',
 };
-/** The order of states inside a section of the list (list.ts: SECTION), what needs you first: one digit each, so a row's place sorts by its bytes. */
+/** The order of states inside a section of the list (sections.ts: SECTION), what needs you first: one digit each, so a row's place sorts by its bytes. */
 const RANK: Record<Reading['state'], number> = {
   'needs you': 0, stuck: 1, flagged: 2, BLOCKED: 3, INVALID: 4, INCONCLUSIVE: 5, stale: 6,
   'sent back': 1, 'says done': 2, working: 3, queued: 4, PASS: 3, finished: 4, quiet: 5,
@@ -120,14 +121,19 @@ async function sessionNames(query: Query, ids: readonly string[]): Promise<Map<s
   // A session's task is the first task.created that names it, as the app reads it.
   const tasks = new Map<string, string>();
   for (const t of (await query(`SELECT thread, title FROM tasks WHERE thread IN (${of}) AND title IS NOT NULL ORDER BY created DESC`)) as { thread: string; title: string }[]) tasks.set(t.thread, t.title);
+  const unnamed: string[] = [];
   for (const id of ids) {
     const named = yours.get(id) ?? tasks.get(id) ?? agents.get(id);
-    if (named) { names.set(id, named); continue; }
-    // Its first prompt of its own, read through the session index, which stops at the first one.
-    const [first] = (await query(`SELECT json_extract(data, '$.text') AS text FROM events INDEXED BY events_session WHERE session_id = ${quote(id)} AND kind = 'user.ask' AND json_extract(data, '$.from') <> 'subagent' AND trim(json_extract(data, '$.text')) <> '' ORDER BY log_pos LIMIT 1`)) as { text: string }[];
-    const line = first?.text.split(/\r?\n/).map((l) => l.trim()).find((l) => l);
+    if (named) names.set(id, named);
+    else unnamed.push(id);
+  }
+  // Its first prompt of its own, read through the session index, which stops at the first one: in one statement for
+  // them all, since a statement a session is a text of its own each, which the record compiles and keeps.
+  const firsts = (!unnamed.length ? [] : await query(`SELECT s.value AS id, (SELECT json_extract(e.data, '$.text') FROM events e INDEXED BY events_session WHERE e.session_id = s.value AND e.kind = 'user.ask' AND json_extract(e.data, '$.from') <> 'subagent' AND trim(json_extract(e.data, '$.text')) <> '' ORDER BY e.log_pos LIMIT 1) AS text FROM json_each(${quote(JSON.stringify(unnamed))}) s`)) as { id: string; text: string | null }[];
+  for (const first of firsts) {
+    const line = first.text?.split(/\r?\n/).map((l) => l.trim()).find((l) => l);
     // By code point, so an emoji is never cut in half.
-    if (line) names.set(id, [...line].slice(0, PROMPT_NAME).join(''));
+    if (line) names.set(first.id, [...line].slice(0, PROMPT_NAME).join(''));
   }
   return names;
 }
@@ -158,6 +164,13 @@ const parsed = <T>(v: unknown, fallback: T): T => {
 export async function buildRows(query: Query, readings: readonly Reading[], open: readonly string[]): Promise<Row[]> {
   const titles = await sessionNames(query, readings.map((r) => r.id));
   const doing = await doings(query, readings);
+  // A failed issue read opens a words-only task, never a silent fallback. Keep its warning through the turn.
+  const unread = new Map((readings.length ? await query(`SELECT r.session_id, json_extract(r.data, '$.reading') AS text FROM events r
+    WHERE r.kind = 'session.reading' AND r.session_id IN (${readings.map((r) => quote(r.id)).join(', ')})
+    AND json_extract(r.data, '$.reading') LIKE ${quote(`${ISSUE_UNREAD}%`)}
+    AND NOT EXISTS (SELECT 1 FROM events p WHERE p.session_id = r.session_id AND p.log_pos > r.log_pos
+      AND p.kind = 'user.ask' AND json_extract(p.data, '$.from') IN ('person', 'app')) ORDER BY r.log_pos`) : [])
+    .map((r) => { const row = r as { session_id: string; text: string }; return [row.session_id, row.text]; }));
   const projects = new Map<string, string | null>();
   const projectOf = (worktree: string | null, project: string | null): string | null => {
     const key = `${worktree ?? ''}\n${project ?? ''}`;
@@ -168,7 +181,7 @@ export async function buildRows(query: Query, readings: readonly Reading[], open
     const project = projectOf(r.worktree, r.project_id);
     const row: Row = {
       id: `session:${r.id}`, address: `session/${r.id}`, title: titles.get(r.id) ?? AGENTS[r.agent ?? ''] ?? r.agent ?? 'agent', project, session: r.id, agent: r.agent,
-      entry: ENTRY[r.state], word: r.state, why: r.plain, waits_on: r.waits_on,
+      entry: ENTRY[r.state], word: r.state, why: [r.plain, unread.get(r.id)].filter(Boolean).join(' · '), waits_on: r.waits_on,
       since: r.since, actions: [], unread: FIRST_UNREAD.has(r.cause) || FIRST_UNREAD.has(r.state),
       ...(doing.has(r.id) ? { doing: doing.get(r.id)! } : {}),
     };

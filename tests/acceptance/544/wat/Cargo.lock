@@ -191,8 +191,21 @@ dependencies = [
 ]
 
 [[patch.unused]]
+name = "quickjs-jit-runtime"
+version = "0.12.11"
+
+[[patch.unused]]
+name = "llrt_crypto"
+version = "0.9.0-beta"
+
+[[patch.unused]]
 name = "accesskit_macos"
 version = "0.26.3"
+
+[[patch.unused]]
+name = "citationberg"
+version = "0.7.0"
+source = "git+https://github.com/typst/citationberg?rev=06a591e2f237d25e1dfdedac3f3d1494c496c52d#06a591e2f237d25e1dfdedac3f3d1494c496c52d"
 
 [[patch.unused]]
 name = "gpui-pre"
@@ -212,5 +225,13 @@ version = "0.12.9"
 source = "git+https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1#1676826d9d49b90f4d7b6808b69924f58796f6f1"
 
 [[patch.unused]]
-name = "quickjs-jit-runtime"
-version = "0.12.11"
+name = "symphonia-codec-vorbis"
+version = "0.6.1"
+
+[[patch.unused]]
+name = "mitex-spec"
+version = "0.2.7"
+
+[[patch.unused]]
+name = "mitex-spec-gen"
+version = "0.2.7"

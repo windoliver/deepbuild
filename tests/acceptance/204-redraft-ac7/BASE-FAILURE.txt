@@ -1,0 +1,63 @@
+#204 AC7 blind redraft on the base, 4a0910cf4 ("design(#204): the osc's waves, the shaper's curves and the crush's
+step, written out as laws"), Nov 13 2026.
+macOS 27.2 arm64, Node v24.22.2, cargo 1.99.1: npm ci; the leased `cargo build --locked --bin deep-show`; then
+CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node node_modules/vitest/vitest.mjs run --root tests/acceptance/204-redraft-ac7 --no-file-parallelism --testTimeout=3600000
+One run. Every test fails, each because the base has no synth: its mix refuses the synth strip (`bad_media`,
+`strip engine: src.asset`), and it doesn't know the planted name (`bad_input`). The checkout's absolute path is
+written <checkout>; vitest's diffs and code frames are trimmed.
+
+---- Summary
+ ❯ export.test.ts (3 tests | 3 failed) 3414ms
+   ❯ AC7 #204.4e815a43 an export of the engine fixture holds its loudness profile, and its PCM hash equals the live render's over the same span (2)
+     × AC7 #204.4e815a43 the engine film exported with no loudness profile named applies no gain, and its PCM over [0, 6 s) hashes equal to what the live transport hands the device gate over [0, 6 s), frame span by frame span and whole 2014ms
+     × AC7 #204.4e815a43 the engine film exported at r128 holds r128 on its receipt, on its receipt's delivery and by the loudness bake of its decoded MP4, and its PCM is the live render's at the one static gain the receipt names 1ms
+   ❯ AC7 #204.4e815a43 a planted export that renders the synth with another block size (1)
+     × AC7 #204.4e815a43 a planted export that renders the synth with 64-sample blocks while the live render keeps 128 (export_synth_block_64) changes the hash and fails, naming the first block 92ms
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Duration  3.72s
+
+---- Failed Tests 3
+
+ FAIL  export.test.ts > … > the engine film exported with no loudness profile named applies no gain, and its PCM over [0, 6 s) hashes equal to what the live transport hands the device gate …
+AssertionError: your press of Play plays the engine film: {"code":"bad_media","what":"strip engine: src.asset","core":"core@0.0.0","set_digest":"9ee47c18c9c5ddb86e16e4382ebb19c99ee171bc9a99541907ed977c675db91b"}: expected undefined to be true // Object.is equality
+ ❯ liveRun export.test.ts:63:105
+ ❯ cleanLive export.test.ts:81:31
+
+ FAIL  export.test.ts > … > the engine film exported at r128 holds r128 on its receipt, on its receipt's delivery and by the loudness bake of its decoded MP4 …
+AssertionError: your press of Play plays the engine film: {"code":"bad_media","what":"strip engine: src.asset", …}: expected undefined to be true // Object.is equality
+ ❯ liveRun export.test.ts:63:105
+ ❯ cleanLive export.test.ts:81:31
+ (the live run, made once for the file, is the first thing both tests read; its failure is kept and raised again)
+
+ FAIL  export.test.ts > … > a planted export that renders the synth with 64-sample blocks while the live render keeps 128 (export_synth_block_64) …
+AssertionError: your click in the engine film's panel (planted export_synth_block_64): deep-show run answers the scenario ok; got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ ❯ runShow helpers.ts:162:88
+ ❯ Driver.step helpers.ts:227:21
+ ❯ liveRun export.test.ts:60:21
+
+---- What the base answers behind those failures
+One `deep-show run` of the export run's first calls (present the engine film, `packs`, the export with no profile
+named), outside vitest, replies trimmed:
+
+{"notices":[{"code":"pack_missing","severity":"notice","path":"packs/0","actual":{"pack":"acme/cars","version":"1.0.0"},"what":"pack `acme/cars` at version 1.0.0 is not in this build: its instances are kept as written and skipped when drawing, never drawn with another version", …}],"rev":1,"issues":[],"created":["back","cam","car","dial","needle","speed"],"outcome":"presented", …}
+{"packs":[{"pack":"acme/cars","version":"1.0.0","state":"refused","checks":1,"issues":[{"check":"document.validate","code":"unknown_field","severity":"error","path":"presets","actual":{"engine@1":{…}},"what":"not a field of a pack in this slice","fix":"Remove the field, or require the kind's minor that defines it."}], …}]}
+{"code":"bad_media","what":"strip engine: src.asset","outcome":"refused", …}
+
+So the base presents the film (with a pack_missing notice), refuses the pack because no module reads `presets`, and
+its export, like its live transport, refuses the strip whose source is a synth.
+
+---- The suite's own machinery, checked at the base (debug run, not committed)
+To show the tests fail only for want of the synth, one run swapped the strip `engine` for an asset strip
+(`src: {asset}`, `in: 0`, `out: 5.5s`) playing a mono float WAV of the same sweep, 0.25 × sin 2π∫(60 + 4 × speed) dt
+computed in f64 at 48 kHz, with no pack named. Result on the base:
+   ✓ the engine film exported with no loudness profile named … hashes equal to what the live transport hands the device gate …
+   ✓ the engine film exported at r128 holds r128 … and its PCM is the live render's at the one static gain the receipt names
+   × the planted test: `bad_input` (the planted name is unknown), as above
+So the export, the decode worker's read-back against the receipt's per-frame hashes, the live render through `handed`,
+the r128 readings on the receipt, its delivery and the loudness bake, the one-gain comparison within 1e-6 and the
+engine's pitch and level guard all hold on the base's own mix. A second debug run fed the hash check a copy of the
+live PCM with 0.001 added at sample 100,005 of the right channel; it failed with
+"block 781: the export's PCM first differs from the live render's at sample 100,005 (2.083438 s), in block 781's
+samples [99,968, 100,096); …" and "1 of the receipt's 180 PCM hashes differ from the live render's frame spans, the
+first frame 62", so the check names the block that holds the first differing sample.

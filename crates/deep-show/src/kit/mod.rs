@@ -25,7 +25,7 @@ mod fixtures;
 mod fuzz;
 pub mod goldens;
 mod gpu;
-mod instance;
+pub(crate) mod instance;
 mod interface;
 pub mod ledger;
 pub mod manifest;
@@ -34,6 +34,7 @@ pub mod modules;
 mod order;
 mod repair;
 mod time_order;
+pub mod trial;
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -182,7 +183,12 @@ impl KitCall {
             patch_seed: optional(c.get("patch_seed"), Value::as_u64)?,
             replay: path("replay")?,
             // The committed migration corpus, unless the call names another folder.
-            corpus: path("corpus")?.or_else(|| Some(PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/kit-corpus")))),
+            corpus: path("corpus")?.or_else(|| {
+                Some(PathBuf::from(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/kit-corpus"
+                )))
+            }),
             ledger: path("ledger")?,
             registries: list("registries")?,
         })
@@ -506,6 +512,7 @@ impl<'a> Hub<'a> {
             "catalog" => catalog::run(self, ctx),
             "migration" => migration::run(self, ctx),
             "bit" => interface::bit(self, ctx),
+            "behavior" if ctx.module == "physics" => crate::physics::kit::behavior(ctx.module),
             "behavior" => interface::behavior(self, ctx),
             REGISTRY_PART => self.registries_part(ctx.module),
             SANDBOX_PART => sandbox_part(ctx.module),
@@ -592,7 +599,9 @@ fn sandbox_part(module: &str) -> Option<PartRun> {
     let cases = kit["cases"].as_array().cloned().unwrap_or_default();
     let mut run = PartRun::new(cases.len() as u64);
     for c in cases {
-        let Value::Object(mut fields) = c else { continue };
+        let Value::Object(mut fields) = c else {
+            continue;
+        };
         let verdict = match fields.remove("verdict").as_ref().and_then(Value::as_str) {
             Some("PASS") => Verdict::Pass,
             _ => Verdict::Fail,

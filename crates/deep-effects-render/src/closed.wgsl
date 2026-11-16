@@ -566,6 +566,12 @@ fn rate_slot(e: u32) -> Birth {
         else { dt = 2.0 * need / (tf(p + 2u) + sqrt(max(tf(p + 2u) * tf(p + 2u) + 2.0 * tf(p + 3u) * need, 0.0))); }
         out.age = uf(0u, 0u) - (tf(p) + dt);
     }
+    // #451: a world-space emitter's particle is born where its anchor was at its bucket.
+    if (uu(30u, 3u) != 0u && uu(30u, 1u) > 0u) {
+        let born = uf(0u, 0u) - out.age;
+        let k = min(u32(max(floor(born / uf(30u, 2u) + 1e-6), 0.0)), uu(30u, 1u) - 1u);
+        out.at = tv3(uu(30u, 0u) + 3u * k);
+    }
     out.h = hash3(uu(0u, 3u), e, gen);
     out.ok = true;
     return out;
@@ -576,7 +582,8 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let e = gid.x + uu(0u, 1u);
     let count = uu(0u, 2u);
     if (e >= count) { return; }
-    let base = e * 8u;
+    // #450: a ribbon's row j lands j × count rows on (word 29.1).
+    let base = (e + uu(29u, 1u)) * 8u;
     let t = uf(0u, 0u);
     var b: Birth;
     if (uu(20u, 3u) != 0u) { b = burst_slot(e, t); } else { b = rate_slot(e); }
@@ -587,8 +594,10 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     if (!b.ok) { return; }
     let h = b.h;
     let life = mix(uf(2u, 1u), uf(2u, 2u), draw(h, 1u));
-    let age = b.age;
-    if (age >= life) { return; }
+    if (b.age >= life) { return; }
+    // #450: a ribbon's row evaluates the particle back along its length (word 29.0), never
+    // before its birth.
+    let age = max(b.age - uf(29u, 0u), 0.0);
     let r5 = draw(h, 5u);
     let r6 = draw(h, 6u);
     let r7 = draw(h, 7u);
@@ -605,7 +614,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     var push = b.push;
     if (shape == 8u) {
         tri = surf_pick(h);
-        let born = t - age;
+        let born = t - b.age;
         birth = surf_point(tri, sw, born);
         push = surf_normal(tri, born) * uf(21u, 0u);
         var w0 = born - uf(28u, 0u);
@@ -644,6 +653,43 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
         let c = curve_at((s0 + uf(22u, 3u) * age) / l);
         pos = c[0];
         vel = c[1] * uf(22u, 3u);
+    } else if (motion == 4u) {
+        // #451: along many curves: one picked by hash or weight, by arc length at a seeded speed,
+        // with a seeded sideways offset (particles/flows.rs).
+        let n = uu(31u, 1u);
+        if (n == 0u) { return; }
+        let base = uu(31u, 0u);
+        let u12 = draw(h, 12u);
+        var c = n - 1u;
+        for (var k = 0u; k < n; k++) { if (u12 < tf(base + 4u * k + 3u)) { c = k; break; } }
+        let head = base + 4u * c;
+        let at = tab[head];
+        let np = tab[head + 1u];
+        let speed = mix(uf(22u, 3u), uf(31u, 2u), draw(h, 13u));
+        let off = uf(31u, 3u) * (2.0 * draw(h, 14u) - 1.0);
+        let s = clamp(speed * age, 0.0, tf(head + 2u));
+        var p = tv3(at);
+        var tan = vec3<f32>(0.0);
+        if (np >= 2u) {
+            var j = 1u;
+            while (j < np - 1u && tf(at + 4u * j + 3u) <= s) { j++; }
+            let a = tv3(at + 4u * (j - 1u));
+            let d = tv3(at + 4u * j) - a;
+            let l = tf(at + 4u * j + 3u) - tf(at + 4u * (j - 1u) + 3u);
+            if (l > 0.0) {
+                p = a + d * clamp((s - tf(at + 4u * (j - 1u) + 3u)) / l, 0.0, 1.0);
+                tan = d / l;
+            } else { p = a; }
+        }
+        if (off != 0.0) {
+            var side = vec3<f32>(1.0, 0.0, 0.0);
+            let hz = vec3<f32>(-tan.z, 0.0, tan.x);
+            if (tan.z == 0.0) { side = vec3<f32>(-tan.y, tan.x, 0.0); }
+            else if (length(hz) > 0.0) { side = normalize(hz); }
+            p += side * off;
+        }
+        pos = p;
+        vel = tan * speed;
     } else if (motion == 2u) {
         let axis = uv3(23u);
         var k = vec3<f32>(0.0);

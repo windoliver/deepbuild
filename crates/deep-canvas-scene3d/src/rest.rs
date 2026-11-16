@@ -534,7 +534,7 @@ mod tests {
     fn a_sunk_item_backs_out_and_one_alongside_a_wall_drops_past_it() {
         let floor = cube([0.0, -0.5, 0.0], [5.0, 0.5, 5.0]);
         let sunk_box = [cube([0.0, 0.2, 0.0], [0.25, 0.25, 0.25])];
-        let s = cast(&sunk_box, &[floor.clone()], DOWN, 10.0).unwrap();
+        let s = cast(&sunk_box, std::slice::from_ref(&floor), DOWN, 10.0).unwrap();
         assert!((s + 0.05).abs() < 1e-8, "{s}");
         // A wall the box touches on its side doesn't hold it up: it drops 1 m to the floor.
         let wall = cube([0.75, 1.0, 0.0], [0.5, 1.0, 1.0]);

@@ -34,19 +34,20 @@ import { readdir, readFile, realpath, stat } from 'node:fs/promises';
 import { basename, isAbsolute, join, normalize, sep } from 'node:path';
 import type { Asks, Delivery } from '@deepbuild/asks';
 import type { PaidKind } from '@deepbuild/gate';
-import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
+import { isRecord as isObj, canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { RecordError, ulid, type Connection, type EventInput } from '@deepbuild/record';
 import { solveLine } from '@deepbuild/gate';
 import type { ClaimCheck, DefinitionState, StatePin, Surface } from './gate-runner.js';
-import { ISSUE_LINK, liveFetch, readIssue, recordedFetch, type Reading } from './github-source.js';
+import { ISSUE_LINK, liveFetch, readIssue, recordedFetch } from './github-source.js';
 import { headOf } from './session-facts.js';
 import type { WorkspaceService, WorkspacesProvider } from './workspaces-port.js';
 import { derivedId, type Plant } from './wire.js';
 
 type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 const sql = (s: string) => s.replace(/'/g, "''");
 const letters = (s: string) => s.replace(/[^0-9A-Za-z]/g, '');
+/** One read, including credentials and every page, fits inside the prompt's 2 s context hold. */
+const ITEM_READ_MS = 1000;
 
 // ---- Which prompts ask for a change.
 
@@ -189,7 +190,7 @@ interface AskTaskOptions {
   github?: string | undefined;
   forge?: string;
   /** Your `gh` login's token for the GitHub source, if any. */
-  token?(): Promise<string | undefined>;
+  token?(signal: AbortSignal): Promise<string | undefined>;
   append(connection: Connection, input: EventInput): Promise<void>;
   /** The core's connection for a session's events. */
   connection(session: string, agent: string): Connection;
@@ -258,10 +259,20 @@ export class AskTasks {
     if (item) return { ...item, readings };
     const link = ISSUE_LINK.exec(text);
     if (!link) return undefined;
-    const fetch = this.o.github ? recordedFetch(this.o.github) : liveFetch(this.o.forge ?? 'https://api.github.com', await this.o.token?.());
-    const read: Reading[] | undefined = await readIssue(fetch, link[1]!, link[2]!, Number(link[3]), this.o.plant).catch(() => undefined);
-    if (!read?.length) return undefined;
-    return { ...read[0]!, readings: read };
+    const signal = AbortSignal.timeout(ITEM_READ_MS);
+    try {
+      const fetch = this.o.github ? recordedFetch(this.o.github) : liveFetch(this.o.forge ?? 'https://api.github.com', await this.o.token?.(signal), signal);
+      const read = await readIssue(async (path, page) => {
+        signal.throwIfAborted();
+        const answer = await fetch(path, page);
+        // A timeout anywhere discards the whole reading, not partial criteria or membership.
+        signal.throwIfAborted();
+        return answer;
+      }, link[1]!, link[2]!, Number(link[3]), this.o.plant);
+      return read?.length ? { ...read[0]!, readings: read } : undefined;
+    } catch {
+      return undefined;
+    }
   }
 
   /** A work item by its ID among the test work source's readings (#66), with every reading on it; only tests set DEEP_HUB_TEST_WORK. */
@@ -273,6 +284,10 @@ export class AskTasks {
 
   /** Each session's definitions still being locked. */
   private readonly locking = new Map<string, Promise<void>>();
+  /** Shutdown drains task initialization too: no workspace git child may outlive the record it writes. */
+  async settled(): Promise<void> {
+    while (this.locking.size) await Promise.all(this.locking.values());
+  }
   /** The task a prompt opened: task.created under the thread, then its handed definition locked, off the hook's path. */
   async opened(t: { session: string; agent: string; cwd: string; thread: string; task_ref: string; text: string; prompt: string; at: number; item?: WorkItem }): Promise<void> {
     // A work item's task is opened once, whichever prompt names it again.

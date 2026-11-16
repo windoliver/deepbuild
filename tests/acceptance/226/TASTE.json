@@ -1,0 +1,17 @@
+{
+  "issue": 226,
+  "criterion": "#226.6f3a3161",
+  "verdict": "looks_right",
+  "who": "Claude, on the owner's delegation in the approved plan for #226 (the owner may overrule)",
+  "when": "2026-11-13T15:31:40-08:00",
+  "screenshots": {
+    "axes-az000.png": "0891b35785cd5c34e296a3319fad8dfd955306a8e3467e2f1a83575b5166ee83",
+    "axes-az090.png": "92b6aca1caa6cae2204f750d14b8530bf0344fd42c722357daf1db1be6cffa40",
+    "axes-az180.png": "b3492d1112bd8f402c3dbb7f47e7da498cd4e9b109c0176ab825787a55090a0b",
+    "axes-az270.png": "f65236154dd0848ebbb6feec798ef5d5ad1db1e7cc3f36d2d08a312c872580a4",
+    "tick-entering.png": "f35f139bfe6ae22bb071a25b1c8f5f50ea399492a6ee513ad912cfc0dcf8a1c0",
+    "orbit-360.apng": "49e2051d5fc67c47befa73922673512c456d70a859b8ceb8717bf58ffef263cf",
+    "domain-change.apng": "2a41ed7c344cd813fca7c2842a2ce74f59dff1357c136a1238e62f7c675c70ae"
+  },
+  "note": "At all four azimuths the three axes, their tips, titles and the xy grid plane sit where the scales put them, and every tick label reads upright and unmirrored, facing the camera (the scene is square, so a 90 degree turn changes only the labels, the point and the plate). The point sits at (2, 3, 1) on the axes. At t = 0.5 s the x domain's entering ticks (-5 and 5) and leaving ones (-4, -2, 2, 4) are drawn half faded and 0 at full ink, as the 2D axis on the same scale fades them. The plate is the suite's stand-in for a surface: its own vertices are read as the axes' numbers, so its flat (x, 0, z) becomes the math plane y = 0, a vertical wall, and as a plate is one-sided by default it shows only from its front (az 180) and is culled from behind. That follows the design's rules; #224's surface, two-sided by default, is the figure's real surface. Labels where the three axes cross at 0 overlap."
+}

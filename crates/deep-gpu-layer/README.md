@@ -14,7 +14,7 @@ The binary `deep-gpu`, the proof surface for the GPU layer (#377): `deep-gpu run
 
 ## What it may import
 
-A proof binary at the top of the stack: deep-gpu, the canvas crates, the render crates, deep-app and deep-replica, each by crate name. No crate depends on it.
+A proof binary at the top of the stack: deep-gpu, the canvas crates, the render crates, deep-app and deep-replica, deep-codecs (the run's decode worker), deep-logic and deep-physics-rapier (a scene's logic items and physics worlds) and deep-text, each by crate name. No crate depends on it.
 
 ## Deviations
 

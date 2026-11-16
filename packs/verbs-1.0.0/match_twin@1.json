@@ -1,0 +1,40 @@
+{
+  "id": "verbs.match_twin",
+  "version": "1.0",
+  "title": "Match, planted twin",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "The planted twin of match: a wrong curve, timing or end state its fixture must catch.",
+  "inputs": {
+    "to": {
+      "type": "ID",
+      "default": "",
+      "about": "the item whose outline it becomes"
+    },
+    "by": {
+      "type": "choice",
+      "options": [
+        "id",
+        "shape"
+      ],
+      "default": "shape",
+      "about": "how parts pair: by their IDs, or by area and centroid"
+    }
+  },
+  "steps": {
+    "morph": {
+      "op": "cue",
+      "params": {
+        "set": {
+          "path": {
+            "of": "to"
+          }
+        },
+        "type": {
+          "path": "path"
+        },
+        "until": 0.5
+      }
+    }
+  }
+}

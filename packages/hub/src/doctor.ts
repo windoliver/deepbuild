@@ -6,7 +6,7 @@ import { execFile } from 'node:child_process';
 import { constants, existsSync, readFileSync, realpathSync, statfsSync } from 'node:fs';
 import { access } from 'node:fs/promises';
 import net from 'node:net';
-import { homedir, tmpdir } from 'node:os';
+import { homedir } from 'node:os';
 import { delimiter, dirname, join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFacts } from '@deepbuild/adapters';
@@ -15,17 +15,18 @@ import { claudeSettings, commands, FORWARDER, installed, readJson, shadowedBy, t
 import { call } from './client.js';
 import { deprecatedCalls, rpcTable } from './contracts.js';
 import { keychain } from './keychain.js';
-import { hubAddress, installedRoot, rootOf } from './paths.js';
+import { hubAddress, installedRoot, rootOf, underTemp } from './paths.js';
 import { activePlant as plant } from './plant.js';
 import { serviceFile } from './service.js';
 import { relationItems } from './setup.js';
 import { describe, unrunnable } from './hook-programs.js';
-import { claudeHomes, denyHolds, homeMods, managedSettings, overrideWords } from './mods.js';
+import { claudeHomes, denyHolds, homeMods, loginPlan, managedSettings, overrideWords } from './mods.js';
+import { probeSignIn } from './sign-in.js';
+import { isRecord as isObj } from '@deepbuild/contracts';
 
 type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 export interface Item { item: string; agent: string; code: string; level: 'ok' | 'warn' | 'fail' | 'skip'; evidence: string; fix: string }
-import { codexHooks, hooksDisabled, installedCodex, modified, readTrust, recordedHome, trustProblems } from './codex-settings.js';
+import { hooksDisabled, installedCodex, modified, readTrust, recordedHome, trustProblems } from './codex-settings.js';
 const OURS = /deep-hook|packages\/cli\/dist\/main\.js/;
 
 /** Runs a program with a 10 s cap; its exit code and output, or null when it couldn't start. */
@@ -202,10 +203,10 @@ function serviceItem(root: string): Item {
   const args = file.endsWith('.plist')
     ? [...(/<key>ProgramArguments<\/key>\s*<array>([\s\S]*?)<\/array>/.exec(text)?.[1] ?? '').matchAll(/<string>([\s\S]*?)<\/string>/g)].map((m) => unxml(m[1]!))
     : [...(/^ExecStart=(.*)$/m.exec(text)?.[1] ?? '').matchAll(/"((?:[^"\\]|\\.)*)"/g)].map((m) => m[1]!.replace(/\\(.)/g, '$1'));
-  const programs = args.filter((a) => a.startsWith('/'));
+  const all = args.filter((a) => a.startsWith('/'));
+  // A service that runs a script through Node is judged by that script, not by where Node is installed.
+  const programs = all.length > 1 && /\/node$/.test(all[0]!) ? all.slice(1) : all;
   const versions = join(root, 'versions') + sep;
-  const real = (p: string) => { try { return realpathSync(p); } catch { return p; } };
-  const temps = [tmpdir(), process.env.TMPDIR ?? '', '/tmp', '/private/tmp', '/var/folders', '/private/var/folders'].filter(Boolean).flatMap((t) => [t, real(t)]).map((t) => (t.endsWith(sep) ? t : t + sep));
   const where = (program: string): string | undefined => {
     if (program.startsWith(versions)) return undefined;
     // A worktree's .git is a file naming its folder under the main checkout's; a checkout's is a folder.
@@ -213,7 +214,7 @@ function serviceItem(root: string): Item {
       const git = join(dir, '.git');
       if (existsSync(git)) return /^gitdir:.*[\\/]worktrees[\\/]/m.test((() => { try { return readFileSync(git, 'utf8'); } catch { return ''; } })()) ? `a git worktree, ${dir}` : `a checkout, ${dir}`;
     }
-    return temps.some((t) => program.startsWith(t) || real(program).startsWith(t)) ? 'a temp folder' : undefined;
+    return underTemp(program) ? 'a temp folder' : undefined;
   };
   for (const program of programs) {
     const found = where(program);
@@ -255,7 +256,7 @@ export function hookItems(env: NodeJS.ProcessEnv, cwd: string): Item[] {
     const gone = unrunnable(root).filter((u) => u.agent === 'codex');
     for (const text of changed) add('codex.hooks', agent, 'hooks_modified', 'fail', text, `Put the entry back as ${root}/codex-hooks.json has it, then approve it once in /hooks if Codex asks.`);
     for (const u of changed.length ? [] : gone) add('codex.hooks', agent, 'hook_program_missing', 'fail', `${describe(u)}, so those hooks can't run`, 'Run `deep setup`, which builds deep-hook and points the entries at it.');
-    if (!changed.length && !gone.length) add('codex.hooks', agent, 'healthy', 'ok', `DeepBuild's entries are in ${codexHooks()} as setup wrote them`, 'Nothing to do.');
+    if (!changed.length && !gone.length) add('codex.hooks', agent, 'healthy', 'ok', `DeepBuild's entries are in ${join(recordedHome(root), 'hooks.json')} as setup wrote them`, 'Nothing to do.');
   }
   // Trust is Codex's to say, by its own hook list, as the hub read it at a Codex session's start: doctor starts no Codex.
   const ours = readTrust(root);
@@ -274,8 +275,8 @@ async function claudeItems(claude: string | undefined, loginPath: string | undef
     add('claude.binary', agent, 'binary_missing', 'fail', 'no claude on your PATH', 'Install Claude Code, or put it on your PATH.');
     return;
   }
-  const [version, auth, token, jobs] = await Promise.all([
-    ran(claude, ['--version']), ran(claude, ['auth', 'status']), tokenExpiry(env), loginPath === undefined ? undefined : which('claude', loginPath),
+  const [version, signedIn, token, jobs] = await Promise.all([
+    ran(claude, ['--version']), probeSignIn(agent, claude), tokenExpiry(env), loginPath === undefined ? undefined : which('claude', loginPath),
   ]);
   const v = /(\d+\.\d+\.\d+[\w.-]*)/.exec(version?.out ?? '')?.[1];
   if (!v) add('claude.binary', agent, 'binary_missing', 'fail', `${claude} --version printed no version`, 'Reinstall Claude Code.');
@@ -286,10 +287,9 @@ async function claudeItems(claude: string | undefined, loginPath: string | undef
     if (same) add('claude.jobs_binary', agent, 'healthy', 'ok', `your sessions and DeepBuild's jobs both run ${claude}`, 'Nothing to do.');
     else add('claude.jobs_binary', agent, 'binary_differs', 'warn', `your sessions run ${claude}, and DeepBuild's jobs, started with your login shell's PATH, would run ${jobs}`, 'Remove one install, or put the one you use first on your login shell\'s PATH, then run `deep setup` to record it again.');
   } else if (loginPath !== undefined) add('claude.jobs_binary', agent, 'binary_missing', 'warn', `DeepBuild's jobs would find no claude on your login shell's PATH (${loginPath})`, 'Put claude on your login shell\'s PATH, then run `deep setup`.');
-  let signed: Obj | undefined;
-  try { signed = JSON.parse(auth?.out ?? '') as Obj; } catch { signed = undefined; }
-  if (signed?.loggedIn === true) add('claude.sign_in', agent, 'healthy', 'ok', `signed in by ${String(signed.authMethod)}${signed.subscriptionType ? `, plan ${String(signed.subscriptionType)}` : ''}`, 'Nothing to do.');
-  else add('claude.sign_in', agent, 'signed_out', 'fail', `claude auth status says you aren't signed in (exit ${auth?.code ?? 'none'})`, 'Run claude and sign in with /login.');
+  // The one probe (#1349): its output is never kept, so this says only what it read.
+  if (signedIn === 'signed_in') add('claude.sign_in', agent, 'healthy', 'ok', 'claude auth status reads signed in', 'Nothing to do.');
+  else add('claude.sign_in', agent, 'signed_out', 'fail', signedIn === 'signed_out' ? "claude auth status says you aren't signed in" : "claude auth status couldn't be read", 'Run claude and sign in with /login.');
   // The planted wrong program says nothing of the token's lifetime.
   if (plant() === 'doctor-hides-token') { /* no item */ } else if (token === undefined) add('claude.token', agent, 'not_checked', 'skip', 'no sign-in token lifetime to read: none in the Keychain or ~/.claude/.credentials.json', 'Sign in to Claude Code; a run checks the token again before it starts.');
   else {
@@ -299,7 +299,7 @@ async function claudeItems(claude: string | undefined, loginPath: string | undef
     else add('claude.token', agent, 'healthy', 'ok', `your sign-in token expires at ${when}`, 'Nothing to do; a run planned past then won\'t start, saying so.');
   }
   billing(agent, 'Claude Code', env, add);
-  await modItems(claude, env, signed?.loggedIn === true ? signed.subscriptionType : undefined, add);
+  await modItems(claude, env, add);
   if (env.CLAUDECODE) add('claude.nesting', agent, 'nested_session', 'warn', 'deep doctor runs inside a Claude Code session (CLAUDECODE is set), so what it reads is that session\'s environment', 'Run deep doctor from your own terminal.');
   if (!prompt && plant() !== 'prompt-without-flag') {
     // The planted wrong program shows the prompt it didn't send as ok.
@@ -318,11 +318,11 @@ async function claudeItems(claude: string | undefined, loginPath: string | undef
  * each that can approve a call past a PreToolUse deny or submit prompts, unless the setup holds the deny; OK
  * when none can; not checked when the home's plugins can't be read.
  */
-async function modItems(claude: string, env: NodeJS.ProcessEnv, plan: unknown, add: (...a: [string, string, string, Item['level'], string, string]) => void): Promise<void> {
+async function modItems(claude: string, env: NodeJS.ProcessEnv, add: (...a: [string, string, string, Item['level'], string, string]) => void): Promise<void> {
   const agent = 'claude-code';
   for (const [i, home] of claudeHomes(env).entries()) {
-    // The sign-in already read is the first home's, the one `claude auth status` reads with this environment.
-    const held = await denyHolds({ ...env, CLAUDE_CONFIG_DIR: home }, claude, i === 0 ? { plan } : undefined);
+    // The first home's plan is the one `claude auth status` reads with this environment.
+    const held = await denyHolds({ ...env, CLAUDE_CONFIG_DIR: home }, claude, i === 0 ? () => loginPlan(claude, env) : undefined);
     const read = await homeMods(home, claude, env);
     if ('unread' in read) {
       add('claude.mods', agent, 'not_checked', 'skip', `the mods ${home} loads couldn't be read: ${read.unread}`, `Run claude plugin validate on each plugin in ${home}/plugins yourself, and remove or fix the one it can't read.`);
@@ -340,14 +340,14 @@ async function codexItems(codex: string | undefined, env: NodeJS.ProcessEnv, add
   const agent = 'codex';
   for (const i of hookItems(env, '').filter((h) => h.agent === agent)) add(i.item, agent, i.code, i.level, i.evidence, i.fix);
   if (!codex) return;
-  const [version, login] = await Promise.all([ran(codex, ['--version']), ran(codex, ['login', 'status'])]);
+  const [version, signedIn] = await Promise.all([ran(codex, ['--version']), probeSignIn(agent, codex)]);
   const v = /(\d+\.\d+\.\d+[\w.-]*)/.exec(version?.out ?? '')?.[1];
   const range = facts(agent).versions;
   if (!v) add('codex.binary', agent, 'binary_missing', 'fail', `${codex} --version printed no version`, 'Reinstall Codex.');
   else if (!covered(agent, v)) add('codex.binary', agent, 'version_uncovered', 'fail', `${codex} is Codex ${v}, outside what its facts cover (${range[0]} to ${range[range.length - 1]})`, 'Install a version the facts cover, or update DeepBuild.');
   else add('codex.binary', agent, 'healthy', 'ok', `${codex} is Codex ${v}, which its facts cover`, 'Nothing to do.');
-  if (login?.code === 0) add('codex.sign_in', agent, 'healthy', 'ok', 'codex login status exits 0: signed in', 'Nothing to do.');
-  else add('codex.sign_in', agent, 'signed_out', 'fail', `codex login status exits ${login?.code ?? 'none'}: not signed in`, 'Run codex login.');
+  if (signedIn === 'signed_in') add('codex.sign_in', agent, 'healthy', 'ok', 'codex login status exits 0: signed in', 'Nothing to do.');
+  else add('codex.sign_in', agent, 'signed_out', 'fail', signedIn === 'signed_out' ? 'codex login status exits non-zero: not signed in' : "codex login status couldn't be read: not signed in", 'Run codex login.');
   billing(agent, 'Codex', env, add);
 }
 /** A billing key set where your sessions start makes them bill an API account; never shows its value. */

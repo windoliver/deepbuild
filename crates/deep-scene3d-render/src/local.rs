@@ -175,7 +175,13 @@ pub fn bytes(scene: &Scene) -> u64 {
         .iter()
         .filter(|&&(i, _)| scene.lights[i].kind != LightKind::Sun)
         .take(SLOTS)
-        .map(|&(i, _)| if shadow::local_map(&scene.lights[i]).cube { 6 } else { 1 })
+        .map(|&(i, _)| {
+            if shadow::local_map(&scene.lights[i]).cube {
+                6
+            } else {
+                1
+            }
+        })
         .sum();
     let texel = u64::from(FORMAT.block_copy_size(None).unwrap_or(4));
     u64::from(scene.shadowing.local_map).pow(2) * layers * texel
@@ -336,6 +342,13 @@ impl Locals {
     /// Forgets what each slot's layers were made from, so the next frame draws every map.
     pub fn forget(&mut self) {
         self.keys = [None; SLOTS];
+    }
+
+    /// Lets go of the maps, so the next frame that casts makes them again; whether it held any.
+    pub fn rest(&mut self) -> bool {
+        self.forget();
+        self.layers = 0;
+        self.texture.take().is_some()
     }
 
     /// The map a slot's layer holds, for a test against a clean render.

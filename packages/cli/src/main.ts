@@ -11,7 +11,10 @@ import type { Verdict } from '@deepbuild/conformance';
 // or not at all, and fails later in ways that name neither. Every module that needs it loads lazily, below.
 const engines = (JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { engines: { node: string } }).engines.node;
 const needed = engines.replace(/^>=\s*/, '');
-if (process.versions.node.localeCompare(needed, undefined, { numeric: true }) < 0) {
+const numbers = (version: string) => version.split('.', 3).map((part) => Number.parseInt(part, 10) || 0);
+const [found, wanted] = [numbers(process.versions.node), numbers(needed)];
+const apart = [0, 1, 2].find((at) => found[at] !== wanted[at]);
+if (apart !== undefined && (found[apart] ?? 0) < (wanted[apart] ?? 0)) {
   process.stderr.write(`deep needs Node ${needed} or newer; this is Node ${process.versions.node} at ${process.execPath}. Install a newer Node, or put one first on PATH.\n`);
   process.exit(2);
 }
@@ -184,14 +187,15 @@ const usage = [
   'deep explain <recorded session folder> [--json]',
   'deep run --result <run.finished event file>',
   'deep run follow <run>   a run\'s output from its start, then as it comes, until it ends',
-  'deep host run <ask> | changes <host> | list | facts <host> [--refresh]   run a root plan you said yes to, in this terminal; list a host\'s changes with their undo; or the hosts your SSH config names, and one\'s facts',
+  'deep host run <ask> | changes <host> | remove <host> | list | facts <host> [--refresh]   run a root plan you said yes to, in this terminal; list a host\'s changes with their undo; undo them, yours as you and root\'s as one root plan; or the hosts your SSH config names, and one\'s facts',
   'deep hub run [--safe] | start | status [--root <folder>]',
   'deep hub stop [--root <folder>]',
   'deep hub use --root <folder>   this worktree\'s sessions to a dev hub, once the OS confirms you',
   'deep fix <id>   work from an item at a source you switched on, such as LIN-42',
   'deep land [judge] --repo <checkout> [--json]   judge each open PR on its merge with main, or land the PASSes one at a time in the order they came',
+  'deep work "<scope>" [--repo <checkout>] [--json]   one approval for a run over the issues your words name, or a standing run over a rule on labels, milestone or epic that new issues join; show prints each one\'s state word and what it waits for, pause stops new starts',
   'deep work --repo <checkout> --issues <n,...> --once [--json]   one pass of a run over a fixed set: an earlier PR joins as its issue\'s attempt',
-  'deep workspace new <topic> [--folder <path>] | move <id> <folder> | revert <id> <commit> | diff <id> | drift <id>   a home for work outside a repo',
+  'deep workspace new <topic> [--folder <path>] | task <id> <title> --criterion <text> [--blocked-by <n>] | move <id> <folder | repo checkout> | revert <id> [<commit>] | diff <id> | drift <id>   a home for work outside a repo, its tasks in the record',
   'deep setup [--undo]  install DeepBuild for Claude Code beside your settings, or remove it all once the OS confirms you',
   'deep mcp [actions]   the MCP server an agent starts, on stdio; actions serves deep-actions, the plug-ins\' actions',
   'deep env up | down [--root <folder>] [--json]   this worktree\'s stack, through the hub',
@@ -407,6 +411,10 @@ if (help) {
 } else if (args[0] === 'run') {
   console.error('Usage: deep run --result <run.finished event file>\n       deep run follow <run>');
   process.exitCode = 2;
+} else if (/\s/.test(args[0]!.trim())) {
+  // Your own words, with any file or link after them (#1342): one input, as the app's box takes it.
+  const { wordsCommand } = await import('@deepbuild/hub');
+  process.exitCode = await wordsCommand(args);
 } else {
   unsupported(args[0]!);
 }

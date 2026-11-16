@@ -1,0 +1,17 @@
+{
+  "issue": 462,
+  "criterion": "#462.28d871fe",
+  "verdict": "looks_right",
+  "who": "Claude, on the owner's delegation in session (\"validate screnshot and clsoe any gaps?\")",
+  "when": "2026-11-14T02:02:45+00:00",
+  "screenshots": {
+    "region-edge.png": "cdc6ae86074d3971fe18be59a00f872d94e10d3a40ccf39d60e4b5ac7b5d52af",
+    "strokes.png": "2abbdac08fbae902efcd0c8b56098140998114b1a529b148c93d8e4e28e8c481",
+    "status-legend.png": "76de48540ef1dd1d806445989558ac3f75be27d7b34023c9dafdfeab0ae790f6"
+  },
+  "recordings": {
+    "orbit.apng": "0519509657ffbb10de6b355b23707b771406ced5de4ce05d406dc3d6e717457b",
+    "motifs.apng": "51e18f5c40a618dd62ec5ebc4fc8d1b3285b9871dd5595cb039a036b71bd71d2"
+  },
+  "note": "Checked each still at 4x crops and every frame of both recordings, the last ones included. The first look found strokes hanging past each box's silhouette onto the ground in the stills and all 46 orbit frames (their quads passed a depth test against the far background), and brush strokes drawn as near-round blobs; strokes now paint only where the scene's depth holds their own surface, and a wide size range draws longer strokes. On these bytes: the torn edge splits the slab between looks a and b with a soft, antialiased tear; the brush strokes stay on every face through the orbit, clipped at silhouettes, darker on shaded faces, two layers overlapping; both status marks draw the document's fail and running colors with their glyphs, and the legend lists exactly those two; the reeds sway in alternate phase, the title holds still from 1.5 s to 3 s and drifts before and after. The edge doesn't show on the background because the fixture's two looks share a ground color; that is the fixture's, not the edge's. Re-recorded after the regions moved to one composite pass on the device: region-edge.png and status-legend.png differ from the first call's only in the 12-px column the torn edge crosses (the tear's noise now evaluated on the GPU); checked at 4x, the tear is the same kind, antialiased, and the marks, the legend and both looks are unchanged. The faint line down the ground at that column in status-legend.png is the region's boundary over the ground, where looks a and b (filmic and AgX) draw near-black a few codes apart."
+}

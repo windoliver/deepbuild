@@ -49,6 +49,9 @@ test-glyph-label = ["dep:deep-canvas-test-modules"]
 # stricter rule; nothing else changes.
 test-hold-min-2s = []
 test-leave-out-logic = []
+# #538: the planted data module whose operator reads a logic array itself, not through the core's
+# column view; built with test-leave-out-logic, the seal refuses it.
+test-data-reads-logic-array = []
 # Issue #489: the full set without the data module, so motion@1's digest is compared without it.
 test-leave-out-data = []
 # Issue #1919: the full set without the physics module, whose physics shapes mode answers
@@ -60,17 +63,27 @@ test-physics-shapes-empty = ["test-leave-out-physics"]
 test-leave-out-motion = []
 test-ease-in-motion = []
 test-ease-renumbered = []
+# Issue #225: the planted motion module that fills follow_stream in constraint@1 itself; built
+# with test-leave-out-data, motion@1's digest then differs from the full set's.
+test-follow-stream-in-motion = []
 # Issue #493: the planted layout that registers camera@1 in the scene3d module, not the core.
 test-camera-in-scene3d = []
 # Issue #238: the sandbox module's test builds (the #238 acceptance README: Test features of
 # deep-show): the full set without sandbox; test.mesh, whose kind takes a provider's mesh at check;
 # test.prog, whose registry packs fill with programs; a planted sandbox module that requires logic;
-# and the test implementation sandbox.alt, pinning another wasmtime 49.0 patch.
+# and the test implementation sandbox.alt, pinning another wasmtime release with the fixes (#2324).
 test-leave-out-sandbox = []
 test-mesh-item = ["dep:deep-canvas-test-modules"]
 test-prog-registry = ["dep:deep-canvas-test-modules"]
 test-sandbox-needs-logic = []
 test-sandbox-alt = []
+# Issue #533: the logic module's test builds (the #533 acceptance README: Test features of
+# deep-show): a patch release of the shipped logic implementation in its place, and a planted
+# logic module that requires physics; #1919's `test-leave-out-physics` is the full set without it.
+test-logic-patch = []
+test-logic-needs-physics = []
+# Issue #2324: the planted engine build, whose engine gives one kit fixture another result.
+plant-engine-differs = ["deep-sandbox-wasmtime/plant-engine-differs"]
 # Issue #387: the test canvas modules of the #387 acceptance README. `test-accent`'s planted
 # operator reads the look's accent role from a static, which the canvas lint keeps out of every
 # deep-canvas* crate, so it lives in this binary.
@@ -93,6 +106,9 @@ test-export-guards = ["dep:deep-canvas-test-modules"]
 # kinds with the cue list that plays it (pop_in's default span 0.5 s, or 0.8 s), the ring at
 # fixture digests A and B, and a kind whose one-liner overruns the sheet.
 test-preview = ["dep:deep-canvas-test-modules"]
+# Issue #1802: `test.preview` once it removed its preview kind, with a migration and, planted, without.
+test-preview-removed = ["dep:deep-canvas-test-modules"]
+test-preview-removed-bare = ["dep:deep-canvas-test-modules"]
 test-cue = ["dep:deep-canvas-test-modules"]
 test-cue-span = ["dep:deep-canvas-test-modules"]
 test-ring-a = ["dep:deep-canvas-test-modules"]
@@ -111,6 +127,8 @@ test-tick = ["dep:deep-canvas-test-modules"]
 test-frame-cache = ["dep:deep-canvas-test-modules"]
 # Issue #497: a module stepping at its item's step_rate into a held array.
 test-held = ["dep:deep-canvas-test-modules"]
+# #169: test.latch, whose checkpoint keeps two plays that draw alike apart.
+test-page-latch = ["dep:deep-canvas-test-modules"]
 # Issue #388: test builds that leave look, or text, out of the build set's list; the seal
 # refuses each at startup, naming the module.
 test-leave-out-look = []
@@ -169,6 +187,8 @@ test-look-finish-off = []
 # a layered layout that breaks a tie by registration order, and currentColor drawn in ink.
 test-data-m4-drops-last = []
 test-graph-tie-by-registration = []
+# #1417: a planted graph@1 whose layout declares no cost, which the kit fails.
+test-graph-layout-no-cost = []
 test-vector-currentcolor-ink = []
 test-sim = ["dep:deep-canvas-test-modules"]
 test-sim-a = ["test-sim"]
@@ -178,6 +198,8 @@ test-sim-b-private-renamed = ["test-sim"]
 test-sim-b-public-renamed = ["test-sim"]
 test-sim-b-false-bit = ["test-sim"]
 test-sim-b-off = ["test-sim"]
+# Issue #191: B adding one unit to one value at step 300 of a recorded input track.
+test-sim-b-plus-one = ["test-sim"]
 test-sim-behavior = ["test-sim"]
 test-sim-c = ["test-sim"]
 test-gpu-second-backend = []
@@ -200,8 +222,18 @@ test-scene3d-reads-vector = []
 test-mark = ["dep:deep-canvas-test-modules"]
 # Issue #202: the test canvas module test.weight, an item kind of 0.20 ms of CPU.
 test-weight = ["dep:deep-canvas-test-modules"]
+# Issue #223: the test canvas module test.swirl, a stream table in streams@1 for (−y, x).
+test-swirl = ["dep:deep-canvas-test-modules"]
 # Issue #397: `test.columns`, which fills the core's `column.source@1` with `test.column.big`.
 test-column-source = ["dep:deep-canvas-test-modules"]
+# Issue #522 (tests/acceptance/522): the test canvas module test.launch, whose items fire a world's
+# launch input, writing a step's entries after the input module's, or with -first before them.
+test-launch-module = ["dep:deep-canvas-test-modules"]
+test-launch-module-first = ["dep:deep-canvas-test-modules"]
+# Issue #522's planted physics modules: one whose manifest requires logic, and one whose checkpoints
+# leave out each joint's steps past breaks_at.
+test-physics-needs-logic = []
+test-physics-checkpoint-drops-break-steps = []
 test-mark-dot-9 = ["dep:deep-canvas-test-modules"]
 test-mark-no-planted = ["dep:deep-canvas-test-modules"]
 test-mark-no-since = ["dep:deep-canvas-test-modules"]
@@ -223,6 +255,8 @@ test-rules-shared = ["dep:deep-canvas-test-modules"]
 test-rules-isolated = ["dep:deep-canvas-test-modules"]
 test-registries-load = ["dep:deep-canvas-test-modules"]
 test-leave-out-effects = []
+# Issue #1940: a planted loop module that registers effects.audit itself and so requires effects.
+test-effects-audit-in-loop = []
 # Issue #499: a build without the media module; the test module that probes an asset through the
 # decode worker, and its planted twin that calls through media; the planted media@1 whose reverb
 # checkpoint leaves out its tail.
@@ -247,6 +281,9 @@ test-gpu-output-in-effects = []
 # readings entry hands the column view no changed ranges, and a motion module with one more operator
 # that reads the physics module's occurrence list by its array name.
 test-physics-hands-no-changes = []
+# Issue #213: physics.cast@1 sorting each request's hits by ID before distance, which the service's
+# conformance fixture refuses at the seal.
+test-cast-sorts-by-id = ["deep-physics-rapier/test-cast-sorts-by-id"]
 test-motion-reads-physics-array = []
 
 [dependencies]
@@ -268,6 +305,8 @@ deep-canvas-scene3d = { path = "../deep-canvas-scene3d" }
 # Issue #499: the media module, media@1; the logic module's world, which a live play steps on the
 # transport's clock.
 deep-canvas-media = { path = "../deep-canvas-media" }
+deep-canvas-export = { path = "../deep-canvas-export" }
+deep-lottie-reader = { path = "../deep-lottie-reader" }
 deep-logic = { path = "../deep-logic" }
 # Issue #1918: the physics module, physics@1, and the Rapier backend a scene's worlds bake on.
 deep-canvas-physics = { path = "../deep-canvas-physics" }
@@ -292,8 +331,10 @@ deep-text = { path = "../deep-text" }
 # Issue #402: a terminal's PTY (openpty, login_tty, the window size) and stopping what serve
 # started, by PID; already in the lockfile.
 libc = "0.2"
-image = { version = "0.25", default-features = false, features = ["png"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
+# Issue #542: the planted text control that normalizes its commit to NFC; already in the lockfile.
+unicode-normalization = "0.1"
 sha2 = "0.10"
 # Issue #1897: the u8 pipeline too, so a cross-machine record drawn through it is real and refused.
 vello_cpu ={ version = "0.3", default-features = false, features = ["std", "text", "f32_pipeline", "u8_pipeline"] }

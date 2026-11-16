@@ -133,9 +133,12 @@ fn read_board(
         CLOCK.with(|c| {
             for (op, item, ns) in &c.borrow().1 {
                 let (ns, v, g, k) = match item.as_deref().and_then(|id| items.get(id)) {
+                    // What an operator declares on the item (#1417) is charged apart from its
+                    // terms, so the terms are fitted to the rest.
                     Some(i) => {
                         let n = counts(i);
-                        (*ns as f64, n.vertices, n.glyphs, 1.0)
+                        let declared = startup.sealed.ops[*op].op.cost.map_or(0.0, |c| c(i) * 1e6);
+                        (*ns as f64 - declared, n.vertices, n.glyphs, 1.0)
                     }
                     None => (*ns as f64, all.0, all.1, n_items),
                 };

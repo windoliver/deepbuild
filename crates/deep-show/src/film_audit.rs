@@ -141,6 +141,16 @@ impl Hub<'_> {
     /// `drawn` played through every frame of its span in one rendition, each frame read as
     /// evaluated data. None when it has no frame rate a frame can be cut from.
     fn film_played(&mut self, drawn: &Value, reduced: bool) -> Option<Played> {
+        self.film_played_at(drawn, reduced, None)
+    }
+
+    /// [`Hub::film_played`]; with `only`, just the frame at that clock time (#507).
+    fn film_played_at(
+        &mut self,
+        drawn: &Value,
+        reduced: bool,
+        only: Option<i64>,
+    ) -> Option<Played> {
         let (p, q) = drawn
             .get("transport")
             .and_then(deep_canvas::document::frame_rate_of)
@@ -148,7 +158,11 @@ impl Hub<'_> {
         let frame = deep_canvas::time::frame_length(p, q).ok()?;
         let span = time_of(drawn, drawn.pointer("/transport/span")).unwrap_or(0);
         let start = time_of(drawn, drawn.pointer("/transport/start")).unwrap_or(0);
-        let count = (span / frame).max(1) as usize;
+        // #507: the clock runs on through the path's holds to where the timeline ends.
+        let span = crate::present::path_of(drawn)
+            .clock_end(start + span)
+            .map_or(span, |end| end - start);
+        let (start, count) = only.map_or((start, (span / frame).max(1) as usize), |t| (t, 1));
         let size = [
             drawn["size"][0].as_f64().unwrap_or(1.0),
             drawn["size"][1].as_f64().unwrap_or(1.0),
@@ -176,12 +190,21 @@ impl Hub<'_> {
                     // During a transition the side shown most is the one read, its share fading
                     // its texts.
                     let (k, share) = match &s.mix {
-                        Some(crate::film::Mix::Fade(m) | crate::film::Mix::Dip(m)) => {
+                        Some(crate::film::Mix::Fade(m)) => {
                             if *m >= 0.5 {
                                 (1, *m)
                             } else {
                                 (0, 1.0 - *m)
                             }
+                        }
+                        // #466: a dip shows the side under its color, at the color's
+                        // remaining share.
+                        Some(crate::film::Mix::Dip { weight, under, .. }) => {
+                            let k = usize::from(!matches!(
+                                under,
+                                deep_canvas_motion::shots::Under::Outgoing
+                            ));
+                            (k, 1.0 - *weight)
                         }
                         Some(_) => (s.status, 1.0),
                         None => (0, 1.0),
@@ -251,18 +274,7 @@ impl Hub<'_> {
                             .map(|s| s.text.clone())
                     })
                     .unwrap_or_default();
-                let (mut cjk, mut other) = (0, 0);
-                let mut unrated = None;
-                for g in deep_text::unicode::grapheme_clusters(&text) {
-                    match deep_text::unicode::reading(g) {
-                        Reading::Cjk => cjk += 1,
-                        Reading::Other => other += 1,
-                        Reading::Space => {}
-                        Reading::Unrated(s) => {
-                            unrated.get_or_insert(s);
-                        }
-                    }
-                }
+                let (cjk, other, unrated) = reading_counts(&text);
                 if let Some(script) = unrated {
                     if !blocked.iter().any(|b| b["item"] == json!(item)) {
                         blocked.push(json!({"code": "film.script_unrated", "ids": [item], "item": item,
@@ -287,13 +299,67 @@ impl Hub<'_> {
         (out, blocked)
     }
 
-    /// The film audit on one document for the check input `input`, under the claim's brief.
+    /// #507: how long a hold at clock `t` must last for the text shown there, by the hold rule
+    /// under `input`, in whole frames of flicks.
+    pub(crate) fn hold_need(&mut self, drawn: &Value, input: &Value, t: i64) -> i64 {
+        let hold = Hold::from_input(input, HOLD_FLOOR);
+        let look_min = self
+            .look
+            .sizes
+            .as_ref()
+            .and_then(|s| s.text.values().map(|r| r.size).reduce(f64::min))
+            .unwrap_or(0.0);
+        let readable = Readable::from_input(input, look_min);
+        let cards = title_cards(drawn);
+        let (mut need, mut frame) = (hold.needed(0, 0, false), FLICKS);
+        for (_, reduced) in RENDITIONS {
+            let Some(played) = self.film_played_at(drawn, reduced, Some(t)) else {
+                continue;
+            };
+            frame = played.frame;
+            for (item, seen) in seen_by_item(&played, &readable) {
+                if let Some(s) = seen.first().filter(|s| s.readable && !s.text.is_empty()) {
+                    let (cjk, other, _) = reading_counts(&s.text);
+                    need = need.max(hold.needed(cjk, other, cards.contains(&item)));
+                }
+            }
+        }
+        // To the nearest flick first, so 1.5 + 51 ÷ 15 s is 4.9 s and not a frame more.
+        let flicks = (need * FLICKS as f64).round() as i64;
+        (flicks + frame - 1).div_euclid(frame.max(1)) * frame
+    }
+
+    /// The film audit on one document for the check input `input`, under the claim's brief: on
+    /// each path its waits and branches make (#507), else on the film as it plays.
     pub(crate) fn film_audit(
         &mut self,
         drawn: &Value,
         input: &Value,
         brief: Option<&Value>,
     ) -> Audited {
+        let Some(tracks) = self.audit_tracks(drawn, input) else {
+            return self.film_audit_path(drawn, input, brief);
+        };
+        let mut all = Audited::default();
+        for (k, track) in tracks.iter().enumerate() {
+            let found =
+                self.film_audit_path(&crate::present::with_track_only(drawn, track), input, brief);
+            all.issues.extend(found.issues.into_iter().map(|mut i| {
+                i["path"] = json!(k);
+                i
+            }));
+            all.blocked.extend(found.blocked);
+            for n in found.not_run {
+                if !all.not_run.contains(&n) {
+                    all.not_run.push(n);
+                }
+            }
+        }
+        all
+    }
+
+    /// The film audit on one path of a document.
+    fn film_audit_path(&mut self, drawn: &Value, input: &Value, brief: Option<&Value>) -> Audited {
         let mut a = Audited::default();
         let (holds, blocked) = self.holds(drawn, input);
         a.blocked.extend(blocked);
@@ -664,6 +730,7 @@ impl Hub<'_> {
                         frame,
                         start,
                         analyzed,
+                        reseeded,
                     }) = self.film_luminance(&revision.drawn, reduced)
                     else {
                         failed =
@@ -676,6 +743,19 @@ impl Hub<'_> {
                             "doc": doc, "t": start, "rendition": rendition, "counter": "analyzed", "frames": frames.len(), "analyzed": analyzed,
                             "what": format!("{analyzed} of {} frames were analyzed from their own raster", frames.len()),
                             "fix": "analyze every frame the check judges; a result served to other frames isn't theirs"}));
+                    }
+                    if let Some(t) = reseeded {
+                        let path = if revision.drawn.pointer("/look/asset").is_some()
+                            && self.has_boil(&revision.drawn)
+                        {
+                            "look/time/boil"
+                        } else {
+                            "look"
+                        };
+                        issues.push(json!({"check": audit::FILM_FLICKER, "code": "film.reseed", "severity": "error", "ids": [],
+                            "doc": doc, "t": t, "rendition": rendition, "path": path,
+                            "what": format!("the frame at {:.3} s draws otherwise sought than played: a seed at {path} follows playback, not time and IDs", seconds(t)),
+                            "fix": "seed the boil, paper or fill from quantized time (⌊t × hz⌋, or a cycle of n drawings) and IDs, never from playback"}));
                     }
                     for found in audit::flashes(&frames, per_second, &f, count) {
                         let t = start + found.first as i64 * frame;
@@ -738,6 +818,7 @@ impl Hub<'_> {
                 ok = false;
                 break;
             };
+            let painted = self.boiled(drawn, t, reduced, painted);
             let sides = program
                 .as_deref()
                 .and_then(|p| crate::film::sides(p, drawn, t, reduced));
@@ -760,6 +841,14 @@ impl Hub<'_> {
             );
             analyzed += 1;
         }
+        // #466: the reseed rule: sampled frames drawn again cold draw what played.
+        let times: Vec<i64> = (0..out.len()).map(|n| start + n as i64 * frame).collect();
+        let reseeded = if ok && !once {
+            self.reseeded(drawn, &out, &times, px, reduced)
+                .map(|k| times[k])
+        } else {
+            None
+        };
         if let Some((look, def)) = kept {
             self.look = look;
             self.look_def = def;
@@ -771,6 +860,7 @@ impl Hub<'_> {
             frame,
             start,
             analyzed,
+            reseeded,
         })
     }
 
@@ -889,12 +979,14 @@ struct Lit {
     start: i64,
     /// #1399: the frames analyzed from their own raster.
     analyzed: usize,
+    /// #466: the first sampled frame that draws otherwise sought than played.
+    reseeded: Option<i64>,
 }
 
 impl Hub<'_> {
     /// Sets the hub's look to the one `drawn` names by asset, as a show of it does; the look it
     /// replaced, to put back.
-    fn with_look_of(
+    pub(crate) fn with_look_of(
         &mut self,
         drawn: &Value,
     ) -> Option<(deep_canvas_marks::look::Look, Option<Value>)> {
@@ -1103,6 +1195,41 @@ fn seen_by_item(played: &Played, limits: &Readable) -> BTreeMap<String, Vec<Seen
         }
     }
     out
+}
+
+/// #507: the string each text item draws in `drawing` with any opacity, by item, as the film
+/// audit reads it.
+pub(crate) fn drawn_texts(drawing: &deep_canvas_marks::modules::Drawing) -> Map<String, Value> {
+    let f = frame_of(
+        drawing,
+        Affine::IDENTITY,
+        1.0,
+        &BTreeMap::new(),
+        &mut crate::film_layout::Outlines::new(),
+        &mut None,
+    );
+    f.texts
+        .into_iter()
+        .filter(|t| t.opacity.iter().any(|o| *o > 0.0))
+        .map(|t| (t.item, json!(t.text)))
+        .collect()
+}
+
+/// A text's graphemes read at the CJK rate and at the other rate, and the first script with no
+/// stated rate.
+fn reading_counts(text: &str) -> (usize, usize, Option<String>) {
+    let (mut cjk, mut other, mut unrated) = (0, 0, None);
+    for g in deep_text::unicode::grapheme_clusters(text) {
+        match deep_text::unicode::reading(g) {
+            Reading::Cjk => cjk += 1,
+            Reading::Other => other += 1,
+            Reading::Space => {}
+            Reading::Unrated(s) => {
+                unrated.get_or_insert(s);
+            }
+        }
+    }
+    (cjk, other, unrated)
 }
 
 /// Each text@1 with a copy key and a line limit whose copy in some locale wraps past it, checked

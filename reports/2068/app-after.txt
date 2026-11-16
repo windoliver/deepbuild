@@ -1,0 +1,14 @@
+
+ RUN  v5.0.5 <issue-worktree>
+
+ ↓ packages/hub/test/prompt-items.test.ts > records an issue prompt before a later tool event of the same session while other sessions remain independent
+ ↓ packages/hub/test/prompt-items.test.ts > does not read the forge again for a spooled copy of a prompt whose live read is still pending
+ ↓ packages/hub/test/prompt-items.test.ts > records a prompt whose spooled copy starts replay before its live read joins intake
+ ✓ packages/hub/test/prompt-items.test.ts > keeps issue criteria when an authenticated app note is carried by the prompt 684ms
+ ↓ packages/hub/test/prompt-items.test.ts > returns an issue prompt reply before waiting for the transcript entry that reply allows Claude to write
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 4 skipped (5)
+   Start at  12:36:16
+   Duration  850ms (tests 96%, import 2%, transform 1%, setup 1%)
+

@@ -62,7 +62,10 @@ pub fn only_loaded(c: &deep_canvas_effects::check::Checked, name: &str) -> bool 
     use deep_canvas_effects::graph::{Arg, Step};
     fn reads(steps: &BTreeMap<String, Step>, name: &str) -> bool {
         steps.values().all(|s| {
-            let names = s.args.values().any(|a| matches!(a, Arg::Ref(r, _) if r == name))
+            let names = s
+                .args
+                .values()
+                .any(|a| matches!(a, Arg::Ref(r, _) if r == name))
                 || s.fields.get("tex").and_then(|v| v.as_str()) == Some(name);
             (!names || s.op == "load@1") && s.body.as_ref().is_none_or(|b| reads(&b.steps, name))
         })
@@ -83,6 +86,15 @@ pub struct Runner {
     frame_layout: wgpu::BindGroupLayout,
     input_layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
+}
+
+/// What one pass bound last frame ([`Runner::rebind`]): its frame and inputs uniforms with what
+/// was last written to each, the textures it reads, and its two groups.
+pub struct Bound {
+    uniforms: [wgpu::Buffer; 2],
+    written: [deep_gpu::counted::Written; 2],
+    textures: Vec<wgpu::TextureView>,
+    pub groups: (wgpu::BindGroup, wgpu::BindGroup),
 }
 
 fn entry(
@@ -107,7 +119,11 @@ fn uniform() -> wgpu::BindingType {
 }
 
 impl Runner {
-    pub fn new(device: &deep_gpu::counted::Wgpu, compiled: Compiled, format: wgpu::TextureFormat) -> Runner {
+    pub fn new(
+        device: &deep_gpu::counted::Wgpu,
+        compiled: Compiled,
+        format: wgpu::TextureFormat,
+    ) -> Runner {
         let c = &compiled.checked;
         let stage = match compiled.kind() {
             Kind::Compute => wgpu::ShaderStages::COMPUTE,
@@ -138,7 +154,9 @@ impl Runner {
                 Ty::Tex3(_) => wgpu::TextureSampleType::Float { filterable: false },
                 // An input the operator only loads, never samples, binds unfiltered, so a
                 // full-precision intermediate can feed it (#432).
-                _ => wgpu::TextureSampleType::Float { filterable: !only_loaded(c, name) },
+                _ => wgpu::TextureSampleType::Float {
+                    filterable: !only_loaded(c, name),
+                },
             };
             wgpu::BindingType::Texture {
                 sample_type,
@@ -157,15 +175,19 @@ impl Runner {
         };
         let buffers = (c.storage_inputs.iter().map(|_| storage(true)))
             .chain(c.op.storage.iter().map(|_| storage(false)))
-            .chain(c.op.textures.values().map(|t| wgpu::BindingType::StorageTexture {
-                access: wgpu::StorageTextureAccess::WriteOnly,
-                format: texture_format(&t.format),
-                view_dimension: if t.dim3 {
-                    wgpu::TextureViewDimension::D3
-                } else {
-                    wgpu::TextureViewDimension::D2
-                },
-            }));
+            .chain(
+                c.op.textures
+                    .values()
+                    .map(|t| wgpu::BindingType::StorageTexture {
+                        access: wgpu::StorageTextureAccess::WriteOnly,
+                        format: texture_format(&t.format),
+                        view_dimension: if t.dim3 {
+                            wgpu::TextureViewDimension::D3
+                        } else {
+                            wgpu::TextureViewDimension::D2
+                        },
+                    }),
+            );
         entries.extend(
             textures
                 .chain(buffers)
@@ -277,6 +299,69 @@ impl Runner {
             contents: &input_bytes(&self.compiled, values),
             usage: wgpu::BufferUsages::UNIFORM,
         });
+        let (g0, g1) = self.groups(device, [&fb, &ib], textures, storage, outs);
+        (g0, g1, [fb, ib])
+    }
+
+    /// [`Runner::bind`] for a pass that runs every frame, `held` what this runner bound for it
+    /// last frame: its uniforms are written where their words changed, and its groups are made
+    /// again only when a texture it reads is another, so a frame after the first makes nothing.
+    pub fn rebind(
+        &self,
+        device: &deep_gpu::device::Device,
+        held: Option<Bound>,
+        frame: &Frame,
+        size: [u32; 2],
+        values: &BTreeMap<String, Val>,
+        textures: &[&wgpu::TextureView],
+    ) -> Bound {
+        let d = &device.device;
+        let bytes = [frame.bytes(size), input_bytes(&self.compiled, values)];
+        let fits =
+            |b: &Bound| (b.uniforms.iter().zip(&bytes)).all(|(u, b)| u.size() == b.len() as u64);
+        let bound = match held.filter(fits) {
+            Some(mut b) => {
+                if !b.textures.iter().eq(textures.iter().copied()) {
+                    b.textures = textures.iter().map(|v| (*v).clone()).collect();
+                    let [fb, ib] = &b.uniforms;
+                    b.groups = self.groups(d, [fb, ib], textures, &[], &[]);
+                }
+                b
+            }
+            None => {
+                let uniforms = [("operator frame", 0), ("operator inputs", 1)].map(|(label, i)| {
+                    d.create_buffer(&wgpu::BufferDescriptor {
+                        label: Some(label),
+                        size: bytes[i].len() as u64,
+                        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                        mapped_at_creation: false,
+                    })
+                });
+                let [fb, ib] = &uniforms;
+                Bound {
+                    groups: self.groups(d, [fb, ib], textures, &[], &[]),
+                    textures: textures.iter().map(|v| (*v).clone()).collect(),
+                    written: Default::default(),
+                    uniforms,
+                }
+            }
+        };
+        for ((buffer, written), bytes) in bound.uniforms.iter().zip(&bound.written).zip(&bytes) {
+            device.queue.write_changed(buffer, written, bytes);
+        }
+        bound
+    }
+
+    /// The frame's group over `fb` and the inputs' over `ib`, each texture, storage buffer and
+    /// texture output, in binding order.
+    fn groups(
+        &self,
+        device: &deep_gpu::counted::Wgpu,
+        [fb, ib]: [&wgpu::Buffer; 2],
+        textures: &[&wgpu::TextureView],
+        storage: &[&wgpu::Buffer],
+        outs: &[&wgpu::TextureView],
+    ) -> (wgpu::BindGroup, wgpu::BindGroup) {
         let g0 = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("operator frame"),
             layout: &self.frame_layout,
@@ -310,7 +395,7 @@ impl Runner {
             layout: &self.input_layout,
             entries: &entries,
         });
-        (g0, g1, [fb, ib])
+        (g0, g1)
     }
 
     /// Records the pass into `target`.

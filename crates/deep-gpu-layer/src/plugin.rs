@@ -48,6 +48,9 @@ pub(crate) fn shipped_modules() -> Vec<Module> {
         deep_canvas_record::module::module(),
         deep_canvas_sheet::module::module(),
         deep_canvas_motion::module::module(),
+        // #2412: a film's strips and buses, so a film that names media is checked here as
+        // deep_show checks it.
+        deep_canvas_media::module::module(),
         deep_canvas_scene3d::module::module(),
         deep_canvas_effects::module::module(),
     ]

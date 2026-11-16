@@ -69,10 +69,10 @@ fn register(r: &mut Registrar, paint: fn(&mut View<'_>) -> Result<(), OpError>) 
         crate::outline_source::vector_fill,
     );
     // The kind (Vector and formula `vector@1`), with its fields as the design lists them, drawn
-    // in a frame as its imported outline (#1162).
-    let field = |name: &'static str| Param {
+    // in a frame as its imported outline (#1162), each with the forms its reader takes (#1973).
+    let field = |(name, form): (&'static str, &'static str)| Param {
         name,
-        ty: ParamType::Json,
+        ty: ParamType::Json(form),
         unit: "",
         default: Value::Null,
         min: None,
@@ -89,8 +89,19 @@ fn register(r: &mut Registrar, paint: fn(&mut View<'_>) -> Result<(), OpError>) 
                 major: 1,
                 minor: 0,
                 params: [
-                    "src", "size", "colors", "lines", "hotspot", "alt", "numbers", "quote",
-                    "write_on", "parts",
+                    ("src", "sha256"),
+                    ("size", "[w: u, h: u]"),
+                    ("colors", "{SVG color → role}"),
+                    ("lines", "{SVG stroke color | class → name (look line)}"),
+                    ("hotspot", "[x: u, y: u]"),
+                    ("alt", "string"),
+                    ("numbers", "{text → path}"),
+                    (
+                        "quote",
+                        "{source: sha256 (or ev:sha256), path, lines: [a, b]}",
+                    ),
+                    ("write_on", "{progress: 0..1, order: term}"),
+                    ("parts", "[name (class)]"),
                 ]
                 .into_iter()
                 .map(field)
@@ -124,18 +135,22 @@ fn register(r: &mut Registrar, paint: fn(&mut View<'_>) -> Result<(), OpError>) 
         .run(paint);
     // The import's codes (svg_*) join the catalog with their planted fixtures when the kit seals
     // vector@1 (#399). The hub draws a vector from the SVG its evidence store holds (#1162); the
-    // fixture names one no store holds, which its codes name.
-    r.fixture("formula", formula(), None).sidecar(json!({
-        "checks": [{"kind": "document.validate"}],
-        "oracles": ["analytic"],
-        "codes": ["asset_missing", "unknown_kind"],
-    }));
+    // fixture names one no store holds, which its codes name: a planted document (#2085).
+    r.fixture("formula", formula(), None)
+        .planted()
+        .sidecar(json!({
+            "checks": [{"kind": "document.validate"}],
+            "oracles": ["analytic"],
+            "codes": ["asset_missing", "unknown_kind"],
+        }));
     // #399: a vector whose `colors` maps `currentColor` to the accent, beside a mapped sRGB color.
-    r.fixture("paint", paint_board(), None).sidecar(json!({
-        "checks": [{"kind": "document.validate"}],
-        "oracles": ["analytic"],
-        "codes": ["asset_missing", "unknown_kind"],
-    }));
+    r.fixture("paint", paint_board(), None)
+        .planted()
+        .sidecar(json!({
+            "checks": [{"kind": "document.validate"}],
+            "oracles": ["analytic"],
+            "codes": ["asset_missing", "unknown_kind"],
+        }));
 }
 
 /// What a vector item draws as in a frame (#1162): one `path@1` of its imported outline, which

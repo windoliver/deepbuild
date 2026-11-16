@@ -8,6 +8,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use deep_canvas_marks::modules::{self as modules, Run, StatusDrawing};
+use deep_canvas_marks::noise_fill::{self, NoiseFill};
 use deep_canvas_marks::path;
 use deep_canvas_marks::scene::{self, Fill, Mark, Palette, Record, Rgb, Slot, StatusMark};
 use deep_canvas_motion::eval;
@@ -22,7 +23,6 @@ use vello_cpu::{
     color::{AlphaColor, Srgb},
     Image, ImageSource, Pixmap, RasterizerSettings, RenderContext, RenderSettings, Resources,
 };
-
 
 /// Why a revision can't be drawn: the issue code and the path it names.
 #[derive(Clone, Debug, PartialEq)]
@@ -58,6 +58,9 @@ pub struct Drawn {
     /// #493: a 2D film's camera, from the document's units to its own pixels, where a shot
     /// moves it; the legend stays where it is.
     pub view: Option<Affine>,
+    /// #1938: each item's noise fill as evaluated at t, which its rect draws in place of the
+    /// fill's first stop.
+    noise: BTreeMap<String, Arc<NoiseFill>>,
 }
 
 impl Drawn {
@@ -65,15 +68,26 @@ impl Drawn {
     /// those alone.
     pub fn part(&self, view: Option<Affine>, marks: bool, status: bool) -> Drawn {
         // The items a status mark draws are left out of the sides: their status draws once.
-        let bound: std::collections::BTreeSet<&str> = self.status.marks.iter().map(|m| m.mark.item.as_str()).collect();
+        let bound: std::collections::BTreeSet<&str> = self
+            .status
+            .marks
+            .iter()
+            .map(|m| m.mark.item.as_str())
+            .collect();
         let mut frame = self.frame.clone();
         if !status {
             for layer in &mut frame.layers {
-                if layer.marks.iter().any(|m| bound.contains(m.mark.item().split('#').next().unwrap_or_default())) {
+                if layer
+                    .marks
+                    .iter()
+                    .any(|m| bound.contains(m.mark.item().split('#').next().unwrap_or_default()))
+                {
                     let kept: Vec<_> = layer
                         .marks
                         .iter()
-                        .filter(|m| !bound.contains(m.mark.item().split('#').next().unwrap_or_default()))
+                        .filter(|m| {
+                            !bound.contains(m.mark.item().split('#').next().unwrap_or_default())
+                        })
                         .cloned()
                         .collect();
                     layer.marks = kept.into_iter().collect();
@@ -84,15 +98,28 @@ impl Drawn {
             frame: if marks {
                 frame
             } else {
-                scene::Frame { size: self.frame.size, ground: self.frame.ground, layers: Vec::new() }
+                scene::Frame {
+                    size: self.frame.size,
+                    ground: self.frame.ground,
+                    layers: Vec::new(),
+                }
             },
-            boxes: if marks { self.boxes.clone() } else { Vec::new() },
-            status: if status { self.status.clone() } else { Arc::new(StatusDrawing::default()) },
+            boxes: if marks {
+                self.boxes.clone()
+            } else {
+                Vec::new()
+            },
+            status: if status {
+                self.status.clone()
+            } else {
+                Arc::new(StatusDrawing::default())
+            },
             images: self.images.clone(),
             pictures: self.pictures.clone(),
             runs: self.runs.clone(),
             animated: self.animated.clone(),
             view,
+            noise: self.noise.clone(),
         }
     }
 
@@ -101,8 +128,15 @@ impl Drawn {
     pub fn glyphs(&self) -> Map<String, Value> {
         let mut out = Map::new();
         for drawn in self.frame.layers.iter().flat_map(|l| &l.marks) {
-            let Mark::Text { item, spec, origin, .. } = &drawn.mark else { continue };
-            let Some(run) = self.runs.get(item).filter(|r| r.spec == *spec) else { continue };
+            let Mark::Text {
+                item, spec, origin, ..
+            } = &drawn.mark
+            else {
+                continue;
+            };
+            let Some(run) = self.runs.get(item).filter(|r| r.spec == *spec) else {
+                continue;
+            };
             let units = self.animated.get(item);
             let glyphs: Vec<Value> = run
                 .shaped
@@ -110,7 +144,8 @@ impl Drawn {
                 .iter()
                 .enumerate()
                 .map(|(k, g)| {
-                    let [lift, opacity] = units.and_then(|u| u.get(k)).copied().unwrap_or([0.0, 1.0]);
+                    let [lift, opacity] =
+                        units.and_then(|u| u.get(k)).copied().unwrap_or([0.0, 1.0]);
                     json!({"x": origin[0] + f64::from(g.x), "y": origin[1] + f64::from(g.y) + lift,
                            "opacity": opacity.clamp(0.0, 1.0)})
                 })
@@ -140,6 +175,7 @@ impl Drawn {
             runs: self.runs.clone(),
             animated: self.animated.clone(),
             view: self.view,
+            noise: self.noise.clone(),
         }
     }
 
@@ -392,6 +428,9 @@ pub fn pixmap_of(rgba: Vec<u8>, w: u16, h: u16) -> Arc<Pixmap> {
     Arc::new(Pixmap::from_parts(rgba, w, h, meta))
 }
 
+/// What [`decode_all`] gives: each video frame by its asset, and the still pictures.
+type Decodings = (BTreeMap<String, Arc<Pixmap>>, Arc<Pictures>);
+
 /// Every image `frame` draws: a video's frame by its asset, and each still picture's request of
 /// the image service, its size read from its header (refused there when it couldn't be decoded
 /// within the caps) and its level at the document's own scale made, within the levels a frame may
@@ -400,14 +439,23 @@ fn decode_all(
     frame: &scene::Frame,
     evidence: &Path,
     videos: &BTreeMap<String, Arc<Pixmap>>,
-) -> Result<(BTreeMap<String, Arc<Pixmap>>, Arc<Pictures>), Unfit> {
+) -> Result<Decodings, Unfit> {
     let mut images = BTreeMap::new();
     let store = Arc::new(deep_images::Store::split(evidence));
     let mut keys = BTreeMap::new();
     let mut drawn = std::collections::HashSet::new();
     let mut held = 0;
     for d in frame.layers.iter().flat_map(|l| &l.marks) {
-        let Mark::Image { item, asset, bounds, fit, crop, tile, .. } = &d.mark else {
+        let Mark::Image {
+            item,
+            asset,
+            bounds,
+            fit,
+            crop,
+            tile,
+            ..
+        } = &d.mark
+        else {
             continue;
         };
         if let Some(frame) = videos.get(asset) {
@@ -428,14 +476,23 @@ fn decode_all(
         let Some(hash) = deep_images::hash_of(asset) else {
             return unfit("ref_unresolved", path());
         };
-        let size = deep_images::shared().size(&store, &hash).or_else(|r| unfit(code(r), path()))?;
+        let size = deep_images::shared()
+            .size(&store, &hash)
+            .or_else(|r| unfit(code(r), path()))?;
         // #1653: an atlas row shows its cell, turned by its flip bits (#535).
-        let cell = tile.as_ref().map(|t| t.rect(size).map(|r| r.map(|v| v as u32)));
+        let cell = tile
+            .as_ref()
+            .map(|t| t.rect(size).map(|r| r.map(|v| v as u32)));
         let Some(cut) = cell.unwrap_or_else(|| deep_images::crop_px(*crop, size)) else {
             continue;
         };
         let flip = tile.as_ref().map_or(0, |t| t.flip);
-        let mut key = deep_images::Key { hash, crop: cut, flip, level: 0 };
+        let mut key = deep_images::Key {
+            hash,
+            crop: cut,
+            flip,
+            level: 0,
+        };
         let to = fit.fitted(*bounds, key.shown());
         key.level = deep_images::level_for(key.shown(), [to[2], to[3]]);
         if drawn.insert(key) {
@@ -444,11 +501,19 @@ fn decode_all(
             if held > CAP {
                 return unfit("over_budget", path());
             }
-            deep_images::shared().wait(&store, key).or_else(|r| unfit(code(r), path()))?;
+            deep_images::shared()
+                .wait(&store, key)
+                .or_else(|r| unfit(code(r), path()))?;
         }
         keys.insert(item.clone(), key);
     }
-    Ok((images, Arc::new(Pictures { store: Some(store), keys })))
+    Ok((
+        images,
+        Arc::new(Pictures {
+            store: Some(store),
+            keys,
+        }),
+    ))
 }
 
 /// The scale `at` draws at, along x and along y.
@@ -460,13 +525,21 @@ fn scales(at: Affine) -> (f64, f64) {
 impl Renderer {
     /// `key`'s level from the image service as a pixmap, made once and kept while drawings draw
     /// it; `None` when the service can't make it.
-    fn level(&mut self, store: &Arc<deep_images::Store>, key: deep_images::Key) -> Option<Arc<Pixmap>> {
+    fn level(
+        &mut self,
+        store: &Arc<deep_images::Store>,
+        key: deep_images::Key,
+    ) -> Option<Arc<Pixmap>> {
         if let Some(p) = self.kept.get(&key) {
             return Some(p.clone());
         }
         let level = deep_images::shared().wait(store, key).ok()?;
         let [w, h] = level.size;
-        let pixmap = pixmap_of(level.rgba.clone(), u16::try_from(w).ok()?, u16::try_from(h).ok()?);
+        let pixmap = pixmap_of(
+            level.rgba.clone(),
+            u16::try_from(w).ok()?,
+            u16::try_from(h).ok()?,
+        );
         self.kept.insert(key, pixmap.clone());
         Some(pixmap)
     }
@@ -530,6 +603,14 @@ impl Renderer {
                 }
             }
         }
+        // #1938: each item's noise fill at t, its seed as its channels give it.
+        let noise = items
+            .iter()
+            .filter_map(|(id, item)| {
+                let fill = noise_fill::of(&item["params"], palette, &format!("items/{id}/params"))?;
+                Some((id.clone(), Arc::new(fill)))
+            })
+            .collect();
         Ok(Drawn {
             frame,
             boxes: Vec::new(),
@@ -539,6 +620,7 @@ impl Renderer {
             runs: BTreeMap::new(),
             animated: BTreeMap::new(),
             view: None,
+            noise,
         })
     }
 
@@ -564,6 +646,7 @@ impl Renderer {
                 runs: BTreeMap::new(),
                 animated: BTreeMap::new(),
                 view: None,
+                noise: BTreeMap::new(),
             });
         };
         let (images, pictures) = decode_all(&drawing.frame, evidence, &self.videos)?;
@@ -577,6 +660,7 @@ impl Renderer {
             runs: drawing.runs.clone(),
             animated: drawing.animated.clone(),
             view: None,
+            noise: BTreeMap::new(),
         })
     }
 
@@ -765,6 +849,38 @@ impl Renderer {
                 fill,
                 ..
             } => {
+                // #1938: a noise fill draws its ramp, as its value at each px.
+                let noise = drawn.noise.get(item_of(mark));
+                if let (Some(n), Fill::Solid(_)) = (noise, fill) {
+                    let (sx, sy) = scales(at);
+                    let [x, y, w, h] = *bounds;
+                    let size = [w * sx, h * sy].map(|v| v.ceil().clamp(1.0, 4096.0) as u16);
+                    let mut rgba = Vec::with_capacity(usize::from(size[0]) * usize::from(size[1]) * 4);
+                    for j in 0..size[1] {
+                        for i in 0..size[0] {
+                            let p = [
+                                x + (f64::from(i) + 0.5) * w / f64::from(size[0]),
+                                y + (f64::from(j) + 0.5) * h / f64::from(size[1]),
+                            ];
+                            let [r, g, b] = n.color(p);
+                            rgba.extend([r, g, b, 255]);
+                        }
+                    }
+                    ctx.set_paint(Image {
+                        image: ImageSource::Pixmap(pixmap_of(rgba, size[0], size[1])),
+                        sampler: sampler(scene::ImageSampling::Nearest),
+                    });
+                    ctx.set_paint_transform(
+                        Affine::translate((x, y))
+                            * Affine::scale_non_uniform(
+                                w / f64::from(size[0]),
+                                h / f64::from(size[1]),
+                            ),
+                    );
+                    ctx.fill_path(&rect_path(*bounds, *radius));
+                    ctx.reset_paint_transform();
+                    return;
+                }
                 match fill {
                     Fill::Solid(c) => ctx.set_paint(color(*c)),
                     Fill::Linear {
@@ -869,6 +985,8 @@ impl Renderer {
                     tabular: spec.bound,
                     mask: false,
                     spans: &spec.spans,
+                    gap: spec.gap as f32,
+                    indent: spec.indent as f32,
                 });
                 self.glyphs(ctx, &shaped, *origin, (*c, runs), at, None);
             }
@@ -886,7 +1004,11 @@ impl Renderer {
             } => {
                 // #1486: a still picture draws the level the drawing's scale takes, cut as its
                 // request is; a video's frame draws whole, cut by its crop.
-                let still = drawn.pictures.keys.get(item).zip(drawn.pictures.store.as_ref());
+                let still = drawn
+                    .pictures
+                    .keys
+                    .get(item)
+                    .zip(drawn.pictures.store.as_ref());
                 let (source, shown, cut) = match (drawn.images.get(asset), still) {
                     (Some(frame), _) => {
                         let size = [u32::from(frame.width()), u32::from(frame.height())];
@@ -993,10 +1115,13 @@ impl Renderer {
         units: Option<&[[f64; 2]]>,
     ) {
         let paint = |g: &deep_text::Glyph| scene::run_paint(runs, g.grapheme, None, c).1;
+        // #1966: a dimmed code line's glyphs at its run's opacity.
+        let alpha_of = |g: &deep_text::Glyph| scene::run_opacity(runs, g.grapheme);
         if let Some(units) = units {
             for (g, unit) in shaped.glyphs.iter().zip(units) {
                 let [lift, opacity] = *unit;
                 let c = paint(g);
+                let opacity = opacity * alpha_of(g);
                 let alpha = (opacity.clamp(0.0, 1.0) * 255.0).round() as u8;
                 ctx.set_paint(AlphaColor::from_rgba8(c[0], c[1], c[2], alpha));
                 ctx.set_transform(at * Affine::translate((origin[0], origin[1] + lift)));
@@ -1027,9 +1152,10 @@ impl Renderer {
                         && g.size == first.size
                         && g.skew == first.skew
                         && paint(g) == paint(first)
+                        && alpha_of(g) == alpha_of(first)
                 })
                 .count();
-            ctx.set_paint(color(paint(first)));
+            ctx.set_paint(color(paint(first)).with_alpha(alpha_of(first) as f32));
             let glyphs = shaped.glyphs[start..start + run]
                 .iter()
                 .map(|g| vello_cpu::Glyph {
@@ -1047,7 +1173,8 @@ impl Renderer {
         }
         // #1964: underlines and strikes over the glyphs, in their span's color.
         for d in &shaped.decorations {
-            ctx.set_paint(color(scene::run_paint(runs, d.grapheme, None, c).1));
+            let alpha = scene::run_opacity(runs, d.grapheme) as f32;
+            ctx.set_paint(color(scene::run_paint(runs, d.grapheme, None, c).1).with_alpha(alpha));
             let [x, y, w, h] = d.rect.map(f64::from);
             ctx.fill_rect(&Rect::new(x, y, x + w, y + h));
         }

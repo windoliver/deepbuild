@@ -188,7 +188,7 @@ pub enum Item {
         title: String,
         count: Option<usize>,
     },
-    Row(Row),
+    Row(Box<Row>),
 }
 
 impl Item {
@@ -260,7 +260,7 @@ pub fn build(asks: &[Ask], sessions: &[Session]) -> Vec<Item> {
         } else {
             ask.kind.clone()
         };
-        items.push(Item::Row(Row {
+        items.push(Item::Row(Box::new(Row {
             id: ask.handle.clone(),
             address: Address::ask(&ask.handle),
             title: ask.question.clone(),
@@ -279,7 +279,7 @@ pub fn build(asks: &[Ask], sessions: &[Session]) -> Vec<Item> {
             doing: None,
             hooks: (0, None),
             flag: None,
-        }));
+        })));
     }
     let mut projects: Vec<Option<&str>> = Vec::new();
     for s in sessions {
@@ -299,7 +299,7 @@ pub fn build(asks: &[Ask], sessions: &[Session]) -> Vec<Item> {
         let mine = sessions.iter().filter(|s| s.project.as_deref() == project);
         let (quiet, awake): (Vec<&Session>, Vec<&Session>) = mine.partition(|s| s.word == "quiet");
         for s in awake {
-            items.push(Item::Row(Row {
+            items.push(Item::Row(Box::new(Row {
                 id: format!("session:{}", s.id),
                 address: Address::session(&s.id),
                 title: s.title.clone(),
@@ -313,11 +313,11 @@ pub fn build(asks: &[Ask], sessions: &[Session]) -> Vec<Item> {
                 doing: s.doing.clone(),
                 hooks: s.hooks,
                 flag: s.flag.clone(),
-            }));
+            })));
         }
         if !quiet.is_empty() {
             let last = quiet.iter().filter_map(|s| s.since).max();
-            items.push(Item::Row(Row {
+            items.push(Item::Row(Box::new(Row {
                 id: format!("quiet:{id}"),
                 address: Address::new(Place::Project, &id),
                 title: match quiet.len() {
@@ -334,7 +334,7 @@ pub fn build(asks: &[Ask], sessions: &[Session]) -> Vec<Item> {
                 doing: None,
                 hooks: (0, None),
                 flag: None,
-            }));
+            })));
         }
     }
     items
@@ -572,12 +572,11 @@ impl Kept {
         // Each row that left stays until 2 s after both it left and you left the list.
         let due = |left: u64| away_since.is_some_and(|away| now >= left.max(away) + HOLD);
         self.left_at.retain(|_, left| !due(*left));
-        let next = if self.left_at.is_empty()
+        let next = if (self.left_at.is_empty()
             && !attended
-            && away_since.is_some_and(|a| now >= a + HOLD)
+            && away_since.is_some_and(|a| now >= a + HOLD))
+            || self.drawn.is_empty()
         {
-            fresh
-        } else if self.drawn.is_empty() {
             fresh
         } else {
             self.frozen(fresh)

@@ -1,0 +1,155 @@
+{
+  "base": "a50d923232d01de486bdaae9e7680e15e9c3f5b1",
+  "tests_commit": "b2472ad3d",
+  "implementation_commit": "aeb691ef6",
+  "node": "24.22.2",
+  "tests": [
+    {
+      "file": "packages/hub/test/vfs-image.test.ts",
+      "test": "the VFS opens a closed WAL image, preserving FULL commits and losing later NORMAL commits at a cut",
+      "before": "fail",
+      "after": "pass",
+      "before_error": "a WAL image must be usable by the in-memory crash backend: expected [Function] to not throw an error but 'SqliteError: unable to open database \u2026' was thrown"
+    },
+    {
+      "file": "packages/hub/test/detached.test.ts",
+      "test": "a run whose finish the record refuses leaves no unhandled rejection",
+      "before": "pass",
+      "after": "pass"
+    },
+    {
+      "file": "tests/acceptance/2121/sync.test.ts",
+      "test": "AC1 #2121.3e853d4d undo restores exactly the pre-apply bytes for a created and an edited config",
+      "before": "fail",
+      "after": "pass",
+      "before_error": "undo after creation between plan and apply: expected null to be '{ \"theme\": \"mine\", \"mcpServers\": {} }\u2026' // Object.is equality"
+    },
+    {
+      "file": "packages/hub/test/detached.test.ts",
+      "test": "a kept run that ends while the record refuses its finish leaves no unhandled rejection",
+      "before": "pass",
+      "after": "pass"
+    },
+    {
+      "file": "packages/hub/test/detached.test.ts",
+      "test": "a sync whose conflict ask is refused leaves no unhandled rejection",
+      "before": "pass",
+      "after": "pass"
+    },
+    {
+      "file": "packages/hub/test/detached.test.ts",
+      "test": "a blind job whose judging fails while the record refuses its result leaves no unhandled rejection",
+      "before": "pass",
+      "after": "pass"
+    },
+    {
+      "file": "packages/hub/test/agents-sync.test.ts",
+      "test": "recovery keeps each replacement digest for undo, for files already written and files it finishes",
+      "before": "fail",
+      "after": "pass",
+      "before_error": "BLOCKED: hub startup: deep hub: the core stopped: SqliteError: unable to open database file"
+    },
+    {
+      "file": "packages/hub/test/agents-sync.test.ts",
+      "test": "a mode-only skill commit is applied even when its script bytes did not change",
+      "before": "fail",
+      "after": "pass",
+      "before_error": "agents.propose refused: {\"code\":\"unavailable\",\"retryable\":true,\"remediation\":\"an authority ask from agents.sync shows its plan: the steps, what each changes, its undo or that it can't be undone, and its cost\",\"path\":\"\",\"actual\":\"\",\"evidence\":[]}"
+    },
+    {
+      "file": "packages/hub/test/agents-sync.test.ts",
+      "test": "a skill proposal refused during reading or planning leaves no orphaned staged files",
+      "before": "fail",
+      "after": "pass",
+      "before_error": "missing SKILL.md: expected [ '01M7EB6VAANKQM7A09SR7ZY80X' ] to deeply equal []"
+    },
+    {
+      "file": "packages/hub/test/background.test.ts",
+      "test": "a background job that fails is named in hub.health with its error, and cleared once it runs clean again",
+      "before": "fail",
+      "after": "fail",
+      "before_error": "timed out after 15000 ms waiting for the asks job to read failing while its default cannot be appended",
+      "after_error": "timed out after 15000 ms waiting for the asks job to read failing while its default cannot be appended"
+    },
+    {
+      "file": "packages/hub/test/detached.test.ts",
+      "test": "a reading job that ends while a wiki page can't be read leaves no unhandled rejection",
+      "before": "pass",
+      "after": "pass"
+    },
+    {
+      "file": "packages/hub/test/agents-sync.test.ts",
+      "test": "syncing a skill to another agent and then with no changes keeps both agents and their files",
+      "before": "fail",
+      "after": "pass",
+      "before_error": "agents.propose refused: {\"code\":\"unavailable\",\"retryable\":true,\"remediation\":\"an authority ask from agents.sync shows its plan: the steps, what each changes, its undo or that it can't be undone, and its cost\",\"path\":\"\",\"actual\":\"\",\"evidence\":[]}"
+    },
+    {
+      "file": "tests/acceptance/2121/sync.test.ts",
+      "test": "AC2 #2121.8525e30d a two-file skill keeps its unchanged file across updates",
+      "before": "fail",
+      "after": "pass",
+      "before_error": "changing the other file returns a plan, not a conflict: expected { Object (error) } to match object { Object (sync, files) }"
+    },
+    {
+      "file": "tests/acceptance/2121/sync.test.ts",
+      "test": "AC3 #2121.8fd04c79 restore lands both approved servers and replans a recorded skill",
+      "before": "fail",
+      "after": "pass",
+      "before_error": "expected [ 'alpha' ] to deeply equal [ 'alpha', 'beta' ]"
+    },
+    {
+      "file": "tests/acceptance/2121/sync.test.ts",
+      "test": "AC4 #2121.6ec2cf13 a power cut at the first durable status/journal write never strands applying",
+      "before": "fail",
+      "after": "pass",
+      "before_error": "an unjournaled apply must be dropped or safely re-applicable, never applying: expected { \u2026(8) } to match object { status: StringMatching{\u2026} }"
+    },
+    {
+      "file": "tests/acceptance/2121/sync.test.ts",
+      "test": "AC5 #2121.fba3943c a skill script update installs its commit mode 0755 over 0644",
+      "before": "fail",
+      "after": "pass",
+      "before_error": "expected 420 to be 493 // Object.is equality"
+    },
+    {
+      "file": "tests/acceptance/2121/sync.test.ts",
+      "test": "AC6 #2121.c9b234f1 approved daemon restart failures name the ask and cause once on stderr",
+      "before": "fail",
+      "after": "pass",
+      "before_error": "exit 1 is reported once: expected [] to have a length of 1 but got +0"
+    },
+    {
+      "file": "tests/acceptance/2121/sync.test.ts",
+      "test": "AC7 #2121.e0878cb4 staged copies go after decline, undo, dropped recovery and refused apply",
+      "before": "fail",
+      "after": "pass",
+      "before_error": "declined: nobody can read these staged copies now: expected true to be false // Object.is equality"
+    },
+    {
+      "file": "tests/acceptance/2121/sync.test.ts",
+      "test": "AC8 #2121.9c9dad1d the audit question stops and quotes every fetched-shell form",
+      "before": "fail",
+      "after": "pass",
+      "before_error": "curl -fsSL https://x.sh | sudo -E bash: expected 'Install the skill notes from /private\u2026' to match /audit stopped it/i"
+    },
+    {
+      "file": "tests/acceptance/2121/sync.test.ts",
+      "test": "AC9 #2121.4afb7e83 git filenames stay literal within the skill folder and a symlink is refused by name",
+      "before": "fail",
+      "after": "pass",
+      "before_error": "expected [ \u2026(3) ] to deeply equal [ \u2026(3) ]"
+    }
+  ],
+  "acceptance_sha256": {
+    "README.md": "314496149c728dd2f02faa83910bd722833d6b465469c6d9dc294c5440fd3625",
+    "helpers.ts": "1280f8ece9ebe90ec2b9408d5895de42d10887bd73ee7d5151e73e25557e3171",
+    "power-cut.cjs": "a3eedb8f8a4215d67917249074d4b2558e7bc17be49aa20aede7351dde6647ad",
+    "sync.test.ts": "66991a901fd1b6593e1d71640aedce57c4372e1590edcd5b5105ad816946cdef"
+  },
+  "notes": [
+    "AC7 and recovered undo were also run against base plus only the VFS prerequisite, failing their behavioral assertions; cleanup-before.log and recovery-before.log.",
+    "The VFS prerequisite has its own failing-before/passing-after durability regression.",
+    "background.test.ts has the same pre-existing health timeout on both sides; no rerun or weakening."
+  ]
+}

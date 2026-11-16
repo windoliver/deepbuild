@@ -25,6 +25,20 @@ pub const PAD_LOWEST: f64 = 48.0;
 pub const PLUCKS: [&str; 3] = ["nylon", "steel", "harp"];
 pub const SYNTHS: [&str; 5] = ["sine", "triangle", "saw", "square", "pad"];
 
+/// #204: a synth instrument may name a pack's preset as `<pack>.<name>@<major>`.
+pub fn pack_preset(name: &str) -> bool {
+    let Some((pack, rest)) = name.split_once('.') else {
+        return false;
+    };
+    let Some((preset, major)) = rest.rsplit_once('@') else {
+        return false;
+    };
+    !pack.is_empty()
+        && !preset.is_empty()
+        && !major.is_empty()
+        && major.bytes().all(|b| b.is_ascii_digit())
+}
+
 /// An instrument's source, read from either `{sampled: {...}}` or `{type: "sampled", ...}`.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Source {
@@ -254,14 +268,19 @@ pub fn read(doc: &Value, id: &str) -> Result<(Score, Vec<Problem>), Vec<Problem>
                 ),
                 ))
             }
-            Source::Synth { preset } if !SYNTHS.contains(&preset.as_str()) => problems.push(error(
-                "score.unknown_preset",
-                format!("{path}/source"),
-                format!(
+            // #204: or a pack's synth preset, `<pack>.<name>@<major>`, which the host resolves.
+            Source::Synth { preset }
+                if !SYNTHS.contains(&preset.as_str()) && !pack_preset(preset) =>
+            {
+                problems.push(error(
+                    "score.unknown_preset",
+                    format!("{path}/source"),
+                    format!(
                     "the instrument {iid} names the synth preset {preset}, which isn't one of {}",
                     SYNTHS.join(", ")
                 ),
-            )),
+                ))
+            }
             _ => {}
         }
         let stem = inst
@@ -562,6 +581,41 @@ pub fn sound_lock(lowered: &Value, input: &Value) -> deep_canvas::registry::Repo
                 };
                 out.raised.push((id.clone(), raised, json!(name)));
             }
+        }
+    }
+    out
+}
+
+/// A score check's issues alone (#2362): what it raised, and where it would be BLOCKED a
+/// `score.check_unread` error on each score, so a reader of issues alone never takes a check
+/// that couldn't read its input for a pass, as with the loop module's `loop.unreadable`.
+pub fn issues_of(lowered: &Value, report: deep_canvas::registry::Report) -> Vec<(String, Raised)> {
+    let mut out: Vec<(String, Raised)> = report
+        .raised
+        .into_iter()
+        .map(|(id, r, _)| (id, r))
+        .collect();
+    let scores = lowered
+        .get("items")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+        .filter(|(_, item)| item.get("kind").and_then(Value::as_str) == Some("score.music@1"));
+    for (id, _) in scores {
+        for b in &report.blocked {
+            out.push((
+                id.clone(),
+                Raised {
+                    code: "score.check_unread",
+                    severity: "error",
+                    path: format!("items/{id}"),
+                    what: format!(
+                        "the check couldn't read what it measures: {}",
+                        b["why"].as_str().unwrap_or_default()
+                    ),
+                    fix_ops: None,
+                },
+            ));
         }
     }
     out

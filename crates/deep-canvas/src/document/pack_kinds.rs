@@ -23,7 +23,7 @@ use crate::interval::Iv;
 use crate::registry::Sealed;
 
 pub(super) mod migrate;
-pub use migrate::{at_load, store_migrations};
+pub use migrate::{at_load, loaded, store_migrations};
 
 /// A pack kind as its pack declares it, with its kit's result once the pack check ran it.
 #[derive(Clone, Debug, PartialEq)]
@@ -56,6 +56,24 @@ pub struct PackKind {
     pub corpus: Vec<migrate::Case>,
     /// Its `feature.response`, when it declares one (#1399).
     pub response: Option<Response>,
+    /// Each example's and twin's film envelope (its tempo map, transport, profile and size),
+    /// by its params, so the kit checks a film recipe's cues on the clock they were written on
+    /// (#142).
+    pub envelopes: Vec<(Map<String, Value>, Map<String, Value>)>,
+}
+
+/// The envelope fields a kit document takes from an example's document (#142).
+const ENVELOPE: [&str; 4] = ["tempo_map", "transport", "profile", "size"];
+
+/// An example document's envelope fields, as [`ENVELOPE`] lists them.
+fn envelope_of(assets: &[Value], sha: &str) -> Map<String, Value> {
+    let Some((doc, _)) = asset_doc(assets, sha) else {
+        return Map::new();
+    };
+    ENVELOPE
+        .iter()
+        .filter_map(|k| member(&doc, k).map(|v| (k.to_string(), v.clone())))
+        .collect()
 }
 
 /// `feature.response {ablate, measure, band}` (#1399): removing the recipe's step `ablate` must
@@ -234,12 +252,14 @@ pub(super) fn check_kinds(
             params
         };
         let mut examples = Vec::new();
+        let mut envelopes = Vec::new();
         let mut texts = BTreeMap::new();
         for (i, sha) in list(fields.get("examples")).iter().enumerate() {
             let sha = sha.as_str().unwrap_or_default();
             match read(sha, format!("{path}/examples/{i}")) {
                 Some((p, text)) => {
                     texts.insert(sha.to_string(), text);
+                    envelopes.push((p.clone(), envelope_of(assets, sha)));
                     examples.push((sha.to_string(), p));
                 }
                 None => ok = false,
@@ -256,7 +276,10 @@ pub(super) fn check_kinds(
                 .and_then(Value::as_str)
                 .unwrap_or_default();
             match read(sha, format!("{path}/twins/{i}")) {
-                Some((p, _)) => twins.push((sha.to_string(), p, expect.to_string())),
+                Some((p, _)) => {
+                    envelopes.push((p.clone(), envelope_of(assets, sha)));
+                    twins.push((sha.to_string(), p, expect.to_string()));
+                }
                 None => ok = false,
             }
         }
@@ -317,6 +340,7 @@ pub(super) fn check_kinds(
                 migrate: steps,
                 corpus: cases,
                 response,
+                envelopes,
             },
         );
     }
@@ -383,6 +407,7 @@ pub fn kind_rules(
     expansions: &[Expansion],
     resolved: &Resolved<'_>,
     planted: super::packs::Planted,
+    sealed: &Sealed,
 ) -> RuleRun {
     let mut run = RuleRun::default();
     if expansions.is_empty() {
@@ -433,6 +458,26 @@ pub fn kind_rules(
         let pack_id = pack.id.text();
         for rule in rules {
             run.ran.insert((rule.code.clone(), pack_id.clone()));
+            // A rule over a cue list (#142): each cue, or each pair, after the times resolve.
+            if let Some((input, expr)) = &rule.over {
+                let ctx = OverCtx {
+                    doc,
+                    items,
+                    resolved,
+                    sealed,
+                    planted: planted.expander,
+                };
+                let named = (id.as_str(), params);
+                over_rule(
+                    &ctx,
+                    named,
+                    (&recipe.id, &pack_id),
+                    rule,
+                    (input, expr),
+                    &mut run,
+                );
+                continue;
+            }
             let moved = driven.contains(id);
             let failed: Result<Option<Option<i64>>, &'static str> = match &rule.at {
                 At::Rest => Ok((!rule.holds(params)).then_some(None)),
@@ -498,6 +543,131 @@ pub fn kind_rules(
     run
 }
 
+/// What a rule over a cue list reads beside its instance (#142).
+struct OverCtx<'a> {
+    doc: &'a Value,
+    items: &'a Map<String, Value>,
+    resolved: &'a Resolved<'a>,
+    sealed: &'a Sealed,
+    planted: Option<&'static str>,
+}
+
+/// A rule over a cue list (#142): the module that reads cue lists times the instance's cues,
+/// then the rule's expression reads each cue as `cue`, or, when it reads `other`, each pair of
+/// a cue and an earlier one, with `touches` 1 where the cue plays on what the earlier one
+/// does. A cue it fails for is refused, an error naming the cue and the rule.
+fn over_rule(
+    ctx: &OverCtx<'_>,
+    (id, params): (&str, &Map<String, Value>),
+    (recipe, pack): (&str, &str),
+    rule: &KindRule,
+    (input, expr): (&str, &super::packs::Template),
+    run: &mut RuleRun,
+) {
+    let path = format!("items/{id}/params/{input}");
+    let refuse = |code: &'static str, at: String, actual: Value, what: String| {
+        let mut issue = Issue::error(code, id, at, actual, &what);
+        issue.fix = rule.fix.clone();
+        issue
+    };
+    let hooks = ctx
+        .sealed
+        .modules
+        .iter()
+        .flat_map(|m| m.shapes.cue_rows.iter());
+    let Some(read) = hooks.into_iter().next() else {
+        run.issues.push(refuse(
+            "not_run",
+            path,
+            json!({"rule": rule.code, "pack": pack}),
+            format!("rule `{}` reads a cue list's times, and no module of this build reads them, so it is never passed", rule.code),
+        ));
+        return;
+    };
+    let empty = json!([]);
+    let entries = super::expands::Entries::new(ctx.sealed, ctx.resolved);
+    let request = super::expands::RowsRequest {
+        doc: ctx.doc,
+        items: ctx.items,
+        cues: params.get(input).unwrap_or(&empty),
+        entries: &entries,
+        planted: ctx.planted,
+    };
+    let rows = match read(&request) {
+        Ok(rows) => rows,
+        Err(r) => {
+            run.issues.push(refuse(
+                r.code,
+                path,
+                json!({"rule": rule.code, "pack": pack, "at": r.path, "actual": *r.actual}),
+                format!(
+                    "rule `{}` can't read the cue list's times: {}",
+                    rule.code, r.what
+                ),
+            ));
+            return;
+        }
+    };
+    let pairs = expr.names().iter().any(|n| n == "other");
+    let targets = |row: &Map<String, Value>| -> Vec<String> {
+        row.get("targets")
+            .and_then(Value::as_array)
+            .map(|l| {
+                l.iter()
+                    .filter_map(|t| t.as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    for (k, row) in rows.iter().enumerate() {
+        let others: Vec<Option<&Map<String, Value>>> = if pairs {
+            rows[..k].iter().map(Some).collect()
+        } else {
+            vec![None]
+        };
+        let cue = row.get("id").cloned().unwrap_or(Value::Null);
+        let name = cue.as_str().unwrap_or("").to_string();
+        for other in others {
+            let mut scope = vec![("cue".to_string(), Value::Object(row.clone()))];
+            if let Some(o) = other {
+                let mine = targets(row);
+                let touches = targets(o).iter().any(|t| mine.contains(t));
+                scope.push(("other".into(), Value::Object(o.clone())));
+                scope.push(("touches".into(), json!(u8::from(touches))));
+            }
+            let held = match expr.eval(&scope) {
+                Ok(v) => v.as_f64().is_some_and(|x| x != 0.0) || v.as_bool() == Some(true),
+                Err(why) => {
+                    run.issues.push(refuse(
+                        "not_run",
+                        format!("{path}/{k}"),
+                        json!({"rule": rule.code, "pack": pack, "cue": cue, "why": why}),
+                        format!(
+                            "rule `{}` can't read cue `{name}`, so it is never passed",
+                            rule.code
+                        ),
+                    ));
+                    break;
+                }
+            };
+            if !held {
+                let mut actual =
+                    json!({"rule": rule.code, "expr": rule.expr.text, "pack": pack, "cue": cue});
+                if let Some(o) = other {
+                    actual["other"] = o.get("id").cloned().unwrap_or(Value::Null);
+                }
+                run.issues.push(refuse(
+                    super::packs::KIND_RULE,
+                    format!("{path}/{k}"),
+                    actual,
+                    format!("cue `{name}` breaks {recipe}'s rule `{}`", rule.code),
+                ));
+                break;
+            }
+        }
+    }
+}
+
 /// The seeds the kit expands each extreme at: three fixed instance IDs, since a derived item's
 /// seed comes from `(instance, step, index)`.
 const KIT_SEEDS: [&str; 3] = ["kit0", "kit1", "kit2"];
@@ -547,6 +717,67 @@ pub(super) fn kit(pack: &mut Pack, sealed: &Sealed, alone: Packs) -> Result<(), 
     Ok(())
 }
 
+/// `field.effect` on each parameter a pack's census maps (#1493), on the recipe its alias maps
+/// the name to, at its defaults: an input no value changes the frame for refuses the pack,
+/// naming the recipe and the input, so a mapped parameter can't mean one that only parses.
+/// `alone` holds the pack and the versions it requires.
+pub(super) fn alias_effect(pack: &Pack, sealed: &Sealed, alone: &Packs) -> Result<(), Vec<Issue>> {
+    let mut mapped: BTreeMap<&str, BTreeSet<&str>> = BTreeMap::new();
+    for row in pack.census.iter().filter(|r| r.state == "mapped") {
+        let target = row
+            .of
+            .as_deref()
+            .and_then(|of| pack.aliases.get(of))
+            .and_then(|a| a["target"].as_str());
+        if let Some(target) = target {
+            mapped
+                .entry(target)
+                .or_default()
+                .insert(row.target.as_deref().unwrap_or(&row.word));
+        }
+    }
+    let mut issues = Vec::new();
+    for recipe in pack.recipes.values() {
+        let target = format!("{}@{}", recipe.id, recipe.major);
+        let Some(fields) = mapped.get(target.as_str()) else {
+            continue;
+        };
+        let mut recipe = recipe.clone();
+        recipe
+            .inputs
+            .retain(|name, _| fields.contains(name.as_str()));
+        let check = |params: &Map<String, Value>| {
+            let doc = json!({
+                "format": 1, "id": "kit", "profile": "board", "title": format!("{target}'s kit"),
+                "description": "One instance of a recipe a pack's word maps to, as field.effect checks it.",
+                "size": [320, 200], "packs": [pack.id.text()],
+                "layers": {"main": {"writer": "kit", "title": "Kit", "order": "a0"}},
+                "items": {"kit": {"id": "kit", "kind": target, "name": "Kit", "layer": "main", "order": "a0", "params": params}},
+            });
+            let checked = super::check_packed(&doc, sealed, alone);
+            let clean = !checked.issues.iter().any(|i| i.severity == "error");
+            let derived: Vec<&Value> = checked
+                .lowered
+                .get("items")
+                .and_then(Value::as_object)
+                .into_iter()
+                .flat_map(|m| m.iter())
+                .filter(|(k, _)| k.as_str() != "kit")
+                .map(|(_, v)| v)
+                .collect();
+            (clean, serde_json::to_vec(&derived).unwrap_or_default())
+        };
+        if let Err(issue) = field_effect(&target, vec![Map::new()], &recipe, &check) {
+            issues.push(*issue);
+        }
+    }
+    if issues.is_empty() {
+        Ok(())
+    } else {
+        Err(issues)
+    }
+}
+
 /// A kind's passing kit: its result, its largest counts over the extremes and its meshes.
 type KitResult = (Value, Value, BTreeSet<String>);
 
@@ -578,14 +809,21 @@ fn kit_doc(
             json!({"id": instance, "kind": kind.name, "name": "Kit", "layer": "main", "order": "a0", "params": params}),
         );
     }
-    json!({
+    let mut doc = json!({
         "format": 1, "id": "kit", "profile": "board", "title": format!("{}'s kit", kind.name),
         "description": "One instance of a pack kind, as its kind kit checks it.",
         "size": [320, 200], "packs": [pack.id.text()],
         "layers": {"main": {"writer": "kit", "title": "Kit", "order": "a0"}},
         "budget": {"class": kind.class.name()},
         "items": items,
-    })
+    });
+    // An example's own envelope: its tempo map and clock, as it was written (#142).
+    if let Some((_, env)) = kind.envelopes.iter().find(|(p, _)| p == params) {
+        for (k, v) in env {
+            doc[k.as_str()] = v.clone();
+        }
+    }
+    doc
 }
 
 /// One instance checked; its cost is the document's less `base`, the same document's without it.
@@ -612,7 +850,11 @@ fn kit_check(
         errors: checked
             .issues
             .iter()
-            .filter(|i| i.severity == "error" && i.code != "over_budget")
+            .filter(|i| {
+                i.severity == "error"
+                    && i.code != "over_budget"
+                    && i.code != super::packs::KIND_RULE
+            })
             .map(Issue::to_json)
             .collect(),
         rules: checked
@@ -871,7 +1113,13 @@ fn kit_one(
     } else {
         json!({"rule": "migration", "verdict": "PASS", "corpus": corpus})
     };
-    let unjudged = field_effect(kind, recipe, &check)?;
+    let bases = std::iter::once(Map::new())
+        .chain(kind.examples.iter().map(|(_, p)| p.clone()))
+        .collect();
+    let unjudged = field_effect(name, bases, recipe, &|p| {
+        let run = check("kit", p);
+        (run.errors.is_empty(), run.frame)
+    })?;
     if let Some(r) = &kind.response {
         let mut ablated = packs.clone();
         let mut cut = pack.clone();
@@ -904,18 +1152,22 @@ fn kit_one(
     Ok((kit, json!({"items": items, "triangles": triangles}), meshes))
 }
 
-/// The values the kit tries for a field whose value is `now`: its hard range's ends (or one more
-/// than `now` without one), the other truth value, its other options, each number of a vector
+/// The values the kit tries for a field whose value is `now`: its hard range's ends, and one more
+/// than `now` when the range has no top (#1493: an aspect that acts only above its default), the
+/// other truth value, its other options, each number of a vector
 /// or range one more, the text with one more character, or the records less their last row. An
 /// ID, a record, or empty records yield none: the kit can't make another that is valid.
 fn others(input: &Input, now: &Value) -> Vec<Value> {
     let n = now.as_f64();
     match input.ty.as_str() {
         "number" | "integer" => {
-            let ends: Vec<f64> = match (input.min, input.max) {
-                (None, None) => n.map(|v| v + 1.0).into_iter().collect(),
-                (lo, hi) => lo.into_iter().chain(hi).collect(),
-            };
+            let above = n.map(|v| v + 1.0).filter(|_| input.max.is_none());
+            let ends: Vec<f64> = input
+                .min
+                .into_iter()
+                .chain(input.max)
+                .chain(above)
+                .collect();
             ends.into_iter()
                 .filter(|v| Some(*v) != n)
                 .map(|v| {
@@ -951,18 +1203,23 @@ fn others(input: &Input, now: &Value) -> Vec<Value> {
     }
 }
 
+/// Whether a kind's params check clean, and the frame they evaluate to (#1399).
+type Evaluate<'a> = dyn Fn(&Map<String, Value>) -> (bool, Vec<u8>) + 'a;
+
 /// `field.effect` (#1399): each field changed from its value at defaults, or in an example, must
 /// change the evaluated frame somewhere; a field that leaves it unchanged at every value tried
 /// is inert and fails the kit, naming it. The fields no value could be tried for are returned.
+/// `check` answers whether a kind's params check clean, and the frame they evaluate to.
 fn field_effect(
-    kind: &PackKind,
+    kind: &str,
+    bases: Vec<Map<String, Value>>,
     recipe: &Recipe,
-    check: &dyn Fn(&str, &Map<String, Value>) -> Run,
+    check: &Evaluate<'_>,
 ) -> Result<Vec<String>, Box<Issue>> {
-    let bases: Vec<(Map<String, Value>, Vec<u8>)> = std::iter::once(Map::new())
-        .chain(kind.examples.iter().map(|(_, p)| p.clone()))
+    let bases: Vec<(Map<String, Value>, Vec<u8>)> = bases
+        .into_iter()
         .map(|p| {
-            let frame = check("kit", &p).frame;
+            let frame = check(&p).1;
             (p, frame)
         })
         .collect();
@@ -974,13 +1231,13 @@ fn field_effect(
             others(input, now).into_iter().any(|value| {
                 let mut p = base.clone();
                 p.insert(field.clone(), value.clone());
-                let run = check("kit", &p);
+                let (clean, moved) = check(&p);
                 // A value the kind refuses shows nothing about the field's effect.
-                if !run.errors.is_empty() {
+                if !clean {
                     return false;
                 }
                 tried.push(value);
-                run.frame != *frame
+                moved != *frame
             })
         });
         if moved {
@@ -991,7 +1248,7 @@ fn field_effect(
             continue;
         }
         return Err(kit_fail(
-            &kind.name,
+            kind,
             "field.effect",
             "out_of_range",
             json!({"field": field, "tried": tried}),

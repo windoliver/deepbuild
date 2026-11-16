@@ -24,7 +24,7 @@ readonly gate: GateRunner;
 kernel: Pick<HubRuntime, "blocked">;
 schedule: Pick<HookSchedule, "queue" | "askingSoon" | "abandoned">;
 
-delivery: () => Pick<AnswerDeliveryPort, "deliver" | "handed" | "offer" | "unwoken" | "waitingFor">;
+delivery: () => Pick<AnswerDeliveryPort, "deliver" | "handed" | "offer" | "unwoken" | "answers">;
  judging: () => Pick<StopJudgingPort, "judging" | "laneOf" | "claimRequirements" | "requirementsOf" | "verdictWrites" | "completion" | "prDelivery" | "noWorkOnce" | "stallGate" | "sizedAt" | "idleOrResumed" | "questionHolds" | "slowStop" | "provisionalCarried" | "smallestOf" | "stopHold" | "stillNeeded" | "judgedLine" | "heldLine" | "lanes">;
 state: () => Pick<SessionStatePort, "live">;
 }
@@ -95,10 +95,19 @@ export class StopReply {
     if (nudge) block = nudge;
     let proceeded = false;
     let questionMs = 0;
+    // The turn's end as the gate reads it, given once: at a stop held for its slow checks, which start with it (#39), or
+    // with the reply. Its loop reading and background work are the session's then (#965, #907).
+    let ended: Promise<void> | undefined;
+    const turnEnds = (): Promise<void> => ended ??= (async () => {
+      const live = this.options.state().live.get(meta.session);
+      const due = live?.due && live.due.at > this.options.services.now() ? live.due : null;
+      const starter = live?.claimedInTurn ? 'claim' as const : live?.words ?? null;
+      await this.options.services.gate.turnEnded(judged?.claim ?? null, [...(live?.background.values() ?? [])].map((b) => b.what), stopAt, { session: meta.session, origin: live?.turnFrom, due, starter }).catch(() => undefined);
+    })();
     try {
       const questionHeld = judged?.claim ? await this.options.judging().questionHolds(meta.session) : false;
       if (lane && !lane.sendBack && !sized && judged?.claim && noWake(meta.agent) && lane.slow.length && !questionHeld) {
-        const failed = await this.options.judging().slowStop(meta, r, judged.claim, held);
+        const failed = await this.options.judging().slowStop(meta, r, judged.claim, held, turnEnds);
         if (failed) lane.sendBack = failed;
         // An answer that ended the hold is delivered below, with the wait an answer gets.
         until = Math.min(held, Date.now() + STOP_HOLD_MS);
@@ -115,19 +124,19 @@ export class StopReply {
       if (going.length || back.length) {
         proceeded = true;
         if (going.length) await this.options.services.holds.record(meta, going, until);
-        const delivered = await this.options.schedule.queue(async () => this.options.delivery().deliver(await this.options.delivery().waitingFor(meta.session), 'stop_hold', { session: meta.session, id: meta.id }));
+        const delivered = await this.options.schedule.queue(async () => this.options.delivery().deliver(await this.options.delivery().answers.waitingFor(meta.session), 'stop_hold', { session: meta.session, id: meta.id }));
         const failing = going.length && lane?.sendBack && judged?.claim ? await this.options.judging().smallestOf(judged.claim) : undefined;
         const said = going.length ? `DeepBuild: proceed (${going.map((p) => `"${p.question}", by rule ${p.rule}`).join('; ')}). Go on with the work. A call that pushes, merges, dispatches, sends or deletes still waits for an authority ask.` : undefined;
         block = (this.options.settings.plant === 'proceed-alone' ? [said] : [r.sendBacks.shift(), delivered, lane?.sendBack, failing, sized, nudge, ...back, said]).filter(Boolean).join('\n\n');
       } else if (lane?.sendBack || sized) {
         // Your answer rides with the send-back: only a question that holds it waits for the first stop after it.
-        const delivered = await this.options.schedule.queue(async () => this.options.delivery().deliver(await this.options.delivery().waitingFor(meta.session), 'stop_hold', { session: meta.session, id: meta.id }));
+        const delivered = await this.options.schedule.queue(async () => this.options.delivery().deliver(await this.options.delivery().answers.waitingFor(meta.session), 'stop_hold', { session: meta.session, id: meta.id }));
         block = [delivered, lane?.sendBack, carried, sized].filter(Boolean).join('\n\n');
       }
       else if (block) this.options.schedule.askingSoon();
       else if ((questionHeld && lane?.fast.length) || sorted?.noHold) {
         // A judged stop whose checks ran waits no longer for them: no send-back follows, so it isn't held for your answer (#84); one already given goes with it.
-        block = await this.options.schedule.queue(async () => this.options.delivery().deliver(await this.options.delivery().waitingFor(meta.session), 'stop_hold', { session: meta.session, id: meta.id }));
+        block = await this.options.schedule.queue(async () => this.options.delivery().deliver(await this.options.delivery().answers.waitingFor(meta.session), 'stop_hold', { session: meta.session, id: meta.id }));
       } else if (!r.places) {
         const waited = this.options.services.now();
         block = await this.options.judging().stopHold(meta, r, until);
@@ -156,9 +165,7 @@ export class StopReply {
     // or answer still needed (#82).
     if (!block && judged?.claim) await this.options.judging().stillNeeded(meta, judged.claim).catch(() => undefined);
     if (!block && !proceeded) {
-      const due = live?.due && live.due.at > this.options.services.now() ? live.due : null;
-      const starter = live?.claimedInTurn ? 'claim' as const : live?.words ?? null;
-      await this.options.services.gate.turnEnded(lane && judged?.claim ? judged.claim : null, background, stopAt, { session: meta.session, origin: live?.turnFrom, due, starter }).catch(() => undefined);
+      await turnEnds();
       if (live) live.words = undefined;
       if (lane && judged?.claim && background.length && lane.slow.length) await this.options.events.appendReading(meta.session, meta.agent, `${lane.slow.join(', ')} ${lane.slow.length === 1 ? 'waits' : 'wait'} for ${backgrounded(background)} in the background, and ${lane.slow.length === 1 ? 'starts' : 'start'} once it ends or 30 minutes from this stop.`).catch(() => undefined);
     }

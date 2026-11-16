@@ -1,0 +1,30 @@
+$ node scripts/affected.mjs scripts/affected.mjs scripts/proof-guard.mjs tests/acceptance/1875/BASE-FAILURE.txt tests/acceptance/1875/README.md tests/acceptance/1875/affected.test.mjs tests/acceptance/1875/helpers.mjs tests/acceptance/1875/twins.json tests/acceptance/1875/twins/all-inconclusive.patch tests/acceptance/1875/twins/global-only.patch tests/acceptance/1875/twins/own-lane-passes.patch tests/acceptance/1875/twins/run.sh tests/acceptance/1875/twins/skip-passes.patch tests/acceptance/1875/twins/unnamed.patch tests/affected.test.mjs   # branch 8cd443e7d, 2026-11-15T09:03:00Z, load 158.11
+parallel vitest: packages/hub/test/acceptance-slots.test.ts
+parallel node: tests/acceptance/1113/guard.test.mjs tests/acceptance/1113/waits.test.mjs tests/acceptance/1114/affected.test.mjs tests/acceptance/1114/failures.test.mjs tests/acceptance/1114/timed-list.test.mjs tests/acceptance/1115/affected.test.mjs tests/acceptance/1115/decisions.test.mjs tests/acceptance/1115/evidence.test.mjs tests/acceptance/1115/failing-states.test.mjs tests/acceptance/1115/failures.test.mjs tests/acceptance/1115/guard.test.mjs tests/acceptance/1115/no-grant.test.mjs tests/acceptance/1115/notes.test.mjs tests/acceptance/1115/skips.test.mjs tests/acceptance/1116/guard.test.mjs tests/acceptance/1118/lock.test.mjs tests/acceptance/1118/run.test.mjs tests/acceptance/1118/rust.test.mjs tests/acceptance/1123/binaries.test.mjs tests/acceptance/1123/capture-redraft/origin.test.mjs tests/acceptance/1326/calls.test.mjs tests/acceptance/1326/guard.test.mjs tests/acceptance/1406/classify.test.mjs tests/acceptance/1406/guard.test.mjs tests/acceptance/1426/guard.test.mjs tests/acceptance/1875/affected.test.mjs tests/acceptance/569/before.test.mjs tests/acceptance/569/decisions.test.mjs tests/acceptance/569/guard.test.mjs tests/acceptance/569/mutation.test.mjs tests/acceptance/569/preflight.test.mjs tests/acceptance/569/replay.test.mjs tests/acceptance/569/suites.test.mjs tests/acceptance/569/tolerance.test.mjs tests/acceptance/569/trace.test.mjs tests/affected.test.mjs tests/proof-binaries-errors.test.mjs tests/proof-binaries-shard-release.test.mjs tests/proof.test.mjs tests/shards.test.mjs
+alone vitest: tests/acceptance/1015/redraft/own-repo.test.ts tests/acceptance/1328/dispute.test.ts tests/acceptance/1328/job.test.ts tests/acceptance/33/bootstrap.test.ts tests/acceptance/87/gate/model-pass.test.ts tests/acceptance/87/gate/post-close.test.ts tests/acceptance/87/gate/replay-lane.test.ts tests/acceptance/87/gate/review-notes.test.ts
+alone node: tests/acceptance/2144/lint-on-main.test.mjs
+slow node: tests/acceptance/1113/before.test.mjs tests/acceptance/1114/lanes.test.mjs (--slow runs them)
+SKIP tests/acceptance/1015/own-repo.test.ts (by hand)
+SHARD 4 not used: Try 'cp --help' for more information.
+SHARD 2 not used: Try 'cp --help' for more information.
+SHARD 1 not used: Try 'cp --help' for more information.
+SHARD 3 not used: Try 'cp --help' for more information.
+SHARD 5 not used: Try 'cp --help' for more information.
+INCONCLUSIVE vitest report: the report ends before the run did, so a test's result may be missing
+BLOCKED tests/acceptance/1123/capture-redraft/origin.test.mjs › lanes.mjs hands its own executable to the consumer after a competing Cargo rewrite: BLOCKED fixture command: ~/.cargo/bin/cargo build --offline --locked -p deep-hook
+BLOCKED tests/acceptance/1123/capture-redraft/origin.test.mjs › affected.mjs hands its own executable to the consumer after a competing Cargo rewrite: BLOCKED fixture command: ~/.cargo/bin/cargo build --offline --locked -p deep-hook
+BLOCKED tests/acceptance/1123/capture-redraft/origin.test.mjs › before keeps base and change origins separate during competing Cargo rewrites: BLOCKED fixture command: ~/.cargo/bin/cargo build --offline --locked -p deep-hook
+BLOCKED tests/acceptance/1326/calls.test.mjs › #1326.7ee1e41b AC5 default signing and tag-push guards hold their plants, allow the signed-commit twin, and refuse an overbroad install: BLOCKED: cargo build --locked -q -p deep-hook is required
+INCONCLUSIVE vitest-alone-worktree-0 report: the report ends before the run did, so a test's result may be missing
+INCONCLUSIVE vitest-alone-worktree-1 report: the report ends before the run did, so a test's result may be missing
+INCONCLUSIVE vitest-alone-worktree-2 report: the report ends before the run did, so a test's result may be missing
+INCONCLUSIVE vitest-alone-worktree-3 report: the report ends before the run did, so a test's result may be missing
+INCONCLUSIVE tests/acceptance/1114/affected.test.mjs › #1114.dc4376fb with --timed, the throttle log shows the timed grant around the timed files: INCONCLUSIVE: the load 179.6 is at or above the 20 cores, so no top-level timed grant can start
+INCONCLUSIVE tests/acceptance/1114/failures.test.mjs › #1114.f626edec failures on main equal today's: a run with the merge base's scripts and one with the change's, on the same paths, list the same FAIL ids: INCONCLUSIVE: the load 166.0 is at or above the 20 cores, so no top-level timed grant can start
+INCONCLUSIVE tests/acceptance/1116/guard.test.mjs › budget-window.mjs joins the guard regex: an unsigned change to it fails the guard: INCONCLUSIVE (platform): the issue runs on the Mac, whose /usr/bin/time counts instructions
+BLOCKED conformance lint: packages/conformance/dist is not built; run npm run build --workspaces
+BLOCKED slots: packages/conformance/dist or packages/contracts/dist is not built; run npm run build --workspaces
+INCONCLUSIVE 1 selected file was not run, left to a person or to a lane of its own; run each by hand or in its lane: tests/acceptance/1015/own-repo.test.ts (by hand)
+INCONCLUSIVE 2 slow files were not run; --slow runs them: tests/acceptance/1113/before.test.mjs tests/acceptance/1114/lanes.test.mjs
+FAIL affected: 182 new, 45 already failing on main, 14 inconclusive or blocked, 0 listed skips, 200 passed, in 3691 s at load 77; logs in <tmp>/deep-affected-…
+exit 1

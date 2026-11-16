@@ -1,0 +1,376 @@
+The #462 suite run once at base commit f6d811c79 ("Merge pull request #2392 …"; no implementation of #462), on macOS
+arm64 (rustc 1.99.1, Node 24.22.2, vitest 5.0.5), with `PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1
+CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/462 --testTimeout=600000
+--no-file-parallelism` through scripts/lease, which ran it unleased here (the checkout's path redacted to `<checkout>`;
+deep-gpu and deep-canvas were built just before, so each file's own cargo build was a no-op). Every test fails at the
+missing surface: `view3d`'s `strokes` field (absent), the planted names (the scenario answers `bad_input`), a second look
+for a region or a shot (the base draws the whole film in the call's look, so the slab is one color across the edge and
+in both shots: with look a it keeps red 240 at every pixel, and the status marks and legend are exact while the guards
+that the looks are drawn fail), the three-look refusal (the base draws the film), `film2d`'s `document` (absent), motifs
+(nothing moves, so the guards that the motifs move things fail), and the taste call (INCONCLUSIVE, no TASTE.json).
+scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `npx vitest run --root tests/acceptance/462 --testTimeout=600000 --no-file-parallelism` runs unleased
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/462
+
+ ❯ ac2-region-edges.test.ts (4 tests | 4 failed) 9097ms
+   ❯ AC2 #462.1b887b5d a region's edge splits an item between two looks; a third look is refused outside a transition, four draw inside one (4)
+     × AC2 #462.1b887b5d a slab crossing a torn region edge draws in both looks, their coverage summing to one at every pixel 3025ms
+     × AC2 #462.1b887b5d (planted) each side clipped by its own copy of the edge leaves pixels whose coverage doesn't sum to one, and fails naming them 23ms
+     × AC2 #462.1b887b5d a third look in one frame outside a transition window is refused, naming the shot and the time 1018ms
+     × AC2 #462.1b887b5d a cross-fade between two shots that each draw two looks draws all four inside its window, coverage summing to one 1190ms
+ ❯ ac1-strokes-orbit.test.ts (4 tests | 4 failed) 5973ms
+   ❯ AC1 #462.c53608f8 strokes stay on their reprojected anchors through an orbit, and a sought frame equals the played one (4)
+     × AC1 #462.c53608f8 the brush look: every stroke within 0.5 px of its reprojected anchor on its box, and frames 13 and 37 sought equal played by pixel hash 2848ms
+     × AC1 #462.c53608f8 the dab look: every stroke within 0.5 px of its reprojected anchor on its box, and frames 13 and 37 sought equal played by pixel hash 711ms
+     × AC1 #462.c53608f8 the dot look: every stroke within 0.5 px of its reprojected anchor on its box, and frames 13 and 37 sought equal played by pixel hash 904ms
+     × AC1 #462.c53608f8 (planted) strokes placed where the previous frame's camera put them fail the reprojection, naming the stroke 31ms
+stdout | taste.test.ts > AC5 #462.28d871fe the screenshots and recordings, and the one taste call on them > AC5 #462.28d871fe the run writes a shot split into two looks along a drawn edge, strokes on 3D boxes, the status legend, an orbit recording and a motifs recording from the renderer's own frames, and the recorded call on exactly those says they look right
+AC5 #462.28d871fe: written from this run's frames:
+  target/acceptance/462/region-edge.png  3d80bf2ddd5a7e34aed4ca077aea12dcc1d53894d1577ae8d60f0d0606048be9
+  target/acceptance/462/strokes.png  87afa17b060ffcf56bdc075ad3a017671335ca11bad7863f72532cdd4ef0aba7
+  target/acceptance/462/status-legend.png  ce00a0a1bf8cf4cc197a946ef3aecef2d0073fe5cbb63cdf6851a833acaf662c
+  target/acceptance/462/orbit.apng  7c69ec34709af1cf800a351ef3c2384a79cf063f521ebc6f4f4dcff0b5a80c4b
+  target/acceptance/462/motifs.apng  7bd0411d2d7bd9d3dc626aac22ae2fe1f4c0d25b95a4a8705bde9a044a9b301f
+
+ ❯ taste.test.ts (1 test | 1 failed) 4864ms
+   ❯ AC5 #462.28d871fe the screenshots and recordings, and the one taste call on them (1)
+     × AC5 #462.28d871fe the run writes a shot split into two looks along a drawn edge, strokes on 3D boxes, the status legend, an orbit recording and a motifs recording from the renderer's own frames, and the recorded call on exactly those says they look right 3653ms
+ ❯ ac3-status-exact.test.ts (2 tests | 2 failed) 4074ms
+   ❯ AC3 #462.2e279aeb status colors are exact in every look and region, with the legend whenever they show (2)
+     × AC3 #462.2e279aeb in both shots' looks, in both regions and inside the cross-fade, each mark and legend swatch draws the document's status color exactly 2722ms
+     × AC3 #462.2e279aeb (planted) status drawn in the look under each mark fails, naming the binding 29ms
+ ❯ ac4-motifs.test.ts (4 tests | 4 failed) 7614ms
+   ❯ AC4 #462.aac0f1f4 motifs leave the document unchanged, hold still under reduced motion and never move text during a reading hold (4)
+     × AC4 #462.aac0f1f4 playing the film with motifs leaves the document's revision hash what it was when it opened 3457ms
+     × AC4 #462.aac0f1f4 (planted) motifs written into the document each frame change its hash, and fail naming played 24ms
+     × AC4 #462.aac0f1f4 under reduced motion the motifs hold still: every frame of the film is alike, though played normally they move 1580ms
+     × AC4 #462.aac0f1f4 a motif never moves the title during the reading hold, though it moves it before 936ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 15 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac1-strokes-orbit.test.ts > AC1 #462.c53608f8 strokes stay on their reprojected anchors through an orbit, and a sought frame equals the played one > AC1 #462.c53608f8 the brush look: every stroke within 0.5 px of its reprojected anchor on its box, and frames 13 and 37 sought equal played by pixel hash
+AssertionError: the brush look through the orbit: frame 0: strokes (README: view3d's strokes field) is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr ../449/helpers.ts:60:67
+     58| }
+     59| export function arr(v: JsonValue | undefined, what: string): JsonValue…
+     60|   expect(Array.isArray(v), `${what} is an array, got ${show(v)}`).toBe…
+       |                                                                   ^
+     61|   return v as JsonValue[];
+     62| }
+ ❯ helpers.ts:151:21
+ ❯ strokeFrames helpers.ts:148:50
+ ❯ playedStrokes ac1-strokes-orbit.test.ts:64:18
+ ❯ orbit ac1-strokes-orbit.test.ts:73:18
+ ❯ ac1-strokes-orbit.test.ts:93:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/15]⎯
+
+ FAIL  ac1-strokes-orbit.test.ts > AC1 #462.c53608f8 strokes stay on their reprojected anchors through an orbit, and a sought frame equals the played one > AC1 #462.c53608f8 the dab look: every stroke within 0.5 px of its reprojected anchor on its box, and frames 13 and 37 sought equal played by pixel hash
+AssertionError: the dab look through the orbit: frame 0: strokes (README: view3d's strokes field) is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr ../449/helpers.ts:60:67
+     58| }
+     59| export function arr(v: JsonValue | undefined, what: string): JsonValue…
+     60|   expect(Array.isArray(v), `${what} is an array, got ${show(v)}`).toBe…
+       |                                                                   ^
+     61|   return v as JsonValue[];
+     62| }
+ ❯ helpers.ts:151:21
+ ❯ strokeFrames helpers.ts:148:50
+ ❯ playedStrokes ac1-strokes-orbit.test.ts:64:18
+ ❯ orbit ac1-strokes-orbit.test.ts:73:18
+ ❯ ac1-strokes-orbit.test.ts:97:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/15]⎯
+
+ FAIL  ac1-strokes-orbit.test.ts > AC1 #462.c53608f8 strokes stay on their reprojected anchors through an orbit, and a sought frame equals the played one > AC1 #462.c53608f8 the dot look: every stroke within 0.5 px of its reprojected anchor on its box, and frames 13 and 37 sought equal played by pixel hash
+AssertionError: the dot look through the orbit: frame 0: strokes (README: view3d's strokes field) is an array, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ arr ../449/helpers.ts:60:67
+     58| }
+     59| export function arr(v: JsonValue | undefined, what: string): JsonValue…
+     60|   expect(Array.isArray(v), `${what} is an array, got ${show(v)}`).toBe…
+       |                                                                   ^
+     61|   return v as JsonValue[];
+     62| }
+ ❯ helpers.ts:151:21
+ ❯ strokeFrames helpers.ts:148:50
+ ❯ playedStrokes ac1-strokes-orbit.test.ts:64:18
+ ❯ orbit ac1-strokes-orbit.test.ts:73:18
+ ❯ ac1-strokes-orbit.test.ts:101:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/15]⎯
+
+ FAIL  ac1-strokes-orbit.test.ts > AC1 #462.c53608f8 strokes stay on their reprojected anchors through an orbit, and a sought frame equals the played one > AC1 #462.c53608f8 (planted) strokes placed where the previous frame's camera put them fail the reprojection, naming the stroke
+AssertionError: deep-gpu run --planted strokes_from_previous_frame exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ runGpu ../449/helpers.ts:229:151
+    227|   if (run.error) throw Error(`${what}: ${run.error.message}`);
+    228|   const stdout = run.stdout ?? '';
+    229|   expect(run.status, `${what} exited 0 (${run.signal ?? 'no signal'});…
+       |                                                                                                                                                       ^
+    230|   const lines = stdout.split('\n').filter((l) => l !== '');
+    231|   expect(lines.length, `${what}: one answer line for the one scenario …
+ ❯ run helpers.ts:34:10
+ ❯ playedStrokes ac1-strokes-orbit.test.ts:63:19
+ ❯ ac1-strokes-orbit.test.ts:108:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/15]⎯
+
+ FAIL  ac2-region-edges.test.ts > AC2 #462.1b887b5d a region's edge splits an item between two looks; a third look is refused outside a transition, four draw inside one > AC2 #462.1b887b5d a slab crossing a torn region edge draws in both looks, their coverage summing to one at every pixel
+AssertionError: the slab across the region's edge:
+  1 s: right of the edge the slab draws (240, 210, 130), not look b's (240, 150, 230): expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "1 s: right of the edge the slab draws (240, 210, 130), not look b's (240, 150, 230)",
++ ]
+
+ ❯ none ../449/helpers.ts:79:144
+     77| /** No failures; the message lists them. */
+     78| export function none(failures: readonly string[], what: string): void {
+     79|   expect(failures, `${what}:\n  ${failures.slice(0, 40).join('\n  ')}$…
+       |                                                                                                                                                ^
+     80| }
+     81| /** At least one failure, and one that names each of `names`: what a p…
+ ❯ ac2-region-edges.test.ts:66:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/15]⎯
+
+ FAIL  ac2-region-edges.test.ts > AC2 #462.1b887b5d a region's edge splits an item between two looks; a third look is refused outside a transition, four draw inside one > AC2 #462.1b887b5d (planted) each side clipped by its own copy of the edge leaves pixels whose coverage doesn't sum to one, and fails naming them
+AssertionError: deep-gpu run --planted region_sides_clip_independently exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ runGpu ../449/helpers.ts:229:151
+    227|   if (run.error) throw Error(`${what}: ${run.error.message}`);
+    228|   const stdout = run.stdout ?? '';
+    229|   expect(run.status, `${what} exited 0 (${run.signal ?? 'no signal'});…
+       |                                                                                                                                                       ^
+    230|   const lines = stdout.split('\n').filter((l) => l !== '');
+    231|   expect(lines.length, `${what}: one answer line for the one scenario …
+ ❯ run helpers.ts:34:10
+ ❯ split ac2-region-edges.test.ts:59:19
+ ❯ ac2-region-edges.test.ts:71:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/15]⎯
+
+ FAIL  ac2-region-edges.test.ts > AC2 #462.1b887b5d a region's edge splits an item between two looks; a third look is refused outside a transition, four draw inside one > AC2 #462.1b887b5d a third look in one frame outside a transition window is refused, naming the shot and the time
+AssertionError: three looks from 2 s in shot crowded are refused, not drawn: {"frames":[{"frame":0,"settled":true,"samples":{"drawn":1,"settling":false},"history":{"mode":"none","shows":0,"window":[],"rendered":[]},"resident":[],"selection":[],"frame_seq":0,"pixel_hash":"a4e0ed7b4a7da994b0f759ce8f43e88286e3bd0dc34e10952862fb9bcf401792"},{"frame":1,"settled":true,"samples":{"drawn":1,"settling":false},"history":{"mode":"none","shows":23520000,"window":[],"rendered":[]},"resident":[],"selection":[],"frame_seq":1,"pixel_hash":"a4e0ed7b4a7da994b0f759ce8f43e88286e3bd0dc34e10952862fb9bcf401792"},{"frame":2,"settled":true,"samples":{"drawn":1,"settling":false},"history":{"mode":"none","shows":47040000,"window":[],"rendered":[]},"resident":[],"selection":[],"frame_seq":2,"pixel_hash":"a4e0ed7b4a7da994b0f759ce8f43e88286e3bd0dc34e10952862fb9bcf401792"},{"frame":3,"settled":true,"samples":{"drawn":1,"settling":false},"history":{"mode":"none","shows":70560000,"window":[],"rendered":[]},"resident":[],"selection":[],"frame_seq":3,"pixel_hash":"a4e0ed7b4a7da994b0f759ce8f43e88286e3bd0dc34e10952862fb9bcf401792"},{"frame":4,"settled":true,"samples":{"drawn":1,"settling":false},"history":{"mode":"none","shows":94080000,"window":[],"rendered":[]},"resident":[],"selection":[],": expected undefined to be defined
+ ❯ ac2-region-edges.test.ts:86:111
+     84|     if (refused!['code'] === 'unsupported_platform') inconclusive('vie…
+     85|     framesOf(plain!, 'the crowded shot with one region, at 2.5 s');
+     86|     expect(refused!['code'], `three looks from 2 s in shot crowded are…
+       |                                                                                                               ^
+     87|     expect(refused!['frames'], 'a refused document draws no frame').to…
+     88|     const times = shotTimes(refused!, 'crowded');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/15]⎯
+
+ FAIL  ac2-region-edges.test.ts > AC2 #462.1b887b5d a region's edge splits an item between two looks; a third look is refused outside a transition, four draw inside one > AC2 #462.1b887b5d a cross-fade between two shots that each draw two looks draws all four inside its window, coverage summing to one
+AssertionError: the cross-fade between two two-look shots:
+  1 s (shot one alone): right of the edge the slab draws (240, 210, 130), not look b's (240, 150, 230)
+  3 s (shot two alone): left of the edge the slab draws (240, 210, 130), not look c's (240, 110, 60)
+  3 s (shot two alone): right of the edge the slab draws (240, 210, 130), not look d's (240, 250, 180)
+  2 s, inside the window: left of the edge the slab draws (240, 210, 130), its green not strictly between look a's 210 and look c's 110, so both don't draw there: expected [ …(4) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "1 s (shot one alone): right of the edge the slab draws (240, 210, 130), not look b's (240, 150, 230)",
++   "3 s (shot two alone): left of the edge the slab draws (240, 210, 130), not look c's (240, 110, 60)",
++   "3 s (shot two alone): right of the edge the slab draws (240, 210, 130), not look d's (240, 250, 180)",
++   "2 s, inside the window: left of the edge the slab draws (240, 210, 130), its green not strictly between look a's 210 and look c's 110, so both don't draw there",
++ ]
+
+ ❯ none ../449/helpers.ts:79:144
+     77| /** No failures; the message lists them. */
+     78| export function none(failures: readonly string[], what: string): void {
+     79|   expect(failures, `${what}:\n  ${failures.slice(0, 40).join('\n  ')}$…
+       |                                                                                                                                                ^
+     80| }
+     81| /** At least one failure, and one that names each of `names`: what a p…
+ ❯ ac2-region-edges.test.ts:116:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/15]⎯
+
+ FAIL  ac3-status-exact.test.ts > AC3 #462.2e279aeb status colors are exact in every look and region, with the legend whenever they show > AC3 #462.2e279aeb in both shots' looks, in both regions and inside the cross-fade, each mark and legend swatch draws the document's status color exactly
+AssertionError: status in every look and region (the colors expected: fail (191, 35, 43), running (0, 99, 184)):
+  1 s: the slab draws #ecece6 on both sides of the region's edge, so looks a and b aren't both drawn
+  3 s: the slab draws #ecece6 on both sides of the region's edge, so looks c and d aren't both drawn
+  the slab's left half draws #ecece6 in both shots, so shot two's look c isn't drawn: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "1 s: the slab draws #ecece6 on both sides of the region's edge, so looks a and b aren't both drawn",
++   "3 s: the slab draws #ecece6 on both sides of the region's edge, so looks c and d aren't both drawn",
++   "the slab's left half draws #ecece6 in both shots, so shot two's look c isn't drawn",
++ ]
+
+ ❯ none ../449/helpers.ts:79:144
+     77| /** No failures; the message lists them. */
+     78| export function none(failures: readonly string[], what: string): void {
+     79|   expect(failures, `${what}:\n  ${failures.slice(0, 40).join('\n  ')}$…
+       |                                                                                                                                                ^
+     80| }
+     81| /** At least one failure, and one that names each of `names`: what a p…
+ ❯ ac3-status-exact.test.ts:80:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/15]⎯
+
+ FAIL  ac3-status-exact.test.ts > AC3 #462.2e279aeb status colors are exact in every look and region, with the legend whenever they show > AC3 #462.2e279aeb (planted) status drawn in the look under each mark fails, naming the binding
+AssertionError: deep-gpu run --planted status_in_look exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ runGpu ../449/helpers.ts:229:151
+    227|   if (run.error) throw Error(`${what}: ${run.error.message}`);
+    228|   const stdout = run.stdout ?? '';
+    229|   expect(run.status, `${what} exited 0 (${run.signal ?? 'no signal'});…
+       |                                                                                                                                                       ^
+    230|   const lines = stdout.split('\n').filter((l) => l !== '');
+    231|   expect(lines.length, `${what}: one answer line for the one scenario …
+ ❯ run helpers.ts:34:10
+ ❯ statusProblems ac3-status-exact.test.ts:37:19
+ ❯ ac3-status-exact.test.ts:85:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/15]⎯
+
+ FAIL  ac4-motifs.test.ts > AC4 #462.aac0f1f4 motifs leave the document unchanged, hold still under reduced motion and never move text during a reading hold > AC4 #462.aac0f1f4 playing the film with motifs leaves the document's revision hash what it was when it opened
+AssertionError: the motif film: document (README: film2d's document field) is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj ../449/helpers.ts:56:63
+     54| export const show = (v: unknown): string => JSON.stringify(v)?.slice(0…
+     55| export function obj(v: JsonValue | undefined, what: string): JsonObjec…
+     56|   expect(isObject(v), `${what} is an object, got ${show(v)}`).toBe(tru…
+       |                                                               ^
+     57|   return v as JsonObject;
+     58| }
+ ❯ documentHashes helpers.ts:351:13
+ ❯ documentProblems ac4-motifs.test.ts:33:18
+ ❯ ac4-motifs.test.ts:47:10
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/15]⎯
+
+ FAIL  ac4-motifs.test.ts > AC4 #462.aac0f1f4 motifs leave the document unchanged, hold still under reduced motion and never move text during a reading hold > AC4 #462.aac0f1f4 (planted) motifs written into the document each frame change its hash, and fail naming played
+AssertionError: deep-gpu run --planted motifs_write_document exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ runGpu ../449/helpers.ts:229:151
+    227|   if (run.error) throw Error(`${what}: ${run.error.message}`);
+    228|   const stdout = run.stdout ?? '';
+    229|   expect(run.status, `${what} exited 0 (${run.signal ?? 'no signal'});…
+       |                                                                                                                                                       ^
+    230|   const lines = stdout.split('\n').filter((l) => l !== '');
+    231|   expect(lines.length, `${what}: one answer line for the one scenario …
+ ❯ run helpers.ts:34:10
+ ❯ documentProblems ac4-motifs.test.ts:31:27
+ ❯ ac4-motifs.test.ts:52:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/15]⎯
+
+ FAIL  ac4-motifs.test.ts > AC4 #462.aac0f1f4 motifs leave the document unchanged, hold still under reduced motion and never move text during a reading hold > AC4 #462.aac0f1f4 under reduced motion the motifs hold still: every frame of the film is alike, though played normally they move
+AssertionError: played normally, the motifs move the reeds and the title: expected 1 to be greater than 1
+ ❯ ac4-motifs.test.ts:61:90
+     59|     const moving = filmFrames(normal!, 'the motif film').map((f) => f.…
+     60|     const held = filmFrames(reduced!, 'the motif film under reduced mo…
+     61|     expect(distinct(moving), 'played normally, the motifs move the ree…
+       |                                                                                          ^
+     62|     expect(held.length, `under reduced motion the film draws its ${MOT…
+     63|     expect(distinct(held), `under reduced motion the ${held.length} fr…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/15]⎯
+
+ FAIL  ac4-motifs.test.ts > AC4 #462.aac0f1f4 motifs leave the document unchanged, hold still under reduced motion and never move text during a reading hold > AC4 #462.aac0f1f4 a motif never moves the title during the reading hold, though it moves it before
+AssertionError: before the hold (frames 0 to 44) the drifting title changes the frame: expected 1 to be greater than 1
+ ❯ ac4-motifs.test.ts:73:127
+     71|     const before = frames.filter((f) => f.frame <= 44);
+     72|     expect(hold.length, 'frames 46 to 89 lie inside the reading hold (…
+     73|     expect(distinct(before.map((f) => f.pixelHash)), 'before the hold …
+       |                                                                                                                               ^
+     74|     const moved = hold.filter((f) => f.pixelHash !== hold[0]!.pixelHas…
+     75|     expect(moved, `inside the reading hold the title stays where frame…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/15]⎯
+
+ FAIL  taste.test.ts > AC5 #462.28d871fe the screenshots and recordings, and the one taste call on them > AC5 #462.28d871fe the run writes a shot split into two looks along a drawn edge, strokes on 3D boxes, the status legend, an orbit recording and a motifs recording from the renderer's own frames, and the recorded call on exactly those says they look right
+AssertionError: INCONCLUSIVE: no taste call is recorded: show the owner
+  target/acceptance/462/region-edge.png  3d80bf2ddd5a7e34aed4ca077aea12dcc1d53894d1577ae8d60f0d0606048be9
+  target/acceptance/462/strokes.png  87afa17b060ffcf56bdc075ad3a017671335ca11bad7863f72532cdd4ef0aba7
+  target/acceptance/462/status-legend.png  ce00a0a1bf8cf4cc197a946ef3aecef2d0073fe5cbb63cdf6851a833acaf662c
+  target/acceptance/462/orbit.apng  7c69ec34709af1cf800a351ef3c2384a79cf063f521ebc6f4f4dcff0b5a80c4b
+  target/acceptance/462/motifs.apng  7bd0411d2d7bd9d3dc626aac22ae2fe1f4c0d25b95a4a8705bde9a044a9b301f
+and record the answer in tests/acceptance/462/TASTE.json (README: The taste call); this is not a pass
+ ❯ inconclusive ../449/helpers.ts:90:17
+     88| /** A test that can't be judged here fails with this, never passes. */
+     89| export function inconclusive(reason: string): never {
+     90|   return expect.fail(`INCONCLUSIVE: ${reason}; this is not a pass`);
+       |                 ^
+     91| }
+     92| /** A host or tool this machine lacks: the test fails with this messag…
+ ❯ taste.test.ts:68:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/15]⎯
+
+
+ Test Files  5 failed (5)
+      Tests  15 failed (15)
+   Start at  14:36:01
+   Duration  32.69s (tests 98%, transform 1%)
+

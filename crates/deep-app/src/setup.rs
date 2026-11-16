@@ -45,6 +45,9 @@ enum Found {
     },
     /// A program on your login shell's PATH, and its home folder where the row names one.
     Program(String, Option<String>),
+    /// The install row's (#1349): none of these programs on your login shell's PATH, and none where an agent's own
+    /// installer puts its program.
+    None(Vec<String>),
 }
 
 impl Step {
@@ -74,6 +77,14 @@ fn list() -> &'static [Step] {
                 name: text(row, "name"),
                 words: text(row, "box"),
                 found: match (&row["found"], text(&row["found"], "program")) {
+                    (found, _) if found["none"].is_array() => Found::None(
+                        found["none"]
+                            .as_array()
+                            .into_iter()
+                            .flatten()
+                            .filter_map(|p| p.as_str().map(str::to_owned))
+                            .collect(),
+                    ),
                     (found, Some(program)) => Found::Program(program, text(found, "folder")),
                     (found, None) if found.is_object() => Found::Home {
                         env: text(found, "env").unwrap_or_default(),
@@ -86,9 +97,28 @@ fn list() -> &'static [Step] {
     })
 }
 
+/// Each agent's own installer and its plan (#1349), as packages/hub/src/setup-steps.ts reads `adapters/install.json`.
+fn installers() -> &'static Value {
+    static FACTS: OnceLock<Value> = OnceLock::new();
+    FACTS.get_or_init(|| {
+        serde_json::from_str::<Value>(include_str!("../../../adapters/install.json"))
+            .expect("adapters/install.json is JSON")["agents"]
+            .clone()
+    })
+}
+
+/// An agent's maker's price page (#1349), from the shipped facts: an https address, or none.
+pub fn price_page(agent: &str) -> Option<String> {
+    installers()[agent]["plan"]["page"]
+        .as_str()
+        .filter(|page| page.starts_with("https://"))
+        .map(str::to_owned)
+}
+
+static LOGIN: OnceLock<String> = OnceLock::new();
+
 /// Your login shell's PATH, read once off the UI thread for the rows found on it; until then, the app's own.
 fn search_path() -> String {
-    static LOGIN: OnceLock<String> = OnceLock::new();
     static READING: OnceLock<()> = OnceLock::new();
     if let Some(path) = LOGIN.get() {
         return path.clone();
@@ -127,6 +157,19 @@ fn read_plan() -> Vec<(Step, bool)> {
                     && folder
                         .as_ref()
                         .is_none_or(|folder| home.join(folder).exists())
+            }
+            // Only once your login shell's PATH is read: the app's own PATH, from Finder, finds no agent anywhere.
+            Found::None(programs) => {
+                LOGIN.get().is_some()
+                    && programs
+                        .iter()
+                        .all(|program| find(&path, program).is_none())
+                    && installers()
+                        .as_object()
+                        .into_iter()
+                        .flatten()
+                        .filter_map(|(_, agent)| agent[std::env::consts::OS]["lands"].as_str())
+                        .all(|lands| !home.join(lands).exists())
             }
         })
         .map(|row| (row.clone(), done.contains(&row.key())))
@@ -193,12 +236,43 @@ pub fn screen_of(plan: &[(Step, bool)]) -> Screen {
     } else {
         ""
     };
+    // An agent Set up installs (#1349): said first, with what its maker charges and when that was read.
+    let installs: Vec<&Value> = plan
+        .iter()
+        .filter(|(row, _)| row.step == "install")
+        .filter_map(|(row, _)| row.agent.as_ref().map(|agent| &installers()[agent]))
+        .collect();
+    let first: String = installs
+        .iter()
+        .map(|agent| {
+            let name = agent["name"].as_str().unwrap_or_default();
+            let plan = &agent["plan"];
+            let paid = match (plan["price"].as_str(), plan["read"].as_str()) {
+                _ if plan["paid"] != Value::Bool(true) => String::new(),
+                (Some(price), Some(read)) => {
+                    format!(" It needs a paid plan from its maker: {price}, as their price page said on {read}.")
+                }
+                _ => " It needs a paid plan from its maker.".to_owned(),
+            };
+            format!("Installs {name} with its maker's own installer.{paid} ")
+        })
+        .collect();
+    let kept: Vec<String> = installs
+        .iter()
+        .filter_map(|agent| agent["name"].as_str().map(str::to_owned))
+        .collect();
+    let undo = if kept.is_empty() {
+        undo
+    } else {
+        format!("{undo} {} stays installed.", listed(&kept))
+    };
     Screen {
         lines: vec![
             (
                 "adds",
                 format!(
-                    "Adds hooks to {}{reads}. A hook is {}{}.",
+                    "{first}{}dds hooks to {}{reads}. A hook is {}{}.",
+                    if first.is_empty() { "A" } else { "Then it a" },
                     listed(&names),
                     HOOK_MEANS[..1].to_lowercase(),
                     &HOOK_MEANS[1..]
@@ -291,6 +365,9 @@ pub fn assume_finished() {
 pub fn assume_unfinished() {
     ASSUMED.with(|assumed| assumed.set(false));
     DISK.with(|disk| disk.set(Some(Disk::NotStarted)));
+    // A replica has no tick that reads the plan again once the login shell's PATH comes in, so it reads it first, as
+    // the app's window shows it a tick after that read (#1349's install row is decided on it).
+    let _ = LOGIN.set(login_path().unwrap_or_else(|_| std::env::var("PATH").unwrap_or_default()));
     PLAN.with(|plan| *plan.borrow_mut() = read_plan());
 }
 
@@ -476,9 +553,32 @@ fn find(path: &str, name: &str) -> Option<PathBuf> {
         })
 }
 
-/// `deep` as `path` finds it, run with `path` so its runtime is found too; without one there, the checkout's CLI.
+/// The app's own runtime folder's `deep` (#1349), beside its program in the bundle: `Contents/MacOS/deep-app` ships
+/// with `Contents/Resources/runtime/bin/deep`.
+fn shipped(exe: &Path) -> Option<PathBuf> {
+    let deep = exe.parent()?.parent()?.join("Resources/runtime/bin/deep");
+    deep.is_file().then_some(deep)
+}
+
+/// A replica's stand-in for the app's runtime folder (#1349), in no shipped build (#1457): Set up runs its bin/deep.
+#[cfg(feature = "fixtures")]
+static RUNTIME: OnceLock<PathBuf> = OnceLock::new();
+
+/// A replica's door to [`RUNTIME`], in no shipped build (#1457).
+#[cfg(feature = "fixtures")]
+pub fn assume_runtime(folder: PathBuf) {
+    let _ = RUNTIME.set(folder);
+}
+
+/// `deep` from the app's own runtime folder; else as `path` finds it, run with `path` so its runtime is found too;
+/// without one there, the checkout's CLI.
 pub fn deep(path: &str) -> Command {
-    let mut command = match find(path, "deep") {
+    #[cfg(feature = "fixtures")]
+    let own = RUNTIME.get().map(|folder| folder.join("bin/deep"));
+    #[cfg(not(feature = "fixtures"))]
+    let own = None;
+    let own = own.or_else(|| std::env::current_exe().ok().and_then(|exe| shipped(&exe)));
+    let mut command = match own.or_else(|| find(path, "deep")) {
         Some(deep) => Command::new(deep),
         None => {
             let mut node = Command::new(find(path, "node").unwrap_or_else(|| "node".into()));

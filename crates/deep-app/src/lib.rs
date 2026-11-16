@@ -28,6 +28,10 @@ pub mod chrome;
 pub mod chrome_fixture;
 pub mod chrome_fx;
 pub mod chrome_gallery;
+#[cfg(all(feature = "hdr-fixture", target_os = "macos"))]
+pub mod hdr_fixture;
+#[cfg(target_os = "macos")]
+pub mod hdr_layer;
 pub mod codes;
 pub mod commands;
 pub mod confirm;
@@ -40,6 +44,8 @@ pub mod hub;
 /// #1486: chrome thumbnails through the one image service.
 pub mod images;
 pub mod installed;
+/// #1606: the device key in the OS secret store.
+mod keystore;
 pub mod kinds;
 pub mod list;
 pub mod notice;

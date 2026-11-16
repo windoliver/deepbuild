@@ -1,0 +1,138 @@
+{
+ "flywheel": {
+  "at3s": 1080.019,
+  "rises": true,
+  "crossings": [
+   {
+    "t_s": 0.25,
+    "level": 90,
+    "direction": 1
+   }
+  ]
+ },
+ "disc": {
+  "faults": [
+   {
+    "step": 1,
+    "a": "fly",
+    "kind": "speed_cap"
+   }
+  ],
+  "degPerStep": 44.855
+ },
+ "limit": {
+  "breaks": [
+   {
+    "step": 6,
+    "a": "elbow",
+    "torque": 50
+   }
+  ],
+  "torqueBefore": [
+   50,
+   50,
+   50,
+   50,
+   50
+  ]
+ },
+ "pressed": {
+  "breaks": 0,
+  "forceAt2s": 63.58,
+  "torqueAt2s": 0
+ },
+ "hanging": {
+  "breaks": [
+   {
+    "step": 6,
+    "a": "heavy_hook",
+    "force": 19.62
+   }
+  ],
+  "forceStep1": 19.62
+ },
+ "gears": {
+  "inAt2s": 180,
+  "outAt2s": 360
+ },
+ "pulley": {
+  "worstSumError": 0.000002384185791015625,
+  "leftYAt3s": -3
+ },
+ "arm": {
+  "jams": [
+   {
+    "step": 241,
+    "a": "grip",
+    "kind": "jam"
+   }
+  ],
+  "jamSteps": 1,
+  "around2s": [
+   {
+    "step": 236,
+    "shoulder": 7.402,
+    "elbow": -14.804
+   },
+   {
+    "step": 238,
+    "shoulder": 5.232,
+    "elbow": -10.464
+   },
+   {
+    "step": 240,
+    "shoulder": 0.176,
+    "elbow": -0.352
+   },
+   {
+    "step": 241,
+    "shoulder": 0,
+    "elbow": 0
+   },
+   {
+    "step": 242,
+    "shoulder": 0,
+    "elbow": 0
+   },
+   {
+    "step": 244,
+    "shoulder": 0,
+    "elbow": 0
+   },
+   {
+    "step": 248,
+    "shoulder": 0,
+    "elbow": 0
+   },
+   {
+    "step": 260,
+    "shoulder": 0,
+    "elbow": 0
+   },
+   {
+    "step": 300,
+    "shoulder": 0,
+    "elbow": 0
+   },
+   {
+    "step": 360,
+    "shoulder": 0,
+    "elbow": 0
+   }
+  ]
+ },
+ "massRatio": [
+  [
+   {
+    "ids": [
+     "wrist",
+     "torso",
+     "hand"
+    ],
+    "ratio": 200
+   }
+  ],
+  [],
+  []
+ ]
+}

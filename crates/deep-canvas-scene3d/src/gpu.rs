@@ -96,9 +96,16 @@ pub fn response_in(ports: &[(&'static str, &'static str)]) -> Vec<(&'static str,
     ports.iter().chain(OWN).copied().collect()
 }
 
+/// A response: the output it is, its inputs and its default.
+type Response = (
+    &'static str,
+    &'static [(&'static str, &'static str)],
+    &'static str,
+);
+
 /// The light loop's two responses: the output each is, its inputs and its default, the core's own
 /// shading, which naming leaves as it is.
-pub const RESPONSES: &[(&str, &[(&str, &str)], &str)] = &[
+pub const RESPONSES: &[Response] = &[
     ("light", LIGHT_IN, "core.light@1"),
     ("ambient", AMBIENT_IN, "core.ambient@1"),
 ];

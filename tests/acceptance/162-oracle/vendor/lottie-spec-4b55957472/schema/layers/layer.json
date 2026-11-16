@@ -1,0 +1,47 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "title": "Layer",
+    "description": "Common properties for all layers",
+    "allOf": [
+        {
+            "$ref": "#/$defs/helpers/visual-object"
+        },
+        {
+            "type": "object",
+            "properties": {
+                "hd": {
+                    "title": "Hidden",
+                    "description": "Whether the layer is hidden",
+                    "type": "boolean"
+                },
+                "ty": {
+                    "title": "Type",
+                    "description": "Layer Type",
+                    "type": "integer"
+                },
+                "ind": {
+                    "title": "Index",
+                    "type": "integer",
+                    "description": "Index that can be used for parenting and referenced in expressions"
+                },
+                "parent": {
+                    "title": "Parent Index",
+                    "description": "Must be the `ind` property of another layer",
+                    "type": "integer"
+                },
+                "ip": {
+                    "title": "In Point",
+                    "description": "Frame when the layer becomes visible (inclusive).",
+                    "type": "number"
+                },
+                "op": {
+                    "title": "Out Point",
+                    "description": "Frame when the layer becomes invisible (exclusive). The layer is visible while `ip <= t < op`.",
+                    "type": "number"
+                }
+            },
+            "required": ["ty", "ip", "op"]
+        }
+    ]
+}

@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 
 use serde_json::{Map, Value};
 
-use super::{join, Body, BodyKind, Breaks, Joint, JointKind, Pose, Reader, Refusal, Shape};
+use super::{join, Body, BodyKind, Breaks, Joint, JointKind, Pose, Reader, Refusal, Shape, Soft};
 
 /// The issue that brings an output's post-processing fields.
 pub const OUTPUT_LATER: &str = "#2248";
@@ -22,10 +22,12 @@ pub enum Read {
     JointForce,
     ContactCount,
     Energy,
+    /// A soft body's particles (#524).
+    ParticlePositions,
 }
 
 /// Each read's name, and whether it reads a joint rather than a body.
-pub const READS: [(&str, Read, bool); 8] = [
+pub const READS: [(&str, Read, bool); 9] = [
     ("pose", Read::Pose, false),
     ("position", Read::Position, false),
     ("angle", Read::Angle, false),
@@ -34,6 +36,7 @@ pub const READS: [(&str, Read, bool); 8] = [
     ("joint_force", Read::JointForce, true),
     ("contact_count", Read::ContactCount, false),
     ("energy", Read::Energy, false),
+    ("particle_positions", Read::ParticlePositions, false),
 ];
 
 impl Read {
@@ -63,6 +66,19 @@ pub struct Output {
     pub to: Option<String>,
     /// `interpolate: hold`: a frame between two steps shows the earlier; else it lerps.
     pub hold: bool,
+    /// `to: skin {item, material}` (#524): the soft body drawn on an item built on its lattice.
+    pub skin: Option<Skin>,
+    /// #523: the levels whose crossings its reading writes (`crossing {t, output, level,
+    /// direction}`); a joint's reading only.
+    pub crossings: Vec<f64>,
+}
+
+/// A skin (Physics output: a skin): the item a soft body's particles draw as the vertices of, or
+/// `None` for the one the core builds (`item: auto`), in `material` or the look's default.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Skin {
+    pub item: Option<String>,
+    pub material: Option<String>,
 }
 
 /// A kinematic solve (Kinematic solve): in kinematic mode, each step sets each driven joint's
@@ -73,6 +89,28 @@ pub struct Solve {
     pub drivers: Vec<(String, String)>,
     pub iterations: u32,
     pub tolerance: f64,
+}
+
+/// #523: what couples a gear's or a pulley's joint (Joint: `ratio`, `of`, `pulley`), which the
+/// kinematic solve runs: a gear's second hinge's coordinate is `ratio` × its first's; a pulley's
+/// two lengths, each from its ground point to its body's anchor, keep `a + ratio × b` at their sum
+/// at build, its first within `length_min` and `length_max`.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Coupling {
+    /// 1 when absent.
+    pub ratio: f64,
+    /// A gear's two hinges, the driving one first.
+    pub of: Vec<String>,
+    pub pulley: Option<Pulley>,
+}
+
+/// A pulley's ground points and the range its first length keeps (Joint: `pulley`).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Pulley {
+    pub ground_a: [f64; 3],
+    pub ground_b: [f64; 3],
+    pub length_min: Option<f64>,
+    pub length_max: Option<f64>,
 }
 
 /// A physics output's fields.
@@ -87,6 +125,7 @@ const OUTPUT_KEYS: &[&str] = &[
     "keep",
     "expr",
     "unit",
+    "crossings",
 ];
 
 impl Reader {
@@ -125,6 +164,74 @@ impl Reader {
             );
         }
         follow
+    }
+
+    /// #523: a joint's `ratio`, `of` and `pulley`; a gear needs its two hinges and a pulley its
+    /// ground points.
+    pub(super) fn coupling(
+        &mut self,
+        j: &Map<String, Value>,
+        p: &str,
+        kind: JointKind,
+    ) -> Coupling {
+        let of = match j.get("of") {
+            None => Vec::new(),
+            Some(v) => {
+                let ids = v.as_array().and_then(|a| {
+                    a.iter()
+                        .map(|x| x.as_str().map(String::from))
+                        .collect::<Option<Vec<_>>>()
+                });
+                ids.unwrap_or_else(|| {
+                    let what = format!("{p}/of must be a list of joint IDs");
+                    self.refuse("out_of_range", join(p, "of"), v, what);
+                    Vec::new()
+                })
+            }
+        };
+        if kind == JointKind::Gear && of.len() != 2 {
+            let at = j.get("of").unwrap_or(&Value::Null);
+            let what = format!("gear {p} needs of: its two hinges");
+            self.refuse("physics.missing_field", join(p, "of"), at, what);
+        }
+        let pulley = j.get("pulley").map(|v| {
+            let pp = join(p, "pulley");
+            let keys = ["ground_a", "ground_b", "length_min", "length_max"];
+            let m = &self.obj(v, &pp, &keys);
+            Pulley {
+                ground_a: self.vec3(m, "ground_a", &pp, [0.0; 3]),
+                ground_b: self.vec3(m, "ground_b", &pp, [0.0; 3]),
+                length_min: self.opt_num(m, "length_min", &pp, 0.0),
+                length_max: self.opt_num(m, "length_max", &pp, 0.0),
+            }
+        });
+        if kind == JointKind::Pulley && pulley.is_none() {
+            let what = format!("pulley {p} needs pulley: its ground points");
+            self.refuse(
+                "physics.missing_field",
+                join(p, "pulley"),
+                &Value::Null,
+                what,
+            );
+        }
+        Coupling {
+            ratio: self.num(j, "ratio", p, 1.0, f64::MIN, f64::MAX),
+            of,
+            pulley,
+        }
+    }
+
+    /// #523: each gear's `of` names two hinges of this world.
+    pub(super) fn gears(&mut self, joints: &BTreeMap<String, Joint>) {
+        for (id, j) in joints.iter().filter(|(_, j)| j.kind == JointKind::Gear) {
+            for (i, h) in j.coupling.of.iter().enumerate() {
+                if joints.get(h).map(|x| x.kind) != Some(JointKind::Hinge) {
+                    let what = format!("{h} is not a hinge of this world, which gear {id} joins");
+                    let at = Value::String(h.clone());
+                    self.refuse("ref_unresolved", format!("joints/{id}/of/{i}"), &at, what);
+                }
+            }
+        }
     }
 
     /// A joint's `breaks_at {force, torque, over_steps = 1}`, which names a force or a torque.
@@ -204,14 +311,15 @@ impl Reader {
         })
     }
 
-    /// An output reading a body or a joint; its post-processing fields and the reads of soft and
-    /// character bodies are refused, naming the issue that brings each.
+    /// An output reading a body, a joint or a soft body's particles; its post-processing fields
+    /// and the reads of character bodies are refused, naming the issue that brings each.
     pub(super) fn output(
         &mut self,
         v: &Value,
         p: &str,
         bodies: &BTreeMap<String, Body>,
         joints: &BTreeMap<String, Joint>,
+        soft: &BTreeMap<String, Soft>,
     ) -> Option<Output> {
         let o = &self.obj(v, p, OUTPUT_KEYS);
         for k in ["reduce", "average", "sample", "keep", "expr", "unit"] {
@@ -222,13 +330,15 @@ impl Reader {
         let name = o.get("read").and_then(Value::as_str).unwrap_or_default();
         let read = match (Read::named(name), name) {
             (Some(r), _) => r,
-            (None, "particle_positions" | "grounded" | "sliding") => {
-                let issue = if name == "particle_positions" {
-                    "#1786"
-                } else {
-                    "#182"
-                };
-                self.refuse("physics.unsupported", join(p, "read"), &o["read"], format!("the read {name} isn't run by this backend interface yet; {issue} brings it"));
+            (None, "grounded" | "sliding") => {
+                self.refuse(
+                    "physics.unsupported",
+                    join(p, "read"),
+                    &o["read"],
+                    format!(
+                        "the read {name} isn't run by this backend interface yet; #182 brings it"
+                    ),
+                );
                 return None;
             }
             (None, _) => {
@@ -243,20 +353,12 @@ impl Reader {
                 return None;
             }
         };
-        let to = match o.get("to") {
-            Some(Value::Object(s)) if s.contains_key("skin") => {
-                self.refuse(
-                    "physics.unsupported",
-                    join(p, "to"),
-                    &o["to"],
-                    "a skin isn't drawn by this backend interface yet; #1786 brings it".into(),
-                );
-                None
-            }
-            _ => self.text(o, "to", p),
-        };
         let hold = self.word(o, "interpolate", p, "linear", &["linear", "hold"]) == "hold";
         let from = o.get("from").unwrap_or(&Value::Null);
+        if read == Read::ParticlePositions || o.get("to").is_some_and(Value::is_object) {
+            return self.particles(o, p, read, hold, soft);
+        }
+        let to = self.text(o, "to", p);
         // #1921: `<body>#*` reads every element body of an each: body, and writes each one's pose
         // into its row of an instancer's position and rotation columns.
         if let Some(body) = from.as_str().and_then(|f| f.strip_suffix("#*")) {
@@ -287,6 +389,8 @@ impl Reader {
                 read,
                 to,
                 hold,
+                skin: None,
+                crossings: Vec::new(),
             });
         }
         let found = from.as_str().filter(|id| {
@@ -306,11 +410,97 @@ impl Reader {
             );
             return None;
         };
+        let mut crossings = Vec::new();
+        if let Some(v) = o.get("crossings") {
+            let path = join(p, "crossings");
+            match v
+                .as_array()
+                .map(|a| a.iter().map(Value::as_f64).collect::<Option<Vec<_>>>())
+            {
+                Some(Some(levels)) if read.of_joint() => crossings = levels,
+                Some(Some(_)) => {
+                    let what = format!("{p} reads {name}; crossings watch a joint's reading, joint_coordinate or joint_force");
+                    self.refuse("out_of_range", path, v, what);
+                }
+                _ => {
+                    let what = format!("{path} must be a list of levels");
+                    self.refuse("out_of_range", path, v, what);
+                }
+            }
+        }
         Some(Output {
             from: id.into(),
             read,
             to,
             hold,
+            skin: None,
+            crossings,
+        })
+    }
+
+    /// An output of `particle_positions` (#524): every particle of a soft body, or with
+    /// `#<address>` one particle, `#pins` its pinned ones; with `to: {skin: {item, material}}`
+    /// the whole body drawn on an item built on its lattice. A skin reads only particles.
+    fn particles(
+        &mut self,
+        o: &Map<String, Value>,
+        p: &str,
+        read: Read,
+        hold: bool,
+        soft: &BTreeMap<String, Soft>,
+    ) -> Option<Output> {
+        let from = o.get("from").unwrap_or(&Value::Null);
+        let name = from.as_str().unwrap_or_default();
+        let (id, part) = name
+            .split_once('#')
+            .map_or((name, None), |(a, b)| (a, Some(b)));
+        let Some(s) = soft.get(id) else {
+            let what =
+                format!("{from} is not a soft body of this world, which particle_positions reads");
+            self.refuse("ref_unresolved", join(p, "from"), from, what);
+            return None;
+        };
+        if let Some(part) = part.filter(|a| *a != "pins" && !s.addresses.iter().any(|x| x == a)) {
+            let what = format!("{part:?} is no particle address of soft body {id}, nor pins");
+            self.refuse("ref_unresolved", join(p, "from"), from, what);
+            return None;
+        }
+        let to = o.get("to").unwrap_or(&Value::Null);
+        let skin = match to {
+            Value::Object(t) => {
+                let tp = join(p, "to");
+                let t = &self.obj(&Value::Object(t.clone()), &tp, &["skin"]);
+                let sp = join(&tp, "skin");
+                let k = &self.obj(
+                    t.get("skin").unwrap_or(&Value::Null),
+                    &sp,
+                    &["item", "material"],
+                );
+                let item = self.text(k, "item", &sp).filter(|i| i != "auto");
+                let skin = Skin {
+                    item,
+                    material: self.text(k, "material", &sp),
+                };
+                if read != Read::ParticlePositions || part.is_some() {
+                    let what = "a skin draws a whole soft body's particle_positions".to_string();
+                    self.refuse("out_of_range", sp, to, what);
+                    return None;
+                }
+                Some(skin)
+            }
+            _ => None,
+        };
+        Some(Output {
+            from: name.into(),
+            read,
+            to: if skin.is_some() {
+                None
+            } else {
+                self.text(o, "to", p)
+            },
+            hold,
+            skin,
+            crossings: Vec::new(),
         })
     }
 }

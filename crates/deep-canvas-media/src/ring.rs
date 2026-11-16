@@ -45,7 +45,12 @@ impl<S> Ring<S> {
             }
             self.every *= 2;
             let every = self.every;
-            let gone: Vec<i64> = self.entries.keys().filter(|s| *s % every != 0).copied().collect();
+            let gone: Vec<i64> = self
+                .entries
+                .keys()
+                .filter(|s| *s % every != 0)
+                .copied()
+                .collect();
             for s in gone {
                 if let Some((_, _, b)) = self.entries.remove(&s) {
                     self.bytes -= b;
@@ -102,5 +107,4 @@ impl<S> Ring<S> {
     pub fn every(&self) -> i64 {
         self.every
     }
-
 }

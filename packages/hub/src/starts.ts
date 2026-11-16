@@ -10,17 +10,17 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, 
 import { homedir } from 'node:os';
 import { basename, delimiter, isAbsolute, join } from 'node:path';
 import type { JsonObject } from '@deepbuild/adapters';
-import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
+import { isRecord as isObj, canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import type { Asks } from '@deepbuild/asks';
 import type { AppKey, SessionCredentials } from './forge-port.js';
 import { TERMINAL_PROTOCOL } from '@deepbuild/extension-host';
-import { HELPER, type Supervisor } from '@deepbuild/supervisor';
+import { alive, HELPER, type Supervisor } from '@deepbuild/supervisor';
 import { parents } from './children.js';
 import { registry } from './hookmap.js';
 import { refusal, Refused, ulid, type Plant } from './wire.js';
+import { ROLES, type Rule } from './work-rule.js';
 
 type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 const letters = (id: string): string => id.replace(/[^0-9A-Za-z]/g, '');
 const DAY = 86_400_000;
 /** How long a started agent has to write its first event before it ends as never started. */
@@ -34,10 +34,13 @@ type Walls = Record<(typeof WALLS)[number], boolean>;
 interface Sandbox { sandboxed: boolean; walls: Walls }
 const NONE: Sandbox = { sandboxed: false, walls: { writes: false, credentials: false, network: false } };
 
-/** A run you approved, as `start.approval` records it, and the ask whose yes makes it count. */
-interface Approval { ask: string; at: number; repo: string; issues: number[]; agents: string[]; homes: Record<string, string>; modes: Record<string, string>; at_once: number; plan_share: number; until: number | null; hosts: string[] }
+/**
+ * A run you approved, as `start.approval` records it, and the ask whose yes makes it count. A standing run's (#1335)
+ * names a rule instead of a set: an issue joins it once the run found it meets the rule and is ready.
+ */
+interface Approval { ask: string; at: number; repo: string; issues: number[]; rule?: Rule | null; agents: string[]; homes: Record<string, string>; modes: Record<string, string>; at_once: number; plan_share: number; until: number | null; hosts: string[] }
 /** A start the hub made: its approval, its agent's process, the session its first hook named, and its sandbox. */
-interface Started { run: string; ask: string; agent: string; pid?: number; dir?: string; session?: string; sandbox: Sandbox; ended: boolean; timer?: NodeJS.Timeout; worktree?: string; token?: string }
+interface Started { run: string; ask: string; agent: string; pid?: number; dir?: string; session?: string; sandbox: Sandbox; ended: boolean; timer?: NodeJS.Timeout; worktree?: string; token?: string; model?: string; adopted?: number }
 /** A session's own forge credential while it lives, and the login GitHub records its pushes as. */
 interface Credential { token: string; login: string | null }
 type StartResult = { status: 'started'; run: string; worktree: string; branch: string; agent: string; version: string; mode: string; sandbox: Sandbox } | { status: 'refused'; reason: string; bound: string };
@@ -74,6 +77,20 @@ const exec = (file: string, args: string[], o: { cwd?: string; env?: NodeJS.Proc
   new Promise((done, fail) => execFile(file, args, { encoding: 'utf8', timeout: o.timeout ?? 30_000, ...o }, (error, stdout, stderr) => (error ? fail(Error(`${file} ${args.join(' ')}: ${String(stderr || error.message).trim()}`)) : done(stdout))));
 const tilde = (p: string): string => (p === '~' ? homedir() : p.startsWith('~/') ? join(homedir(), p.slice(2)) : p);
 const real = (p: string): string => { try { return realpathSync(p); } catch { return p; } };
+/**
+ * The default branch's ref in a checkout: origin/HEAD, else origin's main or master as last fetched; a workspace with no
+ * remote and no forge (#1347) has its own main. '' when there is none.
+ */
+async function defaultRef(dir: string): Promise<string> {
+  const git = (...args: string[]) => exec('git', ['-C', dir, ...args]).then((o) => o.trim());
+  const head = await git('symbolic-ref', '--quiet', 'refs/remotes/origin/HEAD').catch(() => '');
+  if (head) return head;
+  const remote = await git('remote').catch(() => '');
+  for (const candidate of remote ? ['refs/remotes/origin/main', 'refs/remotes/origin/master'] : ['refs/heads/main']) {
+    if (await git('rev-parse', '--verify', '--quiet', candidate).then(() => true, () => false)) return candidate;
+  }
+  return '';
+}
 
 export class Starts {
   private readonly started = new Map<string, Started>();
@@ -100,8 +117,20 @@ export class Starts {
       const kept = this.keptCredential(s);
       if (kept) { s.token = kept.token; if (kept.login) this.agentLogins.add(kept.login); }
       const status = await this.o.supervisor().status(s.run).catch(() => undefined);
-      if (status?.state === 'running') { s.ended = false; void this.o.supervisor().wait(s.run).then(() => { s.ended = true; this.endCredential(s); }, () => { s.ended = true; this.endCredential(s); }); }
-      else this.endCredential(s);
+      // This supervisor has no exit to wait for on a run the last hub started: it lives while the process the
+      // supervisor tracked for it does (#1332), read each time its liveness is asked.
+      const [tracked] = status?.state === 'running' ? (await this.o.raw(`SELECT json_extract(data, '$.pid') AS pid FROM events WHERE kind = 'process.tracked' AND json_extract(data, '$.run') = ? ORDER BY log_pos LIMIT 1`, [s.run])) as { pid: number }[] : [];
+      if (tracked && alive(tracked.pid)) {
+        s.ended = false;
+        s.adopted = tracked.pid;
+        // One whose agent hasn't hooked yet waits for its first hook as at its start: linked by its agent's PID, ended
+        // as never started if none comes in 60 s. This hub heard nothing while it was down.
+        if (!s.session) {
+          const pid = this.agentPid(s);
+          if (pid !== undefined) s.pid = pid;
+          s.timer = setTimeout(() => void this.neverStarted(s).catch(() => undefined), FIRST_EVENT_MS);
+        }
+      } else this.endCredential(s);
     }
   }
   close(): void {
@@ -112,6 +141,58 @@ export class Starts {
   rowOf(session: string): { run: string; sandbox: Sandbox } | undefined {
     for (const s of this.started.values()) if (s.session === session) return { run: s.run, sandbox: s.sandbox };
     return undefined;
+  }
+  /** A work run's approval (#1332): its bounds once you answered its ask yes, else undefined. */
+  async approvalOf(ask: string): Promise<Approval | undefined> {
+    const [row] = (await this.o.raw(`SELECT data FROM events WHERE kind = 'start.approval' AND subject = ? LIMIT 1`, [ask])) as { data: string }[];
+    return row ? (await this.approvals((JSON.parse(row.data) as Approval).repo)).find((a) => a.ask === ask) : undefined;
+  }
+  /** Whether a session is one a work run started (#1332): `deep work` raised the approval its start ran under. */
+  async inWorkRun(session: string): Promise<boolean> {
+    const s = this.runOf(session);
+    if (!s) return false;
+    const [row] = (await this.o.raw(`SELECT 1 AS x FROM events WHERE kind = 'work.run' AND subject = ? LIMIT 1`, [s.ask])) as unknown[];
+    return row !== undefined;
+  }
+  /** Whether GitHub records the agents' app's work as this login: what an agent writes never joins a run by itself (#1335). */
+  isAgentLogin(login: string): boolean {
+    return this.agentLogins.has(login);
+  }
+  /**
+   * Why a run's next start in an agent waits for the next plan window (#1335), or undefined: the account its home signs
+   * into has used the run's plan share of a live window. The run starts nothing and asks nothing until the window resets.
+   */
+  planHeld(a: Approval, agent: string): string | undefined {
+    const started = this.launchOf(agent);
+    if (!started) return undefined;
+    const home = tilde(a.homes[agent] ?? String(started.defaultHome));
+    const used = this.o.windowUsed(agent, home);
+    return used !== undefined && used >= a.plan_share ? `the next plan window: ${agent}'s in ${home} is ${used}% used, at the ${a.plan_share}% plan share ${a.ask} allows` : undefined;
+  }
+  /** The model a started run's agent reported, while this hub has heard it. */
+  modelOf(run: string): string | undefined {
+    return this.started.get(run)?.model;
+  }
+  /** Whether a started run's agent still runs. */
+  live(run: string): boolean {
+    const s = this.started.get(run);
+    if (s?.adopted !== undefined && !s.ended && !alive(s.adopted)) { s.ended = true; this.endCredential(s); }
+    return s !== undefined && !s.ended;
+  }
+  /** The session a started run's first hook named. */
+  sessionOfRun(run: string): string | undefined {
+    return this.started.get(run)?.session;
+  }
+  /** A started run's worktree, branch and base, as `start.started` recorded them: where a next attempt goes on. */
+  async treeOf(run: string): Promise<{ path: string; branch: string; base: string }> {
+    const [row] = (await this.o.raw(`SELECT data FROM events WHERE kind = 'start.started' AND subject = ? LIMIT 1`, [run])) as { data: string }[];
+    const d = JSON.parse(row!.data) as { worktree: string; branch: string; base: string };
+    return { path: d.worktree, branch: d.branch, base: d.base };
+  }
+  /** How a started run ended: whether it never wrote a first event. */
+  async endOf(run: string): Promise<{ never: boolean; session: string | null }> {
+    const [never] = (await this.o.raw(`SELECT 1 AS x FROM events WHERE kind = 'session.never_started' AND subject = ? LIMIT 1`, [run])) as unknown[];
+    return { never: never !== undefined, session: this.started.get(run)?.session ?? null };
   }
   /** The started run a session belongs to, once its first hook linked it. */
   runOf(session: string): Started | undefined {
@@ -126,40 +207,10 @@ export class Starts {
     if (caller.role !== 'cli') throw new Refused(refusal('role', '/method', 'Ask for a run from your own terminal, with deep start approve.', 'start.approve'));
     const agent = await this.o.agentAbove(caller.peer);
     if (agent) throw new Refused(refusal('role', '/method', `Nothing was asked: this deep command runs inside agent session ${agent}'s process tree, and no session asks for a run of its own. Ask from your own terminal.`, 'start.approve'));
-    const repo = await this.repoOf(params.repo);
-    const list = (v: unknown, at: string): string[] => {
-      if (!Array.isArray(v) || !v.length || !v.every((x) => typeof x === 'string' && x)) throw new Refused(refusal('type', at, `Give ${at.slice(8)} as a list of names.`, v));
-      return v as string[];
-    };
-    const map = (v: unknown, at: string): Record<string, string> => {
-      if (v === undefined) return {};
-      if (!isObj(v) || !Object.values(v).every((x) => typeof x === 'string' && x)) throw new Refused(refusal('type', at, `Give ${at.slice(8)} as agent=value pairs.`, v));
-      return v as Record<string, string>;
-    };
-    const issues = Array.isArray(params.issues) && params.issues.length && params.issues.every((n) => Number.isSafeInteger(n) && (n as number) > 0) ? params.issues as number[] : undefined;
-    if (!issues) throw new Refused(refusal('type', '/params/issues', 'Name the set: one or more issue numbers.', params.issues));
-    const agents = list(params.agents, '/params/agents');
-    for (const a of agents) if (!this.launchOf(a)) throw new Refused(refusal('enum', '/params/agents', `${a} can't be started here: name ${Object.keys(AGENTS).join(' or ')}.`, a));
-    const homes = map(params.homes, '/params/homes');
-    const modes = map(params.modes, '/params/modes');
-    for (const [a, m] of Object.entries(modes)) if (!isObj(this.launchOf(a)?.modes) || !(m in (this.launchOf(a)!.modes as Obj))) throw new Refused(refusal('enum', '/params/modes', `${a} has no mode ${m}: its facts name ${Object.keys((this.launchOf(a)?.modes ?? {}) as Obj).join(', ')}.`, m));
-    const at_once = params.at_once;
-    if (!Number.isSafeInteger(at_once) || (at_once as number) < 1 || (at_once as number) > 1000) throw new Refused(refusal('type', '/params/at_once', 'Say how many may run at once: 1 to 1000.', at_once));
-    const plan_share = params.plan_share;
-    if (typeof plan_share !== 'number' || !(plan_share >= 0 && plan_share <= 100)) throw new Refused(refusal('type', '/params/plan_share', 'Give the plan share as a percent, 0 to 100.', plan_share));
-    const until = params.until === undefined || params.until === null ? null : params.until;
-    if (until !== null && (!Number.isSafeInteger(until) || (until as number) <= this.o.now())) throw new Refused(refusal('type', '/params/until', 'Give its end as a time still to come.', until));
-    const hosts = params.hosts === undefined ? [] : list(params.hosts, '/params/hosts');
-    const bounds = { repo, issues, agents, homes, modes, at_once: at_once as number, plan_share, until: until as number | null, hosts };
-    // What each agent's own sandbox holds at the version installed now, so the ask shows it.
-    const sandbox: Record<string, Sandbox> = {};
-    const versions: Record<string, string> = {};
-    for (const a of agents) {
-      const v = await this.versionOf(a).catch(() => undefined);
-      if (v) versions[a] = v.version;
-      sandbox[a] = v ? this.sandboxOf(a, v.version).sandbox : NONE;
-    }
+    const { bounds, sandbox, versions } = await this.drafted(params);
+    const { repo, issues, rule, agents, homes, modes, at_once, plan_share, until, hosts } = bounds;
     const now = this.o.now();
+    const which = rule ? `for each issue that meets the rule "${rule.words}" as the forge holds it, read from structure alone: ${ruleSaid(rule)}` : `for issue${issues.length === 1 ? '' : 's'} ${issues.join(', ')}`;
     const key = sha256Hex(canonicalize({ start: bounds } as unknown as JsonValue));
     const held = (a: string): string => {
       const s = sandbox[a]!;
@@ -174,10 +225,16 @@ export class Starts {
       return (started.skipping as string[]).includes(m) ? `${a} may run in ${m}, which skips permission prompts` : `${a} may run in ${m}, or ${String(started.asks)}`;
     };
     const question = [
-      `Let DeepBuild start sessions without your Send on ${repo}, for issue${issues.length === 1 ? '' : 's'} ${issues.join(', ')}?`,
+      `Let DeepBuild start sessions without your Send on ${repo}, ${which}?`,
+      // A standing run (#1335): what joins, and what stops it.
+      ...(rule ? [`An issue joins only once it has acceptance criteria, a design link that resolves and dependencies that read; one that doesn't is named on the run's page. It runs until you pause it, or until ${IN_A_ROW_WORDS} pause it with one ask, and says each week what it landed, left and spent.`] : []),
       `${agents.map((a) => `${modeWords(a)}, in ${homes[a] ?? String(this.launchOf(a)!.defaultHome)}`).join('; ')}.`,
       `At most ${String(at_once)} at once, up to ${plan_share}% of each plan window${until !== null ? `, until ${new Date(until as number).toISOString()}` : ', with no end'}.`,
       `Each in its own worktree from the default branch; commands reach ${hosts.length ? hosts.join(', ') : 'no host'} beside the agent's own API. ${agents.map(held).join('. ')}.`,
+      // A work run (#1332) lands what it works: each session's push and PR are part of what you approve.
+      ...(params.lands === true ? ['Each session pushes its own branch and opens a pull request for its issue, which lands only on its own PASS.'] : []),
+      // A workspace's run (#1347) has no forge: each task's change finishes on the workspace's own main.
+      ...(params.lands === 'workspace' ? ["Each task's change finishes on the workspace's own main, only on its own PASS; no forge is read or written."] : []),
     ].join(' ');
     const ask = await this.o.asks().raise({ writer: 'core', actor: 'you', scope: 'you' }, 'start.approve', {
       kind: 'authority', question: question.slice(0, 2000),
@@ -185,11 +242,57 @@ export class Starts {
       recommended: null, deadline: now + DAY, fallback: 'you', default: 'deny', provisional: false, owner: 'you',
       key, pinned_to: { kind: 'evidence', ref: key },
     }, {
-      steps: [{ does: `Start ${agents.join(' or ')} sessions on ${basename(repo)} for issue${issues.length === 1 ? '' : 's'} ${issues.join(', ')}, each in its own worktree`, changes: [`worktrees of ${repo}`, `plan usage, up to ${plan_share}%`], undo: null, public: false, cost: 0 }],
+      steps: [{ does: `Start ${agents.join(' or ')} sessions on ${basename(repo)} ${which}, each in its own worktree`.slice(0, 2000), changes: [`worktrees of ${repo}`, `plan usage, up to ${plan_share}%`], undo: null, public: false, cost: 0 }],
       diff: key,
     });
-    await this.o.appendCore('start.approval', { ask, ...bounds, sandbox }, { subject: ask });
+    await this.o.appendCore('start.approval', { ask, ...bounds, sandbox }, { subject: ask, ...(rule ? { v: 2 } : {}) });
     return { ask };
+  }
+
+  /** A run's bounds from its params, refused where one is out of range, with what each agent's own sandbox holds at the version installed now. */
+  private async drafted(params: Obj): Promise<{ bounds: { repo: string; issues: number[]; rule?: Rule; agents: string[]; homes: Record<string, string>; modes: Record<string, string>; at_once: number; plan_share: number; until: number | null; hosts: string[] }; sandbox: Record<string, Sandbox>; versions: Record<string, string> }> {
+    const repo = await this.repoOf(params.repo);
+    const list = (v: unknown, at: string): string[] => {
+      if (!Array.isArray(v) || !v.length || !v.every((x) => typeof x === 'string' && x)) throw new Refused(refusal('type', at, `Give ${at.slice(8)} as a list of names.`, v));
+      return v as string[];
+    };
+    const map = (v: unknown, at: string): Record<string, string> => {
+      if (v === undefined) return {};
+      if (!isObj(v) || !Object.values(v).every((x) => typeof x === 'string' && x)) throw new Refused(refusal('type', at, `Give ${at.slice(8)} as agent=value pairs.`, v));
+      return v as Record<string, string>;
+    };
+    // A standing run (#1335) names a rule on structure instead of a set.
+    const rule = params.rule === undefined ? undefined : ruleIn(params.rule);
+    const issues = rule ? [] : Array.isArray(params.issues) && params.issues.length && params.issues.every((n) => Number.isSafeInteger(n) && (n as number) > 0) ? params.issues as number[] : undefined;
+    if (!issues) throw new Refused(refusal('type', '/params/issues', 'Name the set: one or more issue numbers.', params.issues));
+    const agents = list(params.agents, '/params/agents');
+    for (const a of agents) if (!this.launchOf(a)) throw new Refused(refusal('enum', '/params/agents', `${a} can't be started here: name ${Object.keys(AGENTS).join(' or ')}.`, a));
+    const homes = map(params.homes, '/params/homes');
+    const modes = map(params.modes, '/params/modes');
+    for (const [a, m] of Object.entries(modes)) if (!isObj(this.launchOf(a)?.modes) || !(m in (this.launchOf(a)!.modes as Obj))) throw new Refused(refusal('enum', '/params/modes', `${a} has no mode ${m}: its facts name ${Object.keys((this.launchOf(a)?.modes ?? {}) as Obj).join(', ')}.`, m));
+    const at_once = params.at_once;
+    if (!Number.isSafeInteger(at_once) || (at_once as number) < 1 || (at_once as number) > 1000) throw new Refused(refusal('type', '/params/at_once', 'Say how many may run at once: 1 to 1000.', at_once));
+    const plan_share = params.plan_share;
+    if (typeof plan_share !== 'number' || !(plan_share >= 0 && plan_share <= 100)) throw new Refused(refusal('type', '/params/plan_share', 'Give the plan share as a percent, 0 to 100.', plan_share));
+    const until = params.until === undefined || params.until === null ? null : params.until;
+    if (until !== null && (!Number.isSafeInteger(until) || (until as number) <= this.o.now())) throw new Refused(refusal('type', '/params/until', 'Give its end as a time still to come.', until));
+    const hosts = params.hosts === undefined ? [] : list(params.hosts, '/params/hosts');
+    if (rule && until !== null) throw new Refused(refusal('type', '/params/until', 'A standing run has no end date: it runs until you pause it or its breaker trips.', until));
+    const bounds = { repo, issues, ...(rule ? { rule } : {}), agents, homes, modes, at_once: at_once as number, plan_share, until: until as number | null, hosts };
+    // What each agent's own sandbox holds at the version installed now, so the ask shows it.
+    const sandbox: Record<string, Sandbox> = {};
+    const versions: Record<string, string> = {};
+    for (const a of agents) {
+      const v = await this.versionOf(a).catch(() => undefined);
+      if (v) versions[a] = v.version;
+      sandbox[a] = v ? this.sandboxOf(a, v.version).sandbox : NONE;
+    }
+    return { bounds, sandbox, versions };
+  }
+  /** A run your yes on another card already approved (#1342's brief): its bounds recorded under that card's ask, with no ask of its own. */
+  async approved(ask: string, params: Obj): Promise<void> {
+    const { bounds, sandbox } = await this.drafted(params);
+    await this.o.appendCore('start.approval', { ask, ...bounds, sandbox }, { subject: ask, ...(bounds.rule ? { v: 2 } : {}) });
   }
 
   /** The approvals on the record for a repo, newest first: each `start.approval` whose ask you answered yes on the trusted path. */
@@ -237,35 +340,67 @@ export class Starts {
     if (above) {
       return this.refused('caller', `deep start runs inside agent session ${above}'s process tree, so it acts as that session, and no session starts another, whatever it claims. Start it from your own terminal.`, `agent session ${above}`, { issue, agent });
     }
-    const repo = await this.repoOf(params.repo);
+    return this.launch({ repo: await this.repoOf(params.repo), issue, agent, prompt, ...(asked ? { mode: asked } : {}) }, 'you');
+  }
+
+  /**
+   * A start a work run makes (#1332): under the one approval it was raised as, by the hub and never a session, on the
+   * same bounds as `deep start`. A next attempt goes on in its issue's earlier worktree and branch, uncommitted files
+   * kept; a first one gets a worktree of its own.
+   */
+  runStart(r: { ask: string; repo: string; issue: number; agent: string; prompt: string; worktree?: { path: string; branch: string; base: string } }): Promise<StartResult> {
+    return this.launch(r, `the work run ${r.ask}`);
+  }
+
+  private async launch(r: { ask?: string; repo: string; issue: number; agent: string; prompt: string; mode?: string; worktree?: { path: string; branch: string; base: string } }, caller: string): Promise<StartResult> {
+    const { repo, issue, agent } = r;
     const about = { repo, issue, agent };
     const started = this.launchOf(agent);
-    if (!started) return this.refused('agent', `${agent} can't be started here: name ${Object.keys(AGENTS).join(' or ')}.`, 'you', about);
-    const mode = asked ?? String(started.asks);
+    if (!started) return this.refused('agent', `${agent} can't be started here: name ${Object.keys(AGENTS).join(' or ')}.`, caller, about);
+    const mode = r.mode ?? String(started.asks);
     // The planted wrong program starts with no approval on the record.
     const approvals = this.o.plant === 'starts-without-approval'
       ? [{ ask: 'ask:0', at: 0, repo, issues: [issue], agents: [agent], homes: {}, modes: { [agent]: mode }, at_once: 1000, plan_share: 100, until: null, hosts: [] }]
-      : await this.approvals(repo);
-    if (!approvals.length) return this.refused('approval', `No run you approved covers ${repo}, so issue ${issue} doesn't start. Ask for one with deep start approve and answer it yes.`, 'you', about);
+      : (await this.approvals(repo)).filter((a) => !r.ask || a.ask === r.ask);
+    if (!approvals.length) return this.refused('approval', `No run you approved covers ${repo}, so issue ${issue} doesn't start. Ask for one with deep start approve and answer it yes.`, caller, about);
     let approval: Approval | undefined;
     let outside: { bound: string; reason: string } | undefined;
     for (const a of approvals) {
-      const why = this.outside(a, issue, agent, mode, String(started.asks));
+      const why = await this.outside(a, issue, agent, mode, String(started.asks));
       if (!why) { approval = a; break; }
       outside ??= why;
     }
-    if (!approval) return this.refused(outside!.bound, outside!.reason, 'you', about);
+    if (!approval) return this.refused(outside!.bound, outside!.reason, caller, about);
+    // Its slot is taken before anything is waited for, so starts sent at once each count the ones before them; a later
+    // refusal or a throw frees it.
+    const s: Started = { run: `run:${ulid(this.o.now())}`, ask: approval.ask, agent, sandbox: NONE, ended: false };
+    this.started.set(s.run, s);
+    try {
+      const result = await this.begin(s, { ...r, mode }, approval, started, caller);
+      if (result.status === 'refused') this.started.delete(s.run);
+      return result;
+    } catch (error) {
+      s.ended = true;
+      this.started.delete(s.run);
+      throw error;
+    }
+  }
+  /** A start in the slot `s` holds: its version, worktree, credential and the agent in a terminal the hub hosts. */
+  private async begin(s: Started, r: { repo: string; issue: number; agent: string; prompt: string; mode: string; worktree?: { path: string; branch: string; base: string } }, approval: Approval, started: Obj, caller: string): Promise<StartResult> {
+    const { repo, issue, agent, prompt, mode } = r;
+    const { run } = s;
+    // A refusal frees the slot before it is recorded.
+    const refuse = (bound: string, reason: string): Promise<StartResult> => { s.ended = true; return this.refused(bound, reason, caller, { repo, issue, agent }); };
     const home = tilde(approval.homes[agent] ?? String(started.defaultHome));
     const used = this.o.windowUsed(agent, home);
-    if (used !== undefined && used >= approval.plan_share) return this.refused('plan_share', `${agent}'s plan window in ${home} is ${used}% used, at the ${approval.plan_share}% plan share ${approval.ask} allows.`, 'you', about);
+    if (used !== undefined && used >= approval.plan_share) return refuse('plan_share', `${agent}'s plan window in ${home} is ${used}% used, at the ${approval.plan_share}% plan share ${approval.ask} allows.`);
     const found = await this.versionOf(agent).catch((error: Error) => error);
-    if (found instanceof Error) return this.refused('version', `${agent} can't start: ${found.message}`, 'you', about);
+    if (found instanceof Error) return refuse('version', `${agent} can't start: ${found.message}`);
     const facts = this.factsOf(agent)!;
     if (!(facts.versions as string[]).includes(found.version)) {
-      return this.refused('version', `${agent} ${found.version} is past the versions its facts cover (${(facts.versions as string[]).join(', ')}), so its hooks would be watch-only; it doesn't start.`, 'you', about);
+      return refuse('version', `${agent} ${found.version} is past the versions its facts cover (${(facts.versions as string[]).join(', ')}), so its hooks would be watch-only; it doesn't start.`);
     }
-    const run = `run:${ulid(this.o.now())}`;
-    const tree = await this.worktree(repo, issue, run);
+    const tree = r.worktree ?? await this.worktree(repo, issue, run);
     const { sandbox, entry } = this.o.plant === 'starts-without-sandbox' ? { sandbox: NONE, entry: undefined } : this.sandboxOf(agent, found.version);
     const argv = this.argvOf(started, entry, mode, approval, prompt, tree.path);
     const env = this.envOf(started, home);
@@ -275,16 +410,14 @@ export class Starts {
     mkdirSync(dir, { recursive: true, mode: 0o700 });
     // Kept where a restarted hub finds it to revoke, under a folder the session's sandbox can't read.
     if (forge) writeFileSync(join(dir, 'credential'), JSON.stringify(forge), { mode: 0o600 });
-    const s: Started = { run, ask: approval.ask, agent, sandbox, ended: false, dir, worktree: tree.path, ...(forge ? { token: forge.token } : {}) };
-    this.started.set(run, s);
+    Object.assign(s, { sandbox, dir, worktree: tree.path }, forge ? { token: forge.token } : {});
     const launched = await this.o.supervisor().start({
       run, argv: [HELPER, 'pty', dir, '120', '40', String(TERMINAL_PROTOCOL), this.o.lock, '-', found.path, ...argv],
       cwd: tree.path, env, inherit: false, own_sandbox: true, keep: true, input: Buffer.from(`${ulid(this.o.now())}\n`),
     }).catch((error: Error) => error);
     if (launched instanceof Error || launched.status !== 'started') {
-      s.ended = true;
       this.endCredential(s);
-      return this.refused('version', `${agent} didn't start: ${launched instanceof Error ? launched.message : `held on ${launched.kind}`}.`, 'you', about);
+      return refuse('version', `${agent} didn't start: ${launched instanceof Error ? launched.message : `held on ${launched.kind}`}.`);
     }
     s.pid = launched.pid;
     // The session's own credential ends with it: revoked as soon as its agent's process is gone.
@@ -295,9 +428,13 @@ export class Starts {
   }
 
   /** The first bound of an approval a start falls outside, or undefined when it fits. */
-  private outside(a: Approval, issue: number, agent: string, mode: string, asks: string): { bound: string; reason: string } | undefined {
+  private async outside(a: Approval, issue: number, agent: string, mode: string, asks: string): Promise<{ bound: string; reason: string } | undefined> {
     if (a.until !== null && this.o.now() >= a.until) return { bound: 'end', reason: `The run ${a.ask} approved ended at ${new Date(a.until).toISOString()}, so issue ${issue} doesn't start.` };
-    if (!a.issues.includes(issue)) return { bound: 'set', reason: `Issue ${issue} is outside the set ${a.ask} approved: ${a.issues.join(', ')}.` };
+    // A standing run's issue (#1335) is in it once the run found it meets the rule and ready, and recorded its state.
+    if (a.rule) {
+      const [joined] = (await this.o.raw(`SELECT 1 AS x FROM events WHERE kind = 'work.state' AND subject = ? AND json_extract(data, '$.issue') = ? LIMIT 1`, [a.ask, issue])) as unknown[];
+      if (!joined) return { bound: 'set', reason: `Issue ${issue} hasn't joined the standing run ${a.ask}: an issue joins only once it meets the rule "${a.rule.words}" and is ready.` };
+    } else if (!a.issues.includes(issue)) return { bound: 'set', reason: `Issue ${issue} is outside the set ${a.ask} approved: ${a.issues.join(', ')}.` };
     if (!a.agents.includes(agent)) return { bound: 'agent', reason: `${agent} is outside the agents ${a.ask} approved: ${a.agents.join(', ')}.` };
     if (mode !== asks && mode !== a.modes[agent]) return { bound: 'mode', reason: `The mode ${mode} is one ${a.ask} doesn't name for ${agent}: it allows ${[asks, a.modes[agent]].filter(Boolean).join(' or ')}.` };
     const running = [...this.started.values()].filter((s) => s.ask === a.ask && !s.ended).length;
@@ -309,11 +446,25 @@ export class Starts {
   private async neverStarted(s: Started): Promise<void> {
     if (s.session || s.ended) return;
     await this.o.appendCore('session.never_started', { run: s.run, after_ms: FIRST_EVENT_MS }, { subject: s.run });
+    await this.end(s);
+  }
+  /** A work run's session whose change landed (#1332): its agent stopped and its slot freed. */
+  async stop(run: string): Promise<void> {
+    const s = this.started.get(run);
+    if (s && !s.ended) await this.end(s);
+  }
+  /** The agent's PID, as its terminal's host wrote it in the run's folder; undefined before it has. */
+  private agentPid(s: Started): number | undefined {
+    let agent = NaN;
+    try { agent = s.dir ? Number(readFileSync(join(s.dir, 'pid'), 'utf8').trim()) : NaN; } catch { /* none written */ }
+    return Number.isSafeInteger(agent) && agent > 1 ? agent : undefined;
+  }
+  private async end(s: Started): Promise<void> {
     s.ended = true;
     const sup = this.o.supervisor();
-    // The agent first, by the PID its terminal's host wrote: it runs in a session of its own under the host.
-    const agent = s.dir ? Number(readFileSync(join(s.dir, 'pid'), 'utf8').trim()) : NaN;
-    if (Number.isSafeInteger(agent) && agent > 1) try { process.kill(agent, 'SIGTERM'); } catch { /* gone */ }
+    // The agent first: it runs in a session of its own under its terminal's host.
+    const agent = this.agentPid(s);
+    if (agent !== undefined) try { process.kill(agent, 'SIGTERM'); } catch { /* gone */ }
     await sup.signal(s.run, 'SIGTERM').catch(() => undefined);
     await sup.cleanup(s.run).catch(() => undefined);
   }
@@ -322,7 +473,10 @@ export class Starts {
    * A hook's process, read when a session's first hook arrives: the started run whose terminal its agent runs under,
    * now that session's; the core records `start.session` before the hook's own events.
    */
-  async sessionOf(session: string, pid: number, agent: string): Promise<string | undefined> {
+  async sessionOf(session: string, pid: number, agent: string, model?: string): Promise<string | undefined> {
+    // The model a started session's agent reports in its hooks (#1332): its attempt records it.
+    const linked = model ? this.runOf(session) : undefined;
+    if (linked && model) linked.model = model;
     const waiting = [...this.started.values()].filter((s) => !s.ended && !s.session && s.pid !== undefined);
     if (!waiting.length || this.runOf(session)) return undefined;
     const up = await parents();
@@ -332,6 +486,7 @@ export class Starts {
       const s = waiting.find((w) => w.pid === p);
       if (!s) continue;
       s.session = session;
+      if (model) s.model = model;
       clearTimeout(s.timer);
       await this.o.appendCore('start.session', { run: s.run, session, agent }, { subject: s.run });
       return s.run;
@@ -370,11 +525,10 @@ export class Starts {
       await this.o.appendCore('forge.refused', { run: s.run, session, action, target: f.target.slice(0, 8000), call: call ?? null }, { subject: s.run });
     }
   }
-  /** The default branch a started session's worktree came from, as its repo's origin names it. */
+  /** The default branch a started session's worktree came from, read as the start read it. */
   private async defaultBranch(s: Started): Promise<string | undefined> {
     if (!s.worktree) return undefined;
-    const head = await exec('git', ['-C', s.worktree, 'symbolic-ref', '--quiet', '--short', 'refs/remotes/origin/HEAD']).catch(() => '');
-    return head.trim().replace(/^origin\//, '') || undefined;
+    return (await defaultRef(s.worktree)).replace(/^refs\/(?:remotes\/origin|heads)\//, '') || undefined;
   }
 
   // ---- The session's own forge credential (#1325).
@@ -475,17 +629,13 @@ export class Starts {
    */
   private async worktree(repo: string, issue: number, run: string): Promise<{ path: string; branch: string; base: string }> {
     const git = (...args: string[]) => exec('git', ['-C', repo, ...args]).then((o) => o.trim());
-    const head = await git('symbolic-ref', '--quiet', 'refs/remotes/origin/HEAD').catch(() => '');
-    let ref = head;
-    for (const candidate of ['refs/remotes/origin/main', 'refs/remotes/origin/master']) {
-      if (ref) break;
-      if (await git('rev-parse', '--verify', '--quiet', candidate).then(() => true, () => false)) ref = candidate;
-    }
+    const ref = await defaultRef(repo);
     if (!ref) throw new Refused(refusal('not_found', '/params/repo', `${repo} has no remote-tracking default branch (origin/HEAD, main or master); fetch it first.`, repo));
     const base = await git('rev-parse', `${ref}^{commit}`);
     const id = letters(run);
     const path = join(this.o.root, 'worktrees', basename(repo), id);
-    const branch = `deep/${issue}-${id.slice(-6).toLowerCase()}`;
+    // Named as the session map reads a session's issue: issue-<n>.
+    const branch = `deep/issue-${issue}-${id.slice(-6).toLowerCase()}`;
     mkdirSync(join(this.o.root, 'worktrees', basename(repo)), { recursive: true });
     await git('worktree', 'add', '--quiet', '-b', branch, path, base);
     await this.o.appendCore('worktree.created', { path, branch, owner: `task:${id}`, base });
@@ -573,4 +723,31 @@ function forgeRefusedIn(text: string): { action?: 'post-status' | 'merge'; ref?:
   }
   for (const m of text.matchAll(/GH013: Repository rule violations found for (refs\/\S+?)\.?(?:\s|$)/g)) out.push({ ref: m[1]!, target: m[1]! });
   return out;
+}
+
+/** What stops a standing run besides you (#1335), as its approval says it. */
+const IN_A_ROW_WORDS = 'five attempts in a row ending in anything but a landing, or two reverted landings in a day,';
+
+/** A standing run's rule from a run's params (#1335), refused unless every field is the structure it names. */
+function ruleIn(v: unknown): Rule {
+  const bad = (why: string): never => { throw new Refused(refusal('type', '/params/rule', why, v)); };
+  if (!isObj(v)) return bad('Give the rule as its words, labels, milestone, epic and roles.');
+  const { words, labels, milestone, epic, roles } = v;
+  if (typeof words !== 'string' || !words.trim()) return bad('Give the rule as said, in words.');
+  if (!Array.isArray(labels) || !labels.every((l) => typeof l === 'string' && l)) return bad("Give the rule's labels as a list of names.");
+  if (milestone !== null && (typeof milestone !== 'string' || !milestone)) return bad("Give the rule's milestone by its title, or null.");
+  if (epic !== null && !(Number.isSafeInteger(epic) && (epic as number) > 0)) return bad("Give the rule's epic by its issue number, or null.");
+  if (!Array.isArray(roles) || !roles.length || !roles.every((r) => ROLES.includes(r as string))) return bad(`A standing run takes issues only from ${ROLES.join(', ')} authors.`);
+  return { words: words.slice(0, 2000), labels: labels as string[], milestone: milestone as string | null, epic: epic as number | null, roles: roles as string[] };
+}
+
+/** A rule as structure, for its approval's question. */
+function ruleSaid(r: Rule): string {
+  return [
+    r.labels.length ? `labelled ${r.labels.join(' and ')}` : 'any labels',
+    r.milestone !== null ? `in the milestone ${r.milestone}` : undefined,
+    r.epic !== null ? `under the epic #${r.epic}` : undefined,
+    r.roles.length === 1 ? 'written by you' : 'written by you or a collaborator, never an outside author',
+    'with a Runs on: line this host can serve or none, and never one an agent opened',
+  ].filter(Boolean).join(', ');
 }

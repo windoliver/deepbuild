@@ -38,7 +38,7 @@ pub struct Refusal {
     pub code: &'static str,
     pub path: String,
     pub what: String,
-    pub actual: Value,
+    pub actual: Box<Value>,
     pub also: Vec<String>,
 }
 
@@ -48,14 +48,14 @@ impl Refusal {
             code,
             path: path.into(),
             what: what.into(),
-            actual: Value::Null,
+            actual: Box::new(Value::Null),
             also: Vec::new(),
         }
     }
 
     /// The same refusal with the value it refused.
     pub fn with(mut self, actual: Value) -> Self {
-        self.actual = actual;
+        *self.actual = actual;
         self
     }
 
@@ -117,6 +117,8 @@ pub enum Motion {
     Along {
         curve: Option<String>,
         speed: f64,
+        /// Along many curves (#451): `curves`, `pick`, `lateral` and a speed range.
+        many: Option<Box<Many>>,
     },
     /// About `axis` through the emitter at `spin` rad/s.
     Orbit {
@@ -127,6 +129,28 @@ pub enum Motion {
         amplitude: f64,
         frequency: f64,
     },
+}
+
+/// `motion.along {curves: [ID] | collection, pick: hash | weights, lateral, speed: [min, max]}`
+/// (Particles `particles@1`: space and paths).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Many {
+    /// The curves named: items, a graph's routed edges `<graph>#<edge key>`, or a vector field's
+    /// streams `<field>#streams`.
+    pub curves: Vec<String>,
+    /// The collection named in their place, when one is.
+    pub collection: Option<String>,
+    pub pick: super::flows::Pick,
+    pub lateral: f64,
+    pub speed: [f64; 2],
+}
+
+/// Where a particle lives: about its emitter, or where its anchor was at its birth bucket.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Space {
+    #[default]
+    Local,
+    World,
 }
 
 /// A plane n̂·x = offset, its normal made unit.
@@ -223,6 +247,11 @@ pub struct Spec {
     /// `inherit: {normal, velocity}`.
     pub inherit: [f64; 2],
     pub follow: bool,
+    pub space: Space,
+    /// 3, or 2: positions in u, y down, drawn on the GPU layer.
+    pub dimensions: u8,
+    /// `per_edge: column`: along a graph's edges, each edge emits at that column's value per s.
+    pub per_edge: Option<String>,
 }
 
 /// The params of item `id` of `doc` read and checked, or the first refusal, naming the item and
@@ -318,10 +347,18 @@ pub fn read(doc: &Value, id: &str, p: &Value) -> Result<Spec, Refusal> {
         .unwrap_or_else(|| "ballistic".into());
     let v = &m[&variant];
     let motion = match variant.as_str() {
-        "along" => Motion::Along {
-            curve: v["curve"].as_str().map(str::to_string),
-            speed: num(&v["speed"], "motion/along/speed", 1.0)?,
-        },
+        "along" => {
+            let speed = pair(&v["speed"], "motion/along/speed", [1.0, 1.0])?;
+            let many = match &v["curves"] {
+                Value::Null => None,
+                c => Some(Box::new(many_of(id, v, c, speed, &num)?)),
+            };
+            Motion::Along {
+                curve: v["curve"].as_str().map(str::to_string),
+                speed: speed[0],
+                many,
+            }
+        }
         "orbit" => Motion::Orbit {
             axis: vec3(&v["axis"], "motion/orbit/axis", [0.0, 1.0, 0.0])?,
             spin: deep_canvas::ops::rad(num(&v["rate"], "motion/orbit/rate", 0.0)?),
@@ -383,7 +420,7 @@ pub fn read(doc: &Value, id: &str, p: &Value) -> Result<Spec, Refusal> {
         num(&p["inherit"]["normal"], "inherit/normal", 0.0)?,
         num(&p["inherit"]["velocity"], "inherit/velocity", 0.0)?,
     ];
-    Ok(Spec {
+    let spec = Spec {
         count,
         life,
         shape,
@@ -398,6 +435,116 @@ pub fn read(doc: &Value, id: &str, p: &Value) -> Result<Spec, Refusal> {
         bursts,
         inherit,
         follow: p["follow"].as_bool().unwrap_or(false),
+        space: match p["space"].as_str() {
+            None | Some("local") => Space::Local,
+            Some("world") => Space::World,
+            Some(other) => {
+                return Err(Refusal::new(
+                    "out_of_range",
+                    at("space"),
+                    format!("{id}: space {other} is neither local nor world"),
+                ))
+            }
+        },
+        dimensions: match &p["dimensions"] {
+            Value::Null => 3,
+            v if v.as_u64() == Some(3) => 3,
+            v if v.as_u64() == Some(2) => 2,
+            _ => {
+                return Err(Refusal::new(
+                    "out_of_range",
+                    at("dimensions"),
+                    format!("{id}: dimensions is 3 or 2"),
+                ))
+            }
+        },
+        per_edge: p["per_edge"].as_str().map(str::to_string),
+    };
+    // `per_edge` emits along a 2D graph's routed edges, one emitter an edge.
+    let along_many = matches!(&spec.motion, Motion::Along { many: Some(_), .. });
+    if spec.per_edge.is_some() && (spec.dimensions != 2 || !along_many) {
+        return Err(Refusal::new(
+            "out_of_range",
+            at("per_edge"),
+            format!("{id}: per_edge emits along a 2D item's motion.along.curves, a graph's edges"),
+        ));
+    }
+    Ok(spec)
+}
+
+/// `motion.along`'s many curves, read: the curves or a collection, the pick, the sideways
+/// offset and the speed range.
+fn many_of(
+    id: &str,
+    v: &Value,
+    c: &Value,
+    speed: [f64; 2],
+    num: &Num<'_>,
+) -> Result<Many, Refusal> {
+    let at = |f: &str| format!("items/{id}/params/motion/along/{f}");
+    let (curves, collection) = match c {
+        Value::String(name) => (Vec::new(), Some(name.clone())),
+        Value::Array(a) => (
+            a.iter()
+                .map(|x| x.as_str().map(str::to_string))
+                .collect::<Option<Vec<_>>>()
+                .ok_or_else(|| {
+                    Refusal::new(
+                        "out_of_range",
+                        at("curves"),
+                        format!("{id}: curves are IDs"),
+                    )
+                })?,
+            None,
+        ),
+        _ => {
+            return Err(Refusal::new(
+                "out_of_range",
+                at("curves"),
+                format!("{id}: curves is a list of IDs or a collection"),
+            ))
+        }
+    };
+    let pick = match &v["pick"] {
+        Value::Null => super::flows::Pick::Hash,
+        Value::String(s) if s == "hash" => super::flows::Pick::Hash,
+        p => {
+            let w = p.get("weights").unwrap_or(p);
+            let w = w
+                .as_array()
+                .and_then(|a| a.iter().map(Value::as_f64).collect::<Option<Vec<_>>>())
+                .filter(|w| w.iter().all(|x| x.is_finite() && *x >= 0.0))
+                .ok_or_else(|| {
+                    Refusal::new(
+                        "out_of_range",
+                        at("pick"),
+                        format!("{id}: pick is hash or weights: [f32], each 0 or more"),
+                    )
+                })?;
+            if !curves.is_empty() && w.len() != curves.len() {
+                return Err(Refusal::new(
+                    "out_of_range",
+                    at("pick/weights"),
+                    format!("{id}: pick.weights holds one weight a curve"),
+                ));
+            }
+            super::flows::Pick::Weights(w)
+        }
+    };
+    let lateral = num(&v["lateral"], "motion/along/lateral", 0.0)?;
+    if lateral < 0.0 || speed[1] < speed[0] {
+        return Err(Refusal::new(
+            "out_of_range",
+            at(if lateral < 0.0 { "lateral" } else { "speed" }),
+            format!("{id}: lateral is 0 or more and speed's min at most its max"),
+        ));
+    }
+    Ok(Many {
+        curves,
+        collection,
+        pick,
+        lateral,
+        speed,
     })
 }
 

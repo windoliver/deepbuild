@@ -1,0 +1,42 @@
+The #525 suite at base commit 53c0e72a3 ("Merge pull request #2356"; no implementation of #525), NOT RUN.
+
+Why not run: this worktree had no target folder, so every deep-show build would have been cold (wgpu, the GPUI patch,
+wasmtime, rapier3d and the rest of deep-show's tree, built three times for criterion 3's feature sets), and the shared
+Mac read a load average of 77 to 95 on 18 cores while this job ran (2026-11-12, 21:54 to 22:11). The job's brief caps
+base builds at about 20 minutes on a shared machine; a cold deep-show build there takes longer, so no build was started.
+The type-check ran and passed: `npx tsc -p tests/acceptance/525/tsconfig.json` (Node 24.22.0) exits 0.
+
+Each test fails at the base, as read from the base's code (file and line at 53c0e72a3). None is BLOCKED by the base
+itself: cargo 1.99.1 is installed, and every feature set the suite builds (`full`, `core,test-sim-b`,
+`core,test-sim-b-1-0-1`) exists in crates/deep-show/Cargo.toml, so each build succeeds there.
+
+- ac1-collision-sound, test 1 (#525.06f030c7): the first scenario step opens the lab, a media document whose spawn
+  `clack` reads `lab.occurrences`. The gate's `open` builds the mix (gate.rs:486, `self.mix_of(m)`), whose spawns read
+  the document's own `occurrences` (spawn.rs:235); `open` never bakes `worlds` (only `media_mix` does, through
+  `inline_occurrences`, mixdown.rs:478), so it answers `{"code": "unbaked_list", "spawn": "clack", "list":
+  "lab.occurrences", …}` and the test fails at "the lab opens in the panel". Had it opened, the second step's
+  `occurrences` call is unknown (main.rs `call`, no such name), so the scenario answers `bad_input`.
+- ac2-blocks-ahead, test 1 (#525.bc91e6a4, ten minutes): the same `unbaked_list` at "the lab opens in the panel".
+  Beyond it: `transport` answers no `blocks` (audio.rs:539, frames and steps only), the gate under the test backend
+  answers no `stats` (audio.rs:616, state and notice only), and the scenario value `world_steps_on_frames` is
+  `bad_input` (main.rs:1241, not a known planted name).
+- ac2-blocks-ahead, test 2 (#525.bc91e6a4, the delayed step): its clean play, opened first, fails at "the lab opens in
+  the panel" (`unbaked_list`). Beyond it: no `occurrences` call, no `stats`, `handed` reads only #498's ideal-device
+  play and answers `{"code": "not_playing"}` for a play under the test backend (mixdown.rs:537), `delays` is read
+  nowhere, and `late_step_moves_voice` is `bad_input`.
+- ac3-runtime-digest, test 1 (#525.105c2755, the golden): `core,test-sim-b` and `core,test-sim-b-1-0-1` build, but the
+  recording scenario's `golden_record` call is unknown, so `deep-show run` answers `{"ok": false, "code":
+  "bad_input"}` and the test fails at "the scenario runs". (#138's `golden` call is another call, with `fixture` and
+  `backend`, main.rs:806; this suite doesn't use that name.) `golden_verify` is unknown too, and `--planted
+  golden_compares_across_digests` answers bad_input with exit 2 (main.rs:2969, `planted_named`).
+- ac3-runtime-digest, test 2 (#525.105c2755, the receipt): the full build's export builds a receipt with no
+  `runtime_digest` (export.rs:886 to 940), so the test fails with "the receipt has no field runtime_digest" (read, not
+  run: the export itself wasn't run here). `--planted receipt_omits_runtime_digest` answers bad_input with exit 2.
+- ac4-press-and-hit, test 1 (#525.316e3bea): the press lab's `open` answers `unbaked_list` as above, at "the lab opens
+  in the panel". Beyond it: a world's `inputs` is refused (crates/deep-canvas-physics/src/doc.rs:318 and 539:
+  `physics.unsupported`, "inputs isn't run by this backend interface yet; #522 brings it"); the media mix reads no
+  `packs`, `items` or `controls` and no strip's `start_on`; `input_track` is an unknown call; an `input` control event
+  to a panel with no presented document only answers its serial (input.rs:310); and `entry_stamped_at_frame` is
+  `bad_input`.
+
+6 of 6 tests fail at the base, each before any of its planted programs runs.

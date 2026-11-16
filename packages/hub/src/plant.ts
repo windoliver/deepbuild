@@ -26,6 +26,22 @@ export type Plant =
   | 'lands-unjudged-commit' | 'lander-reruns-all' | 'closes-on-open' | 'second-attempt-beside-pr' | 'trusts-forge-merged'
   // #1331's Scope: a lander that merges with your login though the gate's app is named, landing through the admin's bypass.
   | 'lands-as-person'
+  // #1332's: a run that starts an issue before everything it's blocked by is done, a `deep work show` that takes an
+  // issue's state word from a comment on it, a breaker that counts an issue's replaced attempts per agent, and a run that
+  // keeps a budget-only blocker's dependents waiting for the window.
+  | 'starts-before-blockers-done' | 'state-from-comment' | 'breaker-counts-per-agent' | 'waits-for-budget-window'
+  // #1347's: a run over a workspace's tasks that reads or writes a forge.
+  | 'workspace-calls-forge'
+  // #1345's: a lander that records a change landed with its taste calls open as a PASS, and one that lands such a
+  // change though it reaches a release or a published page.
+  | 'lands-as-pass' | 'lands-unreversible'
+  // #1349's: a setup that installs another agent than the one the first screen named.
+  | 'installs-other-agent'
+  // #1342's: a flow that asks whether the work is a workspace or a repo before its card, one that makes the project
+  // before its card is answered, a repo made public on an unchanged card, and a list with no row while the research runs.
+  | 'asks-which-home' | 'creates-before-approval' | 'repo-public-by-default' | 'empty-list-while-researching'
+  // #1349's: a hub that closes an agent's sign-in task when the sign-in command `signin.open` started ends, with no probe.
+  | 'closes-on-return'
   // #33's gate@1 corpus: a gate that counts a check whose own files the claim edited as approved, reads a command check's
   // result from its exit status alone, judges a retry's run alone, or counts only files under the test folders as a check's own.
   | 'edited-check-approved' | 'verdict-from-exit-status' | 'empty-commit-run-alone' | 'own-files-test-folders-only'
@@ -33,6 +49,8 @@ export type Plant =
   | 'actor-from-payload' | 'reads-unfiltered'
   // #1338: a hub that listens on its network listener with no project members.
   | 'listen-without-members'
+  // #1840: a person's deep_search that reads every decision, whatever scope it was saved at.
+  | 'search-decisions-unfiltered'
   | 'writer-from-payload' | 'unlink-before-lock' | 'accept-stops-at-emfile' | 'ends-binding' | 'git-in-hook-handler' | 'commit-on-event-loop'
   | 'parse-on-event-loop' | 'origin-from-payload' | 'no-run-values' | 'empty-cited' | 'ignores-unknown-field' | 'run-spawns-itself'
   | 'env-kills-by-port' | 'env-leases-port-again' | 'env-holds-lease-for-helper' | 'compose-default-project' | 'env-clone-without-record'
@@ -40,6 +58,8 @@ export type Plant =
   | 'answer-on-peer-check' | 'answer-on-token' | 'answer-inside-session' | 'skip-default-at-deadline'
   // #70's: a hub that starts kept runs and terminals with no user scope of their own, in its service's cgroup.
   | 'kept-in-service-cgroup'
+  // #2199's: a `deep inbox` that shows each ask's options by their labels, never the IDs `deep inbox answer` takes.
+  | 'inbox-labels-only'
   // #1359's: a CLI whose `deep backup` runs before it checks its arguments for help, as the merge base's did.
   | 'dispatches-before-help'
   // #1334's: a build that judges every claim the opposite of its gate, and a hub that speaks a contract a major ahead.
@@ -103,6 +123,9 @@ export type Plant =
   // #1106's: the stand-in's value in the stack's environment too, an environment that loads by value, a filter that
   // substitutes on every allowed host, and the run's CA added to the login keychain.
   | 'standin-value-in-env' | 'env-loads-by-value' | 'standin-every-host' | 'run-ca-in-login-keychain'
+  // #2399's: a supervisor that records no refusal of a run's egress filter, one per operation whatever the target, or
+  // keeps what it recorded without the run.
+  | 'egress-refusals-unrecorded' | 'egress-refusal-once-per-operation' | 'egress-refusals-seen-without-run'
   | 'runs-disk-bytes'
   // #148's: a sync that writes each file as it plans it, replaces from the plan you were shown, keeps a file's original
   // again before each write, renames without flushing the folder, writes entries unchecked against the agent's facts, and
@@ -159,6 +182,8 @@ export type Plant =
   | 'signature-covers-anything'
   // #1579's: the one verifier, skipping the time, so a signature counts however old it is.
   | 'signature-skips-time'
+  // #1606's: a hub that writes each channel provider call's headers, the token's included, to its log.
+  | 'logs-channel-header'
   // #909's: a hub that never checks its lock again once it holds it.
   | 'lock-never-rechecked'
   // #906's: an answer recorded delivered as the hub writes its reply, and one sent again without reading the session.
@@ -194,6 +219,8 @@ export type Plant =
   // #323's: open items' normalizer that drops numbers, a gate that reads only the PR body, one that counts every
   // resolved review thread as closed, and one that closes an item the agent marked completed in its task list.
   | 'normalizer-drops-numbers' | 'pr-body-only' | 'resolved-counts-closed' | 'completed-closes-item'
+  // #1633's: a gate that opens again any item raised again, whatever closed it, your waiver or acceptance too.
+  | 'reopens-every-item'
   // #669's: a command check's runner that reads a masked exit as a clean pass, a stop reply whose line says PASS with no
   // verdict behind it, and a status question sent on to the model.
   | 'runner-passes-masked-exit' | 'line-pass-without-verdict' | 'status-from-model'
@@ -232,8 +259,13 @@ export type Plant =
   | 'job-second-call' | 'job-joiner-cancels-job'
   // #1819's: a runner whose job is done, each output an empty record, when its tool's host doesn't answer.
   | 'job-host-down-done'
+  // #509's: a hub that keeps the speech kind's tools as a list in code, the three first-party names, and so lists and runs no other.
+  | 'job-speech-tools-enum'
   // #1942's: a host link that drops every connection to a host when one stalls, and one that sends an unknown start again.
   | 'host-link-drops-every-connection' | 'host-link-resends-on-reconnect'
+  // #1946's: a sudo rule that names only the script's path, a Remove it that undoes every change as root, and one that
+  // writes over a target edited since.
+  | 'sudo-rule-names-path' | 'remove-undoes-all-as-root' | 'remove-overwrites-edit'
   // #1945's: a `deep host run` that runs the script where the agent wrote it, a host's first run with no lingering, and a
   // root plan that lists a package with install scripts as fully undoable.
   | 'root-plan-runs-agent-path' | 'host-skips-lingering' | 'host-package-fully-undoable'
@@ -243,7 +275,13 @@ export type Plant =
   // the newest hook ID it read: each leaves a spooled permission request with no ask.
   | 'replay-keeps-place-by-id' | 'asks-keep-place-by-id'
   // #1100's: a set-up line that says nothing of the guard entries that block, one written to stdout, and steps that never say what they're doing.
-  | 'set-up-line-says-nothing-blocks' | 'set-up-line-to-stdout' | 'silent-steps';
+  | 'set-up-line-says-nothing-blocks' | 'set-up-line-to-stdout' | 'silent-steps'
+  // #2043's: a parser pool that hears its workers' messages only, and one that replaces an ended worker but leaves its lines waiting.
+  | 'parser-pool-messages-only' | 'parser-pool-leaves-line-waiting'
+  // #2197's: a deep_status that lists every session's open asks.
+  | 'status-lists-every-ask'
+  // #1577's: a request ID marked in progress where the mark outlives the hub, and an undo applied past a newer change.
+  | 'pending-across-restart' | 'applies-stale-undo';
 const PLANTS: readonly string[] = [
   'statusline-user-settings-only', 'window-unknown-as-zero', 'window-carried-from-other-repo', 'sends-block-whole',
   'box-applies-at-once', 'box-ignores-revision',
@@ -274,7 +312,7 @@ const PLANTS: readonly string[] = [
   'permission-always-allow', 'typed-saves-decision', 'decision-over-mode', 'decision-before-guard',
   'rule-without-reason', 'copies-no-standing-rules',
   'status-omits-commit', 'doctor-misses-hooks', 'on-stays-off',
-  'status-second-order', 'status-own-word', 'status-unread-flipped', 'deep-second-count', 'inbox-no-default', 'inbox-adds-unread', 'status-row-leak',
+  'status-second-order', 'status-own-word', 'status-unread-flipped', 'deep-second-count', 'inbox-no-default', 'inbox-adds-unread', 'status-row-leak', 'inbox-labels-only',
   'why-second-reading', 'blocked-bare', 'stale-before-ask',
   'retry-reads-working', 'sent-back-without-hold', 'repeat-by-command', 'repeat-notifies-each', 'repeat-raises-ask',
   'doctor-healthy-fix',
@@ -303,6 +341,7 @@ const PLANTS: readonly string[] = [
   'paseo-delivers-beside-waiter',
   'signature-covers-anything',
   'signature-skips-time',
+  'logs-channel-header',
   'lock-never-rechecked',
   'delivered-when-written', 'sends-shown-again',
   'git-inherits-env', 'fills-every-slot', 'background-subagents-only',
@@ -314,10 +353,12 @@ const PLANTS: readonly string[] = [
   'starts-on-every-green-stop', 'holds-every-loop-check', 'holds-claim-stop-for-loop', 'words-only-at-turn-start',
   'no-grace-window', 'holds-background-without-limit', 'caps-from-first-stop', 'rechecks-facts-at-stops-only', 'monitor-unread',
   'standin-value-in-env', 'env-loads-by-value', 'standin-every-host', 'run-ca-in-login-keychain',
+  'egress-refusals-unrecorded', 'egress-refusal-once-per-operation', 'egress-refusals-seen-without-run',
   'waiting-first', 'ask-from-notification', 'waiting-as-working',
   'criteria-from-github-api', 'role-from-comment-text', 'every-author-collaborator', 'app-membership-as-collaborator',
   'spec-only-judges-early-claim', 'lint-number-only', 'lock-before-any-check',
   'normalizer-drops-numbers', 'pr-body-only', 'resolved-counts-closed', 'completed-closes-item',
+  'reopens-every-item',
   'runner-passes-masked-exit', 'line-pass-without-verdict', 'status-from-model',
   'jobserver-per-build', 'refills-while-running', 'share-ignores-running-build',
   'ask-covers-every-effect', 'reads-every-from', 'defaults-match-text', 'auto-merge-unpinned', 'holds-every-program',
@@ -330,17 +371,26 @@ const PLANTS: readonly string[] = [
   'agent-credential-posts-statuses', 'passes-gate-credential',
   'kind-without-route',
   'lands-unjudged-commit', 'lander-reruns-all', 'closes-on-open', 'second-attempt-beside-pr', 'trusts-forge-merged', 'lands-as-person',
+  'starts-before-blockers-done', 'state-from-comment', 'breaker-counts-per-agent', 'waits-for-budget-window',
+  'workspace-calls-forge',
+  'lands-as-pass', 'lands-unreversible',
+  'asks-which-home', 'creates-before-approval', 'repo-public-by-default', 'empty-list-while-researching',
+  'installs-other-agent', 'closes-on-return',
   'drafted-spec-only', 'bootstrap-commands-only', 'failures-as-fail',
   'edited-check-approved', 'verdict-from-exit-status', 'empty-commit-run-alone', 'own-files-test-folders-only',
-  'actor-from-payload', 'reads-unfiltered', 'listen-without-members',
+  'actor-from-payload', 'reads-unfiltered', 'listen-without-members', 'search-decisions-unfiltered',
   'job-key-params-text', 'job-key-no-version', 'job-build-entry-only', 'job-build-hashes-paths', 'job-build-hashes-mtimes',
   'job-host-asks-again', 'job-host-sends-early', 'job-weights-call-anyway', 'job-weights-not-keyed',
-  'job-second-call', 'job-joiner-cancels-job', 'job-host-down-done',
+  'job-second-call', 'job-joiner-cancels-job', 'job-host-down-done', 'job-speech-tools-enum',
   'host-link-drops-every-connection', 'host-link-resends-on-reconnect',
   'root-plan-runs-agent-path', 'host-skips-lingering', 'host-package-fully-undoable',
+  'sudo-rule-names-path', 'remove-undoes-all-as-root', 'remove-overwrites-edit',
   'figure-in-needs-you', 'figure-feeds-verdict',
   'replay-keeps-place-by-id', 'asks-keep-place-by-id',
   'set-up-line-says-nothing-blocks', 'set-up-line-to-stdout', 'silent-steps',
+  'parser-pool-messages-only', 'parser-pool-leaves-line-waiting',
+  'status-lists-every-ask',
+  'pending-across-restart', 'applies-stale-undo',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;

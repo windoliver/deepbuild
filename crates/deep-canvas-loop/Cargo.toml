@@ -12,5 +12,6 @@ rust-version = "1.95"
 # repairs or remeshes anything.
 [dependencies]
 deep-canvas = { path = "../deep-canvas" }
+deep-canvas-motion = { path = "../deep-canvas-motion" }
 deep-canvas-scene3d = { path = "../deep-canvas-scene3d" }
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }

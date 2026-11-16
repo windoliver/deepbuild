@@ -27,25 +27,40 @@ use serde_json::{json, Map, Value};
 
 use crate::data;
 use crate::ends;
+use crate::grid_rules::frame_box;
 use crate::key::{ContentKey, KeyBuilder};
 use crate::outline::{self, Star};
 use crate::paint::{self, Adjust, By, Over, Ramp, Span, Steps};
 use crate::path::{self, Mesh, Verb};
 use crate::pathops;
-use crate::relations;
+use crate::place::Place;
 use crate::story;
 use deep_canvas::schedule::{Key, KeyTree};
 use deep_canvas::template;
 
 /// The kinds [`frame`] reads: every other kind is one the marks module doesn't know.
 pub const KINDS: &[&str] = &[
-    "rect@1", "circle@1", "path@1", "text@1", "image@1", "marks@1", "axis@1", "scale@1", "mask@1",
-    "group@1", "star@1", "frame@1", "series@1", "matte@1",
+    "rect@1",
+    "circle@1",
+    "path@1",
+    "text@1",
+    "image@1",
+    "marks@1",
+    "axis@1",
+    "scale@1",
+    "mask@1",
+    "group@1",
+    "star@1",
+    "frame@1",
+    "series@1",
+    "matte@1",
+    "axes3d@1",
+    "vector_field@1",
 ];
 
 /// The kinds of [`KINDS`] the data module owns: R1's mark sets, scales and axes, which marks2d
 /// draws for it (the data module's manifest). A build without the data module lacks them.
-pub const DATA_KINDS: &[&str] = &["marks@1", "axis@1", "scale@1"];
+pub const DATA_KINDS: &[&str] = &["marks@1", "axis@1", "scale@1", "axes3d@1", "vector_field@1"];
 
 /// The canvas module that owns one of [`KINDS`]: the data module's, or marks2d's.
 pub fn module_of(kind: &str) -> &'static str {
@@ -72,6 +87,9 @@ pub struct Type {
     /// #1965: the look's code roles, the role each token class draws in (Look `look@1`: `code`);
     /// empty for a look that gives none, where every token draws in plain.
     pub code: BTreeMap<String, String>,
+    /// #1966: the look's diff roles, the role each gutter mark (added, removed, changed) draws
+    /// in (Look `look@1`: `diff`); empty for a look that gives none.
+    pub diff: BTreeMap<String, String>,
     /// #149: the look's drawn fields, when marks are dressed by them.
     pub drawn: Option<Arc<deep_canvas_drawn::spec::Look>>,
     /// #149's wrong programs: only a look's first rim, and every ink fill flat.
@@ -630,6 +648,15 @@ pub struct TextRun {
     pub to: usize,
     pub role: String,
     pub color: Rgb,
+    /// #1966: the opacity its glyphs draw at, 1 but on a code line a highlight dims.
+    pub opacity: f64,
+}
+
+/// #1966: the opacity a text's grapheme draws at: its run's, else 1.
+pub fn run_opacity(runs: &[TextRun], grapheme: usize) -> f64 {
+    runs.get(runs.partition_point(|r| r.to <= grapheme))
+        .filter(|r| r.from <= grapheme)
+        .map_or(1.0, |r| r.opacity)
 }
 
 /// The role and color a text's grapheme is painted in: its run's, else the item's.
@@ -671,6 +698,7 @@ fn text_runs(
             to,
             color: role(palette, run.get("role"), &at)?,
             role: name.clone(),
+            opacity: 1.0,
         });
     }
     crate::code::runs((palette, ty), params, code, path, out)
@@ -823,6 +851,10 @@ pub struct TextSpec {
     pub bound: bool,
     /// #1964: `runs`' styled spans of the one shaped run.
     pub spans: Vec<deep_text::Span>,
+    /// #1966: a list's `gap`, the space after each of its items, and its `indent`, where its
+    /// lines start.
+    pub gap: f64,
+    pub indent: f64,
 }
 
 impl TextSpec {
@@ -856,6 +888,9 @@ impl TextSpec {
         k.int(self.align as i64);
         if !self.spans.is_empty() {
             k.text(&format!("{:?}", self.spans));
+        }
+        if self.gap > 0.0 || self.indent > 0.0 {
+            k.text("list").number(self.gap).number(self.indent);
         }
         k.finish()
     }
@@ -923,7 +958,12 @@ fn text_spec_of(
         .map(f64::round)
         .filter(|w| (1.0..=1000.0).contains(w))
         .map_or(400, |w| w as u16);
+    let size = num(params.get("size")).unwrap_or(13.0);
+    // #1966: a list's items start `indent` in from its box's edge, `gap` apart.
+    let list = crate::lines::list(params, size, &path)?;
     Ok(TextSpec {
+        gap: list.map_or(0.0, |l| l.gap),
+        indent: list.map_or(0.0, |l| l.indent),
         spans: text_spans(params, &path, ty, (ty.family(&font), weight))?,
         text,
         family: ty
@@ -932,7 +972,7 @@ fn text_spec_of(
         fallback: ty.fallback.clone(),
         lang,
         font,
-        size: num(params.get("size")).unwrap_or(13.0),
+        size,
         weight,
         width: params.get("box").and_then(|b| num(b.get("w"))),
         max_lines: match params.get("max_lines") {
@@ -982,6 +1022,8 @@ impl TextSpec {
             tabular: self.bound,
             mask: self.mask,
             spans: &self.spans,
+            gap: self.gap as f32,
+            indent: self.indent as f32,
         })
     }
 }
@@ -1318,6 +1360,7 @@ impl Mark {
                 for r in runs {
                     k.int(r.from as i64).int(r.to as i64);
                     color(k, &r.color);
+                    k.number(r.opacity);
                 }
             }
             Mark::Image {
@@ -1484,6 +1527,11 @@ fn pair(v: Option<&Value>) -> Option<[f64; 2]> {
     }
 }
 
+/// A circle's `center`, at its listed default `[0, 0]` when left out (#1974).
+pub(crate) fn circle_center(v: Option<&Value>) -> Option<[f64; 2]> {
+    v.map_or(Some([0.0, 0.0]), |c| pair(Some(c)))
+}
+
 fn role(palette: &Palette, name: Option<&Value>, path: &str) -> Result<Rgb, Refused> {
     let Some(Value::String(name)) = name else {
         return refuse("bad_paint", path);
@@ -1549,87 +1597,6 @@ pub(crate) fn bounds_of(verbs: &[Verb]) -> [f64; 4] {
 fn four(v: Option<&Value>) -> Option<[f64; 4]> {
     let b: Option<Vec<f64>> = v?.as_array()?.iter().map(|v| num(Some(v))).collect();
     <[f64; 4]>::try_from(b?.as_slice()).ok()
-}
-
-/// Where an item draws: `x ↦ scale·x + pos` from its evaluated `at`, which already rides its
-/// parents as the evaluator composes them; with a box-point pivot it scales about that point of
-/// its own box (#221). Rotation, shear and a numeric pivot wait for the GPU layer, as R1's
-/// marks' do.
-#[derive(Clone, Copy, Debug, PartialEq)]
-struct Place {
-    scale: [f64; 2],
-    offset: [f64; 2],
-}
-
-impl Place {
-    const NONE: Place = Place {
-        scale: [1.0, 1.0],
-        offset: [0.0, 0.0],
-    };
-
-    fn of(item: &Value) -> Place {
-        let pivots = item
-            .get("at")
-            .and_then(|a| a.get("pivot"))
-            .is_some_and(Value::is_string);
-        let local = pivots
-            .then(|| {
-                let kind = item.get("kind").and_then(Value::as_str)?;
-                relations::own_box(kind, object_or_empty(item.get("params")))
-            })
-            .flatten();
-        let (scale, offset) = relations::place_of(item, local);
-        Place { scale, offset }
-    }
-
-    fn at(&self, p: [f64; 2]) -> [f64; 2] {
-        [
-            self.scale[0] * p[0] + self.offset[0],
-            self.scale[1] * p[1] + self.offset[1],
-        ]
-    }
-
-    /// True when the place only moves what it holds, as R1's marks can draw.
-    fn moves(&self) -> bool {
-        self.scale == [1.0, 1.0]
-    }
-
-    /// As a gradient's transform.
-    fn affine(&self) -> [f64; 6] {
-        [
-            self.scale[0],
-            0.0,
-            0.0,
-            self.scale[1],
-            self.offset[0],
-            self.offset[1],
-        ]
-    }
-
-    /// A box `[x, y, w, h]` where it draws.
-    fn rect(&self, [x, y, w, h]: [f64; 4]) -> [f64; 4] {
-        let (a, b) = (self.at([x, y]), self.at([x + w, y + h]));
-        [
-            a[0].min(b[0]),
-            a[1].min(b[1]),
-            (b[0] - a[0]).abs(),
-            (b[1] - a[1]).abs(),
-        ]
-    }
-
-    fn verbs(&self, verbs: Vec<Verb>) -> Vec<Verb> {
-        let m = |p: [f64; 2]| self.at(p);
-        verbs
-            .into_iter()
-            .map(|v| match v {
-                Verb::Move(p) => Verb::Move(m(p)),
-                Verb::Line(p) => Verb::Line(m(p)),
-                Verb::Quad(a, b) => Verb::Quad(m(a), m(b)),
-                Verb::Cubic(a, b, c) => Verb::Cubic(m(a), m(b), m(c)),
-                Verb::Close => Verb::Close,
-            })
-            .collect()
-    }
 }
 
 /// The most dashes one path draws (Paint: "at most 10,000 dashes per path").
@@ -2008,6 +1975,8 @@ pub struct PathBuilt {
     pub below: bool,
     /// Flicks each repeater copy lags the one before, 0 for none.
     pub lag: i64,
+    /// #223: the ways a group's warp cut each of its cubics, 1 with no warp.
+    pub cuts: usize,
 }
 
 /// Builds `verbs` (after any attachment, in the item's own space) through the item's ops, with
@@ -2072,15 +2041,6 @@ fn build_path(
         .get("stroke")
         .and_then(|s| num(s.get("width")))
         .unwrap_or(1.0);
-    let mut heads = Vec::new();
-    if let Some(e) = &ends {
-        for (k, copy) in copies.iter().enumerate() {
-            for h in ends::build(&copy.verbs, e, stroke_width) {
-                heads.push((k, h));
-            }
-        }
-    }
-    let segments = copies.iter().map(|c| pathops::segments(&c.verbs)).sum();
     let mut k = KeyBuilder::new("tessellate@marks2d.160");
     for c in &copies {
         k.int(c.verbs.len() as i64).number(c.opacity);
@@ -2090,6 +2050,104 @@ fn build_path(
             }
         }
     }
+    // #223: under a group's warp, each copy carried through it in the group's own space (its
+    // inputs key what it carries, so a still warp carries nothing again), then heads drawn along
+    // the mapped ends, or built first and carried with the path.
+    let warp = warp_over(ctx, id)?.filter(|(_, w)| w.1.size() > 0.0 && place.size() > 0.0);
+    let mut cuts = 1;
+    let mut warped_heads = None;
+    // A head redrawn under a warp keeps its own size: its cap reads the path's length unwarped.
+    let lengths: Option<Vec<f64>> = (warp.is_some() && ends.is_some())
+        .then(|| copies.iter().map(|c| pathops::length(&c.verbs)).collect());
+    if let Some((group, w)) = &warp {
+        let (warp, gplace) = (&w.0, w.1);
+        let mut wk = KeyBuilder::new("warp@marks2d.223");
+        wk.key(&k.finish());
+        warp.feed(&mut wk);
+        for p in [
+            place.at([0.0, 0.0]),
+            place.at([1.0, 0.0]),
+            place.at([0.0, 1.0]),
+        ] {
+            wk.number(p[0]).number(p[1]);
+        }
+        for p in [
+            gplace.at([0.0, 0.0]),
+            gplace.at([1.0, 0.0]),
+            gplace.at([0.0, 1.0]),
+        ] {
+            wk.number(p[0]).number(p[1]);
+        }
+        let key = wk.finish();
+        k.key(&key);
+        let tolerance = warp.tolerance / gplace.size();
+        let to = |p: [f64; 2]| gplace.back(place.at(p)).unwrap_or(p);
+        let from = |p: [f64; 2]| place.back(gplace.at(p)).unwrap_or(p);
+        let carry = |verbs: &[Verb]| warp.carry(verbs, tolerance, to, from);
+        if warp.ends == crate::warp::Ends::Warp {
+            if let Some(e) = &ends {
+                let mut hs = Vec::new();
+                for (c, copy) in copies.iter().enumerate() {
+                    for mut h in ends::build(&copy.verbs, e, stroke_width) {
+                        let a = deep_canvas::ops::rad(h.angle);
+                        let base = [
+                            h.tip[0] - h.length * deep_canvas::ops::cos(a),
+                            h.tip[1] - h.length * deep_canvas::ops::sin(a),
+                        ];
+                        let (tip, base) = (from(warp.point(to(h.tip))), from(warp.point(to(base))));
+                        h.verbs = carry(&h.verbs).0;
+                        h.tip = tip;
+                        h.length = deep_canvas::ops::hypot(tip[0] - base[0], tip[1] - base[1]);
+                        h.angle = deep_canvas::ops::deg(deep_canvas::ops::atan2(
+                            tip[1] - base[1],
+                            tip[0] - base[0],
+                        ));
+                        hs.push((c, h));
+                    }
+                }
+                warped_heads = Some(hs);
+            }
+        }
+        let carried = crate::warp::kept(key, || {
+            let mut n = 1;
+            let mut points = 0;
+            let out = copies
+                .iter()
+                .map(|c| {
+                    let (v, cut, p) = carry(&c.verbs);
+                    n = n.max(cut);
+                    points += p;
+                    v
+                })
+                .collect();
+            (out, n, points)
+        });
+        for (c, v) in copies.iter_mut().zip(&carried.0) {
+            c.verbs = v.clone();
+        }
+        cuts = carried.1;
+        ctx.warps
+            .points
+            .borrow_mut()
+            .entry(group.clone())
+            .or_default()
+            .insert(id.to_string(), carried.2);
+    }
+    let mut heads = Vec::new();
+    if let Some(hs) = warped_heads {
+        heads = hs;
+    } else if let Some(e) = &ends {
+        for (k, copy) in copies.iter().enumerate() {
+            let built = match &lengths {
+                Some(l) => ends::build_sized(&copy.verbs, e, stroke_width, l[k]),
+                None => ends::build(&copy.verbs, e, stroke_width),
+            };
+            for h in built {
+                heads.push((k, h));
+            }
+        }
+    }
+    let segments = copies.iter().map(|c| pathops::segments(&c.verbs)).sum();
     for (_, h) in &heads {
         k.text(h.kind)
             .number(h.tip[0])
@@ -2121,6 +2179,7 @@ fn build_path(
         digest: k.finish(),
         below,
         lag,
+        cuts,
     })
 }
 
@@ -2631,6 +2690,7 @@ pub fn path_report(
         bound: &bound,
         row_readings: &row_readings,
         planted,
+        warps: &crate::warp::Warps::default(),
     };
     let Some(item) = items.get(id) else {
         return Ok(None);
@@ -2660,17 +2720,35 @@ pub fn path_report(
             digest: k.finish(),
         }));
     }
-    let Some(verbs) = base_verbs(kind, params) else {
-        return Ok(None);
-    };
     let path = format!("items/{id}");
+    // A path function the evaluator didn't lower draws from its samples, as a frame draws it.
+    let verbs = match params.get("fn").filter(|_| kind == "path@1") {
+        Some(f) => fn_verbs(f, &path)?,
+        None => match base_verbs(kind, params) {
+            Some(v) => v,
+            None => return Ok(None),
+        },
+    };
     let verbs = if kind == "path@1" {
         attached(&ctx, verbs, params, &path)?
     } else {
         verbs
     };
     let place = Place::of(item);
-    let paint = object_or_empty(params.get("paint"));
+    // #466: a build draws its strokes on in turn, and its fill when its fill says.
+    let build = crate::build::read(params).map_err(|f| Refused {
+        code: "out_of_range",
+        path: format!("{path}/params/{f}"),
+    })?;
+    let verbs: Vec<Verb> = match &build {
+        Some(b) => b.drawn(&verbs, id),
+        None => verbs,
+    };
+    let unfilled: Option<Map<String, Value>> = build
+        .as_ref()
+        .filter(|b| !b.fills())
+        .map(|_| without_fill(params));
+    let paint = object_or_empty(unfilled.as_ref().unwrap_or(params).get("paint"));
     let built = build_path(&ctx, id, verbs, params, paint, place)?;
     let has_repeater = pathops::read(params.get("ops"), "")
         .map(|ops| ops.iter().any(|o| matches!(o, pathops::Op::Repeater(_))))
@@ -2714,6 +2792,15 @@ pub fn path_report(
         digest: built.digest,
         built: Some(built),
     }))
+}
+
+/// A path's params with its paint's fill taken off (#466: a build's fill before it draws).
+fn without_fill(params: &Map<String, Value>) -> Map<String, Value> {
+    let mut p = params.clone();
+    if let Some(Value::Object(paint)) = p.get_mut("paint") {
+        paint.remove("fill");
+    }
+    p
 }
 
 /// The segments the ops of `id` declare, for a refusal that names the count.
@@ -2781,7 +2868,55 @@ fn boxes_of(frame: &Frame, items: &Map<String, Value>) -> BTreeMap<String, [f64;
                 .and_then(Value::as_str);
         }
     }
+    text_boxes(frame, items, &mut out);
     out
+}
+
+/// #1966: each text's box where its shaped run draws, and each of its read-only anchors a path
+/// attaches to (`<id>#line:n`, `<id>#tok:k`), the line's or token's box. A text's box joins no
+/// parent's, as before.
+fn text_boxes(frame: &Frame, items: &Map<String, Value>, out: &mut BTreeMap<String, [f64; 4]>) {
+    let mut parts: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
+    for item in items.values() {
+        let attach = item.get("params").and_then(|p| p.get("attach"));
+        for end in ["start", "end"] {
+            let target = attach.and_then(|a| a.get(end)).and_then(Value::as_str);
+            if let Some((id, part)) = target.and_then(|t| t.split_once('#')) {
+                parts.entry(id).or_default().push(part);
+            }
+        }
+    }
+    for drawn in frame.layers.iter().flat_map(|l| &l.marks) {
+        let Mark::Text {
+            item, spec, origin, ..
+        } = &drawn.mark
+        else {
+            continue;
+        };
+        if item.contains('#') {
+            continue;
+        }
+        let Some(shaped) = shaped_text(spec) else {
+            continue;
+        };
+        let w = f64::from(shaped.width);
+        let at = match (spec.align, spec.width) {
+            (Align::Center, Some(box_w)) => (box_w - w) / 2.0,
+            (Align::End, Some(box_w)) => box_w - w,
+            _ => 0.0,
+        };
+        out.insert(
+            item.clone(),
+            [origin[0] + at, origin[1], w, f64::from(shaped.height)],
+        );
+        let params = object_or_empty(items.get(item).and_then(|i| i.get("params")));
+        for part in parts.get(item.as_str()).into_iter().flatten() {
+            if let Some(b) = crate::lines::anchor_box(params, &shaped, part) {
+                let placed = [origin[0] + b[0], origin[1] + b[1], b[2], b[3]];
+                out.insert(format!("{item}#{part}"), placed);
+            }
+        }
+    }
 }
 
 /// A format's notation (Bound value: `fixed | compact | percent | duration`).
@@ -3356,7 +3491,10 @@ pub fn text_at(
         // document's own (a control's default before any entry).
         for section in ["controls", "assemblies"] {
             let mut entries = doc.get(section).cloned().unwrap_or_else(|| json!({}));
-            if let Some(shown) = item.pointer(&format!("/params/shown/{section}")).and_then(Value::as_object) {
+            if let Some(shown) = item
+                .pointer(&format!("/params/shown/{section}"))
+                .and_then(Value::as_object)
+            {
                 for (k, v) in shown {
                     if let Some(Value::Object(e)) = entries.get_mut(k) {
                         e.insert("value".into(), v["value"].clone());
@@ -3530,7 +3668,7 @@ fn status_box(kind: &str, item: &Value, params: Option<&Value>) -> Option<([f64;
             ))
         }
         "circle@1" => {
-            let c = pair(p("center"))?;
+            let c = circle_center(p("center"))?;
             let r = num(p("r"))?;
             Some(([c[0] + pos[0] - r, c[1] + pos[1] - r, 2.0 * r, 2.0 * r], r))
         }
@@ -3785,21 +3923,6 @@ fn ancestor_scope(
         }
         _ => None,
     })
-}
-
-fn frame_box(id: &str, item: &Value) -> Result<[f64; 4], Refused> {
-    let b: Option<Vec<f64>> = item
-        .get("params")
-        .and_then(|p| p.get("box"))
-        .and_then(Value::as_array)
-        .map(|b| b.iter().map(|v| num(Some(v))).collect())
-        .unwrap_or(None);
-    b.as_deref()
-        .and_then(|b| <[f64; 4]>::try_from(b).ok())
-        .ok_or(Refused {
-            code: "bad_doc",
-            path: format!("items/{id}/params/box"),
-        })
 }
 
 /// Whether `id` is `root` or has it among its ancestors.
@@ -4321,6 +4444,10 @@ pub enum Planted {
     /// #536's twins: a hex grid shifting the other parity; terrain reading a square grid's sides.
     HexOtherParity,
     TerrainSquareSides,
+    /// #223's twins: a warp that maps only each verb's own points, uncut; a flow that finds its
+    /// stream table by the `vector_field@1` kind rather than by its data layout.
+    WarpAnchorsOnly,
+    WarpFlowByKind,
 }
 
 /// The draw list for evaluated `items` of `doc`, in `palette`, at `zoom` (which picks each path's
@@ -4356,7 +4483,9 @@ pub fn frame_planted(
     let items = moved.as_ref().unwrap_or(items);
     // #1653: terrain drawn as its atlas set, and each animated atlas row at its frame.
     let tiled = crate::atlas::apply(doc, items, record.pinned)?;
-    let items = tiled.as_ref().unwrap_or(items);
+    // #538: keyed copy at the record's time, in the document's locale.
+    let copied = crate::copy::apply(doc, tiled.as_ref().unwrap_or(items), record.pinned, doc.get("locale").and_then(Value::as_str).unwrap_or("en"));
+    let items = copied.as_ref().or(tiled.as_ref()).unwrap_or(items);
     let bound = bound_texts(doc, items, record)?;
     frame_shown(
         doc,
@@ -4369,24 +4498,25 @@ pub fn frame_planted(
     )
 }
 
-/// The draw list for evaluated `items`, with what each bound value and counter shows already
-/// formatted (the text module's counters, in the view's locale); `record` gives the readings
-/// bound to mark sets' rows.
+/// The draw list for evaluated `items` in a look's palette and type (#239: text set in the look's
+/// font roles), with what each bound value and counter shows already formatted (the text module's
+/// counters, in the view's locale); `record` gives the readings bound to mark sets' rows.
 pub fn frame_with(
     doc: &Map<String, Value>,
     items: &Map<String, Value>,
-    palette: &Palette,
+    (palette, ty): (&Palette, &Type),
     zoom: f64,
     bound: &BTreeMap<String, Shown>,
     record: &Record,
+    planted: Planted,
 ) -> Result<Frame, Refused> {
     let row_readings = bound_rows(doc, record);
     frame_shown(
         doc,
         items,
-        (palette, &Type::default()),
+        (palette, ty),
         zoom,
-        Planted::None,
+        planted,
         bound,
         &row_readings,
     )
@@ -4432,9 +4562,13 @@ pub(crate) fn item_pos(item: &Value) -> [f64; 2] {
     pair(item.pointer("/at/pos")).unwrap_or([0.0, 0.0])
 }
 
-/// `items` with each one anchored to a mark set's `#head` moved there (Item and kind: `at.anchor`:
-/// "with an anchor, pos offsets from that point"). A head with no row yet leaves it where it is.
-fn anchored(items: Cow<'_, Map<String, Value>>) -> Result<Cow<'_, Map<String, Value>>, Refused> {
+/// `items` with each one anchored to a mark set's or a revealed text's `#head` moved there (Item
+/// and kind: `at.anchor`: "with an anchor, pos offsets from that point"). A head with no row yet
+/// leaves it where it is.
+fn anchored<'a>(
+    items: Cow<'a, Map<String, Value>>,
+    ty: &Type,
+) -> Result<Cow<'a, Map<String, Value>>, Refused> {
     let mut moves = Vec::new();
     for (id, item) in items.iter() {
         let anchor = item.pointer("/at/anchor").and_then(Value::as_str);
@@ -4458,7 +4592,11 @@ fn anchored(items: Cow<'_, Map<String, Value>>) -> Result<Cow<'_, Map<String, Va
         let Some(source) = items.get(set) else {
             return refuse("ref_unresolved", format!("items/{id}/at/anchor"));
         };
-        if let Some(point) = data::head_place(set, source, &items)? {
+        let head = match source.get("kind").and_then(Value::as_str) {
+            Some("text@1") => text_head(set, source, ty)?,
+            _ => data::head_place(set, source, &items)?,
+        };
+        if let Some(point) = head {
             moves.push((id.clone(), point));
         }
     }
@@ -4474,6 +4612,23 @@ fn anchored(items: Cow<'_, Map<String, Value>>) -> Result<Cow<'_, Map<String, Va
         item["at"]["pos"] = json!([pos[0] + point[0], pos[1] + point[1], 0.0]);
     }
     Ok(Cow::Owned(items))
+}
+
+/// #1969: a revealed text's `#head` in document u (Text `text@1`): the caret its reveal publishes,
+/// from where the text draws; `None` for a text with no reveal.
+fn text_head(id: &str, item: &Value, ty: &Type) -> Result<Option<[f64; 2]>, Refused> {
+    let params = object_or_empty(item.get("params"));
+    if !params.contains_key("reveal") {
+        return Ok(None);
+    }
+    let code = crate::code::read(params, &format!("items/{id}"))?.map(|d| d.text);
+    let spec = text_spec_of(id, params, None, ty, code)?;
+    let Some(shaper) = spec.shaper_spec() else {
+        return Ok(None);
+    };
+    let run = LAYOUT_SHAPER.with(|s| s.borrow_mut().shape(&shaper));
+    let at = Place::of(item).offset;
+    Ok(crate::animator::head(params, &run, id)?.map(|c| [at[0] + c[0], at[1] + c[1]]))
 }
 
 /// An item's place in its layer's draw order (#160): by z, then by the tree, each level as its
@@ -4618,7 +4773,10 @@ fn foot_key(items: &Map<String, Value>, id: &str, item: &Value) -> Option<String
     let own = |it: &Value| {
         let kind = it.get("kind").and_then(Value::as_str).unwrap_or_default();
         let local = crate::relations::own_box(kind, object_or_empty(it.get("params")))?;
-        Some(crate::relations::placed(local, crate::relations::place_of(it, Some(local))))
+        Some(crate::relations::placed(
+            local,
+            crate::relations::place_of(it, Some(local)),
+        ))
     };
     let mut boxes: Vec<[f64; 4]> = own(item).into_iter().collect();
     if item.get("kind").and_then(Value::as_str) == Some("group@1") {
@@ -4637,7 +4795,11 @@ fn foot_key(items: &Map<String, Value>, id: &str, item: &Value) -> Option<String
     let y = y0 + anchor[1] * (y1 - y0);
     // f64 in total order as unsigned bits: negatives flipped whole, the rest with the sign set.
     let bits = y.to_bits();
-    let ordered = if bits >> 63 == 1 { !bits } else { bits | (1 << 63) };
+    let ordered = if bits >> 63 == 1 {
+        !bits
+    } else {
+        bits | (1 << 63)
+    };
     Some(format!("{ordered:016x}"))
 }
 
@@ -4673,7 +4835,7 @@ pub fn base_verbs(kind: &str, params: &Map<String, Value>) -> Option<Vec<Verb>> 
             num(params.get("radius")).unwrap_or(0.0),
         ),
         "circle@1" => outline::circle(
-            pair(params.get("center"))?,
+            circle_center(params.get("center"))?,
             num(params.get("r")).unwrap_or(0.0),
             num(params.get("inner_r")).unwrap_or(0.0),
         ),
@@ -4698,7 +4860,7 @@ pub fn base_verbs(kind: &str, params: &Map<String, Value>) -> Option<Vec<Verb>> 
 
 /// A 2D item's outline where it draws, for a union outline or an attachment at `outline`: a
 /// rect, a circle, a star or a path through its ops.
-fn item_outline(items: &Map<String, Value>, id: &str) -> Option<Vec<Verb>> {
+pub fn item_outline(items: &Map<String, Value>, id: &str) -> Option<Vec<Verb>> {
     let item = items.get(id)?;
     let kind = item.get("kind").and_then(Value::as_str)?;
     let params = object_or_empty(item.get("params"));
@@ -4802,9 +4964,160 @@ struct ItemCtx<'a> {
     bound: &'a BTreeMap<String, Shown>,
     row_readings: &'a BTreeMap<String, data::BoundRows>,
     planted: Planted,
+    /// #223: the groups' warps, read once per frame, and the points carried under each.
+    warps: &'a crate::warp::Warps,
+}
+
+/// #223: the warp of the nearest group over `id` that has one, with where that group draws.
+fn warp_over(
+    ctx: &ItemCtx<'_>,
+    id: &str,
+) -> Result<Option<(String, Arc<(crate::warp::Warp, Place)>)>, Refused> {
+    for g in ancestors(ctx.items, id) {
+        let Some(group) = ctx.items.get(&g) else {
+            continue;
+        };
+        let params = object_or_empty(group.get("params"));
+        if group.get("kind").and_then(Value::as_str) != Some("group@1")
+            || params.get("warp").is_none_or(Value::is_null)
+        {
+            continue;
+        }
+        if let Some(read) = ctx.warps.read.borrow().get(&g) {
+            return Ok(read.clone().map(|w| (g, w)));
+        }
+        let planted = crate::warp::Planted {
+            anchors_only: ctx.planted == Planted::WarpAnchorsOnly,
+            flow_by_kind: ctx.planted == Planted::WarpFlowByKind,
+        };
+        let read = crate::warp::Warp::read(&g, params, ctx.items, planted)?
+            .map(|w| Arc::new((w, Place::of(group))));
+        ctx.warps.read.borrow_mut().insert(g.clone(), read.clone());
+        return Ok(read.map(|w| (g, w)));
+    }
+    Ok(None)
+}
+
+/// The verbs a path function `f` of the item at `path` draws, from its samples (#490).
+fn fn_verbs(f: &Value, path: &str) -> Result<Vec<Verb>, Refused> {
+    let drawn = crate::function::draw(f).map_err(|r| Refused {
+        code: "bad_doc",
+        path: format!("{path}/params/fn/{}", r.field),
+    })?;
+    Ok(drawn
+        .subpaths
+        .iter()
+        .flat_map(|s| {
+            s.iter().enumerate().map(|(i, p)| {
+                if i == 0 {
+                    Verb::Move(*p)
+                } else {
+                    Verb::Line(*p)
+                }
+            })
+        })
+        .collect())
 }
 
 /// What `item` draws; `None` for an item that draws nothing.
+/// A text@1 item's marks at `pos`, and (#1966) what its lines add: the parts a highlight dims,
+/// each with its opacity, and how far a code item's gutter reaches left of its text.
+struct TextMarks {
+    marks: Vec<Mark>,
+    fades: Vec<(String, f64)>,
+    reach: f64,
+}
+
+/// [`TextMarks`] of the text@1 item `id`: its text, set in its fill's role (a stale bound value's
+/// greyed), a code item's tokens as runs; and a code item's gutter and highlights, the bands
+/// under its text and the rest over it, its runs on the lines a highlight dims at 40%.
+fn text_marks(
+    ctx: &ItemCtx<'_>,
+    id: &str,
+    params: &Map<String, Value>,
+    path: &str,
+    pos: [f64; 2],
+    fill: Option<&Map<String, Value>>,
+) -> Result<TextMarks, Refused> {
+    let shown = ctx.bound.get(id);
+    // A stale value greys out (Bound value).
+    let color_role = if shown.is_some_and(|s| s.stale) {
+        Value::String("muted".into())
+    } else {
+        fill.and_then(|f| f.get("role"))
+            .cloned()
+            .unwrap_or(Value::String("ink".into()))
+    };
+    let code = crate::code::read(params, path)?;
+    let text = code.as_ref().map(|d| d.text.clone());
+    // Tokens land on the display text, which a code item shows where nothing else does.
+    let tokened = code
+        .as_ref()
+        .filter(|_| shown.is_none() && !params.contains_key("text"));
+    let spec = text_spec_of(id, params, shown, ctx.ty, text)?;
+    let color = role(
+        ctx.palette,
+        Some(&color_role),
+        &format!("{path}/params/paint/fill/role"),
+    )?;
+    let name = color_role.as_str().map(str::to_string);
+    let mut runs = text_runs((ctx.palette, ctx.ty), params, path, tokened)?;
+    let mut out = TextMarks {
+        marks: Vec::new(),
+        fades: Vec::new(),
+        reach: 0.0,
+    };
+    let lines = match &code {
+        Some(d) => Some(crate::lines::read(
+            params,
+            d.text.split('\n').count(),
+            path,
+        )?),
+        None => None,
+    };
+    // #1966: each item of a list marked before its text, which its run sets `indent` in.
+    let list = crate::lines::list(params, spec.size, path)?;
+    let marked = list.filter(|l| l.marker != crate::lines::Marker::None);
+    let shaped = (lines.is_some() || marked.is_some())
+        .then(|| shaped_text(&spec))
+        .flatten();
+    let mut over = Vec::new();
+    if let (Some(l), Some(shaped)) = (marked, &shaped) {
+        over = crate::lines::markers(id, (&spec, &**shaped, pos), l, (name.as_deref(), color));
+    }
+    if let (Some(lines), Some(shaped)) = (&lines, shaped) {
+        let g = crate::lines::gutter(
+            id,
+            (&spec, &*shaped, pos),
+            lines,
+            (ctx.palette, ctx.ty),
+            (name.as_deref(), color),
+        )?;
+        runs = crate::lines::dimmed(runs, &g.dim, (name.as_deref().unwrap_or_default(), color));
+        out.marks = g.under;
+        over.extend(g.over);
+        out.fades = g.fades;
+        out.reach = g.reach;
+    }
+    out.marks.push(Mark::Text {
+        item: id.to_string(),
+        spec,
+        origin: pos,
+        color,
+        role: name,
+        runs,
+    });
+    out.marks.extend(over);
+    Ok(out)
+}
+
+/// `spec`'s shaped run, through the shaped-run cache the renderers share; `None` for a font
+/// nothing bundles.
+pub(crate) fn shaped_text(spec: &TextSpec) -> Option<Arc<deep_text::Shaped>> {
+    let s = spec.shaper_spec()?;
+    Some(LAYOUT_SHAPER.with(|shaper| shaper.borrow_mut().shape(&s)))
+}
+
 fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>, Refused> {
     let path = format!("items/{id}");
     if item.get("visible") == Some(&Value::Bool(false)) {
@@ -4821,7 +5134,13 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
     let stroke = paint.get("stroke").and_then(Value::as_object);
     let paint_path = format!("{path}/params/paint");
     let center = || {
-        pair(params.get("center")).ok_or(Refused {
+        let c = params.get("center");
+        let at = if item.get("kind").and_then(Value::as_str) == Some("circle@1") {
+            circle_center(c)
+        } else {
+            pair(c)
+        };
+        at.ok_or(Refused {
             code: "bad_doc",
             path: format!("{path}/params/center"),
         })
@@ -4829,24 +5148,7 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
     let path_data = || -> Result<(String, Vec<Verb>), Refused> {
         // #490: a path function in place of `d`, drawn from its samples; its text keys it.
         if let Some(f) = params.get("fn") {
-            let drawn = crate::function::draw(f).map_err(|r| Refused {
-                code: "bad_doc",
-                path: format!("{path}/params/fn/{}", r.field),
-            })?;
-            let verbs = drawn
-                .subpaths
-                .iter()
-                .flat_map(|s| {
-                    s.iter().enumerate().map(|(i, p)| {
-                        if i == 0 {
-                            Verb::Move(*p)
-                        } else {
-                            Verb::Line(*p)
-                        }
-                    })
-                })
-                .collect();
-            return Ok((format!("fn:{f}"), verbs));
+            return Ok((format!("fn:{f}"), fn_verbs(f, &path)?));
         }
         let Some(Value::String(d)) = params.get("d") else {
             return refuse("bad_doc", format!("{path}/params/d"));
@@ -4866,6 +5168,9 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
         || stroke.is_some_and(|s| s.contains_key("taper") || s.contains_key("wave"))
         || paint.get("shade").is_some_and(|v| !v.is_null())
         || joined_under(ctx, id, "opacity").is_some();
+    // #223: under a group's warp, an outline is carried point by point, which R1 can't draw.
+    let warp = warp_over(ctx, id)?;
+    let kinetic = kinetic || warp.is_some();
     // #149: a lamp of a backlit screen is light, and draws nothing of its own.
     if let Some(look) = &ctx.ty.drawn {
         let lamps = look.light.as_ref().and_then(|l| l.back.as_ref());
@@ -4892,6 +5197,8 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
     let mut after: Vec<Mark> = Vec::new();
     // The rows a transform left below full opacity, each through its own pass.
     let mut fades: BTreeMap<String, f64> = BTreeMap::new();
+    // #1966: how far a code item's gutter reaches left of its text, inside its mask.
+    let mut reach = 0.0;
     let mut marks: Vec<Mark> = match kind {
         // A scale draws only its legend. A mask and a group draw nothing themselves, and a
         // camera is the view a document is seen through, not a mark (#378: a 3D figure's
@@ -4931,9 +5238,11 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
             }]
         }
         // A logic item (#544) steps and emits occurrences, and a score (#154) sounds: neither draws.
-        // A readout (#419, #1183) draws over the frame, in scene3d's view.
+        // A readout (#419, #1183) draws over the frame, in scene3d's view; so do an anchored
+        // overlay frame and a view overlay, and an inset draws in scene3d's frame (#506).
         "mask@1" | "matte@1" | "group@1" | "camera@1" | "graph@1" | "salience@1" | "sheet@1"
-        | "logic@1" | "score.music@1" | "overlay.text@1" => return Ok(None),
+        | "axes3d@1" | "logic@1" | "score.music@1" | "overlay.text@1" | "overlay.frame@1"
+        | "overlay.view@1" | "inset@1" => return Ok(None),
         "star@1" => {
             let p = |k: &str| num(params.get(k));
             let star = Star {
@@ -4965,22 +5274,24 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
             )?]
         }
         "frame@1" => {
-            // A frame draws its background; its overflow mask scopes its children.
-            let Some(fill) = fill else { return Ok(None) };
-            let bounds = place.rect(frame_box(id, item)?);
-            vec![Mark::Rect {
-                item: id.clone(),
-                bounds,
-                radius: num(params.get("radius")).unwrap_or(0.0),
-                fill: ctx.paints.paint(
-                    id,
-                    fill,
-                    &format!("{paint_path}/fill"),
-                    bounds,
-                    Place::NONE,
-                    false,
-                )?,
-            }]
+            // A frame draws its background, then a grid's rules (#233); its overflow mask scopes
+            // its children.
+            let mut out = Vec::new();
+            if let Some(fill) = fill {
+                let (bounds, radius) = (place.rect(frame_box(id, item)?), num(params.get("radius")));
+                let fill = ctx.paints.paint(id, fill, &format!("{paint_path}/fill"), bounds, Place::NONE, false)?;
+                out.push(Mark::Rect { item: id.clone(), bounds, radius: radius.unwrap_or(0.0), fill });
+            }
+            let rules = crate::grid_rules::rules(id, params, ctx.items);
+            for [a, b] in rules.lines {
+                let [a, b] = [a, b].map(|p| <[f64; 2]>::try_from(&place.rect([p[0], p[1], 0.0, 0.0])[..2]).unwrap_or(p));
+                let color = role(ctx.palette, Some(&rules.role), &format!("{path}/params/rules/role"))?;
+                out.push(crate::ticks::line(format!("{id}#rule"), a, b, rules.width, color));
+            }
+            if out.is_empty() {
+                return Ok(None);
+            }
+            out
         }
         "circle@1" if params.get("arc").is_some() => {
             let center = center()?;
@@ -5073,8 +5384,17 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
             fades = drawing.fades;
             drawing.marks
         }
+        "vector_field@1" => crate::vector_field::marks(
+            id,
+            item,
+            ctx.items,
+            ctx.palette,
+            pos,
+            crate::vector_field::Method::Rk4,
+        )?,
         "axis@1" => {
-            let drawing = data::axis(id, item, ctx.items, ctx.palette, pos, ctx.size)?;
+            let channels = ctx.paints.doc.get("channels");
+            let drawing = data::axis(id, item, (ctx.items, channels), ctx.palette, pos, ctx.size)?;
             fades = drawing.fades;
             drawing.marks
         }
@@ -5119,7 +5439,7 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
             };
             // #535: `at.rot`'s z (degrees) turns the image about its origin.
             let turn = num(item.pointer("/at/rot/2")).unwrap_or(0.0);
-            let origin = place.at([0.0, 0.0]);
+            let origin = place.offset;
             vec![Mark::Image {
                 item: id.clone(),
                 asset: asset.to_ascii_lowercase(),
@@ -5132,6 +5452,17 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
                 tile: None,
                 turn,
             }]
+        }
+        "text@1" => {
+            // #223: under a warp a text moves by its anchor and keeps its glyphs.
+            let origin = match &warp {
+                Some((_, w)) => w.1.back(pos).map(|g| w.1.at(w.0.point(g))).unwrap_or(pos),
+                None => pos,
+            };
+            let drawn = text_marks(ctx, id, params, &path, origin, fill)?;
+            fades.extend(drawn.fades);
+            reach = drawn.reach;
+            drawn.marks
         }
         _ => vec![match kind {
             "rect@1" => {
@@ -5193,35 +5524,6 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
                     color,
                 }
             }
-            "text@1" => {
-                let shown = ctx.bound.get(id);
-                // A stale value greys out (Bound value).
-                let color_role = if shown.is_some_and(|s| s.stale) {
-                    Value::String("muted".into())
-                } else {
-                    fill.and_then(|f| f.get("role"))
-                        .cloned()
-                        .unwrap_or(Value::String("ink".into()))
-                };
-                let code = crate::code::read(params, &path)?;
-                let text = code.as_ref().map(|d| d.text.clone());
-                // Tokens land on the display text, which a code item shows where nothing else does.
-                let tokened = code
-                    .as_ref()
-                    .filter(|_| shown.is_none() && !params.contains_key("text"));
-                Mark::Text {
-                    item: id.clone(),
-                    spec: text_spec_of(id, params, shown, ctx.ty, text)?,
-                    origin: pos,
-                    color: role(
-                        ctx.palette,
-                        Some(&color_role),
-                        &format!("{path}/params/paint/fill/role"),
-                    )?,
-                    role: color_role.as_str().map(str::to_string),
-                    runs: text_runs((ctx.palette, ctx.ty), params, &path, tokened)?,
-                }
-            }
             // A 2D layer's pass runs on the target of a group that names it, and draws nothing.
             "gpu.pass@1" => return Ok(None),
             _ => return refuse("module_missing", format!("{path}/kind: {kind}")),
@@ -5232,8 +5534,15 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
     if childless_backdrop(id, item, ctx.items) {
         scopes.extend(ancestor_scope(id, item, ctx.items, ctx.palette)?);
     }
-    // Masked text draws whole, clipped to its box: its width, and its height or its line limit's.
-    if let [Mark::Text { spec, origin, .. }] = marks.as_slice() {
+    // Masked text draws whole, clipped to its box: its width, and its height or its line limit's;
+    // a code item's gutter (#1966) inside it, left of its text.
+    let text = marks.iter().find_map(|m| match m {
+        Mark::Text {
+            item, spec, origin, ..
+        } if item == id => Some((spec, origin)),
+        _ => None,
+    });
+    if let (Some((spec, origin)), "text@1") = (text, kind) {
         let side = |k: &str| params.get("box").and_then(|b| num(b.get(k)));
         let lines = spec
             .max_lines
@@ -5242,7 +5551,7 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
         if let (true, Some(w), Some(h)) = (spec.mask, side("w"), side("h").or(lines)) {
             scopes.push(Scope::Clip {
                 item: format!("{id}#box"),
-                rect: [origin[0], origin[1], w, h],
+                rect: [origin[0] - reach, origin[1], w + reach, h],
                 radius: 0.0,
             });
         }
@@ -5312,15 +5621,13 @@ fn placed(ctx: &ItemCtx<'_>, id: &String, item: &Value) -> Result<Option<Placed>
             .collect(),
     };
     // #467: paint built from the item's coverage: a drop, a glow, an inner shade, bevel, satin.
-    let light = ctx
-        .ty
-        .drawn
-        .as_ref()
-        .and_then(|l| l.light.as_ref())
-        .map_or(crate::fx::Light::default(), |l| crate::fx::Light {
+    let light = ctx.ty.drawn.as_ref().and_then(|l| l.light.as_ref()).map_or(
+        crate::fx::Light::default(),
+        |l| crate::fx::Light {
             dir: l.dir,
             elevation: l.elevation,
-        });
+        },
+    );
     let mut fx = crate::fx::Fx::read(ctx.palette, paint, &paint_path, light)?;
     // #1653: halos on a text, or on each row of a set of texts.
     let set_of_texts =
@@ -5436,7 +5743,11 @@ fn with_fx(id: &str, fx: &crate::fx::Fx, marks: Vec<Arc<Drawn>>) -> Vec<Arc<Draw
     if fx.drop.is_none() && parts.is_empty() {
         return marks;
     }
-    let own: Vec<Arc<Drawn>> = marks.iter().filter(|d| d.mark.item() == id).cloned().collect();
+    let own: Vec<Arc<Drawn>> = marks
+        .iter()
+        .filter(|d| d.mark.item() == id)
+        .cloned()
+        .collect();
     let layer = |part: crate::fx::Part| -> Vec<Arc<Drawn>> {
         let name = format!("{id}#{}", part.name());
         let blend = match part.mode() {
@@ -5630,7 +5941,7 @@ fn shaded(
 pub fn item_placed(
     id: &str,
     item: &Value,
-    palette: &Palette,
+    (palette, ty): (&Palette, &Type),
     shown: Option<&Shown>,
 ) -> Option<Placed> {
     let kind = item.get("kind").and_then(Value::as_str)?;
@@ -5638,6 +5949,8 @@ pub fn item_placed(
         || item.get("parent").is_some()
         || item.pointer("/at/anchor").is_some()
         || reads_anchor(item)
+        // #1969: a revealed text publishes `#head`, which the frame's anchor pass reads from it.
+        || item.pointer("/params/reveal").is_some_and(|r| !r.is_null())
     {
         return None;
     }
@@ -5667,12 +5980,13 @@ pub fn item_placed(
         items: &empty,
         size: [0.0; 2],
         palette,
-        ty: &Type::default(),
+        ty,
         paints: &paints,
         scopes: &scopes,
         bound: &bound,
         row_readings: &BTreeMap::new(),
         planted: Planted::None,
+        warps: &crate::warp::Warps::default(),
     };
     let mut placed = placed(&ctx, &id.to_string(), item).ok()??;
     let bucket = path::bucket(1.0);
@@ -5686,20 +6000,21 @@ pub fn item_placed(
 pub fn frame_prebuilt(
     doc: &Map<String, Value>,
     items: &Map<String, Value>,
-    palette: &Palette,
+    (palette, ty): (&Palette, &Type),
     zoom: f64,
     bound: &BTreeMap<String, Shown>,
     record: &Record,
     prebuilt: &[(&str, &Placed)],
+    planted: Planted,
 ) -> Result<Option<(Frame, Places)>, Refused> {
     let row_readings = bound_rows(doc, record);
     let (frame, wants_boxes, places) = build(
         doc,
         (items, prebuilt),
-        (palette, &Type::default()),
+        (palette, ty),
         (bound, &row_readings),
         zoom,
-        Planted::None,
+        planted,
         None,
     )?;
     Ok((!wants_boxes).then_some((frame, places)))
@@ -5739,7 +6054,7 @@ fn build(
     boxes: Option<&BTreeMap<String, [f64; 4]>>,
 ) -> Result<(Frame, bool, Places), Refused> {
     let items = laid_out(doc, items)?;
-    let items = &*anchored(items)?;
+    let items = &*anchored(items, ty)?;
     let size = pair(doc.get("size")).ok_or(Refused {
         code: "bad_doc",
         path: "size".into(),
@@ -5798,6 +6113,7 @@ fn build(
     // #495: each matte's source, drawn alone though hidden: the item and what is under it.
     let mut sources: BTreeMap<String, Arc<Vec<Drawn>>> = BTreeMap::new();
     let bare = BTreeMap::new();
+    let warps = crate::warp::Warps::default();
     let alone = ItemCtx {
         items,
         size,
@@ -5808,6 +6124,7 @@ fn build(
         bound,
         row_readings,
         planted,
+        warps: &warps,
     };
     for (id, item) in items {
         if item.get("kind").and_then(Value::as_str) != Some("matte@1") {
@@ -5872,6 +6189,7 @@ fn build(
         bound,
         row_readings,
         planted,
+        warps: &warps,
     };
     // Each item's marks, then each one prebuilt from the item alone (#857), each in its layer.
     let mut built: Vec<(&str, Placed)> = Vec::new();
@@ -5884,6 +6202,8 @@ fn build(
         }
         built.push((id, placed));
     }
+    // #223: a group's warp carries at most its `max_points` across the items under it.
+    warps.over()?;
     if planted != Planted::SectorsSourceOver {
         cover(&mut built, items);
     }

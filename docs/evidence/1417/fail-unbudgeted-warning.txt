@@ -1,0 +1,25 @@
+running 2 tests
+cost::tests::a_document_with_no_budget_is_warned_when_an_operators_declared_cost_passes_the_frame --- FAILED
+cost::tests::a_patch_that_makes_an_unbudgeted_item_costly_is_warned_on_recheck --- FAILED
+
+failures:
+
+---- cost::tests::a_document_with_no_budget_is_warned_when_an_operators_declared_cost_passes_the_frame stdout ----
+
+thread 'cost::tests::a_document_with_no_budget_is_warned_when_an_operators_declared_cost_passes_the_frame' (2333738) panicked at crates/deep-canvas/src/cost.rs:738:34:
+warned
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- cost::tests::a_patch_that_makes_an_unbudgeted_item_costly_is_warned_on_recheck stdout ----
+
+thread 'cost::tests::a_patch_that_makes_an_unbudgeted_item_costly_is_warned_on_recheck' (2333739) panicked at crates/deep-canvas/src/cost.rs:755:9:
+assertion failed: rechecked.is_none_or(|issues| issues.iter().any(|i| i.code == "over_budget"))
+
+
+failures:
+    cost::tests::a_document_with_no_budget_is_warned_when_an_operators_declared_cost_passes_the_frame
+    cost::tests::a_patch_that_makes_an_unbudgeted_item_costly_is_warned_on_recheck
+
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 267 filtered out; finished in 0.01s
+
+error: test failed, to rerun pass `-p deep-canvas --lib`
