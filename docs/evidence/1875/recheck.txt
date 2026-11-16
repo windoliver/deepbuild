@@ -1,0 +1,23 @@
+# Each file `affected.mjs` flagged on this change's own paths (real-change.txt), rerun one at a time after `npm run build --workspaces` and `cargo build -p deep-hook`, at branch 8cd443e7 and with the base c740dede7's scripts/affected.mjs and scripts/proof-guard.mjs in the same tree. 2026-11-15, Linux arm64, load 30-110, under systemd-run with memory capped. Columns: exit status/failing-line count.
+# The base 1113/waits run was stopped by hand after its branch run: it fails only for want of a top-level timed grant within 60 min at this load ("INCONCLUSIVE no grant").
+
+file                                                    branch   base
+packages/hub/test/acceptance-slots.test.ts              0/0      0/0
+tests/acceptance/1015/redraft/own-repo.test.ts          0/0      0/0
+tests/acceptance/1113/waits.test.mjs                    1/3      1/3
+tests/acceptance/1114/affected.test.mjs                 1/3      1/3
+tests/acceptance/1114/failures.test.mjs                 0/0      0/0
+tests/acceptance/1114/timed-list.test.mjs               1/5      1/5
+tests/acceptance/1116/guard.test.mjs                    0/0      0/0
+tests/acceptance/1123/capture-redraft/origin.test.mjs   1/7      1/7
+tests/acceptance/1326/calls.test.mjs                    0/0      0/0
+tests/acceptance/1328/dispute.test.ts                   0/0      0/0
+tests/acceptance/1328/job.test.ts                       0/0      0/0
+tests/acceptance/2144/lint-on-main.test.mjs             1/55     1/55
+tests/acceptance/33/bootstrap.test.ts                   1/0      1/0
+tests/acceptance/87/gate/model-pass.test.ts             0/0      0/0
+tests/acceptance/87/gate/post-close.test.ts             0/0      0/0
+tests/acceptance/87/gate/replay-lane.test.ts            0/0      0/0
+tests/acceptance/87/gate/review-notes.test.ts           1/0      1/0
+tests/proof-binaries-shard-release.test.mjs             1/4      1/4
+tests/shards.test.mjs                                   1/3      1/3
