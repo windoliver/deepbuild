@@ -1,0 +1,36 @@
+
+ RUN  v5.0.5 ~/deepbuild-fix22-panel/packages/asks
+
+ ❯ test/timing.test.ts (38 tests | 1 failed | 37 skipped) 7003ms
+   ❯ the fold (10)
+     × an inbox row says whether it is its session's "keeps asking" exception, the one that holds folded asks, and no other exception is (#22) 6995ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/timing.test.ts > the fold > an inbox row says whether it is its session's "keeps asking" exception, the one that holds folded asks, and no other exception is (#22)
+AssertionError: expected [] to deeply equal [ 'ask:01M5CJXHG0X3RENAW0Z9R5P39C' ]
+
+- Expected
++ Received
+
+- [
+-   "ask:01M5CJXHG0X3RENAW0Z9R5P39C",
+- ]
++ []
+
+ ❯ test/timing.test.ts:162:21
+    160|     const rows = await asks.inbox();
+    161|     const holders = rows.filter((r) => (r as unknown as Obj).holder ==…
+    162|     expect(holders).toEqual([exception]);
+       |                     ^
+    163|     for (const r of rows) expect((r as unknown as Obj).holder, r.ask).…
+    164|     expect(rows.find((r) => r.ask === guard)?.kind).toBe('exception');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 37 skipped (38)
+   Start at  13:06:21
+   Duration  8.35s (tests 93%, transform 4%, import 3%)
+

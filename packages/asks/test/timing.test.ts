@@ -150,6 +150,21 @@ describe('settings files', () => {
 });
 
 describe('the fold', () => {
+  it('an inbox row says whether it is its session\'s "keeps asking" exception, the one that holds folded asks, and no other exception is (#22)', async () => {
+    settings({}); // no batches: every ask shows when it's raised
+    await start('S1');
+    // An exception of another kind waits in the same session before its asks fold: it holds nothing.
+    const fixture = askSources().find((r) => r.source === 'guard.overridden')!.fixture.ask as Obj;
+    const guard = await asks.raise(core('S1'), 'guard.overridden', { ...structuredClone(fixture), deadline: T0 + 2 * DAY });
+    const { folded, exception } = await fold('S1', ask('taste', 'S1 footer'));
+    const rows = await asks.inbox();
+    const holders = rows.filter((r) => (r as unknown as Obj).holder === true).map((r) => r.ask);
+    expect(holders).toEqual([exception]);
+    for (const r of rows) expect((r as unknown as Obj).holder, r.ask).toBe(r.ask === exception);
+    expect(rows.find((r) => r.ask === guard)?.kind).toBe('exception');
+    expect(rows.find((r) => r.ask === folded)?.status).toBe('folded');
+  });
+
   it('Later on the exception never passes the earliest deadline among the asks it holds', async () => {
     settings({}); // no batches: every ask shows when it's raised
     await start('S1');
