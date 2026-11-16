@@ -1,7 +1,7 @@
 // Visibility and batch rules, with their record-derived batch counts. Callers keep read/append ordering under the core's lock.
 import { canonicalize, sha256Hex } from '@deepbuild/contracts';
 import type { Event } from '@deepbuild/record';
-import { bare, CANT_UNDO, isObj } from './model.js';
+import { bare, CANT_UNDO, isObj, signInAgentOf } from './model.js';
 import type { Ask, BatchCard, InboxStatus, Obj } from './model.js';
 import { duration } from './duration.js';
 
@@ -171,8 +171,9 @@ export class Showing {
       acted = true;
     }
     // A deadline at the next batch's own time counts as passing first: an ask first shown at its deadline would
-    // default only on a later call, after its deadline, so it shows now instead.
-    if (await this.showNow(waiting().filter((a) => this.showBy(a) <= next))) acted = true;
+    // default only on a later call, after its deadline, so it shows now instead. An agent's sign-in task (#1349) shows
+    // at once too: the work that needs the agent waits on you, from a Send or a lapsed sign-in, not on a batch.
+    if (await this.showNow(waiting().filter((a) => this.showBy(a) <= next || signInAgentOf(a.data) !== undefined))) acted = true;
     // Only a showing the record took counts as the batch shown: a refused one is still due at the next beat.
     this.shownAt = now;
     return acted;

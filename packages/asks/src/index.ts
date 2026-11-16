@@ -46,7 +46,7 @@ import { Showing } from './showing.js';
 import { duration } from './duration.js';
 export { duration } from './duration.js';
 
-export { AskRefused, CANT_UNDO } from './model.js';
+export { AskRefused, CANT_UNDO, signInAgentOf } from './model.js';
 export type { AskKind, AsksPlant, BatchCard, BudgetLeft, Card, Change, Decision, EffectSubject, InboxStatus, Missing, PlanStep, PointSubject, Refusal, Resolver, ResolverAnswer, ResolverAsk, RuleState, Subject, TasteSubject } from './model.js';
 export { subjectKey } from './decision-keys.js';
 
@@ -366,12 +366,6 @@ const SIGN_IN = new Set(['sign_in_required', 'token_refresh_failed']);
 export const signInSignature = (agent: string): string => `sig:${sha256Hex(new TextEncoder().encode(`sign-in:${agent}`)).slice(0, 16)}`;
 /** What proves a sign-in task: the agent's own sign-in probe, never a claim. */
 const signInProbe = (agent: string): string => `${agent} sign-in probe`;
-/** The agent a sign-in task's data names by its probe, or undefined for any other ask (#1349). */
-export const signInAgentOf = (data: unknown): string | undefined => {
-  const proves = isObj(data) && data.kind === 'unblock' && typeof data.proves === 'string' ? data.proves : '';
-  const agent = proves.endsWith(' sign-in probe') ? proves.slice(0, -' sign-in probe'.length) : '';
-  return /^[a-z0-9-]+$/.test(agent) ? agent : undefined;
-};
 /** The trusted path: the question card and `deep inbox answer`. Every other writer is an agent's or the core's. */
 const TRUSTED: Readonly<Record<string, 'card' | 'inbox'>> = { app: 'card', cli: 'inbox' };
 /** The kinds a channel's account link may answer (#65): "I did it", a taste call and a choice, each that ask alone. */

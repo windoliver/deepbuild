@@ -1,0 +1,10 @@
+head fe56c13482021066182b9b8d9acb5b23b41dc215 + the fix (uncommitted at run); Sun Nov 15 04:39:36 PM PST 2026
+
+ RUN  v5.0.5 <worktree>
+
+
+ Test Files  6 passed (6)
+      Tests  80 passed (80)
+   Start at  16:27:03
+   Duration  121.71s (tests 98%, transform 1%)
+
