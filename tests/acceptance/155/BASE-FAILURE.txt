@@ -1,0 +1,277 @@
+Base commit: 0e5572731 (0e55727311da14cb0c4644f9afd5e33c9505fefa, "Merge pull request #2529 from
+windoliver/fix/2362-kit-seal", origin/main); no implementation of #155.
+Built first: npm ci; npm run build --workspaces; cargo build --locked -p deep-hook, then --bin deep-show (rustup's
+toolchain, CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0, through scripts/throttle.mjs build and scripts/lease).
+Command: NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/155 --testTimeout=600000
+  --no-file-parallelism (the Bash sandbox off, for the hubs' sockets)
+Date: 2026-11-15  Machine: macOS 27.2 (Apple silicon, load average near 200)  Node: v24.22.2. <repo> is the worktree.
+Result: Test Files 9 failed (9); Tests 12 failed (12); about 70 s.
+
+No test passed at the base, and each failed at a named assertion, for the reason the surface is missing:
+
+  AC1 markers.test.ts: media_mix answered unbaked_list for markers.press (no marker list is compiled).
+  AC2 moments.test.ts, AC3 generator.test.ts, AC6 registry.test.ts, AC8 materials.test.ts, and AC7 budgets.test.ts's
+  render and soak legs: the hub started and deep mcp answered initialize, then installFoleyPlugin's expect "the
+  first-party renderer deepbuild/foley-render is at packages/jobs/foley" failed (no packages/jobs/foley/deepbuild.json).
+  AC7 budgets.test.ts, the budgets leg: "benchmarks/budgets.json has a task whose reason names #155.3c3c0a49" failed.
+  AC4 tapestop.test.ts: media_mix answered bad_media "strip stop: rate" (no rate ramp).
+  AC5 processors.test.ts: media_mix answered bad_media "processor p_tanh: kind Some("shaper") isn't built".
+  AC9 pack.test.ts (2): "the first-party foley@1 pack is at packs/foley-1.0.0" failed (no pack.json).
+
+
+ RUN  v5.0.5 <repo>/tests/acceptance/155
+
+ ❯ materials.test.ts (1 test | 1 failed) 6876ms
+   ❯ AC8 #155.ec088f1d a film bound to paper and metal scrapes each stroke in its collection's material, on its sample, the same when sought (1)
+     × AC8 #155.ec088f1d eight strokes: the pencil's scrape paper and the wire's metal, each from its stroke's sample; seeks equal playing with the same voices; the planted first-collection material fails, naming the stroke 2158ms
+ ❯ processors.test.ts (1 test | 1 failed) 7471ms
+   ❯ AC5 #155.dfb89544 shaper, crush and modulate against f64 references, and seeking into each equals playing (1)
+     × AC5 #155.dfb89544 three shaper curves, two crushes and a modulate each match their f64 reference within −120 dBFS, and seeks into each equal playing 3142ms
+ ❯ budgets.test.ts (3 tests | 3 failed) 14152ms
+   ❯ AC7 #155.3c3c0a49 budgets: every preset's variants under 30 s, 32 spawned voices with no underrun over 10 minutes (3)
+     × AC7 #155.3c3c0a49 the perf lane has a task whose reason names #155.3c3c0a49, valid against the merge base's budgets 37ms
+     × AC7 #155.3c3c0a49 on the reference Mac rendering every preset's variants (90 jobs at once, each fresh) takes under 30 s, judged by the perf lane's rule over five runs after a warm-up 3095ms
+     × AC7 #155.3c3c0a49 on the reference Mac 32 spawned voices of foley.metal.hit play live for 600 s with no underrun 2496ms
+ ❯ moments.test.ts (1 test | 1 failed) 7489ms
+   ❯ AC2 #155.c0ec4150 authored moments pick their level by speed and never repeat the previous take (1)
+     × AC2 #155.c0ec4150 1,000 hits on markers.moment: level 3 at 4 m/s, level 1 at 0.5 m/s, no take repeated after the level's previous one, all four takes heard; the planted round robin by hash alone fails, naming the occurrence 2121ms
+ ❯ tapestop.test.ts (1 test | 1 failed) 7571ms
+   ❯ AC4 #155.fd738754 a tape stop from rate 1 to 0 over 0.8 s follows its exact integral, and seeking into it equals playing (1)
+     × AC4 #155.fd738754 at every block of the stop the source position is within one sample of 1 s + τ − τ² ÷ 1.6 s; a seek into it and a cold seek equal the played samples 2806ms
+ ❯ pack.test.ts (2 tests | 2 failed) 4171ms
+   ❯ AC9 #155.eaff7d6a every foley@1 preset passes synth's pack check, and a planted preset with a node outside the list is refused (2)
+     × AC9 #155.eaff7d6a packs/foley-1.0.0 holds the 90 presets foley.<material>.<action>@1 over synth's closed node list, install_pack admits it with no issue, and registries lists each as a synth.preset@1 entry 5ms
+     × AC9 #155.eaff7d6a the planted preset paper.tear@1 with a node grains of kind granular is refused at pack check, naming the preset and the node; without the node it installs 1ms
+ ❯ registry.test.ts (1 test | 1 failed) 2475ms
+   ❯ AC6 #155.5ffbe66e foley.render registered once, by deepbuild/foley-render (1)
+     × AC6 #155.5ffbe66e deep_job lists foley.render with foley-render@1.0.0 from deepbuild/foley-render's registrations, and test/foley-rival's second registration is refused at install naming the kind and its holder 2360ms
+ ❯ generator.test.ts (1 test | 1 failed) 6375ms
+   ❯ AC3 #155.5d489fd3 a generator strip whose job hasn't run is BLOCKED naming it, and a rerun with the same key is a cache hit (1)
+     × AC3 #155.5d489fd3 the strip on foley.paper.tap's l2r3 is BLOCKED naming foley.paper.tap until the job runs; the rerun is a hit with the same key and variants and no process; then the strip plays the variant 2945ms
+ ❯ markers.test.ts (1 test | 1 failed) 6655ms
+   ❯ AC1 #155.2ad28764 a press marker drives a spawn through markers.press, and its sound moves with it (1)
+     × AC1 #155.2ad28764 the press marker tap at 1.25 s plays one click on sample 60,000; moved to 2.6 s + 7,000 flicks, the click moves to sample 124,801 and nothing sounds at 60,000 2921ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 12 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  budgets.test.ts > AC7 #155.3c3c0a49 budgets: every preset's variants under 30 s, 32 spawned voices with no underrun over 10 minutes > AC7 #155.3c3c0a49 the perf lane has a task whose reason names #155.3c3c0a49, valid against the merge base's budgets
+AssertionError: benchmarks/budgets.json has a task whose reason names #155.3c3c0a49 (the merge-base comparison): expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ budgets.test.ts:78:215
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/12]⎯
+
+ FAIL  budgets.test.ts > AC7 #155.3c3c0a49 budgets: every preset's variants under 30 s, 32 spawned voices with no underrun over 10 minutes > AC7 #155.3c3c0a49 on the reference Mac rendering every preset's variants (90 jobs at once, each fresh) takes under 30 s, judged by the perf lane's rule over five runs after a warm-up
+AssertionError: the first-party renderer deepbuild/foley-render is at packages/jobs/foley (README: The surface under test): no <repo>/packages/jobs/foley/deepbuild.json: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installFoleyPlugin helpers.ts:515:191
+
+ ❯ openWorld helpers.ts:508:25
+ ❯ renderAll budgets.test.ts:62:13
+ ❯ budgets.test.ts:84:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/12]⎯
+
+ FAIL  budgets.test.ts > AC7 #155.3c3c0a49 budgets: every preset's variants under 30 s, 32 spawned voices with no underrun over 10 minutes > AC7 #155.3c3c0a49 on the reference Mac 32 spawned voices of foley.metal.hit play live for 600 s with no underrun
+AssertionError: the first-party renderer deepbuild/foley-render is at packages/jobs/foley (README: The surface under test): no <repo>/packages/jobs/foley/deepbuild.json: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installFoleyPlugin helpers.ts:515:191
+
+ ❯ openWorld helpers.ts:508:25
+ ❯ budgets.test.ts:104:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/12]⎯
+
+ FAIL  generator.test.ts > AC3 #155.5d489fd3 a generator strip whose job hasn't run is BLOCKED naming it, and a rerun with the same key is a cache hit > AC3 #155.5d489fd3 the strip on foley.paper.tap's l2r3 is BLOCKED naming foley.paper.tap until the job runs; the rerun is a hit with the same key and variants and no process; then the strip plays the variant
+AssertionError: the first-party renderer deepbuild/foley-render is at packages/jobs/foley (README: The surface under test): no <repo>/packages/jobs/foley/deepbuild.json: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installFoleyPlugin helpers.ts:515:191
+
+ ❯ openWorld helpers.ts:508:25
+ ❯ generator.test.ts:39:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/12]⎯
+
+ FAIL  markers.test.ts > AC1 #155.2ad28764 a press marker drives a spawn through markers.press, and its sound moves with it > AC1 #155.2ad28764 the press marker tap at 1.25 s plays one click on sample 60,000; moved to 2.6 s + 7,000 flicks, the click moves to sample 124,801 and nothing sounds at 60,000
+AssertionError: the press marker at 1.25 s: media_mix answers a mix; got {"code":"unbaked_list","spawn":"click","list":"markers.press","why":"spawn click reads `markers.press`, which isn't a baked occurrence list in the document","core":"core@0.0.0","set_digest":"4820e8840d7a55ee203054249d8cd339a1743553a687bfa290cba985e2cc7d98"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ mixOf helpers.ts:230:97
+    228| export function mixOf(reply: JsonObject | undefined, asks: SegmentAsk[…
+    229|   const r = obj(reply, what);
+    230|   expect('mix' in r && !isBlocked(r), `${what}: media_mix answers a mi…
+       |                                                                                                 ^
+    231|   const m = obj(r['mix'], `${what}: mix`);
+    232|   expect(int(m['sample_rate'], `${what}: mix.sample_rate`), `${what}: …
+ ❯ pressFailures markers.test.ts:44:13
+ ❯ markers.test.ts:59:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/12]⎯
+
+ FAIL  materials.test.ts > AC8 #155.ec088f1d a film bound to paper and metal scrapes each stroke in its collection's material, on its sample, the same when sought > AC8 #155.ec088f1d eight strokes: the pencil's scrape paper and the wire's metal, each from its stroke's sample; seeks equal playing with the same voices; the planted first-collection material fails, naming the stroke
+AssertionError: the first-party renderer deepbuild/foley-render is at packages/jobs/foley (README: The surface under test): no <repo>/packages/jobs/foley/deepbuild.json: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installFoleyPlugin helpers.ts:515:191
+
+ ❯ openWorld helpers.ts:508:25
+ ❯ rendered materials.test.ts:73:13
+ ❯ materials.test.ts:148:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/12]⎯
+
+ FAIL  moments.test.ts > AC2 #155.c0ec4150 authored moments pick their level by speed and never repeat the previous take > AC2 #155.c0ec4150 1,000 hits on markers.moment: level 3 at 4 m/s, level 1 at 0.5 m/s, no take repeated after the level's previous one, all four takes heard; the planted round robin by hash alone fails, naming the occurrence
+AssertionError: the first-party renderer deepbuild/foley-render is at packages/jobs/foley (README: The surface under test): no <repo>/packages/jobs/foley/deepbuild.json: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installFoleyPlugin helpers.ts:515:191
+
+ ❯ openWorld helpers.ts:508:25
+ ❯ rendered moments.test.ts:95:13
+ ❯ moments.test.ts:114:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/12]⎯
+
+ FAIL  pack.test.ts > AC9 #155.eaff7d6a every foley@1 preset passes synth's pack check, and a planted preset with a node outside the list is refused > AC9 #155.eaff7d6a packs/foley-1.0.0 holds the 90 presets foley.<material>.<action>@1 over synth's closed node list, install_pack admits it with no issue, and registries lists each as a synth.preset@1 entry
+AssertionError: the first-party foley@1 pack is at packs/foley-1.0.0 (README): no <repo>/packs/foley-1.0.0/pack.json: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ manifest pack.test.ts:35:151
+     33|
+     34| function manifest(): JsonObject {
+     35|   expect(existsSync(join(PACK_DIR, 'pack.json')), `the first-party fol…
+       |                                                                                                                                                       ^
+     36|   return JSON.parse(readFileSync(join(PACK_DIR, 'pack.json'), 'utf8'))…
+     37| }
+ ❯ pack.test.ts:41:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/12]⎯
+
+ FAIL  pack.test.ts > AC9 #155.eaff7d6a every foley@1 preset passes synth's pack check, and a planted preset with a node outside the list is refused > AC9 #155.eaff7d6a the planted preset paper.tear@1 with a node grains of kind granular is refused at pack check, naming the preset and the node; without the node it installs
+AssertionError: the first-party foley@1 pack is at packs/foley-1.0.0 (README): no <repo>/packs/foley-1.0.0/pack.json: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ manifest pack.test.ts:35:151
+     33|
+     34| function manifest(): JsonObject {
+     35|   expect(existsSync(join(PACK_DIR, 'pack.json')), `the first-party fol…
+       |                                                                                                                                                       ^
+     36|   return JSON.parse(readFileSync(join(PACK_DIR, 'pack.json'), 'utf8'))…
+     37| }
+ ❯ pack.test.ts:64:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/12]⎯
+
+ FAIL  processors.test.ts > AC5 #155.dfb89544 shaper, crush and modulate against f64 references, and seeking into each equals playing > AC5 #155.dfb89544 three shaper curves, two crushes and a modulate each match their f64 reference within −120 dBFS, and seeks into each equal playing
+AssertionError: the processors' fixtures: media_mix answers a mix; got {"code":"bad_media","what":"processor p_tanh: kind Some(\"shaper\") isn't built","core":"core@0.0.0","set_digest":"4820e8840d7a55ee203054249d8cd339a1743553a687bfa290cba985e2cc7d98"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ mixOf helpers.ts:230:97
+    228| export function mixOf(reply: JsonObject | undefined, asks: SegmentAsk[…
+    229|   const r = obj(reply, what);
+    230|   expect('mix' in r && !isBlocked(r), `${what}: media_mix answers a mi…
+       |                                                                                                 ^
+    231|   const m = obj(r['mix'], `${what}: mix`);
+    232|   expect(int(m['sample_rate'], `${what}: mix.sample_rate`), `${what}: …
+ ❯ processors.test.ts:178:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/12]⎯
+
+ FAIL  registry.test.ts > AC6 #155.5ffbe66e foley.render registered once, by deepbuild/foley-render > AC6 #155.5ffbe66e deep_job lists foley.render with foley-render@1.0.0 from deepbuild/foley-render's registrations, and test/foley-rival's second registration is refused at install naming the kind and its holder
+AssertionError: the first-party renderer deepbuild/foley-render is at packages/jobs/foley (README: The surface under test): no <repo>/packages/jobs/foley/deepbuild.json: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ installFoleyPlugin helpers.ts:515:191
+
+ ❯ openWorld helpers.ts:508:25
+ ❯ registry.test.ts:51:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/12]⎯
+
+ FAIL  tapestop.test.ts > AC4 #155.fd738754 a tape stop from rate 1 to 0 over 0.8 s follows its exact integral, and seeking into it equals playing > AC4 #155.fd738754 at every block of the stop the source position is within one sample of 1 s + τ − τ² ÷ 1.6 s; a seek into it and a cold seek equal the played samples
+AssertionError: the tape stop: media_mix answers a mix; got {"code":"bad_media","what":"strip stop: rate","core":"core@0.0.0","set_digest":"4820e8840d7a55ee203054249d8cd339a1743553a687bfa290cba985e2cc7d98"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ mixOf helpers.ts:230:97
+    228| export function mixOf(reply: JsonObject | undefined, asks: SegmentAsk[…
+    229|   const r = obj(reply, what);
+    230|   expect('mix' in r && !isBlocked(r), `${what}: media_mix answers a mi…
+       |                                                                                                 ^
+    231|   const m = obj(r['mix'], `${what}: mix`);
+    232|   expect(int(m['sample_rate'], `${what}: mix.sample_rate`), `${what}: …
+ ❯ tapestop.test.ts:90:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/12]⎯
+
+
+ Test Files  9 failed (9)
+      Tests  12 failed (12)
+   Start at  01:51:35
+   Duration  69.65s (tests 94%, transform 5%, import 1%)
+
+exit 1

@@ -33,6 +33,7 @@ mod frames;
 mod function;
 mod gate;
 mod generated;
+mod generator;
 mod geometry;
 mod geometry_audit;
 mod golden;
@@ -1746,6 +1747,10 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         fault,
         planted,
         module_planted,
+        jobs: match input.get("jobs") {
+            None => Vec::new(),
+            Some(v) => v.as_array()?.clone(),
+        },
         pack_planted,
         logic_planted,
         calls,
