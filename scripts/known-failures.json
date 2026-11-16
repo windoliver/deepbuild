@@ -453,6 +453,24 @@
       "note": "",
       "reason": "retired by #2560: vitest's default 5 s judges it, and one run of the whole conformance lint takes longer (6.6 s on the Linux dev machine): 313-redraft-2560/packaging.test.ts is its test, with suite 313's 600 s",
       "approval": "#2560, its first choice (the owner's touch-key tag on this commit)"
+    },
+    {
+      "id": "cargo -p deep-replica --test acceptance_326_panels_planted › clip_only_host_fails_on_the_dialog",
+      "note": "retired:",
+      "reason": "retired by #1620: the app's loader refuses the fixtures this first draft mounts; redraft-ac7/planted_redraft.rs is AC7's planted host",
+      "approval": "#2444, the owner's call in its session (this commit lands only with the owner's touch-key tag)"
+    },
+    {
+      "id": "cargo -p deep-replica --test acceptance_326_panels_planted › unclipped_layouts_paint_outside_their_slot",
+      "note": "retired:",
+      "reason": "retired by #1620: the app's loader refuses the fixtures this first draft mounts; redraft-ac7/planted_redraft.rs is AC7's planted host",
+      "approval": "#2444, the owner's call in its session (this commit lands only with the owner's touch-key tag)"
+    },
+    {
+      "id": "cargo -p deep-replica --test acceptance_326_panels_planted › base_loader_reaches_the_network",
+      "note": "retired:",
+      "reason": "retired by #1620: the loader refuses a Git dependency before it fetches, so this wrong program reaches no host; tests/acceptance/1620/planted_loader_proposal.rs is its blind replacement",
+      "approval": "#2444, the owner's call in its session (this commit lands only with the owner's touch-key tag)"
     }
   ]
 }
