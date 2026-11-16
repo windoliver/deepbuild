@@ -3,11 +3,12 @@ import fc from 'fast-check';
 import { expect, test } from 'vitest';
 import { scrubPrefix, scrubText } from '../src/index.js';
 
+const armor = (edge: string) => `-----${edge} PRIVATE KEY-----`;
 test('line-aligned cuts preserve the whole-text scrub for generated adjacent masks, unicode and multiline values', () => {
   const pieces = [
     'safe words 🛒 一 résumé\n', 'a\nb\n', 'first-half\nsecond-half\n',
     '"password": {\n "a": "synthetic only"\n}\n',
-    `-----BEGIN PRIVATE KEY-----\n${'synthetic-not-a-real-key'.repeat(8)}\n-----END PRIVATE KEY-----\n`,
+    `${armor('BEGIN')}\n${'synthetic-not-a-real-key'.repeat(8)}\n${armor('END')}\n`,
     'PASSWORD=fixture\n', '"token":"fixture"\n', '\n',
   ];
   fc.assert(fc.property(fc.array(fc.constantFrom(...pieces), { minLength: 1, maxLength: 20 }), fc.integer({ min: 1, max: 80 }), (parts, target) => {

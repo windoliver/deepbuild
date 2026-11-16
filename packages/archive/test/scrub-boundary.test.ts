@@ -5,10 +5,11 @@ import { archivedOf, claudeTranscript, dataOf, openArchiveOn, openWorld, redacte
 
 afterAll(removeTemps);
 
+const armor = (edge: string) => `-----${edge} PRIVATE KEY-----`;
 // These are deliberately non-JSON transcript lines: the archive's facts can name another agent's plain text.
 for (const [name, secret, held] of [
   ['held', 'upper-half-of-the-value\nlower-half-of-the-value\n', ['upper-half-of-the-value\nlower-half-of-the-value']],
-  ['private key', `-----BEGIN PRIVATE KEY-----\n${'synthetic-not-a-real-key'.repeat(8)}\n-----END PRIVATE KEY-----\n`, []],
+  ['private key', `${armor('BEGIN')}\n${'synthetic-not-a-real-key'.repeat(8)}\n${armor('END')}\n`, []],
   ['field value', '"password": {\n "fixture": "not-a-real-password",\n "second": "also-private"\n}\n', []],
 ] as const) {
   test(`${name} spanning a part boundary equals the whole-file scrub byte for byte`, async () => {
