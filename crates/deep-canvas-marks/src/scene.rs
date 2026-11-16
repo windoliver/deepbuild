@@ -3920,13 +3920,6 @@ fn ancestor_scope(
             let effect = Effect::read(id, p, blend, items)?;
             let isolated =
                 get("isolate") == Some(&Value::Bool(true)) || blend.is_some() || effect.is_some();
-            // #2031: an isolated lit group draws its lit and unlit children as one unit before its
-            // opacity, as any blended group does.
-            let lit = get("light").is_some_and(|l| !l.is_null());
-            let blend = match blend {
-                None if lit && (alpha < 1.0 || isolated) => Some(Blend::Normal),
-                b => b,
-            };
             (alpha < 1.0 || isolated).then(|| Scope::Opacity {
                 item: id.to_string(),
                 alpha,
@@ -4064,8 +4057,23 @@ fn scopes_of(
     }
     let mut lit = BTreeMap::new();
     for (id, item) in items {
+        if item.get("kind").and_then(Value::as_str) != Some("group@1") {
+            continue;
+        }
         if let Some(light) = crate::light::read(id, item, palette, planted)? {
             lit.insert(id.as_str(), Arc::new(light));
+        }
+    }
+    // A lit group and every group around it that isolates draws its children as one unit, as a
+    // blended group does, so a lit run never splits the opacity it sits in.
+    let mut around_lit = BTreeSet::new();
+    for id in lit.keys() {
+        let mut at = Some(id.to_string());
+        while let Some(a) = at {
+            if !around_lit.insert(a.clone()) {
+                break;
+            }
+            at = parent(&a);
         }
     }
     let status_bound = crate::light::status_bound(doc);
@@ -4083,6 +4091,8 @@ fn scopes_of(
         }
         let mut scopes = Vec::new();
         let mut masks: Vec<&str> = Vec::new();
+        // #2031: the light of the lit group above the item, if the item takes it.
+        let mut light = None;
         // (ancestor, true) for a parent's scope; (mask, false) for a collection's mask.
         let ancestors = chain.iter().rev().map(|a| (a.as_str(), true));
         let collected = collection_masks
@@ -4101,16 +4111,20 @@ fn scopes_of(
             } else {
                 Some(mask_scope(a, ancestor, items, palette)?)
             };
-            // #2031: a lit group's lit children draw inside its light, an unlit or status one
-            // outside it.
-            let light = lit
-                .get(a)
-                .filter(|_| by_parent && crate::light::is_lit(items, id, a, &status_bound, planted));
-            let light = light.map(|l| crate::light::scope(a, l));
-            let Some(scope) = scope else {
-                scopes.extend(light);
-                continue;
-            };
+            // #2031: a lit group's lit children draw inside its light, innermost, so each child
+            // is lit before it composites as an unlit group's child does; an unlit or status one
+            // draws outside it.
+            if let Some(l) = lit.get(a).filter(|_| by_parent) {
+                if crate::light::is_lit(items, id, a, &status_bound, planted) {
+                    light = Some(crate::light::scope(a, l));
+                }
+            }
+            let Some(mut scope) = scope else { continue };
+            if let Scope::Opacity { blend: b @ None, .. } = &mut scope {
+                if by_parent && around_lit.contains(a) {
+                    *b = Some(Blend::Normal);
+                }
+            }
             if ancestor.get("kind").and_then(Value::as_str) == Some("mask@1") {
                 if ancestor.get("layer") != item.get("layer") {
                     return refuse("mask_writer", format!("items/{a}: {id}"));
@@ -4121,7 +4135,6 @@ fn scopes_of(
                 }
             }
             scopes.push(scope);
-            scopes.extend(light);
         }
         for (_, scope, members, target) in &matte_of {
             let under = match members {
@@ -4132,6 +4145,7 @@ fn scopes_of(
                 scopes.push(scope.clone());
             }
         }
+        scopes.extend(light);
         out.insert(id.clone(), scopes);
     }
     Ok(out)
@@ -6307,6 +6321,7 @@ fn build(
         .enumerate()
         .map(|(li, (_, id, mut marks))| {
             marks.sort_by(|a, b| (&a.0, a.1, a.2).cmp(&(&b.0, b.1, b.2)));
+            crate::light::gather(&mut marks, |m| &**m.3);
             for (k, m) in marks.iter().enumerate() {
                 let Some(places) = at.as_mut() else { break };
                 let e = places

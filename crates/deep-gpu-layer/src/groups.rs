@@ -142,6 +142,26 @@ const MAX_ISOLATED: usize = 32;
 /// 10-bit code, and operators run on [`LINEAR`], so a pass's input is copied there.
 const ACC: wgpu::TextureFormat = wgpu::TextureFormat::Rgba32Float;
 
+/// #2031: how far past their own marks the groups inside `marks` draw: a paint part's margin or
+/// a pass's grow, the largest.
+fn past_marks(marks: &[Drawn]) -> f64 {
+    let past = |s: &Scope| match s {
+        Scope::Opacity {
+            effect: Some(e), ..
+        } => {
+            let paint = e.paint.as_ref().map_or(0.0, |p| f64::from(p.margin()));
+            let passes = e.passes.iter().map(|p| p.grow.unwrap_or(0.0));
+            passes.fold(paint, f64::max)
+        }
+        _ => 0.0,
+    };
+    marks
+        .iter()
+        .flat_map(|d| &d.scopes)
+        .map(past)
+        .fold(0.0, f64::max)
+}
+
 /// The px `r` (u, `[x, y, w, h]`) grown by `grow` covers of a `size` target, `[x, y, w, h]`.
 fn px(r: [f64; 4], grow: f64, size: [u32; 2]) -> [u32; 4] {
     let (w, h) = (f64::from(size[0]), f64::from(size[1]));
@@ -879,11 +899,13 @@ impl Groups {
             }
             None => None,
         };
-        // #2031: a lit group's run of lit children, lit at each pixel over their bounds.
+        // #2031: a lit group's run of lit children, lit at each pixel over their bounds grown by
+        // what a paint part or a pass inside draws past them.
         let lit = match effect.as_deref().and_then(|e| e.light.clone()) {
             Some(light) => {
                 let zoom = x.options.zoom;
-                let rect = px(bounds.map(|v| v * zoom), 1.0, x.size);
+                let grow = past_marks(&inside);
+                let rect = px(bounds.map(|v| v * zoom), (grow + 1.0) * zoom, x.size);
                 let out = self.take(x.device, x.size, ACC);
                 let device = x.device;
                 self.lightfx
@@ -897,14 +919,14 @@ impl Groups {
                         rect,
                         &out,
                     );
-                Some(out)
+                Some((out, grow))
             }
             None => None,
         };
         let (shown, cover, rect) = match effect.as_deref() {
             Some(e) if e.light.is_some() => {
-                let out = lit.as_ref().expect("lit above");
-                (out.create_view(&Default::default()), false, 0.0)
+                let (out, grow) = lit.as_ref().expect("lit above");
+                (out.create_view(&Default::default()), false, *grow)
             }
             Some(e) if e.paint.is_some() => {
                 let (out, _) = painted.as_ref().expect("painted above");
@@ -975,7 +997,7 @@ impl Groups {
         if let Some((out, _)) = &painted {
             self.give(out);
         }
-        if let Some(out) = &lit {
+        if let Some((out, _)) = &lit {
             self.give(out);
         }
         Ok(())
@@ -1354,10 +1376,20 @@ impl Groups {
             .flat_map(|m| &m.scopes);
         let mut groups = BTreeSet::new();
         for s in drawn {
-            if matches!(s, Scope::Opacity { item, .. } if !item.contains('#')) {
-                groups.insert(s.item());
+            // #2031: a lit group's runs draw offscreen as the group, so it counts once.
+            let group = match s {
+                Scope::Opacity { item, .. } if !item.contains('#') => Some(item.as_str()),
+                Scope::Opacity {
+                    item,
+                    effect: Some(e),
+                    ..
+                } if e.light.is_some() => item.strip_suffix("#light"),
+                _ => None,
+            };
+            if let Some(group) = group {
+                groups.insert(group);
                 if groups.len() > MAX_ISOLATED {
-                    return Err(refused("operator_limit", format!("items/{}", s.item())));
+                    return Err(refused("operator_limit", format!("items/{group}")));
                 }
             }
         }

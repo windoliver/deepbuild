@@ -319,3 +319,129 @@ fn a_lit_group_below_full_opacity_composites_its_children_as_one_unit() {
     );
     std::fs::remove_dir_all(&dir).ok();
 }
+
+/// #2031's documents for the review's regressions: `items` on one writer layer at `size`.
+fn lit_doc(size: [u32; 2], items: Value, extra: Value) -> Value {
+    let mut doc = json!({"format": 1, "id": "lights", "profile": "figure", "title": "Lights",
+        "description": "A lights test.", "size": size,
+        "layers": {"main": {"writer": "agent-a", "title": "Main", "order": "a0"}}, "items": items});
+    doc.as_object_mut()
+        .unwrap()
+        .extend(extra.as_object().unwrap().clone());
+    doc
+}
+
+fn item(id: &str, kind: &str, order: &str, params: Value, parent: Option<&str>) -> Value {
+    let mut i = json!({"id": id, "kind": kind, "layer": "main", "name": id, "order": order,
+        "params": params});
+    if let Some(p) = parent {
+        i["parent"] = json!(p);
+    }
+    i
+}
+
+fn drawn_at(name: &str, doc: &Value, look: &Value, t: i64, at: [u32; 2]) -> [u8; 3] {
+    let dir = scratch("deep-raster", name);
+    let out = dir.join(format!("{name}.png"));
+    let answer = run(
+        "raster",
+        &json!({"out": out, "doc": doc, "look": look, "t": t}),
+    );
+    assert_eq!(answer["ok"], json!(true), "{name} draws: {answer}");
+    let image = image::open(&out).unwrap().to_rgb8();
+    std::fs::remove_dir_all(&dir).ok();
+    image.get_pixel(at[0], at[1]).0
+}
+
+fn near(got: [u8; 3], want: [u8; 3]) -> bool {
+    got.iter().zip(want).all(|(a, b)| a.abs_diff(b) <= 1)
+}
+
+/// #2031: a lit group's blended child still blends with what lies under the group, its color lit
+/// first (here by ambient 1, which lights nothing).
+#[test]
+fn a_blended_child_of_a_lit_group_blends_with_what_is_under_it() {
+    let look = json!({"light": {"ground": [255, 255, 255], "ink": [0, 0, 0],
+        "sky": [100, 200, 255], "red": [255, 128, 0]}});
+    let items = json!({
+        "back": item("back", "rect@1", "a0", json!({"box": [0, 0, 40, 20], "paint": {"fill": {"role": "sky"}}}), None),
+        "g": item("g", "group@1", "a1", json!({"light": {"ambient": 1, "lights": []}}), None),
+        "m": item("m", "group@1", "a2", json!({"blend": "multiply"}), Some("g")),
+        "r": item("r", "rect@1", "a3", json!({"box": [10, 0, 20, 20], "paint": {"fill": {"role": "red"}}}), Some("m")),
+    });
+    let got = drawn_at(
+        "lit-multiply",
+        &lit_doc([40, 20], items, json!({})),
+        &look,
+        0,
+        [20, 10],
+    );
+    assert!(near(got, [100, 100, 0]), "red multiplied over sky: {got:?}");
+}
+
+/// #2031: an item's paint (#467) inside a lit group draws as it does with no light, when the
+/// light (ambient 1) lights nothing.
+#[test]
+fn paint_inside_a_lit_group_draws() {
+    let look = json!({"light": {"ground": [255, 255, 255], "ink": [0, 0, 0],
+        "focus": [79, 70, 229], "accent": [26, 163, 200]}});
+    let doc = |light: Value| {
+        let disc = json!({"center": [100.5, 100.5], "r": 50, "paint": {"fill": {"role": "focus"},
+            "glow": {"where": "inner", "role": "accent", "size": 8}}});
+        lit_doc(
+            [200, 200],
+            json!({
+                "g": item("g", "group@1", "a1", json!({"light": light}), None),
+                "disc": item("disc", "circle@1", "a2", disc, Some("g")),
+            }),
+            json!({}),
+        )
+    };
+    let lit = drawn_at(
+        "lit-paint",
+        &doc(json!({"ambient": 1})),
+        &look,
+        0,
+        [100, 100],
+    );
+    let plain = drawn_at("plain-paint", &doc(Value::Null), &look, 0, [100, 100]);
+    assert!(
+        near(lit, plain),
+        "the disc's centre: {lit:?} lit, {plain:?} with no light"
+    );
+}
+
+/// #2031: a lit group's lights travel with its parallax, as its children do.
+#[test]
+fn a_lit_groups_lights_move_with_its_parallax() {
+    let look = json!({"light": {"ground": [255, 255, 255], "ink": [0, 0, 0]}});
+    let light = json!({"ambient": 0, "lights": [{"at": [50, 50], "color": "ground", "range": 40}]});
+    let items = json!({
+        "g": item("g", "group@1", "a1", json!({"parallax": {"drift": [100, 0]}, "light": light}), None),
+        "r": item("r", "rect@1", "a2", json!({"box": [0, 0, 100, 100], "paint": {"fill": {"role": "ground"}}}), Some("g")),
+    });
+    let doc = lit_doc([300, 100], items, json!({"transport": {"span": "2s"}}));
+    // At 1 s the rect and its light have drifted 100 u right: the light's centre is lit full.
+    let got = drawn_at("lit-parallax", &doc, &look, 705_600_000, [150, 50]);
+    assert!(near(got, [255, 255, 255]), "under the moved light: {got:?}");
+}
+
+/// #2031: a channel that carries a lit group's ambient past 1 is refused at check, naming the key.
+#[test]
+fn a_channel_that_carries_ambient_past_one_is_refused() {
+    let items = json!({
+        "g": item("g", "group@1", "a1", json!({"light": {"ambient": 0.5}}), None),
+        "r": item("r", "rect@1", "a2", json!({"box": [0, 0, 40, 20], "paint": {"fill": {"role": "ground"}}}), Some("g")),
+    });
+    let keys = json!({"k0": {"t": "0s", "value": 0.5, "interp": "linear"}, "k1": {"t": "2s", "value": 2, "interp": "linear"}});
+    let channels = json!({"channels": {"amb": {"target": "items/g/params/light/ambient", "type": "f32", "keys": keys}}});
+    let doc = lit_doc([40, 20], items, channels);
+    let answer = run("check", &json!({"doc": doc, "look": look()}));
+    assert_eq!(answer["ok"], json!(false), "refused: {answer}");
+    let named = answer["issues"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|i| i["severity"] == "error" && i["path"] == "channels/amb/keys/k1/value");
+    assert!(named, "an error names the key: {answer}");
+}

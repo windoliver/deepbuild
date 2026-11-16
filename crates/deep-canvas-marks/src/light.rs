@@ -16,7 +16,7 @@ use deep_canvas::document::STATUS_ROLE;
 use deep_canvas::ops;
 
 use crate::place::Place;
-use crate::scene::{num, pair, Blend, Effect, Palette, Planted, Refused, Scope};
+use crate::scene::{num, pair, Blend, Drawn, Effect, Palette, Planted, Refused, Scope};
 
 /// The most lights one group holds.
 pub const MAX_LIGHTS: usize = 16;
@@ -195,26 +195,97 @@ pub fn problems(items: &Map<String, Value>) -> Vec<Problem> {
             });
         }
         for (k, l) in lights.into_iter().flatten().enumerate() {
-            let path = format!("{base}/lights/{k}/color");
             let name = format!("{id}/light/lights/{k}");
-            match l.get("color") {
-                Some(Value::String(role)) if role.starts_with(STATUS_ROLE) => {
-                    out.push(Problem {
-                        code: "status_color_unbound",
-                        id: id.clone(),
-                        path,
-                        actual: json!({"light": name, "color": role}),
-                        what: format!("the light {name} names the status color {role}; a status color is never a light's"),
-                    });
-                }
-                Some(Value::String(role)) if !role.starts_with('#') => {}
-                other => out.push(Problem {
-                    code: "bad_paint",
-                    id: id.clone(),
-                    path,
-                    actual: json!({"light": name, "color": other}),
-                    what: format!("the light {name}'s color is a literal; a light's color is a role of the look"),
-                }),
+            let path = format!("{base}/lights/{k}/color");
+            out.extend(color_problem(id, &name, path, l.get("color")));
+        }
+    }
+    out
+}
+
+/// A light's color that is a status role or a literal, named.
+fn color_problem(id: &str, name: &str, path: String, color: Option<&Value>) -> Option<Problem> {
+    let (code, what) = match color {
+        Some(Value::String(role)) if role.starts_with(STATUS_ROLE) => (
+            "status_color_unbound",
+            format!(
+                "the light {name} names the status color {role}; a status color is never a light's"
+            ),
+        ),
+        Some(Value::String(role)) if !role.starts_with('#') => return None,
+        _ => (
+            "bad_paint",
+            format!("the light {name}'s color is a literal; a light's color is a role of the look"),
+        ),
+    };
+    let actual = json!({"light": name, "color": color});
+    Some(Problem {
+        code,
+        id: id.to_string(),
+        path,
+        actual,
+        what,
+    })
+}
+
+/// The check's refusals of a lit group's values: an `ambient` outside 0..1 or a `range` below 0
+/// as written, and a channel key that carries one there, or that gives a light's color a status
+/// role or a literal, each named.
+pub fn ranges(doc: &Map<String, Value>) -> Vec<Problem> {
+    let items = crate::scene::object_or_empty(doc.get("items"));
+    let outside = |field: &str, v: &Value| match field {
+        "ambient" => !num(Some(v)).is_some_and(|a| (0.0..=1.0).contains(&a)),
+        "range" => !num(Some(v)).is_some_and(|r| r >= 0.0),
+        _ => false,
+    };
+    let problem = |id: &str, path: String, v: &Value| Problem {
+        code: "out_of_range",
+        id: id.to_string(),
+        actual: v.clone(),
+        what: format!(
+            "{path} reads {v}: a lit group's ambient is within 0..1 and a light's range at least 0"
+        ),
+        path,
+    };
+    let mut out = Vec::new();
+    for (id, item) in items.iter().filter(|(_, i)| lit_group(i)) {
+        let base = format!("items/{id}/params/light");
+        if let Some(a) = item
+            .pointer("/params/light/ambient")
+            .filter(|a| !a.is_null())
+        {
+            if outside("ambient", a) {
+                out.push(problem(id, format!("{base}/ambient"), a));
+            }
+        }
+        let lights = item
+            .pointer("/params/light/lights")
+            .and_then(Value::as_array);
+        for (k, l) in lights.into_iter().flatten().enumerate() {
+            if let Some(r) = l.get("range").filter(|r| outside("range", r)) {
+                out.push(problem(id, format!("{base}/lights/{k}/range"), r));
+            }
+        }
+    }
+    let channels = crate::scene::object_or_empty(doc.get("channels"));
+    for (cid, c) in channels {
+        let target = c.get("target").and_then(Value::as_str).unwrap_or("");
+        let parts: Vec<&str> = target.split('/').collect();
+        let (["items", id, "params", "light", ..], Some(field)) = (parts.as_slice(), parts.last())
+        else {
+            continue;
+        };
+        if !items.get(*id).is_some_and(lit_group) {
+            continue;
+        }
+        let keys = crate::scene::object_or_empty(c.get("keys"));
+        for (k, key) in keys {
+            let Some(v) = key.get("value") else { continue };
+            let path = format!("channels/{cid}/keys/{k}/value");
+            if *field == "color" {
+                out.extend(color_problem(id, target, path, Some(v)));
+            } else if outside(field, v) {
+                out.push(problem(id, path, v));
             }
         }
     }
@@ -244,9 +315,10 @@ pub(crate) fn read(
     let ambient = match light.get("ambient") {
         None | Some(Value::Null) if planted == Planted::LightDefaultAmbientZero => 0.0,
         None | Some(Value::Null) => AMBIENT,
+        // A channel may carry it past its range between checked keys: drawn clamped.
         v => match num(v) {
-            Some(a) if (0.0..=1.0).contains(&a) => a,
-            _ => return bad("out_of_range", format!("{base}/ambient")),
+            Some(a) => a.clamp(0.0, 1.0),
+            None => return bad("out_of_range", format!("{base}/ambient")),
         },
     };
     let place = Place::of(item);
@@ -262,9 +334,8 @@ pub(crate) fn read(
         let Some(at) = pair(l.get("at")) else {
             return bad("bad_doc", path("at"));
         };
-        let range = match num(l.get("range")) {
-            Some(r) if r >= 0.0 => r,
-            _ => return bad("out_of_range", path("range")),
+        let Some(range) = num(l.get("range")).map(|r| r.max(0.0)) else {
+            return bad("out_of_range", path("range"));
         };
         let energy = match l.get("energy") {
             None | Some(Value::Null) => 1.0,
@@ -386,4 +457,62 @@ pub fn around(items: &Map<String, Value>, id: &str, palette: &Palette) -> Option
         at = group.get("parent").and_then(Value::as_str);
     }
     None
+}
+
+/// #2031: a layer's marks in draw order with each unlit mark that sits between a lit group's lit
+/// marks moved past the lit marks after it that it doesn't come near, so the group lights in
+/// fewer runs; the picture is the same. A mark moves only when its scopes are its lit
+/// neighbours' outside their light, so it has none of its own.
+pub(crate) fn gather<T>(marks: &mut Vec<T>, drawn: impl Fn(&T) -> &Drawn) {
+    let lit_at = |d: &Drawn| d.scopes.iter().position(|s| light_of(s).is_some());
+    if !marks.iter().any(|m| lit_at(drawn(m)).is_some()) {
+        return;
+    }
+    let near = |a: [f64; 4], b: [f64; 4]| {
+        // A px of antialiasing around each.
+        a[0] - 1.0 < b[0] + b[2]
+            && b[0] - 1.0 < a[0] + a[2]
+            && a[1] - 1.0 < b[1] + b[3]
+            && b[1] - 1.0 < a[1] + a[3]
+    };
+    let mut out = Vec::with_capacity(marks.len());
+    let mut held: Vec<T> = Vec::new();
+    // The outer scopes of the last lit mark placed, while unlit marks may still move past.
+    let mut context: Option<Vec<Scope>> = None;
+    for m in marks.drain(..) {
+        let d = drawn(&m);
+        match lit_at(d) {
+            Some(k) if context.as_deref() == Some(&d.scopes[..k]) => {
+                let e = d.extent();
+                if held.iter().any(|h| near(drawn(h).extent(), e)) {
+                    out.append(&mut held);
+                }
+                out.push(m);
+            }
+            Some(k) => {
+                out.append(&mut held);
+                context = Some(d.scopes[..k].to_vec());
+                out.push(m);
+            }
+            None if context.as_deref() == Some(&d.scopes[..]) => {
+                held.push(m);
+            }
+            None => {
+                out.append(&mut held);
+                context = None;
+                out.push(m);
+            }
+        }
+    }
+    out.append(&mut held);
+    *marks = out;
+}
+
+fn light_of(s: &Scope) -> Option<&Arc<Light>> {
+    match s {
+        Scope::Opacity {
+            effect: Some(e), ..
+        } => e.light.as_ref(),
+        _ => None,
+    }
 }

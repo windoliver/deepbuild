@@ -56,8 +56,12 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     if ((u.flags & 1u) == 0u) {
         lin = decode(rgb);
     }
+    let planted_sum = (u.flags & 4u) != 0u;
     var sum = vec3<f32>(u.ambient);
-    var apart = space_out(lin * u.ambient);
+    var apart = vec3<f32>(0.0);
+    if (planted_sum) {
+        apart = space_out(lin * u.ambient);
+    }
     for (var i = 0u; i < u.count; i = i + 1u) {
         let l = u.lights[i];
         let d = pos.xy - l.at.xy;
@@ -73,10 +77,12 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
         }
         let term = l.at.w * reach * l.color.rgb;
         sum = sum + term;
-        apart = apart + space_out(lin * term);
+        if (planted_sum) {
+            apart = apart + space_out(lin * term);
+        }
     }
     var out = space_out(lin * sum);
-    if ((u.flags & 4u) != 0u) {
+    if (planted_sum) {
         out = clamp(apart, vec3<f32>(0.0), vec3<f32>(1.0));
     }
     return vec4<f32>(out * c.a, c.a);

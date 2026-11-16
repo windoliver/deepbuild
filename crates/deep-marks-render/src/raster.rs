@@ -1324,10 +1324,14 @@ fn composite<'s>(
                 ..(*d).clone()
             })
             .collect();
-        // #2031: a lit group's light around the run reaches lit children inside a blended group.
-        if inside
-            .iter()
-            .any(|d| d.scopes.iter().any(|s| light_of(s).is_some()))
+        // #2031: a lit run's children draw through this compositor too, so a paint part or a
+        // blended group inside it composites as it would unlit; a light inside a blended group
+        // is reached the same way.
+        let lit_run = light_of(&marks[start].scopes[at]).is_some();
+        if lit_run
+            || inside
+                .iter()
+                .any(|d| d.scopes.iter().any(|s| light_of(s).is_some()))
         {
             let inside: Vec<&Drawn> = inside.iter().collect();
             composite(&mut content, &inside, new_ctx, raster)?;

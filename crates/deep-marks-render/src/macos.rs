@@ -1670,6 +1670,22 @@ impl Renderer {
             if let Some(r) = crate::gpu::refusal(marks.iter().copied()) {
                 return Err(r);
             }
+            // #2031: Vello GPU lights nothing, so a lit group is the live view's refusal, naming
+            // its light; the GPU layer draws it.
+            let lit = marks.iter().flat_map(|d| &d.scopes).find_map(|s| match s {
+                scene::Scope::Opacity {
+                    item,
+                    effect: Some(e),
+                    ..
+                } if e.light.is_some() => item.strip_suffix("#light"),
+                _ => None,
+            });
+            if let Some(group) = lit {
+                return Err(refused(
+                    "module_missing",
+                    &format!("items/{group}/params/light"),
+                ));
+            }
             let images = (session.store.clone(), session.plant);
             pictures.push(Some(
                 self.vello_picture(&marks, frame.size, view.zoom, images)?,
