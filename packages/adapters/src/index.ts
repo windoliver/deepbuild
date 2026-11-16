@@ -123,14 +123,30 @@ export function readFacts<T = JsonValue>(file: string): T {
   return JSON.parse(readFileSync(new URL(file, FACTS), 'utf8')) as T;
 }
 
-/** The shipped adapters, each its facts file plus the parts that aren't data, named by the facts' agent field. */
+/** The shipped adapters. A reader of one agent need not parse and validate every other agent's facts. */
 export function shipped(): AdapterRegistry {
   const reg = registry();
-  for (const [file, parts] of [['claude-code.facts.json', claudeParts], ['codex.facts.json', codexParts], ['pi.facts.json', piParts], ['paseo.facts.json', paseoParts]] as const) {
+  const pending = new Map<string, readonly [string, AdapterParts]>([
+    ['claude', ['claude-code.facts.json', claudeParts]], ['codex', ['codex.facts.json', codexParts]],
+    ['pi', ['pi.facts.json', piParts]], ['paseo', ['paseo.facts.json', paseoParts]],
+  ]);
+  const names = [...pending.keys()];
+  const load = (name: string): void => {
+    const entry = pending.get(name);
+    if (!entry) return;
+    const [file, parts] = entry;
     const facts = readFacts(file);
-    reg.register(String((facts as JsonObject).agent), factsAdapter(facts, parts));
-  }
-  return reg;
+    // The public name still belongs to the facts, and every loaded adapter passes the original registration checks.
+    if ((facts as JsonObject).agent !== name) throw refuse('const', '/facts/agent', (facts as JsonObject).agent, `${file} must name its shipped agent ${name}.`);
+    reg.register(name, factsAdapter(facts, parts));
+    pending.delete(name);
+  };
+  return {
+    names: () => [...names, ...reg.names().filter((name) => !names.includes(name))],
+    get(name) { load(name); return reg.get(name); },
+    register(name, adapter) { load(name); reg.register(name, adapter); },
+    mapHook(request, version, transcript) { load(request.agent); return reg.mapHook(request, version, transcript); },
+  };
 }
 
 /** The type set a published schema node takes: `true` is every type; a $ref follows draft-07 definitions. */
