@@ -1,0 +1,102 @@
+# #1981 acceptance tests: the selection in the fixture, the run on the base, and the planted wrong programs
+
+Run on a Mac17,10, 18 cores, at a 1-minute load of 370 to 650 from other sessions (`sysctl -n vm.loadavg` at the start
+and end of each run); the helpers stand in a Mac15,7 and pin the load each process reads at 2. Each program is a copy of
+the base's scripts/ and this folder, with only scripts/budget-window.mjs replaced, and the worktree's node_modules
+linked. HOME, XDG_CACHE_HOME and TMPDIR were in a scratch folder. The first line of each failure's message follows its
+test's name. Every failure is an AssertionError.
+
+## The selection runs in the fixture's checkout at the base
+
+The fixture as the scene builds it (workspace commit, then a commit changing crates/deep-hook/src/main.rs), in the
+fixture's checkout, with the sandbox's environment (its PATH, cargo, HOME, RUSTUP_HOME, CARGO_HOME, NODE_OPTIONS):
+
+$ node scripts/affected.mjs --list crates/deep-hook/src/main.rs
+exit 0
+parallel cargo test: deep-hook
+
+$ node scripts/affected.mjs --list benchmarks/canvas.mjs
+exit 0
+NOTE benchmarks/canvas.mjs reaches no test
+
+$ node scripts/affected.mjs --list docs/notes.txt
+exit 0
+NOTE docs/notes.txt reaches no test
+
+$ cargo metadata --no-deps --format-version 1 --offline      (the sandbox's cargo)
+exit 0; packages: deep-hook, targets: bin:deep-hook
+git status in the checkout afterwards: clean (no Cargo.lock or target/ written)
+
+## The base (3557b348)
+
+$ node --test tests/acceptance/1981/window.test.mjs          (24 min; load 532 at the start, 396 at the end)
+
+✖ #1981.91e6703b a fixture commit that changes only crates/deep-hook runs the tasks whose commands run deep-hook's binary and no task that runs only benchmarks/canvas.mjs, and its record lists each task not run as not reached
+✔ #1981.a6a21922 a task whose command affected.mjs can't place runs on a fixture commit that changes an unrelated file
+✖ #1981.2eb85d5e a fixture commit naming an issue whose only budget criterion is measured by a task the commit didn't reach leaves that issue open, its record naming the task as not reached
+ℹ tests 3
+ℹ pass 1
+ℹ fail 2
+
+The failures' messages:
+
+✖ #1981.91e6703b    the window ran canvas-patch, which runs only benchmarks/canvas.mjs, on a commit that changes only crates/deep-hook and can't reach it
+✖ #1981.2eb85d5e    the window closed #9501, whose only budget criterion canvas-seal measures, on a commit that can't reach canvas-seal      'CLOSED' !== 'OPEN'
+
+The window measured both commits (two PASS records, every task PASS on each, 480 samples) and ran `gh issue close` on
+9501. AC1 fails at the first unreachable task's samples, before its record line is read; AC3 at the issue's state,
+before its record line. The silent-record twin covers both lines. AC2 passes: the base runs every task.
+
+An earlier base run, at a load near 400 (9 min), met the base's copy step failing on the hook commit, so its record
+was BLOCKED and AC1 and AC3 failed at their first assertion instead:
+
+  {"lane":"budget-window c7476afe…","state":"BLOCKED",…,"tests":[{"id":"benchmarks/budgets.json","state":"BLOCKED","note":"spawnSync tar EPIPE"}],…}
+  ✖ #1981.91e6703b    the window didn't run hook-version, whose command runs deep-hook's binary, on a commit that changes crates/deep-hook
+  ✔ #1981.a6a21922
+  ✖ #1981.2eb85d5e    benchmarks/budgets.json was to pass on the commit that changes crates/deep-hook: …      'BLOCKED' !== 'PASS'
+
+Ten more tries of the same `git archive <commit> | tar -mxf -` pipe through execFileSync, on that commit at that load,
+all ended 0. The run above is the base's own.
+
+## The throwaway window (the base's window plus about 30 lines that meet #1981; not kept)
+
+✔ #1981.91e6703b a fixture commit that changes only crates/deep-hook runs …
+✔ #1981.a6a21922 a task whose command affected.mjs can't place runs …
+✔ #1981.2eb85d5e a fixture commit naming an issue whose only budget criterion …
+ℹ tests 3
+ℹ pass 3
+ℹ fail 0
+(10 min; load 373 at the start, 554 at the end)
+
+Its hook record: tests hook-version, hook-overhead and loose, each PASS; notReached ["canvas-patch","canvas-seal"];
+unmeasured ["#9501.5153e561"]; issue 9501 OPEN.
+
+## Twin silent-record (the throwaway with one fault, laid over a copy of the base)
+
+✖ #1981.91e6703b    the record doesn't list each task not run (canvas-patch, canvas-seal) as not reached: {"lane":"budget-window 201fd499…","state":"PASS",…
+✔ #1981.a6a21922
+✖ #1981.2eb85d5e    the record doesn't name canvas-seal, the task that measures #9501's criterion, as not reached: {"lane":"budget-window 201fd499…
+ℹ tests 3
+ℹ pass 1
+ℹ fail 2
+(14 min)
+
+## Twin skips-unplaced (the throwaway with one fault, laid over a copy of the base)
+
+✔ #1981.91e6703b
+✖ #1981.a6a21922    the window didn't run loose, whose command affected.mjs can't place, on a commit that changes only docs/notes.txt
+✔ #1981.2eb85d5e
+ℹ tests 3
+ℹ pass 2
+ℹ fail 1
+(11 min)
+
+## Twin closes-unreached (the throwaway with one fault, laid over a copy of the base)
+
+✔ #1981.91e6703b
+✔ #1981.a6a21922
+✖ #1981.2eb85d5e    the window closed #9501, whose only budget criterion canvas-seal measures, on a commit that can't reach canvas-seal      'CLOSED' !== 'OPEN'
+ℹ tests 3
+ℹ pass 2
+ℹ fail 1
+(14 min)

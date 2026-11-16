@@ -20,7 +20,7 @@ use crate::hub::Hub;
 
 pub(crate) mod cast;
 mod derive;
-mod kit;
+pub(crate) mod kit;
 pub(crate) use derive::{parse, Bake};
 
 /// The physics module the full set seals, on the Rapier backend this build links, its pins as

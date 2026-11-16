@@ -138,7 +138,8 @@ impl Hub<'_> {
 
     /// #548: deep_query's logic read of `form`: each of `items` baked on `track` over the span
     /// (and to the last step asked): its region map with its layout digest, each asked step's
-    /// arrays as that step left them and the fuel it used, and its trap, null when none.
+    /// arrays as that step left them and the fuel it used, its trap, null when none, and the
+    /// hash of the bytes it runs.
     pub(crate) fn logic_read(&self, form: &Value, items: &[String], steps: &[i64], track: &[Value]) -> Value {
         let piece = match self.logic_piece(form, track) {
             Ok(Some(p)) => Rc::new(p),
@@ -190,9 +191,29 @@ impl Hub<'_> {
                 })
                 .collect();
             let trap = rec.traps.iter().find(|t| t["item"] == json!(id)).cloned().unwrap_or(Value::Null);
-            out.insert(id.clone(), json!({"region_map": region_map, "steps": read, "trap": trap}));
+            // #1164: `hash`, the SHA-256 of the bytes the engine runs (sandbox@1's rewrite).
+            out.insert(id.clone(), json!({"region_map": region_map, "steps": read, "trap": trap, "hash": piece.items[i].hash}));
         }
         json!({"logic": out})
+    }
+}
+
+/// #1164: the logic twins a scenario's `planted` may name, alone or as a list applied together.
+const PLANTED: [&str; 2] = ["restore_zeroes_move_count", "check_compares_step_hashes"];
+
+/// A scenario's `planted` as logic twins: `Some(None)` when it names none, `None` (bad input)
+/// for a list holding any other name.
+pub(crate) fn planted(v: Option<&Value>) -> Option<Option<deep_logic::Planted>> {
+    let mut p = deep_logic::Planted::default();
+    match v {
+        Some(Value::String(n)) if PLANTED.contains(&n.as_str()) => Some(p.and(n)),
+        Some(Value::Array(names)) => {
+            for n in names {
+                p = p.and(n.as_str().filter(|n| PLANTED.contains(n))?)?;
+            }
+            Some(Some(p))
+        }
+        _ => Some(None),
     }
 }
 

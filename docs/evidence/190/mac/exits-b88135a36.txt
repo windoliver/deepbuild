@@ -1,0 +1,13 @@
+start; cc --version exit 0; screen-lock flag 0; Now drawing from 'AC Power' 22:15:51 load { 7.28 24.28 34.23 } thermal 1 free KB 65517340
+docker answers: client 29.2.1 server 29.2.1 22:15:52 load { 7.28 24.28 34.23 } thermal 1 free KB 65516576
+image present as []; pulling linux/amd64 (user go: Yes, pull if missing) 22:16:32 load { 5.93 21.81 32.86 } thermal 1 free KB 65514948
+pull exit=0 22:16:35 load { 5.93 21.81 32.86 } thermal 0 free KB 65512972
+image rust:1.99.1-slim-bookworm linux/amd64 id sha256:6253ededdef8047bd5c12ad710ef5ad84a95631fc39804161088612ae3e90e56 22:17:55 load { 3.72 17.39 30.18 } thermal 0 free KB 65514368
+head b88135a3660b16d739242a725286c8e9e8f86f06 local main 2252dfd6fd144f279f3944795602b1c7b3fc81c7 merge-base 2c1c8cacc83665675a65b262c948511050a5500c 22:18:00 load { 3.74 17.17 30.03 } thermal 0 free KB 64997120
+setup exit=0 22:18:41 load { 14.01 17.98 29.66 } thermal 0 free KB 64628220
+ac04-machines-browser.test.ts exit=0 22:22:48 load { 58.63 37.68 35.22 } thermal 1 free KB 61432520
+ac05-library-trap.test.ts exit=0 22:25:13 load { 64.54 47.72 39.61 } thermal 1 free KB 61313644
+ac07-no-links.test.ts exit=0 22:26:20 load { 49.70 46.16 39.58 } thermal 1 free KB 60577164
+ac10 gate: no load wait (the user's choice at the Mac, 2026-11-14: Drop the waits); at start load 49.70 thermal 1, Now drawing from 'AC Power' 22:26:21 load { 49.70 46.16 39.58 } thermal 1 free KB 60577148
+ac10-budgets.test.ts exit=0 22:26:38 load { 39.70 44.08 38.99 } thermal 1 free KB 60562424
+secret scan hits=0 22:26:38 load { 39.70 44.08 38.99 } thermal 1 free KB 60562024

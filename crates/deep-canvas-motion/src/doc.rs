@@ -1677,8 +1677,21 @@ fn constraint_of(id: &str, c: &Map<String, Value>) -> Result<Constraint, Refused
             }
             Kind::FollowPath {
                 points,
-                fraction: crate::constraint::Fraction::of(c.get("fraction"))
-                    .or_else(|code| refuse(code, at("fraction")))?,
+                // #1960: `fraction: {path}` is the number at that path, as a driver's var reads one.
+                fraction: match c
+                    .get("fraction")
+                    .and_then(Value::as_object)
+                    .filter(|f| f.len() == 1)
+                    .and_then(|f| f.get("path"))
+                {
+                    Some(Value::String(text)) => crate::constraint::Fraction::Path(target_of(
+                        text,
+                        false,
+                        &at("fraction/path"),
+                    )?),
+                    _ => crate::constraint::Fraction::of(c.get("fraction"))
+                        .or_else(|code| refuse(code, at("fraction")))?,
+                },
                 orient: flag("orient"),
                 offset: pair(c.get("offset"), &at("offset"))?,
             }
@@ -3507,6 +3520,39 @@ pub fn track(doc: &Map<String, Value>) -> Result<Option<Vec<crate::input::Entry>
         });
     }
     Ok(Some(out))
+}
+
+/// #903: a tour's linear key on a played form's inline track (Tour; Input track: an entry's
+/// polyline): from its entry at `t` its control's value moves to `to` at `end`.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct Ramp {
+    pub control: String,
+    pub t: i64,
+    pub seq: i64,
+    pub end: i64,
+    pub to: f64,
+}
+
+/// The ramps of `doc`'s inline track: each entry the writer `tour` wrote with the two ends of
+/// its segment as its samples.
+pub(crate) fn ramps(doc: &Map<String, Value>) -> Vec<Ramp> {
+    let list = doc.get("track").and_then(Value::as_array);
+    let ramp = |(i, e): (usize, &Value)| {
+        let [_, last] = e.get("samples")?.as_array()?.as_slice() else {
+            return None;
+        };
+        let t = e.get("t")?.as_i64()?;
+        let end = last.get("t")?.as_i64()?;
+        (e.get("writer")?.as_str()? == "tour" && end > t).then_some(Ramp {
+            control: e.get("control")?.as_str()?.to_string(),
+            t,
+            seq: e.get("seq").and_then(Value::as_i64).unwrap_or(i as i64),
+            end,
+            to: last.get("value")?.as_f64()?,
+        })
+    };
+    let entries = list.into_iter().flatten().enumerate();
+    entries.filter_map(ramp).collect()
 }
 
 /// A placement's writer layer's order key, empty with none.

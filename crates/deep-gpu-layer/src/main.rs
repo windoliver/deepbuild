@@ -33,10 +33,12 @@ mod film;
 mod fix;
 mod fixtures;
 mod flat;
+mod flows2d;
 mod frames;
 mod golden;
 mod groups;
 mod guard;
+mod hdr;
 mod host;
 mod insets;
 mod indexed;
@@ -45,6 +47,7 @@ mod levels;
 mod live;
 mod liveview;
 mod lod;
+mod look_ops;
 mod marks2d;
 mod opframe;
 mod paintfx;
@@ -130,6 +133,18 @@ pub enum Planted {
     SubmitsOnCompletion,
     ReleasesBeforeCompletion,
     WaitsOnGpu,
+    /// #177's wrong HDR output: the surface carries the SDR curve; the shoulder replaced by the
+    /// identity clipped at the headroom; the whole curve scaled by it; what draws over the scene
+    /// scaled by it; the headroom read once; an export drawn from the HDR surface; the HDR layer
+    /// above the window's; a view drawing 3D over 2D presenting HDR.
+    ClipsAtOne,
+    ClipsAtHeadroom,
+    MovesToe,
+    StatusOverPaperWhite,
+    ReadsHeadroomOnce,
+    ExportReadsHdrSurface,
+    HdrLayerAboveChrome,
+    CatcherViewGoesHdr,
     CompilesOnUiThread,
     ExposesGpuToPanels,
     /// #537's wrong programs (tests/acceptance/537/README.md: Planted twins).
@@ -194,6 +209,8 @@ pub enum Planted {
     ShoreFieldFromCentre,
     /// #268: waves at full amplitude by the shore, ignoring its field.
     ShoreCalmIgnoresField,
+    /// #968: the flow's noise moved in one phase, jumping back at every wrap.
+    WaterFlowSinglePhase,
     /// #854's wrong program: the renderer compiles its pipelines in the first frame.
     CompilesOnFirstFrame,
     /// #777's wrong programs (tests/acceptance/777/README.md: Planted programs).
@@ -298,6 +315,9 @@ pub enum Planted {
     /// environment prefiltered one mip a frame; the specular lobe uncompensated, or compensated on
     /// environment light alone; metallic premixed into one F0 before shading.
     DrawsBlack,
+    /// #463's wrong program (tests/acceptance/463/README.md: Planted programs): `art.halftone_pop`
+    /// drawn with `art.dot`'s passes.
+    HalftonePopTakesDotPasses,
     InkFillFlat,
     RimKeepsFirst,
     DropsClouds,
@@ -455,6 +475,9 @@ pub enum Planted {
     BoundsBindPose,
     /// #450's: a whole trail drawn from the frames drawn so far (tests/acceptance/450/README.md).
     TrailAppendsPerFrame,
+    /// #451's: particles on a vector field's stream move instead in a straight line along the
+    /// field's arrow at their birth point (tests/acceptance/451/README.md: The planted program).
+    ParticlesFollowArrows,
     /// #226's wrong programs (tests/acceptance/226/README.md: The planted programs).
     AxesModAppliesTransform,
     Axes3dOwnTickRule,
@@ -491,6 +514,14 @@ impl Planted {
             "submits_on_completion" => Planted::SubmitsOnCompletion,
             "releases_before_completion" => Planted::ReleasesBeforeCompletion,
             "waits_on_gpu" => Planted::WaitsOnGpu,
+            "clips_at_one" => Planted::ClipsAtOne,
+            "clips_at_headroom" => Planted::ClipsAtHeadroom,
+            "moves_toe" => Planted::MovesToe,
+            "status_over_paper_white" => Planted::StatusOverPaperWhite,
+            "reads_headroom_once" => Planted::ReadsHeadroomOnce,
+            "export_reads_hdr_surface" => Planted::ExportReadsHdrSurface,
+            "hdr_layer_above_chrome" => Planted::HdrLayerAboveChrome,
+            "catcher_view_goes_hdr" => Planted::CatcherViewGoesHdr,
             "compiles_on_ui_thread" => Planted::CompilesOnUiThread,
             "exposes_gpu_to_panels" => Planted::ExposesGpuToPanels,
             "forward_z" => Planted::ForwardZ,
@@ -537,6 +568,7 @@ impl Planted {
             "water_foam_keeps_state" => Planted::WaterFoamKeepsState,
             "shore_field_from_centre" => Planted::ShoreFieldFromCentre,
             "shore_calm_ignores_field" => Planted::ShoreCalmIgnoresField,
+            "water_flow_single_phase" => Planted::WaterFlowSinglePhase,
             "compiles_on_first_frame" => Planted::CompilesOnFirstFrame,
             "budgets_each_window" => Planted::BudgetsEachWindow,
             "steps_main_window" => Planted::StepsMainWindow,
@@ -579,6 +611,7 @@ impl Planted {
             "inherit_previous_frame" => Planted::InheritPreviousFrame,
             "bounds_bind_pose" => Planted::BoundsBindPose,
             "trail_appends_per_frame" => Planted::TrailAppendsPerFrame,
+            "particles_follow_arrows" => Planted::ParticlesFollowArrows,
             "axes_mod_applies_transform" => Planted::AxesModAppliesTransform,
             "axes3d_own_tick_rule" => Planted::Axes3dOwnTickRule,
             "axes_mod_maps_every_frame" => Planted::AxesModMapsEveryFrame,
@@ -623,6 +656,7 @@ impl Planted {
             "anisotropy_one" => Planted::AnisotropyOne,
             "normal_map_as_srgb" => Planted::NormalMapAsSrgb,
             "draws_black" => Planted::DrawsBlack,
+            "halftone_pop_takes_dot_passes" => Planted::HalftonePopTakesDotPasses,
             "ink_fill_flat" => Planted::InkFillFlat,
             "rim_keeps_first" => Planted::RimKeepsFirst,
             "drops_clouds" => Planted::DropsClouds,

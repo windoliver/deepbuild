@@ -1,7 +1,7 @@
 
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
-import { parse as parseYaml } from 'yaml';
+import { parseYaml } from './yaml.js';
 
 import { UsageTail } from '@deepbuild/readings';
 import { Numbers } from './numbers.js';
@@ -9,7 +9,7 @@ import { homedir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ADAPTERS } from '@deepbuild/adapters';
-import { openAsks, type Asks } from '@deepbuild/asks';
+import { openAsks, signInSignature, type Asks } from '@deepbuild/asks';
 import { openLedger, type Ledger } from '@deepbuild/budget';
 import { canonicalize, contextBoundFor, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { openEvidenceStore, scrubText, type EvidenceStore } from '@deepbuild/evidence';
@@ -22,7 +22,7 @@ import { openCheckouts, type Checkouts, type TaskListFacts } from '@deepbuild/ga
 import { openLeases, SLOW_SLOT, type LeaseTable } from '@deepbuild/leases';
 import { Acceptance } from './acceptance.js';
 import { Landing } from './landing.js';
-import { openRunner, type JobRecord, type JobSpec, type Runner } from '@deepbuild/runner';
+import { openRunner, type Agent, type JobRecord, type JobSpec, type Runner } from '@deepbuild/runner';
 import { openSupervisor, openUnder, type Host, type Supervisor } from '@deepbuild/supervisor';
 
 import { ClaudeSettings, readJson, STOP_HOLD_MS, words } from './claude-settings.js';
@@ -72,6 +72,7 @@ import { ISSUE_LINK, ISSUE_UNREAD, liveFetch, liveGraphql, readIssue, recordedFe
 import { OpenItems } from './open-items.js';
 import { isStatusQuestion, newestClaim, statusAnswer } from './verdict-chat.js';
 import { apiHost, networkCheck, reachable, slackThreads } from './reach.js';
+import { signInCheck } from './sign-in.js';
 
 import { Answers } from './answers.js';
 import { Runs } from './runs.js';
@@ -270,7 +271,7 @@ export class Core {
   private spaces!: WorkspaceService;
   /** The supervisor's runs (runs.ts). */
   private runs!: Runs;
-  private checkKinds!: CheckKinds;
+  private checkKinds!: () => Promise<CheckKinds>;
   private reviewRounds!: ReviewRounds;
   /** Each worktree's stack and every stack run a check started (#331, #332). */
   private stacks!: Stacks;
@@ -280,6 +281,16 @@ export class Core {
   private agents!: Agents;
   /** The box (#1998): changes in words, each a proposal you approve. */
   private box!: Box;
+  /** `deep.canvas.play`'s replica (#184): the piece's `<doc>@<rev>` read as that revision's canonical document, played once. */
+  private async play(call: Record<string, unknown>): Promise<Record<string, unknown>> {
+    const piece = String(call.piece);
+    const at = piece.lastIndexOf('@');
+    const [row] = (await this.raw(`SELECT json_extract(data, '$.hash') AS hash FROM events WHERE kind = 'doc.patched' AND subject = ? AND json_extract(data, '$.rev') = ? LIMIT 1`, [`doc:${piece.slice(0, at)}`, Number(piece.slice(at + 1))])) as { hash: string }[];
+    if (!row) return { ok: false, error: { code: 'not_found', message: `no revision ${piece} is recorded` } };
+    const document = JSON.parse(readFileSync(join(this.root.evidence, row.hash.slice(0, 2), row.hash.slice(2)), 'utf8')) as Record<string, unknown>;
+    const { piece: _piece, ...run } = call;
+    return this.replicas.play({ ...run, document, evidence: this.root.evidence });
+  }
   /** Each session's deep_drive replicas (#124). */
   private replicas!: Replicas;
   /** Appends handed to the record and not yet settled: a read waits for them, so it sees every hook acknowledged before it. */
@@ -556,16 +567,16 @@ export class Core {
         if (spec.kind === 'review') {
           const head = this.gate.snapshotOf(run.claim) ?? run.commit;
           const since = of.pr ? await this.reviewRounds.since(of.pr, run.claim) : null;
-          const { round, ...result } = await this.checkKinds.run({ ...spec, head, since } as CheckSpec, { checkout: join(this.root.dir, 'objects'), deadline, now: this.now }, of);
+          const { round, ...result } = await (await this.checkKinds()).run({ ...spec, head, since } as CheckSpec, { checkout: join(this.root.dir, 'objects'), deadline, now: this.now }, of);
           if (round && of.pr && run.commit === head) await this.reviewRounds.read(of.pr, run.claim, head, round);
           return result;
         }
-        return this.checkKinds.run(spec, { checkout, deadline, now: this.now }, of, { run: run.run, worktree: this.judging.claimFolder(run.claim) ?? checkout, stop });
+        return (await this.checkKinds()).run(spec, { checkout, deadline, now: this.now }, of, { run: run.run, worktree: this.judging.claimFolder(run.claim) ?? checkout, stop });
       },
     });
-    // The check kinds the hub holds (#1537): command, review, numbers and the work kinds, each with its routes.
+    // Check implementations load for a claim or a kinds listing, never for the first session or tool hook.
     this.reviewRounds = new ReviewRounds({ outcomes: this.providers.checks.reviewOutcomes, raw: this.raw, appendCore: (kind, data, extra) => this.appendCore(kind, data, extra), objects: join(this.root.dir, 'objects') });
-    this.checkKinds = this.providers.checks.kinds({ host: () => this.host, supervisor: () => this.supervisor, checkouts: () => this.checkouts, store: join(this.root.dir, 'objects'), submit: (spec) => this.runner.submit(spec), wait: (job) => this.runner.wait(job), cancel: (job) => this.runner.cancel(job), plant: options.plant });
+    this.checkKinds = this.providers.checks.kinds({ host: () => this.host, supervisor: () => this.supervisor, checkouts: () => this.checkouts, store: join(this.root.dir, 'objects'), submit: (spec) => this.runner.submit(spec), wait: (job) => this.runner.wait(job), cancel: (job) => this.runner.cancel(job), plant: options.plant, extensions: () => this.extensions });
     this.replicas = new Replicas({ folder: join(this.root.dir, 'replicas'), now: this.now, leases: () => this.leases, plant: options.plant });
     this.numbers = new Numbers({
       raw: this.raw, now: this.now, append: (connection, input) => this.append(connection, input), core: this.connection('core'),
@@ -651,6 +662,8 @@ export class Core {
     // Opening the supervisor reaps what the record says a run left before this start.
     const asks = this.asks = await openAsks({
       record: this.record, now: this.now, deliver: (d) => this.delivery.answered(d), home: this.root.dir, threads: slackThreads(this.root.dir), network: networkCheck(),
+      // Each open sign-in task's probe, on the recorded login PATH (#1349).
+      signIn: signInCheck(() => this.agents.loginPath(), (agent) => this.runner?.account(agent as Agent) ?? null, this.now),
       // The hub's own adapters answer, so the facts it maps hooks by are the facts that decide a continue.
       errorTurnHook: (agent) => adapterOf(agent)?.caps.errorTurnHook === true,
     });
@@ -668,9 +681,13 @@ export class Core {
     let beat = { wall: Date.now(), at: this.now() };
     const landed = async (): Promise<number> => Number(((await this.record.raw(`SELECT COALESCE(MAX(log_pos), 0) AS pos FROM events WHERE kind IN ('agent.stop', 'verdict.made')`)) as { pos: number }[])[0]?.pos ?? 0);
     let ticked = await landed();
+    // An ask waiting for your next visit shows at its time, though nothing else lands then (#1345): while one waits,
+    // the asks are read once a minute on the hub's clock.
+    let looked = this.now();
     const due = async (): Promise<boolean> => {
       const pos = await landed();
       if (pos > ticked) { ticked = pos; return true; }
+      if (this.now() - looked >= 60_000 && (await this.record.raw(`SELECT 1 FROM asks WHERE status = 'open' AND batch_id IS NULL LIMIT 1`)).length) { looked = this.now(); return true; }
       return (await this.record.raw(`SELECT 1 FROM asks WHERE status IN ('open', 'later') AND (deadline <= ? OR kind = 'unblock') LIMIT 1`, [this.now()])).length > 0;
     };
     // The hook programs are checked at start and every 10 minutes on the hub's clock (#993): no hook arrives to say they can't run.
@@ -861,13 +878,16 @@ export class Core {
       token: async () => process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken(),
       gateToken: (repo) => this.gateToken(repo), gateApp: () => this.forgeApp('gate'),
       landingToken: (repo) => (this.landingTokens ??= this.providers.forge.gateTokens(this.options.forge, () => this.forgeApp('gate'), true))(repo),
-      judge: (r) => this.judging.judgeLanding(r),
+      judge: (r) => this.judging.judgeLanding(r), verdict: (claim) => this.judging.recorded(claim),
       sendBack: (r) => this.delivery.landingSendBack(r),
       appendCore: (kind, data, extra) => this.appendCore(kind, data, extra),
     });
     // #1922's planted hosts build a tool's digest wrongly: the host's plants, selected with the hub's variable.
     const plant = this.options.plant?.startsWith('job-build-') ? { plant: this.options.plant as 'job-build-entry-only' } : {};
-    const extensions = this.extensions = await openExtensionHost({ record: this.record, supervisor: this.supervisor, trust, home: this.root.dir, release: [], now: this.now, leases, runner: this.runner, evidence: this.store, point: () => this.durable.point('terminals_rewrite'), ...plant });
+    const extensions = this.extensions = await openExtensionHost({ record: this.record, supervisor: this.supervisor, trust, home: this.root.dir, release: [], now: this.now, leases, runner: this.runner, evidence: this.store, point: () => this.durable.point('terminals_rewrite'),
+      // A check runner's reads and plays of a canvas piece (#411, #184): the hub's canvas core, and a replica playing the
+      // revision's canonical document, its programs from the evidence store.
+      canvas: (call) => this.canvasSide.canvasCall(call), replica: (call) => this.play(call), ...plant });
     this.jobKinds = new Jobs({
       root: this.root.dir, now: this.now, host: () => this.extensions, plant: this.options.plant,
       keep: async (bytes, source) => (await this.control.stored(await this.store.connect({ role: 'deepbuild', via: 'job' }).put({ bytes, kind: 'file', source, redaction: 'complete', license: { name: 'job output', allows: [] } }), `a job output from ${source}`)).sha256,
@@ -981,7 +1001,7 @@ export class Core {
     await this.delivery.restore();
     await this.acceptance.open();
     // The work runs (#1332), once the starts are reconciled with what still runs: a pass every 2 s from the record and the forge.
-    (this.work = new Work({ api: this.options.forge ?? 'https://api.github.com', token: async () => process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken(), repoOf: (remote) => this.providers.forge.repoOf(remote), raw: (q, p) => this.record.raw(q, p), appendCore: (kind, data, extra) => this.appendCore(kind, data, extra), starts: () => this.sessionStarts, landing: () => this.landing, asks: () => this.asks, now: this.now, plant: this.options.plant, spaces: () => this.spaces, judgeTask: (r) => this.judging.judgeTask(r), due: () => this.control.briefsDue() })).open();
+    (this.work = new Work({ api: this.options.forge ?? 'https://api.github.com', token: async () => process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken(), repoOf: (remote) => this.providers.forge.repoOf(remote), raw: (q, p) => this.record.raw(q, p), appendCore: (kind, data, extra) => this.appendCore(kind, data, extra), starts: () => this.sessionStarts, landing: () => this.landing, asks: () => this.asks, now: this.now, plant: this.options.plant, spaces: () => this.spaces, judgeTask: (r) => this.judging.judgeTask(r), answered: (claim, req, ask, answer) => this.judging.answered(claim, req, ask, answer), due: () => this.control.briefsDue() })).open();
     // The session map and what its notices delivered, and the loop rule's count, read back (#352).
     await this.siblings.restore().catch(() => undefined);
     for (const timer of this.timers) timer.unref();
@@ -1158,17 +1178,16 @@ export class Core {
     }
   }
   /** A session's start from a process started after the sync its row names: its own evidence of the new set (#148). */
-  private async newSet(session: Session, meta: HookMeta): Promise<void> {
+  private async newSet(session: Session, meta: HookMeta, heldStart: string | undefined): Promise<void> {
     // Its own start: its transcript, from a process of its agent's own binary, a Codex daemon started since included.
     if (meta.transcript && resolve(meta.transcript) !== session.transcript) return;
     // npm's Codex runs as node with its bin script, its native build as codex itself.
     const binaries = meta.agent === 'codex' ? [CODEX_BINARY, /@openai\/codex\/bin\/codex\.js(?:\s|$)/] : meta.agent === 'claude-code' || meta.agent === 'claude' ? [CLAUDE_BINARY] : [];
     const args = binaries.length ? await this.state.parentArgs(meta) : '';
     if (binaries.length && !binaries.some((b) => b.test(args))) return;
-    const ppid = meta.ppid;
     const [last] = (await this.record.raw(`SELECT ts, json_extract(data, '$.reading') AS text FROM events WHERE session_id = ? AND kind = 'session.reading' AND (json_extract(data, '$.reading') LIKE ? OR json_extract(data, '$.reading') LIKE ?) ORDER BY log_pos DESC LIMIT 1`, [session.id, `${OLDER_SET}%`, `${NEWER_SET}%`])) as { ts: number; text: string }[];
     if (!last || last.text.startsWith(NEWER_SET)) return;
-    const started = Date.parse((await this.state.startOf(ppid, true)) ?? '');
+    const started = Date.parse((heldStart && meta.fields?.source !== 'resume' ? heldStart : await this.state.startOf(meta.ppid, true)) ?? '');
     if (!(started > last.ts)) return;
     await this.queue(() => this.appendReading(session.id, session.agent, `${NEWER_SET} its process started after the sync its row named, so it loads the MCP servers and skills synced since.`));
   }
@@ -1399,7 +1418,7 @@ export class Core {
     }
     await this.enrich(drafts, meta, session && verified ? session : undefined);
     // A session's start is its own evidence of the set it loads (#148), from the process it starts in.
-    if (meta.event === 'SessionStart' && session && !FOREIGN.has(meta.agent)) void this.newSet(session, meta).catch(() => undefined);
+    if (meta.event === 'SessionStart' && session && !FOREIGN.has(meta.agent)) void this.newSet(session, meta, verified ? session.start : undefined).catch(() => undefined);
     // The session's newest stop, with its cause and owner read: one whose task is open holds the turns DeepBuild
     // would start there until the task closes (#85); any other stop ends an earlier hold.
     const stopped = meta.session && !meta.fields?.agent_id ? drafts.find((d) => d.kind === 'agent.stop') : undefined;
@@ -2033,7 +2052,8 @@ export class Core {
     if (meta.transcript && !meta.fields?.agent_id) void this.recordUsage(meta).catch(() => undefined);
     const cause = String(data.cause);
     if (cause === 'unknown') return;
-    data.signature = signature(`stop:${cause}`, meta.fields?.error ?? cause, meta.cwd);
+    // A sign-in is one task per agent (#1349): its signature names the agent alone, the same in every session and folder.
+    data.signature = cause === 'sign_in_required' || cause === 'token_refresh_failed' ? signInSignature(meta.agent) : signature(`stop:${cause}`, meta.fields?.error ?? cause, meta.cwd);
     // Who clears it. A spend limit reads as a rate limit, but only you can raise it (#85).
     data.owner = cause === 'sign_in_required' || cause === 'token_refresh_failed' || meta.fields?.error === 'billing_error' ? 'you' : cause === 'rate_limited' || cause === 'plan_window_spent' || cause === 'timed_out' ? 'service' : 'agent';
     // The payload can't tell a dropped connection from a network you must reconnect, so the hub tried it (#85).
@@ -2636,5 +2656,5 @@ export class Core {
 
   async notifierGone(): Promise<void> { return this.control.notifierGone(); }
 
-  async health(): Promise<Obj> { return this.control.health(); }
+  async health(role: string): Promise<Obj> { return this.control.health(role); }
 }

@@ -199,6 +199,8 @@ impl Hub<'_> {
             };
             (rgba, size)
         };
+        // #903: the tour's pointer, in the overlay above the document's layers.
+        self.pointer_over(doc, t, &mut rgba, size);
         #[cfg(feature = "test-export-guards")]
         test_guards::paint(doc, test_guards::frame_of(doc, t), &mut rgba, size, |r| {
             self.look.light.get(r).copied()
@@ -779,6 +781,8 @@ impl Hub<'_> {
             }
         }
         doc = crate::played::with_track(&doc, &track);
+        // #903: an export no one gave input to plays the document's tour.
+        crate::tour::inline(&mut doc);
         if self.scenario.module_planted.as_deref() == Some("export_keeps_live_hover") {
             // Planted (#539): the frames evaluate hover as the panel's live hover, not none.
             self.hover_into(&job.doc, &mut doc);

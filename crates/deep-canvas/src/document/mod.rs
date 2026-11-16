@@ -25,6 +25,7 @@ mod order;
 pub mod pack_kinds;
 pub mod packs;
 pub mod patch_schema;
+mod reads;
 mod requires;
 mod rows;
 mod rules;
@@ -115,6 +116,8 @@ pub const ENVELOPE_KEYS: &[&str] = &[
     "tempo_map",
     // #935: the media module's generated sounds, each held to audio.gen before an item names it.
     "sounds",
+    // #903: the input module's tour (Tour), its keys and its pointer.
+    "tour",
 ];
 
 /// An item's keys (Item and kind), in this slice.
@@ -683,6 +686,7 @@ mod tests {
                 &changed,
                 &crate::registry::core(),
                 &referrers,
+                &Packs::default(),
             )
             .expect("items only");
             assert_eq!(

@@ -207,8 +207,11 @@ impl Hub<'_> {
     /// doesn't know left out, and its tables, vectors and logic programs inlined; with its
     /// expansions.
     pub(crate) fn drawn_of(&self, document: &Value) -> (Value, Vec<Expansion>) {
-        let (mut drawn, expansions) = self.drawing_form(document);
-        self.keep_instances(document, &expansions, &mut drawn);
+        // #1960: as its load opened it, each migrated item and each path a rename carried.
+        let sealed = &self.startup.sealed;
+        let opened = deep_canvas::document::pack_kinds::loaded(document, sealed, &self.packs);
+        let (mut drawn, expansions) = self.drawing_form(&opened);
+        self.keep_instances(&opened, &expansions, &mut drawn);
         let _ = self.inline_tables(&mut drawn);
         let _ = self.inline_vectors(&mut drawn);
         self.inline_programs(&mut drawn);

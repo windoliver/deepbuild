@@ -1,0 +1,147 @@
+# #1875 acceptance tests: the run on the base, and the planted wrong programs
+
+## The base (c740dede7, no implementation of #1875)
+
+$ node --test 'tests/acceptance/1875/*.test.mjs'
+(stack-trace lines dropped; the checkout's path reads <checkout>, temporary folders <tmp>, home paths ~; the TIMED line is cut)
+
+Three tests fail at their assertions. AC4's (#1875.aeda0f53) passes here, as it must: the base already reads PASS
+for a plain change. Its wrong program is the twin all-inconclusive, below.
+
+✖ #1875.801bc708 a change that reaches only a file in byHand, one under tests/acceptance/685/, reads INCONCLUSIVE, naming the file (1993.736962ms)
+✖ #1875.f6c302f9 a change that reaches only a file in ownLane reads INCONCLUSIVE, naming it (1738.27528ms)
+✖ #1875.e267e730 a change to tests/vitest-setup.ts prints INCONCLUSIVE tests/vitest-setup.ts feeds every suite; on main it selects one file (1936.848382ms)
+✔ #1875.aeda0f53 a change that reaches no by-hand, own-lane, timed or slow file can still read PASS (1594.489458ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 1
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 7321.916334
+
+✖ failing tests:
+
+test at tests/acceptance/1875/affected.test.mjs:33:1
+✖ #1875.801bc708 a change that reaches only a file in byHand, one under tests/acceptance/685/, reads INCONCLUSIVE, naming the file (1993.736962ms)
+  AssertionError [ERR_ASSERTION]: a change reaching only tests/acceptance/685/probe-1875.test.mjs (in byHand) does not read INCONCLUSIVE
+  exit 0
+  stdout:
+  SKIP tests/acceptance/685/probe-1875.test.mjs (by hand)
+  TIMED the timed list, from scripts/lanes.mjs (196): tests/acceptan …
+  PASS affected: 0 new, 0 already failing on main, 0 inconclusive or blocked, 0 listed skips, 0 passed, in 1 s at load 9; logs in <tmp>
+  
+  stderr:
+  
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'PASS affected: 0 new, 0 already failing on main, 0 inconclusive or blocked, 0 listed skips, 0 passed, in 1 s at load 9; logs in <tmp>',
+    expected: /^INCONCLUSIVE affected: /,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1875/affected.test.mjs:37:1
+✖ #1875.f6c302f9 a change that reaches only a file in ownLane reads INCONCLUSIVE, naming it (1738.27528ms)
+  AssertionError [ERR_ASSERTION]: a change reaching only tests/acceptance/684/lean.test.ts (in ownLane) does not read INCONCLUSIVE
+  exit 0
+  stdout:
+  SKIP tests/acceptance/684/lean.test.ts (a lane of its own)
+  TIMED the timed list, from scripts/lanes.mjs (196): tests/acceptan …
+  PASS affected: 0 new, 0 already failing on main, 0 inconclusive or blocked, 0 listed skips, 0 passed, in 1 s at load 9; logs in <tmp>
+  
+  stderr:
+  
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'PASS affected: 0 new, 0 already failing on main, 0 inconclusive or blocked, 0 listed skips, 0 passed, in 1 s at load 9; logs in <tmp>',
+    expected: /^INCONCLUSIVE affected: /,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1875/affected.test.mjs:42:1
+✖ #1875.e267e730 a change to tests/vitest-setup.ts prints INCONCLUSIVE tests/vitest-setup.ts feeds every suite; on main it selects one file (1936.848382ms)
+  AssertionError [ERR_ASSERTION]: a change to tests/vitest-setup.ts does not print "INCONCLUSIVE tests/vitest-setup.ts feeds every suite"
+  exit 0
+  stdout:
+  parallel node: tests/vitest-setup.test.mjs
+  TIMED the timed list, from scripts/lanes.mjs (196): tests/acceptan …
+  PASS affected: 0 new, 0 already failing on main, 0 inconclusive or blocked, 0 listed skips, 1 passed, in 1 s at load 10; logs in <tmp>
+  
+  stderr:
+  
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+## The planted wrong programs (twins/, twins.json)
+
+Each twin is twins/<name>.patch applied to the base's scripts/affected.mjs by twins/run.sh, in a throwaway copy.
+Each patch is the blind job's own small reference implementation of #1875 with one planted fault. The reference
+itself (not committed) passes all four. Lines kept: each test's result and its assertion message.
+
+## twin skip-passes: sh tests/acceptance/1875/twins/run.sh skip-passes
+✖ #1875.801bc708 a change that reaches only a file in byHand, one under tests/acceptance/685/, reads INCONCLUSIVE, naming the file (2459.195784ms)
+✔ #1875.f6c302f9 a change that reaches only a file in ownLane reads INCONCLUSIVE, naming it (2228.175054ms)
+✔ #1875.e267e730 a change to tests/vitest-setup.ts prints INCONCLUSIVE tests/vitest-setup.ts feeds every suite; on main it selects one file (2473.369552ms)
+✔ #1875.aeda0f53 a change that reaches no by-hand, own-lane, timed or slow file can still read PASS (1439.072005ms)
+ℹ tests 4
+ℹ pass 3
+ℹ fail 1
+  AssertionError [ERR_ASSERTION]: a change reaching only tests/acceptance/685/probe-1875.test.mjs (in byHand) does not read INCONCLUSIVE
+
+## twin unnamed: sh tests/acceptance/1875/twins/run.sh unnamed
+✖ #1875.801bc708 a change that reaches only a file in byHand, one under tests/acceptance/685/, reads INCONCLUSIVE, naming the file (1748.867688ms)
+✖ #1875.f6c302f9 a change that reaches only a file in ownLane reads INCONCLUSIVE, naming it (2568.407631ms)
+✔ #1875.e267e730 a change to tests/vitest-setup.ts prints INCONCLUSIVE tests/vitest-setup.ts feeds every suite; on main it selects one file (2045.621636ms)
+✔ #1875.aeda0f53 a change that reaches no by-hand, own-lane, timed or slow file can still read PASS (1328.11217ms)
+ℹ tests 4
+ℹ pass 2
+ℹ fail 2
+  AssertionError [ERR_ASSERTION]: no INCONCLUSIVE line names tests/acceptance/685/probe-1875.test.mjs
+  AssertionError [ERR_ASSERTION]: no INCONCLUSIVE line names tests/acceptance/684/lean.test.ts
+
+## twin own-lane-passes: sh tests/acceptance/1875/twins/run.sh own-lane-passes
+✔ #1875.801bc708 a change that reaches only a file in byHand, one under tests/acceptance/685/, reads INCONCLUSIVE, naming the file (2331.923701ms)
+✖ #1875.f6c302f9 a change that reaches only a file in ownLane reads INCONCLUSIVE, naming it (1848.086958ms)
+✔ #1875.e267e730 a change to tests/vitest-setup.ts prints INCONCLUSIVE tests/vitest-setup.ts feeds every suite; on main it selects one file (1982.297742ms)
+✔ #1875.aeda0f53 a change that reaches no by-hand, own-lane, timed or slow file can still read PASS (1763.711787ms)
+ℹ tests 4
+ℹ pass 3
+ℹ fail 1
+  AssertionError [ERR_ASSERTION]: a change reaching only tests/acceptance/684/lean.test.ts (in ownLane) does not read INCONCLUSIVE
+
+## twin global-only: sh tests/acceptance/1875/twins/run.sh global-only
+✔ #1875.801bc708 a change that reaches only a file in byHand, one under tests/acceptance/685/, reads INCONCLUSIVE, naming the file (2146.688641ms)
+✔ #1875.f6c302f9 a change that reaches only a file in ownLane reads INCONCLUSIVE, naming it (3028.831687ms)
+✖ #1875.e267e730 a change to tests/vitest-setup.ts prints INCONCLUSIVE tests/vitest-setup.ts feeds every suite; on main it selects one file (3330.169597ms)
+✔ #1875.aeda0f53 a change that reaches no by-hand, own-lane, timed or slow file can still read PASS (2625.159819ms)
+ℹ tests 4
+ℹ pass 3
+ℹ fail 1
+  AssertionError [ERR_ASSERTION]: a change to tests/vitest-setup.ts does not print "INCONCLUSIVE tests/vitest-setup.ts feeds every suite"
+
+## twin all-inconclusive: sh tests/acceptance/1875/twins/run.sh all-inconclusive
+✔ #1875.801bc708 a change that reaches only a file in byHand, one under tests/acceptance/685/, reads INCONCLUSIVE, naming the file (2426.407661ms)
+✔ #1875.f6c302f9 a change that reaches only a file in ownLane reads INCONCLUSIVE, naming it (3549.808973ms)
+✔ #1875.e267e730 a change to tests/vitest-setup.ts prints INCONCLUSIVE tests/vitest-setup.ts feeds every suite; on main it selects one file (3154.509457ms)
+✖ #1875.aeda0f53 a change that reaches no by-hand, own-lane, timed or slow file can still read PASS (2108.448667ms)
+ℹ tests 4
+ℹ pass 3
+ℹ fail 1
+  AssertionError [ERR_ASSERTION]: a change reaching only the plain file tests/fixture-1875/plain.test.mjs does not read PASS with it passed
+
+## the reference (not committed): sh tests/acceptance/1875/twins/run.sh <reference patch>
+✔ #1875.801bc708 a change that reaches only a file in byHand, one under tests/acceptance/685/, reads INCONCLUSIVE, naming the file (2739.102386ms)
+✔ #1875.f6c302f9 a change that reaches only a file in ownLane reads INCONCLUSIVE, naming it (3482.53655ms)
+✔ #1875.e267e730 a change to tests/vitest-setup.ts prints INCONCLUSIVE tests/vitest-setup.ts feeds every suite; on main it selects one file (2958.687947ms)
+✔ #1875.aeda0f53 a change that reaches no by-hand, own-lane, timed or slow file can still read PASS (2493.2335ms)
+ℹ tests 4
+ℹ pass 4
+ℹ fail 0
