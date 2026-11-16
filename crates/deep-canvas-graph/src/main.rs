@@ -52,11 +52,12 @@ fn layout_line(input: &Value) -> Result<Value, Refused> {
         }
     };
     let started = Instant::now();
+    let elapsed_ms = || started.elapsed().as_secs_f64() * 1e3;
     let graph = read_graph(graph)?;
     let layout = read_layout(layout)?;
     let fresh = |graph, layout| -> Result<Value, Refused> {
         let memory = layered(graph, layout)?;
-        let ms = started.elapsed().as_secs_f64() * 1e3;
+        let ms = elapsed_ms();
         let mut ranks: Vec<u32> = memory.values().map(|p| p.rank).collect();
         ranks.sort_unstable();
         ranks.dedup();
@@ -79,7 +80,7 @@ fn layout_line(input: &Value) -> Result<Value, Refused> {
         }
         Ok((kept, replaced)) => json!({"ok": true, "memory": write_memory(&kept),
                                        "replaced": replaced,
-                                       "ms": started.elapsed().as_secs_f64() * 1e3}),
+                                       "ms": elapsed_ms()}),
         Err(relayout) => json!({
             "ok": false,
             "code": "layout.relayout_needed",

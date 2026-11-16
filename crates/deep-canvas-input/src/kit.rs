@@ -7,7 +7,9 @@
 //! - `read_region`: the kind's value fields and their layout digest;
 //! - `keyboard`: a role and a keyboard path, and keys alone move the value;
 //! - `input`: your gesture's entry carries your serial, the parameter tool's is the agent's with
-//!   none, and an agent's own pointer input writes nothing.
+//!   none, and an agent's own pointer input writes nothing;
+//! - `edges` (#1048): the kind declares its edge values, from its own type and range, which
+//!   `logic.edges` puts in, so a new kind joins that check without a change there.
 
 use deep_canvas::canon::sha256_hex;
 use deep_canvas::registry::lists::RegistryDef;
@@ -17,7 +19,7 @@ use crate::session::{Behavior, Planted, Session, KINDS};
 
 pub const REGISTRY: &str = "control@1";
 /// The kit's parts, each a rule of the registry's kit.
-pub const PARTS: [&str; 4] = ["replay", "read_region", "keyboard", "input"];
+pub const PARTS: [&str; 5] = ["replay", "read_region", "keyboard", "input", "edges"];
 
 const F: f64 = deep_canvas::grammar::FLICKS_PER_SECOND as f64;
 
@@ -171,6 +173,75 @@ fn keyboard_path(b: Behavior) -> (&'static str, Vec<&'static str>) {
     }
 }
 
+/// #1048: the kind's edge values, by name, from its own type and range: `zero`, its range's
+/// `min` and `max`, `off` and `on`, its `first` and `last` option or stage, or `none` picked.
+pub fn edges(b: Behavior) -> Value {
+    match b {
+        Behavior::Number | Behavior::Turn | Behavior::Hover => json!(["zero", "min", "max"]),
+        Behavior::Path => json!(["min", "max"]),
+        Behavior::Toggle => json!(["off", "on"]),
+        Behavior::Choice => json!(["none", "first", "last"]),
+        Behavior::Stages => json!(["first", "last"]),
+        Behavior::Press => json!(["zero", "max"]),
+    }
+}
+
+/// #1048: a control's edge values, as `logic.edges` puts them: the edges its kind declares in its
+/// `control@1` entry, on the control's own declared range, options or byte limit. The text and
+/// scroll kinds the input module holds beside the registry's entries declare theirs here. A kind
+/// that declares none gives none.
+pub fn edge_values(control: &Value) -> Vec<Value> {
+    let kind = control.get("kind").and_then(Value::as_str).unwrap_or("");
+    let names: Vec<String> = match KINDS.iter().find(|(n, _)| *n == kind) {
+        Some((_, b)) => edges(*b)
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|e| e.as_str().map(str::to_string))
+            .collect(),
+        None => match kind {
+            "text" => vec!["empty".into(), "bytes:256".into()],
+            "scroll" => vec!["min".into(), "max".into()],
+            _ => Vec::new(),
+        },
+    };
+    let at = |p: &str| control.pointer(p).and_then(Value::as_f64);
+    let range = [
+        at("/range/0").or(at("/scroll/range/0")),
+        at("/range/1").or(at("/scroll/range/1")),
+    ];
+    let options = control
+        .get("options")
+        .or(control.get("stages"))
+        .and_then(Value::as_array)
+        .map(Vec::len);
+    let mut out: Vec<Value> = Vec::new();
+    for name in names {
+        let v = match name.as_str() {
+            "zero" | "off" | "first" => Some(json!(0)),
+            "on" => Some(json!(1)),
+            "none" => Some(json!(-1)),
+            "min" => range[0].map(|x| json!(x)),
+            "max" => range[1].map(|x| json!(x)),
+            "last" => options.filter(|n| *n > 0).map(|n| json!(n - 1)),
+            "empty" => Some(json!("")),
+            b => b
+                .strip_prefix("bytes:")
+                .and_then(|n| n.parse::<usize>().ok())
+                .map(|n| json!("x".repeat(n))),
+        };
+        // A range's end is a number: one written as an integer stays one.
+        let v = v.map(|v| match v.as_f64() {
+            Some(x) if x.fract() == 0.0 && x.abs() < 1e15 => json!(x as i64),
+            _ => v,
+        });
+        if let Some(v) = v.filter(|v| !out.contains(v)) {
+            out.push(v);
+        }
+    }
+    out
+}
+
 /// The kind's value fields, as its read region lays them out.
 fn value_fields(b: Behavior) -> Value {
     match b {
@@ -305,6 +376,7 @@ pub fn entry(name: &str, b: Behavior, planted: Planted) -> Value {
         "read_region": {"bytes": bytes_of(&fields), "layout": layout_of(&fields)},
         "role": role(b),
         "keyboard": if planted.no_keyboard { "" } else { keyboard },
+        "edges": if planted.no_edges { json!([]) } else { edges(b) },
         "fixture": fixture(name, b, planted),
     })
 }
@@ -392,8 +464,27 @@ fn rule_input(v: &Value) -> Result<(), String> {
     Ok(())
 }
 
+/// #1048: the kind declares at least one edge value, each a name `logic.edges` knows.
+fn rule_edges(v: &Value) -> Result<(), String> {
+    const KNOWN: [&str; 9] = [
+        "zero", "min", "max", "off", "on", "none", "first", "last", "empty",
+    ];
+    let list = v
+        .get("edges")
+        .and_then(Value::as_array)
+        .filter(|l| !l.is_empty());
+    let list = list.ok_or("it declares no edge values")?;
+    match list.iter().find(|e| {
+        !e.as_str()
+            .is_some_and(|e| KNOWN.contains(&e) || e.starts_with("bytes:"))
+    }) {
+        Some(e) => Err(format!("its edge value {e} isn't one logic.edges knows")),
+        None => Ok(()),
+    }
+}
+
 /// The registry the input module declares: `{owner: input, fill: [module], resolve: seal}`,
-/// its kit of four rules and a planted wrong entry that breaks each alone.
+/// its kit of five rules and a planted wrong entry that breaks each alone.
 pub fn registry() -> RegistryDef {
     let schema = json!({"type": "object", "required": ["classes", "sources", "value", "read_region", "role", "keyboard", "fixture"]});
     let good = entry("slider", Behavior::Number, Planted::default());
@@ -440,10 +531,16 @@ pub fn registry() -> RegistryDef {
             e["fixture"]["keyboard"]["after"] = e["fixture"]["keyboard"]["before"].clone();
             e
         })
+        .rule(
+            "edges",
+            "a control kind declares its edge values, from its own type and range",
+            rule_edges,
+        )
         .planted(
             "planted.agent_entry",
             with(&["fixture", "input", "agent"], json!(1)),
         )
+        .planted("planted.edgeless", with(&["edges"], json!([])))
 }
 
 #[cfg(test)]
@@ -503,6 +600,15 @@ mod tests {
             def.run_kit("slider", &entry("slider", Behavior::Number, agent))
                 .failed(),
             vec!["input"]
+        );
+        let edgeless = Planted {
+            no_edges: true,
+            ..Planted::default()
+        };
+        assert_eq!(
+            def.run_kit("slider", &entry("slider", Behavior::Number, edgeless))
+                .failed(),
+            vec!["edges"]
         );
         let keys = Planted {
             no_keyboard: true,

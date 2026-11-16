@@ -15,6 +15,10 @@ pub mod unicode;
 pub use atlas::{
     raster_size, Atlas, Page, Placed, Rect, MAX_DEVICE_SIZE, PAGE, PAGES, PHASES, RING,
 };
+#[cfg(target_arch = "wasm32")]
+pub use fonts::provide;
+#[cfg(not(target_arch = "wasm32"))]
+pub use fonts::LICENSES;
 pub use fonts::{face_of, Face, Role, FACES};
 pub use parley::FontData;
 pub use shape::{Align, Decoration, Fit, Glyph, Shaped, Shaper, Shift, Span, Spec};

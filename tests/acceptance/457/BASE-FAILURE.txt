@@ -1,0 +1,68 @@
+At base 1ab891283 (an arm64 Mac with Metal, macOS, 2026-11-15, one-minute load 370 to 415 on 18 cores), deep-show was
+built with `cargo build --locked --bin deep-show --no-default-features --features full` (debug; 56 minutes from a
+partly warm cache under that load) and each file was run once with
+`node node_modules/vitest/vitest.mjs run --root tests/acceptance/457 --no-file-parallelism --testTimeout=600000 <file>`.
+Every test fails: 15 tests in 10 files, 0 pass. Each test's first failing assertion, as observed:
+
+- ac1-occluded-share.test.ts (2 failed)
+  - test 1: "the castle shot: camera.framing's results list an occluded share for tower (results[].occluded[] {item,
+    share, occluders}): [{t: 0, keep: [tower], cut: [], fill: 0.587, …}]: expected 0 to be greater than 0". The castle
+    row is PASS with no issues: the base has no occluded share.
+  - test 2: "the castle shot names the tower's occlusion fix as patch ops: {result: PASS, …}": no failure, so no fix to
+    apply.
+- ac2-see-through.test.ts (1 failed): "the statue: camera.framing's results list an occluded share for statue …:
+  expected 0 to be greater than 0". The statue row is PASS with no issues; the planted run isn't reached (the base
+  refuses an unknown `planted` name).
+- ac3-stable-samples.test.ts (1 failed): "the castle: camera.framing's results list an occluded share for tower …:
+  expected 0 to be greater than 0" (macOS environment).
+- ac4-cutaway.test.ts (1 failed): "the engine with its half-section: camera.framing's results list an occluded share
+  for piston …: expected 0 to be greater than 0". Both engine rows (with the cutaway item and without) are PASS with
+  no issues.
+- ac5-paths.test.ts (5 failed):
+  - walk: "the walk past the post is PASS, not FAIL" and "no clearance error names the frame, the shot walk and a time
+    within 1/30 s of 1.22 s; clearance errors naming the frame: none". The centre walk passed.
+  - corners: "the glide with a 40° corner is PASS, not FAIL", "no corners error names the key turn". In this run the
+    auto twin was also "BLOCKED, not PASS" (`not_run` at `shots`): its first draft keyed the camera's position as one
+    vec3 channel with `auto` keys, which the base refuses (auto keys on f32 channels only). The fixture was then changed
+    to one f32 channel a component; a scratch run of the base binary (not kept) judged the changed auto twin PASS and the
+    changed linear one PASS (61 checked times each), so the file now fails at the first two lines only. The file wasn't
+    run again.
+  - raster: "the 3× zoom is BLOCKED, not FAIL" (`out_of_range` at `items/cam/params`), the 2× zoom "BLOCKED, not PASS",
+    "the 2× zoom's paths read the recording's magnification as null, not 1.33". The base's camera.framing doesn't read
+    a 2D film (README: What the implementer meets); `document.validate` passes both films (scratch run).
+  - focus: "the subject behind the focus plane is BLOCKED, not FAIL" (`out_of_range` at `items/cam/params/fov`) and "no
+    focus error names the subject with a circle of confusion of 8.1 px (8.071 by the closed form)". Without its shot
+    the same document is PASS at the base (scratch run): the base's shot posing writes a `fov` beside the lens.
+  - explode: "the figure under the brief's sweep of explode is PASS, not FAIL" and "no camera.framing error names the
+    lid at the sweep's apart sample". The unswept figure passed.
+- ac6-near-plane.test.ts (1 failed): "the sphere on the near plane is PASS, not FAIL" and "no clearance error names the
+  sphere dot, 0.099 m from the camera inside √(0.1² + 0.05²) ≈ 0.112 m; it raises: nothing". The sphere 0.12 m out
+  passed.
+- ac7-between-samples.test.ts (1 failed): "the bobbing camera is PASS, not FAIL" and "no clearance error names the
+  ceiling, the shot hall and a time; it raises: nothing". The base checks the shot at 30 Hz, where the camera is always
+  1.4 m up (fill 0.3278 at every sample); a scratch run at 1/60 s read fill 0.3296, so the driver does move the keyed
+  camera at the base.
+- ac8-sweep.test.ts (1 failed): "the camera over the table under the brief's sweep is PASS, not FAIL" and "no clearance
+  error names the table, the shot overhead and the slider s at a value between 0.56 and 0.64".
+- ac9-budgets.test.ts (1 failed): "every reading is taken, on the debug build:" scene.scale's and camera.framing's rows
+  report no `timing.check_ms`; render.exposure's no `timing.gpu_ms`, `readback_bytes` or `times`; camera.framing lists
+  no occluded share for any of the ten kept parts (part-494 to part-503) and no `timing.occluded_ms`; geometry.shading
+  no `timing.check_ms`; render.review no `timing.id_view_ms`; the 60 s film's camera.framing no clearance readings and
+  no `timing.paths_ms` (20 lines). Every row was decided (none BLOCKED); the scene audit's row already carries
+  `timing.check_ms`. No release build was made.
+- ac10-shots.test.ts (1 failed): "the castle shot names the hidden tower's fix as patch ops: {result: PASS, …}". No
+  picture was written.
+
+The planted runs (`occluders_count_add`, `occluded_samples_by_order`, `cutaway_hides_whole_items`,
+`clearance_half_diagonal`, `paths_sampled_at_30hz`, `framing_sweeps_samples_only`) come after each test's shipped
+assertions, so none was reached; the base doesn't know these names and would refuse the scenario.
+
+Fixtures at the base, as observed: camera.framing PASSed with no issues on the castle (stall in front, and with a well
+added), the gallery, both engines, both walks, both glides as changed, the focus shot without its shot, the explode
+figure swept and unswept, both near-plane scenes, the bobbing camera and the table; document.validate PASSed the 2D
+films and the focus shot; in ac9 every row (scale, framing, the scene audit, exposure, shading on the torus, framing on
+the 60 s film over 1,801 checked times) was decided. The castle with its stall aside was judged but not read (its
+test stops at the first assertion).
+
+Type-check: `node node_modules/typescript/bin/tsc -p tests/acceptance/457/tsconfig.json` exits 0. `spans`
+(scripts/proof-change.mjs) reads all 15 test names, each starting with its criterion ID, all `runs: true`.

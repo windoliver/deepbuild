@@ -1,0 +1,29 @@
+Captured output; local paths redacted.
+
+✖ the unit lane runs each reference-Mac budget file alone, after the parallel block (180.859166ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 264.158708
+
+✖ failing tests:
+
+test at tests/preflight.test.mjs:187:1
+✖ the unit lane runs each reference-Mac budget file alone, after the parallel block (180.859166ms)
+  AssertionError [ERR_ASSERTION]: tests/acceptance/112/live.test.ts is not run alone
+      at TestContext.<anonymous> (file://<temporary>/deep-1624-proposal-7ik8gtpu/tests/preflight.test.mjs:206:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }

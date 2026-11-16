@@ -122,6 +122,23 @@ pub enum Measure {
         body: &'static str,
         ground: &'static str,
     },
+    /// #2306: `body`'s contact impulse over each step after `from` to `to`, over the step's
+    /// length, N: the one farthest from the answer.
+    Load {
+        body: &'static str,
+        from: usize,
+        to: usize,
+    },
+    /// #2306: `joint`'s coordinate after each step from `from` on: the one farthest from the
+    /// answer.
+    Angle { joint: &'static str, from: usize },
+    /// #2306: how far `body` is after step `step` from its place on `ground`, along the ground (x
+    /// and z), m.
+    Carried {
+        body: &'static str,
+        ground: &'static str,
+        step: usize,
+    },
 }
 
 /// One fixture of the behavior part.
@@ -598,6 +615,47 @@ fn read(m: &Measure, t: &Trace, b: &dyn Backend, w: &World, f: &Fixture) -> Read
                 vehicles::wheels_of(&t.rows, &t.vehicles, (kind, body, ground), t.rate, f.answer);
             reading(v, extra)
         }
+        Measure::Load { body, from, to } => {
+            let steps = t.states.iter().enumerate().take(to + 1).skip(from + 1);
+            let loads =
+                steps.filter_map(|(k, s)| Some((k, body_of(s, body)?.contact_impulse * t.rate)));
+            let worst = loads.reduce(|a, b| {
+                if (b.1 - f.answer).abs() > (a.1 - f.answer).abs() {
+                    b
+                } else {
+                    a
+                }
+            });
+            reading(
+                worst.map(|w| w.1),
+                json!({"body": body, "step": worst.map(|w| w.0)}),
+            )
+        }
+        Measure::Angle { joint, from } => {
+            let at = t.joints.iter().enumerate().skip(*from);
+            let angles =
+                at.filter_map(|(k, js)| Some((k, js.iter().find(|j| j.id == *joint)?.coordinate?)));
+            let worst = angles.reduce(|a, b| {
+                if (b.1 - f.answer).abs() > (a.1 - f.answer).abs() {
+                    b
+                } else {
+                    a
+                }
+            });
+            reading(
+                worst.map(|w| w.1),
+                json!({"joint": joint, "step": worst.map(|w| w.0)}),
+            )
+        }
+        Measure::Carried { body, ground, step } => {
+            let (p, q) = (path(t, body), path(t, ground));
+            let off = p.get(*step).zip(q.get(*step)).zip(p.first().zip(q.first()));
+            let off = off.map(|((a, b), (a0, b0))| {
+                let off = |i: usize| a[i] - a0[i] - b[i] + b0[i];
+                dist([off(0), 0.0, off(2)], [0.0; 3])
+            });
+            reading(off, json!({"body": body, "ground": ground}))
+        }
     }
 }
 
@@ -658,6 +716,15 @@ fn named_measure(m: &Measure) -> String {
         }
         Measure::Wheels { kind, body, ground } => {
             format!("time of each of {body}'s wheels' first {kind} with {ground}, s")
+        }
+        Measure::Load { body, from, to } => {
+            format!("contact impulse of {body} per step's length over steps {from} to {to}, N")
+        }
+        Measure::Angle { joint, from } => {
+            format!("coordinate of joint {joint} from step {from} on, deg")
+        }
+        Measure::Carried { body, ground, step } => {
+            format!("distance along the ground of {body} from its place on {ground} after step {step}, m")
         }
     }
 }

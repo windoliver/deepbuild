@@ -21,6 +21,7 @@ pub mod module;
 pub mod reverb;
 pub mod ring;
 pub mod script;
+pub mod shape;
 pub mod spawn;
 pub mod synth;
 pub mod viewer;
@@ -47,8 +48,10 @@ pub const FLICKS: i64 = 705_600_000;
 /// master limiter whose lookahead the mix doesn't compensate against the picture; and #204's synths:
 /// an osc whose checkpoint keeps its phase in f32, a shaper with a bias, a crush one bit short, a
 /// tail stated at half, params or logic read once a frame, an export on another block, a synth
-/// routed around the master's limiter, and a block grid that starts at each seek.
-pub const PLANTED: [&str; 37] = [
+/// routed around the master's limiter, and a block grid that starts at each seek; and #155's
+/// spawn whose round robin picks by hash alone, and a foley job named by its action alone that
+/// takes the first bound collection's material for every occurrence.
+pub const PLANTED: [&str; 39] = [
     "av_link_compares_start_only",
     "av_link_start_only",
     "sample_peak_meter",
@@ -86,6 +89,8 @@ pub const PLANTED: [&str; 37] = [
     "synth_tail_halved",
     "steal_keeps_filter_state",
     "crush_7_bits",
+    "round_robin_by_hash_alone",
+    "foley_first_collection_material",
 ];
 
 static PLANTED_NOW: std::sync::Mutex<Option<&'static str>> = std::sync::Mutex::new(None);

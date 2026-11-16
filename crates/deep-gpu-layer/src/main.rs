@@ -40,8 +40,8 @@ mod groups;
 mod guard;
 mod hdr;
 mod host;
-mod insets;
 mod indexed;
+mod insets;
 mod interp_suite;
 mod levels;
 mod live;
@@ -49,6 +49,7 @@ mod liveview;
 mod lod;
 mod look_ops;
 mod marks2d;
+mod op_transition;
 mod opframe;
 mod paintfx;
 mod parity;
@@ -58,7 +59,6 @@ mod plugin;
 mod print2d;
 mod records;
 mod reference;
-mod op_transition;
 mod regions;
 mod scene;
 mod seam;
@@ -174,6 +174,11 @@ pub enum Planted {
     PassOffByTwo,
     BloomWithoutKaris,
     PassesOneGpu,
+    /// #508's wrong programs (tests/acceptance/508/README.md: Surfaces this job invents, 10): a
+    /// plume's haze run before the check readbacks are taken, so they read its bent pixels; and
+    /// the film effects taking their time from the wall clock instead of the frame's t.
+    HazeFeedsCheckReadback,
+    EffectReadsWallClock,
     /// #379's wrong programs (tests/acceptance/379/README.md: Planted programs).
     SumsPassIntervals,
     AllocatesPerFrame,
@@ -543,6 +548,8 @@ impl Planted {
             "pass_off_by_two" => Planted::PassOffByTwo,
             "bloom_without_karis" => Planted::BloomWithoutKaris,
             "passes_one_gpu" => Planted::PassesOneGpu,
+            "haze_feeds_check_readback" => Planted::HazeFeedsCheckReadback,
+            "effect_reads_wall_clock" => Planted::EffectReadsWallClock,
             "sums_pass_intervals" => Planted::SumsPassIntervals,
             "allocates_per_frame" => Planted::AllocatesPerFrame,
             "compiles_at_swap" => Planted::CompilesAtSwap,
