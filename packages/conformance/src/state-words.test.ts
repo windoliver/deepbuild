@@ -22,7 +22,7 @@ const lists = listSchemas().flatMap((entry) => {
 const stateLists = lists.filter((l) => l.words.length > 0);
 const name = (l: { schema: string; keys: string[] }): string => `${l.schema} /${l.keys.join('/')}`;
 
-/** The published schemas, with the enum at `keys` in `schema` (or a property beside it, `as`) holding `values`. */
+/** The published schemas, with `change` applied to the node `keys` reach in `schema` and to that node's parent. */
 function planted(schema: string, keys: string[], change: (node: Json, parent: Json) => void): SchemaEntry[] {
   return listSchemas().map((e) => {
     if (e.name !== schema) return e;
@@ -36,7 +36,7 @@ function planted(schema: string, keys: string[], change: (node: Json, parent: Js
 }
 const adding = (word: string) => (node: Json): void => { node.enum = [...(node.enum as string[]), word]; };
 
-it('names nothing over the published schemas, whose state lists are the eight the issue found and work.attempt@2', () => {
+it('names nothing over the published schemas, whose nine state lists are pinned by schema and pointer', () => {
   expect(unmappedCodes()).toEqual([]);
   expect(stateLists.map(name).sort()).toEqual([
     'landing.made@1 /properties/data/properties/outcome', 'row.set@1 /properties/data/properties/word', 'row.set@2 /properties/data/properties/word',
