@@ -17,3 +17,15 @@ source, load, thermal state and free disk.
 - Part 8: two independent checks. SCREENSHOT-CHECK.md (an agent on the Spark) and SCREENSHOT-CHECK-mac.md (an agent on the Mac, which also covers 22v's two pictures). Both find every picture MATCHes its log.
 
 Still open, for round 22x on AC: 1349 at main side by side, 319 budgets, and the judge.
+
+## The judge rerun on AC (`judge-rerun/`)
+
+- On AC at start and end, thermal 0, wall 384 s, exit 1.
+- FAIL on #22.48b6696b (#318.af2a2599); PASS on #22.1f14a778, #22.f57a814c and #22.3d85284a. Nothing reopened.
+- Cause: main's `work.call` fixture, not #22's code (`../fix-318/README.md`).
+
+## Round 22x (`../mac-22x/`), on AC
+
+- A: 1349 at main b1fc9abb fails the same 12 of 15 as 22w at #22's head: clean account INCONCLUSIVE by design, the
+  journey and plants cases BLOCKED on no zig.
+- B: 319 budgets at 97fffed5 pass 2 of 2. Create or answer took 5279 ms; the inbox with 10,000 asks took 1386 ms.

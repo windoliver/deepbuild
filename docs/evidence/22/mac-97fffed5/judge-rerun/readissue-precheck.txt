@@ -1,0 +1,5 @@
+22 {"number":"22","word":"Closes","criteria":[]}
+318 {"number":"318","word":"Closes","criteria":[{"id":"#318.b64bd314","text":"An ite
+319 {"number":"319","word":"Closes","criteria":[{"id":"#319.ed496876","text":"Asks b
+320 {"number":"320","word":"Closes","criteria":[{"id":"#320.dbf54286","text":"A bloc
+321 {"number":"321","word":"Closes","criteria":[{"id":"#321.69952336","text":"A plan

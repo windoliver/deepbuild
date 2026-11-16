@@ -1,0 +1,68 @@
+# tests/acceptance/318 at 89d7c4a98f0d90192c7ba31305d880f38238e736 (code = 97fffed5), before the fix; 2026-11-16T04:51:25Z; load 46.87 36.29 26.91
+
+ RUN  v5.0.5 ~/deepbuild/.claude/worktrees/issue-22-asks-4dae39
+
+ ❯ tests/acceptance/318/sources.test.ts (2 tests | 1 failed) 2570ms
+   × #318.af2a2599 every place that raises an ask has one row naming its kind; its fixture takes its default; a budget raise and a paid generation take no; a source with no row raises nothing 2231ms
+ ❯ tests/acceptance/318/plants.test.ts (7 tests | 1 failed) 3636ms
+   × #318.af2a2599 fails on a table that files the paid generation as a choice with an approving default, naming the row 4ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/318/plants.test.ts > #318.af2a2599 fails on a table that files the paid generation as a choice with an approving default, naming the row
+AssertionError: expected [Function] to throw error matching /row generation\.paid/ but got 'the table holds to ask.sources@1: exp…'
+
+- Expected:
+/row generation\.paid/
+
++ Received:
+"the table holds to ask.sources@1: expected { ok: false, issues: [ { …(6) } ] } to deeply equal { ok: true }"
+
+ ❯ tests/acceptance/318/plants.test.ts:44:86
+     42|
+     43| test('#318.af2a2599 fails on a table that files the paid generation as…
+     44|   await expect(sourcesTable(paidGenerationAsChoice(askSources()), () =…
+       |                                                                                      ^
+     45| });
+     46|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/acceptance/318/sources.test.ts > #318.af2a2599 every place that raises an ask has one row naming its kind; its fixture takes its default; a budget raise and a paid generation take no; a source with no row raises nothing
+AssertionError: the table holds to ask.sources@1: expected { ok: false, issues: [ { …(6) } ] } to deeply equal { ok: true }
+
+- Expected
++ Received
+
+  {
+-   "ok": true,
++   "issues": [
++     {
++       "actual": "{\"screen\":\"acme/shop#100\",\"element\":\"the look of #100's change is right to you\"}",
++       "code": "unlisted_field",
++       "evidence": [],
++       "path": "/26/fixture/ask/subject",
++       "remediation": "Remove the field, or connect with the contract version that lists it.",
++       "retryable": false,
++     },
++   ],
++   "ok": false,
+  }
+
+ ❯ sourcesTable tests/acceptance/318/scenarios.ts:130:79
+    128| /** #318.af2a2599: one row per place that raises an ask, each with a f…
+    129| export async function sourcesTable(rows: AskSource[], open: () => Prom…
+    130|   expect(validate('ask.sources@1', rows), 'the table holds to ask.sour…
+       |                                                                               ^
+    131|   expect(new Set(rows.map((r) => r.source)).size, 'one row per place')…
+    132|   for (const kind of KINDS) expect(rows.some((r) => r.kind === kind), …
+ ❯ tests/acceptance/318/sources.test.ts:9:9
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed | 5 passed (7)
+      Tests  2 failed | 25 passed (27)
+   Start at  20:51:26
+   Duration  3.92s (tests 95%, transform 2%, import 2%)
+
