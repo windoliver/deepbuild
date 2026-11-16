@@ -504,9 +504,9 @@ export function openWikiBuild(o: WikiBuildOptions): { build(): Promise<WikiBuilt
       const built: WikiBuilt = { changed: [], reading: { jobs: 0, waiting: false } };
       if (batches.length) {
         const agent = await openReading({ record, runner: o.runner, root: root.dir, wiki, now });
+        for (const u of batches.flat()) reading.add(u.session);
         const chain = (async () => {
           for (const batch of batches) {
-            for (const u of batch) reading.add(u.session);
             try {
               built.reading.jobs++;
               const result = await agent.run({ kind: 'install', agent: readingAgent, handles: batch.flatMap((u) => own.get(u.session)!) });
@@ -516,13 +516,12 @@ export function openWikiBuild(o: WikiBuildOptions): { build(): Promise<WikiBuilt
               process.stderr.write(`deep hub: wiki reading: ${error instanceof Error ? error.message : String(error)}\n`);
               return;
             } finally {
-              for (const u of batch) reading.delete(u.session);
               const changed = changedSince(seen);
               bookkeeping(changed);
               seen = pagesOf();
             }
           }
-        })();
+        })().finally(() => { for (const u of batches.flat()) reading.delete(u.session); });
         // Done is each job finished or waiting on the plan reserve: a job that waits goes on in the background.
         let settled = false;
         // A job's clean-up that can't read or write the wiki ends the reading there; the next build reads what is left.

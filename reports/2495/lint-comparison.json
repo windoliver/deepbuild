@@ -1,0 +1,56 @@
+[
+  {
+    "name": "repo-rules",
+    "change": 50,
+    "base": 50,
+    "added": [],
+    "removed": []
+  },
+  {
+    "name": "vendor-rebase",
+    "change": 18,
+    "base": 18,
+    "added": [],
+    "removed": []
+  },
+  {
+    "name": "canvas-lint",
+    "change": 50,
+    "base": 50,
+    "added": [],
+    "removed": []
+  },
+  {
+    "name": "size-ratchet",
+    "change": 58,
+    "base": 58,
+    "added": [],
+    "removed": []
+  },
+  {
+    "name": "conformance-lint",
+    "change": 23,
+    "base": 23,
+    "added": [],
+    "removed": []
+  },
+  {
+    "name": "record-reader-guard",
+    "change": 1,
+    "base": 1,
+    "added": [],
+    "removed": []
+  },
+  {
+    "name": "known-failures-check",
+    "change": 7,
+    "base": 7,
+    "added": [],
+    "removed": []
+  },
+  {
+    "name": "canvas drift",
+    "base": "FAIL drift: Map projections: the table lists it with registry geo.projection@1, and the closure data holds no such list",
+    "alsoInChange": true
+  }
+]

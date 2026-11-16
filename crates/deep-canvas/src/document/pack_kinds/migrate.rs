@@ -8,14 +8,17 @@
 //! the chain and holds what comes out to the kind's inputs. Every fault is named with its reason,
 //! never only the first. At load, before the check, [`at_load`] migrates each instance saved at
 //! an earlier major of its pinned pack's kind on the check's copy, one `migrated` notice a step,
-//! so the stored document changes only when its writer next patches it.
+//! so the stored document changes only when its writer next patches it. A rename carries what
+//! points at what it renames: [`carry_paths`] gives every channel target, driver read, bound
+//! value and constraint path that names an old param its new name, and a drop of a param a
+//! corpus document's path targets refuses the migration, naming the path (#1960).
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::{json, Map, Value};
 
 use super::super::packs::{
-    input_fault, rule_number, Input, Pack, PackId, Packs, Resolved, RuleScope,
+    input_fault, rule_number, Input, Pack, PackId, Packs, Planted, Resolved, RuleScope,
 };
 use super::super::{kind_text, Issue, Notice};
 use super::PackKind;
@@ -290,12 +293,19 @@ fn number(v: f64) -> Value {
 /// One step on an instance's params: rename, then set from the old params, then drop. A renamed
 /// param the instance leaves out stays out and a 0 stays 0, and a set whose expression reads a
 /// param the instance leaves out is left to the new major's default. Returns the params it set.
-fn apply<'a>(step: &'a Step, params: &mut Map<String, Value>) -> Vec<&'a str> {
+/// `zero_as_absent` is #1959's planted migrator, which takes a 0 for a param left out.
+fn apply<'a>(
+    step: &'a Step,
+    params: &mut Map<String, Value>,
+    zero_as_absent: bool,
+) -> Vec<&'a str> {
     let old = params.clone();
     for (from, to) in &step.rename {
         if !params.contains_key(to) {
             if let Some(v) = params.shift_remove(from) {
-                params.insert(to.clone(), v);
+                if !(zero_as_absent && v.as_f64() == Some(0.0)) {
+                    params.insert(to.clone(), v);
+                }
             }
         }
     }
@@ -311,6 +321,160 @@ fn apply<'a>(step: &'a Step, params: &mut Map<String, Value>) -> Vec<&'a str> {
         params.shift_remove(p);
     }
     set
+}
+
+/// What each major of a kind declares: its inputs at `major`, and each earlier major's taken back
+/// through the renames and drops of the step after it, as [`read`] takes them.
+fn declared(
+    major: u64,
+    inputs: &BTreeMap<String, Input>,
+    steps: &BTreeMap<u64, Step>,
+) -> BTreeMap<u64, BTreeSet<String>> {
+    let mut names: BTreeMap<u64, BTreeSet<String>> = BTreeMap::new();
+    names.insert(major, inputs.keys().cloned().collect());
+    for from in (1..major).rev() {
+        let mut was = names[&(from + 1)].clone();
+        if let Some(step) = steps.get(&from) {
+            for (old, new) in &step.rename {
+                was.remove(new);
+                was.insert(old.clone());
+            }
+            was.extend(step.drop.iter().cloned());
+        }
+        names.insert(from, was);
+    }
+    names
+}
+
+/// The name `param` goes by at `major`, as a path names it: carried through each step's rename
+/// from the latest major that declares it, so a path written before its item's writer stored
+/// the item migrated is carried as one on an item the load migrates is. `Err` is the major
+/// whose step drops it; `None`, a name no major declares.
+fn carried(
+    steps: &BTreeMap<u64, Step>,
+    names: &BTreeMap<u64, BTreeSet<String>>,
+    major: u64,
+    param: &str,
+) -> Option<Result<String, u64>> {
+    let from = (1..=major)
+        .rev()
+        .find(|m| names.get(m).is_some_and(|n| n.contains(param)))?;
+    let mut name = param.to_string();
+    for (f, step) in steps.range(from..major) {
+        if let Some((_, to)) = step.rename.iter().find(|(old, _)| *old == name) {
+            name = to.clone();
+        }
+        if step.drop.contains(&name) {
+            return Some(Err(*f));
+        }
+    }
+    Some(Ok(name))
+}
+
+/// The item and the param a path names, `items/<id>/params/<param>[/…]`, the param as its place
+/// in `text`.
+fn param_of(text: &str) -> Option<(&str, std::ops::Range<usize>)> {
+    let (id, rest) = text.strip_prefix("items/")?.split_once('/')?;
+    let rest = rest.strip_prefix("params/")?;
+    let start = text.len() - rest.len();
+    let len = rest.find('/').unwrap_or(rest.len());
+    (len > 0).then_some((id, start..start + len))
+}
+
+/// Each path a document names a param by (Pack: migrations as data): a channel's target, a
+/// driver's target and reads, a bound value's target and a constraint's paths, with where it
+/// sits. `channels_only` is #1960's planted migrator, which carries channel targets alone.
+fn each_path(doc: &mut Value, channels_only: bool, visit: &mut dyn FnMut(String, &mut String)) {
+    let sections = ["channels", "drivers", "bound_values", "constraints"];
+    for section in &sections[..if channels_only { 1 } else { sections.len() }] {
+        let Some(Value::Object(entries)) = doc.get_mut(*section) else {
+            continue;
+        };
+        for (id, entry) in entries {
+            for (field, value) in entry.as_object_mut().into_iter().flatten() {
+                let reads = *section == "drivers" && field == "vars";
+                if field == "target" || reads || *section == "constraints" {
+                    strings(value, format!("{section}/{id}/{field}"), visit);
+                }
+            }
+        }
+    }
+}
+
+/// Each string `value` holds, at any depth, with where it sits.
+fn strings(value: &mut Value, at: String, visit: &mut dyn FnMut(String, &mut String)) {
+    match value {
+        Value::String(text) => visit(at, text),
+        Value::Object(map) => {
+            for (key, v) in map {
+                strings(v, format!("{at}/{key}"), visit);
+            }
+        }
+        Value::Array(list) => {
+            for (i, v) in list.iter_mut().enumerate() {
+                strings(v, format!("{at}/{i}"), visit);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// A rename carries what points at what it renames (Pack: migrations as data; #1960): on the
+/// check's copy, after [`at_load`], every channel target, driver read, bound value and
+/// constraint path that names a pack-kind item's param by a name an earlier major gave it takes
+/// the name its current major gives it. A path whose param a step drops is left as written, for
+/// the check to refuse.
+pub fn carry_paths(doc: &mut Value, resolved: &Resolved, planted: Planted) {
+    if planted.migrate_params_only || resolved.is_empty() {
+        return;
+    }
+    let items = match doc.get_mut("items") {
+        Some(items @ Value::Object(_)) => items.take(),
+        _ => return,
+    };
+    // Each kind's current major, steps and what each major declares, read once per kind.
+    let mut kinds = BTreeMap::new();
+    each_path(doc, planted.migrate_channels_only, &mut |_, text| {
+        let Some((id, at)) = param_of(text) else {
+            return;
+        };
+        let Some(name) = items.get(id).and_then(kind_text) else {
+            return;
+        };
+        let kind = kinds.entry(name).or_insert_with(|| {
+            let major: u64 = name.rsplit_once('@')?.1.parse().ok()?;
+            let (kind, (_, recipe)) = (resolved.kind(name)?, resolved.recipe(name)?);
+            let names = declared(major, &recipe.inputs, &kind.migrate);
+            (major > 1).then_some((major, &kind.migrate, names))
+        });
+        let Some((major, steps, names)) = &*kind else {
+            return;
+        };
+        if let Some(Ok(now)) = carried(steps, names, *major, &text[at.clone()]) {
+            text.replace_range(at, &now);
+        }
+    });
+    doc["items"] = items;
+}
+
+/// `doc` as its load's migration leaves it, before expansion (#1960): every item the load
+/// migrates at its migrated kind and params, and every path [`carry_paths`] carries. A document
+/// the load migrates nothing of comes back as it is.
+pub fn loaded(doc: &Value, sealed: &Sealed, packs: &Packs) -> Value {
+    let mut out = doc.clone();
+    let resolved = super::super::packs::resolve(doc, packs, Some(sealed), &mut Vec::new());
+    if let Some(Value::Object(items)) = out.get_mut("items") {
+        let mut notices = Vec::new();
+        for (key, item) in items.iter_mut() {
+            if let Some(moved) = sealed.unremoved(item) {
+                *item = moved;
+            }
+            super::super::check::migrate_item(key, item, &mut notices, sealed.kinds_ref());
+        }
+        at_load(items, &resolved, packs.planted, &mut notices);
+    }
+    carry_paths(&mut out, &resolved, packs.planted);
+    out
 }
 
 /// The pack's `corpus: {major → [sha256]}`, each an asset holding a record `{document, values}`.
@@ -394,6 +558,7 @@ pub(in crate::document) fn corpus_faults(
     faults: &mut Vec<Issue>,
 ) -> Vec<Case> {
     let full = kind.rsplit_once('@').map_or(kind, |(f, _)| f);
+    let names = declared(major, inputs, steps);
     let mut mine = Vec::new();
     for from in 1..major {
         let cases: Vec<&Case> = corpus
@@ -436,7 +601,7 @@ pub(in crate::document) fn corpus_faults(
                             origin.insert(b.clone(), o);
                         }
                     }
-                    for p in apply(step, &mut params) {
+                    for p in apply(step, &mut params, false) {
                         origin.insert(p.to_string(), (f, p.to_string()));
                     }
                 }
@@ -464,6 +629,29 @@ pub(in crate::document) fn corpus_faults(
                     faults.push(issue);
                 }
             }
+            // A drop of a param some path targets refuses the migration, naming the path (#1960).
+            let mut doc = case.doc.clone();
+            each_path(&mut doc, false, &mut |site, text| {
+                let text = text.as_str();
+                let Some((id, at)) = param_of(text) else {
+                    return;
+                };
+                let param = &text[at];
+                let named = items_of(&case.doc, full, from).any(|(i, _)| i == id);
+                let Some(Err(f)) = named
+                    .then(|| carried(steps, &names, major, param))
+                    .flatten()
+                else {
+                    return;
+                };
+                let mut issue = fault(
+                    format!("kinds/{kind}/migrate/{f}/drop/{param}"),
+                    json!({"kind": kind, "item": id, "corpus": case.sha, "from": f, "param": param, "path": site, "names": text}),
+                    format!("`{kind}`'s step from major {f} drops `{param}`, which `{site}` of corpus document `{}` names as `{text}`: a migration can't drop a param a path targets", case.sha),
+                );
+                issue.ids = vec![id.to_string()];
+                faults.push(issue);
+            });
         }
     }
     mine
@@ -509,26 +697,59 @@ fn current<'a>(pack: &'a Pack, full: &str) -> Option<(u64, &'a PackKind)> {
 }
 
 /// Migrates each instance saved at an earlier major of its pinned pack's kind, on the check's
-/// copy and before expansion: one major a step, one `migrated` notice a step (Migration).
-pub fn at_load(items: &mut Map<String, Value>, resolved: &Resolved, notices: &mut Vec<Notice>) {
+/// copy and before expansion: one major a step, one `migrated` notice a step (Migration). Each
+/// item migrates from its own saved major, so a document mixing majors across writers' layers
+/// opens with every item at the current one (#1959).
+pub fn at_load(
+    items: &mut Map<String, Value>,
+    resolved: &Resolved,
+    planted: Planted,
+    notices: &mut Vec<Notice>,
+) {
+    // #1959's planted loader: one saved major, the lowest a pack-kind item holds, for every item.
+    let whole = planted
+        .migrate_one_major
+        .then(|| {
+            items
+                .values()
+                .filter_map(|item| saved_major(item, resolved))
+                .min()
+        })
+        .flatten();
     for (key, item) in items.iter_mut() {
-        migrate_item(key, item, resolved, notices);
+        migrate_item(
+            key,
+            item,
+            resolved,
+            (whole, planted.migrate_zero_as_absent),
+            notices,
+        );
     }
+}
+
+/// The major an item of a pack kind was saved at, if its pinned pack carries the kind.
+fn saved_major(item: &Value, resolved: &Resolved) -> Option<u64> {
+    let (full, saved) = kind_text(item)?.rsplit_once('@')?;
+    let family = full.split_once('.')?.0;
+    current(resolved.by_name.get(family)?, full)?;
+    saved.parse().ok()
 }
 
 /// Stores the migrations of the pack-kind items in `layer`, the writer's, in place, and returns
 /// each item it migrated as it was before, as `store_migrations` does for canvas modules' kinds:
-/// another writer's items stay as saved (Migration).
+/// another writer's items stay as saved (Migration), so a later load migrates the stored items
+/// no further and raises no `migrated` for them (#1960).
 pub fn store_migrations(doc: &mut Value, layer: &str, packs: &Packs) -> Vec<(String, Value)> {
     let resolved = super::super::packs::resolve(doc, packs, None, &mut Vec::new());
     let mut out = Vec::new();
-    let Some(Value::Object(items)) = doc.get_mut("items") else {
+    let Some(Value::Object(items)) = doc.get_mut("items").filter(|_| !resolved.is_empty()) else {
         return out;
     };
     for (key, item) in items.iter_mut() {
         if item.get("layer").and_then(Value::as_str) == Some(layer) {
             let was = item.clone();
-            if migrate_item(key, item, &resolved, &mut Vec::new()) {
+            let zero = packs.planted.migrate_zero_as_absent;
+            if migrate_item(key, item, &resolved, (None, zero), &mut Vec::new()) {
                 out.push((key.clone(), was));
             }
         }
@@ -537,11 +758,13 @@ pub fn store_migrations(doc: &mut Value, layer: &str, packs: &Packs) -> Vec<(Str
 }
 
 /// One item through its pinned pack's chain, if it is saved at an earlier major of the pack's
-/// kind; whether it moved.
+/// kind; whether it moved. `planted` is #1959's: a saved major taken for the whole document, and
+/// a 0 taken for a param left out.
 fn migrate_item(
     key: &str,
     item: &mut Value,
     resolved: &Resolved,
+    planted: (Option<u64>, bool),
     notices: &mut Vec<Notice>,
 ) -> bool {
     let Some(text) = kind_text(item).map(str::to_string) else {
@@ -550,7 +773,8 @@ fn migrate_item(
     let Some((full, saved)) = text.rsplit_once('@') else {
         return false;
     };
-    let (Some(saved), Some((family, _))) = (saved.parse::<u64>().ok(), full.split_once('.')) else {
+    let saved = planted.0.or(saved.parse::<u64>().ok());
+    let (Some(saved), Some((family, _))) = (saved, full.split_once('.')) else {
         return false;
     };
     let Some((major, kind)) = resolved
@@ -577,7 +801,7 @@ fn migrate_item(
         .cloned()
         .unwrap_or_default();
     for (from, step) in (saved..).zip(chain) {
-        apply(step, &mut params);
+        apply(step, &mut params, planted.1);
         let major = |m: u64| u32::try_from(m).unwrap_or(u32::MAX);
         notices.push(Notice {
             code: "migrated",

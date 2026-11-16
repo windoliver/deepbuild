@@ -430,15 +430,48 @@
     "entry": {
       "type": "object",
       "properties": {
-        "answers_from": {
-          "type": "string"
+        "request": {
+          "type": "object",
+          "properties": {
+            "bytes": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "required": [
+            "bytes"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "bytes": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "required": [
+            "bytes"
+          ]
+        },
+        "max_per_step": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1024
+        },
+        "fuel_per_request": {
+          "type": "integer",
+          "minimum": 0
         },
         "fixture": {
           "type": "array"
         }
       },
       "required": [
-        "answers_from"
+        "request",
+        "result",
+        "max_per_step",
+        "fuel_per_request"
       ]
     }
   },

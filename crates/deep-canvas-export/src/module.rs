@@ -60,7 +60,8 @@ fn register(r: &mut Registrar) {
         "R6",
     );
     r.check("export", "any", &CODES, check);
-    // Each code's planted fixture, held to the export check on the Lottie target.
+    // Each code's planted fixture, held to the export check on the Lottie target. Each is planted:
+    // the kit runs it, and the `fixtures` call leaves it out (#2085, #2362).
     // The kit seals the module with its dependencies' kinds left unknown, so each fixture's plate
     // is also `unknown_kind` to the core check.
     let lottie = json!([{"kind": "export"}]);
@@ -73,11 +74,14 @@ fn register(r: &mut Registrar) {
         ),
         None,
     )
+    .planted()
     .sidecar(json!({"codes": ["export.cant_hold", "unknown_kind"], "checks": lottie}));
     r.fixture("export-spring", fixture("export-spring", json!({"paint": {"fill": {"role": "accent"}}}), Some(json!({"spin": {"target": "items/plate/at/rot/2", "type": "f32",
         "keys": {"k0": {"t": "0s", "value": 0, "interp": {"spring": {"freq_hz": 2, "damping_ratio": 0.4}}}, "k1": {"t": "1s", "value": 45}}}}))), None)
+        .planted()
         .sidecar(json!({"codes": ["export.listed", "unknown_kind"], "checks": lottie}));
     r.fixture("export-status", fixture("export-status", json!({"paint": {"fill": {"role": "accent"}}, "status": {"source": "verdict:01JB162K000000000000000001"}}), None), None)
+        .planted()
         .sidecar(json!({"codes": ["export.refused", "unknown_kind"], "checks": lottie}));
     r.code(
         "export.cant_hold",

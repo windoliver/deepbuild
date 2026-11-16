@@ -18,154 +18,13 @@ use wasmparser::{ExternalKind, Parser, Payload, ValType};
 use wasmtime::Val;
 
 use crate::bake::{self, Range};
+pub use crate::bake::{handed, HANDED};
 use crate::budget::cpu_ns;
+use crate::mirrors::{self, Pending};
 use crate::piece::{h64, step_seed, Item, Piece, Read, Ty, PAGE, PER_STEP};
-use crate::point::Point;
+use crate::services;
+pub use crate::track::{track_of, Entry, Given, Track};
 use crate::Planted;
-
-/// An entry's value: a number, the row a pick wrote (Control: picks on rows and grid focus):
-/// its set's index in `rows` and its key, an integer key column's value and 0, a grid's
-/// `(cx, cy)` or a fed instancer's `(slot, gen)`, or a point control's press, move or release
-/// (Control: point), or a text control's committed bytes (Control: text). A scroll control's
-/// position is a number (Control: scroll).
-#[derive(Clone, Debug, PartialEq)]
-pub enum Given {
-    Number(f64),
-    Pick { set: u32, key: [i64; 2] },
-    Point(Point),
-    Text(String),
-}
-
-impl From<f64> for Given {
-    fn from(n: f64) -> Given {
-        Given::Number(n)
-    }
-}
-
-impl Given {
-    fn parse(v: &Value) -> Option<Given> {
-        if let Some(n) = v.as_f64() {
-            return Some(Given::Number(n));
-        }
-        if v.get("phase").is_some() {
-            return Point::parse(v).map(Given::Point);
-        }
-        if let Some(t) = v.as_str() {
-            return Some(Given::Text(t.to_string()));
-        }
-        let set = v.get("set")?.as_u64().filter(|s| *s < 8)? as u32;
-        match v.get("key")?.as_array()?.as_slice() {
-            [a, b] => Some(Given::Pick {
-                set,
-                key: [a.as_i64()?, b.as_i64()?],
-            }),
-            _ => None,
-        }
-    }
-    pub fn to_json(&self) -> Value {
-        match self {
-            Given::Number(n) => json!(n),
-            Given::Pick { set, key } => json!({"set": set, "key": key}),
-            Given::Point(p) => p.to_json(),
-            Given::Text(t) => json!(t),
-        }
-    }
-    /// The value as its control's read region lays it out: an f64 (8 B), a pick's `u32 set,
-    /// 4 zero bytes, i64 key[0], i64 key[1]` (24 B), a point's record (248 B), or a text
-    /// commit's `u32` length and its bytes.
-    pub fn bytes(&self) -> Vec<u8> {
-        match self {
-            Given::Number(n) => n.to_le_bytes().to_vec(),
-            Given::Pick { set, key } => {
-                let mut b = set.to_le_bytes().to_vec();
-                b.extend([0; 4]);
-                b.extend(key[0].to_le_bytes());
-                b.extend(key[1].to_le_bytes());
-                b
-            }
-            Given::Point(p) => p.bytes().to_vec(),
-            Given::Text(t) => {
-                let mut b = (t.len() as u32).to_le_bytes().to_vec();
-                b.extend(t.as_bytes());
-                b
-            }
-        }
-    }
-}
-
-/// An entry on the input track (Input track entries).
-#[derive(Clone, Debug, PartialEq)]
-pub struct Entry {
-    pub t: i64,
-    pub seq: u32,
-    pub control: String,
-    pub value: Given,
-    pub writer: String,
-    pub player: u32,
-    /// A reading's as-of time, in microseconds: then `control` is the reading, `reading:<source>`
-    /// (Logic: readings).
-    pub as_of: Option<i64>,
-    /// Its place in the order entries reached the track, which no read follows but a planted one.
-    pub arrived: u64,
-}
-
-impl Entry {
-    pub fn parse(v: &Value) -> Option<Entry> {
-        let reading = v.get("reading").and_then(Value::as_str);
-        Some(Entry {
-            t: v.get("t")?.as_i64()?,
-            seq: v.get("seq").map_or(Some(0), Value::as_u64)? as u32,
-            control: reading
-                .or(v.get("control").and_then(Value::as_str))?
-                .to_string(),
-            // A reading's value is a number.
-            value: match reading {
-                Some(_) => v.get("value")?.as_f64()?.into(),
-                None => Given::parse(v.get("value")?)?,
-            },
-            writer: v
-                .get("writer")
-                .map_or(Some("you"), Value::as_str)?
-                .to_string(),
-            player: v.get("player").map_or(Some(1), Value::as_u64)? as u32,
-            as_of: match reading {
-                Some(_) => Some(v.get("as_of")?.as_i64()?),
-                None => None,
-            },
-            arrived: 0,
-        })
-    }
-    pub fn to_json(&self) -> Value {
-        let value = self.value.to_json();
-        match self.as_of {
-            None => {
-                json!({"t": self.t, "seq": self.seq, "control": self.control, "value": value, "writer": self.writer, "player": self.player})
-            }
-            Some(as_of) => {
-                json!({"t": self.t, "seq": self.seq, "reading": self.control, "value": value, "as_of": as_of, "writer": self.writer, "player": self.player})
-            }
-        }
-    }
-}
-
-/// The input track by control or reading, each in the track's order: by time, player and seq.
-pub type Track = BTreeMap<String, Vec<Entry>>;
-
-/// The track of `entries`, each arriving in the order given.
-pub fn track_of(entries: &[Entry]) -> Track {
-    let mut out: Track = BTreeMap::new();
-    for (n, e) in entries.iter().enumerate() {
-        let e = Entry {
-            arrived: n as u64,
-            ..e.clone()
-        };
-        out.entry(e.control.clone()).or_default().push(e);
-    }
-    for list in out.values_mut() {
-        list.sort_by_key(|e| (e.t, e.player, e.seq));
-    }
-    out
-}
 
 /// The exports the rewrite gave a logic item's program: its mutable globals (with their types) and
 /// the page bitmap's words.
@@ -240,6 +99,12 @@ pub struct Record {
     /// #538: each item's comparison of its arrays after each step with their values before it,
     /// as `(step, bytes compared, ms)`: a proof reading of the bake's cost, never part of a run.
     pub compares: BTreeMap<String, Vec<(i64, usize, f64)>>,
+    /// When asked for: each step's services region of each item that asks services, as the step
+    /// read it, in hex, by step and item (`{services}`).
+    pub regions: Option<BTreeMap<i64, Map<String, Value>>>,
+    /// When asked for (#184's play): each step's time by item, as `(item, ns)`, so a bot's steps
+    /// are timed apart from the piece's. A reading, never part of a run.
+    pub ns: Option<Vec<(usize, u64)>>,
 }
 
 impl Record {
@@ -339,6 +204,7 @@ pub(crate) struct Stored {
     prev: Vec<u8>,
     cursor: BTreeMap<String, usize>,
     pending: BTreeMap<String, VecDeque<Entry>>,
+    mirrors: Vec<Pending>,
     pub(crate) memory: Memory,
     /// The CPU time taking and storing it took, in ns, as the ring reports it (#548).
     ns: u64,
@@ -363,6 +229,15 @@ pub(crate) struct Live {
     pub(crate) pending: BTreeMap<String, VecDeque<Entry>>,
     /// The slot its last step asked to save, and whether as ended (Logic: saves).
     pub(crate) asked: Option<(i32, bool)>,
+    /// Each mirror's ranges its writer changed since this item's last step (Logic: mirror reads).
+    pub(crate) mirrors: Vec<Pending>,
+    /// The planted late answers: step's requests not yet answered when its checkpoint is taken.
+    late: bool,
+    /// The hashes of the regions the module filled before the last step: its mirrors' lists and
+    /// its services' results, which logic.determinism compares.
+    filled: Option<Value>,
+    /// #213: the CPU time updating its mirrors before the last step took, in ns: a proof reading.
+    mirror_ns: u64,
     dirty: BTreeSet<u32>,
     /// The pages written since the last keyframe stored (crate::keyframes).
     pub(crate) kdirty: BTreeSet<u32>,
@@ -462,6 +337,7 @@ impl Live {
             prev: self.prev.clone(),
             cursor: self.cursor.clone(),
             pending: self.pending.clone(),
+            mirrors: self.mirrors.clone(),
             memory,
             ns: 0,
         }
@@ -618,6 +494,10 @@ impl World {
                 prev: if linear { vec![0; size] } else { Vec::new() },
                 cursor: BTreeMap::new(),
                 pending: BTreeMap::new(),
+                mirrors: vec![Some(Vec::new()); item.mirrors.len()],
+                late: false,
+                filled: None,
+                mirror_ns: 0,
                 asked: None,
                 dirty: BTreeSet::new(),
                 kdirty: BTreeSet::new(),
@@ -843,6 +723,9 @@ impl World {
                 if t.is_none_or(|t| self.lives[i].next * self.piece.items[i].step == t) {
                     self.checkpoint(i, rec);
                 }
+                if std::mem::take(&mut self.lives[i].late) {
+                    self.serve(i, rec);
+                }
             }
             if let Some(k) = self.at() {
                 if self.saves_dir.is_some() {
@@ -868,10 +751,59 @@ impl World {
                 continue;
             }
             let snapshot = self.published.clone();
+            let mut held = Vec::new();
             self.seen += 1;
             for i in group {
-                self.step(i, &snapshot, rec);
+                let started = rec.ns.is_some().then(std::time::Instant::now);
+                self.step(i, &snapshot, rec, &mut held);
+                if let (Some(ns), Some(s)) = (rec.ns.as_mut(), started) {
+                    ns.push((i, s.elapsed().as_nanos() as u64));
+                }
                 self.published[i] = self.lives[i].arrays.clone();
+                // Right after the step, before any checkpoint or step k + 1 (Logic: between-step
+                // services); the planted module answers after the next checkpoint instead.
+                if self.planted.services_after_checkpoint {
+                    self.lives[i].late = !self.piece.items[i].services.is_empty();
+                } else {
+                    self.serve(i, rec);
+                }
+            }
+            mirrors::pend(held, &mut self.lives);
+        }
+    }
+
+    /// Item `i`'s services answering the requests its last step wrote, into its memory: the pages
+    /// they wrote join the next checkpoint's. A service that can't answer traps `services`.
+    fn serve(&mut self, i: usize, rec: &mut Record) {
+        let item = &self.piece.items[i];
+        let l = &mut self.lives[i];
+        if item.services.is_empty() || l.failed {
+            return;
+        }
+        let (k, started) = (l.last, std::time::Instant::now());
+        let memory = l.runner.memory_mut("memory").expect("a memory");
+        match services::serve(item, k, memory) {
+            Ok((pages, n)) => {
+                let pages = pages.into_iter().map(|p| p as u32);
+                l.dirty.extend(pages.clone());
+                l.kdirty.extend(pages);
+                // The time answering what step k asked: 0 when it asked nothing.
+                let ns = if n == 0 {
+                    0
+                } else {
+                    (started.elapsed().as_nanos() as u64).max(1)
+                };
+                if let Some(row) = rec
+                    .steps
+                    .get_mut(&k)
+                    .and_then(|(items, _)| items.get_mut(&item.id))
+                {
+                    row["service_ns"] = json!(ns);
+                }
+            }
+            Err((service, what)) => {
+                l.failed = true;
+                rec.traps.push(json!({"item": item.id, "step": k, "t": k * item.step, "kind": "services", "service": service, "what": what, "function": null, "offset": null, "inputs": []}));
             }
         }
     }
@@ -952,7 +884,7 @@ impl World {
         drawn(&self.piece, shown, t, self.planted.linear_blends_forward)
     }
 
-    fn step(&mut self, i: usize, snapshot: &[Vec<u8>], rec: &mut Record) {
+    fn step(&mut self, i: usize, snapshot: &[Vec<u8>], rec: &mut Record, held: &mut mirrors::Held) {
         let piece = self.piece.clone();
         let item = &piece.items[i];
         let k = self.lives[i].next;
@@ -1003,6 +935,8 @@ impl World {
         l.next = k + 1;
         l.ran += 1;
         l.last = k;
+        l.filled = None;
+        l.mirror_ns = 0;
         // What a linear write blends from: the arrays as they stood before this step ran.
         if !l.prev.is_empty() {
             l.prev.clone_from(&l.arrays);
@@ -1107,7 +1041,7 @@ impl World {
                 }
                 Read::Seed => region[at..at + 8]
                     .copy_from_slice(&step_seed(piece.seed, &item.id, k).to_le_bytes()),
-                Read::None => {}
+                Read::Mirror(_) | Read::None => {}
             }
         }
         let from = item.reads_at as usize;
@@ -1122,10 +1056,37 @@ impl World {
             return;
         }
         let memory = l.runner.memory_mut("memory").expect("a memory");
-        memory[from..from + size].copy_from_slice(&region);
         // The bitmap starts each step with the pages the logic module's own writes touched: the
-        // read region and each emitted kind's count, zeroed before the step.
+        // read region, each mirror's copied ranges and each emitted kind's count, zeroed before
+        // the step.
         let mut touched = Vec::new();
+        let mut filled = Map::new();
+        if !item.mirrors.is_empty() {
+            let started = std::time::Instant::now();
+            let lists = mirrors::fill(
+                item,
+                &mut l.mirrors,
+                snapshot,
+                &mut region,
+                memory,
+                &mut touched,
+            );
+            l.mirror_ns = (started.elapsed().as_nanos() as u64).max(1);
+            filled.insert("reads".into(), json!(format!("{lists:016x}")));
+        }
+        if !item.services.is_empty() {
+            let h = services::results_hash(item, memory);
+            filled.insert("services".into(), json!(format!("{h:016x}")));
+            if let Some(r) = rec.regions.as_mut() {
+                let at = item.services_at as usize;
+                let bytes = &memory[at..at + services::size(item) as usize];
+                r.entry(k)
+                    .or_default()
+                    .insert(item.id.clone(), json!({"services": hex(bytes)}));
+            }
+        }
+        l.filled = (!filled.is_empty()).then_some(Value::Object(filled));
+        memory[from..from + size].copy_from_slice(&region);
         if size > 0 {
             touched.extend(from as u64 / PAGE..=(from + size - 1) as u64 / PAGE);
         }
@@ -1145,10 +1106,12 @@ impl World {
         for (w, n) in words.iter().zip(&names.pages) {
             let _ = l.runner.set(n, Val::I64(*w as i64));
         }
+        // The answers after the last step charge this one: each request its fuel_per_request.
+        let debt = services::debt(item, l.runner.memory("memory").expect("a memory"));
         let call = Call {
             export: "step".into(),
             args: vec![Val::I64(k)],
-            fuel: item.fuel,
+            fuel: item.fuel - debt,
             stack: item.stack,
             deadline: None,
         };
@@ -1195,6 +1158,13 @@ impl World {
                 return;
             }
         };
+        // A request count past its max_per_step traps as an occurrence count does: none dropped.
+        if let Some((service, count)) = services::over(item, memory) {
+            l.failed = true;
+            rec.traps.push(json!({"item": item.id, "step": k, "t": t, "kind": "services", "service": service, "count": count, "function": null, "offset": null, "inputs": inputs}));
+            report(rec, item, k, l, None, fuel, pages, &Vec::new());
+            return;
+        }
         if self.planted.seek_repeats_occurrences && l.rerun {
             rows.extend(rows.clone());
         }
@@ -1211,6 +1181,7 @@ impl World {
         if self.planted.ranges_drop_second_at_step_5000 && k == 5000 && changed.len() > 1 {
             changed.remove(1);
         }
+        mirrors::changed(&piece, i, &changed, held);
         rec.ranges
             .entry(item.id.clone())
             .or_default()
@@ -1248,7 +1219,7 @@ impl World {
             let mut region = vec![0u8; (p.writes_at - p.at) as usize];
             for e in &p.reads {
                 if let Some(b) = values.get(&e.name).filter(|b| b.len() == e.size as usize) {
-                    region[e.offset as usize..][..b.len()].copy_from_slice(&b);
+                    region[e.offset as usize..][..b.len()].copy_from_slice(b);
                 }
             }
             let k = l.last;
@@ -1646,6 +1617,14 @@ impl World {
             }
             memory = kept;
         }
+        // #1164's planted restore: the checkpoint a seek to step 225 restores from.
+        let spacing = self.lives[i].spacing;
+        if self.planted.restore_zeroes_move_count && s.step <= 225 && 225 < s.step + spacing {
+            let at = crate::piece::global_at(&item.given, "moves_at").map(|a| a as usize);
+            if let Some(count) = at.and_then(|a| memory.get_mut(a..a + 4)) {
+                count.fill(0);
+            }
+        }
         if self.planted.restore_copies_assets && !item.assets.is_empty() {
             let b = item.asset_bytes();
             memory[item.assets_at as usize..][..b.len()].copy_from_slice(&b);
@@ -1662,6 +1641,10 @@ impl World {
         }
         live.cursor = s.cursor.clone();
         live.pending = s.pending.clone();
+        live.mirrors = match self.planted.mirror_restores_whole {
+            true => vec![None; s.mirrors.len()],
+            false => s.mirrors.clone(),
+        };
         Ok(live)
     }
 
@@ -1730,6 +1713,10 @@ impl World {
             prev: Vec::new(),
             cursor: BTreeMap::new(),
             pending: BTreeMap::new(),
+            mirrors: Vec::new(),
+            late: false,
+            filled: None,
+            mirror_ns: 0,
             asked: None,
             // The restore wrote every page.
             dirty: (0..pages).collect(),
@@ -1766,6 +1753,7 @@ impl World {
             live.prev = l.prev.clone();
             live.cursor = l.cursor.clone();
             live.pending = l.pending.clone();
+            live.mirrors = l.mirrors.clone();
             lives.push(live);
         }
         let len = self.piece.items.first().map_or(0, |i| i.step);
@@ -1830,20 +1818,6 @@ fn changed(item: &Item, arrays: &mut [u8]) {
     }
 }
 
-/// The most index ranges a step hands the column view per array.
-pub const HANDED: usize = 64;
-
-/// A step's changed runs `[start, end)`, ascending, as the column view takes them: the first
-/// [`HANDED`] − 1 as they are and any more merged into their span, so at most [`HANDED`].
-pub fn handed(runs: &[[u64; 2]]) -> Vec<[u64; 2]> {
-    if runs.len() <= HANDED {
-        return runs.to_vec();
-    }
-    let mut out = runs[..HANDED - 1].to_vec();
-    out.push([runs[HANDED - 1][0], runs[runs.len() - 1][1]]);
-    out
-}
-
 /// The rows a step wrote to the item's emit region, each kind's in declaration order and sorted by
 /// (a, b) with ties in the order the program wrote them; or the first kind whose count passes its
 /// `max_per_step`, and the count.
@@ -1903,7 +1877,12 @@ fn report(
     rows: &Rows,
 ) {
     let (items, arrays) = rec.steps.entry(k).or_default();
-    items.insert(item.id.clone(), json!({"hash": hash.map(|h| format!("{h:016x}")), "fuel": fuel, "failed": l.failed, "pages": pages}));
+    let mut row = json!({"hash": hash.map(|h| format!("{h:016x}")), "fuel": fuel, "failed": l.failed, "pages": pages,
+                         "mirror_ns": l.mirror_ns, "service_ns": 0});
+    if let Some(f) = &l.filled {
+        row["filled"] = f.clone();
+    }
+    items.insert(item.id.clone(), row);
     // Each write's hash: runs compare these; the bake's values are its ranges (crate::bake).
     for w in &item.writes {
         let e = item.write(&w.name).expect("a write entry");
@@ -2037,41 +2016,4 @@ pub fn drawn<'a>(
         }
     }
     out
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// #539: a pick entry's value is `u32 set, 4 zero bytes, i64 key[0], i64 key[1]`, read back
-    /// from its track form; a number stays an f64.
-    #[test]
-    fn a_pick_value_lays_out_as_24_bytes() {
-        let e =
-            Entry::parse(&json!({"t": 0, "control": "place", "value": {"set": 1, "key": [-7, 3]}}))
-                .expect("a pick entry");
-        let mut want = 1u32.to_le_bytes().to_vec();
-        want.extend([0; 4]);
-        want.extend((-7i64).to_le_bytes());
-        want.extend(3i64.to_le_bytes());
-        assert_eq!(e.value.bytes(), want);
-        assert_eq!(Entry::parse(&e.to_json()), Some(e));
-        assert_eq!(Given::from(0.5).bytes(), 0.5f64.to_le_bytes().to_vec());
-        assert_eq!(
-            Entry::parse(&json!({"t": 0, "control": "place", "value": {"set": 8, "key": [0, 0]}})),
-            None
-        );
-    }
-
-    /// #535: a step's 100 changed runs reach the column view as 64 ranges, the last the span of
-    /// the 37 past the 63rd; 64 or fewer reach it as they are.
-    #[test]
-    fn a_step_hands_over_at_most_64_ranges() {
-        let runs: Vec<[u64; 2]> = (0..100).map(|i| [3 * i, 3 * i + 1]).collect();
-        let out = handed(&runs);
-        assert_eq!(out.len(), HANDED);
-        assert_eq!(out[..63], runs[..63]);
-        assert_eq!(out[63], [189, 298]);
-        assert_eq!(handed(&runs[..64]), runs[..64].to_vec());
-    }
 }

@@ -16,6 +16,7 @@ pub mod fusion;
 pub mod fx;
 pub mod graph;
 pub mod interp;
+pub mod look_finish;
 pub mod module;
 pub mod particles;
 pub mod shipped;

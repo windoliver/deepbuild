@@ -119,6 +119,23 @@ pub fn effects_with_base_steps() -> Module {
     m
 }
 
+/// The motion module of the planted layout `test-follow-stream-in-motion` (#225): it fills the
+/// data module's `follow_stream` in `constraint@1` itself, so its interface digest changes.
+#[cfg_attr(not(feature = "test-follow-stream-in-motion"), allow(dead_code))]
+pub fn motion_filling_follow_stream() -> Module {
+    let mut m = deep_canvas_motion::module::module();
+    m.register = |r| {
+        (deep_canvas_motion::module::module().register)(r);
+        r.entry(
+            "constraint@1",
+            deep_canvas_marks::vector_field::FOLLOW,
+            deep_canvas_marks::vector_field::entry(),
+            "R6",
+        );
+    };
+    m
+}
+
 /// The effects module of the planted layout `test-gpu-output-in-effects` (#485): it declares
 /// `gpu.output@1` with today's outputs, which the core then leaves to it.
 #[cfg_attr(not(feature = "test-gpu-output-in-effects"), allow(dead_code))]

@@ -1,0 +1,576 @@
+{
+ "subject": "A lighthouse on a headland at dusk, a sailing boat crossing the bay",
+ "2d": {
+  "format": 1,
+  "id": "art-463-scene-2d",
+  "profile": "film",
+  "title": "Lighthouse at dusk",
+  "description": "A lighthouse on a headland at dusk, a sailing boat crossing the bay: the #463 shared test scene, drawn flat.",
+  "size": [
+   1920,
+   1080
+  ],
+  "camera": "cam",
+  "transport": {
+   "span": "12s"
+  },
+  "budget": {
+   "class": "showpiece"
+  },
+  "layers": {
+   "main": {
+    "writer": "agent-a",
+    "title": "Main",
+    "order": "a0"
+   }
+  },
+  "channels": {
+   "sail_on": {
+    "target": "items/hull/at/pos/0",
+    "type": "f32",
+    "keys": {
+     "k0": {
+      "t": "0s",
+      "value": 0,
+      "interp": "linear"
+     },
+     "k1": {
+      "t": "12s",
+      "value": 360,
+      "interp": "linear"
+     }
+    }
+   },
+   "sail_on_too": {
+    "target": "items/sail/at/pos/0",
+    "type": "f32",
+    "keys": {
+     "k0": {
+      "t": "0s",
+      "value": 0,
+      "interp": "linear"
+     },
+     "k1": {
+      "t": "12s",
+      "value": 360,
+      "interp": "linear"
+     }
+    }
+   }
+  },
+  "items": {
+   "cam": {
+    "id": "cam",
+    "kind": "camera@1",
+    "layer": "main",
+    "name": "cam",
+    "order": "a00",
+    "params": {
+     "projection": "orthographic",
+     "target": [
+      960,
+      540,
+      0
+     ],
+     "view_width": 1920
+    }
+   },
+   "sun": {
+    "id": "sun",
+    "kind": "circle@1",
+    "layer": "main",
+    "name": "sun",
+    "order": "a01",
+    "params": {
+     "center": [
+      1480,
+      300
+     ],
+     "r": 110,
+     "paint": {
+      "fill": {
+       "role": "muted"
+      }
+     }
+    }
+   },
+   "sea": {
+    "id": "sea",
+    "kind": "rect@1",
+    "layer": "main",
+    "name": "sea",
+    "order": "a02",
+    "params": {
+     "box": [
+      0,
+      720,
+      1920,
+      360
+     ],
+     "paint": {
+      "fill": {
+       "role": "accent"
+      }
+     }
+    }
+   },
+   "swell": {
+    "id": "swell",
+    "kind": "path@1",
+    "layer": "main",
+    "name": "swell",
+    "order": "a03",
+    "params": {
+     "d": "M 0 880 C 240 850 480 910 720 880 C 960 850 1200 850 1440 880 C 1680 910 1800 910 1920 880",
+     "paint": {
+      "stroke": {
+       "role": "muted",
+       "width": 6
+      }
+     }
+    }
+   },
+   "headland": {
+    "id": "headland",
+    "kind": "path@1",
+    "layer": "main",
+    "name": "headland",
+    "order": "a04",
+    "params": {
+     "d": "M 0 720 L 0 560 C 220 520 420 500 620 560 L 780 720 Z",
+     "paint": {
+      "fill": {
+       "role": "muted"
+      },
+      "stroke": {
+       "role": "ink",
+       "width": 4
+      }
+     }
+    }
+   },
+   "tower": {
+    "id": "tower",
+    "kind": "path@1",
+    "layer": "main",
+    "name": "tower",
+    "order": "a05",
+    "params": {
+     "d": "M 300 540 L 400 540 L 385 260 L 315 260 Z",
+     "paint": {
+      "fill": {
+       "role": "ground"
+      },
+      "stroke": {
+       "role": "ink",
+       "width": 4
+      }
+     }
+    }
+   },
+   "lamp": {
+    "id": "lamp",
+    "kind": "circle@1",
+    "layer": "main",
+    "name": "lamp",
+    "order": "a06",
+    "params": {
+     "center": [
+      350,
+      236
+     ],
+     "r": 26,
+     "paint": {
+      "fill": {
+       "role": "accent"
+      },
+      "stroke": {
+       "role": "ink",
+       "width": 3
+      }
+     }
+    }
+   },
+   "roof": {
+    "id": "roof",
+    "kind": "path@1",
+    "layer": "main",
+    "name": "roof",
+    "order": "a07",
+    "params": {
+     "d": "M 300 214 L 400 214 L 350 160 Z",
+     "paint": {
+      "fill": {
+       "role": "ink"
+      }
+     }
+    }
+   },
+   "hull": {
+    "id": "hull",
+    "kind": "path@1",
+    "layer": "main",
+    "name": "hull",
+    "order": "a08",
+    "params": {
+     "d": "M 900 760 L 1180 760 L 1130 820 L 950 820 Z",
+     "paint": {
+      "fill": {
+       "role": "ink"
+      }
+     }
+    },
+    "at": {
+     "pos": [
+      0,
+      0,
+      0
+     ]
+    }
+   },
+   "sail": {
+    "id": "sail",
+    "kind": "path@1",
+    "layer": "main",
+    "name": "sail",
+    "order": "a09",
+    "params": {
+     "d": "M 1040 750 L 1040 560 L 1150 750 Z",
+     "paint": {
+      "fill": {
+       "role": "ground"
+      },
+      "stroke": {
+       "role": "ink",
+       "width": 3
+      }
+     }
+    },
+    "at": {
+     "pos": [
+      0,
+      0,
+      0
+     ]
+    }
+   }
+  }
+ },
+ "3d": {
+  "format": 1,
+  "id": "art-463-scene-3d",
+  "profile": "scene",
+  "title": "Lighthouse at dusk",
+  "description": "A lighthouse on a headland at dusk, a sailing boat crossing the bay: the #463 shared test scene, in depth.",
+  "size": [
+   1920,
+   1080
+  ],
+  "camera": "cam",
+  "transport": {
+   "span": "12s"
+  },
+  "budget": {
+   "class": "showpiece"
+  },
+  "requires": {
+   "modules": {
+    "scene3d": "^1",
+    "effects": "^1"
+   }
+  },
+  "layers": {
+   "main": {
+    "writer": "agent-a",
+    "title": "Main",
+    "order": "a0"
+   }
+  },
+  "channels": {
+   "sail_on": {
+    "target": "items/hull/at/pos/0",
+    "type": "f32",
+    "keys": {
+     "k0": {
+      "t": "0s",
+      "value": -1,
+      "interp": "linear"
+     },
+     "k1": {
+      "t": "12s",
+      "value": 2,
+      "interp": "linear"
+     }
+    }
+   },
+   "sail_on_too": {
+    "target": "items/sail/at/pos/0",
+    "type": "f32",
+    "keys": {
+     "k0": {
+      "t": "0s",
+      "value": -0.8,
+      "interp": "linear"
+     },
+     "k1": {
+      "t": "12s",
+      "value": 2.2,
+      "interp": "linear"
+     }
+    }
+   }
+  },
+  "items": {
+   "cam": {
+    "id": "cam",
+    "kind": "camera@1",
+    "layer": "main",
+    "name": "cam",
+    "order": "a00",
+    "params": {
+     "projection": "perspective",
+     "position": [
+      0,
+      3,
+      14
+     ],
+     "target": [
+      0,
+      1.4,
+      0
+     ],
+     "fov": 45,
+     "near": 0.1,
+     "far": 100
+    }
+   },
+   "sunlight": {
+    "id": "sunlight",
+    "kind": "light.sun@1",
+    "layer": "main",
+    "name": "sunlight",
+    "order": "a01",
+    "params": {
+     "illuminance": 3.141592653589793,
+     "shadow": true,
+     "angle": 0.53
+    },
+    "at": {
+     "rot": [
+      -35,
+      40,
+      0
+     ]
+    }
+   },
+   "sun": {
+    "id": "sun",
+    "kind": "mark.sphere@1",
+    "layer": "main",
+    "name": "sun",
+    "order": "a02",
+    "params": {
+     "size": [
+      3,
+      3,
+      3
+     ],
+     "paint": {
+      "fill": {
+       "role": "muted"
+      }
+     }
+    },
+    "at": {
+     "pos": [
+      4.5,
+      5.5,
+      -14
+     ]
+    }
+   },
+   "sea": {
+    "id": "sea",
+    "kind": "mark.box@1",
+    "layer": "main",
+    "name": "sea",
+    "order": "a03",
+    "params": {
+     "size": [
+      80,
+      0.1,
+      50
+     ],
+     "paint": {
+      "fill": {
+       "role": "accent"
+      }
+     }
+    },
+    "at": {
+     "pos": [
+      0,
+      -0.05,
+      -10
+     ]
+    }
+   },
+   "headland": {
+    "id": "headland",
+    "kind": "mark.box@1",
+    "layer": "main",
+    "name": "headland",
+    "order": "a04",
+    "params": {
+     "size": [
+      4,
+      1,
+      4
+     ],
+     "paint": {
+      "fill": {
+       "role": "muted"
+      }
+     }
+    },
+    "at": {
+     "pos": [
+      -4,
+      0.5,
+      -2
+     ]
+    }
+   },
+   "tower": {
+    "id": "tower",
+    "kind": "mark.cylinder@1",
+    "layer": "main",
+    "name": "tower",
+    "order": "a05",
+    "params": {
+     "size": [
+      0.6,
+      2.2,
+      0.6
+     ],
+     "paint": {
+      "fill": {
+       "role": "ground"
+      }
+     }
+    },
+    "at": {
+     "pos": [
+      -4,
+      2.1,
+      -2
+     ]
+    }
+   },
+   "lamp": {
+    "id": "lamp",
+    "kind": "mark.sphere@1",
+    "layer": "main",
+    "name": "lamp",
+    "order": "a06",
+    "params": {
+     "size": [
+      0.5,
+      0.5,
+      0.5
+     ],
+     "paint": {
+      "fill": {
+       "role": "accent"
+      }
+     }
+    },
+    "at": {
+     "pos": [
+      -4,
+      3.45,
+      -2
+     ]
+    }
+   },
+   "roof": {
+    "id": "roof",
+    "kind": "mark.cylinder@1",
+    "layer": "main",
+    "name": "roof",
+    "order": "a07",
+    "params": {
+     "size": [
+      0.7,
+      0.2,
+      0.7
+     ],
+     "paint": {
+      "fill": {
+       "role": "ink"
+      }
+     }
+    },
+    "at": {
+     "pos": [
+      -4,
+      3.8,
+      -2
+     ]
+    }
+   },
+   "hull": {
+    "id": "hull",
+    "kind": "mark.box@1",
+    "layer": "main",
+    "name": "hull",
+    "order": "a08",
+    "params": {
+     "size": [
+      1.6,
+      0.35,
+      0.6
+     ],
+     "paint": {
+      "fill": {
+       "role": "ink"
+      }
+     }
+    },
+    "at": {
+     "pos": [
+      -1,
+      0.18,
+      2
+     ]
+    }
+   },
+   "sail": {
+    "id": "sail",
+    "kind": "mark.box@1",
+    "layer": "main",
+    "name": "sail",
+    "order": "a09",
+    "params": {
+     "size": [
+      0.05,
+      1.3,
+      0.9
+     ],
+     "paint": {
+      "fill": {
+       "role": "ground"
+      }
+     }
+    },
+    "at": {
+     "pos": [
+      -0.8,
+      1,
+      2
+     ]
+    }
+   }
+  }
+ }
+}
