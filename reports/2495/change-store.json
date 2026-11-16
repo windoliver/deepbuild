@@ -1,0 +1,37 @@
+{
+  "side": "change",
+  "status": 0,
+  "outcome": "adopt",
+  "beforeHasReport": false,
+  "reportSHA256": "64a2b2bc79037d8c1311ceb70b780c3cda1c34dc0ad18d5ab5c148da707a14a6",
+  "printedHandle": "ev:64a2b2bc79037d8c1311ceb70b780c3cda1c34dc0ad18d5ab5c148da707a14a6",
+  "storeHasReport": true,
+  "storedBytesEqualFile": true,
+  "runs": 12,
+  "reportKeys": [
+    "after",
+    "before",
+    "calls",
+    "diverged",
+    "hash",
+    "held",
+    "plan",
+    "runs",
+    "usage"
+  ],
+  "stored": {
+    "sha256": "64a2b2bc79037d8c1311ceb70b780c3cda1c34dc0ad18d5ab5c148da707a14a6",
+    "size": 4831,
+    "type": "binary",
+    "kind": "replay",
+    "source": "config-eval",
+    "origin": "deepbuild",
+    "redaction": "unknown",
+    "license": {
+      "name": "session",
+      "allows": []
+    },
+    "derivedFrom": [],
+    "intake": "captured"
+  }
+}

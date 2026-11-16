@@ -1,6 +1,7 @@
 import type { HubEvents, HubRuntime, HookSchedule } from './hub-capabilities.js';
 import type { AnswerDeliveryPort, StopJudgingPort, SessionFlagsPort, SessionMemoryPort, TranscriptsPort, McpOperationsPort } from './hub-ports.js';
 
+import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { stat } from 'node:fs/promises';
 
@@ -100,8 +101,12 @@ export class SessionState {
   /** When each session's agent process last had its start time read, by the watch for processes gone (#992). */
   private readonly startChecked = new Map<string, number>();
 
-  /** A hook's parent's command line, read once for the hook: its start's readers share one `ps`. */
+  /** A hook's parent's command line, shared even while a resume is changing the session's binding. */
   private readonly argsRead = new WeakMap<HookMeta, Promise<string>>();
+
+  /** Launch facts belong to the checked process, shared across rotated IDs and forgotten with its sessions. */
+  private readonly processReads = new WeakMap<Session, { pid: number; start: string; args?: Promise<string>; parents?: { key: string; read: Promise<string | undefined> } }>();
+  private readonly parentLinks = new WeakMap<Session, string>();
 
   /** The repo each session works in, from its hooks' folder: what its events carry as their project (#23). */
   readonly projects = new Map<string, string>();
@@ -180,9 +185,32 @@ export class SessionState {
   /** Each session's own five-hour reading, as its status line last sent it. */
   private readonly windowOf = new Map<string, { used: number; resets: number | null }>();
 
-  parentArgs(meta: HookMeta): Promise<string> {
+  private readsOf(session: Session) {
+    let kept = this.processReads.get(session);
+    if (!kept) {
+      const before = [...this.sessions.values()].find((s) => s !== session && s.pid === session.pid && s.start === session.start && this.processReads.has(s));
+      if (before) kept = this.processReads.get(before);
+    }
+    if (!kept || kept.pid !== session.pid || kept.start !== session.start) {
+      kept = { pid: session.pid, start: session.start };
+      this.parentLinks.delete(session);
+    }
+    this.processReads.set(session, kept);
+    return kept;
+  }
+
+  async parentArgs(meta: HookMeta): Promise<string> {
+    const session = this.sessions.get(meta.session);
+    const kept = session && !session.ended && session.pid === meta.ppid && session.cwd === meta.cwd
+      && (!meta.transcript || resolve(meta.transcript) === session.transcript)
+      && await this.startOf(meta.ppid) === session.start ? this.readsOf(session) : undefined;
     let read = this.argsRead.get(meta);
-    if (!read) this.argsRead.set(meta, (read = argsOf(meta.ppid).catch(() => '')));
+    if (!read) this.argsRead.set(meta, (read = kept?.args ?? argsOf(meta.ppid).catch(() => '')));
+    if (kept && kept.args !== read) {
+      kept.args = read;
+      // An unread command line is not a launch fact: the next start tries again.
+      void read.then((args) => { if (!args && kept.args === read) delete kept.args; });
+    }
     return read;
   }
 
@@ -647,9 +675,25 @@ export class SessionState {
 
   /** Links a session whose agent process another session's agent process started, such as `codex exec` run by Claude Code, as its child. */
   async childOf(session: Session, agent: string): Promise<void> {
-    const parent = await this.agentAbove({ pid: session.pid, start: session.start });
-    if (!parent || parent === session.id) return;
-    await this.options.events.appendSession(session.id, agent, 'session.child_started', { parent: `session:${letters(parent)}`, child: `session:${letters(session.id)}`, task_ref: null });
+    const kept = this.readsOf(session);
+    // The process didn't change. Only learning another possible parent (or its rotated ID) can change the link.
+    const candidates = JSON.stringify([...this.sessions.values()].filter((s) => s.pid > 1 && s.pid !== session.pid).map((s) => [s.id, s.pid, s.start, s.ended]));
+    const key = createHash('sha256').update(candidates).digest('hex'); // Fixed retained size, not a copy of every session.
+    let finding = kept.parents;
+    if (finding?.key !== key) {
+      finding = { key, read: this.readAgentAbove({ pid: session.pid, start: session.start }) };
+      kept.parents = finding;
+    }
+    try {
+      const parent = await finding.read;
+      if (!parent || parent === session.id || this.parentLinks.get(session) === parent) return;
+      this.parentLinks.set(session, parent);
+      await this.options.events.appendSession(session.id, agent, 'session.child_started', { parent: `session:${letters(parent)}`, child: `session:${letters(session.id)}`, task_ref: null });
+    } catch (error) {
+      if (kept.parents === finding) delete kept.parents;
+      this.parentLinks.delete(session);
+      throw error;
+    }
   }
 
   /**
@@ -761,6 +805,11 @@ export class SessionState {
     // desktop app opened again) is too, by its own resume start (#1033).
     const binary = meta.agent === 'codex' ? CODEX_BINARY : meta.agent === 'claude-code' || meta.agent === 'claude' ? CLAUDE_BINARY : undefined;
     const resumed = meta.fields?.source === 'resume' || (meta.agent === 'codex' && meta.fields?.source === 'startup');
+    // A resume rereads launch facts as before, even when it names the same PID (#2329).
+    if (meta.event === 'SessionStart' && resumed) {
+      this.processReads.set(session, { pid: session.pid, start: session.start });
+      this.parentLinks.delete(session);
+    }
     if (binary && transcript === session.transcript && meta.event === 'SessionStart' && resumed
       && (session.ended || await this.startOf(session.pid, true) !== session.start) && binary.test(await this.parentArgs(meta))) {
       Object.assign(session, { pid: meta.ppid, start, cwd: meta.cwd, ended: false, interrupted: false, watched: false });
@@ -917,11 +966,20 @@ export class SessionState {
    * The peer check: the agent session whose process is above the caller's, by PID and start time as that session's
    * hooks established them. It decides whose session a deep command acts as, never whether an answer counts.
    */
-  async agentAbove(peer: CallContext['peer']): Promise<string | undefined> {
-    if (!peer || (await this.startOf(peer.pid, true)) !== peer.start) return undefined;
-    // Only a session of another process can be above it (a process table has no cycles): with none, the table isn't read.
-    if (![...this.sessions.values()].some((s) => s.pid > 1 && s.pid !== peer.pid)) return undefined;
-    const up = await parents();
+  agentAbove(peer: CallContext['peer']): Promise<string | undefined> {
+    return this.readAgentAbove(peer).catch(() => undefined);
+  }
+
+  /** A failed OS read is not a cached absence of a parent; public peer checks still refuse it as before. */
+  private async readAgentAbove(peer: CallContext['peer']): Promise<string | undefined> {
+    if (!peer) return undefined;
+    // Only a session of another process can be above it (a process table has no cycles): with none, the table isn't read;
+    // with one, the caller's start and the table are read together, not one ps after the other (#2328).
+    const others = [...this.sessions.values()].some((s) => s.pid > 1 && s.pid !== peer.pid);
+    const [actual, up] = await Promise.all([this.startOf(peer.pid, true), others ? parents() : undefined]);
+    if (!actual) throw Error('the peer process start could not be read');
+    if (actual !== peer.start || !up) return undefined;
+    if (!up.has(peer.pid)) throw Error('the peer process is missing from the process table');
     const seen = new Set<number>();
     for (let pid = up.get(peer.pid); pid !== undefined && pid > 1 && !seen.has(pid); pid = up.get(pid)) {
       seen.add(pid);

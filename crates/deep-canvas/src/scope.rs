@@ -89,6 +89,10 @@ pub enum Event {
         alt: bool,
     },
     Text(String),
+    /// #542: a paste into the focused text field, and the input method's composition (its
+    /// marked text, `""` once it ends); the scope itself takes neither.
+    Paste(String),
+    Ime(String),
     /// An entry on one of the canvas's view controls (Scope and input classes: view class), the
     /// value `null` to clear it: `filter` `{kinds, writers}`, `isolate` an item ID, `lens`
     /// `writer` or `changed`, `time` the flicks the view shows the record as of, `compare` the
@@ -977,6 +981,17 @@ impl Scope {
         self.focus = stops.get(next).cloned();
     }
 
+    /// #542: the control whose own Tab stop has focus, and focus taken off it.
+    pub fn focused_control(&self) -> Option<&str> {
+        match &self.focus {
+            Some((c, None)) => Some(c),
+            _ => None,
+        }
+    }
+    pub fn blur(&mut self) {
+        self.focus = None;
+    }
+
     /// The focused target, while it still draws.
     fn focused_target(&self, doc: &Value) -> Option<PickTarget> {
         let (control, option) = self.focus.as_ref()?;
@@ -1293,6 +1308,7 @@ impl Scope {
                     query.push_str(text);
                 }
             }
+            Event::Paste(_) | Event::Ime(_) => {}
             Event::Control { control, value } => {
                 if self.control(control, value) {
                     commit(&mut done);

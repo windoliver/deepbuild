@@ -1,0 +1,33 @@
+Base of tests/acceptance/223-oracle at 65f383b3f ("motion(#222): cues@1's param declares its form, so main builds
+again"), main with no implementation of #223.
+
+NOT RUN. No binary was built and no test ran (a shared machine at load ~300; this job was told not to). Where each test
+fails was reasoned from the base's code, not observed. The type-check was run on a copy outside the repo with the root
+tsconfig.json's options and TypeScript 5.9.3: `tsc -p tests/acceptance/223-oracle/tsconfig.json` exits 0.
+
+At the base no group's `warp` is read (group@1 has no param schema), so every warped path draws unwarped, and
+`raster::planted_path` knows no `warp_maps_anchors_only` (bad_input).
+
+ac1-split.test.ts (AC1 #223.532d1014)
+- the port: each path draws as written (n = 1), off its image under the waves map by up to 50 u; fails at `each mapped
+  path is cut one way for every curve, each piece within 0.75 u of the true image`.
+- the planted fault: fails at `path waves, alone, path 0 is accepted` (bad_input for the unknown plant).
+
+ac2-rises.test.ts (AC2 #223.48c2501c)
+- the port: the square never moves; fails at `the square rises as the plane reads y up`.
+- the planted fault: fails at `on a plane read y down the warp moves the square down the screen (the fault is live)`.
+- the frames: BLOCKED (at the base and after, until the goldens exist).
+
+ac3-matrix.test.ts (AC3 #223.9d800d51)
+- the port: fails at `the matrix's mix moves each corner straight from where it starts to its image` (the rigid key
+  half, which the base already draws, is not reached).
+- the planted faults: fail at `the fault is live: the transposed matrix moves the square as its own mix says`.
+- the frames: BLOCKED.
+
+ac4-progress.test.ts (AC4 #223.bd85dee7)
+- the line never moves, so every comparison agrees; fails at `the homotopies move between a and b, so the stale frame is
+  a live fault` (0, not 16).
+
+ac5-tips.test.ts (AC5 #223.3a3308e4)
+- every tip sits on the unsheared end; fails at `each redrawn tip sits on the sheared end, along the sheared arriving
+  tangent, at its own length`.

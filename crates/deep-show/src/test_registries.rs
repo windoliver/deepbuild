@@ -31,6 +31,9 @@ pub fn modules() -> Vec<Module> {
     // Issue #202's test canvas module: an item kind of 0.20 ms of CPU.
     #[cfg(feature = "test-weight")]
     out.push(deep_canvas_test_modules::weight::module());
+    // Issue #223's test canvas module: an item that builds a streams@1 table.
+    #[cfg(feature = "test-swirl")]
+    out.push(deep_canvas_test_modules::swirl::module());
     #[cfg(feature = "test-column-source")]
     out.push(deep_canvas_test_modules::registries::columns());
     // Issue #522's test canvas module: an item that fires a world's launch input.
@@ -112,6 +115,23 @@ pub fn effects_with_base_steps() -> Module {
         (deep_canvas_effects::module::module().register)(r);
         r.entries
             .extend(deep_canvas::registry::core_lists::base_steps());
+    };
+    m
+}
+
+/// The motion module of the planted layout `test-follow-stream-in-motion` (#225): it fills the
+/// data module's `follow_stream` in `constraint@1` itself, so its interface digest changes.
+#[cfg_attr(not(feature = "test-follow-stream-in-motion"), allow(dead_code))]
+pub fn motion_filling_follow_stream() -> Module {
+    let mut m = deep_canvas_motion::module::module();
+    m.register = |r| {
+        (deep_canvas_motion::module::module().register)(r);
+        r.entry(
+            "constraint@1",
+            deep_canvas_marks::vector_field::FOLLOW,
+            deep_canvas_marks::vector_field::entry(),
+            "R6",
+        );
     };
     m
 }

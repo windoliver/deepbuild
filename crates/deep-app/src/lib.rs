@@ -28,6 +28,10 @@ pub mod chrome;
 pub mod chrome_fixture;
 pub mod chrome_fx;
 pub mod chrome_gallery;
+#[cfg(all(feature = "hdr-fixture", target_os = "macos"))]
+pub mod hdr_fixture;
+#[cfg(target_os = "macos")]
+pub mod hdr_layer;
 pub mod codes;
 pub mod commands;
 pub mod confirm;

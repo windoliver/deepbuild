@@ -1,0 +1,15 @@
+
+> @deepbuild/contracts@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/hub@0.0.0 build
+> tsc -p tsconfig.json && node native/build.mjs
+
+
+> @deepbuild/cli@0.0.0 build
+> tsc -p tsconfig.json
+
+   Compiling deep-contracts v0.0.0 (<base>/crates/deep-contracts)
+   Compiling deep-hook v0.0.0 (<base>/crates/deep-hook)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2m 06s

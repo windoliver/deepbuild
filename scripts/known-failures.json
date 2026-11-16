@@ -1,12 +1,8 @@
 {
   "failures": {
-    "cargo -p deep-replica --test acceptance_326_panels_planted › base_loader_reaches_the_network": "fails on main 772f5482: the base loader reaches the network (#1620, added 2026-10-31)",
-    "cargo -p deep-replica --test acceptance_327_card": "fails on main 772f5482: #327's blind card suite fails (#1620, added 2026-10-31)",
-    "packages/hub/test/memory-overrule.test.ts › deep memory overrule › stays overruled across a re-read of the transcript, and a new prompt rejects it again": "failed on main 772f5482 at load 50 in one run, not re-run; may be load (#1621, added 2026-10-31)",
-    "tests/acceptance/56/decision.test.mjs › #56 scope import(\"effect/Effect\") is timed on Node 22, and the command that times it measures this Node": "fails on main 772f5482: the Effect bench is timed on Node 22, not this Node (#1622, added 2026-10-31)",
-    "tests/acceptance/56/decision.test.mjs › #56.31f12028 [effect] the bench holds 50 sessions' hooks and prints the variant's hold latency, memory and leaked handles": "fails on main 772f5482: the Effect bench is timed on Node 22, not this Node (#1622, added 2026-10-31)",
-    "tests/acceptance/882/lint.test.mjs › #882.f3bc7068 crates/deep-app/src holds no color literal: no rgb(0x, rgba(0x, hsla(, hex inside rgb(...) or \"#rrggbb\" line": "fails on main 2721ca7b: the judge counts crates/deep-app/src/cells.rs:386-387, two lines the guard passes by their dated exceptions; #1458 fixed #1623's three (#1623, added 2026-10-31)",
-    "tests/preflight.test.mjs › the unit lane runs each reference-Mac budget file alone, after the parallel block": "fails on main 772f5482: it reads tests/acceptance/plans.ts as a folder (ENOTDIR) (#1624, added 2026-10-31)"
+    "tests/acceptance/1463/list.test.ts › #1463.f9ab70a8 › #1463.f9ab70a8: on one fixture, the app's list and deep status --json hold the same rows, IDs, words and order at one log_pos": "fails on main d8c46f0d5: the window draws see's rows, by their ids, in their order: expected [ …(5) ] to deeply equal []. The window draws Needs you's asks first, each with its kind in the state-word slot (#1461), against the judge's rows' order and word; a blind redraft (#2668, added 2026-11-15)",
+    "tests/acceptance/1463/words.test.ts › #1463.cc5d1e3f › #1463.cc5d1e3f: 992/agree still holds": "fails on main d8c46f0d5: tests/acceptance/992's agree.test.ts must pass as it is: exit 1. It fails as 992/agree does, below (#2668, added 2026-11-15)",
+    "tests/acceptance/992/agree.test.ts › AC3 #992.45c506d1 › AC3 #992.45c506d1: for each of 12 recorded sessions covering every state, deep status and the app's row name the same state; a planted app that maps waiting to Working fails, naming the session": "fails on main d8c46f0d5: deep status and the app name these sessions differently. It finds deep status's rows by short ID and knows six words, where #2018 gave each session one name and the word says done; a blind redraft (#2668, added 2026-11-15)"
   },
   "lint": {
     "canvas-lint: crates/deep-canvas-cells/src/recording.rs the env! macro, the building machine's environment compiled into the check": 1,
@@ -444,6 +440,18 @@
       "note": "",
       "reason": "retired by #2551, which keeps the two rules #1296 added, so the design names twelve: 313-redraft-2551/fakes.test.ts is AC12's test",
       "approval": "#2551, the owner's decision of 2026-11-14 (the owner's touch-key tag on this commit)"
+    },
+    {
+      "id": "tests/acceptance/313/generator.test.ts › AC15 a generator draws valid instances and four mutations for every schema, at 1,000 cases from the recorded seed › AC15 each mutation names its kind, its code (required, enum, range, unlisted_field) and a JSON Pointer; every kind the schema affords is drawn",
+      "note": "",
+      "reason": "retired by #2560: vitest's default 5 s judges it, and its walk over every schema's 1,000 draws takes longer (13.3 s on the Linux dev machine): 313-redraft-2560/generator.test.ts is its test, with the neighbouring AC15 test's 600 s",
+      "approval": "#2560, its first choice (the owner's touch-key tag on this commit)"
+    },
+    {
+      "id": "tests/acceptance/313/packaging.test.ts › the local preflight runs the conformance lint: enum closures, code mappings, rule fakes and planted codes › the conformance lint passes on the checkout, printing one PASS line per check and no FAIL, INVALID or BLOCKED",
+      "note": "",
+      "reason": "retired by #2560: vitest's default 5 s judges it, and one run of the whole conformance lint takes longer (6.6 s on the Linux dev machine): 313-redraft-2560/packaging.test.ts is its test, with suite 313's 600 s",
+      "approval": "#2560, its first choice (the owner's touch-key tag on this commit)"
     }
   ]
 }

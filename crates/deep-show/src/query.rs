@@ -123,15 +123,23 @@ pub(crate) fn item_value(
     id: &str,
     field: &str,
 ) -> Option<(Value, Vec<Key>)> {
+    // #142: the whole `at` reads the evaluated transform too, as each of its fields does.
     let (array, rest) = match field.strip_prefix("at/") {
         Some(rest) => ("core.transform", rest),
+        None if field == "at" => ("core.transform", ""),
         None => ("core.fields", field),
     };
     let (val, keys) = s.read(sched, array, Some(id))?;
     let value = match array {
         "core.transform" => {
             let t = val.as_typed::<Transform>()?;
-            let at = json!({"pos": t.pos, "rot": t.rot, "scale": t.scale});
+            let mut at = json!({"pos": t.pos, "rot": t.rot, "scale": t.scale});
+            if rest.is_empty() {
+                if let Some(p) = t.pivot {
+                    at["pivot"] = json!(p);
+                }
+                return Some((at, keys));
+            }
             at_field(&at, rest)?.clone()
         }
         _ => at_field(&val.as_typed::<Fields>()?.to_json(), rest)?.clone(),
@@ -273,8 +281,11 @@ impl Hub<'_> {
     /// doesn't know left out, and its tables, vectors and logic programs inlined; with its
     /// expansions.
     pub(crate) fn drawn_of(&self, document: &Value) -> (Value, Vec<Expansion>) {
-        let (mut drawn, expansions) = self.drawing_form(document);
-        self.keep_instances(document, &expansions, &mut drawn);
+        // #1960: as its load opened it, each migrated item and each path a rename carried.
+        let sealed = &self.startup.sealed;
+        let opened = deep_canvas::document::pack_kinds::loaded(document, sealed, &self.packs);
+        let (mut drawn, expansions) = self.drawing_form(&opened);
+        self.keep_instances(&opened, &expansions, &mut drawn);
         let _ = self.inline_tables(&mut drawn);
         let _ = self.inline_vectors(&mut drawn);
         self.inline_programs(&mut drawn);

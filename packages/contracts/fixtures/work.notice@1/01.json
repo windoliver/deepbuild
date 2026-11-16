@@ -1,0 +1,31 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T7E",
+  "kind": "work.notice",
+  "subject": "ask:01K74FKZVK8Q2X5R7M3N9P4T7B",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760618251123,
+  "data": {
+    "ask": "ask:01K74FKZVK8Q2X5R7M3N9P4T7B",
+    "from": 1760013451123,
+    "to": 1760618251123,
+    "landed": [
+      100,
+      101
+    ],
+    "left": [
+      {
+        "issue": 103,
+        "word": "queued"
+      }
+    ],
+    "spent": {
+      "attempts": 4,
+      "sessions": 4,
+      "usd": 3.2,
+      "tokens": 1840000
+    }
+  }
+}

@@ -1,11 +1,12 @@
 import type { HubEvents, HubRuntime, HookSchedule } from './hub-capabilities.js';
 import { StopReply } from './stop-reply.js';
+import { recordRefusal } from './claim-refusal.js';
 import type { AnswerDeliveryPort, TranscriptsPort, SessionFlagsPort, SessionStatePort, McpOperationsPort, HubControlPort } from './hub-ports.js';
 import { backgrounded } from './hub-shared.js';
 import type { Questions } from './questions.js';
 import { STOP_HOLD_MS } from './claude-settings.js';
 import { execFile } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { liveFetch, readIssue, recordedFetch } from './github-source.js';
 import type { Outcome } from './landing.js';
 import { homedir } from 'node:os';
@@ -13,7 +14,7 @@ import { basename, dirname, join } from 'node:path';
 import { duration, type Asks, type Delivery } from '@deepbuild/asks';
 import { type Ledger } from '@deepbuild/budget';
 import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
-import { type EvidenceStore } from '@deepbuild/evidence';
+import { scrubText, type EvidenceStore } from '@deepbuild/evidence';
 import { type ExtensionHost, type ProjectTrust } from '@deepbuild/extension-host';
 import { type RecordStore } from '@deepbuild/record';
 import { endsEmpty, freshCount, gitEnv, judgeStop, leftOpen, priceDefinition, toldToRun, unitless, validityGate, type PaidKind, type SessionLog, type StallRule } from '@deepbuild/gate';
@@ -32,7 +33,7 @@ import { Holds } from './holds.js';
 import { countMcp } from './mcp-servers.js';
 import { reachOf, type Reach, type ReachTool } from './could-do.js';
 import { coveredBy } from './hookmap.js';
-import { mergedWithMain, releaseSpec, switchesOff } from './release.js';
+import { cantRun, mergedWithMain, releaseSpec, specEntries, switchesOff, unreadSpec } from './release.js';
 import { repoOf } from './shared-runs.js';
 import { GateRecord, type GateAsk } from './gate-record.js';
 import { headOf } from './session-facts.js';
@@ -54,7 +55,7 @@ import { HubCanvas } from './hub-canvas.js';
 import { docCheckIn, docCommand, docSpec } from './doc-checks.js';
 import { refuse, Refused, refusal, ulid, type CoreOptions, type HookMeta } from './wire.js';
 import type { Live, Counter, Routes } from './session-types.js';
-import { DAY, sql, letters, ghToken, COMPLETION_PROMPTS, unseenTools, type Obj, isObj, misjudged, watching, waitingOn, READS, OWN_TURN } from "./hub-shared.js";
+import { DAY, sql, letters, ghToken, COMPLETION_PROMPTS, unseenTools, type Obj, isObj, misjudged, watching, waitingOn, READS, OWN_TURN, inCheckout, writeApproved } from "./hub-shared.js";
 
 /** How long a landing's judgement waits for its verdict (#1331). */
 const VERDICT_WAIT_MS = 30 * 60_000;
@@ -110,7 +111,7 @@ export class StopJudging {
     const readclaimRequirements = () => this.claimRequirements;
     const readverdictWrites = () => this.verdictWrites;
     const readlanes = () => this.lanes;
-    this.reply = new StopReply({ settings: options.settings, services: options.services, events: options.events, kernel: options.kernel, schedule: options.schedule, delivery: options.delivery, state: options.state, judging: () => ({ judging: (meta) => this.judging(meta), laneOf: (claim, until) => this.laneOf(claim, until), requirementsOf: (session) => this.requirementsOf(session), completion: (meta, claim, sendBack) => this.completion(meta, claim, sendBack), prDelivery: (judged) => this.prDelivery(judged), noWorkOnce: (session, claim) => this.noWorkOnce(session, claim), stallGate: (meta, claim, sendBack) => this.stallGate(meta, claim, sendBack), sizedAt: (claim, meta, deadline) => this.sizedAt(claim, meta, deadline), idleOrResumed: (meta, judged, sentBack) => this.idleOrResumed(meta, judged, sentBack), questionHolds: (session) => this.questionHolds(session), slowStop: (meta, r, claim, held) => this.slowStop(meta, r, claim, held), provisionalCarried: (session) => this.provisionalCarried(session), smallestOf: (claim) => this.smallestOf(claim), stopHold: (meta, r, until) => this.stopHold(meta, r, until), stillNeeded: (meta, claim) => this.stillNeeded(meta, claim), judgedLine: (live) => this.judgedLine(live), heldLine: (session, line) => this.heldLine(session, line), get claimRequirements() { return readclaimRequirements(); }, get verdictWrites() { return readverdictWrites(); }, get lanes() { return readlanes(); } }) });
+    this.reply = new StopReply({ settings: options.settings, services: options.services, events: options.events, kernel: options.kernel, schedule: options.schedule, delivery: options.delivery, state: options.state, judging: () => ({ judging: (meta) => this.judging(meta), laneOf: (claim, until) => this.laneOf(claim, until), requirementsOf: (session) => this.requirementsOf(session), completion: (meta, claim, sendBack) => this.completion(meta, claim, sendBack), prDelivery: (judged) => this.prDelivery(judged), noWorkOnce: (session, claim) => this.noWorkOnce(session, claim), stallGate: (meta, claim, sendBack) => this.stallGate(meta, claim, sendBack), sizedAt: (claim, meta, deadline) => this.sizedAt(claim, meta, deadline), idleOrResumed: (meta, judged, sentBack) => this.idleOrResumed(meta, judged, sentBack), questionHolds: (session) => this.questionHolds(session), slowStop: (meta, r, claim, held, turnEnds) => this.slowStop(meta, r, claim, held, turnEnds), provisionalCarried: (session) => this.provisionalCarried(session), smallestOf: (claim) => this.smallestOf(claim), stopHold: (meta, r, until) => this.stopHold(meta, r, until), stillNeeded: (meta, claim) => this.stillNeeded(meta, claim), judgedLine: (live) => this.judgedLine(live), heldLine: (session, line) => this.heldLine(session, line), get claimRequirements() { return readclaimRequirements(); }, get verdictWrites() { return readverdictWrites(); }, get lanes() { return readlanes(); } }) });
   }
 
   /** The commands each claim's final message told you to run, which its gate ran as the agent's own checks (#323). */
@@ -713,7 +714,7 @@ export class StopJudging {
    * entry's timeout, so a FAIL reaches the agent in the same turn; otherwise replied at once, with the row saying why,
    * and the verdict comes with the next message. What it is sent back with, or nothing.
    */
-  async slowStop(meta: HookMeta, r: Routes, claim: string, held: number): Promise<string | undefined> {
+  async slowStop(meta: HookMeta, r: Routes, claim: string, held: number, turnEnds: () => Promise<void>): Promise<string | undefined> {
     const timeoutS = stopTimeoutS(this.options.services.root.dir) ?? 600;
     const slowClaims = (r.slowClaims ??= []);
     const verdictLater = async (why: string) => {
@@ -725,25 +726,27 @@ export class StopJudging {
     // Something already sends the agent on: the turn isn't ending, so no slow check starts.
     const waiting = () => this.options.schedule.queue(() => this.options.delivery().answers.waitingFor(meta.session));
     if (r.sendBacks.length || (await waiting()).length) return undefined;
-    const deadlines = this.options.services.gate.slowDeadlines(claim);
+    await turnEnds();
+    // A check held in its place for the session's loop or its background work (#965, #907) starts later: no stop is held for it.
+    const waits = this.options.services.gate.slowHeld(claim);
+    const deadlines = this.options.services.gate.slowDeadlines(claim).filter((c) => !waits.includes(c.check));
     const late = deadlines.find((c) => c.deadline_ms === null || !holdsFor(c.deadline_ms, timeoutS));
-    await this.options.services.gate.turnEnded(claim);
     if (late) {
       const deadline = late.deadline_ms === null ? 'has no deadline' : `has a deadline of ${words(late.deadline_ms)}`;
       await verdictLater(`${late.check} ${deadline}, which must end at least 5 s before Codex's Stop hook timeout, ${timeoutS} s`);
       return undefined;
     }
     // Measured from now, with the check started: `held` already ends 5 s before the timeout, counted from the stop.
-    const unstarted = this.options.services.gate.slowUnstarted(claim);
+    const unstarted = this.options.services.gate.slowUnstarted(claim).filter((check) => !waits.includes(check));
     if (unstarted.length) { await verdictLater(`${unstarted[0]} is waiting for a CPU slot, so its deadline can't be kept before Codex's Stop hook timeout, ${timeoutS} s`); return undefined; }
     const tight = deadlines.find((c) => Date.now() + c.deadline_ms! > held);
     if (tight) { await verdictLater(`${tight.check} has a deadline of ${words(tight.deadline_ms!)}, which no longer ends at least 5 s before Codex's Stop hook timeout, ${timeoutS} s`); return undefined; }
-    while (Date.now() < held && this.options.services.gate.slowStanding(claim).pending) {
+    while (Date.now() < held && this.options.services.gate.slowStanding(claim, waits).pending) {
       await this.options.services.gate.slowEnded(claim, Math.min(held, Date.now() + 500));
       // An answer goes back at once; the check's verdict then comes with your next message.
       if (r.sendBacks.length || (await waiting()).length) { if (!slowClaims.includes(claim)) slowClaims.push(claim); return undefined; }
     }
-    const standing = this.options.services.gate.slowStanding(claim);
+    const standing = this.options.services.gate.slowStanding(claim, waits);
     if (standing.pending) { await verdictLater(`its checks were still going when the hold ended, 5 s before Codex's Stop hook timeout, ${timeoutS} s`); return undefined; }
     return standing.failed.length ? `DeepBuild sent this claim back: ${standing.failed.join(', ')}.` : undefined;
   }
@@ -1129,14 +1132,19 @@ export class StopJudging {
       this.verdictWrites.set(r.claim, written);
       written.catch(() => undefined).finally(() => { if (this.verdictWrites.get(r.claim) === written) this.verdictWrites.delete(r.claim); });
       return { ...ran, findings };
-    })();
-    this.lanes.set(r.claim, lane);
-    // A claim whose checks could not start is INCONCLUSIVE, naming why, as one past its budget is: never left with no verdict.
-    lane.catch((error: unknown) => {
-      const why = error instanceof Error ? error.message : String(error);
-      process.stderr.write(`deep hub: ${r.claim}'s checks did not start: ${why}\n`);
-      void this.invalid(r.claim, r.commit, `its checks did not start: ${why}`, 'INCONCLUSIVE', 'checks_not_started').catch((failed: unknown) => process.stderr.write(`deep hub: ${r.claim}'s verdict wasn't recorded: ${failed instanceof Error ? failed.message : String(failed)}\n`));
+    })().catch(async (error: unknown) => {
+      // The lane awaits setup's BLOCKED, at a held stop or watch end (#2074). Scrub before bounding the cause,
+      // leaving room for owner, remedy and the reading's claim prefix.
+      const why = scrubText(error instanceof Error ? error.message : String(error), { held: this.options.settings.held }).slice(0, 7000);
+      const reason = `its checks did not start: ${why}; owner: you`;
+      const session = { session: r.session, agent: this.options.state().live.get(r.session)?.agent ?? 'claude-code', task: r.task, cwd: r.cwd };
+      await this.options.services.openItems.stillNeeded(session, [`BLOCKED: ${reason}. Resolve the cause and run the checks again.`]);
+      await recordRefusal(this.options.events, this.options.services.now(), r.claim, r.commit, reason, 'BLOCKED', 'checks_not_started');
+      await this.options.events.appendReading(session.session, session.agent, `${r.claim} BLOCKED: ${reason}. Resolve the cause and run the checks again.`);
+      return { fast: [], slow: [], snapshot: r.commit, readyAt: this.options.services.now(), budgetCost: [], changed: false, findings: [] };
     });
+    this.lanes.set(r.claim, lane);
+    lane.catch((error: unknown) => process.stderr.write(`deep hub: ${r.claim}'s setup failure wasn't recorded: ${error instanceof Error ? error.message : String(error)}\n`));
   }
 
   /**
@@ -1145,15 +1153,15 @@ export class StopJudging {
    */
   private specChecks(cwd: string): ClaimCheck[] {
     const spec = this.options.doneSpec(cwd);
-    if (spec === undefined) return [];
+    if (spec === undefined) return unreadSpec(cwd);
     const checks = this.options.mcp().checksOf(cwd);
     const docs = this.options.services.canvasSide.docChecksOf(cwd);
-    const done = isObj(spec) && isObj(spec.claims) && isObj(spec.claims.done) && Array.isArray(spec.claims.done.checks) ? spec.claims.done.checks.map(String) : [...checks.keys(), ...docs.keys()];
+    const done = isObj(spec) && isObj(spec.claims) && isObj(spec.claims.done) && Array.isArray(spec.claims.done.checks) ? spec.claims.done.checks.map(String) : [...new Set([...checks.keys(), ...docs.keys(), ...specEntries(spec)])];
     return done.flatMap((name): ClaimCheck[] => {
       const check = checks.get(name);
       const doc = docs.get(name);
       if (!check && doc) return [{ check: name, approved: null, command: docCommand(doc, undefined), covers: [], depth: 'unit', on_base: 'passes', asserts: [], source: 'spec', document: doc.doc }];
-      if (!check) return [];
+      if (!check) return [cantRun(spec, name)];
       const deadline = check.deadline === undefined ? undefined : duration(check.deadline as JsonValue);
       // A journey runs on the repo's stack, as its environment block starts it (#33, #580).
       return [{ check: name, approved: null, command: check.run, covers: [], depth: check.type === 'journey' ? 'journey' as const : 'unit' as const, on_base: 'passes' as const, asserts: [], source: 'spec' as const, ...(deadline ? { deadline_ms: deadline } : {}) }];
@@ -1173,7 +1181,7 @@ export class StopJudging {
       const projects = isObj(user.projects) ? user.projects : {};
       for (const key of [cwd, real]) { const p = projects[key]; if (isObj(p) && p.hasTrustDialogAccepted === true) return true; }
     } catch { /* no Claude Code settings */ }
-    return codexTrusted([cwd, real]);
+    return codexTrusted(this.options.services.root.dir, [cwd, real]);
   }
 
   /**
@@ -1259,7 +1267,9 @@ export class StopJudging {
     }
     // What a pending claim waited for closes once its run ended or your answer came (#82), before open items are read.
     const [owner] = (await this.options.services.record.raw(`SELECT subject_ref, session_id FROM claims WHERE id = ?`, [claim.slice(6)])) as { subject_ref: string | null; session_id: string | null }[];
-    if (owner?.subject_ref) await this.options.services.openItems.settled({ session: owner.session_id ?? '', agent: this.options.state().live.get(owner.session_id ?? '')?.agent ?? 'claude-code', task: owner.subject_ref }, this.needsOf(claim)).catch(() => undefined);
+    // An older run ending is not recovery evidence for a newer claim's setup failure (#2074).
+    const [latest] = owner?.subject_ref ? (await this.options.services.record.raw('SELECT id FROM claims WHERE subject_ref = ? ORDER BY created DESC, id DESC LIMIT 1', [owner.subject_ref])) as { id: string }[] : [];
+    if (owner?.subject_ref && latest?.id === claim.slice(6)) await this.options.services.openItems.settled({ session: owner.session_id ?? '', agent: this.options.state().live.get(owner.session_id ?? '')?.agent ?? 'claude-code', task: owner.subject_ref }, this.needsOf(claim)).catch(() => undefined);
     // Nor while what its task left open stays open (#323): an item closes on evidence, your answer or a rule, never the agent's word.
     if (v.outcome === 'PASS') {
       const open = (await this.options.services.record.raw(`SELECT text FROM open_items WHERE closed IS NULL AND task_ref = (SELECT subject_ref FROM claims WHERE id = ?)`, [claim.slice(6)])) as { text: string }[];
@@ -1303,23 +1313,17 @@ export class StopJudging {
    */
   async runApproved(r: { claim: string; check: string; approved: string | null; command: string; commit: string; cwd: string; lane?: 'fast' | 'slow'; expected_ms?: number | null; deadline_ms?: number | null; env?: Record<string, string>; hosts?: string[]; standIns?: string[]; references?: { path: string; sha256: string }[]; overlay?: Record<string, string>; key?: RunKey; stack?: StackWant }): Promise<string> {
     // A spec check is a command alone: nothing of it is written. A drafted check and each expected output it
-    // references are written from their approved bytes (#322).
+    // references are written from their approved bytes (#322), never through a link that leaves the checkout.
     if (r.approved !== null && this.options.settings.plant !== 'runs-disk-bytes') {
       for (const { path, sha256 } of [{ path: r.check, sha256: r.approved }, ...(r.references ?? [])]) {
-        const file = join(r.cwd, path);
-        mkdirSync(dirname(file), { recursive: true });
-        writeFileSync(`${file}.tmp`, await this.options.services.store.read(sha256), { mode: path === r.check ? 0o500 : 0o400 });
-        renameSync(`${file}.tmp`, file);
+        writeApproved(r.cwd, path, await this.options.services.store.read(sha256), path === r.check ? 0o500 : 0o400);
       }
     }
     // A held-out variant's files (#1018), from the store by their digests, over the snapshot's in its own checkout.
     // Its folder is resolved through any link the snapshot holds and must still lie in the checkout, and a link in the
     // file's place is removed, never written through: the agent never reaches the variant's bytes.
     for (const [path, sha] of Object.entries(r.overlay ?? {})) {
-      const file = join(r.cwd, path);
-      let folder = dirname(file);
-      while (!existsSync(folder)) folder = dirname(folder);
-      if (!`${realpathSync(folder)}/`.startsWith(`${realpathSync(r.cwd)}/`) || !`${file}/`.startsWith(`${r.cwd}/`)) throw Error(`a held-out variant's file ${path} lies outside its checkout`);
+      const file = inCheckout(r.cwd, path, "a held-out variant's file");
       mkdirSync(dirname(file), { recursive: true });
       rmSync(file, { force: true });
       writeFileSync(file, await this.options.services.store.read(sha), { flag: 'wx' });
@@ -1434,17 +1438,9 @@ export class StopJudging {
     }
   }
 
-  /** The core's INVALID verdict on a claim the floor refused (#29): before any check counts, naming why, by its code when it has one (#2029). */
+  /** The validity floor's INVALID and snapshot budget's INCONCLUSIVE, recorded before checks count. */
   async invalid(claim: string, commit: string, reason: string, outcome: 'INVALID' | 'INCONCLUSIVE' = 'INVALID', code?: string): Promise<void> {
-    const ts = this.options.services.now();
-    const id = ulid(ts);
-    await this.options.events.append(this.options.events.connection('core'), {
-      v: code ? 2 : 1, id, kind: 'verdict.made', ts, subject: claim,
-      data: {
-        outcome, verdict: `verdict:${id}`, claim, reasons: [reason.slice(0, 8192)], ...(code ? { why: [{ reason: code, text: reason.slice(0, 8192) }] } : {}), requirements: [], smallest: null, points_to: null, commit,
-        key: { commit, doc_revisions: [], check_digests: [], state_digests: [], environment: `${process.platform}-${process.arch}`, tools: [] },
-      },
-    });
+    await recordRefusal(this.options.events, this.options.services.now(), claim, commit, reason, outcome, code);
   }
 
   /** The denied calls that ran anyway in a claim's session (#1033): as they arrived, and as the record holds them. */

@@ -120,7 +120,7 @@ impl Frames {
             path: String::new(),
         })?;
         let read = assets.as_deref().map(|a| a as Assets<'_>);
-        let scene = evaluate_compiled(map, &program, 0, look, labels, read, Default::default())?;
+        let scene = evaluate_compiled(doc, &program, 0, look, labels, read, Default::default())?;
         let state = program.state();
         // #462: a look's motifs move items the fast path doesn't rewrite.
         let moving = !look.motifs.is_empty() && map.get("motif_slots").is_some();
@@ -274,28 +274,16 @@ impl Frames {
         offsets: &Offsets,
         labels: &mut Labels,
     ) -> Result<&Scene, Refused> {
-        let mut doc = self.doc.clone();
-        doc["size"] = Value::from(vec![size[0], size[1]]);
-        let read = self.assets.as_deref().map(|a| a as Assets<'_>);
-        let mut scene = evaluate_any(&doc, t, &self.look, labels, read, Default::default())?;
+        // The kept document is read by this path alone, so the frame's size is set in it.
+        self.doc["size"] = Value::from(vec![size[0], size[1]]);
+        let (doc, read) = (&self.doc, self.assets.as_deref().map(|a| a as Assets<'_>));
+        let mut scene = evaluate_any(doc, t, &self.look, labels, read, Default::default())?;
         if *offsets != Offsets::default() {
-            scene.camera = self.turned_whole(&doc, &scene, t, size, offsets)?;
+            scene.camera = turned_camera(doc, &self.program, &scene, t, size, offsets)?;
         }
         self.changed = scene != self.scene;
         self.scene = scene;
         Ok(&self.scene)
-    }
-
-    /// The camera at `t` turned by `offsets`, around `scene`'s solids.
-    fn turned_whole(
-        &mut self,
-        doc: &Value,
-        scene: &Scene,
-        t: i64,
-        size: [u32; 2],
-        offsets: &Offsets,
-    ) -> Result<crate::scene::Camera, Refused> {
-        turned_camera(doc, &self.program, scene, t, size, offsets)
     }
 }
 
@@ -324,10 +312,7 @@ pub fn turned_camera(
         .cloned()
         .unwrap_or_default();
     let path = format!("items/{id}/params");
-    let spec = Spec::read(&with_defaults("camera@1", &params), &path).map_err(|r| Refused {
-        code: r.code,
-        path: r.path,
-    })?;
+    let spec = crate::scene::lensed(&params, [f64::from(size[0]), f64::from(size[1])], &path)?;
     let mut bounds = Vec::new();
     for l in &scene.layers {
         for s in &l.solids {
@@ -379,6 +364,10 @@ fn fast_path(map: &Map<String, Value>, program: &Program, scene: &Scene) -> Opti
     // A light's place and power (#421) and another module's items (#380) move with fields
     // this path doesn't follow, so a scene holding one is evaluated whole.
     if !scene.overlays.is_empty()
+        // #468: a depth of field's focus and a lens's field of view follow the whole scene.
+        || scene.dof.is_some()
+        || scene.optics.focal_length.is_some()
+        || scene.exposure.is_some()
         || !scene.lights.is_empty()
         || !scene.others.is_empty()
         // A builder's solid isn't a unit mesh its size scales (#420).
