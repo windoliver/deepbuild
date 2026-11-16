@@ -27,10 +27,10 @@ use crate::states::{closes, handle, Table};
 /// Once a session holds this many open asks, its further asks fold into one exception.
 pub const FOLD_AFTER: usize = 5;
 
-/// Whether the row is an exception that asks fold into: the core's "keeps asking" for its session, or, for a row from
-/// the hub's inbox read, any exception.
+/// Whether the row is the exception asks fold into, its session's "keeps asking": the hub's inbox read says so of
+/// each row, and this app of each ask created since.
 fn holds(row: &Value) -> bool {
-    row["holder"] == true || (row["holder"].is_null() && row["kind"] == "exception")
+    row["holder"] == true
 }
 
 /// The events one refetch asks for at a time.
@@ -1149,6 +1149,29 @@ mod tests {
         view.apply(fold("x1", "s1"));
         view.apply(json!({"kind": "ask.created", "id": "a1", "session": "s1", "writer": "mcp:agent", "data": {"kind": "taste"}}));
         assert_eq!(handles(view.panel_asks()), ["ask:a0", "ask:x1", "ask:a1"]);
+    }
+
+    #[test]
+    fn only_the_keeps_asking_exception_the_hub_reads_holds_folded_asks() {
+        // #22: rows read from the hub name the exception holding a session's folded asks. Another exception of that
+        // session, waiting for its batch, holds nothing: it neither keeps the folded ask from a panel nor folds the
+        // next ask, and its close releases nothing.
+        let mut view = View::default();
+        let read = |id: &str, kind: &str, session: &str, status: &str, holder: bool| json!({"ask": id, "kind": kind, "session": session, "status": status, "outcome": "unanswered", "holder": holder});
+        view.inbox
+            .push(read("ask:x1", "exception", "s1", "shown", true));
+        view.inbox
+            .push(read("ask:f1", "taste", "s1", "folded", false));
+        view.inbox
+            .push(read("ask:g1", "exception", "s1", "queued", false));
+        view.inbox
+            .push(read("ask:g2", "exception", "s2", "queued", false));
+        view.apply(json!({"kind": "row.set", "writer": "core", "data": {"id": "ask:x1", "listed": true, "order": "1"}}));
+        assert_eq!(handles(view.panel_asks()), ["ask:x1", "ask:f1"]);
+        view.apply(json!({"kind": "ask.created", "id": "a2", "session": "s2", "writer": "mcp:agent", "data": {"kind": "taste"}}));
+        assert_eq!(row(&view, "ask:a2").0, "queued");
+        view.apply(json!({"kind": "ask.answered", "writer": "core", "subject": "ask:g1", "data": {"answer": "checked"}}));
+        assert_eq!(row(&view, "ask:f1").0, "folded");
     }
 
     #[test]

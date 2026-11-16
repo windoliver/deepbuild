@@ -1,0 +1,63 @@
+33:    row["kind"] == "exception"
+warning: unused variable: `diagnostic_key`
+    --> vendor/quickjs-jit-runtime/src/compiler/optimized.rs:8795:5
+     |
+8795 |     diagnostic_key: Option<crate::runtime::FunctionKey>,
+     |     ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_diagnostic_key`
+     |
+     = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `apply_stress_gc_after_validation` is never used
+    --> vendor/quickjs-jit-runtime/src/lib.rs:1387:4
+     |
+1387 | fn apply_stress_gc_after_validation(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `machine_disassembly` is never read
+    --> vendor/quickjs-jit-runtime/src/compiler/baseline.rs:1985:5
+     |
+1974 | pub struct RelocatableCode {
+     |            --------------- field in this struct
+...
+1985 |     machine_disassembly: Option<String>,
+     |     ^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `RelocatableCode` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+
+warning: `quickjs-jit-runtime` (lib) generated 3 warnings (run `cargo fix --lib -p quickjs-jit-runtime` to apply 1 suggestion)
+   Compiling deep-app v0.0.0 (~/deepbuild-fix22-panel/crates/deep-app)
+warning: unused import: `gpui_kit`
+  --> crates/deep-app/src/gpu_view.rs:12:5
+   |
+12 | use gpui_kit::*;
+   |     ^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: `deep-app` (lib) generated 1 warning
+warning: `deep-app` (lib test) generated 1 warning (1 duplicate)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4m 23s
+     Running unittests src/lib.rs (~/deepbuild/.claude/worktrees/issue-22-asks-4dae39/target/debug-22/debug/deps/deep_app-42ea6afab76bd921)
+
+running 1 test
+test record::tests::only_the_keeps_asking_exception_the_hub_reads_holds_folded_asks ... FAILED
+
+failures:
+
+---- record::tests::only_the_keeps_asking_exception_the_hub_reads_holds_folded_asks stdout ----
+
+thread 'record::tests::only_the_keeps_asking_exception_the_hub_reads_holds_folded_asks' (2297995) panicked at crates/deep-app/src/record.rs:1168:9:
+assertion `left == right` failed
+  left: ["ask:x1"]
+ right: ["ask:x1", "ask:f1"]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    record::tests::only_the_keeps_asking_exception_the_hub_reads_holds_folded_asks
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 115 filtered out; finished in 0.03s
+
+error: test failed, to rerun pass `-p deep-app --lib`

@@ -1,0 +1,113 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.5 [39m[90m~/deepbuild-fix22-panel/packages/asks[39m
+
+ [32m✓[39m test/block.test.ts [2m([22m[2m4 tests[22m[2m)[22m[33m 9855[2mms[22m[39m
+   [32m✓[39m a block task you answer [2m(2)[22m
+     [33m[2m✓[22m[39m "I did it" closes it and resumes every session it covers, once[33m 2434[2mms[22m[39m
+     [33m[2m✓[22m[39m "Leave it blocked" resumes nothing[33m 1260[2mms[22m[39m
+   [32m✓[39m a task's outside check [2m(2)[22m
+     [33m[2m✓[22m[39m a try from before the task never closes it[33m 3880[2mms[22m[39m
+     [33m[2m✓[22m[39m a thread task counts only your post since it was raised, and a good read clears a failed one[33m 2280[2mms[22m[39m
+ [32m✓[39m test/continues.test.ts [2m([22m[2m5 tests[22m[2m)[22m[33m 10840[2mms[22m[39m
+   [32m✓[39m the one automatic continue, counted per session since its last normal turn end [2m(2)[22m
+     [33m[2m✓[22m[39m continues the first drop, not a second right after it, and the next drop after a turn that ended normally[33m 1915[2mms[22m[39m
+   [32m✓[39m a resume on a shared task [2m(3)[22m
+     [33m[2m✓[22m[39m skips a session you stopped after its stop, and records why: its SessionEnd[33m 2393[2mms[22m[39m
+     [33m[2m✓[22m[39m skips a session you stopped after its stop, and records why: the core's end at its process's exit[33m 1525[2mms[22m[39m
+     [33m[2m✓[22m[39m still records why it skips a session you stopped after 64 newer sessions ended, since the open task covers its stop (#824)[33m 4737[2mms[22m[39m
+ [32m✓[39m test/sign-in.test.ts [2m([22m[2m6 tests[22m[2m)[22m[33m 16836[2mms[22m[39m
+   [33m[2m✓[22m[39m one sign-in task per agent across a Send and two folders, closed only by a signed-in probe reading after it[33m 5898[2mms[22m[39m
+   [33m[2m✓[22m[39m under setup's 8-hour batches a sign-in task shows at once, from a Send or a lapsed sign-in, while another block waits for its batch (#22)[33m 3959[2mms[22m[39m
+   [33m[2m✓[22m[39m with no batches, a lapsed sign-in after the message you typed shows at once: the stopped agent takes no step that reads it (#22)[33m 419[2mms[22m[39m
+   [33m[2m✓[22m[39m under setup's 8-hour batches a lapsed sign-in in a session that keeps asking shows at once, not folded into its exception (#22)[33m 1364[2mms[22m[39m
+   [33m[2m✓[22m[39m under setup's 8-hour batches a lapsed sign-in in a session whose agent the record never named shows at once, by its sign-in signature (#22)[33m 5034[2mms[22m[39m
+ [32m✓[39m test/asks.test.ts [2m([22m[2m29 tests[22m[2m)[22m[33m 49685[2mms[22m[39m
+   [32m✓[39m a provisional choice whose decided files a change touches [2m(2)[22m
+     [33m[2m✓[22m[39m is offered again, pinned to the new commit[33m 5318[2mms[22m[39m
+     [33m[2m✓[22m[39m is not offered again when the change leaves its files alone[33m 4529[2mms[22m[39m
+   [32m✓[39m an ask whose attempt was replaced [2m(2)[22m
+     [33m[2m✓[22m[39m closes as moot, naming the attempt that replaced it[33m 646[2mms[22m[39m
+     [33m[2m✓[22m[39m stays open when another task gets a new attempt[33m 537[2mms[22m[39m
+   [32m✓[39m a repeated question [2m(2)[22m
+     [33m[2m✓[22m[39m joins the open ask with its kind, normalized question and pin in its thread: one record[33m 485[2mms[22m[39m
+   [32m✓[39m no agent closes an ask [2m(8)[22m
+     [33m[2m✓[22m[39m ask.cancelled from hook leaves it open in Needs you and in the asks table[33m 1645[2mms[22m[39m
+     [33m[2m✓[22m[39m ask.cancelled from mcp:S1 leaves it open in Needs you and in the asks table[33m 2488[2mms[22m[39m
+     [33m[2m✓[22m[39m ask.escalated from hook leaves it open in Needs you and in the asks table[33m 2214[2mms[22m[39m
+     [33m[2m✓[22m[39m ask.escalated from mcp:S1 leaves it open in Needs you and in the asks table[33m 1973[2mms[22m[39m
+     [33m[2m✓[22m[39m ask.superseded from hook leaves it open in Needs you and in the asks table[33m 1505[2mms[22m[39m
+     [33m[2m✓[22m[39m ask.superseded from mcp:S1 leaves it open in Needs you and in the asks table[33m 779[2mms[22m[39m
+     [33m[2m✓[22m[39m ask.moot from hook leaves it open in Needs you and in the asks table[33m 660[2mms[22m[39m
+     [33m[2m✓[22m[39m ask.moot from mcp:S1 leaves it open in Needs you and in the asks table[33m 1800[2mms[22m[39m
+   [32m✓[39m a taste call that dropped near copies (#394) [2m(1)[22m
+     [33m[2m✓[22m[39m names each dropped copy only beside an option it still offers[33m 949[2mms[22m[39m
+   [32m✓[39m a block someone else owns (#320) [2m(5)[22m
+     [33m[2m✓[22m[39m is never a person's own task: one raised for you in bob's session is bob's, and drafts no request (#1337)[33m 3568[2mms[22m[39m
+     [33m[2m✓[22m[39m stays BLOCKED at its deadline, by the default its raiser named, though it never showed to you[33m 1312[2mms[22m[39m
+     [33m[2m✓[22m[39m takes its request with it when its check passes[33m 2294[2mms[22m[39m
+     [33m[2m✓[22m[39m isn't one of your asks, so raising it folds nothing into an exception[33m 1100[2mms[22m[39m
+   [32m✓[39m #349 resolvers are consulted outside the core's lock [2m(1)[22m
+     [33m[2m✓[22m[39m a resolver that reads the core while it answers doesn't deadlock raise: the ask is raised, and its refusals read empty[33m 1922[2mms[22m[39m
+   [32m✓[39m the resolver gate reads every decision the record holds, however it was written [2m(7)[22m
+     [33m[2m✓[22m[39m a decision you overruled covers nothing: a resolver naming it is refused naming it, nothing is applied, and it can't be revoked again[33m 816[2mms[22m[39m
+     [33m[2m✓[22m[39m a decision the hub saved as repo:<the ask's project> covers an ask of a session in that project[33m 3219[2mms[22m[39m
+     [33m[2m✓[22m[39m a decision the hub saved as session:<the session's letters and digits> covers that session's asks[33m 1878[2mms[22m[39m
+     [33m[2m✓[22m[39m forgets an ended session once 64 newer ones ended, but never one with an ask open (#824)[33m 1120[2mms[22m[39m
+     [33m[2m✓[22m[39m keeps a session's decision past 64 newer ended sessions: resumed, it is never asked the same question again (#824)[33m 2055[2mms[22m[39m
+     [33m[2m✓[22m[39m revokes a decision whose session left memory, and the revocation holds when that session resumes (#824)[33m 1406[2mms[22m[39m
+     [33m[2m✓[22m[39m a decision saved from an ask that left memory still carries the size bound of that ask's change (#824)[33m 2782[2mms[22m[39m
+   [32m✓[39m an answer that saves a decision (#319.43d13eb3, #22) [2m(1)[22m
+     [33m[2m✓[22m[39m syncs the record once: the answer and its decision are durable together, before the agent hears it[33m 421[2mms[22m[39m
+ [32m✓[39m test/timing.test.ts [2m([22m[2m38 tests[22m[2m)[22m[33m 57121[2mms[22m[39m
+   [32m✓[39m settings files [2m(3)[22m
+     [33m[2m✓[22m[39m a config.json that does not parse declares nothing: raise is refused naming the value, and setup leaves the file as it is[33m 2409[2mms[22m[39m
+     [33m[2m✓[22m[39m a repo done.yaml asks block written as block maps, with comments, overrides your deadline for that kind only[33m 1172[2mms[22m[39m
+     [33m[2m✓[22m[39m a done.yaml asks block the reader cannot follow leaves the repo's asks BLOCKED, naming the line, not your settings in its place[33m 6249[2mms[22m[39m
+   [32m✓[39m the fold [2m(10)[22m
+     [33m[2m✓[22m[39m an inbox row says whether it is its session's "keeps asking" exception, the one that holds folded asks, and no other exception is (#22)[33m 1265[2mms[22m[39m
+     [33m[2m✓[22m[39m Later on the exception never passes the earliest deadline among the asks it holds[33m 886[2mms[22m[39m
+     [33m[2m✓[22m[39m left to its defaults, the exception is not raised again for the asks it held, which close at their own deadlines[33m 1860[2mms[22m[39m
+     [33m[2m✓[22m[39m answered together, an approval and an unblock it held get their own cards and keep their own defaults[33m 720[2mms[22m[39m
+     [33m[2m✓[22m[39m an ask that joins an exception already shown, from a turn that has not read your message, waits there for the agent's next step[33m 2276[2mms[22m[39m
+     [33m[2m✓[22m[39m an ask held for your message that joins an exception already shown still shows there when due before the next batch[33m 1193[2mms[22m[39m
+     [33m[2m✓[22m[39m an ask held for your message that joins an exception already shown still shows there when with no batches to wait for[33m 468[2mms[22m[39m
+     [33m[2m✓[22m[39m an ask held for your message when you leave the exception to its defaults gets its own card, not a default unseen[33m 1829[2mms[22m[39m
+     [33m[2m✓[22m[39m a provisional ask held for your message that joins an exception shows there at once when its session is held on it[33m 1207[2mms[22m[39m
+     [33m[2m✓[22m[39m an ask that folds into an exception already shown is recorded as shown before it can default[33m 2332[2mms[22m[39m
+   [32m✓[39m the hub stopped and started [2m(1)[22m
+     [33m[2m✓[22m[39m an ask whose deadline passed unseen while the hub was down shows at the start and defaults no sooner than its minimum notice after (#908)[33m 1321[2mms[22m[39m
+   [32m✓[39m an ask past its deadline [2m(6)[22m
+     [33m[2m✓[22m[39m while hidden by Later, when the hub was down, shows again and defaults only on a later call[33m 652[2mms[22m[39m
+     [33m[2m✓[22m[39m that joined an exception hidden by Later, when the hub was down, shows with it and defaults no sooner than its minimum notice after (#908)[33m 3357[2mms[22m[39m
+     [33m[2m✓[22m[39m shown through an exception, then hidden with it by Later while the hub was down, defaults only on a later call[33m 2265[2mms[22m[39m
+     [33m[2m✓[22m[39m first shown by one call defaults no sooner than its minimum notice after, not on the next call (#908)[33m 5312[2mms[22m[39m
+     [33m[2m✓[22m[39m an authority ask with no option that says no is refused when raised, so its deadline never records a no its options never offered[33m 645[2mms[22m[39m
+   [32m✓[39m Later [2m(6)[22m
+     [33m[2m✓[22m[39m ends with a recorded showing, so the inbox and the asks table read the same before and after a rebuild[33m 1405[2mms[22m[39m
+     [33m[2m✓[22m[39m on the exception ends early when an ask joins it due before the Later ends[33m 3362[2mms[22m[39m
+     [33m[2m✓[22m[39m on a held ask ends when its session is held on it[33m 622[2mms[22m[39m
+     [33m[2m✓[22m[39m on a queued ask keeps it out of the next batch until the Later ends[33m 1186[2mms[22m[39m
+     [33m[2m✓[22m[39m keeps an ask out of the fold's answer together[33m 832[2mms[22m[39m
+     [33m[2m✓[22m[39m goes on the exception, not an ask it holds, and a Later the core recorded on one keeps it out of the answer together[33m 3775[2mms[22m[39m
+   [32m✓[39m the inbox and the asks table [2m(1)[22m
+     [33m[2m✓[22m[39m take Later and showings by the same rules: Later only as the core records it, before the deadline, and a showing only from the core under the ask's identity[33m 535[2mms[22m[39m
+   [32m✓[39m the asks table and the exception [2m(2)[22m
+     [33m[2m✓[22m[39m takes a Later on the exception only before the earliest deadline it holds, as the core does, before and after a rebuild[33m 707[2mms[22m[39m
+     [33m[2m✓[22m[39m counts as held only the asks raised after the exception, not an earlier one from the same instant, before and after a rebuild[33m 1054[2mms[22m[39m
+   [32m✓[39m showings [2m(8)[22m
+     [33m[2m✓[22m[39m a fold is one person's: another scope's ask on the same thread neither folds into it nor is answered by it[33m 1376[2mms[22m[39m
+     [33m[2m✓[22m[39m one batch shows asks of two scopes as one ask.batched for each, under that scope[33m 785[2mms[22m[39m
+     [33m[2m✓[22m[39m a batch whose showing for one scope failed to append shows that scope on the next call, in the same batch, without showing the other again[33m 754[2mms[22m[39m
+     [33m[2m✓[22m[39m an ask held for your message, read after its batch ran, waits for the next batch, across a restart too[33m 760[2mms[22m[39m
+     [33m[2m✓[22m[39m text you type answers only a question in sight, not one queued for a batch or put off with Later[33m 408[2mms[22m[39m
+     [33m[2m✓[22m[39m text you type does not answer an ask inside an exception put off with Later[33m 415[2mms[22m[39m
+     [33m[2m✓[22m[39m the fold's answer together from another scope is refused and closes nothing[33m 690[2mms[22m[39m
+     [33m[2m✓[22m[39m Later from another scope neither is taken nor, recorded, hides the ask in the inbox or the asks table[33m 470[2mms[22m[39m
+   [32m✓[39m a batch the record refused (#22) [2m(1)[22m
+     [33m[2m✓[22m[39m is still due at the next beat, and shows then: a refused showing does not count as the batch shown[33m 347[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m5 passed[39m[22m[90m (5)[39m
+[2m      Tests [22m [1m[32m82 passed[39m[22m[90m (82)[39m
+[2m   Start at [22m 13:16:48
+[2m   Duration [22m 62.23s[2m (tests 87%, transform 12%, import 1%)[22m
+
