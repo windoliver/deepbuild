@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { RecordedRun } from '@deepbuild/gate';
 import type { Connection, EventInput } from '@deepbuild/record';
-import { GateRunner, type GateOptions } from '../src/gate-runner.js';
+import { GateRunner, type GateOptions, type RunKey } from '../src/gate-runner.js';
 
 const dirs: string[] = [];
 afterEach(() => { for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true }); });
@@ -83,6 +83,65 @@ describe('a slow run outdated by a newer claim', () => {
     ends.get('run1')!('passed');
     await new Promise((r) => setTimeout(r, 300));
     expect(appended.filter((e) => e.kind === 'run.stale'), 'the run is still the newest tree\'s').toEqual([]);
+  }, 30_000);
+});
+
+// What #2218's blind suite doesn't reach of a spec check's runs on one claim: it shows the clean runs (29) and a pass
+// then a fail; these are the other two ends, three failures and a run that didn't count.
+describe("a spec check's runs on one claim (#2218)", () => {
+  const spec = { ...check, check: 'spec-check', approved: null, covers: [], source: 'spec' as const, runs: 3 };
+  /** A claim on the spec check whose runs each end as `outcome` as they start, `runs` of them at most, each with its record kept unless `kept` is false: the runs that started, and the check as it stands. */
+  async function claim(outcome: 'failed' | 'uncounted', runs: number, kept = true) {
+    const dir = repo();
+    const ends = new Map<string, (outcome: string) => void>();
+    const gate = runner(dir, [], ends);
+    await gate.stop({ session: 'S', claim: 'claim:A', task: 'task:1', cwd: dir, base: 'b', requirements: [], checks: [spec], stopAt: Date.now() });
+    gate.turnEnded('claim:A');
+    for (let i = 1; i <= runs; i++) {
+      await until(() => ends.has(`run${i}`));
+      if (!ends.has(`run${i}`)) break;
+      if (kept) gate.recorded(`run${i}`, { run: `run${i}`, outcome, testsRun: 1, failures: [], evidence: [], read: [], mask: null, exit: 1, output: { stdout: '', stderr: '', sha256: { stdout: '', stderr: '' } }, attempts: [], seeded: [], contract: null } as unknown as RecordedRun);
+      ends.get(`run${i}`)!(outcome);
+    }
+    await new Promise((r) => setTimeout(r, 300));
+    return { started: [...ends.keys()], check: gate.verdictOf('claim:A')?.checks.find((c) => c.check === 'spec-check') };
+  }
+
+  it('after a run fails, two more start and no fourth: three failures are its FAIL', async () => {
+    const { started, check } = await claim('failed', 4);
+    expect(started, 'a check that needs 3 clean runs gets up to two more runs after its first fails').toEqual(['run1', 'run2', 'run3']);
+    expect(check?.outcome).toBe('FAIL');
+    expect(check?.counted).toEqual(['run1', 'run2', 'run3']);
+  }, 30_000);
+
+  it('runs that fail with no record kept, as when the runner itself throws, still end at three', async () => {
+    const { started } = await claim('failed', 5, false);
+    expect(started, 'each failure counts toward the three whether or not its record was kept').toEqual(['run1', 'run2', 'run3']);
+  }, 30_000);
+
+  it('two clean runs that read different files, and so land on different keys, both count for the claim', async () => {
+    const dir = repo();
+    writeFileSync(join(dir, 'b.txt'), 'two\n');
+    const ends = new Map<string, (outcome: string) => void>();
+    const keys: RunKey[] = [];
+    const gate = runner(dir, [], ends, { start: async (r) => { keys.push(r.key!); return `run${keys.length}`; } });
+    await gate.stop({ session: 'S', claim: 'claim:A', task: 'task:1', cwd: dir, base: 'b', requirements: [], checks: [{ ...spec, runs: 2 }], stopAt: Date.now() });
+    gate.turnEnded('claim:A');
+    for (const [i, read] of [['a.txt'], ['b.txt']].entries()) {
+      const run = `run${i + 1}`;
+      await until(() => ends.has(run));
+      expect(ends.has(run), `${run} of the 2 the check needs started`).toBe(true);
+      await gate.keyed(keys[i]!, run, gate.recorded(run, { run, outcome: 'passed', testsRun: 1, failures: [], evidence: [], read, mask: null, exit: 0, output: { stdout: '', stderr: '', sha256: { stdout: '', stderr: '' } }, attempts: [], seeded: [], contract: null } as unknown as RecordedRun));
+      ends.get(run)!('passed');
+    }
+    await new Promise((r) => setTimeout(r, 300));
+    expect(gate.verdictOf('claim:A')?.checks.find((c) => c.check === 'spec-check')?.counted.sort()).toEqual(['run1', 'run2']);
+  }, 30_000);
+
+  it("a run that didn't count ends its runs: no other starts, and the check never passes on it", async () => {
+    const { started, check } = await claim('uncounted', 2);
+    expect(started, 'an uncounted run says nothing of the check, so the next would say nothing either').toEqual(['run1']);
+    expect(check?.outcome).toBe('INCONCLUSIVE');
   }, 30_000);
 });
 

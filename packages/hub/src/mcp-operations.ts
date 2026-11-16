@@ -382,13 +382,14 @@ export class McpOperations {
     return [...this.options.state().sessions.values()].map((s) => s.cwd).find((cwd) => cwd === real || isUnder(real, cwd));
   }
 
-  /** The checks a worktree's spec names, by name, with the command each runs and its deadline as the spec writes it, where it gives one. */
-  checksOf(worktree: string): Map<string, { run: string; deadline?: unknown; type?: string; host?: string }> {
+  /** The checks a worktree's spec names, by name, with the command each runs and its deadline, run count and test count as the spec writes them, where it gives one. */
+  checksOf(worktree: string): Map<string, { run: string; deadline?: unknown; type?: string; host?: string; runs?: unknown; accept?: unknown; min_tests?: unknown }> {
     const spec = this.options.doneSpec(worktree);
     const checks = isObj(spec) && isObj(spec.checks) ? spec.checks : {};
     return new Map(Object.entries(checks).flatMap(([name, c]) => {
       if (!isObj(c) || typeof c.run !== 'string') return [];
-      return [[name, { run: c.run, ...(c.deadline !== undefined ? { deadline: c.deadline } : {}), ...(typeof c.type === 'string' ? { type: c.type } : {}), ...(typeof c.host === 'string' ? { host: c.host } : {}) }] as const];
+      const written = Object.fromEntries((['deadline', 'runs', 'accept', 'min_tests'] as const).flatMap((key) => (c[key] !== undefined ? [[key, c[key]]] : [])));
+      return [[name, { run: c.run, ...written, ...(typeof c.type === 'string' ? { type: c.type } : {}), ...(typeof c.host === 'string' ? { host: c.host } : {}) }] as const];
     }));
   }
 

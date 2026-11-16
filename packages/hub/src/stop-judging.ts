@@ -33,6 +33,7 @@ import { countMcp } from './mcp-servers.js';
 import { reachOf, type Reach, type ReachTool } from './could-do.js';
 import { coveredBy } from './hookmap.js';
 import { mergedWithMain, releaseSpec, switchesOff } from './release.js';
+import { specChecks } from './spec-checks.js';
 import { repoOf } from './shared-runs.js';
 import { GateRecord, type GateAsk } from './gate-record.js';
 import { headOf } from './session-facts.js';
@@ -1139,25 +1140,10 @@ export class StopJudging {
     });
   }
 
-  /**
-   * The repo's spec checks (#322): each check the spec's `done` claim names (or, with no claims block, every check),
-   * as a command run in the claim's checkout, the repo's own, covering the claim as a whole.
-   */
+  /** The repo's spec checks (#322), as spec-checks.ts reads them from the spec the claim's folder holds. */
   private specChecks(cwd: string): ClaimCheck[] {
     const spec = this.options.doneSpec(cwd);
-    if (spec === undefined) return [];
-    const checks = this.options.mcp().checksOf(cwd);
-    const docs = this.options.services.canvasSide.docChecksOf(cwd);
-    const done = isObj(spec) && isObj(spec.claims) && isObj(spec.claims.done) && Array.isArray(spec.claims.done.checks) ? spec.claims.done.checks.map(String) : [...checks.keys(), ...docs.keys()];
-    return done.flatMap((name): ClaimCheck[] => {
-      const check = checks.get(name);
-      const doc = docs.get(name);
-      if (!check && doc) return [{ check: name, approved: null, command: docCommand(doc, undefined), covers: [], depth: 'unit', on_base: 'passes', asserts: [], source: 'spec', document: doc.doc }];
-      if (!check) return [];
-      const deadline = check.deadline === undefined ? undefined : duration(check.deadline as JsonValue);
-      // A journey runs on the repo's stack, as its environment block starts it (#33, #580).
-      return [{ check: name, approved: null, command: check.run, covers: [], depth: check.type === 'journey' ? 'journey' as const : 'unit' as const, on_base: 'passes' as const, asserts: [], source: 'spec' as const, ...(deadline ? { deadline_ms: deadline } : {}) }];
-    });
+    return spec === undefined ? [] : specChecks(cwd, spec, this.options.mcp().checksOf(cwd), this.options.services.canvasSide.docChecksOf(cwd));
   }
 
   /**

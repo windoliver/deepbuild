@@ -1,0 +1,59 @@
+The two unit files on the final source:
+  node node_modules/vitest/vitest.mjs run packages/hub/test/spec-checks.test.ts packages/hub/test/gate-runner.test.ts
+ ✓ packages/hub/test/spec-checks.test.ts > a spec check with runs: 0 is missing a count the hub can read, naming the value 2ms
+ ✓ packages/hub/test/spec-checks.test.ts > a spec check with accept: 250% is missing a count the hub can read, naming the value 0ms
+ ✓ packages/hub/test/spec-checks.test.ts > a spec check with min_tests: five is missing a count the hub can read, naming the value 0ms
+ ✓ packages/hub/test/gate-runner.test.ts > a slow run outdated by a newer claim > is recorded stale only when the newer claim changed its check's inputs, naming that claim; the same tree stopped again outdates 
+ ✓ packages/hub/test/gate-runner.test.ts > a slow run outdated by a newer claim > a run no newer claim changed the inputs of ends with no run.stale 1035ms
+ ✓ packages/hub/test/gate-runner.test.ts > a spec check's runs on one claim (#2218) > after a run fails, two more start and no fourth: three failures are its FAIL 2708ms
+ ✓ packages/hub/test/gate-runner.test.ts > a spec check's runs on one claim (#2218) > runs that fail with no record kept, as when the runner itself throws, still end at three 1871ms
+ ✓ packages/hub/test/gate-runner.test.ts > a spec check's runs on one claim (#2218) > two clean runs that read different files, and so land on different keys, both count for the claim 904ms
+ ✓ packages/hub/test/gate-runner.test.ts > a spec check's runs on one claim (#2218) > a run that didn't count ends its runs: no other starts, and the check never passes on it 1593ms
+ ✓ packages/hub/test/gate-runner.test.ts > a check pinned to a commit of its own (#325) > a timing run that failed under load and passed rerun alone (#352): a later claim on that commit gets the rerun, not the 
+ ✓ packages/hub/test/gate-runner.test.ts > a check pinned to a commit of its own (#325) > a drift rerun of a timing check that fails under load again is set aside and rerun alone again; the old run under load d
+ Test Files  2 passed (2)
+      Tests  11 passed (11)
+
+Each mutant of the change's own lines, and the test that fails on it. M1, M2 and M6 ran on the final source;
+M3 and M5 on the source as it then stood (the lines they change did not change after); M4 in a clone's built hub.
+
+== M1 on the final source: an uncounted run no longer ends a spec check's runs
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  packages/hub/test/gate-runner.test.ts > a spec check's runs on one claim (#2218) > a run that didn't count ends its runs: no other starts, and the check never passes on it
+AssertionError: an uncounted run says nothing of the check, so the next would say nothing either: expected [ 'run1', 'run2', 'run3' ] to deeply equal [ 'run1' ]
+      Tests  1 failed | 7 passed (8)
+== M2 on the final source: the base's one run a claim
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  packages/hub/test/gate-runner.test.ts > a spec check's runs on one claim (#2218) > after a run fails, two more start and no fourth: three failures are its FAIL
+AssertionError: a check that needs 3 clean runs gets up to two more runs after its first fails: expected [ 'run1' ] to deeply equal [ 'run1', 'run2', 'run3' ]
+ FAIL  packages/hub/test/gate-runner.test.ts > a spec check's runs on one claim (#2218) > runs that fail with no record kept, as when the runner itself throws, still end at three
+AssertionError: each failure counts toward the three whether or not its record was kept: expected [ 'run1' ] to deeply equal [ 'run1', 'run2', 'run3' ]
+ FAIL  packages/hub/test/gate-runner.test.ts > a spec check's runs on one claim (#2218) > two clean runs that read different files, and so land on different keys, both count for the claim
+
+== M3: a count the hub can't read is dropped (spec-checks.ts no longer stands its cause on the check)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  packages/hub/test/spec-checks.test.ts > a spec check with runs: 0 is missing a count the hub can read, naming the value
+ FAIL  packages/hub/test/spec-checks.test.ts > a spec check with accept: 250% is missing a count the hub can read, naming the value
+ FAIL  packages/hub/test/spec-checks.test.ts > a spec check with min_tests: five is missing a count the hub can read, naming the value
+AssertionError: expected undefined to be 'missing' // Object.is equality
+      Tests  3 failed | 6 passed (9)
+
+== M4: min_tests taken off the keys a check entry may write (tests/acceptance/2218/twin.test.ts)
+ × tests/acceptance/2218/twin.test.ts > AC5 #2218.cb279bf8 the twin: this repo's own done.yaml > AC5 #2218.cb279bf8 a claim in a trusted repo whose spec is this repo's own done.yaml runs every check it names and passes: no key is refused 56681ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: AC5 #2218.cb279bf8 this repo's .deepbuild/done.yaml names typecheck for a done claim, so it must run on the claim and pass in a repo that holds what its command enters: claim:01M7GJENF5P7YPG7Y496VWP35N: verdict BLOCKED [".deepbuild/done.yaml: missing a key DeepBuild reads in place of `min_tests` on check test at line 9: a spec is read whole or not at all, so none of its checks ran, owner you"]; runs: run:01M7GJENNJNPVNDS9Z7N5DWBNY of .deepbuild/done.yaml on eb4c6314: missing, 0 tests; run:01M7GJENNP
+      Tests  1 failed (1)
+
+== M5: own runs counted only through their kept records
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  packages/hub/test/gate-runner.test.ts > a spec check's runs on one claim (#2218) > runs that fail with no record kept, as when the runner itself throws, still end at three
+AssertionError: each failure counts toward the three whether or not its record was kept: expected [ Array(6) ] to deeply equal [ 'run1', 'run2', 'run3' ]
+ Test Files  1 failed | 1 passed (2)
+      Tests  1 failed | 9 passed (10)
+
+== M6: a spec check's own runs on another key are dropped from its count (unit files run directly: no test grant came in over an hour)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  packages/hub/test/gate-runner.test.ts > a spec check's runs on one claim (#2218) > two clean runs that read different files, and so land on different keys, both count for the claim
+AssertionError: expected [ 'run2' ] to deeply equal [ 'run1', 'run2' ]
+ Test Files  1 failed (1)
+      Tests  1 failed | 7 passed (8)
