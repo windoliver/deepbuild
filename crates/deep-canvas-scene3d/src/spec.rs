@@ -900,8 +900,8 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                 .takes("{strength: 0..1, blur: px, plane: named part}"),
             // #166: water on a plate's part; the sweep leaves it unset, as it does the mirror.
             // `water::parse` also takes a wind's fields bare, in place of `{wind: {..}}`.
-            p("water", "{waves: wind {speed, direction} | [{direction, length, amplitude, steepness}], ripples: {scale, strength}, rain, absorption: {color, depth}, distort: px, foam: {threshold}, wake: {item, span} | none}", "m", Value::Null, S, Value::Null, Value::Null)
-                .takes("{waves: wind {speed, direction} | {speed, direction} | [{direction, length, amplitude, steepness}] ≤ 4, ripples, rain: f32, absorption, distort: px, foam, wake: {item, span} | none, shore}"),
+            p("water", "{waves: wind {speed, direction} | [{direction, length, amplitude, steepness}], ripples: {scale, strength}, rain, absorption: {color, depth}, distort: px, foam: {threshold, speed}, flow: {along, speed, cycle} | none, wake: {item, span} | none}", "m", Value::Null, S, Value::Null, Value::Null)
+                .takes("{waves: wind {speed, direction} | {speed, direction} | [{direction, length, amplitude, steepness}] ≤ 4, ripples, rain: f32, absorption, distort: px, foam: {threshold, speed: m/s | none}, flow: {along: curve ID | field {x, z}, speed: m/s, cycle: s} | none, wake: {item, span} | none, shore}"),
             p(
                 "pattern",
                 "none | plaster | stone_courses | roof_tiles | wood | rock | grass | cobbles | glass_curtain | concrete | asphalt",

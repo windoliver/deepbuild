@@ -366,6 +366,19 @@ pub enum Edge {
     Brush,
 }
 
+impl Edge {
+    /// The edge a name gives: `straight`, `torn`, `pixel` or `brush`.
+    pub fn named(name: &str) -> Option<Edge> {
+        Some(match name {
+            "straight" => Edge::Straight,
+            "torn" => Edge::Torn,
+            "pixel" => Edge::Pixel,
+            "brush" => Edge::Brush,
+            _ => return None,
+        })
+    }
+}
+
 /// A look region (#462): what the item `mask` holds, at its evaluated pose, draws in `look`, the
 /// edge `edge` (`None`: the incoming look's own) `width` px wide, seeded from `seed`.
 #[derive(Clone, Debug, PartialEq)]
@@ -396,11 +409,10 @@ fn regions_of(s: &Map<String, Value>, path: &str) -> Result<Vec<Region>, Refused
         };
         let edge = match r.get("edge").and_then(Value::as_str) {
             None => None,
-            Some("straight") => Some(Edge::Straight),
-            Some("torn") => Some(Edge::Torn),
-            Some("pixel") => Some(Edge::Pixel),
-            Some("brush") => Some(Edge::Brush),
-            Some(_) => return bad(format!("{at}/edge")),
+            Some(e) => match Edge::named(e) {
+                Some(e) => Some(e),
+                None => return bad(format!("{at}/edge")),
+            },
         };
         let width = num(r.get("width"), &format!("{at}/width"))?.unwrap_or(16.0);
         if width < 0.0 {
