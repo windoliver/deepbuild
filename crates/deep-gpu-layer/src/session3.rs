@@ -132,6 +132,9 @@ pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
             Planted::LoopCallsCutLights,
             Planted::LoopWorldNormal,
             Planted::LoopViewAway,
+            // #1383's (cover.wgsl).
+            Planted::CoverKeepsPlanarUv,
+            Planted::TriplanarByShadedNormal,
         ]
         .iter()
         .position(|q| p == Some(*q))

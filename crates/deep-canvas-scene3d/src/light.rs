@@ -257,7 +257,22 @@ pub fn map_uses(
             }
         }
     }
+    // #1383: a cover entry's base color map, which the fragment stage reads as RGBA8 texels.
+    for e in scene.covers.iter().flat_map(|c| &c.entries) {
+        if let Some(m) = &e.map {
+            out.entry(m.sha.clone()).or_default().insert(COVER_ROLE);
+        }
+    }
     out
+}
+
+/// #1383: the use a cover entry's base color map is made for, sRGB texels with their mips that
+/// the fragment stage filters itself; held in a scene's `texels` at [`cover_texels`].
+pub const COVER_ROLE: &str = "cover";
+
+/// Where a scene's `texels` hold a cover map's RGBA8 texels.
+pub fn cover_texels(sha: &str) -> String {
+    format!("{sha}:{COVER_ROLE}")
 }
 
 /// The decode worker's job role for a map the fields `uses` name: the color fields' sRGB, a normal
@@ -526,7 +541,7 @@ fn color3(v: Option<&Value>) -> Option<Vec3> {
     }
 }
 
-fn srgb_decode(c: u8) -> f64 {
+pub(crate) fn srgb_decode(c: u8) -> f64 {
     let c = f64::from(c) / 255.0;
     if c <= 0.04045 {
         c / 12.92

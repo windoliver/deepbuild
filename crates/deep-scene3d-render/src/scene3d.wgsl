@@ -2386,6 +2386,8 @@ fn shade(in0: MeshOut, front: bool, local_n: vec3<f32>, g: array<vec4<f32>, 2>, 
             m = mapped(in, geometric, m.s, g);
             cutoff = maps.values.z;
         }
+        // A terrain plate's cover lies over its material, under its overlays (#1383).
+        m.s = covered(m.s, in.pick, in.local, in.world, in.uv.xy, local_n, in.object_n);
         m.s.base = projected(tinted(m.s.base, in.pick, in.local), in.pick, in.world, geometric);
         // A material operator's normal replaces the mapped one, its coat's bends the coat alone,
         // and its occlusion scales only what the map's does: the ambient light (#486).
@@ -2481,7 +2483,10 @@ fn shade(in0: MeshOut, front: bool, local_n: vec3<f32>, g: array<vec4<f32>, 2>, 
     if lights.count.w > 0u && (in.flags & NO_RECEIVE) == 0u {
         direct = direct * lit_share(in.world, n, curved, in.pos.xy) * contact_at(in.pos.xy);
     }
-    let albedo = projected(tinted(select(paint(in.color), in.tangent.rgb, tinted_by_vertex(in)), in.pick, in.local), in.pick, in.world, n);
+    var painted = Surface(select(paint(in.color), in.tangent.rgb, tinted_by_vertex(in)), 0.0, 0.5, 0.5,
+        vec3<f32>(1.0), 0.0, 0.0, 0u, vec3<f32>(0.0), vec3<f32>(0.0), 0.0, 0.0);
+    painted = covered(painted, in.pick, in.local, in.world, in.uv.xy, local_n, in.object_n);
+    let albedo = projected(tinted(painted.base, in.pick, in.local), in.pick, in.world, n);
     let lit = ambient * occlusion(in.pos.xy, in.world, normalize(in.normal), albedo) + vec3<f32>(direct);
     let a = in.emission.w;
     return targets(vec4<f32>(fogged(adjusted(albedo * lit + in.emission.rgb, in.op.w), in.world) * a, a), in.pick);

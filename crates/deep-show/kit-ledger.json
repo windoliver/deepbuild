@@ -287,7 +287,7 @@
   },
   "scene3d": {
     "version": "1.0.0",
-    "digest": "7f54bcff64a6dcd286b8f8105b80fe7a82577c72a20f6374a84671e452e6e75d",
+    "digest": "76b60b95b2340ca9212ac83561f41f795f6e691b8e3b2c7aeb920e2eeadd6411",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",

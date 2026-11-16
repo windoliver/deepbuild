@@ -83,6 +83,9 @@ struct Args {
     /// `ground_points: {item, at: [[x, z]]}`: each frame reports the height a terrain plate draws
     /// at each point, with its tile and level (#2017).
     ground_points: Option<(String, Vec<[f64; 2]>)>,
+    /// `cover_points: {item, at: [[x, z]]}`: each frame reports what a terrain plate's cover gives
+    /// the fragment stage at each ground point (#1383).
+    cover_points: Option<(String, Vec<[f64; 2]>)>,
     /// The glTF files `mesh.asset@1` items name, by sha256 (#420), and the images a material's
     /// maps or a glTF name (#423).
     assets: std::collections::BTreeMap<String, std::path::PathBuf>,
@@ -153,6 +156,54 @@ struct Args {
     history: history::Inputs,
     /// #177: the view's HDR output, `hdr` and the stub display.
     hdr: crate::hdr::Hdr,
+}
+
+/// A call's `{item, at: [[x, z]]}`: none when it's left out.
+fn points_of(v: &Value) -> Result<Option<(String, Vec<[f64; 2]>)>, ()> {
+    if v.is_null() {
+        return Ok(None);
+    }
+    let item = v["item"].as_str().ok_or(())?;
+    let at: Option<Vec<[f64; 2]>> = v["at"].as_array().and_then(|a| {
+        a.iter()
+            .map(|p| Some([p.get(0)?.as_f64()?, p.get(1)?.as_f64()?]))
+            .collect()
+    });
+    Ok(Some((item.to_string(), at.ok_or(())?)))
+}
+
+/// The frame's `cover_points` (#1383): at each world (x, z) asked, what the plate `item`'s cover
+/// gives the fragment stage at its ground point (`Cover::reading`, under #1383's planted
+/// programs as the frame draws them); null off the plate or for a plate with no cover.
+fn cover_points(
+    scene: &deep_canvas_scene3d::scene::Scene,
+    item: &str,
+    at: &[[f64; 2]],
+    planted: Option<Planted>,
+) -> Value {
+    use deep_canvas_scene3d::cover::Plant;
+    let plant = match planted {
+        Some(Planted::CoverKeepsPlanarUv) => Plant::PlanarUv,
+        Some(Planted::TriplanarByShadedNormal) => Plant::ShadedNormal,
+        _ => Plant::None,
+    };
+    let cover = scene.covers.iter().find(|c| c.plate == item);
+    let rows = at.iter().map(|&[x, z]| {
+        let Some(c) = cover else { return Value::Null };
+        let m = deep_canvas_scene3d::cut::inverse(&c.model);
+        let local = |r: usize| m[r][0] * x + m[r][2] * z + m[r][3];
+        match c.reading(local(0), local(2), plant) {
+            Some(r) => json!({
+                "at": [x, z],
+                "curvature": r.curvature,
+                "entries": r.entries.iter().map(|e| json!({"weight": e.weight, "triplanar": e.triplanar})).collect::<Vec<_>>(),
+                "base_color": r.shading.base,
+                "roughness": r.shading.roughness,
+            }),
+            None => Value::Null,
+        }
+    });
+    Value::Array(rows.collect())
 }
 
 pub(crate) fn pair(v: &Value) -> Option<[u32; 2]> {
@@ -486,21 +537,10 @@ fn parse(call: &Value, planted: Option<Planted>) -> Result<Args, Value> {
         window,
         latency,
         counts: call["counts"].as_bool().unwrap_or(false),
-        ground_points: match &call["ground_points"] {
-            Value::Null => None,
-            g => {
-                let item = g["item"].as_str();
-                let at: Option<Vec<[f64; 2]>> = g["at"].as_array().and_then(|a| {
-                    a.iter()
-                        .map(|p| Some([p.get(0)?.as_f64()?, p.get(1)?.as_f64()?]))
-                        .collect()
-                });
-                match (item, at) {
-                    (Some(item), Some(at)) => Some((item.to_string(), at)),
-                    _ => return Err(bad("ground_points is {item, at: [[x, z]]}")),
-                }
-            }
-        },
+        ground_points: points_of(&call["ground_points"])
+            .map_err(|()| bad("ground_points is {item, at: [[x, z]]}"))?,
+        cover_points: points_of(&call["cover_points"])
+            .map_err(|()| bad("cover_points is {item, at: [[x, z]]}"))?,
         assets: call["assets"]
             .as_object()
             .into_iter()
@@ -2778,6 +2818,12 @@ fn run_view(
             }
             if args.lod {
                 frame.insert("lod".into(), crate::lod::rows(&choices));
+            }
+            if let Some((item, at)) = &args.cover_points {
+                frame.insert(
+                    "cover_points".into(),
+                    cover_points(&scene, item, at, app.planted),
+                );
             }
             if let (Some((item, at)), Some(tiles)) = (&args.ground_points, &tiles) {
                 frame.insert(

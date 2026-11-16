@@ -1,0 +1,72 @@
+#1383 acceptance suite at the base, before any implementation. The job was asked for 1ab891283; its worktree stood at
+3557b3489 ("Merge pull request #2626", flowing water #968), whose only change since 1ab891283 is that merge (water's
+flow fields, its render passes and its suite: no terrain, cover, material or view3d field these tests read). Run on
+2026-11-15 on an arm64 Mac (Mac17,10, not a reference Mac; 18 cores; one-minute load 360 to 590 throughout), with
+deep-gpu built by each file (`cargo build --locked --bin deep-gpu`, CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0;
+exit 0), after `npm ci` and `npm run build --workspaces` (both exit 0). Each file was run once, one at a time:
+
+  PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    scripts/lease npx vitest run --root tests/acceptance/1383 --no-file-parallelism --testTimeout=600000 <file>
+
+(`scripts/lease` ran each unleased: "DeepBuild isn't set up here (no hub token)".)
+Type-check: `npx tsc -p tests/acceptance/1383/tsconfig.json` exits 0 with no output.
+
+Every test fails at an assertion in this folder that names the missing behavior: no crash, no timeout, no missing
+fixture, no build failure. 10 tests, 10 failed. At the base `view3d` draws a plate whose params hold `cover` without
+refusing it, as if it weren't there (each plate in its own material, no checker, no snow, no wetness), reports no
+`cover_points`, and answers an unknown `--planted` name `{"ok":false,"code":"bad_input"}` (exit 2).
+
+Before the run, the harness was checked against the base's real components with a probe (not committed): the cliff with
+the checker as the plate's own material (no cover), its uv0 the base's box fallback, measures a cell of 0.4999 m on
+flat ground both ways and, on the 70° face, 0.5321 m down it (1.064×, 0.5 ÷ sin 70° = 0.532) and 0.4999 m across it;
+the same plate with `uv0: planar` (the ground's (x, z)) measures 1.4619 m down the face, 2.9245× (1 ÷ cos 70° = 2.9238),
+and the judge fails it with "down the face: the 70° face's checker cells are 2.92× their size on flat ground (1.462 m
+against 0.500 m), past 10%". The fixture document's three shots pass #1399's guard at the base.
+
+ac1-cliff-texels.test.ts (2 failed of 2)
+- shipped: texelJudge (helpers.ts), from measure (ac1-cliff-texels.test.ts:34): "the flat ground shows the checker
+  along both of the view's axes (cells {"rows":null,"columns":null}): expected false to be true". The base draws the
+  plate in turf with no checker; the flat frame is one colour.
+- cover_keeps_planar_uv: runGpu (helpers.ts), from measure (ac1-cliff-texels.test.ts:32): "deep-gpu run --planted
+  cover_keeps_planar_uv exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}".
+
+ac2-triplanar-weights.test.ts (2 failed of 2)
+- shipped: coverPointsOf (helpers.ts), from judge (ac2-triplanar-weights.test.ts:31): "the four planes: the frame's
+  `cover_points` (README: Assumed surfaces 2) is an array, got undefined".
+- triplanar_by_shaded_normal: runGpu, from judge (ac2-triplanar-weights.test.ts:29): "deep-gpu run --planted
+  triplanar_by_shaded_normal exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}".
+
+ac3-aspect.test.ts (1 failed of 1)
+- coverPointsOf, from ac3-aspect.test.ts:27: "the pyramid: the frame's `cover_points` (README: Assumed surfaces 2) is an
+  array, got undefined".
+
+ac4-curvature.test.ts (1 failed of 1)
+- coverPointsOf, from ac4-curvature.test.ts:27: "the ridge and the gully: the frame's `cover_points` (README: Assumed
+  surfaces 2) is an array, got undefined".
+
+ac5-wet.test.ts (1 failed of 1)
+- coverPointsOf, from read (ac5-wet.test.ts:26): "the wet ground: the frame's `cover_points` (README: Assumed surfaces
+  2) is an array, got undefined".
+
+ac6-snow-line-seek.test.ts (1 failed of 1; second draft, 101 s)
+- `none`, from ac6-snow-line-seek.test.ts:45: "the snow line is drawn and falls: the played frames at 0 s, 5 s and 10 s
+  don't all differ (72615bd0…, 72615bd0…, 72615bd0…): the snow line doesn't move". The played frames pass #1399's guard.
+- The first draft drew 121 frames at 12 frames a second with the peaks and the cliff at 257 × 257 samples; under this
+  machine's load its played call didn't finish within runGpu's 3,000 s ("deep-gpu run did not finish within 3,000 s",
+  5,839 s in all), a timeout, not the behavior. It was redrafted to 4 frames a second (41 played frames) with every plate
+  of the fixture document at 129 × 129 samples, and run once more; the result above is the second draft's. AC7 and AC8,
+  which draw the same fixture document, were run after that change: AC7 again, AC8 for the first time to its end (its
+  first run, still drawing, was stopped by PID with the run that started it).
+
+ac7-fields-reach-pixels.test.ts (1 failed of 1; run after the fixture change, 32 s)
+- `none`, from ac7-fields-reach-pixels.test.ts:57: "each new field set away from its default changes a pixel of the
+  fixture: projection uv: the cliff shot's frame at 5 s is the defaults' (pixel hash 1a51ddb5…, 0 pixels differ);
+  projection triplanar: … (1a51ddb5…, 0 pixels differ); where.aspect: the snow shot's frame … (3024e7e7…, 0 pixels
+  differ); where.curvature: … (3024e7e7…, 0 pixels differ); modify wet: the field shot's frame … (1cf4595e…, 0 pixels
+  differ); modify dust: … (1cf4595e…, 0 pixels differ)". Every frame passes #1399's guard. (Its run before the fixture
+  change failed the same way, on all six fields.)
+
+ac8-taste.test.ts (1 failed of 1; 120 s)
+- `inconclusive`, from ac8-taste.test.ts:56: "INCONCLUSIVE: no taste call is recorded: attach these to the PR, show them
+  to the owner in the session …; this is not a pass". The base's pictures (plates in their own materials, before and
+  after rain the same picture) were written to docs/evidence/1383/ and deleted after the run; none is committed.
