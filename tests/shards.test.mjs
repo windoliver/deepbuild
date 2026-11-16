@@ -150,12 +150,15 @@ test('a new shard leaves behind the other worktrees the checkout holds', async (
   assert.match(run.out, /^PASS affected: /m, run.out);
 });
 
-// A run stopped by its PID stops its jobs too, and ends only once they have: they ran on its one grant, which is free
-// once it has ended, so a job left running would run beside the next run uncounted. Its last line says it was stopped,
-// and it exits 128 plus the signal. The merge base gave each job a grant of its own.
+// A run stopped by its PID stops its jobs too, and ends only once they have, through its own clean-up: they ran on its
+// one grant, which is free once it has ended, so a job left running would run beside the next run uncounted, and a
+// shard lock left behind lets the next run take a shard this one's children may still write. Its last line says it was
+// stopped, and it exits 128 plus the signal. The merge base gave each job a grant of its own.
 test('a run stopped by its PID stops the jobs it started', async (t) => {
   const s = scene(t);
   const file = `${A}shard-long.test.mjs`;
+  // Two alone folders, so the run takes shards.
+  writeFileSync(join(s.tree, `${B}shard-b.test.mjs`), probe('b', 60000));
   writeFileSync(join(s.tree, file), `import { appendFileSync } from 'node:fs';
 import test from 'node:test';
 test('long', async () => {
@@ -163,15 +166,21 @@ test('long', async () => {
   await new Promise((done) => setTimeout(done, 60000));
 });
 `);
-  const running = s.affected([file]);
+  const running = s.affected([file, `${B}shard-b.test.mjs`]);
   const until = async (ok, ms) => { for (const end = Date.now() + ms; Date.now() < end && !ok();) await new Promise((done) => setTimeout(done, 100)); return ok(); };
   assert.ok(await until(() => s.at('long', 'start'), 60000), 'the long probe never started');
   const { pid } = s.at('long', 'start');
-  t.after(() => { try { process.kill(pid, 'SIGKILL'); } catch {} });
+  const alive = () => { try { process.kill(pid, 0); return true; } catch { return false; } };
+  // Only a probe seen alive is killed after, so a pid the machine has reused is never.
+  let left = true;
+  t.after(() => { if (left) try { process.kill(pid, 'SIGKILL'); } catch {} });
   process.kill(running.pid, 'SIGTERM');
   const run = await running;
-  const alive = () => { try { process.kill(pid, 0); return true; } catch { return false; } };
-  assert.equal(alive(), false, `the run ended with its job still running\n${run.out}`);
+  left = alive();
+  assert.equal(left, false, `the run ended with its job still running\n${run.out}`);
   assert.equal(run.status, 143, `the run stopped by SIGTERM exited ${run.status}\n${run.out}`);
   assert.match(run.out.trim().split('\n').at(-1), /^BLOCKED affected: stopped by SIGTERM/, run.out);
+  assert.match(run.out, /^SHARD 1 /m, `the run took no shard\n${run.out}`);
+  const shards = join(s.home, 'deepbuild-shards');
+  assert.deepEqual(readdirSync(shards).filter((name) => name.endsWith('.lock')), [], `the stopped run left its shard locks\n${run.out}`);
 });
