@@ -566,6 +566,18 @@ fn title(table: &Table, session: &str) -> String {
     format!("DeepBuild · {}", table.title(session))
 }
 
+/// A batch's notification (#1345), from its first ask's: how many questions the one card holds, then the first's
+/// question and default.
+fn batch_text(first: &str, count: usize) -> String {
+    let line = first.split_once('\n').map_or(first, |(_, line)| line);
+    let first = line.split_once(" — ").map_or(line, |(_, rest)| rest);
+    format!(
+        "DeepBuild\n{} {} — {count} questions on one card. The first: {first}",
+        states::glyph(states::State::NeedsYou.entry()),
+        states::State::NeedsYou.word()
+    )
+}
+
 /// An ask's notification: the session's task, the question, and the default with when it applies.
 fn ask_text(table: &Table, ask: &Value, now: u64) -> String {
     let data = &ask["data"];
@@ -589,18 +601,6 @@ fn ask_text(table: &Table, ask: &Value, now: u64) -> String {
         states::State::NeedsYou.word(),
         question,
         states::moment(deadline, now),
-    )
-}
-
-/// A batch's notification (#1345), from its first ask's: how many questions the one card holds, then the first's
-/// question and default.
-fn batch_text(first: &str, count: usize) -> String {
-    let line = first.split_once('\n').map_or(first, |(_, line)| line);
-    let first = line.split_once(" — ").map_or(line, |(_, rest)| rest);
-    format!(
-        "DeepBuild\n{} {} — {count} questions on one card. The first: {first}",
-        states::glyph(states::State::NeedsYou.entry()),
-        states::State::NeedsYou.word()
     )
 }
 

@@ -1232,7 +1232,7 @@ pub fn count() -> usize {
 }
 
 /// The count of what needs you in this view: as many as Needs you draws.
-pub fn count_of(view: &crate::record::View) -> usize {
+fn count_of(view: &crate::record::View) -> usize {
     let table = view.table();
     if table.listed() {
         return states::count(&table);

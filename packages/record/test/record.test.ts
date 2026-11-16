@@ -1143,6 +1143,7 @@ describe('a commit that waited behind an evidence sync is judged by the log as i
     const second = r.append(hook(S), event('tool.before', T0 + 50, seqAt(T0 + 50)));
     const verdict = r.append(core(S), event('verdict.made', T0 + 60, undefined, { claim: `claim:${claim.id}`, verdict: `verdict:${ulidAt(T0 + 60)}` }, 1));
     const order = (await Promise.all([first, second, verdict])).map((appended) => appended.log_pos);
+    expect(order.every((pos) => Number.isInteger(pos)) && new Set(order).size === 3, 'three places in the log').toBe(true);
     expect(order, 'the log keeps arrival order').toEqual([...order].sort((x, y) => x - y));
   });
 });

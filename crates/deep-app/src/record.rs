@@ -220,11 +220,20 @@ impl View {
     /// which it names as folded.
     pub fn panel_asks(&self) -> Vec<&Value> {
         let shown = self.needs_you();
+        let in_sight = |row: &Value| shown.iter().any(|ask| ask["ask"] == row["ask"]);
+        // A folded ask comes with its exception, so not before that is in sight, at its batch (#22). A fixture's record
+        // folds by count with no exception (#338), and those show as they did.
+        let held_out = |row: &Value| {
+            self.inbox.iter().any(|other| {
+                other["session"] == row["session"]
+                    && other["status"] != "closed"
+                    && holds(other)
+                    && !in_sight(other)
+            })
+        };
         self.inbox
             .iter()
-            .filter(|row| {
-                (row["status"] == "folded") || shown.iter().any(|ask| ask["ask"] == row["ask"])
-            })
+            .filter(|row| in_sight(row) || (row["status"] == "folded" && !held_out(row)))
             .collect()
     }
 

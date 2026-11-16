@@ -170,7 +170,7 @@ it('under setup\'s 8-hour batches a lapsed sign-in in a session that keeps askin
   writeFileSync(config, JSON.stringify(settings));
   now = T0 + 4 * 3_600_000 + 60_000;
   await started(S1, 'a');
-  const taste = askSources().find((r) => r.kind === 'taste')!.source;
+  const taste = askSources().find((r) => r.source === 'deep_ask.taste')!.source;
   for (const k of [1, 2, 3, 4, 5, 6]) {
     await asks.raise({ ...core, session: S1 }, taste, {
       kind: 'taste', question: `Which header for screen ${k}?`, options: [{ id: 'blue', label: 'Blue', decision: 'none' }, { id: 'green', label: 'Green', decision: 'none' }], recommended: 'green',
