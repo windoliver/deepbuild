@@ -126,6 +126,8 @@ pub struct PostFrame<'a> {
     pub picks: &'a BTreeMap<String, u32>,
     /// The core's velocity and emission targets this frame, where something reads them (#431).
     pub core: Vec<(&'static str, &'a wgpu::TextureView)>,
+    /// #463: the rectangle, px at `size`, a look region's other side draws inside (Scene::crop).
+    pub crop: Option<[u32; 4]>,
 }
 
 /// What a frame hands the passes after the finish (issue #382: the status guard and the status

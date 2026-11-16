@@ -1,0 +1,2 @@
+PASS guard: 2 commits checked: no guarded edit lacks its own approved proposal
+proof: wall time 579.2 s

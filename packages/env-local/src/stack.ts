@@ -13,7 +13,7 @@ import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { SlotFill } from '@deepbuild/conformance';
 import { listening, type Grant, type Host, type ResourceKind, type Supervisor } from '@deepbuild/supervisor';
-import { parse } from 'yaml';
+import { parse } from './yaml.js';
 
 /** The `environment:` block of done.yaml. */
 export interface Environment {

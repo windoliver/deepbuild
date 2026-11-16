@@ -10,7 +10,7 @@ import { readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { readFacts } from '@deepbuild/adapters';
-import { isRecord as isObj, canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
+import { isRecord as isObj, canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts/runtime';
 
 type Obj = Record<string, unknown>;
 interface Counted { counts: 'read' | 'change' | 'send' | 'destructive'; effect?: string }
