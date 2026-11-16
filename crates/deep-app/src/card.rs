@@ -422,7 +422,7 @@ impl Card {
                         Row::Step { index, .. } => Some(Target::Step(*index)),
                         Row::Send => Some(Target::Send),
                         Row::Undo => Some(Target::Undo),
-                        Row::Text(_) => None,
+                        Row::Text(_) | Row::Call { .. } => None,
                     })
                     .collect()
             })
@@ -637,9 +637,39 @@ impl Card {
 
     fn row(&self, index: usize, row: &Row, chrome: &Chrome, cx: &mut Context<Self>) -> AnyElement {
         use crate::views::{control, Control};
+        // A row of the batched taste card (#1345): one group per call, keyed by its ask, each line a label in it.
+        if let Row::Call { ask, lines, .. } = row {
+            let id = format!("card-row:{}", ask.trim_start_matches("ask:"));
+            return crate::views::observed(ElementId::Name(id.into()))
+                .role(Role::Group)
+                .aria_label(SharedString::from(
+                    lines.first().cloned().unwrap_or_default(),
+                ))
+                .flex()
+                .flex_col()
+                .pt(sizes().space(1))
+                .children(lines.iter().enumerate().map(|(line, text)| {
+                    let text = SharedString::from(text.clone());
+                    crate::views::observed(("card-row-line", line))
+                        .role(Role::Label)
+                        .aria_label(text.clone())
+                        .typed(if line == 0 {
+                            sizes().body
+                        } else {
+                            sizes().small
+                        })
+                        .text_color(if line == 0 {
+                            chrome.ink_primary
+                        } else {
+                            chrome.ink_secondary
+                        })
+                        .child(text)
+                }))
+                .into_any_element();
+        }
         let label: SharedString = row.label().to_owned().into();
         let (kind, target): (Option<Control>, Option<Target>) = match row {
-            Row::Text(_) => (None, None),
+            Row::Text(_) | Row::Call { .. } => (None, None),
             Row::Option { index, .. } => (Some(Control::Plain), Some(Target::Option(*index))),
             Row::Step { index, on, .. } => (Some(Control::Switch(*on)), Some(Target::Step(*index))),
             Row::Send => (Some(Control::Main), Some(Target::Send)),

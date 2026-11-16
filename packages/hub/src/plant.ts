@@ -32,6 +32,9 @@ export type Plant =
   | 'starts-before-blockers-done' | 'state-from-comment' | 'breaker-counts-per-agent' | 'waits-for-budget-window'
   // #1347's: a run over a workspace's tasks that reads or writes a forge.
   | 'workspace-calls-forge'
+  // #1345's: a lander that records a change landed with its taste calls open as a PASS, and one that lands such a
+  // change though it reaches a release or a published page.
+  | 'lands-as-pass' | 'lands-unreversible'
   // #1342's: a flow that asks whether the work is a workspace or a repo before its card, one that makes the project
   // before its card is answered, a repo made public on an unchanged card, and a list with no row while the research runs.
   | 'asks-which-home' | 'creates-before-approval' | 'repo-public-by-default' | 'empty-list-while-researching'
@@ -363,6 +366,7 @@ const PLANTS: readonly string[] = [
   'lands-unjudged-commit', 'lander-reruns-all', 'closes-on-open', 'second-attempt-beside-pr', 'trusts-forge-merged', 'lands-as-person',
   'starts-before-blockers-done', 'state-from-comment', 'breaker-counts-per-agent', 'waits-for-budget-window',
   'workspace-calls-forge',
+  'lands-as-pass', 'lands-unreversible',
   'asks-which-home', 'creates-before-approval', 'repo-public-by-default', 'empty-list-while-researching',
   'drafted-spec-only', 'bootstrap-commands-only', 'failures-as-fail',
   'edited-check-approved', 'verdict-from-exit-status', 'empty-commit-run-alone', 'own-files-test-folders-only',

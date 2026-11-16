@@ -122,6 +122,12 @@ pub enum Row {
     },
     Send,
     Undo,
+    /// A row of the batched taste card (#1345): its ask, its lines, and the lines as one label.
+    Call {
+        ask: String,
+        label: String,
+        lines: Vec<String>,
+    },
 }
 
 impl Row {
@@ -129,7 +135,7 @@ impl Row {
     pub fn label(&self) -> &str {
         match self {
             Row::Text(text) => text,
-            Row::Option { label, .. } | Row::Step { label, .. } => label,
+            Row::Option { label, .. } | Row::Step { label, .. } | Row::Call { label, .. } => label,
             Row::Send => "Send",
             Row::Undo => "Undo",
         }
@@ -152,6 +158,11 @@ impl Row {
                 index,
                 label: visible(&label),
                 on,
+            },
+            Row::Call { ask, label, lines } => Row::Call {
+                ask,
+                label: visible(&label),
+                lines: lines.iter().map(|line| visible(line)).collect(),
             },
             row => row,
         }
@@ -324,6 +335,11 @@ impl Controller {
         }
         fresh.scope = self.model.scope.clone();
         fresh.applies = self.model.applies.clone();
+        for call in &mut fresh.calls {
+            if let Some(was) = self.model.calls.iter().find(|was| was.ask == call.ask) {
+                call.applies = was.applies.clone();
+            }
+        }
         let was = |member: usize| {
             let handle = &fresh.batch.get(member)?.0;
             let before = self.model.batch.iter().position(|(ask, _)| ask == handle)?;
@@ -445,6 +461,30 @@ impl Controller {
         }
         if let Some(label) = self.model.approve_label() {
             rows.push(Row::Text(label));
+        }
+        // The batched taste card's rows (#1345): one per call, with its two answers, what Send back does here before
+        // it's pressed, and when its recommended answer applies. Its two planted twins leave the words off the first
+        // row that reverts, and the time off the first row.
+        let mut unannounced = crate::plain::planted("card-row-reverts-unannounced");
+        let mut timeless = crate::plain::planted("card-row-without-time");
+        for call in &self.model.calls {
+            let mut lines = vec![call.question.clone(), format!("{} (recommended)", call.yes)];
+            if unannounced && call.sends == crate::kinds::REVERTS {
+                unannounced = false;
+                lines.push(call.back.clone());
+            } else {
+                lines.push(format!("{} · {}", call.back, call.sends));
+            }
+            if timeless {
+                timeless = false;
+            } else {
+                lines.push(format!("{} applies at {}", call.yes, call.applies));
+            }
+            rows.push(Row::Call {
+                ask: call.ask.clone(),
+                label: lines.join(" · "),
+                lines,
+            });
         }
         for call in &self.model.past {
             rows.push(Row::Text(format!(

@@ -112,6 +112,24 @@ pub struct Scope {
     pub also: usize,
 }
 
+/// What Send back does to a call's change (#1345): reverts it when it landed, else starts another attempt.
+pub const REVERTS: &str = "reverts this change";
+pub const ATTEMPTS: &str = "starts another attempt";
+
+/// One row of the batched taste card (#1345, #2030): a taste ask shown in the batch, what its Send back does here,
+/// and when its recommended answer applies.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CallRow {
+    pub ask: String,
+    pub question: String,
+    /// The recommended option's label, and Send back's.
+    pub yes: String,
+    pub back: String,
+    /// [`REVERTS`] or [`ATTEMPTS`].
+    pub sends: &'static str,
+    pub applies: String,
+}
+
 /// The card's content for one ask.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Model {
@@ -139,6 +157,8 @@ pub struct Model {
     pub plan_hash: Option<String>,
     pub past: Vec<PastCall>,
     pub scope: Option<Scope>,
+    /// On a taste ask shown with other taste asks, every one of them still open, in batch order: a row each (#1345).
+    pub calls: Vec<CallRow>,
 }
 
 /// Whether a plan step can be undone: its `undo` names how, unless it says it can't.
@@ -371,6 +391,10 @@ impl Model {
             Kind::Taste => past_calls(events, ask),
             _ => Vec::new(),
         };
+        let calls = match kind {
+            Kind::Taste => calls(events, handle, now),
+            _ => Vec::new(),
+        };
         Some(Model {
             ask: handle.to_owned(),
             kind,
@@ -392,6 +416,7 @@ impl Model {
             plan_hash,
             past,
             scope: scope(events, ask),
+            calls,
         })
     }
 
@@ -458,6 +483,60 @@ impl Model {
         members.sort_unstable();
         members.dedup();
         members
+    }
+}
+
+/// The batched taste card's rows (#1345): each taste ask shown beside `handle` in its batch of several and still open,
+/// in batch order, `handle` among them. Send back reverts a change the core landed at the commit the ask is pinned
+/// to, and starts another attempt on any other.
+fn calls(events: &[Value], handle: &str, now: u64) -> Vec<CallRow> {
+    let members = batch_of(events, handle);
+    let rows: Vec<CallRow> = members
+        .iter()
+        .filter_map(|member| {
+            let ask = find(events, member)?;
+            if Kind::of(ask) != Kind::Taste || !states::is_open(events, member) {
+                return None;
+            }
+            let data = &ask["data"];
+            let label = |id: &Value| {
+                data["options"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .find(|option| option["id"] == *id)
+                    .map(|option| text(&option["label"]))
+            };
+            let recommended = &data["recommended"];
+            let back = data["options"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .find(|option| option["id"] != *recommended)
+                .map(|option| text(&option["label"]))
+                .unwrap_or_default();
+            let pinned = &data["pinned_to"]["ref"];
+            let landed = events.iter().any(|event| {
+                event["kind"] == "landing.made"
+                    && event["writer"] == "core"
+                    && event["data"]["step"] == "landed"
+                    && !pinned.is_null()
+                    && event["data"]["head"] == *pinned
+            });
+            Some(CallRow {
+                ask: member.clone(),
+                question: text(&data["question"]),
+                yes: label(recommended).unwrap_or_default(),
+                back,
+                sends: if landed { REVERTS } else { ATTEMPTS },
+                applies: states::moment(states::deadline(events, ask).unwrap_or(now), now),
+            })
+        })
+        .collect();
+    if rows.len() > 1 {
+        rows
+    } else {
+        Vec::new()
     }
 }
 
