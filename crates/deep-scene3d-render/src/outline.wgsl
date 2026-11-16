@@ -160,7 +160,7 @@ fn outline_fs(in: OutlineOut) -> @location(0) vec4<f32> {
     if (in.flags & EXACT) == 0u {
         let lo = c / 12.92;
         let hi = pow((c + 0.055) / 1.055, vec3<f32>(2.4));
-        shown = finish(select(hi, lo, c <= vec3<f32>(0.04045)));
+        shown = finish(select(hi, lo, c <= vec3<f32>(0.04045)), 1.0);
     }
     return vec4<f32>(shown * alpha, alpha);
 }

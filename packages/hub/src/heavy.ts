@@ -209,6 +209,7 @@ export class HeavyQueue {
     const granted = typeof params.ticket === 'string' ? this.held.get(params.ticket) : undefined;
     if (granted && granted.secret === params.secret) return this.grant(granted);
     if (!w) {
+      if (typeof params.ticket === 'string') throw Error('this deep lease lost its place in the queue; run it again');
       if (!peer) throw Error('deep lease names no process, so whose session it runs for is unknown; run the deep command itself');
       const id = await session();
       const needs = [{ kind: 'cpu.slot', mode: 'exclusive' as Mode }, ...needsOf(params.kinds ?? [])];
@@ -287,7 +288,8 @@ export class HeavyQueue {
       const by = [...new Set([...this.held.values()].filter((h) => h.tokens > 0).map((h) => this.who(h.holder)))].join(', ');
       return { kind: 'jobs', line: await this.line(w, 'jobs', by ? `held by ${by}` : 'all in use') };
     }
-    this.waiting.splice(this.waiting.indexOf(w), 1);
+    const at = this.waiting.indexOf(w);
+    if (at >= 0) this.waiting.splice(at, 1);
     const now = this.o.now();
     const waits = { ...w.waits };
     if (w.last) waits[w.last.reason] = (waits[w.last.reason] ?? 0) + (now - w.last.at);
@@ -443,9 +445,12 @@ function runGroup(argv: string[], env: NodeJS.ProcessEnv, started: (pid: number)
     if (child.pid) started(child.pid);
     child.on('error', (error) => { process.stderr.write(`deep lease: ${argv[0]}: ${error.message}\n`); resolve(127); });
     child.on('exit', async (code, signal) => {
-      exited();
-      // The leases hold while any process of the group runs; the command's status is its first process's.
-      while (groupAlive(child.pid!)) await sleep(100);
+      // The leases hold while any process of the group runs; the command's status is its first process's. The hub hears
+      // of the first process's exit only while its group runs on: a group that ended with it is told once, below (#2328).
+      if (groupAlive(child.pid!)) {
+        exited();
+        while (groupAlive(child.pid!)) await sleep(100);
+      }
       await ended();
       resolve(code ?? 128 + (signal ? ({ SIGHUP: 1, SIGINT: 2, SIGKILL: 9, SIGTERM: 15 } as Record<string, number>)[signal] ?? 1 : 1));
     });
@@ -464,10 +469,12 @@ export async function leaseCommand(args: readonly string[]): Promise<number> {
   let token: string;
   try { token = readFileSync(rootOf(installedRoot()).token, 'utf8').trim(); } catch { return unleased(argv, 'DeepBuild isn\'t set up here (no hub token)'); }
   const socket = hubAddress().path;
-  const peer = { pid: process.pid, start: (await startOf(process.pid)) ?? '' };
+  // Its own start is read while deep-hook heavy finds the command's entry: neither needs the other's result (#2328).
+  const start = startOf(process.pid);
+  const { jobs, flag } = jobsFor(argv);
+  const peer = { pid: process.pid, start: (await start) ?? '' };
   const ask = async (method: string, params: Obj): Promise<Reply> => call(socket, token, method, params, peer);
   let reply: Reply;
-  const { jobs, flag } = jobsFor(argv);
   try { reply = await ask('lease.wait', { kinds, command: argv.join(' '), cwd: process.cwd(), jobs }); } catch (error) { return unleased(argv, `the hub can't be reached (${error instanceof Error ? error.message : String(error)})`); }
   let shown = -Infinity;
   for (;;) {

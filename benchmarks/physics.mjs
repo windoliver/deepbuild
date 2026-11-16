@@ -1,5 +1,5 @@
 // The physics module's budgets (issue #524; tests/acceptance/524/README.md: The budgets): node benchmarks/physics.mjs
-// <module | soft-labs | judge>. Each mode builds release `deep-physics` (and for `module` release `deep-show`), takes one
+// <module | soft-labs | kit | judge>. Each mode builds release `deep-physics` (and for `module` release `deep-show`), takes one
 // untimed warm-up run and five timed runs, each a fresh process, and prints its report as its last stdout line with this
 // machine's fingerprint; `judge` reads {current, base} on stdin and holds each target to its limit by the reference-Mac
 // rule (scripts/benchmark.mjs judgeLimit), so the budget window's judgeTargets runs it.
@@ -9,6 +9,8 @@
 //              process's peak resident memory; startup_ms, the time deep-show's seal spends on its interface checks, in
 //              whose pass the runtime digest is hashed (registry.seal.interfaces.ms).
 //   soft-labs: bridge_step_ms and banner_step_ms, each lab's 600 steps as `module` times the bridge.
+//   kit:       kit_native_s and kit_wasm32_s, the whole behavior kit (#191) on Rapier in one process, release natively
+//              and through scripts/physics-wasm32.mjs, each the run's wall time.
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { loadavg, tmpdir } from 'node:os';
@@ -22,7 +24,9 @@ const STEPS = 600;
 const LIMITS = {
   module: { bridge_step_ms: 2, stress_step_ms: 2, bake_10s_ms: 1000, world_mb: 50, startup_ms: 5 },
   'soft-labs': { bridge_step_ms: 2, banner_step_ms: 2 },
+  kit: { kit_native_s: 60, kit_wasm32_s: 60 },
 };
+const TASKS = { module: 'physics-module', 'soft-labs': 'physics-soft-labs', kit: 'physics-behavior-kit' };
 
 function release(pkg, bin) {
   const built = spawnSync('cargo', ['build', '--locked', '--release', '-p', pkg, '--bin', bin], { cwd: root, stdio: ['ignore', 'ignore', 'inherit'] });
@@ -103,6 +107,20 @@ const modes = {
       banner_step_ms: timed(() => stepP95(bin, lab('banner'))),
     };
   },
+  kit() {
+    const bin = release('deep-physics-rapier', 'deep-physics');
+    const kit = { call: 'behavior_kit' };
+    const wasm32 = () => {
+      const start = performance.now();
+      const r = spawnSync(process.execPath, [join(root, 'scripts', 'physics-wasm32.mjs')], { cwd: root, input: `${JSON.stringify(kit)}\n`, encoding: 'utf8', maxBuffer: 1 << 30 });
+      if (r.status !== 0 || JSON.parse(r.stdout.trim().split('\n').at(-1)).verdict !== 'pass') throw Error(`the wasm32 kit didn't pass: ${r.stdout.slice(0, 1500)} ${r.stderr.slice(-1500)}`);
+      return (performance.now() - start) / 1000;
+    };
+    return {
+      kit_native_s: timed(() => physics(bin, [kit]).ms / 1000),
+      kit_wasm32_s: timed(wasm32),
+    };
+  },
 };
 
 const mode = process.argv[2];
@@ -116,8 +134,7 @@ if (mode === 'judge') {
   const status = statuses.includes('FAIL') ? 'FAIL' : statuses.includes('BLOCKED') ? 'BLOCKED' : statuses.every((s) => s === 'PASS') ? 'PASS' : 'INCONCLUSIVE';
   console.log(JSON.stringify({ task: current.task, status, targets }));
 } else if (modes[mode]) {
-  const task = mode === 'module' ? 'physics-module' : 'physics-soft-labs';
-  console.log(JSON.stringify({ task, fingerprint: fingerprint(), targets: modes[mode]() }));
+  console.log(JSON.stringify({ task: TASKS[mode], fingerprint: fingerprint(), targets: modes[mode]() }));
 } else {
-  throw Error(`Unknown mode ${mode}; one of: module, soft-labs, judge`);
+  throw Error(`Unknown mode ${mode}; one of: module, soft-labs, kit, judge`);
 }

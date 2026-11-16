@@ -5,9 +5,11 @@
 //! public `test.sim.pos`, twice an item's `value`, and the private `test.sim.scratch`. Each of B's
 //! variants changes one thing: an array's type or name, a false `bit`, or an answer 2% off. Issue
 //! #1920 adds A and B at version 1.0.1 and B with its pin's feature changed, for the runtime digest.
+//! Issue #191 adds a planted B that adds one unit at step 300 of a recorded input track.
 
 use std::collections::BTreeMap;
 
+use deep_canvas::grammar::FLICKS_PER_SECOND;
 use deep_canvas::registry::{
     Answer, Behavior, BehaviorFixture, Equivalence, Implementation, Interface, Manifest, Module,
     Pin, Registrar, Run, Semver, StateClass,
@@ -62,6 +64,16 @@ fn near(v: &mut View<'_>) -> Result<(), OpError> {
     v.write("test.sim.pos", Val::typed(2.0 * x * (1.0 + 1e-5)))
 }
 
+/// The time of step 300 of a recorded input track, at 120 steps a second (#191).
+const STEP_300: i64 = 300 * (FLICKS_PER_SECOND / 120);
+
+/// The planted B's of #191: B's own answer, and one unit more at step 300 of a track.
+fn near_plus_one(v: &mut View<'_>) -> Result<(), OpError> {
+    let x = value_of(v)?;
+    let bump = if v.t()? == STEP_300 { 1.0 } else { 0.0 };
+    v.write("test.sim.pos", Val::typed(2.0 * x * (1.0 + 1e-5) + bump))
+}
+
 /// The planted B's: 2% off.
 fn off(v: &mut View<'_>) -> Result<(), OpError> {
     let x = value_of(v)?;
@@ -98,6 +110,19 @@ fn board(title: &str, value: f64) -> Value {
 /// The shapes every implementation registers, with its public array `pos` of type `ty`, its
 /// private array `scratch`, and the operator `step` that writes `pos`.
 fn shapes(r: &mut Registrar, pos: &'static str, ty: &str, scratch: &'static str, step: Run) {
+    shapes_reading(r, pos, ty, scratch, step, false);
+}
+
+/// The shapes, `step` also reading the time when `reads_t` (an operator's reads are no part of
+/// the interface's digest).
+fn shapes_reading(
+    r: &mut Registrar,
+    pos: &'static str,
+    ty: &str,
+    scratch: &'static str,
+    step: Run,
+    reads_t: bool,
+) {
     r.kind(
         super::kind("test", "sim", vec![super::box_param(), super::number("value")]),
         &[pos],
@@ -110,8 +135,12 @@ fn shapes(r: &mut Registrar, pos: &'static str, ty: &str, scratch: &'static str,
     r.private_array(scratch, "f32", "item", "params", "items");
     r.operator("work", "items", &["self"], &[scratch])
         .run(work(scratch));
-    r.operator("step", "items", &["self", scratch], &[pos])
-        .run(step);
+    let reads: &[&str] = if reads_t {
+        &["self", scratch, "t"]
+    } else {
+        &["self", scratch]
+    };
+    r.operator("step", "items", reads, &[pos]).run(step);
     let sidecar = json!({"checks": [{"kind": "document.determinism", "probe": "pixels", "render": "seek_vs_play"}],
                          "oracles": ["seek_play"], "codes": []});
     r.parity("kernel", "sim-small", board("Small", 1.5), sidecar.clone());
@@ -200,6 +229,23 @@ pub fn b_off() -> Module {
     Module {
         manifest: measured("test.sim.b"),
         register: |r| shapes(r, "test.sim.pos", "f32", "test.sim.scratch", off),
+    }
+}
+
+/// Planted (#191): B adding one unit to `test.sim.pos` at step 300 of a track's replay.
+pub fn b_plus_one() -> Module {
+    Module {
+        manifest: measured("test.sim.b"),
+        register: |r| {
+            shapes_reading(
+                r,
+                "test.sim.pos",
+                "f32",
+                "test.sim.scratch",
+                near_plus_one,
+                true,
+            )
+        },
     }
 }
 

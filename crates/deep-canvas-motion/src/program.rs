@@ -933,7 +933,7 @@ impl Program {
                 }
                 _ => [owner; 2],
             };
-            let table = match &c.kind {
+            let mut table = match &c.kind {
                 Kind::FollowPath {
                     points, fraction, ..
                 } => Some(crate::constraint::PathRead::compile(
@@ -944,6 +944,18 @@ impl Program {
                 )?),
                 _ => None,
             };
+            // #1960: a fraction read at a path takes that field's slot, as a driver's var does.
+            if let Kind::FollowPath {
+                fraction: crate::constraint::Fraction::Path(t),
+                ..
+            } = &c.kind
+            {
+                let slot = program.slot(items_json, &t.owner, t, 1);
+                table = table.map(|read| crate::constraint::PathRead {
+                    from: Some(slot),
+                    ..read
+                });
+            }
             program.constraints.push(Compiled {
                 owner,
                 other,
@@ -3089,16 +3101,15 @@ impl Program {
                     if lagged.iter().any(|l| l.var == *name && l.dt < 0) {
                         return Err(refused("look_ahead_on_array", format!("lag({name}) looks ahead through the array `{array}`, which a stepping module writes step by step")));
                     }
-                    // #1183: a logic item's scalar output its host baked into the document.
+                    // #1183, #1164: a logic output its host baked, or one element of it.
                     if let Some(read) = doc
                         .get("arrays")
-                        .and_then(|a| a.get(array.as_str()))
-                        .and_then(crate::array::Read::of)
+                        .and_then(|a| crate::array::Read::of_var(a, array))
                     {
                         inputs_of.push((name.as_str(), CoreInput::Array(Arc::new(read))));
                         continue;
                     }
-                    let why = "motion's drivers read only a logic item's scalar f64 output, baked into the document, or a spectrum's bands";
+                    let why = "motion's drivers read only a logic item's scalar f64 output or one element of an i32 or f64 one, baked into the document, or a spectrum's bands";
                     let detail = Some(Box::new(
                         json!({"driver": driver.id, "array": array, "why": why}),
                     ));

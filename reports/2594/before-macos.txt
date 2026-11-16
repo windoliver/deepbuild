@@ -1,0 +1,69 @@
+
+ RUN  v5.0.5 <checkout>
+
+ ❯ tests/acceptance/2594/startup.test.ts (1 test | 1 failed) 1090ms
+   × AC1 + AC2: real core directories retain 0700 during socket creation; the socket is private at creation 981ms
+ ❯ tests/acceptance/2594/existing-root.test.ts (1 test | 1 failed) 850ms
+   × AC2: an existing permissive hub root protects the socket from its creation 737ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2594/existing-root.test.ts > AC2: an existing permissive hub root protects the socket from its creation
+AssertionError: AC2: pre-existing root must not expose the socket at creation: {"pid":"<hub-pid>","threadId":0,"socket":{"path":"<sandbox>/h/.deepbuild/hub.sock","mode":384,"uid":"<owner-uid>","directory":false,"socket":true},"parents":[{"path":"<sandbox>/h/.deepbuild","mode":493,"uid":"<owner-uid>","directory":true,"socket":false}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/acceptance/2594/existing-root.test.ts:50:96
+     48|   const privateSocket = process.platform === 'linux' && (bound.socket.…
+     49|   expect(privateParent || privateSocket,
+     50|     `AC2: pre-existing root must not expose the socket at creation: ${…
+       |                                                                                                ^
+     51|   expect(outcome.ready, `the real hub must start; ${diagnostic}`).toBe…
+     52|   expect(outcome.ready!.socket).toBe(bound.socket.path);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/acceptance/2594/startup.test.ts > AC1 + AC2: real core directories retain 0700 during socket creation; the socket is private at creation
+AssertionError: AC1: concurrent core mkdir must not fail; {"exit":{"code":1,"signal":null}}
+deep hub: the core stopped: Error: EACCES: permission denied, mkdir '<sandbox>/h/.deepbuild/agents/syncs'
+    at mkdirSync (node:fs:1410:26)
+    at fs.mkdirSync (file://<checkout>/tests/acceptance/2594/overlap.mjs:44:22)
+    at new Agents (file://<checkout>/packages/hub/dist/agents.js:376:9)
+    at Core.wirePeopleServices (file://<checkout>/packages/hub/dist/core.js:483:23)
+    at new Core (file://<checkout>/packages/hub/dist/core.js:309:14)
+    at createCore (file://<checkout>/packages/hub/dist/hub-runtime.js:68:12)
+    at file://<checkout>/packages/hub/dist/core-worker.js:34:48
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+    at async node:internal/modules/esm/loader:647:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)
+: expected { code: 'EACCES', …(1) } to be null
+
+- Expected:
+null
+
++ Received:
+{
+  "code": "EACCES",
+  "message": "EACCES: permission denied, mkdir '<sandbox>/h/.deepbuild/agents/syncs'",
+}
+
+ ❯ fs.mkdirSync tests/acceptance/2594/overlap.mjs:44:22
+ ❯ tests/acceptance/2594/startup.test.ts:51:83
+     49|   // umask or repair a mode. Even root cannot hide the 0600 regression…
+     50|   expect(core.requested, 'the issue’s real core mkdir requested 0700')…
+     51|   expect(core.failure, `AC1: concurrent core mkdir must not fail; ${di…
+       |                                                                                   ^
+     52|   for (const key of ['agents', 'syncs']) {
+     53|     expect(core[key].directory, `AC1: ${key} exists as a directory`).t…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  2 failed (2)
+   Start at  14:00:16
+   Duration  2.50s (tests 88%, transform 9%, import 2%, setup 1%)

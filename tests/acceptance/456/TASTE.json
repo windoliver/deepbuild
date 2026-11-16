@@ -1,0 +1,5 @@
+{"issue": 456, "criterion": "#456.95e1edbb", "verdict": "looks_right",
+ "who": "Claude, on the owner's delegation in session (\"validate scrrenshot for me and close whtever gaps\")",
+ "when": "2026-11-15T20:40:00Z",
+ "screenshots": {"snapshot.png": "041b5f3b195baf1fd98b241db9cf62b4d239bb5fde84738e44abd23d2010426f", "id-view.png": "dba1c9424327c4b5c684627843a6fc59ceb20ff2a7324d21abfbf7fe880f01ef"},
+ "note": "Checked at 3x beside the snapshot: each of the eleven visible items has a flat region matching its silhouette, box side faces included, with its number on a black plate near its centre; digits 1-12 read cleanly; the wall is 12 and the lantern behind it is listed as 7 with no mark. No item colour is near black or white. Items 2, 4 and 9 share a slate-blue family, told apart by their numbers."}

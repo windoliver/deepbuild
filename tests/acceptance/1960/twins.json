@@ -1,0 +1,12 @@
+{
+  "#1960.fc74f8ec": [
+    "migration_renames_params_only",
+    "shelf-2.0.0-drops-read"
+  ],
+  "#1960.5e2a1e73": [
+    "migration_rewrites_channel_targets_only"
+  ],
+  "#1960.40e69d87": [
+    "store_migrated_params_under_saved_major"
+  ]
+}

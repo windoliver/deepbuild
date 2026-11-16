@@ -1,0 +1,7 @@
+{"type":"pass","file":"<checkout>/tests/acceptance/2594/existing-root.test.ts","name":"AC2: an existing permissive hub root protects the socket from its creation"}
+{"type":"pass","file":"<checkout>/tests/acceptance/2594/startup.test.ts","name":"AC1 + AC2: real core directories retain 0700 during socket creation; the socket is private at creation"}
+{"type":"end"}
+{"type":"pass","file":"<checkout>/tests/acceptance/16/socket.test.ts","name":"AC4 #16.e6b88436 the socket is not readable by another user › AC4 the installed hub's socket, started under umask 000, appears with mode 0600, owned by you, and keeps it"}
+{"type":"pass","file":"<checkout>/tests/acceptance/16/socket.test.ts","name":"AC4 #16.e6b88436 the socket is not readable by another user › AC4 the dev hub's socket, started under umask 000, appears with mode 0600, owned by you, and keeps it"}
+{"type":"pass","file":"<checkout>/tests/acceptance/16/socket.test.ts","name":"AC10 #16.03f71eb5 the hub listens on no network port of its own › AC10 with no plug-in turned on, the hub holds no TCP or UDP socket: idle, and after hooks, a paste and a run"}
+{"type":"end"}
