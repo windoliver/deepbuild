@@ -1,0 +1,10 @@
+World: home /tmp/dh27-WPgowy/h; machine linux; 2026-11-16T01:34:53.962Z; batches as setup drafts them
+
+$ deep inbox    # 2026-11-16T01:35:00.531Z
+Sign in to Claude Code again? Your sign-in lapsed. The work waits, and nothing is lost.  unblock  repob3fe  2a22a725-2d5f-4e7e-be37-05a69715e778  5s  If you don't answer: Leave it blocked, on Tue 17 Nov at 17:34  ask:01M7GZWCYX8ZYP2ZEVTWK8730M
+    answer with done (I did it), wait (Leave it blocked), agent (The agent can do it)
+    opens claude auth login
+1 ask needs you
+
+sign-in task ask:01M7GZWCYX8ZYP2ZEVTWK8730M "Sign in to Claude Code again? Your sign-in lapsed. The work waits, and nothing is lost.": inbox shown, hub list listed
+taste call ask:01M7GZWCH8PE5DWEG3Q95BRM55: inbox queued, hub list not listed
