@@ -14,7 +14,7 @@ use deep_canvas_physics::doc::World;
 use deep_canvas_physics::module::changed;
 use deep_canvas_physics::occurrence::{step_flicks, timed};
 use deep_canvas_physics::written;
-use deep_physics_rapier::channels::{output_channels, pose_at};
+use deep_physics_rapier::channels::{output_channels, pose_at, states};
 use deep_physics_rapier::runner::Run;
 use serde_json::{json, Map, Value};
 
@@ -23,6 +23,7 @@ use crate::hub::Hub;
 pub(crate) mod cast;
 mod derive;
 pub(crate) mod kit;
+mod lap;
 pub(crate) use derive::{parse, Bake};
 
 /// The physics module the full set seals, on the Rapier backend this build links, its pins as
@@ -46,6 +47,7 @@ pub(crate) fn module() -> Option<Module> {
         m.register = |r| {
             (deep_canvas_physics::module::module(&deep_physics_rapier::build()).register)(r);
             kit::register(r);
+            lap::register(r);
             cast::register(r);
         };
         if cfg!(feature = "test-physics-needs-logic") {
@@ -287,7 +289,7 @@ impl Hub<'_> {
             }
             let rows = reply["occurrences"].as_array().cloned().unwrap_or_default();
             lists.insert(format!("{id}.occurrences"), json!(timed(&rows, &w)));
-            output_channels(id, &w, &reply["bodies"], &frames, whole, &mut channels)
+            output_channels(id, &w, &states(&reply), &frames, whole, &mut channels)
                 .map_err(|e| refused(id, e))?;
             arrays.extend(readings(form, id, &w, &reply["bodies"]).map_err(|e| refused(id, e))?);
             arrays.extend(written::arrays(id, &w, form, &reply["bodies"]));

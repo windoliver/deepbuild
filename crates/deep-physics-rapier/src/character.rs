@@ -7,7 +7,7 @@
 //! step's length, and the new pose is its kinematic target for the step. Its own state rides in
 //! the checkpoint after the soft bodies' bytes, and in the canonical state after every body's.
 
-use deep_canvas_physics::backend::{Canonical, CharacterState, ShapeRef};
+use deep_canvas_physics::backend::{Canonical, CharacterState, ShapeRef, CHARACTER_FIELDS};
 use deep_canvas_physics::doc::{BodyKind, Character, World};
 use deep_canvas_physics::occurrence::{code, Payload, Raw};
 use rapier3d::control::{CharacterLength, KinematicCharacterController};
@@ -182,7 +182,6 @@ impl Rapier {
             }
             "place" => {
                 let (pos, rot) = match d.get("pose") {
-                    Some(p) if p.is_array() => (vec_of(d, "pose"), None),
                     Some(p) => (vec_of(p, "pos"), p.get("rot").cloned()),
                     None => (None, None),
                 };
@@ -649,6 +648,7 @@ impl Rapier {
                 Canonical {
                     id: s.id.clone(),
                     values,
+                    names: &CHARACTER_FIELDS,
                 }
             })
             .collect()

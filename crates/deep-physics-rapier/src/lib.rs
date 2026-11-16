@@ -8,7 +8,7 @@ use std::f32::consts::PI;
 
 use deep_canvas_physics::backend::{
     Backend, BodyState, Canonical, Checkpoint, Held, Hit, Input, JointState, Query, ShapeRef,
-    State, Targets,
+    State, Targets, VehicleState, FIELDS,
 };
 use deep_canvas_physics::bake::{Build, Pin};
 use deep_canvas_physics::caps::{Caps, RAPIER3D};
@@ -46,6 +46,8 @@ pub mod runner;
 pub mod scene;
 mod soft;
 pub mod source;
+mod vehicle;
+pub use vehicle::Plant as VehiclePlant;
 
 /// #1919 criterion 1's test backend (`test-count-calls`): each backend-interface call this process
 /// made, by method, `query`'s by kind (`query.ray`), which `backend_calls` answers.
@@ -203,6 +205,9 @@ pub struct Rapier {
     walked: Vec<Raw>,
     up: Vector,
     fall: f32,
+    /// #251: its vehicle bodies, and the wheel contacts this step's places and drives wrote.
+    pub(crate) vehicles: vehicle::Vehicles,
+    wheel_rows: Vec<Raw>,
 }
 
 fn v3(a: [f64; 3]) -> Vector {
@@ -959,6 +964,7 @@ impl Backend for Rapier {
         for (id, j) in &w.joints {
             self.joint(&handles, id, j, &mut out);
         }
+        self.vehicles.build(w, &handles);
         self.kinematic(w);
         self.walked.clear();
         self.characters_build(w);
@@ -975,6 +981,7 @@ impl Backend for Rapier {
 
     fn step(&mut self, inputs: &[Input], targets: &Targets) -> Result<(), Box<Refusal>> {
         tally("step");
+        self.wheel_rows.clear();
         self.apply(inputs)?;
         self.walk();
         let before = self.before();
@@ -982,6 +989,15 @@ impl Backend for Rapier {
         let watched = self.readings();
         self.aim(targets);
         self.push();
+        let vehicles = self.vehicles.ids();
+        // #251: a world never stepped has no broad phase yet, so a wheel's ray would meet nothing
+        // on the first step; it is built first, as the world stands.
+        if self.step == 0 && !vehicles.is_empty() {
+            self.world.detect_collisions(&(), &());
+        }
+        for id in vehicles {
+            self.drive_vehicle(&id)?;
+        }
         self.pull();
         let (particles, quarantined) = (
             self.soft.particles(&self.world),
@@ -1005,6 +1021,9 @@ impl Backend for Rapier {
         let jams: Vec<Raw> = self.jams.iter().map(|j| joints::fault(j, "jam")).collect();
         self.last.extend(jams);
         self.last.extend(torn);
+        self.last.append(&mut self.wheel_rows);
+        let touched = self.vehicles.touch(&self.world, &self.uses);
+        self.last.extend(touched);
         let faults = self.soft_faults(particles, &quarantined);
         self.last.extend(faults);
         // #524: a world with soft bodies continues from its own checkpoint at every checkpoint's
@@ -1074,9 +1093,11 @@ impl Backend for Rapier {
                     values: vec![
                         p.x, p.y, p.z, q.x, q.y, q.z, q.w, v.x, v.y, v.z, w.x, w.y, w.z,
                     ],
+                    names: &FIELDS,
                 }
             })
             .chain(self.character_canonical())
+            .chain(self.vehicles.canonical())
             .chain(self.soft.canonical(&self.world))
             .collect()
     }
@@ -1103,6 +1124,7 @@ impl Backend for Rapier {
             step: self.step,
             state: [
                 bincode::serialize(&self.world).expect("a Rapier world serializes"),
+                self.vehicles.bytes(),
                 self.soft.bytes(),
                 self.character_bytes(),
                 self.grab_bytes(),
@@ -1139,6 +1161,7 @@ impl Backend for Rapier {
             ))
         })?;
         self.world = world;
+        let rest = self.vehicles.restore(rest);
         let rest = self.soft.restore(rest);
         let rest = self.characters_of(rest);
         self.grabs = Rapier::grabs_of(rest);
@@ -1205,6 +1228,19 @@ impl Backend for Rapier {
         let to = rb.translation() + moved.translation;
         self.world.bodies[h].set_next_kinematic_translation(to);
         Ok(back(moved.translation))
+    }
+
+    fn drive_vehicle(&mut self, body: &str) -> Result<(), Box<Refusal>> {
+        tally("drive_vehicle");
+        self.vehicles.drive(body, &mut self.world).ok_or_else(|| {
+            let what = format!("{body} isn't a vehicle body, so no vehicle controller moves it");
+            let path = format!("bodies/{body}");
+            Box::new(refusal("physics.not_vehicle", path, json!(body), what))
+        })
+    }
+
+    fn vehicles(&self) -> Vec<VehicleState> {
+        self.vehicles.read()
     }
 
     /// Each collider's own ray cast at its placed pose, so a world never stepped answers too.

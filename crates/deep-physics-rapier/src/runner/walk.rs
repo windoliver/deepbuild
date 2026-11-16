@@ -11,8 +11,7 @@ use std::collections::BTreeMap;
 use super::{shape_use, Run};
 use crate::{Rapier, Twin};
 use deep_canvas_physics::backend::{Backend, CharacterState};
-use deep_canvas_physics::check::BACKEND_CAP;
-use deep_canvas_physics::doc::{Read, Refusal, World};
+use deep_canvas_physics::doc::{Read, World};
 use deep_canvas_physics::kit::Planted;
 use serde_json::{json, Value};
 
@@ -32,7 +31,7 @@ pub const PLANTED: [&str; 8] = [
 pub fn planted(name: &str, run: &mut Run) -> bool {
     run.twin = match name {
         "kit_passes_excluded" => {
-            run.kit_planted = Planted::PassesExcluded;
+            run.kit_planted = Planted::CountsExcludedPassed;
             return true;
         }
         "slope_limit_ignored" => Twin::SlopeIgnored,
@@ -83,18 +82,4 @@ pub(super) fn with_character(
                                     "sliding": c.sliding, "crouched": c.crouched, "touching": touching});
     }
     state
-}
-
-impl Run {
-    /// `e` with each refusal for a cap a test backend lacks naming that backend.
-    pub(super) fn named(&self, mut e: Vec<Refusal>) -> Vec<Refusal> {
-        if let Some(t) = self.test {
-            let ours = format!("{} {}", self.caps.backend, self.caps.version);
-            let theirs = format!("the test backend {} over {ours}", t.name);
-            for r in e.iter_mut().filter(|r| r.code == BACKEND_CAP) {
-                r.what = r.what.replacen(&ours, &theirs, 1);
-            }
-        }
-        e
-    }
 }

@@ -480,5 +480,6 @@ pub fn all() -> Vec<Fixture> {
     out.push(ccd_wall());
     out.extend(super::sensors::all());
     out.extend(super::walks::all());
+    out.extend(super::vehicles::all());
     out
 }

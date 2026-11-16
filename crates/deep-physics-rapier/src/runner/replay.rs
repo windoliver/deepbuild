@@ -1,5 +1,6 @@
 //! #2010: a golden replayed on this machine (Golden), moved here from runner.rs whole; #524 lets it
-//! name a scene's world, keyed with the scene's reads as its bake is.
+//! name a scene's world, keyed with the scene's reads as its bake is; #251 replays it with the
+//! input track it was recorded with, keyed with that track as `golden` keys it.
 
 use super::*;
 
@@ -13,8 +14,11 @@ impl Run {
             Err(e) => return Some(e),
         };
         let (g, world) = (call.get("golden")?, &world);
-        // #182: the track the golden was recorded on, keyed with it as `golden` keys it.
-        let track = match self.build(world).and_then(|(w, _)| Track::read(&w, call)) {
+        let (w, mut b) = match self.build(world) {
+            Ok(x) => x,
+            Err(e) => return Some(e),
+        };
+        let track = match Track::read(&w, call) {
             Ok(t) => t,
             Err(e) => return Some(e),
         };
@@ -47,10 +51,6 @@ impl Run {
             .map_or(Some(None), |s| s.map(Some))?;
         let (rate, _) = match rate(call) {
             Ok(r) => r,
-            Err(e) => return Some(e),
-        };
-        let (w, mut b) = match self.build(world) {
-            Ok(x) => x,
             Err(e) => return Some(e),
         };
         let reads = reads(&plan, plan.steps);
@@ -99,7 +99,14 @@ impl Run {
             let target = g["record_on"].as_str()?;
             let bake = stored(
                 dir,
-                &self.key(world, &reads, &json!([]), &rate, plan.steps, Some(target)),
+                &self.key(
+                    world,
+                    &reads,
+                    &track.json(),
+                    &rate,
+                    plan.steps,
+                    Some(target),
+                ),
             )?;
             let cp = bake["checkpoints"]
                 .as_array()?

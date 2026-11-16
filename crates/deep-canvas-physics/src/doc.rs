@@ -165,6 +165,8 @@ pub struct Body {
     pub anchors: BTreeMap<String, [f64; 3]>,
     /// #182: a character body's own fields.
     pub character: Option<Character>,
+    /// #251: a vehicle body's wheels; its kind is then dynamic.
+    pub vehicle: Option<Vehicle>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -301,11 +303,13 @@ mod heightfield;
 mod inputs;
 mod reads;
 mod soft;
+mod vehicle;
 pub use character::{Character, FIELDS as CHARACTER_FIELDS};
 pub use heightfield::HEIGHTFIELD_SAMPLES;
 pub use inputs::{resolved, Input, On, INPUTS_LATER};
 pub use reads::{probe_pose, probe_shape, Output, Read, Skin, Solve, READS};
 pub use soft::{sides, Pin, Soft, SoftShape, Stiffness, Tear, OPEN_MESH};
+pub use vehicle::{flat, Vehicle, Wheel, MOST_WHEELS};
 
 /// The world document's own fields; `kind` names it.
 const WORLD_KEYS: &[&str] = &[
@@ -1087,32 +1091,10 @@ impl Reader {
                 "anchors",
                 "priority",
                 "character",
+                "vehicle",
             ],
         );
-        let kind = match b.get("kind").and_then(Value::as_str) {
-            Some("static") => BodyKind::Static,
-            Some("dynamic") => BodyKind::Dynamic,
-            Some("kinematic") => BodyKind::Kinematic,
-            Some("character") => BodyKind::Character,
-            Some("vehicle") => {
-                self.refuse(
-                    "physics.unsupported",
-                    join(p, "kind"),
-                    &b["kind"],
-                    "a vehicle body isn't run by this backend interface yet; #251 brings it".into(),
-                );
-                BodyKind::Static
-            }
-            _ => {
-                self.refuse(
-                    "out_of_range",
-                    join(p, "kind"),
-                    b.get("kind").unwrap_or(&Value::Null),
-                    "a body's kind must be static, kinematic, dynamic, character or vehicle".into(),
-                );
-                BodyKind::Static
-            }
-        };
+        let (kind, vehicle) = (self.kind(b, p), self.vehicle(b, p));
         if let Some(x) = b.get("inertia") {
             self.refuse(
                 "physics.unsupported",
@@ -1247,6 +1229,7 @@ impl Reader {
             active: self.flag(b, "active", p, true),
             anchors,
             character,
+            vehicle,
         }
     }
 

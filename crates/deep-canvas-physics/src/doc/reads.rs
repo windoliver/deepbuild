@@ -405,6 +405,11 @@ impl Reader {
                 crossings: Vec::new(),
             });
         }
+        // #251: a vehicle body's wheel, `<body>#<wheel>`, reads its pose and its contact count.
+        let wheel = |id: &str| {
+            let (body, name) = id.split_once('#')?;
+            bodies.get(body)?.vehicle.as_ref()?.wheels.get(name)
+        };
         let found = from.as_str().filter(|id| {
             if read.of_joint() {
                 joints.contains_key(*id)
@@ -414,6 +419,7 @@ impl Reader {
                     .is_some_and(|b| b.kind == BodyKind::Character)
             } else {
                 bodies.contains_key(*id)
+                    || (wheel(id).is_some() && matches!(read, Read::Pose | Read::ContactCount))
             }
         });
         let Some(id) = found else {
