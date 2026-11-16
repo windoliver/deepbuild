@@ -2,7 +2,7 @@
 // stop on are one task, keyed on the agent; "I did it" leaves it open while the probe reads not signed in; a reading
 // from before the task closes nothing; the first signed-in reading after it closes it as signed_in, naming the account,
 // and the sessions it holds resume.
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, expect, it } from 'vitest';
@@ -96,4 +96,45 @@ it('one sign-in task per agent across a Send and two folders, closed only by a s
   expect(await open(), 'the signed-in reading closes it').toEqual([]);
   expect((await events('ask.moot')).map((e) => [e.subject, e.v, e.data]), 'closed as signed_in, naming the agent and its account').toEqual([[task, 2, { because: 'signed_in', agent: 'claude-code', account: 'acct-1' }]]);
   expect((await events('session.continued')).map((e) => [e.session, (e.data as Obj).because, (e.data as Obj).task]).sort(), 'both stopped sessions resume').toEqual([[S1, 'task_closed', task], [S2, 'task_closed', task]]);
+});
+
+it('under setup\'s 8-hour batches a sign-in task shows at once, from a Send or a lapsed sign-in, while another block waits for its batch (#22)', async () => {
+  const config = join(dir, 'config.json');
+  const settings = JSON.parse(readFileSync(config, 'utf8'));
+  settings.asks.batch = { every: '8h', cap: 20 };
+  writeFileSync(config, JSON.stringify(settings));
+  // A minute past a batch time: the next is almost 8 hours away, past no deadline here.
+  now = T0 + 4 * 3_600_000 + 60_000;
+  const status = async (ask: string) => (await asks.inbox()).find((r) => r.ask === ask)?.status;
+
+  // Another block you own, a crashed agent, waits for the batch as any ask does.
+  await record.append(hook(S2), { v: 1, id: ulid(now), kind: 'session.start', ts: now, seq: seq(now), data: { agent: 'claude-code', worktree: join(dir, 'b'), branch: 'main', thread: S2 } });
+  now += 1000;
+  await record.append(hook(S2), { v: 4, id: ulid(now), kind: 'agent.stop', subject: `session:${S2.replace(/[^0-9A-Za-z]/g, '')}`, ts: now, seq: seq(now), data: {
+    turn: 1, did_work: false, claim: false, cause: 'agent_crashed', outcome: 'failed', signature: 'sig:0123456789abcdef', owner: 'you',
+    usage: { covers: 'turn', model: 'claude-haiku-5-5', input: { value: 10, exact: true }, cached: { value: 0, exact: true }, output: { value: 1, exact: true }, context_fill: 0.01, cost: { usd: 0, basis: 'reported' } },
+  } });
+  now += 1000;
+  await asks.tick();
+  const crashed = (await open())[0]?.ask;
+  expect(crashed, 'the crashed agent\'s block raised its task').toBeDefined();
+  expect(await status(crashed!), 'a block that is no sign-in waits for its batch').toBe('queued');
+
+  // A lapsed sign-in shows at once: the work it stopped waits on you, and nothing else will show it for hours.
+  await stopped(S1, 'a');
+  const lapsed = (await open()).find((r) => r.ask !== crashed)?.ask;
+  expect(lapsed, 'the lapsed sign-in raised its task').toBeDefined();
+  expect(await status(lapsed!), 'a lapsed sign-in shows at once').toBe('shown');
+  expect(await status(crashed!), 'and the crashed agent\'s block still waits').toBe('queued');
+
+  // The task a Send raises before any stop is the same one, so close it and raise the next from a Send.
+  readings.set('claude-code', { signedIn: true, account: 'acct-1', at: now });
+  await asks.tick();
+  now += 1000;
+  await asks.tick();
+  expect(await status(lapsed!), 'the signed-in reading closes it').toBe('closed');
+  const sent = await asks.signIn(core, 'claude-code', 'req:0123456789abcdef');
+  expect(sent).not.toBe(lapsed);
+  expect(await status(sent), 'a Send\'s sign-in task shows at once').toBe('shown');
+  expect(await status(crashed!), 'and the crashed agent\'s block still waits for its batch').toBe('queued');
 });
