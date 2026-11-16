@@ -1,0 +1,39 @@
+# the new ordering test at 40db6d59c (the merge as pushed), before the fix; 2026-11-16T09:08:07Z; load 303.87 298.63 254.52
+
+ RUN  v5.0.5 ~/deepbuild/.claude/worktrees/issue-22-asks-4dae39
+
+ ❯ packages/record/test/record.test.ts (81 tests | 1 failed | 80 skipped) 1740ms
+   ❯ a commit that waited behind an evidence sync is judged by the log as it is when it commits (#1410) (2)
+     × a FULL append that arrives after two commit-each ones commits after them, with nothing to sync (#22) 335ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/record/test/record.test.ts > a commit that waited behind an evidence sync is judged by the log as it is when it commits (#1410) > a FULL append that arrives after two commit-each ones commits after them, with nothing to sync (#22)
+AssertionError: the log keeps arrival order: expected [ 5, 6, 4 ] to deeply equal [ 4, 5, 6 ]
+
+- Expected
++ Received
+
+  [
+-   4,
+    5,
+    6,
++   4,
+  ]
+
+ ❯ packages/record/test/record.test.ts:1146:50
+    1144|     const verdict = r.append(core(S), event('verdict.made', T0 + 60, u…
+    1145|     const order = (await Promise.all([first, second, verdict])).map((a…
+    1146|     expect(order, 'the log keeps arrival order').toEqual([...order].so…
+       |                                                  ^
+    1147|   });
+    1148| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 80 skipped (81)
+   Start at  01:08:20
+   Duration  3.82s (tests 57%, transform 31%, import 11%, setup 1%)
+

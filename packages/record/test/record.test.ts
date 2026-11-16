@@ -1129,6 +1129,22 @@ describe('a commit that waited behind an evidence sync is judged by the log as i
     // A mode chosen before the wait reads the session as still running, commits the resume NORMAL, and the cut drops it.
     expect((await r.read({ after: 0 })).map((e) => e.id), 'the resume survived the cut').toContain(resume.id);
   });
+
+  it('a FULL append that arrives after two commit-each ones commits after them, with nothing to sync (#22)', async () => {
+    const r = await openRecord({ path: 'record.db', now: () => T0, storage: testStorage(), commitEach: true });
+    open.push(r);
+    const S = ulidAt(T0 - 1000);
+    await r.append(hook(S), event('session.start', T0 - 1000, undefined));
+    await r.append(hook(S), event('user.ask', T0, seqAt(T0), { msg: 1 }));
+    const claim = event('claim.made', T0 + 1, undefined);
+    await r.append({ ...hook(S), writer: 'app' }, claim);
+    // Back to back, as Promise.all would make them: the verdict commits FULL in a batch of its turn, the others NORMAL.
+    const first = r.append(hook(S), event('tool.before', T0 + 40, seqAt(T0 + 40)));
+    const second = r.append(hook(S), event('tool.before', T0 + 50, seqAt(T0 + 50)));
+    const verdict = r.append(core(S), event('verdict.made', T0 + 60, undefined, { claim: `claim:${claim.id}`, verdict: `verdict:${ulidAt(T0 + 60)}` }, 1));
+    const order = (await Promise.all([first, second, verdict])).map((appended) => appended.log_pos);
+    expect(order, 'the log keeps arrival order').toEqual([...order].sort((x, y) => x - y));
+  });
 });
 
 describe('a verdict\'s commit syncs the evidence its requirements stand on, without citing it (#1410)', () => {
