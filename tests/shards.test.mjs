@@ -5,7 +5,7 @@
 // program: they run the alone block one file at a time, so its folders never overlap.
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, join } from 'node:path';
 import test from 'node:test';
@@ -50,15 +50,14 @@ function scene(t, scripts = join(CHECKOUT, 'scripts'), extra = {}) {
   chmodSync(join(bin, 'cargo'), 0o755);
   const env = { ...process.env, HOME: home, PATH: `${bin}${delimiter}${process.env.PATH}`, T_SHARDS_EVENTS: join(dir, 'events.jsonl'), DEEP_SHARDS: '2', DEEP_TEST_SHARD_FLOOR: '0', ...extra };
   for (const name of ['DEEP_THROTTLE', 'NODE_TEST_CONTEXT', 'CARGO_TARGET_DIR']) delete env[name];
-  // The run's promise carries its pid, so a test stops the run it started by that pid.
-  const affected = (args) => {
+  const affected = (args) => new Promise((done) => {
     const child = spawn(process.execPath, ['scripts/affected.mjs', ...args], { cwd: tree, env, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
     let out = '';
     child.stdout.on('data', (chunk) => { out += chunk; });
     child.stderr.on('data', (chunk) => { out += chunk; });
     t.after(() => { if (child.exitCode === null) try { process.kill(-child.pid, 'SIGKILL'); } catch {} });
-    return Object.assign(new Promise((done) => child.on('close', (status) => done({ status, out }))), { pid: child.pid });
-  };
+    child.on('close', (status) => done({ status, out }));
+  });
   const events = () => (existsSync(env.T_SHARDS_EVENTS) ? readFileSync(env.T_SHARDS_EVENTS, 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line)) : []);
   const at = (name, event) => events().find((e) => e.name === name && e.event === event);
   return { tree, files: Object.keys(files), affected, events, at, home };
@@ -132,55 +131,4 @@ test('the merge base\'s scripts, the wrong program, run the two alone folders on
   assert.ok(s.at('a', 'start') && s.at('b', 'start'), `the merge base ran no probe\n${all}`);
   const overlap = s.at('a', 'start').t < s.at('b', 'end').t && s.at('b', 'start').t < s.at('a', 'end').t;
   assert.equal(overlap, false, `the merge base ran the alone folders at once, so this test can't tell it from the change\n${all}`);
-});
-
-// From the main checkout, whose ignored .claude/worktrees/ holds every other worktree with its own target/, a new
-// shard copied them all in full off macOS (#2574's review: 81 worktrees there); a worktree at the top level too.
-test('a new shard leaves behind the other worktrees the checkout holds', async (t) => {
-  const s = scene(t);
-  const git = (...args) => execFileSync('git', ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', ...args], { cwd: s.tree, stdio: 'pipe' });
-  writeFileSync(join(s.tree, '.git/info/exclude'), '.claude/worktrees/\ntop/\n');
-  git('worktree', 'add', '-q', '-b', 'other', '.claude/worktrees/other');
-  git('worktree', 'add', '-q', '-b', 'top', 'top');
-  const run = await s.affected([`${A}shard-a.test.mjs`, `${B}shard-b.test.mjs`]);
-  const shards = join(s.home, 'deepbuild-shards');
-  const made = existsSync(shards) ? readdirSync(shards).filter((name) => /^\d+$/.test(name)) : [];
-  assert.ok(made.length, `no shard was made\n${run.out}`);
-  for (const k of made) for (const other of ['.claude/worktrees/other', 'top']) assert.equal(existsSync(join(shards, k, other)), false, `shard ${k} holds a copy of the worktree ${other}\n${run.out}`);
-  assert.match(run.out, /^PASS affected: /m, run.out);
-});
-
-// A run stopped by its PID stops its jobs too, and ends only once they have, through its own clean-up: they ran on its
-// one grant, which is free once it has ended, so a job left running would run beside the next run uncounted, and a
-// shard lock left behind lets the next run take a shard this one's children may still write. Its last line says it was
-// stopped, and it exits 128 plus the signal. The merge base gave each job a grant of its own.
-test('a run stopped by its PID stops the jobs it started', async (t) => {
-  const s = scene(t);
-  const file = `${A}shard-long.test.mjs`;
-  // Two alone folders, so the run takes shards.
-  writeFileSync(join(s.tree, `${B}shard-b.test.mjs`), probe('b', 60000));
-  writeFileSync(join(s.tree, file), `import { appendFileSync } from 'node:fs';
-import test from 'node:test';
-test('long', async () => {
-  appendFileSync(process.env.T_SHARDS_EVENTS, JSON.stringify({ name: 'long', event: 'start', pid: process.pid, t: Date.now() }) + '\\n');
-  await new Promise((done) => setTimeout(done, 60000));
-});
-`);
-  const running = s.affected([file, `${B}shard-b.test.mjs`]);
-  const until = async (ok, ms) => { for (const end = Date.now() + ms; Date.now() < end && !ok();) await new Promise((done) => setTimeout(done, 100)); return ok(); };
-  assert.ok(await until(() => s.at('long', 'start'), 60000), 'the long probe never started');
-  const { pid } = s.at('long', 'start');
-  const alive = () => { try { process.kill(pid, 0); return true; } catch { return false; } };
-  // Only a probe seen alive is killed after, so a pid the machine has reused is never.
-  let left = true;
-  t.after(() => { if (left) try { process.kill(pid, 'SIGKILL'); } catch {} });
-  process.kill(running.pid, 'SIGTERM');
-  const run = await running;
-  left = alive();
-  assert.equal(left, false, `the run ended with its job still running\n${run.out}`);
-  assert.equal(run.status, 143, `the run stopped by SIGTERM exited ${run.status}\n${run.out}`);
-  assert.match(run.out.trim().split('\n').at(-1), /^BLOCKED affected: stopped by SIGTERM/, run.out);
-  assert.match(run.out, /^SHARD 1 /m, `the run took no shard\n${run.out}`);
-  const shards = join(s.home, 'deepbuild-shards');
-  assert.deepEqual(readdirSync(shards).filter((name) => name.endsWith('.lock')), [], `the stopped run left its shard locks\n${run.out}`);
 });

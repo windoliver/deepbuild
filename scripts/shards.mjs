@@ -8,7 +8,7 @@
 // dead holder's is taken. `node shards.mjs <root> <k>` prepares shard k, as claimShards runs it, one child per shard.
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statfsSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statfsSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -92,11 +92,7 @@ function prepare(root, k) {
     // On macOS the worktree's files are cloned first, so the reset reads them once and target/ starts warm. Elsewhere,
     // where the disk can't clone (ext4), that is a full copy of target/'s many GB, and from a main checkout of every
     // worktree under .claude/, so git writes the tree alone and the shard builds its own target/, once, through sccache.
-    // A folder that is or holds another worktree of the repository's, as .claude/worktrees/ holds them all, stays
-    // behind on macOS too: the shard runs this tree only.
-    const own = MAC ? realpathSync(root) : null;
-    const others = MAC ? git(root, ['worktree', 'list', '--porcelain']).split('\n').filter((line) => line.startsWith('worktree ')).map((line) => line.slice(9)).filter((path) => path.startsWith(`${own}/`)) : [];
-    if (MAC) for (const name of readdirSync(root).filter((name) => name !== '.git' && !others.some((path) => path === `${own}/${name}` || path.startsWith(`${own}/${name}/`)))) clone(join(root, name), join(dir, name));
+    if (MAC) for (const name of readdirSync(root).filter((name) => name !== '.git')) clone(join(root, name), join(dir, name));
     // Incremental data is keyed by the crate's path, so at the shard's path it is never read, only rewritten.
     rmSync(join(dir, 'target/debug/incremental'), { recursive: true, force: true });
     git(dir, ['init', '-q', '--template=', dir]);

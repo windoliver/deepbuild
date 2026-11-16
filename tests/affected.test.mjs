@@ -45,22 +45,43 @@ const packages = {
 
 test('a change reaches the tests that import it, near or far, through the packages\' entries, and no others', (t) => {
   const { root, files } = repo(t, packages);
-  const { tests } = select(root, ['packages/a/src/leaf.ts'], { files, workspace: [] });
+  const { tests, wide } = select(root, ['packages/a/src/leaf.ts'], { files, workspace: [] });
   // Four imports away; a selector that follows only direct importers, takes a's whole entry for `deep` (so other.test.ts
-  // too) or counts a type-only import fails here. The test starting b's build sees a only through b, so it is wide (#2574).
+  // too) or counts a type-only import fails here. b's build reaches leaf.ts only through a, another package, so the test
+  // starting it is wide (#2574 AC3).
   assert.deepEqual(tests, ['tests/acceptance/1/b.test.ts', 'tests/acceptance/4/entry.test.ts']);
+  assert.deepEqual(wide, ['tests/acceptance/5/b-build.test.mjs', 'tests/acceptance/6/c-build.test.mjs']);
   // A change to the entry itself reaches everything imported through it by name.
   assert.deepEqual(select(root, ['packages/a/src/index.ts'], { files, workspace: [] }).tests,
     ['tests/acceptance/1/b.test.ts', 'tests/acceptance/2/other.test.ts', 'tests/acceptance/4/entry.test.ts']);
 });
 
-test('a test starting a package\'s build sees that package; through one it depends on is wide (#2574), and a fixture reaches its folder', (t) => {
+// The package rule reads the test's folder, not the helper's that starts the build: a helper in a's tests reaches a test
+// outside a, and one outside a reaches a test in a (#2574 AC3).
+test('a test reached through a helper that starts another package\'s build is selected only in the changed file\'s package', (t) => {
+  const start = "import { spawnSync } from 'node:child_process';\nexport const start = () => spawnSync('node', ['packages/c/dist/index.js']);\n";
+  const uses = (helper) => `import test from 'node:test';\nimport { start } from '${helper}';\ntest('c', () => start());\n`;
+  const { root, files } = repo(t, {
+    ...packages,
+    'packages/a/test/start-c.mjs': start,
+    'packages/a/test/c.test.mjs': uses('./start-c.mjs'),
+    'tests/acceptance/8/c.test.mjs': uses('../../../packages/a/test/start-c.mjs'),
+    'tests/acceptance/9/start-c.mjs': start,
+    'tests/acceptance/9/c.test.mjs': uses('./start-c.mjs'),
+    'packages/a/test/c9.test.mjs': uses('../../../tests/acceptance/9/start-c.mjs'),
+  });
+  const { tests, wide } = select(root, ['packages/a/src/leaf.ts'], { files, workspace: [] });
+  for (const test of ['packages/a/test/c.test.mjs', 'packages/a/test/c9.test.mjs']) assert.ok(tests.includes(test) && !wide.includes(test), `${test} is in a: selected\n${JSON.stringify({ tests, wide })}`);
+  for (const test of ['tests/acceptance/8/c.test.mjs', 'tests/acceptance/9/c.test.mjs']) assert.ok(wide.includes(test) && !tests.includes(test), `${test} is outside a: wide\n${JSON.stringify({ tests, wide })}`);
+});
+
+test('a test starting a package\'s build sees that package; one it reaches through another package is wide, and a fixture reaches its folder', (t) => {
   const { root, files } = repo(t, packages);
-  // b's and c's builds reach leaf.ts only through other packages.
+  // c's build reaches leaf.ts only through b and a, other packages (#2574 AC3).
   const deep = select(root, ['packages/a/src/leaf.ts'], { files, workspace: [] });
   assert.equal(deep.tests.includes('tests/acceptance/6/c-build.test.mjs'), false);
   assert.deepEqual(deep.wide, ['tests/acceptance/5/b-build.test.mjs', 'tests/acceptance/6/c-build.test.mjs']);
-  // b's own build is near; c's, which reaches b as a package it depends on, is wide.
+  // b's build sees b's own change; c's, which depends on b, sees it only through another package.
   const near = select(root, ['packages/b/src/index.ts'], { files, workspace: [] });
   assert.deepEqual(near.tests, ['tests/acceptance/1/b.test.ts', 'tests/acceptance/5/b-build.test.mjs']);
   assert.deepEqual(near.wide, ['tests/acceptance/6/c-build.test.mjs']);

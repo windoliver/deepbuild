@@ -1,0 +1,34 @@
+{
+  "id": "mathwords.dot",
+  "version": "1.0",
+  "title": "Dot",
+  "license": "MIT",
+  "author": "the #233 acceptance suite",
+  "description": "A test recipe: one filled square at the frame's centre, its side twice the radius.",
+  "inputs": {
+    "radius": {
+      "type": "number",
+      "default": 10,
+      "min": 1,
+      "max": 100,
+      "about": "half the square's side, in u"
+    }
+  },
+  "steps": {
+    "dot": {
+      "op": "mark",
+      "kind": "rect@1",
+      "params": {
+        "box": [0, 0, "2 * radius", "2 * radius"],
+        "paint": {
+          "fill": {
+            "role": "ink"
+          }
+        }
+      },
+      "at": {
+        "pos": [100, 100, 0]
+      }
+    }
+  }
+}
