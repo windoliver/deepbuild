@@ -1,0 +1,81 @@
+Base commit: 5aa64f719 ("Merge remote-tracking branch 'origin/main' into worktree-github-issue-233-a38b6d"), no implementation.
+Machine: macOS on Apple silicon (Mac17,10, 18 cores), shared and loaded. Builds as tests/acceptance/233/BASE-FAILURE.txt says.
+Command, one file at a time, each file once (the checkout path redacted to <checkout>):
+  PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/233-oracle --no-file-parallelism --testTimeout=600000 <file>
+Type-check: node node_modules/typescript/bin/tsc -p tests/acceptance/233-oracle/tsconfig.json exits 0 with no output.
+
+Result: 6 files, 26 tests, all failed, each at an assertion in its own test file: every figure naming deepbuild/math@1.0.0 is
+presented with its instances skipped (`pack_missing`), and deep_kinds answers every rate-function word `no_match`, so no mapped ease
+reaches deep-motion. As in the issue's lane, a first run showed the presentation check and the vector module gap in helpers.ts; c8
+and c9 were run once more after the second fix. Below is the last run of each file.
+
+c1-axes-coordinates.test.ts
+  × AC1 #233.b6a28e06 case 1: axes x [-3,3,1], y [0,9,3], lengths 8 × 5: coordinates map to points and back
+    AssertionError: the figure is presented and drawn: expected 'the figure is not presented: instance…' to be '' // Object.is equality
+  × AC1 #233.b6a28e06 case 2: axes x [-50,50,10], y [-2,3,1], lengths 12 × 7: coordinates map to points and back
+    AssertionError: the figure is presented and drawn: expected 'the figure is not presented: instance…' to be '' // Object.is equality
+  × AC1 #233.b6a28e06 case 3: axes x [0.5,1.5,0.25], y [-40,60,20], lengths 1 × 3: coordinates map to points and back
+    AssertionError: the figure is presented and drawn: expected 'the figure is not presented: instance…' to be '' // Object.is equality
+  × AC1 #233.b6a28e06 case 4: axes x [-10,90,25], y [5,5.5,0.1], lengths 6 × 2: coordinates map to points and back
+    AssertionError: the figure is presented and drawn: expected 'the figure is not presented: instance…' to be '' // Object.is equality
+  Tests 4 failed (4)
+
+c3-riemann.test.ts
+  × AC3 #233.1d713f1c upstream: x² − 0.25 over [−1, 1], dx 1, left samples: each bar spans its dx and rises from 0 to f at its sample
+    AssertionError: the figure is presented and drawn: expected 'the figure is not presented: instance…' to be '' // Object.is equality
+  × AC3 #233.1d713f1c upstream: x² − 0.25 over [−1, 1], dx 1, right samples: each bar spans its dx and rises from 0 to f at its sample
+    AssertionError: the figure is presented and drawn: expected 'the figure is not presented: instance…' to be '' // Object.is equality
+  × AC3 #233.1d713f1c the criterion's: x² over [0, 1], dx 0.25, center samples: each bar spans its dx and rises from 0 to f at its sample
+    AssertionError: the figure is presented and drawn: expected 'the figure is not presented: instance…' to be '' // Object.is equality
+  × AC3 #233.1d713f1c the criterion's: x² over [0, 1], dx 0.25, right samples: each bar spans its dx and rises from 0 to f at its sample
+    AssertionError: the figure is presented and drawn: expected 'the figure is not presented: instance…' to be '' // Object.is equality
+  Tests 4 failed (4)
+
+c4-to-edge.test.ts
+  × AC4 #233.ca1d4667 on 1920 × 1080: a square to_edge toward each of eight directions, at buffs 0.5 (default), 0, 0.25 and 1
+    AssertionError: the figure is presented and drawn: expected 'the figure is not presented: instance…' to be '' // Object.is equality
+  × AC4 #233.ca1d4667 on 1080 × 1920: a square to_edge toward each of eight directions, at buffs 0.5 (default), 0, 0.25 and 1
+    AssertionError: the figure is presented and drawn: expected 'the figure is not presented: instance…' to be '' // Object.is equality
+  Tests 2 failed (2)
+
+c5-rate-functions.test.ts
+  × AC5 #233.a6357ff6 each ease word's mapped entry starts at exactly 0, ends at exactly 1 and holds both ends outside its span; each there-and-back pulse is exactly 0 at both ends and outside
+    AssertionError: the ends, exactly: 7 failures:
+  × AC5 #233.a6357ff6 squish_rate_func as keys at a and b runs its function through the window and holds outside it; not_quite_there as a key value goes p of the way
+    AssertionError: smooth maps to an ease@1 entry: {"word":"smooth","code":"no_match","core":"core@0.0.0","set_digest":"4496b93cb6ca6462e18c0bd8430d02d4b2952134790319f836b94b3442cc71b5"}: expected false to be true // Object.is equality
+  Tests 2 failed (2)
+
+c8-number-line.test.ts
+  × AC8 #233.1fb6242f (0, 3, 1) excluding 0 with 1 elongated: one tick per step, numbers 1, 2 and 3 below their ticks and none at 0, the tick at 1 twice as long
+    AssertionError: the figure is presented and drawn: expected 'the figure is not presented: instance…' to be '' // Object.is equality
+  × AC8 #233.1fb6242f add_labels: x_range [−4, 4] with six labels by value, each at its value's tick
+    AssertionError: the figure is presented and drawn: expected 'the figure is not presented: instance…' to be '' // Object.is equality
+  × AC8 #233.1fb6242f number_to_point: the default line puts 1 … 5 at (1 … 5, 0) units
+    AssertionError: the figure is presented and drawn: expected 'the figure is not presented: instance…' to be '' // Object.is equality
+  Tests 3 failed (3)
+
+c9-planes-tables-matrices.test.ts
+  × AC9 #233.5c072eb1 polar plane "thirds": rings every radius_step ÷ ratio and rays every 2π ÷ (azimuth_step × ratio) from the offset
+    AssertionError: the figure is presented and drawn: expected 'the figure is not presented: instance…' to be '' // Object.is equality
+  × AC9 #233.5c072eb1 polar plane "halves, turned": rings every radius_step ÷ ratio and rays every 2π ÷ (azimuth_step × ratio) from the offset
+    AssertionError: the figure is presented and drawn: expected 'the figure is not presented: instance…' to be '' // Object.is equality
+  × AC9 #233.5c072eb1 polar plane "quarters": rings every radius_step ÷ ratio and rays every 2π ÷ (azimuth_step × ratio) from the offset
+    AssertionError: the figure is presented and drawn: expected 'the figure is not presented: instance…' to be '' // Object.is equality
+  × AC9 #233.5c072eb1 polar plane "every line a background one": rings every radius_step ÷ ratio and rays every 2π ÷ (azimuth_step × ratio) from the offset
+    AssertionError: the figure is presented and drawn: expected 'the figure is not presented: instance…' to be '' // Object.is equality
+  × AC9 #233.5c072eb1 polar plane "thirds of two steps": rings every radius_step ÷ ratio and rays every 2π ÷ (azimuth_step × ratio) from the offset
+    AssertionError: the figure is presented and drawn: expected 'the figure is not presented: instance…' to be '' // Object.is equality
+  × AC9 #233.5c072eb1 polar plane "thirds of a third of a turn": rings every radius_step ÷ ratio and rays every 2π ÷ (azimuth_step × ratio) from the offset
+    AssertionError: the figure is presented and drawn: expected 'the figure is not presented: instance…' to be '' // Object.is equality
+  × AC9 #233.5c072eb1 polar plane "a radius between circles": rings every radius_step ÷ ratio and rays every 2π ÷ (azimuth_step × ratio) from the offset
+    AssertionError: the figure is presented and drawn: expected 'the figure is not presented: instance…' to be '' // Object.is equality
+  × AC9 #233.5c072eb1 a 2 × 2 table with lines: outer draws 2 horizontal and 2 vertical rules
+    AssertionError: the figure is presented and drawn: expected 'the figure is not presented: instance…' to be '' // Object.is equality
+  × AC9 #233.5c072eb1 a 2 × 2 table with lines: both draws 3 horizontal and 3 vertical rules
+    AssertionError: the figure is presented and drawn: expected 'the figure is not presented: instance…' to be '' // Object.is equality
+  × AC9 #233.5c072eb1 a 2 × 3 table with labels and lines: both: inner rules bisect the gaps, outer rules enclose the cells at half a buff
+    AssertionError: the figure is presented and drawn: expected 'the figure is not presented: instance…' to be '' // Object.is equality
+  × AC9 #233.5c072eb1 a 2 × 3 matrix with h_buff 1.7 and v_buff 0.9 keeps its entries' centres on that grid, inside both brackets
+    AssertionError: the figure is presented and drawn: expected 'the figure is not presented: instance…' to be '' // Object.is equality
+  Tests 11 failed (11)
+

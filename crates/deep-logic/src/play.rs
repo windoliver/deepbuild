@@ -13,6 +13,7 @@ use std::rc::Rc;
 use serde_json::{json, Map, Value};
 use sha2::Digest as _;
 
+use crate::grid_bot::{Action, Bot as GridBot, Iface};
 use crate::piece::{check_in, h64, History};
 use crate::world::{track_of, Entry, Given, Record, World};
 use crate::Planted;
@@ -121,20 +122,36 @@ fn stamp(t: i64, step: i64) -> i64 {
     (t + step - 1).div_euclid(step) * step
 }
 
+/// A policy value's entries on a control: a number's, or a play interface action's gesture.
+type Values<'a> = &'a dyn Fn(&str, &Value) -> Result<Vec<Given>, Value>;
+
 /// The policy's entries over the span, each with the writer `bot`: its keys at their times and
-/// each pick every `every` seconds, drawn by hash(the run's seed, the control, the step).
-fn policy(p: &Value, seed: u64, step: i64, steps: i64) -> Result<Vec<Entry>, Value> {
+/// each pick every `every` seconds, drawn by hash(the run's seed, the control, the step). A value
+/// is a number, or (#555) the name of a play interface's action on that control, put as the
+/// entries that action's gesture makes (`values`).
+fn policy(
+    p: &Value,
+    seed: u64,
+    step: i64,
+    steps: i64,
+    values: Values<'_>,
+) -> Result<Vec<Entry>, Value> {
     let bad = |what: &str| refused("bad_input", json!(format!("bot.policy: {what}")));
     let mut out = Vec::new();
-    let entry = |t: i64, control: &str, value: f64| Entry {
-        t,
-        seq: 0,
-        control: control.to_string(),
-        value: Given::Number(value),
-        writer: "bot".into(),
-        player: 1,
-        as_of: None,
-        arrived: 0,
+    let mut entry = |t: i64, control: &str, value: &Value| -> Result<(), Value> {
+        for value in values(control, value)? {
+            out.push(Entry {
+                t,
+                seq: 0,
+                control: control.to_string(),
+                value,
+                writer: "bot".into(),
+                player: 1,
+                as_of: None,
+                arrived: 0,
+            });
+        }
+        Ok(())
     };
     let end = steps * step;
     for (control, keys) in p
@@ -149,13 +166,13 @@ fn policy(p: &Value, seed: u64, step: i64, steps: i64) -> Result<Vec<Entry>, Val
         {
             let (Some(t), Some(v)) = (
                 k.get(0).and_then(Value::as_f64),
-                k.get(1).and_then(Value::as_f64),
+                k.get(1).filter(|v| v.is_number() || v.is_string()),
             ) else {
                 return Err(bad("keys are [t, value] pairs"));
             };
             let t = stamp((t * F as f64).round() as i64, step);
             if t < end {
-                out.push(entry(t, control, v));
+                entry(t, control, v)?;
             }
         }
     }
@@ -165,11 +182,11 @@ fn policy(p: &Value, seed: u64, step: i64, steps: i64) -> Result<Vec<Entry>, Val
         .into_iter()
         .flatten()
     {
-        let from: Vec<f64> = pick
+        let from: Vec<Value> = pick
             .get("from")
             .and_then(Value::as_array)
-            .and_then(|a| a.iter().map(Value::as_f64).collect())
-            .filter(|f: &Vec<f64>| !f.is_empty())
+            .filter(|f| !f.is_empty() && f.iter().all(|v| v.is_number() || v.is_string()))
+            .cloned()
             .ok_or_else(|| bad("a pick draws from a list of values"))?;
         let every = pick
             .get("every")
@@ -184,14 +201,15 @@ fn policy(p: &Value, seed: u64, step: i64, steps: i64) -> Result<Vec<Entry>, Val
                 break;
             }
             let k = t / step;
-            out.push(entry(
+            entry(
                 t,
                 control,
-                from[(pick_hash(seed, control, k) % from.len() as u64) as usize],
-            ));
+                &from[(pick_hash(seed, control, k) % from.len() as u64) as usize],
+            )?;
             n += 1;
         }
     }
+    drop(entry);
     out.sort_by(|a, b| (a.t, &a.control).cmp(&(b.t, &b.control)));
     let mut seq: BTreeMap<String, u32> = BTreeMap::new();
     for e in &mut out {
@@ -200,6 +218,54 @@ fn policy(p: &Value, seed: u64, step: i64, steps: i64) -> Result<Vec<Entry>, Val
         *s += 1;
     }
     Ok(out)
+}
+
+/// The values a player's gesture on a listed row's action writes (Play interface `game.play@1`):
+/// on an actions control, its named action's index there with repeat 0; a cell on a point
+/// control, a press and a release of its first button there; on a pick on rows, the key in its
+/// first set; otherwise the row's first argument, an option's index.
+fn gesture(controls: &Value, action: &Action, [_, a, b]: [i32; 3]) -> Vec<Given> {
+    let control = &controls[&action.control];
+    match control.get("kind").and_then(Value::as_str) {
+        Some("actions") => {
+            let index = action
+                .action
+                .as_deref()
+                .and_then(|name| {
+                    control
+                        .get("actions")
+                        .and_then(Value::as_object)?
+                        .keys()
+                        .position(|k| k == name)
+                })
+                .unwrap_or(0);
+            vec![Given::Number(index as f64)]
+        }
+        Some("point") => {
+            let button = control
+                .pointer("/buttons/0")
+                .and_then(Value::as_str)
+                .unwrap_or("primary");
+            ["press", "release"]
+                .iter()
+                .filter_map(|phase| {
+                    crate::point::Point::parse(
+                        &json!({"phase": phase, "button": button, "cell": [a, b]}),
+                    )
+                    .map(Given::Point)
+                })
+                .collect()
+        }
+        _ if control.get("verb").and_then(Value::as_str) == Some("pick")
+            && control.get("rows").is_some() =>
+        {
+            vec![Given::Pick {
+                set: 0,
+                key: [i64::from(a), i64::from(b)],
+            }]
+        }
+        _ => vec![Given::Number(f64::from(a))],
+    }
 }
 
 /// Every control a bot names that the piece doesn't declare: refused before any run.
@@ -308,6 +374,17 @@ pub fn play(
         )
         .map_err(|r| r.0)?,
     );
+    // #555: the play interface, checked against the piece before any step, and a first-party bot
+    // that plays it.
+    let iface = call
+        .get("play")
+        .filter(|p| !p.is_null())
+        .map(|p| Iface::of(p, &piece))
+        .transpose()?;
+    let mut walker = bot
+        .map(|b| GridBot::of(b, iface.as_ref(), seed))
+        .transpose()?
+        .flatten();
     let bot_i = piece
         .items
         .iter()
@@ -365,7 +442,22 @@ pub fn play(
             .ok_or_else(|| refused("bad_input", json!("track: entries")))?,
     };
     if let Some(p) = bot.and_then(|b| b.get("policy")) {
-        entries.extend(policy(p, seed, step, steps)?);
+        // A number is the control's value; a name, an action the play interface declares on
+        // that control, as its gesture's entries.
+        let values = |control: &str, v: &Value| -> Result<Vec<Given>, Value> {
+            let Some(name) = v.as_str() else {
+                return Ok(vec![Given::Number(v.as_f64().unwrap_or(0.0))]);
+            };
+            let action = iface
+                .as_ref()
+                .and_then(|i| i.actions.iter().find(|a| a.name == name && a.control == control))
+                .ok_or_else(|| {
+                    json!({"ok": false, "code": "action_undeclared", "action": name,
+                           "what": format!("the policy puts the action {name} on {control}, which the play interface doesn't declare there")})
+                })?;
+            Ok(gesture(&controls, action, [0, 0, 0]))
+        };
+        entries.extend(policy(p, seed, step, steps, &values)?);
     }
     let mut rec = Record {
         ns: Some(Vec::new()),
@@ -424,6 +516,28 @@ pub fn play(
                         arrived: 0,
                     };
                     world.append(e)?;
+                }
+            }
+        }
+        // A first-party bot's row, as the entries a player's gesture on its action's control
+        // makes, stamped at the next step; none past the span's last step.
+        if let (Some(b), Some(iface)) = (walker.as_mut(), iface.as_ref()) {
+            if k + 1 < steps {
+                if let Some(row) = b.act(k, &world, iface) {
+                    for value in gesture(&controls, &iface.actions[row[0] as usize], row) {
+                        let control = iface.actions[row[0] as usize].control.clone();
+                        let seq = world.track.get(&control).map_or(0, Vec::len) as u32;
+                        world.append(Entry {
+                            t: (k + 1) * step,
+                            seq,
+                            control,
+                            value,
+                            writer: "bot".into(),
+                            player: 1,
+                            as_of: None,
+                            arrived: 0,
+                        })?;
+                    }
                 }
             }
         }

@@ -1,7 +1,8 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import fc from 'fast-check';
+import { open as fsOpen } from 'node:fs/promises';
 import { afterEach, describe, expect, it } from 'vitest';
 import { openEvidenceStore, scrubText, type PutRequest } from '../src/index.js';
 
@@ -21,7 +22,7 @@ async function open() {
     if (result.status !== 'stored') throw Error(result.reason);
     return result.evidence.sha256;
   };
-  return { store, writer, put, at: (ms: number) => { clock = ms; } };
+  return { store, writer, put, root, at: (ms: number) => { clock = ms; } };
 }
 
 describe('retention of a series and of map layers', () => {
@@ -627,5 +628,77 @@ describe('the scrub by field name', () => {
       scrubText(text);
       expect(performance.now() - started, `pwd: a, then 1 MB of ${JSON.stringify(unit)}`).toBeLessThan(2_000);
     }
+  });
+});
+
+// Not root: a folder without read permission still opens its files, but can't itself be opened to sync.
+describe('sync: a file counts as synced only once it and its folder are (#1410)', () => {
+  const folderOf = (root: string, sha: string) => join(root, sha.slice(0, 2));
+  it('after a sync that failed at the folder, the next sync of the same file fails again rather than passing unsynced', async () => {
+    const { store, put, root } = await open();
+    const sha = await put('a verdict\'s log');
+    chmodSync(folderOf(root, sha), 0o300);
+    try {
+      await expect(store.sync([sha])).rejects.toThrow();
+      await expect(store.sync([sha]), 'the folder still is not synced').rejects.toThrow();
+    } finally { chmodSync(folderOf(root, sha), 0o700); }
+    await store.sync([sha]);
+  });
+
+  it('a file put again by path is a new file on disk, so it is synced again', async () => {
+    const { store, writer, root } = await open();
+    const request = { kind: 'asset.pack', source: 'fixture/samples@1.0.0', redaction: 'complete', license: { name: 'CC0-1.0', allows: ['export'] } } as const;
+    const again = async () => {
+      const input = join(root, 'input.bin');
+      writeFileSync(input, 'the same bytes');
+      const result = await writer.file({ file: input, ...request });
+      if (result.status !== 'stored') throw Error(result.reason);
+      return result.evidence.sha256;
+    };
+    const sha = await again();
+    await store.sync([sha]);
+    await again();
+    chmodSync(folderOf(root, sha), 0o300);
+    try {
+      await expect(store.sync([sha]), 'the replaced file needs its sync, which this folder refuses').rejects.toThrow();
+    } finally { chmodSync(folderOf(root, sha), 0o700); }
+  });
+
+  it('a file replaced while its sync runs is synced again before the sync returns', async () => {
+    const { store, writer, root } = await open();
+    const request = { kind: 'asset.pack', source: 'fixture/samples@1.0.0', redaction: 'complete', license: { name: 'CC0-1.0', allows: ['export'] } } as const;
+    const again = async () => {
+      const input = join(root, 'input.bin');
+      writeFileSync(input, 'the same bytes');
+      const result = await writer.file({ file: input, ...request });
+      if (result.status !== 'stored') throw Error(result.reason);
+      return result.evidence.sha256;
+    };
+    const sha = await again();
+    const handle = await fsOpen(root, 'r');
+    const proto = Object.getPrototypeOf(handle) as { sync(): Promise<void> };
+    await handle.close();
+    const real = proto.sync;
+    let replaced = false;
+    proto.sync = async function (this: unknown) {
+      if (!replaced) { replaced = true; await again(); }
+      return real.call(this);
+    };
+    try { await store.sync([sha]); } finally { proto.sync = real; }
+    chmodSync(folderOf(root, sha), 0o300);
+    try {
+      // A sync that returned with the replacement unsynced would have to sync it now, and this folder refuses.
+      await store.sync([sha]);
+    } finally { chmodSync(folderOf(root, sha), 0o700); }
+  });
+
+  it('a named file that cannot be looked at refuses the sync; only one that is gone has nothing to sync', async () => {
+    const { store, put, root } = await open();
+    const sha = await put('a log');
+    chmodSync(folderOf(root, sha), 0o000);
+    try {
+      await expect(store.sync([sha])).rejects.toThrow();
+    } finally { chmodSync(folderOf(root, sha), 0o700); }
+    await store.sync(['0'.repeat(64)]);
   });
 });

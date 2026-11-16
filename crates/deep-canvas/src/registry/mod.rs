@@ -156,6 +156,8 @@ const BARE_MODULE_KINDS: &[(&str, &str)] = &[
     ("display", "scene3d"),
     ("hull", "scene3d"),
     ("surface", "scene3d"),
+    // #1636: trees from a seed.
+    ("tree", "scene3d"),
     ("curve", "scene3d"),
     ("material", "scene3d"),
     ("sky", "scene3d"),
@@ -1226,6 +1228,13 @@ pub enum Fault {
     NoCloseNames,
     /// The document check ranks close names by spelling alone, reading no rename record (#412).
     CloseBySpelling,
+    /// The document check accepts a field an installed pack's census maps, as its target (#1493).
+    CensusAccepted,
+    /// The document check reads no installed pack's census for an unknown name (#1493).
+    CensusSkipped,
+    /// The document check names a pack whose census maps a field before a kind that defines it
+    /// (#1493).
+    CensusPackFirst,
     /// Hashes each implementation's pins into its interface's digest, so another patch of a
     /// pinned crate changes it (#238).
     DigestCoversPins,
@@ -3190,9 +3199,16 @@ impl Registry {
             interface_ns,
             registries,
             registry_ns,
-            close_fault: self
-                .fault
-                .filter(|f| matches!(f, Fault::NoCloseNames | Fault::CloseBySpelling)),
+            close_fault: self.fault.filter(|f| {
+                matches!(
+                    f,
+                    Fault::NoCloseNames
+                        | Fault::CloseBySpelling
+                        | Fault::CensusAccepted
+                        | Fault::CensusSkipped
+                        | Fault::CensusPackFirst
+                )
+            }),
             camera_in_scene3d: self.fault == Some(Fault::CameraInScene3d),
             outlines,
             fills,

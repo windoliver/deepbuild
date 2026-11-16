@@ -16,6 +16,7 @@ pub mod dof;
 pub mod emitters;
 pub mod fixtures;
 pub mod flare;
+pub mod flow;
 pub mod frames;
 /// The look's finish in f64, which the look module owns (#418).
 pub use deep_canvas_marks::finish;
@@ -59,6 +60,7 @@ pub mod sweep;
 pub mod terrain;
 pub mod tints;
 pub mod trail;
+pub mod tree;
 pub mod uv;
 pub mod vars;
 pub mod views;
@@ -66,7 +68,7 @@ pub mod water;
 
 /// The wrong programs #420's, #441's and #440's criteria plant in scene3d's and the building
 /// module's operators, each reachable only through a proof surface's `planted`.
-pub const PLANTED: [&str; 28] = [
+pub const PLANTED: [&str; 30] = [
     "torus_genus_0",
     "vertex_count_off_by_one",
     "cap_left_open",
@@ -103,4 +105,7 @@ pub const PLANTED: [&str; 28] = [
     surface::PLANTS[2],
     surface::PLANTS[3],
     surface::PLANTS[4],
+    // #1636: a tree whose children keep their parent's radius, and one framed by curvature.
+    "tree_child_keeps_parent_radius",
+    "tree_curvature_frames",
 ];
