@@ -479,11 +479,8 @@ async function main(args) {
     shards = groups.shared.length > 1 && SHARDS > 1 ? await claimShards(root, Math.min(SHARDS, groups.shared.length), (line) => console.log(line)) : [];
     // All final executables are captured before any consumer or sibling cargo test starts. Each shard builds
     // from its own checkout; its first use covers every group it could take from the shared queue.
-    // A build blocks the run, so a stop is seen only between builds, once the run has let its handlers run.
-    const pause = () => new Promise((done) => setImmediate(done));
     prepareBinaries(root, files);
-    for (const { dir } of shards) if (await pause(), !stopped) prepareBinaries(dir, groups.shared.flat());
-    await pause();
+    for (const { dir } of shards) prepareBinaries(dir, groups.shared.flat());
     const lints = checks.find(({ name }) => name === 'lint').commands.filter(([, script]) => script?.startsWith('scripts/'));
     if (selection.owners.length) lints.push(['cargo', 'fmt', '--all', '--', '--check'], ['cargo', 'clippy', '--locked', '--keep-going', '--all-targets', ...selection.owners.flatMap((name) => ['-p', name]), '--', '-D', 'warnings']);
     const beside = [
@@ -577,7 +574,6 @@ async function main(args) {
     console.log(`${state} affected: ${fresh.length} new, ${known.length} already failing on main, ${unsure.length} inconclusive or blocked, ${covered.length} listed skips, ${passed.length} passed, in ${((performance.now() - started) / 1000).toFixed(0)} s at load ${loadavg()[0].toFixed(0)}; logs in ${logs}`);
     return { FAIL: 1, INCONCLUSIVE: 2, BLOCKED: 3, INVALID: 3 }[state] ?? 0;
   } catch (error) {
-    if (stopped) return console.log(`BLOCKED affected: stopped by ${stopped}, then ${error.message}; logs in ${logs}`), 128 + constants.signals[stopped];
     console.log(`${/^(?:BLOCKED|INCONCLUSIVE)\b/.test(error.message) ? '' : 'BLOCKED test binaries: '}${error.message}`);
     return error.message.startsWith('INCONCLUSIVE') ? 2 : 3;
   } finally {

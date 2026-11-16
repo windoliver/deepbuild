@@ -94,7 +94,7 @@ function prepare(root, k) {
     // worktree under .claude/, so git writes the tree alone and the shard builds its own target/, once, through sccache.
     // A folder that is or holds another worktree of the repository's, as .claude/worktrees/ holds them all, stays
     // behind on macOS too: the shard runs this tree only.
-    const own = realpathSync(root);
+    const own = MAC ? realpathSync(root) : null;
     const others = MAC ? git(root, ['worktree', 'list', '--porcelain']).split('\n').filter((line) => line.startsWith('worktree ')).map((line) => line.slice(9)).filter((path) => path.startsWith(`${own}/`)) : [];
     if (MAC) for (const name of readdirSync(root).filter((name) => name !== '.git' && !others.some((path) => path === `${own}/${name}` || path.startsWith(`${own}/${name}/`)))) clone(join(root, name), join(dir, name));
     // Incremental data is keyed by the crate's path, so at the shard's path it is never read, only rewritten.
