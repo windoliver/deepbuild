@@ -158,9 +158,9 @@ describe('the fold', () => {
     const guard = await asks.raise(core('S1'), 'guard.overridden', { ...structuredClone(fixture), deadline: T0 + 2 * DAY });
     const { folded, exception } = await fold('S1', ask('taste', 'S1 footer'));
     const rows = await asks.inbox();
-    const holders = rows.filter((r) => (r as unknown as Obj).holder === true).map((r) => r.ask);
+    const holders = rows.filter((r) => r.holder).map((r) => r.ask);
     expect(holders).toEqual([exception]);
-    for (const r of rows) expect((r as unknown as Obj).holder, r.ask).toBe(r.ask === exception);
+    for (const r of rows) expect(r.holder, r.ask).toBe(r.ask === exception);
     expect(rows.find((r) => r.ask === guard)?.kind).toBe('exception');
     expect(rows.find((r) => r.ask === folded)?.status).toBe('folded');
   });

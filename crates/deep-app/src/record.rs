@@ -27,8 +27,8 @@ use crate::states::{closes, handle, Table};
 /// Once a session holds this many open asks, its further asks fold into one exception.
 pub const FOLD_AFTER: usize = 5;
 
-/// Whether the row is the exception asks fold into, its session's "keeps asking": the hub's inbox read says so of
-/// each row, and this app of each ask created since.
+/// Whether the row is a "keeps asking" exception, the one the core folds its thread's further asks into: the hub's
+/// inbox read says so of each row, and this app of each ask created since.
 fn holds(row: &Value) -> bool {
     row["holder"] == true
 }

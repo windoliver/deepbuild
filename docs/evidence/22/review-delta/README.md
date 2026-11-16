@@ -11,4 +11,8 @@ from a panel, folded the session's next ask, and on closing released the folded 
 - `passing-holder-app.txt`, `passing-holder-asks.txt`: after the fix, deep-app's lib tests (116) and the asks
   package's tests (82) pass.
 
+The asks test is the one that fails on the merge base: the bug was the hub's rows not saying which exception holds.
+The app test passes on the merge base too, its rows carrying `holder` as the hub now sends them; it guards the panel,
+the next ask's fold and the close's release against a `holds()` that takes any exception, as the mutant run shows.
+
 The fix: each `InboxRow` carries `holder` (the core's `Ask.fold`), and the app's `holds()` reads only that.
