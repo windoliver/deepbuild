@@ -12,7 +12,7 @@ import { realpathSync } from 'node:fs';
 import { Numbers } from './numbers.js';
 import { homedir } from 'node:os';
 
-import { type Asks } from '@deepbuild/asks';
+import { signInAgentOf, type Asks } from '@deepbuild/asks';
 
 import { type Evidence, type EvidenceStore, type PutResult } from '@deepbuild/evidence';
 import { type ExtensionHost, type ViewShown } from '@deepbuild/extension-host';
@@ -68,6 +68,7 @@ import { Libraries } from './libraries.js';
 import { type Durable } from './vfs.js';
 import { refuse, Refused, refusal, type CoreOptions } from './wire.js';
 import { reported } from './setup-steps.js';
+import { openSignIn, probeOnPath } from './sign-in.js';
 import type { CallContext } from './session-types.js';
 import { HubCanvas } from './hub-canvas.js';
 import { Writes } from './receipts.js';
@@ -366,6 +367,19 @@ export class HubControl {
         await this.options.services.asks.notifications(setting !== 'allowed');
         return { reported: true };
       }
+      // The sign-in task's one button (#1349): the agent's own sign-in command, started on the trusted path; it closes nothing.
+      case 'signin.open': {
+        if (context.role !== 'app') throw refuse('role', '/method', 'Only the app starts an agent\'s sign-in.', method);
+        const handle = params.ask;
+        if (typeof handle !== 'string' || !/^ask:[0-9A-Za-z]+$/.test(handle)) throw refuse('handle_syntax', '/params/ask', 'Name the sign-in task by its handle, ask:<id>.', handle);
+        const [task] = (await this.options.services.raw(`SELECT data FROM events WHERE id = ? AND kind = 'ask.created'`, [handle.slice(4)])) as { data: string }[];
+        const agent = task ? signInAgentOf(JSON.parse(task.data)) : undefined;
+        if (!agent) throw refuse('not_found', '/params/ask', `${handle} is no agent's sign-in task.`, handle);
+        if (!openSignIn(agent, this.options.services.agents.loginPath(), this.options.settings.plant)) {
+          throw refuse('not_found', '/params/ask', `No sign-in command for ${agent} is on your login shell's PATH.`, handle);
+        }
+        return { started: true };
+      }
       case 'windows.report': return this.options.services.runner.report(params as unknown as WindowReport).then(() => { this.options.services.tasks.windowChanged(); this.options.state().sessionWindow(params); return { reported: true }; });
       default: throw new Refused(refusal('unknown_method', '/method', `The hub serves no method ${method}.`, method));
     }
@@ -416,7 +430,7 @@ export class HubControl {
       root: s.root.dir, now: s.now, plant: this.options.settings.plant, forge: this.options.settings.forge,
       token: async () => process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken(),
       raw: s.raw, appendCore: (kind, data, extra) => this.options.events.appendCore(kind, data, extra), keep: (bytes, source) => this.keep(bytes, source),
-      runner: () => s.runner, asks: () => s.asks, spaces: () => s.spaces,
+      runner: () => s.runner, asks: () => s.asks, spaces: () => s.spaces, signedIn: (agent) => probeOnPath(agent, s.agents.loginPath()),
       start: (ask, folder, scope) => s.work.under(ask, folder, scope),
       row: async (id, row) => {
         const ts = s.now();

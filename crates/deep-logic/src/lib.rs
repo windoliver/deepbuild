@@ -24,6 +24,7 @@ pub mod live;
 pub mod mirrors;
 pub mod module;
 pub mod piece;
+pub mod play;
 pub mod point;
 pub mod saves;
 pub mod services;
