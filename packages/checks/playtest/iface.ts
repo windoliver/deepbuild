@@ -41,6 +41,8 @@ export function declared(play: PlayIface): { name: string; at: Name; row?: numbe
   if (play.units?.cell !== undefined) out.push({ name: 'cell', at: play.units.cell });
   if (play.grid?.cells !== undefined) out.push({ name: 'cells', at: play.grid.cells });
   if (play.grid?.floor !== undefined) out.push({ name: 'floor', at: play.grid.floor });
+  const links = linksOf(play);
+  if (links) out.push({ name: 'links', at: links.rows }, { name: 'links.count', at: links.count });
   if (play.legal) for (const k of ['rows', 'count', 'score'] as const) if (play.legal[k] !== undefined) out.push({ name: `legal.${k}`, at: play.legal[k]! });
   return out;
 }
@@ -59,6 +61,51 @@ export function lockRefusal(play: PlayIface): string | undefined {
 /** The names that carry a range, each with its path. */
 export function ranged(play: PlayIface): { name: string; path: string; range: [number, number] }[] {
   return declared(play).flatMap((d) => (typeof d.at !== 'string' && d.at.range ? [{ name: d.name, path: d.at.name, range: d.at.range }] : []));
+}
+
+/**
+ * The grid's links (#1048), when it declares them: the rows' path, the count's path and the number of cells, layer by
+ * layer, a link's from and to must name. `links: name` with `links.count: name` beside it, or `links: {rows, count}`.
+ */
+export function linksOf(play: PlayIface): { rows: string; count: string; cells: number } | undefined {
+  const g = play.grid;
+  const l = g?.['links'] as Name | { rows: Name; count: Name } | undefined;
+  if (!g || l === undefined) return undefined;
+  const rows = typeof l === 'object' && 'rows' in l ? pathOf(l.rows) : pathOf(l as Name);
+  const count = typeof l === 'object' && 'count' in l ? pathOf(l.count) : g['links.count'] !== undefined ? pathOf(g['links.count'] as Name) : undefined;
+  if (!count) return undefined;
+  const layers = Number(g['layers'] ?? 1) || 1;
+  return { rows, count, cells: layers * g.size[0] * g.size[1] };
+}
+
+/** The first listed link naming a cell off the grid in a play's values: the step, the row and the cell. */
+export function linkOffGrid(rows: unknown[], counts: unknown[], cells: number): { step: number; row: number; cell: number } | undefined {
+  for (let k = 0; k < rows.length; k++) {
+    const flat = (Array.isArray(rows[k]) ? (rows[k] as unknown[]) : []).map(Number);
+    const c = counts[k];
+    const n = Number(Array.isArray(c) ? c[0] : c) || 0;
+    for (let r = 0; r < n && 3 * r + 1 < flat.length; r++) {
+      const bad = [flat[3 * r]!, flat[3 * r + 1]!].find((x) => !(x >= 0 && x < cells));
+      if (bad !== undefined) return { step: k, row: r, cell: bad };
+    }
+  }
+  return undefined;
+}
+
+/** The interface's legal list's paths. */
+export function legalPaths(play: PlayIface): { rows: string; count: string } | undefined {
+  const rows = play.legal?.rows !== undefined ? pathOf(play.legal.rows) : undefined;
+  const count = play.legal?.count !== undefined ? pathOf(play.legal.count) : undefined;
+  return rows && count ? { rows, count } : undefined;
+}
+
+/** #1048: the rows a step lists: `count` rows of (action, a, b). */
+export function listedAt(rows: unknown, count: unknown): [number, number, number][] {
+  const flat = (Array.isArray(rows) ? rows : []).map(Number);
+  const n = Math.max(0, Number(Array.isArray(count) ? count[0] : count) || 0);
+  const out: [number, number, number][] = [];
+  for (let r = 0; r < n && 3 * r + 2 < flat.length; r++) out.push([flat[3 * r]!, flat[3 * r + 1]!, flat[3 * r + 2]!]);
+  return out;
 }
 
 /** The first row of a ranged name's array outside its range in a play's values: the step, the row and the value. */

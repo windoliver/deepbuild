@@ -2670,6 +2670,7 @@ dependencies = [
  "base64 0.22.1",
  "crc32fast",
  "deep-app",
+ "deep-canvas-input",
  "deep-logic",
  "gpui-kit",
  "gpui-shell",
