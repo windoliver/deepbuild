@@ -1,0 +1,40 @@
+# tests/catalogue-drift-list.test.mjs against scripts/catalogue-drift.mjs as it was at 48601e8a9 (the list read, not yet hardened;
+# the first commit of the closed #2542), 2026-11-14, linux/arm64. Four fail, each at its own assertion; the control passes.
+✔ the check listed once, beside the issue that defines it, passes the lane
+✖ an entry for a catalogued event kind fails the lane, naming it, though its issue names it
+✖ an entry for a name of no event family fails the lane, naming it, though its issue names it
+✖ a name listed twice fails the lane, naming it, though each issue names it
+✖ a missing list fails the lane in a FAIL line that names the list, not a stack
+ℹ pass 1
+ℹ fail 4
+✖ failing tests:
+
+test at tests/catalogue-drift-list.test.mjs:46:1
+✖ an entry for a catalogued event kind fails the lane, naming it, though its issue names it
+  AssertionError [ERR_ASSERTION]: catalogue drift: 2 docs and 2 open issues name only catalogued event kinds, or names scripts/not-event-kinds.txt holds (2 listed)
+  
+  
+✖ an entry for a name of no event family fails the lane, naming it, though its issue names it
+  AssertionError [ERR_ASSERTION]: catalogue drift: 2 docs and 2 open issues name only catalogued event kinds, or names scripts/not-event-kinds.txt holds (2 listed)
+  
+  
+✖ a name listed twice fails the lane, naming it, though each issue names it
+  AssertionError [ERR_ASSERTION]: catalogue drift: 2 docs and 2 open issues name only catalogued event kinds, or names scripts/not-event-kinds.txt holds (1 listed)
+  
+  
+✖ a missing list fails the lane in a FAIL line that names the list, not a stack
+  AssertionError [ERR_ASSERTION]: the lane printed more than its FAIL line:
+  node:fs:483
+      return binding.readFileUtf8(path, stringToFlags(options.flag));
+# tests/catalogue-drift-list.test.mjs's missing-list test against 4e1f83bf3's scripts/catalogue-drift.mjs, which failed a missing list
+# instead of reading it as empty, 2026-11-15, linux/arm64.
+✔ the check listed once, beside the issue that defines it, passes the lane
+✔ an entry for a catalogued event kind fails the lane, naming it, though its issue names it
+✔ an entry for a name of no event family fails the lane, naming it, though its issue names it
+✔ a name listed twice fails the lane, naming it, though each issue names it
+✖ a missing list reads as no entries, as a missing scripts/planned-names.txt does: the unlisted check fails the lane, named
+✔ a line of another shape fails the lane, naming its line
+ℹ pass 5
+ℹ fail 1
+AssertionError [ERR_ASSERTION]: the FAIL line doesn't name plan.overlay (#1):
+FAIL scripts/not-event-kinds.txt can't be read (ENOENT)

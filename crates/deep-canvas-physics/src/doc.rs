@@ -50,74 +50,8 @@ pub struct Solver {
     pub ccd: bool,
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct Material {
-    pub friction: f64,
-    pub restitution: f64,
-    pub density: Option<f64>,
-    pub rolling_resistance: f64,
-    pub tangent_speed: f64,
-    /// Such as "wood": a hit carries both sides' tags (#1918).
-    pub tag: Option<String>,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum Shape {
-    Sphere {
-        radius: f64,
-    },
-    Box {
-        half: [f64; 3],
-    },
-    Capsule {
-        half_height: f64,
-        radius: f64,
-    },
-    Cylinder {
-        half_height: f64,
-        radius: f64,
-    },
-    Plane {
-        normal: [f64; 3],
-    },
-    /// The hull of at most 64 points, rounded by `radius`.
-    Convex {
-        points: Vec<[f64; 3]>,
-        radius: f64,
-    },
-    /// Triangles over vertices; static only.
-    Mesh {
-        vertices: Vec<[f64; 3]>,
-        triangles: Vec<[u32; 3]>,
-    },
-    /// #2014: `rows` × `cols` heights, row by row, row along +Z and column along +X, spanning
-    /// `scale[0]` × `scale[2]` m centred on the body with each height times `scale[1]`; each cell
-    /// splits along the diagonal from its (column, row + 1) corner to its (column + 1, row) one,
-    /// as a terrain plate draws it. Static only.
-    Heightfield {
-        cols: usize,
-        rows: usize,
-        heights: Vec<f64>,
-        scale: [f64; 3],
-    },
-    /// Other shapes of the world by ID, each at its pose.
-    Compound {
-        children: Vec<(String, Pose)>,
-    },
-}
-
-/// A rotation as written: a quaternion `[x, y, z, w]` or Euler degrees `[x, y, z]`.
-#[derive(Clone, Debug, PartialEq)]
-pub enum Rot {
-    Quat([f64; 4]),
-    Deg([f64; 3]),
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct Pose {
-    pub pos: [f64; 3],
-    pub rot: Rot,
-}
+mod shape;
+pub use shape::*;
 
 /// A shape on a body (Shape: each use on a body).
 #[derive(Clone, Debug, PartialEq)]
@@ -161,6 +95,8 @@ pub struct Body {
     pub lock_angular: [bool; 3],
     pub active: bool,
     pub anchors: BTreeMap<String, [f64; 3]>,
+    /// #251: a vehicle body's wheels; its kind is then dynamic.
+    pub vehicle: Option<Vehicle>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -296,10 +232,12 @@ mod heightfield;
 mod inputs;
 mod reads;
 mod soft;
+mod vehicle;
 pub use heightfield::HEIGHTFIELD_SAMPLES;
 pub use inputs::{resolved, Input, On, INPUTS_LATER};
 pub use reads::{probe_pose, probe_shape, Output, Read, Skin, Solve, READS};
 pub use soft::{sides, Pin, Soft, SoftShape, Stiffness, Tear, OPEN_MESH};
+pub use vehicle::{flat, Vehicle, Wheel, MOST_WHEELS};
 
 /// The world document's own fields; `kind` names it.
 const WORLD_KEYS: &[&str] = &[
@@ -1080,34 +1018,10 @@ impl Reader {
                 "active",
                 "anchors",
                 "priority",
+                "vehicle",
             ],
         );
-        let kind = match b.get("kind").and_then(Value::as_str) {
-            Some("static") => BodyKind::Static,
-            Some("dynamic") => BodyKind::Dynamic,
-            Some("kinematic") => BodyKind::Kinematic,
-            Some(k @ ("character" | "vehicle")) => {
-                let issue = if k == "character" { "#182" } else { "#251" };
-                self.refuse(
-                    "physics.unsupported",
-                    join(p, "kind"),
-                    &b["kind"],
-                    format!(
-                        "a {k} body isn't run by this backend interface yet; {issue} brings it"
-                    ),
-                );
-                BodyKind::Static
-            }
-            _ => {
-                self.refuse(
-                    "out_of_range",
-                    join(p, "kind"),
-                    b.get("kind").unwrap_or(&Value::Null),
-                    "a body's kind must be static, kinematic, dynamic, character or vehicle".into(),
-                );
-                BodyKind::Static
-            }
-        };
+        let (kind, vehicle) = (self.kind(b, p), self.vehicle(b, p));
         if let Some(x) = b.get("inertia") {
             self.refuse(
                 "physics.unsupported",
@@ -1240,6 +1154,7 @@ impl Reader {
             lock_angular: self.bools3(locks, "angular", &join(p, "locks")),
             active: self.flag(b, "active", p, true),
             anchors,
+            vehicle,
         }
     }
 

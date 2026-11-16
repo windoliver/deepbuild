@@ -27,6 +27,12 @@ const NO_CCD_CAPS: Caps = Caps {
     claims: &[],
     ..RAPIER3D
 };
+/// #251: a test backend with no vehicle controller, under its own name, so a refusal by its caps
+/// names it.
+const NO_VEHICLE_CAPS: Caps = Caps {
+    backend: "no_vehicle_controller",
+    ..TEST_CAPS
+};
 
 /// A test backend: Rapier running `twin`, under `caps`, declaring `tolerances` of its own.
 pub struct TestBackend {
@@ -45,8 +51,8 @@ const fn test(name: &'static str, twin: Twin, caps: &'static Caps) -> TestBacken
     }
 }
 
-/// #191's test backends by name.
-pub const TEST_BACKENDS: [TestBackend; 8] = [
+/// #191's test backends by name, and #251's.
+pub const TEST_BACKENDS: [TestBackend; 9] = [
     test("friction_average", Twin::FrictionAverage, &TEST_CAPS),
     test("no_joint_limits", Twin::NoJointLimits, &TEST_CAPS),
     test("restitution_min", Twin::RestitutionMin, &TEST_CAPS),
@@ -60,6 +66,7 @@ pub const TEST_BACKENDS: [TestBackend; 8] = [
         caps: &TEST_CAPS,
         tolerances: Some(r#"{"free_fall": {"relative": 0.05}}"#),
     },
+    test("no_vehicle_controller", Twin::None, &NO_VEHICLE_CAPS),
 ];
 
 /// The test backend named `name`, in a `test-backends` build only.

@@ -1,0 +1,35 @@
+{
+  "format": 1,
+  "profile": "figure",
+  "title": "A test rig: an engine on a stand",
+  "description": "An engine on a stand with a throttle slider that drives its exhaust plume, and two views, each with its own shot.",
+  "size": [1280, 720],
+  "camera": "cam",
+  "requires": {"modules": {"scene3d": "^1", "motion": "^1", "input": "^1"}},
+  "transport": {"span": "6s", "frame_rate": [60, 1]},
+  "items": {
+    "cam": {"id": "cam", "kind": "camera@1", "name": "Camera", "order": "a0", "params": {"projection": "perspective", "target": [0.4, 0.8, 0], "orbit": {"azimuth": 30, "elevation": 15, "distance": 5}, "fov": 40}},
+    "floor": {"id": "floor", "kind": "mark.box@1", "name": "Floor", "order": "a1", "params": {"size": [6, 0.1, 4], "paint": {"fill": {"role": "raised"}}}, "at": {"pos": [0, -0.05, 0]}},
+    "stand": {"id": "stand", "kind": "mark.box@1", "name": "Stand", "order": "a2", "params": {"size": [1.8, 0.5, 0.6], "paint": {"fill": {"role": "muted"}}}, "at": {"pos": [0.1, 0.25, 0]}},
+    "engine": {"id": "engine", "kind": "mark.box@1", "name": "Engine", "order": "a3", "parent": "rig", "params": {"size": [1.4, 0.5, 0.5], "paint": {"fill": {"role": "accent"}}}, "at": {"pos": [0, 0.75, 0]}},
+    "nozzle": {"id": "nozzle", "kind": "mark.box@1", "name": "Nozzle", "order": "a4", "parent": "rig", "params": {"size": [0.2, 0.5, 0.36], "paint": {"fill": {"role": "ink"}}}, "at": {"pos": [0.8, 0.75, 0]}},
+    "plume": {"id": "plume", "kind": "effect@1", "name": "Exhaust plume", "order": "a5", "params": {"kind": "plume", "anchor": "nozzle", "axis": [1, 0, 0], "plume": {"radius": 0.18, "reach": 0.5, "heat": 0.2, "shock_cells": 4, "turbulence": 0.2, "seed": 7}}}
+  },
+  "audit": {"support": {"floating": ["floor"]}},
+  "assemblies": {
+    "rig": {"parent": null, "at": {"pos": [0, 0, 0]}, "apart": [0, 0.4, 0], "order": 0, "value": 0}
+  },
+  "controls": {
+    "throttle": {"kind": "slider", "class": "document", "label": "Throttle", "role": "slider", "range": [0, 1], "default": 0.2, "increment": 0.01},
+    "view": {"kind": "stages", "class": "document", "label": "View", "role": "group", "default": "side", "stages": {"side": {"label": "Side", "shot": "side-shot"}, "exhaust": {"label": "Exhaust", "shot": "exhaust-shot"}}}
+  },
+  "drivers": {
+    "reach": {"target": "items/plume/params/plume/reach", "expr": "0.5 + 2.5 * s", "vars": {"s": "controls/throttle/value"}},
+    "heat": {"target": "items/plume/params/plume/heat", "expr": "0.2 + 0.8 * s", "vars": {"s": "controls/throttle/value"}}
+  },
+  "shots": {
+    "side-shot": {"camera": "cam", "move": "hold", "target": [0.4, 0.8, 0], "orbit": {"azimuth": 30, "elevation": 15, "distance": 5}},
+    "exhaust-shot": {"camera": "cam", "move": "hold", "target": [1.6, 0.75, 0], "orbit": {"azimuth": 60, "elevation": 10, "distance": 3}}
+  },
+  "card": {"fig": "Fig. 1", "title": "An engine on a test stand", "hint": "Drag Throttle to open the plume", "readout": "Throttle {controls/throttle/value}"}
+}

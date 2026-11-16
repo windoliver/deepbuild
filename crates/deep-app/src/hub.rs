@@ -41,9 +41,9 @@ pub fn address() -> PathBuf {
 pub const CONTRACT: &str = "1.0";
 /// Every hub method the app calls (#41), which the hub's hello must list (`FEATURES` in packages/hub/src/wire.ts).
 pub const NEEDS: &[&str] = &[
-    "inbox.read",
-    "stream.subscribe",
-    "events.read",
+    crate::record::CALLS[0],
+    crate::record::CALLS[1],
+    crate::record::CALLS[2],
     "notifications.report",
     "views.shown",
     "views.hidden",
