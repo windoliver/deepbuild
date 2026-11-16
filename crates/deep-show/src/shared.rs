@@ -982,6 +982,7 @@ impl Hub<'_> {
                 &changed,
                 &self.startup.sealed,
                 referrers,
+                &self.packs,
             )
         }
         .unwrap_or_else(|| {

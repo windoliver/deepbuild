@@ -79,6 +79,10 @@ pub struct Water {
     pub distort: f64,
     /// Foam's steepness threshold; 1 is off.
     pub foam: f64,
+    /// #968: the flow faster than which foam covers the water, m/s, or none.
+    pub foam_speed: Option<f64>,
+    /// #968: the flow the ripples' and the foam's noise moves along, or none.
+    pub flow: Option<crate::flow::Flow>,
     pub wake: Option<Wake>,
     /// Its shore (#268), with the field baked at check, or none.
     pub shore: Option<crate::shore::Shore>,
@@ -239,6 +243,15 @@ pub fn parse(material: &str, spec: &Value, seed: u32, t: f64) -> Result<Water, R
         1.0,
         [0.0, 1.0],
     )?;
+    let foam_speed = match spec.get("foam").and_then(|f| f.get("speed")) {
+        None | Some(Value::Null) => None,
+        Some(Value::String(s)) if s == "none" => None,
+        Some(v) => Some(
+            v.as_f64()
+                .filter(|x| x.is_finite() && *x >= 0.0)
+                .ok_or_else(|| bad("out_of_range", at("foam/speed")))?,
+        ),
+    };
     let wake = match spec.get("wake") {
         None | Some(Value::Null) => None,
         Some(Value::String(s)) if s == "none" => None,
@@ -269,6 +282,8 @@ pub fn parse(material: &str, spec: &Value, seed: u32, t: f64) -> Result<Water, R
         depth,
         distort,
         foam,
+        foam_speed,
+        flow: crate::flow::parse(material, spec.get("flow"))?,
         wake,
         shore: crate::shore::parse(material, spec.get("shore"))?,
         level: 0.0,
