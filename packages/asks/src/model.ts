@@ -139,6 +139,8 @@ export interface Ask {
   folded?: string;
   /** A block someone else owns: it never reaches your inbox, and the core drafts them a request in its place. */
   theirs: boolean;
+  /** An agent's sign-in task the core filed (#1349): it shows at once, never folds, and isn't held for your message (#22). */
+  signIn?: true;
   /** On a drafted request: who it's for and the block it asks them to clear. */
   request?: { to: string; block: string };
   plan?: { hash: string; steps: PlanStep[] };

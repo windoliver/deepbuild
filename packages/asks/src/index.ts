@@ -1513,11 +1513,12 @@ class AsksCore implements Asks {
         const open = inThread.filter((a) => !a.fold);
         // An agent's sign-in task (#1349) holds the work that needs the agent: it shows at once (showing.ts), so it never
         // folds into an exception, and isn't held for your message, which the agent stopped on it won't take a step to read.
-        const signIn = e.writer === 'core' && signInAgentOf(d) !== undefined;
+        // Only the core files one, by its probe or by an agent's sign-in signature; an agent naming a probe files none.
+        const signIn = e.writer === 'core' && d.kind === 'unblock' && (signInAgentOf(d) !== undefined || (signature !== undefined && this.signInAgents.has(signature)));
         const holder = fold || theirs || signIn ? undefined : inThread.find((a) => a.fold && a.who.actor === e.actor && a.who.scope === e.scope);
         const ask: Ask = {
           id: e.id, handle: `ask:${e.id}`, data: d, options: d.options as Option[], session: e.session ?? '', who: { actor: e.actor, scope: e.scope }, thread, pos: e.log_pos,
-          fold, ...(holder ? { folded: holder.handle } : {}), theirs, ...(request ? { request } : {}), words: [], receiptAlso: [], decided: new Set(), pending: {}, conflict: [],
+          fold, ...(holder ? { folded: holder.handle } : {}), theirs, ...(signIn ? { signIn: true as const } : {}), ...(request ? { request } : {}), words: [], receiptAlso: [], decided: new Set(), pending: {}, conflict: [],
           created: e.ts, wait: (d.deadline as number) - e.ts, due: d.deadline as number, since: e.ts, shown: false, unread: !signIn && e.session !== undefined && this.unread.has(e.session), hubs: e.writer === 'core' && d.kind === 'exception',
           ...(signature === undefined ? {} : { block: { signature, stops: this.coveringStops(d) } }),
         };
