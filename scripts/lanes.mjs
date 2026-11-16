@@ -768,6 +768,10 @@ byHand.push('tests/acceptance/213/ac3-trap-fuel.test.ts');
 // runs the release canvas bench's art modes, hours of frames.
 alone.push('tests/acceptance/463/');
 timed.push('tests/acceptance/463/ac2-budgets.test.ts');
+// #233's files each build deep-show and read math@1's expansions through deep-canvas-render or deep-motion; ac11
+// times the math document against its expansion written by hand under the frame budget.
+alone.push('tests/acceptance/233/', 'tests/acceptance/233-oracle/');
+timed.push('tests/acceptance/233/ac11-budgets.test.ts');
 
 // #2516: each file builds deep-gpu and reads linear targets; castle costs require a timed grant.
 alone.push('tests/acceptance/2516/');
