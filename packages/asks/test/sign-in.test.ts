@@ -184,3 +184,26 @@ it('under setup\'s 8-hour batches a lapsed sign-in in a session that keeps askin
   expect(await signInStatus(), 'the sign-in task is shown at once, not folded to wait for the exception\'s batch').toBe('shown');
   expect((await asks.inbox()).filter((r) => r.kind === 'taste' && r.status !== 'closed').map((r) => r.status), 'the taste calls still wait for their batch').not.toContain('shown');
 });
+
+it('under setup\'s 8-hour batches an agent\'s ask that names a sign-in probe waits for its batch: only the core files a sign-in task (#22)', async () => {
+  const config = join(dir, 'config.json');
+  const settings = JSON.parse(readFileSync(config, 'utf8'));
+  settings.asks.batch = { every: '8h', cap: 20 };
+  writeFileSync(config, JSON.stringify(settings));
+  now = T0 + 4 * 3_600_000 + 60_000;
+  await started(S1, 'a');
+  const fixture = askSources().find((r) => r.source === 'deep_ask.unblock')!.fixture.ask as Obj;
+  const agent: Connection = { writer: `mcp:${S1}`, ...who, session: S1 };
+  const handle = await asks.raise(agent, 'deep_ask.unblock', { ...structuredClone(fixture), deadline: now + 2 * 86_400_000, proves: 'claude-code sign-in probe' });
+  expect((await asks.inbox()).find((r) => r.ask === handle)?.status, 'an agent\'s word that its ask is a sign-in skips no batch').toBe('queued');
+});
+
+it('under setup\'s 8-hour batches a lapsed sign-in in a session whose agent the record never named shows at once, by its sign-in signature (#22)', async () => {
+  const config = join(dir, 'config.json');
+  const settings = JSON.parse(readFileSync(config, 'utf8'));
+  settings.asks.batch = { every: '8h', cap: 20 };
+  writeFileSync(config, JSON.stringify(settings));
+  now = T0 + 4 * 3_600_000 + 60_000;
+  await lapses(S1);
+  expect(await signInStatus(), 'the task the sign-in probe closes shows at once').toBe('shown');
+});
