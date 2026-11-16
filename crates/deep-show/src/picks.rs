@@ -778,7 +778,10 @@ impl Hub<'_> {
             Ok(None) => return json!({"code": "no_logic"}),
             Err(i) => return json!({"code": i.code, "issues": [i.to_json()]}),
         };
-        let entries: Vec<Entry> = read.iter().filter_map(Entry::parse).collect();
+        let mut entries: Vec<Entry> = read.iter().filter_map(Entry::parse).collect();
+        if let Err(i) = self.with_world_reads(&form, &read, &piece, &mut entries) {
+            return json!({"code": i.code, "issues": [i.to_json()]});
+        }
         let planted = deep_logic::Planted {
             services_after_checkpoint: self.planted(crate::hub::Planted::Physics(
                 crate::physics::Planted::ResultsAfterCheckpoint,

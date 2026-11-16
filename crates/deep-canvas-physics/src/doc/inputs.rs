@@ -12,8 +12,9 @@ use super::{data, join, Body, Reader, Refusal};
 pub const INPUTS_LATER: &str = "#2371";
 
 /// The input kinds this backend interface runs, each with its fields and their defaults; #191
-/// runs `deactivate`, which the behavior kit's sensor fixture needs.
-const KINDS: [(&str, &[(&str, Field)]); 6] = [
+/// runs `deactivate`, which the behavior kit's sensor fixture needs; #182 a character body's
+/// `move {velocity}`, `jump {height}`, `launch {vertical}`, `place {pose}` and `crouch {on}`.
+const KINDS: [(&str, &[(&str, Field)]); 9] = [
     (
         "grab",
         &[
@@ -31,9 +32,19 @@ const KINDS: [(&str, &[(&str, Field)]); 6] = [
             ("linear", Field::Vec3([0.0; 3])),
             ("angular", Field::Vec3([0.0; 3])),
             ("from", Field::From),
+            ("vertical", Field::Num(0.0, f64::MIN)),
         ],
     ),
-    ("move", &[("to", Field::Vec3([0.0; 3]))]),
+    (
+        "move",
+        &[
+            ("to", Field::Vec3([0.0; 3])),
+            ("velocity", Field::Vec3([0.0; 3])),
+        ],
+    ),
+    ("jump", &[("height", Field::Num(1.0, 0.0))]),
+    ("place", &[("pose", Field::Pose)]),
+    ("crouch", &[("on", Field::Bool(true))]),
     (
         "poke",
         &[
@@ -47,11 +58,10 @@ const KINDS: [(&str, &[(&str, Field)]); 6] = [
 ];
 
 /// The kinds and fields the design gives that wait on `INPUTS_LATER` or the issue named.
-const LATER: [(&str, &str); 10] = [
+const LATER: [(&str, &str); 9] = [
     ("set", INPUTS_LATER),
     ("activate", INPUTS_LATER),
     ("blast", INPUTS_LATER),
-    ("jump", "#182"),
     ("drive", "#251"),
     ("steer", "#251"),
     ("brake", "#251"),
@@ -71,6 +81,8 @@ enum Field {
     /// Where a launch places its body first (#540): a position `[x, y, z]`, a pose `{pos, rot}`,
     /// or `pose`, the pose its `from.pos` and `from.rot` data fields give; none by default.
     From,
+    /// #182: where a place moves a character body: a position `[x, y, z]` or a pose `{pos, rot}`.
+    Pose,
 }
 
 /// The issue that brings a launch from a body's anchor.
@@ -171,6 +183,19 @@ fn field(kind: &str, key: &str, v: &Value, path: &str) -> Result<Value, Box<Refu
                     .and_then(Value::as_array)
                     .is_some_and(|a| a.len() == 3)
         }
+        Field::Pose => match v {
+            Value::Array(_) => three(v),
+            Value::Object(o) => {
+                o.keys().all(|k| k == "pos" || k == "rot")
+                    && o.get("pos").is_some_and(three)
+                    && o.get("rot").is_none_or(|r| {
+                        r.as_array().is_some_and(|a| {
+                            (3..=4).contains(&a.len()) && a.iter().all(|x| x.as_f64().is_some())
+                        })
+                    })
+            }
+            _ => false,
+        },
         Field::From => match v {
             Value::String(s) if s == "pose" => true,
             Value::String(s) => {
@@ -203,6 +228,7 @@ fn field(kind: &str, key: &str, v: &Value, path: &str) -> Result<Value, Box<Refu
             Field::Bool(_) => "true or false".into(),
             Field::Plane => "view, ground or {normal: vec3}".into(),
             Field::From => "a position [x, y, z], a pose {pos, rot} or pose".into(),
+            Field::Pose => "a position [x, y, z] or a pose {pos, rot}".into(),
         };
         Err(bad(path.into(), v, format!("{path} must be {want}")))
     }
@@ -234,14 +260,16 @@ fn own(kind: &str) -> Map<String, Value> {
     fields
         .iter()
         .filter(|(n, _)| !matches!(*n, "point" | "impulse" | "push") || kind == "grab")
-        .filter(|(n, _)| *n != "from")
+        // #182: a launch's vertical, a jump's height and a place's pose have no default (a jump
+        // without a height takes its body's own), nor a move's velocity beside a grab's `to`.
+        .filter(|(n, _)| !matches!(*n, "from" | "vertical" | "height" | "pose" | "velocity"))
         .map(|(n, f)| {
             let v = match f {
                 Field::Num(d, _) => json!(d),
                 Field::Vec3(d) => json!(d),
                 Field::Bool(b) => json!(b),
                 Field::Plane => json!("view"),
-                Field::From => Value::Null,
+                Field::From | Field::Pose => Value::Null,
             };
             ((*n).to_string(), v)
         })

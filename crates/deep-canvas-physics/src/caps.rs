@@ -50,5 +50,5 @@ pub const RAPIER3D: Caps = Caps {
         "It runs gear, rack, pulley and path joints only in kinematic mode.",
         "A contact with restitution 1 or more never comes to rest.",
     ],
-    claims: &["ccd", "soft_bodies"],
+    claims: &["ccd", "soft_bodies", "character_controller"],
 };

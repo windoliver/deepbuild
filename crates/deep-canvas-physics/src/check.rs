@@ -203,6 +203,26 @@ fn refused_by(doc: &Value, caps: &Caps) -> Vec<Refusal> {
             out.push(cap("soft".into(), v, caps, "claims no soft bodies"));
         }
     }
+    // #182: a character body needs the backend's character controller.
+    if !claims("character_controller") {
+        for (id, b) in doc
+            .get("bodies")
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten()
+        {
+            if let Some(v) = b.get("kind").filter(|k| k.as_str() == Some("character")) {
+                out.push(cap(
+                    format!("bodies/{id}/kind"),
+                    v,
+                    caps,
+                    &format!(
+                        "claims no character controller, so character body {id} can't run on it"
+                    ),
+                ));
+            }
+        }
+    }
     // #524: no backend this module runs takes a soft body's pressure (caps.declared).
     for (id, b) in doc
         .get("soft")

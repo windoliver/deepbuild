@@ -24,10 +24,14 @@ pub enum Read {
     Energy,
     /// A soft body's particles (#524).
     ParticlePositions,
+    /// #182: a character body's grounded, sliding and crouched, each 0 or 1.
+    Grounded,
+    Sliding,
+    Crouched,
 }
 
 /// Each read's name, and whether it reads a joint rather than a body.
-pub const READS: [(&str, Read, bool); 9] = [
+pub const READS: [(&str, Read, bool); 12] = [
     ("pose", Read::Pose, false),
     ("position", Read::Position, false),
     ("angle", Read::Angle, false),
@@ -37,6 +41,9 @@ pub const READS: [(&str, Read, bool); 9] = [
     ("contact_count", Read::ContactCount, false),
     ("energy", Read::Energy, false),
     ("particle_positions", Read::ParticlePositions, false),
+    ("grounded", Read::Grounded, false),
+    ("sliding", Read::Sliding, false),
+    ("crouched", Read::Crouched, false),
 ];
 
 impl Read {
@@ -52,6 +59,21 @@ impl Read {
     /// Whether it reads a joint (`joint_coordinate`, `joint_force`) rather than a body.
     pub fn of_joint(self) -> bool {
         READS.iter().any(|r| r.1 == self && r.2)
+    }
+
+    /// #182: whether it reads a character body's own state.
+    pub fn of_character(self) -> bool {
+        matches!(self, Read::Grounded | Read::Sliding | Read::Crouched)
+    }
+
+    /// Where a position or a velocity read starts among a body's canonical values
+    /// (`backend::FIELDS`); none for another read.
+    pub fn vec3_at(self) -> Option<usize> {
+        match self {
+            Read::Position => Some(0),
+            Read::Velocity => Some(7),
+            _ => None,
+        }
     }
 }
 
@@ -312,7 +334,8 @@ impl Reader {
     }
 
     /// An output reading a body, a joint or a soft body's particles; its post-processing fields
-    /// and the reads of character bodies are refused, naming the issue that brings each.
+    /// are refused, naming the issue that brings them, and a character body's reads (#182) from
+    /// any other body.
     pub(super) fn output(
         &mut self,
         v: &Value,
@@ -330,17 +353,6 @@ impl Reader {
         let name = o.get("read").and_then(Value::as_str).unwrap_or_default();
         let read = match (Read::named(name), name) {
             (Some(r), _) => r,
-            (None, "grounded" | "sliding") => {
-                self.refuse(
-                    "physics.unsupported",
-                    join(p, "read"),
-                    &o["read"],
-                    format!(
-                        "the read {name} isn't run by this backend interface yet; #182 brings it"
-                    ),
-                );
-                return None;
-            }
             (None, _) => {
                 let names: Vec<&str> = READS.iter().map(|r| r.0).collect();
                 let at = o.get("read").unwrap_or(&Value::Null);
@@ -396,12 +408,22 @@ impl Reader {
         let found = from.as_str().filter(|id| {
             if read.of_joint() {
                 joints.contains_key(*id)
+            } else if read.of_character() {
+                bodies
+                    .get(*id)
+                    .is_some_and(|b| b.kind == BodyKind::Character)
             } else {
                 bodies.contains_key(*id)
             }
         });
         let Some(id) = found else {
-            let what = if read.of_joint() { "joint" } else { "body" };
+            let what = if read.of_joint() {
+                "joint"
+            } else if read.of_character() {
+                "character body"
+            } else {
+                "body"
+            };
             self.refuse(
                 "ref_unresolved",
                 join(p, "from"),

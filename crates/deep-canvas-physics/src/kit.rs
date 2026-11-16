@@ -8,7 +8,9 @@
 
 use serde_json::{json, Map, Value};
 
-use crate::backend::{Backend, BodyState, Input, JointState, Query, State, Targets};
+use crate::backend::{
+    Backend, BodyState, CharacterState, Input, JointState, Query, State, Targets,
+};
 use crate::check::check;
 use crate::doc::World;
 use crate::occurrence::{self, Row, KINDS};
@@ -18,6 +20,7 @@ use crate::track;
 mod fixtures;
 pub mod scan;
 mod sensors;
+pub mod walks;
 
 pub use fixtures::{all, test_capped};
 
@@ -96,6 +99,8 @@ pub enum Measure {
         enter: f64,
         exit: f64,
     },
+    /// #182: how many of a character fixture's characters break their rule, each named.
+    Walks(Vec<walks::Walk>),
 }
 
 /// One fixture of the behavior part.
@@ -120,8 +125,9 @@ pub struct Fixture {
 impl Fixture {
     /// The fixture as the interface's data: `{name, world, measure, answer, tolerance, caps}`.
     pub fn json(&self) -> Value {
-        json!({"name": self.name, "world": self.world, "measure": named_measure(&self.measure),
-               "answer": self.answer, "tolerance": tolerance_json(self.tolerance), "caps": self.caps})
+        json!({"name": self.name, "world": self.world, "steps": self.steps, "track": self.track,
+               "measure": named_measure(&self.measure), "answer": self.answer,
+               "tolerance": tolerance_json(self.tolerance), "caps": self.caps})
     }
 }
 
@@ -133,6 +139,8 @@ pub enum Planted {
     None,
     RunsExcluded,
     AdmitsUnfixtured,
+    /// #182: a report that reads `pass` for a fixture its backend's caps exclude.
+    PassesExcluded,
 }
 
 /// The kit's report on one backend.
@@ -175,6 +183,8 @@ struct Trace {
     states: Vec<State>,
     joints: Vec<Vec<JointState>>,
     rows: Vec<Row>,
+    /// #182: each character body's own state.
+    characters: Vec<Vec<CharacterState>>,
 }
 
 fn body_of<'a>(s: &'a State, id: &str) -> Option<&'a BodyState> {
@@ -197,6 +207,7 @@ fn trace(b: &mut dyn Backend, w: &World, f: &Fixture) -> Result<Trace, String> {
         states: vec![start.clone()],
         joints: vec![b.joints()],
         rows: Vec::new(),
+        characters: vec![b.characters()],
     };
     for k in 1..=f.steps {
         let inputs: Vec<Input> = by_step
@@ -224,8 +235,73 @@ fn trace(b: &mut dyn Backend, w: &World, f: &Fixture) -> Result<Trace, String> {
             .extend(occurrence::sorted(k as u32, b.occurrences(), &rank));
         t.states.push(b.read());
         t.joints.push(b.joints());
+        t.characters.push(b.characters());
     }
     Ok(t)
+}
+
+/// #182: whether character `id` reads `read` (grounded or sliding) after step `k`.
+fn reads(t: &Trace, id: &str, read: &str, k: usize) -> Option<bool> {
+    let c = t.characters.get(k)?.iter().find(|c| c.id == id)?;
+    Some(if read == "sliding" {
+        c.sliding
+    } else {
+        c.grounded
+    })
+}
+
+/// #182: each failure of a character fixture's characters, named: the body, what it met, the
+/// step and the height its lowest point reached over its start, m.
+fn walked(t: &Trace, cases: &[walks::Walk]) -> Vec<Value> {
+    use walks::Rule;
+    let mut out = Vec::new();
+    for c in cases {
+        let p = path(t, c.body);
+        let y0 = p.first().map_or(0.0, |x| x[1]);
+        let rise = |k: usize| p.get(k).map_or(0.0, |x| x[1] - y0);
+        let (body, meets) = (c.body, c.meets);
+        let fail = |step: usize, height: f64, what: String| json!({"body": body, "obstacle": meets, "step": step, "height": height, "what": what});
+        match &c.rule {
+            Rule::Climbs {
+                rise: want,
+                within,
+                by,
+            } => {
+                let k = (*by).min(p.len().saturating_sub(1));
+                if (rise(k) - want).abs() > *within {
+                    out.push(fail(k, rise(k), format!("body {body} on {meets} stands {:.4} m above its start at step {k}, where {want} m within {within} m is due", rise(k))));
+                }
+            }
+            Rule::Stops { most } => {
+                if let Some(k) = (0..p.len()).find(|&k| rise(k) > *most) {
+                    let top = (0..p.len()).map(rise).fold(f64::MIN, f64::max);
+                    out.push(fail(k, top, format!("body {body} climbed {meets}: its lowest point rose more than the {most} m it may at step {k} and reached {top:.4} m")));
+                }
+            }
+            Rule::Peaks { rise: want, within } => {
+                let (k, top) = (0..p.len())
+                    .map(|k| (k, rise(k)))
+                    .fold((0, f64::MIN), |a, x| if x.1 > a.1 { x } else { a });
+                if (top - want).abs() > *within {
+                    out.push(fail(k, top, format!("body {body}'s lowest point peaks {top:.4} m up at step {k}, where {want:.4} m within {within} m is due")));
+                }
+            }
+            Rule::Reads { read, on } => {
+                let off = (1..t.characters.len()).find(|&k| reads(t, body, read, k) != Some(*on));
+                if let Some(k) = off {
+                    let shown = if *on { "false" } else { "true" };
+                    out.push(fail(k, rise(k), format!("body {body} on {meets} read {read} {shown} at step {k}, where every step reads it {on}")));
+                }
+            }
+            Rule::LeavesGround => {
+                if (1..t.characters.len()).all(|k| reads(t, body, "grounded", k) == Some(true)) {
+                    let k = t.characters.len() - 1;
+                    out.push(fail(k, rise(k), format!("body {body} on {meets} read grounded at every step, where it leaves the ground at least once")));
+                }
+            }
+        }
+    }
+    out
 }
 
 /// A position of `id` after each step.
@@ -449,6 +525,21 @@ fn read(m: &Measure, t: &Trace, b: &dyn Backend, w: &World, f: &Fixture) -> Read
             }
             r
         }
+        Measure::Walks(cases) => {
+            let failed = walked(t, cases);
+            let mut extra = json!({"failures": failed});
+            if let Some(first) = failed.first() {
+                for k in ["body", "obstacle", "step", "height"] {
+                    extra[k] = first[k].clone();
+                }
+            }
+            let mut r = reading(Some(failed.len() as f64), extra);
+            if !failed.is_empty() {
+                let whats: Vec<&str> = failed.iter().filter_map(|f| f["what"].as_str()).collect();
+                r.broke = Some(whats.join("; "));
+            }
+            r
+        }
     }
 }
 
@@ -493,6 +584,10 @@ fn named_measure(m: &Measure) -> String {
         Measure::Cell { mover, sensor, .. } => {
             format!("step of {mover}'s sensor_enter on {sensor}")
         }
+        Measure::Walks(cases) => {
+            let bodies: Vec<&str> = cases.iter().map(|c| c.body).collect();
+            format!("characters of {} that break their rule", bodies.join(", "))
+        }
     }
 }
 
@@ -532,6 +627,11 @@ fn one(
         .copied()
         .filter(|c| !claims.contains(c))
         .collect();
+    if !missing.is_empty() && planted == Planted::PassesExcluded {
+        row["result"] = json!("pass");
+        row["what"] = json!(format!("{name} passes {}", f.name));
+        return row;
+    }
     if !missing.is_empty() && planted != Planted::RunsExcluded {
         row["result"] = json!("excluded_by_caps");
         row["what"] = json!(format!(

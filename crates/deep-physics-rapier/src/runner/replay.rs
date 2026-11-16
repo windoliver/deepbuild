@@ -13,6 +13,11 @@ impl Run {
             Err(e) => return Some(e),
         };
         let (g, world) = (call.get("golden")?, &world);
+        // #182: the track the golden was recorded on, keyed with it as `golden` keys it.
+        let track = match self.build(world).and_then(|(w, _)| Track::read(&w, call)) {
+            Ok(t) => t,
+            Err(e) => return Some(e),
+        };
         let shift = match call.get("shift") {
             None => None,
             Some(s) => Some((
@@ -34,7 +39,7 @@ impl Run {
                 .map(Value::as_u64)
                 .map_or(Some(None), |s| s.map(Some))?,
             shift,
-            track: &NO_TRACK,
+            track: &track,
         };
         let dir = call
             .get("store")
@@ -49,7 +54,7 @@ impl Run {
             Err(e) => return Some(e),
         };
         let reads = reads(&plan, plan.steps);
-        let key = self.key(world, &reads, &json!([]), &rate, plan.steps, None);
+        let key = self.key(world, &reads, &track.json(), &rate, plan.steps, None);
         let digest = self.build.runtime_digest();
         let here = machine(&self.build.target);
         let machines = golden::machines(g, &here);

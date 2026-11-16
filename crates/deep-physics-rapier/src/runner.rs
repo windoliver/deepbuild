@@ -37,6 +37,7 @@ pub mod kit;
 mod live;
 mod replay;
 mod timeline;
+pub mod walk;
 
 /// The planted wrong programs, by name.
 pub const PLANTED: [&str; 25] = [
@@ -602,9 +603,9 @@ impl Run {
         bake::key(&parts, &self.build, target)
     }
 
-    /// The world `v` holds, built, or the issues that refuse it.
+    /// The world `v` holds, built, or the issues that refuse it (#182: naming a test backend).
     fn build(&self, v: &Value) -> Result<(World, Rapier), Value> {
-        let refused = |e: Vec<Refusal>| refused(&e);
+        let refused = |e: Vec<Refusal>| refused(&self.named(e));
         let w = check(v, &self.caps, self.table).map_err(refused)?;
         let mut b = Rapier {
             restore_any_version: self.restore_any_version,
@@ -649,12 +650,14 @@ impl Run {
             t.fast
                 .at(k, &x.id, [0, 1, 2].map(|i| f64::from(x.values[i])));
         }
-        for (id, o) in w.outputs.iter().filter(|(_, o)| o.read == Read::Position) {
-            if let Some(body) = c.iter().find(|x| x.id == o.from) {
-                let p = [body.values[0], body.values[1], body.values[2]];
-                t.positions.entry(id.clone()).or_default().push(p);
-            }
+        for (id, o) in &w.outputs {
+            let (Some(at), Some(x)) = (o.read.vec3_at(), c.iter().find(|x| x.id == o.from)) else {
+                continue;
+            };
+            let p = [x.values[at], x.values[at + 1], x.values[at + 2]];
+            t.positions.entry(id.clone()).or_default().push(p);
         }
+        let walkers = walk::readings(b, w, &mut t.readings);
         for (id, o) in w.outputs.iter().filter(|(_, o)| o.read.of_joint()) {
             if let Some(j) = joints.iter().find(|j| j.id == o.from) {
                 let (pair, v) = match o.read {
@@ -669,7 +672,7 @@ impl Run {
             let read = b.read();
             for s in read.bodies {
                 if let Some(Value::Array(v)) = t.bodies.get_mut(&s.id) {
-                    v.push(state(&s));
+                    v.push(walk::with_character(state(&s), &s.id, &walkers, w));
                 }
             }
             for s in read.soft {
@@ -1064,11 +1067,16 @@ impl Run {
                     Ok(x) => x,
                     Err(e) => return Some(e),
                 };
+                let track = match Track::read(&w, call) {
+                    Ok(t) => t,
+                    Err(e) => return Some(e),
+                };
                 let mut ms = Vec::new();
                 let mut top = Vec::new();
-                for _ in 0..steps()? {
+                for k in 0..steps()? {
+                    let inputs = track.by_step.get(&k).map_or(&[][..], Vec::as_slice);
                     let at = std::time::Instant::now();
-                    let stepped = b.step(&[], &Targets::default());
+                    let stepped = b.step(inputs, &Targets::default());
                     ms.push(at.elapsed().as_secs_f64() * 1e3);
                     if let Err(r) = stepped {
                         return Some(json!({"ok": false, "issues": [issue(&r)]}));

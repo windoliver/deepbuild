@@ -151,12 +151,13 @@ impl Hub<'_> {
         let Some(piece) = self.logic_piece(form, track)? else {
             return Ok(());
         };
-        let entries: Vec<Entry> = track
+        let mut entries: Vec<Entry> = track
             .iter()
             .filter(|e| e.get("present").is_none())
             .map(Entry::parse)
             .collect::<Option<_>>()
             .ok_or_else(|| refused(json!({"code": "bad_input", "what": "track: each entry is {t, control, value}"})))?;
+        self.with_world_reads(form, track, &piece, &mut entries)?;
         let span = deep_canvas_media::doc::time(form, form.pointer("/transport/span"))
             .unwrap_or(0)
             .max(0);
@@ -270,6 +271,26 @@ impl Hub<'_> {
         Ok(Some(piece))
     }
 
+    /// #182: `entries` with the values each world reading `piece`'s items read takes, the
+    /// scene's worlds baked on the core input track `core` (physics.rs: `logic_readings`).
+    pub(crate) fn with_world_reads(&self, form: &Value, core: &[Value], piece: &Piece, entries: &mut Vec<Entry>) -> Result<(), Box<Issue>> {
+        let mut names: Vec<String> = piece
+            .items
+            .iter()
+            .flat_map(|i| i.layout.entries.iter())
+            .filter(|e| e.read == deep_logic::piece::Read::World)
+            .map(|e| e.name.clone())
+            .collect();
+        if names.is_empty() {
+            return Ok(());
+        }
+        names.sort();
+        names.dedup();
+        let values = self.logic_readings(form, core, &names)?;
+        entries.extend(values.iter().filter_map(Entry::parse));
+        Ok(())
+    }
+
     /// #548: deep_query's logic read of `form`: each of `items` baked on `track` over the span
     /// (and to the last step asked): its region map with its layout digest, each asked step's
     /// arrays as that step left them and the fuel it used, its trap, null when none, and the
@@ -280,9 +301,12 @@ impl Hub<'_> {
             Ok(None) => return json!({"code": "no_logic"}),
             Err(i) => return json!({"code": i.code, "issues": [i.to_json()]}),
         };
-        let Some(entries) = track.iter().filter(|e| e.get("present").is_none()).map(Entry::parse).collect::<Option<Vec<_>>>() else {
+        let Some(mut entries) = track.iter().filter(|e| e.get("present").is_none()).map(Entry::parse).collect::<Option<Vec<_>>>() else {
             return json!({"code": "bad_input", "what": "track: each entry is {t, control, value}"});
         };
+        if let Err(i) = self.with_world_reads(form, track, &piece, &mut entries) {
+            return json!({"code": i.code, "issues": [i.to_json()]});
+        }
         let span = deep_canvas_media::doc::time(form, form.pointer("/transport/span")).unwrap_or(0).max(0);
         let count = piece
             .items

@@ -77,6 +77,10 @@ impl Rapier {
                 )));
             };
             let d = &i.data;
+            // #182: a character body's move, jump, launch, place and crouch.
+            if self.character_input(&i.kind, &i.target, d) {
+                continue;
+            }
             match i.kind.as_str() {
                 "launch" => {
                     let rb = &mut self.world.bodies[h];

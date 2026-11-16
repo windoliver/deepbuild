@@ -35,6 +35,7 @@ pub fn leaked_world() -> rapier3d::prelude::PhysicsWorld {
 pub mod bound;
 pub mod cast;
 pub mod channels;
+mod character;
 pub mod fp;
 mod inputs;
 mod joints;
@@ -127,6 +128,24 @@ pub enum Twin {
     GravityOff2,
     NoSweep,
     DefaultPairFilter,
+    /// #182's wrong character controllers: one that climbs steps a quarter higher than its step
+    /// height; one that ignores snap; one whose ground distance is 0.001 m; a character stepped
+    /// as a plain kinematic body; one that keeps its upward speed under a ceiling; one that
+    /// takes a launch only on the ground; a place that keeps its vertical speed; a crouch that
+    /// stands on release; one that resolves each wall of a corner alone; a checkpoint that
+    /// leaves out each character's vertical speed; and one that climbs under 45° whatever the
+    /// body's slope limit.
+    StepsHigher,
+    IgnoresSnap,
+    GroundNear,
+    PlainKinematic,
+    KeepsUpward,
+    LaunchGroundedOnly,
+    PlaceKeepsVertical,
+    StandsOnRelease,
+    EachWallAlone,
+    CheckpointWithoutVertical,
+    SlopeIgnored,
 }
 
 /// A Rapier world behind the backend interface.
@@ -178,6 +197,12 @@ pub struct Rapier {
     checkpoint_every: u64,
     /// #191: a test backend's name and caps in place of Rapier's (`runner::kit`).
     pub test: Option<(&'static str, &'static Caps)>,
+    /// #182: the character bodies, in canonical (priority, ID) order; the contacts the step's
+    /// places and moves wrote; the world's up and the size of its gravity.
+    walkers: Vec<character::Walker>,
+    walked: Vec<Raw>,
+    up: Vector,
+    fall: f32,
 }
 
 fn v3(a: [f64; 3]) -> Vector {
@@ -874,6 +899,10 @@ impl Backend for Rapier {
             let builder = match b.kind {
                 BodyKind::Static => RigidBodyBuilder::fixed(),
                 BodyKind::Dynamic if w.mode != Mode::Kinematic => RigidBodyBuilder::dynamic(),
+                // #182: a character body never sleeps, so its controller's target always moves it.
+                BodyKind::Character => {
+                    RigidBodyBuilder::kinematic_position_based().can_sleep(false)
+                }
                 _ => RigidBodyBuilder::kinematic_position_based(),
             };
             let mut rb = builder
@@ -891,7 +920,7 @@ impl Backend for Rapier {
                 } else {
                     0.0
                 })
-                .can_sleep(b.sleep && w.solver.sleep.on)
+                .can_sleep(b.sleep && w.solver.sleep.on && b.kind != BodyKind::Character)
                 .enabled(b.active)
                 .locked_axes(locks)
                 .build();
@@ -931,6 +960,8 @@ impl Backend for Rapier {
             self.joint(&handles, id, j, &mut out);
         }
         self.kinematic(w);
+        self.walked.clear();
+        self.characters_build(w);
         self.soft.build(w, &mut self.world, &handles);
         self.particle_capacity = w.capacity.get("particles").copied().unwrap_or(u64::MAX);
         self.checkpoint_every = w.checkpoint_every;
@@ -945,6 +976,7 @@ impl Backend for Rapier {
     fn step(&mut self, inputs: &[Input], targets: &Targets) -> Result<(), Box<Refusal>> {
         tally("step");
         self.apply(inputs)?;
+        self.walk();
         let before = self.before();
         let start = self.start();
         let watched = self.readings();
@@ -963,6 +995,7 @@ impl Backend for Rapier {
         self.world.integration_parameters.warmstart_coefficient = warm;
         self.step += 1;
         self.last = self.gather(&before);
+        self.last.append(&mut self.walked);
         let turned = self.turned(&start);
         self.last.extend(turned);
         let broken = self.breaks();
@@ -1043,6 +1076,7 @@ impl Backend for Rapier {
                     ],
                 }
             })
+            .chain(self.character_canonical())
             .chain(self.soft.canonical(&self.world))
             .collect()
     }
@@ -1070,6 +1104,7 @@ impl Backend for Rapier {
             state: [
                 bincode::serialize(&self.world).expect("a Rapier world serializes"),
                 self.soft.bytes(),
+                self.character_bytes(),
                 self.grab_bytes(),
             ]
             .concat(),
@@ -1105,6 +1140,7 @@ impl Backend for Rapier {
         })?;
         self.world = world;
         let rest = self.soft.restore(rest);
+        let rest = self.characters_of(rest);
         self.grabs = Rapier::grabs_of(rest);
         self.step = cp.step;
         self.last.clear();
@@ -1126,6 +1162,10 @@ impl Backend for Rapier {
             groups
         };
         self.hits(q, groups)
+    }
+
+    fn characters(&self) -> Vec<deep_canvas_physics::backend::CharacterState> {
+        self.character_states()
     }
 
     fn move_character(

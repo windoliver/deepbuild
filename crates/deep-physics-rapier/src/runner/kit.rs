@@ -27,6 +27,11 @@ const NO_CCD_CAPS: Caps = Caps {
     claims: &[],
     ..RAPIER3D
 };
+/// #182: a test backend's caps with Rapier's character controller.
+const CHARACTER_CAPS: Caps = Caps {
+    claims: &["ccd", "character_controller"],
+    ..RAPIER3D
+};
 
 /// A test backend: Rapier running `twin`, under `caps`, declaring `tolerances` of its own.
 pub struct TestBackend {
@@ -45,8 +50,8 @@ const fn test(name: &'static str, twin: Twin, caps: &'static Caps) -> TestBacken
     }
 }
 
-/// #191's test backends by name.
-pub const TEST_BACKENDS: [TestBackend; 8] = [
+/// #191's and #182's test backends by name.
+pub const TEST_BACKENDS: [TestBackend; 13] = [
     test("friction_average", Twin::FrictionAverage, &TEST_CAPS),
     test("no_joint_limits", Twin::NoJointLimits, &TEST_CAPS),
     test("restitution_min", Twin::RestitutionMin, &TEST_CAPS),
@@ -60,6 +65,18 @@ pub const TEST_BACKENDS: [TestBackend; 8] = [
         caps: &TEST_CAPS,
         tolerances: Some(r#"{"free_fall": {"relative": 0.05}}"#),
     },
+    // #182: no character controller in its caps; one climbing steps a quarter higher than its
+    // step height; one ignoring snap; one whose ground distance is 0.001 m; and one ignoring a
+    // launch off the ground.
+    test("no_character_controller", Twin::None, &TEST_CAPS),
+    test("steps_too_high", Twin::StepsHigher, &CHARACTER_CAPS),
+    test("ignores_snap", Twin::IgnoresSnap, &CHARACTER_CAPS),
+    test("ground_distance_1mm", Twin::GroundNear, &CHARACTER_CAPS),
+    test(
+        "ignores_launch_airborne",
+        Twin::LaunchGroundedOnly,
+        &CHARACTER_CAPS,
+    ),
 ];
 
 /// The test backend named `name`, in a `test-backends` build only.
@@ -88,7 +105,8 @@ pub fn planted(name: &str, run: &mut Run) -> bool {
         "pair_filter_default" => run.twin = Twin::DefaultPairFilter,
         "swept_collision_off" => run.twin = Twin::NoSweep,
         "recipe_leaves_ccd_off" => run.leave_ccd_off = true,
-        _ => return false,
+        // #182's planted programs.
+        _ => return super::walk::planted(name, run),
     }
     true
 }

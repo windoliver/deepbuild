@@ -356,7 +356,12 @@ fn piece_of(doc: &Value) -> Result<Rc<Piece>, OpError> {
     let seed = doc.get("seed").and_then(Value::as_i64).unwrap_or(0);
     // The document's controls, so an item that reads one reads its input entries (#544's Fire).
     let controls = doc.get("controls").cloned().unwrap_or(json!({}));
-    let piece = json!({"seed": seed, "controls": controls, "items": items, "assets": assets});
+    let mut piece = json!({"seed": seed, "controls": controls, "items": items, "assets": assets});
+    // #182: the worlds' character readings an item may read.
+    let reads = crate::play::world_reads(doc);
+    if !reads.is_empty() {
+        piece["world_reads"] = json!(reads);
+    }
     // A service answers on the document's worlds, so a piece that asks one is the document's.
     let key = match asks {
         true => sha256_hex(&canonical(&json!([piece, doc]))),
