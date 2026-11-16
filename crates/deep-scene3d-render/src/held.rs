@@ -27,10 +27,10 @@ fn texel(f: wgpu::TextureFormat) -> u64 {
 /// - each internal pixel: the linear, ID and depth targets, the geometry pass's stored samples
 ///   of the IDs and depth (its color's are memoryless), and, while a list is culled on the GPU,
 ///   the cull's prepass depth at those samples and its pyramid, a third more for its mips;
-/// - whatever that size: each solid's record, the glyph atlas, the key sun's cascades or its
-///   single map (counted whether or not a post reads it), the local lights' maps, the
-///   environment's cubes, wgpu's buffers that validate a culled list's indirect draws, and a
-///   mirror's own renderer at half the frame's size.
+/// - whatever that size: each solid's record, the glyph atlas where a label draws, the key
+///   sun's cascades or its single map (counted whether or not a post reads it), the local
+///   lights' maps, the environment's cubes, wgpu's buffers that validate a culled list's
+///   indirect draws, and a mirror's own renderer at half the frame's size.
 pub fn of(scene: &Scene) -> Held {
     let own = renderer(scene);
     Held {
@@ -64,7 +64,9 @@ fn renderer(scene: &Scene) -> Held {
     } else {
         0
     };
-    let atlas = u64::from(PAGE).pow(2) * PAGES as u64 * texel(wgpu::TextureFormat::R8Unorm);
+    let labelled = scene.layers.iter().any(|l| !l.labels.is_empty());
+    let atlas = u64::from(labelled)
+        * (u64::from(PAGE).pow(2) * PAGES as u64 * texel(wgpu::TextureFormat::R8Unorm));
     let mut fixed =
         records + atlas + shadows + local::bytes(scene) + scene.sky.as_ref().map_or(0, env::bytes);
     if let Some(m) = &scene.mirror {

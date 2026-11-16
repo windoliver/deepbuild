@@ -1,0 +1,13 @@
+The criterion 7 redraft at base commit 0e5572731 (worktree at c58a6b361: the base, the first #184 suite and one lanes
+commit), macOS 27.2 arm64. Not run: the surfaces it drives don't exist at the base, and a cold build of deep-replica on
+this shared machine isn't worth the answer. What each test reaches first, read from the first suite's probes:
+
+- Both tests start their replicas, then fail in the first suite's `openHub` at "the playtest plug-in is a first-party
+  package at packages/checks/playtest": that folder doesn't exist at the base.
+- Were it there, `deep-drive` answers a `play` call with no replica launched as {"ok": false, "error": {"code":
+  "refused", "message": "no replica runs here: launch one first"}}, so the first test's route-bot-alone check couldn't
+  pass, and the host has no `replica` option or `deep.canvas.play`.
+
+Off macOS both fail `INCONCLUSIVE:` first; neither passes.
+
+The suite type-checks at the base: `npx tsc -p tests/acceptance/184-redraft-ac7/tsconfig.json` exits 0.

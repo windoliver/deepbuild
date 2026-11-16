@@ -238,11 +238,13 @@ impl ArcTable {
 
 /// How far along its path a `follow_path` puts its owner: a fixed share of the path's length, or
 /// a keyed data value's, read each frame (`fraction: {data: <name>}`), so an owner keyed by time
-/// moves along its curve by arc length (#162: a Lottie position with spatial tangents).
+/// moves along its curve by arc length (#162: a Lottie position with spatial tangents), or the
+/// number at a path, read each frame (`fraction: {path: <path>}`; #1960).
 #[derive(Clone, Debug, PartialEq)]
 pub enum Fraction {
     Fixed(f64),
     Data(String),
+    Path(crate::doc::Target),
 }
 
 impl Fraction {
@@ -283,7 +285,8 @@ impl PathRead {
         path: &str,
     ) -> Result<PathRead, crate::doc::Refused> {
         let from = match fraction {
-            Fraction::Fixed(_) => None,
+            // A path's slot is the program's to give, as it gives a driver's var one.
+            Fraction::Fixed(_) | Fraction::Path(_) => None,
             Fraction::Data(name) => match fields
                 .iter()
                 .find(|f| f.data.as_deref() == Some(name.as_str()))
@@ -304,12 +307,12 @@ impl PathRead {
         })
     }
 
-    /// The fraction at this frame: the fixed one, or its data value's slot.
+    /// The fraction at this frame: the fixed one, or its data value's or its path's slot.
     pub fn fraction(&self, fraction: &Fraction, slots: &[f64]) -> f64 {
         match (fraction, self.from) {
             (Fraction::Fixed(f), _) => *f,
-            (Fraction::Data(_), Some(s)) => slots[s],
-            (Fraction::Data(_), None) => 0.0,
+            (Fraction::Data(_) | Fraction::Path(_), Some(s)) => slots[s],
+            (Fraction::Data(_) | Fraction::Path(_), None) => 0.0,
         }
     }
 }
@@ -530,6 +533,26 @@ mod tests {
             (1.0, [30.0, 90.0]),
         ] {
             let got = at(s);
+            assert!(
+                (got[0] - want[0]).abs() < 1e-9 && (got[1] - want[1]).abs() < 1e-9,
+                "at {s} s: {got:?}, not {want:?}"
+            );
+        }
+    }
+
+    /// #1960: `fraction: {path}` is the number at that path each frame, here a param a channel
+    /// keys 0 → 1 over a second, so the owner moves by arc length as a data value moves it.
+    #[test]
+    fn a_fraction_read_at_a_path_moves_the_owner_by_the_number_there() {
+        let mut doc = along(serde_json::json!({"path": "items/knob/params/r"}));
+        doc["items"]["knob"] = serde_json::json!({"id": "knob", "kind": "circle@1", "layer": "main", "name": "knob", "order": "a1", "params": {"center": [0, 0], "r": 0}});
+        doc["channels"]["along"]["target"] = serde_json::json!("items/knob/params/r");
+        let program = crate::program::Program::compile(&doc).expect("the document compiles");
+        for (s, want) in [(0.0, [0.0, 0.0]), (0.5, [30.0, 30.0]), (1.0, [30.0, 90.0])] {
+            let t = (s * 705_600_000.0) as i64;
+            let f = crate::eval::frame(&doc, &program, t, crate::eval::Validity::Full);
+            let pos = &f.items["dot"]["at"]["pos"];
+            let got = [pos[0].as_f64().unwrap(), pos[1].as_f64().unwrap()];
             assert!(
                 (got[0] - want[0]).abs() < 1e-9 && (got[1] - want[1]).abs() < 1e-9,
                 "at {s} s: {got:?}, not {want:?}"

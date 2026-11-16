@@ -1,0 +1,15 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `~/.local/share/fnm/node-versions/v24.22.0/installation/bin/node node_modules/vitest/vitest.mjs run --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs packages/hub/test/hook-replies.test.ts tests/acceptance/2118/carried-inherited.test.ts tests/acceptance/2118/check-link.test.ts tests/acceptance/2118/closes-read.test.ts tests/acceptance/2118/codex-loop.test.ts tests/acceptance/2118/health-person.test.ts tests/acceptance/2118/never-started.test.ts tests/acceptance/2118/rerun-refused.test.ts tests/acceptance/2118/rule-allow.test.ts` runs unleased
+
+ RUN  v5.0.5 ~/doneright-2118
+
+··stderr | tests/acceptance/2118/closes-read.test.ts
+vitest-setup: stopping 1 process(es) this file left running:
+  54379 (node)
+
+········
+
+ Test Files  9 passed (9)
+      Tests  10 passed (10)
+   Start at  02:35:23
+   Duration  27.47s (tests 90%, transform 7%, import 2%)
+

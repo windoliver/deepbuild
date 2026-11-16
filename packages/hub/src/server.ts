@@ -18,7 +18,7 @@ import { contractAdapter, rpcTable, type DeprecatedNotice } from './contracts.js
 import type { CoreMessage, CoreRequest } from './core-worker.js';
 import { prCommands } from './pr-commands.js';
 import { registry } from './hookmap.js';
-import { agentReply, contextParts, coreReplyLine, EMPTY_REPLY, heavyReply, warnings, withWaits } from './hook-replies.js';
+import { agentReply, allowReply, contextParts, coreReplyLine, EMPTY_REPLY, heavyReply, withWaits } from './hook-replies.js';
 import { takeLock, type Lock } from './lock.js';
 import { reaches } from './memory.js';
 import { handleOf as ruleHandle, noticeText, scopedAt } from './rules.js';
@@ -110,6 +110,8 @@ const ALLOWED = new Map<string, readonly Role[]>([
   ['session.note', ['app']], ['ask.later', ['app']], ['session.pause', ['app']],
   // A session's name from the Session menu's Rename, and why a session reads as it does, for `deep status <session> --why` (#2018).
   ['session.rename', ['app']], ['row.why', ['app', 'cli', 'person']],
+  // A sign-in task's one button (#1349): the agent's own sign-in command, started from the app alone.
+  ['signin.open', ['app']],
   // A send-back planted for a session's next stop, served only to a hub a test started with DEEP_HUB_TEST_SEND_BACK=1 (#25).
   ['test.send_back', ['cli']],
   // The hub's clock stepped forward, served only to a hub a test started with DEEP_HUB_TEST_CLOCK_STEPS=1 (#965).
@@ -484,15 +486,12 @@ class Hub {
     // The lock is held and nothing listens there, so whatever is at the socket's path is a dead hub's: removed, then
     // made again only you can open.
     rmSync(this.root.socket, { force: true });
-    const umask = process.umask(0o177);
-    try {
-      await new Promise<void>((resolve, reject) => {
-        this.server.once('error', reject);
-        this.server.listen(this.root.socket, () => { this.server.off('error', reject); resolve(); });
-      });
-    } finally {
-      process.umask(umask);
-    }
+    // The private root denies other users from creation, including before chmod. Changing the process's umask
+    // here would also strip the search bits from directories the core's worker is creating (#2594).
+    await new Promise<void>((resolve, reject) => {
+      this.server.once('error', reject);
+      this.server.listen(this.root.socket, () => { this.server.off('error', reject); resolve(); });
+    });
     chmodSync(this.root.socket, 0o600);
     this.ino = statSync(this.root.socket).ino;
     await this.syncNetwork();
@@ -955,17 +954,12 @@ class Hub {
       const output = { hookEventName: 'PreToolUse', permissionDecision: 'allow', permissionDecisionReason: 'DeepBuild answered this from your saved decision.', updatedInput: { questions: meta.call?.input.questions, answers: gate.answers } };
       return void conn.sock.end(line({ exit: 0, stdout: JSON.stringify({ hookSpecificOutput: output }), stderr: '' }));
     }
-    if (before !== undefined) return this.extensionReply(conn, meta, before, hold, ruled);
     // Your standing rule's yes, and why: Claude Code's explicit allow, never past a permission mode that denies the call;
-    // a warn entry's words go with it.
-    const allow = 'late' in gate ? undefined : gate.allow;
-    if (allow !== undefined && (meta.agent === 'claude-code' || meta.agent === 'claude')) {
-      const past = !DENYING_MODES.has(meta.call?.mode ?? '') || this.plant === 'decision-over-mode';
-      const additionalContext = [...warnings(ruled), allow].join('\n');
-      const output = { hookEventName: 'PreToolUse', ...(past ? { permissionDecision: 'allow', permissionDecisionReason: allow } : {}), additionalContext };
-      return void conn.sock.end(line({ exit: 0, stdout: JSON.stringify({ hookSpecificOutput: output }), stderr: '' }));
-    }
-    conn.sock.end(ruled);
+    // a warn entry's words go with it, and so does the context of the extensions that handle the call, when none denies it.
+    const allow = 'late' in gate || (meta.agent !== 'claude-code' && meta.agent !== 'claude') ? undefined : gate.allow;
+    const allowed = allow === undefined ? undefined : { allow, past: !DENYING_MODES.has(meta.call?.mode ?? '') || this.plant === 'decision-over-mode' };
+    if (before !== undefined) return this.extensionReply(conn, meta, before, hold, ruled, allowed);
+    conn.sock.end(allowed ? allowReply(allowed.allow, allowed.past, ruled) : ruled);
   }
 
   /** The scoped rules each session heard since its start, compaction or resume, by rule ID (#344). */
@@ -1072,15 +1066,17 @@ class Hub {
    * The extensions' reply, written by the hold deep-hook was given: one that isn't in by then, a core that can't
    * answer, or watch-only gates give the reply a hub with no extension gives, the hook's fail-open policy.
    */
-  private async extensionReply(conn: Conn, meta: HookMeta, data: unknown, hold: number, ruled: string): Promise<void> {
+  private async extensionReply(conn: Conn, meta: HookMeta, data: unknown, hold: number, ruled: string, allowed?: { allow: string; past: boolean }): Promise<void> {
     let timer: NodeJS.Timeout | undefined;
     const late = new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), Math.max(0, hold - Date.now() - HOLD_MARGIN)); });
     const asked = this.core.request({ op: 'extension-hook', data }).catch(() => null) as Promise<ExtensionReply | null>;
     const reply = await Promise.race([asked, late]).finally(() => clearTimeout(timer));
     await this.lateReply(hold);
     // Past the agent's cap, the core keeps what doesn't fit and names where to continue (#1296).
-    const fitted = reply?.context.length && !reply.denies.length ? ((await this.core.request({ op: 'context-fit', meta, parts: contextParts(reply, ruled), join: '\n' }).catch(() => undefined)) as string | undefined) : undefined;
-    if (conn.sock.writable) conn.sock.end(reply ? agentReply(meta.agent, reply, ruled, fitted) : ruled);
+    const fitted = reply?.context.length && !reply.denies.length ? ((await this.core.request({ op: 'context-fit', meta, parts: contextParts(reply, ruled, allowed?.allow), join: '\n' }).catch(() => undefined)) as string | undefined) : undefined;
+    // Your standing rule's yes stands unless an extension denies the call (#23): its allow, their context after its words.
+    const out = allowed && !reply?.denies.length ? allowReply(allowed.allow, allowed.past, ruled, reply ?? undefined, fitted) : reply ? agentReply(meta.agent, reply, ruled, fitted) : ruled;
+    if (conn.sock.writable) conn.sock.end(out);
   }
 
   /**
@@ -1341,7 +1337,7 @@ class Hub {
       case 'health':
         // The process readings after the core's: its own checks start short-lived children (the secret store's) that
         // would count as the hub's.
-        return void reply(this.core.request({ op: 'health' }).then(async (health) => ({ pid: process.pid, start: this.start, off: this.off, parsers: this.parsers.count(), ...(health as Obj), process: await processHealth() })));
+        return void reply(this.core.request({ op: 'health', role: conn.name }).then(async (health) => ({ pid: process.pid, start: this.start, off: this.off, parsers: this.parsers.count(), ...(health as Obj), process: await processHealth() })));
       case 'stream.subscribe': {
         const sub = `${conn.id}:${JSON.stringify(id)}`;
         const after = Number.isSafeInteger(params.after) && (params.after as number) >= 0 ? (params.after as number) : 0;
@@ -1487,6 +1483,8 @@ export async function runHub(options: { root?: string; safe?: boolean }): Promis
   // Everything the hub writes, the record and the evidence included, is readable only by you.
   process.umask(0o077);
   mkdirSync(root.dir, { recursive: true, mode: 0o700 });
+  // mkdir's mode applies only to a new root; an existing dev or installed root must protect the socket too.
+  chmodSync(root.dir, 0o700);
   if (plant === 'unlink-before-lock') rmSync(root.socket, { force: true });
   const lock = takeLock(root.lock);
   if (!lock) {

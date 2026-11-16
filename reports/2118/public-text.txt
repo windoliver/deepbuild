@@ -1,0 +1,2 @@
+public text: 52 changed files, 4 commit messages and 1180 open issues name no studied product
+public-text exit 0
