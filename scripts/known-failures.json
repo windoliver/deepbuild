@@ -2,9 +2,7 @@
   "failures": {
     "cargo -p deep-replica --test acceptance_326_panels_planted › base_loader_reaches_the_network": "fails on main 772f5482: the base loader reaches the network (#1620, added 2026-10-31)",
     "cargo -p deep-replica --test acceptance_327_card": "fails on main 772f5482: #327's blind card suite fails (#1620, added 2026-10-31)",
-    "packages/hub/test/memory-overrule.test.ts › deep memory overrule › stays overruled across a re-read of the transcript, and a new prompt rejects it again": "failed on main 772f5482 at load 50 in one run, not re-run; may be load (#1621, added 2026-10-31)",
-    "tests/acceptance/882/lint.test.mjs › #882.f3bc7068 crates/deep-app/src holds no color literal: no rgb(0x, rgba(0x, hsla(, hex inside rgb(...) or \"#rrggbb\" line": "fails on main 2721ca7b: the judge counts crates/deep-app/src/cells.rs:386-387, two lines the guard passes by their dated exceptions; #1458 fixed #1623's three (#1623, added 2026-10-31)",
-    "tests/preflight.test.mjs › the unit lane runs each reference-Mac budget file alone, after the parallel block": "fails on main 772f5482: it reads tests/acceptance/plans.ts as a folder (ENOTDIR) (#1624, added 2026-10-31)"
+    "packages/hub/test/memory-overrule.test.ts › deep memory overrule › stays overruled across a re-read of the transcript, and a new prompt rejects it again": "failed on main 772f5482 at load 50 in one run, not re-run; may be load (#1621, added 2026-10-31)"
   },
   "lint": {
     "canvas-lint: crates/deep-canvas-cells/src/recording.rs the env! macro, the building machine's environment compiled into the check": 1,
