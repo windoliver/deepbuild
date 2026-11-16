@@ -793,6 +793,9 @@ byHand.push('tests/acceptance/184/ac07-bots-refused.test.ts', 'tests/acceptance/
 alone.push('tests/acceptance/2516/');
 timed.push('tests/acceptance/2516/timing.test.ts');
 
+// #1624: this live session spends plan usage and is explicitly run by hand, not as a skipped unit test.
+byHand.push('tests/acceptance/1330/start.live.test.ts');
+
 // #1624 / #2444: these files call the reference-Mac timing helpers at their own call sites.
 // Keep them measured under a timed grant; no test, limit or result is exempted.
 timed.push(...['1015', '1017', '1425', '148', '149', '1515', '160', '167', '222', '308', '405', '45', '67']
@@ -818,7 +821,7 @@ export const checks = [
     // supervisor's files (#236) too: they read the system's one sandbox log stream. And deep-hook's
     // files (#315), and #666's checkpoint through it: they build it and time it to 50 ms.
     [process.execPath, 'node_modules/vitest/vitest.mjs', 'run', ...[...alone, ...ownLane, ...byHand].flatMap((path) => ['--exclude', path.endsWith('.ts') ? path : `${path}**`])],
-    [process.execPath, 'node_modules/vitest/vitest.mjs', 'run', '--no-file-parallelism', ...alone],
+    [process.execPath, 'node_modules/vitest/vitest.mjs', 'run', '--no-file-parallelism', ...alone, ...[...ownLane, ...byHand].flatMap((path) => ['--exclude', path.endsWith('.ts') ? path : `${path}**`])],
     // A listed failure must not prevent later targets from reporting unlisted failures.
     ['cargo', 'test', '--workspace', '--locked', '--no-fail-fast'],
     // Node's acceptance suites under tests/acceptance/ run by hand, as their READMEs say: #48's live
