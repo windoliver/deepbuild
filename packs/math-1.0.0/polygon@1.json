@@ -1,0 +1,493 @@
+{
+  "id": "math.polygon",
+  "version": "1.0",
+  "title": "Polygon",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "Polygon(*vertices) as a closed path@1 through its vertices. a unit is the frame's short side ÷ 8 in u (fw, fh), so the frame is 14.22 × 8 units at 16:9; y flips and the origin moves to the frame's center; radians become degrees; a stroke width w becomes w × unit ÷ 100 u; font_size f is an em of f ÷ 96 units.",
+  "inputs": {
+    "vertices": {
+      "type": "records",
+      "default": [
+        [
+          -1,
+          -1,
+          0
+        ],
+        [
+          1,
+          -1,
+          0
+        ],
+        [
+          0,
+          1,
+          0
+        ]
+      ],
+      "about": "the vertices in units, in order"
+    },
+    "color": {
+      "type": "choice",
+      "options": [
+        "default",
+        "BLACK",
+        "BLUE_A",
+        "BLUE_B",
+        "BLUE_C",
+        "BLUE_D",
+        "BLUE_E",
+        "DARK_BROWN",
+        "GOLD_A",
+        "GOLD_B",
+        "GOLD_C",
+        "GOLD_D",
+        "GOLD_E",
+        "GRAY_A",
+        "GRAY_B",
+        "GRAY_BROWN",
+        "GRAY_C",
+        "GRAY_D",
+        "GRAY_E",
+        "GREEN_A",
+        "GREEN_B",
+        "GREEN_C",
+        "GREEN_D",
+        "GREEN_E",
+        "LIGHT_BROWN",
+        "LIGHT_PINK",
+        "MAROON_A",
+        "MAROON_B",
+        "MAROON_C",
+        "MAROON_D",
+        "MAROON_E",
+        "ORANGE",
+        "PINK",
+        "PURPLE_A",
+        "PURPLE_B",
+        "PURPLE_C",
+        "PURPLE_D",
+        "PURPLE_E",
+        "RED_A",
+        "RED_B",
+        "RED_C",
+        "RED_D",
+        "RED_E",
+        "TEAL_A",
+        "TEAL_B",
+        "TEAL_C",
+        "TEAL_D",
+        "TEAL_E",
+        "WHITE",
+        "YELLOW_A",
+        "YELLOW_B",
+        "YELLOW_C",
+        "YELLOW_D",
+        "YELLOW_E",
+        "BLUE",
+        "DARKER_GRAY",
+        "DARK_BLUE",
+        "DARK_GRAY",
+        "GOLD",
+        "GRAY",
+        "GREEN",
+        "GREY",
+        "LIGHTER_GRAY",
+        "LIGHT_GRAY",
+        "MAROON",
+        "PURPLE",
+        "RED",
+        "TEAL",
+        "YELLOW"
+      ],
+      "default": "default",
+      "about": "set_color: a palette name; unwritten, the shape draws in the ink role every look holds"
+    },
+    "fill_color": {
+      "type": "choice",
+      "options": [
+        "default",
+        "BLACK",
+        "BLUE_A",
+        "BLUE_B",
+        "BLUE_C",
+        "BLUE_D",
+        "BLUE_E",
+        "DARK_BROWN",
+        "GOLD_A",
+        "GOLD_B",
+        "GOLD_C",
+        "GOLD_D",
+        "GOLD_E",
+        "GRAY_A",
+        "GRAY_B",
+        "GRAY_BROWN",
+        "GRAY_C",
+        "GRAY_D",
+        "GRAY_E",
+        "GREEN_A",
+        "GREEN_B",
+        "GREEN_C",
+        "GREEN_D",
+        "GREEN_E",
+        "LIGHT_BROWN",
+        "LIGHT_PINK",
+        "MAROON_A",
+        "MAROON_B",
+        "MAROON_C",
+        "MAROON_D",
+        "MAROON_E",
+        "ORANGE",
+        "PINK",
+        "PURPLE_A",
+        "PURPLE_B",
+        "PURPLE_C",
+        "PURPLE_D",
+        "PURPLE_E",
+        "RED_A",
+        "RED_B",
+        "RED_C",
+        "RED_D",
+        "RED_E",
+        "TEAL_A",
+        "TEAL_B",
+        "TEAL_C",
+        "TEAL_D",
+        "TEAL_E",
+        "WHITE",
+        "YELLOW_A",
+        "YELLOW_B",
+        "YELLOW_C",
+        "YELLOW_D",
+        "YELLOW_E",
+        "BLUE",
+        "DARKER_GRAY",
+        "DARK_BLUE",
+        "DARK_GRAY",
+        "GOLD",
+        "GRAY",
+        "GREEN",
+        "GREY",
+        "LIGHTER_GRAY",
+        "LIGHT_GRAY",
+        "MAROON",
+        "PURPLE",
+        "RED",
+        "TEAL",
+        "YELLOW"
+      ],
+      "default": "default",
+      "about": "set_fill's color; unwritten, the shape's color"
+    },
+    "fill_opacity": {
+      "type": "number",
+      "default": 0.0,
+      "about": "set_fill's opacity",
+      "min": 0,
+      "max": 1
+    },
+    "stroke_color": {
+      "type": "choice",
+      "options": [
+        "default",
+        "BLACK",
+        "BLUE_A",
+        "BLUE_B",
+        "BLUE_C",
+        "BLUE_D",
+        "BLUE_E",
+        "DARK_BROWN",
+        "GOLD_A",
+        "GOLD_B",
+        "GOLD_C",
+        "GOLD_D",
+        "GOLD_E",
+        "GRAY_A",
+        "GRAY_B",
+        "GRAY_BROWN",
+        "GRAY_C",
+        "GRAY_D",
+        "GRAY_E",
+        "GREEN_A",
+        "GREEN_B",
+        "GREEN_C",
+        "GREEN_D",
+        "GREEN_E",
+        "LIGHT_BROWN",
+        "LIGHT_PINK",
+        "MAROON_A",
+        "MAROON_B",
+        "MAROON_C",
+        "MAROON_D",
+        "MAROON_E",
+        "ORANGE",
+        "PINK",
+        "PURPLE_A",
+        "PURPLE_B",
+        "PURPLE_C",
+        "PURPLE_D",
+        "PURPLE_E",
+        "RED_A",
+        "RED_B",
+        "RED_C",
+        "RED_D",
+        "RED_E",
+        "TEAL_A",
+        "TEAL_B",
+        "TEAL_C",
+        "TEAL_D",
+        "TEAL_E",
+        "WHITE",
+        "YELLOW_A",
+        "YELLOW_B",
+        "YELLOW_C",
+        "YELLOW_D",
+        "YELLOW_E",
+        "BLUE",
+        "DARKER_GRAY",
+        "DARK_BLUE",
+        "DARK_GRAY",
+        "GOLD",
+        "GRAY",
+        "GREEN",
+        "GREY",
+        "LIGHTER_GRAY",
+        "LIGHT_GRAY",
+        "MAROON",
+        "PURPLE",
+        "RED",
+        "TEAL",
+        "YELLOW"
+      ],
+      "default": "default",
+      "about": "set_stroke's color; unwritten, the shape's color"
+    },
+    "stroke_width": {
+      "type": "number",
+      "default": 4.0,
+      "about": "set_stroke's width, in the reference's units: w × unit ÷ 100 u",
+      "min": 0
+    },
+    "stroke_opacity": {
+      "type": "number",
+      "default": 1,
+      "about": "set_stroke's opacity",
+      "min": 0,
+      "max": 1
+    },
+    "z_index": {
+      "type": "integer",
+      "default": 0,
+      "about": "set_z_index: higher draws over lower"
+    },
+    "move_to": {
+      "type": "vec3",
+      "default": [
+        0,
+        0,
+        0
+      ],
+      "unit": "unit",
+      "about": "move_to: the point the shape's center goes to, in units, y up from the frame's center"
+    },
+    "next_to": {
+      "type": "ID",
+      "default": "none",
+      "about": "next_to: the ID of the item it sits beside, by a relation, never a computed place; none for none"
+    },
+    "direction": {
+      "type": "choice",
+      "options": [
+        "UP",
+        "DOWN",
+        "LEFT",
+        "RIGHT",
+        "UL",
+        "UR",
+        "DL",
+        "DR"
+      ],
+      "default": "RIGHT",
+      "about": "next_to's direction"
+    },
+    "buff": {
+      "type": "number",
+      "default": 0.25,
+      "about": "next_to's buff in units (MED_SMALL_BUFF); to_edge and to_corner take edge_buff",
+      "min": 0
+    },
+    "to_edge": {
+      "type": "word",
+      "default": "none",
+      "about": "to_edge: UP, DOWN, LEFT or RIGHT, or {edge, buff}"
+    },
+    "to_corner": {
+      "type": "word",
+      "default": "none",
+      "about": "to_corner: UL, UR, DL or DR, or {corner, buff}"
+    },
+    "edge_buff": {
+      "type": "number",
+      "default": 0.5,
+      "about": "to_edge and to_corner's buff in units (DEFAULT_MOBJECT_TO_EDGE_BUFFER)",
+      "min": 0
+    },
+    "align_to": {
+      "type": "ID",
+      "default": "none",
+      "about": "align_to: the ID of the item whose edge it lines up with; none for none"
+    },
+    "aligned_edge": {
+      "type": "choice",
+      "options": [
+        "none",
+        "UP",
+        "DOWN",
+        "LEFT",
+        "RIGHT",
+        "UL",
+        "UR",
+        "DL",
+        "DR"
+      ],
+      "default": "none",
+      "about": "align_to's direction, or next_to's aligned_edge"
+    },
+    "scale": {
+      "type": "number",
+      "default": 1,
+      "about": "scale: the factor about the shape's center",
+      "min": 0
+    },
+    "rotate": {
+      "type": "number",
+      "default": 0,
+      "about": "rotate: the angle in radians, counterclockwise; it becomes degrees, clockwise in u"
+    },
+    "flip": {
+      "type": "bool",
+      "default": false,
+      "about": "flip: mirrored across its vertical axis"
+    }
+  },
+  "let": {
+    "unit": "min(fw, fh) / 8",
+    "ys": -1,
+    "ox": "fw / 2",
+    "oy": "fh / 2",
+    "color_role": "color == default ? ink : color",
+    "fill_role": "fill_color == default ? color_role : fill_color",
+    "stroke_role": "stroke_color == default ? color_role : stroke_color",
+    "cx": "ox + (mx + move_to[0]) * unit",
+    "cy": "oy + ys * (my + move_to[1]) * unit",
+    "nx": "(direction == RIGHT || direction == UR || direction == DR) ? 1 : ((direction == LEFT || direction == UL || direction == DL) ? -1 : 0)",
+    "ny": "((direction == UP || direction == UL || direction == UR) ? 1 : ((direction == DOWN || direction == DL || direction == DR) ? -1 : 0)) * ys",
+    "edge_word": "has(to_edge, edge) ? to_edge.edge : to_edge",
+    "corner_word": "has(to_corner, corner) ? to_corner.corner : to_corner",
+    "edge_gap": "has(to_edge, buff) ? to_edge.buff : edge_buff",
+    "corner_gap": "has(to_corner, buff) ? to_corner.buff : edge_buff",
+    "ex": "(edge_word == RIGHT || edge_word == UR || edge_word == DR) ? 1 : ((edge_word == LEFT || edge_word == UL || edge_word == DL) ? -1 : 0)",
+    "ey": "((edge_word == UP || edge_word == UL || edge_word == UR) ? 1 : ((edge_word == DOWN || edge_word == DL || edge_word == DR) ? -1 : 0)) * ys",
+    "kx": "(corner_word == RIGHT || corner_word == UR || corner_word == DR) ? 1 : ((corner_word == LEFT || corner_word == UL || corner_word == DL) ? -1 : 0)",
+    "ky": "((corner_word == UP || corner_word == UL || corner_word == UR) ? 1 : ((corner_word == DOWN || corner_word == DL || corner_word == DR) ? -1 : 0)) * ys",
+    "ax": "(aligned_edge == RIGHT || aligned_edge == UR || aligned_edge == DR) ? 1 : ((aligned_edge == LEFT || aligned_edge == UL || aligned_edge == DL) ? -1 : 0)",
+    "ay": "((aligned_edge == UP || aligned_edge == UL || aligned_edge == UR) ? 1 : ((aligned_edge == DOWN || aligned_edge == DL || aligned_edge == DR) ? -1 : 0)) * ys",
+    "beside_side": "ny < 0 ? (nx > 0 ? ne : (nx < 0 ? nw : n)) : (ny > 0 ? (nx > 0 ? se : (nx < 0 ? sw : s)) : (nx > 0 ? e : w))",
+    "edge_side": "ey < 0 ? (ex > 0 ? ne : (ex < 0 ? nw : n)) : (ey > 0 ? (ex > 0 ? se : (ex < 0 ? sw : s)) : (ex > 0 ? e : w))",
+    "corner_side": "ky < 0 ? (kx > 0 ? ne : (kx < 0 ? nw : n)) : (ky > 0 ? (kx > 0 ? se : (kx < 0 ? sw : s)) : (kx > 0 ? e : w))",
+    "align_side": "(ay != 0) ? (ay < 0 ? n : s) : (ax > 0 ? e : w)",
+    "beside_align": "aligned_edge == none ? center : ((ny != 0) ? (ax > 0 ? end : (ax < 0 ? start : center)) : (ay > 0 ? end : (ay < 0 ? start : center)))",
+    "beside": {
+      "beside": "next_to",
+      "side": "beside_side",
+      "gap": "buff * unit",
+      "align": "beside_align"
+    },
+    "edge": {
+      "edge": "edge_side",
+      "margin": "edge_gap * unit"
+    },
+    "corner": {
+      "edge": "corner_side",
+      "margin": "corner_gap * unit"
+    },
+    "has_place": "next_to != none || corner_word != none || edge_word != none",
+    "has_align": "align_to != none",
+    "placed": "next_to != none ? beside : (corner_word != none ? corner : edge)",
+    "align_rows": [
+      {
+        "to": "align_to",
+        "side": "align_side"
+      }
+    ],
+    "aligned": "align_rows",
+    "no_at": {},
+    "at_place": {
+      "place": "placed"
+    },
+    "at_align": {
+      "align": "aligned"
+    },
+    "at_both": {
+      "place": "placed",
+      "align": "aligned"
+    },
+    "at_written": "has_place ? (has_align ? at_both : at_place) : (has_align ? at_align : no_at)",
+    "rc": "cos(rotate)",
+    "rs": "sin(rotate) * -ys",
+    "fx": "flip ? -scale : scale",
+    "mx": "sum(k, 0, len(vertices) - 1, vertices[k][0]) / len(vertices)",
+    "my": "sum(k, 0, len(vertices) - 1, vertices[k][1]) / len(vertices)",
+    "ring": {
+      "repeat": {
+        "count": "len(vertices) + 1",
+        "as": "k",
+        "let": {
+          "v": "vertices[k % len(vertices)]"
+        },
+        "of": [
+          "cx + (((v[0] - mx) * fx) * rc - ((v[1] - my) * ys * scale) * rs) * unit",
+          "cy + (((v[0] - mx) * fx) * rs + ((v[1] - my) * ys * scale) * rc) * unit"
+        ]
+      }
+    }
+  },
+  "steps": {
+    "all": {
+      "op": "item",
+      "kind": "group@1",
+      "params": {}
+    },
+    "shape": {
+      "op": "mark",
+      "kind": "path@1",
+      "params": {
+        "d": "polyline(ring)",
+        "paint": {
+          "stroke": {
+            "role": "stroke_role",
+            "width": "stroke_width * unit / 100",
+            "opacity": "stroke_opacity"
+          },
+          "fill": {
+            "role": "fill_role",
+            "opacity": "fill_opacity"
+          }
+        },
+        "z": "z_index"
+      },
+      "at": "at_written",
+      "parent": "id(instance, all)"
+    }
+  },
+  "refuses": {
+    "use_vectorized": "Leave it out: every math@1 shape is a path the renderer strokes and fills on its own.",
+    "sheen_factor": "Leave it out: a flat fill has no sheen; use a gradient fill through the look.",
+    "sheen_direction": "Leave it out: a flat fill has no sheen; use a gradient fill through the look.",
+    "background_stroke_width": "Leave it out, or draw a second, wider copy beneath in the background color.",
+    "background_stroke_color": "Leave it out, or draw a second, wider copy beneath in the background color.",
+    "joint_type": "Leave it out: paths join by the look's line style.",
+    "cap_style": "Leave it out: paths cap by the look's line style.",
+    "shade_in_3d": "Leave it out: 2D shapes draw flat; for a lit shape use math.surface."
+  }
+}

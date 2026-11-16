@@ -55,30 +55,14 @@ const FLICKS_PER_SECOND: i64 = 705_600_000;
 /// marks encoded into them, set by the surface's module.
 pub type Encoded = Arc<Mutex<Option<(Instant, u64)>>>;
 
-/// A look's definition: a shipped look's by its ID, or the look@1 given.
-fn def_of(v: &Value) -> Result<Value, Value> {
-    Ok(match v {
-        Value::String(id) => look::shipped(id)
-            .ok_or_else(|| refused("bad_input", format!("look: {id} isn't a shipped look")))?,
-        Value::Object(_) => v.clone(),
-        _ => {
-            return Err(refused(
-                "bad_input",
-                "a look is a shipped look's ID or a look@1",
-            ))
-        }
-    })
-}
-
 /// A look's light theme as the 2D marks read it: its roles and its type.
-fn look_of(app: &App, v: &Value, doc: &Map<String, Value>) -> Result<(Palette, Type), Value> {
-    let def = def_of(v)?;
+fn look_of(app: &App, def: &Value, doc: &Map<String, Value>) -> Result<(Palette, Type), Value> {
     let bundled: Vec<&str> = deep_text::FACES.iter().map(|f| f.file).collect();
     // A film played on its own holds the status distance only where it shows status, which the
     // check judges (The status-color rule).
     let resolved =
-        look::resolve_in(&def, &bundled, Distance::WhereStatusShows).map_err(|r| r.to_json())?;
-    let bare = drawn_type(app, &def, doc)?;
+        look::resolve_in(def, &bundled, Distance::WhereStatusShows).map_err(|r| r.to_json())?;
+    let bare = drawn_type(app, def, doc)?;
     let ty = Type {
         drawn: bare.drawn,
         first_rim: bare.first_rim,
@@ -330,21 +314,35 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     let reduced_motion = call["reduced_motion"] == true;
     let checks_flicker = call["flicker"] == true;
     let seed = doc.get("seed").and_then(Value::as_u64).unwrap_or(0) as u32;
+    // #463: a look by ID may be one of the call's packs' looks.
+    let manifests = crate::op_transition::manifests(call)?;
+    let plant = app.planted;
+    let def_of = |v: &Value| crate::look_ops::def_of(v, &manifests, plant);
     let mut events = Vec::new();
     for e in call["events"].as_array().into_iter().flatten() {
         let frame = e["frame"]
             .as_u64()
             .filter(|f| *f > 0 && *f < count)
             .ok_or_else(|| bad("an event names a frame after the first, within the film"))?;
-        events.push((
-            frame,
-            (look_of(app, &e["look"], &doc)?, def_of(&e["look"])?),
-        ));
+        let d = def_of(&e["look"])?;
+        events.push((frame, (look_of(app, &d, &doc)?, d)));
     }
     events.sort_by_key(|(f, _)| *f);
     let mut events = events.into_iter().peekable();
-    let mut look = look_of(app, &call["look"], &doc)?;
     let mut def = def_of(&call["look"])?;
+    let mut look = look_of(app, &def, &doc)?;
+    // #463: each look's operator finish, checked and compiled before any frame draws, by its
+    // definition; a frame that mixes looks draws none (a 2D region's sides composite on the GPU).
+    let mut finishes = BTreeMap::new();
+    finishes.insert(def.to_string(), finish_of(&def, &look, &manifests)?);
+    for (_, (l, d)) in events.clone() {
+        finishes.insert(d.to_string(), finish_of(&d, &l, &manifests)?);
+    }
+    let profiler = finishes
+        .values()
+        .any(|f| !f.is_empty())
+        .then(|| crate::look_ops::profiler(app))
+        .flatten();
     // #462: the document's revision hash as the film opened it, and the document it holds.
     let opened_hash = revision(&doc)?;
     let mut held = doc.clone();
@@ -447,7 +445,8 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     // before any frame draws.
     let mut named: BTreeMap<String, Named2> = BTreeMap::new();
     for (name, v) in call["looks"].as_object().into_iter().flatten() {
-        let (l, d) = (look_of(app, v, &doc)?, def_of(v)?);
+        let d = def_of(v)?;
+        let l = look_of(app, &d, &doc)?;
         named.insert(
             name.clone(),
             Named2 {
@@ -610,6 +609,9 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             }
             let started = Instant::now();
             let (frame, ground, items) = build(n, own(&look, &def, &ix, &motifs, &page))?;
+            let finish = finishes
+                .get(&def.to_string())
+                .filter(|f| !f.is_empty() && frame.mix.is_none());
             // #462's planted twin writes each moved item's evaluated place into the document.
             if writes_document && motifs.is_some() {
                 write_places(&mut held, &items);
@@ -624,8 +626,25 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             }
             let built = started.elapsed().as_secs_f64() * 1e3;
             let keep = export || checks_flicker || capture.contains(&n);
-            let (encode_ms, layer_gpu_ms, fills, pixels, bytes) =
-                render(app, k, &encoded, hash, keep)?;
+            let (encode_ms, layer_gpu_ms, fills, mut pixels, mut bytes) = render(
+                app,
+                k,
+                &encoded,
+                hash && finish.is_none(),
+                keep || finish.is_some(),
+            )?;
+            // #463: the look's operator finish over the frame as its picture shows it.
+            let mut finish_ms = 0.0;
+            if let Some((f, raw)) = finish.and_then(|f| Some((f, bytes.take()?))) {
+                let mut image = picture(&raw, size, ground, false);
+                finish_ms = f
+                    .apply(app, profiler.clone(), "", &mut image, size, &[], false)?
+                    .unwrap_or(0.0);
+                if hash {
+                    pixels = Some(frames::hex(&image));
+                }
+                bytes = keep.then_some(image);
+            }
             if let Some(e) = error.lock().unwrap_or_else(|e| e.into_inner()).take() {
                 return Err(e);
             }
@@ -649,7 +668,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 .saturating_sub(baseline);
             let mut row = json!({
                 "frame": n,
-                "gpu_ms": layer_gpu_ms + window_gpu_ns as f64 / 1e6,
+                "gpu_ms": layer_gpu_ms + window_gpu_ns as f64 / 1e6 + finish_ms,
                 "cpu_ms": built + encode_ms + ui_time.as_secs_f64() * 1e3,
                 "fills": fills,
             });
@@ -661,7 +680,11 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                 row["particles"] = crate::flows2d::report(&doc, &program, at(n), &asked, planted)?;
             }
             if let Some(bytes) = bytes {
-                let image = picture(&bytes, size, ground, black);
+                let image = if finish.is_some() {
+                    blackened(bytes, black)
+                } else {
+                    picture(&bytes, size, ground, black)
+                };
                 if capture.contains(&n) {
                     row["final"] = json!(write_named(out, &png(&image, size)?, "png")?);
                     if wants_linear {
@@ -788,6 +811,32 @@ fn indices_of(app: &App, out: &str, taps: &crate::print2d::Taps) -> Result<Strin
         })
         .map_err(|e| refused("no_read_back", e))?;
     write_named(out, &bytes, "u16")
+}
+
+/// #463: a look's operator finish, its roles the look's.
+fn finish_of(
+    def: &Value,
+    look: &(Palette, Type),
+    manifests: &[Value],
+) -> Result<crate::look_ops::Finish, Value> {
+    let roles = look
+        .0
+        .iter()
+        .map(|(k, c)| (k.clone(), c.map(|v| f64::from(v) / 255.0)))
+        .collect();
+    crate::look_ops::of(def, manifests, &roles)
+}
+
+/// A finished picture, blacked out under the planted `draws_black`.
+fn blackened(mut picture: Vec<u8>, black: bool) -> Vec<u8> {
+    if black {
+        picture
+            .as_chunks_mut::<4>()
+            .0
+            .iter_mut()
+            .for_each(|p| p[..3].fill(0));
+    }
+    picture
 }
 
 /// A frame's surface as a picture: its premultiplied BGRA over the page's ground, RGBA rows.

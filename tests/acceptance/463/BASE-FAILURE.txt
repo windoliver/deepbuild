@@ -1,0 +1,50 @@
+#463 acceptance suite at the base, 0e5572731 (Merge pull request #2529), before any implementation.
+
+Run on a Mac17,10 under heavy load (one-minute load 220 to 280 on 18 cores), deep-gpu built at the base:
+
+  PATH=$HOME/.rustup/toolchains/1.99.1-aarch64-apple-darwin/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    npx vitest run --root tests/acceptance/463 --no-file-parallelism --testTimeout=600000
+
+All 8 tests fail at a missing surface; none reaches a reading:
+
+- AC1, goldens: packs/art-1.0.0/pack.json doesn't exist.
+- AC1, planted draws_black: film2d refuses the look "art.flow_brush" ("isn't a shipped look") before drawing any frame,
+  so no frame reaches the guard.
+- AC1, planted halftone_pop_takes_dot_passes: the honest draw is refused the same way before the plant runs. deep-gpu
+  has no such plant at the base either.
+- AC2, budgets.json: there is no canvas-art-frames task, and no canvas-art-regions or canvas-art-switch either. The
+  validator passes against the merge base, because the file is the base's.
+- AC2, art-frames, art-regions and art-switch: benchmarks/canvas.mjs throws "Unknown task" for each mode.
+- AC3, taste: film2d refuses art.flow_brush, so no screenshot is written. TASTE.json doesn't exist.
+
+The fixtures were checked at the base with shipped looks instead, by a throwaway probe that is not committed. These
+calls all drew frame 30 at 1920 x 1080:
+- the 2D film in clean and in chalk;
+- the 3D scene in studio@1's physical_neutral and in drawing_ink;
+- both region documents: 2D in clean with a chalk region, and 3D in physical_neutral with a drawing_ink region.
+Every frame passed the blank guard: golden read BLOCKED no_golden, not blank. The region frames differ from the plain
+ones, and the 2D film reports document.opened equal to played. view3d with the look "art.dab" and the art pack is
+refused because pack.json is missing. `npx tsc -p tests/acceptance/463/tsconfig.json` exits 0.
+
+---- vitest output (failures; repository path shortened to <repo>) ----
+     × AC2 #463.7c8d3f4b budgets.json has the three tasks, with the issue's numbers and the lane's margin, and passes the lane's validator against the merge base 90ms
+     × AC2 #463.7c8d3f4b each look plays the 1080p test scene within the showpiece budget in 2D and 3D: each run's worst p95, five runs 75ms
+     × AC2 #463.7c8d3f4b a region's edge in view costs at most twice the frame: each run's worst ratio over every look pair, 2D and 3D 56ms
+     × AC2 #463.7c8d3f4b switching looks takes under 100 ms: each run's slowest switch over every ordered pair of art@1 looks 52ms
+     × AC1 #463.d6ee1ca5 the scene, unchanged, renders in each of the twelve looks in 2D and 3D, each frame matching its golden pixel hash, the blank guard first 3ms
+     × AC1 #463.d6ee1ca5 (planted) a look that draws a black frame reads BLOCKED under the guard, never PASS, for every look in 2D and 3D 2541ms
+     × AC1 #463.d6ee1ca5 (planted) a look drawing the scene with another look's passes misses that look's goldens and fails, naming the look; the other look keeps its own 345ms
+     × AC3 #463.fee183bf the run writes the scene in all twelve art@1 looks in 2D and 3D from the canvas's own frames, and the recorded call on exactly those says they look right 2950ms
+AssertionError: packs/art-1.0.0/pack.json can't be read: ENOENT: no such file or directory, open '<repo>/packs/art-1.0.0/pack.json'
+AssertionError: the scene in art.flow_brush, 2d was drawn, not refused: {"code":"bad_input","reason":"look: art.flow_brush isn't a shipped look"}: expected 'bad_input' to be undefined
+AssertionError: the scene in art.halftone_pop, 2d was drawn, not refused: {"code":"bad_input","reason":"look: art.halftone_pop isn't a shipped look"}: expected 'bad_input' to be undefined
+AssertionError: budgets.json has the task canvas-art-frames: expected undefined to be defined
+AssertionError: node benchmarks/canvas.mjs art-frames exits 0; stderr: file://<repo>/benchmarks/canvas.mjs:1562
+Error: Unknown task art-frames; one of: patch-apply, merge-10k, seal, kit, …
+AssertionError: node benchmarks/canvas.mjs art-regions exits 0; stderr: file://<repo>/benchmarks/canvas.mjs:1562
+Error: Unknown task art-regions; one of: patch-apply, merge-10k, seal, kit, …
+AssertionError: node benchmarks/canvas.mjs art-switch exits 0; stderr: file://<repo>/benchmarks/canvas.mjs:1562
+Error: Unknown task art-switch; one of: patch-apply, merge-10k, seal, kit, …
+AssertionError: flow_brush-2d.png was drawn, not refused: {"code":"bad_input","reason":"look: art.flow_brush isn't a shipped look"}: expected 'bad_input' to be undefined
+ Test Files  3 failed (3)
+      Tests  8 failed (8)
