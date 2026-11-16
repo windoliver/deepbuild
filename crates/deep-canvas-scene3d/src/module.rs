@@ -485,6 +485,16 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
         "codes": [],
         "covers": {"kinds": ["instance@1"], "fields": ["instance@1/params/of", "instance@1/params/from"]},
     }));
+    // #2363: the same rest with a moving support, and a time-dependent builder.
+    let mut moving = garden();
+    moving["channels"] = json!({"lift": {"target": "items/table/at/pos/1", "type": "f32",
+        "keys": {"k0": {"t": "0s", "value": 0, "interp": "linear"},
+                 "k1": {"t": "1s", "value": 0.2, "interp": "linear"}}}});
+    moving["items"]["flower"]["modifiers"] = json!([
+        {"kind": "mod.bob@1", "params": {"amount": 0.1, "hz": 1}}
+    ]);
+    r.fixture("moving-garden", moving, None)
+        .sidecar(json!({"codes": []}));
     // #2013: a ball told to rest on a shelf it doesn't stand over, which raises `no_support`.
     r.fixture("rest-no-support", unsupported(), None)
         .planted()

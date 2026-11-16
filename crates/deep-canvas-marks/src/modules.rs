@@ -1240,6 +1240,27 @@ fn register_data(r: &mut Registrar, decimate: fn(&mut View<'_>) -> Result<(), Op
         "codes": ["unknown_kind"],
         "twin": {"path": "items/ys/params/range", "value": [190, 30]},
     }));
+    // #2363: columns read a baked array at frame zero, not just static column bytes.
+    let mut columns = points_board();
+    let values = &mut columns["items"]["dots"]["params"]["columns"]["v"];
+    values["type"] = json!("f64");
+    values["count"] = json!(2);
+    values["every"] = json!(705_600_000);
+    values["steps"] = json!([
+        {"step": 0, "changed": [[0, 2]], "values": [[0, [2.0, 5.0]]]},
+        {"step": 1, "changed": [[0, 1]], "values": [[0, [3.0]]]},
+    ]);
+    columns["transport"] = json!({"span": "1s"});
+    columns["items"]["swirl"] = json!({"id": "swirl", "kind": "vector_field@1", "name": "Swirl", "order": "a3",
+        "params": {"fn": {"x": "-y", "y": "x"},
+                   "streams": {"starts": [[1, 0]], "step": 0.1, "time": 1}}});
+    columns["items"]["follower"] = json!({"id": "follower", "kind": "circle@1", "name": "Follower", "order": "a4",
+        "params": {"center": [0, 0], "r": 4}});
+    columns["constraints"] = json!({"follow": {"owner": "follower", "kind": "follow_stream",
+        "vector_field": "swirl", "from": [1, 0]}});
+    r.fixture("columns", columns, None).sidecar(json!({
+        "checks": [{"kind": "document.validate"}], "oracles": ["analytic"], "codes": ["unknown_kind"],
+    }));
     r.fixture("decimated", decimated_board(), None)
         .sidecar(json!({
             "checks": [{"kind": "document.validate"}],
@@ -1723,6 +1744,15 @@ fn register_marks2d_with(r: &mut Registrar, planted: relations::Planted) {
         "Name the axis's scale, and a side of bottom, top, left or right.",
         false,
     );
+    // #2363: a relation and a time-bound warp each have a node at 0 s.
+    let mut placed = marks_board();
+    placed["items"]["cap"]["at"] = json!({"place": {"beside": "box", "side": "s", "gap": 8}});
+    placed["items"]["warp"] = json!({"id": "warp", "kind": "group@1", "name": "Warp", "order": "a5",
+        "params": {"warp": {"map": {"x": "x", "y": "y + u"}, "vars": {"u": "time"}}}});
+    placed["items"]["line"]["parent"] = json!("warp");
+    r.fixture("relations", placed, None).sidecar(json!({
+        "checks": [{"kind": "document.validate"}], "oracles": ["analytic"], "codes": ["unknown_kind"],
+    }));
     r.fixture("board", marks_board(), None).sidecar(json!({
         "checks": [{"kind": "document.determinism", "probe": "pixels", "render": "seek_vs_play"}],
         "oracles": ["seek_play"],

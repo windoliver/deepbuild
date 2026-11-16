@@ -186,7 +186,33 @@ fn register(r: &mut Registrar) {
         json!({"checks": [{"kind": "document.determinism"}], "oracles": ["seek_play"], "codes": [],
                "at_times": ["0s", "1s"], "inputs": [{"step": 20, "kind": "press", "value": 1}]}),
     )
-    .fixture_assets(vec![bytes]);
+    .fixture_assets(vec![bytes.clone()]);
+    // #2363: the module's program also supplies real array readers at frame zero.
+    // The copies, flip and mark set read the core's view, not a fabricated baked envelope.
+    // With no control read, the fixture program reads the seed at offset zero: keep it zero.
+    r.fixture("readers", json!({
+        "format": 1, "profile": "board", "title": "Array readers",
+        "description": "A counter selects a caption, a row label and a flip child.",
+        "size": [320, 200], "seed": 0, "transport": {"span": "1s"},
+        "data": {"copy": {"en": {"labels": {"0": "Ready", "missing": "Counting"}},
+                          "fr": {"labels": {"0": "Pret", "missing": "Compter"}}}},
+        "items": {
+            "counter": {"id": "counter", "kind": "logic@1", "name": "Counter", "order": "a0", "params": params},
+            "caption": {"id": "caption", "kind": "text@1", "name": "Caption", "order": "a1",
+                "params": {"text": {"copy": "labels[counter.presses]"}, "font": "body", "size": 13, "box": {"w": 200, "h": 20}}},
+            "choices": {"id": "choices", "kind": "group@1", "name": "Choices", "order": "a2",
+                "params": {"flip": {"array": "counter.presses", "map": {"0": "dot"}}}},
+            "dot": {"id": "dot", "kind": "circle@1", "name": "Dot", "order": "a3", "parent": "choices",
+                "params": {"center": [40, 60], "r": 8, "paint": {"fill": {"role": "accent"}}}},
+            "labels": {"id": "labels", "kind": "marks@1", "name": "Labels", "order": "a4",
+                "params": {"mark": "text", "n": 1, "key": "k",
+                    "columns": {"k": {"array": "counter.presses", "as": "i32", "dtype": "i32", "len": 1, "data": "AAAAAA=="},
+                                "text": {"copy": "labels", "key": "k"}},
+                    "encode": {"x": 20, "y": 100, "text": {"column": "text"}, "size": 13}}}
+        }
+    }), None).fixture_assets(vec![bytes]).sidecar(json!({
+        "checks": [{"kind": "document.validate"}], "oracles": ["analytic"], "codes": ["unknown_kind"],
+    }));
     // #548: deep_run's logic kinds (Check input: logic kinds), each on the lowered document's
     // logic items, their programs read from the assets the check names.
     r.check("logic.determinism", "any", &["logic.determinism"], |d, i| issues(determinism(d, i)))

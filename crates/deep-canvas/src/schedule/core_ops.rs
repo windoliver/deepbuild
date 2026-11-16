@@ -138,8 +138,13 @@ fn lower(v: &mut View<'_>) -> Result<(), OpError> {
                            "paint": {"fill": {"role": "ink"}}}),
         };
     } else if v.is_module_kind(&kind) {
+        // A data-only module may keep the fields its operators read without drawing a mark.
+        let params = v
+            .draw_of(&kind)
+            .map(|draw| draw(out.get("params").unwrap_or(&Value::Null)))
+            .unwrap_or_else(|| json!({}));
         out["kind"] = json!("group@1");
-        out["params"] = json!({});
+        out["params"] = params;
     }
     v.write("core.lowered", Val::json(out))
 }

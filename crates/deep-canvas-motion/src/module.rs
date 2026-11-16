@@ -301,6 +301,10 @@ fn register_compiling(
         "Start the second placement where the first ends, or after it.",
         false,
     );
+    r.fixture("arrangement", arrangement(), None)
+        .sidecar(json!({
+            "checks": [{"kind": "document.validate"}], "oracles": ["analytic"], "codes": [],
+        }));
     r.fixture("slide", slide(), None).sidecar(json!({
         "checks": [{"kind": "document.determinism", "probe": "pixels", "render": "seek_vs_play"}],
         "oracles": ["seek_play"],
@@ -721,6 +725,23 @@ fn slide() -> Value {
             "channels": {"x": {"target": "slot:target/at/pos/0", "type": "f32",
                 "keys": {"k0": {"t": "0s", "value": 16, "interp": "linear"}, "k1": {"t": "2s", "value": 260, "interp": "linear"}}}}}},
         "placements": {"p": {"clip": "slide", "slots": {"target": "mover"}, "start": "0s"}}
+    })
+}
+
+/// #2363: an arrangement at frame zero, including both its check and frame operators.
+fn arrangement() -> Value {
+    json!({
+        "format": 1, "profile": "figure", "title": "Two arranged boxes",
+        "description": "A small box placed near a larger one without passing into it.",
+        "size": [320, 200], "requires": {"modules": {"scene3d": "^1", "motion": "^1"}},
+        "items": {
+            "fixed": {"id": "fixed", "kind": "mark.box@1", "name": "Fixed", "order": "a0",
+                "params": {"size": [1, 1, 1]}},
+            "near": {"id": "near", "kind": "mark.box@1", "name": "Near", "order": "a1",
+                "params": {"size": [0.4, 0.4, 0.4]}, "at": {"pos": [3, 0, 0]}},
+            "set": {"id": "set", "kind": "arrange@1", "name": "Arrangement", "order": "a2",
+                "params": {"items": ["near"], "relations": [{"a": "near", "rel": "near", "b": "fixed", "d": 0.5}]}}
+        }
     })
 }
 

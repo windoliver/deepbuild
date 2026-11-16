@@ -160,6 +160,8 @@ const BARE_MODULE_KINDS: &[(&str, &str)] = &[
     ("material", "scene3d"),
     ("sky", "scene3d"),
     ("vector", "vector"),
+    ("salience", "record"),
+    ("sheet", "sheet"),
     // #494: a graph is the graph module's, so a match morph pairs its nodes by key.
     ("graph", "graph"),
     // #533: the logic item keeps the logic module's name, as the cell grid does.

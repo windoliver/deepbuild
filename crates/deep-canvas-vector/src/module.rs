@@ -133,6 +133,16 @@ fn register(r: &mut Registrar, paint: fn(&mut View<'_>) -> Result<(), OpError>) 
     r.operator("paint", "items", &["core.fields"], &["vector.paint"])
         .applies(is_vector)
         .run(paint);
+    // A positive twin carries the actual SVG; keep the missing-asset fixtures below (#2363).
+    let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 100"><path id="accent" fill="currentColor" d="M10 10H130V90H10Z"/><path id="muted" fill="#ff0000" d="M160 10H290V90H160Z"/></svg>"##;
+    let mut stored = paint_board();
+    stored["items"]["mark"]["params"]["src"] = json!(deep_canvas::canon::sha256_hex(svg));
+    r.fixture("stored-paint", stored, None)
+        .fixture_assets(vec![svg.to_vec()])
+        .sidecar(json!({
+            "checks": [{"kind": "document.validate"}],
+            "oracles": ["analytic"], "codes": ["unknown_kind"],
+        }));
     // The import's codes (svg_*) join the catalog with their planted fixtures when the kit seals
     // vector@1 (#399). The hub draws a vector from the SVG its evidence store holds (#1162); the
     // fixture names one no store holds, which its codes name: a planted document (#2085).

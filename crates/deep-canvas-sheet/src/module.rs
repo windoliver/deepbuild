@@ -3,6 +3,7 @@
 //! question card's slot, every cell at its exact size with room for its highlights' marks, and
 //! its captions, one node per item.
 
+use deep_canvas::kinds::{Entry, Param, ParamType, Version};
 use deep_canvas::registry::{Dependency, Manifest, Module, Range, Registrar, Semver};
 use deep_canvas::schedule::core_ops::Fields;
 use deep_canvas::schedule::{OpError, Val, View};
@@ -57,6 +58,22 @@ pub fn module() -> Module {
 }
 
 fn register(r: &mut Registrar) {
+    r.kind(Entry {
+        family: "", name: "sheet", migrations: Vec::new(),
+        versions: vec![Version {
+            major: 1, minor: 0,
+            params: [
+                ("view", "[w: u32, h: u32]", Value::Null),
+                ("card", "[w: u32, h: u32]", Value::Null),
+                ("cells", "[{id: ID, size: [w: u32, h: u32], label?: string, look?: name, highlights?: [[x: u32, y: u32, w: u32, h: u32]]}]", json!([])),
+                ("columns", "u32", Value::Null),
+                ("gap", "u32", json!(8)),
+            ].into_iter().map(|(name, form, default)| Param {
+                name, ty: ParamType::Json(form), unit: "", default, min: None, max: None,
+                minor: 0, module: "", operator: "",
+            }).collect(),
+        }],
+    }, &[], "").drawn(Value::clone);
     r.array("sheet.placed", "placed", "item", "geometry", "items");
     r.operator("place", "items", &["core.fields"], &["sheet.placed"])
         .applies(is_sheet)
@@ -172,7 +189,7 @@ fn board() -> Value {
     json!({
         "format": 1, "profile": "board", "seed": 388, "title": "Variants",
         "description": "Three candidate stills on a variant sheet beside the question card's slot: the sheet module's fixture.",
-        "size": [800, 400],
+        "size": [800, 400], "requires": {"modules": {"sheet": "^1"}},
         "items": {
             "sheet": {"id": "sheet", "kind": "sheet@1", "name": "Variants", "order": "a0",
                       "params": {"view": [800, 400], "card": [240, 160], "gap": 8,

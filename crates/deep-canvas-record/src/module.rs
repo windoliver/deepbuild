@@ -2,6 +2,7 @@
 //! issue #388 lays R1's canvas out as canvas modules): each `salience@1` item's level, the items
 //! it shows ranked by their record facts and the rest folded into one count, one node per item.
 
+use deep_canvas::kinds::{Entry, Param, ParamType, Version};
 use deep_canvas::registry::{Dependency, Manifest, Module, Range, Registrar, Semver};
 use deep_canvas::schedule::core_ops::Fields;
 use deep_canvas::schedule::{OpError, Val, View};
@@ -42,6 +43,42 @@ pub fn module() -> Module {
 }
 
 fn register(r: &mut Registrar) {
+    r.kind(
+        Entry {
+            family: "",
+            name: "salience",
+            migrations: Vec::new(),
+            versions: vec![Version {
+                major: 1,
+                minor: 0,
+                params: [
+                    ("show", "u8", json!(9)),
+                    ("fits", "u32", Value::Null),
+                    (
+                        "items",
+                        "[{id: ID, facts: {needs_you: bool, sent_back: bool, failing: bool, lacks_proof: bool, touched: bool, changed: bool, priority?: i16}, priority?: i16, file?: bool}]",
+                        json!([]),
+                    ),
+                    ("evidence", "bool", json!(false)),
+                ]
+                .into_iter()
+                .map(|(name, form, default)| Param {
+                    name,
+                    ty: ParamType::Json(form),
+                    unit: "",
+                    default,
+                    min: None,
+                    max: None,
+                    minor: 0,
+                    module: "",
+                    operator: "",
+                })
+                .collect(),
+            }],
+        },
+        &[],
+        "",
+    ).drawn(Value::clone);
     r.array("record.level", "level", "item", "geometry", "items");
     r.operator("salience", "items", &["core.fields"], &["record.level"])
         .applies(is_salience)
@@ -117,7 +154,7 @@ fn board() -> Value {
     json!({
         "format": 1, "profile": "board", "seed": 388, "title": "Level",
         "description": "Four parts ranked by their record facts, three shown and the rest folded: the record module's fixture.",
-        "size": [320, 200],
+        "size": [320, 200], "requires": {"modules": {"record": "^1"}},
         "items": {
             "level": {"id": "level", "kind": "salience@1", "name": "Level", "order": "a0",
                       "params": {"show": 3, "fits": 3, "items": [

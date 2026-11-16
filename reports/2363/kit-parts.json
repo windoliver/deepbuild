@@ -1,0 +1,522 @@
+{
+  "command": {
+    "call": "kit",
+    "modules": [
+      "data",
+      "marks2d",
+      "motion",
+      "record",
+      "sheet",
+      "scene3d",
+      "vector",
+      "logic"
+    ],
+    "parts": [
+      "fixtures",
+      "catalog",
+      "read_set",
+      "order",
+      "schedule",
+      "contribution"
+    ]
+  },
+  "verdict": "FAIL",
+  "seed": 138,
+  "backends": [
+    "vello_cpu",
+    "noop"
+  ],
+  "modules": [
+    {
+      "module": "data",
+      "verdict": "PASS",
+      "parts": [
+        {
+          "part": "fixtures",
+          "verdict": "PASS",
+          "cases": 8,
+          "failures": []
+        },
+        {
+          "part": "read_set",
+          "verdict": "PASS",
+          "cases": 223,
+          "failures": []
+        },
+        {
+          "part": "order",
+          "verdict": "PASS",
+          "cases": 32,
+          "failures": []
+        },
+        {
+          "part": "schedule",
+          "verdict": "PASS",
+          "cases": 1,
+          "failures": []
+        },
+        {
+          "part": "catalog",
+          "verdict": "PASS",
+          "cases": 4,
+          "failures": []
+        }
+      ]
+    },
+    {
+      "module": "logic",
+      "verdict": "PASS",
+      "parts": [
+        {
+          "part": "fixtures",
+          "verdict": "PASS",
+          "cases": 4,
+          "failures": []
+        },
+        {
+          "part": "read_set",
+          "verdict": "PASS",
+          "cases": 210,
+          "failures": []
+        },
+        {
+          "part": "order",
+          "verdict": "PASS",
+          "cases": 32,
+          "failures": []
+        },
+        {
+          "part": "schedule",
+          "verdict": "PASS",
+          "cases": 1,
+          "failures": []
+        },
+        {
+          "part": "catalog",
+          "verdict": "PASS",
+          "cases": 6,
+          "failures": []
+        }
+      ]
+    },
+    {
+      "module": "marks2d",
+      "verdict": "PASS",
+      "parts": [
+        {
+          "part": "fixtures",
+          "verdict": "PASS",
+          "cases": 25,
+          "failures": []
+        },
+        {
+          "part": "read_set",
+          "verdict": "PASS",
+          "cases": 1128,
+          "failures": []
+        },
+        {
+          "part": "order",
+          "verdict": "PASS",
+          "cases": 184,
+          "failures": []
+        },
+        {
+          "part": "schedule",
+          "verdict": "PASS",
+          "cases": 1,
+          "failures": []
+        },
+        {
+          "part": "catalog",
+          "verdict": "PASS",
+          "cases": 44,
+          "failures": []
+        }
+      ]
+    },
+    {
+      "module": "motion",
+      "verdict": "PASS",
+      "parts": [
+        {
+          "part": "fixtures",
+          "verdict": "PASS",
+          "cases": 29,
+          "failures": []
+        },
+        {
+          "part": "read_set",
+          "verdict": "PASS",
+          "cases": 910,
+          "failures": []
+        },
+        {
+          "part": "order",
+          "verdict": "PASS",
+          "cases": 136,
+          "failures": []
+        },
+        {
+          "part": "schedule",
+          "verdict": "PASS",
+          "cases": 1,
+          "failures": []
+        },
+        {
+          "part": "catalog",
+          "verdict": "PASS",
+          "cases": 52,
+          "failures": []
+        }
+      ]
+    },
+    {
+      "module": "record",
+      "verdict": "FAIL",
+      "parts": [
+        {
+          "part": "fixtures",
+          "verdict": "FAIL",
+          "cases": 2,
+          "failures": [
+            {
+              "code": "unexpected_codes",
+              "module": "record",
+              "part": "fixtures",
+              "case": "parity/framework/record-salience-duplicate-id.board#codes",
+              "fixture": "parity/framework/record-salience-duplicate-id.board",
+              "extra": [
+                "out_of_range"
+              ],
+              "missing": [
+                "salience.duplicate_id",
+                "unknown_kind"
+              ]
+            }
+          ]
+        },
+        {
+          "part": "read_set",
+          "verdict": "PASS",
+          "cases": 54,
+          "failures": []
+        },
+        {
+          "part": "order",
+          "verdict": "PASS",
+          "cases": 8,
+          "failures": []
+        },
+        {
+          "part": "schedule",
+          "verdict": "PASS",
+          "cases": 1,
+          "failures": []
+        },
+        {
+          "part": "catalog",
+          "verdict": "FAIL",
+          "cases": 3,
+          "failures": [
+            {
+              "code": "unexpected_codes",
+              "module": "record",
+              "part": "catalog",
+              "case": "code:salience.duplicate_id",
+              "fixture": "parity/framework/record-salience-duplicate-id.board",
+              "extra": [
+                "out_of_range"
+              ],
+              "missing": [
+                "salience.duplicate_id",
+                "unknown_kind"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "module": "scene3d",
+      "verdict": "PASS",
+      "parts": [
+        {
+          "part": "fixtures",
+          "verdict": "PASS",
+          "cases": 11,
+          "failures": []
+        },
+        {
+          "part": "read_set",
+          "verdict": "PASS",
+          "cases": 352,
+          "failures": []
+        },
+        {
+          "part": "order",
+          "verdict": "PASS",
+          "cases": 48,
+          "failures": []
+        },
+        {
+          "part": "schedule",
+          "verdict": "PASS",
+          "cases": 1,
+          "failures": []
+        },
+        {
+          "part": "catalog",
+          "verdict": "PASS",
+          "cases": 7,
+          "failures": []
+        }
+      ]
+    },
+    {
+      "module": "sheet",
+      "verdict": "FAIL",
+      "parts": [
+        {
+          "part": "fixtures",
+          "verdict": "FAIL",
+          "cases": 3,
+          "failures": [
+            {
+              "code": "unexpected_codes",
+              "module": "sheet",
+              "part": "fixtures",
+              "case": "parity/framework/sheet-sheet-does-not-fit.board#codes",
+              "fixture": "parity/framework/sheet-sheet-does-not-fit.board",
+              "extra": [
+                "out_of_range"
+              ],
+              "missing": [
+                "sheet.does_not_fit",
+                "unknown_kind"
+              ]
+            },
+            {
+              "code": "unexpected_codes",
+              "module": "sheet",
+              "part": "fixtures",
+              "case": "parity/framework/sheet-sheet-highlight-outside.board#codes",
+              "fixture": "parity/framework/sheet-sheet-highlight-outside.board",
+              "extra": [
+                "out_of_range"
+              ],
+              "missing": [
+                "sheet.highlight_outside",
+                "unknown_kind"
+              ]
+            }
+          ]
+        },
+        {
+          "part": "read_set",
+          "verdict": "PASS",
+          "cases": 54,
+          "failures": []
+        },
+        {
+          "part": "order",
+          "verdict": "PASS",
+          "cases": 8,
+          "failures": []
+        },
+        {
+          "part": "schedule",
+          "verdict": "PASS",
+          "cases": 1,
+          "failures": []
+        },
+        {
+          "part": "catalog",
+          "verdict": "FAIL",
+          "cases": 5,
+          "failures": [
+            {
+              "code": "unexpected_codes",
+              "module": "sheet",
+              "part": "catalog",
+              "case": "code:sheet.does_not_fit",
+              "fixture": "parity/framework/sheet-sheet-does-not-fit.board",
+              "extra": [
+                "out_of_range"
+              ],
+              "missing": [
+                "sheet.does_not_fit",
+                "unknown_kind"
+              ]
+            },
+            {
+              "code": "unexpected_codes",
+              "module": "sheet",
+              "part": "catalog",
+              "case": "code:sheet.highlight_outside",
+              "fixture": "parity/framework/sheet-sheet-highlight-outside.board",
+              "extra": [
+                "out_of_range"
+              ],
+              "missing": [
+                "sheet.highlight_outside",
+                "unknown_kind"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "module": "vector",
+      "verdict": "PASS",
+      "parts": [
+        {
+          "part": "fixtures",
+          "verdict": "PASS",
+          "cases": 3,
+          "failures": []
+        },
+        {
+          "part": "read_set",
+          "verdict": "PASS",
+          "cases": 168,
+          "failures": []
+        },
+        {
+          "part": "order",
+          "verdict": "PASS",
+          "cases": 24,
+          "failures": []
+        },
+        {
+          "part": "schedule",
+          "verdict": "PASS",
+          "cases": 1,
+          "failures": []
+        },
+        {
+          "part": "contribution",
+          "verdict": "PASS",
+          "cases": 1,
+          "failures": []
+        },
+        {
+          "part": "catalog",
+          "verdict": "PASS",
+          "cases": 3,
+          "failures": []
+        }
+      ]
+    }
+  ],
+  "inventory": {
+    "operators": [
+      "building.build",
+      "building.shade",
+      "cells.grid",
+      "core.fields",
+      "core.lower",
+      "core.status",
+      "core.transform",
+      "core.world",
+      "data.columns",
+      "data.decimate",
+      "data.follow_stream",
+      "data.scale",
+      "data.vector_field",
+      "graph.layout",
+      "logic.step",
+      "look.finish",
+      "look.palette",
+      "marks2d.frame",
+      "marks2d.item",
+      "marks2d.place",
+      "marks2d.relations",
+      "marks2d.warp",
+      "motion.arrange",
+      "motion.arrangelive",
+      "motion.channels",
+      "motion.clock",
+      "motion.compile",
+      "motion.flip",
+      "motion.placed",
+      "record.salience",
+      "scene3d.build",
+      "scene3d.lights",
+      "scene3d.mark",
+      "scene3d.rebuild",
+      "scene3d.rest",
+      "scene3d.rested",
+      "scene3d.restlive",
+      "scene3d.scatter",
+      "scene3d.shade",
+      "scene3d.stack",
+      "sheet.place",
+      "text.animate",
+      "text.copy",
+      "text.copy_columns",
+      "text.counter",
+      "text.shape",
+      "text.status",
+      "vector.glyphs",
+      "vector.paint"
+    ],
+    "fixtures": [
+      "core/board",
+      "building/house",
+      "cells/grid",
+      "data/points",
+      "data/race",
+      "data/columns",
+      "data/decimated",
+      "effects/shadowed-box",
+      "effects/audit-unread",
+      "graph/layered",
+      "graph/tie",
+      "graph/over_budget",
+      "logic/counter",
+      "logic/readers",
+      "look/roles",
+      "look/finish",
+      "loop/loop-scale-door",
+      "loop/loop-scale-door-clean",
+      "loop/loop-framing-horizon",
+      "loop/loop-framing-clean",
+      "loop/loop-exposure-clipped",
+      "loop/loop-exposure-clean",
+      "loop/loop-contrast-muted",
+      "loop/loop-contrast-clean",
+      "loop/loop-noise-reseeds",
+      "loop/loop-noise-clean",
+      "loop/shading-unreadable",
+      "loop/shading-degenerate",
+      "loop/shading-flipped",
+      "loop/shading-inconsistent",
+      "loop/shading-inward",
+      "loop/shading-quad-ratio",
+      "loop/shading-uv",
+      "marks2d/relations",
+      "marks2d/board",
+      "media/bell",
+      "media/reverb",
+      "motion/arrangement",
+      "motion/slide",
+      "physics/late-joint",
+      "record/level",
+      "scene3d/figure",
+      "scene3d/lights",
+      "scene3d/stack",
+      "scene3d/garden",
+      "scene3d/moving-garden",
+      "sheet/variants",
+      "text/counter",
+      "text/status",
+      "vector/stored-paint"
+    ],
+    "kinds": {
+      "salience@1": "record",
+      "sheet@1": "sheet"
+    }
+  }
+}

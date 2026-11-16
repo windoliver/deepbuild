@@ -1724,6 +1724,20 @@ impl Hub<'_> {
     /// their `at`; each writer's patches wait in its own queue, and one checker takes them in
     /// turn across writers, one at a time, so one writer's flood never delays another's patch.
     pub fn run_calls(&mut self) -> Vec<Value> {
+        // Registered fixtures carry their assets, so their documents also open in a fresh
+        // store in another process (#2363). Missing or unwritable bytes never count as shown.
+        for (_, fixture) in &self.startup.sealed.fixtures {
+            for bytes in &fixture.assets {
+                if evidence::put(&self.scenario.evidence, bytes).is_err() {
+                    return self
+                        .scenario
+                        .calls
+                        .iter()
+                        .map(|_| json!({"outcome": "refused", "code": "store_failed"}))
+                        .collect();
+                }
+            }
+        }
         // #499: the media module's own check reads its planted wrong program from here.
         deep_canvas_media::plant(self.scenario.module_planted.as_deref());
         self.open_shared();
