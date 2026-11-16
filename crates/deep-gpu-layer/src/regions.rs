@@ -581,6 +581,8 @@ struct FrameU {
     size: [f32; 4],
     sides: [f32; 4],
     counts: [u32; 4],
+    /// #463: where each look's render starts in the frame, px: looks 0 and 1, then 2 and 3.
+    origins: [[f32; 4]; 2],
 }
 
 #[repr(C)]
@@ -691,6 +693,7 @@ pub fn mix(
             sides.len().min(2) as u32,
             u32::from(independent),
         ],
+        origins: [[0.0; 4]; 2],
     };
     match seen {
         Seen::Camera(c) => {
@@ -711,6 +714,73 @@ pub fn mix(
         frame,
         regions,
     })
+}
+
+impl Mix {
+    /// #463: the look of index `j` was drawn from frame px `origin` on, at its crop's size.
+    pub fn set_origin(&mut self, j: usize, origin: [u32; 2]) {
+        if j < MOST_LOOKS {
+            self.frame.origins[j / 2][2 * (j % 2)] = origin[0] as f32;
+            self.frame.origins[j / 2][2 * (j % 2) + 1] = origin[1] as f32;
+        }
+    }
+}
+
+/// How far past where a 2D region's look can show its frame still draws, px: what its media and
+/// paper read around a pixel (#463).
+const CROP_MARGIN_2D: f64 = 48.0;
+/// The grid a 2D crop's corner lies on, px (#463).
+const CROP_GRID: f64 = 64.0;
+
+/// #463: the px rectangle `[x, y, w, h]` of a 2D frame of `size` that the look `key` draws in:
+/// the screen bounds of the masks of the regions that draw it, grown by each edge's width and
+/// [`CROP_MARGIN_2D`]. A 2D region covers only pixels whose page point is within its edge of its
+/// mask, so nothing outside shows the look. `None` where it can show anywhere: a side's own look,
+/// or a 3D view.
+pub fn crop_2d(
+    sides: &[Side<'_>],
+    seen: &Seen,
+    volumes: &BTreeMap<String, Volume>,
+    key: &Key,
+) -> Result<Option<[u32; 4]>, Value> {
+    let (Some(name), Seen::Page { size, .. }) = (key, seen) else {
+        return Ok(None);
+    };
+    if sides.iter().any(|s| s.look == Some(name.as_str())) {
+        return Ok(None);
+    }
+    let (mut lo, mut hi) = ([f64::INFINITY; 2], [f64::NEG_INFINITY; 2]);
+    for side in sides {
+        for r in side.regions.iter().filter(|r| &r.look == name) {
+            let v = volume(volumes, &r.mask, side.shot)?;
+            let grow = r.width + CROP_MARGIN_2D;
+            for c in 0..8 {
+                let corner = [0, 1, 2].map(|a| if c >> a & 1 == 0 { -0.5 } else { 0.5 });
+                let Some(q) = seen.project(apply(&v.1, corner)) else {
+                    return Ok(None);
+                };
+                for a in 0..2 {
+                    lo[a] = lo[a].min(q[a] - grow);
+                    hi[a] = hi[a].max(q[a] + grow);
+                }
+            }
+        }
+    }
+    let at = |v: f64, n: u32| v.clamp(0.0, f64::from(n));
+    // The corner on a 64 px grid, so the passes that read a look's coverage at reduced sizes
+    // sample it at the same pixels as the whole frame does.
+    let grid = |v: f64| (v / CROP_GRID).floor() * CROP_GRID;
+    let (x0, y0) = (grid(at(lo[0], size[0])), grid(at(lo[1], size[1])));
+    let (x1, y1) = (at(hi[0], size[0]).ceil(), at(hi[1], size[1]).ceil());
+    if !(x0 < x1 && y0 < y1) {
+        return Ok(None);
+    }
+    Ok(Some([
+        x0 as u32,
+        y0 as u32,
+        (x1 - x0) as u32,
+        (y1 - y0) as u32,
+    ]))
 }
 
 /// What the composite reads a frame's view depths from.

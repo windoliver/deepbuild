@@ -215,7 +215,8 @@ fn blurred(px: vec2<f32>) -> f32 {
     if ((u.kind.w & 2u) != 0u) {
         return 1.0;
     }
-    return textureSampleLevel(soft, clamped, px / u.size, 0.0).a;
+    // The layer's own size: a look drawn at a crop of the frame (#463) samples its own.
+    return textureSampleLevel(soft, clamped, px / vec2<f32>(textureDimensions(cover)), 0.0).a;
 }
 
 // How lit a pixel is, 0..1: a 2D item's dome under the look's light, or a 3D surface's own light.
@@ -478,7 +479,10 @@ fn dabs(p: vec2<f32>, h: f32) -> vec4<f32> {
                 let center = (vec2<f32>(id) + vec2<f32>(rand(s), rand(s ^ 3u))) * size;
                 let len = mix(u.a.y, u.a.z, rand(s ^ 5u));
                 let d = rotated(p - center, degrees(flow) + rand(s ^ 9u) * 40.0);
-                let body = smoothstep(1.0, 0.8, length(d / vec2<f32>(len * 0.5, len * 0.16)));
+                // #463: as wide as the 3D strokes reader makes it (scene3d strokes::lay): from a
+                // third of its length, round when its size range is one size.
+                let wide = len * 0.5 * (0.3 + 0.7 * u.a.y / max(u.a.z, 1e-6));
+                let body = smoothstep(1.0, 0.8, length(d / vec2<f32>(len * 0.5, wide)));
                 if (body > out.a) {
                     let pick = u32(rand(s ^ 11u) * u.b.x);
                     out = vec4<f32>(u.list[min(pick, u32(u.b.x) - 1u)].rgb, body);

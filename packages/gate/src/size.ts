@@ -5,7 +5,8 @@
 import { execFile } from 'node:child_process';
 import { lstat, readFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
-import { parse as parseYaml } from 'yaml';
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
 import { gitEnv } from './env.js';
 
 /** A change past this many times the usual size is over it. */
@@ -98,7 +99,8 @@ export async function measure(folder: string, base: string, head?: string): Prom
 const COMPOSE = /^(docker-)?compose(\.[\w-]+)?\.ya?ml$/;
 function servicesOf(text: string | undefined): string[] {
   try {
-    const doc = parseYaml(text ?? '') as { services?: unknown } | null;
+    const { parse } = require('yaml') as typeof import('yaml');
+    const doc = parse(text ?? '') as { services?: unknown } | null;
     return doc?.services && typeof doc.services === 'object' ? Object.keys(doc.services).map((s) => `service ${s}`) : [];
   } catch {
     return [];

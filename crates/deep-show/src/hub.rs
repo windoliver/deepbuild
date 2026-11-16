@@ -1079,6 +1079,8 @@ pub struct Eval {
     pub texts: bool,
     /// #169: the core's carried-state list as the frame leaves it.
     pub carried: bool,
+    /// #903: the tour pointer as the frame draws it.
+    pub tour_pointer: bool,
 }
 
 pub struct Scenario {
@@ -1217,6 +1219,8 @@ pub struct Hub<'a> {
     pub renderer: Renderer,
     /// #506: each inset's picture its 3D frames drew last, by key.
     pub(crate) inset_pictures: BTreeMap<String, std::sync::Arc<deep_canvas_scene3d::light::Texels>>,
+    /// #903: the tour pointer's anchors of the played form last asked for, by control and time.
+    pub(crate) tour_anchors: crate::tour::Anchors,
     /// The scheduler every document session shares, with its content-key cache (#387).
     pub sched: Scheduler<'a>,
     /// The scenario's background jobs' progress (#857).
@@ -1424,6 +1428,7 @@ impl<'a> Hub<'a> {
             tracks: BTreeMap::new(),
             forms: BTreeMap::new(),
             inset_pictures: BTreeMap::new(),
+            tour_anchors: Default::default(),
             renderer: Renderer::new().turning_about_corner(
                 scenario.module_planted.as_deref() == Some("turns_about_corner"),
             ),
@@ -2561,6 +2566,8 @@ impl<'a> Hub<'a> {
             // #542: text and scroll controls' fields.
             issues.extend(deep_canvas_input::text::check(form));
             issues.extend(deep_canvas_input::scroll::check(form));
+            // #903: the tour's keys.
+            issues.extend(deep_canvas_input::tour::check(form));
             // #544: a spawn's reads of a logic item's occurrences, checked against its emits
             // before any step runs; then the logic items baked into the lists their readers read.
             if !deep_canvas_media::planted("undeclared_field_reads_zero") {

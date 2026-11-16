@@ -229,6 +229,13 @@
       "initialReason": "Issue #62 first measurement: the merge base has no learned layer. One process builds a 10,000-change learned layer over 200 archived transcripts, rolls back the newer 5,000 to a date, then drops every projection and rebuilds it by replay, so p50 includes the appends and Node's start and the rebuild's own limit (5 s) stays in tests/acceptance/62/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
+      "id": "hub-start-to-ready",
+      "command": ["node", "benchmarks/hub.mjs", "start-to-ready"],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #2332: first reading from main 9f93f1e7bbd7974eeda9f2e98c47851e07ad9bff on Mac17,10, Node 24.22.2, 2026-11-15: 5,004,036,860 hub-only instructions from process start to the core-ready stdout line, on a fresh home with the shipped guards. This command prints that live-process counter before shutdown; the perf lane also counts the whole command and its children. Acceptance compares 20 alternated pairs for at least 25% fewer startup instructions, no increase in the first SessionStart, prompt or PreToolUse, and no higher idle RSS. Wall time under this machine's load is a reading, not a passing budget."
+    },
+    {
       "id": "hub-cold-start",
       "command": [
         "node",

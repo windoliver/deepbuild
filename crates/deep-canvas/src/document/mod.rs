@@ -118,6 +118,8 @@ pub const ENVELOPE_KEYS: &[&str] = &[
     "sounds",
     // #155: a film's foley material for each collection (Foley `foley.render@1`).
     "foley_materials",
+    // #903: the input module's tour (Tour), its keys and its pointer.
+    "tour",
 ];
 
 /// An item's keys (Item and kind), in this slice.
@@ -686,6 +688,7 @@ mod tests {
                 &changed,
                 &crate::registry::core(),
                 &referrers,
+                &Packs::default(),
             )
             .expect("items only");
             assert_eq!(
