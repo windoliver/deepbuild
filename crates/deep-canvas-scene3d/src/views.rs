@@ -203,6 +203,7 @@ pub fn moved(camera: &Camera, by: &Affine3) -> Camera {
     };
     Camera {
         eye: apply(camera.eye),
+        target: apply(camera.target),
         right: turn(camera.right),
         up: turn(camera.up),
         forward: turn(camera.forward),
@@ -275,6 +276,7 @@ pub fn seen(scene: &Scene, v: &View) -> Scene {
     s.flare = None;
     s.read_reflection = false;
     s.read_foam = false;
+    s.read_normal = false;
     if let Some(e) = &v.eye {
         clip(&mut s, e.plane, format!("{}#window", v.id));
     }
@@ -289,6 +291,7 @@ mod tests {
         Camera {
             size: [320.0, 180.0],
             eye: [1.0, 0.5, 4.0],
+            target: [1.0, 0.5, 3.0],
             right: [1.0, 0.0, 0.0],
             up: [0.0, 1.0, 0.0],
             forward: [0.0, 0.0, -1.0],
