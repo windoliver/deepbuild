@@ -1,0 +1,1 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `node node_modules/typescript/bin/tsc -p packages/hub/tsconfig.json` runs unleased

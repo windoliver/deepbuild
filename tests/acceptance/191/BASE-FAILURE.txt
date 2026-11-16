@@ -1,0 +1,708 @@
+The #191 suite run once at the base this worktree stands on, dc9b4315 (no implementation of #191), on macOS arm64
+(Mac17,10, not a reference Mac; the machine shared with other sessions, 1-minute load 250 to 400), with
+`NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/191 --testTimeout=600000 --no-file-parallelism`
+(the checkout's path redacted to `<checkout>`).
+
+28 of 28 tests fail, each because the surface is absent, none in a judge:
+- every call the suite adds answers `{"ok":false,"code":"bad_input"}` (behavior_fixtures, behavior_kit, backend, expand),
+  and a bake reply holds no `issues` (ac1, ac5's first test, ac8, ac10's first test, ac11's first and third, ac12's first two);
+- every planted name the suite adds is refused at startup, exit 2 (pair_filter_default, swept_collision_off,
+  recipe_leaves_ccd_off);
+- `cargo build … --features test-backends` fails: the crate has no such feature (ac2 to ac7, every test-backend test);
+- `deep-show run` refuses a scenario holding `track_record` or `trial` with `bad_input` (ac8's trial test, ac9).
+
+In the first run below, ac9's file-level build hook timed out after 60 minutes (three first builds of deep-show at a
+load near 400), so its three tests were reported skipped. The hook's timeout was then raised (helpers.ts BUILD_TIMEOUT,
+4 hours) and ac9 run again alone with the builds warm; that second run, appended after the first, is ac9's base
+failure. Between the two, ac2's golden test was tidied (it reads the slide through statesOf); its failure, the missing
+test-backends feature, is unchanged. The type-check, `npx tsc -p tests/acceptance/191/tsconfig.json`, exits 0.
+
+==================================================================================================================
+First run: all files
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/191
+
+ ❯ ac9-trial.test.ts (3 tests | 3 skipped) 4405816ms
+ ❯ ac11-fast-bodies.test.ts (3 tests | 3 failed) 232115ms
+   ❯ #191.e5696c9f a fast sphere with ccd never passes a thin wall, and physics.fast_body flags it with ccd off (3)
+     × #191.e5696c9f with ccd on, the ball never passes the far face and first touches the wall at step 6 within one step; the kit's ccd_wall passes 376ms
+     × #191.e5696c9f a planted wrapper turning swept collision off for the world ends past the wall, and ccd_wall fails naming the body and the step it crossed 6ms
+     × #191.e5696c9f physics.fast_body names the ball, step 1, its 1.667 m move and its 0.05 m half extent with ccd off, and nothing with ccd on or for a ball rolling at 2 m/s 19ms
+ ❯ ac1-reference-kit.test.ts (2 tests | 2 failed) 263373ms
+   ❯ #191.8c7c5edf Rapier 0.36.1 passes every fixture on macOS arm64 and on wasm32, measured beside each answer (2)
+     × #191.8c7c5edf macOS arm64: the reference backend passes every fixture within the issue's tolerance, listing each measured value beside its answer 578ms
+     × #191.8c7c5edf wasm32: the physics crate built for wasm32-unknown-unknown passes every fixture within the issue's tolerance 261633ms
+ ❯ ac8-budgets.test.ts (3 tests | 3 failed) 343661ms
+   ❯ #191.8b5fd147 budgets on the reference Mac, compared with the merge base (3)
+     × #191.8b5fd147 the whole kit runs in under 60 s per backend and target (release macOS arm64, and wasm32) 354ms
+     × #191.8b5fd147 a trial of test.sim@1's corpus documents, parity fixtures and two 1,200-step tracks finishes in under 15 minutes in two replicas 2313ms
+     × #191.8b5fd147 a build gains no work at run time: bakes take no longer than the merge base's 7ms
+ ❯ ac4-excluded-by-caps.test.ts (2 tests | 2 failed) 156ms
+   ❯ #191.11530f89 a fixture whose cap a backend's caps() leave out reads excluded_by_caps there and passes on Rapier (2)
+     × #191.11530f89 test_capped reads excluded_by_caps on drops_cap, which passes the rest, and passes on Rapier 25ms
+     × #191.11530f89 a planted kit that runs test_capped anyway on drops_cap reads a fail there, and this check fails naming the fixture and the cap 0ms
+ ❯ ac2-friction-average.test.ts (2 tests | 2 failed) 125ms
+   ❯ #191.7542a335 a backend that averages friction while its world declares the geometric mean (2)
+     × #191.7542a335 fails slide_geometric naming friction_average, the fixture, 3.186 m, 3% and the 2.548 m it slid, and passes slide_average 6ms
+     × #191.7542a335 every golden recorded on friction_average still passes when replayed on it 2ms
+ ❯ ac6-admission.test.ts (3 tests | 3 failed) 161ms
+   ❯ #191.7d1f689f a candidate whose caps() claim a feature no fixture covers is refused before its kit runs (3)
+     × #191.7d1f689f rapier_caps, keeping Rapier's caps with soft bodies, is refused before any fixture runs, naming soft_bodies 24ms
+     × #191.7d1f689f no_soft_bodies, the same with soft_bodies taken out of its caps, runs the kit and passes 1ms
+     × #191.7d1f689f a planted kit that runs only the fixtures it has admits rapier_caps, and this check fails naming soft_bodies 2ms
+ ❯ ac10-sensor-matrix.test.ts (2 tests | 2 failed) 1644ms
+   ❯ #191.9d50a1a7 the sensor matrix: one enter and one exit per crossing, at its analytic step (2)
+     × #191.9d50a1a7 on Rapier every cell writes its enter and exit at the issue's steps; the character and place cells read excluded_by_caps without a character controller 471ms
+     × #191.9d50a1a7 a planted wrapper on the default pair filter writes nothing in static × kinematic and static × character, and fails naming each cell 13ms
+ ❯ ac12-ccd-by-default.test.ts (3 tests | 3 failed) 2527ms
+   ❯ #191.a949ec63 a body physics.fast_body flags gets ccd on by default, shown as an assumption (3)
+     × #191.a949ec63 the fast sphere with ccd unset expands with ccd: true and one assumption row naming the ball and the reason, and first touches the wall at step 6 277ms
+     × #191.a949ec63 a ball rolling at 2 m/s keeps ccd off and carries no assumption row 8ms
+     × #191.a949ec63 a planted recipe leaving the flagged ball's ccd off is refused at check, naming the ball 9ms
+ ❯ ac5-queries.test.ts (2 tests | 2 failed) 2204ms
+   ❯ #191.db04732f queries through query() match a brute-force scan, groups applied (2)
+     × #191.db04732f Rapier's query() matches the brute-force scan on every ray, sweep and overlap of the queries fixture 503ms
+     × #191.db04732f query_ignores_groups fails queries, naming the fixture and a hit on a body its ray's groups filter out 2ms
+ ❯ ac3-limits-and-restitution.test.ts (2 tests | 2 failed) 245ms
+   ❯ #191.5e3fd235 backends that skip joint limits or take the minimum restitution fail their fixtures, naming what they did (2)
+     × #191.5e3fd235 no_joint_limits fails hinge_limit, naming the joint and the largest angle it reached (past 30.5°) 4ms
+     × #191.5e3fd235 restitution_min fails bounce_max, naming the answer 0.81 m and the 0.25 m it bounced 0ms
+ ❯ ac7-tolerance-owner.test.ts (1 test | 1 failed) 420ms
+   ❯ #191.55b756cb the kit reads tolerances only from the interface, never from a backend's manifest (1)
+     × #191.55b756cb loose_tolerance, declaring 5% for free fall and falling 2% off, fails free_fall naming the fixture and the interface's 1% 6ms
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac9-trial.test.ts [ ac9-trial.test.ts ]
+Error: Hook timed out in 3600000ms.
+If this is a long-running hook, pass a timeout value as the last argument or configure it globally with "hookTimeout".
+ ❯ prebuildShow helpers.ts:429:3
+    427| const shows = new Map<ShowBuild, { bin: string; error: string }>();
+    428| export function prebuildShow(builds: ShowBuild[]): void {
+    429|   beforeAll(() => { for (const b of builds) { try { showBin(b); } catc…
+       |   ^
+    430|   afterAll(() => { if (showDir) rmSync(showDir, { recursive: true, for…
+    431| }
+ ❯ ac9-trial.test.ts:15:1
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/26]⎯
+
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 25 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac1-reference-kit.test.ts > #191.8c7c5edf Rapier 0.36.1 passes every fixture on macOS arm64 and on wasm32, measured beside each answer > #191.8c7c5edf macOS arm64: the reference backend passes every fixture within the issue's tolerance, listing each measured value beside its answer
+AssertionError: behavior_fixtures: the interface's fixtures answer (call behavior_fixtures): {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ fixturesOf helpers.ts:272:108
+    270| export interface FixtureData { name: string; world: JsonObject; measur…
+    271| export function fixturesOf(reply: JsonObject, what: string): FixtureDa…
+    272|   expect(reply['ok'], `${what}: the interface's fixtures answer (call …
+       |                                                                                                            ^
+    273|   return arr(reply['fixtures'], `${what}: fixtures`).map((v, i) => {
+    274|     const o = obj(v, `${what}: fixtures[${i}]`);
+ ❯ ac1-reference-kit.test.ts:74:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/26]⎯
+
+ FAIL  ac1-reference-kit.test.ts > #191.8c7c5edf Rapier 0.36.1 passes every fixture on macOS arm64 and on wasm32, measured beside each answer > #191.8c7c5edf wasm32: the physics crate built for wasm32-unknown-unknown passes every fixture within the issue's tolerance
+AssertionError: behavior_fixtures on wasm32: the interface's fixtures answer (call behavior_fixtures): {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ fixturesOf helpers.ts:272:108
+    270| export interface FixtureData { name: string; world: JsonObject; measur…
+    271| export function fixturesOf(reply: JsonObject, what: string): FixtureDa…
+    272|   expect(reply['ok'], `${what}: the interface's fixtures answer (call …
+       |                                                                                                            ^
+    273|   return arr(reply['fixtures'], `${what}: fixtures`).map((v, i) => {
+    274|     const o = obj(v, `${what}: fixtures[${i}]`);
+ ❯ ac1-reference-kit.test.ts:91:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/26]⎯
+
+ FAIL  ac10-sensor-matrix.test.ts > #191.9d50a1a7 the sensor matrix: one enter and one exit per crossing, at its analytic step > #191.9d50a1a7 on Rapier every cell writes its enter and exit at the issue's steps; the character and place cells read excluded_by_caps without a character controller
+AssertionError: backend: the backend's manifest answers (call backend): {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ backendOf helpers.ts:283:97
+    281| export interface BackendInfo { backend: string; reference: boolean; ca…
+    282| export function backendOf(reply: JsonObject, what: string): BackendInf…
+    283|   expect(reply['ok'], `${what}: the backend's manifest answers (call b…
+       |                                                                                                 ^
+    284|   return {
+    285|     backend: str(reply['backend'], `${what}: backend`), reference: rep…
+ ❯ ac10-sensor-matrix.test.ts:35:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/26]⎯
+
+ FAIL  ac10-sensor-matrix.test.ts > #191.9d50a1a7 the sensor matrix: one enter and one exit per crossing, at its analytic step > #191.9d50a1a7 a planted wrapper on the default pair filter writes nothing in static × kinematic and static × character, and fails naming each cell
+AssertionError: deep-physics --planted pair_filter_default exits 0; stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ readReplies helpers.ts:129:103
+    127|
+    128| function readReplies(status: number | null, stdout: string, stderr: st…
+    129|   expect(status, `${what} exits 0; stdout: ${stdout.slice(0, 1000)}; s…
+       |                                                                                                       ^
+    130|   const lines = stdout.split('\n').filter((l) => l !== '');
+    131|   expect(lines.length, `${what}: one reply per call; stdout: ${stdout.…
+ ❯ physics helpers.ts:144:10
+ ❯ ac10-sensor-matrix.test.ts:41:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/26]⎯
+
+ FAIL  ac11-fast-bodies.test.ts > #191.e5696c9f a fast sphere with ccd never passes a thin wall, and physics.fast_body flags it with ccd off > #191.e5696c9f with ccd on, the ball never passes the far face and first touches the wall at step 6 within one step; the kit's ccd_wall passes
+AssertionError: behavior_kit: the behavior kit ran (call behavior_kit): {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ kitReport helpers.ts:246:92
+    244| export const kitCall = (): JsonObject => ({ call: 'behavior_kit' });
+    245| export function kitReport(reply: JsonObject, what: string): KitReport {
+    246|   expect(reply['ok'], `${what}: the behavior kit ran (call behavior_ki…
+       |                                                                                            ^
+    247|   const results = arr(reply['results'], `${what}: results`).map((v, i)…
+    248|     const o = obj(v, `${what}: results[${i}]`);
+ ❯ ac11-fast-bodies.test.ts:42:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/26]⎯
+
+ FAIL  ac11-fast-bodies.test.ts > #191.e5696c9f a fast sphere with ccd never passes a thin wall, and physics.fast_body flags it with ccd off > #191.e5696c9f a planted wrapper turning swept collision off for the world ends past the wall, and ccd_wall fails naming the body and the step it crossed
+AssertionError: deep-physics --planted swept_collision_off exits 0; stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ readReplies helpers.ts:129:103
+    127|
+    128| function readReplies(status: number | null, stdout: string, stderr: st…
+    129|   expect(status, `${what} exits 0; stdout: ${stdout.slice(0, 1000)}; s…
+       |                                                                                                       ^
+    130|   const lines = stdout.split('\n').filter((l) => l !== '');
+    131|   expect(lines.length, `${what}: one reply per call; stdout: ${stdout.…
+ ❯ physics helpers.ts:144:10
+ ❯ ac11-fast-bodies.test.ts:46:39
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/26]⎯
+
+ FAIL  ac11-fast-bodies.test.ts > #191.e5696c9f a fast sphere with ccd never passes a thin wall, and physics.fast_body flags it with ccd off > #191.e5696c9f physics.fast_body names the ball, step 1, its 1.667 m move and its 0.05 m half extent with ccd off, and nothing with ccd on or for a ball rolling at 2 m/s
+AssertionError: the ball with ccd off: the bake lists the issues its lints raised (issues): expected null not to be null
+ ❯ fastBodyIssues ac11-fast-bodies.test.ts:34:86
+     32|   expect(reply['ok'], `${what} is baked: ${show(reply)}`).toBe(true);
+     33|   const issues = Array.isArray(reply['issues']) ? reply['issues'] : nu…
+     34|   expect(issues, `${what}: the bake lists the issues its lints raised …
+       |                                                                                      ^
+     35|   return issues!.filter((i): i is JsonObject => isObject(i) && i['code…
+     36| }
+ ❯ ac11-fast-bodies.test.ts:73:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/26]⎯
+
+ FAIL  ac12-ccd-by-default.test.ts > #191.a949ec63 a body physics.fast_body flags gets ccd on by default, shown as an assumption > #191.a949ec63 the fast sphere with ccd unset expands with ccd: true and one assumption row naming the ball and the reason, and first touches the wall at step 6
+AssertionError: the fast ball: the recipe expanded the world (call expand): {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ expanded ac12-ccd-by-default.test.ts:14:95
+     12| interface Expanded { world: JsonObject; assumptions: JsonObject[] }
+     13| function expanded(reply: JsonObject, what: string): Expanded {
+     14|   expect(reply['ok'], `${what}: the recipe expanded the world (call ex…
+       |                                                                                               ^
+     15|   return { world: obj(reply['world'], `${what}: world`), assumptions: …
+     16| }
+ ❯ ac12-ccd-by-default.test.ts:21:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/26]⎯
+
+ FAIL  ac12-ccd-by-default.test.ts > #191.a949ec63 a body physics.fast_body flags gets ccd on by default, shown as an assumption > #191.a949ec63 a ball rolling at 2 m/s keeps ccd off and carries no assumption row
+AssertionError: the rolling ball: the recipe expanded the world (call expand): {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ expanded ac12-ccd-by-default.test.ts:14:95
+     12| interface Expanded { world: JsonObject; assumptions: JsonObject[] }
+     13| function expanded(reply: JsonObject, what: string): Expanded {
+     14|   expect(reply['ok'], `${what}: the recipe expanded the world (call ex…
+       |                                                                                               ^
+     15|   return { world: obj(reply['world'], `${what}: world`), assumptions: …
+     16| }
+ ❯ ac12-ccd-by-default.test.ts:36:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/26]⎯
+
+ FAIL  ac12-ccd-by-default.test.ts > #191.a949ec63 a body physics.fast_body flags gets ccd on by default, shown as an assumption > #191.a949ec63 a planted recipe leaving the flagged ball's ccd off is refused at check, naming the ball
+AssertionError: deep-physics --planted recipe_leaves_ccd_off exits 0; stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ readReplies helpers.ts:129:103
+    127|
+    128| function readReplies(status: number | null, stdout: string, stderr: st…
+    129|   expect(status, `${what} exits 0; stdout: ${stdout.slice(0, 1000)}; s…
+       |                                                                                                       ^
+    130|   const lines = stdout.split('\n').filter((l) => l !== '');
+    131|   expect(lines.length, `${what}: one reply per call; stdout: ${stdout.…
+ ❯ physics helpers.ts:144:10
+ ❯ ac12-ccd-by-default.test.ts:42:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/26]⎯
+
+ FAIL  ac2-friction-average.test.ts > #191.7542a335 a backend that averages friction while its world declares the geometric mean > #191.7542a335 fails slide_geometric naming friction_average, the fixture, 3.186 m, 3% and the 2.548 m it slid, and passes slide_average
+AssertionError: deep-physics builds (cargo build --locked -p deep-physics-rapier --bin deep-physics --features test-backends): expected 'cargo build --locked -p deep-physics-…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked -p deep-physics-rapier --bin deep-physics --features test-backends failed:
++ error: the package 'deep-physics-rapier' does not contain this feature: test-backends
++
+
+ ❯ physicsBin helpers.ts:116:84
+    114|     built.set(b, entry);
+    115|   }
+    116|   expect(entry.error, `${PHYSICS_BIN} builds (cargo ${physicsArgs(b).j…
+       |                                                                                    ^
+    117|   return entry.bin;
+    118| }
+ ❯ physics helpers.ts:138:15
+ ❯ one helpers.ts:146:70
+ ❯ ac2-friction-average.test.ts:31:25
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/26]⎯
+
+ FAIL  ac2-friction-average.test.ts > #191.7542a335 a backend that averages friction while its world declares the geometric mean > #191.7542a335 every golden recorded on friction_average still passes when replayed on it
+AssertionError: deep-physics builds (cargo build --locked -p deep-physics-rapier --bin deep-physics --features test-backends): expected 'cargo build --locked -p deep-physics-…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked -p deep-physics-rapier --bin deep-physics --features test-backends failed:
++ error: the package 'deep-physics-rapier' does not contain this feature: test-backends
++
+
+ ❯ physicsBin helpers.ts:116:84
+    114|     built.set(b, entry);
+    115|   }
+    116|   expect(entry.error, `${PHYSICS_BIN} builds (cargo ${physicsArgs(b).j…
+       |                                                                                    ^
+    117|   return entry.bin;
+    118| }
+ ❯ physics helpers.ts:138:15
+ ❯ ac2-friction-average.test.ts:48:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/26]⎯
+
+ FAIL  ac3-limits-and-restitution.test.ts > #191.5e3fd235 backends that skip joint limits or take the minimum restitution fail their fixtures, naming what they did > #191.5e3fd235 no_joint_limits fails hinge_limit, naming the joint and the largest angle it reached (past 30.5°)
+AssertionError: deep-physics builds (cargo build --locked -p deep-physics-rapier --bin deep-physics --features test-backends): expected 'cargo build --locked -p deep-physics-…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked -p deep-physics-rapier --bin deep-physics --features test-backends failed:
++ error: the package 'deep-physics-rapier' does not contain this feature: test-backends
++
+
+ ❯ physicsBin helpers.ts:116:84
+    114|     built.set(b, entry);
+    115|   }
+    116|   expect(entry.error, `${PHYSICS_BIN} builds (cargo ${physicsArgs(b).j…
+       |                                                                                    ^
+    117|   return entry.bin;
+    118| }
+ ❯ physics helpers.ts:138:15
+ ❯ ac3-limits-and-restitution.test.ts:13:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/26]⎯
+
+ FAIL  ac3-limits-and-restitution.test.ts > #191.5e3fd235 backends that skip joint limits or take the minimum restitution fail their fixtures, naming what they did > #191.5e3fd235 restitution_min fails bounce_max, naming the answer 0.81 m and the 0.25 m it bounced
+AssertionError: deep-physics builds (cargo build --locked -p deep-physics-rapier --bin deep-physics --features test-backends): expected 'cargo build --locked -p deep-physics-…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked -p deep-physics-rapier --bin deep-physics --features test-backends failed:
++ error: the package 'deep-physics-rapier' does not contain this feature: test-backends
++
+
+ ❯ physicsBin helpers.ts:116:84
+    114|     built.set(b, entry);
+    115|   }
+    116|   expect(entry.error, `${PHYSICS_BIN} builds (cargo ${physicsArgs(b).j…
+       |                                                                                    ^
+    117|   return entry.bin;
+    118| }
+ ❯ physics helpers.ts:138:15
+ ❯ ac3-limits-and-restitution.test.ts:27:34
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/26]⎯
+
+ FAIL  ac4-excluded-by-caps.test.ts > #191.11530f89 a fixture whose cap a backend's caps() leave out reads excluded_by_caps there and passes on Rapier > #191.11530f89 test_capped reads excluded_by_caps on drops_cap, which passes the rest, and passes on Rapier
+AssertionError: deep-physics builds (cargo build --locked -p deep-physics-rapier --bin deep-physics --features test-backends): expected 'cargo build --locked -p deep-physics-…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked -p deep-physics-rapier --bin deep-physics --features test-backends failed:
++ error: the package 'deep-physics-rapier' does not contain this feature: test-backends
++
+
+ ❯ physicsBin helpers.ts:116:84
+    114|     built.set(b, entry);
+    115|   }
+    116|   expect(entry.error, `${PHYSICS_BIN} builds (cargo ${physicsArgs(b).j…
+       |                                                                                    ^
+    117|   return entry.bin;
+    118| }
+ ❯ physics helpers.ts:138:15
+ ❯ ac4-excluded-by-caps.test.ts:46:47
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/26]⎯
+
+ FAIL  ac4-excluded-by-caps.test.ts > #191.11530f89 a fixture whose cap a backend's caps() leave out reads excluded_by_caps there and passes on Rapier > #191.11530f89 a planted kit that runs test_capped anyway on drops_cap reads a fail there, and this check fails naming the fixture and the cap
+AssertionError: deep-physics builds (cargo build --locked -p deep-physics-rapier --bin deep-physics --features test-backends): expected 'cargo build --locked -p deep-physics-…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked -p deep-physics-rapier --bin deep-physics --features test-backends failed:
++ error: the package 'deep-physics-rapier' does not contain this feature: test-backends
++
+
+ ❯ physicsBin helpers.ts:116:84
+    114|     built.set(b, entry);
+    115|   }
+    116|   expect(entry.error, `${PHYSICS_BIN} builds (cargo ${physicsArgs(b).j…
+       |                                                                                    ^
+    117|   return entry.bin;
+    118| }
+ ❯ physics helpers.ts:138:15
+ ❯ ac4-excluded-by-caps.test.ts:58:36
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/26]⎯
+
+ FAIL  ac5-queries.test.ts > #191.db04732f queries through query() match a brute-force scan, groups applied > #191.db04732f Rapier's query() matches the brute-force scan on every ray, sweep and overlap of the queries fixture
+AssertionError: behavior_kit on rapier3d: the behavior kit ran (call behavior_kit): {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ kitReport helpers.ts:246:92
+    244| export const kitCall = (): JsonObject => ({ call: 'behavior_kit' });
+    245| export function kitReport(reply: JsonObject, what: string): KitReport {
+    246|   expect(reply['ok'], `${what}: the behavior kit ran (call behavior_ki…
+       |                                                                                            ^
+    247|   const results = arr(reply['results'], `${what}: results`).map((v, i)…
+    248|     const o = obj(v, `${what}: results[${i}]`);
+ ❯ ac5-queries.test.ts:20:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/26]⎯
+
+ FAIL  ac5-queries.test.ts > #191.db04732f queries through query() match a brute-force scan, groups applied > #191.db04732f query_ignores_groups fails queries, naming the fixture and a hit on a body its ray's groups filter out
+AssertionError: deep-physics builds (cargo build --locked -p deep-physics-rapier --bin deep-physics --features test-backends): expected 'cargo build --locked -p deep-physics-…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked -p deep-physics-rapier --bin deep-physics --features test-backends failed:
++ error: the package 'deep-physics-rapier' does not contain this feature: test-backends
++
+
+ ❯ physicsBin helpers.ts:116:84
+    114|     built.set(b, entry);
+    115|   }
+    116|   expect(entry.error, `${PHYSICS_BIN} builds (cargo ${physicsArgs(b).j…
+       |                                                                                    ^
+    117|   return entry.bin;
+    118| }
+ ❯ physics helpers.ts:138:15
+ ❯ ac5-queries.test.ts:27:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/26]⎯
+
+ FAIL  ac6-admission.test.ts > #191.7d1f689f a candidate whose caps() claim a feature no fixture covers is refused before its kit runs > #191.7d1f689f rapier_caps, keeping Rapier's caps with soft bodies, is refused before any fixture runs, naming soft_bodies
+AssertionError: deep-physics builds (cargo build --locked -p deep-physics-rapier --bin deep-physics --features test-backends): expected 'cargo build --locked -p deep-physics-…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked -p deep-physics-rapier --bin deep-physics --features test-backends failed:
++ error: the package 'deep-physics-rapier' does not contain this feature: test-backends
++
+
+ ❯ physicsBin helpers.ts:116:84
+    114|     built.set(b, entry);
+    115|   }
+    116|   expect(entry.error, `${PHYSICS_BIN} builds (cargo ${physicsArgs(b).j…
+       |                                                                                    ^
+    117|   return entry.bin;
+    118| }
+ ❯ physics helpers.ts:138:15
+ ❯ ac6-admission.test.ts:24:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/26]⎯
+
+ FAIL  ac6-admission.test.ts > #191.7d1f689f a candidate whose caps() claim a feature no fixture covers is refused before its kit runs > #191.7d1f689f no_soft_bodies, the same with soft_bodies taken out of its caps, runs the kit and passes
+AssertionError: deep-physics builds (cargo build --locked -p deep-physics-rapier --bin deep-physics --features test-backends): expected 'cargo build --locked -p deep-physics-…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked -p deep-physics-rapier --bin deep-physics --features test-backends failed:
++ error: the package 'deep-physics-rapier' does not contain this feature: test-backends
++
+
+ ❯ physicsBin helpers.ts:116:84
+    114|     built.set(b, entry);
+    115|   }
+    116|   expect(entry.error, `${PHYSICS_BIN} builds (cargo ${physicsArgs(b).j…
+       |                                                                                    ^
+    117|   return entry.bin;
+    118| }
+ ❯ physics helpers.ts:138:15
+ ❯ ac6-admission.test.ts:35:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[21/26]⎯
+
+ FAIL  ac6-admission.test.ts > #191.7d1f689f a candidate whose caps() claim a feature no fixture covers is refused before its kit runs > #191.7d1f689f a planted kit that runs only the fixtures it has admits rapier_caps, and this check fails naming soft_bodies
+AssertionError: deep-physics builds (cargo build --locked -p deep-physics-rapier --bin deep-physics --features test-backends): expected 'cargo build --locked -p deep-physics-…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked -p deep-physics-rapier --bin deep-physics --features test-backends failed:
++ error: the package 'deep-physics-rapier' does not contain this feature: test-backends
++
+
+ ❯ physicsBin helpers.ts:116:84
+    114|     built.set(b, entry);
+    115|   }
+    116|   expect(entry.error, `${PHYSICS_BIN} builds (cargo ${physicsArgs(b).j…
+       |                                                                                    ^
+    117|   return entry.bin;
+    118| }
+ ❯ physics helpers.ts:138:15
+ ❯ ac6-admission.test.ts:48:25
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22/26]⎯
+
+ FAIL  ac7-tolerance-owner.test.ts > #191.55b756cb the kit reads tolerances only from the interface, never from a backend's manifest > #191.55b756cb loose_tolerance, declaring 5% for free fall and falling 2% off, fails free_fall naming the fixture and the interface's 1%
+AssertionError: deep-physics builds (cargo build --locked -p deep-physics-rapier --bin deep-physics --features test-backends): expected 'cargo build --locked -p deep-physics-…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked -p deep-physics-rapier --bin deep-physics --features test-backends failed:
++ error: the package 'deep-physics-rapier' does not contain this feature: test-backends
++
+
+ ❯ physicsBin helpers.ts:116:84
+    114|     built.set(b, entry);
+    115|   }
+    116|   expect(entry.error, `${PHYSICS_BIN} builds (cargo ${physicsArgs(b).j…
+       |                                                                                    ^
+    117|   return entry.bin;
+    118| }
+ ❯ physics helpers.ts:138:15
+ ❯ ac7-tolerance-owner.test.ts:14:28
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[23/26]⎯
+
+ FAIL  ac8-budgets.test.ts > #191.8b5fd147 budgets on the reference Mac, compared with the merge base > #191.8b5fd147 the whole kit runs in under 60 s per backend and target (release macOS arm64, and wasm32)
+AssertionError: behavior_kit (release): the behavior kit ran (call behavior_kit): {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ kitReport helpers.ts:246:92
+    244| export const kitCall = (): JsonObject => ({ call: 'behavior_kit' });
+    245| export function kitReport(reply: JsonObject, what: string): KitReport {
+    246|   expect(reply['ok'], `${what}: the behavior kit ran (call behavior_ki…
+       |                                                                                            ^
+    247|   const results = arr(reply['results'], `${what}: results`).map((v, i)…
+    248|     const o = obj(v, `${what}: results[${i}]`);
+ ❯ ac8-budgets.test.ts:30:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[24/26]⎯
+
+ FAIL  ac8-budgets.test.ts > #191.8b5fd147 budgets on the reference Mac, compared with the merge base > #191.8b5fd147 a trial of test.sim@1's corpus documents, parity fixtures and two 1,200-step tracks finishes in under 15 minutes in two replicas
+AssertionError: deep-show run accepted the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ showRun helpers.ts:463:76
+    461|   expect(lines.length, `${SHOW_BIN} run: one answer line`).toBe(1);
+    462|   const out = obj(JSON.parse(lines[0]!) as JsonValue, `${SHOW_BIN} run…
+    463|   expect(out['ok'], `${SHOW_BIN} run accepted the scenario: ${show(out…
+       |                                                                            ^
+    464|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    465|   expect(replies.length, 'run: one reply per call').toBe(arr(sc['calls…
+ ❯ ac8-budgets.test.ts:55:27
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[25/26]⎯
+
+ FAIL  ac8-budgets.test.ts > #191.8b5fd147 budgets on the reference Mac, compared with the merge base > #191.8b5fd147 a build gains no work at run time: bakes take no longer than the merge base's
+AssertionError: behavior_kit (release): the behavior kit ran (call behavior_kit): {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ kitReport helpers.ts:246:92
+    244| export const kitCall = (): JsonObject => ({ call: 'behavior_kit' });
+    245| export function kitReport(reply: JsonObject, what: string): KitReport {
+    246|   expect(reply['ok'], `${what}: the behavior kit ran (call behavior_ki…
+       |                                                                                            ^
+    247|   const results = arr(reply['results'], `${what}: results`).map((v, i)…
+    248|     const o = obj(v, `${what}: results[${i}]`);
+ ❯ ac8-budgets.test.ts:74:12
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[26/26]⎯
+
+
+ Test Files  12 failed (12)
+      Tests  25 failed | 3 skipped (28)
+   Start at  10:29:18
+   Duration  5269.40s (tests 100%)
+
+
+==================================================================================================================
+Second run: ac9-trial.test.ts alone, builds warm
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/191
+
+ ❯ ac9-trial.test.ts (3 tests | 3 failed) 6893ms
+   ❯ #191.d1baa3cb a trial of B against a build with A, in two replicas, and one decision to switch (3)
+     × #191.d1baa3cb B against A: two corpus documents, the parity fixtures and two 1,200-step tracks each read equal or within tolerance, and the build doesn't switch 1829ms
+     × #191.d1baa3cb a planted B adding one unit at step 300 reads each track as differing at item s1, step 300 and its field, and the build doesn't switch 65ms
+     × #191.d1baa3cb one decision to switch moves each golden the switch changes once, naming that decision as its cause 66ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac9-trial.test.ts > #191.d1baa3cb a trial of B against a build with A, in two replicas, and one decision to switch > #191.d1baa3cb B against A: two corpus documents, the parity fixtures and two 1,200-step tracks each read equal or within tolerance, and the build doesn't switch
+AssertionError: deep-show run accepted the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ showRun helpers.ts:465:76
+    463|   expect(lines.length, `${SHOW_BIN} run: one answer line`).toBe(1);
+    464|   const out = obj(JSON.parse(lines[0]!) as JsonValue, `${SHOW_BIN} run…
+    465|   expect(out['ok'], `${SHOW_BIN} run accepted the scenario: ${show(out…
+       |                                                                            ^
+    466|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    467|   expect(replies.length, 'run: one reply per call').toBe(arr(sc['calls…
+ ❯ setUp ac9-trial.test.ts:23:23
+ ❯ withEvidence ac9-trial.test.ts:86:11
+ ❯ ac9-trial.test.ts:91:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  ac9-trial.test.ts > #191.d1baa3cb a trial of B against a build with A, in two replicas, and one decision to switch > #191.d1baa3cb a planted B adding one unit at step 300 reads each track as differing at item s1, step 300 and its field, and the build doesn't switch
+AssertionError: deep-show run accepted the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ showRun helpers.ts:465:76
+    463|   expect(lines.length, `${SHOW_BIN} run: one answer line`).toBe(1);
+    464|   const out = obj(JSON.parse(lines[0]!) as JsonValue, `${SHOW_BIN} run…
+    465|   expect(out['ok'], `${SHOW_BIN} run accepted the scenario: ${show(out…
+       |                                                                            ^
+    466|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    467|   expect(replies.length, 'run: one reply per call').toBe(arr(sc['calls…
+ ❯ setUp ac9-trial.test.ts:23:23
+ ❯ withEvidence ac9-trial.test.ts:86:11
+ ❯ ac9-trial.test.ts:101:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  ac9-trial.test.ts > #191.d1baa3cb a trial of B against a build with A, in two replicas, and one decision to switch > #191.d1baa3cb one decision to switch moves each golden the switch changes once, naming that decision as its cause
+AssertionError: deep-show run accepted the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ showRun helpers.ts:465:76
+    463|   expect(lines.length, `${SHOW_BIN} run: one answer line`).toBe(1);
+    464|   const out = obj(JSON.parse(lines[0]!) as JsonValue, `${SHOW_BIN} run…
+    465|   expect(out['ok'], `${SHOW_BIN} run accepted the scenario: ${show(out…
+       |                                                                            ^
+    466|   const replies = arr(out['replies'], 'run: replies').map((r, i) => ob…
+    467|   expect(replies.length, 'run: one reply per call').toBe(arr(sc['calls…
+ ❯ setUp ac9-trial.test.ts:23:23
+ ❯ withEvidence ac9-trial.test.ts:86:11
+ ❯ ac9-trial.test.ts:111:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  11:57:56
+   Duration  7.16s (tests 98%, transform 2%)
+

@@ -1,0 +1,59 @@
+# Base a12be6c8c (origin/main, 2026-11-14), run once at a 1-minute load of 120 to 155 on this Mac:
+#   NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1335 --no-file-parallelism --testTimeout=600000
+# exit 1: 5 files, 5 tests, 5 failed, 0 passed, in 30 s. Each fails at its own first assertion in its own test file:
+# `deep work "<scope>" --repo <checkout> --json`, its words naming a rule (`labelled "checkout"`) and no issue numbers,
+# is refused by #1332's `scopeOf` ("Name the issues by number, ...", exit 1), so no approval is raised and no run starts.
+# Each world (forge, repo, hub, played agents, and AC4's stepped clock and account reading) set up on the base first.
+#
+# AC1 rule.test.ts:17      exit 1: no rule in a run's words, no set that follows the forge, no refusal of a rule that reads text
+# AC2 authors.test.ts:23   exit 1: no standing run, so no author rule keeping out an outside author's or a session's issue
+# AC3 criteria.test.ts:14  exit 1: no ready-to-join check, nothing named on the run's page for an issue with no criteria
+# AC4 week.test.ts:18      exit 1: no standing run past 7 days, no weekly notice (landed, left, spent), no wait at the share
+# AC5 breaker.test.ts:24   exit 1: no run-level breaker on five attempts in a row ending in anything but PASS, no pause
+
+ RUN  v5.0.5 <repo>/tests/acceptance/1335
+
+ ❯ week.test.ts (1 test | 1 failed) 6817ms
+   × AC4 #1335.adae4f21 The run goes on past 7 days with no ask, and its weekly notice lists landed, left and spent. At its plan share it starts nothing until the next window, and raises no ask 6390ms
+ ❯ rule.test.ts (1 test | 1 failed) 4679ms
+   × AC1 #1335.d72bf6b5 On a fixture forge, an issue added after approval that meets the rule starts with no new approval, and one that doesn't starts nothing. A planted rule that reads the issue's text is refused at approval, naming the rule 4419ms
+ ❯ breaker.test.ts (1 test | 1 failed) 5262ms
+   × AC5 #1335.846df82d A fifth attempt in a row ending in anything but PASS pauses the run with one ask 5056ms
+ ❯ authors.test.ts (1 test | 1 failed) 5405ms
+   × AC2 #1335.4dced2b8 An issue with the rule's labels written by an outside author never joins, and neither does one a session opens 5253ms
+ ❯ criteria.test.ts (1 test | 1 failed) 3493ms
+   × AC3 #1335.5396151b An issue with no acceptance criteria stays out, is named on the run's page and raises no ask 3343ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  authors.test.ts > AC2 #1335.4dced2b8 An issue with the rule's labels written by an outside author never joins, and neither does one a session opens
+AssertionError: deep work "work through open issues labelled "checkout" with Claude Code, two at a time" raises the standing run's one approval and exits 0: exit 1, stdout "", stderr "Name the issues by number, such as \"work through #12, #14 and #15 with Claude Code, two at a time\".\n": expected 1 to be +0 // Object.is equality
+
+ ❯ authors.test.ts:23:114
+
+ FAIL  breaker.test.ts > AC5 #1335.846df82d A fifth attempt in a row ending in anything but PASS pauses the run with one ask
+AssertionError: deep work "work through open issues labelled "checkout" with Claude Code, one at a time" raises the standing run's one approval and exits 0: exit 1, stdout "", stderr "Name the issues by number, such as \"work through #12, #14 and #15 with Claude Code, two at a time\".\n": expected 1 to be +0 // Object.is equality
+
+ ❯ breaker.test.ts:24:114
+
+ FAIL  criteria.test.ts > AC3 #1335.5396151b An issue with no acceptance criteria stays out, is named on the run's page and raises no ask
+AssertionError: deep work "work through open issues labelled "checkout" with Claude Code, two at a time" raises the standing run's one approval and exits 0: exit 1, stdout "", stderr "Name the issues by number, such as \"work through #12, #14 and #15 with Claude Code, two at a time\".\n": expected 1 to be +0 // Object.is equality
+
+ ❯ criteria.test.ts:14:114
+
+ FAIL  rule.test.ts > AC1 #1335.d72bf6b5 On a fixture forge, an issue added after approval that meets the rule starts with no new approval, and one that doesn't starts nothing. A planted rule that reads the issue's text is refused at approval, naming the rule
+AssertionError: deep work "work through open issues labelled "checkout" with Claude Code, two at a time" raises the standing run's one approval and exits 0: exit 1, stdout "", stderr "Name the issues by number, such as \"work through #12, #14 and #15 with Claude Code, two at a time\".\n": expected 1 to be +0 // Object.is equality
+
+ ❯ rule.test.ts:17:114
+
+ FAIL  week.test.ts > AC4 #1335.adae4f21 The run goes on past 7 days with no ask, and its weekly notice lists landed, left and spent. At its plan share it starts nothing until the next window, and raises no ask
+AssertionError: deep work "work through open issues labelled "checkout" with Claude Code, two at a time, up to 50% of each plan window" raises the standing run's one approval and exits 0: exit 1, stdout "", stderr "Name the issues by number, such as \"work through #12, #14 and #15 with Claude Code, two at a time\".\n": expected 1 to be +0 // Object.is equality
+
+ ❯ week.test.ts:18:114
+
+ Test Files  5 failed (5)
+      Tests  5 failed (5)
+   Start at  15:34:53
+   Duration  29.19s (tests 90%, import 7%, worker 2%, transform 1%)
+
+# (vitest's code frames and Expected/Received diffs, the same 0 against 1 in each, are left out above.)

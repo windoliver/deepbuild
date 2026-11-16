@@ -186,6 +186,8 @@ pub struct Notifier {
     /// The work runs whose end was told, by their approval's ask, and the log position last read for one (#1348).
     told: HashSet<String>,
     told_at: Option<u64>,
+    /// The asks this notifier saw opened, which notify once they show (#1345).
+    opened: HashSet<String>,
 }
 
 impl Notifier {
@@ -203,6 +205,7 @@ impl Notifier {
             logged: 0,
             told: HashSet::new(),
             told_at: None,
+            opened: HashSet::new(),
         }
     }
 
@@ -241,6 +244,12 @@ impl Notifier {
     /// in the record notifies, since you could have seen it before.
     pub fn start(&mut self, view: &View, delivered: Vec<Notification>) {
         self.read.extend(view.unseen.iter().filter_map(opening));
+        self.read.extend(
+            view.unseen
+                .iter()
+                .filter(|event| showing(event).is_some())
+                .filter_map(|event| event["id"].as_str().map(str::to_owned)),
+        );
         self.delivered = delivered;
         // A run that had ended already was told, or could have been seen.
         self.told
@@ -253,12 +262,28 @@ impl Notifier {
         if let Some(id) = opening(event) {
             if self.read.insert(id) {
                 let handle = match event["kind"].as_str() {
-                    Some("ask.created") => states::handle(event),
+                    Some("ask.created") => {
+                        self.opened.insert(states::handle(event));
+                        states::handle(event)
+                    }
                     _ => event["subject"].as_str().unwrap_or_default().to_owned(),
                 };
                 if !self.waiting.iter().any(|(waiting, _)| *waiting == handle) {
                     self.waiting
                         .push((handle, now + self.after.as_millis() as u64));
+                }
+            }
+        } else if let Some(asks) = showing(event) {
+            // The core's showing, at your visit or at once: each ask it shows comes due a moment after (#1345).
+            if self
+                .read
+                .insert(event["id"].as_str().unwrap_or_default().to_owned())
+            {
+                for handle in asks {
+                    if !self.waiting.iter().any(|(waiting, _)| *waiting == handle) {
+                        self.waiting
+                            .push((handle, now + self.after.as_millis() as u64));
+                    }
                 }
             }
         } else if event["kind"] == "notice.sent" {
@@ -364,10 +389,18 @@ impl Notifier {
         } else {
             table.open_asks(None)
         };
+        // Asks shown together in one showing are one card, so they post one notification (#1345): the batch's, under
+        // its first ask, saying how many it holds.
+        let mut batches: Vec<(&[String], usize, usize)> = Vec::new();
         for (handle, _) in due {
             let Some(ask) = open.iter().find(|ask| states::handle(ask) == handle) else {
                 continue;
             };
+            // An ask waiting for your next visit notifies once that visit shows it (#1345). A record that holds no
+            // showing, as a fixture from before the core recorded them, shows each ask as it opens.
+            if self.opened.contains(&handle) && table.shown(&handle) == Some(false) {
+                continue;
+            }
             let session = ask["session"].as_str().unwrap_or_default();
             if looking_at == Some(session) {
                 continue;
@@ -378,6 +411,15 @@ impl Notifier {
                 }
                 continue;
             }
+            let batch = table.batch(&handle);
+            if let Some(seen) = batches
+                .iter_mut()
+                .find(|(b, ..)| !b.is_empty() && *b == batch)
+            {
+                seen.2 += 1;
+                continue;
+            }
+            batches.push((batch, out.len(), 1));
             out.push(Notification {
                 ask: Some(handle),
                 session: session.to_owned(),
@@ -385,6 +427,10 @@ impl Notifier {
                 text: ask_text(table, ask, now),
                 sound: None,
             });
+        }
+        for &(_, at, count) in batches.iter().filter(|(.., count)| *count > 1) {
+            out[at].title = "DeepBuild".to_owned();
+            out[at].text = batch_text(&out[at].text, count);
         }
         // Each session keeps its newest; the one sound goes on what is left.
         let mut kept: Vec<Notification> = Vec::new();
@@ -418,9 +464,21 @@ impl Notifier {
     }
 }
 
-/// Whether the notifier reads the event: it opens an ask, gives it a new deadline or sends a notice.
+/// Whether the notifier reads the event: it opens an ask, gives it a new deadline, shows asks or sends a notice.
 pub fn reads(event: &Value) -> bool {
-    opening(event).is_some() || event["kind"] == "notice.sent"
+    opening(event).is_some() || showing(event).is_some() || event["kind"] == "notice.sent"
+}
+
+/// The asks a showing of the core's holds (#1345): `ask.batched`, at a visit or at once.
+fn showing(event: &Value) -> Option<Vec<String>> {
+    (event["kind"] == "ask.batched" && event["writer"] == "core").then(|| {
+        event["data"]["asks"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|item| item["ask"].as_str().map(str::to_owned))
+            .collect()
+    })
 }
 
 /// The id of the event, if it opens an ask or gives it a new deadline: its creation, the core's undo of its
@@ -494,6 +552,18 @@ fn title(table: &Table, session: &str) -> String {
         };
     }
     format!("DeepBuild · {}", table.title(session))
+}
+
+/// A batch's notification (#1345), from its first ask's: how many questions the one card holds, then the first's
+/// question and default.
+fn batch_text(first: &str, count: usize) -> String {
+    let line = first.split_once('\n').map_or(first, |(_, line)| line);
+    let first = line.split_once(" — ").map_or(line, |(_, rest)| rest);
+    format!(
+        "DeepBuild\n{} {} — {count} questions on one card. The first: {first}",
+        states::glyph(states::State::NeedsYou.entry()),
+        states::State::NeedsYou.word()
+    )
 }
 
 /// An ask's notification: the session's task, the question, and the default with when it applies.

@@ -1,0 +1,77 @@
+Base 0e55727311da14cb0c4644f9afd5e33c9505fefa (origin/main, 2026-11-15), the suite unchanged, Node 24.22.0, macOS.
+The recorded run is AGENTS.md's verifier, all eight files in one vitest run (it ran them side by side):
+
+  node scripts/affected.mjs tests/acceptance/2118/carried-inherited.test.ts tests/acceptance/2118/never-started.test.ts \
+    tests/acceptance/2118/rerun-refused.test.ts tests/acceptance/2118/closes-read.test.ts tests/acceptance/2118/check-link.test.ts \
+    tests/acceptance/2118/health-person.test.ts tests/acceptance/2118/rule-allow.test.ts tests/acceptance/2118/codex-loop.test.ts
+
+Its last line:
+
+  FAIL affected: 178 new, 45 already failing on main, 0 inconclusive or blocked, 0 listed skips, 1 passed, in 180 s at load 165
+
+It printed no WIDE line and no INCONCLUSIVE line. Seven of its
+178 new failures are this suite's, below; the other 171 are the repository lints it runs beside any selection (size,
+deps, code mappings, vendor, canvas-lint, known-failures.json's dates, the environment slot kit, drift, secrets, the
+record reader), none of them about a file of this suite. The machine's 1-minute load was 165 on 18 cores; no reading
+was INCONCLUSIVE and none timed out. The checkout's path is written <checkout>, the home folder ~.
+
+Seven criteria fail on the base, each at an assertion in its own test file, for the reason its "Today ..." sentence
+gives. One, AC4, already holds on the base: its test passes.
+
+- AC1 #2118.b16df21c fails: session B's verdict is FAIL, its check not inherited; no merge-base result reaches its claim.
+- AC2 #2118.bfff8439 fails: no run starts on the new claim, which is BLOCKED again on the copied missing run.
+- AC3 #2118.a5258d6e fails: verdictOf(claim) is pending after the rerun's start rejected.
+- AC4 #2118.53305b98 PASSES ON THE BASE: the call is denied, naming the cause. Since 49d0d25a5 (#2064, on main before this
+  base) the core turns a Closes rule that throws into a denial carrying the error. Run apart, with the same world, hub
+  and call (README, Checked apart), the denial read: "DeepBuild denied this: the Closes rule failed: no such column:
+  requirements".
+- AC5 #2118.fee60420 fails: the approved check's bytes are written through the link, over the file outside the repo; the
+  check's requirement then reads INCONCLUSIVE (0 of 1 clean runs), not BLOCKED.
+- AC6 #2118.6cbb26ce fails: bob's hub.health names the owner's session in maya/notes.
+- AC7 #2118.8efe3220 fails: the reply holds the extension's block and neither permissionDecision nor the rule.
+- AC8 #2118.60587a8a fails: a run of the slow check starts on the continuation's claim before the stop's reply, and no
+  check.held is recorded.
+
+Trimmed to each failing test's name, its assertion failure and where it failed, and the summary.
+
+FAIL  tests/acceptance/2118/carried-inherited.test.ts > AC1 #2118.b16df21c two sessions with equal keys for a spec check that fails on the head and on the merge base: the second session's claim reads the first's result as carried, and its verdict is BLOCKED naming the failure as also on the merge base
+AssertionError: AC1 #2118.b16df21c a failure carried from another session, which the merge base shares, is BLOCKED as inherited, never the claim's own FAIL; session B's verdict is FAIL (price: failed on every real run: total takes the discount off; price carried run:01M7FBF106VY394BRNXG3Q3KSB from claim:2118CA in session:carrieda); its check price is FAIL, inherited false (price: failed on every real run: total takes the discount off); session A's verdict was BLOCKED (price: inherited: also fails on the merge base: total takes the discount off); starts: price for claim:2118CA: run:01M7FBF106VY394BRNXG3Q3KSB failed; price for claim:2118CA on the merge base: run:01M7FBF1N0VBW8Q34XG98F97YD failed: expected 'FAIL' to be 'BLOCKED' // Object.is equality
+ ❯ tests/acceptance/2118/carried-inherited.test.ts:43:162
+
+FAIL  tests/acceptance/2118/check-link.test.ts > AC5 #2118.fee60420 a claim whose snapshot holds the approved check's folder .deepbuild/checks as a symlink to a folder outside the checkout: when the check starts, nothing is written in that folder and the check is BLOCKED naming the path
+AssertionError: AC5 #2118.fee60420 nothing is written in the folder the link names: it holds your two files as they were, and no other; the approved bytes are "#!/bin/sh\n# Drafted check: an expired token is rejected with"...; the outside folder holds {"expired-token.sh":"#!/bin/sh\n# Drafted check: an expired token is rejected with 401.\nnode -e \"process.exit(require('./src/auth.js').rejectsExpired ? 0 : 1)\"\n","notes.txt":"kept outside the repo\n"}; claim:01M7FBF1MJPB0PG2E9JRC0R4N4's verdicts on .deepbuild/checks/expired-token.sh's requirement: [{"req":"req:sessioneb75534af2ed40ac8e9626c5c46f46820#R1","outcome":"INCONCLUSIVE","check":".deepbuild/checks/expired-token.sh","depth":"unit","oracle":"code","runs":{"clean":0,"needed":1,"counted":[]},"smallest":null,"points_to":null,"evidence":[],"proof":"test_run","reasons":[".deepbuild/checks/expired-token.sh: 0 of 1 clean runs"],"claim_outcome":"INCONCLUSIVE"}]; every verdict of it: [{"outcome":"INVALID","reasons":["the definition's hash differs from the one locked for session:eb75534af2ed40ac8e9626c5c46f4682#0; changed: .deepbuild/checks/expired-token.sh"]},{"outcome":"INCONCLUSIVE","reasons":[".deepbuild/checks/expired-token.sh: 0 of 1 clean runs"]}]: expected { …(2) } to deeply equal { …(2) }
+ ❯ scene tests/acceptance/2118/check-link.test.ts:89:216
+
+FAIL  tests/acceptance/2118/codex-loop.test.ts > AC8 #2118.60587a8a a Codex session whose turn began from a continuation with an active goal stops green with one slow check: the check is held for the loop and no run of it starts at that stop
+AssertionError: AC8 #2118.60587a8a no run of the slow check starts at a looping session's stop: the next continuation is about to change the code; the stop's reply came at 1794737947774 (exit 0, stdout "{\"systemMessage\":\"PASS 1/1 · 1 test · next: you · session/c47f329b/01M7FBFE2J2690ESBGY4DD2YP1\"}", stderr ""); runs of .deepbuild/checks/slow.sh on claim:01M7FBFE2J2690ESBGY4DD2YP1: run.started at 1794737945704 {"run":"run:01M7FBFF2NKG36HENPET07TDM0","check":".deepbuild/checks/slow.sh","claim":"claim:01M7FBFE2J2690ESBGY4DD2YP1","commit":"3834fbea9ad302f1e9c8ad33373e9be8983f5f40","host":"local","needs":{"cores":1,"memory_mb":0,"stack_slot":0,"gpus":0,"expected_ms":1200000},"lane":"slow","argv":["/bin/sh","-; its held places: none: expected [ Array(1) ] to deeply equal []
+ ❯ scene tests/acceptance/2118/codex-loop.test.ts:99:203
+
+FAIL  tests/acceptance/2118/health-person.test.ts > AC6 #2118.6cbb26ce the owner has a session in maya/notes and one in acme/shop; bob, a person on acme/shop only, calls hub.health: its sessions list holds no session of maya/notes, and still holds the one in acme/shop
+AssertionError: AC6 #2118.6cbb26ce a person's hub.health holds no session of a repo that person isn't on; bob's hub.health names sessions ["18a6b513-0350-4973-8c3c-6db799c29b01","8c167e54-c76c-42c8-8661-28ef0d4393ad"]; the owner's session in maya/notes is 8c167e54-c76c-42c8-8661-28ef0d4393ad, the one in acme/shop is 18a6b513-0350-4973-8c3c-6db799c29b01; bob's sessions.read shows ["18a6b513-0350-4973-8c3c-6db799c29b01"]: expected [ …(2) ] to not include '8c167e54-c76c-42c8-8661-28ef0d4393ad'
+ ❯ tests/acceptance/2118/health-person.test.ts:51:110
+
+FAIL  tests/acceptance/2118/never-started.test.ts > AC2 #2118.bfff8439 a claim whose one check's start rejected is BLOCKED on a missing run; the session stops again on the same tree with the start working: the check has one real run on the new claim and the verdict is made from it
+AssertionError: AC2 #2118.bfff8439 the check has one real run on the new claim, since the run that never started says nothing of the tree; the new claim's verdict is BLOCKED (sum: missing sum couldn't start: its budget waits for your answer (the test refused this start), owner you); every start the gate asked for: sum for claim:2118N1: start rejected (its budget waits for your answer (the test refused this start)): expected [] to deeply equal [ 'sum passed' ]
+ ❯ tests/acceptance/2118/never-started.test.ts:36:187
+
+FAIL  tests/acceptance/2118/rerun-refused.test.ts > AC3 #2118.a5258d6e a claim whose check ended; rerun() is called for that check and start rejects: verdictOf(claim) is BLOCKED and names the check as one that couldn't start
+AssertionError: AC3 #2118.a5258d6e after a rerun whose start rejected, the claim is BLOCKED, never pending; verdictOf(claim:2118R1) is pending (sum: runs still to come); its check sum is pending (sum: runs still to come); starts: sum for claim:2118R1: run:01M7FBF0TZ54MSF6KFQTPQPDGE passed; sum for claim:2118R1: start rejected (the claim's checkout is gone (the test refused this start)): expected 'pending' to be 'BLOCKED' // Object.is equality
+ ❯ tests/acceptance/2118/rerun-refused.test.ts:39:113
+
+FAIL  tests/acceptance/2118/rule-allow.test.ts > AC7 #2118.8efe3220 a loaded extension handles tool.before and denies nothing, and a standing rule approves a dependency install: a Claude Code session's npm install gets a hook reply with permissionDecision allow and the rule's words
+AssertionError: AC7 #2118.8efe3220 your standing rule's yes reaches the agent as Claude Code's explicit allow, with acme/open-notes handling tool.before too; the rule is decision:01M6DQSRT4EAPPPEW2CDGA1BXG; the PreToolUse reply to `npm install is-odd`: exit 0 after 124 ms, stdout "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"additionalContext\":\"[acme/open-notes] 3 notes are open\"}}", stderr "": expected undefined to be 'allow' // Object.is equality
+ ❯ tests/acceptance/2118/rule-allow.test.ts:108:174
+
+ Test Files  7 failed | 1 passed (8)
+      Tests  7 failed | 1 passed (8)
+   Duration  32.10s (tests 95%, transform 3%, import 2%)
+
+AC4's own file, run alone (node scripts/throttle.mjs test --wait 120 -- npx vitest run
+tests/acceptance/2118/closes-read.test.ts --testTimeout=1800000 --hookTimeout=600000), the suite as it is now:
+
+ ✓ tests/acceptance/2118/closes-read.test.ts (1 test) 2003ms
+   ✓ AC4 #2118.53305b98 a session with an open task for issue 7, and a record whose read of the task's definition rejects: gh pr create with Closes #7 is denied, naming the cause 1931ms
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Duration  2.30s (tests 92%, transform 7%, setup 1%)
+exit 0

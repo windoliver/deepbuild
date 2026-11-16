@@ -403,6 +403,8 @@ impl Card {
             Target::Step(index) => format!("card-step:{index}"),
             Target::Send => "card-send".to_owned(),
             Target::Undo => "card-undo".to_owned(),
+            Target::SignIn => "card-sign-in".to_owned(),
+            Target::Page => "card-price-page".to_owned(),
         })
     }
 
@@ -422,7 +424,9 @@ impl Card {
                         Row::Step { index, .. } => Some(Target::Step(*index)),
                         Row::Send => Some(Target::Send),
                         Row::Undo => Some(Target::Undo),
-                        Row::Text(_) => None,
+                        Row::SignIn => Some(Target::SignIn),
+                        Row::Page(_) => Some(Target::Page),
+                        Row::Text(_) | Row::Call { .. } => None,
                     })
                     .collect()
             })
@@ -577,8 +581,12 @@ impl Card {
             Did::Nothing => controller.press(press(Phase::Up, up), &events, now),
             other => other,
         };
-        if let Did::NeedsConfirmation(reason) = did {
-            self.confirm(reason, cx);
+        match did {
+            Did::NeedsConfirmation(reason) => self.confirm(reason, cx),
+            Did::SignIn(ask) => self.sign_in(ask, cx),
+            // The maker's own price page, in your browser (#1349): it answers nothing.
+            Did::Page(page) => cx.open_url(&page),
+            _ => {}
         }
         self.send(cx);
         cx.notify();
@@ -603,6 +611,26 @@ impl Card {
                 card.send(cx);
                 cx.notify();
             });
+        })
+        .detach();
+    }
+
+    /// Starts the agent's own sign-in through the hub's `signin.open`, off the main thread (#1349): the agent opens its own
+    /// window or browser page. It closes nothing; one the hub couldn't start stays on the card, saying why.
+    fn sign_in(&mut self, ask: String, cx: &mut Context<Self>) {
+        self.failed = None;
+        cx.spawn(async move |card, cx| {
+            let started = cx
+                .background_spawn(async move {
+                    crate::hub::call_app("signin.open", serde_json::json!({ "ask": ask }))
+                })
+                .await;
+            if let Err(error) = started {
+                let _ = card.update(cx, |card, cx| {
+                    card.failed = Some(why(&error).into());
+                    cx.notify();
+                });
+            }
         })
         .detach();
     }
@@ -637,13 +665,45 @@ impl Card {
 
     fn row(&self, index: usize, row: &Row, chrome: &Chrome, cx: &mut Context<Self>) -> AnyElement {
         use crate::views::{control, Control};
+        // A row of the batched taste card (#1345): one group per call, keyed by its ask, each line a label in it.
+        if let Row::Call { ask, lines, .. } = row {
+            let id = format!("card-row:{}", ask.trim_start_matches("ask:"));
+            return crate::views::observed(ElementId::Name(id.into()))
+                .role(Role::Group)
+                .aria_label(SharedString::from(
+                    lines.first().cloned().unwrap_or_default(),
+                ))
+                .flex()
+                .flex_col()
+                .pt(sizes().space(1))
+                .children(lines.iter().enumerate().map(|(line, text)| {
+                    let text = SharedString::from(text.clone());
+                    crate::views::observed(("card-row-line", line))
+                        .role(Role::Label)
+                        .aria_label(text.clone())
+                        .typed(if line == 0 {
+                            sizes().body
+                        } else {
+                            sizes().small
+                        })
+                        .text_color(if line == 0 {
+                            chrome.ink_primary
+                        } else {
+                            chrome.ink_secondary
+                        })
+                        .child(text)
+                }))
+                .into_any_element();
+        }
         let label: SharedString = row.label().to_owned().into();
         let (kind, target): (Option<Control>, Option<Target>) = match row {
-            Row::Text(_) => (None, None),
+            Row::Text(_) | Row::Call { .. } => (None, None),
             Row::Option { index, .. } => (Some(Control::Plain), Some(Target::Option(*index))),
             Row::Step { index, on, .. } => (Some(Control::Switch(*on)), Some(Target::Step(*index))),
             Row::Send => (Some(Control::Main), Some(Target::Send)),
             Row::Undo => (Some(Control::Plain), Some(Target::Undo)),
+            Row::SignIn => (Some(Control::Main), Some(Target::SignIn)),
+            Row::Page(_) => (Some(Control::Plain), Some(Target::Page)),
         };
         // Each control keyed by what it is, never its place (#1462); a line by its place.
         let id: ElementId = match target.and_then(|target| self.id_of(target)) {
