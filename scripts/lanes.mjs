@@ -847,6 +847,11 @@ timed.push('tests/acceptance/457/ac9-budgets.test.ts');
 alone.push('tests/acceptance/1636/');
 timed.push('tests/acceptance/1636/ac8-budget.test.ts');
 
+// #192's voxel files each build deep-show per feature set (and the merge base's); ac10-budgets times the voxel mesher's
+// run at check on the reference Mac.
+alone.push('tests/acceptance/192/voxel/');
+timed.push('tests/acceptance/192/voxel/ac10-budgets.test.ts');
+
 // #1624: this live session spends plan usage and is explicitly run by hand, not as a skipped unit test.
 byHand.push('tests/acceptance/1330/start.live.test.ts');
 
