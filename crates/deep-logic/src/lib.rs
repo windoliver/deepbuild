@@ -15,6 +15,7 @@ pub mod bindings;
 pub mod budget;
 pub mod checks;
 mod fixtures;
+pub mod grid_bot;
 pub mod judder;
 pub mod keyframes;
 pub mod lane;
