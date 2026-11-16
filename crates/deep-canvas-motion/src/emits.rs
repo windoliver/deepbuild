@@ -193,6 +193,36 @@ pub fn build_lists(doc: &Map<String, Value>, program: &Program) -> Map<String, V
     out
 }
 
+/// #155: each `markers.<kind>` list the document's markers compile (Marker; Spawn: variant and
+/// span), so authored moments drive Spawn: a row per marker of that kind in flick order (ties by
+/// ID), `{t, end, kind, a: its ID, tags}` and its payload's fields beside them, as Spawn reads a
+/// row's fields. A spawn's `on.tags` filters them.
+pub fn marker_lists(program: &Program) -> Map<String, Value> {
+    let mut markers: Vec<&crate::doc::Marker> = program.motion.markers.iter().collect();
+    markers.sort_by(|a, b| (a.start, &a.id).cmp(&(b.start, &b.id)));
+    let mut out = Map::new();
+    for m in markers {
+        let mut row = match &m.payload {
+            Value::Object(p) => p.clone(),
+            _ => Map::new(),
+        };
+        row.extend([
+            ("t".into(), json!(m.start)),
+            ("end".into(), json!(m.end)),
+            ("kind".into(), json!(m.kind)),
+            ("a".into(), json!(m.id)),
+            ("tags".into(), json!(m.tags)),
+        ]);
+        if let Value::Array(rows) = out
+            .entry(format!("markers.{}", m.kind))
+            .or_insert_with(|| Value::Array(Vec::new()))
+        {
+            rows.push(Value::Object(row));
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

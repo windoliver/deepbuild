@@ -3,7 +3,7 @@
 //! lines; deep-show calls the same functions for providers, validators, registry programs and its
 //! kit part `sandbox`, so neither keeps a copy of the subset, the rewrite or the runner.
 
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
 use deep_canvas_sandbox::check::{self, Limits, Refusal, SUBSET};
@@ -11,9 +11,9 @@ use deep_canvas_sandbox::rewrite::{self, Rewritten, START};
 use deep_canvas_sandbox::trap::Trap;
 use deep_canvas_sandbox::{kit, module};
 use serde_json::{json, Value};
-use wasmtime::Val;
+use web_time::Instant;
 
-use crate::{Call, Faults, Runner, WASMTIME};
+use crate::{Call, Faults, Runner, Val, WASMTIME};
 
 /// The web player's implementation of sandbox@1: the browser's own WebAssembly engine runs the
 /// bytes the app rewrote.
