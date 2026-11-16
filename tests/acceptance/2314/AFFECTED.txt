@@ -1,0 +1,10 @@
+file:///private/tmp/deepbuild-2314-blind.7KMP1F/scripts/affected.mjs:50
+  if (result.status !== 0) throw Error(`cargo metadata failed: ${result.stderr.trim().split('\n').at(-1)}`);
+                                                                               ^
+
+TypeError: Cannot read properties of undefined (reading 'trim')
+    at crates (file:///private/tmp/deepbuild-2314-blind.7KMP1F/scripts/affected.mjs:50:80)
+    at main (file:///private/tmp/deepbuild-2314-blind.7KMP1F/scripts/affected.mjs:378:21)
+    at file:///private/tmp/deepbuild-2314-blind.7KMP1F/scripts/affected.mjs:499:82
+
+Node.js v24.22.2
