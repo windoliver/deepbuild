@@ -266,7 +266,7 @@ pub fn judge_fields(card: &CardSeen, data: &Value) -> Vec<String> {
                 need(&[&format!("{cost:.2}")], "its cost");
             }
         }
-        "choice" if data["subject"]["point"].as_str().map_or(false, |p| p.starts_with("claim:")) => {
+        "choice" if data["subject"]["point"].as_str().is_some_and(|p| p.starts_with("claim:")) => {
             // A stalled claim: split, fund or accept, with costs.
             need(&["split", "fund", "accept", "USD"], "split, fund or accept, with costs");
         }

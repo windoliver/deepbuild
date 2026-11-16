@@ -13,4 +13,3 @@ pub fn png(rgba: Vec<u8>, size: [u16; 2]) -> Vec<u8> {
         .expect("a PNG encodes into memory");
     out
 }
-

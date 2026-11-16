@@ -11,7 +11,7 @@ export const FIRST_PARTY = ['legal', 'explorer', 'descender'] as const;
 
 /** The bot's own name in messages: its kind. */
 export function kindOf(bot: Bot): string {
-  return FIRST_PARTY.find((k) => k in bot) ?? ('policy' in bot ? 'policy' : 'logic');
+  return FIRST_PARTY.find((k) => k in bot) ?? ('policy' in bot ? 'policy' : 'model' in bot ? 'model' : 'logic');
 }
 
 /** The bot as a replica runs it: without the input's bands, expectations and authorship. */
@@ -21,24 +21,21 @@ export function lower(bot: Bot): Lowered {
 }
 
 /**
- * Why a bot can't play this input, before any run, or nothing: a first-party bot with no play interface, or an action
- * a bot names that the interface doesn't declare (a descender's `action`, a policy's key or pick on an action's name).
+ * Why a bot can't play this input, before any run, or nothing: a first-party or model bot with no play interface, a
+ * model bot that can't ask as the design spells it, or a descender's `action` the interface doesn't declare.
  */
 export function refusal(bot: Bot, play: PlayIface | undefined): string | undefined {
   const kind = kindOf(bot);
   const declared = new Set(Object.keys(play?.actions ?? {}));
-  if (FIRST_PARTY.some((k) => k in bot) && !play) return `the ${kind} plays a play interface, and the input gives none`;
-  const named: [string, string | undefined][] = [];
-  if ('descender' in bot) named.push([bot.descender.action, undefined]);
-  if ('policy' in bot) {
-    // A policy's value may be the name of an action on that control, put as the entry that action's gesture makes.
-    for (const [control, keys] of Object.entries(bot.policy.keys ?? {})) for (const [, v] of keys) if (typeof v === 'string') named.push([v, control]);
-    for (const [control, p] of Object.entries(bot.policy.pick ?? {})) for (const v of p.from) if (typeof v === 'string') named.push([v, control]);
+  if ((FIRST_PARTY.some((k) => k in bot) || 'model' in bot) && !play) return `the ${kind} plays a play interface, and the input gives none`;
+  // #1048: a model bot picks among listed rows, at most once every 15 steps.
+  if ('model' in bot) {
+    if (!play?.legal) return 'the model picks one of the rows the piece lists, and the interface declares no legal list';
+    if (!(typeof bot.model.provider === 'string' && /^[^@\s]+@[^@\s]+$/.test(bot.model.provider))) return 'a model bot names its provider as name@version';
+    if ((bot.model.every ?? 15) < 15) return `a model bot asks at most once every 15 steps, not every ${bot.model.every}`;
   }
-  for (const [action, control] of named) {
-    if (!declared.has(action)) return `the ${kind} names the action ${action}, which the play interface doesn't declare`;
-    const on = play?.actions?.[action]?.control;
-    if (control !== undefined && on !== control) return `the ${kind} puts the action ${action} on ${control}, and the play interface declares it on ${on}`;
-  }
+  // A policy's string names an action on its control, or (#1048) on a text control is a commit: the replica, which
+  // reads the control's kind, refuses an action the interface doesn't declare there before any run.
+  if ('descender' in bot && !declared.has(bot.descender.action)) return `the ${kind} names the action ${bot.descender.action}, which the play interface doesn't declare`;
   return undefined;
 }

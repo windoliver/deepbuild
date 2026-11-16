@@ -961,7 +961,22 @@ impl Backend for Rapier {
         // #251: a world never stepped has no broad phase yet, so a wheel's ray would meet nothing
         // on the first step; it is built first, as the world stands.
         if self.step == 0 && !vehicles.is_empty() {
-            self.world.detect_collisions(&(), &());
+            // #2306: a joint puts its bodies in the engine's islands when it is inserted, before
+            // any step, and the collision pass then takes every body's insertion without putting
+            // the rest in them, which a debug build refuses; so a world with a joint seeds only
+            // its broad phase's boxes, and its first step finds its contacts.
+            if self.world.impulse_joints.is_empty() {
+                self.world.detect_collisions(&(), &());
+            } else {
+                let params = self.world.integration_parameters;
+                let enabled = self.world.colliders.iter().filter(|(_, c)| c.is_enabled());
+                let all: Vec<ColliderHandle> = enabled.map(|(h, _)| h).collect();
+                for h in all {
+                    let aabb = self.world.colliders[h]
+                        .compute_broad_phase_aabb(&params, &self.world.bodies);
+                    self.world.broad_phase.set_aabb(&params, h, aabb);
+                }
+            }
         }
         for id in vehicles {
             self.drive_vehicle(&id)?;

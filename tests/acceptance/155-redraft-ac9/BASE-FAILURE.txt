@@ -1,7 +1,7 @@
 # One run at the base 0e5572731, deep-show built by the README's commands. Both tests fail: the base has no
 # packs/foley-1.0.0, not for a mistake in a test.
 
- RUN  v5.0.5 /Users/taofeng/dev/claude-worktrees/github-issue-155-9fc359/agent-a9bd62db372968c91/tests/acceptance/155-redraft-ac9
+ RUN  v5.0.5 <checkout>/tests/acceptance/155-redraft-ac9
 
  ❯ presets.test.ts (2 tests | 2 failed) 965ms
    ❯ AC9 #155.eaff7d6a every foley@1 preset is a synth.preset@1 entry that passes synth's pack check; a planted node outside the closed list is refused (2)

@@ -66,6 +66,7 @@ const wrap = (store: RecordStore): RecordStore => ({
   findMessages: (terms, sessions) => store.findMessages(terms, sessions),
   touched: (file, cwd) => store.touched(file, cwd),
   keep: (connection, file) => store.keep(connection, file),
+  keepReceipt: (receipt, outcome) => store.keepReceipt(receipt, outcome),
   rollBack: (connection, what) => store.rollBack(connection, what),
   backup: (path) => store.backup(path),
   close: () => store.close(),
