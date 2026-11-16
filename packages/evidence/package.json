@@ -10,5 +10,5 @@
     "development": "./src/index.ts",
     "default": "./dist/index.js"
   },
-  "scripts": { "build": "tsc -p tsconfig.json" }
+  "scripts": { "build": "node build-patterns.mjs && tsc -p tsconfig.json" }
 }

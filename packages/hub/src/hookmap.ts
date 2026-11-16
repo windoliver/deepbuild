@@ -1,11 +1,12 @@
 // One line read off the socket, parsed: a hello or a method call is handed back as it is; a hook request is
 // held to hook.request@3, mapped through its agent's adapter to its event, and kept to that kind's catalogue
 // fields, its text scrubbed of every value the hub holds. Runs in the parser workers, off the event loop.
-import { closeSync, openSync, readFileSync, readSync, readdirSync, fstatSync } from 'node:fs';
-import { join } from 'node:path';
-import { ADAPTERS, factsAdapter, readFacts, registry as emptyRegistry, shipped, type Adapter, type AdapterRegistry, type HookRequestLine, type JsonObject } from '@deepbuild/adapters';
-import { isObject as isObj, canonicalize, getSchema, sha256Hex, validate, type JsonValue } from '@deepbuild/contracts';
+import { closeSync, openSync, readSync, fstatSync } from 'node:fs';
+import { ADAPTERS, readFacts, type HookRequestLine, type JsonObject } from '@deepbuild/adapters';
 import { scrubText } from '@deepbuild/evidence';
+import { adapterOf, registry } from './adapter-facts.js';
+export { adapterOf, hubAdapters, registry } from './adapter-facts.js';
+import { isObject as isObj, canonicalize, getSchema, sha256Hex, validate, type JsonValue } from '@deepbuild/contracts/runtime';
 import { isPrCreate, prUrlIn } from './forge.js';
 import { countMcp } from './mcp-servers.js';
 import { derivedId, refusal, signature, type Draft, type HookMeta, type Hunk, type Parsed, type Plant } from './wire.js';
@@ -74,28 +75,6 @@ function hunkOf(h: JsonObject): Hunk[] {
   flush();
   return runs;
 }
-
-let adapters: AdapterRegistry | undefined;
-/**
- * The shipped adapters; DEEP_HUB_TEST_FACTS names a folder whose facts files they read instead, as a widened range
- * would after the live smoke test (only tests set it).
- */
-export function hubAdapters(): AdapterRegistry {
-  const folder = process.env.DEEP_HUB_TEST_FACTS;
-  const base = shipped();
-  if (!folder) return base;
-  const reg = emptyRegistry();
-  // A facts file for an agent with no shipped adapter (cursor's, opencode's) is data for other readers, as the
-  // MCP and loop facts are: it registers nothing.
-  for (const file of readdirSync(folder).filter((f) => f.endsWith('.facts.json'))) {
-    const facts = JSON.parse(readFileSync(join(folder, file), 'utf8')) as JsonObject;
-    const name = String(facts.agent);
-    if (base.names().includes(name)) reg.register(name, factsAdapter(facts, base.get(name) as Adapter));
-  }
-  return reg;
-}
-/** The hub's adapters, read once per thread. */
-export const registry = (): AdapterRegistry => (adapters ??= hubAdapters());
 
 /**
  * What each tool the agents' facts list counts as where it isn't change (#304), for rules.json: a read or a search
@@ -167,11 +146,6 @@ export function versionOf(transcript: string): string | undefined {
 function newest(name: string): string {
   const versions = ((registry().get(name).facts as JsonObject).events as JsonObject).versions as JsonObject;
   return Object.keys(versions).at(-1)!;
-}
-/** The adapter an agent's hooks map through, whose caps and facts answer for it; none for a name no adapter maps. */
-export function adapterOf(agent: string | undefined): Adapter | undefined {
-  const name = agent === undefined ? undefined : ADAPTERS[agent];
-  return name === undefined ? undefined : registry().get(name);
 }
 /** A model call as the agent's own transcript records it (#2019): a retry, with its attempt, most and cause, or the reply that ends the retries. */
 export interface ModelCall { outcome: 'retry' | 'reply'; attempt?: number; max?: number; cause?: string; at: number; record: string }
