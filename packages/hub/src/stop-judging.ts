@@ -1386,7 +1386,7 @@ export class StopJudging {
    * reading, claims the merge commit in a worktree of its own, as `session` did a stop; its slow checks start, and its
    * verdict is read once made. Each check whose key the merge didn't change carries from the run that made it (#1018).
    */
-  async judgeLanding(r: { repo: string; checkout: string; issue: number; pr: number; commit: string; session: string }): Promise<{ claim: string; outcome: Outcome; requirements: { req: string; text: string; settled_by: string | null; outcome: string }[] } | undefined> {
+  async judgeLanding(r: { repo: string; checkout: string; issue: number; pr: number; commit: string; session: string }): Promise<{ claim: string; outcome: Outcome; requirements: { req: string; text: string; settled_by: string | null; outcome: string; oracle?: string | null }[] } | undefined> {
     const [owner, name] = r.repo.split('/') as [string, string];
     const fetch = this.options.settings.github ? recordedFetch(this.options.settings.github) : liveFetch(this.options.settings.forge, process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken());
     // A reading with no revision time is revised by its text: the definition still names the issue it locked from.
@@ -1424,10 +1424,12 @@ export class StopJudging {
         await this.verdictWrites.get(made.claim)?.catch(() => undefined);
         const v = this.options.services.gate.verdictOf(made.claim);
         const [row] = v && v.outcome !== 'pending' ? (await this.options.services.record.raw(`SELECT outcome, requirements FROM verdicts WHERE claim_id = ? ORDER BY created DESC LIMIT 1`, [made.claim.slice(6)])) as { outcome: Outcome; requirements: string | null }[] : [];
-        if (row) {
-          const settled = new Map((await this.options.services.tasks.lockedRequirements(made.task)).map((q) => [q.req, q]));
-          const reqs = (JSON.parse(row.requirements ?? '[]') as { req: string; outcome: string }[]).map((q) => ({ req: q.req, text: settled.get(q.req)?.text ?? q.req, settled_by: settled.get(q.req)?.settled_by ?? null, outcome: q.outcome }));
-          return { claim: made.claim, outcome: row.outcome, requirements: reqs };
+        // A verdict that waits only on your answer to requirements whose oracle is you, every other one passed, waits on
+        // no check (#1345): it's judged now, INCONCLUSIVE, with those requirements pending, and never recorded as made.
+        const calls = !row && v && v.requirements.some((q) => q.oracle === 'person' && q.outcome === 'pending') && v.requirements.every((q) => q.outcome === 'PASS' || (q.oracle === 'person' && q.outcome === 'pending'));
+        if (row || calls) {
+          const read = row ? JSON.parse(row.requirements ?? '[]') as { req: string; outcome: string; oracle?: string }[] : v!.requirements;
+          return { claim: made.claim, outcome: row?.outcome ?? 'INCONCLUSIVE', requirements: await this.landingRequirements(made.task, read) };
         }
         if (Date.now() > until) return undefined;
         await new Promise((done) => setTimeout(done, 200));
@@ -1436,6 +1438,25 @@ export class StopJudging {
       this.options.state().live.delete(r.session);
       if (!r.keep) await worktree('remove', '--force', tree).catch(() => undefined);
     }
+  }
+
+  /** A verdict's requirements as the landing reads them: each one's text and what alone settles it, from the task's locked definition, and whose word decides it. */
+  private async landingRequirements(task: string, read: { req: string; outcome: string; oracle?: string }[]): Promise<{ req: string; text: string; settled_by: string | null; outcome: string; oracle: string | null }[]> {
+    const settled = new Map((await this.options.services.tasks.lockedRequirements(task)).map((q) => [q.req, q]));
+    return read.map((q) => ({ req: q.req, text: settled.get(q.req)?.text ?? q.req, settled_by: settled.get(q.req)?.settled_by ?? null, outcome: q.outcome, oracle: q.oracle ?? null }));
+  }
+  /** A landed claim's newest recorded verdict (#1345): one your answers to its calls made; undefined while none is recorded. */
+  async recorded(claim: string): Promise<{ outcome: Outcome; requirements: { req: string; text: string; settled_by: string | null; outcome: string; oracle: string | null }[] } | undefined> {
+    const [row] = (await this.options.services.record.raw(`SELECT v.outcome AS outcome, v.requirements AS requirements, c.subject_ref AS task FROM verdicts v JOIN claims c ON c.id = v.claim_id WHERE v.claim_id = ? ORDER BY v.created DESC LIMIT 1`, [claim.slice(6)])) as { outcome: Outcome; requirements: string | null; task: string | null }[];
+    if (!row?.task) return undefined;
+    return { outcome: row.outcome, requirements: await this.landingRequirements(row.task, JSON.parse(row.requirements ?? '[]') as { req: string; outcome: string; oracle?: string }[]) };
+  }
+  /**
+   * A call on a requirement whose oracle is you (#1345), and once it closed your answer (`unanswered` for a default):
+   * the claim's verdict reads them from now on, and the one they make is recorded.
+   */
+  async answered(claim: string, req: string, ask: string, answer?: 'PASS' | 'FAIL' | 'unanswered'): Promise<void> {
+    if (this.options.services.gate.answered(claim, req, ask, answer) && answer) await this.judged(claim);
   }
 
   /** The validity floor's INVALID and snapshot budget's INCONCLUSIVE, recorded before checks count. */

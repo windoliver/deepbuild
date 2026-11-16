@@ -82,8 +82,10 @@ export function crates(cwd) {
  * crates (crate:name). Code imports its specifiers, a package by its exports, and a crate the crates it depends on.
  * A test's own files and Rust files read every repository path their literals name, and a test runs each crate its
  * literals name; other code runs only the builds and binaries it names, as packages/cli/dist/main.js or debug/deep-hook.
+ * A budget task of benchmarks/budgets.json, `task:<id>`, imports what its command runs: each file it names and each
+ * crate whose binary it names, as target/debug/deep-hook (#1981).
  */
-export function graph(cwd, files, workspace) {
+export function graph(cwd, files, workspace, tasks = []) {
   const set = new Set(files);
   const counts = new Map();
   for (const file of files) for (const folder of folders(file)) counts.set(folder, (counts.get(folder) ?? 0) + 1);
@@ -198,6 +200,14 @@ export function graph(cwd, files, workspace) {
       paths(runs, node, texts, [dirname(file), crate.dir]);
     }
   }
+  // A script or binary that runs takes in all it imports or links, so a task's command is its imports.
+  for (const { id, command } of tasks) {
+    for (const part of command.map((part) => posix.normalize(part))) {
+      const binary = binaries.get(part.replace(/^.*\/(?:debug|release)\//, ''));
+      link(imports, `task:${id}`, set.has(part) ? part : resolve(part));
+      link(imports, `task:${id}`, binary && `crate:${binary}`);
+    }
+  }
   return { imports, runs, spawns, barrels };
 }
 
@@ -209,10 +219,12 @@ export function graph(cwd, files, workspace) {
  * A test that starts a package's build sees a change to that package; one that sees it only through a package the
  * build depends on, as a test starting the CLI sees the hub, is `wide`, which the release preflight runs, unless it is
  * in the changed package's own folder (#2574: a one-line hub change selected 1,205 of 3,754 test files that way).
+ * Of the budget `tasks` given, `tasks` names those a budget window runs: each the change reaches or marks wide, each
+ * the graph can't place, and all of them when it changes a file every suite reads (#1981).
  */
-export function select(cwd, changed, { files = listFiles(cwd), workspace = crates(cwd) } = {}) {
+export function select(cwd, changed, { files = listFiles(cwd), workspace = crates(cwd), tasks = [] } = {}) {
   const all = [...new Set([...files, ...changed])];
-  const { imports, runs, spawns, barrels } = graph(cwd, all, workspace);
+  const { imports, runs, spawns, barrels } = graph(cwd, all, workspace, tasks);
   const reverse = (edges) => {
     const users = new Map();
     for (const [node, targets] of edges) for (const target of targets) users.set(target, [...(users.get(target) ?? []), node]);
@@ -231,7 +243,8 @@ export function select(cwd, changed, { files = listFiles(cwd), workspace = crate
   };
   const ownersOf = (path) => workspace.filter((crate) => (within(crate.dir, path) && !path.endsWith('.md')) || (path.endsWith('.rs') && crate.away.some((folder) => within(folder, path)))).map((crate) => `crate:${crate.name}`);
   const packageOf = (path) => path.match(/^packages\/[^/]+/)?.[0];
-  const ends = (nodes) => [...nodes].filter((node) => isTestFile(node) || node.startsWith('crate:'));
+  const ends = (nodes) => [...nodes].filter((node) => isTestFile(node) || /^(?:crate|task):/.test(node));
+  const task = (node) => node.startsWith('task:');
   const reach = (path) => {
     const owners = ownersOf(path);
     const code = up([path, ...owners]);
@@ -244,16 +257,20 @@ export function select(cwd, changed, { files = listFiles(cwd), workspace = crate
     const started = [...spawns].filter(([, targets]) => [...targets].some((target) => hit(target) && close(target))).map(([node]) => node);
     const deeper = [...spawns].filter(([, targets]) => [...targets].some(hit)).map(([node]) => node);
     const onward = (nodes) => [...nodes, ...up(nodes.filter((node) => !node.startsWith('crate:')))];
-    const found = new Set([...ends([...code, ...onward([...ran, ...started])]), ...ends(onward(deeper)).filter((node) => packageOf(path) && packageOf(node) === packageOf(path))]);
+    // A task runs a binary as cargo builds it, from its crate and every crate that one depends on.
+    const built = [...runs].filter(([, targets]) => [...targets].some((target) => target.startsWith('crate:') && code.has(target))).map(([node]) => node);
+    const found = new Set([...ends([...code, ...onward([...ran, ...started]), ...onward(built).filter(task)]), ...ends(onward(deeper)).filter((node) => packageOf(path) && packageOf(node) === packageOf(path))]);
     return { found: [...found], wide: ends(onward(deeper)).filter((node) => !found.has(node)) };
   };
-  const tests = new Set(), reached = new Set(), wide = new Set(), every = [], none = [];
+  const tests = new Set(), reached = new Set(), wide = new Set(), every = [], none = [], touched = new Set();
   // The files a runner config names, as the guard reads them: its setup files and the config modules it imports.
   const setup = namedByConfig(cwd, null, all);
   const feedsEvery = (path) => EVERY.includes(path) || setup.has(path);
   for (const path of changed) {
     if (feedsEvery(path)) every.push(path);
     let { found, wide: far } = reach(path);
+    for (const node of [...found, ...far].filter(task)) touched.add(node.slice(5));
+    [found, far] = [found, far].map((nodes) => nodes.filter((node) => !task(node)));
     // A fixture no test names by path is read by the tests of its own folder.
     if (!found.length && underTestPaths(path)) {
       const folder = path.match(/^(?:tests\/acceptance\/[^/]+|packages\/[^/]+\/test|tests)\//)?.[0];
@@ -265,7 +282,8 @@ export function select(cwd, changed, { files = listFiles(cwd), workspace = crate
     if (!found.length && !far.length && !path.endsWith('.md') && !feedsEvery(path)) none.push(path);
   }
   const owners = [...new Set(changed.filter((path) => path.endsWith('.rs')).flatMap(ownersOf))].map((node) => node.slice(6));
-  return { tests: [...tests].sort(), crates: [...reached].sort(), wide: [...wide].filter((node) => !tests.has(node) && !reached.has(node.replace('cargo test -p ', ''))).sort(), every, none, owners };
+  const runsTask = ({ id }) => every.length || touched.has(id) || !imports.has(`task:${id}`);
+  return { tests: [...tests].sort(), crates: [...reached].sort(), wide: [...wide].filter((node) => !tests.has(node) && !reached.has(node.replace('cargo test -p ', ''))).sort(), every, none, owners, tasks: tasks.filter(runsTask).map(({ id }) => id) };
 }
 
 /** Which runner a test file is written for, by what it imports at its top level, else by its extension. */
