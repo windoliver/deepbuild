@@ -1,0 +1,102 @@
+Base commit: 5aa64f719 ("Merge remote-tracking branch 'origin/main' into worktree-github-issue-233-a38b6d"), no implementation.
+Machine: macOS on Apple silicon (Mac17,10, 18 cores), shared and loaded (one-minute load 100 to 150), so no timing was judged.
+Builds, CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0, through scripts/throttle.mjs build, all exit 0: cargo build --locked --bin
+  deep-show --no-default-features --features full; cargo build --locked --bin deep-canvas-render --bin deep-motion. Each file then
+  rebuilt what it drives (a no-op) in beforeAll and copied it out. deep-gpu was not built: ac11's budget test fails before it.
+Command, one file at a time, each file once (the checkout path redacted to <checkout>):
+  PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/233 --no-file-parallelism --testTimeout=600000 <file>
+Type-check: node node_modules/typescript/bin/tsc -p tests/acceptance/233/tsconfig.json exits 0 with no output.
+
+Result: 13 files, 21 tests, all failed, each at an assertion in its own test file; none at a load error, a TypeError or a crash.
+The kinds of failure: a document naming deepbuild/math@1.0.0 is presented with its instances skipped (`pack_missing`: there is no
+packs/math-1.0.0); the scenario's planted names are refused ({"ok":false,"code":"bad_input"}); deep_kinds answers every math@1 word
+`no_match`; packs/math-1.0.0/pack.json is missing; the base pack check installs test233/mathwords (an alias to a target nothing holds)
+and refuses test233/matheases' clean twin (an alias to an ease@1 entry is no `name@major`); benchmarks/budgets.json has no task
+canvas-math. AC12's taste test stops at its first figure, before any picture is written.
+
+Two runs were made: the first showed that a `deep show` of a missing pack is `presented` with a `pack_missing` notice, which let
+several tests reach a helper's assertion first, and that a figure holding vector@1 items must name the vector module; the helper's
+presentation check now counts skipped instances, and such figures name `requires.modules` (helpers.ts). ac9 was run once more after
+that second change. Below is the last run of each file.
+
+ac1-parabola-golden.test.ts
+  × AC1 #233.b6a28e06 every tick and the curve lie within 1 px of the golden Parabola at 1920 × 1080
+    AssertionError: the parabola figure is presented with no error: expected 'instances are skipped when drawing: […' to be '' // Object.is equality
+  Tests 1 failed (1)
+
+ac2-axes-ticks.test.ts
+  × AC2 #233.3d899ebc a scale@1 and an axis@1 per axis and no tick mark set; under a keyed domain the x axis's ticks equal a hand-written axis@1's at 20 times, entering ticks fading in
+    AssertionError: the axes figure is presented with no error: expected 'instances are skipped when drawing: […' to be '' // Object.is equality
+  × AC2 #233.3d899ebc a planted expansion that keeps a rule mark set of ticks from computed columns fails, naming the recipe
+    AssertionError: deep-show run accepts the scenario with planted math_axes_ticks_as_marks: deep-show run exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+  Tests 2 failed (2)
+
+ac3-riemann.test.ts
+  × AC3 #233.1d713f1c math.riemann {dx: 0.25, input_sample_type: center} expands to 4 bars of heights 0.015625, 0.140625, 0.390625 and 0.765625
+    AssertionError: the Riemann figure is presented with no error: expected 'instances are skipped when drawing: […' to be '' // Object.is equality
+  Tests 1 failed (1)
+
+ac4-to-corner.test.ts
+  × AC4 #233.ca1d4667 to_corner(UR) lands 0.5 units (67.5 u) from the right and top edges within 0.5 px, and every fixture entry is where its words put it
+    AssertionError: the positions figure is presented with no error: expected 'instances are skipped when drawing: […' to be '' // Object.is equality
+  × AC4 #233.ca1d4667 a planted conversion that keeps y up fails the positions fixture, naming the first label more than 1 px off
+    AssertionError: deep-show run accepts the scenario with planted math_keeps_y_up: deep-show run exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+  Tests 2 failed (2)
+
+ac5-rate-functions.test.ts
+  × AC5 #233.a6357ff6 every mapped rate function, through math@1's mapping and our evaluation, equals the upstream equation within 1e-12 at 1,001 points
+    AssertionError: deep_kinds answers every rate-function word from math@1: smooth → {"word":"smooth","code":"no_match","core":"core@0.0.0","set_digest":"4496b93cb6ca6462e18c0bd8430d02d4b2952134790319f836b94b3442cc71b5"}; slow_into → {"word":"slow_into","code":"no_match","core":"core@0.0.0","set_digest":"4496b93cb6ca6462e18c0bd8430d02d4b2952134790319f836b94b3442cc71b5"}; rush_into → {"word":"rush_int …
+  Tests 1 failed (1)
+
+ac6-refused-parameter.test.ts
+  × AC6 #233.8747d6f5 use_vectorized on math.plot is refused at its path, with a fix that names it
+    AssertionError: the plot without use_vectorized is presented with no error: expected 'instances are skipped when drawing: […' to be '' // Object.is equality
+  Tests 1 failed (1)
+
+ac7-deep-kinds.test.ts
+  × AC7 #233.a838a9eb ShowCreation returns Create's mapping with the rename noted, and add_updater returns no_match naming the driver and bake routes
+    AssertionError: Create is answered: {"word":"Create","code":"no_match","core":"core@0.0.0","set_digest":"4496b93cb6ca6462e18c0bd8430d02d4b2952134790319f836b94b3442cc71b5"}: expected 'no_match' to be undefined
+  Tests 1 failed (1)
+
+ac8-number-line.test.ts
+  × AC8 #233.1fb6242f 7 ticks, 6 labels with none at 0, each centred within 0.5 px on its tick, and an arrow end at +3
+    AssertionError: the number line is presented with no error: expected 'instances are skipped when drawing: […' to be '' // Object.is equality
+  × AC8 #233.1fb6242f a planted expansion that drops numbers_to_exclude fails, naming it
+    AssertionError: deep-show run accepts the scenario with planted math_number_line_drops_excluded: deep-show run exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+  Tests 2 failed (2)
+
+ac9-planes-tables-matrices.test.ts
+  × AC9 #233.5c072eb1 math.polar_plane {azimuth_units: degrees, azimuth_step: 12} draws 12 rays labelled 0° to 330° in 30° steps
+    AssertionError: pp's figure is presented with no error: expected 'instances are skipped when drawing: […' to be '' // Object.is equality
+  × AC9 #233.5c072eb1 math.table of 2 × 3 entries with row and column labels and lines: inner draws 5 inner rules and no border
+    AssertionError: t's figure is presented with no error: expected 'instances are skipped when drawing: […' to be '' // Object.is equality
+  × AC9 #233.5c072eb1 math.matrix of 2 × 2 entries puts each entry's centre on its column's centre within 0.5 px, inside both brackets
+    AssertionError: m's figure is presented with no error: expected 'instances are skipped when drawing: […' to be '' // Object.is equality
+  Tests 3 failed (3)
+
+ac10-aliases.test.ts
+  × AC10 #233.1cae712c math@1's aliases holds ShowCreation with target Create and renamed_from set, and deep_kinds answers from that field alone
+    AssertionError: packs/math-1.0.0/pack.json exists: expected null not to be null
+  × AC10 #233.1cae712c a test familiar-names pack whose alias names a target the pack doesn't hold is refused at pack check, naming the word
+    AssertionError: the pack whose alias Ghost names mathwords.ghost@1 is refused at pack check: {"outcome":"installed","pack":"test233/mathwords","version":"1.0.0","issues":[],"layouts":[],"core":"core@0.0.0","set_digest":"4496b93cb6ca6462e18c0bd8430d02d4b2952134790319f836b94b3442cc71b5"}: expected 'installed' to be 'refused' // Object.is equality
+  Tests 2 failed (2)
+
+ac11-budgets.test.ts
+  × AC11 #233.f4f81b7b per frame the math document runs only what its expansion written by hand runs; a planted pack that expands each frame fails, naming the recipe
+    AssertionError: the math document is presented with no error: expected 'instances are skipped when drawing: […' to be '' // Object.is equality
+  × AC11 #233.f4f81b7b the budgets, recorded against the merge base and judged on the reference Mac: the math document's frame time equals its expansion's written by hand, under the frame-budget rule
+    AssertionError: benchmarks/budgets.json has the task canvas-math: expected undefined to be defined
+  Tests 2 failed (2)
+
+ac12-taste.test.ts
+  × AC12 #233.d8298507 the run writes the four pictures from the renderer's own output, no other test reads them, and the recorded call on exactly those says they look right
+    AssertionError: axes-parabola.png's figure is presented with no error: expected 'instances are skipped when drawing: […' to be '' // Object.is equality
+  Tests 1 failed (1)
+
+ac13-ease-aliases.test.ts
+  × AC13 #233.2163815c math@1's aliases holds smooth with the target ease@1 entry sigmoid(10) and its conversion, and the pack passes its pack check
+    AssertionError: packs/math-1.0.0/pack.json exists: expected null not to be null
+  × AC13 #233.2163815c a test pack whose alias names an ease@1 entry the build doesn't hold is refused at pack check, naming the word
+    AssertionError: the pack without wobble, its smooth an alias to sigmoid(10), installs: {"outcome":"refused","pack":"test233/matheases","version":"1.0.0","issues":[{"check":"document.validate","code":"out_of_range","severity":"error","ids":[],"path":"aliases/smooth","actual":{"target":{"ease":{"name":"sigmoid","params":10}},"conversion":"the upstream smooth(t, inflection = 10) is our sigmoid(10) ov …
+  Tests 2 failed (2)
+

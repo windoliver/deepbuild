@@ -792,7 +792,8 @@ impl Drawn {
         let mut w = self.words(page, Self::tooth_flag(page));
         w[11][1] = strength as f32;
         w[12][0] = f32::from_bits(u32::from(own));
-        let size = [page.size[0] as u32, page.size[1] as u32];
+        // The layer's own size: a look drawn at a crop of the frame (#463) is smaller.
+        let size = [into.width(), into.height()];
         let tile = self.tile_or_grain(device, page);
         let empty = self.empty.clone();
         self.pass(

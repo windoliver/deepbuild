@@ -1,10 +1,12 @@
 //! Close names (#412): an `unknown_kind` or `unknown_field` names at most three names the writer
 //! may have meant. A name a migration's rename record gives comes first, with the kind version
 //! that renamed it (`renamed_in`), ahead of any name close by spelling; spelling ranks the rest by
-//! edit distance, then by name.
+//! edit distance, then by name. A kind that defines the field (#1970) and an installed pack whose
+//! census maps or refuses the name (#1493) come between them.
 
 use serde_json::{json, Map, Value};
 
+use super::packs::{Packs, Resolved};
 use crate::kinds::{Entry, Registry, Version};
 use crate::registry::Fault;
 
@@ -94,9 +96,14 @@ pub fn undeclared(
     close(f, names)
 }
 
-/// The close names for a kind text no registry in this build holds: every kind at its build
-/// major, by spelling.
-pub fn kind_names(text: &str, kinds: &Registry, fault: Option<Fault>) -> Vec<Value> {
+/// The close names for a kind text no registry in this build holds: the installed packs whose
+/// census holds it (#1493), then every kind at its build major, by spelling.
+pub fn kind_names(
+    text: &str,
+    kinds: &Registry,
+    census: &[Value],
+    fault: Option<Fault>,
+) -> Vec<Value> {
     if fault == Some(Fault::NoCloseNames) {
         return Vec::new();
     }
@@ -105,10 +112,95 @@ pub fn kind_names(text: &str, kinds: &Registry, fault: Option<Fault>) -> Vec<Val
         .iter()
         .map(|e| format!("{}@{}", e.full_name(), e.current().major))
         .collect();
-    by_spelling(text, names.iter().map(String::as_str))
-        .into_iter()
+    census
+        .iter()
+        .cloned()
+        .chain(
+            by_spelling(text, names.iter().map(String::as_str))
+                .into_iter()
+                .map(|n| json!({"name": n})),
+        )
         .take(MOST)
-        .map(|n| json!({"name": n}))
+        .collect()
+}
+
+/// What each installed pack's census says of `word` (#1493), one entry a pack: a pack whose
+/// census maps it gives `{name: pack, maps, target, conversion}`, with `kind` for a parameter of
+/// a name it maps; one that refuses it gives `{name: pack, refuses, reason}`, with `target` when
+/// the row says what to write instead. An open row says nothing, and nothing is accepted.
+pub fn census(word: &str, packs: &Packs, fault: Option<Fault>) -> Vec<Value> {
+    if matches!(
+        fault,
+        Some(Fault::NoCloseNames | Fault::CloseBySpelling | Fault::CensusSkipped)
+    ) {
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    for pack in packs.all() {
+        let rows = || pack.census.iter().filter(|r| r.word == word);
+        let Some(row) = rows()
+            .find(|r| r.state == "mapped")
+            .or_else(|| rows().find(|r| r.state == "refused"))
+        else {
+            continue;
+        };
+        let alias = pack.aliases.get(row.of.as_deref().unwrap_or(word));
+        let mut entry = json!({"name": pack.id.text()});
+        if row.state == "mapped" {
+            entry["maps"] = json!(word);
+            entry["target"] = json!(row.target.as_deref().unwrap_or(word));
+            entry["conversion"] = alias.map_or(Value::Null, |a| a["conversion"].clone());
+        } else {
+            entry["refuses"] = json!(word);
+            entry["reason"] = json!(row.reason);
+            if let Some(instead) = &row.target {
+                entry["target"] = json!(instead);
+            }
+        }
+        if row.of.is_some() {
+            entry["kind"] = alias.map_or(Value::Null, |a| a["target"].clone());
+        }
+        out.push(entry);
+    }
+    out
+}
+
+/// The fix's sentences for the census entries in `close`, in its order (#1493): a pack that maps
+/// the word names its target and conversion, and, when the document doesn't name the pack, says
+/// to; one that refuses it names its reason.
+pub fn census_fix(close: &[Value], resolved: &Resolved<'_>) -> Vec<String> {
+    close
+        .iter()
+        .filter_map(|c| {
+            let pack = c["name"].as_str()?;
+            if let Some(word) = c["maps"].as_str() {
+                let field = c["target"].as_str().unwrap_or(word);
+                let target = match c["kind"].as_str() {
+                    Some(kind) => format!("{kind}'s `{field}`"),
+                    None => field.to_string(),
+                };
+                let named = resolved.by_name.values().any(|p| p.id.text() == pack);
+                let add = if named {
+                    String::new()
+                } else {
+                    format!(", with {pack} in the document's packs")
+                };
+                let conversion = c["conversion"].as_str().unwrap_or("no conversion stated");
+                Some(format!(
+                    "{pack} maps `{word}` to {target} ({conversion}): write {target}{add}, or remove it."
+                ))
+            } else {
+                let word = c["refuses"].as_str()?;
+                let instead = c["target"]
+                    .as_str()
+                    .map(|t| format!("; write {t} instead"))
+                    .unwrap_or_default();
+                Some(format!(
+                    "{pack} refuses `{word}`: {}{instead}.",
+                    c["reason"].as_str().unwrap_or_default()
+                ))
+            }
+        })
         .collect()
 }
 
@@ -130,13 +222,14 @@ pub fn owners(name: &str, entry: &Entry, kinds: &Registry, fault: Option<Fault>)
 }
 
 /// The close names for a field `name` the kind's `version` doesn't define: the name a rename
-/// record up to that version gives it, then each kind in `owners` that defines it, then its
-/// params by spelling.
+/// record up to that version gives it, then each kind in `owners` that defines it, then each
+/// pack whose census holds it (#1493), then its params by spelling.
 pub fn field_names(
     name: &str,
     entry: &Entry,
     version: &Version,
     owners: &[String],
+    census: &[Value],
     fault: Option<Fault>,
 ) -> Vec<Value> {
     if fault == Some(Fault::NoCloseNames) {
@@ -152,7 +245,14 @@ pub fn field_names(
             }
         }
     }
+    let pack_first = fault == Some(Fault::CensusPackFirst);
+    if pack_first {
+        out.extend(census.iter().cloned());
+    }
     out.extend(owners.iter().map(|k| json!({"name": k, "defines": name})));
+    if !pack_first {
+        out.extend(census.iter().cloned());
+    }
     for n in by_spelling(name, version.params.iter().map(|p| p.name)) {
         if !out.iter().any(|c| c["name"] == n) {
             out.push(json!({"name": n}));

@@ -329,6 +329,10 @@ pub fn draw(hub: &mut Hub<'_>, replies: Vec<Value>, out: &str, t: i64, scale: f6
             if let Some(d) = &session_drawn {
                 let over = hub.renderer.raster(d, drawn_size, None);
                 crate::snapshot::over(&mut drawn, &over);
+                // #903: then the tour's pointer.
+                if let Some(form) = hub.played_form(doc) {
+                    hub.pointer_over(&form, t, &mut drawn, drawn_size);
+                }
             }
             let (pw, dw) = (usize::from(size[0]) * 4, usize::from(drawn_size[0]) * 4);
             let mut rgba = vec![0u8; pw * usize::from(size[1])];
@@ -337,6 +341,8 @@ pub fn draw(hub: &mut Hub<'_>, replies: Vec<Value>, out: &str, t: i64, scale: f6
             }
             rgba
         } else {
+            // #903: a document its session draws shows its tour's pointer over its layers.
+            let toured = session_drawn.as_ref().and_then(|_| hub.played_form(doc));
             let drawn = match session_drawn {
                 Some(d) => d,
                 None => match hub.renderer.prepare(
@@ -361,7 +367,11 @@ pub fn draw(hub: &mut Hub<'_>, replies: Vec<Value>, out: &str, t: i64, scale: f6
                 ];
                 items.push(json!({"id": id, "layer": row.layer, "box": at}));
             }
-            hub.renderer.raster(&drawn, size, None)
+            let mut rgba = hub.renderer.raster(&drawn, size, None);
+            if let Some(form) = toured {
+                hub.pointer_over(&form, t, &mut rgba, size);
+            }
+            rgba
         };
         let Some(picture) = picture(rgba, size) else {
             return refused("no_picture");
