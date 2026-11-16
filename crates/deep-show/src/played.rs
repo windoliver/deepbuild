@@ -148,6 +148,8 @@ impl Hub<'_> {
             .filter(|e| reads(form, e))
             .collect();
         let mut out = with_track(form, &entries);
+        // #903: where no one gives input, the document's tour plays.
+        crate::tour::inline(&mut out);
         // #507: present mode's span, which a stage marker holds through.
         if let Some(present) = self.present_field(doc) {
             out["present"] = present;

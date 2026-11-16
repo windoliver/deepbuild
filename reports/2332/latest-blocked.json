@@ -1,0 +1,31 @@
+{
+  "status": "BLOCKED",
+  "base": "3557b34899ac7905ccdf3e7dedd7db92459f8261",
+  "candidate": "2330de4297fdc62ac3e0b3d8fe557ec463d50207",
+  "build": {
+    "status": "INCONCLUSIVE",
+    "exit": 3,
+    "reason": "no test grant came within 30 min",
+    "started": false
+  },
+  "memory": {
+    "status": "UNRUN",
+    "samples": 0,
+    "reason": "Previous queued request cancelled before integrating newer main; valid reference conditions and timed grant still required"
+  },
+  "reference": {
+    "model": "Mac17,10",
+    "chip": "Apple M5 Max",
+    "memoryBytes": 68719476736,
+    "power": "ac",
+    "lowPowerMode": false,
+    "thermalState": "fair",
+    "macosBuild": "26B8119",
+    "load1m": 490.07,
+    "cores": 18
+  },
+  "unchangedAcceptanceHashes": true,
+  "sharedProofScriptsEqualBase": true,
+  "outstandingTaskProcesses": false,
+  "requiredAction": "Pause competing workloads or use a quiet reference Mac; then build and run the unchanged checks. Do not waive failures or change thresholds."
+}

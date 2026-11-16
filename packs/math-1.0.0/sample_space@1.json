@@ -1,0 +1,137 @@
+{
+  "id": "math.sample_space",
+  "version": "1.0",
+  "title": "SampleSpace",
+  "license": "Apache-2.0",
+  "author": "DeepBuild",
+  "description": "SampleSpace(width, height) with divide_horizontally(divisions) as a rect@1 split into one rect@1 per share, top to bottom, each share its probability of the height. a unit is the frame's short side ÷ 8 in u (fw, fh), so the frame is 14.22 × 8 units at 16:9; y flips and the origin moves to the frame's center; radians become degrees; a stroke width w becomes w × unit ÷ 100 u; font_size f is an em of f ÷ 96 units.",
+  "inputs": {
+    "width": {
+      "type": "number",
+      "default": 3,
+      "about": "the width in units",
+      "min": 0
+    },
+    "height": {
+      "type": "number",
+      "default": 3,
+      "about": "the height in units",
+      "min": 0
+    },
+    "divisions": {
+      "type": "records",
+      "default": [],
+      "about": "divide_horizontally: each share's probability, top to bottom"
+    },
+    "colors": {
+      "type": "records",
+      "default": [],
+      "about": "each share's palette name, in turn"
+    },
+    "fill_opacity": {
+      "type": "number",
+      "default": 1,
+      "about": "the fill opacity",
+      "min": 0,
+      "max": 1
+    },
+    "stroke_width": {
+      "type": "number",
+      "default": 0.5,
+      "about": "the outline width, w × unit ÷ 100 u",
+      "min": 0
+    },
+    "move_to": {
+      "type": "vec3",
+      "default": [
+        0,
+        0,
+        0
+      ],
+      "unit": "unit",
+      "about": "move_to: the center, in units"
+    }
+  },
+  "let": {
+    "unit": "min(fw, fh) / 8",
+    "ys": -1,
+    "ox": "fw / 2",
+    "oy": "fh / 2",
+    "cx": "ox + move_to[0] * unit",
+    "cy": "oy + ys * move_to[1] * unit",
+    "x0": "cx - width / 2 * unit",
+    "y0": "cy - height / 2 * unit",
+    "w": "width * unit",
+    "h": "height * unit"
+  },
+  "steps": {
+    "all": {
+      "op": "item",
+      "kind": "group@1",
+      "params": {}
+    },
+    "space": {
+      "op": "mark",
+      "kind": "rect@1",
+      "params": {
+        "box": [
+          "x0",
+          "y0",
+          "w",
+          "h"
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted",
+            "opacity": "fill_opacity"
+          },
+          "stroke": {
+            "role": "ink",
+            "width": "stroke_width * unit / 100"
+          }
+        }
+      },
+      "parent": "id(instance, all)"
+    },
+    "share": {
+      "op": "mark",
+      "kind": "rect@1",
+      "repeat": {
+        "over": "divisions",
+        "as": "p"
+      },
+      "let": {
+        "top": "y0 + h * sum(k, 0, i - 1, divisions[k])"
+      },
+      "params": {
+        "box": [
+          "x0",
+          "top",
+          "w",
+          "h * p"
+        ],
+        "paint": {
+          "fill": {
+            "role": "i < len(colors) ? colors[i] : (i % 2 == 0 ? accent : muted)",
+            "opacity": "fill_opacity"
+          },
+          "stroke": {
+            "role": "ink",
+            "width": "stroke_width * unit / 100"
+          }
+        }
+      },
+      "parent": "id(instance, all)"
+    }
+  },
+  "refuses": {
+    "use_vectorized": "Leave it out: every math@1 shape is a path the renderer strokes and fills on its own.",
+    "sheen_factor": "Leave it out: a flat fill has no sheen; use a gradient fill through the look.",
+    "sheen_direction": "Leave it out: a flat fill has no sheen; use a gradient fill through the look.",
+    "background_stroke_width": "Leave it out, or draw a second, wider copy beneath in the background color.",
+    "background_stroke_color": "Leave it out, or draw a second, wider copy beneath in the background color.",
+    "joint_type": "Leave it out: paths join by the look's line style.",
+    "cap_style": "Leave it out: paths cap by the look's line style.",
+    "shade_in_3d": "Leave it out: 2D shapes draw flat; for a lit shape use math.surface."
+  }
+}

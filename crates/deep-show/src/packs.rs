@@ -104,6 +104,7 @@ pub fn install(
         Ok((mut manifest, known)) => {
             if let Some(planted) = twin {
                 crate::familiar::twin(planted, id, &mut manifest);
+                crate::math_twins::twin(planted, id, &mut manifest);
             }
             let version = manifest["version"].as_str().unwrap_or_default().to_string();
             let admitted = match known {

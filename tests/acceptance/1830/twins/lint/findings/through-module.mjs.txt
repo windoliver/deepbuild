@@ -1,0 +1,14 @@
+// A planted suite for #1830 AC1: judgeLimit reached through its module. Each line marked `finding` gives it no loads.
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import * as bench from '../../../scripts/benchmark.mjs';
+
+test('a budget judged through the module', async () => {
+  const runs = [11, 12, 11, 13, 12];
+  assert.equal(bench.judgeLimit({ limit: 20, runs, fingerprint: bench.fingerprint() }).status, 'PASS'); // finding
+  const given = { limit: 20, runs, fingerprint: bench.fingerprint(), loads: runs.map(() => ({ start: 1, end: 1 })) };
+  assert.equal(bench.judgeLimit({ ...given, limit: 25 }).status, 'PASS');
+  const { judgeLimit } = await import('../../../scripts/benchmark.mjs');
+  assert.equal(judgeLimit({ limit: 20, runs: [...runs].reverse(), fingerprint: given.fingerprint }).status, 'PASS'); // finding
+  assert.throws(() => bench.validateBudgets({ limit: 20, runs }));
+});

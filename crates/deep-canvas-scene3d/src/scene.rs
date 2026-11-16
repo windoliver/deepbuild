@@ -842,6 +842,10 @@ pub struct Scene {
     pub light_cut: Option<crate::light::Policy>,
     /// The first `cutaway@1` (#424), which the solids it reaches are cut by in every pass.
     pub cutaway: Option<crate::cut::Cutaway>,
+    /// #463: the share of the frame a look region's other side shows, `[x0, y0, x1, y1]` in 0 to
+    /// 1 from the top left; its per-pixel passes draw inside it alone, so an edge in view costs
+    /// the region's pixels, not a second whole frame. `None` draws the whole frame.
+    pub crop: Option<[f64; 4]>,
     /// The per-pixel resolve's room (#424): the view's `max_fragments`, and the most fragments
     /// the class's GPU memory holds at 16 B each.
     pub fragments: [u64; 2],
@@ -4237,6 +4241,7 @@ pub(crate) fn evaluate_compiled(
         texels: BTreeMap::new(),
         jitter: [0.0; 2],
         cutaway: None,
+        crop: None,
         fragments,
         distributions: tables,
         shadowing: crate::sets::policy(map)?,
