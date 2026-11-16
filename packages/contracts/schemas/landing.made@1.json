@@ -172,7 +172,7 @@
             "maxLength": 8192,
             "description": "A requirement."
           },
-          "description": "landed: the requirements only the budget window can settle, which its issue names while it stays open."
+          "description": "landed: the requirements left open, which its issue names while it stays open: ones only the budget window can settle, or calls on you (#1345)."
         }
       },
       "required": [

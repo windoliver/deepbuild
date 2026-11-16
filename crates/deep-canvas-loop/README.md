@@ -7,6 +7,7 @@ The loop canvas module's check kinds (canvas primitives: Check input: loop kinds
 - `geometry.shading` (issues #453 and #1935): on every `mesh.asset@1` a document holds, its positions welded, then its flipped, degenerate, non-manifold, inconsistent and boundary defects counted per face or edge, its signed volume, and its quad ratio, which a mesh that deforms must keep; then (issue #1935) each UV set's charts, flipped triangles, overlap, area outside the unit square, fill, smallest gap and texel density, and the mesh's hidden faces, unused vertices and islands. A primitive it can't read raises `BLOCKED` naming it, and so does a UV set asked at a `resolution` over 4,096 px, never read on a coarser raster.
 - `scene.scale` and `camera.framing` (issue #1938), on the document evaluated on the CPU: a sized item's height against studio@1's range for its size, and the kept items against the safe frame, `fill` and the horizon. Each fix is a patch op the check applies to a copy and measures again before naming it. Both hold on any machine.
 - `render.exposure`, `render.contrast` and `render.noise` (issue #1938), on frames the host draws as render-back does and hands over through `check_frames`. They hold on the machine that drew them.
+- `render.review` (issue #456): the ID view a model's reading points at, each item in render-back's ID table drawn flat in a color from its ID hash and numbered at its visible centre, a kept item that doesn't show listed with no mark; and the sifting of observations against the closed `observe` list. The model call, the fresh context, the findings and the taste ask are the host's (deep-show's `src/review.rs`); run anywhere else the kind is BLOCKED, never passed.
 
 It never repairs, remeshes or patches the document itself. deep-show registers the module in its full build set.
 
@@ -16,9 +17,10 @@ It never repairs, remeshes or patches the document itself. deep-show registers t
 - Reading one UV set (charts, raster, gaps, texel density) goes in `src/uv.rs`.
 - The check's report, its codes, the requirement it reads and the planted wrong programs go in `src/lib.rs`.
 - What the evaluated-data kinds share (evaluation, checked times, kept items, a fix applied to a copy) goes in `src/scene.rs`; what the pixel kinds share goes in `src/pixels.rs`; each kind has its own file.
+- Drawing the ID view and sifting observations go in `src/review.rs`.
 - Kit fixtures, one per code, go in `src/fixtures.rs`.
 - Reading a glTF's primitives and UV sets goes in deep-canvas-scene3d's `src/gltf.rs`, and casting the fixed directions for hidden faces in its `src/measures.rs`, not here. Drawing frames goes in the host (deep-show's `src/pixels.rs`), not here.
-- Acceptance tests are in `tests/acceptance/453`, `tests/acceptance/1935` and `tests/acceptance/1938`.
+- Acceptance tests are in `tests/acceptance/453`, `tests/acceptance/1935`, `tests/acceptance/1938` and `tests/acceptance/456`.
 
 ## What it may import
 

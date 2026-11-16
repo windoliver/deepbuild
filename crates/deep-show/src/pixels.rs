@@ -23,7 +23,7 @@ pub(crate) enum Drawn {
 }
 
 /// The times a check input's `at_times` names, in flicks, else the start.
-fn times(input: &Value) -> Vec<i64> {
+pub(crate) fn times(input: &Value) -> Vec<i64> {
     let named: Vec<i64> = input["at_times"]
         .as_array()
         .into_iter()

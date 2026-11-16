@@ -74,6 +74,8 @@ export const API = Object.freeze([
   { method: 'deep.terminal.close', needs: 'run_as_you' },
   // #411: a canvas revision's evaluated values by stable ID, for a check runner, under its grant's documents.
   { method: 'deep.canvas.read', needs: 'canvas' },
+  // #184: a piece played headless in a replica, from the seed and entries the running check's input gives.
+  { method: 'deep.canvas.play', needs: 'canvas' },
 ].map((m) => Object.freeze(m)));
 
 /**

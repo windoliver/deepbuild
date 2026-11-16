@@ -116,6 +116,17 @@ pub enum Twin {
     ForcePerStep,
     /// A kinematic solve that ends its iteration cap past its tolerance reports success.
     SolveCapSuccess,
+    /// #191's test backends, each wrong one way: friction combined by the average and
+    /// restitution by the minimum whatever the world declares; joint limits skipped; `query()`
+    /// blind to collision groups; gravity 2% strong; swept collision off for the whole world; and
+    /// sensors left on the engine's default pair filter, which skips kinematic–static pairs.
+    FrictionAverage,
+    RestitutionMin,
+    NoJointLimits,
+    QueryIgnoresGroups,
+    GravityOff2,
+    NoSweep,
+    DefaultPairFilter,
 }
 
 /// A Rapier world behind the backend interface.
@@ -165,6 +176,8 @@ pub struct Rapier {
     soft: soft::Softs,
     particle_capacity: u64,
     checkpoint_every: u64,
+    /// #191: a test backend's name and caps in place of Rapier's (`runner::kit`).
+    pub test: Option<(&'static str, &'static Caps)>,
 }
 
 fn v3(a: [f64; 3]) -> Vector {
@@ -379,14 +392,29 @@ impl Rapier {
             .position(pose(&u.offset))
             .friction(m.friction as f32)
             .restitution(m.restitution as f32)
-            .friction_combine_rule(combine(w.friction_rule))
-            .restitution_combine_rule(combine(w.restitution_rule))
+            .friction_combine_rule(combine(match self.twin {
+                Twin::FrictionAverage => Rule::Average,
+                _ => w.friction_rule,
+            }))
+            .restitution_combine_rule(combine(match self.twin {
+                Twin::RestitutionMin => Rule::Min,
+                _ => w.restitution_rule,
+            }))
             .collision_groups(InteractionGroups::new(
                 Group::from_bits_retain(u.member),
                 Group::from_bits_retain(u.collides),
                 InteractionTestMode::And,
             ))
             .sensor(u.sensor);
+        // #191: a sensor reports every body that overlaps it, kinematic ones included, which the
+        // engine's default pair filter would skip against a static or kinematic sensor.
+        if u.sensor && self.twin != Twin::DefaultPairFilter {
+            c = c.active_collision_types(
+                ActiveCollisionTypes::default()
+                    | ActiveCollisionTypes::KINEMATIC_FIXED
+                    | ActiveCollisionTypes::KINEMATIC_KINEMATIC,
+            );
+        }
         if b.kind != BodyKind::Dynamic || w.mode == Mode::Kinematic || b.mass.is_some() {
             return Some(c);
         }
@@ -447,7 +475,7 @@ impl Rapier {
                 let mut b = RevoluteJointBuilder::new(axis)
                     .local_anchor1(p1)
                     .local_anchor2(p2);
-                if let Some([lo, hi]) = j.limits {
+                if let Some([lo, hi]) = j.limits.filter(|_| self.twin != Twin::NoJointLimits) {
                     b = b.limits([deg(lo), deg(hi)]);
                 }
                 if let Some(m) = &j.motor {
@@ -468,7 +496,7 @@ impl Rapier {
                 let mut b = PrismaticJointBuilder::new(axis)
                     .local_anchor1(p1)
                     .local_anchor2(p2);
-                if let Some([lo, hi]) = j.limits {
+                if let Some([lo, hi]) = j.limits.filter(|_| self.twin != Twin::NoJointLimits) {
                     b = b.limits([lo as f32, hi as f32]);
                 }
                 if let Some(m) = &j.motor {
@@ -766,11 +794,14 @@ impl Rapier {
 
 impl Backend for Rapier {
     fn id(&self) -> String {
-        format!("{}@{}", RAPIER3D.backend, RAPIER3D.version)
+        match self.test {
+            Some((name, _)) => name.into(),
+            None => format!("{}@{}", RAPIER3D.backend, RAPIER3D.version),
+        }
     }
 
     fn caps(&self) -> &'static Caps {
-        &RAPIER3D
+        self.test.map_or(&RAPIER3D, |t| t.1)
     }
 
     fn build(&mut self, w: &World) -> Result<(), Vec<Refusal>> {
@@ -805,6 +836,9 @@ impl Backend for Rapier {
             .collect();
         self.step = 0;
         self.world.gravity = v3(w.gravity);
+        if self.twin == Twin::GravityOff2 {
+            self.world.gravity *= 1.02;
+        }
         let p = &mut self.world.integration_parameters;
         p.dt = (1.0 / w.step_rate) as f32;
         // The world's substeps are the solver's iterations, not repeated steps (World and backend).
@@ -817,7 +851,7 @@ impl Backend for Rapier {
             w.solver.contact_damping as f32,
         );
         p.normalized_max_linear_velocity = w.solver.max_speed as f32;
-        p.max_ccd_substeps = usize::from(w.solver.ccd);
+        p.max_ccd_substeps = usize::from(w.solver.ccd && self.twin != Twin::NoSweep);
         let mut handles = BTreeMap::new();
         for id in deep_canvas_physics::occurrence::built_order(w) {
             let b = &w.bodies[id];
@@ -849,7 +883,14 @@ impl Backend for Rapier {
                 .linear_damping(b.linear_damping as f32)
                 .angular_damping(b.angular_damping as f32)
                 .gravity_scale(b.gravity_scale as f32)
-                .ccd_enabled(b.ccd)
+                .ccd_enabled(b.ccd && self.twin != Twin::NoSweep)
+                // #191: a body with ccd is also met by the contacts its next step reaches, so its
+                // contact begins in the step it hits, not the one after.
+                .soft_ccd_prediction(if b.ccd && self.twin != Twin::NoSweep {
+                    (w.solver.max_speed / w.step_rate) as f32
+                } else {
+                    0.0
+                })
                 .can_sleep(b.sleep && w.solver.sleep.on)
                 .enabled(b.active)
                 .locked_axes(locks)
@@ -1079,6 +1120,11 @@ impl Backend for Rapier {
             Query::Sweep { .. } => "query.sweep",
             Query::Overlap { .. } => "query.overlap",
         });
+        let groups = if self.twin == Twin::QueryIgnoresGroups {
+            u32::MAX
+        } else {
+            groups
+        };
         self.hits(q, groups)
     }
 

@@ -686,6 +686,12 @@ impl<'a> Hub<'a> {
             // The corpus file keeps the decision beside the result it accepted.
             reply["fixtures"] = json!([format!("corpus/{name}")]);
             return reply;
+        } else if let Some((kind, d)) = ["switch", "keep", "drop"]
+            .into_iter()
+            .find_map(|k| Some((k, decision.get(k)?)))
+        {
+            // #191: the trial's record keeps the decision beside the goldens it moved.
+            return self.switch(kind, d, &id);
         } else {
             return refused("out_of_range");
         }
