@@ -1,0 +1,22 @@
+
+ RUN  v5.0.5 <worktree>
+
+ ❯ tests/acceptance/83/redraft-319/status.test.ts (5 tests | 1 failed) 26888ms
+   ❯ AC2 #83.5bcede40 A status question returns the state, time in state, next step and the Needs-you count with no model call (2)
+     × AC2 #83.5bcede40 an ask still waiting for its batch isn't counted: under the settings deep setup drafts (batches 8 hours apart), an ask raised between batches is open but not shown in Needs you, deep inbox lists no row for it, and each status question's answer carries the Needs-you count deep inbox shows, without it 3547ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/83/redraft-319/status.test.ts > AC2 #83.5bcede40 A status question returns the state, time in state, next step and the Needs-you count with no model call > AC2 #83.5bcede40 an ask still waiting for its batch isn't counted: under the settings deep setup drafts (batches 8 hours apart), an ask raised between batches is open but not shown in Needs you, deep inbox lists no row for it, and each status question's answer carries the Needs-you count deep inbox shows, without it
+AssertionError: "still going?" is answered from the record (the UserPromptSubmit reply blocks the prompt with the answer as its reason): {"shown":["says done · next: DeepBuild · session/a8811eb1/01M7GZEGQSDK722QJG5JY562W6 (for 1s) · needs you: 0\nwork: /tmp/dh83-j75cqu/w53b1e8 · session a8811eb1 (claude-code) · resume: claude --resume a8811eb1-9084-4d56-8f20-0cb482520d59 · deep://sessions/a8811eb1-9084-4d56-8f20-0cb482520d59"],"model":true,"runs":[{"command":"exec '<worktree>/target/debug/deep-hook' claude-code UserPromptSubmit","code":0,"signal":null,"timedOut":false,"stdout":"{\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\",\"additionalContext\":\"DeepBuild: this session is outside any repo, so this task's home is the workspace at /tmp/dh83-j75cqu/h/.deepbuild/workspaces/fixthecarttotalthenstop-4f5ab304. Keep what you build there, as code where you can; your work there is committed for you at each stop.\"},\"systemMessage\":\"says done · next: DeepBuild · session/a8811eb1/01M7GZEGQSDK722QJG5JY562W6 (for 1s) · needs you: 0\\nwork: /tmp/dh83-j75cqu/w53b1e8 · session a8811eb1 (claude-code) · resume: claude --resume a8811eb1-9084-4d56-8f20-0cb482520d59 · deep://sessio","stderr":""}]}: expected undefined to be defined
+ ❯ tests/acceptance/83/redraft-319/status.test.ts:140:159
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 4 passed (5)
+   Start at  17:27:07
+   Duration  27.22s (tests 99%)
+
