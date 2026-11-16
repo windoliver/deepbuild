@@ -1,9 +1,5 @@
 {
-  "failures": {
-    "tests/acceptance/1463/list.test.ts › #1463.f9ab70a8 › #1463.f9ab70a8: on one fixture, the app's list and deep status --json hold the same rows, IDs, words and order at one log_pos": "fails on main d8c46f0d5: the window draws see's rows, by their ids, in their order: expected [ …(5) ] to deeply equal []. The window draws Needs you's asks first, each with its kind in the state-word slot (#1461), against the judge's rows' order and word; a blind redraft (#2668, added 2026-11-15)",
-    "tests/acceptance/1463/words.test.ts › #1463.cc5d1e3f › #1463.cc5d1e3f: 992/agree still holds": "fails on main d8c46f0d5: tests/acceptance/992's agree.test.ts must pass as it is: exit 1. It fails as 992/agree does, below (#2668, added 2026-11-15)",
-    "tests/acceptance/992/agree.test.ts › AC3 #992.45c506d1 › AC3 #992.45c506d1: for each of 12 recorded sessions covering every state, deep status and the app's row name the same state; a planted app that maps waiting to Working fails, naming the session": "fails on main d8c46f0d5: deep status and the app name these sessions differently. It finds deep status's rows by short ID and knows six words, where #2018 gave each session one name and the word says done; a blind redraft (#2668, added 2026-11-15)"
-  },
+  "failures": {},
   "lint": {
     "canvas-lint: crates/deep-canvas-cells/src/recording.rs the env! macro, the building machine's environment compiled into the check": 1,
     "canvas-lint: crates/deep-canvas-cells/src/recording.rs the fs module, ambient input a check never reads": 3,
