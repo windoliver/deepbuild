@@ -1,0 +1,6 @@
+
+> @deepbuild/hub@0.0.0 build
+> tsc -p tsconfig.json && node native/build.mjs
+
+
+Exit status: 0

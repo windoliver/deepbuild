@@ -1,0 +1,250 @@
+The #1729 suite run once at the base, ef869ad87 (main's 54d307821 plus #2321, which changes no crate), on macOS (Metal),
+with home paths redacted to ~. Main doesn't compile there (crates/deep-canvas-motion/src/cues.rs:841 writes
+`ty: ParamType::Json,` where #1973 made the variant take its form), so this run used a local, uncommitted one-line fix:
+`ty: ParamType::Json("[{id?, when?, gap?, span?, ease?, lag?, order?, targets?, set?, kind?, params?}] ≤ 512"),`
+Command: CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 scripts/lease node node_modules/vitest/vitest.mjs run --root tests/acceptance/1729 --no-file-parallelism --testTimeout=600000
+All eight tests fail, each on its criterion; none fails on the build or a fixture check.
+
+scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `node node_modules/vitest/vitest.mjs run --root tests/acceptance/1729 --no-file-parallelism --testTimeout=600000` runs unleased
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/silly-albattani-3f80f5/agent-ad3b17de2871692f9/tests/acceptance/1729
+
+stdout | maps.test.ts > AC7 #1729.50fb770a a material's base colour map is read from the store and drawn on render-back > AC7 #1729.50fb770a the panel under white paper with the red PNG as maps.base_color has mean red at least 0.3 above its green
+PROOF #1729 deep_show: the panel's mean colour (red, green, blue): [1,1,1]
+PROOF #1729 render_back: the panel's mean colour (red, green, blue): [1,1,1]
+
+stdout | maps.test.ts > AC8 #1729.beae915f a map whose image the store lacks is asset_missing at its path, on render-back and from view3d > AC8 #1729.beae915f asset_missing at items/paper/params/maps/base_color from deep_show and from view3d
+PROOF #1729 the missing map: deep_show and view3d replies: [{"notices":[{"code":"unknown_field","severity":"notice","ids":["paper"],"path":"items/paper/params/maps","actual":{"base_color":"0dd0ba558b8b590df90a3c17af76efd2ff379b79f136c8ffded7f52aafb9bdd0"},"what":"material@1.0 does not define `maps`; the document requires a newer minor, so it is skipped"}],"rev":1,"expansions":[],"issues":[],"issues_evidence":"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945","snapshots":[{"sha256":"0486b5f47e24a740734471cc5e34f9219cb291f00a660ad2fd6e6f0513ae1131","w":320,"h":240}],"changed":[],"unchanged":[],"created":["cam","panel","paper","sky"],"removed":[],"visible":[{"id":"panel","box":[12.97779695226103,9.733347714195773,294.04440609547794,220.53330457160848]}],"batches":[],"outcome":"presented","backends":{"fonts":{"name":"fonts.bundled","version":"1.0.0"},"cpu":{"name":"aarch64","version":"1.0.0"}},"core":"core@0.0.0","set_digest":"7a4ff1f4f1a072476f639de0b78d35eb6bc20b04948e9de47bb7a2904350a09e"},{"frames":[{"frame":0,"settled":true,"samples":{"drawn":1,"settling":false},"history":{"mode":"none","shows":0,"window":[],"rendered":[]},"resident":[],"selection":[],"frame_seq":0,"pixel_hash":"4ef9cb1ed52f888221408c0e865dd91fbfb877fba28c511439a387715361ba80","final":"75b37919d7d4debc8488c38f255ba47daa1ad1a32d8999b22a6b1840817c88a9"}],"passes":[{"name":"scene3d.geometry","reads":[],"writes":["linear","ids","depth"]},{"name":"scene3d.output","reads":["linear"],"writes":["final"]}],"status":{"shows":false,"look":"document","distance":null,"guard":null,"marks":[],"legend":[]},"surface":{"internal_scale":1,"upscale":"none","sharpen":0.2,"size_px":[320,240],"internal_px":[320,240],"msaa":4},"render_targets":[{"name":"color","sample_count":4},{"name":"ids","sample_count":4},{"name":"depth","sample_count":4}],"layers":[{"layer":"main","writer":"agent:alpha","band":"agent"}]}]
+
+ ❯ maps.test.ts (2 tests | 2 failed) 406724ms
+   ❯ AC7 #1729.50fb770a a material's base colour map is read from the store and drawn on render-back (1)
+     × AC7 #1729.50fb770a the panel under white paper with the red PNG as maps.base_color has mean red at least 0.3 above its green 4635ms
+   ❯ AC8 #1729.beae915f a map whose image the store lacks is asset_missing at its path, on render-back and from view3d (1)
+     × AC8 #1729.beae915f asset_missing at items/paper/params/maps/base_color from deep_show and from view3d 7419ms
+stdout | canonical.test.ts > AC6 #1729.3e434fdf the GPU layer's canonical render_back draws the Duck > AC6 #1729.3e434fdf the live call's canonical render of the Duck document differs from the same document without the item
+PROOF #1729 canonical render_back pixel hashes (Duck, without the item): ["2cb334e484fb944d3dac35a7c2c65e68092707ed2e3655753c9937fd7c22a0a9","2cb334e484fb944d3dac35a7c2c65e68092707ed2e3655753c9937fd7c22a0a9"]
+
+ ❯ canonical.test.ts (1 test | 1 failed) 10027ms
+   ❯ AC6 #1729.3e434fdf the GPU layer's canonical render_back draws the Duck (1)
+     × AC6 #1729.3e434fdf the live call's canonical render of the Duck document differs from the same document without the item 6216ms
+stdout | models.test.ts > AC1 #1729.f59f9cb0 the Duck renders back in visible, at view3d's object-ID box > AC1 #1729.f59f9cb0 the Duck's visible box is within 1 px of view3d's object-ID box for the same document, camera and size
+PROOF #1729 the Duck render-back: visible: []
+
+stdout | models.test.ts > AC2 #1729.797f90d5 Box, Duck and BoxTextured give three different snapshot hashes > AC2 #1729.797f90d5 each model's render-back differs from the others' and from the empty frame's, on deep_show and on render_back
+PROOF #1729 deep_show snapshot hashes (Box, Duck, BoxTextured, empty): ["843d20ce0d5d5b0994123c9fdb3b3d409d31e19f1bb04dfbb4758ea80e96a0da","843d20ce0d5d5b0994123c9fdb3b3d409d31e19f1bb04dfbb4758ea80e96a0da","843d20ce0d5d5b0994123c9fdb3b3d409d31e19f1bb04dfbb4758ea80e96a0da","843d20ce0d5d5b0994123c9fdb3b3d409d31e19f1bb04dfbb4758ea80e96a0da"]
+PROOF #1729 render_back snapshot hashes (Box, Duck, BoxTextured, empty): ["70c1100e7cb8463032f5f7a0fc95e6b930c96984dfbee0d184b1deecb328296c","8b678402665d0d4e1705ab6c783ac75cbd7e4963b43ab006fdb62ef9ef2125ef","76763c3ab9f096f92596c1c147495c8f02ad34b2a2e812fb55f3124c03c63cb9","7afd77ffaac0835f86167b5da5a8025712cb1d78bb613f5930ad2f9742ae1b05"]
+
+stdout | models.test.ts > AC3 #1729.1248be9e a mesh.asset@1 whose hash isn't in the store is answered asset_missing at its sha256 > AC3 #1729.1248be9e asset_missing at items/duck/params/sha256, nothing presented as clean; the planted skips_missing_mesh_asset fails, naming duck
+PROOF #1729 a missing model's reply: {"rev":1,"expansions":[],"issues":[],"issues_evidence":"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945","snapshots":[{"sha256":"843d20ce0d5d5b0994123c9fdb3b3d409d31e19f1bb04dfbb4758ea80e96a0da","w":320,"h":240,"marks":[],"legend":[]}],"changed":[],"unchanged":[],"created":["cam","duck","sky","sun"],"removed":[],"visible":[],"batches":[],"outcome":"presented","backends":{"fonts":{"name":"fonts.bundled","version":"1.0.0"},"cpu":{"name":"aarch64","version":"1.0.0"}},"core":"core@0.0.0","set_digest":"7a4ff1f4f1a072476f639de0b78d35eb6bc20b04948e9de47bb7a2904350a09e"}
+
+ ❯ models.test.ts (3 tests | 3 failed) 11429ms
+   ❯ AC1 #1729.f59f9cb0 the Duck renders back in visible, at view3d's object-ID box (1)
+     × AC1 #1729.f59f9cb0 the Duck's visible box is within 1 px of view3d's object-ID box for the same document, camera and size 3061ms
+   ❯ AC2 #1729.797f90d5 Box, Duck and BoxTextured give three different snapshot hashes (1)
+     × AC2 #1729.797f90d5 each model's render-back differs from the others' and from the empty frame's, on deep_show and on render_back 3575ms
+   ❯ AC3 #1729.1248be9e a mesh.asset@1 whose hash isn't in the store is answered asset_missing at its sha256 (1)
+     × AC3 #1729.1248be9e asset_missing at items/duck/params/sha256, nothing presented as clean; the planted skips_missing_mesh_asset fails, naming duck 910ms
+stdout | environment.test.ts > AC4 #1729.6e5d2b27 a sky@1 environment named by hash renders back lit by the file in the store > AC4 #1729.6e5d2b27 lit by the Radiance file, unlike its all-black twin; asset_missing at items/sky/params/environment/from when the store lacks it
+PROOF #1729 deep_show snapshot hashes (lit, black): ["babff43c590d96e777f1caef780a01990a13d6297475ee4b52614e6a62391190","babff43c590d96e777f1caef780a01990a13d6297475ee4b52614e6a62391190"]
+PROOF #1729 render_back snapshot hashes (lit, black): ["894df9e9047f03092890a33e04a3233599d8e80e5fb01c6db9b35d50a2311233","babff43c590d96e777f1caef780a01990a13d6297475ee4b52614e6a62391190"]
+PROOF #1729 the missing sky's reply: {"rev":1,"expansions":[],"issues":[],"issues_evidence":"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945","snapshots":[{"sha256":"babff43c590d96e777f1caef780a01990a13d6297475ee4b52614e6a62391190","w":320,"h":240}],"changed":[],"unchanged":[],"created":["block","cam","clay","sky"],"removed":[],"visible":[{"id":"block","box":[111.27150965233159,72.90038709506359,97.45698069533682,102.04916129402886]}],"batches":[],"outcome":"presented","backends":{"fonts":{"name":"fonts.bundled","version":"1.0.0"},"cpu":{"name":"aarch64","version":"1.0.0"}},"core":"core@0.0.0","set_digest":"7a4ff1f4f1a072476f639de0b78d35eb6bc20b04948e9de47bb7a2904350a09e"}
+
+ ❯ environment.test.ts (1 test | 1 failed) 10498ms
+   ❯ AC4 #1729.6e5d2b27 a sky@1 environment named by hash renders back lit by the file in the store (1)
+     × AC4 #1729.6e5d2b27 lit by the Radiance file, unlike its all-black twin; asset_missing at items/sky/params/environment/from when the store lacks it 6302ms
+stdout | sequence.test.ts > AC5 #1729.612df1ca a mesh.sequence@1 reads its frames from the store > AC5 #1729.612df1ca in visible when its asset is in the store; asset_missing at the item when it isn't
+PROOF #1729 the sequence in the store: visible: []
+PROOF #1729 the missing sequence's reply: {"notices":[{"code":"unknown_kind","severity":"notice","ids":["seq"],"path":"items/seq/kind","actual":"mesh.sequence@1","what":"kind `mesh.sequence@1` is not registered in this build; the item is skipped"}],"rev":1,"expansions":[],"issues":[],"issues_evidence":"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945","snapshots":[{"sha256":"843d20ce0d5d5b0994123c9fdb3b3d409d31e19f1bb04dfbb4758ea80e96a0da","w":320,"h":240,"marks":[],"legend":[]}],"changed":[],"unchanged":[],"created":["cam","clay","seq","sky","sun"],"removed":[],"visible":[],"batches":[],"outcome":"presented","backends":{"fonts":{"name":"fonts.bundled","version":"1.0.0"},"cpu":{"name":"aarch64","version":"1.0.0"}},"core":"core@0.0.0","set_digest":"7a4ff1f4f1a072476f639de0b78d35eb6bc20b04948e9de47bb7a2904350a09e"}
+
+ ❯ sequence.test.ts (1 test | 1 failed) 7383ms
+   ❯ AC5 #1729.612df1ca a mesh.sequence@1 reads its frames from the store (1)
+     × AC5 #1729.612df1ca in visible when its asset is in the store; asset_missing at the item when it isn't 2772ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 8 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  canonical.test.ts > AC6 #1729.3e434fdf the GPU layer's canonical render_back draws the Duck > AC6 #1729.3e434fdf the live call's canonical render of the Duck document differs from the same document without the item
+AssertionError: the canonical render_back of the Duck document has the pixel hash of the same document without duck (2cb334e484fb944d3dac35a7c2c65e68092707ed2e3655753c9937fd7c22a0a9): duck isn't drawn: expected '2cb334e484fb944d3dac35a7c2c65e6809270…' not to be '2cb334e484fb944d3dac35a7c2c65e6809270…' // Object.is equality
+ ❯ canonical.test.ts:33:154
+     31|     const empty = canonicalHash(reply!, 's-empty', 'the live call');
+     32|     proof('canonical render_back pixel hashes (Duck, without the item)…
+     33|     expect(duck, `the canonical render_back of the Duck document has t…
+       |                                                                                                                                                          ^
+     34|   }, 1_800_000);
+     35| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/8]⎯
+
+ FAIL  environment.test.ts > AC4 #1729.6e5d2b27 a sky@1 environment named by hash renders back lit by the file in the store > AC4 #1729.6e5d2b27 lit by the Radiance file, unlike its all-black twin; asset_missing at items/sky/params/environment/from when the store lacks it
+AssertionError: the environment is read from the store, and a missing one is refused:
+  deep_show: the sky lit by the Radiance file 939a6340dcd8… renders back as babff43c590d96e777f1caef780a01990a13d6297475ee4b52614e6a62391190, the same as with the all-black file in its place: items/sky/params/environment/from isn't read from the store
+  the render-back of a sky whose environment file the store lacks: the reply carries no asset_missing at items/sky/params/environment/from, and presents the frame as clean without sky: {"rev":1,"expansions":[],"issues":[],"issues_evidence":"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945","snapshots":[{"sha256":"babff43c590d96e777f1caef780a01990a13d6297475ee4b52614e6a62391190","w":320,"h":240}],"changed":[],"unchanged":[],"created":["block","cam","clay","sky"],"removed":[],"visible":[{"id":"block","box":[111.27150965233159,72.90038709506359,97.45698069533682,102.04916129402886]}],"batches":[],"outcome":"presented","backends":{"fonts":{"name":"fonts.bundled","version":"1.0.0"},"cpu":{"name":"aarch64","version":"1.0.0"}},"core":"core@0.0.0","set_digest":"7a4ff1f4f1a072476f639de0b78d35eb6bc20b04948e9de47bb7a2904350a09e"}: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deep_show: the sky lit by the Radiance file 939a6340dcd8… renders back as babff43c590d96e777f1caef780a01990a13d6297475ee4b52614e6a62391190, the same as with the all-black file in its place: items/sky/params/environment/from isn't read from the store",
++   "the render-back of a sky whose environment file the store lacks: the reply carries no asset_missing at items/sky/params/environment/from, and presents the frame as clean without sky: {\"rev\":1,\"expansions\":[],\"issues\":[],\"issues_evidence\":\"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945\",\"snapshots\":[{\"sha256\":\"babff43c590d96e777f1caef780a01990a13d6297475ee4b52614e6a62391190\",\"w\":320,\"h\":240}],\"changed\":[],\"unchanged\":[],\"created\":[\"block\",\"cam\",\"clay\",\"sky\"],\"removed\":[],\"visible\":[{\"id\":\"block\",\"box\":[111.27150965233159,72.90038709506359,97.45698069533682,102.04916129402886]}],\"batches\":[],\"outcome\":\"presented\",\"backends\":{\"fonts\":{\"name\":\"fonts.bundled\",\"version\":\"1.0.0\"},\"cpu\":{\"name\":\"aarch64\",\"version\":\"1.0.0\"}},\"core\":\"core@0.0.0\",\"set_digest\":\"7a4ff1f4f1a072476f639de0b78d35eb6bc20b04948e9de47bb7a2904350a09e\"}",
++ ]
+
+ ❯ none helpers.ts:56:60
+     54| /** No failures; the message lists them, each naming what failed. */
+     55| export function none(failures: readonly string[], what: string): void {
+     56|   expect(failures, `${what}:\n  ${failures.join('\n  ')}`).toEqual([]);
+       |                                                            ^
+     57| }
+     58|
+ ❯ environment.test.ts:56:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/8]⎯
+
+ FAIL  maps.test.ts > AC7 #1729.50fb770a a material's base colour map is read from the store and drawn on render-back > AC7 #1729.50fb770a the panel under white paper with the red PNG as maps.base_color has mean red at least 0.3 above its green
+AssertionError: the base colour map is drawn on render-back:
+  deep_show: the panel's mean red 1.000 is 0.000 above its green 1.000, not at least 0.3: the map at items/paper/params/maps/base_color (f41dfec15303…) isn't drawn
+  render_back: the panel's mean red 1.000 is 0.000 above its green 1.000, not at least 0.3: the map at items/paper/params/maps/base_color (f41dfec15303…) isn't drawn: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deep_show: the panel's mean red 1.000 is 0.000 above its green 1.000, not at least 0.3: the map at items/paper/params/maps/base_color (f41dfec15303…) isn't drawn",
++   "render_back: the panel's mean red 1.000 is 0.000 above its green 1.000, not at least 0.3: the map at items/paper/params/maps/base_color (f41dfec15303…) isn't drawn",
++ ]
+
+ ❯ none helpers.ts:56:60
+     54| /** No failures; the message lists them, each naming what failed. */
+     55| export function none(failures: readonly string[], what: string): void {
+     56|   expect(failures, `${what}:\n  ${failures.join('\n  ')}`).toEqual([]);
+       |                                                            ^
+     57| }
+     58|
+ ❯ maps.test.ts:60:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/8]⎯
+
+ FAIL  maps.test.ts > AC8 #1729.beae915f a map whose image the store lacks is asset_missing at its path, on render-back and from view3d > AC8 #1729.beae915f asset_missing at items/paper/params/maps/base_color from deep_show and from view3d
+AssertionError: a missing map is refused at its path:
+  deep_show of the panel whose map the store lacks: the reply carries no asset_missing at items/paper/params/maps/base_color, and presents the frame as clean without the map: {"notices":[{"code":"unknown_field","severity":"notice","ids":["paper"],"path":"items/paper/params/maps","actual":{"base_color":"0dd0ba558b8b590df90a3c17af76efd2ff379b79f136c8ffded7f52aafb9bdd0"},"what":"material@1.0 does not define `maps`; the document requires a newer minor, so it is skipped"}],"rev":1,"expansions":[],"issues":[],"issues_evidence":"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945","snapshots":[{"sha256":"0486b5f47e24a740734471cc5e34f9219cb291f00a660ad2fd6e6f0513ae1131","w":320,"h":240}],"changed":[],"unchanged":[],"created":["cam","panel","paper","sky"],"removed":[],"visible":[{"id":"panel","box":[12.97779695226103,9.733347714195773,294.04440609547794,220.53330457160848]}],"batches":[],"outcome":"presented","backends":{"fonts":{"name":"fonts.bundled","version":"1.0.0"},"cpu":{"name":"aarch64","version":"1.0.0"}},"core":"core@0.0.0","set_digest":"7a4ff1f4f1a072476f639de0b78d35eb6bc20b04948e9de47bb7a2904350a09e"}
+  view3d of the panel whose map it isn't given: the reply carries no asset_missing at items/paper/params/maps/base_color, and presents the frame as clean without the map: {"frames":[{"frame":0,"settled":true,"samples":{"drawn":1,"settling":false},"history":{"mode":"none","shows":0,"window":[],"rendered":[]},"resident":[],"selection":[],"frame_seq":0,"pixel_hash":"4ef9cb1ed52f888221408c0e865dd91fbfb877fba28c511439a387715361ba80","final":"75b37919d7d4debc8488c38f255ba47daa1ad1a32d8999b22a6b1840817c88a9"}],"passes":[{"name":"scene3d.geometry","reads":[],"writes":["linear","ids","depth"]},{"name":"scene3d.output","reads":["linear"],"writes":["final"]}],"status":{"shows":false,"look":"document","distance":null,"guard":null,"marks":[],"legend":[]},"surface":{"internal_scale":1,"upscale":"none","sharpen":0.2,"size_px":[320,240],"internal_px":[320,240],"msaa":4},"render_targets":[{"name":"color","sample_count":4},{"name":"ids","sample_count":4},{"name":"depth","sample_count":4}],"layers":[{"layer":"main","writer":"agent:alpha","band":"agent"}]}: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deep_show of the panel whose map the store lacks: the reply carries no asset_missing at items/paper/params/maps/base_color, and presents the frame as clean without the map: {\"notices\":[{\"code\":\"unknown_field\",\"severity\":\"notice\",\"ids\":[\"paper\"],\"path\":\"items/paper/params/maps\",\"actual\":{\"base_color\":\"0dd0ba558b8b590df90a3c17af76efd2ff379b79f136c8ffded7f52aafb9bdd0\"},\"what\":\"material@1.0 does not define `maps`; the document requires a newer minor, so it is skipped\"}],\"rev\":1,\"expansions\":[],\"issues\":[],\"issues_evidence\":\"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945\",\"snapshots\":[{\"sha256\":\"0486b5f47e24a740734471cc5e34f9219cb291f00a660ad2fd6e6f0513ae1131\",\"w\":320,\"h\":240}],\"changed\":[],\"unchanged\":[],\"created\":[\"cam\",\"panel\",\"paper\",\"sky\"],\"removed\":[],\"visible\":[{\"id\":\"panel\",\"box\":[12.97779695226103,9.733347714195773,294.04440609547794,220.53330457160848]}],\"batches\":[],\"outcome\":\"presented\",\"backends\":{\"fonts\":{\"name\":\"fonts.bundled\",\"version\":\"1.0.0\"},\"cpu\":{\"name\":\"aarch64\",\"version\":\"1.0.0\"}},\"core\":\"core@0.0.0\",\"set_digest\":\"7a4ff1f4f1a072476f639de0b78d35eb6bc20b04948e9de47bb7a2904350a09e\"}",
++   "view3d of the panel whose map it isn't given: the reply carries no asset_missing at items/paper/params/maps/base_color, and presents the frame as clean without the map: {\"frames\":[{\"frame\":0,\"settled\":true,\"samples\":{\"drawn\":1,\"settling\":false},\"history\":{\"mode\":\"none\",\"shows\":0,\"window\":[],\"rendered\":[]},\"resident\":[],\"selection\":[],\"frame_seq\":0,\"pixel_hash\":\"4ef9cb1ed52f888221408c0e865dd91fbfb877fba28c511439a387715361ba80\",\"final\":\"75b37919d7d4debc8488c38f255ba47daa1ad1a32d8999b22a6b1840817c88a9\"}],\"passes\":[{\"name\":\"scene3d.geometry\",\"reads\":[],\"writes\":[\"linear\",\"ids\",\"depth\"]},{\"name\":\"scene3d.output\",\"reads\":[\"linear\"],\"writes\":[\"final\"]}],\"status\":{\"shows\":false,\"look\":\"document\",\"distance\":null,\"guard\":null,\"marks\":[],\"legend\":[]},\"surface\":{\"internal_scale\":1,\"upscale\":\"none\",\"sharpen\":0.2,\"size_px\":[320,240],\"internal_px\":[320,240],\"msaa\":4},\"render_targets\":[{\"name\":\"color\",\"sample_count\":4},{\"name\":\"ids\",\"sample_count\":4},{\"name\":\"depth\",\"sample_count\":4}],\"layers\":[{\"layer\":\"main\",\"writer\":\"agent:alpha\",\"band\":\"agent\"}]}",
++ ]
+
+ ❯ none helpers.ts:56:60
+     54| /** No failures; the message lists them, each naming what failed. */
+     55| export function none(failures: readonly string[], what: string): void {
+     56|   expect(failures, `${what}:\n  ${failures.join('\n  ')}`).toEqual([]);
+       |                                                            ^
+     57| }
+     58|
+ ❯ maps.test.ts:73:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/8]⎯
+
+ FAIL  models.test.ts > AC1 #1729.f59f9cb0 the Duck renders back in visible, at view3d's object-ID box > AC1 #1729.f59f9cb0 the Duck's visible box is within 1 px of view3d's object-ID box for the same document, camera and size
+AssertionError: the Duck render-back's visible lists duck (rows: []): nothing of duck is drawn: expected 0 to be greater than 0
+ ❯ models.test.ts:44:128
+     42|     const mine = rowsOf(rows, 'duck');
+     43|     proof('the Duck render-back: visible', rows.map((r) => ({ id: r.id…
+     44|     expect(mine.length, `the Duck render-back's visible lists duck (ro…
+       |                                                                                                                                ^
+     45|
+     46|     const f = file(out, bytes);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/8]⎯
+
+ FAIL  models.test.ts > AC2 #1729.797f90d5 Box, Duck and BoxTextured give three different snapshot hashes > AC2 #1729.797f90d5 each model's render-back differs from the others' and from the empty frame's, on deep_show and on render_back
+AssertionError: three different snapshot hashes, none the empty frame's:
+  deep_show: Box's snapshot 843d20ce0d5d5b0994123c9fdb3b3d409d31e19f1bb04dfbb4758ea80e96a0da is the empty frame's: nothing of box is drawn
+  deep_show: Box and Duck give the same snapshot 843d20ce0d5d5b0994123c9fdb3b3d409d31e19f1bb04dfbb4758ea80e96a0da
+  deep_show: Box and BoxTextured give the same snapshot 843d20ce0d5d5b0994123c9fdb3b3d409d31e19f1bb04dfbb4758ea80e96a0da
+  deep_show: Duck's snapshot 843d20ce0d5d5b0994123c9fdb3b3d409d31e19f1bb04dfbb4758ea80e96a0da is the empty frame's: nothing of duck is drawn
+  deep_show: Duck and BoxTextured give the same snapshot 843d20ce0d5d5b0994123c9fdb3b3d409d31e19f1bb04dfbb4758ea80e96a0da
+  deep_show: BoxTextured's snapshot 843d20ce0d5d5b0994123c9fdb3b3d409d31e19f1bb04dfbb4758ea80e96a0da is the empty frame's: nothing of textured is drawn: expected [ …(6) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deep_show: Box's snapshot 843d20ce0d5d5b0994123c9fdb3b3d409d31e19f1bb04dfbb4758ea80e96a0da is the empty frame's: nothing of box is drawn",
++   "deep_show: Box and Duck give the same snapshot 843d20ce0d5d5b0994123c9fdb3b3d409d31e19f1bb04dfbb4758ea80e96a0da",
++   "deep_show: Box and BoxTextured give the same snapshot 843d20ce0d5d5b0994123c9fdb3b3d409d31e19f1bb04dfbb4758ea80e96a0da",
++   "deep_show: Duck's snapshot 843d20ce0d5d5b0994123c9fdb3b3d409d31e19f1bb04dfbb4758ea80e96a0da is the empty frame's: nothing of duck is drawn",
++   "deep_show: Duck and BoxTextured give the same snapshot 843d20ce0d5d5b0994123c9fdb3b3d409d31e19f1bb04dfbb4758ea80e96a0da",
++   "deep_show: BoxTextured's snapshot 843d20ce0d5d5b0994123c9fdb3b3d409d31e19f1bb04dfbb4758ea80e96a0da is the empty frame's: nothing of textured is drawn",
++ ]
+
+ ❯ none helpers.ts:56:60
+     54| /** No failures; the message lists them, each naming what failed. */
+     55| export function none(failures: readonly string[], what: string): void {
+     56|   expect(failures, `${what}:\n  ${failures.join('\n  ')}`).toEqual([]);
+       |                                                            ^
+     57| }
+     58|
+ ❯ models.test.ts:83:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/8]⎯
+
+ FAIL  models.test.ts > AC3 #1729.1248be9e a mesh.asset@1 whose hash isn't in the store is answered asset_missing at its sha256 > AC3 #1729.1248be9e asset_missing at items/duck/params/sha256, nothing presented as clean; the planted skips_missing_mesh_asset fails, naming duck
+AssertionError: the missing model is refused at its hash:
+  the render-back of a model whose hash the store lacks: the reply carries no asset_missing at items/duck/params/sha256, and presents the frame as clean without duck: {"rev":1,"expansions":[],"issues":[],"issues_evidence":"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945","snapshots":[{"sha256":"843d20ce0d5d5b0994123c9fdb3b3d409d31e19f1bb04dfbb4758ea80e96a0da","w":320,"h":240,"marks":[],"legend":[]}],"changed":[],"unchanged":[],"created":["cam","duck","sky","sun"],"removed":[],"visible":[],"batches":[],"outcome":"presented","backends":{"fonts":{"name":"fonts.bundled","version":"1.0.0"},"cpu":{"name":"aarch64","version":"1.0.0"}},"core":"core@0.0.0","set_digest":"7a4ff1f4f1a072476f639de0b78d35eb6bc20b04948e9de47bb7a2904350a09e"}: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the render-back of a model whose hash the store lacks: the reply carries no asset_missing at items/duck/params/sha256, and presents the frame as clean without duck: {\"rev\":1,\"expansions\":[],\"issues\":[],\"issues_evidence\":\"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945\",\"snapshots\":[{\"sha256\":\"843d20ce0d5d5b0994123c9fdb3b3d409d31e19f1bb04dfbb4758ea80e96a0da\",\"w\":320,\"h\":240,\"marks\":[],\"legend\":[]}],\"changed\":[],\"unchanged\":[],\"created\":[\"cam\",\"duck\",\"sky\",\"sun\"],\"removed\":[],\"visible\":[],\"batches\":[],\"outcome\":\"presented\",\"backends\":{\"fonts\":{\"name\":\"fonts.bundled\",\"version\":\"1.0.0\"},\"cpu\":{\"name\":\"aarch64\",\"version\":\"1.0.0\"}},\"core\":\"core@0.0.0\",\"set_digest\":\"7a4ff1f4f1a072476f639de0b78d35eb6bc20b04948e9de47bb7a2904350a09e\"}",
++ ]
+
+ ❯ none helpers.ts:56:60
+     54| /** No failures; the message lists them, each naming what failed. */
+     55| export function none(failures: readonly string[], what: string): void {
+     56|   expect(failures, `${what}:\n  ${failures.join('\n  ')}`).toEqual([]);
+       |                                                            ^
+     57| }
+     58|
+ ❯ models.test.ts:99:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/8]⎯
+
+ FAIL  sequence.test.ts > AC5 #1729.612df1ca a mesh.sequence@1 reads its frames from the store > AC5 #1729.612df1ca in visible when its asset is in the store; asset_missing at the item when it isn't
+AssertionError: the sequence reads its frames from the store:
+  the sequence whose asset is in the store renders back with nothing of seq in visible (rows: [])
+  the render-back of a sequence whose asset the store lacks: the reply carries no asset_missing at the item (items/seq or under it), and presents the frame as clean without seq: {"notices":[{"code":"unknown_kind","severity":"notice","ids":["seq"],"path":"items/seq/kind","actual":"mesh.sequence@1","what":"kind `mesh.sequence@1` is not registered in this build; the item is skipped"}],"rev":1,"expansions":[],"issues":[],"issues_evidence":"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945","snapshots":[{"sha256":"843d20ce0d5d5b0994123c9fdb3b3d409d31e19f1bb04dfbb4758ea80e96a0da","w":320,"h":240,"marks":[],"legend":[]}],"changed":[],"unchanged":[],"created":["cam","clay","seq","sky","sun"],"removed":[],"visible":[],"batches":[],"outcome":"presented","backends":{"fonts":{"name":"fonts.bundled","version":"1.0.0"},"cpu":{"name":"aarch64","version":"1.0.0"}},"core":"core@0.0.0","set_digest":"7a4ff1f4f1a072476f639de0b78d35eb6bc20b04948e9de47bb7a2904350a09e"}: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the sequence whose asset is in the store renders back with nothing of seq in visible (rows: [])",
++   "the render-back of a sequence whose asset the store lacks: the reply carries no asset_missing at the item (items/seq or under it), and presents the frame as clean without seq: {\"notices\":[{\"code\":\"unknown_kind\",\"severity\":\"notice\",\"ids\":[\"seq\"],\"path\":\"items/seq/kind\",\"actual\":\"mesh.sequence@1\",\"what\":\"kind `mesh.sequence@1` is not registered in this build; the item is skipped\"}],\"rev\":1,\"expansions\":[],\"issues\":[],\"issues_evidence\":\"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945\",\"snapshots\":[{\"sha256\":\"843d20ce0d5d5b0994123c9fdb3b3d409d31e19f1bb04dfbb4758ea80e96a0da\",\"w\":320,\"h\":240,\"marks\":[],\"legend\":[]}],\"changed\":[],\"unchanged\":[],\"created\":[\"cam\",\"clay\",\"seq\",\"sky\",\"sun\"],\"removed\":[],\"visible\":[],\"batches\":[],\"outcome\":\"presented\",\"backends\":{\"fonts\":{\"name\":\"fonts.bundled\",\"version\":\"1.0.0\"},\"cpu\":{\"name\":\"aarch64\",\"version\":\"1.0.0\"}},\"core\":\"core@0.0.0\",\"set_digest\":\"7a4ff1f4f1a072476f639de0b78d35eb6bc20b04948e9de47bb7a2904350a09e\"}",
++ ]
+
+ ❯ none helpers.ts:56:60
+     54| /** No failures; the message lists them, each naming what failed. */
+     55| export function none(failures: readonly string[], what: string): void {
+     56|   expect(failures, `${what}:\n  ${failures.join('\n  ')}`).toEqual([]);
+       |                                                            ^
+     57| }
+     58|
+ ❯ sequence.test.ts:46:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/8]⎯
+
+
+ Test Files  5 failed (5)
+      Tests  8 failed (8)
+   Start at  02:32:27
+   Duration  447.94s (tests 100%)
+

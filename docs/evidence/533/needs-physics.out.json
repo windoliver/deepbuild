@@ -1,0 +1,1 @@
+{"ok":false,"code":"seal_refused","reason":"missing_dependency","modules":["logic","physics"],"operators":[],"arrays":[],"what":"`logic` requires `physics`, which this build lacks"}

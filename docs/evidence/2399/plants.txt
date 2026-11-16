@@ -1,0 +1,119 @@
+# The criterion tests run on each planted supervisor (DH2399_PLANT -> DEEP_HUB_PLANT by fixtures/plant-setup.mjs), be9adeb8b
+## egress-refusal-once-per-operation: AC2's criterion test
+
+ RUN  v5.0.5 ~/deepbuild/.claude/worktrees/fix-2399-egress-refusal-once-f86bd5/tests/acceptance/2399
+
+ × tunnels.test.ts > AC2 #2399.c1245384 100 tunnels asked for to one host no credential names leave one sandbox.denied with the operation egress-host, and a tunnel to a second such host adds one more; a planted supervisor that keeps one refusal per operation records none for the second host and fails, naming the host > AC2 100 tunnels asked for to one host no credential names are each refused and leave one sandbox.denied (egress-host, that host), and one tunnel to a second such host adds exactly one more, naming it 66030ms
+   → a refusal of a target not seen before, sent after each step, is in the record: expected [ true, false ] to deeply equal [ true, true ]
+ ↓ tunnels.test.ts > AC2 #2399.c1245384 100 tunnels asked for to one host no credential names leave one sandbox.denied with the operation egress-host, and a tunnel to a second such host adds one more; a planted supervisor that keeps one refusal per operation records none for the second host and fails, naming the host > AC2 (wrong program) a supervisor that keeps one refusal per operation (DEEP_HUB_PLANT=egress-refusal-once-per-operation) fails the reading, naming the second host
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tunnels.test.ts > AC2 #2399.c1245384 100 tunnels asked for to one host no credential names leave one sandbox.denied with the operation egress-host, and a tunnel to a second such host adds one more; a planted supervisor that keeps one refusal per operation records none for the second host and fails, naming the host > AC2 100 tunnels asked for to one host no credential names are each refused and leave one sandbox.denied (egress-host, that host), and one tunnel to a second such host adds exactly one more, naming it
+AssertionError: a refusal of a target not seen before, sent after each step, is in the record: expected [ true, false ] to deeply equal [ true, true ]
+
+- Expected
++ Received
+
+  [
+    true,
+-   true,
++   false,
+  ]
+
+ ❯ tunnels.test.ts:51:105
+     49|       u = s.u;
+     50|       expect(s.answers.filter((a) => a !== 403), `each of the ${TIMES …
+     51|       expect(s.marked, 'a refusal of a target not seen before, sent af…
+       |                                                                                                         ^
+     52|       expect(s.problems).toEqual([]);
+     53|     } finally {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 skipped (2)
+   Start at  18:05:15
+   Duration  66.31s (tests 100%)
+
+[exit 1]
+## egress-refusals-unrecorded: #1106's AC3 criterion test
+
+ RUN  v5.0.5 ~/deepbuild/.claude/worktrees/fix-2399-egress-refusal-once-f86bd5/tests/acceptance/1106
+
+ × refusals.test.ts > AC3 #1106.bd90f543 the stand-in sent to a second allowed host, in a query string and in a form body is refused each time and recorded; a filter that substitutes on every allowed host fails, naming the host > AC3 SHOP_API_KEY's stand-in sent to the other credential's host, in a query string and in a form body to its own host, is refused each time, reaches no sample API, and each refusal is in the record on the stack's run 13823ms
+   → expected [ …(3) ] to deeply equal []
+ ↓ refusals.test.ts > AC3 #1106.bd90f543 the stand-in sent to a second allowed host, in a query string and in a form body is refused each time and recorded; a filter that substitutes on every allowed host fails, naming the host > AC3 (wrong program) a filter that substitutes on every allowed host (DEEP_HUB_PLANT=standin-every-host) fails the reading, naming the host
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  refusals.test.ts > AC3 #1106.bd90f543 the stand-in sent to a second allowed host, in a query string and in a form body is refused each time and recorded; a filter that substitutes on every allowed host fails, naming the host > AC3 SHOP_API_KEY's stand-in sent to the other credential's host, in a query string and in a form body to its own host, is refused each time, reaches no sample API, and each refusal is in the record on the stack's run
+AssertionError: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "no event in the record names the run run:01M7EF9B59CKKZMAKAKCZRBWVR and refuses the stand-in sent to the second allowed host 127.0.0.1:36701",
++   "no event in the record names the run run:01M7EF9B59CKKZMAKAKCZRBWVR and refuses the stand-in sent in a query string",
++   "no event in the record names the run run:01M7EF9B59CKKZMAKAKCZRBWVR and refuses the stand-in sent in a form body",
++ ]
+
+ ❯ refusals.test.ts:73:26
+     71|       const s = await scenario();
+     72|       u = s.u;
+     73|       expect(s.problems).toEqual([]);
+       |                          ^
+     74|     } finally {
+     75|       await downWorld(u);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 skipped (2)
+   Start at  18:06:22
+   Duration  14.07s (tests 99%)
+
+[exit 1]
+## egress-refusals-seen-without-run: AC4's criterion test
+
+ RUN  v5.0.5 ~/deepbuild/.claude/worktrees/fix-2399-egress-refusal-once-f86bd5/tests/acceptance/2399
+
+ × runs.test.ts > AC4 #2399.d19e2d85 a refusal recorded for one run doesn't hide the same operation and target for a second run beside it, and the first refusal of a run started after another ended is recorded; a planted supervisor that keeps the set without the run records none for the second run and fails, naming the run > AC4 the same refused request sent to the filters of two runs beside each other, and to a run started after the first ended, leaves one sandbox.denied for each run 10113ms
+   → expected [ …(2) ] to deeply equal []
+ ↓ runs.test.ts > AC4 #2399.d19e2d85 a refusal recorded for one run doesn't hide the same operation and target for a second run beside it, and the first refusal of a run started after another ended is recorded; a planted supervisor that keeps the set without the run records none for the second run and fails, naming the run > AC4 (wrong program) a supervisor that keeps the set without the run (DEEP_HUB_PLANT=egress-refusals-seen-without-run) fails the reading, naming the second run
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  runs.test.ts > AC4 #2399.d19e2d85 a refusal recorded for one run doesn't hide the same operation and target for a second run beside it, and the first refusal of a run started after another ended is recorded; a planted supervisor that keeps the set without the run records none for the second run and fails, naming the run > AC4 the same refused request sent to the filters of two runs beside each other, and to a run started after the first ended, leaves one sandbox.denied for each run
+AssertionError: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "no sandbox.denied is recorded for the second run run:01M7EF9TGWTFTCYKKG538E3F2R with the operation egress-plain-http and the target dh2399-same.invalid, its filter having refused that request (the record gained [] for it)",
++   "no sandbox.denied is recorded for the later run run:01M7EF9XSCKAQ308KHFYWPAFV1 with the operation egress-plain-http and the target dh2399-same.invalid, its filter having refused that request (the record gained [] for it)",
++ ]
+
+ ❯ runs.test.ts:70:26
+     68|       expect(s.answers, 'each run\'s filter answers the request 403').…
+     69|       expect(s.marked, 'a refusal of a target not seen before, sent to…
+     70|       expect(s.problems).toEqual([]);
+       |                          ^
+     71|     } finally {
+     72|       await downAll(s?.u, s?.worktrees ?? []);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 skipped (2)
+   Start at  18:06:37
+   Duration  10.38s (tests 99%, transform 1%)
+
+[exit 1]

@@ -1,0 +1,97 @@
+{
+  "format": 1,
+  "profile": "film",
+  "title": "Sales by season",
+  "description": "Sales by season: explain@1's chart_story.",
+  "size": [
+    640,
+    360
+  ],
+  "transport": {
+    "span": "6s"
+  },
+  "packs": [
+    "deepbuild/explain@1.0.0"
+  ],
+  "items": {
+    "film": {
+      "id": "film",
+      "kind": "explain.chart_story@1",
+      "name": "Film",
+      "order": "a0",
+      "params": {
+        "cues": [
+          {
+            "id": "q1",
+            "kind": "fade_in",
+            "text": "Winter",
+            "span": "0.5s",
+            "data": {
+              "value": 40
+            }
+          },
+          {
+            "id": "q2",
+            "kind": "fade_in",
+            "text": "Spring",
+            "span": "0.5s",
+            "data": {
+              "value": 55
+            }
+          },
+          {
+            "id": "q3",
+            "kind": "fade_in",
+            "text": "Summer",
+            "span": "0.5s",
+            "data": {
+              "value": 48
+            }
+          },
+          {
+            "id": "q4",
+            "kind": "fade_in",
+            "text": "Autumn",
+            "span": "0.5s",
+            "data": {
+              "value": 90
+            }
+          },
+          {
+            "id": "q5",
+            "kind": "indicate",
+            "targets": [
+              "q4"
+            ],
+            "span": "1s",
+            "gap": "0.5s"
+          },
+          {
+            "id": "q6",
+            "kind": "fade_in",
+            "text": "Autumn nearly doubled winter",
+            "span": "0.5s",
+            "data": {
+              "section": true
+            }
+          }
+        ],
+        "stage": "2d"
+      }
+    }
+  },
+  "tempo_map": {
+    "segments": [
+      {
+        "at": "0s",
+        "bpm": 120,
+        "meter": [
+          4,
+          4
+        ],
+        "span": 64
+      }
+    ]
+  },
+  "camera": "film.cam"
+}

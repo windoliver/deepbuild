@@ -3,6 +3,8 @@
 # here, not in Cargo.toml, because it replaces rquickjs alone: gpui-kit and gpui-shell come from
 # upstream at a pinned commit, with no fork (#338 checks the manifests for a [patch] table).
 [patch.crates-io]
+# Issue #2359: upstream XML-range fix, without a Typst update (MIT OR Apache-2.0).
+citationberg = { git = "https://github.com/typst/citationberg", rev = "06a591e2f237d25e1dfdedac3f3d1494c496c52d" }
 rquickjs = { git = "https://github.com/longbridge/gpui-kit", rev = "1676826d9d49b90f4d7b6808b69924f58796f6f1" }
 
 # Issue #390: the GPUI patch (technical design: Conventions, "the GPUI patch ... adds a tinted mask
@@ -38,6 +40,17 @@ symphonia-codec-vorbis = { path = "vendor/symphonia-codec-vorbis" }
 # marked "DeepBuild patch". It replaces this one crate; gpui-kit and gpui-shell stay upstream, unforked.
 [patch."https://github.com/longbridge/quickjs-jit"]
 quickjs-jit-runtime = { path = "vendor/quickjs-jit-runtime" }
+
+# Issue #2359: retain the panel's VM and LLRT pin, but use final RSA's feature names.
+# This Apache-2.0 copy adapts only the manifest and final PKCS#1 type names; tests stay upstream's.
+[patch."https://github.com/awslabs/llrt"]
+llrt_crypto = { path = "vendor/llrt_crypto" }
+
+# Issue #2359: migrate MiTeX's reader and compiled-in command archive together to rkyv 0.8.
+# Only these Apache-2.0 crates change; the parser/converter and Typst stay at their pins.
+[patch."https://github.com/mitex-rs/mitex"]
+mitex-spec = { path = "vendor/mitex-spec" }
+mitex-spec-gen = { path = "vendor/mitex-spec-gen" }
 
 # Issue #449: an x86_64 build, the other machine a check runs under Rosetta 2, links CoreMedia for
 # Rust's x86_64 deployment target (macOS 10.12) through the Swift overlay

@@ -1,0 +1,168 @@
+# #1888 acceptance tests: the one run on the base
+
+Base 72fe11a11 ("Merge pull request #2523 ..."; no implementation), 2026-11-14 23:22:55 UTC, Node 24.22.0, vitest
+5.0.5, Linux arm64, 1-minute load 55 on the machine (no test here is timed). node_modules from `npm ci` in this
+checkout (install scripts not run; nothing here opens the record's database) and `npm run build --workspaces`, which
+vitest.config.ts needs to load. Run once from the checkout, after the suite's last edit. The output below is the
+run's, whole; only the checkout's path is replaced, by <checkout>.
+
+AC1 (#1888.2a9bc364) FAILS, for the issue's reason: with the Makefile rule `test lint:` running `eslint . || true`,
+the floor answers `{ ok: true }` and the validity gate finds nothing for a claim citing `make lint`, and the same
+for `make test`; the expected reading is the masked-exit finding naming `|| true`. Its clean-twin assertion (the
+same rule with no mask reads clean) held.
+
+AC2 (#1888.d330ac62) PASSES, both tests (the "2 passed" below; the default reporter names only failures): the eight
+floor readings (a one-target Makefile rule, a package script and a justfile recipe, masked and clean) and the four
+checkSource readings.
+
+AC3 (#1888.b67d81e0) FAILS, for the issue's reason: the sources hold 2 functions that read a Makefile rule,
+`scriptOf` (floor.ts:87) and `targetBody` (own.ts:55), the two the issue names. Its detector's own assertions held
+in the same run: each planted second reader (regular expressions; strings) was found as a third and nothing else
+changed, the two planted non-readers weren't counted, and the sources were untouched. The second failure,
+`expected false to be true`, is the same count read through `holdsOne`.
+
+$ git status --porcelain     # before and after the run
+?? tests/acceptance/1888/
+$ node node_modules/vitest/vitest.mjs run tests/acceptance/1888/
+
+ RUN  v5.0.5 <checkout>
+
+ ❯ tests/acceptance/1888/reads.test.ts (3 tests | 1 failed) 285ms
+   × #1888.2a9bc364 with a Makefile whose rule `test lint:` runs `eslint . || true`, a claim that cites `make lint` reads exit_masked 13ms
+ ❯ tests/acceptance/1888/one-reader.test.ts (1 test | 1 failed) 573ms
+   × #1888.b67d81e0 packages/gate/src holds one function that reads a Makefile rule: a planted second reader fails this reading of the sources 519ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1888/one-reader.test.ts > #1888.b67d81e0 packages/gate/src holds one function that reads a Makefile rule: a planted second reader fails this reading of the sources
+AssertionError: packages/gate/src holds 2 functions that read a Makefile rule, not one: scriptOf (floor.ts:87; header new RegExp(`^${sub.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*:`), recipe /^\s/); targetBody (own.ts:55; header /\s*:.*$/, recipe /^[^\s#][^:=]*:(?!=)/): expected 2 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 2
+
+ ❯ tests/acceptance/1888/one-reader.test.ts:81:110
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  tests/acceptance/1888/one-reader.test.ts > #1888.b67d81e0 packages/gate/src holds one function that reads a Makefile rule: a planted second reader fails this reading of the sources
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/acceptance/1888/one-reader.test.ts:82:26
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  tests/acceptance/1888/reads.test.ts > #1888.2a9bc364 with a Makefile whose rule `test lint:` runs `eslint . || true`, a claim that cites `make lint` reads exit_masked
+AssertionError: `make lint` runs the rule `test lint:`, whose recipe masks its exit with `|| true`: expected { floor: { ok: true }, findings: [] } to deeply equal { floor: { ok: false, …(3) }, …(1) }
+
+- Expected
++ Received
+
+  {
+-   "findings": [
+-     {
+-       "kind": "masked_exit",
+-       "mask": "|| true",
+-       "ref": "make lint",
+-       "why": "the run `make lint` it cites proves nothing: exit status masked by `|| true`",
+-     },
+-   ],
++   "findings": [],
+    "floor": {
+-     "action": "send_back",
+-     "claim": "claim:1888",
+-     "findings": [
+-       {
+-         "kind": "masked_exit",
+-         "mask": "|| true",
+-         "ref": "make lint",
+-         "why": "the run `make lint` it cites proves nothing: exit status masked by `|| true`",
+-       },
+-     ],
+-     "ok": false,
++     "ok": true,
+    },
+  }
+
+ ❯ tests/acceptance/1888/reads.test.ts:59:139
+     57|   const TWO = 'test lint:\n\teslint . || true\n';
+     58|   // The issue's case: the floor sends the claim back, and the finding…
+     59|   expect.soft(read('make lint', { Makefile: TWO }), '`make lint` runs …
+       |                                                                                                                                           ^
+     60|   // The rule's other target runs the same recipe.
+     61|   expect.soft(read('make test', { Makefile: TWO }), '`make test` runs …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  tests/acceptance/1888/reads.test.ts > #1888.2a9bc364 with a Makefile whose rule `test lint:` runs `eslint . || true`, a claim that cites `make lint` reads exit_masked
+AssertionError: `make test` runs the same rule: expected { floor: { ok: true }, findings: [] } to deeply equal { floor: { ok: false, …(3) }, …(1) }
+
+- Expected
++ Received
+
+  {
+-   "findings": [
+-     {
+-       "kind": "masked_exit",
+-       "mask": "|| true",
+-       "ref": "make test",
+-       "why": "the run `make test` it cites proves nothing: exit status masked by `|| true`",
+-     },
+-   ],
++   "findings": [],
+    "floor": {
+-     "action": "send_back",
+-     "claim": "claim:1888",
+-     "findings": [
+-       {
+-         "kind": "masked_exit",
+-         "mask": "|| true",
+-         "ref": "make test",
+-         "why": "the run `make test` it cites proves nothing: exit status masked by `|| true`",
+-       },
+-     ],
+-     "ok": false,
++     "ok": true,
+    },
+  }
+
+ ❯ tests/acceptance/1888/reads.test.ts:61:87
+     59|   expect.soft(read('make lint', { Makefile: TWO }), '`make lint` runs …
+     60|   // The rule's other target runs the same recipe.
+     61|   expect.soft(read('make test', { Makefile: TWO }), '`make test` runs …
+       |                                                                                       ^
+     62|   // The clean twin: the same rule with no mask sends nothing back, so…
+     63|   expect.soft(read('make lint', { Makefile: 'test lint:\n\teslint .\n'…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  2 failed | 2 passed (4)
+   Start at  15:22:56
+   Duration  1.00s (tests 60%, import 20%, transform 18%, setup 2%, worker 1%)
+
+exit 1
+
+# The one-target readings of checkSource that #29 AC21's test already holds (README, AC2), once on the same base:
+$ node node_modules/vitest/vitest.mjs run tests/acceptance/29/own.test.ts -t "AC21 a changed package script target"
+
+ RUN  v5.0.5 <checkout>
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 8 skipped (9)
+   Start at  15:22:57
+   Duration  993ms (tests 67%, transform 19%, import 13%, setup 1%, worker 1%)
+
+exit 0

@@ -23,6 +23,15 @@ pub fn kit_of(name: &str, digest: &str) -> Value {
     }
 }
 
+/// Whether `i` holds a behavior part: fixtures of #185's kind, or (#191) a part named `behavior` in
+/// its own kit, physics@1's, whose fixtures its interface crate holds.
+fn has_behavior_part(i: &deep_canvas::registry::SealedInterface) -> bool {
+    i.behavior.as_ref().is_some_and(|b| !b.fixtures.is_empty())
+        || i.kit
+            .as_ref()
+            .is_some_and(|k| k.iter().any(|p| p == "behavior"))
+}
+
 /// The modules a release build refuses, as the seal's refusal; nothing in a debug build.
 pub fn admit(sealed: &Sealed) -> Result<(), Box<SealError>> {
     if cfg!(debug_assertions) {
@@ -31,7 +40,7 @@ pub fn admit(sealed: &Sealed) -> Result<(), Box<SealError>> {
     if let Some(i) = sealed.interfaces.iter().find(|i| {
         i.implementation.equivalence == Equivalence::Measured
             && i.implementation.name != i.reference
-            && i.behavior.as_ref().is_none_or(|b| b.fixtures.is_empty())
+            && !has_behavior_part(i)
     }) {
         return Err(Box::new(SealError {
             code: "no_behavior_part",
@@ -83,4 +92,31 @@ pub fn admit(sealed: &Sealed) -> Result<(), Box<SealError>> {
         implementations,
         ..SealError::default()
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// #191: physics@1 holds a behavior part, so a measured physics implementation that isn't the
+    /// reference meets its kit rather than a refusal for having none; an interface with neither
+    /// fixtures nor the part has none.
+    #[test]
+    fn physics_holds_a_behavior_part() {
+        let sealed = crate::assemble(crate::BuildSet::Full, crate::modules(crate::BuildSet::Full))
+            .seal()
+            .expect("the full set seals");
+        let physics = sealed
+            .interfaces
+            .iter()
+            .find(|i| i.name == "physics@1")
+            .expect("physics@1 is sealed");
+        assert!(has_behavior_part(physics));
+        let none = sealed
+            .interfaces
+            .iter()
+            .find(|i| i.name == "look@1")
+            .expect("look@1 is sealed");
+        assert!(!has_behavior_part(none));
+    }
 }

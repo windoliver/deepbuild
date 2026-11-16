@@ -73,7 +73,27 @@ pub struct Refusal {
 /// A module's expansion of one item of its kind.
 pub type Expand = fn(&Request<'_>) -> Result<Lowered, Vec<Refusal>>;
 
+/// What a reading of a cue list's times takes, for a pack kind's rule over it (#142).
+pub struct RowsRequest<'a> {
+    pub doc: &'a Value,
+    pub items: &'a Map<String, Value>,
+    /// The cue list, as the instance's input holds it.
+    pub cues: &'a Value,
+    pub entries: &'a Entries<'a>,
+    pub planted: Option<&'static str>,
+}
+
+/// A module's reading of a cue list (#142): each cue's row, in list order, `{id, index, start,
+/// end, class, targets, …}`, its times in seconds from the list's start.
+pub type CueRows = fn(&RowsRequest<'_>) -> Result<Vec<Map<String, Value>>, Refusal>;
+
 impl Registrar {
+    /// Reads a cue list's times for the core's rules over it (#142).
+    pub fn cue_rows(&mut self, rows: CueRows) -> &mut Self {
+        self.cue_rows.push(rows);
+        self
+    }
+
     /// Expands each item of the kind `family.name` at check (#222).
     pub fn expands(&mut self, kind: &str, expand: Expand) -> &mut Self {
         self.expands.push((kind.into(), expand));
@@ -193,6 +213,7 @@ pub(super) fn run(
             orphaned: Vec::new(),
             channels: Map::new(),
             sections: lowered.sections,
+            placed: Vec::new(),
         });
     }
     out
@@ -234,11 +255,172 @@ fn merge_into(doc: &mut Value, sections: &Map<String, Value>) {
     }
 }
 
+/// The document as it draws: each recipe instance replaced by the derived items its expansion
+/// made, which draw in its place, and each cue list by what it expanded to, the sections every
+/// expansion wrote merged in; everything else as the writer sent it.
+pub fn drawn(doc: &Value, expansions: &[Expansion]) -> Value {
+    let mut out = doc.clone();
+    if let Some(Value::Object(items)) = out.get_mut("items") {
+        for e in expansions {
+            items.shift_remove(&e.instance);
+            for (id, item) in &e.derived {
+                items.insert(id.clone(), item.clone());
+            }
+        }
+    }
+    // #222: a cue list's channels and markers join the document's, so the frames play them.
+    merge(&mut out, expansions);
+    out
+}
+
 /// The sections each expansion wrote, merged into `doc`: what the check's lowered document and a
 /// session's drawn form both hold, so the motion program, film.layout and every reader of
 /// markers see plain entries.
 pub fn merge(doc: &mut Value, expansions: &[Expansion]) {
     for e in expansions {
         merge_into(doc, &e.sections);
+    }
+}
+
+/// A film recipe's shots, markers, strips and transitions with every time resolved (#142): a
+/// time anchored on a marker (`@cues.c3`, `@cues.c3.end`) reads the markers the document and
+/// every expansion wrote, so cue lists' markers time the shots built on them; a shot written
+/// without an end runs to the next shot of its camera, the last to the transport's span; a
+/// transition written without `from` comes from the shot that ends where its `to` starts.
+pub(super) fn resolve_times(doc: &Value, expansions: &mut [Expansion], issues: &mut Vec<Issue>) {
+    use crate::grammar::{Time, TimeContext};
+    if !expansions
+        .iter()
+        .any(|e| !e.pack.is_empty() && !e.sections.is_empty())
+    {
+        return;
+    }
+    let frame_rate = member(doc, "transport")
+        .and_then(|t| super::check::frame_rate_of(t))
+        .unwrap_or((60, 1));
+    let mut ctx = TimeContext {
+        frame_rate,
+        markers: Default::default(),
+    };
+    let flicks = |v: &Value| v.as_i64();
+    let mark = |ctx: &mut TimeContext, name: &str, m: &Value| {
+        if let Some(t) = member(m, "t").and_then(flicks) {
+            let span = member(m, "span").and_then(flicks).unwrap_or(0);
+            ctx.markers.insert(name.to_string(), (t, t + span));
+        }
+    };
+    for (name, m) in member(doc, "markers")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+    {
+        mark(&mut ctx, name, m);
+    }
+    for e in expansions.iter() {
+        for (name, m) in e
+            .sections
+            .get("markers")
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten()
+        {
+            mark(&mut ctx, name, m);
+        }
+    }
+    let span = member(doc, "transport")
+        .and_then(|t| member(t, "span"))
+        .and_then(|s| match s {
+            Value::String(text) => Time::parse(text).ok()?.resolve(&ctx).ok(),
+            v => v.as_i64(),
+        });
+    for e in expansions.iter_mut().filter(|e| !e.pack.is_empty()) {
+        let instance = e.instance.clone();
+        let mut resolve = |section: &str, field: &str, entry: &mut Value, id: &str| {
+            let Some(Value::String(text)) = entry.get(field) else {
+                return;
+            };
+            if !text.starts_with('@') {
+                return;
+            }
+            match Time::parse(text).and_then(|t| t.resolve(&ctx)) {
+                Ok(t) => entry[field] = json!(t),
+                Err(r) => issues.push(Issue {
+                    ids: vec![instance.clone()],
+                    ..Issue::envelope(
+                        "time_unresolved",
+                        format!("{section}/{id}/{field}"),
+                        json!(text),
+                        &r.what,
+                    )
+                }),
+            }
+        };
+        for (section, fields) in [
+            ("shots", &["start", "end"][..]),
+            ("markers", &["t"][..]),
+            ("strips", &["start"][..]),
+        ] {
+            if let Some(map) = e.sections.get_mut(section).and_then(Value::as_object_mut) {
+                for (id, entry) in map.iter_mut() {
+                    for f in fields {
+                        resolve(section, f, entry, id);
+                    }
+                }
+            }
+        }
+        // Shots in time order: one without an end runs to the next of its camera.
+        let starts: Vec<(String, i64, Value)> = e
+            .sections
+            .get("shots")
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten()
+            .filter_map(|(id, s)| {
+                let start = member(s, "start")?.as_i64()?;
+                Some((
+                    id.clone(),
+                    start,
+                    member(s, "camera").cloned().unwrap_or(Value::Null),
+                ))
+            })
+            .collect();
+        if let Some(map) = e.sections.get_mut("shots").and_then(Value::as_object_mut) {
+            for (id, start, camera) in &starts {
+                let next = starts
+                    .iter()
+                    .filter(|(_, s, c)| s > start && c == camera)
+                    .map(|(_, s, _)| *s)
+                    .min()
+                    .or(span);
+                if let (Some(shot), Some(end)) = (map.get_mut(id), next) {
+                    if shot.get("end").is_none() {
+                        shot["end"] = json!(end);
+                    }
+                }
+            }
+        }
+        let shots = e.sections.get("shots").cloned().unwrap_or(Value::Null);
+        if let Some(map) = e
+            .sections
+            .get_mut("transitions")
+            .and_then(Value::as_object_mut)
+        {
+            for tr in map.values_mut() {
+                if tr.get("from").is_some() {
+                    continue;
+                }
+                let to_start = member(tr, "to")
+                    .and_then(Value::as_str)
+                    .and_then(|to| member(&shots, to))
+                    .and_then(|s| member(s, "start"))
+                    .cloned();
+                let from = shots.as_object().into_iter().flatten().find(|(_, s)| {
+                    member(s, "end").is_some() && member(s, "end").cloned() == to_start
+                });
+                if let Some((from, _)) = from {
+                    tr["from"] = json!(from);
+                }
+            }
+        }
     }
 }

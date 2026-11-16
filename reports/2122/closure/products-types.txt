@@ -1,0 +1,2 @@
+
+TYPECHECK: 0 diagnostics

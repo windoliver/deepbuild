@@ -1,0 +1,10 @@
+{
+ "fixture": "art.cel_light.2d",
+ "fingerprint": {
+  "os": "27.2 (26B8119)",
+  "gpu": "Apple M5 Max",
+  "driver": "Metal",
+  "wgpu": "30.0.1"
+ },
+ "pixels": "42f1ff4bb684ec6a0a2d421a16cc95f5e6edd001db7c94edd31c3bc9a82defa7"
+}

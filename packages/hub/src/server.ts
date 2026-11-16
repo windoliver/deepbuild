@@ -17,22 +17,22 @@ import { stopTimeoutS } from './codex-settings.js';
 import { contractAdapter, rpcTable, type DeprecatedNotice } from './contracts.js';
 import type { CoreMessage, CoreRequest } from './core-worker.js';
 import { prCommands } from './pr-commands.js';
-import { adapterOf, registry } from './hookmap.js';
-import type { Part } from './context-fit.js';
+import { registry } from './hookmap.js';
+import { agentReply, allowReply, contextParts, coreReplyLine, EMPTY_REPLY, heavyReply, withWaits } from './hook-replies.js';
 import { takeLock, type Lock } from './lock.js';
 import { reaches } from './memory.js';
 import { handleOf as ruleHandle, noticeText, scopedAt } from './rules.js';
 import { dropTestSettings, installedRoot, repoOf, rootOf, type Root } from './paths.js';
 import { shedStartup, YOUNG } from './settle.js';
-import { heavyDenial } from './heavy.js';
 import { processHealth } from './process-health.js';
-import { Waits, type HookSeen, type OpenCall, type Reply as WaitReply, type Restored } from './waits.js';
+import { Waits, type HookSeen, type OpenCall, type Restored } from './waits.js';
 import { People } from './people.js';
 import { identityAt, idOf, type Identity } from './identity.js';
 import { plantedStart } from './plant.js';
 import { gatesOff } from './watch.js';
 import { AUTHORITY, CONTRACT, EXTENSION_HOLD_MS, FEATURES, line, plantOf, refuse, refusal, Refused, STAGE_HOLD_MS, ulid, VERSION, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Parsed, type Plant, type Refusal, type Scope, type Scoped, SCREEN_TOOLS, type StageReach, type VfsSettings } from './wire.js';
 import { isRecord as isObj } from '@deepbuild/contracts';
+import { writeSynced } from './vfs.js';
 
 /** How often the hub checks that its lock file is still the one it holds (#909): the design says at least once a minute. */
 const LOCK_CHECK_MS = 5000;
@@ -65,7 +65,7 @@ const ALLOWED = new Map<string, readonly Role[]>([
   // The Agents page (#148): a server or a skill proposed for the agents you choose, the page's model, Codex's daemon
   // restarted through an ask, a sync undone; and `deep mcp-exec`, a synced server's command with its secrets by handle.
   ['agents.propose', ['app', 'cli']], ['agents.read', ['app', 'cli']], ['agents.restart', ['app', 'cli']], ['agents.undo', ['app', 'cli']], ['box.say', ['app', 'cli']], ['mcp.exec', ['cli']],
-  ['gates.off', ['app', 'cli']], ['gates.on', ['app', 'cli']], ['you.confirm', ['cli']], ['status.read', ['app', 'cli', 'person']], ['rows.read', ['app', 'cli', 'person']], ['row.read', ['app']], ['hub.stop', ['app', 'cli']], ['run.start', ['app', 'cli']], ['run.output', ['app', 'cli']], ['host.list', ['app', 'cli']], ['host.facts', ['app', 'cli']], ['host.plan', ['cli']], ['host.ran', ['cli']], ['host.changes', ['app', 'cli']], ['test.load', ['app', 'cli']],
+  ['gates.off', ['app', 'cli']], ['gates.on', ['app', 'cli']], ['you.confirm', ['cli']], ['status.read', ['app', 'cli', 'person']], ['rows.read', ['app', 'cli', 'person']], ['row.read', ['app']], ['hub.stop', ['app', 'cli']], ['run.start', ['app', 'cli']], ['run.output', ['app', 'cli']], ['host.list', ['app', 'cli']], ['host.facts', ['app', 'cli']], ['host.plan', ['cli']], ['host.ran', ['cli']], ['host.changes', ['app', 'cli']], ['host.remove', ['cli']], ['test.load', ['app', 'cli']],
   // A new secret, on the trusted path, and which are held; values never come back (#70).
   ['secret.enter', ['cli']], ['secret.list', ['app', 'cli']],
   // A hosted terminal the hub reattaches after a restart (#70).
@@ -81,7 +81,7 @@ const ALLOWED = new Map<string, readonly Role[]>([
   ['person.invite', ['cli']], ['person.revoke', ['cli']],
   // `deep lease` (#1015): a heavy command's place in the queue, its process group once it starts, and its first process's exit.
   ['lease.wait', ['cli']], ['lease.started', ['cli']], ['lease.exited', ['cli']], ['extension.install', ['cli']], ['guard.add', ['cli']], ['record.backup', ['cli']], ['test.verdict', ['cli']],
-  ['mcp.call', ['mcp']], ['mcp.cancel', ['mcp']], ['evidence.paste', ['app']],
+  ['mcp.call', ['mcp']], ['mcp.cancel', ['mcp']], ['evidence.paste', ['app']], ['eval.report', ['cli']],
   // Setup reads your history into the wiki (#356), and records the steps it took (#1100).
   ['wiki.build', ['cli']], ['setup.report', ['cli']],
   // Every agent's memory: the ranked list, and your keep or remove of a lesson (#111).
@@ -110,6 +110,8 @@ const ALLOWED = new Map<string, readonly Role[]>([
   ['session.note', ['app']], ['ask.later', ['app']], ['session.pause', ['app']],
   // A session's name from the Session menu's Rename, and why a session reads as it does, for `deep status <session> --why` (#2018).
   ['session.rename', ['app']], ['row.why', ['app', 'cli', 'person']],
+  // A sign-in task's one button (#1349): the agent's own sign-in command, started from the app alone.
+  ['signin.open', ['app']],
   // A send-back planted for a session's next stop, served only to a hub a test started with DEEP_HUB_TEST_SEND_BACK=1 (#25).
   ['test.send_back', ['cli']],
   // The hub's clock stepped forward, served only to a hub a test started with DEEP_HUB_TEST_CLOCK_STEPS=1 (#965).
@@ -153,66 +155,8 @@ function noticed<C extends object>(conn: C & { write(value: Obj): void }, id: un
     set: (target, key, value) => Reflect.set(target, key, value, target),
   });
 }
-const EMPTY_REPLY = line({ exit: 0, stdout: '', stderr: '' });
-/** A warn entry's words in the guard entries' reply to a call no entry blocks, or none. */
-const warnings = (ruled: string): string[] =>
-  ruled === EMPTY_REPLY ? [] : [(JSON.parse(String((JSON.parse(ruled) as Obj).stdout)) as { hookSpecificOutput: { additionalContext: string } }).hookSpecificOutput.additionalContext];
-/**
- * The extensions' joined reply as the agent's own hook output (#350): a deny ends the call, its reasons on stderr
- * as deep-hook's own denials are; context goes as Claude Code reads it, after a warn entry's words, each block
- * labelled with its extension. `ruled` is the guard entries' reply: an agent with no context channel, or a reply
- * with no context, gets it as it is.
- */
-function agentReply(agent: string, reply: ExtensionReply, ruled: string, fitted?: string): string {
-  if (reply.denies.length) return line({ exit: 2, stdout: '', stderr: reply.denies.map((d) => `DeepBuild blocked this: [${d.extension}] ${d.reason}`).join('\n') + '\n' });
-  if (!reply.context.length || (agent !== 'claude-code' && agent !== 'claude')) return ruled;
-  const additionalContext = fitted ?? contextParts(reply, ruled).map((p) => p.text).join('\n');
-  return line({ exit: 0, stdout: JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext } }), stderr: '' });
-}
-/** A warn entry's words, then each extension's block, labelled: the parts of a call's context the cap fits (#1296). */
-const contextParts = (reply: ExtensionReply, ruled: string): Part[] =>
-  [...warnings(ruled).map((text) => ({ name: 'guard warnings', text, keep: true })), ...reply.context.map((b) => ({ name: `${b.extension}'s context`, text: `[${b.extension}] ${b.text}` }))];
-/**
- * The core's reply as the agent's hook output: a block with its reason (a stop sent back, a prompt answered from the
- * record), or context the agent adds at a session's start or a prompt, never a decision; beside either, the one
- * line the chat shows (`systemMessage`, #83). Nothing to say is the hook's empty reply.
- */
-function coreReplyLine(agent: string, event: string, reply: { context?: string; block?: string; message?: string }, watchPaths?: string[]): string {
-  const out: Record<string, unknown> = {};
-  // Context goes as the agent's adapter gives it the model (#1296); one that gives none at this event sends nothing.
-  const adapter = adapterOf(agent);
-  const given = reply.context && !reply.block && adapter?.contextReply ? adapter.contextReply(event, reply.context) : undefined;
-  if (reply.block) Object.assign(out, { decision: 'block', reason: reply.block });
-  else if (given) {
-    const json = ((): unknown => { try { return JSON.parse(given.stdout); } catch { return undefined; } })();
-    if (!isObj(json)) return line(given);
-    Object.assign(out, json);
-  }
-  else if (reply.context && !adapter?.contextReply) out.hookSpecificOutput = { hookEventName: event, additionalContext: reply.context };
-  // A session's start names the ticker file whose change fires its FileChanged hook: the route a line takes into the
-  // terminal while a call still runs (#120).
-  if (watchPaths?.length && !reply.block) out.hookSpecificOutput = { hookEventName: event, ...(isObj(out.hookSpecificOutput) ? out.hookSpecificOutput : {}), watchPaths };
-  if (reply.message) out.systemMessage = reply.message;
-  return Object.keys(out).length ? line({ exit: 0, stdout: JSON.stringify(out), stderr: '' }) : EMPTY_REPLY;
-}
-/**
- * A hook's reply with what the waits add (#120): the one line the chat shows, context for the agent, and a rewritten
- * input carrying a deadline, never a decision. A reply that already denies the call stands as it is.
- */
-function withWaits(ruled: string, event: string, wait: WaitReply): string {
-  if (!wait.message && !wait.context && !wait.updatedInput) return ruled;
-  const reply = ruled === EMPTY_REPLY ? { exit: 0, stdout: '', stderr: '' } : JSON.parse(ruled) as { exit: number; stdout: string; stderr: string };
-  if (reply.exit !== 0) return ruled;
-  const out = reply.stdout ? JSON.parse(reply.stdout) as Record<string, unknown> : {};
-  const specific = isObj(out.hookSpecificOutput) ? out.hookSpecificOutput : { hookEventName: event };
-  if (wait.context) specific.additionalContext = [specific.additionalContext, wait.context].filter(Boolean).join('\n');
-  if (wait.updatedInput) specific.updatedInput = wait.updatedInput;
-  if (wait.context || wait.updatedInput) out.hookSpecificOutput = specific;
-  if (wait.message) out.systemMessage = [out.systemMessage, wait.message].filter(Boolean).join('\n');
-  return line({ exit: 0, stdout: JSON.stringify(out), stderr: reply.stderr });
-}
-/** A file's identity, size and time, so a change is read once; 'none' while it is missing. */
-const fileKey = (file: string): string => { try { const s = statSync(file); return `${s.ino}:${s.size}:${s.mtimeMs}`; } catch { return 'none'; } };
+/** A file's identity, size and times, so a change is read once, one to its mode alone included; 'none' while it is missing. */
+const fileKey = (file: string): string => { try { const s = statSync(file); return `${s.ino}:${s.size}:${s.mtimeMs}:${s.ctimeMs}`; } catch { return 'none'; } };
 const versionRefusal = (value: Obj): Refusal =>
   refusal('v' in value ? 'const' : 'required', '/v', 'Send every line with "v": 1, the socket protocol version.', value.v);
 /** A subscribe's scope (#1575): none, as the app subscribes; one session; or the list's rows. Anything else is refused, never read as none. */
@@ -532,6 +476,8 @@ class Hub {
     this.helloLine = line({ hello: 'deep-hub', start: this.start, contract, features: FEATURES, generation: writerGeneration(this.root.ledger), hub: this.identity.id });
     this.core = this.plant === 'commit-on-event-loop' ? await coreInline(options, frame, fatal, asking, acking, scrub) : coreWorker(options, frame, fatal, asking, acking, scrub);
     this.parsers = this.plant === 'parse-on-event-loop' ? await parserInline(held, this.plant, this.root.dir) : parserPool(held, this.plant, this.root.dir);
+    // Read once before any hook, so a rules.json spoiled later can be written again as it was.
+    this.rules();
     this.server.on('connection', (sock) => this.accept(sock));
     // Out of descriptors, the accept loop keeps going: libuv sheds the connections it can't take, and the next one is served.
     this.server.on('error', (error: NodeJS.ErrnoException) => {
@@ -540,15 +486,12 @@ class Hub {
     // The lock is held and nothing listens there, so whatever is at the socket's path is a dead hub's: removed, then
     // made again only you can open.
     rmSync(this.root.socket, { force: true });
-    const umask = process.umask(0o177);
-    try {
-      await new Promise<void>((resolve, reject) => {
-        this.server.once('error', reject);
-        this.server.listen(this.root.socket, () => { this.server.off('error', reject); resolve(); });
-      });
-    } finally {
-      process.umask(umask);
-    }
+    // The private root denies other users from creation, including before chmod. Changing the process's umask
+    // here would also strip the search bits from directories the core's worker is creating (#2594).
+    await new Promise<void>((resolve, reject) => {
+      this.server.once('error', reject);
+      this.server.listen(this.root.socket, () => { this.server.off('error', reject); resolve(); });
+    });
     chmodSync(this.root.socket, 0o600);
     this.ino = statSync(this.root.socket).ino;
     await this.syncNetwork();
@@ -556,6 +499,8 @@ class Hub {
     this.hooks = new Set((await this.core.started).hooks);
     // Once lost, the lock stays lost: every gate turns watch-only, BLOCKED, and deep-hook spools what this hub won't take.
     const checking = setInterval(() => {
+      // An entry installed since the last hook is in the copy a later rewrite of rules.json is made from (#2204).
+      this.rules(false);
       if (this.lost || this.lock.held() || this.plant === 'lock-never-rechecked') return;
       this.lost = true;
       clearInterval(checking);
@@ -582,22 +527,7 @@ class Hub {
    */
   private leased(meta: HookMeta, ruled: string): string {
     if (meta.event !== 'PreToolUse' || this.off) return ruled;
-    const command = typeof meta.call?.input.command === 'string' ? meta.call.input.command : undefined;
-    const rewrites = this.rewrites(meta.agent);
-    // The planted wrong program for AC2 denies the leased form too, so the agent's retry is denied again.
-    const retried = this.plant === 'denies-every-retry' && !rewrites && command !== undefined && /^\s*deep lease\b/.test(command);
-    if ((!meta.heavy && !retried) || command === undefined || this.plant === 'runs-matched-as-written') return ruled;
-    const reply = ruled === EMPTY_REPLY ? { exit: 0, stdout: '', stderr: '' } : JSON.parse(ruled) as { exit: number; stdout: string; stderr: string };
-    if (reply.exit !== 0) return ruled;
-    const form = retried ? command : meta.heavy!.form;
-    if (!rewrites) {
-      return line({ exit: 2, stdout: '', stderr: `${heavyDenial(command, form, meta.heavy?.name ?? 'deep lease')}\n` });
-    }
-    const out = reply.stdout ? JSON.parse(reply.stdout) as Record<string, unknown> : {};
-    const specific = isObj(out.hookSpecificOutput) ? out.hookSpecificOutput : { hookEventName: 'PreToolUse' };
-    specific.updatedInput = { ...meta.call!.input, ...(isObj(specific.updatedInput) ? specific.updatedInput : {}), command: form };
-    out.hookSpecificOutput = specific;
-    return line({ exit: 0, stdout: JSON.stringify(out), stderr: reply.stderr });
+    return heavyReply(meta, ruled, this.rewrites(meta.agent), this.plant);
   }
 
   /** Whether an agent's adapter can rewrite a call's input, so a deadline can be attached to a command that never ends. */
@@ -675,6 +605,8 @@ class Hub {
       }
     });
     sock.on('data', (chunk: Buffer) => this.read(conn, chunk));
+    // A rules.json removed since the last hook is back before the hello: the deep-hook that connects reads it then (#1856).
+    this.rules();
     sock.write(this.helloLine);
   }
 
@@ -823,6 +755,8 @@ class Hub {
     conn.done = true;
     // With its lock lost the hub acknowledges nothing: closed with no ack, deep-hook fails open and spools the hook.
     if (this.lost) return void conn.sock.end();
+    // A rules.json this hub can't read is written again before the hook is answered (#2204).
+    this.rules();
     // A tool.before some extension handles, and no guard entry blocks, is held for their joined reply (#350); a
     // session's start, a prompt and a stop the hub can hold are held for the core's (#18); every other hook gets
     // the acknowledgement and the reply in one write, which also ends the connection.
@@ -882,10 +816,14 @@ class Hub {
     // other line is read, so a deep_* call that follows this hook finds its stamp.
     const writer = this.plant === 'writer-from-payload' && meta.payloadWriter ? meta.payloadWriter : 'hook';
     this.core.post({ op: 'hook', drafts: parsed.drafts, meta, writer });
+    if (this.rulesRewritten && meta.session) {
+      this.core.post({ op: 'line', session: meta.session, agent: meta.agent, text: this.rulesRewritten });
+      this.rulesRewritten = undefined;
+    }
     if (prompted) void this.permissionReply(conn, meta, hold!);
     else if (gated) void this.gateReply(conn, meta, gated, hold!, before?.data, ruled);
     else if (before) void this.extensionReply(conn, meta, before.data, hold!, ruled);
-    else if (held !== null) void this.coreReply(conn, meta, held);
+    else if (held !== null) void this.coreReply(conn, meta, held, ruled);
   }
 
   /**
@@ -1016,17 +954,12 @@ class Hub {
       const output = { hookEventName: 'PreToolUse', permissionDecision: 'allow', permissionDecisionReason: 'DeepBuild answered this from your saved decision.', updatedInput: { questions: meta.call?.input.questions, answers: gate.answers } };
       return void conn.sock.end(line({ exit: 0, stdout: JSON.stringify({ hookSpecificOutput: output }), stderr: '' }));
     }
-    if (before !== undefined) return this.extensionReply(conn, meta, before, hold, ruled);
     // Your standing rule's yes, and why: Claude Code's explicit allow, never past a permission mode that denies the call;
-    // a warn entry's words go with it.
-    const allow = 'late' in gate ? undefined : gate.allow;
-    if (allow !== undefined && (meta.agent === 'claude-code' || meta.agent === 'claude')) {
-      const past = !DENYING_MODES.has(meta.call?.mode ?? '') || this.plant === 'decision-over-mode';
-      const additionalContext = [...warnings(ruled), allow].join('\n');
-      const output = { hookEventName: 'PreToolUse', ...(past ? { permissionDecision: 'allow', permissionDecisionReason: allow } : {}), additionalContext };
-      return void conn.sock.end(line({ exit: 0, stdout: JSON.stringify({ hookSpecificOutput: output }), stderr: '' }));
-    }
-    conn.sock.end(ruled);
+    // a warn entry's words go with it, and so does the context of the extensions that handle the call, when none denies it.
+    const allow = 'late' in gate || (meta.agent !== 'claude-code' && meta.agent !== 'claude') ? undefined : gate.allow;
+    const allowed = allow === undefined ? undefined : { allow, past: !DENYING_MODES.has(meta.call?.mode ?? '') || this.plant === 'decision-over-mode' };
+    if (before !== undefined) return this.extensionReply(conn, meta, before, hold, ruled, allowed);
+    conn.sock.end(allowed ? allowReply(allowed.allow, allowed.past, ruled) : ruled);
   }
 
   /** The scoped rules each session heard since its start, compaction or resume, by rule ID (#344). */
@@ -1109,8 +1042,8 @@ class Hub {
     if (!file || !existsSync(file)) return;
     await new Promise((done) => setTimeout(done, Math.max(0, hold + 1000 - Date.now())));
   }
-  /** The core's reply to a held hook, written by its hold; one that isn't in by then is the hook's fail-open one. */
-  private async coreReply(conn: Conn, meta: HookMeta, hold: number): Promise<void> {
+  /** The core's reply to a held hook, written by its hold, with the settled reply kept even if the core can't answer. */
+  private async coreReply(conn: Conn, meta: HookMeta, hold: number, ruled: string): Promise<void> {
     // A deep-hook that gave up on the hub before reading its reply has let the hook through: nothing is held for it (#27).
     let replied = false;
     conn.sock.once('close', () => { if (!replied) this.core.post({ op: 'hook-gone', id: meta.id, session: meta.session }); });
@@ -1126,22 +1059,24 @@ class Hub {
     // With DeepBuild off every gate is watch-only: a status answer shows beside the prompt, never in its place.
     const shown = reply && this.off && meta.event === 'UserPromptSubmit' && reply.block ? { ...(reply.context ? { context: reply.context } : {}), message: reply.block } : reply;
     const watch = meta.event === 'SessionStart' && !meta.watchOnly && meta.session && this.watches(meta.agent) ? [this.ticker(meta.session)] : undefined;
-    conn.sock.end(shown || watch ? coreReplyLine(meta.agent, meta.event, shown ?? {}, watch) : EMPTY_REPLY);
+    conn.sock.end(shown || watch ? coreReplyLine(meta.agent, meta.event, shown ?? {}, ruled, watch) : ruled);
   }
 
   /**
    * The extensions' reply, written by the hold deep-hook was given: one that isn't in by then, a core that can't
    * answer, or watch-only gates give the reply a hub with no extension gives, the hook's fail-open policy.
    */
-  private async extensionReply(conn: Conn, meta: HookMeta, data: unknown, hold: number, ruled: string): Promise<void> {
+  private async extensionReply(conn: Conn, meta: HookMeta, data: unknown, hold: number, ruled: string, allowed?: { allow: string; past: boolean }): Promise<void> {
     let timer: NodeJS.Timeout | undefined;
     const late = new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), Math.max(0, hold - Date.now() - HOLD_MARGIN)); });
     const asked = this.core.request({ op: 'extension-hook', data }).catch(() => null) as Promise<ExtensionReply | null>;
     const reply = await Promise.race([asked, late]).finally(() => clearTimeout(timer));
     await this.lateReply(hold);
     // Past the agent's cap, the core keeps what doesn't fit and names where to continue (#1296).
-    const fitted = reply?.context.length && !reply.denies.length ? ((await this.core.request({ op: 'context-fit', meta, parts: contextParts(reply, ruled), join: '\n' }).catch(() => undefined)) as string | undefined) : undefined;
-    if (conn.sock.writable) conn.sock.end(reply ? agentReply(meta.agent, reply, ruled, fitted) : ruled);
+    const fitted = reply?.context.length && !reply.denies.length ? ((await this.core.request({ op: 'context-fit', meta, parts: contextParts(reply, ruled, allowed?.allow), join: '\n' }).catch(() => undefined)) as string | undefined) : undefined;
+    // Your standing rule's yes stands unless an extension denies the call (#23): its allow, their context after its words.
+    const out = allowed && !reply?.denies.length ? allowReply(allowed.allow, allowed.past, ruled, reply ?? undefined, fitted) : reply ? agentReply(meta.agent, reply, ruled, fitted) : ruled;
+    if (conn.sock.writable) conn.sock.end(out);
   }
 
   /**
@@ -1188,19 +1123,40 @@ class Hub {
     return line({ exit: 0, stdout: JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext } }), stderr: '' });
   }
 
-  private rulesSeen = { key: '', entries: {} as Record<string, Guard | undefined> };
-  /** The entries of rules.json, read again only when the file changes. */
-  private rules(): Record<string, Guard | undefined> {
+  private rulesSeen = { key: '', entries: {} as Record<string, Guard | undefined>, text: undefined as string | undefined };
+  /** Why rules.json was written again, until a hook's session can record it. */
+  private rulesRewritten: string | undefined;
+  /**
+   * The entries of rules.json, read again only when the file changes. One that can't be read, cut short or written
+   * over by a command's child no guard saw (#2204), or removed by one (#1856), is written again as this hub last read
+   * it: deep-hook matches against that file alone, and denies every call while it can't read it. A file this hub
+   * never read stays as it is, and so does none.
+   * Without `rewrite`, a readable file is only kept: the copy stays whole between hooks.
+   */
+  private rules(rewrite = true): Record<string, Guard | undefined> {
     const file = join(this.root.dir, 'rules.json');
-    // No rules.json: no entries.
     const key = fileKey(file);
     if (key !== this.rulesSeen.key) {
-      let entries: Record<string, Guard | undefined> = {};
+      let entries: Record<string, Guard | undefined> | undefined;
+      let text: string | undefined;
+      let why = key === 'none' ? 'was removed' : 'has no entries object';
       try {
-        const parsed = JSON.parse(readFileSync(file, 'utf8')) as { entries?: unknown };
-        if (typeof parsed.entries === 'object' && parsed.entries !== null) entries = parsed.entries as Record<string, Guard | undefined>;
-      } catch { /* unreadable: deep-hook names it; the hub decides nothing from it */ }
-      this.rulesSeen = { key, entries };
+        text = readFileSync(file, 'utf8');
+        const parsed = JSON.parse(text) as { entries?: unknown } | null;
+        if (isObj(parsed?.entries)) entries = parsed.entries as Record<string, Guard | undefined>;
+      } catch (error) {
+        if (key !== 'none') why = error instanceof SyntaxError ? "isn't JSON" : `can't be read (${(error as NodeJS.ErrnoException).code ?? 'error'})`;
+      }
+      const kept = this.rulesSeen.text;
+      if (entries) this.rulesSeen = { key, entries, text };
+      else if (kept !== undefined) {
+        if (!rewrite) return this.rulesSeen.entries;
+        try {
+          writeSynced(file, Buffer.from(kept));
+          this.rulesRewritten = `${file} ${why}, so deep-hook could match no call against its guards; the hub wrote it again as it last read it.`;
+        } catch { /* it can't be written either: deep-hook goes on naming it, and the next change to it is tried again */ }
+        this.rulesSeen.key = fileKey(file);
+      } else this.rulesSeen = { key, entries: {}, text: undefined }; // No rules.json this hub ever read: no entries.
     }
     return this.rulesSeen.entries;
   }
@@ -1381,7 +1337,7 @@ class Hub {
       case 'health':
         // The process readings after the core's: its own checks start short-lived children (the secret store's) that
         // would count as the hub's.
-        return void reply(this.core.request({ op: 'health' }).then(async (health) => ({ pid: process.pid, start: this.start, off: this.off, parsers: this.parsers.count(), ...(health as Obj), process: await processHealth() })));
+        return void reply(this.core.request({ op: 'health', role: conn.name }).then(async (health) => ({ pid: process.pid, start: this.start, off: this.off, parsers: this.parsers.count(), ...(health as Obj), process: await processHealth() })));
       case 'stream.subscribe': {
         const sub = `${conn.id}:${JSON.stringify(id)}`;
         const after = Number.isSafeInteger(params.after) && (params.after as number) >= 0 ? (params.after as number) : 0;
@@ -1527,6 +1483,8 @@ export async function runHub(options: { root?: string; safe?: boolean }): Promis
   // Everything the hub writes, the record and the evidence included, is readable only by you.
   process.umask(0o077);
   mkdirSync(root.dir, { recursive: true, mode: 0o700 });
+  // mkdir's mode applies only to a new root; an existing dev or installed root must protect the socket too.
+  chmodSync(root.dir, 0o700);
   if (plant === 'unlink-before-lock') rmSync(root.socket, { force: true });
   const lock = takeLock(root.lock);
   if (!lock) {

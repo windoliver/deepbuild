@@ -185,11 +185,6 @@ impl Mirrorer {
         self.bind = None;
     }
 
-    /// A frame with no mirror: the overlay lets go of the targets it bound.
-    pub fn rest(&mut self) {
-        self.bind = None;
-    }
-
     /// The mirrored picture, linear, at half the frame's size (#166's water reads it).
     pub fn picture(&self) -> Option<wgpu::TextureView> {
         self.view.linear().map(|(_, v)| v.clone())
@@ -205,17 +200,22 @@ impl Mirrorer {
         ids: &wgpu::TextureView,
         reflection: Option<wgpu::TextureView>,
         profiler: &Option<crate::Profiler>,
+        keep: bool,
     ) -> Vec<(String, Job)> {
         let Some((uniform, parts)) = &self.frame else {
             return Vec::new();
         };
-        let mut jobs: Vec<(String, Job)> = self
-            .view
-            .jobs(device, slot, None, None)
-            .into_iter()
-            .take_while(|(name, _)| name != OUTPUT_PASS)
-            .map(|(_, job)| (MIRROR_PASS.to_string(), job))
-            .collect();
+        // #506's planted core keeps the picture the view before it drew.
+        let mut jobs: Vec<(String, Job)> = match keep {
+            true => Vec::new(),
+            false => self
+                .view
+                .jobs(device, slot, None, None)
+                .into_iter()
+                .take_while(|(name, _)| name != OUTPUT_PASS)
+                .map(|(_, job)| (MIRROR_PASS.to_string(), job))
+                .collect(),
+        };
         let Some((_, picture)) = self.view.linear() else {
             return Vec::new();
         };

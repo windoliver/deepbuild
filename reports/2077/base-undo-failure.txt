@@ -1,0 +1,45 @@
+
+ RUN  v5.0.5 <base-checkout>
+
+ ↓ packages/runner/test/runner.test.ts > refuses a checkout whose tree names a link and a path its case folds onto, and writes nothing through the link
+ ↓ packages/runner/test/runner.test.ts > refuses a checkout whose tree writes into a .git of another case
+ ↓ packages/runner/test/runner.test.ts > never starts a job cancelled while its binary is checked, and ends it once
+ ↓ packages/runner/test/runner.test.ts > keeps the higher reading of a window until it resets: a lower one before then is not believed
+ ↓ packages/runner/test/runner.test.ts > starts a job that needs a checkout only once its checkout is whole
+ ↓ packages/runner/test/runner.test.ts > never lets an older window's reading, past its reset, replace the current one
+ ↓ packages/runner/test/runner.test.ts > counts a reading that names no window as no reading
+ ↓ packages/runner/test/runner.test.ts > refuses a job whose budget you declined, and never asks for it again
+ ↓ packages/runner/test/runner.test.ts > remembers a declined budget while the job waits on something else first
+ × packages/runner/test/runner.test.ts > reads a default you undid as open again, so the job goes on waiting (#824) 10282ms
+   → expected 'refused' to be 'waiting' // Object.is equality
+ ↓ packages/runner/test/runner.test.ts > gives a real agent's job what it needs and no more: its own temp folder, your sign-in token, and only its model API, through your proxy
+ ↓ packages/runner/test/runner.test.ts > hands a job no token from an expired sign-in
+ ↓ packages/runner/test/runner.test.ts > refuses a job when your HTTPS_PROXY is one the forwarder can't use, rather than going around it
+ ↓ packages/runner/test/runner.test.ts > ends a job whose temp folder it made hard to remove, and removes it
+ ↓ packages/runner/test/runner.test.ts > removes the temp folder of a job a hub crash cut
+ ↓ packages/runner/test/runner.test.ts > reads a result that names its own stop as that cause
+ ↓ packages/runner/test/runner.test.ts > reads a job that got no answer as stopped, by the error its stream-json names, never finished
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/runner/test/runner.test.ts > reads a default you undid as open again, so the job goes on waiting (#824)
+AssertionError: expected 'refused' to be 'waiting' // Object.is equality
+
+Expected: "waiting"
+Received: "refused"
+
+ ❯ packages/runner/test/runner.test.ts:201:48
+    199|   await asks.undo({ writer: 'app', actor: 'you', scope: 'you' }, ask!.…
+    200|   await runner.tick();
+    201|   expect((await runner.status(rec.job)).state).toBe('waiting');
+       |                                                ^
+    202| }, 60_000);
+    203|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 16 skipped (17)
+   Start at  16:06:54
+   Duration  11.21s (tests 93%, transform 6%, import 1%)

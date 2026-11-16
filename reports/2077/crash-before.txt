@@ -1,0 +1,52 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `node node_modules/vitest/vitest.mjs run --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs packages/hub/test/removal-crash.test.ts` runs unleased
+
+ RUN  v5.0.5 <checkout>
+
+xxx
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/hub/test/removal-crash.test.ts > recovers adopted removal after sync_intent
+AssertionError: the hub cuts after sync_intent, not after it claims success: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ packages/hub/test/removal-crash.test.ts:40:81
+     38|       writeFileSync(w.release, 'go\n');
+     39|       const ended = await Promise.race([hub.exit.then(() => true), sle…
+     40|       expect(ended, `the hub cuts after ${point}, not after it claims …
+       |                                                                                 ^
+     41|       const file = join(w.repo, FILE);
+     42|       expect(readFileSync(file, 'utf8')).toBe(point === 'sync_intent' …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  packages/hub/test/removal-crash.test.ts > recovers adopted removal after sync_flush
+ FAIL  packages/hub/test/removal-crash.test.ts > recovers adopted removal after sync_flush, preserving a subsequent edit
+AssertionError: the hub cuts after sync_flush, not after it claims success: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ packages/hub/test/removal-crash.test.ts:40:81
+     38|       writeFileSync(w.release, 'go\n');
+     39|       const ended = await Promise.race([hub.exit.then(() => true), sle…
+     40|       expect(ended, `the hub cuts after ${point}, not after it claims …
+       |                                                                                 ^
+     41|       const file = join(w.repo, FILE);
+     42|       expect(readFileSync(file, 'utf8')).toBe(point === 'sync_intent' …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  15:44:43
+   Duration  398.37s (tests 100%)

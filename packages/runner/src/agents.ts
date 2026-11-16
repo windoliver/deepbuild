@@ -44,9 +44,9 @@ export interface AgentParts {
   /** It reports no plan window: its job waits for no reading of one. */
   windowless?: boolean;
   /** Your sign-in token from the Keychain, unexpired, when its own sign-in files don't hold it. */
-  token(home: string, keychain: (service: string) => Promise<string | undefined>): Promise<string | undefined>;
+  token(home: string, keychain: (service: string) => Promise<string | undefined>, env?: Record<string, string | undefined>): Promise<string | undefined>;
   /** When that token expires, in ms, if the Keychain says (#19: a run that would outlive it never starts). */
-  expires(home: string, keychain: (service: string) => Promise<string | undefined>): Promise<number | undefined>;
+  expires(home: string, keychain: (service: string) => Promise<string | undefined>, env?: Record<string, string | undefined>): Promise<number | undefined>;
 }
 /** What a program reads to run: the package holding it, since a launcher in bin loads the rest from there, or its own folder. */
 export function programRoot(real: string): string {
@@ -82,12 +82,12 @@ export const AGENTS: Partial<Record<Agent, AgentParts>> = {
       '--tools', `Read,Grep,Glob${writes ? ',Write,Edit' : ''}${Object.keys(subagents).length ? ',Task' : ''}`,
       ...(Object.keys(subagents).length ? ['--agents', JSON.stringify(subagents)] : []),
     ],
-    account: (home) => {
-      const v = readJson(join(home, '.claude.json'));
+    account: (home, env) => {
+      const v = readJson(join(env.CLAUDE_CONFIG_DIR || home, '.claude.json'));
       const id = isObj(v) && isObj(v.oauthAccount) ? v.oauthAccount.accountUuid : undefined;
       return typeof id === 'string' && id ? id : null;
     },
-    signIn: (home) => [join(home, '.claude.json'), join(home, '.claude', 'settings.json'), join(home, '.claude', '.credentials.json')],
+    signIn: (home, env) => [join(env.CLAUDE_CONFIG_DIR || home, '.claude.json'), ...['settings.json', '.credentials.json'].map((f) => join(env.CLAUDE_CONFIG_DIR || join(home, '.claude'), f))],
     windows: (limits) => {
       const out = new Map<string, { used: number; resets: number | null }>();
       for (const name of ['five_hour', 'seven_day']) {
@@ -103,17 +103,18 @@ export const AGENTS: Partial<Record<Agent, AgentParts>> = {
       ...(token ? { CLAUDE_CODE_OAUTH_TOKEN: token } : {}),
     }),
     // Only the access token, never the refresh token; an expired one isn't handed on, so the job reads as signed out.
-    token: async (home, keychain) => {
-      if (existsSync(join(home, '.claude', '.credentials.json'))) return undefined;
+    token: async (home, keychain, env = {}) => {
+      if (existsSync(join(env.CLAUDE_CONFIG_DIR || join(home, '.claude'), '.credentials.json'))) return undefined;
       let v: unknown;
       try { v = JSON.parse((await keychain('Claude Code-credentials')) ?? ''); } catch { return undefined; }
       const o = isObj(v) && isObj(v.claudeAiOauth) ? v.claudeAiOauth : undefined;
       return o && typeof o.accessToken === 'string' && o.accessToken && !(typeof o.expiresAt === 'number' && o.expiresAt <= Date.now()) ? o.accessToken : undefined;
     },
-    expires: async (home, keychain) => {
-      if (existsSync(join(home, '.claude', '.credentials.json'))) return undefined;
-      let v: unknown;
-      try { v = JSON.parse((await keychain('Claude Code-credentials')) ?? ''); } catch { return undefined; }
+    expires: async (home, keychain, env = {}) => {
+      let v = readJson(join(env.CLAUDE_CONFIG_DIR || join(home, '.claude'), '.credentials.json'));
+      if (v === undefined) {
+        try { v = JSON.parse((await keychain('Claude Code-credentials')) ?? ''); } catch { return undefined; }
+      }
       const o = isObj(v) && isObj(v.claudeAiOauth) ? v.claudeAiOauth : undefined;
       return o && typeof o.expiresAt === 'number' ? o.expiresAt : undefined;
     },

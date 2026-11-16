@@ -1,0 +1,47 @@
+{
+  "v": 2,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T7A",
+  "kind": "start.approval",
+  "subject": "ask:01K74FKZVK8Q2X5R7M3N9P4T7B",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "ask": "ask:01K74FKZVK8Q2X5R7M3N9P4T7B",
+    "repo": "/srv/src/shop",
+    "issues": [],
+    "rule": {
+      "words": "every issue labelled ready in milestone M1 with Claude Code, two at a time, 50% of each plan window",
+      "labels": [
+        "ready"
+      ],
+      "milestone": "M1",
+      "epic": null,
+      "roles": [
+        "OWNER",
+        "MEMBER",
+        "COLLABORATOR"
+      ]
+    },
+    "agents": [
+      "claude-code"
+    ],
+    "homes": {},
+    "modes": {},
+    "at_once": 2,
+    "plan_share": 50,
+    "until": null,
+    "hosts": [],
+    "sandbox": {
+      "claude-code": {
+        "sandboxed": true,
+        "walls": {
+          "writes": true,
+          "credentials": true,
+          "network": true
+        }
+      }
+    }
+  }
+}

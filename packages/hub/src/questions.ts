@@ -5,12 +5,13 @@
 // it states. A question an ask can't be filled from goes back once, for `deep_ask`; nothing is keyed from its words.
 import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { basename, extname, join } from 'node:path';
+import { basename, dirname, extname, join, resolve } from 'node:path';
 import type { Asks, PlanInput } from '@deepbuild/asks';
 import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { leftOpen } from '@deepbuild/gate';
 import type { Connection } from '@deepbuild/record';
 import type { Holds } from './holds.js';
+import { repoRoot } from './rules.js';
 import type { HookMeta, Plant } from './wire.js';
 import { couldDo, SECRET_NAME, struck, type Found, type Reach } from './could-do.js';
 
@@ -83,9 +84,16 @@ export function opensOf(question: string, signIns: Readonly<Record<string, strin
   return agent ? { kind: 'sign_in', command: signIns[agent]! } : undefined;
 }
 
-/** What your rule files say of commits: whether a line reserves them. */
+/**
+ * What your rule files say of commits: whether a line reserves them, in your user-level files (`~/.claude/CLAUDE.md`,
+ * `~/.codex/AGENTS.md`) or in a CLAUDE.md or AGENTS.md from the session's folder up to its repo's root, as the rules
+ * page reads them.
+ */
 function rulesReserveCommits(cwd: string): boolean {
-  for (const file of [join(homedir(), '.claude/CLAUDE.md'), join(cwd, 'CLAUDE.md'), join(cwd, 'AGENTS.md')]) {
+  const root = repoRoot(cwd);
+  const dirs = [resolve(cwd)];
+  for (let dir = dirs[0]!; root && dir !== root && dirname(dir) !== dir;) dirs.push(dir = dirname(dir));
+  for (const file of [join(homedir(), '.claude/CLAUDE.md'), join(homedir(), '.codex/AGENTS.md'), ...dirs.flatMap((d) => [join(d, 'CLAUDE.md'), join(d, 'AGENTS.md')])]) {
     try {
       if (/\b(?:commit\b[^.\n]*\bonly when\b|never commit\b|don'?t commit\b|do not commit\b)/i.test(readFileSync(file, 'utf8'))) return true;
     } catch { /* no such file */ }
