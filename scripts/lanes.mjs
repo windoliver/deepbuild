@@ -806,6 +806,8 @@ timed.push('tests/acceptance/184/budgets.test.ts');
 // replica's refusal before a play's first step is "before any run", its third draft runs; the first two by hand.
 alone.push('tests/acceptance/184-redraft-ac7-2/');
 byHand.push('tests/acceptance/184/ac07-bots-refused.test.ts', 'tests/acceptance/184-redraft-ac7/ac7-bots-refused.test.ts');
+// #555's files start replicas and a hub and play the crawler's 4,000-step runs for minutes.
+alone.push('tests/acceptance/555/');
 
 // #2516: each file builds deep-gpu and reads linear targets; castle costs require a timed grant.
 alone.push('tests/acceptance/2516/');
