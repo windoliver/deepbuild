@@ -48,6 +48,16 @@ pub fn pose_at(states: &[Value], t: i64, step: i64, hold: bool) -> Option<([f64;
     Some((pos, q.map(|x| x / n)))
 }
 
+/// #251: a bake reply's states by ID, the bodies' and each wheel's (`<body>#<wheel>`), for the
+/// outputs to item paths.
+pub fn states(reply: &Value) -> Value {
+    let mut all = reply["bodies"].clone();
+    if let (Some(all), Some(wheels)) = (all.as_object_mut(), reply["wheels"].as_object()) {
+        all.extend(wheels.clone());
+    }
+    all
+}
+
 /// A channel keyed at each of `values`' frames, linear between them.
 fn keyed(target: String, values: Vec<[f64; 3]>) -> Value {
     let keys: Map<String, Value> = values

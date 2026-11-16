@@ -95,10 +95,14 @@ pub fn run(call: &Value, plant: Option<Plant>, out: &Path) -> Result<Value, Fail
             || e.to_string(),
             |w| w.as_str().map_or_else(|| w.to_string(), str::to_string),
         );
-        match e.get("control") {
-            Some(c) => fail(&code, what).with("control", c.clone()),
-            None => fail(&code, what),
-        }
+        // What the refusal names: an undeclared control, a play interface's missing name (#555)
+        // or an action it doesn't declare.
+        ["control", "name", "action"]
+            .iter()
+            .fold(fail(&code, what), |f, k| match e.get(*k) {
+                Some(v) => f.with(k, v.clone()),
+                None => f,
+            })
     })?;
     if let Some(e) = error {
         return Err(fail("blocked", format!("{}: {e}", dir.display())));

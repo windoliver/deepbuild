@@ -4,11 +4,15 @@
 // outcome's and any the input asks for. testsRun counts runs; a failure names its run (`bot <b> run <i>`) and starts
 // with its code. Before any run, each bot plays no step at the check's own seed: a bot the piece can't take, such as a
 // policy naming a control it doesn't declare, is refused there by the replica, and the check ends with no run counted.
+// With a play interface (#555), the interface is played first for no step, so a name the piece publishes no array of
+// the right type for fails play.missing before any run; goals are expressions over its names; a name's range fails a
+// run that publishes a value outside it with play.out_of_range; and each bot's bands and expectations hold over its runs.
 import { createHash } from 'node:crypto';
 import type { CheckResult, Failure } from '@deepbuild/conformance';
-import { lower } from './bots.ts';
-import { firstDiffering, goalSteps, outcomeOf } from './judge.ts';
-import type { Outcome, Play, PlayAnswer, PlaytestInput, Span } from './types.ts';
+import { kindOf, lower, refusal } from './bots.ts';
+import { goalTest, lockRefusal, outOfRange, ranged } from './iface.ts';
+import { firstDiffering, goalSteps, outcomeOf, type Judged } from './judge.ts';
+import type { Bot, Outcome, Play, PlayAnswer, PlaytestInput, Span } from './types.ts';
 
 const FLICKS = 705_600_000;
 /** Runs played at once: a playtest's replicas are leased two at a time. */
@@ -26,15 +30,43 @@ const failure = (test: string, message: string, assertion = true): Failure => ({
 /** A span or a stuck rule's time as the piece's steps. */
 const steps = (s: Span, step: number): number => (typeof s === 'number' ? Math.round((s * FLICKS) / step) : s.steps);
 
-interface Ran { test: string; seed: number; outcome: Outcome; first: PlayAnswer; replay: PlayAnswer; reached: Set<string> }
+interface Ran { test: string; bot: number; seed: number; outcome: Outcome; first: PlayAnswer; replay: PlayAnswer; reached: Map<string, number> }
+
+const ended = (failures: Failure[], evidence: string[] = [], testsRun = 0): CheckResult => ({ outcome: 'failed', testsRun, failures, evidence, read: [], mask: null });
+/** A refusal's words led by the code the replica names: the host's message without its prefix, or a replica's error. */
+function said(e: unknown): string {
+  const raw = String((e as Error)?.message ?? e);
+  try {
+    const j = JSON.parse(raw) as { code?: unknown; message?: unknown };
+    if (typeof j?.code === 'string') return `${j.code}: ${String(j.message ?? '')}`;
+  } catch { /* not a replica's error as JSON */ }
+  return raw.replace(/^deep\.canvas\.play: (?:refused: )?/, '');
+}
 
 export async function runPlaytest(input: PlaytestInput, play: Play): Promise<CheckResult> {
   const runs = input.runs ?? 20;
   const span = input.span ?? 120;
-  const goals = input.goals ?? [];
-  const values = [...new Set([input.stuck?.measure, ...goals.map((g) => g.when)].filter((v): v is string => v !== undefined))];
-  const common = { span, values, ...(input.piece_seed ? { piece_seed: input.piece_seed } : {}) };
-  const jobs = input.bots.flatMap((bot, b) => Array.from({ length: runs }, (_, i) => ({ bot, test: `bot ${b} run ${i}`, seed: runSeed(input.seed, i) })));
+  const iface = input.play;
+  // The interface, its goals and its bots, each refused before any run.
+  const locked = iface && lockRefusal(iface);
+  if (locked) return ended([failure('play', `refused before any run: ${locked}`, false)]);
+  let goals: Judged[];
+  let reads: string[];
+  try {
+    const tests = (input.goals ?? []).map((g) => ({ name: g.name, ...goalTest(g.when, iface) }));
+    goals = tests;
+    reads = tests.flatMap((t) => t.reads);
+  } catch (e) {
+    return ended([failure('goals', `refused before any run: ${said(e)}`, false)]);
+  }
+  for (const [b, bot] of input.bots.entries()) {
+    const why = refusal(bot, iface);
+    if (why) return ended([failure(`bot ${b}`, `refused before any run: ${why}`, false)]);
+  }
+  const bounds = iface ? ranged(iface) : [];
+  const values = [...new Set([input.stuck?.measure, ...reads, ...bounds.map((r) => r.path)].filter((v): v is string => v !== undefined))];
+  const common = { span, values, ...(input.piece_seed ? { piece_seed: input.piece_seed } : {}), ...(iface ? { play: iface } : {}) };
+  const jobs = input.bots.flatMap((bot, b) => Array.from({ length: runs }, (_, i) => ({ bot, b, test: `bot ${b} run ${i}`, seed: runSeed(input.seed, i) })));
   const ran: Ran[] = [];
   let refused: Failure | undefined;
   const next = async (): Promise<void> => {
@@ -42,7 +74,7 @@ export async function runPlaytest(input: PlaytestInput, play: Play): Promise<Che
       const { test, seed } = job;
       let first: PlayAnswer;
       try {
-        first = await play(input.piece, { ...common, seed, bot: lower(job.bot, seed), frames: [0] });
+        first = await play(input.piece, { ...common, seed, bot: lower(job.bot), frames: [0] });
       } catch (e) {
         refused = failure(test, `refused: ${String((e as Error)?.message ?? e)}`, false);
         return;
@@ -52,17 +84,26 @@ export async function runPlaytest(input: PlaytestInput, play: Play): Promise<Che
       const every = input.frames?.every ? steps(input.frames.every, first.step) : 0;
       const keep = [...new Set([0, outcome.step, ...(every ? Array.from({ length: Math.floor((first.steps - 1) / every) + 1 }, (_, n) => n * every) : [])])].filter((k) => k < first.steps);
       const replay = await play(input.piece, { ...common, seed, track: first.entries, frames: keep });
-      const reached = new Set([...goalSteps(first, goals)].filter(([, k]) => k !== undefined).map(([g]) => g));
-      ran.push({ test, seed, outcome, first, replay, reached });
+      const reached = new Map([...goalSteps(first, goals)].flatMap(([g, k]) => (k === undefined ? [] : [[g, k] as const])));
+      ran.push({ test, bot: job.b, seed, outcome, first, replay, reached });
     }
   };
-  // Each bot taken by the piece before any run: a play of no step at the check's own seed, which the replica refuses,
-  // naming what, for a bot the piece can't take, such as a policy on a control it doesn't declare.
+  // The interface taken by the piece before any run, then each bot: a play of no step at the check's own seed, which the
+  // replica refuses, naming what, for a name the piece publishes no array of the right type for (play.missing), or a
+  // bot the piece can't take, such as a policy on a control it doesn't declare.
+  if (iface) {
+    try {
+      await play(input.piece, { seed: input.seed, span: { steps: 0 }, play: iface, values: [], frames: [] });
+    } catch (e) {
+      const why = said(e);
+      return ended([failure('play', why.startsWith('play.missing') ? why : `refused before any run: ${why}`, false)]);
+    }
+  }
   for (const [b, bot] of input.bots.entries()) {
     try {
-      await play(input.piece, { seed: input.seed, span: { steps: 0 }, bot: lower(bot, input.seed), values: [], frames: [] });
+      await play(input.piece, { seed: input.seed, span: { steps: 0 }, bot: lower(bot), values: [], frames: [], ...(iface ? { play: iface } : {}) });
     } catch (e) {
-      refused = failure(`bot ${b}`, `refused before any run: ${String((e as Error)?.message ?? e)}`, false);
+      refused = failure(`bot ${b}`, `refused before any run: ${said(e)}`, false);
       break;
     }
   }
@@ -74,27 +115,52 @@ export async function runPlaytest(input: PlaytestInput, play: Play): Promise<Che
   const evidence: string[] = [];
   for (const r of ran) {
     evidence.push(r.first.track, r.replay.track, ...[...r.first.frames, ...r.replay.frames].map((f) => f.sha256));
-    const message = said(r);
+    const message = told(r);
     if (message) failures.push(failure(r.test, message, r.outcome.kind !== 'invalid'));
     const differs = firstDiffering(r.first, r.replay);
     if (differs !== undefined) failures.push(failure(r.test, `playtest.replay: ${r.test} (seed ${r.seed}): its track played again without its bot first differs in the full-state hash at step ${differs}`));
+    for (const { name, path, range } of bounds) {
+      const out = outOfRange(r.first.values[path] ?? [], range);
+      if (out) failures.push(failure(r.test, `play.out_of_range: ${r.test} (seed ${r.seed}): ${name} row ${out.row} is ${out.value} at step ${out.step}, outside [${range[0]}, ${range[1]}]`));
+    }
   }
   // A refused bot ends the check before any run: nothing was played to reach or miss a goal.
   if (refused) return { outcome: 'failed', testsRun: ran.length, failures: [refused, ...failures], evidence, read: [], mask: null };
   const counted = ran.filter((r) => r.outcome.kind !== 'invalid');
-  for (const g of goals) {
+  for (const g of input.goals ?? []) {
     if (g.each) {
       for (const r of counted.filter((x) => !x.reached.has(g.name))) failures.push(failure(r.test, `playtest.goal_missed: ${r.test} (seed ${r.seed}) never reached ${g.name}, which each run must`));
     } else if (!counted.some((r) => r.reached.has(g.name))) {
       failures.push(failure(`goal ${g.name}`, `playtest.goal_missed: no run reached ${g.name}`));
     }
   }
+  for (const [b, bot] of input.bots.entries()) failures.push(...held(b, bot, counted.filter((r) => r.bot === b)));
   const outcome = !failures.length ? 'passed' : failures.every((f) => !f.assertion) ? 'ran_nothing' : 'failed';
   return { outcome, testsRun: ran.length, failures, evidence, read: [], mask: null };
 }
 
+/**
+ * A bot's bands and expectations over its counted runs: the share that reach each goal it bands must lie in the band
+ * (playtest.band, naming the bot, the goal, the share and the band), and a goal it must miss fails each run that
+ * reaches it (playtest.expect, naming the run and the step).
+ */
+function held(b: number, bot: Bot, runs: Ran[]): Failure[] {
+  const out: Failure[] = [];
+  const name = `bot ${b} (${kindOf(bot)})`;
+  for (const [goal, [min, max]] of Object.entries(bot.share ?? {})) {
+    const n = runs.filter((r) => r.reached.has(goal)).length;
+    const share = runs.length ? n / runs.length : 0;
+    if (!(share >= min && share <= max)) out.push(failure(`bot ${b}`, `playtest.band: ${name}: ${goal} reached in ${n} of its ${runs.length} runs, share ${share}, outside [${min}, ${max}]`));
+  }
+  for (const [goal, want] of Object.entries(bot.expect ?? {})) {
+    if (want !== 'miss') continue;
+    for (const r of runs.filter((x) => x.reached.has(goal))) out.push(failure(r.test, `playtest.expect: ${r.test} (seed ${r.seed}) of ${name} reached ${goal} at step ${r.reached.get(goal)}, which it must miss`));
+  }
+  return out;
+}
+
 /** What a run's outcome says, or nothing when it reached its goals or ended. */
-function said(r: Ran): string | undefined {
+function told(r: Ran): string | undefined {
   const o = r.outcome;
   const run = `${r.test} (seed ${r.seed})`;
   switch (o.kind) {

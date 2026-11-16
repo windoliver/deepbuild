@@ -21,6 +21,7 @@ use crate::hub::Hub;
 pub(crate) mod cast;
 mod derive;
 pub(crate) mod kit;
+mod lap;
 pub(crate) use derive::{parse, Bake};
 
 /// The physics module the full set seals, on the Rapier backend this build links, its pins as
@@ -44,6 +45,7 @@ pub(crate) fn module() -> Option<Module> {
         m.register = |r| {
             (deep_canvas_physics::module::module(&deep_physics_rapier::build()).register)(r);
             kit::register(r);
+            lap::register(r);
             cast::register(r);
         };
         if cfg!(feature = "test-physics-needs-logic") {
