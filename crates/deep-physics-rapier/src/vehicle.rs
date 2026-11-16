@@ -17,8 +17,9 @@
 //! velocity at the contact less the touched body's there, a kinematic body's over the coming step
 //! (the pose it is set to reach), which the controller reads only for a dynamic body's grip; and
 //! what its spring, drive, brake and grip push the chassis with goes back, equal and opposite, at
-//! the contact, to a dynamic body under it, as an impulse over the step. A static or kinematic
-//! body takes nothing, so a car on static ground moves exactly as before.
+//! the contact, to a dynamic body under it, as an impulse over the step, and the wheel spins by
+//! its travel over that body. A static or kinematic body takes nothing, so a car on static ground
+//! moves exactly as before.
 
 use std::f32::consts::PI;
 
@@ -484,6 +485,22 @@ impl Vehicles {
             filter,
         );
         c.ctl.update_vehicle(dt, queries);
+        // A touching wheel spins by its contact's forward travel over the body under it, which
+        // the controller takes over the world.
+        for w in c.ctl.wheels_mut().iter_mut() {
+            let r = w.raycast_info();
+            let (p, n, g) = (r.contact_point_ws, r.contact_normal_ws, r.ground_object);
+            let under = g
+                .filter(|_| r.is_in_contact)
+                .and_then(|g| under(world, g, p));
+            let ground = match under.filter(|_| plant != Plant::GroundTakesNothing) {
+                Some(Under::Kinematic(v)) => v,
+                Some(Under::Dynamic(h)) => world.bodies[h].velocity_at_point(p),
+                None => continue,
+            };
+            let forward = n.cross(w.axle()).normalize_or_zero();
+            w.rotation -= forward.dot(ground) * dt / w.radius;
+        }
         for ((t, w), s) in c.turned.iter_mut().zip(c.ctl.wheels()).zip(spun) {
             *t = w.rotation - s;
         }
