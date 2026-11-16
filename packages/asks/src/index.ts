@@ -38,7 +38,7 @@ import type { JsonValue } from '@deepbuild/contracts';
 import { asCore, ulid } from '@deepbuild/record';
 import type { Connection, Event, RecordStore } from '@deepbuild/record';
 import { KINDS, place, remotesOf, targetsOf, type CardTarget } from './targets.js';
-import { AskRefused, bare, CANT_UNDO, isObj, letters } from './model.js';
+import { AskRefused, bare, CANT_UNDO, isObj, letters, signInAgentOf } from './model.js';
 import type { Ask, AskKind, AsksPlant, BatchCard, BudgetLeft, Card, Decision, HeldDecision, InboxStatus, Missing, Obj, Option, PlanStep, Refusal, Resolver, ResolverAsk, RuleState, Subject } from './model.js';
 import { blockKey, BLOCK_SOURCE, boundFor, DecisionKeys, foldKey, FOLD_SOURCE, linesOf, nearOf, needsPerson, requestKey, REQUEST_SOURCE, subjectKey, SUBJECT_KINDS } from './decision-keys.js';
 import { ResolverGate } from './resolver-gate.js';
@@ -1511,11 +1511,14 @@ class AsksCore implements Asks {
         const request = block?.theirs && !this.requested.has(block.handle) && d.key === requestKey(block) ? { to: String(block.data.owner), block: block.handle } : undefined;
         const inThread = this.openIn(thread);
         const open = inThread.filter((a) => !a.fold);
-        const holder = fold || theirs ? undefined : inThread.find((a) => a.fold && a.who.actor === e.actor && a.who.scope === e.scope);
+        // An agent's sign-in task (#1349) holds the work that needs the agent: it shows at once (showing.ts), so it never
+        // folds into an exception, and isn't held for your message, which the agent stopped on it won't take a step to read.
+        const signIn = e.writer === 'core' && signInAgentOf(d) !== undefined;
+        const holder = fold || theirs || signIn ? undefined : inThread.find((a) => a.fold && a.who.actor === e.actor && a.who.scope === e.scope);
         const ask: Ask = {
           id: e.id, handle: `ask:${e.id}`, data: d, options: d.options as Option[], session: e.session ?? '', who: { actor: e.actor, scope: e.scope }, thread, pos: e.log_pos,
           fold, ...(holder ? { folded: holder.handle } : {}), theirs, ...(request ? { request } : {}), words: [], receiptAlso: [], decided: new Set(), pending: {}, conflict: [],
-          created: e.ts, wait: (d.deadline as number) - e.ts, due: d.deadline as number, since: e.ts, shown: false, unread: e.session !== undefined && this.unread.has(e.session), hubs: e.writer === 'core' && d.kind === 'exception',
+          created: e.ts, wait: (d.deadline as number) - e.ts, due: d.deadline as number, since: e.ts, shown: false, unread: !signIn && e.session !== undefined && this.unread.has(e.session), hubs: e.writer === 'core' && d.kind === 'exception',
           ...(signature === undefined ? {} : { block: { signature, stops: this.coveringStops(d) } }),
         };
         if (request) this.requested.set(request.block, ask.handle);
