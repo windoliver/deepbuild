@@ -17,7 +17,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, watch, type FSWatcher } from 'node:fs';
 import { lstat, readdir, rm } from 'node:fs/promises';
 import { dirname, join, relative } from 'node:path';
-import { parse } from 'yaml';
+import { parseYaml as parse } from './yaml.js';
 import { DISK_FLOOR, freeBytes } from './disk.js';
 import { repoOf } from './paths.js';
 import { writeSynced } from './vfs.js';
@@ -380,6 +380,7 @@ export class Products {
       const entry: Entry = { repo, name, path, key, commit: '', built: now, finished: now, used: now, served: 0, bytes: await sizeOf(dst) };
       mkdirSync(join(this.store, repo), { recursive: true });
       if (this.found(repo, name, key)) { this.found(repo, name, key)!.used = now; this.save(); return; }
+      rmSync(this.entryDir(entry), { recursive: true, force: true });
       renameSync(stage, this.entryDir(entry));
       this.index.entries = [...this.index.entries, entry];
       this.save();
@@ -464,6 +465,7 @@ export class Products {
       const entry: Entry = { repo, name: p.name, path: p.path, key, commit, built, finished: this.o.now(), used: this.o.now(), served: 0, bytes: await sizeOf(join(src, p.path)) };
       mkdirSync(join(this.store, repo), { recursive: true });
       rmSync(join(stage, 'index'), { force: true });
+      rmSync(this.entryDir(entry), { recursive: true, force: true });
       renameSync(stage, this.entryDir(entry));
       this.index.entries = [...this.index.entries.filter((e) => !(e.repo === repo && e.name === p.name && e.key === key)), entry];
       this.save();
@@ -569,8 +571,15 @@ export class Products {
   }
 
   /** Every hook of a session: when it worked, which calls are open, and its end; a call's end checks the store. */
-  hook(meta: { event: string; session: string; toolUse?: string | undefined }): void {
-    const s = this.sessions.get(meta.session);
+  async hook(meta: { event: string; session: string; cwd: string; toolUse?: string | undefined }): Promise<void> {
+    let s = this.sessions.get(meta.session);
+    if (!s && meta.cwd) {
+      // Nothing is stored or placed, and this folder declares no products: there is no product work to observe.
+      // Once any entry exists, calls from other repos still participate in detecting writes to the store.
+      if (!this.index.entries.length && !this.index.placed.length && !specAbove(meta.cwd)) return;
+      const repo = await this.repoAt(meta.cwd);
+      if (repo) s = this.seen(meta.session, repo.top);
+    }
     if (!s) return;
     const now = this.o.now();
     s.last = now;

@@ -228,6 +228,16 @@ pub struct Printer {
     pipelines: HashMap<(wgpu::TextureFormat, bool), wgpu::RenderPipeline>,
     blank: wgpu::TextureView,
     blank_ids: wgpu::TextureView,
+    /// What the last pass bound, which the next binds again where it holds.
+    kept: Option<Kept>,
+}
+
+/// A pass's uniform and masks with the values they hold, the views it read, and its group.
+struct Kept {
+    uniform: (Vec<u8>, wgpu::Buffer),
+    masks: (Vec<u32>, wgpu::Buffer),
+    views: Vec<wgpu::TextureView>,
+    bind: wgpu::BindGroup,
 }
 
 impl Printer {
@@ -308,6 +318,7 @@ impl Printer {
             pipelines: HashMap::new(),
             blank: small(wgpu::TextureFormat::Rgba8Unorm, "print blank"),
             blank_ids: small(wgpu::TextureFormat::R32Uint, "print blank ids"),
+            kept: None,
         }
     }
 
@@ -365,48 +376,61 @@ impl Printer {
         linear: Option<&wgpu::TextureView>,
     ) {
         let pipeline = self.pipeline(device, format, linear.is_some());
-        let uniform = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some(PRINT_PASS),
-            contents: bytemuck::bytes_of(params),
-            usage: wgpu::BufferUsages::UNIFORM,
-        });
         let (covs, ids, masks): (Vec<&wgpu::TextureView>, &wgpu::TextureView, Vec<u32>) =
             match coverage {
                 Coverage::Textures(t) => (t.clone(), &self.blank_ids, vec![0]),
-                Coverage::Ids(ids, masks) => (Vec::new(), ids, masks.clone()),
+                Coverage::Ids(ids, masks) if !masks.is_empty() => (Vec::new(), ids, masks.clone()),
+                Coverage::Ids(ids, _) => (Vec::new(), ids, vec![0]),
                 Coverage::None => (Vec::new(), &self.blank_ids, vec![0]),
             };
-        let masks = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some(PRINT_PASS),
-            contents: bytemuck::cast_slice(if masks.is_empty() { &[0u32] } else { &masks }),
-            usage: wgpu::BufferUsages::STORAGE,
-        });
         let cov = |i: usize| covs.get(i).copied().unwrap_or(&self.blank);
-        fn view(binding: u32, v: &wgpu::TextureView) -> wgpu::BindGroupEntry<'_> {
-            wgpu::BindGroupEntry {
-                binding,
-                resource: wgpu::BindingResource::TextureView(v),
+        let views = [source, cov(0), cov(1), cov(2), cov(3), ids];
+        // A buffer whose values hold is the last pass's, and so is the group while it binds the
+        // same buffers and views.
+        let kept = self.kept.take();
+        let bytes = bytemuck::bytes_of(params);
+        let (uniform, masks, bind) = match kept {
+            Some(k) if k.uniform.0 == bytes && k.masks.0 == masks => {
+                let same = k.views.iter().eq(views);
+                (k.uniform, k.masks, same.then_some(k.bind))
             }
-        }
-        let bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some(PRINT_PASS),
-            layout: &self.layout,
-            entries: &[
-                view(0, source),
-                view(1, cov(0)),
-                view(2, cov(1)),
-                view(3, cov(2)),
-                view(4, cov(3)),
-                view(5, ids),
-                wgpu::BindGroupEntry {
-                    binding: 6,
-                    resource: uniform.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 7,
-                    resource: masks.as_entire_binding(),
-                },
-            ],
+            _ => {
+                let buffer = |contents, usage| {
+                    device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                        label: Some(PRINT_PASS),
+                        contents,
+                        usage,
+                    })
+                };
+                let uniform = buffer(bytes, wgpu::BufferUsages::UNIFORM);
+                let held = buffer(bytemuck::cast_slice(&masks), wgpu::BufferUsages::STORAGE);
+                ((bytes.to_vec(), uniform), (masks, held), None)
+            }
+        };
+        let bind = bind.unwrap_or_else(|| {
+            let mut entries: Vec<_> = (views.iter().zip(0..))
+                .map(|(v, binding)| wgpu::BindGroupEntry {
+                    binding,
+                    resource: wgpu::BindingResource::TextureView(v),
+                })
+                .collect();
+            for (binding, b) in [(6, &uniform.1), (7, &masks.1)] {
+                entries.push(wgpu::BindGroupEntry {
+                    binding,
+                    resource: b.as_entire_binding(),
+                });
+            }
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some(PRINT_PASS),
+                layout: &self.layout,
+                entries: &entries,
+            })
+        });
+        self.kept = Some(Kept {
+            views: views.map(Clone::clone).to_vec(),
+            bind: bind.clone(),
+            uniform,
+            masks,
         });
         let attach = |view| {
             Some(wgpu::RenderPassColorAttachment {
@@ -435,6 +459,54 @@ impl Printer {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use deep_gpu::device::{Backend, Gpu};
+
+    /// Canvas primitives, Frame budget: a pass whose values and views hold binds what the pass
+    /// before it made; another source makes a group and no buffer; other values make both.
+    #[test]
+    fn a_pass_whose_values_and_views_hold_makes_no_buffer_and_no_bind_group() {
+        let gpu = Gpu::open(Backend::Noop).expect("the noop backend gives a device");
+        let device = gpu.device();
+        let d = &device.device;
+        let format = wgpu::TextureFormat::Rgba8Unorm;
+        let view = |usage| {
+            crate::texture2d(d, "test print", [16, 16], format, usage)
+                .create_view(&Default::default())
+        };
+        let sampled = wgpu::TextureUsages::TEXTURE_BINDING;
+        let (sources, target) = (
+            [view(sampled), view(sampled)],
+            view(wgpu::TextureUsages::RENDER_ATTACHMENT),
+        );
+        let mut printer = Printer::new(d);
+        let mut made = |source: usize, flag: u32| {
+            let mut params = Params::zeroed();
+            params.flags[0] = flag;
+            let before = d.counts().read();
+            let mut encoder = d.create_command_encoder(&Default::default());
+            printer.record(
+                d,
+                &mut encoder,
+                &params,
+                &sources[source],
+                &Coverage::None,
+                &target,
+                format,
+                None,
+            );
+            device.queue.submit([encoder.finish()]);
+            let made = d.counts().read().since(before);
+            (made.buffers, made.bind_groups)
+        };
+        assert_eq!(made(0, 0), (2, 1), "the first pass");
+        assert_eq!(made(0, 0), (0, 0), "the same values and views");
+        assert_eq!(made(1, 0), (0, 1), "another source");
+        assert_eq!(made(1, 1), (2, 1), "other values");
+        let raised = device.take_raised();
+        assert!(raised.is_empty(), "the device raised: {raised:?}");
+    }
+
     #[test]
     fn the_print_shader_validates() {
         let module = naga::front::wgsl::parse_str(super::SOURCE)

@@ -15,6 +15,8 @@ struct Tone {
     saturation: f32,
     // 1 applies the grade (white balance and CDL); 0 skips it, the identity.
     graded: u32,
+    // Where the curves end (#177): 1 for SDR, the display's headroom for the HDR surface.
+    top: f32,
     // The white balance's rows on linear sRGB.
     wb0: vec4<f32>,
     wb1: vec4<f32>,
@@ -49,7 +51,7 @@ fn filmic(x: vec3<f32>) -> vec3<f32> {
     return clamp((v * (2.51 * v + 0.03)) / (v * (2.43 * v + 0.59) + 0.14), vec3<f32>(0.0), vec3<f32>(1.0));
 }
 
-fn agx_curve(x: f32) -> f32 {
+fn agx_curve(x: f32, top: f32) -> f32 {
     let c = tone.contrast;
     let white = tone.white;
     if !(x > 0.0) {
@@ -61,16 +63,17 @@ fn agx_curve(x: f32) -> f32 {
         return xc / (xc + a);
     }
     if x >= white {
-        return 1.0;
+        return top;
     }
+    let shoulder = top - 0.18;
     let s = pow(0.18, c) + a;
     let k = c * pow(0.18, c - 1.0) * a / (s * s);
-    let w = k * (white - 0.18) * (white - 0.18) / 0.82;
+    let w = k * (white - 0.18) * (white - 0.18) / shoulder;
     let d = x - 0.18;
-    return 0.18 + k * d * (1.0 + d / w) / (1.0 + k * d / 0.82);
+    return 0.18 + k * d * (1.0 + d / w) / (1.0 + k * d / shoulder);
 }
 
-fn agx(x: vec3<f32>) -> vec3<f32> {
+fn agx(x: vec3<f32>, top: f32) -> vec3<f32> {
     let inset = mat3x3<f32>(
         0.856627153315983, 0.137318972929847, 0.11189821299995,
         0.0951212405381588, 0.761241990602591, 0.0767994186031903,
@@ -82,11 +85,11 @@ fn agx(x: vec3<f32>) -> vec3<f32> {
         -0.016493938717834573, -0.016493938717834257, 1.2519364065950405,
     );
     let v = inset * max(x, vec3<f32>(0.0));
-    let curved = vec3<f32>(agx_curve(v.r), agx_curve(v.g), agx_curve(v.b));
-    return clamp(outset * curved, vec3<f32>(0.0), vec3<f32>(1.0));
+    let curved = vec3<f32>(agx_curve(v.r, top), agx_curve(v.g, top), agx_curve(v.b, top));
+    return clamp(outset * curved, vec3<f32>(0.0), vec3<f32>(top));
 }
 
-fn neutral(x: vec3<f32>) -> vec3<f32> {
+fn neutral(x: vec3<f32>, top: f32) -> vec3<f32> {
     let start = 0.8 - 0.04;
     let desat = 0.15;
     let m = min(x.r, min(x.g, x.b));
@@ -94,13 +97,13 @@ fn neutral(x: vec3<f32>) -> vec3<f32> {
     var c = x - offset;
     let peak = max(c.r, max(c.g, c.b));
     if peak < start {
-        return clamp(c, vec3<f32>(0.0), vec3<f32>(1.0));
+        return clamp(c, vec3<f32>(0.0), vec3<f32>(top));
     }
-    let d = 1.0 - start;
-    let new_peak = 1.0 - d * d / (peak + d - start);
+    let d = top - start;
+    let new_peak = top - d * d / (peak + d - start);
     c = c * (new_peak / peak);
     let g = 1.0 - 1.0 / (desat * (peak - new_peak) + 1.0);
-    return clamp(mix(c, vec3<f32>(new_peak), g), vec3<f32>(0.0), vec3<f32>(1.0));
+    return clamp(mix(c, vec3<f32>(new_peak), g), vec3<f32>(0.0), vec3<f32>(top));
 }
 
 // The deband's integer hash of a pixel and a lane (lowbias32), as finish.rs has it.
@@ -123,7 +126,7 @@ fn dither(p: vec2<u32>) -> f32 {
 
 @fragment
 fn out_fs(@builtin(position) p: vec4<f32>) -> @location(0) vec4<f32> {
-    var encoded = finish(textureLoad(linear_target, vec2<i32>(p.xy), 0).rgb);
+    var encoded = finish(textureLoad(linear_target, vec2<i32>(p.xy), 0).rgb, tone.top);
     if tone.deband > 0.0 {
         let dims = textureDimensions(covered);
         let at = min(vec2<u32>(p.xy), dims - vec2<u32>(1u));
@@ -135,22 +138,23 @@ fn out_fs(@builtin(position) p: vec4<f32>) -> @location(0) vec4<f32> {
     return vec4<f32>(encoded, 1.0);
 }
 
-fn cdl(x: vec3<f32>) -> vec3<f32> {
-    let v = pow(clamp(x * tone.slope.rgb + tone.offset.rgb, vec3<f32>(0.0), vec3<f32>(1.0)), tone.power.rgb);
+fn cdl(x: vec3<f32>, top: f32) -> vec3<f32> {
+    let v = pow(clamp(x * tone.slope.rgb + tone.offset.rgb, vec3<f32>(0.0), vec3<f32>(top)), tone.power.rgb);
     let l = dot(v, vec3<f32>(0.2126, 0.7152, 0.0722));
     return vec3<f32>(l) + tone.saturation * (v - vec3<f32>(l));
 }
 
-// The look's tone curve on an exposed linear value, into [0, 1].
-fn tone_curve(linear: vec3<f32>) -> vec3<f32> {
+// The look's tone curve on an exposed linear value, into [0, top]: agx and neutral end their
+// shoulders at `top`, none clips there and filmic stays SDR (#177). A `top` of 1 is SDR.
+fn tone_curve(linear: vec3<f32>, top: f32) -> vec3<f32> {
     if tone.map == 1u {
         return filmic(linear);
     } else if tone.map == 2u {
-        return agx(linear);
+        return agx(linear, top);
     } else if tone.map == 3u {
-        return neutral(linear);
+        return neutral(linear, top);
     }
-    return clamp(linear, vec3<f32>(0.0), vec3<f32>(1.0));
+    return clamp(linear, vec3<f32>(0.0), vec3<f32>(top));
 }
 
 // The `tone` call (#418): the curve alone over an input, before any encode; alpha passes through.
@@ -161,24 +165,31 @@ fn tone_fs(@builtin(position) p: vec4<f32>) -> @location(0) vec4<f32> {
     if tone.graded == 1u {
         linear = vec3<f32>(dot(tone.wb0.xyz, linear), dot(tone.wb1.xyz, linear), dot(tone.wb2.xyz, linear));
     }
-    var mapped = tone_curve(linear);
+    var mapped = tone_curve(linear, tone.top);
     if tone.graded == 1u {
-        mapped = clamp(cdl(mapped), vec3<f32>(0.0), vec3<f32>(1.0));
+        mapped = clamp(cdl(mapped, tone.top), vec3<f32>(0.0), vec3<f32>(tone.top));
     }
     return vec4<f32>(mapped, v.a);
 }
 
-// A linear value through the exposure, the white balance, the tone map, the CDL and the sRGB
-// encode.
-fn finish(value: vec3<f32>) -> vec3<f32> {
+// A linear value through the exposure, the white balance, the tone map and the CDL, rolled off
+// to `top`: linear light before the encode.
+fn finish_linear(value: vec3<f32>, top: f32) -> vec3<f32> {
     var linear = value * tone.exposure;
     if tone.graded == 1u {
         linear = vec3<f32>(dot(tone.wb0.xyz, linear), dot(tone.wb1.xyz, linear), dot(tone.wb2.xyz, linear));
     }
-    var mapped = tone_curve(linear);
+    var mapped = tone_curve(linear, top);
     if tone.graded == 1u {
-        mapped = clamp(cdl(mapped), vec3<f32>(0.0), vec3<f32>(1.0));
+        mapped = clamp(cdl(mapped, top), vec3<f32>(0.0), vec3<f32>(top));
     }
+    return mapped;
+}
+
+// A linear value through the exposure, the white balance, the tone map, the CDL and the sRGB
+// encode.
+fn finish(value: vec3<f32>, top: f32) -> vec3<f32> {
+    let mapped = finish_linear(value, top);
     var encoded = srgb_encode(mapped);
     if tone.encode == 1u {
         encoded = srgb_encode(encoded);

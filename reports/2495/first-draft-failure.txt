@@ -1,0 +1,24 @@
+
+ RUN  v5.0.5 <checkout>
+
+ ❯ tests/acceptance/2495/report-store.test.ts (3 tests) 6562ms
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2495/report-store.test.ts [ tests/acceptance/2495/report-store.test.ts ]
+Error: ENOTEMPTY, Directory not empty: '<fixture>'
+ ❯ tests/acceptance/2495/report-store.test.ts:128:36
+    126|     if (l?.hub.pid) try { process.kill(l.hub.pid, 'SIGTERM'); } catch …
+    127|   }
+    128|   for (const b of boxes.splice(0)) rmSync(b, { recursive: true, force:…
+       |                                    ^
+    129|   removeRoots();
+    130| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 passed (3)
+   Start at  17:01:02
+   Duration  7.15s (tests 93%, transform 6%, import 1%)

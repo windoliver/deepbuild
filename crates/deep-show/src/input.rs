@@ -396,14 +396,16 @@ impl Hub<'_> {
             }
         }
         // #506: Enter on a focused toggle or press control presses it, as its own UI would: a
-        // toggle turns over from the value it holds, a press gives 1.
+        // toggle turns over from the value it holds, a press gives 1. A pick control on rows
+        // (#539) is a press too, but its Enter picks its focused row, below.
         if let (Event::Key { key, cmd: false, .. }, Some(id)) = (event, doc_id.as_deref()) {
             let focused = self
                 .scopes
                 .get(panel)
                 .and_then(|s| s.scope.focus.clone())
                 .filter(|(_, option)| option.is_none())
-                .map(|(c, _)| c);
+                .map(|(c, _)| c)
+                .filter(|c| !crate::picks::pickers(&doc).iter().any(|p| p.id == *c));
             let control = focused.as_deref().and_then(|c| Some((c, doc.get("controls")?.get(c)?)));
             let kind = control.and_then(|(_, c)| c.get("kind")).and_then(Value::as_str);
             if let (true, Some((c, spec)), Some(kind @ ("toggle" | "press"))) =
@@ -432,6 +434,47 @@ impl Hub<'_> {
                         "commits": [{"gesture": serial}], "appended": entry.into_iter().collect::<Vec<_>>()}),
                     Err(e) => e,
                 };
+            }
+        }
+        // #1164: a key a press control binds in its `keys` presses it with the value bound, as
+        // the input module's key rule does, and a logic item reading it bakes again on the
+        // track; every press control that binds it, in key order,
+        // stamped at the playhead where the transport is paused there (Input track: a new entry
+        // where later entries exist forks the track).
+        if let (
+            Event::Key {
+                key,
+                cmd: false,
+                alt: false,
+            },
+            Some(id),
+        ) = (event, doc_id.as_deref())
+        {
+            let at = self
+                .scopes
+                .get(panel)
+                .and_then(|s| s.scope.playhead())
+                .unwrap_or(now);
+            let bound: Vec<(String, Value)> = doc
+                .get("controls")
+                .and_then(Value::as_object)
+                .into_iter()
+                .flatten()
+                .filter(|(_, c)| c.get("kind").and_then(Value::as_str) == Some("press"))
+                .filter_map(|(c, spec)| {
+                    Some((c.clone(), spec.get("keys")?.get(key.as_str())?.clone()))
+                })
+                .collect();
+            if !bound.is_empty() {
+                let mut appended = Vec::new();
+                for (c, value) in bound {
+                    match self.pick(id, &c, value, at, serial) {
+                        Ok(entry) => appended.extend(entry),
+                        Err(e) => return e,
+                    }
+                }
+                return json!({"serial": serial, "state": self.state(panel), "picks": 0,
+                    "commits": [{"gesture": serial}], "appended": appended});
             }
         }
         // #540: a press of a point control's button, and the drag and release it starts, are the

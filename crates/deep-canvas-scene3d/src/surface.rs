@@ -1309,5 +1309,6 @@ pub fn grid_line(
         dash_world: false,
         cap: Default::default(),
         trail: None,
+        points: Vec::new(),
     }))
 }

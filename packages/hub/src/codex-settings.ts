@@ -11,7 +11,7 @@ import { dirname, join } from 'node:path';
 import { strictObject, target, writeThrough } from './agent-files.js';
 import { HOLD_MARGIN_MS, readJson, words } from './claude-settings.js';
 import { shellQuote as q } from './shell.js';
-import { isRecord as isObj } from '@deepbuild/contracts';
+import { isRecord as isObj } from '@deepbuild/contracts/runtime';
 
 type Obj = Record<string, unknown>;
 
@@ -91,7 +91,8 @@ export function sessionHomes(root: string): string[] {
 /** `text` with our entries taken out, for undo after you edited the file. */
 export function withoutEntries(root: string, text: string): string {
   const parsed = strictObject(text);
-  if ('refused' in parsed) throw Error(`${codexHooks()} ${parsed.refused}`);
+  // Undo reads the file in the home setup wrote in, so its refusal names that file.
+  if ('refused' in parsed) throw Error(`${join(recordedHome(root), 'hooks.json')} ${parsed.refused}`);
   const ours = new Set(recorded(root).map((e) => e.command));
   const hooks: Obj = {};
   for (const [event, groups] of Object.entries(isObj(parsed.value.hooks) ? parsed.value.hooks : {})) {
@@ -251,7 +252,7 @@ export function tomlTables(text: string): { tables: Tables } | { refused: string
   }
   return { tables };
 }
-const configTables = (file = codexConfig()): Tables | undefined => {
+const configTables = (file: string): Tables | undefined => {
   try {
     const read = tomlTables(readFileSync(target(file), 'utf8'));
     return 'tables' in read ? read.tables : undefined;
@@ -292,9 +293,9 @@ export function recordedServer(root: string): Server | undefined {
 }
 /** Your `hooks = false` under [features], which setup never flips. */
 export const hooksDisabled = (root: string): boolean => configTables(join(recordedHome(root), 'config.toml'))?.get('features')?.get('hooks') === 'false';
-/** Whether Codex's trusted projects hold one of a folder's paths (#322): its `[projects."<path>"]` table says `trust_level = "trusted"`. */
-export function codexTrusted(paths: string[]): boolean {
-  const tables = configTables();
+/** Whether Codex's trusted projects hold one of a folder's paths (#322): its `[projects."<path>"]` table, in the home setup wrote in, says `trust_level = "trusted"`. */
+export function codexTrusted(root: string, paths: string[]): boolean {
+  const tables = configTables(join(recordedHome(root), 'config.toml'));
   return paths.some((p) => /^["']trusted["']$/.test(tables?.get(`projects.${p}`)?.get('trust_level') ?? ''));
 }
 /** The `tool_timeout_sec` Codex gives DeepBuild's MCP server, in seconds. */
@@ -317,10 +318,11 @@ const entriesFor = (root: string, event: string): Obj[] => {
 export const installedCodex = (root: string): boolean => recorded(root).length > 0;
 /** Each entry of ours the file no longer holds as setup wrote it: named, with `removed` or `modified`. */
 export function modified(root: string): string[] {
+  const file = join(recordedHome(root), 'hooks.json');
   return recorded(root).flatMap(({ event, command, entry }) => {
     const found = entriesFor(root, event).find((h) => h.command === command);
-    if (!found) return [`Codex's ${event} entry was removed from ${codexHooks()}, so that hook doesn't reach the hub`];
-    return JSON.stringify(found) === JSON.stringify(entry) ? [] : [`Codex's ${event} entry was modified in ${codexHooks()}: it isn't what setup wrote, so Codex asks for trust again and holds may not fit`];
+    if (!found) return [`Codex's ${event} entry was removed from ${file}, so that hook doesn't reach the hub`];
+    return JSON.stringify(found) === JSON.stringify(entry) ? [] : [`Codex's ${event} entry was modified in ${file}: it isn't what setup wrote, so Codex asks for trust again and holds may not fit`];
   });
 }
 /** The Stop entry's timeout as the file holds it, in seconds; undefined before setup. */
@@ -344,20 +346,23 @@ interface CodexRelation { name: 'slow lane' | 'deep_ask'; holds: boolean; text: 
 export function codexRelations(root: string): CodexRelation[] {
   if (!installedCodex(root)) return [];
   const out: CodexRelation[] = [];
+  // The texts name the files in the home setup wrote in, which this process's environment may not.
+  const at = recordedHome(root);
+  const [hooksFile, configFile] = [join(at, 'hooks.json'), join(at, 'config.toml')];
   const timeoutS = stopTimeoutS(root);
   if (timeoutS !== undefined) {
     const slow = slowLaneMs(root);
     const set = words(STOP_TIMEOUT_S * 1000);
     out.push(holdsFor(slow, timeoutS)
       ? { name: 'slow lane', holds: true, waitMs: 0, text: `slow lane holds: its expected ${words(slow)} ends at least 5 s before Codex's Stop hook timeout, ${words(timeoutS * 1000)}` }
-      : { name: 'slow lane', holds: false, waitMs: 0, text: `slow lane broken: its expected ${words(slow)} must end at least 5 s before Codex's Stop hook timeout, which is ${timeoutS} s where setup set ${set}, so a stop with a slow check isn't held and its verdict comes with your next message; put the Stop entry's timeout back in ${codexHooks()}` });
+      : { name: 'slow lane', holds: false, waitMs: 0, text: `slow lane broken: its expected ${words(slow)} must end at least 5 s before Codex's Stop hook timeout, which is ${timeoutS} s where setup set ${set}, so a stop with a slow check isn't held and its verdict comes with your next message; put the Stop entry's timeout back in ${hooksFile}` });
   }
-  const toolS = toolTimeoutS(join(recordedHome(root), 'config.toml'));
+  const toolS = toolTimeoutS(configFile);
   const waitMs = toolS * 1000 - HOLD_MARGIN_MS;
   // Under 10 s leaves too little to wait in: deep_ask returns at once, and the agent waits with deep_wait.
   out.push(toolS >= 10
     ? { name: 'deep_ask', holds: true, waitMs, text: `deep_ask holds: it says still waiting at ${waitMs / 1000} s, 5 s before the tool_timeout_sec Codex gives DeepBuild's MCP server, ${toolS} s` }
-    : { name: 'deep_ask', holds: false, waitMs: 0, text: `deep_ask broken: the tool_timeout_sec Codex gives DeepBuild's MCP server is ${toolS} s, too short to wait in, so deep_ask returns at once with the ask's ID, deadline and default and the agent waits with deep_wait; set it to at least 10 under [mcp_servers.${MCP_SERVER}] in ${codexConfig()}` });
+    : { name: 'deep_ask', holds: false, waitMs: 0, text: `deep_ask broken: the tool_timeout_sec Codex gives DeepBuild's MCP server is ${toolS} s, too short to wait in, so deep_ask returns at once with the ask's ID, deadline and default and the agent waits with deep_wait; set it to at least 10 under [mcp_servers.${MCP_SERVER}] in ${configFile}` });
   return out;
 }
 

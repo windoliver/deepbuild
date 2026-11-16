@@ -1,0 +1,221 @@
+# Regression runs, 2026-11-14. Each block: the command, its selection and summary lines, and its test jobs' logs.
+
+## On the change: DEEP_SHARDS=1 node scripts/affected.mjs packages/hub/test/done-reader-fold.test.ts tests/acceptance/322/trust.test.ts tests/acceptance/322/early-claim.test.ts tests/acceptance/322/combine.test.ts tests/acceptance/2067/release.test.ts tests/acceptance/2067/twins.test.ts tests/acceptance/33/bootstrap.test.ts
+parallel vitest: packages/hub/test/done-reader-fold.test.ts tests/acceptance/2067/release.test.ts tests/acceptance/2067/twins.test.ts
+alone vitest: tests/acceptance/322/combine.test.ts tests/acceptance/322/coverage.test.ts tests/acceptance/322/early-claim.test.ts tests/acceptance/322/trust.test.ts tests/acceptance/33/bootstrap.test.ts
+FAIL affected: 156 new, 42 already failing on main, 0 inconclusive or blocked, 0 listed skips, 15 passed, in 1089 s at load 299; logs in <logs>
+
+### parallel block
+deep lease: DeepBuild isn't set up here (no hub token), so `node node_modules/vitest/vitest.mjs run --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs packages/hub/test/done-reader-fold.test.ts tests/acceptance/2067/release.test.ts tests/acceptance/2067/twins.test.ts` runs unleased
+
+ RUN  v5.0.5 <repo>
+
+2067 merge evidence {"mode":"trunk","expectedTree":"d64e57c878f8c6ca86b160a7d965ac514b6bf7dd","parents":["794515c01611958cc9fdf5f1f6d5243cc2521b3e","4983f3ac5c2cfeb0b9dd0cd87d3eaa79823546a0"],"mergedRuns":["7c33c4db0cd44a62813f21206cc4dda0cdcd5226"]}
+
+2067 twin {"verdict":"PASS","releaseRuns":1,"merged":"e5a7bb69cb1eb5b8d43db1b968f139bd27eff7c0"}
+
+··stdout | tests/acceptance/2067/twins.test.ts > scope twin: a genuine merge conflict still FAILs preflight and holds Closes
+
+2067 merge evidence {"mode":"develop","expectedTree":"d64e57c878f8c6ca86b160a7d965ac514b6bf7dd","parents":["5b9e98220dfb0599d931f60fade7fc3b00a73736","dc221c603910e7e0abbfff8a2b010215fe463165"],"mergedRuns":["c314178b9f1b6b3e4257f53d6852cc5f5daa76c3"]}
+
+2067 merge evidence {"mode":"remote-main","expectedTree":"d64e57c878f8c6ca86b160a7d965ac514b6bf7dd","parents":["274bcd613260dba205a77b8a6ae19de0c9057a8a","53d10805ed73c8b2f9b50a81022bf1fdf87a6961"],"mergedRuns":["46ecde76cb95844064d817f9465429c98b62562b"]}
+
+2067 merge evidence {"mode":"remote-master","expectedTree":"d64e57c878f8c6ca86b160a7d965ac514b6bf7dd","parents":["deed73ffc3e5f3fa64289751b17b924bc60b663e","6a220c236ce9fa7d6b80e177160e6a5a6adbfe41"],"mergedRuns":["89eac19d9fdd4444e127dd64a033799aa62111eb"]}
+
+·
+
+ Test Files  3 passed (3)
+      Tests  10 passed (10)
+   Start at  16:27:05
+   Duration  89.45s (tests 100%)
+
+### alone block, tests/acceptance/322
+deep lease: DeepBuild isn't set up here (no hub token), so `node node_modules/vitest/vitest.mjs run --no-file-parallelism --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs tests/acceptance/322/combine.test.ts tests/acceptance/322/coverage.test.ts tests/acceptance/322/early-claim.test.ts tests/acceptance/322/trust.test.ts` runs unleased
+
+ RUN  v5.0.5 <repo>
+
+·xx··x
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/322/combine.test.ts > AC5 #322.141e3358 the repo's spec plus the task's definition, in one order > AC5 #322.141e3358 with the unit test passing and R1 failing the claim runs both and is FAIL naming .deepbuild/checks/expired-token.sh; with R1 passing and the unit test failing it is FAIL naming unit; both claims run the checks in the same order
+Error: AC5 #322.141e3358 [unit failing] unit failed on every run, so the combined verdict is FAIL by the precedence FAIL > INVALID > BLOCKED > INCONCLUSIVE > PASS: {"outcome":"INVALID","verdict":"verdict:01M7E9XTZT4M7PMY6HQ7SYTCXT","claim":"claim:01M7E9XBM72MNQ32KA2J3H5CHZ","reasons":[".deepbuild/checks/expired-token.sh failed on the base before its tests ran","req:sessiond6fc4dab106144c885b48521313c838e0#R2 is covered by no check at depth unit: it needs a check at depth unit",".deepbuild/checks/expired-token.sh: failed on the merge base only off its named assertions, so it proves nothing","unit: inherited: also fails on the merge base: checkToken rejects
+ ❯ must tests/acceptance/322/helpers.ts:97:18
+     95| }
+     96| export function must(ok: boolean, message: string): asserts ok {
+     97|   if (!ok) throw Error(message);
+       |                  ^
+     98| }
+     99|
+ ❯ claimWith tests/acceptance/322/combine.test.ts:43:3
+ ❯ tests/acceptance/322/combine.test.ts:53:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  tests/acceptance/322/early-claim.test.ts > AC10 #322.4f122abc a claim before its definition locks > AC10 #322.4f122abc the stop before the lock makes a claim that waits within the hold and stays pending, never PASS; after your answer locks the definition the claim is judged against it
+Error: AC10 #322.4f122abc your answer through deep inbox answer must count, exit 0: exit 2 after 294 ms, stdout "", stderr "ask:01M7E9SQDAK9Q4R5A3KVDNR8XD closed as cancelled at 2026-11-15T00:30:30.737Z\n"
+ ❯ must tests/acceptance/322/helpers.ts:97:18
+     95| }
+     96| export function must(ok: boolean, message: string): asserts ok {
+     97|   if (!ok) throw Error(message);
+       |                  ^
+     98| }
+     99|
+ ❯ claimBeforeLock tests/acceptance/322/early-claim.test.ts:53:3
+ ❯ tests/acceptance/322/early-claim.test.ts:62:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  tests/acceptance/322/early-claim.test.ts > AC10 #322.4f122abc a claim before its definition locks > AC10 #322.4f122abc (wrong program) a gate that judges the early claim on the repo spec alone (DEEP_HUB_PLANT=spec-only-judges-early-claim) gives PASS on the fixture and fails this test
+Error: AC10 #322.4f122abc the planted gate fails where its PASS shows; it failed elsewhere: AC10 #322.4f122abc your answer through deep inbox answer must count, exit 0: exit 2 after 467 ms, stdout "", stderr "ask:01M7E9T5EXP4GJD9RQ8MT1SRXN closed as cancelled at 2026-11-15T00:30:45.394Z\n"
+ ❯ must tests/acceptance/322/helpers.ts:97:18
+     95| }
+     96| export function must(ok: boolean, message: string): asserts ok {
+     97|   if (!ok) throw Error(message);
+       |                  ^
+     98| }
+     99|
+ ❯ tests/acceptance/322/early-claim.test.ts:68:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  2 failed | 2 passed (4)
+      Tests  3 failed | 3 passed (6)
+   Start at  16:30:15
+   Duration  151.73s (tests 99%)
+
+### alone block, tests/acceptance/33
+deep lease: DeepBuild isn't set up here (no hub token), so `node node_modules/vitest/vitest.mjs run --no-file-parallelism --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs tests/acceptance/33/bootstrap.test.ts` runs unleased
+
+ RUN  v5.0.5 <repo>
+
+x··
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/33/bootstrap.test.ts > AC4 #33.6932417b with only the maintainer's bootstrap done.yaml, the repo is gated: tests pass, typecheck fails → FAIL naming the typecheck > AC4 #33.6932417b this checkout's .deepbuild/done.yaml runs the repo's test and typecheck commands, approved by the maintainer's signed tag
+Error: AC4 #33.6932417b the commit 1de9761f051b that last changed the bootstrap carries the maintainer's SSH-signed tag under refs/tags/deep/approved/ with "Approves: .deepbuild/done.yaml" (fetch the tags first): it approves []
+ ❯ must tests/acceptance/322/helpers.ts:97:18
+     95| }
+     96| export function must(ok: boolean, message: string): asserts ok {
+     97|   if (!ok) throw Error(message);
+       |                  ^
+     98| }
+     99|
+ ❯ tests/acceptance/33/bootstrap.test.ts:74:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 passed (3)
+   Start at  16:38:33
+   Duration  18.99s (tests 99%, transform 1%)
+
+
+## On the unchanged merge base b9131dbd9: DEEP_SHARDS=1 node scripts/affected.mjs tests/acceptance/322/combine.test.ts tests/acceptance/322/early-claim.test.ts
+alone vitest: tests/acceptance/322/combine.test.ts tests/acceptance/322/coverage.test.ts tests/acceptance/322/early-claim.test.ts
+FAIL affected: 154 new, 42 already failing on main, 0 inconclusive or blocked, 0 listed skips, 2 passed, in 968 s at load 236; logs in <logs>
+deep lease: DeepBuild isn't set up here (no hub token), so `node node_modules/vitest/vitest.mjs run --no-file-parallelism --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs tests/acceptance/322/combine.test.ts tests/acceptance/322/coverage.test.ts tests/acceptance/322/early-claim.test.ts` runs unleased
+
+ RUN  v5.0.5 <base>
+
+··xx
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/322/combine.test.ts > AC5 #322.141e3358 the repo's spec plus the task's definition, in one order > AC5 #322.141e3358 with the unit test passing and R1 failing the claim runs both and is FAIL naming .deepbuild/checks/expired-token.sh; with R1 passing and the unit test failing it is FAIL naming unit; both claims run the checks in the same order
+Error: AC5 #322.141e3358 [unit failing] unit failed on every run, so the combined verdict is FAIL by the precedence FAIL > INVALID > BLOCKED > INCONCLUSIVE > PASS: {"outcome":"INVALID","verdict":"verdict:01M7EB6NBK8EA19142XGQXVZW5","claim":"claim:01M7EB6B2FFEHTF0G6W946Y1J6","reasons":[".deepbuild/checks/expired-token.sh failed on the base before its tests ran","req:session0817d1af781c4003b9e9858ce1fcd2900#R2 is covered by no check at depth unit: it needs a check at depth unit",".deepbuild/checks/expired-token.sh: failed on the merge base only off its named assertions, so it proves nothing","unit: inherited: also fails on the merge base: checkToken rejects
+ ❯ must tests/acceptance/322/helpers.ts:97:18
+     95| }
+     96| export function must(ok: boolean, message: string): asserts ok {
+     97|   if (!ok) throw Error(message);
+       |                  ^
+     98| }
+     99|
+ ❯ claimWith tests/acceptance/322/combine.test.ts:43:3
+ ❯ tests/acceptance/322/combine.test.ts:53:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/acceptance/322/early-claim.test.ts > AC10 #322.4f122abc a claim before its definition locks > AC10 #322.4f122abc (wrong program) a gate that judges the early claim on the repo spec alone (DEEP_HUB_PLANT=spec-only-judges-early-claim) gives PASS on the fixture and fails this test
+Error: AC10 #322.4f122abc the planted gate must fail this test: it passed
+ ❯ must tests/acceptance/322/helpers.ts:97:18
+     95| }
+     96| export function must(ok: boolean, message: string): asserts ok {
+     97|   if (!ok) throw Error(message);
+       |                  ^
+     98| }
+     99|
+ ❯ tests/acceptance/322/early-claim.test.ts:67:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed | 1 passed (3)
+      Tests  2 failed | 2 passed (4)
+   Start at  16:54:12
+   Duration  50.18s (tests 100%)
+
+
+## On the unchanged merge base b9131dbd9: DEEP_SHARDS=1 node scripts/affected.mjs tests/acceptance/33/bootstrap.test.ts
+alone vitest: tests/acceptance/33/bootstrap.test.ts
+FAIL affected: 153 new, 42 already failing on main, 0 inconclusive or blocked, 0 listed skips, 2 passed, in 170 s at load 209; logs in <logs>
+deep lease: DeepBuild isn't set up here (no hub token), so `node node_modules/vitest/vitest.mjs run --no-file-parallelism --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs tests/acceptance/33/bootstrap.test.ts` runs unleased
+
+ RUN  v5.0.5 <base>
+
+x··
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/33/bootstrap.test.ts > AC4 #33.6932417b with only the maintainer's bootstrap done.yaml, the repo is gated: tests pass, typecheck fails → FAIL naming the typecheck > AC4 #33.6932417b this checkout's .deepbuild/done.yaml runs the repo's test and typecheck commands, approved by the maintainer's signed tag
+Error: AC4 #33.6932417b the commit 1de9761f051b that last changed the bootstrap carries the maintainer's SSH-signed tag under refs/tags/deep/approved/ with "Approves: .deepbuild/done.yaml" (fetch the tags first): it approves []
+ ❯ must tests/acceptance/322/helpers.ts:97:18
+     95| }
+     96| export function must(ok: boolean, message: string): asserts ok {
+     97|   if (!ok) throw Error(message);
+       |                  ^
+     98| }
+     99|
+ ❯ tests/acceptance/33/bootstrap.test.ts:74:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 passed (3)
+   Start at  17:15:19
+   Duration  14.44s (tests 99%)
+
+
+## On the change, once more: DEEP_SHARDS=1 node scripts/affected.mjs tests/acceptance/322/early-claim.test.ts
+alone vitest: tests/acceptance/322/coverage.test.ts tests/acceptance/322/early-claim.test.ts
+FAIL affected: 153 new, 42 already failing on main, 0 inconclusive or blocked, 0 listed skips, 2 passed, in 1006 s at load 202; logs in <logs>
+deep lease: DeepBuild isn't set up here (no hub token), so `node node_modules/vitest/vitest.mjs run --no-file-parallelism --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs tests/acceptance/322/coverage.test.ts tests/acceptance/322/early-claim.test.ts` runs unleased
+
+ RUN  v5.0.5 <repo>
+
+·x·
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/322/early-claim.test.ts > AC10 #322.4f122abc a claim before its definition locks > AC10 #322.4f122abc (wrong program) a gate that judges the early claim on the repo spec alone (DEEP_HUB_PLANT=spec-only-judges-early-claim) gives PASS on the fixture and fails this test
+Error: AC10 #322.4f122abc the planted gate fails where its PASS shows; it failed elsewhere: AC10 #322.4f122abc your answer through deep inbox answer must count, exit 0: exit 2 after 67 ms, stdout "", stderr "ask:01M7ECBDA291DNQ60NMRKKT1CV closed as cancelled at 2026-11-15T01:15:07.088Z\n"
+ ❯ must tests/acceptance/322/helpers.ts:97:18
+     95| }
+     96| export function must(ok: boolean, message: string): asserts ok {
+     97|   if (!ok) throw Error(message);
+       |                  ^
+     98| }
+     99|
+ ❯ tests/acceptance/322/early-claim.test.ts:68:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  1 failed | 2 passed (3)
+   Start at  17:14:54
+   Duration  23.95s (tests 100%)

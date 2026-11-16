@@ -1,0 +1,72 @@
+{
+  "name": "shelf",
+  "version": "2.0.0",
+  "license": "MIT",
+  "description": "A test pack of the #1960 acceptance suite, by an outside owner: shelf.bookcase@2, whose @1-to-@2 step renames levels to shelves and sets depth = old.width * 0.25 and drops dividers, which nothing in its corpus reads: the control of the planted migration.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "marks2d": ">=0.0.0"
+    }
+  },
+  "recipes": {
+    "shelf.bookcase@2": "shelf.bookcase@2.json"
+  },
+  "kinds": {
+    "shelf.bookcase@2": {
+      "minor": 0,
+      "recipe": "shelf.bookcase@2",
+      "children": [],
+      "capabilities": {
+        "pickable": true,
+        "snap": false
+      },
+      "rules": [],
+      "twins": [],
+      "migrate": {
+        "1": {
+          "rename": {
+            "levels": "shelves"
+          },
+          "set": {
+            "depth": "old.width * 0.25"
+          },
+          "drop": [
+            "dividers"
+          ]
+        }
+      },
+      "examples": [],
+      "cost": {
+        "class": "figure",
+        "at_defaults": {
+          "cpu_ms": 0.5,
+          "gpu_ms": 0.2,
+          "items": 10
+        }
+      }
+    }
+  },
+  "corpus": {
+    "1": [
+      "2c93ea163a541ebb5093292524a3428435f5cb290e5f8d8f0c538f299e61f717"
+    ],
+    "2": [
+      "5996e202a85165fb5fb6e382781724b65b9c8072cb027cc04ac5115b0b5fdb71"
+    ]
+  },
+  "assets": [
+    {
+      "path": "corpus/drop-unread.json",
+      "sha256": "2c93ea163a541ebb5093292524a3428435f5cb290e5f8d8f0c538f299e61f717",
+      "size": 3572,
+      "license": "MIT"
+    },
+    {
+      "path": "corpus/case-2.json",
+      "sha256": "5996e202a85165fb5fb6e382781724b65b9c8072cb027cc04ac5115b0b5fdb71",
+      "size": 3104,
+      "license": "MIT"
+    }
+  ]
+}
