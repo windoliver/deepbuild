@@ -1024,7 +1024,7 @@ fn run_view(
         Some(_) => Vec::new(),
     };
     let mut drawn_k = 0usize;
-    crate::physics::bake(&mut args.doc)?;
+    crate::physics::bake(&mut args.doc, &call["tracks"])?;
     crate::particles::refuse(&args.doc, app.planted)?;
     // The frames the call draws and how each is reached (#173), the ones logic runs at first.
     let reached = history::order(args.from, args.frames, &args.seeks, &args.history, args.fps);
