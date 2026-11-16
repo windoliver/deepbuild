@@ -1257,6 +1257,8 @@ pub struct Hub<'a> {
     pub audit_asks: BTreeMap<String, Option<bool>>,
     /// #456: render.review's model calls and the findings its readings kept.
     pub review: crate::review::State,
+    /// #457: what the GPU light reductions cost since last read: ms, bytes read back, runs.
+    pub light_cost: std::sync::Arc<std::sync::Mutex<[f64; 3]>>,
     /// The pack store (#306): the versions admitted, and one row per offer.
     pub packs: Packs,
     pub pack_rows: Vec<crate::packs::Row>,
@@ -1451,6 +1453,7 @@ impl<'a> Hub<'a> {
             verdicts_made: BTreeMap::new(),
             audit_asks: BTreeMap::new(),
             review: Default::default(),
+            light_cost: Default::default(),
             packs: Packs::new(pack_planted),
             pack_rows: Vec::new(),
             pack_authors: BTreeMap::new(),

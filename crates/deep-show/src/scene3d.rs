@@ -186,14 +186,27 @@ impl Gpu3 {
 
     /// #2513: the last frame drawn, kept on this GPU for render.exposure to reduce after later
     /// frames draw: a frame's reduction in place of its linear image.
-    pub fn kept_light(&mut self, short: bool) -> Option<Reduce> {
+    /// #457: each reduction's GPU time (ms, by the pass's timestamps), the bytes it read back and
+    /// one run are added to `cost`.
+    pub fn kept_light(
+        &mut self,
+        short: bool,
+        cost: Arc<std::sync::Mutex<[f64; 3]>>,
+    ) -> Option<Reduce> {
         let reducer = self.reducer();
         let (pre_tone, ids, size) = self.renderer.light_source()?;
         let kept = Kept::copy(&self.device, pre_tone, ids, size);
         let device = self.device.clone();
         let rows = read_rows(size, short);
+        let bytes = deep_scene3d_render::exposure::readback_bytes(rows) as f64;
         Some(Reduce(Arc::new(move |q| {
-            kept.reduce(&device, &reducer, rows, q)
+            let (sums, gpu_ms) = kept.reduce(&device, &reducer, rows, q, true)?;
+            if let Ok(mut c) = cost.lock() {
+                c[0] += gpu_ms.unwrap_or(f64::NAN);
+                c[1] += bytes + if gpu_ms.is_some() { 16.0 } else { 0.0 };
+                c[2] += 1.0;
+            }
+            Some(sums)
         })))
     }
 
