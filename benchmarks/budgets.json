@@ -229,6 +229,13 @@
       "initialReason": "Issue #62 first measurement: the merge base has no learned layer. One process builds a 10,000-change learned layer over 200 archived transcripts, rolls back the newer 5,000 to a date, then drops every projection and rebuilds it by replay, so p50 includes the appends and Node's start and the rebuild's own limit (5 s) stays in tests/acceptance/62/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
+      "id": "hub-start-to-ready",
+      "command": ["node", "benchmarks/hub.mjs", "start-to-ready"],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #2332: first reading from main 9f93f1e7bbd7974eeda9f2e98c47851e07ad9bff on Mac17,10, Node 24.22.2, 2026-11-15: 5,004,036,860 hub-only instructions from process start to the core-ready stdout line, on a fresh home with the shipped guards. This command prints that live-process counter before shutdown; the perf lane also counts the whole command and its children. Acceptance compares 20 alternated pairs for at least 25% fewer startup instructions, no increase in the first SessionStart, prompt or PreToolUse, and no higher idle RSS. Wall time under this machine's load is a reading, not a passing budget."
+    },
+    {
       "id": "hub-cold-start",
       "command": [
         "node",
@@ -1799,6 +1806,24 @@
       "initialReason": "Issue #233 first measurement (#233.f4f81b7b): the merge base has no math@1 pack. A release deep-gpu draws criterion 11's math@1 document (math.axes on x [-3, 3] and y [0, 9] over 8 x 5 units, x squared plotted on them, and a square a channel moves) and the same document's expansion written by hand, each under frame_budget at 1920 x 1080 for 5 s at 60 fps in look clean, in alternating order, one warm-up and five runs; a release deep-show evaluates the math document at 0.55 s and counts the nodes that ran for an instance itself. canvas.mjs judge holds the math document's median GPU p95 to 1.05 x the hand-written one's (math_over_hand) and the instance nodes to 0 (frame_expansions, a count judged on any machine). p50 and peak memory get a 50% margin against the merge base once main has this task.",
       "criteria": [
         "#233.f4f81b7b"
+      ]
+    },
+    {
+      "id": "canvas-tree",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "tree"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "tree_build_ms": 20,
+        "forest_draws_per_variant_material": 1
+      },
+      "initialReason": "Issue #1636 first measurement: the merge base has no tree builder and no such task. Release deep-show's geometry call with timings builds a 4-level tree@1 of 4 children a fork, 12 sides and 10 rings (about 21,000 triangles) and reads its build_ms, the builder's own time with its count; and release deep-gpu draws a forest of 10,000 instances of 8 seeded tree variants, each in a bark and a leaf material, for one frame with counts, the reading the most color-pass draws any (variant, material) takes. Five runs after a warm-up one, each a fresh process per binary. canvas.mjs judge holds the time on a reference Mac and the count anywhere. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#1636.2d5eb798"
       ]
     },
     {

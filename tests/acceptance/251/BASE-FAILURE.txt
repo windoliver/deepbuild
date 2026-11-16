@@ -1,0 +1,97 @@
+The #251 suite run once at base commit 1ab891283 ("Merge pull request #2597 …"; no implementation of #251), on macOS
+arm64 (Mac17,10, Apple M5 Max, not a reference Mac; shared, 1-minute load about 380 to 420), rustc 1.99.1, Node 24.22.2,
+vitest 5.0.5, with
+
+  PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    npx vitest run --root tests/acceptance/251 --testTimeout=600000 --no-file-parallelism ac1 ac2 ac3 ac4 ac9
+
+run directly, without scripts/throttle.mjs or scripts/lease: under that load the throttle held the whole-suite run for
+over 40 minutes without admitting it, so it was stopped (by the PIDs this job started) and only the files that need
+nothing but the base's own deep-physics build were run. Its first file built deep-physics cold in this worktree
+(`cargo build --locked --bin deep-physics`, about 96 minutes under that load); the later files found it built.
+
+Result: Test Files 6 failed (6); Tests 17 failed | 1 skipped (18); 5,846 s, nearly all of it the cold build.
+
+Every test of ac1, ac2, ac3, ac4 and ac9 fails at an assertion because the surface is absent; none fails in the
+harness and none is BLOCKED or INCONCLUSIVE.
+
+- Each test that bakes a vehicle world fails at "… is baked, not refused" (helpers.ts `baked`, or #522's `hashesOf`):
+  the base refuses every vehicle world at its check, with these error issues:
+    {"code":"unknown_field","ids":["kart"],"path":"bodies/kart/vehicle", …}
+    {"code":"physics.unsupported","ids":["kart"],"path":"bodies/kart/kind","what":"a vehicle body isn't run by this
+     backend interface yet; #251 brings it", …}
+    {"code":"physics.unsupported","ids":[],"path":"inputs/drive/kind","what":"the input kind drive isn't run by this
+     backend interface yet; #251 brings it", …}
+- Each planted twin fails at #1918's runner: "deep-physics --planted <name> (…) exits 0; stdout:
+  {"ok":false,"code":"bad_input"}": expected 2 to be +0. The base knows none of this suite's planted names.
+
+Each failing test, trimmed to its failing assertion:
+
+ac1-sag.test.ts
+- #251.1571a36a after 3 s each spring is 0.0621 m shorter than its rest length, within 2%:
+    AssertionError: the car set down is baked, not refused: {"ok":false,"issues":[{"check":"document.validate",
+    "code":"unknown_field","severity":"error","ids":["kart"],"path":"bodies/kart/vehicle", …
+- #251.1571a36a (twin: spring_on_whole_mass):
+    AssertionError: deep-physics --planted spring_on_whole_mass (the car set down) exits 0; stdout:
+    {"ok":false,"code":"bad_input"}
+
+ac2-drive-and-brake.test.ts
+- #251.acf8ab9a settled with its rear wheels driving, a drive of 2,000 N from rest reaches 4.00 m/s at 2 s:
+    AssertionError: the settled car driven at 1 s is baked, not refused: {"ok":false,"issues":[… "unknown_field" …
+    "path":"bodies/kart/vehicle" …
+- #251.acf8ab9a from rest and asleep, a drive of −2,000 N wakes it and reaches 4.00 m/s backwards at 2 s:
+    AssertionError: the sleeping car driven backwards is baked, not refused: {"ok":false,"issues":[… "unknown_field" …
+- #251.acf8ab9a from 10 m/s a brake of 4,000 N, with that drive of 2,000 N still held, stops it 12.5 m on:
+    AssertionError: the car braked from 10 m/s is baked, not refused: {"ok":false,"issues":[… "unknown_field" …
+- #251.acf8ab9a (twin: brake_whole_force_each_wheel):
+    AssertionError: deep-physics --planted brake_whole_force_each_wheel (the car braked from 10 m/s) exits 0; stdout:
+    {"ok":false,"code":"bad_input"}
+
+ac3-turn.test.ts
+- #251.d72490eb rolling from 3 m/s with steer 15° …:
+    AssertionError: steer 15° is baked, not refused: {"ok":false,"issues":[… "unknown_field" … "bodies/kart/vehicle" …
+- #251.d72490eb steer 50° turns the inside front wheel 35.00° and the outside one 25.80°:
+    AssertionError: steer 50° is baked, not refused: {"ok":false,"issues":[… "unknown_field" …
+- #251.d72490eb (twin: steer_clamps_angle):
+    AssertionError: deep-physics --planted steer_clamps_angle (the car rolling at 3 m/s, steer 50°) exits 0; stdout:
+    {"ok":false,"code":"bad_input"}
+- #251.d72490eb (twin: steer_parallel):
+    AssertionError: deep-physics --planted steer_parallel (the car rolling at 3 m/s, steer 15°) exits 0; stdout:
+    {"ok":false,"code":"bad_input"}
+
+ac4-contacts.test.ts
+- #251.0d1641fc set down from 1 m above where its rays first reach the floor …:
+    AssertionError: the car dropped 1 m is baked: {"ok":false,"issues":[… "unknown_field" … "bodies/kart/vehicle" …
+- #251.0d1641fc driving off the end of a raised floor …:
+    AssertionError: the car rolling off the raised floor is baked: {"ok":false,"issues":[… "unknown_field" …
+- #251.0d1641fc (twin: contact_names_body_only):
+    AssertionError: deep-physics --planted contact_names_body_only (the car dropped 1 m) exits 0; stdout:
+    {"ok":false,"code":"bad_input"}
+
+ac9-place.test.ts
+- #251.a96ef62b rolled onto its roof at step 900 and placed upright at the last gate …:
+    AssertionError: the kart placed at the last gate is baked, not refused: {"ok":false,"issues":[… "unknown_field" …
+- #251.a96ef62b a seek from the checkpoint before step 900 to step 1,200 …:
+    AssertionError: the straight run answers ok: {"ok":false,"issues":[… "unknown_field" … "bodies/kart/vehicle" …
+- #251.a96ef62b (twin: place_keeps_spin_rate):
+    AssertionError: deep-physics --planted place_keeps_spin_rate (the kart placed at the last gate) exits 0; stdout:
+    {"ok":false,"code":"bad_input"}
+- #251.a96ef62b (twin: place_keeps_angular_velocity):
+    AssertionError: deep-physics --planted place_keeps_angular_velocity (the kart placed at the last gate) exits 0;
+    stdout: {"ok":false,"code":"bad_input"}
+
+The one skipped test is ac10-taste.test.ts's, which vitest's file filter `ac1` also matched. It was the first file
+run, so its #2009 `prebuild` hook carried the cold deep-physics build and hit that hook's 60-minute timeout
+("Error: Hook timed out in 3600000ms" at ../2009/helpers.ts:95), and vitest skipped its test. That is not a result:
+ac10 counts as not run at the base.
+
+Not run at the base: ac5-lap, ac6-refusals, ac7-behavior-kit, ac8-budgets and ac10-taste. The base refuses `kind:
+vehicle` at check with physics.unsupported naming #251 (above), so each of their tests fails at the world check or on
+a vehicle surface the base lacks: the lap world is refused before its seek, golden or kit part (ac5); the car is
+refused in a 3D world on Rapier, Rapier's caps list no `vehicle_controller`, and the interface holds no
+`drive_vehicle` (ac6); the kit's data holds no vehicle fixture and `--backend no_vehicle_controller` is unknown (ac7);
+the levels with vehicles are refused before any timing (ac8); the scenes' worlds are refused before anything is
+drawn (ac10). Their extra builds (deep-show, #191's test-backends and release builds, the merge base's release build,
+deep-gpu, rustdoc JSON and the linux/amd64 lane in Docker) were not spent on a base that can't run the car.
+
+`npx tsc -p tests/acceptance/251/tsconfig.json` type-checks the whole suite clean.

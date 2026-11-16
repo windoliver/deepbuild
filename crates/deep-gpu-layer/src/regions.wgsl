@@ -25,6 +25,8 @@ struct Frame {
     sides: vec4<f32>,
     // Mode (0: 3D, 1: 2D), regions, sides, planted twin.
     counts: vec4<u32>,
+    // #463: where each look's render starts in the frame, px (a cropped look's smaller render).
+    origins: array<vec4<f32>, 2>,
 }
 
 struct Region {
@@ -251,11 +253,13 @@ fn seen(r: Region, x: f32, y: f32, hit: f32) -> Seen {
 }
 
 fn render(j: u32, px: vec2<i32>) -> vec4<f32> {
+    let o = frame.origins[j / 2u];
+    let at = px - vec2<i32>(select(o.xy, o.zw, (j % 2u) == 1u));
     switch j {
-        case 1u: { return textureLoad(look1, px, 0); }
-        case 2u: { return textureLoad(look2, px, 0); }
-        case 3u: { return textureLoad(look3, px, 0); }
-        default: { return textureLoad(look0, px, 0); }
+        case 1u: { return textureLoad(look1, at, 0); }
+        case 2u: { return textureLoad(look2, at, 0); }
+        case 3u: { return textureLoad(look3, at, 0); }
+        default: { return textureLoad(look0, at, 0); }
     }
 }
 

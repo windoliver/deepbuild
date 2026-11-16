@@ -4,7 +4,7 @@
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { loadavg, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { performance } from 'node:perf_hooks';
@@ -591,9 +591,13 @@ workloads['cell-grid-60hz'] = terminal(true);
 // the task's targets in benchmarks/budgets.json, refusing a reading of any other build. The perf lane compares each
 // command with the merge base as it does every task.
 const RUNS = 5;
+// Each run carries the one-minute load at its start and end, as measureOnce names them: judgeLimit's loads (#1830).
 const runs = (once) => {
   once(true);
-  return Array.from({ length: RUNS }, () => once(false));
+  return Array.from({ length: RUNS }, () => {
+    const loadStart = loadavg()[0];
+    return { ...once(false), loadStart, loadEnd: loadavg()[0] };
+  });
 };
 const toolchain = () => spawnSync('rustc', ['-V'], { cwd: root, encoding: 'utf8' }).stdout.trim();
 function release(pkg, bin) {
@@ -1104,6 +1108,57 @@ workloads.ground = () => {
   }
 };
 
+// #1636's budgets: a 4-level tree of 4 children a fork, 12 sides and 10 rings (about 21,000 triangles) built by geometry
+// with timings, and a forest of 10,000 instances of 8 seeded variants, each in bark and leaf, drawn for one frame with
+// counts: the most color-pass draws any (variant, material) of the forest takes.
+const treeParams = (seed, more = {}) => ({ seed, levels: 4, length: 4, radius: 0.15, split: 3, angle: 40, roll: 30, gravity: 0.3,
+  leaves: { per_twig: 6, size: 0.12 }, segments: 8, rings: 8, ...more });
+const treeItem = (params, more = {}) => ({ kind: 'tree@1', params, material: 'bark', materials: { leaves: 'leaf' }, ...more });
+const treeStages = () => {
+  const pos = Array.from({ length: 10_000 }, (_, k) => [4 * (k % 100), 0, 4 * Math.floor(k / 100)]);
+  const variants = Array.from({ length: 8 }, (_, k) => `variant-${k + 1}`);
+  const materials = { bark: groundMaterial([0.36, 0.25, 0.16], 0.9), leaf: groundMaterial([0.25, 0.5, 0.18], 0.7) };
+  return {
+    budget: groundDoc('tree-1636', [640, 360], { cam: groundCamera([7, 5, 14], [0, 4, 0]), sun: groundSun, ...materials,
+      tree: treeItem(treeParams(2026, { split: 4, segments: 12, rings: 10 })) }),
+    forest: groundDoc('forest-1636', [512, 512], { sun: groundSun, ...materials,
+      cam: { kind: 'camera@1', params: { projection: 'orthographic', position: [198, 120, 198], target: [198, 0, 198], view_width: 440, near: 1, far: 300 } },
+      ...Object.fromEntries(variants.map((v, k) => [v, treeItem(treeParams(k + 1), { visible: false })])),
+      forest: { kind: 'instance@1', params: { of: variants, ids: pos.map((_, k) => k), proto: pos.map((_, k) => k % 8), pos, yaw: pos.map((_, k) => (k * 137.5) % 360), scale: pos.map(() => 1) } } }),
+  };
+};
+workloads.tree = () => {
+  const fingerprint = release('deep-show', 'deep-show');
+  release('deep-gpu-layer', 'deep-gpu');
+  const look2d = JSON.parse(readFileSync(join(root, 'tests', 'acceptance', '465', 'fixtures', 'look.json'), 'utf8'));
+  const look = { ...look2d, id: 'plain-1636', basis: 'physical', palette: { ...look2d.palette, night: '#101114', graphite: '#1b1d22', slate: '#8b8f97', white: '#ffffff' },
+    roles: { ...look2d.roles, ground: 'night', ink: 'graphite', muted: 'slate' }, tone_map: 'none', exposure: -Math.log2(1.2), finish: [], deband: 'none', bloom: 'none', ao: 'none', ground_3d: { kind: 'none' } };
+  const dir = mkdtempSync(join(tmpdir(), 'deep-canvas-bench-'));
+  try {
+    const stages = treeStages();
+    const forest = join(dir, 'forest.json');
+    writeFileSync(forest, JSON.stringify(stages.forest));
+    const measured = runs(() => {
+      const answer = once('deep-show', ['run'], { evidence: dir, sessions: GROUND_SESSION, processes: GROUND_PROCESSES, panels: { main: { rect: [0, 0, 1280, 720] } },
+        docs: { [DOC]: { panel: 'main' } }, calls: [{ call: 'deep_show', session: 's1', doc: DOC, document: stillAsAgent(stages.budget) },
+          { call: 'geometry', doc: DOC, items: ['tree'], t: '0s', timings: true }] });
+      if (answer.ok !== true || answer.replies[0]?.outcome !== 'presented' || answer.replies[1]?.code) throw Error(`deep-show answered ${JSON.stringify(answer).slice(0, 1500)}`);
+      const row = answer.replies[1].items.find((r) => r.id === 'tree');
+      const drawn = once('deep-gpu', ['run'], { out: dir, calls: [{ call: 'view3d', doc: forest, look, size: [512, 512], fps: 30, frames: 1, counts: true }] });
+      if (drawn.ok !== true || drawn.replies[0]?.code) throw Error(`deep-gpu answered ${JSON.stringify(drawn).slice(0, 1500)}`);
+      const groups = new Map();
+      for (const d of drawn.replies[0].frames[0].draws.filter((d) => d.pass === 'color' && d.of === 'forest')) {
+        const key = `${d.mesh} in ${d.material}`;
+        groups.set(key, (groups.get(key) ?? 0) + 1);
+      }
+      return { tree_build_ms: row.build_ms, tree_triangles: row.indices.length / 3, forest_draws_per_variant_material: Math.max(0, ...groups.values()), forest_groups: groups.size };
+    });
+    console.log(JSON.stringify({ task: 'canvas-tree', fingerprint, runs: measured }));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+};
+
 // #896's two boards of a run, the 1,000-item one first; `null` for a run with any other boards.
 const pair = (r) => {
   const [small, large] = r.boards ?? [];
@@ -1145,6 +1200,7 @@ const EFFICIENCY = {
     bevel_ms: (r) => r.bevel_ms, subdivide_ms: (r) => r.subdivide_ms, distribute_ms: (r) => r.distribute_ms, arc_length_ms: (r) => r.arc_length_ms,
     still_steps: (r) => r.still_steps, sway_gpu_ms: (r) => r.sway_gpu_ms,
   },
+  'canvas-tree': { tree_build_ms: (r) => r.tree_build_ms, forest_draws_per_variant_material: (r) => r.forest_draws_per_variant_material },
   // #538: each reading by its own name (benchmarks/game-state.mjs).
   'canvas-axes3d': { axes_over_marks: (r) => r.axes_over_marks, still_maps: (r) => r.still_maps },
   'canvas-surface': { rebuild_128_ms: (r) => r.rebuild_128_ms },
@@ -1158,7 +1214,7 @@ const EFFICIENCY = {
   'playtest-maze': { maze_40_runs_s: (r) => r.maze_40_runs_s, idle_work: (r) => r.idle_work },
   'playtest-throughput': { fixture_realtime_x: (r) => r.fixture_realtime_x },
 };
-const COUNTS = new Set(['summary_tokens', 'page_rows', 'frames', 'upload_bytes_per_item', 'indexed_target_bytes', 'still_steps', 'idle_steps', 'still_maps', 'still_code_steps', 'idle_work', 'frame_expansions']);
+const COUNTS = new Set(['summary_tokens', 'page_rows', 'frames', 'upload_bytes_per_item', 'indexed_target_bytes', 'still_steps', 'idle_steps', 'still_maps', 'still_code_steps', 'idle_work', 'frame_expansions', 'forest_draws_per_variant_material']);
 /** Targets that are floors, each reading at or above its limit: judged as the limit on their negations (#184's multiple of real time). */
 const FLOORS = new Set(['fixture_realtime_x']);
 

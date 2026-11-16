@@ -1,6 +1,244 @@
 {
   "files": [
     {
+      "path": "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/examples/jsm/geometries/RoundedBoxGeometry.js",
+      "url": "https://raw.githubusercontent.com/mrdoob/three.js/65c4864bb3bd4309257d41c6e54f4403dc57f255/examples/jsm/geometries/RoundedBoxGeometry.js",
+      "sha256": "c5feab96123858ed8823c889b238dc8734adab7e760e3cfd21e7f3f2f3e348e3",
+      "size": 6470,
+      "credit": "three.js authors (github.com/mrdoob/three.js), MIT License"
+    },
+    {
+      "path": "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/Three.Core.js",
+      "url": "https://raw.githubusercontent.com/mrdoob/three.js/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/Three.Core.js",
+      "sha256": "a78116be225f10bc6e801b8e53581815be9ef08d68b3f2d73b4808a9ac5d7a5a",
+      "size": 9936,
+      "credit": "three.js authors (github.com/mrdoob/three.js), MIT License"
+    },
+    {
+      "path": "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/Three.Legacy.js",
+      "url": "https://raw.githubusercontent.com/mrdoob/three.js/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/Three.Legacy.js",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0,
+      "credit": "three.js authors (github.com/mrdoob/three.js), MIT License"
+    },
+    {
+      "path": "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/Three.js",
+      "url": "https://raw.githubusercontent.com/mrdoob/three.js/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/Three.js",
+      "sha256": "935f59de685cf5030b2e2052c28aa81cdb09bfb75dc8720a8a898de72d3e203d",
+      "size": 561,
+      "credit": "three.js authors (github.com/mrdoob/three.js), MIT License"
+    },
+    {
+      "path": "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/cameras/PerspectiveCamera.js",
+      "url": "https://raw.githubusercontent.com/mrdoob/three.js/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/cameras/PerspectiveCamera.js",
+      "sha256": "1cc44938885f785649a978ecb6f57c444561381ddab24de19fc59b400009b111",
+      "size": 10651,
+      "credit": "three.js authors (github.com/mrdoob/three.js), MIT License"
+    },
+    {
+      "path": "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/constants.js",
+      "url": "https://raw.githubusercontent.com/mrdoob/three.js/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/constants.js",
+      "sha256": "457f37d839585170e47ae0cd4b0b8f58ba530c4ad9dfc901e75865af22da0439",
+      "size": 33392,
+      "credit": "three.js authors (github.com/mrdoob/three.js), MIT License"
+    },
+    {
+      "path": "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/core/BufferAttribute.js",
+      "url": "https://raw.githubusercontent.com/mrdoob/three.js/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/core/BufferAttribute.js",
+      "sha256": "c03416080d3ef2d89678df82b1feecb85b38a769286e1f201952604813dfd37d",
+      "size": 24861,
+      "credit": "three.js authors (github.com/mrdoob/three.js), MIT License"
+    },
+    {
+      "path": "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/extras/curves/Curves.js",
+      "url": "https://raw.githubusercontent.com/mrdoob/three.js/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/extras/curves/Curves.js",
+      "sha256": "506c35f73bba72b6ebcb26189967fdff73b2202a96156ce0a1db4efe7d036e5c",
+      "size": 540,
+      "credit": "three.js authors (github.com/mrdoob/three.js), MIT License"
+    },
+    {
+      "path": "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/BoxGeometry.js",
+      "url": "https://raw.githubusercontent.com/mrdoob/three.js/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/BoxGeometry.js",
+      "sha256": "9b3799b446b031e55ac60795859f3f941cb8bd32579ea43d29f32d98cd661d7c",
+      "size": 5933,
+      "credit": "three.js authors (github.com/mrdoob/three.js), MIT License"
+    },
+    {
+      "path": "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/CapsuleGeometry.js",
+      "url": "https://raw.githubusercontent.com/mrdoob/three.js/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/CapsuleGeometry.js",
+      "sha256": "ec15a52b030e91457641882bd95d236714dd564aff185cc78995c910fbb5a8a9",
+      "size": 5763,
+      "credit": "three.js authors (github.com/mrdoob/three.js), MIT License"
+    },
+    {
+      "path": "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/CircleGeometry.js",
+      "url": "https://raw.githubusercontent.com/mrdoob/three.js/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/CircleGeometry.js",
+      "sha256": "8edbd82ac884294689e8e3fd2d7b2981ba1d683cae2e4ac8e51da00304453e36",
+      "size": 3522,
+      "credit": "three.js authors (github.com/mrdoob/three.js), MIT License"
+    },
+    {
+      "path": "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/ConeGeometry.js",
+      "url": "https://raw.githubusercontent.com/mrdoob/three.js/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/ConeGeometry.js",
+      "sha256": "7a7bc9c8ffb715d9c9ffc547bded0ab590dd5aa581cc1dbe135cc0424f6febcc",
+      "size": 2296,
+      "credit": "three.js authors (github.com/mrdoob/three.js), MIT License"
+    },
+    {
+      "path": "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/CylinderGeometry.js",
+      "url": "https://raw.githubusercontent.com/mrdoob/three.js/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/CylinderGeometry.js",
+      "sha256": "ec4aaa60e490afaf76c6ee6e2c11a373f647381eb737d1d6f095f4cbb0c063ff",
+      "size": 7603,
+      "credit": "three.js authors (github.com/mrdoob/three.js), MIT License"
+    },
+    {
+      "path": "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/DodecahedronGeometry.js",
+      "url": "https://raw.githubusercontent.com/mrdoob/three.js/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/DodecahedronGeometry.js",
+      "sha256": "524d37a936890ad9bbd8de858f62ff8f288ff0ab75dc119d50d0701b3f98823c",
+      "size": 2418,
+      "credit": "three.js authors (github.com/mrdoob/three.js), MIT License"
+    },
+    {
+      "path": "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/EdgesGeometry.js",
+      "url": "https://raw.githubusercontent.com/mrdoob/three.js/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/EdgesGeometry.js",
+      "sha256": "b7d2300c96518d391e9571038980b8befd5d004f7df8c47dd7a772cf9a0ba506",
+      "size": 4950,
+      "credit": "three.js authors (github.com/mrdoob/three.js), MIT License"
+    },
+    {
+      "path": "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/ExtrudeGeometry.js",
+      "url": "https://raw.githubusercontent.com/mrdoob/three.js/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/ExtrudeGeometry.js",
+      "sha256": "e9b7550aacea7dd6a68cf5dbd52975dfdb2fd5badddeabb4c8ddaa855681f723",
+      "size": 21582,
+      "credit": "three.js authors (github.com/mrdoob/three.js), MIT License"
+    },
+    {
+      "path": "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/Geometries.js",
+      "url": "https://raw.githubusercontent.com/mrdoob/three.js/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/Geometries.js",
+      "sha256": "e89a1b90600c34f039283f98174d026f4b1f8e10ee1be8405f2fb3e6b0a64a5c",
+      "size": 797,
+      "credit": "three.js authors (github.com/mrdoob/three.js), MIT License"
+    },
+    {
+      "path": "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/IcosahedronGeometry.js",
+      "url": "https://raw.githubusercontent.com/mrdoob/three.js/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/IcosahedronGeometry.js",
+      "sha256": "43d6dc2837507722d2a5ab0a6865ddd4c3bb2fdad9ebf90056556a46bd795ef9",
+      "size": 1955,
+      "credit": "three.js authors (github.com/mrdoob/three.js), MIT License"
+    },
+    {
+      "path": "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/LatheGeometry.js",
+      "url": "https://raw.githubusercontent.com/mrdoob/three.js/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/LatheGeometry.js",
+      "sha256": "61450b2a2894a634e4d15d41dc6c0be169a9ae94b184e77c4028f679e7a70ddf",
+      "size": 5388,
+      "credit": "three.js authors (github.com/mrdoob/three.js), MIT License"
+    },
+    {
+      "path": "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/OctahedronGeometry.js",
+      "url": "https://raw.githubusercontent.com/mrdoob/three.js/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/OctahedronGeometry.js",
+      "sha256": "30730533c4f0cfe5def833a454e23a45c26ce0720252fd7a6dd26fa2839c2988",
+      "size": 1691,
+      "credit": "three.js authors (github.com/mrdoob/three.js), MIT License"
+    },
+    {
+      "path": "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/PlaneGeometry.js",
+      "url": "https://raw.githubusercontent.com/mrdoob/three.js/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/PlaneGeometry.js",
+      "sha256": "1e04283cdf4336000dc4c7244794929eabe583057a5bb3f970467b3338f3db7e",
+      "size": 3142,
+      "credit": "three.js authors (github.com/mrdoob/three.js), MIT License"
+    },
+    {
+      "path": "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/PolyhedronGeometry.js",
+      "url": "https://raw.githubusercontent.com/mrdoob/three.js/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/PolyhedronGeometry.js",
+      "sha256": "f421a0a8c3912a9184e5fc178983cdf523baef2851a52ee708d98a4beed6ec11",
+      "size": 7514,
+      "credit": "three.js authors (github.com/mrdoob/three.js), MIT License"
+    },
+    {
+      "path": "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/RingGeometry.js",
+      "url": "https://raw.githubusercontent.com/mrdoob/three.js/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/RingGeometry.js",
+      "sha256": "5681dc191f015a69e5f3d5c7038ebd9999c560141f11b27984a4a6aef9bf7602",
+      "size": 4123,
+      "credit": "three.js authors (github.com/mrdoob/three.js), MIT License"
+    },
+    {
+      "path": "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/ShapeGeometry.js",
+      "url": "https://raw.githubusercontent.com/mrdoob/three.js/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/ShapeGeometry.js",
+      "sha256": "0714706c29c23481a735f5d5385440559e305ff4e91a935df52e334818b495c2",
+      "size": 4882,
+      "credit": "three.js authors (github.com/mrdoob/three.js), MIT License"
+    },
+    {
+      "path": "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/SphereGeometry.js",
+      "url": "https://raw.githubusercontent.com/mrdoob/three.js/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/SphereGeometry.js",
+      "sha256": "3a824a3cb7bbc16516b8ed5a40a6815857e5d6a3c9406d445e34175179bf9081",
+      "size": 4551,
+      "credit": "three.js authors (github.com/mrdoob/three.js), MIT License"
+    },
+    {
+      "path": "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/TetrahedronGeometry.js",
+      "url": "https://raw.githubusercontent.com/mrdoob/three.js/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/TetrahedronGeometry.js",
+      "sha256": "b006bea749e5fee850678e9a931b881cad501efea997373ff9a115b93b32b182",
+      "size": 1649,
+      "credit": "three.js authors (github.com/mrdoob/three.js), MIT License"
+    },
+    {
+      "path": "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/TorusGeometry.js",
+      "url": "https://raw.githubusercontent.com/mrdoob/three.js/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/TorusGeometry.js",
+      "sha256": "ec67dc40be0a201e4af571a5a572ef83a2b9195398e2220228c0618c1f72fe37",
+      "size": 4173,
+      "credit": "three.js authors (github.com/mrdoob/three.js), MIT License"
+    },
+    {
+      "path": "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/TorusKnotGeometry.js",
+      "url": "https://raw.githubusercontent.com/mrdoob/three.js/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/TorusKnotGeometry.js",
+      "sha256": "775c6c72fa98302716d5696b5a240859d9036ff91c5a9efce27454bd1a2733c3",
+      "size": 5767,
+      "credit": "three.js authors (github.com/mrdoob/three.js), MIT License"
+    },
+    {
+      "path": "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/TubeGeometry.js",
+      "url": "https://raw.githubusercontent.com/mrdoob/three.js/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/TubeGeometry.js",
+      "sha256": "8b63d228b7589a1397d961c76a13e72e047d5a4e0f74fe81e123374654f9f072",
+      "size": 5931,
+      "credit": "three.js authors (github.com/mrdoob/three.js), MIT License"
+    },
+    {
+      "path": "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/WireframeGeometry.js",
+      "url": "https://raw.githubusercontent.com/mrdoob/three.js/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/geometries/WireframeGeometry.js",
+      "sha256": "d03f328d637c015870a19ecd7c9a6de939ec8199b88e829915948a3089e08927",
+      "size": 3836,
+      "credit": "three.js authors (github.com/mrdoob/three.js), MIT License"
+    },
+    {
+      "path": "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/lights/PointLight.js",
+      "url": "https://raw.githubusercontent.com/mrdoob/three.js/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/lights/PointLight.js",
+      "sha256": "1ad93ac773bd881f30d923624e663b237c1209d29aa14e9bc7ae5ea81ab4365f",
+      "size": 3047,
+      "credit": "three.js authors (github.com/mrdoob/three.js), MIT License"
+    },
+    {
+      "path": "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/lights/SpotLight.js",
+      "url": "https://raw.githubusercontent.com/mrdoob/three.js/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/lights/SpotLight.js",
+      "sha256": "8f1af695946fd14f3f9b0e93778549fb0859a1011ca12a04a6039b6b851681e8",
+      "size": 5014,
+      "credit": "three.js authors (github.com/mrdoob/three.js), MIT License"
+    },
+    {
+      "path": "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/materials/Materials.js",
+      "url": "https://raw.githubusercontent.com/mrdoob/three.js/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/materials/Materials.js",
+      "sha256": "c6593291701abd43f3c247ed307d01d1d7ca0a5d9a11f51378ac90bcdbf9deef",
+      "size": 1428,
+      "credit": "three.js authors (github.com/mrdoob/three.js), MIT License"
+    },
+    {
+      "path": "familiar/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/materials/MeshStandardMaterial.js",
+      "url": "https://raw.githubusercontent.com/mrdoob/three.js/65c4864bb3bd4309257d41c6e54f4403dc57f255/src/materials/MeshStandardMaterial.js",
+      "sha256": "60d854c4c7f4506e8e0fd5951a2e631aa3d1dfce5c2d632084cb7cf8b27cbb68",
+      "size": 13835,
+      "credit": "three.js authors (github.com/mrdoob/three.js), MIT License"
+    },
+    {
       "path": "app/node-v24.22.2-darwin-arm64.tar.gz",
       "url": "https://nodejs.org/dist/v24.22.2/node-v24.22.2-darwin-arm64.tar.gz",
       "sha256": "aa9549349e47dffaa42dcf95d6e06ade8c4bdafc980979883b88767670df385a",

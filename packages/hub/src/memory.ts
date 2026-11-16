@@ -5,13 +5,13 @@
 // stops its tool calls too, through deep-hook. Your past taste decisions: the ones for the screen a session starts on.
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import type { EvidenceStore } from '@deepbuild/evidence';
 import type { Connection, Message, RecordStore } from '@deepbuild/record';
 import { ulid } from '@deepbuild/record/ids';
 import { startOf } from './wire.js';
 import { call, withPrompt, type Reply } from './client.js';
-import { hubAddress, installedRoot, rootOf } from './paths.js';
+import { hubAddress, installedRoot, repoOf, rootOf } from './paths.js';
 import { dropEntries, writeRejected } from './guards.js';
 
 type LessonKind = 'guard' | 'shared-rule' | 'removal';
@@ -24,6 +24,20 @@ export interface Lesson {
 type Raw = RecordStore['raw'];
 const sha256 = (text: string): string => createHash('sha256').update(text).digest('hex');
 const letters = (id: string): string => id.replace(/[^0-9A-Za-z]/g, '');
+/** Archive sources without adapters (#111), independent of the wiki builder that reads their copies later. */
+export const MEMORY_TRANSCRIPTS = [
+  { agent: 'pi', transcripts: { home: ['~/.pi/agent'], path: 'sessions/{folder}/{stamp}_{session}.jsonl' } },
+  { agent: 'cursor', transcripts: { home: ['~/.cursor'], path: 'projects/{folder}/agent-transcripts/{session}.jsonl' }, folderNames: -3 },
+];
+/** A transcript's repo identity, including a gone folder; the planted merges remain deliberately wrong. */
+export function projectOf(cwd: string, agent: string, plant?: string): string | undefined {
+  let id = repoOf(cwd);
+  if (!id && !existsSync(cwd)) id = `${letters(basename(cwd))}${sha256(cwd).slice(0, 8)}`;
+  if (!id) return undefined;
+  if (plant === 'merge-by-name') id = id.slice(0, -8);
+  if (plant === 'never-merge') id += letters(agent).toLowerCase();
+  return id;
+}
 const parsed = (text: string | null): unknown => { try { return JSON.parse(text ?? 'null'); } catch { return text; } };
 /** What a text names in backticks. */
 const ticked = (text: string): string[] => [...text.matchAll(/`([^`]+)`/g)].map((m) => m[1]!);

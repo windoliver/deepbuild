@@ -4,8 +4,20 @@
 // gets stuck, misses a goal, traps or passes its step ceiling fails; and every run's track replays exactly. Its input,
 // the spec's `play`, comes from the brief or definition, so the working agent can't change it or pick a lucky seed.
 import type { CheckResult } from '@deepbuild/conformance';
+import { lockRefusal, type PlayIface } from './iface.ts';
 import { runPlaytest } from './run.ts';
 import type { Play, PlaytestInput } from './types.ts';
+
+/**
+ * The play interface `game.play@1` as the brief locks it (#555), before anything is generated: the interface as
+ * locked, a copy no later change to the brief's own object reaches, or an Error naming why it's refused, such as a
+ * name carrying a unit the canvas doesn't name.
+ */
+export function lockPlay(play: PlayIface): PlayIface {
+  const why = lockRefusal(play);
+  if (why) throw Error(`the play interface can't be locked: ${why}`);
+  return JSON.parse(JSON.stringify(play)) as PlayIface;
+}
 
 /**
  * The check's source for the verdict: `own` when every bot is the working agent's (`by: "agent"`), so a pass binds
