@@ -1,0 +1,9 @@
+{
+  "tests/acceptance/2668/judges.test.ts": "9eddb4e524138423847ad6c14e4d0df79350bca1042e8cdd47e036fa56dc17db",
+  "tests/acceptance/2668/judges.ts": "b05c371ec70c0f86a7ba9ae210c828ee4c4e38d548ad0954870f05d6c9fafe5f",
+  "tests/acceptance/2668/README.md": "512a0851a5df4ee3e1b1928a8f9e424933ebcb8e1a00839b21f91f1ec6f86b19",
+  "tests/acceptance/2668/agree-readers.ts": "b3beae10d89b94faffc14195cb02f80d338ac8cb0c2a76904aa791f34ae27902",
+  "tests/acceptance/2668/tsconfig.json": "c5b0031dc2191959d86202363d79087b03e941d881587792b08e308dc9e69c0a",
+  "tests/acceptance/2668/proposed/tests/acceptance/992/agree.test.ts.proposed": "d41f82fca086236a7871fcdb979d7c38971f56cb57e6ab2989f49511df395cfd",
+  "tests/acceptance/2668/proposed/tests/acceptance/1463/list.test.ts.proposed": "25bd7c0269f9624acdb64172615a38e9081aa3e9e0abfb1dc68318d095701424"
+}
