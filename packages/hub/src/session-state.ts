@@ -905,6 +905,8 @@ export class SessionState {
     // Its start once more, after its parent was read: a PID that went and was reused meanwhile reads another.
     if (Date.parse((await startOf(peer)) ?? '') !== began) return { refused: `Process ${peer} changed while the hub looked at it, so it isn't bound as session ${session}'s waiter.` };
     const unbound = this.waiterUnbound(session, above === undefined || !start ? undefined : { pid: above, start });
+    // One that ended while the hub looked is done too, as one that had ended before.
+    if (unbound?.ended) return { session };
     return unbound ? { refused: `Process ${peer} can't wait as session ${session}'s waiter: ${unbound.why}` } : { session, parent: { pid: above!, start: start! } };
   }
 
