@@ -1,7 +1,8 @@
 # #2218: a spec check's runs, accept and min_tests are read, and a key the hub doesn't read is BLOCKED
 
-**Status: Part of #2218, not Closes.** All five criteria pass on the change through the blind suite, unchanged, and
-fail on the base as the issue says. Not committed. What keeps it from Closes is under Open.
+**Status: Part of #2218, not Closes.** All five criteria passed through the blind suite, unchanged, on the change as
+it stood on its base, and failed on the base as the issue says. Main was then merged with a hand-resolved conflict,
+and the suite has not run on the merged tree: its build got no grant. What keeps it from Closes is under Open.
 
 Base: `b9131dbd9857aefc4dcc39dd0d534d007b1ef671` (origin/main when the work started).
 
@@ -11,12 +12,22 @@ Base: `b9131dbd9857aefc4dcc39dd0d534d007b1ef671` (origin/main when the work star
 |---|---|---|
 | Scope 1, AC1, AC2: `runs` and `accept` reach the claim's check and its clean runs are counted against them | `checksOf` keeps `runs`, `accept`, `min_tests`. `spec-checks.ts` turns `runs`, or the count `accept` computes (`runsNeeded`), into the check's run count. `gate-runner.ts` starts a spec check's runs one after another on the claim until `moreRuns` says none is to come; the check is pending till then | `runs.test.ts`, `accept.test.ts`: fail on the base (PASS on 1 run), pass on the change (a pass and a fail: INCONCLUSIVE; 29 runs, no PASS before the 29th) |
 | Scope 2, AC3: `min_tests` | One row in the verdict engine: a pass that counted fewer tests is INVALID, naming both counts; carried there through the gate's `ClaimedCheck` | `min-tests.test.ts`: fails on the base, passes on the change |
-| Scope 3, AC4: a key no reader takes | `unreadKeys` reads done.yaml with positions. Any such key, at the top or on a check entry, stands on the claim as one check, `.deepbuild/done.yaml`, missing a cause that is yours: BLOCKED, naming each key and line, owner you. None of the spec's checks runs | `unread.test.ts` (2 tests): fail on the base, pass on the change |
+| Scope 3, AC4: a key no reader takes | `unreadKeys` reads done.yaml with positions. Any such key, at the top or on a check entry, stands on the claim as one check, `.deepbuild/done.yaml`, missing a cause that is yours: BLOCKED, naming each key and line, owner you. The spec's other checks still run beside it (see Merged with main) | `unread.test.ts` (2 tests): fail on the base, pass on the change |
 | AC5, the twin | The keys this repo's spec writes are all read | `twin.test.ts`: passes on both. Its wrong program is mutant M4 (`min_tests` taken off the read keys), which it fails |
 | Scope 4: no version key | none added | |
 
 Not asked for by a criterion, and kept because dropping a value silently is the bug: a `runs`, `accept` or `min_tests`
 the hub can't read stands on its check as a missing cause (BLOCKED, naming the value). `spec-checks.test.ts`.
+
+## Merged with main
+
+Main moved 699 commits while this was verified, and #2205 landed in the same function (`specChecks`), so the merge
+conflicted there. Resolved by hand in `spec-checks.ts`: #2205's checks the gate can't run and its unparseable file
+are kept as main has them, and this change's keys and counts are read beside them. One behavior changed at the merge:
+before it, a spec with an unread key ran none of its checks; #2205's suite needs `unit` to run in a spec whose journey
+entry writes `file`, so the unread-key check now stands beside the spec's checks instead of in their place.
+`after-acceptance.txt`, `affected-summary.txt` and the mutants are from before the merge; what ran after it is in
+`after-merge.txt`.
 
 ## Evidence here
 
@@ -45,4 +56,6 @@ the hub can't read stands on its check as a missing cause (BLOCKED, naming the v
    each side. No cause found in the change. A load of 300 to 400 against the test's 20 s wait is the likely one.
 6. **Not shown either way:** #322's `github.test.ts` wrong-program tests fail on both sides, on a different count each
    run, at `ENOTEMPTY` in their cleanup.
-7. **Not run:** the proof lanes (before, trace, mutation), the full typecheck, the preflight.
+7. **Not run on the merged tree:** the blind suite, #2205's suite and `affected.mjs`. Only the hub typecheck and the
+   two unit files ran there (`after-merge.txt`).
+8. **Not run:** the proof lanes (before, trace, mutation), the full typecheck, the preflight.

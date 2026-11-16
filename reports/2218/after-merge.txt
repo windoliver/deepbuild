@@ -1,0 +1,18 @@
+After the merge with main 78307b1c4 (merge commit eda286640). No build grant came: the merged tree's build was queued 21:33 and had not started by 22:20, so the acceptance suite, #2205's suite and affected.mjs were not run on the merged tree.
+
+node node_modules/typescript/bin/tsc -p packages/hub/tsconfig.json --noEmit: exit 0
+
+node node_modules/vitest/vitest.mjs run packages/hub/test/spec-checks.test.ts packages/hub/test/gate-runner.test.ts (run directly, once):
+ ✓ packages/hub/test/spec-checks.test.ts > a spec check with runs: 0 is missing a count the hub can read, naming the value 6ms
+ ✓ packages/hub/test/spec-checks.test.ts > a spec check with accept: 250% is missing a count the hub can read, naming the value 1ms
+ ✓ packages/hub/test/spec-checks.test.ts > a spec check with min_tests: five is missing a count the hub can read, naming the value 1ms
+ ✓ packages/hub/test/gate-runner.test.ts > a slow run outdated by a newer claim > is recorded stale only when the newer claim changed its check's inputs, naming that claim; the same tree stopped again
+ ✓ packages/hub/test/gate-runner.test.ts > a slow run outdated by a newer claim > a run no newer claim changed the inputs of ends with no run.stale 1586ms
+ ✓ packages/hub/test/gate-runner.test.ts > a spec check's runs on one claim (#2218) > after a run fails, two more start and no fourth: three failures are its FAIL 2509ms
+ ✓ packages/hub/test/gate-runner.test.ts > a spec check's runs on one claim (#2218) > runs that fail with no record kept, as when the runner itself throws, still end at three 2410ms
+ ✓ packages/hub/test/gate-runner.test.ts > a spec check's runs on one claim (#2218) > two clean runs that read different files, and so land on different keys, both count for the claim 3526ms
+ ✓ packages/hub/test/gate-runner.test.ts > a spec check's runs on one claim (#2218) > a run that didn't count ends its runs: no other starts, and the check never passes on it 2449ms
+ ✓ packages/hub/test/gate-runner.test.ts > a check pinned to a commit of its own (#325) > a timing run that failed under load and passed rerun alone (#352): a later claim on that commit gets the rerun
+ ✓ packages/hub/test/gate-runner.test.ts > a check pinned to a commit of its own (#325) > a drift rerun of a timing check that fails under load again is set aside and rerun alone again; the old run un
+ Test Files  2 passed (2)
+      Tests  11 passed (11)
