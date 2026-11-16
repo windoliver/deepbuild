@@ -8,6 +8,7 @@ The input module, `input@1` (#308; design: Control and input track): controls an
 
 - `src/module.rs`: the module's manifest and what it registers; `src/session.rs`: a control session, its behaviors and the kinds.
 - `src/track.rs`: the input track, its entries, samples and writers; `src/kit.rs`: `control@1`'s kit and its planted fills.
+- `src/tour.rs`: the tour's keys, the entries they write and the tour pointer (#903), which hosts read through its `Layout`.
 - The proof binary is `crates/deep-input`, not here.
 
 ## What it may import

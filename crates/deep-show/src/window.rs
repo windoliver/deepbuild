@@ -309,12 +309,15 @@ pub fn draw(hub: &mut Hub<'_>, replies: Vec<Value>, out: &str, t: i64, scale: f6
                 (dim(0) * scale).round().clamp(1.0, f64::from(size[0])) as u16,
                 (dim(1) * scale).round().clamp(1.0, f64::from(size[1])) as u16,
             ];
-            let Some(gpu) = hub.gpu3() else {
+            if hub.gpu3().is_none() {
                 return refused("unsupported_platform");
-            };
-            let Ok((mut drawn, scene)) =
-                gpu.draw(&Value::Object(stamped.clone()), t, &palette, drawn_size)
+            }
+            // #1729: its assets and maps from the evidence store, as render-back reads them.
+            let Ok((scene, look)) = hub.evaluate3d(&Value::Object(stamped.clone()), t, drawn_size)
             else {
+                continue;
+            };
+            let Some(mut drawn) = hub.gpu3().and_then(|g| g.draw(&scene, &look)) else {
                 continue;
             };
             for (id, b) in scene.boxes() {
@@ -326,6 +329,10 @@ pub fn draw(hub: &mut Hub<'_>, replies: Vec<Value>, out: &str, t: i64, scale: f6
             if let Some(d) = &session_drawn {
                 let over = hub.renderer.raster(d, drawn_size, None);
                 crate::snapshot::over(&mut drawn, &over);
+                // #903: then the tour's pointer.
+                if let Some(form) = hub.played_form(doc) {
+                    hub.pointer_over(&form, t, &mut drawn, drawn_size);
+                }
             }
             let (pw, dw) = (usize::from(size[0]) * 4, usize::from(drawn_size[0]) * 4);
             let mut rgba = vec![0u8; pw * usize::from(size[1])];
@@ -334,6 +341,8 @@ pub fn draw(hub: &mut Hub<'_>, replies: Vec<Value>, out: &str, t: i64, scale: f6
             }
             rgba
         } else {
+            // #903: a document its session draws shows its tour's pointer over its layers.
+            let toured = session_drawn.as_ref().and_then(|_| hub.played_form(doc));
             let drawn = match session_drawn {
                 Some(d) => d,
                 None => match hub.renderer.prepare(
@@ -358,7 +367,11 @@ pub fn draw(hub: &mut Hub<'_>, replies: Vec<Value>, out: &str, t: i64, scale: f6
                 ];
                 items.push(json!({"id": id, "layer": row.layer, "box": at}));
             }
-            hub.renderer.raster(&drawn, size, None)
+            let mut rgba = hub.renderer.raster(&drawn, size, None);
+            if let Some(form) = toured {
+                hub.pointer_over(&form, t, &mut rgba, size);
+            }
+            rgba
         };
         let Some(picture) = picture(rgba, size) else {
             return refused("no_picture");

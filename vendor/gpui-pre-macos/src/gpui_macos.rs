@@ -47,6 +47,7 @@ pub(crate) use window::*;
 
 pub use platform::MacPlatform;
 pub use window::frame_link; // DeepBuild patch (windoliver/deepbuild#1551)
+pub use events::momentum; // DeepBuild patch (windoliver/deepbuild#542)
 
 trait BoolExt {
     fn to_objc(self) -> BOOL;

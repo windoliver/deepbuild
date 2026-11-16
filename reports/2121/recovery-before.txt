@@ -1,0 +1,78 @@
+
+ RUN  v5.0.5 /private/tmp/deepbuild-2121.WRTSs6/pr-before/packages/hub/test
+
+ × agents-sync.test.ts > recovery keeps each replacement digest for undo, for files already written and files it finishes 6251ms
+   → undo recovered created files: expected [ …(2) ] to deeply equal [ …(2) ]
+   → undo recovered edited files: expected [ …(2) ] to deeply equal [ …(2) ]
+ ↓ agents-sync.test.ts > a mode-only skill commit is applied even when its script bytes did not change
+ ↓ agents-sync.test.ts > a skill proposal refused during reading or planning leaves no orphaned staged files
+ ↓ agents-sync.test.ts > syncing a skill to another agent and then with no changes keeps both agents and their files
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  agents-sync.test.ts > recovery keeps each replacement digest for undo, for files already written and files it finishes
+AssertionError: undo recovered created files: expected [ …(2) ] to deeply equal [ …(2) ]
+
+- Expected
++ Received
+
+  [
+-   "{ \"theme\": \"mine\", \"mcpServers\": {} }
++   "{
++   \"theme\": \"mine\",
++   \"mcpServers\": {}
++ }
+  ",
+-   "# mine
+- model = \"current\"
+- ",
++   null,
+  ]
+
+ ❯ agents-sync.test.ts:25:93
+     23|     expect(paths.map(bytes).every(text => text?.includes('recovered'))…
+     24|     expect(await deep(w, ['undo', p.sync])).toMatchObject({ code: 0 });
+     25|     expect.soft(paths.map(bytes), `undo recovered ${present ? 'edited'…
+       |                                                                                             ^
+     26|     await stop(w);
+     27|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  agents-sync.test.ts > recovery keeps each replacement digest for undo, for files already written and files it finishes
+AssertionError: undo recovered edited files: expected [ …(2) ] to deeply equal [ …(2) ]
+
+- Expected
++ Received
+
+  [
+-   "{ \"theme\": \"mine\", \"mcpServers\": {} }
++   "{
++   \"theme\": \"mine\",
++   \"mcpServers\": {}
++ }
+  ",
+    "# mine
+  model = \"current\"
++
++ [mcp_servers.recovered]
++ command = \"/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node\"
++ args = [\"-e\", \"console.log(\\\"started:recovered\\\")\"]
+  ",
+  ]
+
+ ❯ agents-sync.test.ts:25:93
+     23|     expect(paths.map(bytes).every(text => text?.includes('recovered'))…
+     24|     expect(await deep(w, ['undo', p.sync])).toMatchObject({ code: 0 });
+     25|     expect.soft(paths.map(bytes), `undo recovered ${present ? 'edited'…
+       |                                                                                             ^
+     26|     await stop(w);
+     27|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 3 skipped (4)
+   Start at  16:57:14
+   Duration  6.61s (tests 97%, transform 2%, import 1%)

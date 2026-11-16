@@ -424,6 +424,32 @@ fn drawn_here(kind: &Value) -> bool {
 /// Each imported `vector@1` item by ID (#398).
 type Vectors = BTreeMap<String, deep_canvas_vector::Imported>;
 
+/// Each graph item's routes by edge ID: its corner points in document u (#451).
+pub type Routes = BTreeMap<String, BTreeMap<String, Vec<[f64; 2]>>>;
+
+/// #451: `items` with every `graph@1` laid out and drawn as marks2d's items, as this crate draws
+/// a document (labels left out), and each graph's routes as laid out, which particles moving
+/// along a routed edge read. A graph's refusal is a drawing command's answer.
+pub fn graphs_drawn(
+    doc: &Map<String, Value>,
+    items: &Map<String, Value>,
+) -> Result<(Map<String, Value>, Routes), Value> {
+    let (mut items, graphs) = graphs::lower(doc, items, &Vectors::new(), Default::default())?;
+    items.retain(|_, i| i.get("kind").and_then(Value::as_str) != Some("label@1"));
+    let routes = graphs
+        .into_iter()
+        .map(|(g, d)| {
+            let edges = d
+                .routes
+                .into_iter()
+                .map(|(e, r)| (e, r.into_iter().map(|p| [p.0, p.1]).collect()))
+                .collect();
+            (g, edges)
+        })
+        .collect();
+    Ok((items, routes))
+}
+
 /// The document check: the core's, then the vector module's import of each vector item from
 /// `store`, then, with a look and no error yet, the marks2d module's over the document with its
 /// vectors drawn as marks2d's items; and the imported vectors.
@@ -790,6 +816,10 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
             Some(Value::Bool(b)) => *b,
             Some(_) => return None,
         };
+        // #223: a line's warps are counted from here, so its first frame reports what the check,
+        // which draws the document first, mapped for it.
+        deep_canvas_marks::warp::take_mapped();
+        deep_canvas_marks::warp::time_with(timing.then_some(raster::clock_ms as fn() -> f64));
         let (checked, vectors) = check(
             &doc,
             look.as_ref().map(|(l, _)| l),

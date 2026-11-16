@@ -13,6 +13,7 @@
 mod feed;
 mod fidelity;
 mod frames;
+mod gltf;
 mod guards;
 mod lottie;
 mod page;
@@ -65,6 +66,8 @@ pub enum Guard {
     PageKeysByPicture,
     /// #169: the page draws its targets only as boxes on each still.
     PageTargetsOnImage,
+    /// #468: the glTF export drops a camera's lens shift without a warning.
+    GltfDropsShift,
     /// A wrong encoder, muxer or reader in the helper processes, by its name there.
     Codec(&'static str),
 }
@@ -123,6 +126,7 @@ pub(crate) fn planted(name: &str) -> Option<Planted> {
         "pdf_writer_skips_stage_4" => Planted::Export(G::PdfSkipsStage4),
         "page_keys_by_picture" => Planted::Export(G::PageKeysByPicture),
         "page_targets_on_image" => Planted::Export(G::PageTargetsOnImage),
+        "gltf_drops_shift" => Planted::Export(G::GltfDropsShift),
         other => Planted::Export(G::Codec(CODEC_PLANTS.iter().find(|p| **p == other)?)),
     })
 }
@@ -182,6 +186,8 @@ impl Hub<'_> {
             };
             (rgba, size)
         };
+        // #903: the tour's pointer, in the overlay above the document's layers.
+        self.pointer_over(doc, t, &mut rgba, size);
         #[cfg(feature = "test-export-guards")]
         test_guards::paint(doc, test_guards::frame_of(doc, t), &mut rgba, size, |r| {
             self.look.light.get(r).copied()
@@ -614,6 +620,10 @@ impl Hub<'_> {
         if job.codec == "page" {
             return self.export_page(job, &doc);
         }
+        // #468: a still as one glTF file, outside export.target@1 (Export: glTF).
+        if job.codec == "gltf" {
+            return self.export_gltf(job, &doc);
+        }
         let target = job.target().to_string();
         // The target, as this build sealed it.
         let entry = self
@@ -754,6 +764,8 @@ impl Hub<'_> {
             }
         }
         doc = crate::played::with_track(&doc, &track);
+        // #903: an export no one gave input to plays the document's tour.
+        crate::tour::inline(&mut doc);
         if self.scenario.module_planted.as_deref() == Some("export_keeps_live_hover") {
             // Planted (#539): the frames evaluate hover as the panel's live hover, not none.
             self.hover_into(&job.doc, &mut doc);

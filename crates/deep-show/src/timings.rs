@@ -67,6 +67,64 @@ pub(crate) fn compares(doc: &Value, t: i64, seen: &mut BTreeMap<String, i64>) ->
     Value::Array(out)
 }
 
+/// #1968: `tokens`, each code item's tokens mapped to runs in the session's look as a change to the
+/// item maps them (its display form, its tokens' spans, their runs); and `aligns`, each text diff's
+/// two versions read and aligned as the check aligns them. Each is timed by doing the module's own
+/// work on the frame's inputs again.
+pub(crate) fn code(sched: &Scheduler<'_>, session: &Session, doc: &Value) -> (Value, Value) {
+    use deep_canvas_marks::scene::object_or_empty;
+    use deep_canvas_marks::{code, diff, modules::LookValue};
+    let look = session
+        .value(sched, "look.palette", None)
+        .and_then(|v| v.as_typed::<LookValue>());
+    let items = doc["items"].as_object();
+    let params =
+        |id: &str| object_or_empty(items.and_then(|i| i.get(id)).and_then(|i| i.get("params")));
+    let ms = |started: std::time::Instant| started.elapsed().as_secs_f64() * 1000.0;
+    let mut tokens = Vec::new();
+    for (id, item) in items.into_iter().flatten() {
+        let (Some(look), true) = (
+            &look,
+            item["kind"] == "text@1" && params(id).contains_key("code"),
+        ) else {
+            continue;
+        };
+        let path = format!("items/{id}");
+        let started = std::time::Instant::now();
+        let d = code::read(params(id), &path).ok().flatten();
+        std::hint::black_box(
+            code::runs(
+                (&look.palette, &look.ty),
+                params(id),
+                d.as_ref(),
+                &path,
+                Vec::new(),
+            )
+            .ok(),
+        );
+        tokens.push(json!({"item": id, "ms": ms(started)}));
+    }
+    let mut aligns = Vec::new();
+    for (id, tr) in doc["transitions"].as_object().into_iter().flatten() {
+        let (Some(from), Some(to), true) = (
+            tr["from"].as_str(),
+            tr["to"].as_str(),
+            tr["kind"] == "text_diff",
+        ) else {
+            continue;
+        };
+        let started = std::time::Instant::now();
+        if let (Ok(Some(old)), Ok(Some(new))) = (
+            diff::Version::read(params(from), ""),
+            diff::Version::read(params(to), ""),
+        ) {
+            std::hint::black_box(diff::matching(&old, &new));
+        }
+        aligns.push(json!({"transition": id, "ms": ms(started)}));
+    }
+    (Value::Array(tokens), Value::Array(aligns))
+}
+
 /// A frame's `timings` fields, for `frame` (a `frames` entry).
 pub(crate) fn add(frame: &mut Value, timed: (&Value, &Mappings, &Mappings, i64), seen: &mut BTreeMap<String, i64>) {
     let (doc, before, after, t) = timed;

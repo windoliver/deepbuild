@@ -1,0 +1,112 @@
+Base commit 1c4d1f0e2aaad8c6a6573848823566d04ff73d17 (detached, already installed and built), with nothing changed but
+this folder (the frozen tests/acceptance/27/ is imported as it is). November 14, 2026, 11:23 PST. Node 24.22.0, macOS,
+18 cores, on a Mac shared with many other sessions (1-minute load 275.95 at the start, 304.51 at the end). One run of
+the file, from the checkout's root:
+
+  node scripts/throttle.mjs test --wait 240 -- node node_modules/vitest/vitest.mjs run --root tests/acceptance/27-redraft-2073 --no-file-parallelism --testTimeout=600000 --reporter=verbose waits.test.ts
+
+Summary: Test Files 1 failed (1), Tests 1 failed | 3 passed (4), in 150.09 s (152 s by the clock, the throttle's grant
+included); exit 1. No test ended BLOCKED. The one failure is in a test carried over word for word from #27's file, at
+that test's control, before any assertion of the criterion; the redrafted test passed.
+
+Per test (all four are waits.test.ts > AC4 #27.e6116d56 Fixtures show each ask, hold, check run and agent command
+reaching a recorded outcome by its deadline > ...):
+
+- PASS  AC4 #27.e6116d56 an ask nobody answers reaches its default by its deadline (1m in your settings), recorded as
+  defaulted, never as answered   65.6 s
+  Carried over as written. Why: the base defaults an unanswered ask at the deadline your settings give its kind. It
+  calls no deep_run and its repo names no check.
+
+- FAIL  AC4 #27.e6116d56 a stop held for an open ask nobody answers goes through by the end of its hold, the record
+  says how the hold ended, naming the ask, and the session doesn't read as finished   4.6 s
+  Carried over as written: this is the base's result for #27's own test, word for word. First failure, at the test's
+  control (waits.test.ts:92), the third expect, after "isn't sent back" and "by the end of its hold" passed:
+    AssertionError: the stop was held while ask:01M7DR9HN3MR0TXK46DG3YAR1F was open (the control): it took 246 ms:
+    expected 246 to be greater than 5000
+  So the session's Stop went through in 246 ms with nothing sent back: it was never held. The assertions of the
+  criterion that follow (the record says how the hold ended, naming the ask; the session doesn't read as finished)
+  were not reached, so this run says nothing about them either way.
+  What in the base produces a Stop that goes through unheld: deep-hook decides alone when the hub hasn't acknowledged
+  its call in time. crates/deep-hook/src/main.rs gives the hub 20 ms from the hook's start to acknowledge
+  (ACK_BUDGET), and its watchdog ends a hook still unacknowledged at 48 ms (WATCHDOG) with the decision for the hub
+  away, which for a Stop with no fail_closed denial is exit 0 with no output: the stop is allowed and the call is
+  spooled marked late. tests/acceptance/27/README.md says so under "Machine load": "on a badly loaded Mac a Stop can
+  go through unheld and a test fails on a hook's reply, naming it; rerun it and keep the load with the result". The
+  hub's own rule would hold this stop: holdFor in packages/hub/src/server.ts holds a Claude Code stop of a session
+  with an open ask for up to 60 s, and project trust has no part in it. The load was 276 to 305 on 18 cores.
+  Not confirmed by this run: the message at that expect doesn't carry the hook's reply, and the test's folder is
+  removed when it ends, so the late mark in the spool was not read. This job reads the failure as the load's, not as
+  the base's handling of holds, and not as anything #2073 or this redraft touches: the test calls no deep_run, its
+  repo names no check, and its lines are #27's. Not rerun: the file was not changed and the run was not cut short.
+  tests/acceptance/27/waits.test.ts is not in scripts/known-failures.json.
+
+- PASS  AC4 #27.e6116d56 a check run that never ends on its own reaches overran by its deadline (1m in the repo's
+  spec), its processes stopped (redraft 2073)   64.9 s
+  The redrafted test. Why: the base's deep_run asks no trust and runs `/bin/sh -c "node checks/forever.mjs <marker>"`
+  as you in the live worktree, which holds what the claim's commit holds. It arms the spec's 1-minute deadline once
+  run.started is appended (launch in packages/hub/src/runs.ts), signals the run's process group at it and records
+  run.finished with outcome overran; no process holding the marker was left. The trust decision the fixture records
+  changes nothing on the base, which never reads it for deep_run.
+
+- PASS  AC4 #27.e6116d56 an agent command still running far past its expected time is recorded as an overrun while it
+  runs, never as finished   7.4 s
+  Carried over as written. Why: the base records an overrun for a call still running past the time the same command
+  took before (packages/hub/src/waits.ts). It calls no deep_run and its repo names no check.
+
+No folder under /tmp/dh27-* and no process the tests started was left after the run. Vitest's cache,
+tests/acceptance/27-redraft-2073/node_modules, was removed.
+
+Type check, clean (exit 0, no output), run at 11:27 PST and again at 11:31 PST once Vitest's cache was removed; the
+program holds waits.test.ts here, tests/acceptance/27/helpers.ts and the record's entry (packages/record/src/index.ts):
+
+  node node_modules/typescript/bin/tsc -p tests/acceptance/27-redraft-2073/tsconfig.json
+
+The check's two lines on the hermetic runner, one scratch run on this base at 11:28 PST (1-minute load 219.05 at its
+start, 275.71 at its end), through the same throttle, its script not kept: the command check kind (runCommandCheck of
+packages/checks-command, which a claim's checks run through, on a supervisor of its own, HOME a temporary folder), in a
+folder holding checks/forever.mjs, each line given a deadline of 8 s:
+
+- node checks/forever.mjs <marker> (the redraft's): outcome overran, mask null,
+  exit {"code":null,"signal":"SIGKILL","cause":"deadline"}, testsRun 0, no failure recorded. The one command line seen
+  holding the marker while it ran was `node checks/forever.mjs <marker>`; none was left after. 19.4 s from the call to
+  the result: the process was first seen in a listing begun 10.3 s after the call and last in one that ended at 18.6 s
+  (ps every 250 ms, its slowest listing 1.1 s). With the 8 s deadline and the 500 ms before the kill both counted from
+  the process's start, that puts its start 9 to 11 s after the call.
+- sh -c 'sleep 600; : <marker>' (#27's): outcome uncounted, mask "untraced program sh", exit null, in 4 ms; no process
+  holding the marker was seen and none was left.
+
+So the redraft's line reaches overran both as the base's deep_run runs it (the run above) and as a claim's checks run
+it, and #27's line a claim's checks leave uncounted before a process starts. At this load the hermetic run ended
+11.4 s past its deadline, most of that before its process started. The redrafted test gives a run 10 s past
+run.started + 1 minute, #27's slack, kept (REDRAFT.md, Readings): on a machine loaded like this one a correct hub
+under #2073 could miss it for the load alone. One reading at that load, not repeated.
+
+An earlier run of this job, cut off before it wrote this record, left one log of a run of the same file on this base
+(November 13, 14:30 PST, load 154 at its start, 139 at its end). It is a first reading and not this record's: the same
+three passes (86.0 s, 61.8 s, 4.5 s) and the same failure at the same control ("it took 101 ms").
+
+Not run: any implementation of #2073 (none exists in this checkout), so the redrafted test's pass on a hub that
+refuses an untrusted project and runs a trusted one's check on the claim's commit is unverified until one exists; the
+frozen tests/acceptance/27/waits.test.ts; any wrong program (no DEEP_HUB_PLANT run, no twin); a second run of the
+file.
+
+==== The run (the checkout written <repo>)
+
+ RUN  v5.0.5 <repo>/tests/acceptance/27-redraft-2073
+
+ ✓ waits.test.ts > AC4 #27.e6116d56 Fixtures show each ask, hold, check run and agent command reaching a recorded outcome by its deadline > AC4 #27.e6116d56 an ask nobody answers reaches its default by its deadline (1m in your settings), recorded as defaulted, never as answered 65617ms
+ × waits.test.ts > AC4 #27.e6116d56 Fixtures show each ask, hold, check run and agent command reaching a recorded outcome by its deadline > AC4 #27.e6116d56 a stop held for an open ask nobody answers goes through by the end of its hold, the record says how the hold ended, naming the ask, and the session doesn't read as finished 4606ms
+   → the stop was held while ask:01M7DR9HN3MR0TXK46DG3YAR1F was open (the control): it took 246 ms: expected 246 to be greater than 5000
+ ✓ waits.test.ts > AC4 #27.e6116d56 Fixtures show each ask, hold, check run and agent command reaching a recorded outcome by its deadline > AC4 #27.e6116d56 a check run that never ends on its own reaches overran by its deadline (1m in the repo's spec), its processes stopped (redraft 2073) 64855ms
+ ✓ waits.test.ts > AC4 #27.e6116d56 Fixtures show each ask, hold, check run and agent command reaching a recorded outcome by its deadline > AC4 #27.e6116d56 an agent command still running far past its expected time is recorded as an overrun while it runs, never as finished 7405ms
+
+ FAIL  waits.test.ts > AC4 #27.e6116d56 Fixtures show each ask, hold, check run and agent command reaching a recorded outcome by its deadline > AC4 #27.e6116d56 a stop held for an open ask nobody answers goes through by the end of its hold, the record says how the hold ended, naming the ask, and the session doesn't read as finished
+AssertionError: the stop was held while ask:01M7DR9HN3MR0TXK46DG3YAR1F was open (the control): it took 246 ms: expected 246 to be greater than 5000
+ ❯ waits.test.ts:92:122
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 3 passed (4)
+   Start at  11:23:23
+   Duration  150.09s (tests 100%)
+
+exit 1

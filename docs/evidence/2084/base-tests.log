@@ -1,0 +1,102 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `node node_modules/vitest/vitest.mjs run --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs packages/hub/test/extensions.test.ts tests/acceptance/2084/closure/closure.test.ts tests/acceptance/2084/held.test.ts` runs unleased
+
+ RUN  v5.0.5 <checkout>
+
+deep hub: the core stopped: Error: no deep-hook is built under <checkout>/target; run cargo build -p deep-hook first
+    at deepHook (file://<checkout>/packages/hub/dist/paths.js:227:15)
+    at Object.guard (file://<checkout>/packages/hub/dist/core.js:377:75)
+    at Products.secure (file://<checkout>/packages/hub/dist/products.js:203:36)
+    at Products.open (file://<checkout>/packages/hub/dist/products.js:191:24)
+    at Core.openExecution (file://<checkout>/packages/hub/dist/core.js:824:29)
+    at async Core.init (file://<checkout>/packages/hub/dist/core.js:570:9)
+xdeep hub: the core stopped: Error: no deep-hook is built under <checkout>/target; run cargo build -p deep-hook first
+    at deepHook (file://<checkout>/packages/hub/dist/paths.js:227:15)
+    at Object.guard (file://<checkout>/packages/hub/dist/core.js:377:75)
+    at Products.secure (file://<checkout>/packages/hub/dist/products.js:203:36)
+    at Products.open (file://<checkout>/packages/hub/dist/products.js:191:24)
+    at Core.openExecution (file://<checkout>/packages/hub/dist/core.js:824:29)
+    at async Core.init (file://<checkout>/packages/hub/dist/core.js:570:9)
+stderr | packages/hub/test/extensions.test.ts
+vitest-setup: stopping 1 process(es) this file left running:
+  72756 (node)
+
+xx·xx
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/hub/test/extensions.test.ts > an extension on the hub answers tool.before > denies with its reason, adds context, and a handler past the deadline takes the fail-open reply before the hold
+ FAIL  packages/hub/test/extensions.test.ts > an extension on the hub answers tool.before > is still asked when a warn-mode guard entry matches: its deny wins, and its context joins the warning
+Error: the hub exited before it was ready
+ ❯ ChildProcess.<anonymous> packages/hub/test/hub.ts:75:37
+     73|     await new Promise((resolve, reject) => {
+     74|       hub.stdout.once('data', resolve);
+     75|       hub.once('exit', () => reject(Error('the hub exited before it wa…
+       |                                     ^
+     76|       timer = setTimeout(() => reject(Error("the hub wasn't ready with…
+     77|     }).finally(() => clearTimeout(timer));
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  tests/acceptance/2084/held.test.ts > #2084 a heavy command whose call is held for the core keeps its settled reply > #2084 Claude Code: the second session's first `cargo test --workspace` after its prompt is rewritten into its `deep lease` form, holds a cpu.slot, and its reply carries the sibling notice
+AssertionError: the second session's first `cargo test --workspace` after its prompt was held for the core, and must still be rewritten into its `deep lease` form (the hub's settled reply dropped?): exit 0, stdout "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"additionalContext\":\"DeepBuild: session 70974f83 (claude-code) also changed README.md, line 1, in its worktree (a behavior change), and this session changes it too.\"}}", stderr "": expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/acceptance/2084/held.test.ts:63:258
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  tests/acceptance/2084/closure/closure.test.ts > AC1 #2084.2c4c3709 the two #1015 files pass, unchanged > AC1 #2084.2c4c3709 `tests/acceptance/1015/claude.test.ts` and `tests/acceptance/1015/focused.test.ts`, unchanged from the base, run and pass every test
+AssertionError: every test of the two #1015 files must pass: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "tests/acceptance/1015/claude.test.ts › AC1 #1015.081f8373 eight Claude Code sessions' `cargo test --workspace` share a cpu.slot pool of 6: at most 5 run at once › AC1 #1015.081f8373 at most 5 of the eight commands run at once, the rest wait and then run, each waiter's tool result shows its waiting lines, and the lease table holds each running command under its session [failed]: AssertionError: the sixth command, `cargo test --workspace` in wt-6 (session 578e9c9a-72f6-4291-9006-34400ee2c5d5), started while 5 others ran (wt-5, wt-3, wt-4, wt-1, wt-7): with `cpu.slot` a pool of 6, at most 5 leased commands run at once (8 did)
++     at judged (<checkout>/tests/acceptance/1015/claude.test.ts:55:12)
++     at <checkout>/tests/acceptance/1015/claude.test.ts:80:5
++     at async file://<checkout>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:2801:20",
++   "tests/acceptance/1015/focused.test.ts › AC3 #1015.0ceaf8cf focused runs match no shipped entry; a repo entry in done.yaml leases one › AC3 #1015.0ceaf8cf `npx vitest run src/cart.test.ts` and `cargo test -p cart` run as written and both at once; with done.yaml naming `npx vitest run`, the first one runs leased [failed]: AssertionError: with done.yaml naming `npx vitest run`, `npx vitest run src/cart.test.ts` must be rewritten into its `deep lease` form: exit 0, stdout \"\", stderr \"\": expected false to be true // Object.is equality
++     at <checkout>/tests/acceptance/1015/focused.test.ts:60:196
++     at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
++     at async file://<checkout>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:2801:20",
++ ]
+
+ ❯ tests/acceptance/2084/closure/closure.test.ts:100:134
+     98|     }
+     99|     const notPassed = run.cases.filter((c) => c.status !== 'passed');
+    100|     expect(notPassed.map((c) => `${c.id} [${c.status}]: ${c.message.sl…
+       |                                                                                                                                      ^
+    101|     expect(run.cases.length, 'both files report their tests').toBeGrea…
+    102|   }, 4_500_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  tests/acceptance/2084/closure/closure.test.ts > AC3 #2084.76e6811e the two failing cases are listed with #2084 while they fail, and gone once they pass > AC3 #2084.76e6811e each of the two #1015 cases that fails is listed in scripts/known-failures.json with #2084, and no entry of #2084 stands for a case that passes
+AssertionError: `tests/acceptance/1015/claude.test.ts › AC1 #1015.081f8373 eight Claude Code sessions' `cargo test --workspace` share a cpu.slot pool of 6: at most 5 run at once › AC1 #1015.081f8373 at most 5 of the eight commands run at once, the rest wait and then run, each waiter's tool result shows its waiting lines, and the lease table holds each running command under its session` fails (AssertionError: the sixth command, `cargo test --workspace` in wt-6 (session 578e9c9a-72f6-4291-9006-34400ee2c5d5), started while 5 others ran (wt-5, wt-3, wt-4, wt-1, wt-7): with `cpu.slot` a pool of 6, at most 5 leased commands run at once (8 did)
+    at judged (<checkout>), so scripts/known-failures.json must list it by that id with (#2084, added <date>); it holds null: expected '' to match /\(#2084, added \d{4}-\d{2}-\d{2}\)$/
+
+- Expected:
+/\(#2084, added \d{4}-\d{2}-\d{2}\)$/
+
++ Received:
+""
+
+ ❯ tests/acceptance/2084/closure/closure.test.ts:116:221
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  5 failed | 1 passed (6)
+   Start at  16:04:58
+   Duration  42.07s (tests 98%, transform 2%)
+

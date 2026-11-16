@@ -1,0 +1,18 @@
+The #213 Oracle lane run once at base commit fe5a88f17 (no implementation of #213), on macOS 27.2 arm64 (rustc 1.99.1,
+Node 24.22.2, vitest 5.0.5), right after the #213 suite's base run, with the base's deep-show already built (the run's
+build was a no-op), under a test grant:
+
+  PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    node scripts/throttle.mjs test --wait 120 -- sh scripts/lease \
+    npx vitest run --root tests/acceptance/213-oracle --testTimeout=600000 --no-file-parallelism
+
+Run: 2 of 2 tests fail, each at an assertion because the surface is absent, none in the harness and none BLOCKED
+(Duration 31.98 s):
+
+- ray-box.test.ts (#213.170f7e56): the two blocks' scene (collision groups front and back) with `ticker` is presented
+  and steps, but the `logic` reply has no `handles` ("the two blocks: the handle probe: handles is an object, got
+  undefined").
+- cuboid-rays.test.ts (#213.170f7e56): the turned targets' scene (100 static bodies at seeded rotations) with `ticker` is
+  presented and steps; the same `handles` assertion fails.
+
+The type-check, `npx tsc -p tests/acceptance/213-oracle/tsconfig.json`, exits 0.

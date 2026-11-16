@@ -134,12 +134,18 @@ impl Viewer {
     }
 }
 
-/// `logic`: the document's logic items stepped from 0 to `steps` − 1 on its input track.
+/// `logic`: the document's logic items stepped from 0 to `steps` − 1 on its input track; #213:
+/// with `seeks` (`[{to}]`), each a restore of the nearest checkpoint run through step `to`; with
+/// `regions`, each step's services regions as the step read them; `at_times` (s), the steps
+/// logic.determinism samples.
 #[derive(Debug)]
 pub struct LogicCall {
     pub doc: String,
     pub steps: i64,
     pub check: bool,
+    pub seeks: Vec<i64>,
+    pub regions: bool,
+    pub at_times: Option<Vec<f64>>,
     /// #548: the input track the replay reads in place of the hub's.
     pub track: Option<Vec<Value>>,
 }
@@ -153,6 +159,23 @@ pub fn parse(c: &Map<String, Value>) -> Option<LogicCall> {
         .get("steps")?
         .as_i64()
         .filter(|n| (1..=100_000).contains(n))?;
+    let seeks = match c.get("seeks") {
+        None => Vec::new(),
+        Some(v) => v
+            .as_array()?
+            .iter()
+            .map(|s| s.get("to")?.as_i64().filter(|k| (0..steps).contains(k)))
+            .collect::<Option<_>>()?,
+    };
+    let at_times = match c.get("at_times") {
+        None => None,
+        Some(v) => Some(
+            v.as_array()?
+                .iter()
+                .map(Value::as_f64)
+                .collect::<Option<_>>()?,
+        ),
+    };
     let track = match c.get("track") {
         None => None,
         Some(t) => Some(t.as_array()?.clone()),
@@ -161,8 +184,75 @@ pub fn parse(c: &Map<String, Value>) -> Option<LogicCall> {
         doc: c.get("doc")?.as_str()?.to_string(),
         steps,
         check,
+        seeks,
+        regions: c.get("regions").and_then(Value::as_bool).unwrap_or(false),
+        at_times,
         track,
     })
+}
+
+/// #213: a seek to step `to` of `world`'s run: the nearest checkpoint at or before it restored
+/// and run through `to`, with the services regions step `to` read, each item's step hashes from
+/// `to` on, and the first checkpoint after it.
+fn seek_to(world: &World, to: i64, steps: i64, regions: bool) -> Result<Value, Value> {
+    let from = world.nearest(to).ok_or_else(
+        || json!({"code": "bad_input", "what": format!("no checkpoint at or before step {to}")}),
+    )?;
+    let mut w = world.restore(from, None)?;
+    let mut r = Record::default();
+    r.regions = regions.then(Default::default);
+    let ids: Vec<String> = w.piece.items.iter().map(|i| i.id.clone()).collect();
+    let after = |r: &Record| {
+        ids.iter()
+            .filter_map(|id| r.deep(id).into_iter().find(|(k, _)| *k > to))
+            .next()
+    };
+    // #1164: each step from `to` through the first checkpoint after it, as `logic`'s rows.
+    let piece = w.piece.clone();
+    let mut ran = Vec::new();
+    let mut until = from;
+    while until <= to || (after(&r).is_none() && until < steps) {
+        until += 1;
+        w.run(until, &mut r, &mut |_, _| {});
+        let k = until - 1;
+        if k >= to {
+            let hash: Map<String, Value> = r
+                .rows()
+                .get(&k)
+                .map(|(items, _)| {
+                    ids.iter()
+                        .filter_map(|id| Some((id.clone(), items.get(id)?.get("hash")?.clone())))
+                        .collect()
+                })
+                .unwrap_or_default();
+            ran.push(json!({"step": k, "hash": hash, "arrays": arrays_of(&w, &piece)}));
+        }
+    }
+    let mut hashes = Map::new();
+    for id in &ids {
+        let list: Vec<Value> = r
+            .rows()
+            .range(to..)
+            .filter_map(|(_, (items, _))| items.get(id)?.get("hash").cloned())
+            .collect();
+        hashes.insert(id.clone(), json!(list));
+    }
+    let checkpoint = after(&r).map(|(k, _)| {
+        let deep: Map<String, Value> = ids
+            .iter()
+            .filter_map(|id| {
+                Some((
+                    id.clone(),
+                    json!(r.deep(id).into_iter().find(|(s, _)| *s == k)?.1),
+                ))
+            })
+            .collect();
+        json!({"step": k, "deep_hash": deep})
+    });
+    let read = r.regions.as_ref().and_then(|m| m.get(&to).cloned());
+    Ok(
+        json!({"to": to, "from": from, "regions": read, "hashes": hashes, "checkpoint": checkpoint, "steps": ran}),
+    )
 }
 
 /// `piece` stepped from 0 to `count` − 1 on `entries`: each step's hash and arrays per item, as
@@ -182,37 +272,68 @@ pub(crate) fn stepped(
         &mut rec,
         None,
     )?;
+    Ok(step_rows(&mut world, &mut rec, piece, count, false))
+}
+
+/// Each step 0 … `count` − 1 of `world`: its hash and arrays per item and, with `full` (#213's
+/// `logic` call), its fuel, its services' and mirrors' times and, where `rec` keeps them, the
+/// services regions each step read.
+fn step_rows(
+    world: &mut World,
+    rec: &mut Record,
+    piece: &Piece,
+    count: i64,
+    full: bool,
+) -> (Vec<Value>, Option<Value>) {
     let len = piece.items.first().map_or(1, |i| i.step);
     let mut steps = Vec::new();
     for k in 0..count {
-        world.run(k + 1, &mut rec, &mut |_, _| {});
+        world.run(k + 1, rec, &mut |_, _| {});
         let row = rec.rows().get(&k).map(|r| &r.0);
-        let hash: Map<String, Value> = piece
-            .items
-            .iter()
-            .filter_map(|i| Some((i.id.clone(), row?.get(&i.id)?.get("hash")?.clone())))
-            .collect();
-        let mut arrays = Map::new();
-        for (n, item) in piece.items.iter().enumerate() {
-            let region = world.write_region(n);
-            for w in &item.writes {
-                let Some(e) = item.write(&w.name) else {
-                    continue;
-                };
-                let bytes = &region[e.offset as usize..(e.offset + e.size) as usize];
-                let values = bytes
-                    .chunks_exact(w.ty.size() as usize)
-                    .map(|b| w.ty.value(b))
-                    .collect();
-                arrays.insert(format!("{}.{}", item.id, w.name), Value::Array(values));
+        let field = |f: &str| -> Map<String, Value> {
+            piece
+                .items
+                .iter()
+                .filter_map(|i| Some((i.id.clone(), row?.get(&i.id)?.get(f)?.clone())))
+                .collect()
+        };
+        let arrays = arrays_of(world, piece);
+        let mut step = json!({"step": k, "t": k * len, "hash": field("hash"), "arrays": arrays});
+        if full {
+            for f in ["fuel", "service_ns", "mirror_ns"] {
+                step[f] = json!(field(f));
+            }
+            if let Some(r) = rec.regions.as_ref() {
+                step["regions"] = json!(r.get(&k).cloned().unwrap_or_default());
             }
         }
-        steps.push(json!({"step": k, "t": k * len, "hash": hash, "arrays": arrays}));
+        steps.push(step);
+        // #548: when an item traps, the replay stops there.
         if let Some(trap) = rec.traps.first() {
-            return Ok((steps, Some(trap.clone())));
+            return (steps, Some(trap.clone()));
         }
     }
-    Ok((steps, None))
+    (steps, None)
+}
+
+/// Each item's arrays as its write region holds them now, by `<item>.<name>`.
+fn arrays_of(world: &World, piece: &Piece) -> Map<String, Value> {
+    let mut arrays = Map::new();
+    for (n, item) in piece.items.iter().enumerate() {
+        let region = world.write_region(n);
+        for w in &item.writes {
+            let Some(e) = item.write(&w.name) else {
+                continue;
+            };
+            let bytes = &region[e.offset as usize..(e.offset + e.size) as usize];
+            let values = bytes
+                .chunks_exact(w.ty.size() as usize)
+                .map(|b| w.ty.value(b))
+                .collect();
+            arrays.insert(format!("{}.{}", item.id, w.name), Value::Array(values));
+        }
+    }
+    arrays
 }
 
 /// Whether a logic item of `form` reads control `c`.
@@ -406,13 +527,21 @@ impl Hub<'_> {
             .enter(doc, control, value, t, serial)?
             .into_iter()
             .collect();
-        let Some(mut form) = self
+        if self
             .forms
             .get(doc)
-            .filter(|f| read_by_logic(f, control))
-            .cloned()
-        else {
-            return Ok(appended);
+            .is_some_and(|f| read_by_logic(f, control))
+        {
+            self.rebake(doc, t);
+        }
+        Ok(appended)
+    }
+
+    /// The document's logic baked again on its track, as an export bakes it, so the live
+    /// session draws what its rules make of the track; then shown at `t`.
+    pub(crate) fn rebake(&mut self, doc: &str, t: i64) {
+        let Some(mut form) = self.forms.get(doc).cloned() else {
+            return;
         };
         let track = self.track_json(doc);
         if self.inline_occurrences(&mut form, &track).is_ok() {
@@ -420,7 +549,6 @@ impl Hub<'_> {
             self.forms.insert(doc.to_string(), form);
             self.replay(doc, t);
         }
-        Ok(appended)
     }
 
     /// The roving focus on the stop the scope holds: a pick control with `focus` enters at its
@@ -524,6 +652,8 @@ impl Hub<'_> {
     /// Writes the panel's viewer state for its pick controls into `form`, a live view's: each
     /// control's hovered cell as its `hover`, and the focused row's outline, never a fill.
     pub(crate) fn viewer_into(&self, panel: &str, form: &mut Value) {
+        // #542: its text fields.
+        self.fields_into(panel, form);
         let Some(v) = self.scopes.get(panel).map(|s| &s.picks) else {
             return;
         };
@@ -641,37 +771,68 @@ impl Hub<'_> {
         let Some(form) = self.forms.get(&l.doc).cloned() else {
             return json!({"code": "no_revision"});
         };
-        let piece = match self.logic_piece(&form) {
+        let held = l.track.clone().unwrap_or_else(|| self.track_json(&l.doc));
+        let read = l.track.clone().unwrap_or_else(|| self.track_read(&l.doc));
+        let piece = match self.logic_piece(&form, &read) {
             Ok(Some(p)) => Rc::new(p),
             Ok(None) => return json!({"code": "no_logic"}),
             Err(i) => return json!({"code": i.code, "issues": [i.to_json()]}),
         };
-        let held = l.track.clone().unwrap_or_else(|| self.track_json(&l.doc));
-        let read = l.track.clone().unwrap_or_else(|| self.track_read(&l.doc));
         let entries: Vec<Entry> = read.iter().filter_map(Entry::parse).collect();
-        let (steps, trap) = match stepped(&piece, &entries, l.steps) {
-            Ok(s) => s,
+        let planted = deep_logic::Planted {
+            services_after_checkpoint: self.planted(crate::hub::Planted::Physics(
+                crate::physics::Planted::ResultsAfterCheckpoint,
+            )),
+            // #1164's restore and check twins, named by the scenario.
+            ..self.scenario.logic_planted.unwrap_or_default()
+        };
+        let mut rec = Record::default();
+        rec.regions = l.regions.then(Default::default);
+        let mut world = match World::new(
+            piece.clone(),
+            track_of(&entries),
+            !l.seeks.is_empty(),
+            planted,
+            &mut rec,
+            None,
+        ) {
+            Ok(w) => w,
             Err(e) => return e,
         };
+        let (steps, trap) = step_rows(&mut world, &mut rec, &piece, l.steps, true);
         let len = piece.items.first().map_or(1, |i| i.step);
         let hashes: Vec<Value> = steps.iter().map(|s| s["hash"].clone()).collect();
         let replay = self.against_record(&l.doc, &held, &hashes, &piece, len);
-        let mut out = json!({"steps": steps, "track": held, "trap": trap});
+        let mut out = json!({"steps": steps, "track": held, "trap": trap, "traps": rec.traps, "checkpoints": rec.checkpoints,
+                             "handles": deep_physics_rapier::cast::handles(&form)});
+        if !l.seeks.is_empty() {
+            let mut seeks = Vec::new();
+            for &to in &l.seeks {
+                match seek_to(&world, to, l.steps, l.regions) {
+                    Ok(s) => seeks.push(s),
+                    Err(e) => return e,
+                }
+            }
+            out["seeks"] = json!(seeks);
+        }
         if l.check {
-            let at = [l.steps / 2];
-            let (verdict, mut failures) = match deep_logic::checks::determinism(
-                &piece,
-                &entries,
-                l.steps,
-                &at,
-                Default::default(),
-            ) {
-                Ok(v) => (
-                    "PASS",
-                    v["failures"].as_array().cloned().unwrap_or_default(),
-                ),
-                Err(e) => ("BLOCKED", vec![e]),
+            let at: Vec<i64> = match &l.at_times {
+                Some(ts) => ts
+                    .iter()
+                    .map(|t| {
+                        (t * deep_canvas::grammar::FLICKS_PER_SECOND as f64).round() as i64 / len
+                    })
+                    .collect(),
+                None => vec![l.steps / 2],
             };
+            let (verdict, mut failures) =
+                match deep_logic::checks::determinism(&piece, &entries, l.steps, &at, planted) {
+                    Ok(v) => (
+                        "PASS",
+                        v["failures"].as_array().cloned().unwrap_or_default(),
+                    ),
+                    Err(e) => ("BLOCKED", vec![e]),
+                };
             failures.extend(replay);
             let verdict = if verdict == "PASS" && !failures.is_empty() {
                 "FAIL"

@@ -162,12 +162,16 @@ const BARE_MODULE_KINDS: &[(&str, &str)] = &[
     ("vector", "vector"),
     // #494: a graph is the graph module's, so a match morph pairs its nodes by key.
     ("graph", "graph"),
+    // #533: the logic item keeps the logic module's name, as the cell grid does.
+    ("logic", "logic"),
     // R1's mark sets, scales and axes are the data module's, which marks2d draws.
     ("marks", "data"),
     ("axis", "data"),
     ("scale", "data"),
     // #226: 3D axes are the data module's too, beside its scales and axes.
     ("axes3d", "data"),
+    // #225: a vector field is the data module's, beside its scales and 3D axes.
+    ("vector_field", "data"),
     ("puff", "scene3d"),
     ("cutaway", "scene3d"),
     ("instance", "scene3d"),
@@ -434,6 +438,9 @@ pub struct Fixture {
     pub sidecar: Value,
     /// The assets its items name by hash (#453), which a kit hands a check that reports.
     pub assets: Vec<Vec<u8>>,
+    /// A planted document: one the check must refuse with the codes its sidecar names. The kit
+    /// runs it; the `fixtures` call, every document of which presents, leaves it out (#2085).
+    pub planted: bool,
 }
 
 /// A kind's drawing as `rect@1` params, from the item's params.
@@ -658,6 +665,45 @@ pub struct Frame {
     pub picks: BTreeMap<u32, String>,
     /// The look's roles it was drawn in, sRGB.
     pub roles: BTreeMap<String, [u8; 3]>,
+    /// #2513: the light of its px reduced on the GPU that drew it, which render.exposure reads in
+    /// place of `linear`, then left empty: a few KB cross to the CPU, never its px.
+    pub reduce: Option<Reduce>,
+}
+
+/// What render.exposure asks of a frame's px (#2513): those whose pick is one of `picks`
+/// (sorted; `None`, every px), each px's linear RGB times `exposure`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct LightQuery {
+    pub picks: Option<Vec<u32>>,
+    pub exposure: f64,
+    /// A px is over when its brightest exposed channel is above `white`, under when below `black`.
+    pub white: f64,
+    pub black: f64,
+    /// Its luminance, `weights` over its exposed RGB, is floored at `floor` before its log2.
+    pub weights: [f64; 3],
+    pub floor: f64,
+}
+
+/// The px a [`LightQuery`] read, those over and under, and the sum of their luminances' log2.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct LightSums {
+    pub px: u64,
+    pub over: u64,
+    pub under: u64,
+    pub log2: f64,
+}
+
+/// What a host's reduction runs: a query in, its sums out.
+pub type Reducing = dyn Fn(&LightQuery) -> Option<LightSums> + Send + Sync;
+
+/// A host's reduction of one frame it drew (#2513), run on the GPU that drew it.
+#[derive(Clone)]
+pub struct Reduce(pub std::sync::Arc<Reducing>);
+
+impl std::fmt::Debug for Reduce {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Reduce")
+    }
 }
 
 /// A pixel check's run: the lowered document, the check input and the frames drawn for it.
@@ -743,6 +789,8 @@ pub struct Registrar {
     pub elements: Vec<(String, Elements)>,
     /// Its kinds expanded at check, by kind (`family.name`; #222).
     pub expands: Vec<(String, crate::document::expands::Expand)>,
+    /// Its reading of a cue list's times, for a pack kind's rule over it (#142).
+    pub cue_rows: Vec<crate::document::expands::CueRows>,
     /// Its carried state with checkpoints.
     pub steppers: Vec<Stepper>,
     /// The registries it declares (#200).
@@ -986,7 +1034,16 @@ impl Registrar {
             category: String::new(),
             sidecar: Value::Null,
             assets: Vec::new(),
+            planted: false,
         });
+        self
+    }
+
+    /// The last fixture as a planted document, which the check must refuse (#2085).
+    pub fn planted(&mut self) -> &mut Self {
+        if let Some(last) = self.fixtures.last_mut() {
+            last.planted = true;
+        }
         self
     }
 
@@ -1167,9 +1224,19 @@ pub enum Fault {
     NoCloseNames,
     /// The document check ranks close names by spelling alone, reading no rename record (#412).
     CloseBySpelling,
+    /// The document check accepts a field an installed pack's census maps, as its target (#1493).
+    CensusAccepted,
+    /// The document check reads no installed pack's census for an unknown name (#1493).
+    CensusSkipped,
+    /// The document check names a pack whose census maps a field before a kind that defines it
+    /// (#1493).
+    CensusPackFirst,
     /// Hashes each implementation's pins into its interface's digest, so another patch of a
     /// pinned crate changes it (#238).
     DigestCoversPins,
+    /// Hashes each implementation's version into its interface's digest, so a patch release of
+    /// a bit, canonical implementation changes it (#533).
+    DigestCoversVersion,
     /// Opens `ease@1` with its entries renumbered, so a key's content key changes (#490).
     EaseRenumbered,
     /// Declares `ease@1` in the motion module instead of the core (#490): the core declares
@@ -1231,6 +1298,8 @@ pub struct RegistryRefusal {
     pub entries: Vec<Value>,
     pub rules: Vec<String>,
     pub passes: Vec<String>,
+    /// What each failing kit rule read on the entry (#213: a service's fixture names its request).
+    pub report: serde_json::Map<String, Value>,
 }
 
 // Each refusal is boxed as it is made: a `SealError` is large, and a `Result` carries only its pointer.
@@ -1271,6 +1340,7 @@ impl SealError {
             entries,
             rules: rules.iter().map(|r| r.to_string()).collect(),
             passes: Vec::new(),
+            report: Default::default(),
         }));
         self
     }
@@ -3125,9 +3195,16 @@ impl Registry {
             interface_ns,
             registries,
             registry_ns,
-            close_fault: self
-                .fault
-                .filter(|f| matches!(f, Fault::NoCloseNames | Fault::CloseBySpelling)),
+            close_fault: self.fault.filter(|f| {
+                matches!(
+                    f,
+                    Fault::NoCloseNames
+                        | Fault::CloseBySpelling
+                        | Fault::CensusAccepted
+                        | Fault::CensusSkipped
+                        | Fault::CensusPackFirst
+                )
+            }),
             camera_in_scene3d: self.fault == Some(Fault::CameraInScene3d),
             outlines,
             fills,
@@ -3154,20 +3231,25 @@ impl Registry {
         ns: &mut u64,
     ) -> Result<(String, Option<SealedInterface>), Box<SealError>> {
         let bad = |e: CanonError| SealError::new("bad_shape", &[name], &[], e.to_string());
-        // The planted digest that also covers the implementation's pins (#238).
+        // The planted digests that also cover the implementation's pins (#238) or its version
+        // (#533): the field each covers.
+        let covered = match self.fault {
+            Some(Fault::DigestCoversPins) => Some("pins"),
+            Some(Fault::DigestCoversVersion) => Some("version"),
+            _ => None,
+        };
         let pinned = |digest: String, m: &Manifest| -> Result<String, CanonError> {
-            if self.fault != Some(Fault::DigestCoversPins) {
+            let Some(field) = covered else {
                 return Ok(digest);
-            }
-            d1(&json!({"shapes": digest, "pins": m.implementation.to_json()["pins"]}))
+            };
+            d1(&json!({"shapes": digest, field: m.implementation.to_json()[field]}))
         };
         let (digest, mut listed) = module_shapes(shapes, lists, private).map_err(bad)?;
         let digest = pinned(digest, m).map_err(bad)?;
-        let covers = self.fault == Some(Fault::DigestCoversPins);
-        if covers {
+        if let Some(field) = covered {
             listed.insert(
-                "pins".into(),
-                d1(&m.implementation.to_json()["pins"]).map_err(bad)?,
+                field.into(),
+                d1(&m.implementation.to_json()[field]).map_err(bad)?,
             );
         }
         let started = self.clock.map(|c| c());
@@ -3175,16 +3257,21 @@ impl Registry {
         let reference = declared.map_or(&m.implementation.name, |i| {
             &i.reference.manifest.implementation.name
         });
-        if let Some(i) = declared.filter(|_| *reference != m.implementation.name) {
+        // Another implementation, or another release of the reference, hashes to its digest.
+        let other = |i: &&Interface| {
+            let r = &i.reference.manifest.implementation;
+            (&r.name, r.version) != (&m.implementation.name, m.implementation.version)
+        };
+        if let Some(i) = declared.filter(other) {
             let mut r = Registrar::default();
             (i.reference.register)(&mut r);
             let own = own_lists(&r);
             let (want, mut want_listed) = module_shapes(&r, own.as_ref(), private).map_err(bad)?;
             let want = pinned(want, &i.reference.manifest).map_err(bad)?;
-            if covers {
-                let pins =
-                    d1(&i.reference.manifest.implementation.to_json()["pins"]).map_err(bad)?;
-                want_listed.insert("pins".into(), pins);
+            if let Some(field) = covered {
+                let theirs =
+                    d1(&i.reference.manifest.implementation.to_json()[field]).map_err(bad)?;
+                want_listed.insert(field.into(), theirs);
             }
             if want != digest {
                 let differs = want_listed

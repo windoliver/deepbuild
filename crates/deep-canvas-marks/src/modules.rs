@@ -847,7 +847,45 @@ fn register_look(r: &mut Registrar) {
     look_with(r, finish);
 }
 
+/// #463: a pack's `looks` (Pack: art@1 painterly looks), each a look@1 by its ID, checked as
+/// a film resolves one (roles, fonts, the status distance where status shows), stating its GPU ms
+/// at 1080p in 2D and 3D (`cost: {"2d", "3d"}`) and its known limits (`limits`).
+fn pack_looks(manifest: &Value) -> Vec<(String, String)> {
+    let Some(looks) = manifest["looks"].as_object() else {
+        return vec![(
+            String::new(),
+            "looks maps each look's ID to its look@1".into(),
+        )];
+    };
+    let bundled: Vec<&str> = deep_text::FACES.iter().map(|f| f.file).collect();
+    let mut out = Vec::new();
+    for (id, def) in looks {
+        if let Err(r) =
+            crate::look::resolve_in(def, &bundled, crate::look::Distance::WhereStatusShows)
+        {
+            out.push((id.clone(), r.to_json().to_string()));
+            continue;
+        }
+        let ms = |d: &str| def["cost"][d].as_f64().is_some_and(|v| v > 0.0);
+        if !(ms("2d") && ms("3d")) {
+            out.push((
+                format!("{id}/cost"),
+                format!("{id} states its GPU ms at 1080p in 2d and 3d"),
+            ));
+        }
+        let limits = def["limits"].as_array();
+        if !limits.is_some_and(|l| !l.is_empty() && l.iter().all(Value::is_string)) {
+            out.push((
+                format!("{id}/limits"),
+                format!("{id} states its known limits"),
+            ));
+        }
+    }
+    out
+}
+
 fn look_with(r: &mut Registrar, finish: fn(&mut View<'_>) -> Result<(), OpError>) {
+    r.pack_field("looks", pack_looks);
     r.array("look.palette", "palette", "document", "shading", "items");
     // #418: a finish swatch, `look.finish@1`: the look's roles through the look's finish at the
     // item's settings (its tone map, exposure and grade, and the deband, ao and bloom it names),
@@ -1222,6 +1260,8 @@ fn register_data(r: &mut Registrar, decimate: fn(&mut View<'_>) -> Result<(), Op
     crate::arrays::register(r);
     // #226: 3D axes' marks and their deform, through the core's fills.
     crate::axes3d::register(r);
+    // #225: the vector field, its stream table and flow, and its `follow_stream` entry.
+    crate::vector_field::register(r);
     // A scale it can't read raises marks2d's `scale_type` or `bad_scale`, which mark sets and
     // axes raise through the same scale.
     r.fixture("points", points_board(), None).sidecar(json!({
@@ -1533,6 +1573,19 @@ fn register_marks2d_with(r: &mut Registrar, planted: relations::Planted) {
     )
     .applies(is_placed)
     .run(place_op);
+    // #223: a group's warp whose vars read time takes the frame's seconds into its fields, so the
+    // frame carries its paths through the formula at t; no other item reads t here.
+    r.contribution(
+        "marks2d.warp",
+        "fields",
+        "item",
+        "geometry",
+        "items",
+        "core.fields",
+    );
+    r.operator("warp", "items", &["self", "t"], &["marks2d.warp"])
+        .applies(|_, _, item| crate::warp::reads_time(item))
+        .run(warp_time);
     r.code(
         relations::CYCLE,
         "Items placed by relation that read each other back, through relations or parents.",
@@ -2030,6 +2083,27 @@ fn check_font(drawn: &scene::Drawn) -> Result<(), OpError> {
     Ok(())
 }
 
+/// #223: each of a group's warp vars that reads `time` as the frame's seconds.
+fn warp_time(v: &mut View<'_>) -> Result<(), OpError> {
+    let item = v.item()?;
+    let seconds = v.t()? as f64 / deep_canvas::grammar::FLICKS_PER_SECOND as f64;
+    let edits = item
+        .pointer("/params/warp/vars")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+        .filter(|(_, v)| v.as_str() == Some("time"))
+        .map(|(name, _)| deep_canvas::schedule::core_ops::Edit {
+            add: false,
+            path: ["params", "warp", "vars", name]
+                .map(str::to_string)
+                .to_vec(),
+            value: Datum::Num(seconds),
+        })
+        .collect();
+    v.write("marks2d.warp", Val::typed(Edits(edits)))
+}
+
 /// The frame's draw list from every item's evaluated fields and transform.
 fn frame(v: &mut View<'_>) -> Result<(), OpError> {
     let doc = v.document()?;
@@ -2124,6 +2198,11 @@ fn frame(v: &mut View<'_>) -> Result<(), OpError> {
             bound.insert(id.clone(), shown);
         }
     }
+    // #223's twin: a flow that finds its stream table by a vector field's kind.
+    let planted = match v.planted() {
+        Some(crate::warp::FLOW_BY_KIND) => scene::Planted::WarpFlowByKind,
+        _ => scene::Planted::None,
+    };
     let (frame, basis) = match scene::frame_prebuilt(
         doc,
         &items,
@@ -2132,6 +2211,7 @@ fn frame(v: &mut View<'_>) -> Result<(), OpError> {
         &bound,
         &record,
         &placed,
+        planted,
     )
     .map_err(refused)?
     {
@@ -2147,9 +2227,16 @@ fn frame(v: &mut View<'_>) -> Result<(), OpError> {
                 .iter()
                 .map(|(id, f)| (id.to_string(), item_json(f, world(id).as_deref())))
                 .collect();
-            let frame =
-                scene::frame_with(doc, &all, (&look.palette, &look.ty), 1.0, &bound, &record)
-                    .map_err(refused)?;
+            let frame = scene::frame_with(
+                doc,
+                &all,
+                (&look.palette, &look.ty),
+                1.0,
+                &bound,
+                &record,
+                planted,
+            )
+            .map_err(refused)?;
             (frame, None)
         }
     };

@@ -1,0 +1,12 @@
+
+ RUN  v5.0.5 <head-checkout>
+
+ ✓ packages/hub/test/prompt-workspace-stop.test.ts > settles a words task workspace before recording the clean hub stop 2622ms
+ ✓ packages/hub/test/prompt-flush.test.ts > a typed prompt whose transcript entry Claude Code writes after its hook > is recorded as yours, ahead of the tool call that follows it 753ms
+ ✓ packages/hub/test/prompt-flush.test.ts > a typed prompt whose transcript entry Claude Code writes after its hook > is recorded as yours when no hook follows it 3728ms
+
+ Test Files  2 passed (2)
+      Tests  3 passed (3)
+   Start at  16:10:24
+   Duration  7.47s (tests 99%)
+

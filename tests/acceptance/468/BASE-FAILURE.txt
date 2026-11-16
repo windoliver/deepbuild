@@ -1,0 +1,75 @@
+#468's acceptance suite at its base, run 2026-11-14 on this worktree's HEAD eb2822a36 (merge of #2526, a hub-only
+change, over a50d92323), on a Mac17,10 (macOS, Metal) with the one-minute load between 45 and 237 on 18 cores. Binaries
+built from the base: `cargo build --locked --bin deep-gpu` and `cargo build --locked --bin deep-show
+--no-default-features --features full`. Each file run once, alone:
+
+  node node_modules/vitest/vitest.mjs run --root tests/acceptance/468 --no-file-parallelism --testTimeout=600000 <file>
+
+Type-check: `node node_modules/typescript/bin/tsc -p tests/acceptance/468/tsconfig.json` exits 0.
+
+Every functional test fails on the base for the reason its criterion names; the taste test reads INCONCLUSIVE.
+
+ac1-occlusion.test.ts (AC1 #468.01baeaa5): 2 failed (2)
+  × on the occlusion fixture no far sample brightens a sharper nearer pixel …
+    AssertionError: occlusion-dof was answered, not refused: {"code":"out_of_range","reason":"items/fx/params/kind"}
+  × an orthographic camera blurs by distance to the focus plane …, and the tilt band's centre row keeps a CoC under 0.5 px
+    AssertionError: ortho-blur was answered, not refused: {"code":"out_of_range","reason":"items/fx/params/kind"}
+  (the base's effect@1 draws only kind flare: no dof, so no gather, no orthographic CoC, no band and no coc target)
+
+ac2-lens.test.ts (AC2 #468.75d393c7): 2 failed (2)
+  × the field of view is 2·atan(sensor ÷ 2f) of the fitted side, to 1e-6
+    AssertionError: fov-0: items/cam/params/fov is a finite number, got null
+  × exposure from_lens is log2(N² ÷ t) − log2(ISO ÷ 100) …, to 1e-6
+    AssertionError: ev-0: items/cam/params/exposure is a finite number, got "from_lens"
+  (the base reads no lens: no field of view derives from it, and from_lens is never worked)
+
+ac3-leader.test.ts (AC3 #468.632af807): 1 failed (1)
+  AC3: of the 200 sampled frames, lid#hinge projects inside the safe frame at 144 and outside at 56
+  × at 200 random times, played and seeked: the leader ends within 0.5 px of lid#hinge's projection, the label hides …
+    AssertionError: frame 116 (0.9667 s, played): frame 116's overlays is an object, got undefined
+  (the base draws an overlay.text@1 only as a top-left readout: no edge anchor, no leader, no hiding, no named anchor)
+
+ac4-focus-pull.test.ts (AC4 #468.7ecff161): 2 failed (2)
+  × dof.focus keyed from A to B over 0.8 s gives A's distance at the first key, B's at the second …
+    AssertionError: played was answered, not refused: {"code":"out_of_range","reason":"channels/pull/keys/k0/value"}
+  × view width 20 m with fov 0° to 40°: orthographic at 0° within 1e-9 of the view …
+    AssertionError: fov 0°: frame 0's projected is an array, got undefined
+  (a key naming an item is refused; the base reports no projection of points through the drawn camera)
+
+ac5-budgets.test.ts (AC5 #468.43d77df2): 2 failed (2)
+  × a composed transition within its declared cost …, dof with 64 taps under 0.8 ms at 1080p, … five runs each
+    AssertionError: the stage with dof was answered, not refused: {"code":"out_of_range","reason":"items/fx/params/kind"}
+    (the warm-up run fails before the machine is read: no dof to time. On a base that drew it, this machine under
+    its load would read INCONCLUSIVE from the lane's judgeLimit, never PASS)
+  × a drop adds one fill, on a text and on a rect; and the perf lane carries these budgets beside the merge base …
+    benchmarks/budgets.json has no task for #468.43d77df2 (its criteria or its initialReason naming #468)
+    scripts/lanes.mjs does not list tests/acceptance/468/ac5-budgets.test.ts in timed, the local preflight's perf step
+    a text: frame 0 reports no count of fills (fills undefined without a drop, undefined with one)
+    a rect: frame 0 reports no count of fills (fills undefined without a drop, undefined with one)
+    (the lane's validator accepts budgets.json against the merge base's; the drop cards draw, #467's paint being in)
+
+ac6-bokeh.test.ts (AC6 #468.1d583371): 2 failed (2)
+  × the 10 m point spreads into a disc 19.5 ± 1 px across and the 4 m point 12.2 ± 1 px, …
+    AssertionError: bokeh-round was answered, not refused: {"code":"out_of_range","reason":"items/fx/params/kind"}
+  × the planted coc_linear_in_distance … draws the 4 m disc about 4.9 px across and fails, naming the point
+    AssertionError: deep-gpu run --planted coc_linear_in_distance exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+  (no dof effect; the planted name is unknown to the base's deep-gpu)
+  The fixture's premise was checked on the base's renderer apart from the suite (a camera of the lens's 39.5978°
+  instead of the lens, which the base can't read): each emissive ball draws exactly one pixel of linear radiance 50.000
+  in pre_tone, every neighbour 0.
+
+ac7-shift.test.ts (AC7 #468.af788480): 2 failed (2)
+  × the level camera with shift [0, 0.3] projects every vertical edge of the 30 m tower within 0.05° of vertical …
+    AssertionError: the shifted tower: frame 0's projected is an array, got undefined
+  × verticals_max 0.5 passes the shifted camera and fails the twin pitched 12°, naming tower and the angle; …
+    the shifted camera under verticals_max 0.5 is FAIL, not PASS (loop.framing: "tower cut by the safe frame less its
+      margin": the base reads no lens, so no shift frames the tower's top)
+    the pitched twin raises no camera.framing issue naming tower and the angle (1.08°, 1.32°, 12.00°)
+    the shipped exporter: the glTF export of the shifted camera is not exported:
+      {"code":"unknown_target","target":"gltf","codec":"gltf","outcome":"refused",…}
+  (no lens shift, no `project`, no verticals_max, no gltf export target)
+
+taste.test.ts (AC8 #468.ce8ac7ee): 1 failed (1)
+  × the recorded call on exactly the check run's pictures says they look right; with none the run is INCONCLUSIVE
+    AssertionError: INCONCLUSIVE: the check run's pictures are not in docs/evidence/468/: bokeh-disc.png,
+    focus-pull.png, lid-leader.png, focus-pull-and-lid.apng; this is not a pass

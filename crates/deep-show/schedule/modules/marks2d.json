@@ -3,6 +3,19 @@
   "phases": {
     "items": [
       {
+        "operator": "marks2d.warp",
+        "module": "marks2d",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "t"
+        ],
+        "writes": [
+          "marks2d.warp"
+        ],
+        "per": "item"
+      },
+      {
         "operator": "marks2d.relations",
         "module": "marks2d",
         "version": "1.0.0",
@@ -75,5 +88,9 @@
       }
     ]
   },
-  "contributions": {}
+  "contributions": {
+    "core.fields": [
+      "marks2d.warp"
+    ]
+  }
 }

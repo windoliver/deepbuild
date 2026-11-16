@@ -30,6 +30,13 @@ const ROUTES = {
 type Route = keyof typeof ROUTES;
 
 interface Held { fill: CheckRunnerFill; routes: Route[] }
+/**
+ * The check kinds a first-party plug-in holds, by the plug-in (#184): a definition reaches each through the extension
+ * host, and with its plug-in off the check is BLOCKED, naming the plug-in, never run as a command.
+ */
+const PLUGIN_KINDS: Record<string, string> = { playtest: 'deepbuild/playtest' };
+/** A plug-in kind's deadline when its check names none. */
+const PLUGIN_MS = 3_600_000;
 
 /** The rubric a review reads when your wiki holds none: `- <rule>: <text>`, in order. */
 const RUBRIC = `# Review rubric
@@ -75,9 +82,9 @@ export class Kinds {
     return [...this.held].map(([kind, h]) => ({ kind, routes: h.routes.map((r) => ROUTES[r]) }));
   }
   /** Whether a gate run may name `kind` by `route`. */
-  reaches(kind: string, route: Route): boolean { return this.held.get(kind)?.routes.includes(route) ?? false; }
+  reaches(kind: string, route: Route): boolean { return this.held.get(kind)?.routes.includes(route) ?? (route === 'definition' && kind in PLUGIN_KINDS); }
   /** The deadline a kind's run gets when its check names none: its budget's time. */
-  deadline(kind: string): number { return this.held.get(kind)?.fill.budget?.time_ms ?? 0; }
+  deadline(kind: string): number { return this.held.get(kind)?.fill.budget?.time_ms ?? (kind in PLUGIN_KINDS ? PLUGIN_MS : 0); }
 
   /** A drafted check's bytes as a kind's spec: a JSON object with check@1's fields naming a kind a definition reaches, else undefined. */
   definitionSpec(bytes: Uint8Array): CheckSpec | undefined {
@@ -126,6 +133,12 @@ export class Kinds {
   /** One run of a held kind on `spec` in `ctx`; a review asks its second model through the runner, for `of`'s claim; a speed or added terms read the hub's store for `repo`'s run (#1863). */
   async run(spec: CheckSpec, ctx: CheckContext, of: ReviewOf, repo?: RepoOf): Promise<CheckResult & { round?: ReviewRound; speed?: TimingReport }> {
     const held = this.held.get(spec.kind);
+    const plugin = PLUGIN_KINDS[spec.kind];
+    if (!held && plugin) {
+      const ran = await this.o.extensions()?.runCheck(spec.kind, spec, ctx);
+      if (ran && ran.outcome !== 'missing') return ran;
+      return result('missing', `${spec.kind}: run`, '', `BLOCKED: the check kind ${spec.kind} is the ${plugin} plug-in's, which isn't loaded`);
+    }
     if (!held) return result('missing', `${spec.kind}: run`, '', `BLOCKED: the hub holds no ${spec.kind} check kind`);
     if (claimNumbers(spec)) {
       if (!repo) return result('missing', `${spec.kind}: run`, '', `BLOCKED: the ${spec.runner} check has no worktree to read its claim's commits from`);

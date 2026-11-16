@@ -774,9 +774,10 @@ pub(crate) struct Frame2 {
 }
 
 /// #462: a 2D frame's look regions: each other look's frame, in the mix's key order after this
-/// frame's own, and the mix the composite pass reads.
+/// frame's own, with (#463) the size of the crop it draws at where it isn't the whole frame, and
+/// the mix the composite pass reads.
 pub(crate) struct Mix2 {
-    pub frames: Vec<Arc<Frame2>>,
+    pub frames: Vec<(Arc<Frame2>, Option<[u32; 2]>)>,
     pub mix: crate::regions::Mix,
 }
 
@@ -996,6 +997,13 @@ impl RenderModule for Module2 {
         let (options, planted) = (self.options, self.planted);
         let (error, encoded) = (self.error.clone(), self.encoded.clone());
         let size = target.size;
+        // #468: what the frame's draws encode, a composited group's included, from Vello GPU's
+        // count before them to its count once the job has drawn.
+        let before = vello.lock().unwrap_or_else(|e| e.into_inner()).fills();
+        let fills = {
+            let vello = vello.clone();
+            move || vello.lock().unwrap_or_else(|e| e.into_inner()).fills() - before
+        };
         let Some(mix) = frame.mix.clone() else {
             let draw = self.painter.draw(
                 device,
@@ -1010,7 +1018,7 @@ impl RenderModule for Module2 {
             let job: Job = Box::new(move |encoder| {
                 let drawn = draw(encoder);
                 if let Some(at) = &encoded {
-                    *at.lock().unwrap_or_else(|e| e.into_inner()) = Some(Instant::now());
+                    *at.lock().unwrap_or_else(|e| e.into_inner()) = Some((Instant::now(), fills()));
                 }
                 *error.lock().unwrap_or_else(|e| e.into_inner()) = drawn.err();
             });
@@ -1019,12 +1027,25 @@ impl RenderModule for Module2 {
         // #462: each look the frame mixes draws whole into its own target, then the composite
         // mixes them into the slot.
         let looks = 1 + mix.frames.len();
-        self.targets
-            .retain(|(t, _)| t.width() == size[0] && t.height() == size[1]);
-        while self.targets.len() < looks {
-            let t = crate::regions::scratch(&device.device, size, "look.regions render");
-            let v = t.create_view(&Default::default());
-            self.targets.push((t, v));
+        // Each look's target at the size it draws at: the frame's, or (#463) its crop's.
+        let sizes: Vec<[u32; 2]> = std::iter::once(size)
+            .chain(mix.frames.iter().map(|(_, c)| c.unwrap_or(size)))
+            .collect();
+        self.targets.truncate(looks);
+        for (j, at) in sizes.iter().enumerate() {
+            let fits = self
+                .targets
+                .get(j)
+                .is_some_and(|(t, _)| t.width() == at[0] && t.height() == at[1]);
+            if !fits {
+                let t = crate::regions::scratch(&device.device, *at, "look.regions render");
+                let v = t.create_view(&Default::default());
+                if j < self.targets.len() {
+                    self.targets[j] = (t, v);
+                } else {
+                    self.targets.push((t, v));
+                }
+            }
         }
         self.mixed.resize_with(mix.frames.len(), Painter::default);
         let mut draws = vec![self.painter.draw(
@@ -1037,13 +1058,13 @@ impl RenderModule for Module2 {
             planted,
             self.taps.clone(),
         )];
-        for (j, f) in mix.frames.iter().enumerate() {
+        for (j, (f, _)) in mix.frames.iter().enumerate() {
             draws.push(self.mixed[j].draw(
                 device,
                 &vello,
                 f.clone(),
                 self.targets[j + 1].1.clone(),
-                size,
+                sizes[j + 1],
                 options,
                 planted,
                 crate::print2d::Taps::default(),
@@ -1057,6 +1078,9 @@ impl RenderModule for Module2 {
         let composite = self.composite.clone();
         let slot = target.view.clone();
         let job: Job = Box::new(move |encoder| {
+            // #463: the frame's GPU time runs from its first look's submit, so the looks drawn
+            // and submitted here count in it, not the composite alone.
+            let begun = Instant::now();
             // Each look on its own encoder and submit: their draws share Vello GPU's buffers.
             let mut drawn = Ok(());
             for d in draws {
@@ -1075,7 +1099,7 @@ impl RenderModule for Module2 {
                 None,
             );
             if let Some(at) = &encoded {
-                *at.lock().unwrap_or_else(|e| e.into_inner()) = Some(Instant::now());
+                *at.lock().unwrap_or_else(|e| e.into_inner()) = Some((begun, fills()));
             }
             *error.lock().unwrap_or_else(|e| e.into_inner()) = drawn.err();
         });

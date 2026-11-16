@@ -1,0 +1,26 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node node_modules/vitest/vitest.mjs run --no-file-parallelism --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs tests/acceptance/322/coverage.test.ts tests/acceptance/322/early-claim.test.ts` runs unleased
+
+ RUN  v5.0.5 <proof>/base
+
+··x
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/322/early-claim.test.ts > AC10 #322.4f122abc a claim before its definition locks > AC10 #322.4f122abc (wrong program) a gate that judges the early claim on the repo spec alone (DEEP_HUB_PLANT=spec-only-judges-early-claim) gives PASS on the fixture and fails this test
+Error: AC10 #322.4f122abc the planted gate fails where its PASS shows; it failed elsewhere: AC10 #322.4f122abc your answer through deep inbox answer must count, exit 0: exit 2 after 47 ms, stdout "", stderr "ask:01M7ECRBC8TDE774P2QX0Q1X5P closed as cancelled at 2026-11-15T01:22:11.033Z\n"
+ ❯ must tests/acceptance/322/helpers.ts:97:18
+     95| }
+     96| export function must(ok: boolean, message: string): asserts ok {
+     97|   if (!ok) throw Error(message);
+       |                  ^
+     98| }
+     99|
+ ❯ tests/acceptance/322/early-claim.test.ts:68:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  1 failed | 2 passed (3)
+   Start at  17:21:57
+   Duration  23.10s (tests 100%)
