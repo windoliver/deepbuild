@@ -37,35 +37,9 @@ pub mod kit;
 mod live;
 mod replay;
 mod timeline;
+pub mod vehicle;
 
-/// The planted wrong programs, by name.
-pub const PLANTED: [&str; 25] = [
-    "caps_allow_restitution_threshold",
-    "caps_allow_rolling_resistance",
-    "caps_allow_tangent_speed",
-    "caps_allow_dynamic_gear",
-    "restore_ignores_version",
-    "hash_rounds_1e6",
-    "key_omits_frame_rate",
-    "role_table_pickup_solid",
-    "occurrences_in_engine_order",
-    "query_bypasses_backend",
-    "query_machines_any",
-    "checkpoint_poses_only",
-    "fork_on_scrub",
-    "restore_keeps_replaced_occurrences",
-    "late_entry_forks",
-    "ring_drops_oldest",
-    "restore_without_warm_start",
-    "simulate_runs_all_steps",
-    "hinge_coordinate_wraps",
-    "checkpoint_drops_turns",
-    "speed_cap_silent",
-    "joint_force_per_step",
-    "solve_cap_reports_success",
-    "mass_ratio_declared_only",
-    "volume_without_constraint",
-];
+pub use crate::planted::PLANTED;
 
 /// The reply to a line that isn't a call.
 pub const BAD_INPUT: &str = r#"{"ok":false,"code":"bad_input"}"#;
@@ -107,6 +81,8 @@ pub struct Run {
     kit_planted: deep_canvas_physics::kit::Planted,
     /// #191 criterion 12's planted recipe: it leaves a flagged body's ccd off.
     leave_ccd_off: bool,
+    /// #251's planted vehicle controller or check.
+    vehicle: crate::VehiclePlant,
     /// The views this runner holds open, by session (#522).
     #[cfg(not(target_arch = "wasm32"))]
     views: std::cell::RefCell<BTreeMap<String, live::View>>,
@@ -402,6 +378,11 @@ struct Trace {
     particles: Map<String, Value>,
     /// #191: the lint physics.fast_body over the run.
     fast: deep_canvas_physics::fast::FastBodies,
+    /// #251: each named vehicle body's own state every `every` steps; each wheel output's
+    /// reading after each step, and the wheel each pose output reads (runner/vehicle.rs).
+    vehicles: Map<String, Value>,
+    wheels: BTreeMap<String, Vec<Vec<f64>>>,
+    posed: BTreeMap<String, String>,
 }
 
 /// What a run's world reads of its scene over `steps` steps, as its bake key holds it: `[]` when
@@ -496,6 +477,7 @@ impl Run {
             test: None,
             kit_planted: deep_canvas_physics::kit::Planted::None,
             leave_ccd_off: false,
+            vehicle: crate::VehiclePlant::None,
             #[cfg(not(target_arch = "wasm32"))]
             views: std::cell::RefCell::default(),
         };
@@ -526,7 +508,9 @@ impl Run {
             Some("solve_cap_reports_success") => run.twin = Twin::SolveCapSuccess,
             Some("mass_ratio_declared_only") => run.declared_masses_only = true,
             Some("volume_without_constraint") => run.no_volume = true,
-            Some(name) if !kit::planted(name, &mut run) => return None,
+            Some(name) if !kit::planted(name, &mut run) && !vehicle::planted(name, &mut run) => {
+                return None
+            }
             Some(_) => {}
         }
         Some(run)
@@ -575,6 +559,7 @@ impl Run {
                     .iter()
                     .map(|v| ((f64::from(*v) * 1e6).round() / 1e6) as f32)
                     .collect(),
+                names: b.names,
             })
             .collect();
         golden::step_hash(&rounded, joints)
@@ -605,7 +590,7 @@ impl Run {
     /// The world `v` holds, built, or the issues that refuse it.
     fn build(&self, v: &Value) -> Result<(World, Rapier), Value> {
         let refused = |e: Vec<Refusal>| refused(&e);
-        let w = check(v, &self.caps, self.table).map_err(refused)?;
+        let w = vehicle::check(v, self).map_err(refused)?;
         let mut b = Rapier {
             restore_any_version: self.restore_any_version,
             reverse_pairs: cfg!(feature = "test-reverse-pairs"),
@@ -613,7 +598,7 @@ impl Run {
             test: self.test.map(|t| (t.name, t.caps)),
             ..Rapier::default()
         };
-        b.soft.no_volume = self.no_volume;
+        (b.soft.no_volume, b.vehicles.plant) = (self.no_volume, self.vehicle);
         b.build(&w).map_err(refused)?;
         Ok((w, b))
     }
@@ -665,6 +650,7 @@ impl Run {
                 e.1.push(v);
             }
         }
+        vehicle::take(b, w, t, (k, start, plan.every));
         if (k - start).is_multiple_of(plan.every) {
             let read = b.read();
             for s in read.bodies {
@@ -761,6 +747,7 @@ impl Run {
             bodies,
             particles,
             fast: deep_canvas_physics::fast::FastBodies::new(&w),
+            vehicles: vehicle::named(call, &b),
             ..Trace::default()
         };
         self.run(&mut b, &w, plan, &mut t).map_err(|s| match s {
@@ -800,7 +787,8 @@ impl Run {
             steps,
             Some(&self.build.target),
         );
-        let outputs = bake::outputs(&t.positions, &t.readings, rate, frame, w.step_rate, steps);
+        let mut outputs = bake::outputs(&t.positions, &t.readings, rate, frame, w.step_rate, steps);
+        vehicle::outputs(&mut outputs, t, frame, w);
         let rank = occurrence::ranks(w);
         t.shaped = shape_uses(&t.occurrences, w);
         let record = json!({"key": key, "step_hashes": t.step_hashes, "ring": ring(t),
@@ -900,6 +888,10 @@ impl Run {
                     if dir.is_some() {
                         reply["reused"] = json!(false);
                     }
+                    vehicle::wheel_states(&mut reply, &t.posed, &t.wheels);
+                    if !t.vehicles.is_empty() {
+                        reply["vehicles"] = Value::Object(t.vehicles);
+                    }
                     reply
                 }))
             }
@@ -940,6 +932,7 @@ impl Run {
                 let mut t = Trace {
                     bodies,
                     particles,
+                    vehicles: vehicle::named(call, &b),
                     ..Trace::default()
                 };
                 if let Err(Stop::Refused(v)) = self.run(&mut b, &w, &plan, &mut t) {
@@ -952,6 +945,9 @@ impl Run {
                 if with_checkpoints {
                     let kept = t.ring.kept.iter().map(|k| checkpoint(&k.checkpoint));
                     reply["checkpoints"] = Value::Array(kept.collect());
+                }
+                if !t.vehicles.is_empty() {
+                    reply["vehicles"] = Value::Object(t.vehicles);
                 }
                 Some(reply)
             }

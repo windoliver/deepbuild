@@ -18,6 +18,13 @@ pub const SPARKS: &str = "effects.particles";
 pub const STROKES: &str = "effects.strokes";
 pub const OUTLINE: &str = "effects.outline";
 pub const GLOW: &str = "effects.glow";
+/// #508: the film effects' emission passes, after the particles, and a plume's haze, the last
+/// pass before the flare: display only, so nothing that feeds a check runs after it.
+pub const WAVE_FIELD: &str = "effects.wave_field";
+pub const ARC: &str = "effects.arc";
+pub const HAZE: &str = "effects.haze";
+/// #508: the copy of the chain's color a check reads back, where the document's operators read it.
+pub const CHECKS: &str = "effects.checks";
 
 /// The passes the shipped operators run as, each timed in the frame under its name, and the place
 /// each goes into, in frame order: glow's whole chain is one pass in the bloom place.
@@ -26,8 +33,12 @@ pub const PASSES: &[(&str, &str)] = &[
     (SHADOW, "effects"),
     (STROKES, "effects"),
     (SPARKS, "effects"),
+    (WAVE_FIELD, "effects"),
+    (ARC, "effects"),
     (OUTLINE, "effects"),
+    (CHECKS, "effects"),
     (GLOW, "bloom"),
+    (HAZE, "bloom"),
 ];
 
 fn manifest() -> Manifest {
@@ -172,6 +183,14 @@ fn particles_rule(doc: &Value, id: &str, item: &Value) -> Vec<Raised> {
     crate::particles::rule::count(doc, id, item, None)
         .map(|r| raised(r.code, r.path, r.what))
         .into_iter()
+        .collect()
+}
+
+/// #508's rule over an effect@1 item of a film kind (Effect: params per kind, each with a range).
+fn effect_rule(doc: &Value, id: &str, item: &Value) -> Vec<Raised> {
+    crate::effect::refusals(doc, id, item)
+        .into_iter()
+        .map(|r| raised(r.code, r.path, r.what))
         .collect()
 }
 
@@ -730,6 +749,8 @@ fn register_with(r: &mut Registrar, rule: deep_canvas::registry::Rule) {
     r.rule("group", group_rule);
     // #449: a particles@1 item's count against its budget class's cap, wherever the check runs.
     r.rule("particles", particles_rule);
+    // #508: effect@1's film kinds, each number ranged, refused naming its field.
+    r.rule("effect", effect_rule);
     for (code, meaning) in [
         ("not_exact", "An operator declared exact computes as less, or a check that holds on any machine reads an operator that isn't exact."),
         ("operator_budget_class", "The document's budget class doesn't run this operator's kind."),

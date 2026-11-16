@@ -10,7 +10,7 @@ use deep_canvas::ops;
 use deep_canvas_effects::emit::Options;
 use deep_canvas_effects::graph::{self, Class, Kind, Tex, Ty};
 use deep_canvas_effects::interp::{self, hash1, Image};
-use deep_canvas_effects::{check, shipped};
+use deep_canvas_effects::{check, effect, shipped};
 use deep_canvas_scene3d::look::Look3;
 use deep_canvas_scene3d::scene::{evaluate, Labels, Scene};
 use deep_effects_render::compile::{compile_planted, compile_with, validate, Compiled};
@@ -139,6 +139,23 @@ fn over_life(v: Option<&Value>, default: f64) -> [f64; 2] {
         }
         other => pair(other, [default, default]),
     }
+}
+
+/// #508: a channel over life's keys `[{at, value}]`, up to 12, as the draw reads them when there
+/// are more than two.
+fn life_keys(v: Option<&Value>) -> Vec<(f64, f64)> {
+    v.and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter(|k| k.is_object())
+        .take(12)
+        .map(|k| {
+            (
+                k["at"].as_f64().unwrap_or(0.0),
+                k["value"].as_f64().unwrap_or(1.0),
+            )
+        })
+        .collect()
 }
 
 /// One particles@1 item as the operator and the draw read it: its emitter, motion, life and
@@ -274,11 +291,14 @@ fn sparks_of(
         opacity: 4.0,
         size: over_life(p.get("size"), 3.0),
         fade: over_life(p.get("opacity"), 1.0),
+        fade_keys: life_keys(p.get("opacity")),
         stops,
         draw,
         half: draw == 2 && p["resolution"].as_str() != Some("full"),
         closed: None,
         ribbon: None,
+        effect: None,
+        cost_ns: None,
     }
 }
 
@@ -290,6 +310,7 @@ pub fn planted_fx(p: Option<Planted>) -> fx::Planted {
         slow_glow: p == Some(Planted::SlowGlow),
         dirt_overlay: p == Some(Planted::DirtOverlay),
         block_copy: p == Some(Planted::PuffBlockCopy),
+        haze_feeds_check_readback: p == Some(Planted::HazeFeedsCheckReadback),
     }
 }
 
@@ -360,12 +381,31 @@ pub fn settings(
         .as_ref()
         .filter(|s| s.shadow && !scene.cascaded())
         .map(|s| (BTreeMap::new(), seeding.key(item_seed(doc_seed, &s.id))));
-    let sparks = scene
+    let mut sparks: Vec<Sparks> = scene
         .others
         .iter()
         .filter(|o| o.kind == "particles@1")
         .map(|o| sparks_of(scene, o, look, seeding.key(item_seed(doc_seed, &o.id))))
         .collect();
+    // #508: the film effects: a plume's or an airflow's particles cost as its preset declares,
+    // and a wave field's or an arc's emission pass.
+    let mut emits = Vec::new();
+    for o in scene.others.iter().filter(|o| o.kind == "effect@1") {
+        let p = &o.params;
+        let kind = p["kind"].as_str().unwrap_or_default();
+        if let Some(cost) = deep_canvas_effects::effect::cost(kind) {
+            for sp in sparks
+                .iter_mut()
+                .filter(|sp| lowered_from(&sp.item, &o.id, kind))
+            {
+                sp.effect = Some(o.id.clone());
+                sp.cost_ns = Some(cost);
+            }
+        }
+        if let Some(e) = emit_of(scene, o, look, effect_seed(doc_seed, o, seeding)) {
+            emits.push(e);
+        }
+    }
     roles.insert("selection".into(), role(look, Some("selection"), "accent"));
     let bloom = look_json["bloom"].as_object().map(|b| {
         b.iter()
@@ -380,6 +420,9 @@ pub fn settings(
         grid,
         shadow,
         sparks,
+        emits,
+        hazes: Vec::new(),
+        checks: false,
         selection: selection.to_vec(),
         outline_width: 2,
         bloom,
@@ -394,6 +437,93 @@ pub fn settings(
             )))
         }),
     }
+}
+
+/// #508: whether particles item `id` is one effect `effect` of `kind` lowered to.
+fn lowered_from(id: &str, effect: &str, kind: &str) -> bool {
+    match kind {
+        "plume" => id == format!("{effect}.particles"),
+        _ => id
+            .strip_prefix(effect)
+            .and_then(|r| r.strip_prefix(".p"))
+            .is_some_and(|r| r.contains('c')),
+    }
+}
+
+/// #508: an effect item's seed (Effect: `seed: item | u64 = item`), keyed as every shipped noise.
+pub(crate) fn effect_seed(
+    doc_seed: u64,
+    o: &deep_canvas_scene3d::scene::Other,
+    seeding: Seeding,
+) -> u32 {
+    let base = match o.params["seed"].as_u64() {
+        Some(s) => hash1(s as u32) ^ (s >> 32) as u32,
+        None => item_seed(doc_seed, &o.id),
+    };
+    seeding.key(base)
+}
+
+/// #508: a wave field's or an arc's emission pass from its params and the scene at t: its anchor
+/// (and an arc's end) where the scene puts them, its own role's color in the slot its pass reads.
+fn emit_of(
+    scene: &Scene,
+    o: &deep_canvas_scene3d::scene::Other,
+    look: &Look3,
+    seed: u32,
+) -> Option<fx::Emit> {
+    use deep_canvas_effects::effect::{axis, num, scale};
+    let p = &o.params;
+    let kind = p["kind"].as_str()?;
+    let anchor = p["anchor"]
+        .as_str()
+        .and_then(|a| item_pos(scene, a))
+        .unwrap_or(o.pos);
+    let k = scale(p);
+    let n = |f: &str| json!(num(p, kind, f));
+    let (kind, op, slot, params) = match kind {
+        "wave_field" => (
+            "wave_field",
+            "wave_field@1",
+            "wave",
+            BTreeMap::from([
+                ("wave.point".to_string(), json!(anchor)),
+                ("wave.normal".to_string(), json!(axis(&p["axis"]))),
+                ("wave.amplitude".to_string(), n("amplitude")),
+                ("wave.wavelength".to_string(), n("wavelength")),
+                ("wave.speed".to_string(), n("speed")),
+                ("wave.radius".to_string(), n("radius")),
+            ]),
+        ),
+        "arc" => {
+            let to = p["arc"]["to"].as_str().and_then(|a| item_pos(scene, a))?;
+            // Its px widths at the view's size, drawn at its resolution.
+            let px = |f: &str| json!(num(p, "arc", f) * k);
+            (
+                "arc",
+                "arc@1",
+                "arc",
+                BTreeMap::from([
+                    ("arc.from".to_string(), json!(anchor)),
+                    ("arc.to".to_string(), json!(to)),
+                    ("arc.intensity".to_string(), n("intensity")),
+                    ("arc.width".to_string(), px("width")),
+                    ("arc.jitter".to_string(), px("jitter")),
+                    ("arc.rate".to_string(), n("rate")),
+                    ("arc.waves".to_string(), n("waves")),
+                ]),
+            )
+        }
+        _ => return None,
+    };
+    Some(fx::Emit {
+        item: o.id.clone(),
+        kind,
+        op,
+        params,
+        seed,
+        scale: k,
+        roles: BTreeMap::from([(slot.into(), role(look, p[kind]["role"].as_str(), "accent"))]),
+    })
 }
 
 /// #462: the strokes a frame laid, as the effects chain's draw reads them (colors linear).
@@ -428,6 +558,13 @@ pub fn operators(app: &App) -> Value {
                 .filter_map(|g| check::read_and_check(g).ok().map(|c| c.class))
                 .max()
                 .unwrap_or(Class::SameMachine);
+            // #508: a film effect's operator names its kind's fixture document, by its path.
+            let fixture = match s.name {
+                "wave_field@1" => fixture_path("wave_field"),
+                "arc@1" => fixture_path("arc"),
+                "plume.haze@1" => fixture_path("plume"),
+                _ => None,
+            };
             json!({
                 "name": s.name,
                 "kind": s.kind.name(),
@@ -436,11 +573,41 @@ pub fn operators(app: &App) -> Value {
                 "determinism": class.name(),
                 "noise": s.noise,
                 "ported": [],
-                "fixture": null,
+                "fixture": fixture,
+                "cost": s.stages.iter().map(|g| &g["cost"]).collect::<Vec<_>>(),
             })
         })
         .collect();
-    json!({"operators": list})
+    // #508: the film kinds: what each draws through, its declared cost and its fixture; a plume
+    // and an airflow are presets of particles@1, drawn by its operator.
+    let kinds: Vec<Value> = effect::KINDS
+        .iter()
+        .map(|k| {
+            let (operator, preset, ns) = match *k {
+                "wave_field" => ("wave_field@1", Value::Null, None),
+                "arc" => ("arc@1", Value::Null, None),
+                other => (
+                    "particles.sparks@1",
+                    json!("particles@1"),
+                    effect::cost(other),
+                ),
+            };
+            let ns = ns.or_else(|| {
+                shipped::EFFECT_MEASURED_NS_PER_PX
+                    .iter()
+                    .find(|(n, _)| *n == operator)
+                    .map(|(_, c)| *c)
+            });
+            json!({"kind": k, "operator": operator, "preset_of": preset,
+                   "cost": {"ns_per_px": ns}, "fixture": fixture_path(k)})
+        })
+        .collect();
+    json!({"operators": list, "effects": kinds})
+}
+
+/// #508: a film kind's fixture document, as its path from the checkout's root.
+fn fixture_path(kind: &str) -> Option<String> {
+    effect::fixture(kind).map(|_| format!("crates/deep-canvas-effects/fixtures/{kind}.json"))
 }
 
 /// Records a frame for the reference call's inputs, asking for the shadow map when the sun casts.
@@ -1480,4 +1647,55 @@ pub fn cross_gpu(app: &App, call: &Value) -> Value {
         "families": families,
         "differs": differs,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// #508: two wave fields each draw in their own role's color: A's pass reads ink, B's accent.
+    #[test]
+    fn each_wave_field_draws_in_its_own_role() {
+        let doc = json!({
+            "format": 1, "id": "two-waves", "profile": "scene", "title": "t", "description": "d",
+            "size": [320, 240], "camera": "cam", "seed": 508,
+            "requires": {"modules": {"scene3d": "^1", "effects": "^1"}},
+            "items": {
+                "cam": {"id": "cam", "kind": "camera@1", "order": "a0",
+                        "params": {"projection": "orthographic", "position": [0, 0, 10], "target": [0, 0, 0],
+                                   "view_width": 6.4, "near": 0.05, "far": 100}},
+                "a": {"id": "a", "kind": "effect@1", "order": "a1",
+                      "params": {"kind": "wave_field", "wave_field": {"role": "ink"}}},
+                "b": {"id": "b", "kind": "effect@1", "order": "a2",
+                      "params": {"kind": "wave_field", "wave_field": {"role": "accent"}}},
+            },
+        });
+        let look_json = json!({"roles": {"ink": "#202020", "accent": "#e04010"}});
+        let look = Look3::read(&look_json).expect("the look reads");
+        let scene = evaluate(&doc, 0, &look, &mut Labels::new()).expect("the scene evaluates");
+        let s = settings(&scene, &look_json, &look, &[], 0.0, 508, Seeding::Item);
+        let read = |id: &str| {
+            let e = s
+                .emits
+                .iter()
+                .find(|e| e.item == id)
+                .expect("its emission pass");
+            e.roles["wave"]
+        };
+        let (ink, accent) = (
+            role(&look, Some("ink"), "accent"),
+            role(&look, Some("accent"), "ink"),
+        );
+        assert_ne!(ink, accent);
+        assert_eq!(
+            read("a"),
+            ink,
+            "wave field a (role ink) draws in another color"
+        );
+        assert_eq!(
+            read("b"),
+            accent,
+            "wave field b (role accent) draws in another color"
+        );
+    }
 }

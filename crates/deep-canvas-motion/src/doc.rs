@@ -2563,8 +2563,10 @@ pub fn read_with(
         }
         // #504: a follow whose stagger's targets are assemblies is a take-apart, writing each
         // target's apart share; its target is `assemblies/apart`, those shares, or none. Any
-        // other target of its own follows the source unstaggered, as any follow does.
-        if let (true, Some(Value::Object(f))) = (staggered, c.get("follow")) {
+        // other target of its own follows the source unstaggered, as any follow does. #508: a
+        // follow on `assemblies/apart` with no stagger takes every assembly apart at once.
+        let apart = c.get("target").and_then(Value::as_str) == Some("assemblies/apart");
+        if let (true, Some(Value::Object(f))) = (staggered || apart, c.get("follow")) {
             staggers.push(take_apart_of(id, f, doc, &ctx, seed)?);
             if c.get("target")
                 .is_none_or(|t| t.as_str() == Some("assemblies/apart"))
@@ -3429,14 +3431,24 @@ fn take_apart_of(
     let path = format!("channels/{id}/follow");
     let spec = follow_spec_of(f, ctx, &path)?;
     let spath = format!("{path}/stagger");
-    let Some(Value::Object(st)) = f.get("stagger") else {
+    let assemblies = doc.get("assemblies").and_then(Value::as_object);
+    let Some(st) = f.get("stagger") else {
+        // #508: no stagger, so every assembly at once, each at rank 0.
+        return Ok(Stagger {
+            id: id.to_string(),
+            spec,
+            targets: assemblies.into_iter().flatten().map(|(a, _)| (a.clone(), 0)).collect(),
+            lag: 0,
+            reverse_on_close: false,
+        });
+    };
+    let Value::Object(st) = st else {
         return refuse("bad_doc", spath);
     };
     let (lag, order, reverse_on_close) = stagger_of(st, ctx, &spath)?;
     let Some(Value::Array(list)) = st.get("targets") else {
         return refuse("bad_doc", format!("{spath}/targets"));
     };
-    let assemblies = doc.get("assemblies").and_then(Value::as_object);
     let mut ids = Vec::with_capacity(list.len());
     let mut orders = Vec::with_capacity(list.len());
     for (i, t) in list.iter().enumerate() {
