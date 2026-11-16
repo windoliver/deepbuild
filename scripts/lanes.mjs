@@ -784,6 +784,14 @@ timed.push('tests/acceptance/213/ac8-budgets.test.ts');
 // (tests/acceptance/213-redraft-ac3/DISPUTE.md): the redraft runs in its place, the first draft by hand.
 alone.push('tests/acceptance/213-redraft-ac3/');
 byHand.push('tests/acceptance/213/ac3-trap-fuel.test.ts');
+// #463's files each build deep-gpu and draw the shared scene in art@1's twelve looks on the Metal GPU; ac2-budgets
+// runs the release canvas bench's art modes, hours of frames.
+alone.push('tests/acceptance/463/');
+timed.push('tests/acceptance/463/ac2-budgets.test.ts');
+// #233's files each build deep-show and read math@1's expansions through deep-canvas-render or deep-motion; ac11
+// times the math document against its expansion written by hand under the frame budget.
+alone.push('tests/acceptance/233/', 'tests/acceptance/233-oracle/');
+timed.push('tests/acceptance/233/ac11-budgets.test.ts');
 // #184's files start replicas and hosts and play mazes for minutes; budgets.test.ts times release replicas.
 alone.push('tests/acceptance/184/');
 timed.push('tests/acceptance/184/budgets.test.ts');

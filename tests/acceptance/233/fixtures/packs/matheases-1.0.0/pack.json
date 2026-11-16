@@ -1,0 +1,29 @@
+{
+  "name": "matheases",
+  "version": "1.0.0",
+  "license": "MIT",
+  "description": "A test familiar-names pack of the #233 acceptance suite (criterion 13): two rate-function words, each mapped to an ease@1 entry with its parameters. smooth maps to sigmoid(10), an entry every build holds; wobble names wobble_in_out, an entry no build holds, which the pack check must refuse, naming the word.",
+  "requires": {
+    "core": ">=0.0.0"
+  },
+  "aliases": {
+    "smooth": {
+      "target": {
+        "ease": {
+          "name": "sigmoid",
+          "params": 10
+        }
+      },
+      "conversion": "the upstream smooth(t, inflection = 10) is our sigmoid(10) over the key's segment"
+    },
+    "wobble": {
+      "target": {
+        "ease": {
+          "name": "wobble_in_out",
+          "params": 3
+        }
+      },
+      "conversion": "none: no ease@1 entry is named wobble_in_out"
+    }
+  }
+}

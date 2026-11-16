@@ -404,6 +404,13 @@ impl<'a> Hub<'a> {
         if self.scenario.planted == Some(crate::hub::Planted::PluginCodePerFrame) {
             nodes.push(json!({"operator": "plugin.place", "module": "plugin", "phase": "items", "item": null, "run": "ran"}));
         }
+        // Planted (#233): math@1 expands its instances again each frame.
+        if self.scenario.pack_planted.as_deref() == Some(crate::math_twins::EXPANDS_EACH_FRAME) {
+            if let Some(form) = self.forms.get(&e.doc) {
+                let again = crate::math_twins::expand_again(form, &self.startup.sealed, &self.packs);
+                nodes.extend(again);
+            }
+        }
         let report = &evaluated.report;
         let mut reply = json!({
             "outcome": if evaluated.frozen().is_some() { "frozen" } else { "evaluated" },
