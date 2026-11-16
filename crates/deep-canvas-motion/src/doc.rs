@@ -1808,243 +1808,204 @@ pub fn follow_spec(f: &Map<String, Value>, path: &str) -> Result<follow::Spec, R
     follow_spec_of(f, &Ctx::of((60, 1)), path)
 }
 
-/// A follow channel's `follow` on held keys or a control's value (#489): its source, its model
-/// and its outputs. A `follow` naming `source.control` and its option `values` is #417's.
-fn follow_spec_of(f: &Map<String, Value>, ctx: &Ctx, path: &str) -> Result<follow::Spec, Refused> {
-    let source = match f.get("source") {
-        Some(Value::String(s)) => match s
-            .strip_prefix("controls/")
-            .and_then(|r| r.strip_suffix("/value"))
-        {
-            Some(id) if !id.is_empty() => follow::Source::Control(id.to_string()),
-            _ => return refuse("bad_path", format!("{path}/source")),
-        },
-        Some(Value::Object(o)) => {
-            let Some(Value::Object(keys)) = o.get("keys") else {
-                return refuse("bad_doc", format!("{path}/source"));
-            };
-            let mut list = Vec::new();
-            for (kid, k) in keys {
-                let kpath = format!("{path}/source/keys/{kid}");
-                // The source holds between its changes: a key that moves is a varying source.
-                match k.get("interp").and_then(Value::as_str) {
-                    None | Some("hold") => {}
-                    Some(_) => return refuse("varying_source", kpath),
-                }
-                list.push((
-                    time_of(k.get("t"), ctx, &format!("{kpath}/t"))?,
-                    number(k.get("value"), &format!("{kpath}/value"))?,
-                ));
-            }
-            list.sort_by_key(|(t, _)| *t);
-            if list.is_empty() {
-                return refuse("bad_doc", format!("{path}/source/keys"));
-            }
-            follow::Source::Keys(list)
-        }
-        _ => return refuse("bad_doc", format!("{path}/source")),
-    };
-    let Some(Value::Object(m)) = f.get("model") else {
-        return refuse("bad_doc", format!("{path}/model"));
-    };
-    let mpath = format!("{path}/model");
-    let positive = |o: &Map<String, Value>, k: &str, d: Option<f64>| -> Result<f64, Refused> {
-        let v = match (o.get(k), d) {
-            (None, Some(d)) => d,
-            (v, _) => number(v, &format!("{mpath}/{k}"))?,
+mod channel_of;
+pub use channel_of::*;
+
+/// The document's time remaps (Time remap), outer targets first, so nested remaps compose outer
+/// to inner. Each map compiles to closed-form pieces, here or, for what reads occurrences or the
+/// input track, in the program. A placement target points the placement at its remap.
+fn remaps_of(
+    doc: &Map<String, Value>,
+    transport: &Transport,
+    ctx: &Ctx,
+    placements: &mut [Placement],
+    clips: &[Clip],
+) -> Result<Vec<Remap>, Refused> {
+    let mut out = Vec::new();
+    for (id, r) in section(doc, "time_remaps")? {
+        let path = format!("time_remaps/{id}");
+        let Some(target) = r.get("target").and_then(Value::as_str) else {
+            return refuse("ref_unresolved", format!("{path}/target"));
         };
-        if v > 0.0 {
-            Ok(v)
-        } else {
-            refuse("out_of_range", format!("{mpath}/{k}"))
-        }
-    };
-    let model = if let Some(Value::Object(s)) = m.get("spring") {
-        follow::Model::Spring(spring_of(s, &format!("{mpath}/spring"))?)
-    } else if let Some(Value::Object(o)) = m.get("first_order") {
-        let tau = o.get("tau").and_then(Value::as_f64);
-        follow::Model::FirstOrder {
-            tau_up: positive(o, "tau_up", tau)?,
-            tau_down: positive(o, "tau_down", tau)?,
-        }
-    } else if let Some(Value::Object(o)) = m.get("rate_limit") {
-        follow::Model::RateLimit {
-            max: positive(o, "max", None)?,
-        }
-    } else if let Some(Value::Object(o)) = m.get("transition") {
-        let span = seconds_of(o.get("span"), ctx, &format!("{mpath}/transition/span"))?;
-        if span <= 0 {
-            return refuse("out_of_range", format!("{mpath}/transition/span"));
-        }
-        let along = match interp_of(o.get("interp"), &format!("{mpath}/transition/interp"))? {
-            Interp::Ease(e) => follow::Along::Ease(e.ease),
-            Interp::Bezier { x1, y1, x2, y2 } => {
-                follow::Along::Bezier(crate::curve::Bezier::new(x1, y1, x2, y2))
-            }
-            Interp::Linear => follow::Along::Linear,
-            _ => return refuse("bad_interp", format!("{mpath}/transition/interp")),
+        let placed = placements.iter().find(|p| p.id == target);
+        let span = match placed {
+            Some(p) => Some(
+                i64::from(p.count) * clips.iter().find(|c| c.id == p.clip).map_or(1, |c| c.span),
+            ),
+            None => transport.span.filter(|s| *s > 0),
         };
-        follow::Model::Transition { span, along }
-    } else {
-        return refuse("bad_doc", mpath);
-    };
-    let outputs: Vec<&str> = match f.get("outputs") {
-        None => vec!["value"],
-        Some(Value::Array(a)) => a.iter().filter_map(Value::as_str).collect(),
-        Some(_) => return refuse("bad_doc", format!("{path}/outputs")),
-    };
-    if let Some(bad) = outputs
-        .iter()
-        .find(|o| !matches!(**o, "value" | "rate" | "integral"))
-    {
-        return refuse("bad_doc", format!("{path}/outputs/{bad}"));
+        let (segs, pending) = map_of(r, span, ctx, transport, &path)?;
+        out.push(Remap {
+            id: id.clone(),
+            target: target.to_string(),
+            segs,
+            pending,
+            clamp: r.get("clamp").and_then(Value::as_bool).unwrap_or(true),
+        });
     }
-    let (rate, integral) = (outputs.contains(&"rate"), outputs.contains(&"integral"));
-    if matches!(model, follow::Model::Transition { .. }) && (rate || integral) {
-        return refuse("bad_doc", format!("{path}/outputs"));
+    out.sort_by_key(|r| r.target.matches('.').count());
+    for (i, r) in out.iter().enumerate() {
+        if let Some(p) = placements.iter_mut().find(|p| p.id == r.target) {
+            p.timing.remap = Some(i);
+        }
     }
-    Ok(follow::Spec {
-        source,
-        model,
-        rate,
-        integral,
-    })
+    Ok(out)
 }
 
-/// The code a `per_loop` on a document that doesn't loop is refused with.
-pub const PER_LOOP_NO_LOOP: &str = "per_loop_no_loop";
-
-/// One modifier: `{wave: {...}}`, `{noise: {...}}`, `{pulse: {...}}` or `{limits: {...}}`, or
-/// the same with its kind in `kind`; each takes an `influence` (1).
-fn modifier_of(
-    m: &Value,
+/// A remap's `map`: a preset by name with `{<preset>: fields}`, `reverse`, or a channel of keys.
+fn map_of(
+    r: &Map<String, Value>,
+    span: Option<i64>,
     ctx: &Ctx,
     transport: &Transport,
     path: &str,
-    channel: &str,
-    // The channel's id when its times are on the timeline (not in a clip), for the literal notice.
-    placed: Option<&str>,
-) -> Result<Modifier, Refused> {
-    let Value::Object(m) = m else {
-        return refuse("bad_doc", path);
+) -> Result<(Vec<remap::Seg>, Option<Pending>), Refused> {
+    let mpath = format!("{path}/map");
+    let Some(map) = r.get("map") else {
+        return refuse("out_of_range", mpath);
     };
-    let (kind, body, at) = match m.get("kind").and_then(Value::as_str) {
-        Some(k) => (k.to_string(), m, path.to_string()),
-        None => match m.iter().find(|(k, v)| v.is_object() && *k != "influence") {
-            Some((k, Value::Object(b))) => (k.clone(), b, format!("{path}/{k}")),
-            _ => return refuse("bad_doc", path),
-        },
+    if map.as_str() == Some("reverse") {
+        let Some(span) = span else {
+            return refuse("bad_time", "transport/span");
+        };
+        return Ok((remap::reverse(span), None));
+    }
+    let Value::Object(o) = map else {
+        return refuse("out_of_range", mpath);
     };
-    let num = |k: &str, d: f64| -> Result<f64, Refused> {
-        match body.get(k) {
-            None => Ok(d),
-            v => number(v, &format!("{at}/{k}")),
+    if o.contains_key("keys") {
+        let mut labels = Vec::new();
+        let channel = channel_of(
+            "map",
+            &with_target(o),
+            false,
+            ctx,
+            transport,
+            &mpath,
+            &mut labels,
+        )?;
+        return Ok((
+            vec![remap::Seg {
+                t: i64::MIN / 2,
+                c: 0,
+                piece: remap::Piece::Map(channel.curve),
+                active: None,
+            }],
+            None,
+        ));
+    }
+    let Some((name, Value::Object(f))) = o.iter().next() else {
+        return refuse("out_of_range", mpath);
+    };
+    let at = format!("{mpath}/{name}");
+    let time = |key: &str| time_of(f.get(key), ctx, &format!("{at}/{key}"));
+    let time_or = |key: &str, d: i64| {
+        if f.contains_key(key) {
+            time(key)
+        } else {
+            Ok(d)
         }
     };
-    let rate = || -> Result<Rate, Refused> {
-        match body.get("per_loop") {
-            Some(v) => {
-                let n = v.as_u64().filter(|n| (1..=u64::from(u16::MAX)).contains(n));
-                let Some(n) = n else {
-                    return refuse("out_of_range", format!("{at}/per_loop"));
-                };
-                let span = match (transport.wrap, transport.span) {
-                    (true, Some(span)) => span,
-                    _ => return refuse(PER_LOOP_NO_LOOP, channel),
-                };
-                Ok(Rate::PerLoop { n: n as u16, span })
-            }
-            None if body.contains_key("period") => {
-                let p = num("period", 1.0)?;
-                if p <= 0.0 {
-                    return refuse("out_of_range", format!("{at}/period"));
-                }
-                Ok(Rate::Hz(1.0 / p))
-            }
-            None => Ok(Rate::Hz(num("frequency", 1.0)?)),
-        }
+    let rational = |key: &str, d: Ratio| {
+        f.get(key)
+            .map_or(Ok(d), |v| ratio_of(v, &format!("{at}/{key}")))
     };
-    let kind = match kind.as_str() {
-        "wave" => ModKind::Wave {
-            amplitude: num("amplitude", 1.0)?,
-            rate: rate()?,
-            phase: num("phase", 0.0)?,
-            offset: num("offset", 0.0)?,
-        },
-        "noise" => ModKind::Noise {
-            amplitude: num("amplitude", 1.0)?,
-            rate: rate()?,
-            seed: match body.get("seed") {
-                None => 0,
-                Some(v) => v
-                    .as_u64()
-                    .map_or_else(|| refuse("out_of_range", format!("{at}/seed")), Ok)?,
-            },
-        },
-        "quantize" => {
-            let hz = num("hz", 0.0)?;
-            if hz <= 0.0 {
-                return refuse("out_of_range", format!("{at}/hz"));
-            }
-            ModKind::Quantize {
-                hz,
-                jump: jump_of(body.get("jump"), &format!("{at}/jump"))?,
-            }
-        }
-        "limits" => {
-            let (min, max) = (num("min", f64::MIN)?, num("max", f64::MAX)?);
-            // Limits written upside down hold no value.
-            if min > max {
-                return refuse("out_of_range", format!("{at}/min"));
-            }
-            ModKind::Limits { min, max }
-        }
-        "pulse" => {
-            let shape = match body.get("shape") {
-                None => Shape::ThereAndBack,
-                Some(Value::String(s)) if s == "there_and_back" => Shape::ThereAndBack,
-                Some(Value::String(s)) if s == "pause" => Shape::Pause(1.0 / 3.0),
-                Some(Value::String(s)) if s == "wiggle" => Shape::Wiggle(2.0),
-                Some(Value::Object(o)) if o.contains_key("pause") => Shape::Pause(
-                    o["pause"]
-                        .get("share")
-                        .and_then(Value::as_f64)
-                        .unwrap_or(1.0 / 3.0),
-                ),
-                Some(Value::Object(o)) if o.contains_key("wiggle") => Shape::Wiggle(
-                    o["wiggle"]
-                        .get("count")
-                        .and_then(Value::as_f64)
-                        .unwrap_or(2.0),
-                ),
-                Some(_) => return refuse("bad_doc", format!("{at}/shape")),
-            };
-            let ease = match body.get("ease") {
-                None => ease::named("sigmoid", Some(10.0)).unwrap_or(Named::Smoothstep),
+    let times = |key: &str| -> Result<Vec<i64>, Refused> {
+        let Some(Value::Array(list)) = f.get(key) else {
+            return refuse("bad_doc", format!("{at}/{key}"));
+        };
+        list.iter()
+            .enumerate()
+            .map(|(i, v)| time_of(Some(v), ctx, &format!("{at}/{key}/{i}")))
+            .collect()
+    };
+    Ok(match name.as_str() {
+        "hold_at" => (remap::hold_at(time("at")?, time("for")?), None),
+        "ramp" => {
+            let ease = match f.get("ease") {
+                None => Named::Penner(ease::Family::Quad, ease::Side::InOut),
                 Some(e) => named_of(e, &format!("{at}/ease"))?,
             };
-            ModKind::Pulse {
-                at: match placed {
-                    Some(id) => placed_time_of(body.get("at"), ctx, &format!("{at}/at"), id)?,
-                    None => time_of(body.get("at"), ctx, &format!("{at}/at"))?,
-                },
-                span: time_of(body.get("span"), ctx, &format!("{at}/span"))?,
-                amount: num("amount", 1.0)?,
-                shape,
-                ease,
-            }
+            let to = rational("to", (1, 1))?;
+            (
+                remap::ramp(
+                    rational("from", (1, 1))?,
+                    to,
+                    time("at")?,
+                    time("over")?,
+                    ease,
+                ),
+                None,
+            )
         }
-        _ => return refuse("bad_doc", format!("{path}/kind")),
-    };
-    let influence = match m.get("influence").or_else(|| body.get("influence")) {
-        None => 1.0,
-        v => number(v, &format!("{path}/influence"))?,
-    };
-    Ok(Modifier { kind, influence })
+        "hitstop" => {
+            let hold = time_or("hold", FLICKS_PER_SECOND * 3 / 25)?;
+            if hold <= 0 || hold > FLICKS_PER_SECOND / 4 {
+                return refuse("out_of_range", format!("{at}/hold"));
+            }
+            let rejoin = match f.get("then").and_then(Value::as_str) {
+                None | Some("lag") => false,
+                Some("rejoin") => true,
+                Some(_) => return refuse("bad_doc", format!("{at}/then")),
+            };
+            let on = f
+                .get("on")
+                .map(|on| list_of(on, &format!("{at}/on")))
+                .transpose()?;
+            let at_times = if f.contains_key("at") {
+                times("at")?
+            } else {
+                Vec::new()
+            };
+            if on.is_none() && at_times.is_empty() {
+                return refuse("bad_doc", at);
+            }
+            (
+                Vec::new(),
+                Some(Pending::Hitstop {
+                    at: at_times,
+                    on,
+                    hold,
+                    rejoin,
+                }),
+            )
+        }
+        "replay" => {
+            let rate = rational("rate", (1, 4))?;
+            if rate.0 <= 0 || rate.0 > rate.1 {
+                return refuse("out_of_range", format!("{at}/rate"));
+            }
+            let on = match (f.get("on"), f.get("control").and_then(Value::as_str)) {
+                (Some(on), None) => list_of(on, &format!("{at}/on"))?,
+                (None, Some(control)) => filter_named(&format!("input.{control}")),
+                _ => return refuse("bad_doc", at),
+            };
+            let (before, after) = (
+                time_or("before", 2 * FLICKS_PER_SECOND)?,
+                time_or("after", FLICKS_PER_SECOND / 2)?,
+            );
+            (
+                Vec::new(),
+                Some(Pending::Replay {
+                    on,
+                    before,
+                    after,
+                    rate,
+                }),
+            )
+        }
+        "scrub" => match f.get("control").and_then(Value::as_str) {
+            Some(control) => (
+                Vec::new(),
+                Some(Pending::Scrub {
+                    control: control.to_string(),
+                }),
+            ),
+            None => return refuse("bad_doc", format!("{at}/control")),
+        },
+        _ => return refuse("out_of_range", mpath),
+    })
 }
-
-mod channels;
-pub use channels::*;
 
 /// A `map` channel as a channel: its target names nothing it writes.
 fn with_target(o: &Map<String, Value>) -> Map<String, Value> {
@@ -2583,14 +2544,28 @@ fn take_apart_of(
     let path = format!("channels/{id}/follow");
     let spec = follow_spec_of(f, ctx, &path)?;
     let spath = format!("{path}/stagger");
-    let Some(Value::Object(st)) = f.get("stagger") else {
+    let assemblies = doc.get("assemblies").and_then(Value::as_object);
+    let Some(st) = f.get("stagger") else {
+        // #508: no stagger, so every assembly at once, each at rank 0.
+        return Ok(Stagger {
+            id: id.to_string(),
+            spec,
+            targets: assemblies
+                .into_iter()
+                .flatten()
+                .map(|(a, _)| (a.clone(), 0))
+                .collect(),
+            lag: 0,
+            reverse_on_close: false,
+        });
+    };
+    let Value::Object(st) = st else {
         return refuse("bad_doc", spath);
     };
     let (lag, order, reverse_on_close) = stagger_of(st, ctx, &spath)?;
     let Some(Value::Array(list)) = st.get("targets") else {
         return refuse("bad_doc", format!("{spath}/targets"));
     };
-    let assemblies = doc.get("assemblies").and_then(Value::as_object);
     let mut ids = Vec::with_capacity(list.len());
     let mut orders = Vec::with_capacity(list.len());
     for (i, t) in list.iter().enumerate() {

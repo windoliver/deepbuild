@@ -54,8 +54,971 @@ pub fn unfit_issue(code: &'static str, path: String) -> Issue {
     }
 }
 
-mod eval;
-pub use eval::*;
+/// Every number past f64's range in a document (read as an overflow marker), refused with
+/// `out_of_range` at its path.
+pub fn overflows(doc: &Value) -> Vec<Issue> {
+    fn walk(v: &Value, path: &mut Vec<String>, out: &mut Vec<Issue>) {
+        match v {
+            Value::String(s) if s.starts_with(crate::OVERFLOW) => {
+                let p = path.join("/");
+                let what = "a number past f64's range: NaN and infinity have no place in a param";
+                match (path.first().map(String::as_str), path.get(1)) {
+                    (Some("items"), Some(id)) => {
+                        out.push(Issue::error("out_of_range", id, p, Value::Null, what))
+                    }
+                    _ => out.push(Issue::envelope("out_of_range", p, Value::Null, what)),
+                }
+            }
+            Value::Array(list) => {
+                for (i, x) in list.iter().enumerate() {
+                    path.push(i.to_string());
+                    walk(x, path, out);
+                    path.pop();
+                }
+            }
+            Value::Object(map) => {
+                for (k, x) in map {
+                    path.push(k.clone());
+                    walk(x, path, out);
+                    path.pop();
+                }
+            }
+            _ => {}
+        }
+    }
+    let mut out = Vec::new();
+    walk(doc, &mut Vec::new(), &mut out);
+    out
+}
+
+fn issue_json(i: &OpIssue) -> Value {
+    let mut v = json!({
+        "code": i.code, "severity": "error", "ids": i.item.iter().collect::<Vec<_>>(),
+        "module": i.module, "operator": i.operator, "path": i.path,
+    });
+    if let Some(r) = &i.read {
+        v["read"] = json!(r);
+    }
+    v
+}
+
+impl<'a> Hub<'a> {
+    /// The sealed set as the build holds it (#305), with each module's version and digest,
+    /// every operator the seal kept (the core's own as module `core`) with its read set as its
+    /// module registered it, and each array's contribution (#387).
+    pub fn registry_reply(&self) -> Value {
+        let sealed = &self.startup.sealed;
+        let arrays: Map<String, Value> = sealed
+            .arrays
+            .iter()
+            .map(|(k, a)| {
+                (
+                    k.clone(),
+                    json!({
+                        "owner": a.owner, "type": a.ty, "domain": a.domain,
+                        "class": a.class, "phase": a.phase, "contributes_to": a.contributes_to,
+                        "visibility": if a.private { "private" } else { "public" },
+                    }),
+                )
+            })
+            .collect();
+        let operators: Map<String, Value> = sealed
+            .ops
+            .iter()
+            .map(|o| {
+                (
+                    o.key.clone(),
+                    json!({"module": o.module, "phase": o.op.phase, "reads": o.op.reads, "writes": o.op.writes,
+                           "thread_safe": !o.op.serial}),
+                )
+            })
+            .collect();
+        // #379: every render pass the build registers, and every operator's and pass's cost
+        // model, its coefficients and the micro-benchmark that measured them.
+        let reference = &sealed.costs;
+        let mut passes = Map::new();
+        let mut costs = Map::new();
+        let mut cost = |name: &str, module: &str| {
+            let terms = reference.terms.get(name).copied().unwrap_or_default();
+            costs.insert(
+                name.to_string(),
+                json!({"module": module, "terms": terms.to_json(), "fingerprint": reference.fingerprint,
+                       "benchmark": {"task": "canvas-costs", "case": name}}),
+            );
+        };
+        for o in &sealed.ops {
+            cost(&o.key, &o.module);
+        }
+        for m in &sealed.modules {
+            for p in &m.shapes.passes {
+                let mut pass = json!({"module": m.name, "place": p.place});
+                // #200: the gpu.step@1 steps a GPU pass compiles from, each resolved at the seal.
+                if !p.steps.is_empty() {
+                    pass["steps"] = json!(p.steps);
+                }
+                passes.insert(p.name.clone(), pass);
+                cost(&p.name, &m.name);
+            }
+        }
+        // #411: every item kind the build draws, as documents name it, with its canvas module.
+        let kinds: Map<String, Value> = crate::kit::manifest::Manifest::kinds_of(sealed)
+            .into_iter()
+            .map(|k| {
+                let module = self.module_of(&k);
+                (k, json!(module))
+            })
+            .collect();
+        json!({
+            "build_set": sealed.build_set.name(),
+            "state": sealed.state(),
+            "kinds": kinds,
+            "modules": sealed.modules.iter().map(|m| m.name.clone()).collect::<Vec<_>>(),
+            "versions": sealed.modules.iter().map(|m| (m.name.clone(), json!(m.version.to_string()))).collect::<Map<_, _>>(),
+            "digests": sealed.modules.iter().map(|m| (m.name.clone(), json!(m.digest))).collect::<Map<_, _>>(),
+            "arrays": arrays,
+            "operators": operators,
+            "passes": passes,
+            "costs": costs,
+            "plan": sealed.plan,
+            "schedule": {"uri": sealed.schedule_uri(), "sha256": deep_canvas::schedule::sha256_hex(&deep_canvas::schedule::canonical(&sealed.schedule()))},
+            "seal": {"ms": self.startup.seal_ms, "runs": SEAL_RUNS.load(Ordering::Relaxed),
+                     "interfaces": {"ms": sealed.interface_ns as f64 / 1e6, "runs": INTERFACE_RUNS.load(Ordering::Relaxed)},
+                     "registries": {"ms": sealed.registry_ns as f64 / 1e6, "runs": INTERFACE_RUNS.load(Ordering::Relaxed)}},
+            "registries": {"uri": sealed.registries_uri()},
+        })
+    }
+
+    /// Every canvas module's fixtures, the core's first; a planted document, which the check
+    /// refuses, is the kit's alone (#2085).
+    pub fn fixtures_reply(&self) -> Value {
+        let list: Vec<Value> = self
+            .startup
+            .sealed
+            .fixtures
+            .iter()
+            .filter(|(_, f)| !f.planted)
+            .map(|(module, f)| {
+                let mut v = json!({"module": module, "name": f.name, "document": f.document});
+                if let Some(r) = &f.record {
+                    v["record"] = r.clone();
+                }
+                v
+            })
+            .collect();
+        json!({ "fixtures": list })
+    }
+
+    /// The revision `doc` checked before it becomes current: the operators' errors, and the
+    /// frame's drawing when it ran. `readings` stand in for the scenario's record: a kit
+    /// fixture's own.
+    pub fn probe(
+        &mut self,
+        doc: &Value,
+        t: i64,
+        frames: bool,
+        readings: Option<&BTreeMap<String, Value>>,
+    ) -> (Vec<OpIssue>, Option<Painted>) {
+        let mut base = self.new_session();
+        if let Some(r) = readings {
+            base.set_readings(r.clone());
+        }
+        let scratch = base.probe(&mut self.sched, doc, t, frames);
+        let drawing = drawing_of(&self.sched, &scratch);
+        (scratch.report.issues, drawing)
+    }
+
+    /// The session's own frame at `t` in its current view, drawn: render-back's snapshot.
+    pub fn live_drawn(&mut self, doc: &str, t: i64) -> Option<Drawn> {
+        self.load_frame(doc, t);
+        let session = self.sessions.get_mut(doc)?;
+        let view = session_view(session, &Map::new());
+        session.frame(&mut self.sched, t, &view);
+        let drawing = drawing_of(&self.sched, session)?;
+        self.renderer
+            .prepare_drawing(&drawing, &self.scenario.evidence)
+            .ok()
+    }
+
+    /// #223: `path` of an item under a group's warp: its outline as the frame at `t` draws it,
+    /// through its groups' warps at their values then, each sub-path flattened to its points.
+    pub fn warped_path(&mut self, doc: &str, item: &str, t: &EvalTime) -> Value {
+        let t = match self.resolve_time(doc, t) {
+            Ok(t) => t,
+            Err(code) => return json!({"outcome": "refused", "code": code}),
+        };
+        self.load_frame(doc, t);
+        let planted = crate::warps::planted(self.scenario.module_planted.as_deref());
+        let Some(session) = self.sessions.get_mut(doc) else {
+            return json!({"outcome": "refused", "code": "no_revision"});
+        };
+        let view = session_view(session, &Map::new());
+        session.frame(&mut self.sched, t, &view);
+        let (Some(form), Some(items)) = (
+            session.document().and_then(Value::as_object).cloned(),
+            crate::warps::items_at(&self.sched, session),
+        ) else {
+            return json!({"outcome": "refused", "code": "no_revision"});
+        };
+        match crate::warps::drawn(&form, &items, item, planted) {
+            Ok(Some(subpaths)) => {
+                json!({"item": item, "t": t, "subpaths": subpaths, "notices": []})
+            }
+            Ok(None) => json!({"outcome": "refused", "code": "ref_unresolved", "item": item}),
+            Err(r) => json!({"outcome": "refused", "code": r.code, "item": item, "path": r.path}),
+        }
+    }
+
+    /// #225: a vector field at its frame: its streams, its arrows and its flow windows at t, its
+    /// vars as the frame read them, by the integrator the scenario plants, if any.
+    pub fn vector_field(&mut self, doc: &str, item: &str, t: &EvalTime) -> Value {
+        let t = match self.resolve_time(doc, t) {
+            Ok(t) => t,
+            Err(code) => return json!({"outcome": "refused", "code": code}),
+        };
+        self.load_frame(doc, t);
+        let method =
+            deep_canvas_marks::vector_field::method_of(self.scenario.module_planted.as_deref());
+        let Some(session) = self.sessions.get_mut(doc) else {
+            return json!({"outcome": "refused", "code": "no_revision"});
+        };
+        let view = session_view(session, &Map::new());
+        session.frame(&mut self.sched, t, &view);
+        let Some(items) = crate::warps::items_at(&self.sched, session) else {
+            return json!({"outcome": "refused", "code": "no_revision"});
+        };
+        let Some(field) = items.get(item).filter(|i| {
+            i.get("kind").and_then(Value::as_str) == Some(deep_canvas_marks::vector_field::KIND)
+        }) else {
+            return json!({"outcome": "refused", "code": "ref_unresolved", "item": item});
+        };
+        let seconds = t as f64 / deep_canvas::grammar::FLICKS_PER_SECOND as f64;
+        match deep_canvas_marks::vector_field::read_item(item, field, &|_| None, method) {
+            Ok(vf) => deep_canvas_marks::vector_field::answer(item, &vf, seconds),
+            Err(r) => json!({"outcome": "refused", "code": r.code, "item": item, "path": r.path}),
+        }
+    }
+
+    /// One frame of a document's session (`eval`). #542: a golden pins each view setting to its
+    /// declared default (Scope and input classes), so the frame leaves the session's view-class
+    /// values out, and the live session gets them back after.
+    pub fn eval(&mut self, e: &Eval) -> Value {
+        let held = self.take_view(&e.doc);
+        if held.is_some() {
+            self.replay(&e.doc, self.now);
+        }
+        let reply = self.eval_frame(e);
+        if let Some(view) = held {
+            if let Some(s) = self.session_state.get_mut(&e.doc) {
+                s["view"] = view;
+            }
+            self.replay(&e.doc, self.now);
+        }
+        reply
+    }
+
+    /// The document's view-class session values, taken out; none when it holds none.
+    fn take_view(&mut self, doc: &str) -> Option<Value> {
+        let view = self.session_state.get_mut(doc)?.get_mut("view")?;
+        view.as_object()
+            .is_some_and(|m| !m.is_empty())
+            .then(|| view.take())
+    }
+
+    fn eval_frame(&mut self, e: &Eval) -> Value {
+        if !self.doc_visible(&e.doc) {
+            return json!({"outcome": "not_presented", "reason": "hidden", "nodes": []});
+        }
+        let rev = self.current(&e.doc).map(|r| r.rev);
+        let t = match self.resolve_time(&e.doc, &e.t) {
+            Ok(t) => t,
+            Err(code) => return json!({"outcome": "refused", "code": code, "issues": []}),
+        };
+        match &e.track {
+            Some(track) => self.load_with(&e.doc, track, t),
+            None => self.load_frame(&e.doc, t),
+        }
+
+        // Planted (#504): a document with controls runs a program through the sandbox each frame.
+        if self.planted(crate::hub::Planted::BoardRunsProgramPerFrame)
+            && self
+                .forms
+                .get(&e.doc)
+                .is_some_and(|f| f.get("controls").is_some())
+        {
+            self.sandbox.runs += 1;
+        }
+        // #169: every row of the core's carried-state list as a play on this track leaves it at
+        // `t`, so steps the live session ran under another track never answer for it.
+        let carried: Option<Value> = self.played_form(&e.doc).filter(|_| e.carried).map(|form| {
+            let form = e
+                .track
+                .as_ref()
+                .map_or(form.clone(), |t| crate::played::with_track(&form, t));
+            (self.carried_at(&form, t).into_iter())
+                .map(|c| json!({"owner": c.module, "kind": c.kind, "key": c.key, "hash": c.hash}))
+                .collect()
+        });
+        let Some(session) = self.sessions.get_mut(&e.doc).filter(|_| rev.is_some()) else {
+            return json!({"outcome": "refused", "code": "no_revision", "issues": []});
+        };
+        // #544's planted start_on: a run starts at the session's first frame at or after it.
+        if self.scenario.planted == Some(crate::hub::Planted::StartOnAtFirstFrame)
+            && !self.first_frames.contains_key(&e.doc)
+        {
+            self.first_frames.insert(e.doc.clone(), t);
+            if let Some(mut d) = session.document().cloned() {
+                crate::logic::from_first_frame(&mut d, t);
+                session.load(&mut self.sched, &d);
+            }
+        }
+        let view = session_view(session, &e.view);
+        let _ = self.sched.take_hashes();
+        let perturb = e.perturb.as_deref().map(Target::parse);
+        if perturb.as_ref().is_some_and(|p| p.is_none() || !e.clean) {
+            return json!({"outcome": "refused", "code": "bad_input", "issues": []});
+        }
+        let targets = session.targets(&self.sched);
+        let scratch;
+        let started = Instant::now();
+        let evaluated: &DocSession = if e.clean {
+            scratch = session.clean(&mut self.sched, t, &view, perturb.flatten());
+            &scratch
+        } else {
+            session.frame(&mut self.sched, t, &view);
+            session
+        };
+        let frame_ms = started.elapsed().as_secs_f64() * 1000.0;
+        let mut nodes: Vec<Value> = evaluated
+            .nodes(&self.sched)
+            .into_iter()
+            .map(|n| {
+                let mut node = json!({"operator": n.operator, "module": n.module, "phase": n.phase, "item": n.item,
+                       "key": n.key, "result": n.result, "run": n.run.name(), "thread": n.thread});
+                if e.debug_text {
+                    node["debug"] = debug_digest(&n.values);
+                }
+                node
+            })
+            .collect();
+        // Planted (#504): a plug-in's code computes a part each frame, outside every sealed operator.
+        if self.scenario.planted == Some(crate::hub::Planted::PluginCodePerFrame) {
+            nodes.push(json!({"operator": "plugin.place", "module": "plugin", "phase": "items", "item": null, "run": "ran"}));
+        }
+        // Planted (#233): math@1 expands its instances again each frame.
+        if self.scenario.pack_planted.as_deref() == Some(crate::math_twins::EXPANDS_EACH_FRAME) {
+            if let Some(form) = self.forms.get(&e.doc) {
+                let again =
+                    crate::math_twins::expand_again(form, &self.startup.sealed, &self.packs);
+                nodes.extend(again);
+            }
+        }
+        let report = &evaluated.report;
+        let mut reply = json!({
+            "outcome": if evaluated.frozen().is_some() { "frozen" } else { "evaluated" },
+            "hash": self.sched.hash().name(),
+            "rev": rev,
+            "t": t,
+            "epoch": evaluated.epoch(),
+            "threads": evaluated.threads(),
+            "frame_ms": frame_ms,
+            "nodes": nodes,
+            "targets": targets.iter().map(|t| json!({"target": t.name(), "term": t.term()})).collect::<Vec<_>>(),
+            "steps": report.steps.iter().map(|s| json!({"module": s.module, "t": s.t, "count": s.count, "read": s.read})).collect::<Vec<_>>(),
+            "issues": report.issues.iter().map(issue_json).collect::<Vec<_>>(),
+        });
+        // #535: a logic column's row whose value goes out of range raises column.out_of_range at
+        // the frame of the step its excursion begins.
+        if let (Some(doc), Some(list)) = (evaluated.document(), reply["issues"].as_array_mut()) {
+            // #537: and scene3d's readers', an instancer's columns and a line's points; #538: and
+            // the cell grid's, keyed copy's and flip's, in the session's locale.
+            let raised = [
+                deep_canvas::columns::raised_at(doc, t),
+                deep_canvas_scene3d::arrays::raised_at(doc, t),
+                crate::logic::raised_at(
+                    doc,
+                    Some(t),
+                    view[deep_canvas::schedule::LOCALE].as_str().unwrap_or("en"),
+                ),
+            ];
+            list.extend(raised.iter().flatten().map(|i| i.to_json()));
+        }
+        if !e.arrays.is_empty() {
+            // #497: each named array as this frame read it.
+            let read: Map<String, Value> = e
+                .arrays
+                .iter()
+                .map(|name| {
+                    (
+                        name.clone(),
+                        deep_play::read::array(&self.sched, evaluated, name, t),
+                    )
+                })
+                .collect();
+            reply["arrays"] = Value::Object(read);
+        }
+        if !e.paths.is_empty() {
+            reply["values"] = crate::query::values(&self.sched, evaluated, &e.paths);
+        }
+        if let Some(rows) = carried {
+            reply["carried"] = rows;
+        }
+        if e.data_hash {
+            reply["data_hash"] = json!(crate::data_hash::of(&self.sched, evaluated));
+        }
+        if self.startup.test_build {
+            reply["access"] = json!(report
+                .access
+                .iter()
+                .map(|a| json!({"operator": a.operator, "item": a.item, "read": a.read}))
+                .collect::<Vec<_>>());
+        }
+        // #493: a 2D film's shots: the sides its frame draws, and the film block.
+        let reduced = e
+            .view
+            .get("reduced_motion")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        let program = crate::film::program_of(&self.sched, evaluated);
+        let document = evaluated.document().cloned();
+        let sides = match (&program, &document) {
+            (Some(p), Some(d)) => crate::film::sides(p, d, t, reduced),
+            _ => None,
+        };
+        // #507: the timeline position the frame at this clock time shows.
+        reply["position"] = json!(program.as_ref().map_or(t, |p| p.position(t).0));
+        // #1968: each text diff's tokens at t, for the film block.
+        let diffs = e.film.then(|| diff_report(&self.sched, evaluated));
+        let drawing = if e.pixels || e.film || e.texts {
+            drawing_of(&self.sched, evaluated).map(|p| match &document {
+                // #466: the look's boil on the frame's lines.
+                Some(d) => self.boiled(d, t, reduced, p),
+                None => p,
+            })
+        } else {
+            None
+        };
+        // #499: each video image item's frame at t, and its picture for the snapshot.
+        if let Some(d) = &document {
+            let (video, pictures) = self.videos_at(d, t, false);
+            if !video.is_empty() {
+                reply["video"] = Value::Object(video);
+            }
+            self.renderer.videos = pictures;
+            self.caption_at(d, t);
+        }
+        if e.film {
+            let glyphs = drawing
+                .as_ref()
+                .and_then(|d| {
+                    self.renderer
+                        .prepare_drawing(d, &self.scenario.evidence)
+                        .ok()
+                })
+                .map(|d| d.glyphs())
+                .unwrap_or_default();
+            let mut film = match (&program, &document) {
+                (Some(p), Some(d)) => crate::film::block(p, d, t, reduced, glyphs),
+                _ => json!({"cameras": {}, "dissolve": null, "parallax": {}, "glyphs": glyphs}),
+            };
+            film["diffs"] = Value::Object(diffs.unwrap_or_default());
+            reply["film"] = film;
+            // #466: every list the document's reveals compile.
+            if let Some(d) = &document {
+                reply["film"]["occurrences"] = Value::Object(self.reveal_lists(d));
+            }
+        }
+        if e.texts {
+            reply["texts"] = Value::Object(
+                drawing
+                    .as_ref()
+                    .and_then(|d| d.drawing.as_deref())
+                    .map(crate::film_audit::drawn_texts)
+                    .unwrap_or_default(),
+            );
+        }
+        let drawing = drawing.filter(|_| e.pixels);
+        reply["hashes"] = json!(self
+            .sched
+            .take_hashes()
+            .iter()
+            .map(|h| json!({"of": h.of, "bytes": h.bytes}))
+            .collect::<Vec<_>>());
+        if let Some(drawing) = drawing {
+            let drawn = match (&sides, &document) {
+                (Some(sides), Some(doc)) => self.film_png(&drawing, e.size, sides, doc),
+                _ => self.canonical_png(&drawing, e.size),
+            };
+            match drawn {
+                Ok((sha, drawn, size)) => {
+                    reply["snapshots"] = json!([snapshot::entry(&sha, &drawn, size)]);
+                }
+                Err(Unfit { code, path }) => {
+                    reply["issues"]
+                        .as_array_mut()
+                        .expect("issues")
+                        .push(json!({"code": code, "severity": "error", "path": path, "ids": []}));
+                }
+            }
+        }
+        // #903: the tour pointer as this frame draws it, in px of the frame at its own size.
+        if e.tour_pointer {
+            let form = self.played_form(&e.doc).map(|form| match &e.track {
+                Some(track) => crate::played::with_track(&form, track),
+                None => form,
+            });
+            let pointer = form.and_then(|f| self.tour_pointer(&f, t, reduced));
+            reply["tour_pointer"] = crate::tour::reading(pointer);
+        }
+        // #504: an eval's own track lasts the call: the session goes back to the hub's.
+        if e.track.is_some() {
+            self.replay(&e.doc, t);
+        }
+        reply
+    }
+
+    /// A frame's drawing as its canonical render: prepared, rastered at `size` (the drawing's
+    /// own frame when none is given) over the look's ground, and stored as a PNG in the evidence
+    /// store. Its SHA-256, the drawn frame and the size; or why it can't be drawn, an evidence
+    /// store that takes no write counted as such (nothing missing passes).
+    pub(crate) fn canonical_png(
+        &mut self,
+        drawing: &Painted,
+        size: Option<[u16; 2]>,
+    ) -> Result<(String, Drawn, [u16; 2]), Unfit> {
+        let (rgba, drawn, size) = self.canonical_rgba(drawing, size, true)?;
+        Ok((self.put_png(rgba, size)?, drawn, size))
+    }
+
+    /// #501: the raster [`Hub::canonical_png`] stores, straight RGBA rows top-down: over the
+    /// look's ground when `opaque`, over nothing otherwise (an export with alpha). A still and an
+    /// export frame are this one function, so each equals the live frame.
+    pub(crate) fn canonical_rgba(
+        &mut self,
+        drawing: &Painted,
+        size: Option<[u16; 2]>,
+        opaque: bool,
+    ) -> Result<(Vec<u8>, Drawn, [u16; 2]), Unfit> {
+        let drawn = self
+            .renderer
+            .prepare_drawing(drawing, &self.scenario.evidence)?;
+        let size = size.unwrap_or_else(|| snapshot::px(drawn.frame.size));
+        let rgba = if self.renderer.caption.is_some() {
+            // #502: the caption layer draws over every item and under the status marks.
+            let mut rgba = self.renderer.raster(
+                &drawn.part(drawn.view, true, false),
+                size,
+                self.ground(opaque),
+            );
+            self.caption_over(&mut rgba, size);
+            let status = self
+                .renderer
+                .raster(&drawn.part(drawn.view, false, true), size, None);
+            snapshot::over(&mut rgba, &status);
+            rgba
+        } else {
+            self.renderer.raster(&drawn, size, self.ground(opaque))
+        };
+        Ok((rgba, drawn, size))
+    }
+
+    /// The look's ground, when the frame is opaque.
+    fn ground(&self, opaque: bool) -> Option<[u8; 3]> {
+        opaque.then(|| self.look.light.get("ground").copied().unwrap_or([255; 3]))
+    }
+
+    /// A PNG of `rgba` in the evidence store, its SHA-256; a store that takes no write is unfit.
+    pub(crate) fn put_png(&self, rgba: Vec<u8>, size: [u16; 2]) -> Result<String, Unfit> {
+        evidence::put(&self.scenario.evidence, &snapshot::png(rgba, size)).map_err(|_| Unfit {
+            code: "evidence_unwritable",
+            path: "snapshots".into(),
+        })
+    }
+
+    /// #493: [`Hub::canonical_png`] of a 2D film whose shots write its camera: each side the
+    /// frame draws through its own camera, finished in its own look, the sides blended as
+    /// finished pixels, and the status marks drawn once on top from the side that holds the
+    /// reveal, never blended (Transition).
+    pub(crate) fn film_png(
+        &mut self,
+        drawing: &Painted,
+        size: Option<[u16; 2]>,
+        sides: &crate::film::Sides,
+        doc: &Value,
+    ) -> Result<(String, Drawn, [u16; 2]), Unfit> {
+        let (rgba, status, size) = self.film_rgba(drawing, size, sides, doc, (true, None))?;
+        Ok((self.put_png(rgba, size)?, status, size))
+    }
+
+    /// #501: the raster [`Hub::film_png`] stores, as [`Hub::canonical_rgba`] is to
+    /// [`Hub::canonical_png`]; an export's (#157) opaque sides each through their look's print
+    /// finish at `print_at` (its grain), as the canvas shows them.
+    pub(crate) fn film_rgba(
+        &mut self,
+        drawing: &Painted,
+        size: Option<[u16; 2]>,
+        sides: &crate::film::Sides,
+        doc: &Value,
+        (opaque, print_at): (bool, Option<i64>),
+    ) -> Result<(Vec<u8>, Drawn, [u16; 2]), Unfit> {
+        let drawn = self
+            .renderer
+            .prepare_drawing(drawing, &self.scenario.evidence)?;
+        let size = size.unwrap_or_else(|| snapshot::px(drawn.frame.size));
+        let ground = self.ground(opaque);
+        // #466: a dip's color is a look role, ink unless it names another.
+        let role = match &sides.mix {
+            Some(crate::film::Mix::Dip { role, .. }) => role.as_str(),
+            _ => "ink",
+        };
+        let Some(ink) = self.look.light.get(role).copied() else {
+            return Err(Unfit {
+                code: "role_unresolved",
+                path: "transitions".into(),
+            });
+        };
+        let frame = drawn.frame.size;
+        let mut pictures = Vec::with_capacity(sides.sides.len());
+        for side in &sides.sides {
+            let part = drawn.part(Some(crate::film::view(&side.pose, frame)), true, false);
+            let printed = match print_at
+                .filter(|_| opaque)
+                .and_then(|t| Some((t, self.print_look(doc, side.look.as_deref())?)))
+            {
+                Some((t, def)) => self.print_part(&def, doc, &part, size, t)?,
+                None => None,
+            };
+            let mut rgba = printed.unwrap_or_else(|| self.renderer.raster(&part, size, ground));
+            if let Some(map) = side.look.as_deref().and_then(|l| self.tone_of(doc, l)) {
+                crate::film::finish(&mut rgba, map);
+            }
+            pictures.push(rgba);
+        }
+        let mut rgba = match (&sides.mix, pictures.len()) {
+            (Some(mix), 2) => {
+                let pass = self.transition_pass(doc, mix, &pictures, size)?;
+                crate::film::blend(&pictures[0], &pictures[1], mix, size, ink, pass.as_deref())
+            }
+            _ => pictures.swap_remove(0),
+        };
+        self.caption_over(&mut rgba, size);
+        let top = &sides.sides[sides.status.min(sides.sides.len() - 1)];
+        let status = drawn.part(Some(crate::film::view(&top.pose, frame)), false, true);
+        let over = self.renderer.raster(&status, size, None);
+        crate::film::over(&mut rgba, &over);
+        Ok((rgba, status, size))
+    }
+
+    /// #466: an operator transition's pass over the two finished sides, or `None` for a mix of
+    /// another kind.
+    fn transition_pass(
+        &self,
+        doc: &Value,
+        mix: &crate::film::Mix,
+        pictures: &[Vec<u8>],
+        size: [u16; 2],
+    ) -> Result<Option<Vec<u8>>, Unfit> {
+        let crate::film::Mix::Operator { id, op, p } = mix else {
+            return Ok(None);
+        };
+        let roles = self
+            .look
+            .light
+            .iter()
+            .map(|(k, c)| (k.clone(), c.map(|v| f64::from(v) / 255.0)))
+            .collect();
+        let sides = [pictures[0].as_slice(), pictures[1].as_slice()];
+        crate::film_operator::draw(doc, id, op, *p, sides, size, &roles).map(Some)
+    }
+
+    /// A shot's look's tone map: the look@1 the document names by asset, read from the evidence
+    /// store (#1162's way).
+    fn tone_of(&self, doc: &Value, name: &str) -> Option<deep_canvas_marks::finish::ToneMap> {
+        let def = self.look_named(doc, name)?;
+        deep_canvas_marks::finish::read_tone_map(def.get("tone_map")).ok()
+    }
+
+    /// The raster of a document with 3D writer layers: its 3D frame at `t` on the GPU, the 2D
+    /// items drawn over it with no ground of their own, as render-back draws it (#1162), at
+    /// `size` when given (#501).
+    pub(crate) fn rgba3d(
+        &mut self,
+        doc: &Value,
+        t: i64,
+        drawing: &Painted,
+        size: Option<[u16; 2]>,
+    ) -> Result<(Vec<u8>, [u16; 2]), Unfit> {
+        let size = size.unwrap_or_else(|| snapshot::px(drawing.size));
+        // #506: with its insets' pictures, its overlay frames at their anchors and its view
+        // overlays (over3d.rs).
+        let mut rgba = self
+            .frame3d(doc, t, size, Some(drawing))
+            .map_err(|u| match u.code {
+                "unsupported_platform" => Unfit {
+                    code: "gpu_unavailable",
+                    path: "snapshots".into(),
+                },
+                _ => u,
+            })?;
+        self.caption_over(&mut rgba, size);
+        Ok((rgba, size))
+    }
+
+    /// `count` frames of a session, `step` apart from `from`: how many nodes ran in each, the
+    /// heap allocations the scheduler made and its CPU time (#387); and (#856) the UI thread's CPU
+    /// per frame, whether the frame is settling and, with `pixels`, its pixel hash. A revision
+    /// that arrives at a frame's latch is admitted there, unless a text in it that the cost model
+    /// estimates past 1 ms to shape isn't shaped yet: that text shapes on the render worker, and
+    /// the frames draw the current revision, its last shaped run, settling, until it is ready.
+    pub fn frames(&mut self, f: &Frames) -> Value {
+        if !self.doc_visible(&f.doc) {
+            return json!({"outcome": "not_presented", "reason": "hidden", "frames": []});
+        }
+        if !self.sessions.contains_key(&f.doc) {
+            return json!({"outcome": "refused", "code": "no_revision", "frames": []});
+        }
+        let started = Instant::now();
+        let period = Duration::from_secs_f64(f.step.max(0) as f64 / FLICKS_PER_SECOND);
+        let mut pending: Option<(&Value, Vec<Pending>)> = None;
+        let mut revised = Value::Null;
+        // The last frame's drawing and its hash: an unchanged drawing isn't drawn again.
+        let mut last: Option<(Option<*const Drawing>, Option<*const StatusDrawing>, String)> = None;
+        let mut out = Vec::with_capacity(f.count);
+        let mut revised_now = false;
+        let mut seen = BTreeMap::new();
+        for k in 0..f.count {
+            if f.paced {
+                let due = started + period * k as u32;
+                if let Some(wait) = due.checked_duration_since(Instant::now()) {
+                    std::thread::sleep(wait);
+                }
+            }
+            let cpu = thread_cpu_ns();
+            if let Some((_, document)) = f.revise.as_ref().filter(|(at, _)| *at == k) {
+                let shaping = if self.startup.shapes_on_ui_thread {
+                    Vec::new()
+                } else {
+                    shape_ahead(document)
+                };
+                pending = Some((document, shaping));
+            }
+            if pending
+                .as_ref()
+                .is_some_and(|(_, shaping)| shaping.iter().all(Pending::ready))
+            {
+                let (document, _) = pending.take().expect("checked above");
+                revised = self.revise(&f.doc, document);
+                revised_now = true;
+            }
+            let t = f.from + f.step * k as i64;
+            self.load_frame(&f.doc, t);
+            let Some(session) = self.sessions.get_mut(&f.doc) else {
+                break;
+            };
+            let view = session_view(session, &Map::new());
+            let before = f
+                .timings
+                .then(|| crate::timings::mappings(&self.sched, session));
+            let _ = self.sched.take_json();
+            let frame_started = Instant::now();
+            let (ran, allocs) =
+                crate::count_allocations(|| session.frame(&mut self.sched, t, &view));
+            let ms = frame_started.elapsed().as_secs_f64() * 1000.0;
+            // #855: the JSON values the frame's operators wrote, each counted by the heap
+            // allocations it takes, which a copy of it takes again, and its shared handle.
+            let json_values: u64 = self
+                .sched
+                .take_json()
+                .iter()
+                .map(|v| crate::count_allocations(|| (**v).clone()).1 + 1)
+                .sum();
+            let mut frame = json!({"t": t, "ran": ran, "allocs": allocs, "scheduler_ms": ms,
+                                   "frame_ms": ms, "settling": pending.is_some(),
+                                   "json_values": json_values});
+            // #1732: the solves of each arrangement this frame ran, from the scheduler's nodes.
+            frame["solves"] = solves(&self.sched, &self.sessions[&f.doc], revised_now);
+            frame["remaps"] = remaps(&self.sched, &self.sessions[&f.doc]);
+            if let (Some(before), Some(doc)) = (&before, self.sessions[&f.doc].document()) {
+                let after = crate::timings::mappings(&self.sched, &self.sessions[&f.doc]);
+                crate::timings::add(&mut frame, (doc, before, &after, t), &mut seen);
+                let (tokens, aligns) =
+                    crate::timings::code(&self.sched, &self.sessions[&f.doc], doc);
+                frame["tokens"] = tokens;
+                frame["aligns"] = aligns;
+            }
+            revised_now = false;
+            let mut capture = 0;
+            if f.pixels {
+                let before = thread_cpu_ns();
+                let drawing = drawing_of(&self.sched, &self.sessions[&f.doc]);
+                let ptrs = drawing.as_ref().map_or((None, None), |d| {
+                    (
+                        d.drawing.as_ref().map(Arc::as_ptr),
+                        d.status.as_ref().map(Arc::as_ptr),
+                    )
+                });
+                let hash = match (&last, &drawing) {
+                    (Some((a, b, hash)), Some(d)) if (*a, *b) == ptrs && d.boxes.is_empty() => {
+                        Some(hash.clone())
+                    }
+                    (_, Some(d)) => self.canonical_png(d, None).ok().map(|(sha, _, _)| sha),
+                    (_, None) => None,
+                };
+                if let Some(hash) = &hash {
+                    last = Some((ptrs.0, ptrs.1, hash.clone()));
+                }
+                frame["pixel_hash"] = json!(hash);
+                capture = thread_cpu_ns() - before;
+            }
+            let ui = thread_cpu_ns().saturating_sub(cpu).saturating_sub(capture);
+            frame["ui_ms"] = json!(ui as f64 / 1e6);
+            out.push(frame);
+        }
+        // #857: each background job's frames from its start to this reply.
+        let background: Vec<Value> = self
+            .background
+            .iter()
+            .map(|(job, replica, frames)| {
+                let mut v = json!({"job": job, "frames": frames.load(Ordering::Relaxed)});
+                if let Some(r) = replica {
+                    v["replica"] = json!(r);
+                }
+                v
+            })
+            .collect();
+        let threads = self.sessions.get(&f.doc).map(|s| s.threads());
+        let mut reply = json!({"threads": threads, "frames": out, "background": background});
+        if !revised.is_null() {
+            reply["revised"] = revised;
+        }
+        reply
+    }
+
+    /// One frame of a background job's session at `t` (#857); false when it has no revision,
+    /// as when the check refused its document.
+    pub fn job_frame(&mut self, doc: &str, t: i64, over: &Map<String, Value>) -> bool {
+        let Some(session) = self.sessions.get_mut(doc) else {
+            return false;
+        };
+        let view = session_view(session, over);
+        session.frame(&mut self.sched, t, &view);
+        true
+    }
+
+    /// A whole revision of `doc` from whoever sent its last one, admitted as a deep_show call is.
+    fn revise(&mut self, doc: &str, document: &Value) -> Value {
+        let Some(via) = self.vias.get(doc).cloned() else {
+            return json!({"outcome": "refused", "code": "no_session"});
+        };
+        self.call(&Call::Show(Box::new(Show {
+            via,
+            doc: doc.to_string(),
+            document: document.clone(),
+            removes: Vec::new(),
+            t: 0,
+            size: None,
+            include: Vec::new(),
+            check: false,
+            claim: None,
+        })))
+    }
+
+    /// #856: the shaped-run cache's runs of `text`: the times this process shaped each one's key,
+    /// and the documents whose current revision draws it, each evaluated at its frame.
+    pub fn shaped_runs(&mut self, text: &str) -> Value {
+        for shaping in deep_text::cache::take_log() {
+            *self.shapings.entry(shaping.key).or_default() += 1;
+        }
+        let mut drawn: Vec<(String, Arc<deep_text::Shaped>)> = Vec::new();
+        for (doc, session) in self.sessions.iter_mut() {
+            let view = session_view(session, &Map::new());
+            session.frame(&mut self.sched, 0, &view);
+            let ids: Vec<String> = session
+                .document()
+                .and_then(|d| d["items"].as_object())
+                .map(|items| items.keys().cloned().collect())
+                .unwrap_or_default();
+            for id in ids {
+                let run = session
+                    .value(&self.sched, "text.run", Some(&id))
+                    .and_then(|v| v.as_typed::<Run>());
+                if let Some(run) = run {
+                    drawn.push((doc.clone(), run.shaped.clone()));
+                }
+            }
+        }
+        let runs: Vec<Value> = deep_text::cache::runs_of(text)
+            .into_iter()
+            .map(|(key, run)| {
+                let docs: Vec<&String> = drawn
+                    .iter()
+                    .filter(|(_, r)| Arc::ptr_eq(r, &run))
+                    .map(|(doc, _)| doc)
+                    .collect();
+                json!({"shaped": self.shapings.get(&key).copied().unwrap_or(0), "docs": docs})
+            })
+            .collect();
+        json!({ "runs": runs })
+    }
+
+    /// `migrate`: rekeys the process's content-key cache under `to`, once (#855).
+    pub fn migrate(&mut self, to: HashVersion) -> Value {
+        let from = self.sched.hash();
+        let mut sessions: Vec<&mut DocSession> = self.sessions.values_mut().collect();
+        let rekeyed = self.sched.migrate(to, &mut sessions);
+        json!({"from": from.name(), "to": to.name(), "entries": self.sched.cached(), "rekeyed": rekeyed})
+    }
+
+    /// `keys`: every content key of the session's current revision computed afresh, `runs`
+    /// times, each pass timed by this binary's clock (#855).
+    pub fn keys(&mut self, doc: &str, runs: usize) -> Value {
+        let Some(session) = self.sessions.get_mut(doc) else {
+            return json!({"outcome": "refused", "code": "no_revision"});
+        };
+        let mut ns = Vec::with_capacity(runs);
+        for _ in 0..runs {
+            let started = Instant::now();
+            session.rekey(&mut self.sched);
+            ns.push(started.elapsed().as_nanos() as u64);
+        }
+        json!({"hash": self.sched.hash().name(), "nodes": session.node_count(), "ns": ns})
+    }
+
+    /// An item's interned handle in the session's current revision.
+    pub fn intern(&mut self, doc: &str, id: &str) -> Value {
+        match self.sessions.get(doc).and_then(|s| s.intern(id)) {
+            Some(handle) => json!({ "handle": handle }),
+            None => json!({"code": "ref_unresolved"}),
+        }
+    }
+
+    /// The item a handle names, or `stale_handle` for one interned in another revision.
+    pub fn resolve(&mut self, doc: &str, handle: &Value) -> Value {
+        match self.sessions.get(doc).and_then(|s| s.resolve(handle)) {
+            Some(id) => json!({ "id": id }),
+            None => json!({"code": "stale_handle"}),
+        }
+    }
+
+    /// A new batch of a document's source: each column hashed once as it arrives.
+    pub fn batch(&mut self, doc: &str, source: &str, columns: &BTreeMap<String, Vec<u8>>) -> Value {
+        if !self.sessions.contains_key(doc) {
+            let fresh = self.new_session();
+            self.sessions.insert(doc.to_string(), fresh);
+        }
+        let session = self.sessions.get_mut(doc).expect("made above");
+        let rows = columns.values().map(|c| c.len() / 8).max().unwrap_or(0);
+        let hashes = session.batch(
+            columns
+                .iter()
+                .map(|(k, v)| (k.clone(), Arc::<[u8]>::from(v.as_slice())))
+                .collect(),
+        );
+        json!({
+            "source": source, "rows": rows,
+            "hashes": hashes.iter().map(|h| json!({"of": h.of, "bytes": h.bytes})).collect::<Vec<_>>(),
+        })
+    }
+}
 
 /// Flicks in a second: the document clock's unit.
 const FLICKS_PER_SECOND: f64 = 705_600_000.0;
@@ -113,733 +1076,23 @@ pub(crate) fn session_view(session: &DocSession, over: &Map<String, Value>) -> [
     view
 }
 
-/// What a session's frame draws: marks2d's draw list, in a build that holds marks2d, else the
-/// core's boxes; and the text module's status marks with the legend, at the document's size.
-pub(crate) struct Painted {
-    pub drawing: Option<Arc<Drawing>>,
-    pub boxes: Vec<CoreBox>,
-    pub status: Option<Arc<StatusDrawing>>,
-    pub size: [f64; 2],
-}
+pub(crate) use deep_play::drawing::Painted;
 
-/// An item of a canvas module's kind that the core draws as `rect@1` (Kind: `draws_as`): its
-/// lowered box, moved by its world position, filled in the color of the role its paint names.
-pub(crate) struct CoreBox {
-    pub rect: [f64; 4],
-    pub color: [u8; 3],
-}
-
-/// In a build without marks2d, the core's own boxes, in item order: every item whose kind a
-/// canvas module registered with `draws_as: rect@1`. Marks2d draws them where it is held.
-fn core_boxes(
-    sched: &deep_canvas::schedule::Scheduler<'_>,
-    session: &DocSession,
-    doc: &Value,
-) -> Vec<CoreBox> {
-    let mut items: Vec<(&str, &str)> = doc["items"]
-        .as_object()
-        .into_iter()
-        .flatten()
-        .filter(|(_, item)| {
-            item["kind"]
-                .as_str()
-                .is_some_and(|k| sched.sealed.draws_as(k) == Some("rect@1"))
-        })
-        .map(|(id, item)| (item["order"].as_str().unwrap_or(""), id.as_str()))
-        .collect();
-    items.sort();
-    let json = |array: &str, id: &str| match session.value(sched, array, Some(id)) {
-        Some(Val::Json(v)) => Some(v),
-        _ => None,
-    };
-    let num = |v: &Value| v.as_f64().unwrap_or(0.0);
-    items
-        .into_iter()
-        .filter_map(|(_, id)| {
-            let lowered = json("core.lowered", id)?;
-            let b = lowered["params"]["box"].as_array()?;
-            let pos = session
-                .value(sched, "core.world", Some(id))
-                .and_then(|w| w.as_typed::<deep_canvas::schedule::core_ops::Transform>())
-                .map(|w| [w.pos[0], w.pos[1]]);
-            let [x, y] = pos.unwrap_or([0.0, 0.0]);
-            let role = lowered["params"]["paint"]["fill"]["role"]
-                .as_str()
-                .unwrap_or("ink");
-            let c = session.look().get(role)?.as_array()?;
-            let channel = |i: usize| c.get(i)?.as_u64().and_then(|v| u8::try_from(v).ok());
-            Some(CoreBox {
-                rect: [
-                    x + num(b.first()?),
-                    y + num(b.get(1)?),
-                    num(b.get(2)?),
-                    num(b.get(3)?),
-                ],
-                color: [channel(0)?, channel(1)?, channel(2)?],
-            })
-        })
-        .collect()
-}
-
-/// Each cell grid's marks (#402): a cell whose background isn't the grid's own as a box, then
-/// each row as one line of the mono face, its runs in their cells' colors.
-fn cell_grids(
-    sched: &deep_canvas::schedule::Scheduler<'_>,
-    session: &DocSession,
-    doc: &Value,
-) -> Vec<deep_canvas_marks::scene::Drawn> {
-    use deep_canvas_cells::module::Grid;
-    use deep_canvas_marks::scene::{self, Fill, Mark};
-    let mut out = Vec::new();
-    // Each grid by its item, read once from the grid operator's own nodes (#854: a lookup per
-    // item scanned every node, which a 10,000-item board paid on every frame).
-    let grids: BTreeMap<&str, Val> = session
-        .values(sched, "cells.grid")
-        .into_iter()
-        .filter_map(|(id, v)| Some((id?, v)))
-        .collect();
-    if grids.is_empty() {
-        return out;
-    }
-    for (id, _) in doc["items"].as_object().into_iter().flatten() {
-        let Some(g) = grids.get(id.as_str()).and_then(|v| v.as_typed::<Grid>()) else {
-            continue;
-        };
-        let mark = |m: Mark| scene::Drawn {
-            mark: m,
-            clip: None,
-            scopes: Vec::new(),
-        };
-        let [cw, ch] = g.cell;
-        let w = cw * g.rows.first().map_or(0, |r| r.text.chars().count()) as f64;
-        out.push(mark(Mark::Rect {
-            item: id.clone(),
-            bounds: [g.origin[0], g.origin[1], w, ch * g.rows.len() as f64],
-            radius: 0.0,
-            fill: Fill::Solid(g.bg),
-        }));
-        for (r, row) in g.rows.iter().enumerate() {
-            let y = g.origin[1] + ch * r as f64;
-            for (from, to, c) in &row.fills {
-                out.push(mark(Mark::Rect {
-                    item: id.clone(),
-                    bounds: [
-                        g.origin[0] + cw * *from as f64,
-                        y,
-                        cw * (to - from) as f64,
-                        ch,
-                    ],
-                    radius: 0.0,
-                    fill: Fill::Solid(*c),
-                }));
-            }
-            let base = row.runs.first().map_or([0; 3], |r| r.2);
-            let runs = row
-                .runs
-                .iter()
-                .map(|(from, to, c)| scene::TextRun {
-                    from: *from,
-                    to: *to,
-                    role: String::new(),
-                    color: *c,
-                    opacity: 1.0,
-                })
-                .collect();
-            let text = row.text.trim_end().to_string();
-            out.push(mark(Mark::Text {
-                item: id.clone(),
-                spec: scene::TextSpec {
-                    spans: crate::terminal::cell_spacing(&text, cw, g.font_size),
-                    gap: 0.0,
-                    indent: 0.0,
-                    text,
-                    font: "mono".into(),
-                    family: Some(deep_text::Role::Mono.family()),
-                    fallback: Vec::new(),
-                    lang: None,
-                    size: g.font_size,
-                    weight: 400,
-                    width: None,
-                    max_lines: None,
-                    mask: false,
-                    align: scene::Align::Start,
-                    bound: false,
-                },
-                origin: [g.origin[0], y],
-                role: None,
-                color: base,
-                runs,
-            }));
-        }
-    }
-    out
-}
-
-/// #220: each match morph between two vector items as a frame draws it: before its window only its
-/// from item, after it only its to item, and inside it each piece in place of both, a shape in the
-/// document's u filled in the role of the item it comes from at the piece's opacity.
-fn morphed_vectors(
-    sched: &deep_canvas::schedule::Scheduler<'_>,
-    session: &DocSession,
-    doc: &Value,
-    frame: &deep_canvas_marks::scene::Frame,
-) -> Option<deep_canvas_marks::scene::Frame> {
-    use deep_canvas::schedule::core_ops::Fields;
-    use deep_canvas_marks::path::Verb;
-    use deep_canvas_marks::scene::{Drawn, Fill, Mark};
-    use deep_canvas_motion::morph;
-    let program = crate::film::program_of(sched, session)?;
-    if program.betweens.is_empty() {
-        return None;
-    }
-    let t = session.t();
-    let fields = |id: &str| -> Option<Value> {
-        let item = doc.pointer(&format!("/items/{id}"))?;
-        (item["kind"].as_str() == Some("vector@1")).then_some(())?;
-        session
-            .read(sched, "core.fields", Some(id))
-            .and_then(|(v, _)| v.as_typed::<Fields>())
-            .map(|f| f.to_json())
-    };
-    let rgb = |role: &str| -> Option<[u8; 3]> {
-        let c = session.look().get(role)?.as_array()?;
-        let channel = |i: usize| c.get(i)?.as_u64().and_then(|v| u8::try_from(v).ok());
-        Some([channel(0)?, channel(1)?, channel(2)?])
-    };
-    // Where marks2d placed each vector's outline: its path mark's offset, as a write-on reads it.
-    let mut offsets: BTreeMap<&str, [f64; 2]> = BTreeMap::new();
-    for m in frame.layers.iter().flat_map(|l| l.marks.iter()) {
-        if let Mark::Path { item, offset, .. } = &m.mark {
-            offsets.entry(item.as_str()).or_insert(*offset);
-        }
-    }
-    let parts = |id: &str, item: &Value| -> Vec<morph::Part> {
-        let [dx, dy] = offsets.get(id).copied().unwrap_or([0.0, 0.0]);
-        morph::vector_parts(id, item)
-            .into_iter()
-            .map(|mut p| {
-                for s in &mut p.shape {
-                    for q in &mut s.points {
-                        *q = [q[0] + dx, q[1] + dy];
-                    }
-                }
-                p
-            })
-            .collect()
-    };
-    // Each item's marks dropped, and for the from item of an open window, the pieces drawn there.
-    let mut dropped: BTreeMap<String, Option<Vec<Arc<Drawn>>>> = BTreeMap::new();
-    let mut mix = [0u8; 8];
-    for b in &program.betweens {
-        let (Some(from), Some(to)) = (fields(&b.from), fields(&b.to)) else {
-            continue;
-        };
-        if t <= b.start {
-            dropped.insert(b.to.clone(), None);
-            continue;
-        }
-        if t >= b.end {
-            dropped.insert(b.from.clone(), None);
-            continue;
-        }
-        let p = b.progress(t);
-        let role = |item: &Value| {
-            item.pointer("/params/outline/role")
-                .and_then(Value::as_str)
-                .unwrap_or("ink")
-                .to_string()
-        };
-        let (role_a, role_z) = (role(&from), role(&to));
-        let pieces = morph::pieces(
-            &parts(&b.from, &from),
-            &parts(&b.to, &to),
-            &b.pairs,
-            b.unpaired,
-            p,
-        );
-        let marks = pieces
-            .iter()
-            .filter_map(|piece| {
-                let color = rgb(if piece.from.is_some() {
-                    &role_a
-                } else {
-                    &role_z
-                })?;
-                let mut verbs = Vec::new();
-                for s in &piece.shape {
-                    for (i, q) in s.points.iter().enumerate() {
-                        verbs.push(if i == 0 {
-                            Verb::Move(*q)
-                        } else {
-                            Verb::Line(*q)
-                        });
-                    }
-                    if s.closed {
-                        verbs.push(Verb::Close);
-                    }
-                }
-                Some(Arc::new(Drawn {
-                    mark: Mark::Shape {
-                        item: b.from.clone(),
-                        verbs,
-                        fill: Some((Fill::Solid(color), piece.opacity.clamp(0.0, 1.0))),
-                        stroke: None,
-                    },
-                    clip: None,
-                    scopes: Vec::new(),
-                }))
-            })
-            .collect();
-        dropped.insert(b.from.clone(), Some(marks));
-        dropped.insert(b.to.clone(), None);
-        for (m, x) in mix.iter_mut().zip(p.to_bits().to_le_bytes()) {
-            *m ^= x;
-        }
-    }
-    if dropped.is_empty() {
-        return None;
-    }
-    let owner = |m: &Drawn| match &m.mark {
-        Mark::Path { item, .. } | Mark::Shape { item, .. } => Some(item.clone()),
-        _ => None,
-    };
-    let mut frame = frame.clone();
-    for layer in &mut frame.layers {
-        if !layer
-            .marks
-            .iter()
-            .any(|m| owner(m).is_some_and(|i| dropped.contains_key(&i)))
-        {
-            continue;
-        }
-        let mut marks = Vec::with_capacity(layer.marks.len());
-        for m in &layer.marks {
-            match owner(m).and_then(|i| dropped.get_mut(&i)) {
-                None => marks.push(m.clone()),
-                // The pieces stand where the from item's first mark stood.
-                Some(pieces) => marks.extend(pieces.take().unwrap_or_default()),
-            }
-        }
-        layer.marks = marks.into_iter().collect();
-        for (k, x) in layer.key.0.iter_mut().zip(mix) {
-            *k ^= x;
-        }
-    }
-    Some(frame)
-}
-
-/// A frame as its text diffs draw it, with each unit's shaped run by its mark's item.
-type Diffed = (
-    deep_canvas_marks::scene::Frame,
-    Vec<(String, Arc<deep_canvas_marks::modules::Run>)>,
-);
-
-/// #1968: each text diff between two code items as a frame draws it: before its window only its
-/// from item, after it only its to item, and inside it each item's text giving way to its units,
-/// moved and faded as the diff has them at its progress, while the rest each item draws (its
-/// gutter, numbers and highlights) cross-fades from the old item's to the new one's.
-fn diffed_code(
-    sched: &deep_canvas::schedule::Scheduler<'_>,
-    session: &DocSession,
-    frame: &deep_canvas_marks::scene::Frame,
-) -> Option<Diffed> {
-    use deep_canvas_marks::diff::{self, Side};
-    use deep_canvas_marks::scene::{Drawn, Scope};
-    let program = crate::film::program_of(sched, session)?;
-    let diffs: Vec<_> = program
-        .betweens
-        .iter()
-        .filter_map(|b| Some((b, b.diff.as_ref()?)))
-        .collect();
-    if diffs.is_empty() {
-        return None;
-    }
-    let t = session.t();
-    let base = |m: &Drawn| -> String {
-        let item = m.mark.item();
-        item.split('#').next().unwrap_or(item).to_string()
-    };
-    let mut frame = frame.clone();
-    let mut runs = Vec::new();
-    for (b, d) in diffs {
-        let p = b.progress(t);
-        let (a, z) = (
-            text_mark(&frame, &b.from).cloned(),
-            text_mark(&frame, &b.to).cloned(),
-        );
-        let units = match (&a, &z) {
-            (Some(a), Some(z)) if t > b.start && t < b.end => {
-                match (Side::of(a, &d.old), Side::of(z, &d.new)) {
-                    (Some(old), Some(new)) => Some(diff::marks(
-                        &old,
-                        &new,
-                        &diff::moved(&old, &new, &d.matching, p),
-                    )),
-                    _ => None,
-                }
-            }
-            _ => None,
-        };
-        for m in units.iter().flatten() {
-            if let Some(run) = diff::run_of(&m.mark) {
-                runs.push((m.mark.item().to_string(), Arc::new(run)));
-            }
-        }
-        // Each item's marks at their opacity in the frame: none, all, or faded.
-        let (from, to) = match (t <= b.start, t >= b.end) {
-            (true, _) => (1.0, 0.0),
-            (_, true) => (0.0, 1.0),
-            _ => (1.0 - p, p),
-        };
-        let mut units = units.map(|u| u.into_iter());
-        for layer in &mut frame.layers {
-            if !layer
-                .marks
-                .iter()
-                .any(|m| [&b.from, &b.to].contains(&&base(m)))
-            {
-                continue;
-            }
-            let mut marks: Vec<Arc<Drawn>> = Vec::with_capacity(layer.marks.len());
-            for m in layer.marks.iter() {
-                let owner = base(m);
-                let alpha = if owner == b.from {
-                    from
-                } else if owner == b.to {
-                    to
-                } else {
-                    marks.push(m.clone());
-                    continue;
-                };
-                // Inside the window, the two texts draw as their units, where the old one stood.
-                if let Some(units) = units.as_mut().filter(|_| m.mark.item() == owner) {
-                    if owner == b.from {
-                        marks.extend(units.by_ref());
-                    }
-                    continue;
-                }
-                if alpha <= 0.0 {
-                    continue;
-                }
-                if alpha >= 1.0 {
-                    marks.push(m.clone());
-                    continue;
-                }
-                let mut scopes = m.scopes.clone();
-                scopes.push(Scope::Opacity {
-                    item: format!("{}#diff", m.mark.item()),
-                    alpha,
-                    blend: None,
-                    effect: None,
-                });
-                marks.push(Arc::new(Drawn {
-                    mark: m.mark.clone(),
-                    clip: m.clip,
-                    scopes,
-                }));
-            }
-            layer.marks = marks.into_iter().collect();
-            // Before the window too the layer holds other marks than its items drew.
-            for (k, x) in layer
-                .key
-                .0
-                .iter_mut()
-                .zip((1.0 + p).to_bits().to_le_bytes())
-            {
-                *k ^= x;
-            }
-        }
-    }
-    Some((frame, runs))
-}
-
-/// The text mark the item `id` draws in `frame`.
-fn text_mark<'a>(
-    frame: &'a deep_canvas_marks::scene::Frame,
-    id: &str,
-) -> Option<&'a Arc<deep_canvas_marks::scene::Drawn>> {
-    frame.layers.iter().flat_map(|l| l.marks.iter()).find(
-        |m| matches!(&m.mark, deep_canvas_marks::scene::Mark::Text { item, .. } if item == id),
-    )
-}
-
-/// #1968: the film block's `diffs`, each text diff at the session's time: its progress, and each
-/// token of either code item once (`<item>#tok:k`), a kept one naming both, with its box in the
-/// document and its opacity in the diff.
-pub(crate) fn diff_report(
-    sched: &deep_canvas::schedule::Scheduler<'_>,
-    session: &DocSession,
-) -> Map<String, Value> {
-    use deep_canvas_marks::diff::{self, Side};
-    let mut out = Map::new();
-    let Some(program) = crate::film::program_of(sched, session) else {
-        return out;
-    };
-    let drawing = session
-        .value(sched, "marks2d.frame", None)
-        .and_then(|v| v.as_typed::<Drawing>());
-    let t = session.t();
-    for (b, d) in program
-        .betweens
-        .iter()
-        .filter_map(|b| Some((b, b.diff.as_ref()?)))
-    {
-        let p = b.progress(t);
-        let pieces = drawing
-            .as_deref()
-            .and_then(|drawing| {
-                let a = Side::of(text_mark(&drawing.frame, &b.from)?, &d.old)?;
-                let z = Side::of(text_mark(&drawing.frame, &b.to)?, &d.new)?;
-                Some(diff::pieces(
-                    &a,
-                    &z,
-                    &d.matching,
-                    &diff::moved(&a, &z, &d.matching, p),
-                ))
-            })
-            .unwrap_or_default();
-        let name = |item: &str, k: Option<usize>| k.map(|k| format!("{item}#tok:{k}"));
-        let tokens: Vec<Value> = pieces
-            .iter()
-            .map(|q| {
-                json!({"from": name(&b.from, q.from), "to": name(&b.to, q.to), "box": q.bbox, "opacity": q.opacity})
-            })
-            .collect();
-        out.insert(b.id.clone(), json!({"progress": p, "tokens": tokens}));
-    }
-    out
-}
-
-/// Each vector at t, drawn as its lowering draws it (#1162; Vector and formula `vector@1`): the whole
-/// outline marks2d draws for it gives way to each of its paths, so a glyph's counters stay open
-/// (#220), and while it writes on, to each path as the lowering writes it at the item's evaluated
-/// progress (outline first, then fill); from the SVG the evidence store's holder inlined, in the
-/// look's roles. `None` when the frame draws no vector.
-fn written_vectors(
-    sched: &deep_canvas::schedule::Scheduler<'_>,
-    session: &DocSession,
-    doc: &Value,
-    frame: &deep_canvas_marks::scene::Frame,
-) -> Option<deep_canvas_marks::scene::Frame> {
-    use deep_canvas::schedule::core_ops::Fields;
-    use deep_canvas_marks::path::Verb;
-    use deep_canvas_marks::scene::{Drawn, Fill, Line, Mark, Rgb};
-    use deep_canvas_vector::{lower, svg};
-    type Written = (Vec<Verb>, Option<(Rgb, f64)>, Option<(Rgb, f64, f64)>);
-    let rgb = |role: Option<&str>| -> Option<Rgb> {
-        let c = session.look().get(role?)?.as_array()?;
-        let channel = |i: usize| c.get(i)?.as_u64().and_then(|v| u8::try_from(v).ok());
-        Some([channel(0)?, channel(1)?, channel(2)?])
-    };
-    let mut swap: BTreeMap<&str, Vec<Written>> = BTreeMap::new();
-    let mut mix = [0u8; 8];
-    for (id, item) in doc["items"].as_object()? {
-        if item["kind"].as_str() != Some("vector@1") {
-            continue;
-        }
-        // With motion's edits folded in, as marks2d reads them.
-        let Some(fields) = session
-            .read(sched, "core.fields", Some(id))
-            .and_then(|(v, _)| v.as_typed::<Fields>())
-            .map(|f| f.to_json())
-        else {
-            continue;
-        };
-        let params = &fields["params"];
-        let progress = params
-            .pointer("/write_on/progress")
-            .and_then(Value::as_f64)
-            .unwrap_or(1.0);
-        let (Some(src), Some(map)) = (
-            params.pointer("/outline/svg").and_then(Value::as_str),
-            params.as_object(),
-        ) else {
-            continue;
-        };
-        let classes: Vec<String> = params["parts"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(Value::as_str)
-            .map(str::to_string)
-            .collect();
-        let (Ok(svg), Ok(colors)) = (
-            svg::import(src.as_bytes(), &classes, svg::Twin::Honest),
-            lower::colors(id, map),
-        ) else {
-            continue;
-        };
-        // In the item's own units: marks2d placed its outline at the mark's offset.
-        let mut local = fields.clone();
-        if let Some(m) = local.as_object_mut() {
-            m.remove("at");
-        }
-        let mut paths = Vec::new();
-        for (_, part) in lower::lower(id, &local, &svg, &colors, lower::Write::Honest) {
-            let p = &part["params"];
-            let Some(verbs) = p["d"].as_str().and_then(deep_canvas_marks::path::parse) else {
-                continue;
-            };
-            let paint = |k: &str| -> Option<(Rgb, f64)> {
-                let f = p.pointer(&format!("/paint/{k}"))?;
-                Some((
-                    rgb(f["role"].as_str())?,
-                    f["opacity"].as_f64().unwrap_or(1.0),
-                ))
-            };
-            let width = p.pointer("/paint/stroke/width").and_then(Value::as_f64);
-            let stroke = paint("stroke").map(|(c, o)| (c, o, width.unwrap_or(1.0)));
-            paths.push((verbs, paint("fill"), stroke));
-        }
-        for (m, b) in mix.iter_mut().zip(progress.to_bits().to_le_bytes()) {
-            *m ^= b;
-        }
-        swap.insert(id.as_str(), paths);
-    }
-    if swap.is_empty() {
-        return None;
-    }
-    let shift = |v: &Verb, [dx, dy]: [f64; 2]| {
-        let s = |p: [f64; 2]| [p[0] + dx, p[1] + dy];
-        match *v {
-            Verb::Move(p) => Verb::Move(s(p)),
-            Verb::Line(p) => Verb::Line(s(p)),
-            Verb::Quad(a, b) => Verb::Quad(s(a), s(b)),
-            Verb::Cubic(a, b, c) => Verb::Cubic(s(a), s(b), s(c)),
-            Verb::Close => Verb::Close,
-        }
-    };
-    let mut frame = frame.clone();
-    for layer in &mut frame.layers {
-        fn swapped<'m, 's>(
-            m: &'m Drawn,
-            swap: &'s BTreeMap<&str, Vec<Written>>,
-        ) -> Option<(&'m String, [f64; 2], &'s Vec<Written>)> {
-            match &m.mark {
-                Mark::Path { item, offset, .. } => {
-                    swap.get(item.as_str()).map(|p| (item, *offset, p))
-                }
-                _ => None,
-            }
-        }
-        if !layer.marks.iter().any(|m| swapped(m, &swap).is_some()) {
-            continue;
-        }
-        layer.marks = layer
-            .marks
-            .iter()
-            .flat_map(|m| match swapped(m, &swap) {
-                None => vec![m.clone()],
-                // The whole outline unpainted first, so the item keeps its box in the view
-                // while its write hasn't reached it all.
-                Some((item, offset, paths)) => std::iter::once(match &m.mark {
-                    Mark::Path { geometry, .. } => (geometry.verbs.clone(), None, None),
-                    _ => (Vec::new(), None, None),
-                })
-                .chain(paths.iter().cloned())
-                .map(|(verbs, fill, stroke)| {
-                    Arc::new(Drawn {
-                        mark: Mark::Shape {
-                            item: item.clone(),
-                            verbs: verbs.iter().map(|v| shift(v, offset)).collect(),
-                            fill: fill.map(|(c, o)| (Fill::Solid(c), o)),
-                            stroke: stroke.map(|(c, o, w)| Line {
-                                width: w,
-                                paint: Fill::Solid(c),
-                                opacity: o,
-                                dashes: None,
-                                profile: None,
-                            }),
-                        },
-                        clip: m.clip,
-                        scopes: m.scopes.clone(),
-                    })
-                })
-                .collect(),
-            })
-            .collect();
-        for (k, b) in layer.key.0.iter_mut().zip(mix) {
-            *k ^= b;
-        }
-    }
-    Some(frame)
-}
-
-/// What the frame's operators left in a session to draw; `None` before it has a document.
+/// What a session's frame draws, as [`deep_play::drawing::drawing_of`] reads it, with this build's
+/// film placement (#466).
 pub(crate) fn drawing_of(
     sched: &deep_canvas::schedule::Scheduler<'_>,
     session: &DocSession,
 ) -> Option<Painted> {
-    let doc = session.document()?;
-    let mut drawing = session
-        .value(sched, "marks2d.frame", None)
-        .and_then(|v| v.as_typed::<Drawing>());
-    // #402: each cell grid's rows, drawn through the one shaper over the frame's marks.
-    let grids = cell_grids(sched, session, doc);
-    if let (Some(d), false) = (&mut drawing, grids.is_empty()) {
-        let mut frame = d.frame.clone();
-        frame.layers.push(deep_canvas_marks::scene::Layer {
-            id: "cells".into(),
-            marks: grids.into_iter().map(Arc::new).collect(),
-            key: deep_canvas_marks::key::ContentKey([0; 16]),
-        });
-        *d = Arc::new(Drawing {
-            frame,
-            runs: d.runs.clone(),
-            animated: d.animated.clone(),
-            built: d.built,
-            damage: Vec::new(),
-            basis: None,
-        });
-    }
-    if let Some(d) = &mut drawing {
-        if let Some(frame) = morphed_vectors(sched, session, doc, &d.frame) {
-            *d = Arc::new(Drawing {
-                frame,
-                runs: d.runs.clone(),
-                animated: d.animated.clone(),
-                built: d.built,
-                damage: Vec::new(),
-                basis: None,
-            });
-        }
-        if let Some(frame) = written_vectors(sched, session, doc, &d.frame) {
-            *d = Arc::new(Drawing {
-                frame,
-                runs: d.runs.clone(),
-                animated: d.animated.clone(),
-                built: d.built,
-                damage: Vec::new(),
-                basis: None,
-            });
-        }
-        if let Some((frame, units)) = diffed_code(sched, session, &d.frame) {
-            let mut runs = d.runs.clone();
-            runs.extend(units);
-            *d = Arc::new(Drawing {
-                frame,
-                runs,
-                animated: d.animated.clone(),
-                built: d.built,
-                damage: Vec::new(),
-                basis: None,
-            });
-        }
-    }
-    let status = session
-        .value(sched, "text.status", None)
-        .and_then(|v| v.as_typed::<StatusDrawing>());
-    let side = |k: usize| doc["size"][k].as_f64().unwrap_or(1.0);
-    let boxes = match drawing {
-        Some(_) => Vec::new(),
-        None => core_boxes(sched, session, doc),
-    };
-    Some(Painted {
-        drawing,
-        boxes,
-        status,
-        size: [side(0), side(1)],
-    })
+    deep_play::drawing::drawing_of(sched, session, &crate::film::program_of)
+}
+
+/// Each text diff's tokens at the session's time, for the film block (#1968).
+pub(crate) fn diff_report(
+    sched: &deep_canvas::schedule::Scheduler<'_>,
+    session: &DocSession,
+) -> Map<String, Value> {
+    deep_play::drawing::diff_report(sched, session, &crate::film::program_of)
 }
 
 /// A value's Debug text, as a diagnostic shows it; never a digest's input. A test build with

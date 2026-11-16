@@ -12,10 +12,10 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::rc::Rc;
 
 use deep_canvas_sandbox::rewrite::{self, BLOCK, FUEL, GLOBAL, PAGES, START};
+use deep_sandbox_wasmtime::Val;
 use deep_sandbox_wasmtime::{Call, Faults, Runner};
 use serde_json::{json, Map, Value};
 use wasmparser::{ExternalKind, Parser, Payload, ValType};
-use wasmtime::Val;
 
 use crate::bake::{self, Range};
 pub use crate::bake::{handed, HANDED};
@@ -428,7 +428,7 @@ pub struct World {
 
 pub type Failed = Value;
 
-mod methods;
+mod world_impl;
 
 /// The planted replay's change: the first value of the item's first array, an i32 plus one, an
 /// f64 (or a vector's first component) to the next f64 above it, a bool flipped.

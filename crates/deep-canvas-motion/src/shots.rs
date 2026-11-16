@@ -1172,18 +1172,7 @@ fn time(v: Option<&Value>, ctx: &Ctx, path: &str) -> Result<i64, Refused> {
     crate::doc::time_of(v, ctx, path)
 }
 
-/// The fields of a pose a channel may not write while an unkeyed shot holds its camera.
-const POSE_FIELDS: [&str; 7] = [
-    "target",
-    "position",
-    "orbit",
-    "view_width",
-    "roll",
-    "fov",
-    "zoom",
-];
-
-mod plan;
+mod pose_fields;
 
 impl Shot {
     /// The eased share of the move at t.
@@ -1413,8 +1402,9 @@ pub fn posed(doc: &Value, t: i64) -> Option<Value> {
     }
     let program = Program::compile(doc.as_object()?).ok()?;
     let plan = program.shots.as_deref()?;
-    let id = doc.get("camera")?.as_str()?;
-    let cam = plan.camera(id)?;
+    // #508: the shown shot's camera, the envelope's by default.
+    let cam = plan.showing(doc, plan.camera(doc.get("camera")?.as_str()?)?, t);
+    let id = plan.cameras[cam].id.as_str();
     let mut state = program.state();
     program.evaluate(t, Validity::Full, &mut state);
     let keyed = |c: usize| plan.keyed_pose(c, &program, &state);
@@ -1431,6 +1421,7 @@ pub fn posed(doc: &Value, t: i64) -> Option<Value> {
         )
         .pose;
     let mut out = doc.clone();
+    out["camera"] = json!(id);
     let params = out
         .pointer_mut(&format!("/items/{id}/params"))?
         .as_object_mut()?;
@@ -1440,10 +1431,69 @@ pub fn posed(doc: &Value, t: i64) -> Option<Value> {
     params.insert("position".into(), json!(pose.position));
     params.insert("target".into(), json!(pose.target));
     params.insert("roll".into(), json!(pose.roll));
+    // #457: a lens gives its own field of view; the two together are refused.
     if pose.perspective() {
-        params.insert("fov".into(), json!(pose.fov));
+        if !params.contains_key("lens") {
+            params.insert("fov".into(), json!(pose.fov));
+        }
     } else {
         params.insert("view_width".into(), json!(pose.view_width));
     }
     Some(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const S: i64 = FLICKS_PER_SECOND;
+
+    /// A stages control whose stage `b`, entered at 2 s, names a shot on `second`.
+    fn two_stages(second: &str) -> Value {
+        let cam = |azimuth: f64| {
+            json!({"kind": "camera@1", "params": {"projection": "perspective", "target": [0, 0, 0],
+                "orbit": {"azimuth": azimuth, "elevation": 10, "distance": 10}, "fov": 40}})
+        };
+        json!({
+            "transport": {"span": "6s"},
+            "camera": "cam",
+            "items": {"cam": cam(0.0), "side": cam(90.0)},
+            "controls": {"steps": {"kind": "stages", "class": "document", "default": "a", "stages": {
+                "a": {"label": "A", "shot": "a"}, "b": {"label": "B", "shot": "b"}}}},
+            "shots": {
+                "a": {"camera": "cam", "move": "hold", "join": "cut"},
+                "b": {"camera": second, "move": "hold", "target": [1, 0, 0], "orbit": {"distance": 4}, "join": "cut"},
+            },
+            "track": [{"t": 2 * S, "control": "steps", "value": "b"}],
+        })
+    }
+
+    /// The camera the posed document draws through, and whether its eye is `want` within 1e-9 m.
+    fn eye(doc: &Value, want: Option<Vec3>) -> (String, bool) {
+        let id = doc["camera"].as_str().unwrap().to_string();
+        let eye = &doc["items"][&id]["params"]["position"];
+        let at =
+            want.is_some_and(|w| (0..3).all(|k| (eye[k].as_f64().unwrap() - w[k]).abs() < 1e-9));
+        (id, at)
+    }
+
+    #[test]
+    fn the_picture_follows_the_shown_shots_camera() {
+        // b's pose: target [1, 0, 0] at distance 4 along the camera's own orbit direction.
+        let b = |az: f64| Some(add([1.0, 0.0, 0.0], scale(orbit_direction(az, 10.0), 4.0)));
+        let two = two_stages("side");
+        let (before, _) = eye(&posed(&two, S).unwrap(), None);
+        assert_eq!(before, "cam", "before b's entry the envelope camera shows");
+        assert_eq!(
+            eye(&posed(&two, 3 * S).unwrap(), b(90.0)),
+            ("side".to_string(), true),
+            "after b's entry the picture is drawn through b's camera, posed as b frames it"
+        );
+        // One camera: the envelope camera, posed by the stage shown, as before.
+        let one = two_stages("cam");
+        assert_eq!(
+            eye(&posed(&one, 3 * S).unwrap(), b(0.0)),
+            ("cam".to_string(), true)
+        );
+    }
 }

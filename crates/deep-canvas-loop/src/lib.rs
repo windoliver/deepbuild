@@ -10,6 +10,8 @@ pub mod exposure;
 mod fixtures;
 pub mod framing;
 pub mod noise;
+mod occluded;
+mod paths;
 mod pixels;
 pub mod review;
 pub mod scale;
@@ -30,7 +32,7 @@ pub const KIND: &str = "geometry.shading";
 /// The wrong programs #453's and #1935's criteria plant in geometry.shading, and #1938's in
 /// render.contrast, each reachable only through a proof surface's `planted`, which the hub puts in
 /// the check's input.
-pub const PLANTED: [&str; 10] = [
+pub const PLANTED: [&str; 16] = [
     "no_weld",
     "one_winding_sum",
     "degenerate_exact_zero",
@@ -42,6 +44,13 @@ pub const PLANTED: [&str; 10] = [
     "uv_overlap_from_boxes",
     // #1938's: render.contrast holds text to 3:1.
     contrast::PLANTED_MIN_3,
+    // #457's, in camera.framing's occluded share and camera paths.
+    occluded::PLANTED_ADD_OCCLUDES,
+    occluded::PLANTED_BY_ORDER,
+    occluded::PLANTED_CUT_WHOLE,
+    paths::PLANTED_HALF_DIAGONAL,
+    paths::PLANTED_SAMPLED,
+    paths::PLANTED_SWEEP_SAMPLES,
 ];
 
 /// The most IDs a result lists per field.
@@ -467,16 +476,11 @@ pub fn report(lowered: &Value, input: &Value) -> Report {
         }
         let prims: Vec<&Prim> = read.iter().map(|(_, p)| p).collect();
         let c = count::count(&prims, &opts);
-        let tris: Vec<[count::V3; 3]> = prims
-            .iter()
-            .flat_map(|p| {
-                p.indices
-                    .as_chunks::<3>()
-                    .0
-                    .iter()
-                    .map(|t| t.map(|i| p.positions[i as usize]))
-            })
-            .collect();
+        let mut tris: Vec<[count::V3; 3]> = Vec::with_capacity(c.triangles);
+        for p in &prims {
+            let corners = |t: &[u32; 3]| t.map(|i| p.positions[i as usize]);
+            tris.extend(p.indices.as_chunks::<3>().0.iter().map(corners));
+        }
         let hidden: Vec<usize> = measures::hidden(&tris)
             .into_iter()
             .enumerate()

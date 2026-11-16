@@ -1563,7 +1563,7 @@ impl Program {
                         Iv::new(seconds(a) - e, seconds(b) + e)
                     }
                     Src::Channel(c) => {
-                        channel_window(&self.motion.channels[c], a, b, value(c, a), value(c, b))
+                        channel_window(&self.motion.channels[c], 0, a, b, value(c, a), value(c, b))
                     }
                     Src::Base(base) => Iv::point(base),
                 })
@@ -2585,15 +2585,15 @@ fn layouts(
 /// A keyed channel's bound over the flicks [a, b], given its values there: those and every key
 /// inside, every value a segment that overlaps the window reaches, widened by its modifiers.
 /// Only for a channel [`channel_bound`] settles.
-fn channel_window(c: &doc::Channel, a: i64, b: i64, at_a: f64, at_b: f64) -> Iv {
+fn channel_window(c: &doc::Channel, comp: usize, a: i64, b: i64, at_a: f64, at_b: f64) -> Iv {
     let keys = &c.curve.keys;
     let (mut lo, mut hi) = (at_a.min(at_b), at_a.max(at_b));
     for (i, k) in keys.iter().enumerate() {
         if (a..=b).contains(&k.t) {
-            (lo, hi) = (lo.min(k.value[0]), hi.max(k.value[0]));
+            (lo, hi) = (lo.min(k.value[comp]), hi.max(k.value[comp]));
         }
         if let Some(next) = keys.get(i + 1).filter(|n| k.t < b && n.t > a) {
-            for (v, _) in segment_reach(k, next, 0) {
+            for (v, _) in segment_reach(k, next, comp) {
                 (lo, hi) = (lo.min(v), hi.max(v));
             }
         }
@@ -2662,15 +2662,7 @@ fn pose(slots: &[f64], first: usize) -> crate::constraint::Pose {
     }
 }
 
-/// Slots `first + 3·group ..+3` of each group in `groups`.
-fn groups(first: usize, groups: &[usize]) -> Vec<usize> {
-    groups
-        .iter()
-        .flat_map(|g| first + 3 * g..first + 3 * g + 3)
-        .collect()
-}
-
-mod constraints;
+mod groups;
 
 impl Program {
     /// Whether an evaluation may write any slot in `slots` beyond its base: a channel, a

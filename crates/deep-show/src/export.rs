@@ -20,6 +20,7 @@ mod page;
 mod pdf;
 #[cfg(feature = "test-export-guards")]
 mod test_guards;
+mod web;
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -68,6 +69,14 @@ pub enum Guard {
     PageTargetsOnImage,
     /// #468: the glTF export drops a camera's lens shift without a warning.
     GltfDropsShift,
+    /// #172: the web export writes the export's time into the index page.
+    WebIndexExportTime,
+    /// #172: the web export writes a test variant of the player, which alone has probe().
+    WebProbeTestVariant,
+    /// #172: the web player's device request asks for the adapter's own limits.
+    WebRequestsAdapterLimits,
+    /// #172: the web player writes a fragment `control.<ID>=<value>` as an input entry.
+    WebFragmentWritesEntry,
     /// A wrong encoder, muxer or reader in the helper processes, by its name there.
     Codec(&'static str),
 }
@@ -127,6 +136,10 @@ pub(crate) fn planted(name: &str) -> Option<Planted> {
         "page_keys_by_picture" => Planted::Export(G::PageKeysByPicture),
         "page_targets_on_image" => Planted::Export(G::PageTargetsOnImage),
         "gltf_drops_shift" => Planted::Export(G::GltfDropsShift),
+        "web_index_export_time" => Planted::Export(G::WebIndexExportTime),
+        "web_probe_test_variant" => Planted::Export(G::WebProbeTestVariant),
+        "web_requests_adapter_limits" => Planted::Export(G::WebRequestsAdapterLimits),
+        "web_fragment_writes_entry" => Planted::Export(G::WebFragmentWritesEntry),
         other => Planted::Export(G::Codec(CODEC_PLANTS.iter().find(|p| **p == other)?)),
     })
 }
@@ -539,8 +552,13 @@ fn pair_of(v: &Value) -> Option<(EvalTime, EvalTime)> {
     Some((at(&a[0])?, at(&a[1])?))
 }
 
+/// The software adapter's refusal: no adapter draws without a GPU here (#230).
+pub(crate) fn no_software_adapter() -> Value {
+    json!({"outcome": "refused", "code": "software_adapter_unavailable", "adapter": "software",
+        "why": "no software adapter opens in this build (#230); the frames draw and hash on the GPU only"})
+}
+
 mod run;
-pub(crate) use run::*;
 
 impl Hub<'_> {
     /// `session`: a document's session state, its selection and view inputs, after `set`

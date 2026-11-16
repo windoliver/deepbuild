@@ -1,11 +1,5 @@
 use super::*;
 
-/// The software adapter's refusal: no adapter draws without a GPU here (#230).
-pub(crate) fn no_software_adapter() -> Value {
-    json!({"outcome": "refused", "code": "software_adapter_unavailable", "adapter": "software",
-        "why": "no software adapter opens in this build (#230); the frames draw and hash on the GPU only"})
-}
-
 impl Hub<'_> {
     /// `export` with an `out`: the job checked, the readiness gate passed before anything is
     /// written, every shard rendered, the target's writer handed the frames and samples, and
@@ -69,7 +63,12 @@ impl Hub<'_> {
         }
     }
 
-    fn export_inner(&mut self, job: &Job, mut doc: Value, scratch: &Path) -> Result<Value, Value> {
+    pub(super) fn export_inner(
+        &mut self,
+        job: &Job,
+        mut doc: Value,
+        scratch: &Path,
+    ) -> Result<Value, Value> {
         let refuse = |code: &str| json!({"code": code});
         if job.software {
             return Err(no_software_adapter());
@@ -80,6 +79,10 @@ impl Hub<'_> {
         // #169: the playable page, the export module's own writer outside export.target@1.
         if job.codec == "page" {
             return self.export_page(job, &doc);
+        }
+        // #172: the web player's bundle, the export module's own writer outside export.target@1.
+        if job.codec == "web" {
+            return self.export_web(job, &doc);
         }
         // #468: a still as one glTF file, outside export.target@1 (Export: glTF).
         if job.codec == "gltf" {
@@ -749,7 +752,7 @@ impl Hub<'_> {
 
     /// The readiness gate: every strip's asset, and every asset an item probes, in the store;
     /// the first missing one named, with the strip's start.
-    fn ready(&mut self, doc: &mut Value) -> Result<(), Value> {
+    pub(super) fn ready(&mut self, doc: &mut Value) -> Result<(), Value> {
         let strips: Vec<(String, String, Option<i64>)> = doc
             .get("strips")
             .and_then(Value::as_object)
@@ -782,7 +785,7 @@ impl Hub<'_> {
     }
 
     /// Planted: a new current revision of `id` holding a baked channel, written by the export.
-    fn bake_back(&mut self, id: &str, doc: &Value) {
+    pub(super) fn bake_back(&mut self, id: &str, doc: &Value) {
         let mut baked = doc.clone();
         baked["channels"]["baked"] = json!({"target": "items/baked", "type": "f32", "keys": {}});
         self.push_revision(id, baked);

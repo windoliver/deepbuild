@@ -861,6 +861,106 @@ workloads['lens-focus'] = () => {
   }
 };
 
+// #508: a figure's budgets at 1080p on a release `deep-gpu`, the documents tests/acceptance/508/ac4-budgets.test.ts
+// draws: the turbofan fixture at 120 fps with its throttle moved to the top at 1 s, the redrawn frame's `wall_ms`
+// (frame 120 must differ from the untouched run's and frame 119 must not); 500 boxes in five assemblies taken apart
+// while the camera orbits, the worst `wall_ms` of frames 1 to 599 at 120 fps; and a projected inset over the left half
+// of a floor, lit and unlit, less the floor alone, the difference of the median `gpu_ms` over 120 frames. One warm-up
+// run and five, each a fresh process.
+const HD = [1920, 1080];
+const SKY = { kind: 'sky@1', params: { top: [0.15, 0.3, 0.75, 1], low: [0.45, 0.6, 0.85, 1], ambient_top: [0.25, 0.25, 0.25], ambient_low: [0.1, 0.1, 0.1] } };
+const asSession = (doc) => {
+  const d = structuredClone(doc);
+  d.layers = { main: { writer: 'agent-a', title: 'Main', order: 'a0' } };
+  for (const item of Object.values(d.items)) item.layer = 'main';
+  return d;
+};
+function partsDoc() {
+  const items = {
+    cam: { kind: 'camera@1', params: { projection: 'perspective', target: [0, 1, 0], orbit: { azimuth: 0, elevation: 20, distance: 14 }, fov: 40, near: 0.05, far: 200 } },
+    sky: SKY,
+    sun: { kind: 'light.sun@1', params: { illuminance: 3, color: [1, 1, 1], shadow: false }, at: { rot: [-45, 30, 0] } },
+    metal: { kind: 'material@1', params: { base_color: [0.6, 0.6, 0.65, 1], roughness: 0.5 } },
+  };
+  const assemblies = {};
+  for (let a = 0; a < 5; a++) assemblies[`a${a}`] = { parent: a === 0 ? null : 'a0', at: { pos: [0, 0, 0] }, apart: a === 0 ? [0, 0, 0] : [0, 0.6 * a, 0], order: a, value: 0 };
+  for (let k = 0; k < 500; k++) {
+    const a = Math.floor(k / 100), i = k % 100;
+    items[`p${String(k).padStart(3, '0')}`] = { kind: 'mark.box@1', params: { size: [0.3, 0.12, 0.3] }, at: { pos: [(i % 10) * 0.4 - 1.8, a * 0.2, Math.floor(i / 10) * 0.4 - 1.8] }, material: 'metal', parent: `a${a}` };
+  }
+  const keys = { k0: { t: '0s', value: 0, interp: 'hold' }, k1: { t: '1s', value: 1, interp: 'hold' }, k2: { t: '3s', value: 0, interp: 'hold' } };
+  return asSession({
+    format: 1, id: 'parts-500', profile: 'figure', title: 'Five hundred parts', description: 'A 500-part figure taken apart while the camera orbits.',
+    size: HD, camera: 'cam', seed: 508, transport: { span: '5s' }, requires: { modules: { scene3d: '^1' } }, budget: { class: 'figure' },
+    assemblies, items,
+    channels: {
+      spin: { target: 'items/cam/params/orbit/azimuth', type: 'f32', keys: { k0: { t: '0s', value: 0, interp: 'linear' }, k1: { t: '5s', value: 180, interp: 'linear' } } },
+      take: { target: 'assemblies/apart', type: 'f32', mode: 'follow', follow: { source: { keys }, model: { transition: { span: '1s', interp: 'linear' } } } },
+    },
+  });
+}
+function insetDoc(shading) {
+  const items = {
+    cam: { kind: 'camera@1', params: { projection: 'orthographic', position: [0, 20 * Math.sin(Math.PI / 3), 20 * Math.cos(Math.PI / 3)], target: [0, 0, 0], view_width: 19.2, near: 0.05, far: 200 } },
+    sky: SKY,
+    sun: { kind: 'light.sun@1', params: { illuminance: 3, color: [1, 1, 1], shadow: false }, at: { rot: [-50, 30, 0] } },
+    ground: { kind: 'material@1', params: { base_color: [0.4, 0.4, 0.4, 1], roughness: 0.9 } },
+    floor: { kind: 'mark.box@1', params: { size: [40, 0.1, 40] }, at: { pos: [0, -0.05, 0] }, material: 'ground' },
+  };
+  if (shading) {
+    items.map = {
+      kind: 'inset@1', parent: 'floor', at: { pos: [-4.8, 0, 0] },
+      params: { size: [9.6, 14], px_per_unit: 20, content: { ground: { kind: 'rect@1', order: 'a0', params: { box: [0, 0, 192, 280], paint: { fill: { role: 'stone' } } } } }, project: { shading } },
+    };
+  }
+  return asSession({
+    format: 1, id: `inset-${shading ?? 'none'}`, profile: 'scene', title: 'A projected inset over half a frame', description: 'A floor with a projected inset over the left half of a 1080p frame.',
+    size: HD, camera: 'cam', seed: 508, transport: { span: '2s' }, requires: { modules: { scene3d: '^1', marks2d: '^1' } }, budget: { class: 'figure' }, items,
+  });
+}
+workloads['figure-budgets'] = () => {
+  const fingerprint = release('deep-gpu-layer', 'deep-gpu');
+  const look2d = JSON.parse(readFileSync(join(root, 'tests', 'acceptance', '465', 'fixtures', 'look.json'), 'utf8'));
+  const look = { ...look2d, id: 'figure-508', basis: 'physical', palette: { ...look2d.palette, night: '#101114', graphite: '#1b1d22', slate: '#8b8f97', stone: '#d9dde3' },
+    roles: { ...look2d.roles, ground: 'night', ink: 'graphite', muted: 'slate', stone: 'stone' }, tone_map: 'none', finish: [], deband: 'none', bloom: 'none', ao: 'none', ground_3d: { kind: 'none' } };
+  const fan = JSON.parse(readFileSync(join(root, 'tests', 'fixtures', 'figures', 'turbofan', 'figure.json'), 'utf8'));
+  const top = fan.controls.throttle.range[1];
+  const dir = mkdtempSync(join(tmpdir(), 'deep-canvas-bench-'));
+  try {
+    const write = (name, doc) => {
+      const path = join(dir, `${name}.json`);
+      writeFileSync(path, JSON.stringify(doc));
+      return path;
+    };
+    const fanDoc = write('turbofan', asSession(fan));
+    const track = [{ t: SEC, seq: 0, control: 'throttle', value: top, writer: 'you', player: 1 }];
+    const view = (doc, fps, frames, more = {}) => ({ call: 'view3d', doc, look, size: HD, fps, frames, timings: true, ...more });
+    const calls = [
+      view(fanDoc, 120, 181, { track }), view(fanDoc, 120, 181), view(write('parts', partsDoc()), 120, 600),
+      ...['lit', 'unlit', null].map((s) => view(write(`inset-${s ?? 'none'}`, insetDoc(s)), 60, 120)),
+    ];
+    const median = (xs) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
+    const measured = runs(() => {
+      const answer = once('deep-gpu', ['run'], { out: dir, calls });
+      const refused = answer.replies?.findIndex((r) => r.code);
+      if (answer.ok !== true || refused >= 0) throw Error(`deep-gpu answered ${JSON.stringify(answer.replies?.[refused] ?? answer).slice(0, 1500)}`);
+      const [tracked, untracked, parts, lit, unlit, bare] = answer.replies.map((r) => r.frames);
+      if (tracked[119].pixel_hash !== untracked[119].pixel_hash) throw Error('the turbofan: frame 119 differs before the throttle moves');
+      if (tracked[120].pixel_hash === untracked[120].pixel_hash) throw Error('the turbofan: frame 120 doesn\'t show the throttle moved at 1 s');
+      const plain = median(bare.map((f) => f.gpu_ms));
+      return {
+        redraw_wall_ms: tracked[120].wall_ms,
+        parts_wall_ms: Math.max(...parts.slice(1).map((f) => f.wall_ms)),
+        inset_lit_gpu_ms: Math.max(0, median(lit.map((f) => f.gpu_ms)) - plain),
+        inset_unlit_gpu_ms: Math.max(0, median(unlit.map((f) => f.gpu_ms)) - plain),
+      };
+    });
+    console.log(JSON.stringify({ task: 'canvas-figure-budgets', fingerprint, runs: measured }));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+};
+
 // #166: the water's GPU cost at 1080p on a release `deep-gpu`, each the difference of two sides' median `gpu_ms` over
 // 300 frames, the water against the same plate as a plain mirror (strength 1, blur 0, roughness 0), so the mirror's own
 // pass is in both: a 400 m lake filling the lower half of the frame (four waves, ripples, rain) seen level from 2 m, and
@@ -1193,6 +1293,7 @@ const EFFICIENCY = {
   'canvas-flares-mirrors': { finish_gpu_ms: (r) => r.finish_gpu_ms, flare_gpu_ms: (r) => r.flare_gpu_ms, mirror_share: (r) => r.mirror_share, indexed_target_bytes: (r) => r.indexed_target_bytes },
   'canvas-water': { lake_gpu_ms: (r) => r.lake_gpu_ms, waves_vertex_ms: (r) => r.waves_vertex_ms },
   'canvas-lens-focus': { dof_gpu_ms: (r) => r.dof_gpu_ms },
+  'canvas-figure-budgets': Object.fromEntries(['redraw_wall_ms', 'parts_wall_ms', 'inset_lit_gpu_ms', 'inset_unlit_gpu_ms'].map((k) => [k, (r) => r[k]])),
   'canvas-occlusion': { gpu_fall: (r) => r.gpu_fall, pyramid_declared_error: (r) => r.pyramid_declared_error },
   'canvas-water-shore': { shore_lake_gpu_ms: (r) => r.shore_lake_gpu_ms },
   'canvas-water-flow': { flow_sheet_gpu_ms: (r) => r.flow_sheet_gpu_ms },

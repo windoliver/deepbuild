@@ -1015,6 +1015,26 @@
       ]
     },
     {
+      "id": "canvas-figure-budgets",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "figure-budgets"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "redraw_wall_ms": 8.33,
+        "parts_wall_ms": 8.33,
+        "inset_lit_gpu_ms": 0.2,
+        "inset_unlit_gpu_ms": 0.3
+      },
+      "initialReason": "Issue #508 first measurement: the merge base has no figure fixtures, no view3d track and no such task. A release deep-gpu draws, at 1080p: the turbofan fixture at 120 fps with its throttle moved to the top at 1 s, the redrawn frame's wall ms; 500 boxes in five assemblies taken apart while the camera orbits, the worst frame's wall ms over 600 frames at 120 fps; and a projected inset over the left half of a floor, lit and unlit, less the floor alone, the difference of the median GPU ms over 120 frames. Five runs after a warm-up one, each a fresh process. canvas.mjs judge holds it on a reference Mac; tests/acceptance/508/ac4-budgets.test.ts holds the issue's numbers. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#508.822d5a2c"
+      ]
+    },
+    {
       "id": "canvas-water",
       "command": [
         "node",
@@ -1568,6 +1588,19 @@
       "initialReason": "Issue #169 first measurement (#169.e6c2fc38): the merge base has no playable page. One `deep-show run` exports a 2D walkthrough of four stages, an explode toggle and three finishes (24 states, 144 edges) as a page at 320 × 180 and 30 fps, each state's still and each edge's clip rendered through the export; it prints the receipt's timing.wall and bytes. The criterion's limits (the 1080p30 walkthrough under 4 minutes and 250 MB, the player under 100 KB) are judged by tests/acceptance/169/budgets.test.ts on a reference Mac. p50 and peak memory get a 50% margin against the merge base once main has this task.",
       "criteria": [
         "#169.e6c2fc38"
+      ]
+    },
+    {
+      "id": "web-export",
+      "command": [
+        "node",
+        "benchmarks/web.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #172 first measurement (#172.1e1f958d): the merge base has no web player. One `deep-show run` exports a 2D figure to the web and reads its bundle's player (the WebAssembly and JavaScript it is made of, fonts and assets aside), each compressed with Brotli at quality 11; it prints those bytes and the bundle's. The criterion's limits (the player under 12 MB compressed without fonts and assets, the lab's first frame under 3 s in Chrome, 60 fps at 1080p) are judged by tests/acceptance/172/budgets.test.ts on a reference Mac. p50 and peak memory get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#172.1e1f958d"
       ]
     },
     {

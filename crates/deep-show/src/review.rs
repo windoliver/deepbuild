@@ -173,12 +173,15 @@ impl Hub<'_> {
         let mut snapshots = Vec::new();
         let mut views = Vec::new();
         let mut shown: Vec<(Vec<u8>, Vec<Numbered>)> = Vec::new();
+        // #457: what drawing the ID view (its flat pass and numbers) adds to the render-back.
+        let mut id_view_ms = 0.0;
         for f in &frames {
             let snap = crate::snapshot::png(f.rgba.clone(), size);
             let sha = self.put(&snap)?;
             snapshots.push(
                 json!({"sha256": sha, "w": size[0], "h": size[1], "camera": camera, "t": f.t}),
             );
+            let started = std::time::Instant::now();
             // The check input's kept items that the table doesn't list are numbered too, with no mark.
             let mut table = self.id_table(&document, f, size);
             for k in r.check["keep"]
@@ -210,6 +213,7 @@ impl Hub<'_> {
                     .collect();
                 views.push(json!({"sha256": self.put(&png)?, "w": size[0], "h": size[1], "numbers": numbers}));
             }
+            id_view_ms += started.elapsed().as_secs_f64() * 1000.0;
             shown.push((f.rgba.clone(), view.items));
         }
         let asks: Vec<String> = match r.check["asks"].as_array() {
@@ -245,6 +249,7 @@ impl Hub<'_> {
             reading["id_views"] = Value::Array(views);
         }
         let mut m = row(r, "INCONCLUSIVE", Vec::new());
+        m.insert("timing".into(), json!({"id_view_ms": id_view_ms}));
         if let Some(words) = reply.get("unreadable") {
             reading["why"] = json!(format!(
                 "the model couldn't read its images: {}",

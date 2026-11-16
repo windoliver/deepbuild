@@ -1,13 +1,5 @@
 use super::*;
 
-pub(super) struct Window3 {
-    pub(super) size: [u32; 2],
-    pub(super) view: [u32; 2],
-    pub(super) page: [u8; 3],
-    /// The shell's question card over the view (#177).
-    pub(super) card: Option<crate::window::Card>,
-}
-
 pub(super) struct Args {
     pub(super) doc: Value,
     pub(super) look: Look3,
@@ -229,6 +221,11 @@ pub(super) fn parse(call: &Value, planted: Option<Planted>) -> Result<Args, Valu
         .ok_or_else(|| bad("size is [w, h]"))?;
     if let Some(d) = doc.as_object_mut() {
         d.insert("size".into(), json!(size));
+        // #508: an input track applied to the document's controls on the frame clock, as a played
+        // form carries it inline (the motion module reads `track`).
+        if let Some(track) = call.get("track").filter(|t| !t.is_null()) {
+            d.insert("track".into(), track.clone());
+        }
     }
     // #443: each vector item's SVG from the store, inlined as deep_show's hub inlines it
     // (`params.outline.svg`), which vector's outline source reads.
@@ -261,13 +258,17 @@ pub(super) fn parse(call: &Value, planted: Option<Planted>) -> Result<Args, Valu
         };
         patches.push((frame, writer.to_string(), p["ops"].clone()));
     }
-    let targets = call["targets"]
+    let mut targets = call["targets"]
         .as_array()
         .into_iter()
         .flatten()
         .filter_map(Value::as_str)
         .map(str::to_string)
         .collect::<BTreeSet<_>>();
+    // #508: a capture that names no targets keeps each captured frame's final picture.
+    if call.get("targets").is_none() && call.get("capture").is_some() {
+        targets.insert("final".into());
+    }
     if targets.iter().any(|t| {
         !matches!(
             t.as_str(),
@@ -283,12 +284,13 @@ pub(super) fn parse(call: &Value, planted: Option<Planted>) -> Result<Args, Valu
                 | "foam"
                 | "normal"
                 | "coc"
+                | "checks"
                 | "surface"
                 | "window_linear"
         )
     }) {
         return Err(bad(
-            "targets are final, linear, ids, pre_tone, dirt, scene, backdrop, depth, reflection, foam, normal, coc, surface and window_linear",
+            "targets are final, linear, ids, pre_tone, dirt, scene, backdrop, depth, reflection, foam, normal, coc, surface, window_linear and checks",
         ));
     }
     // A render-back draws as an export does, through the view your hand turned (#173).
@@ -846,4 +848,116 @@ pub(super) fn dirt_png(
         *p = [d, d, d, 1.0];
     }
     Ok(out)
+}
+
+/// The dirt image as the bloom's mix reads it at each pixel of a `size` frame, stretched over it:
+/// f32 RGBA with d in red, green and blue.
+pub(super) fn dirt_target(dirt: &deep_canvas_effects::interp::Image, size: [u32; 2]) -> Vec<u8> {
+    let mut out = Vec::with_capacity((size[0] * size[1] * 16) as usize);
+    for y in 0..size[1] {
+        for x in 0..size[0] {
+            let uv = [
+                (f64::from(x) + 0.5) / f64::from(size[0]),
+                (f64::from(y) + 0.5) / f64::from(size[1]),
+            ];
+            let d = dirt.sample(uv)[0] as f32;
+            for v in [d, d, d, 1.0] {
+                out.extend_from_slice(&v.to_le_bytes());
+            }
+        }
+    }
+    out
+}
+
+pub(crate) fn write_named(out: &str, bytes: &[u8], ext: &str) -> Result<String, Value> {
+    let name = hex(bytes);
+    std::fs::write(
+        std::path::Path::new(out).join(format!("{name}.{ext}")),
+        bytes,
+    )
+    .map_err(|e| refused("not_written", e.to_string()))?;
+    Ok(name)
+}
+
+/// Each label's glyphs, with their places in the core's glyph atlas, and the pages they sample,
+/// each written as an 8-bit grayscale PNG of its alpha named by its SHA-256.
+/// #468: each overlay's leader over the frame `bgra` (`size` px, premultiplied BGRA), its straight
+/// RGBA picture laid on by its coverage.
+pub(super) fn leaders_over(
+    overlays: &[deep_canvas_scene3d::scene::Overlay],
+    bgra: &mut [u8],
+    size: [u32; 2],
+) {
+    for l in overlays.iter().filter_map(|o| o.leader.as_ref()) {
+        let Some(p) = deep_canvas_scene3d::overlay::leader_picture(l) else {
+            continue;
+        };
+        let w = i64::from(p.size[0]);
+        for (k, s) in p.rgba.as_chunks::<4>().0.iter().enumerate() {
+            let (dx, dy) = (p.at[0] + k as i64 % w, p.at[1] + k as i64 / w);
+            let a = u32::from(s[3]);
+            if a == 0 || dx < 0 || dy < 0 || dx >= i64::from(size[0]) || dy >= i64::from(size[1]) {
+                continue;
+            }
+            let o = ((dy * i64::from(size[0]) + dx) * 4) as usize;
+            let d = &mut bgra[o..o + 4];
+            let over = |src: u8, dst: u8| {
+                ((u32::from(src) * a + u32::from(dst) * (255 - a) + 127) / 255) as u8
+            };
+            d[0] = over(s[2], d[0]);
+            d[1] = over(s[1], d[1]);
+            d[2] = over(s[0], d[2]);
+            d[3] = over(255, d[3]);
+        }
+    }
+}
+
+pub(super) fn labels_json(scene: &Scene, out: &str) -> Result<(Value, Value), Value> {
+    let mut labels = Vec::new();
+    let mut sampled = BTreeSet::new();
+    for l in scene.layers.iter().flat_map(|layer| &layer.labels) {
+        let glyphs: Vec<Value> = l
+            .glyphs
+            .iter()
+            .map(|g| {
+                let atlas = g.atlas.map(|a| {
+                    sampled.insert(a.page);
+                    json!({"page": a.page, "x": a.x, "y": a.y, "w": a.w, "h": a.h, "raster": g.raster})
+                });
+                json!({
+                    "font": format!("crates/deep-text/fonts/{}", g.file), "size": g.size, "id": g.id,
+                    "x": g.x, "y": g.y, "grapheme": g.grapheme, "atlas": atlas,
+                })
+            })
+            .collect();
+        labels.push(json!({"item": l.id, "glyphs": glyphs}));
+    }
+    let mut pages = Vec::new();
+    for page in sampled {
+        let bytes = &scene.pages[page as usize].bytes;
+        let mut png = Vec::new();
+        image::codecs::png::PngEncoder::new(&mut png)
+            .write_image(bytes, PAGE, PAGE, image::ExtendedColorType::L8)
+            .map_err(|e| refused("not_written", e.to_string()))?;
+        pages.push(json!({"page": page, "png": write_named(out, &png, "png")?}));
+    }
+    Ok((json!(labels), json!(pages)))
+}
+
+/// How far past the pixels a region's look covers its render still draws, px: what its finish
+/// and effects read around a pixel (#463).
+pub(super) const CROP_MARGIN: u32 = 48;
+
+/// #463: a look's covered px rectangle (`[x0, y0, x1, y1]`, inclusive) grown by [`CROP_MARGIN`],
+/// as the share of a `size` frame its render draws inside (Scene::crop).
+pub(super) fn crop_share(b: [u32; 4], size: [u32; 2]) -> [f64; 4] {
+    let lo = |v: u32| f64::from(v.saturating_sub(CROP_MARGIN));
+    let hi = |v: u32| f64::from(v + 1 + CROP_MARGIN);
+    let (w, h) = (f64::from(size[0]), f64::from(size[1]));
+    [
+        (lo(b[0]) / w).min(1.0),
+        (lo(b[1]) / h).min(1.0),
+        (hi(b[2]) / w).min(1.0),
+        (hi(b[3]) / h).min(1.0),
+    ]
 }

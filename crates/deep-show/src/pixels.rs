@@ -151,6 +151,7 @@ impl Hub<'_> {
             return Drawn::Elsewhere(json!({"code": "software_adapter", "drew": fingerprint}));
         }
         let mut frames = Vec::new();
+        let cost = self.light_cost.clone();
         for &t in at {
             // #493: a shot writes the camera's pose the frame is drawn through.
             let doc = crate::film::posed(document, t).unwrap_or_else(|| document.clone());
@@ -169,7 +170,9 @@ impl Hub<'_> {
             // #2513: the frame's light stays on the GPU, reduced there when the check reads it.
             let drawn = gpu
                 .draw_scene(&scene, &look, false)
-                .and_then(|(rgba, targets)| Some((rgba, targets, gpu.kept_light(short)?)));
+                .and_then(|(rgba, targets)| {
+                    Some((rgba, targets, gpu.kept_light(short, cost.clone())?))
+                });
             let Some((rgba, targets, reduce)) = drawn else {
                 return Drawn::Blocked(
                     json!({"code": "not_presented", "reason": "unsupported_platform", "t": t}),

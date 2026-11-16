@@ -311,7 +311,7 @@ impl<'a> Hub<'a> {
                         row
                     }
                     _ => self.judge(
-                        r,
+                        &with_brief_sweeps(r, c.brief.as_ref()),
                         &docs,
                         missing,
                         &read,
@@ -860,6 +860,7 @@ impl<'a> Hub<'a> {
         // #1183: each length mapping with the ratio it is drawn at, and whether any went unread.
         let (mut lengths, mut unchecked) = (Vec::new(), false);
         let mut results: Vec<Value> = Vec::new();
+        let mut timing = Map::new();
         // #1938: pixels that hold on another machine than the run's.
         let mut elsewhere: Vec<Value> = Vec::new();
         // #1938: the environment each deliverable's pixels were drawn in, by document.
@@ -966,20 +967,38 @@ impl<'a> Hub<'a> {
                         v["doc"] = json!(doc);
                         v
                     };
+                    // #457: the check's own time on the requirement, and its parts' times.
+                    let started = std::time::Instant::now();
                     // #1938: a pixel check runs on the frames drawn for it here, or not at all.
                     let out = match (check.frames, drawn.and_then(|d| d.get(doc))) {
-                        (Some((_, run)), Some(crate::pixels::Drawn::Frames(f, fp))) => {
+                        (Some((draws, run)), Some(crate::pixels::Drawn::Frames(f, fp))) => {
+                            if let Ok(mut c) = self.light_cost.lock() {
+                                *c = [0.0; 3];
+                            }
+                            add_timing(
+                                &mut timing,
+                                "times",
+                                (f.len() / usize::from(draws.max(1))) as f64,
+                            );
                             prints.push((doc.clone(), fp.clone()));
                             // #466: the captions the frames drew, read as texts by their names.
                             let picks: Vec<&str> = f
                                 .iter()
                                 .flat_map(|fr| fr.picks.values().map(String::as_str))
                                 .collect();
-                            run(
+                            let out = run(
                                 &self.with_caption_texts(&checked.lowered, &picks),
                                 &input,
                                 f,
-                            )
+                            );
+                            // What its reductions added on the GPU and read back.
+                            if let Ok(c) = self.light_cost.lock() {
+                                if c[2] > 0.0 {
+                                    add_timing(&mut timing, "gpu_ms", c[0]);
+                                    add_timing(&mut timing, "readback_bytes", c[1]);
+                                }
+                            }
+                            out
                         }
                         (Some(_), Some(crate::pixels::Drawn::Elsewhere(e))) => {
                             elsewhere.push(in_doc(e.clone()));
@@ -999,16 +1018,32 @@ impl<'a> Hub<'a> {
                         (None, _) => check
                             .report
                             .map(|run| {
-                                run(
-                                    &crate::played::with_track(
-                                        &checked.lowered,
-                                        &self.track_json(doc),
-                                    ),
-                                    &input,
-                                )
+                                let played = crate::played::with_track(
+                                    &checked.lowered,
+                                    &self.track_json(doc),
+                                );
+                                // #457: camera.framing times its occluded share and its camera
+                                // paths through this clock; the loop reads none of its own.
+                                if kind == deep_canvas_loop::framing::KIND {
+                                    let clock = || started.elapsed().as_secs_f64() * 1000.0;
+                                    let timer = deep_canvas_loop::framing::Timer::new(Some(&clock));
+                                    let out = deep_canvas_loop::framing::report_with(
+                                        &played, &input, &timer,
+                                    );
+                                    for (k, v) in timer.timing() {
+                                        add_timing(&mut timing, &k, v.as_f64().unwrap_or(0.0));
+                                    }
+                                    return out;
+                                }
+                                run(&played, &input)
                             })
                             .unwrap_or_default(),
                     };
+                    add_timing(
+                        &mut timing,
+                        "check_ms",
+                        started.elapsed().as_secs_f64() * 1000.0,
+                    );
                     for (id, r, actual) in out.raised {
                         let mut issue = raised_json(self, &kind, &m.name, &id, r);
                         issue["actual"] = actual;
@@ -1112,6 +1147,7 @@ impl<'a> Hub<'a> {
         }
         if registered.is_some_and(|(_, c)| c.report.is_some() || c.frames.is_some()) {
             row.insert("results".into(), Value::Array(results));
+            row.insert("timing".into(), Value::Object(timing));
         }
         // #1938: a pixel row names the environment it holds in: one fingerprint, or one a
         // deliverable where they differ.
@@ -1171,7 +1207,13 @@ impl<'a> Hub<'a> {
             .map(|(_, v)| v)
         {
             // #548: a logic item's program and its debug sidecar, beside a media item's bytes.
-            for at in ["/params/sha256", "/params/program", "/params/debug"] {
+            // #457: an image's or a video's own pixels, which camera.framing's raster reads.
+            for at in [
+                "/params/sha256",
+                "/params/program",
+                "/params/debug",
+                "/params/asset",
+            ] {
                 if let Some(sha) = item.pointer(at).and_then(Value::as_str) {
                     if let Some(b) = crate::evidence::read(&self.scenario.evidence, sha) {
                         out.insert(sha.to_string(), json!(deep_canvas::base64::encode(&b)));
@@ -1181,6 +1223,35 @@ impl<'a> Hub<'a> {
         }
         Value::Object(out)
     }
+}
+
+/// #457: camera.framing's `sweeps: from_brief` (its default) as the claim's brief's own
+/// `sweeps`, which it runs across; a brief with none sweeps nothing.
+fn with_brief_sweeps(r: &Requirement, brief: Option<&Value>) -> Requirement {
+    let mut check = r.check.clone();
+    if check["kind"] == deep_canvas_loop::framing::KIND
+        && check.get("sweeps").is_none_or(|s| s == "from_brief")
+    {
+        if let Some(m) = check.as_object_mut() {
+            match brief
+                .and_then(|b| b.get("sweeps"))
+                .filter(|s| s.is_object())
+            {
+                Some(s) => m.insert("sweeps".into(), s.clone()),
+                None => m.remove("sweeps"),
+            };
+        }
+    }
+    Requirement {
+        id: r.id.clone(),
+        check,
+    }
+}
+
+/// Adds `ms` (or a count) to a row's timing `key`, summed over its deliverables (#457).
+fn add_timing(timing: &mut Map<String, Value>, key: &str, v: f64) {
+    let was = timing.get(key).and_then(Value::as_f64).unwrap_or(0.0);
+    timing.insert(key.into(), json!(was + v));
 }
 
 /// #407: a film audit's or flicker check's row: BLOCKED where it can't decide (a script with no

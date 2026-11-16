@@ -2221,8 +2221,8 @@ fn check_id_maps(doc: &Value, issues: &mut Vec<Issue>) {
     }
 }
 
-mod assemblies;
-use assemblies::*;
+mod check_assemblies;
+use check_assemblies::*;
 
 /// A bound value's fields (Bound value).
 const BOUND_VALUE_FIELDS: &[&str] = &[

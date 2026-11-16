@@ -32,6 +32,7 @@ mod oit;
 mod op;
 mod planted;
 pub mod print;
+mod readouts;
 mod set;
 pub mod shadow;
 pub mod sss;
@@ -69,6 +70,7 @@ pub use crate::module::{
     LIGHT, PYRAMID_NS_PER_PX,
 };
 pub use crate::planted::Planted;
+pub use crate::readouts::{lay_over, readouts_as_labels};
 use crate::set::Set;
 use crate::surface::{Low, Surface, Upscale, LABEL_PASS, OUTLINE_PASS, SHARPEN_PASS, UPSCALE_PASS};
 
@@ -1501,436 +1503,8 @@ struct Uniforms {
     lobes: Written,
 }
 
-pub struct Renderer {
-    planted: Planted,
-    /// The buffer #1903's planted `uploads_every_transform` writes every item's transform into.
-    planted_transforms: Option<wgpu::Buffer>,
-    /// The diagnostic views' pipelines (#427), made on first use.
-    diag: Option<Box<diag::Pipes>>,
-    /// Motion blur by velocity (#419): its pipelines, and this frame's pass when it blurs.
-    motion: motion::MotionPass,
-    motion_frame: Option<motion::Frame>,
-    /// The core's velocity and emission targets (#431), built only while read, and this frame's
-    /// draws of them.
-    pub core: targets::Core,
-    velocity_frame: Option<motion::TargetFrame>,
-    emission_frame: Option<targets::EmissionFrame>,
-    epoch: u64,
-    /// The material maps' textures and bind groups (#423), and the look's default taps.
-    maps: maps::Store,
-    filter_taps: u8,
-    frame_buffer: wgpu::Buffer,
-    frame_bind: wgpu::BindGroup,
-    frame_layout: wgpu::BindGroupLayout,
-    /// Each material operator's pipeline, by [`op::key`], compiled the first time a prepared
-    /// scene holds it, or why it can't draw (#429).
-    materials: BTreeMap<u64, Result<op::MatOp, String>>,
-    /// Each material operator's group with one solid's maps, by (operator, maps) key.
-    op_binds: BTreeMap<(u64, u32), wgpu::BindGroup>,
-    /// Each material operator with a light response that a solid drew through, by key: its ID
-    /// and the time it last drew at (#485).
-    answering: BTreeMap<u64, (String, f64)>,
-    /// The time each operator last raised `light_response.range` at, so it raises once a time.
-    raised: BTreeMap<String, u64>,
-    /// The material operators that change nothing their parts shade with, by key: their parts
-    /// draw as their materials' own (#485).
-    plain_ops: BTreeSet<u64>,
-    /// The lights this frame's policy shades and the DFG table, for the solids' shading (#421).
-    lights_buffer: wgpu::Buffer,
-    lights_bind: wgpu::BindGroup,
-    lights_layout: wgpu::BindGroupLayout,
-    dfg_buffer: wgpu::Buffer,
-    /// Bumped whenever the lights' bind group is made again (the cascades' texture, the
-    /// environment's cubes): a new bind group is a new resource in the draw key.
-    lights_generation: u64,
-    /// The key sun's cascades (#422).
-    cascaded: Cascaded,
-    /// The local lights' shadow maps (#446).
-    locals: local::Locals,
-    /// What a shadow frame's `light.w` holds: −1, or −2 to pancake its near plane.
-    shadow_mark: f32,
-    /// The IES tables' atlas (#446).
-    ies: local::Tables,
-    /// The terrain overlays' cells (#537).
-    tints: tint::Store,
-    /// The projected insets (#506), and the unlit ones' pass with the clip-to-world matrix it
-    /// reads, made when one draws.
-    insets: inset::Store,
-    unlit: Option<inset::Unlit>,
-    to_world: Option<[f32; 16]>,
-    /// The light grid this frame, and the buffer its cells are in (#446).
-    clusters: Option<clusters::Grid>,
-    cluster_buffer: wgpu::Buffer,
-    /// The environment's prefilter and cubes (#422).
-    env: EnvState,
-    /// Whether this frame has a sky, which draws first; its pipeline once compiled (#422); the
-    /// video background that draws in its place (#503).
-    sky: bool,
-    sky_pipeline: Option<wgpu::RenderPipeline>,
-    backdrop: backdrop::Backdrop,
-    /// This frame's point sets from a depth video, as the effects wrote them (#503).
-    clouds: clouds::Clouds,
-    /// This frame's puffs, back to front, and their pipeline once compiled (#422).
-    puffs: Option<(wgpu::Buffer, u32)>,
-    puff_records: Set,
-    puff_pipeline: Option<wgpu::RenderPipeline>,
-    /// The see-through solids' pipelines, blend and add, each compiled the first time a batch
-    /// draws one.
-    solid_layout: wgpu::PipelineLayout,
-    clear_pipelines: [Option<wgpu::RenderPipeline>; 6],
-    /// Blend and add over the glass, which draws after the resolve (#428, #1173).
-    late_pipelines: [Option<wgpu::RenderPipeline>; 2],
-    /// This frame's adjust table (#424), each distinct adjust once, entry k + 1 at k.
-    adjust_buffer: wgpu::Buffer,
-    adjusts: Vec<AdjustEntry>,
-    /// This frame's lobe table (#428), each distinct lobe set once, entry k + 1 at k.
-    lobe_buffer: wgpu::Buffer,
-    lobe_table: Vec<LobeEntry>,
-    /// The opaque scene's copy with mips while a scene holds a transmissive part (#428), and the
-    /// texel that stands in for it.
-    glass: Option<glass::Glass>,
-    glass_stub: wgpu::TextureView,
-    /// The subsurface share and spread while a scene holds a part whose subsurface spreads
-    /// (#481).
-    subsurface: Option<sss::Subsurface>,
-    /// Whether the DFG buffer holds the sheen table yet (#428).
-    sheen_written: bool,
-    /// The per-pixel resolve's lists (#424), and its resolve and sorted-fallback pipelines once
-    /// a frame draws a per-pixel item.
-    oit: oit::Oit,
-    oit_pipelines: Option<[wgpu::RenderPipeline; 2]>,
-    /// Each solid's rank by ID (#421), ranked again each frame (#450); and which way the planted
-    /// ties_by_submission submits this frame.
-    ties: crate::ties::Ties,
-    flip: bool,
-    tone_buffer: wgpu::Buffer,
-    /// What each per-frame uniform last uploaded (#1903).
-    written: Uniforms,
-    output_layout: wgpu::BindGroupLayout,
-    /// What the passes after the finish cover this frame (their layer, which the view holds), as
-    /// the output pass's undithered mask; one clear texel with none (#418).
-    covered: (Option<std::sync::Arc<[u8]>>, wgpu::TextureView),
-    mesh_pipeline: wgpu::RenderPipeline,
-    /// The opaque material solids' pipelines culling back faces, and front faces (mirrored).
-    mesh_culled: [wgpu::RenderPipeline; 2],
-    /// The solids' pipeline in a frame with a capped cutaway, its caps at their plane's depth,
-    /// compiled the first time one draws; and whether this frame has one (#424).
-    cut_pipeline: Option<wgpu::RenderPipeline>,
-    /// The GPU cull's kernels and the pipelines that read a row list, compiled the first time a
-    /// batch needs them (#484); the groups those pipelines lay out; this frame's stale views.
-    rows: Option<Rows>,
-    row_groups: [wgpu::BindGroupLayout; 4],
-    cull_runs: Vec<cull::Run>,
-    /// The document's instances outputs (#484), which their instancers draw from.
-    sources: Vec<cull::Source>,
-    /// Draws every batch from the CPU's f64 cull, the reference a GPU frame is judged against.
-    cpu_cull: bool,
-    /// #1637: whether the camera's lists are culled by occlusion too (a view's `occlusion: off`
-    /// clears it); the camera's prepass depth and pyramid; and this frame's occluders and tests.
-    occlusion: bool,
-    pyramid: Option<Arc<cull::Pyramid>>,
-    occluders: Vec<(usize, RowDraw)>,
-    occlude_runs: Vec<cull::Occlude>,
-    /// This frame's light probes (#427), whose captures see every solid (#1637's report).
-    probe_ids: Vec<String>,
-    capped: bool,
-    /// Ambient occlusion's prepass, passes and the solids' group 2 (#418).
-    ao: ao::Passes,
-    /// The scene3d shader module and the solids' vertex layouts, which the ao prepass shares.
-    scene_module: wgpu::ShaderModule,
-    families: Families,
-    output_pipeline: wgpu::RenderPipeline,
-    /// The output pass into the finished frame, for the passes after the finish (#382).
-    output_f32: wgpu::RenderPipeline,
-    /// The finished frame (status::FINISHED), made when a frame has passes after the finish.
-    finished: Option<(wgpu::Texture, wgpu::TextureView, [u32; 2])>,
-    /// #464: the look's print finish for the frame being drawn (its fields, the frame's values,
-    /// the ground, each item's color for its separations), the pass, and the frame it reads.
-    print: Option<(
-        Arc<deep_canvas_marks::print::Print>,
-        deep_canvas_marks::print::Frame,
-        [u8; 3],
-    )>,
-    print_colors: BTreeMap<String, [u8; 3]>,
-    printer: Option<Arc<Mutex<print::Printer>>>,
-    print_source: Option<(wgpu::TextureView, [u32; 2], wgpu::TextureFormat)>,
-    /// #465: the mirror's pass, made when a frame first has a mirror, and whether this frame has.
-    mirrorer: Option<Box<mirror::Mirrorer>>,
-    mirroring: bool,
-    /// #506: each view inset's own renderer, by the inset's ID, drawn whole before this view's
-    /// geometry, one level deep.
-    views: BTreeMap<String, Box<Renderer>>,
-    /// #465: the flare's passes, made when a frame first has a flare, and whether this frame has.
-    flarer: Option<Box<flare::Flarer>>,
-    flaring: bool,
-    /// #468: the depth of field's passes, made when a frame first has one, and whether this
-    /// frame has.
-    doffer: Option<Box<dof::Dofer>>,
-    dofing: bool,
-    /// #166: the water's pass, made when a frame first has water, and whether this frame has.
-    waterer: Option<Box<water::Waterer>>,
-    watering: bool,
-    /// #166: view3d's `reflection` target while a frame asks for it: each mirror part's lookup.
-    reflection: Option<(wgpu::Texture, wgpu::TextureView, [u32; 2])>,
-    /// #268: view3d's `foam` target while a frame asks for it: the water's foam share.
-    foam: Option<(wgpu::Texture, wgpu::TextureView, [u32; 2])>,
-    /// #968: view3d's `normal` target while a frame asks for it: the water's shaded normal.
-    normal: Option<(wgpu::Texture, wgpu::TextureView, [u32; 2])>,
-    /// The pass resolving the geometry pass's object IDs and depth (#1173), and the planted
-    /// resolve_accumulates_frames' blend of the previous frame.
-    resolve: wgpu::RenderPipeline,
-    accumulate: Option<wgpu::RenderPipeline>,
-    /// Render pipelines this renderer compiled, so a patch's new ones can be counted (#379).
-    compiled: u32,
-    /// Each pipeline it compiled, by name, in the order it compiled them (#854).
-    names: Vec<&'static str>,
-    /// Each pipeline made, with its items, feature set and target (#432); how many of `names`
-    /// it has logged; and what the next new names were made for, by name.
-    pub log: created::Log,
-    logged: usize,
-    made_for: BTreeMap<&'static str, (Vec<String>, String, String)>,
-    /// Whether the warm-up makes the shadow maps' pipelines: not under the planted
-    /// warms_view_only, which leaves them to the first frame (#432).
-    pub warm_shadows: bool,
-    /// The opaque solids' pipelines that shade extra lobes, by cull: none, back, front (#432).
-    lobed: [Option<wgpu::RenderPipeline>; 3],
-    /// The glass copy's mip pass, kept once made (#432).
-    glass_kit: Option<glass::Kit>,
-    /// Whether a mask-alpha part casts this frame: its sets draw into shadow maps only then.
-    mask_casts: bool,
-    meshes: BTreeMap<Shape, Mesh>,
-    /// The swaying meshes' rest vertices, weights and params (#2016).
-    sways: sway::Sways,
-    batches: BTreeMap<String, Batch>,
-    /// The glyph atlas, held while a frame draws a label, and the layout and sampler it binds by.
-    atlas: Option<AtlasTexture>,
-    mask: (wgpu::BindGroupLayout, wgpu::Sampler),
-    picks: BTreeMap<String, u32>,
-    next_generation: u64,
-    targets: Option<Targets>,
-    /// The batches this frame draws, in layer order.
-    order: Vec<String>,
-    ground: [f64; 4],
-    counts: Counts,
-    /// The planted slow_gpu_frame twin's pipeline.
-    busy: Option<wgpu::RenderPipeline>,
-    shadow: Shadow,
-    /// This frame's camera: world to clip (column-major), the eye and the near plane.
-    camera: Camera,
-    /// The camera's view axis this frame (#166's `depth` target reads along it).
-    forward: [f64; 3],
-    pub profiler: Option<Profiler>,
-    /// #463: the scene's crop (Scene::crop) this frame.
-    crop: Option<[f64; 4]>,
-    /// The next frame's HDR surface and the headroom it rolls off to (#177), and the pass once
-    /// a view first presents HDR.
-    pub hdr: Option<HdrFrame>,
-    hdr_pass: Option<hdr::HdrPass>,
-    /// The look's deband amplitude, which the HDR pass allows between the slot and the output.
-    deband: f32,
-    /// The GPU surface it draws through, and the upscale's pipelines once compiled (#386).
-    pub surface: Surface,
-    pub upscale: Option<Arc<Upscale>>,
-    /// Frame history resolves this frame (#173): lines 1 device px or thinner, outlines and
-    /// labels draw after it at display size, through the camera unjittered; `jitter` is its
-    /// window frame's offset, display px right and down, added to the scene's.
-    pub history: bool,
-    pub jitter: [f64; 2],
-    /// The window a view's frames draw into and what this frame does with it (#173).
-    pub frame_history: history::State,
-    /// The key sun's cascade maps at this many times their size: 2 at the climb's top rung
-    /// (#425), else 1.
-    pub shadow_scale: u32,
-    /// The frame's full size, and its targets below scale 1.
-    size: [u32; 2],
-    low: Option<Low>,
-    low_bytes: Option<u64>,
-    outlines: Outlines,
-    /// The linear image this frame's output pass reads when passes between geometry and output
-    /// wrote one (#418's `pre_tone`); `None`, the linear target.
-    pre_tone: Option<wgpu::TextureView>,
-    /// The output pass's bind group over a post module's own target, with that target and the
-    /// covered mask it binds.
-    post_bind: Option<(wgpu::TextureView, wgpu::TextureView, wgpu::BindGroup)>,
-}
-
-/// The pass that draws thin lines and outlines at full size after the upscale (#386).
-struct Outlines {
-    pipeline: wgpu::RenderPipeline,
-    /// The screen-size labels' pass after the upscale, over the same frame and depth (#1174).
-    labels: wgpu::RenderPipeline,
-    layout: wgpu::BindGroupLayout,
-    /// The camera over the full-size slot, and over the internal size (the planted programs').
-    display: wgpu::Buffer,
-    internal: wgpu::Buffer,
-    /// Each with the core's depth target, made with the targets.
-    binds: Option<[wgpu::BindGroup; 2]>,
-    /// The solids' strokes, and the status outlines.
-    strokes: Set,
-    statuses: Set,
-}
-
-/// A box's silhouette from `cam`: each edge between a face turned toward the camera and one
-/// turned away, in world space. `model` maps the unit box (rows of a 3×4 matrix).
-fn silhouette(
-    model: &[[f64; 4]; 3],
-    cam: &deep_canvas_scene3d::scene::Camera,
-) -> Vec<[[f64; 3]; 2]> {
-    let col = |c: usize| [model[0][c], model[1][c], model[2][c]];
-    let at = |l: [f64; 3]| {
-        let mut p = [0.0; 3];
-        for (r, v) in p.iter_mut().enumerate() {
-            *v = model[r][0] * l[0] + model[r][1] * l[1] + model[r][2] * l[2] + model[r][3];
-        }
-        p
-    };
-    let cross = |a: [f64; 3], b: [f64; 3]| {
-        [
-            a[1] * b[2] - a[2] * b[1],
-            a[2] * b[0] - a[0] * b[2],
-            a[0] * b[1] - a[1] * b[0],
-        ]
-    };
-    let dot = |a: [f64; 3], b: [f64; 3]| a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-    let det = dot(col(0), cross(col(1), col(2)));
-    // Whether face `axis` on side `t` (0: −, 1: +) faces the camera. Its normal is the inverse
-    // transpose's column, from the other two columns' cross product.
-    let facing = |axis: usize, t: usize| {
-        let n = cross(col((axis + 1) % 3), col((axis + 2) % 3));
-        let sign = if t == 1 { 1.0 } else { -1.0 } * det.signum();
-        let mut centre = [0.0; 3];
-        centre[axis] = t as f64 - 0.5;
-        let toward = if cam.perspective {
-            let c = at(centre);
-            [cam.eye[0] - c[0], cam.eye[1] - c[1], cam.eye[2] - c[2]]
-        } else {
-            [-cam.forward[0], -cam.forward[1], -cam.forward[2]]
-        };
-        dot(n, toward) * sign > 0.0
-    };
-    let mut out = Vec::new();
-    for axis in 0..3 {
-        let (b, c) = ((axis + 1) % 3, (axis + 2) % 3);
-        for tb in 0..2 {
-            for tc in 0..2 {
-                if facing(b, tb) == facing(c, tc) {
-                    continue;
-                }
-                let mut p = [0.0; 3];
-                p[b] = tb as f64 - 0.5;
-                p[c] = tc as f64 - 0.5;
-                p[axis] = -0.5;
-                let start = at(p);
-                p[axis] = 0.5;
-                out.push([start, at(p)]);
-            }
-        }
-    }
-    out
-}
-
-/// A builder's mesh's contour as seen from `cam` (#1162): in world space, each edge between a
-/// triangle that faces the camera and one that doesn't, and each edge only one triangle holds
-/// when that one faces it. Vertices at one position are one, so a mesh with split normals has
-/// the same edges as its welded form.
-fn contour(
-    mesh: &deep_canvas_scene3d::geom::Mesh,
-    model: &[[f64; 4]; 3],
-    cam: &deep_canvas_scene3d::scene::Camera,
-) -> Vec<[[f64; 3]; 2]> {
-    use std::collections::BTreeMap;
-    let at = |l: [f64; 3]| {
-        let mut p = [0.0; 3];
-        for (r, v) in p.iter_mut().enumerate() {
-            *v = model[r][0] * l[0] + model[r][1] * l[1] + model[r][2] * l[2] + model[r][3];
-        }
-        p
-    };
-    let world: Vec<[f64; 3]> = mesh.positions.iter().map(|p| at(*p)).collect();
-    // One index per distinct position, by its bits.
-    let mut weld: BTreeMap<[u64; 3], u32> = BTreeMap::new();
-    let ids: Vec<u32> = world
-        .iter()
-        .enumerate()
-        .map(|(i, p)| *weld.entry(p.map(f64::to_bits)).or_insert(i as u32))
-        .collect();
-    let sub = |a: [f64; 3], b: [f64; 3]| [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
-    let mut faces_by_edge: BTreeMap<(u32, u32), Vec<bool>> = BTreeMap::new();
-    for t in mesh.indices.as_chunks::<3>().0 {
-        let [a, b, c] = t.map(|i| ids[i as usize]);
-        let [pa, pb, pc] = [a, b, c].map(|i| world[i as usize]);
-        let (u, v) = (sub(pb, pa), sub(pc, pa));
-        let n = [
-            u[1] * v[2] - u[2] * v[1],
-            u[2] * v[0] - u[0] * v[2],
-            u[0] * v[1] - u[1] * v[0],
-        ];
-        let toward = if cam.perspective {
-            sub(cam.eye, pa)
-        } else {
-            [-cam.forward[0], -cam.forward[1], -cam.forward[2]]
-        };
-        let front = n[0] * toward[0] + n[1] * toward[1] + n[2] * toward[2] > 0.0;
-        for (x, y) in [(a, b), (b, c), (c, a)] {
-            if x != y {
-                faces_by_edge
-                    .entry((x.min(y), x.max(y)))
-                    .or_default()
-                    .push(front);
-            }
-        }
-    }
-    // In screen px about the eye: an edge whose both sides the mesh covers all along it is a
-    // fold inside the outline (a mitre seen across a corner), never the outline itself.
-    let proj = |p: [f64; 3]| {
-        let d = sub(p, cam.eye);
-        let dot = |a: [f64; 3]| d[0] * a[0] + d[1] * a[1] + d[2] * a[2];
-        let k = if cam.perspective {
-            cam.scale / dot(cam.forward).max(1e-9)
-        } else {
-            cam.scale
-        };
-        [dot(cam.right) * k, dot(cam.up) * k]
-    };
-    let flat: Vec<[[f64; 2]; 3]> = mesh
-        .indices
-        .as_chunks::<3>()
-        .0
-        .iter()
-        .map(|t| t.map(|i| proj(world[ids[i as usize] as usize])))
-        .collect();
-    let covered = |q: [f64; 2]| {
-        flat.iter().any(|[a, b, c]| {
-            let side = |p: [f64; 2], r: [f64; 2]| {
-                (r[0] - p[0]) * (q[1] - p[1]) - (r[1] - p[1]) * (q[0] - p[0])
-            };
-            let (x, y, z) = (side(*a, *b), side(*b, *c), side(*c, *a));
-            (x >= 0.0 && y >= 0.0 && z >= 0.0) || (x <= 0.0 && y <= 0.0 && z <= 0.0)
-        })
-    };
-    let outer = |a: [f64; 3], b: [f64; 3]| {
-        let (pa, pb) = (proj(a), proj(b));
-        let (dx, dy) = (pb[0] - pa[0], pb[1] - pa[1]);
-        let len = (dx * dx + dy * dy).sqrt();
-        if len < 1e-9 {
-            return false;
-        }
-        let n = [-dy / len * 1.5, dx / len * 1.5];
-        [0.125, 0.375, 0.625, 0.875].iter().any(|s| {
-            let m = [pa[0] + dx * s, pa[1] + dy * s];
-            !covered([m[0] + n[0], m[1] + n[1]]) || !covered([m[0] - n[0], m[1] - n[1]])
-        })
-    };
-    faces_by_edge
-        .into_iter()
-        .filter(|(_, f)| match f.as_slice() {
-            [one] => *one,
-            many => many.iter().any(|x| *x) && many.iter().any(|x| !*x),
-        })
-        .map(|((a, b), _)| [world[a as usize], world[b as usize]])
-        .filter(|[a, b]| outer(*a, *b))
-        .collect()
-}
+mod renderer;
+pub use renderer::*;
 
 fn rgb4(v: [f64; 3]) -> [f32; 4] {
     [v[0] as f32, v[1] as f32, v[2] as f32, 0.0]
@@ -6169,7 +5743,7 @@ impl Renderer {
         batch.casters.retain(|_, set| set.count > 0);
         let mut fed_uploads: BTreeMap<String, BTreeSet<u32>> = BTreeMap::new();
         for (key, set) in batch.solids.iter_mut().chain(batch.casters.iter_mut()) {
-            let started = std::time::Instant::now();
+            let started = web_time::Instant::now();
             set.finish(device, &mut next, &mut written);
             if layer.fed.contains_key(&key.3) {
                 let owner = set
@@ -9046,4 +8620,383 @@ pub(crate) fn full_pass_in(
 }
 
 #[cfg(test)]
-mod tests;
+mod tests {
+    use super::*;
+    use deep_canvas_scene3d::frames::Frames;
+    use deep_canvas_scene3d::scene::Labels;
+    use deep_gpu::device::{Backend, Gpu};
+    use serde_json::json;
+
+    /// Records by shape, in each batch.
+    fn records(r: &Renderer) -> Vec<(String, Shape, Vec<u8>)> {
+        let mut out = Vec::new();
+        for (id, b) in &r.batches {
+            for ((shape, ..), set) in &b.solids {
+                out.push((id.clone(), *shape, set.records.clone()));
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn a_frame_that_writes_what_moved_leaves_the_records_a_whole_prepare_writes() {
+        let gpu = Gpu::open(Backend::Noop).expect("the noop backend gives a device");
+        let device = gpu.device();
+        let look =
+            Look3::read(&json!({"roles": {"accent": "#1aa3c8", "ground": "#000000"}})).unwrap();
+        let boxes = |id: &str, order: &str, pos: [f64; 3]| json!({"id": id, "kind": "mark.box@1", "name": id, "order": order, "layer": "main", "params": {"size": 1, "paint": {"fill": {"role": "accent"}}}, "at": {"pos": pos}});
+        // Boxes in one layer; `b` slides, `c` rides it, `a` and `d` stay.
+        let mut items = serde_json::Map::new();
+        items.insert("cam".into(), json!({"id": "cam", "kind": "camera@1", "name": "C", "order": "a0", "layer": "main", "params": {"projection": "perspective", "target": [0, 0, 0], "orbit": {"azimuth": 30, "elevation": 35, "distance": 14}, "fov": 40}}));
+        for (id, order, pos) in [
+            ("a", "b0", [-3.0, 0.5, 0.0]),
+            ("b", "b1", [0.0, 0.5, 0.0]),
+            ("c", "b2", [0.0, 1.0, 0.0]),
+            ("d", "b3", [3.0, 0.5, 0.0]),
+        ] {
+            items.insert(id.into(), boxes(id, order, pos));
+        }
+        items["c"]["parent"] = json!("b");
+        let doc = json!({
+            "format": 1, "profile": "scene", "title": "T", "size": [128, 96], "camera": "cam",
+            "transport": {"span": "60s"}, "layers": {"main": {"writer": "w", "title": "Main", "order": "a0"}},
+            "items": items,
+            "channels": {
+                "slide": {"target": "items/b/at/pos/0", "type": "f32", "keys": {"k0": {"t": "0s", "value": -3, "interp": "linear"}, "k1": {"t": "60s", "value": 3, "interp": "linear"}}},
+                "orbit": {"target": "items/cam/params/orbit/azimuth", "type": "f32", "keys": {"k0": {"t": "0s", "value": 0, "interp": "linear"}, "k1": {"t": "60s", "value": 90, "interp": "linear"}}}
+            }
+        });
+        let mut labels = Labels::new();
+        let mut frames = Frames::new(&doc, &look, &mut labels).unwrap();
+        let moved = frames
+            .moved()
+            .expect("transforms and the orbit stay on the fast path")
+            .to_vec();
+        assert_eq!(moved.len(), 2, "the sliding box and its child: {moved:?}");
+        let mut playing = Renderer::new(&device, Planted::default());
+        frames
+            .at(0, [128, 96], &Default::default(), &mut labels)
+            .unwrap();
+        playing.prepare(&device, frames.scene(), &look);
+        for n in [1i64, 17, 600] {
+            frames
+                .at(
+                    n * 705_600_000 / 60,
+                    [128, 96],
+                    &Default::default(),
+                    &mut labels,
+                )
+                .unwrap();
+            playing.prepare_moved(&device, frames.scene(), &look, &moved);
+            assert_eq!(
+                playing.counts().instances_written,
+                2,
+                "frame {n}: the two moved records alone"
+            );
+            let mut whole = Renderer::new(&device, Planted::default());
+            whole.prepare(&device, frames.scene(), &look);
+            assert_eq!(records(&playing), records(&whole), "frame {n}");
+        }
+    }
+
+    /// Glass (#428) and per-pixel items (#424) draw after the geometry pass resolves (#1173), so
+    /// their pipelines take the resolved targets' sample count and ID format, not the geometry
+    /// pass's.
+    #[test]
+    fn glass_blend_and_per_pixel_parts_draw_with_no_validation_error() {
+        let gpu = Gpu::open(Backend::Noop).expect("the noop backend gives a device");
+        let device = gpu.device();
+        let look =
+            Look3::read(&json!({"roles": {"accent": "#1aa3c8", "ground": "#000000"}})).unwrap();
+        let part = |id: &str, order: &str, x: f64, material: &str| json!({"id": id, "kind": "mark.box@1", "name": id, "order": order, "layer": "main", "material": material, "params": {"size": 1, "paint": {"fill": {"role": "accent"}}}, "at": {"pos": [x, 0.5, 0.0]}});
+        let mut items = serde_json::Map::new();
+        items.insert("cam".into(), json!({"id": "cam", "kind": "camera@1", "name": "C", "order": "a0", "layer": "main", "params": {"projection": "perspective", "target": [0, 0, 0], "orbit": {"azimuth": 30, "elevation": 35, "distance": 8}, "fov": 40}}));
+        items.insert("glass".into(), json!({"id": "glass", "kind": "material@1", "name": "Glass", "order": "a1", "layer": "main", "params": {"base_color": [1, 1, 1, 1], "metallic": 0, "roughness": 0.2, "transmission": 1, "ior": 1.5}}));
+        items.insert("tint".into(), json!({"id": "tint", "kind": "material@1", "name": "Tint", "order": "a2", "layer": "main", "params": {"base_color": [1, 0.5, 0.2, 0.5], "alpha_mode": "blend"}}));
+        items.insert("a".into(), part("a", "b0", -0.6, "glass"));
+        items.insert("b".into(), part("b", "b1", 0.6, "tint"));
+        items.insert("c".into(), part("c", "b2", 0.0, "tint"));
+        items["c"]["resolve"] = json!("per_pixel");
+        let doc = json!({
+            "format": 1, "profile": "scene", "title": "T", "size": [96, 64], "camera": "cam",
+            "layers": {"main": {"writer": "w", "title": "Main", "order": "a0"}},
+            "items": items,
+        });
+        let mut labels = Labels::new();
+        let mut frames = Frames::new(&doc, &look, &mut labels).unwrap();
+        frames
+            .at(0, [96, 64], &Default::default(), &mut labels)
+            .unwrap();
+        let mut renderer = Renderer::new(&device, Planted::default());
+        draw_offscreen(&device, &mut renderer, frames.scene(), &look, None);
+        assert!(
+            renderer.clear_pipelines[usize::from(GLASS)].is_some(),
+            "the glass part is drawn as glass"
+        );
+        assert!(
+            renderer.clear_pipelines[usize::from(PER_PIXEL)].is_some(),
+            "the per-pixel part is drawn per pixel"
+        );
+        let raised = device.take_raised();
+        assert!(raised.is_empty(), "the device raised: {raised:?}");
+    }
+
+    /// A scene document of `items` in one layer, each stamped with its ID, name, order and layer.
+    pub(crate) fn stamped(
+        items: &[(&str, serde_json::Value)],
+        channels: serde_json::Value,
+    ) -> serde_json::Value {
+        let mut map = serde_json::Map::new();
+        for (k, (id, item)) in items.iter().enumerate() {
+            let mut item = item.clone();
+            item["id"] = json!(id);
+            item["name"] = json!(id);
+            item["order"] = json!(format!("a{k:03}"));
+            item["layer"] = json!("main");
+            map.insert((*id).into(), item);
+        }
+        json!({
+            "format": 1, "profile": "scene", "title": "T", "size": [128, 96], "camera": "cam",
+            "transport": {"span": "60s"}, "layers": {"main": {"writer": "w", "title": "Main", "order": "a0"}},
+            "items": map, "channels": channels,
+        })
+    }
+
+    pub(crate) fn orbiting_camera() -> (serde_json::Value, serde_json::Value) {
+        (
+            json!({"kind": "camera@1", "params": {"projection": "perspective", "target": [0, 0.8, 0], "orbit": {"azimuth": 30, "elevation": 20, "distance": 14}, "fov": 45, "near": 0.1, "far": 500}}),
+            json!({"orbit": {"target": "items/cam/params/orbit/azimuth", "type": "f32", "keys": {"k0": {"t": "0s", "value": 30, "interp": "linear"}, "k1": {"t": "60s", "value": 390, "interp": "linear"}}}}),
+        )
+    }
+
+    /// What the device made and wrote while `frame` ran.
+    fn counted(device: &Device, frame: impl FnOnce()) -> deep_gpu::counted::Reading {
+        let before = device.device.counts().read();
+        frame();
+        device.device.counts().read().since(before)
+    }
+
+    /// Frames 1 to 5 of `doc`, each prepared whole and its jobs recorded into a slot as the GPU
+    /// layer's view does: what the device made and wrote in each. `host` leaves each frame's
+    /// scene and the renderer as a host would before the renderer takes the frame.
+    pub(crate) fn played(
+        doc: &serde_json::Value,
+        mut post: Option<&mut dyn Post>,
+        host: impl Fn(&mut Renderer, &mut Scene),
+    ) -> Vec<deep_gpu::counted::Reading> {
+        let gpu = Gpu::open(Backend::Noop).expect("the noop backend gives a device");
+        let device = gpu.device();
+        let look =
+            Look3::read(&json!({"roles": {"accent": "#1aa3c8", "ground": "#000000"}})).unwrap();
+        let mut labels = Labels::new();
+        let mut frames = Frames::new(doc, &look, &mut labels).unwrap();
+        let mut renderer = Renderer::new(&device, Planted::default());
+        let slot = texture2d(
+            &device.device,
+            "test slot",
+            [128, 96],
+            FORMAT,
+            wgpu::TextureUsages::RENDER_ATTACHMENT,
+        )
+        .create_view(&Default::default());
+        let mut out = Vec::new();
+        for n in 0..6i64 {
+            frames
+                .at(
+                    n * 705_600_000 / 60,
+                    [128, 96],
+                    &Default::default(),
+                    &mut labels,
+                )
+                .unwrap();
+            let mut scene = frames.scene().clone();
+            host(&mut renderer, &mut scene);
+            let made = counted(&device, || {
+                renderer.prepare(&device, &scene, &look);
+                let mut encoder = device.device.create_command_encoder(&Default::default());
+                let post = post.as_deref_mut().map(|p| p as &mut dyn Post);
+                for (_, job) in renderer.jobs(&device, &slot, post, None) {
+                    job(&mut encoder);
+                }
+                device.queue.submit([encoder.finish()]);
+            });
+            if n > 0 {
+                out.push(made);
+            }
+        }
+        let raised = device.take_raised();
+        assert!(raised.is_empty(), "the device raised: {raised:?}");
+        out
+    }
+
+    /// Canvas primitives, Frame budget: bind groups and buffers created in each frame after the
+    /// first are counted. Puffs, a mirror's overlay and a flare bind what they made at the first.
+    #[test]
+    fn a_frame_after_the_first_makes_no_buffer_and_no_bind_group_for_puffs_a_mirror_and_a_flare() {
+        let (cam, channels) = orbiting_camera();
+        let puff = |x: f64, seed: u32| json!({"kind": "puff@1", "at": {"pos": [x, 9.0, -20.0]}, "params": {"radius": 5, "aspect": 1.6, "density": 1, "bright": 1, "seed": seed}});
+        let doc = stamped(
+            &[
+                ("cam", cam),
+                (
+                    "sky",
+                    json!({"kind": "sky@1", "params": {"top": [0.15, 0.3, 0.75, 1], "low": [0.45, 0.6, 0.85, 1], "ambient_top": [0.25, 0.25, 0.25], "ambient_low": [0.1, 0.1, 0.1]}}),
+                ),
+                (
+                    "sun",
+                    json!({"kind": "light.sun@1", "params": {"illuminance": 3, "color": [1, 1, 1], "shadow": false}, "at": {"rot": [-45, 30, 0]}}),
+                ),
+                (
+                    "lamp",
+                    json!({"kind": "light.point@1", "params": {"power": 40, "radius": 0.05, "color": [1, 0.9, 0.8], "shadow": false}, "at": {"pos": [0.8, 2.6, -1]}}),
+                ),
+                (
+                    "floor_mat",
+                    json!({"kind": "material@1", "params": {"base_color": [0.05, 0.05, 0.06, 1], "metallic": 0, "roughness": 0.2, "mirror": {"strength": 1, "blur": 0, "plane": "floor"}}}),
+                ),
+                (
+                    "box_mat",
+                    json!({"kind": "material@1", "params": {"base_color": [0.7, 0.45, 0.3, 1], "roughness": 0.6}}),
+                ),
+                (
+                    "floor",
+                    json!({"kind": "plate@1", "params": {"grid": [1, 1], "size": [40, 40]}, "at": {"pos": [0, 0, 0]}, "material": "floor_mat"}),
+                ),
+                (
+                    "box",
+                    json!({"kind": "mark.box@1", "params": {"size": [0.7, 0.7, 0.7]}, "at": {"pos": [3, 0.35, 0]}, "material": "box_mat"}),
+                ),
+                (
+                    "flare",
+                    json!({"kind": "effect@1", "params": {"kind": "flare", "flare": {"from": "lights", "ghosts": 8, "halo": 0.05, "streak": {"count": 6, "length": 0.25, "anamorphic": false}, "starburst": {"blades": 6}, "intensity": 1}}}),
+                ),
+                ("puff0", puff(-12.0, 0)),
+                ("puff1", puff(0.0, 1)),
+                ("puff2", puff(12.0, 2)),
+            ],
+            channels,
+        );
+        for (n, made) in played(&doc, None, |_, _| {}).iter().enumerate() {
+            assert_eq!(
+                (made.buffers, made.bind_groups),
+                (0, 0),
+                "frame {}: buffers and bind groups made",
+                n + 1
+            );
+        }
+    }
+
+    /// A post module's passes hand the output pass the target it reads: the one it handed last
+    /// frame, or the geometry's own, binds as it did then.
+    #[test]
+    fn a_frame_after_the_first_makes_no_bind_group_for_the_output_of_a_post_module() {
+        struct Hands(Option<wgpu::TextureView>);
+        impl Post for Hands {
+            fn shadows(&self) -> bool {
+                false
+            }
+            fn jobs(
+                &mut self,
+                _: &Device,
+                frame: &PostFrame<'_>,
+            ) -> (Vec<(String, Job)>, Option<wgpu::TextureView>) {
+                let view = self.0.clone().unwrap_or_else(|| frame.linear.clone());
+                (Vec::new(), Some(view))
+            }
+        }
+        let (cam, channels) = orbiting_camera();
+        let doc = stamped(
+            &[
+                ("cam", cam),
+                (
+                    "box",
+                    json!({"kind": "mark.box@1", "params": {"size": 1, "paint": {"fill": {"role": "accent"}}}, "at": {"pos": [0, 0.5, 0]}}),
+                ),
+            ],
+            channels,
+        );
+        let gpu = Gpu::open(Backend::Noop).expect("the noop backend gives a device");
+        let own = texture2d(
+            &gpu.device().device,
+            "test post",
+            [128, 96],
+            LINEAR,
+            wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+        )
+        .create_view(&Default::default());
+        for (what, mut post) in [
+            ("its own target", Hands(Some(own))),
+            ("the geometry's", Hands(None)),
+        ] {
+            for (n, made) in played(&doc, Some(&mut post), |_, _| {}).iter().enumerate() {
+                assert_eq!(
+                    made.bind_groups,
+                    0,
+                    "handing {what}, frame {}: bind groups made",
+                    n + 1
+                );
+            }
+        }
+    }
+
+    /// wgpu stages each queue write in a buffer of its own, so the records a frame moves go in
+    /// one write per run of neighbours, as a whole prepare's do.
+    #[test]
+    fn a_frame_that_moves_neighbouring_records_writes_them_in_one_write() {
+        let slide = |id: &str| {
+            (
+                format!("slide-{id}"),
+                json!({"target": format!("items/{id}/at/pos/1"), "type": "f32", "keys": {"k0": {"t": "0s", "value": 0.5, "interp": "linear"}, "k1": {"t": "60s", "value": 5, "interp": "linear"}}}),
+            )
+        };
+        let part = |x: f64| json!({"kind": "mark.box@1", "params": {"size": 1, "paint": {"fill": {"role": "accent"}}}, "at": {"pos": [x, 0.5, 0.0]}});
+        let ids = ["a", "b", "c", "d"];
+        let channels: serde_json::Map<String, serde_json::Value> =
+            ids.iter().map(|id| slide(id)).collect();
+        let mut items = vec![("cam", orbiting_camera().0)];
+        items.extend(
+            ids.iter()
+                .enumerate()
+                .map(|(k, id)| (*id, part(k as f64 * 2.0 - 3.0))),
+        );
+        let doc = stamped(&items, serde_json::Value::Object(channels));
+        let gpu = Gpu::open(Backend::Noop).expect("the noop backend gives a device");
+        let device = gpu.device();
+        let look =
+            Look3::read(&json!({"roles": {"accent": "#1aa3c8", "ground": "#000000"}})).unwrap();
+        let mut labels = Labels::new();
+        let mut frames = Frames::new(&doc, &look, &mut labels).unwrap();
+        let moved = frames
+            .moved()
+            .expect("transforms stay on the fast path")
+            .to_vec();
+        assert_eq!(moved.len(), 4, "the four sliding boxes: {moved:?}");
+        let mut playing = Renderer::new(&device, Planted::default());
+        frames
+            .at(0, [128, 96], &Default::default(), &mut labels)
+            .unwrap();
+        playing.prepare(&device, frames.scene(), &look);
+        for n in [1i64, 17, 600] {
+            frames
+                .at(
+                    n * 705_600_000 / 60,
+                    [128, 96],
+                    &Default::default(),
+                    &mut labels,
+                )
+                .unwrap();
+            let made = counted(&device, || {
+                playing.prepare_moved(&device, frames.scene(), &look, &moved)
+            });
+            assert_eq!(
+                playing.counts().instances_written,
+                4,
+                "frame {n}: the four moved records"
+            );
+            assert_eq!(made.writes, 1, "frame {n}: queue writes");
+            let mut whole = Renderer::new(&device, Planted::default());
+            whole.prepare(&device, frames.scene(), &look);
+            assert_eq!(records(&playing), records(&whole), "frame {n}");
+        }
+    }
+}

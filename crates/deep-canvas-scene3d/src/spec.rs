@@ -1193,12 +1193,26 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
             fixture: json!({"it": item("sky@1", json!({"top": [0.2, 0.4, 0.8, 1], "low": [0.8, 0.8, 0.7, 1]}))}),
         },
         // #465, #468: an Effect item; scene3d draws `kind: flare` (Effect: flare) and `kind: dof`
-        // (Effect: dof).
+        // (Effect: dof). #508: the film kinds, which the effects module ranges and draws; each
+        // kind's params sit under its name.
         "effect@1" => Spec {
             kind: "effect@1",
             module: "scene3d",
             params: vec![
-                p("kind", "flare | dof", "", json!("flare"), S, json!("flare"), json!("flare")),
+                p("kind", "flare | dof | wave_field | plume | arc | airflow", "", json!("flare"), S, json!("flare"), json!("flare")),
+                p("anchor", "ID", "", Value::Null, S, json!("it"), json!("it")),
+                p("axis", "vec3", "", json!([0, 1, 0]), S, json!([0, 1, 0]), json!([1, 0, 0])),
+                p("seed", "item | u64", "", json!("item"), S, json!("item"), json!(7))
+                    .takes("item | u64"),
+                p("resolution", "full | half | quarter", "", json!("half"), S, json!("half"), json!("full")),
+                p("wave_field", "{amplitude, wavelength: m, speed: m/s, radius: m, role}", "", Value::Null, S, json!({"amplitude": 1}), json!({"amplitude": 2}))
+                    .takes("{amplitude?: 0 to 64, wavelength?: 0.001 to 1000 m, speed?: -1000 to 1000 m/s, radius?: 0.001 to 10000 m, role?: role}"),
+                p("plume", "{radius: m, reach: m, heat, shock_cells, turbulence: m, seed, haze: {strength: px, scale: m}}", "", Value::Null, S, json!({"reach": 2}), json!({"reach": 3}))
+                    .takes("{radius?: 0.001 to 100 m, reach?: 0 to 1000 m, heat?: 0 to 64, shock_cells?: 0 to 4, turbulence?: 0 to 100 m, seed?: 0 to 4294967295, haze?: {strength?: 0 to 32 px, scale?: 0.001 to 100 m}}"),
+                p("arc", "{to: ID, intensity, width: px, jitter: px, rate: Hz, waves, role}", "", Value::Null, S, json!({"intensity": 4}), json!({"intensity": 2}))
+                    .takes("{to: ID, intensity?: 0 to 64, width?: 0.25 to 64 px, jitter?: 0 to 256 px, rate?: 0 to 120 Hz, waves?: 1 to 64, role?: role}"),
+                p("airflow", "{paths: [ID], around: {axis, copies, span: [deg, deg]}, count, speed: m/s, length: m, fade: {in: s, out: s}}", "", Value::Null, S, json!({"count": 64}), json!({"count": 128}))
+                    .takes("{paths: [curve ID] ≤ 8 (at least 1), around?: {axis?: vec3, copies?: 1 to 16, span?: [-360 to 360 deg, -360 to 360 deg]}, count?: 1 to 65536, speed?: 0.001 to 1000 m/s, length?: 0.001 to 1000 m, fade?: {in?: 0 to 60 s, out?: 0 to 60 s}}"),
                 p(
                     "dof",
                     "{focus: ID | m, coc: physical, max_coc: px, taps: 64 | 96 | 128, rotate: pixel_hash, far_over_near: refuse, projection: perspective | orthographic, ortho_coc: px per m, band: {center: ID | screen y, width, feather, angle: deg, amount: px}}",
@@ -2165,78 +2179,5 @@ pub fn params_of(item: &Value, kind: &str, geometry: bool, planted: Option<&str>
     Value::Object(out)
 }
 
-/// The params resolved: each one the item gives, the schema's default for the rest.
-pub fn resolved(spec: &Spec, params: &Value, geometry: bool, planted: Option<&str>) -> Value {
-    let mut out = Map::new();
-    for ((path, class), q) in dirty(spec, planted).into_iter().zip(&spec.params) {
-        if (class == G) != geometry {
-            continue;
-        }
-        let v = params
-            .get(&path["params/".len()..])
-            .cloned()
-            .unwrap_or_else(|| q.default.clone());
-        let v = match q.name {
-            "overlays" => crate::tints::resolved(v),
-            _ => v,
-        };
-        out.insert(q.name.to_string(), v);
-    }
-    Value::Object(out)
-}
-
-/// The `kinds` call's row of a spec.
-pub fn row(spec: &Spec, planted: Option<&str>) -> Value {
-    let params: Map<String, Value> = spec
-        .params
-        .iter()
-        .map(|q| {
-            let mut v = json!({"type": q.ty, "unit": q.unit, "default": q.default,
-                               "live": q.ty == "m" || q.ty == "deg" || q.ty == "f32",
-                               "cost": if q.class == G { "rebuild" } else { "transform" }});
-            if let (Some(min), Some(max)) = (q.min, q.max) {
-                v["min"] = json!(min);
-                v["max"] = json!(max);
-            }
-            (q.name.to_string(), v)
-        })
-        .collect();
-    let dirty: Map<String, Value> = dirty(spec, planted)
-        .into_iter()
-        .map(|(k, c)| (k, json!(c)))
-        .collect();
-    let sweep: Map<String, Value> = spec
-        .params
-        .iter()
-        .map(|q| (format!("params/{}", q.name), json!([q.sweep.0, q.sweep.1])))
-        .collect();
-    let mut items = Map::new();
-    items.insert(
-        "cam".into(),
-        json!({"kind": "camera@1", "params": {"projection": "perspective", "position": [6, 5, 8], "target": [0, 0.5, 0], "fov": 40}}),
-    );
-    if let Some(fx) = spec.fixture.as_object() {
-        items.extend(fx.clone());
-    }
-    for (k, (id, v)) in items.iter_mut().enumerate() {
-        v["id"] = json!(id);
-        v["name"] = json!(id);
-        v["order"] = json!(format!("a{k:03}"));
-    }
-    let modules = if spec.module == "building" {
-        json!({"scene3d": "^1", "building": "^1"})
-    } else {
-        json!({"scene3d": "^1"})
-    };
-    let document = json!({
-        "format": 1, "profile": "scene", "title": format!("The {} fixture", spec.kind),
-        "description": format!("One {} for the sweep of its paths.", spec.kind),
-        "size": [480, 360], "camera": "cam", "requires": {"modules": modules}, "items": items,
-    });
-    let mut out = json!({"kind": spec.kind, "module": spec.module, "params": params, "dirty": dirty,
-                         "fixture": {"document": document, "item": "it"}, "sweep": sweep});
-    if let Some(reads) = spec.reads {
-        out["reads"] = json!(reads);
-    }
-    out
-}
+mod row;
+pub use row::*;

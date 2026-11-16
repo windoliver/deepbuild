@@ -7,7 +7,7 @@
 use std::rc::Rc;
 
 use deep_canvas::document::Issue;
-use deep_logic::piece::{check_in, History, Piece};
+use deep_logic::piece::Piece;
 use deep_logic::world::{track_of, Entry, Record, World};
 use serde_json::{json, Map, Value};
 
@@ -15,27 +15,6 @@ use crate::hub::Hub;
 
 /// #548's planted deep_query: its region map lays the reads out by name, not in declaration order.
 pub(crate) const MAP_READS_BY_NAME: &str = "region_map_reads_by_name";
-
-/// A refusal of the logic module as the revision's issue, on the item it names.
-fn refused(r: Value) -> Issue {
-    let item = r
-        .get("item")
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .to_string();
-    let what = "the logic module refuses this logic item";
-    if item.is_empty() {
-        Issue::envelope("logic_refused", String::new(), r, what)
-    } else {
-        Issue::error(
-            "logic_refused",
-            &item,
-            format!("items/{item}/params"),
-            r,
-            what,
-        )
-    }
-}
 
 /// The logic items' lists in `form`'s `occurrences`, by name.
 fn logic_lists(form: &mut Value) -> Vec<&mut Value> {
@@ -71,28 +50,9 @@ pub(crate) fn from_first_frame(form: &mut Value, first: i64) {
 
 impl Hub<'_> {
     /// Mark set columns that read a column source, resolved and narrowed by the core's column
-    /// view at `t` (#397), and those that read a logic array, baked for every frame (#535); and
-    /// scene3d's readers of logic arrays, checked (#537).
+    /// view at `t`, as [`deep_play::logic::column_view`] resolves them.
     pub(crate) fn column_view(&self, form: &mut Value, t: i64) -> Vec<Issue> {
-        let sealed = &self.startup.sealed;
-        let entries = sealed.registry(deep_canvas::columns::REGISTRY);
-        let entries = entries.map_or(&[][..], |r| r.entries.as_slice());
-        let mut issues = deep_canvas_scene3d::arrays::check(form, entries);
-        issues.extend(deep_canvas_scene3d::tints::check(form));
-        issues.extend(deep_canvas::columns::view(form, entries, t));
-        // #538: the logic grid, keyed copy and flip by array, each through the same view.
-        issues.extend(deep_canvas_cells::logic_grid::check(form, entries));
-        issues.extend(grid_glyphs(form));
-        issues.extend(readers(form, entries));
-        if issues.iter().all(|i| i.code != "module_missing") {
-            let locale = form
-                .get("locale")
-                .and_then(Value::as_str)
-                .unwrap_or("en")
-                .to_string();
-            issues.extend(raised_at(form, None, &locale));
-        }
-        issues
+        deep_play::logic::column_view(&self.startup.sealed, form, t)
     }
 
     /// The document check's view of `form`'s readers ([`Hub::column_view`]), and #538's fit
@@ -167,138 +127,32 @@ impl Hub<'_> {
     }
 
     /// Each logic item of `form` stepped on `track` over the transport's span, its program read
-    /// from the evidence store, and its rows written to `occurrences.<logic ID>.occurrences`:
-    /// `{t, step, kind, a, b}` and its declared fields by name, as Spawn and motion read a row.
+    /// from the evidence store, after `form`'s worlds (shared with the web player, #172).
     fn inline_logic(&self, form: &mut Value, track: &[Value]) -> Result<(), Box<Issue>> {
         self.inline_worlds(form, track)?;
-        let Some(piece) = self.logic_piece(form, track)? else {
-            return Ok(());
-        };
-        let entries: Vec<Entry> = track
-            .iter()
-            .filter(|e| e.get("present").is_none())
-            .map(Entry::parse)
-            .collect::<Option<_>>()
-            .ok_or_else(|| refused(json!({"code": "bad_input", "what": "track: each entry is {t, control, value}"})))?;
-        let span = deep_canvas_media::doc::time(form, form.pointer("/transport/span"))
-            .unwrap_or(0)
-            .max(0);
-        let steps = piece
-            .items
-            .iter()
-            .map(|i| (span + i.step - 1) / i.step.max(1))
-            .max()
-            .unwrap_or(0);
-        let piece = Rc::new(piece);
-        let mut rec = Record::default();
-        let mut world = World::new(
-            piece.clone(),
-            track_of(&entries),
-            false,
-            Default::default(),
-            &mut rec,
-            None,
-        )
-        .map_err(refused)?;
-        world.run(steps, &mut rec, &mut |_, _| {});
-        let Some(doc) = form.as_object_mut() else {
-            return Ok(());
-        };
-        let lists = doc.entry("occurrences").or_insert_with(|| json!({}));
-        for (id, rows) in rec.occurrences(&piece) {
-            let flat: Vec<Value> = rows
-                .as_array()
-                .into_iter()
-                .flatten()
-                .filter_map(Value::as_object)
-                .map(|r| {
-                    let mut out: Map<String, Value> = r
-                        .iter()
-                        .filter(|(k, _)| *k != "fields")
-                        .map(|(k, v)| (k.clone(), v.clone()))
-                        .collect();
-                    out.extend(
-                        r.get("fields")
-                            .and_then(Value::as_object)
-                            .cloned()
-                            .unwrap_or_default(),
-                    );
-                    Value::Object(out)
-                })
-                .collect();
-            lists[format!("{id}.occurrences")] = Value::Array(flat);
-        }
-        // #535: the same bake's arrays, each step's changes with the ranges the logic module hands
-        // the core's column view, as the drawn form's `arrays`.
-        let mut arrays = rec.arrays(&piece);
-        if self.scenario.module_planted.as_deref() == Some("hand_over_drops_last_range") {
-            // The planted hand-over: each step's last changed range never reaches the view.
-            for steps in arrays
-                .values_mut()
-                .filter_map(|a| a["steps"].as_array_mut())
-            {
-                for s in steps {
-                    if let Some(c) = s["changed"].as_array_mut() {
-                        c.pop();
-                    }
-                }
-            }
-        }
-        // #538: each item's comparisons after its steps, on its first array, for `frames`' timings.
-        for (id, compares) in &rec.compares {
-            let first = piece
-                .items
-                .iter()
-                .find(|i| &i.id == id)
-                .and_then(|i| i.writes.first())
-                .map(|w| format!("{id}.{}", w.name));
-            if let Some(a) = first.and_then(|f| arrays.get_mut(&f)) {
-                a["compares"] = json!(compares
-                    .iter()
-                    .map(|(k, bytes, ms)| json!([k, bytes, ms]))
-                    .collect::<Vec<_>>());
-            }
-        }
-        // #1918: beside the readings of the worlds the document lists.
-        if let Some(all) = doc
-            .entry("arrays")
-            .or_insert_with(|| json!({}))
-            .as_object_mut()
-        {
-            all.extend(arrays);
-        }
-        Ok(())
+        let piece = self.logic_piece(form, track)?;
+        let drops = self.scenario.module_planted.as_deref() == Some("hand_over_drops_last_range");
+        deep_play::logic::inline_logic(form, piece, track, drops)
     }
 
-    /// `form`'s logic items as one piece with its seed and controls, checked by the logic module,
-    /// each program read from the evidence store, with the between-step services this build binds
-    /// answering on `form`'s worlds and the core input track `track` (#213); none when it has no
-    /// logic item.
+    /// `form`'s logic items as one piece, checked by the logic module, each program read from the
+    /// evidence store, with the services this build binds (#213); none without a logic item.
     pub(crate) fn logic_piece(
         &self,
         form: &Value,
         track: &[Value],
     ) -> Result<Option<Piece>, Box<Issue>> {
-        let Some(piece) = piece_json(form) else {
-            return Ok(None);
-        };
         let root = &self.scenario.evidence;
-        let piece = check_in(
-            &piece,
-            &Default::default(),
-            &mut History::new(),
+        let late = self.planted(crate::hub::Planted::Physics(
+            crate::physics::Planted::CastAnswersLate,
+        ));
+        deep_play::logic::logic_piece(
+            &self.startup.sealed,
+            form,
+            track,
             &|sha| crate::evidence::read(root, sha),
-            &crate::physics::cast::services(
-                &self.startup.sealed,
-                form,
-                track,
-                self.planted(crate::hub::Planted::Physics(
-                    crate::physics::Planted::CastAnswersLate,
-                )),
-            ),
+            late,
         )
-        .map_err(|r| refused(r.0))?;
-        Ok(Some(piece))
     }
 
     /// #548: deep_query's logic read of `form`: each of `items` baked on `track` over the span
@@ -419,98 +273,7 @@ pub(crate) fn planted(v: Option<&Value>) -> Option<Option<deep_logic::Planted>> 
     }
 }
 
-/// `form`'s logic items as one piece, as the logic module checks one: its seed, controls and
-/// items; none when it has no logic item.
-pub(crate) fn piece_json(form: &Value) -> Option<Value> {
-    // Without the program the hub inlined as `wasm` for the module's steps (#533): the check
-    // reads it from the store by `program`. The core's reads judge as figure, as they did before
-    // a play (#184) carried the document's class.
-    let mut piece = deep_logic::play::piece_of(form)?;
-    piece.as_object_mut()?.remove("class");
-    Some(piece)
-}
-
-/// #538: each array a text's lookup or a group's flip names, resolved through the core's view:
-/// `module_missing` naming logic in a build without it, `ref_unresolved` where nothing writes
-/// it. A path with a `/` is a template's slot, not an array.
-fn readers(form: &Value, entries: &[deep_canvas::registry::lists::SealedEntry]) -> Vec<Issue> {
-    let worlds = form.get("worlds").unwrap_or(&Value::Null);
-    let mut out = Vec::new();
-    for (id, item) in form
-        .get("items")
-        .and_then(Value::as_object)
-        .into_iter()
-        .flatten()
-    {
-        let mut paths: Vec<(String, String)> = Vec::new();
-        if let Some(a) = item.pointer("/params/flip/array").and_then(Value::as_str) {
-            paths.push(("flip/array".into(), a.into()));
-        }
-        for (field, v) in deep_canvas_marks::copy::lookups_of(item) {
-            let Ok(l) = deep_canvas_marks::copy::lookup(&v) else {
-                continue;
-            };
-            paths.push((field.clone(), l.key.into()));
-            for a in &l.args {
-                let p = match a {
-                    deep_canvas_marks::copy::Arg::Number { path, .. } => path,
-                    deep_canvas_marks::copy::Arg::Lookup { key, .. } => key,
-                };
-                paths.push((field.clone(), p.to_string()));
-            }
-        }
-        for (field, path) in paths.into_iter().filter(|(_, p)| !p.contains('/')) {
-            let Some((name, _)) = deep_canvas::columns::element_path(&path) else {
-                continue;
-            };
-            let at = format!("items/{id}/params/{field}");
-            if let Err(issue) =
-                deep_canvas::columns::source((&form["arrays"], worlds), entries, id, &at, name)
-            {
-                out.push(*issue);
-            }
-        }
-    }
-    out
-}
-
-/// #538: each grapheme a logic grid lists that the face it draws in can't draw: a grid draws
-/// every row in the mono role's face, so a glyph that face lacks is refused at check, naming it.
-fn grid_glyphs(form: &Value) -> Vec<Issue> {
-    let mut shaper: Option<deep_text::Shaper> = None;
-    let mut out = Vec::new();
-    for (id, item) in form
-        .get("items")
-        .and_then(Value::as_object)
-        .into_iter()
-        .flatten()
-    {
-        if item["kind"] != "cells@1" {
-            continue;
-        }
-        let Ok(Some(spec)) = deep_canvas_cells::logic_grid::spec(&item["params"]) else {
-            continue;
-        };
-        let shaper = shaper.get_or_insert_with(deep_text::Shaper::new);
-        for (i, g) in spec.glyphs.iter().enumerate() {
-            let run = deep_text::Spec {
-                family: deep_text::Role::Mono.family(),
-                ..deep_text::Spec::label(g)
-            };
-            if shaper.missing(&run, g).is_empty() {
-                continue;
-            }
-            out.push(Issue::error(
-                "text.glyph_missing",
-                id,
-                format!("items/{id}/params/grid/glyphs/{i}"),
-                json!({"item": id, "grapheme": g}),
-                &format!("the grid's face draws no `{g}`; a logic grid never draws a glyph its fonts lack"),
-            ));
-        }
-    }
-    out
-}
+pub(crate) use deep_play::logic::piece_json;
 
 /// #538: keyed copy's fit check over `form` (Text `text@1`: keyed copy), in the default type,
 /// and the CPU time it took in ms.
@@ -527,16 +290,4 @@ pub(crate) fn copy_fit(form: &Value) -> (Vec<Issue>, f64) {
     (out, started.elapsed().as_secs_f64() * 1000.0)
 }
 
-/// #538: the issues the cell grid, keyed copy and flip by array raise over `form`'s baked arrays:
-/// every one at check (`t` none), or those beginning at the step of a frame at `t` in `locale`.
-pub(crate) fn raised_at(form: &Value, t: Option<i64>, locale: &str) -> Vec<Issue> {
-    let empty = Map::new();
-    let map = form.as_object().unwrap_or(&empty);
-    let mut out = t.map_or_else(Vec::new, |t| {
-        deep_canvas_cells::logic_grid::raised_at(form, t)
-    });
-    out.extend(deep_canvas_motion::held::unmapped(form, t));
-    out.extend(deep_canvas_marks::copy::raised_at(map, t, locale));
-    out.extend(deep_canvas_marks::copy::column_missing(map, t, locale));
-    out
-}
+pub(crate) use deep_play::logic::raised_at;
