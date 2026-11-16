@@ -1201,7 +1201,7 @@ describe('a FULL commit syncs the evidence its data names beside its own list (#
 describe('a FULL commit whose evidence fails to sync is refused, and nothing of it is in the log (#1410)', () => {
   // Not root: an evidence root without read permission still takes new files, but can't itself be opened to sync.
   it.each([
-    ['a verdict, committed alone', true, (S: string, sha: string): EventInput => ({ ...event('verdict.made', T0 + 200, undefined, { claim: `claim:${ulidAt(T0 + 1)}`, verdict: `verdict:${ulidAt(T0 + 200)}` }, 1), evidence: [sha] })],
+    ['a verdict, committed alone', true, (_S: string, sha: string): EventInput => ({ ...event('verdict.made', T0 + 200, undefined, { claim: `claim:${ulidAt(T0 + 1)}`, verdict: `verdict:${ulidAt(T0 + 200)}` }, 1), evidence: [sha] })],
     ['a prompt that resumes its session, committed in a batch', false, (): EventInput => event('user.ask', T0 + 200, seqAt(T0 + 200), { msg: 2, text: 'carry on '.repeat(1200) })],
   ])('%s', async (_name, commitEach, make) => {
     const root = tempRoot();
