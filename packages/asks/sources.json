@@ -1008,10 +1008,6 @@
         "pinned_to": {
           "kind": "commit",
           "ref": "89abcdef0123456789abcdef0123456789abcdef"
-        },
-        "subject": {
-          "screen": "acme/shop#100",
-          "element": "the look of #100's change is right to you"
         }
       },
       "at_deadline": {
