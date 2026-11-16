@@ -1,0 +1,32 @@
+The blind redraft of #251's criterion 2 run once at base commit a6e742ed0 ("Merge pull request #2708 …"; no
+implementation of #251), on macOS arm64 (Mac17,10, rustc 1.99.1, cargo 1.99.1, Node 24.22.2, vitest 5.0.5), directly,
+with no throttle or lease (the machine's 1-minute load was about 370), with `tests/acceptance/251/helpers.ts` put back
+unchanged from bf254d0fc (SHA-256 d2f043ad28f31999ee6a159548b14af050ec7c5186bd6e8a4568f45c345a78cb) and not committed:
+
+  PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    npx vitest run --root tests/acceptance/251-redraft-ac2 --testTimeout=600000 --no-file-parallelism
+
+The file's own `cargo build --locked --bin deep-physics` ran cold in its beforeAll (about 8 minutes under that load).
+
+Result: Test Files 1 failed (1); Tests 4 failed (4); 481 s. Every failure is at an assertion because the vehicle surface
+is absent; none is in the harness and none is BLOCKED. `npx tsc -p tests/acceptance/251-redraft-ac2/tsconfig.json`
+exits 0. Each failing test, trimmed to its failing assertion:
+
+ac2-drive-and-brake.test.ts
+- #251.acf8ab9a (drive), at ../251/helpers.ts `baked` (through helpers.ts `run`):
+    AssertionError: the drive from rest is baked, not refused: {"ok":false,"issues":[{"check":"document.validate",
+    "code":"unknown_field","severity":"error","ids":["kart"],"path":"bodies/kart/vehicle", …,"what":"bodies/kart/vehicle
+    is not a field here; …"},{"check":"document.validate","code":"physics.unsupported","severity":"error",
+    "ids":["kart"],"path":"bodies/kart/kind","actual":"vehicle","t":null,"what":"a vehicle body isn't run by this
+    backend interface yet; #251 brings it", …},{"check":"document.validate","code":"physics.unsupported",
+    "severity":"error","ids":[],"path":"inputs/drive/kind","actual":"drive","t":null,"what":"the input kind drive isn't
+    run by this backend interface yet; #251 brings it", …}, …]}: expected false to be true
+- #251.acf8ab9a (from sleep), at the same assertion:
+    AssertionError: the drive from sleep is baked, not refused: {"ok":false,"issues":[… the same three issues …]}:
+    expected false to be true
+- #251.acf8ab9a (brake), at the same assertion:
+    AssertionError: the brake is baked, not refused: {"ok":false,"issues":[… the same three issues …]}: expected false
+    to be true
+- #251.acf8ab9a (twin: brake_whole_force_each_wheel), at ../1918/helpers.ts `physics`:
+    AssertionError: deep-physics --planted brake_whole_force_each_wheel (the brake) exits 0; stdout:
+    {"ok":false,"code":"bad_input"}; stderr: : expected 2 to be +0
