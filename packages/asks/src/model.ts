@@ -114,12 +114,6 @@ export type InboxStatus = 'queued' | 'shown' | 'later' | 'folded' | 'held' | 'cl
 export type Obj = { [key: string]: JsonValue };
 export type Option = { id: string; label: string; decision: Decision };
 export const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
-/** The agent a sign-in task's data names by its probe, or undefined for any other ask (#1349). */
-export const signInAgentOf = (data: unknown): string | undefined => {
-  const proves = isObj(data) && data.kind === 'unblock' && typeof data.proves === 'string' ? data.proves : '';
-  const agent = proves.endsWith(' sign-in probe') ? proves.slice(0, -' sign-in probe'.length) : '';
-  return /^[a-z0-9-]+$/.test(agent) ? agent : undefined;
-};
 export const bare = (handle: string): string => handle.replace(/^ask:/, '');
 /** A session or project ID as a scope names it: letters and digits only, as the hub's handles hold them. */
 export const letters = (id: string): string => id.replace(/[^0-9A-Za-z]/g, '');

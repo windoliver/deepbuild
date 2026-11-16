@@ -38,7 +38,7 @@ import type { JsonValue } from '@deepbuild/contracts';
 import { asCore, ulid } from '@deepbuild/record';
 import type { Connection, Event, RecordStore } from '@deepbuild/record';
 import { KINDS, place, remotesOf, targetsOf, type CardTarget } from './targets.js';
-import { AskRefused, bare, CANT_UNDO, isObj, letters, signInAgentOf } from './model.js';
+import { AskRefused, bare, CANT_UNDO, isObj, letters } from './model.js';
 import type { Ask, AskKind, AsksPlant, BatchCard, BudgetLeft, Card, Decision, HeldDecision, InboxStatus, Missing, Obj, Option, PlanStep, Refusal, Resolver, ResolverAsk, RuleState, Subject } from './model.js';
 import { blockKey, BLOCK_SOURCE, boundFor, DecisionKeys, foldKey, FOLD_SOURCE, linesOf, nearOf, needsPerson, requestKey, REQUEST_SOURCE, subjectKey, SUBJECT_KINDS } from './decision-keys.js';
 import { ResolverGate } from './resolver-gate.js';
@@ -46,7 +46,7 @@ import { Showing } from './showing.js';
 import { duration } from './duration.js';
 export { duration } from './duration.js';
 
-export { AskRefused, CANT_UNDO, signInAgentOf } from './model.js';
+export { AskRefused, CANT_UNDO } from './model.js';
 export type { AskKind, AsksPlant, BatchCard, BudgetLeft, Card, Change, Decision, EffectSubject, InboxStatus, Missing, PlanStep, PointSubject, Refusal, Resolver, ResolverAnswer, ResolverAsk, RuleState, Subject, TasteSubject } from './model.js';
 export { subjectKey } from './decision-keys.js';
 
@@ -366,6 +366,12 @@ const SIGN_IN = new Set(['sign_in_required', 'token_refresh_failed']);
 export const signInSignature = (agent: string): string => `sig:${sha256Hex(new TextEncoder().encode(`sign-in:${agent}`)).slice(0, 16)}`;
 /** What proves a sign-in task: the agent's own sign-in probe, never a claim. */
 const signInProbe = (agent: string): string => `${agent} sign-in probe`;
+/** The agent a sign-in task's data names by its probe, or undefined for any other ask (#1349). */
+export const signInAgentOf = (data: unknown): string | undefined => {
+  const proves = isObj(data) && data.kind === 'unblock' && typeof data.proves === 'string' ? data.proves : '';
+  const agent = proves.endsWith(' sign-in probe') ? proves.slice(0, -' sign-in probe'.length) : '';
+  return /^[a-z0-9-]+$/.test(agent) ? agent : undefined;
+};
 /** The trusted path: the question card and `deep inbox answer`. Every other writer is an agent's or the core's. */
 const TRUSTED: Readonly<Record<string, 'card' | 'inbox'>> = { app: 'card', cli: 'inbox' };
 /** The kinds a channel's account link may answer (#65): "I did it", a taste call and a choice, each that ask alone. */
@@ -1513,8 +1519,8 @@ class AsksCore implements Asks {
         const open = inThread.filter((a) => !a.fold);
         // An agent's sign-in task (#1349) holds the work that needs the agent: it shows at once (showing.ts), so it never
         // folds into an exception, and isn't held for your message, which the agent stopped on it won't take a step to read.
-        // Only the core files one, by its probe or by an agent's sign-in signature; an agent naming a probe files none.
-        const signIn = e.writer === 'core' && d.kind === 'unblock' && (signInAgentOf(d) !== undefined || (signature !== undefined && this.signInAgents.has(signature)));
+        // Only the core files one, under an agent's sign-in signature, from a Send or a lapsed sign-in; an agent naming a probe files none.
+        const signIn = signature !== undefined && this.signInAgents.has(signature);
         const holder = fold || theirs || signIn ? undefined : inThread.find((a) => a.fold && a.who.actor === e.actor && a.who.scope === e.scope);
         const ask: Ask = {
           id: e.id, handle: `ask:${e.id}`, data: d, options: d.options as Option[], session: e.session ?? '', who: { actor: e.actor, scope: e.scope }, thread, pos: e.log_pos,
