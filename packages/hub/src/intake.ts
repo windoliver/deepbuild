@@ -23,6 +23,13 @@ const CAP = 256 << 10;
 const FETCH_MS = 20_000;
 const JOB_MS = 30 * 60_000;
 const YOU = { writer: 'core', actor: 'you', scope: 'you' } as const;
+/** The agent the research job runs on, and the stop causes a sign-in clears: such a job waits for one, never refused (#1349). */
+const RESEARCHER = 'claude-code';
+const SIGNED_OUT = new Set(['sign_in_required', 'token_refresh_failed']);
+/** What the research job's run gives back when its sign-in lapsed. */
+const LAPSED = Symbol('lapsed');
+/** How often a brief that waits on a sign-in reads whether its task closed. */
+const WAIT_MS = 1000;
 const IDENTITY = ['-c', 'user.name=DeepBuild', '-c', 'user.email=workspace@deepbuild.invalid', '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null'];
 
 interface Source { at: string; text: string }
@@ -112,7 +119,13 @@ export class Intake implements IntakeService {
       }
       for (const s of sources) await this.o.keep(Buffer.from(s.text), s.at === WORDS ? 'your words' : s.at);
       const projects = await this.projects();
-      const answer = await this.ask(f.words, sources, projects);
+      // First needed, at the first Send (#1349): the job waits for Claude Code to read signed in, your words kept on the
+      // record; one that stops on a lapsed sign-in waits on the same task, and runs again once it reads signed in.
+      let answer: unknown = LAPSED;
+      for (let lapsed = false; answer === LAPSED; lapsed = true) {
+        await this.signIn(key, f.heading, lapsed);
+        answer = await this.ask(f.words, sources, projects);
+      }
       const brief = briefOf(answer, new Map(sources.map((s) => [s.at, s.text] as const)), projects.map((p) => p.id), f.words);
       if ('refused' in brief) return await this.refuse(key, f.heading, brief.refused);
       if (!brief.tasks.length) return await this.refuse(key, f.heading, 'The brief holds no task to start.');
@@ -142,11 +155,37 @@ export class Intake implements IntakeService {
   /** The research job: your agent, headless on the runner, with no tool that writes or reaches a network. Its answer is data. */
   private async ask(words: string, sources: readonly Source[], projects: readonly { id: string; name: string }[]): Promise<unknown> {
     const runner = this.o.runner();
-    const job = await runner.submit({ kind: 'read', agent: 'claude-code', model: 'opus', prompt: prompt(words, sources, projects), deadline_ms: JOB_MS });
+    const job = await runner.submit({ kind: 'read', agent: RESEARCHER, model: 'opus', prompt: prompt(words, sources, projects), deadline_ms: JOB_MS });
     const rec = await runner.wait(job.job);
+    if (rec.stop && SIGNED_OUT.has(rec.stop.cause)) return LAPSED;
     const text = rec.result ?? '';
     if (rec.state !== 'finished' || !text.includes('{')) throw Error(`the research job ${rec.job} ended ${rec.state} with no answer`);
     try { return JSON.parse(text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1)) as unknown; } catch { throw Error(`the research job ${rec.job}'s answer is not JSON`); }
+  }
+  /**
+   * Until Claude Code reads signed in (#1349): at once when its probe says so, unless its job just stopped on a lapsed
+   * sign-in; else on the agent's one sign-in task, the row saying in one line that it waits and nothing is lost, until
+   * the task closes on a signed-in reading. A task that closes any other way is raised again.
+   */
+  private async signIn(key: string, heading: string, lapsed: boolean): Promise<void> {
+    if (!lapsed && await this.o.signedIn(RESEARCHER) === 'signed_in') return;
+    for (;;) {
+      const ask = await this.o.asks().signIn(YOU, RESEARCHER, `req:${key.slice(0, 16)}`);
+      await this.o.row(rowId(key), {
+        id: rowId(key), title: heading, project: null, session: '', agent: null, entry: 'blocked', word: 'BLOCKED',
+        why: 'Waits for you to sign in to Claude Code. Your words are kept, and nothing is lost', waits_on: 'you', since: this.o.now(), actions: [], unread: true,
+      });
+      if (await this.closedAs(ask) === 'signed_in') return this.working(key, heading);
+    }
+  }
+  /** How a task closed, once it has: a moot's reason, or the kind of event that closed it. */
+  private async closedAs(ask: string): Promise<string> {
+    for (;;) {
+      const [row] = (await this.o.raw(`SELECT kind, json_extract(data, '$.because') AS because FROM events WHERE subject = ? AND kind IN ('ask.moot', 'ask.answered', 'ask.defaulted', 'ask.cancelled', 'ask.superseded', 'ask.escalated', 'decision.applied') ORDER BY log_pos LIMIT 1`, [ask])) as { kind: string; because: string | null }[];
+      if (row) return row.kind === 'ask.moot' ? String(row.because) : row.kind;
+      // The wait holds no stopping hub open.
+      await new Promise((resolve) => setTimeout(resolve, WAIT_MS).unref());
+    }
   }
   private async refuse(key: string, heading: string, reason: string): Promise<void> {
     await this.o.appendCore('brief.made', { step: 'refused', key, reason: reason.slice(0, 8000) });
@@ -211,7 +250,11 @@ export class Intake implements IntakeService {
       if (!started.length) await this.o.start(f.ask!, made.folder, scope([...numbers.values()]));
       await this.o.appendCore('brief.made', { step: 'applied', key, project: made.project, folder: made.folder, tasks: [...numbers.values()] }, { subject: f.ask! });
     } catch (error) {
-      process.stderr.write(`deep hub: the brief ${key.slice(0, 12)} was not applied: ${error instanceof Error ? error.message : String(error)}\n`);
+      const why = error instanceof Error ? error.message : String(error);
+      process.stderr.write(`deep hub: the brief ${key.slice(0, 12)} was not applied: ${why}\n`);
+      // On the record and its row too (#1349), so what stopped it, such as the git call that failed, is said where you look.
+      const f = (await this.folds()).get(key);
+      await this.refuse(key, f?.heading ?? '', `Your approved card wasn't applied: ${why}`).catch(() => undefined);
     } finally {
       this.busy.delete(key);
     }

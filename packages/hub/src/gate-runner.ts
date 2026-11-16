@@ -545,6 +545,10 @@ export class GateRunner {
     }
     return runs;
   }
+  /** Whether a check's result is carried from a key that holds a failed or overran run: it fails as the check's own would (#1018). */
+  private carriedFailure(e: Entry): boolean {
+    return e.outcome === 'carried' && e.group !== undefined && this.runsOn(e.group).some((s) => ['failed', 'overran'].includes(this.records.get(s.run)?.outcome ?? ''));
+  }
   /** A check whose run couldn't start, its snapshot's checkout or its start refused: one missing run, naming why (#31). */
   private cantStart(e: Entry, error: unknown): void {
     const run = `run:${ulid(this.o.now())}`;
@@ -587,7 +591,7 @@ export class GateRunner {
     let checkout: string | null = null;
     // Hooks cannot see an outside edit (#2078). Read the tree and HEAD under the snapshot budget before deciding
     // whether the last claim's results can carry without a checkout (#82).
-    const ended = (e: Entry | undefined) => e !== undefined && !e.running && e.outcome !== null && e.runs.length > 0;
+    const ended = (e: Entry | undefined) => e !== undefined && !e.running && e.outcome !== null && e.runs.length > 0 && KEPT.has(e.outcome);
     // What a workspace's checks read is one of their inputs: another reading on the same tree is new work (#67).
     const stated = (t: string | undefined): string | undefined => (t !== undefined && r.state?.digests.length ? sha256Hex(new TextEncoder().encode(`${t}\n${r.state.digests.join('\n')}`)) : t);
     // A claim with no check to run yet, its definition still to come, takes no snapshot: nothing would run on it.
@@ -744,8 +748,7 @@ export class GateRunner {
         e.running = false;
       }
       // A result carried from another session's failed run fails as the check's own would.
-      const failed = (o: string | null | undefined) => o === 'failed' || o === 'overran';
-      if (failed(e.outcome) || (e.outcome === 'carried' && e.group && this.runsOn(e.group).some((s) => failed(this.records.get(s.run)?.outcome)))) unlocked?.();
+      if (e.outcome === 'failed' || e.outcome === 'overran' || this.carriedFailure(e)) unlocked?.();
       await this.o.judged?.(r.claim);
       await e.readings;
     });
@@ -798,9 +801,11 @@ export class GateRunner {
    * requirement's `stand_in`.
    */
   private async onBase(c: Claim, e: Entry): Promise<void> {
-    // A fix check runs there once it passed, to prove the fix; a spec check once it failed, so a failure the merge base
-    // shares reads as inherited, BLOCKED, never as the claim's own FAIL (design: How runs become one of five verdicts).
-    if (e.outcome !== (e.check.on_base === 'fails' ? 'passed' : e.check.source === 'spec' ? 'failed' : null) || e.check.document !== undefined) return;
+    // A fix check runs there once it passed, to prove the fix; a spec check once it failed, on its own run or one carried
+    // from another session's, so a failure the merge base shares reads as inherited, BLOCKED, never as the claim's own
+    // FAIL (design: How runs become one of five verdicts).
+    const outcome = this.carriedFailure(e) ? 'failed' : e.outcome;
+    if (outcome !== (e.check.on_base === 'fails' ? 'passed' : e.check.source === 'spec' ? 'failed' : null) || e.check.document !== undefined) return;
     const check = e.check.check;
     const token = `${e.claim} ${check} base`;
     const surface = this.o.plant === 'stand-in-surface-dropped' ? null : e.check.surface ?? null;
@@ -883,8 +888,9 @@ export class GateRunner {
           e.outcome = await this.alone(e, e.runs.at(-1)!, ended, start);
           // Its held-out variants run again on the new reading too.
           if (KEPT.has(e.outcome)) await this.variants(c, e, undefined, 'slow');
-        } catch {
+        } catch (error) {
           e.outcome = 'missing';
+          if (!e.runs.length) this.cantStart(e, error);
         } finally {
           e.running = false;
         }
@@ -985,9 +991,13 @@ export class GateRunner {
     const c = this.claimOf(claim);
     return c ? [...c.entries.values()].filter((e) => e.lane === 'slow' && !e.stale && !e.running && !e.waiting && !e.group && !e.runs.length).map((e) => e.check.check) : [];
   }
-  /** A claim's slow checks as they stand: whether any is still to end, and each that failed. One a newer claim outdated counts for neither. */
-  slowStanding(claim: string): { pending: boolean; failed: string[] } {
-    const slow = this.standing(claim).filter((c) => c.lane === 'slow' && !c.stale);
+  /** A claim's slow checks held in their places, for its session's loop or its background work (#965, #907): no stop is held for them. */
+  slowHeld(claim: string): string[] {
+    return [...this.holding.values()].filter((h) => h.entry.claim === claim).map((h) => h.entry.check.check);
+  }
+  /** A claim's slow checks as they stand: whether any is still to end, and each that failed. One a newer claim outdated counts for neither, nor one `besides` names. */
+  slowStanding(claim: string, besides: readonly string[] = []): { pending: boolean; failed: string[] } {
+    const slow = this.standing(claim).filter((c) => c.lane === 'slow' && !c.stale && !besides.includes(c.check));
     return { pending: slow.some((c) => c.result === 'pending'), failed: slow.filter((c) => c.result === 'FAIL' || c.result === 'BLOCKED').map((c) => `${c.check} ${c.result}`) };
   }
   /** Resolves once none of a claim's slow checks is running or queued. */

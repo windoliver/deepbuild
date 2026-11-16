@@ -1,0 +1,14 @@
+[
+  {
+    "id": "#2495.f43599c5",
+    "text": "After an eval run, the evidence store holds the report's bytes, and the handle the run prints resolves to them: a test fails on the merge base, where the store holds nothing"
+  },
+  {
+    "id": "#2495.9f9da789",
+    "text": "A `learn.widened` change by the local-first rule that cites that handle passes `replayCheck` when the report adopts, and is refused naming the outcome when it doesn't"
+  },
+  {
+    "id": "#2495.69b5913d",
+    "text": "#112's and #1108's suites pass unchanged"
+  }
+]

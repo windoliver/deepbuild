@@ -1,0 +1,16 @@
+{
+  "readBy": "Set up's install step, when no shipped agent is found, and the plan line on an agent's sign-in task (#1349). Each agent's own installer, per platform, where its program lands under your home, and what its maker charges, with the date it was read; a price without a date is never shown",
+  "agents": {
+    "claude-code": {
+      "name": "Claude Code",
+      "darwin": { "installer": "https://claude.ai/install.sh", "shell": "/bin/bash", "lands": ".local/bin/claude" },
+      "plan": {
+        "paid": true,
+        "page": "https://claude.com/pricing",
+        "price": "Pro, $20 a month, or $17 a month billed yearly",
+        "read": "2026-11-15"
+      },
+      "source": "https://code.claude.com/docs/en/setup and https://claude.com/pricing, read 2026-11-15: the native installer for macOS, its program at ~/.local/bin/claude, and the free plan without Claude Code"
+    }
+  }
+}

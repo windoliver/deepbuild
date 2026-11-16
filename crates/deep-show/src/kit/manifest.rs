@@ -58,7 +58,7 @@ pub const SIDECAR_KEYS: [&str; 9] = [
     "inputs",
     "at_times",
 ];
-pub const CHECK_KEYS: [&str; 9] = [
+pub const CHECK_KEYS: [&str; 10] = [
     "kind",
     "probe",
     "at_times",
@@ -68,6 +68,8 @@ pub const CHECK_KEYS: [&str; 9] = [
     "render",
     "sweeps",
     "declared_cuts",
+    // `sound_lock`'s palette, the brief's instruments (#2362).
+    "instruments",
 ];
 /// Where a fixture's expected value came from, when not from the implementation itself.
 pub const EXPECTED_FROM: [&str; 4] = ["analytic", "upstream", "issue", "second_implementation"];

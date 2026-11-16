@@ -172,5 +172,6 @@ pub fn line(
         dash_world: false,
         cap,
         trail: Some(Arc::new(drawn)),
+        points: Vec::new(),
     }
 }

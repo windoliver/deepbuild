@@ -1,0 +1,35 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node node_modules/vitest/vitest.mjs run --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs packages/hub/test/waits.test.ts tests/acceptance/2122/canvas.test.ts tests/acceptance/2122/heavy-queue.test.ts tests/acceptance/2122/never-ends.test.ts tests/acceptance/2122/product-index.test.ts tests/acceptance/2122/product-session.test.ts` runs unleased
+
+ RUN  v5.0.5 <checkout>
+
+··············stdout | tests/acceptance/2122/canvas.test.ts > AC4: a dead or asynchronously unstartable canvas refuses calls without crashing its host
+closed-pipe: exit=0, signal=null
+FIRST {"answered":true}
+RESULT unavailable
+HOST still running
+
+
+spawn-failure: exit=0, signal=null
+RESULT unavailable
+HOST still running
+
+
+
+·stdout | tests/acceptance/2122/heavy-queue.test.ts > AC3: a late grant cannot erase C, and a ticket absent from queue and holdings is refused
+AC3 C poll: waiting C held kinds: []
+
+stdout | tests/acceptance/2122/heavy-queue.test.ts > AC3: a late grant cannot erase C, and a ticket absent from queue and holdings is refused
+AC3 unknown-ticket poll: refused
+
+·stdout | tests/acceptance/2122/product-index.test.ts > AC1: rebuilding the same commit replaces a product folder its lost index no longer names
+AC1 rebuild readings: []
+
+·stdout | tests/acceptance/2122/product-session.test.ts > AC2: a PreToolUse from a live session after restart protects its old worktree product from reclamation
+AC2 worktree product retained after restart hook and low-disk reclaim: true
+
+·
+
+ Test Files  6 passed (6)
+      Tests  18 passed (18)
+   Start at  16:15:37
+   Duration  14.18s (tests 84%, transform 14%, import 2%)

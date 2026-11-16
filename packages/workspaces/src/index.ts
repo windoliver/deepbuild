@@ -68,7 +68,12 @@ export async function changePlan(source: Pick<StateSource, 'undo'>, change: Stat
 const IDENTITY = ['-c', 'user.name=DeepBuild', '-c', 'user.email=workspace@deepbuild.invalid', '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', '-c', 'core.autocrlf=false'];
 const gitEnv = (): NodeJS.ProcessEnv => ({ ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith('GIT_'))), GIT_TERMINAL_PROMPT: '0' });
 async function git(folder: string, args: string[]): Promise<string> {
-  return (await run('git', [...IDENTITY, '-C', folder, ...args], { env: gitEnv(), maxBuffer: 64 * 1024 * 1024 })).stdout.trim();
+  try {
+    return (await run('git', [...IDENTITY, '-C', folder, ...args], { env: gitEnv(), maxBuffer: 64 * 1024 * 1024 })).stdout.trim();
+  } catch (error) {
+    // Named by its own call (#1349), so a failure says which git call it was, not the options around it.
+    throw Error(`git ${args[0]} failed: ${String((error as { stderr?: unknown }).stderr || (error as Error).message).trim()}`);
+  }
 }
 /** Commits everything in the folder, when anything changed. Answers whether it did. */
 export async function keepWork(folder: string, message: string): Promise<boolean> {

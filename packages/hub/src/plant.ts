@@ -34,9 +34,13 @@ export type Plant =
   | 'starts-before-blockers-done' | 'state-from-comment' | 'breaker-counts-per-agent' | 'waits-for-budget-window'
   // #1347's: a run over a workspace's tasks that reads or writes a forge.
   | 'workspace-calls-forge'
+  // #1349's: a setup that installs another agent than the one the first screen named.
+  | 'installs-other-agent'
   // #1342's: a flow that asks whether the work is a workspace or a repo before its card, one that makes the project
   // before its card is answered, a repo made public on an unchanged card, and a list with no row while the research runs.
   | 'asks-which-home' | 'creates-before-approval' | 'repo-public-by-default' | 'empty-list-while-researching'
+  // #1349's: a hub that closes an agent's sign-in task when the sign-in command `signin.open` started ends, with no probe.
+  | 'closes-on-return'
   // #33's gate@1 corpus: a gate that counts a check whose own files the claim edited as approved, reads a command check's
   // result from its exit status alone, judges a retry's run alone, or counts only files under the test folders as a check's own.
   | 'edited-check-approved' | 'verdict-from-exit-status' | 'empty-commit-run-alone' | 'own-files-test-folders-only'
@@ -258,6 +262,9 @@ export type Plant =
   | 'job-speech-tools-enum'
   // #1942's: a host link that drops every connection to a host when one stalls, and one that sends an unknown start again.
   | 'host-link-drops-every-connection' | 'host-link-resends-on-reconnect'
+  // #1946's: a sudo rule that names only the script's path, a Remove it that undoes every change as root, and one that
+  // writes over a target edited since.
+  | 'sudo-rule-names-path' | 'remove-undoes-all-as-root' | 'remove-overwrites-edit'
   // #1945's: a `deep host run` that runs the script where the agent wrote it, a host's first run with no lingering, and a
   // root plan that lists a package with install scripts as fully undoable.
   | 'root-plan-runs-agent-path' | 'host-skips-lingering' | 'host-package-fully-undoable'
@@ -366,6 +373,7 @@ const PLANTS: readonly string[] = [
   'starts-before-blockers-done', 'state-from-comment', 'breaker-counts-per-agent', 'waits-for-budget-window',
   'workspace-calls-forge',
   'asks-which-home', 'creates-before-approval', 'repo-public-by-default', 'empty-list-while-researching',
+  'installs-other-agent', 'closes-on-return',
   'drafted-spec-only', 'bootstrap-commands-only', 'failures-as-fail',
   'edited-check-approved', 'verdict-from-exit-status', 'empty-commit-run-alone', 'own-files-test-folders-only',
   'actor-from-payload', 'reads-unfiltered', 'listen-without-members', 'search-decisions-unfiltered',
@@ -374,6 +382,7 @@ const PLANTS: readonly string[] = [
   'job-second-call', 'job-joiner-cancels-job', 'job-host-down-done', 'job-speech-tools-enum',
   'host-link-drops-every-connection', 'host-link-resends-on-reconnect',
   'root-plan-runs-agent-path', 'host-skips-lingering', 'host-package-fully-undoable',
+  'sudo-rule-names-path', 'remove-undoes-all-as-root', 'remove-overwrites-edit',
   'figure-in-needs-you', 'figure-feeds-verdict',
   'replay-keeps-place-by-id', 'asks-keep-place-by-id',
   'set-up-line-says-nothing-blocks', 'set-up-line-to-stdout', 'silent-steps',

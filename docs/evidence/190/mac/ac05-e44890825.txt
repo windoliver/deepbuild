@@ -1,0 +1,1 @@
+BLOCKED: Docker did not answer (docker info failed or hung for 40 s, tried for about 4 min)

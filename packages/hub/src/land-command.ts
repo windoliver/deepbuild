@@ -10,7 +10,7 @@ import { hubAddress, installedRoot, rootOf } from './paths.js';
 import { startOf } from './wire.js';
 
 const LAND = 'Usage: deep land [judge] --repo <checkout> [--json]   judge each open PR on its merge with main, or land the PASSes in turn';
-const WORK = `Usage: deep work "<scope>" [--repo <checkout>] [--json]   one approval for a run over the issues your words name
+const WORK = `Usage: deep work "<scope>" [--repo <checkout>] [--json]   one approval for a run over the issues your words name, or a standing run over a rule
        deep work show | pause [--repo <checkout>] [--json]
        deep work --repo <checkout> --issues <n,...> --once [--json]   one pass of a run over a fixed set of issues`;
 
@@ -69,9 +69,19 @@ export async function workCommand(args: readonly string[]): Promise<number> {
   return send('work.once', { repo: resolve(repo), issues });
 }
 
-/** `deep work show` as lines: each run, then each issue's state word and what it waits for. */
+/**
+ * `deep work show` as lines: each run, then each issue's state word and what it waits for. A standing run (#1335) adds
+ * its rule, the issues that stay out with why, and its last weekly notice.
+ */
 function shown(r: Record<string, unknown>): string {
-  const runs = r.runs as { ask: string; paused: boolean; issues: { issue: number; word: string; waits_on: string | null }[] }[];
+  type Notice = { landed: number[]; left: { issue: number; word: string }[]; spent: { attempts: number; usd: number | null } };
+  const runs = r.runs as { ask: string; paused: boolean; breaker?: string; rule?: string; issues: { issue: number; word: string; waits_on: string | null }[]; left_out?: { issue: number; why: string }[]; notices?: Notice[] }[];
   if (!runs.length) return 'No work run yet: start one with deep work "<scope>".';
-  return runs.map((run) => [`${run.ask}${run.paused ? ' (paused)' : ''}`, ...run.issues.map((i) => `  #${i.issue}  ${i.word}${i.waits_on ? `  waits on ${i.waits_on}` : ''}`)].join('\n')).join('\n');
+  const week = (n: Notice): string => `  this week: landed ${n.landed.map((i) => `#${i}`).join(', ') || 'nothing'}; left ${n.left.map((i) => `#${i.issue} (${i.word})`).join(', ') || 'nothing'}; spent ${n.spent.attempts} attempt${n.spent.attempts === 1 ? '' : 's'}${n.spent.usd !== null ? `, $${n.spent.usd}` : ''}`;
+  return runs.map((run) => [
+    `${run.ask}${run.rule ? ` standing on "${run.rule}"` : ''}${run.paused ? ` (paused${run.breaker ? `: ${run.breaker}` : ''})` : ''}`,
+    ...run.issues.map((i) => `  #${i.issue}  ${i.word}${i.waits_on ? `  waits on ${i.waits_on}` : ''}`),
+    ...(run.left_out ?? []).map((i) => `  #${i.issue}  stays out: ${i.why}`),
+    ...(run.notices?.length ? [week(run.notices.at(-1)!)] : []),
+  ].join('\n')).join('\n');
 }

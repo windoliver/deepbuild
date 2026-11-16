@@ -1,0 +1,266 @@
+{
+  "format": 1,
+  "profile": "board",
+  "title": "Mixed-version bookcases",
+  "description": "Twelve shelf.bookcase instances in two writers' layers: a1 to a6 saved at @1 by writer A, b1 to b6 saved at @2 by writer B, with acme/shelf@3.0.0 named. A channel is keyed on a1's levels, a driver reads a2's width, a bound value targets b1's width and a constraint's path names b2's width. A fixture of the #1960 acceptance suite.",
+  "size": [
+    320,
+    360
+  ],
+  "transport": {
+    "span": "10s"
+  },
+  "packs": [
+    "acme/shelf@3.0.0"
+  ],
+  "layers": {
+    "writer-a": {
+      "writer": "agent:thread-alpha",
+      "title": "Writer A",
+      "order": "a1"
+    },
+    "writer-b": {
+      "writer": "agent:thread-beta",
+      "title": "Writer B",
+      "order": "a2"
+    }
+  },
+  "items": {
+    "a1": {
+      "id": "a1",
+      "kind": "shelf.bookcase@1",
+      "name": "Bookcase A1",
+      "order": "a1",
+      "layer": "writer-a",
+      "params": {
+        "width": 1.6,
+        "levels": 4
+      }
+    },
+    "a2": {
+      "id": "a2",
+      "kind": "shelf.bookcase@1",
+      "name": "Bookcase A2",
+      "order": "a2",
+      "layer": "writer-a",
+      "params": {
+        "width": 1.6,
+        "levels": 4
+      }
+    },
+    "a3": {
+      "id": "a3",
+      "kind": "shelf.bookcase@1",
+      "name": "Bookcase A3",
+      "order": "a3",
+      "layer": "writer-a",
+      "params": {
+        "width": 1.6,
+        "levels": 4
+      }
+    },
+    "a4": {
+      "id": "a4",
+      "kind": "shelf.bookcase@1",
+      "name": "Bookcase A4",
+      "order": "a4",
+      "layer": "writer-a",
+      "params": {
+        "width": 1.6,
+        "levels": 4
+      }
+    },
+    "a5": {
+      "id": "a5",
+      "kind": "shelf.bookcase@1",
+      "name": "Bookcase A5",
+      "order": "a5",
+      "layer": "writer-a",
+      "params": {
+        "width": 1.6,
+        "levels": 4
+      }
+    },
+    "a6": {
+      "id": "a6",
+      "kind": "shelf.bookcase@1",
+      "name": "Bookcase A6",
+      "order": "a6",
+      "layer": "writer-a",
+      "params": {
+        "width": 1.6,
+        "levels": 4
+      }
+    },
+    "b1": {
+      "id": "b1",
+      "kind": "shelf.bookcase@2",
+      "name": "Bookcase B1",
+      "order": "b1",
+      "layer": "writer-b",
+      "params": {
+        "width": 1.6,
+        "shelves": 4,
+        "depth": 0.4
+      }
+    },
+    "b2": {
+      "id": "b2",
+      "kind": "shelf.bookcase@2",
+      "name": "Bookcase B2",
+      "order": "b2",
+      "layer": "writer-b",
+      "params": {
+        "width": 1.6,
+        "shelves": 4,
+        "depth": 0.4
+      }
+    },
+    "b3": {
+      "id": "b3",
+      "kind": "shelf.bookcase@2",
+      "name": "Bookcase B3",
+      "order": "b3",
+      "layer": "writer-b",
+      "params": {
+        "width": 1.6,
+        "shelves": 4,
+        "depth": 0.4
+      }
+    },
+    "b4": {
+      "id": "b4",
+      "kind": "shelf.bookcase@2",
+      "name": "Bookcase B4",
+      "order": "b4",
+      "layer": "writer-b",
+      "params": {
+        "width": 1.6,
+        "shelves": 4,
+        "depth": 0.4
+      }
+    },
+    "b5": {
+      "id": "b5",
+      "kind": "shelf.bookcase@2",
+      "name": "Bookcase B5",
+      "order": "b5",
+      "layer": "writer-b",
+      "params": {
+        "width": 1.6,
+        "shelves": 4,
+        "depth": 0.4
+      }
+    },
+    "b6": {
+      "id": "b6",
+      "kind": "shelf.bookcase@2",
+      "name": "Bookcase B6",
+      "order": "b6",
+      "layer": "writer-b",
+      "params": {
+        "width": 1.6,
+        "shelves": 4,
+        "depth": 0.4
+      }
+    },
+    "gauge-a": {
+      "id": "gauge-a",
+      "kind": "rect@1",
+      "name": "Gauge A",
+      "order": "c1",
+      "layer": "writer-a",
+      "params": {
+        "box": [
+          0,
+          0,
+          8,
+          8
+        ]
+      }
+    },
+    "gauge-b": {
+      "id": "gauge-b",
+      "kind": "rect@1",
+      "name": "Gauge B",
+      "order": "c2",
+      "layer": "writer-b",
+      "params": {
+        "box": [
+          0,
+          0,
+          8,
+          8
+        ]
+      }
+    }
+  },
+  "channels": {
+    "rise": {
+      "target": "items/a1/params/levels",
+      "type": "f32",
+      "keys": {
+        "k0": {
+          "t": "0s",
+          "value": 4,
+          "interp": "hold"
+        },
+        "k1": {
+          "t": "2s",
+          "value": 6,
+          "interp": "hold"
+        },
+        "k2": {
+          "t": "4s",
+          "value": 3,
+          "interp": "hold"
+        },
+        "k3": {
+          "t": "6s",
+          "value": 8,
+          "interp": "hold"
+        },
+        "k4": {
+          "t": "8s",
+          "value": 5,
+          "interp": "hold"
+        }
+      }
+    }
+  },
+  "drivers": {
+    "reach": {
+      "target": "items/gauge-a/at/pos/0",
+      "expr": "w * 100 + t * 2",
+      "vars": {
+        "w": "items/a2/params/width",
+        "t": "time"
+      }
+    }
+  },
+  "bound_values": {
+    "stock": {
+      "target": "items/b1/params/width",
+      "source": "reading:01JB1960R00000000000000001"
+    }
+  },
+  "constraints": {
+    "slide": {
+      "owner": "gauge-b",
+      "kind": "follow_path",
+      "path": [
+        [
+          0,
+          0
+        ],
+        [
+          100,
+          0
+        ]
+      ],
+      "fraction": {
+        "path": "items/b2/params/width"
+      }
+    }
+  }
+}
