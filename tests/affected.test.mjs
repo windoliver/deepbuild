@@ -45,24 +45,46 @@ const packages = {
 
 test('a change reaches the tests that import it, near or far, through the packages\' entries, and no others', (t) => {
   const { root, files } = repo(t, packages);
-  const { tests } = select(root, ['packages/a/src/leaf.ts'], { files, workspace: [] });
+  const { tests, wide } = select(root, ['packages/a/src/leaf.ts'], { files, workspace: [] });
   // Four imports away; a selector that follows only direct importers, takes a's whole entry for `deep` (so other.test.ts
-  // too) or counts a type-only import fails here.
-  assert.deepEqual(tests, ['tests/acceptance/1/b.test.ts', 'tests/acceptance/4/entry.test.ts', 'tests/acceptance/5/b-build.test.mjs']);
+  // too) or counts a type-only import fails here. b's build reaches leaf.ts only through a, another package, so the test
+  // starting it is wide (#2574 AC3).
+  assert.deepEqual(tests, ['tests/acceptance/1/b.test.ts', 'tests/acceptance/4/entry.test.ts']);
+  assert.deepEqual(wide, ['tests/acceptance/5/b-build.test.mjs', 'tests/acceptance/6/c-build.test.mjs']);
   // A change to the entry itself reaches everything imported through it by name.
   assert.deepEqual(select(root, ['packages/a/src/index.ts'], { files, workspace: [] }).tests,
-    ['tests/acceptance/1/b.test.ts', 'tests/acceptance/2/other.test.ts', 'tests/acceptance/4/entry.test.ts', 'tests/acceptance/5/b-build.test.mjs']);
+    ['tests/acceptance/1/b.test.ts', 'tests/acceptance/2/other.test.ts', 'tests/acceptance/4/entry.test.ts']);
 });
 
-test('a test starting a package\'s build sees that package and the ones it depends on; deeper is wide, and a fixture reaches its folder', (t) => {
+// The package rule reads the test's folder, not the helper's that starts the build: a helper in a's tests reaches a test
+// outside a, and one outside a reaches a test in a (#2574 AC3).
+test('a test reached through a helper that starts another package\'s build is selected only in the changed file\'s package', (t) => {
+  const start = "import { spawnSync } from 'node:child_process';\nexport const start = () => spawnSync('node', ['packages/c/dist/index.js']);\n";
+  const uses = (helper) => `import test from 'node:test';\nimport { start } from '${helper}';\ntest('c', () => start());\n`;
+  const { root, files } = repo(t, {
+    ...packages,
+    'packages/a/test/start-c.mjs': start,
+    'packages/a/test/c.test.mjs': uses('./start-c.mjs'),
+    'tests/acceptance/8/c.test.mjs': uses('../../../packages/a/test/start-c.mjs'),
+    'tests/acceptance/9/start-c.mjs': start,
+    'tests/acceptance/9/c.test.mjs': uses('./start-c.mjs'),
+    'packages/a/test/c9.test.mjs': uses('../../../tests/acceptance/9/start-c.mjs'),
+  });
+  const { tests, wide } = select(root, ['packages/a/src/leaf.ts'], { files, workspace: [] });
+  for (const test of ['packages/a/test/c.test.mjs', 'packages/a/test/c9.test.mjs']) assert.ok(tests.includes(test) && !wide.includes(test), `${test} is in a: selected\n${JSON.stringify({ tests, wide })}`);
+  for (const test of ['tests/acceptance/8/c.test.mjs', 'tests/acceptance/9/c.test.mjs']) assert.ok(wide.includes(test) && !tests.includes(test), `${test} is outside a: wide\n${JSON.stringify({ tests, wide })}`);
+});
+
+test('a test starting a package\'s build sees that package; one it reaches through another package is wide, and a fixture reaches its folder', (t) => {
   const { root, files } = repo(t, packages);
-  // c's build reaches leaf.ts only through b, which c depends on, and a, which it doesn't.
+  // c's build reaches leaf.ts only through b and a, other packages (#2574 AC3).
   const deep = select(root, ['packages/a/src/leaf.ts'], { files, workspace: [] });
   assert.equal(deep.tests.includes('tests/acceptance/6/c-build.test.mjs'), false);
-  assert.deepEqual(deep.wide, ['tests/acceptance/6/c-build.test.mjs']);
+  assert.deepEqual(deep.wide, ['tests/acceptance/5/b-build.test.mjs', 'tests/acceptance/6/c-build.test.mjs']);
+  // b's build sees b's own change; c's, which depends on b, sees it only through another package.
   const near = select(root, ['packages/b/src/index.ts'], { files, workspace: [] });
-  assert.deepEqual(near.tests, ['tests/acceptance/1/b.test.ts', 'tests/acceptance/5/b-build.test.mjs', 'tests/acceptance/6/c-build.test.mjs']);
-  assert.deepEqual(near.wide, []);
+  assert.deepEqual(near.tests, ['tests/acceptance/1/b.test.ts', 'tests/acceptance/5/b-build.test.mjs']);
+  assert.deepEqual(near.wide, ['tests/acceptance/6/c-build.test.mjs']);
   // A fixture its test reads by a path built at run time reaches the tests of its own folder; a doc reaches none.
   const fixture = select(root, ['tests/acceptance/7/fixtures/case.json', 'packages/a/README.md', 'packages/a/notes.txt'], { files, workspace: [] });
   assert.deepEqual(fixture.tests, ['tests/acceptance/7/case.test.ts', 'tests/acceptance/7/other.test.ts']);
@@ -105,6 +127,22 @@ test('a Rust change reaches its crate and the crates depending on it, their [[te
   // A [[test]] file outside its crate belongs to it, and a Rust test starting a package's build sees the package.
   assert.deepEqual(select(root, ['tests/acceptance/8/card.rs'], { files, workspace }).crates, ['r2']);
   assert.deepEqual(select(root, ['packages/a/src/leaf.ts'], { files, workspace }).crates, ['r2']);
+});
+
+test('a budget task runs when the change reaches its script or its binary\'s crates, when it can\'t be placed, and when the change feeds every suite', (t) => {
+  const { root, files } = repo(t, { ...cargo, 'benchmarks/bench.mjs': "import './helper.mjs';\n", 'benchmarks/helper.mjs': 'export {};\n', 'benchmarks/r2.mjs': "const R2 = 'target/release/r2';\n", 'Cargo.lock': '' });
+  const workspace = crates(root);
+  const tasks = [
+    { id: 'binary', command: ['target/debug/r2', '--version'] }, { id: 'script', command: ['node', 'benchmarks/bench.mjs'] },
+    { id: 'script-runs-r2', command: ['node', 'benchmarks/r2.mjs'] }, { id: 'nowhere', command: ['/bin/sh', '-c', 'true'] },
+  ];
+  const run = (path) => select(root, [path], { files, workspace, tasks }).tasks;
+  // r2's binary links r1, so a selector that reaches only a crate whose own source changed, as for tests, drops the
+  // script that runs it.
+  assert.deepEqual(run('crates/r1/src/lib.rs'), ['binary', 'script-runs-r2', 'nowhere']);
+  assert.deepEqual(run('crates/r3/src/lib.rs'), ['nowhere']);
+  assert.deepEqual(run('benchmarks/helper.mjs'), ['script', 'nowhere']);
+  assert.deepEqual(run('Cargo.lock'), tasks.map(({ id }) => id));
 });
 
 test('the files a runner config names feed every suite, wherever the config names them, and a setup file the change deletes still does', (t) => {

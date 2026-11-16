@@ -4,7 +4,7 @@
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { loadavg, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { performance } from 'node:perf_hooks';
@@ -591,9 +591,13 @@ workloads['cell-grid-60hz'] = terminal(true);
 // the task's targets in benchmarks/budgets.json, refusing a reading of any other build. The perf lane compares each
 // command with the merge base as it does every task.
 const RUNS = 5;
+// Each run carries the one-minute load at its start and end, as measureOnce names them: judgeLimit's loads (#1830).
 const runs = (once) => {
   once(true);
-  return Array.from({ length: RUNS }, () => once(false));
+  return Array.from({ length: RUNS }, () => {
+    const loadStart = loadavg()[0];
+    return { ...once(false), loadStart, loadEnd: loadavg()[0] };
+  });
 };
 const toolchain = () => spawnSync('rustc', ['-V'], { cwd: root, encoding: 'utf8' }).stdout.trim();
 function release(pkg, bin) {
@@ -1148,6 +1152,7 @@ const EFFICIENCY = {
   // #538: each reading by its own name (benchmarks/game-state.mjs).
   'canvas-axes3d': { axes_over_marks: (r) => r.axes_over_marks, still_maps: (r) => r.still_maps },
   'canvas-surface': { rebuild_128_ms: (r) => r.rebuild_128_ms },
+  'canvas-math': { math_over_hand: (r) => r.math_over_hand, frame_expansions: (r) => r.frame_expansions },
   'canvas-game-state': Object.fromEntries(['compare_ms', 'remap_row_us', 'remap_layer_ms', 'upload_slots_ms', 'overlay_upload_ms', 'fit_check_ms', 'idle_steps'].map((k) => [k, (r) => r[k]])),
   // #548: each reading by its own name (benchmarks/logic-budgets.mjs).
   'canvas-logic-budgets': Object.fromEntries(['occurrences_64_ms', 'linear_1000_vec3_ms', 'preview_4mib_ms', 'checkpoint_3_pages_ms'].map((k) => [k, (r) => r[k]])),
@@ -1157,7 +1162,7 @@ const EFFICIENCY = {
   'playtest-maze': { maze_40_runs_s: (r) => r.maze_40_runs_s, idle_work: (r) => r.idle_work },
   'playtest-throughput': { fixture_realtime_x: (r) => r.fixture_realtime_x },
 };
-const COUNTS = new Set(['summary_tokens', 'page_rows', 'frames', 'upload_bytes_per_item', 'indexed_target_bytes', 'still_steps', 'idle_steps', 'still_maps', 'still_code_steps', 'idle_work']);
+const COUNTS = new Set(['summary_tokens', 'page_rows', 'frames', 'upload_bytes_per_item', 'indexed_target_bytes', 'still_steps', 'idle_steps', 'still_maps', 'still_code_steps', 'idle_work', 'frame_expansions']);
 /** Targets that are floors, each reading at or above its limit: judged as the limit on their negations (#184's multiple of real time). */
 const FLOORS = new Set(['fixture_realtime_x']);
 
@@ -1382,6 +1387,102 @@ workloads['look-switch'] = () => {
     return { samples: reply.switches.map(({ ms, ground }, i) => ({ from: walk[i], to: walk[i + 1], ms, ground })) };
   });
   console.log(JSON.stringify({ task: 'canvas-look-switch', fixture, fingerprint, runs: measured }));
+};
+
+// #463's art@1 looks (tests/acceptance/463/README.md, "AC2's reports"): a release `deep-gpu` plays the shared test
+// scene in each pack look by ID, its pack installed, at 1080p, 30 warm frames then 300 timed, one warm-up run and five,
+// each run a fresh process. `art-frames` times every look in 2D (`film2d`) and 3D (`view3d`); `art-regions` times each
+// look, the next look of the list, and the scene with a region in that next look whose edge stays in view, with each
+// side's pixel hash at frame 30; `art-switch` switches the 2D film between every ordered pair of looks.
+const ART_463 = join('tests', 'acceptance', '463', 'fixtures');
+const ART_PACK = () => [{ id: 'deepbuild/art', dir: join(root, 'packs', 'art-1.0.0') }];
+const ART_SIZE = [1920, 1080];
+const artLooks = () => Object.keys(JSON.parse(readFileSync(join(root, 'packs', 'art-1.0.0', 'pack.json'), 'utf8')).looks);
+/** A fixture's 2D film and the path of its 3D scene, written into `dir`. */
+function artScene(dir, file) {
+  const fixture = `${ART_463}/${file}`;
+  const scene = JSON.parse(readFileSync(join(root, fixture), 'utf8'));
+  const path = join(dir, file.replace('.json', '-3d.json'));
+  writeFileSync(path, JSON.stringify(scene['3d']));
+  return { fixture, flat: scene['2d'], deep: path };
+}
+const artFrames = (reply) => reply.frames.slice(WARM_UP).map(({ gpu_ms, cpu_ms }) => ({ gpu_ms, cpu_ms }));
+const artCall = (dim, scene, look, extra = {}) => dim === '2d'
+  ? { call: 'film2d', doc: scene.flat, look, packs: ART_PACK(), fps: 30, ...extra }
+  : { call: 'view3d', doc: scene.deep, look, packs: ART_PACK(), size: ART_SIZE, fps: 30, timings: true, ...extra };
+/** `body(dir)` with a scratch folder removed after it. */
+function inScratch(body) {
+  const dir = mkdtempSync(join(tmpdir(), 'deep-art-'));
+  try { return body(dir); } finally { rmSync(dir, { recursive: true, force: true }); }
+}
+
+workloads['art-frames'] = () => {
+  const fingerprint = release('deep-gpu-layer', 'deep-gpu');
+  const looks = artLooks();
+  inScratch((dir) => {
+    const scene = artScene(dir, 'scene.json');
+    const frames = WARM_UP + WARM_FRAMES;
+    const measured = runs(() => {
+      const flat = films(looks.map((look) => artCall('2d', scene, look, { frames })));
+      const deep = films(looks.map((look) => artCall('3d', scene, look, { frames })));
+      return { looks: Object.fromEntries(looks.map((look, i) => [look, {
+        '2d': { fixture: scene.fixture, size: ART_SIZE, frames: artFrames(flat[i]) },
+        '3d': { fixture: scene.fixture, size: ART_SIZE, frames: artFrames(deep[i]) },
+      }])) };
+    });
+    console.log(JSON.stringify({ task: 'canvas-art-frames', fingerprint, runs: measured }));
+  });
+};
+
+workloads['art-regions'] = () => {
+  const fingerprint = release('deep-gpu-layer', 'deep-gpu');
+  const looks = artLooks();
+  const pairs = looks.map((look, i) => ({ look, region: looks[(i + 1) % looks.length] }));
+  inScratch((dir) => {
+    const plain = artScene(dir, 'scene.json');
+    const edged = artScene(dir, 'scene-region.json');
+    const frames = WARM_UP + WARM_FRAMES;
+    const sides = (dim, { look, region }) => [
+      artCall(dim, plain, look, { frames }),
+      artCall(dim, plain, region, { frames }),
+      artCall(dim, edged, look, { frames, looks: { outer: look, inner: region } }),
+    ];
+    const hashAt = (dim, call) => dim === '2d'
+      ? { ...call, frames: WARM_UP + 1, hash: true }
+      : { ...call, frames: WARM_UP + 1, capture: [WARM_UP], targets: ['final'], timings: false };
+    const measured = runs(() => {
+      const byDim = Object.fromEntries(['2d', '3d'].map((dim) => {
+        const calls = pairs.flatMap((p) => sides(dim, p));
+        const timed = films(calls);
+        const hashed = films(calls.map((c) => hashAt(dim, c)));
+        return [dim, { timed, hashed }];
+      }));
+      return { pairs: pairs.map((p, k) => ({ ...p, ...Object.fromEntries(['2d', '3d'].map((dim) => {
+        const at = (j) => byDim[dim].timed[3 * k + j];
+        const hash = (j) => byDim[dim].hashed[3 * k + j].frames[WARM_UP].pixel_hash;
+        return [dim, {
+          fixture: edged.fixture,
+          outer: { frames: artFrames(at(0)) }, inner: { frames: artFrames(at(1)) }, edge: { frames: artFrames(at(2)) },
+          hashes: { outer: hash(0), inner: hash(1), edge: hash(2) },
+        }];
+      })) })) };
+    });
+    console.log(JSON.stringify({ task: 'canvas-art-regions', fingerprint, runs: measured }));
+  });
+};
+
+workloads['art-switch'] = () => {
+  const fingerprint = release('deep-gpu-layer', 'deep-gpu');
+  const fixture = `${ART_463}/scene.json`;
+  const doc = JSON.parse(readFileSync(join(root, fixture), 'utf8'))['2d'];
+  const walk = everyPair(artLooks());
+  const events = walk.slice(1).map((look, i) => ({ frame: SWITCH_EVERY * (i + 1), look }));
+  const measured = runs(() => {
+    const [reply] = films([{ call: 'film2d', doc, look: walk[0], packs: ART_PACK(), frames: SWITCH_EVERY * walk.length, events }]);
+    if (reply.switches?.length !== events.length) throw Error(`film2d timed ${reply.switches?.length} of ${events.length} switches`);
+    return { samples: reply.switches.map(({ ms, ground }, i) => ({ from: walk[i], to: walk[i + 1], ms, ground })) };
+  });
+  console.log(JSON.stringify({ task: 'canvas-art-switch', fixture, fingerprint, runs: measured }));
 };
 
 // #105: a bug capture of the second display through `deep-show run` on the virtual clock: picked, the chord held for
@@ -1610,6 +1711,8 @@ workloads.surface = async () => (await import('./surface.mjs')).surface({ releas
 // #1968's budgets: a long file's tokens mapped to runs, two versions aligned, a seek into a long terminal recording and a
 // still code item's steps per frame (benchmarks/code-film.mjs).
 workloads['code-film'] = async () => (await import('./code-film.mjs')).codeFilm({ release, once, runs });
+// #233's budgets: a math@1 document against its expansion written by hand, and a frame's own expansions (benchmarks/math.mjs).
+workloads.math = async () => (await import('./math.mjs')).math({ root, release, once, runs });
 workloads['between-steps'] = async () => (await import('./between-steps.mjs')).betweenSteps({ root, release, once, runs });
 // #184's budgets: the maze's 40 runs and replays on two replicas with no work added to a piece played without the
 // plug-in, and 20 runs of the 2-minute maze on four replicas as a multiple of real time (benchmarks/playtest.mjs).
