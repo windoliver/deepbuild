@@ -55,6 +55,8 @@ const STATE_LISTS: Record<string, readonly string[]> = {
   [`work.state@1 ${WORD}`]: ['queued', 'working', 'says done', 'sent back', 'needs you', 'stale', 'finished', 'closed', 'closed before the gate'],
   // Attempt and plan's closed set of causes, the two a work run adds, and none for an attempt that hasn't ended.
   'work.attempt@1 /properties/data/properties/cause': ['none', 'landed with the budget window open', 'gave up its slot', 'replaced by you', 'sent back past its rounds', 'stalled', 'context full', 'plan window or spend cap', 'crashed or interrupted'],
+  // The same, with the third a work run adds: landed while a call on you stays open (#1345).
+  'work.attempt@2 /properties/data/properties/cause': ['none', 'landed with the budget window open', 'landed with your call open', 'gave up its slot', 'replaced by you', 'sent back past its rounds', 'stalled', 'context full', 'plan window or spend cap', 'crashed or interrupted'],
   // The five verdicts, or none for a landing step that reads no verdict.
   'landing.made@1 /properties/data/properties/outcome': ['none'],
 };
