@@ -1,0 +1,36 @@
+Captured output, paths redacted. This is not a passing full preflight.
+
+✖ #1624.alone the unit lane runs each reference-Mac budget file alone, after the parallel block (1496.272834ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3296.014667
+
+✖ failing tests:
+
+test at tests/acceptance/1624-redraft/alone.test.mjs:44:1
+✖ #1624.alone the unit lane runs each reference-Mac budget file alone, after the parallel block (1496.272834ms)
+  AssertionError [ERR_ASSERTION]: these budget files are not run alone, so no block runs them with nothing beside them
+  + actual - expected
+
+  + [
+  +   'tests/acceptance/112/live.test.ts',
+  +   'tests/acceptance/21/sessions.live.test.ts',
+  +   'tests/acceptance/824/budgets.long.test.ts'
+  + ]
+  - []
+
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/1624-redraft/alone.test.mjs:65:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'tests/acceptance/112/live.test.ts', 'tests/acceptance/21/sessions.live.test.ts', 'tests/acceptance/824/budgets.long.test.ts' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }

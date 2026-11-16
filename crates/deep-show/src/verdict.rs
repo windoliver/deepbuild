@@ -765,6 +765,7 @@ impl<'a> Hub<'a> {
 
     /// One requirement's row: its check input's kind run on every deliverable, with the machines
     /// its result holds on and the determinism class of what it read (#411).
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn judge(
         &self,
         r: &Requirement,
@@ -897,7 +898,9 @@ impl<'a> Hub<'a> {
             // checked against none, and a scene over its class names its fix as patch ops.
             if budget {
                 if deep_canvas::budget::of(&checked.lowered).is_none() {
-                    blocked.push(json!({"code": "not_run", "kind": kind, "ids": [], "path": "budget/class"}));
+                    blocked.push(
+                        json!({"code": "not_run", "kind": kind, "ids": [], "path": "budget/class"}),
+                    );
                 }
                 let over = raised.iter().position(|i| i["code"] == "over_budget");
                 if let Some(k) = over {
@@ -1294,7 +1297,13 @@ pub fn run_check(
 }
 
 /// An issue a module's check raised, as a reply carries it, naming the check kind.
-pub(crate) fn raised_json(hub: &Hub<'_>, kind: &str, module: &str, id: &str, raised: Raised) -> Value {
+pub(crate) fn raised_json(
+    hub: &Hub<'_>,
+    kind: &str,
+    module: &str,
+    id: &str,
+    raised: Raised,
+) -> Value {
     let mut issue = Issue::error(raised.code, id, raised.path, Value::Null, &raised.what);
     issue.severity = raised.severity;
     issue.fix = fix_of(hub, module, raised.code);

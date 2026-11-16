@@ -163,7 +163,9 @@ pub(crate) fn refusals(
                 format!("the item {id} draws a video's frames the bundle can't carry decoded"),
             );
         }
-        if let Some(module) = module_of(kind.split('@').next().unwrap_or(kind)).filter(|m| !held.iter().any(|h| h == m)) {
+        if let Some(module) = module_of(kind.split('@').next().unwrap_or(kind))
+            .filter(|m| !held.iter().any(|h| h == m))
+        {
             refuse(id, "module_missing", format!("the item {id} is a {kind}, of the canvas module {module}, which the web player lacks"));
         }
     }
