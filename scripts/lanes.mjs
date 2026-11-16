@@ -655,6 +655,9 @@ alone.push('tests/acceptance/1347/');
 alone.push('tests/acceptance/1335/');
 // #1342's files each start their own hubs, a played forge, a web source and played agents, and run a brief to its project.
 alone.push('tests/acceptance/1342/');
+// #1345's files each start their own hubs, a played forge and played agents, run a standing run to its calls, and draw
+// the app headless with deep-drive over a copy of the record.
+alone.push('tests/acceptance/1345/');
 // #1349's files each build the app's runtime folder once, run real setups and hubs on a fixture machine, and drive the replica.
 alone.push('tests/acceptance/1349/');
 // #525's files each build deep-show (criterion 3 also the test.sim B builds) and play a live lab ten minutes long.
@@ -781,6 +784,14 @@ timed.push('tests/acceptance/213/ac8-budgets.test.ts');
 // (tests/acceptance/213-redraft-ac3/DISPUTE.md): the redraft runs in its place, the first draft by hand.
 alone.push('tests/acceptance/213-redraft-ac3/');
 byHand.push('tests/acceptance/213/ac3-trap-fuel.test.ts');
+// #463's files each build deep-gpu and draw the shared scene in art@1's twelve looks on the Metal GPU; ac2-budgets
+// runs the release canvas bench's art modes, hours of frames.
+alone.push('tests/acceptance/463/');
+timed.push('tests/acceptance/463/ac2-budgets.test.ts');
+// #233's files each build deep-show and read math@1's expansions through deep-canvas-render or deep-motion; ac11
+// times the math document against its expansion written by hand under the frame budget.
+alone.push('tests/acceptance/233/', 'tests/acceptance/233-oracle/');
+timed.push('tests/acceptance/233/ac11-budgets.test.ts');
 // #184's files start replicas and hosts and play mazes for minutes; budgets.test.ts times release replicas.
 alone.push('tests/acceptance/184/');
 timed.push('tests/acceptance/184/budgets.test.ts');

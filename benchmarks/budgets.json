@@ -1730,6 +1730,76 @@
       "criteria": [
         "#184.694b8a04"
       ]
+    },
+    {
+      "id": "canvas-art-frames",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "art-frames"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "frame_gpu_p95_ms": 10,
+        "frame_cpu_p95_ms": 4
+      },
+      "initialReason": "Issue #463 first measurement: the merge base has no art@1 pack. A release deep-gpu plays the shared test scene (tests/acceptance/463/fixtures/scene.json) in each art@1 look by ID, the pack installed, at 1080p, in 2D through film2d and in 3D through view3d, 300 timed frames after 30 warm ones, and the worst look's p95s are held to the showpiece class's limits; five runs after a warm-up one, each a fresh process. tests/acceptance/463/ac2-budgets.test.ts holds the issue's numbers by the design's rule on a reference Mac. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#463.7c8d3f4b"
+      ]
+    },
+    {
+      "id": "canvas-art-regions",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "art-regions"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "edge_frame_ratio": 2
+      },
+      "initialReason": "Issue #463 first measurement: the merge base has no art@1 pack. A release deep-gpu plays each art@1 look, the next look of the list, and the scene with a region in that next look whose edge stays in view (tests/acceptance/463/fixtures/scene-region.json), at 1080p in 2D and 3D, 300 timed frames after 30 warm ones, and the worst pair's p95 GPU with the edge over the costlier look alone is held to twice; five runs after a warm-up one, each a fresh process. tests/acceptance/463/ac2-budgets.test.ts holds the issue's numbers by the design's rule on a reference Mac. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#463.7c8d3f4b"
+      ]
+    },
+    {
+      "id": "canvas-art-switch",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "art-switch"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "switch_ms": 100
+      },
+      "initialReason": "Issue #463 first measurement: the merge base has no art@1 pack. A release deep-gpu plays the shared test scene's 2D film and switches between every ordered pair of art@1 looks, each switch timed from its request to the first frame drawn in the new look, read back from the window, and the slowest is held to switch_ms; five runs after a warm-up one, each a fresh process. tests/acceptance/463/ac2-budgets.test.ts holds the issue's numbers by the design's rule on a reference Mac. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#463.7c8d3f4b"
+      ]
+    },
+    {
+      "id": "canvas-math",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "math"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "math_over_hand": 1.05,
+        "frame_expansions": 0
+      },
+      "initialReason": "Issue #233 first measurement (#233.f4f81b7b): the merge base has no math@1 pack. A release deep-gpu draws criterion 11's math@1 document (math.axes on x [-3, 3] and y [0, 9] over 8 x 5 units, x squared plotted on them, and a square a channel moves) and the same document's expansion written by hand, each under frame_budget at 1920 x 1080 for 5 s at 60 fps in look clean, in alternating order, one warm-up and five runs; a release deep-show evaluates the math document at 0.55 s and counts the nodes that ran for an instance itself. canvas.mjs judge holds the math document's median GPU p95 to 1.05 x the hand-written one's (math_over_hand) and the instance nodes to 0 (frame_expansions, a count judged on any machine). p50 and peak memory get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#233.f4f81b7b"
+      ]
     }
   ]
 }
