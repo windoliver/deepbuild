@@ -1,0 +1,50 @@
+Base commit: 3557b3489 ("Merge pull request #2626 from windoliver/worktree-github-issue-968-e176a1"), main one merge
+             past 1ab891283.
+Machine: macOS on Apple silicon, the shared Mac this job ran on; one-minute load 240 to 680 throughout.
+
+No test file was run on the base. Plainly why:
+- Every file's beforeAll first runs `cargo build --locked --bin deep-gpu` (README: Run them), and this worktree had no
+  target folder, so no file reaches an assertion until a full debug build of deep-gpu finishes (#2017's took 2,424 s
+  at a lower load). None fails quickly before drawing.
+- The build was asked for under the machine's build throttle, as the repo requires:
+    PATH=<pinned 1.99.1 toolchain>:/opt/homebrew/opt/rustup/bin:$PATH CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+      node scripts/throttle.mjs build --wait 120 -- cargo build --locked --bin deep-gpu
+  It answered, after 120 minutes queued behind other sessions' builds (one grant held for over two hours):
+    INCONCLUSIVE no grant: no build grant came within 120 min
+      Fix: Wait for the other sessions' builds and proofs on this machine, then run again.
+    exit 3
+  So no deep-gpu binary existed at the base in this job, and the coordinator asked that no long run be started while
+  deep-gpu's GPU readbacks stall machine-wide.
+
+What was run (observed):
+- npm ci (node_modules was missing): exit 0.
+- node node_modules/typescript/bin/tsc -p tests/acceptance/1381/tsconfig.json: exit 0, no output.
+- node node_modules/vitest/vitest.mjs list --root tests/acceptance/1381: collects the 10 tests of the 7 files
+  (AC1 1, AC2 2, AC3 2, AC4 2, AC5 1, AC6 1, AC7 1), each named `AC<n> #1381.<id> …`.
+- node -e "import('./scripts/lanes.mjs')…": `timed` and `alone` name nothing under tests/acceptance/1381/, so
+  ac6-budget.test.ts's first assertion ("scripts/lanes.mjs runs tests/acceptance/1381/ac6-budget.test.ts as a timed
+  file") fails at the base once its build is done.
+
+Where each file is expected to fail at the base, by reading the base's code only (NOT observed; a run with a built
+deep-gpu should confirm and replace these lines):
+- Every fixture writes `params.horizon` on its plate and the readout fixtures `shadow_far: 0` on the sun. The base's
+  scene3d has no `horizon` anywhere (`spec.rs`, `terrain.rs`), and `scene.rs`'s `cascades` refuses a `shadow_far` that
+  isn't > 0 (`out_of_range` at `.../shadow_far`). Where the document is refused, framesOf fails at "view3d is answered,
+  not refused"; where an unknown plate param is let through, the readout files fail at groundRows'
+  "ground_points[0].sun_visibility (README: Assumed surfaces 3) is a finite number" (`lod.rs`'s rows are only
+  `{at, tile, level, y}`).
+  - ac1-ridge-reach (1 test), ac2-far-tile first test, ac3-crater-occlusion first test, ac5-seek-equals-play (1): one
+    of the two failures above.
+  - ac4-sun-moves-free: either failure above, else "frame 0: counts' horizons_baked (README: Assumed surfaces 4) is a
+    finite number" (`view3d.rs`'s counts have no `horizons_baked` or `compute_passes`), in both tests.
+  - ac6-budget: the lanes assertion above, first.
+  - ac7-taste: the document refusal at the first picture, else the run would draw and stop INCONCLUSIVE with no
+    TASTE.json.
+- The planted tests (ac2's and ac3's second): `main.rs`'s `Planted` has no `terrain_no_horizon_bake` or
+  `terrain_occlusion_from_slope`, so `deep-gpu run --planted <name>` answers {"ok":false,"code":"bad_input"} with a
+  non-zero exit, and runGpu fails at "deep-gpu run --planted <name> exits 0" (as #2017's planted tests did at their
+  base).
+
+Not observed either, and to be checked on the first run with a built binary: the cost of building a 4,097 × 4,097-sample
+plate in the debug build, and that the sunset frames and the taste pictures pass #1399's blank guard (the guards in
+ac5 and ac7 assert it; a scratch probe for both was written but never ran, for want of the binary).
