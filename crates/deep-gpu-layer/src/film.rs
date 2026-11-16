@@ -471,7 +471,15 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
         None,
     )?;
     // The paper's fields hold still; only where the pixels land moves with the camera.
-    let page = page_of(&look.1, view.as_ref(), &doc, &roles(&look), call)?;
+    let mut page = page_of(&look.1, view.as_ref(), &doc, &roles(&look), call)?;
+    // #463: each look a switch takes draws on its own paper, built before any frame plays.
+    let mut pages = BTreeMap::from([(def.to_string(), page.clone())]);
+    for (_, (l, d)) in events.clone() {
+        pages.insert(
+            d.to_string(),
+            page_of(&l.1, view.as_ref(), &doc, &roles(&l), call)?,
+        );
+    }
     for n in named.values_mut() {
         n.page = page_of(&n.look.1, view.as_ref(), &doc, &roles(&n.look), call)?;
     }
@@ -606,6 +614,7 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
                     request = Some(asked);
                 }
                 (look, def) = next;
+                page = pages.get(&def.to_string()).cloned().flatten();
                 ix = indexed(&def, &look)?;
                 motifs = motifs_of(&def)?;
             }
