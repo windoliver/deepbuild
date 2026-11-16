@@ -1537,8 +1537,7 @@ fn listing(
     let header = json!({
         "core_version": core_name(),
         "module_set": sealed.set_digest,
-        "modules": sealed.modules.iter().map(|m| json!({"name": m.name, "version": m.version.to_string(),
-            "kit": crate::kit::ledger::kit_of(&m.name, m.digest.as_str())})).collect::<Vec<_>>(),
+        "modules": sealed.modules.iter().map(module_row).collect::<Vec<_>>(),
         "interfaces": interfaces,
     });
     Listing {
@@ -1546,6 +1545,21 @@ fn listing(
         rows,
         examples,
     }
+}
+
+/// A canvas module as the listing names it, with what its tool entries add to `deep_kinds`
+/// (#182: physics's character body, its fields and their defaults) under `lists`.
+fn module_row(m: &deep_canvas::registry::SealedModule) -> Value {
+    let mut row = json!({"name": m.name, "version": m.version.to_string(),
+                         "kit": crate::kit::ledger::kit_of(&m.name, m.digest.as_str())});
+    let lists: Vec<Value> = (m.shapes.tool_entries.iter())
+        .filter(|t| t.tool == "deep_kinds")
+        .map(|t| serde_json::from_str(&t.entry).unwrap_or_else(|_| json!(t.entry)))
+        .collect();
+    if !lists.is_empty() {
+        row["lists"] = json!(lists);
+    }
+    row
 }
 
 /// A list cut at the reply cap: the page from `cursor` (an index) and the next one's index.
@@ -1981,5 +1995,35 @@ mod tests {
             }
         }
         assert!(bad.is_empty(), "{}", bad.join("\n"));
+    }
+
+    /// #182: deep_kinds lists the character body with its fields and defaults, through the physics
+    /// module's tool entries; the defaults are the issue's.
+    #[test]
+    fn lists_the_character_body_from_the_physics_module() {
+        let full = crate::BuildSet::Full;
+        let sealed = crate::assemble(full, crate::modules(full))
+            .seal()
+            .expect("the shipped set seals");
+        let header = listing(&sealed, None, json!({"registries": []}), &[]).header;
+        let mut physics = header["modules"].as_array().into_iter().flatten();
+        let physics = physics
+            .find(|m| m["name"] == "physics")
+            .expect("physics is listed");
+        let mut lists = physics["lists"].as_array().into_iter().flatten();
+        let body = lists.find(|e| e["name"] == "body@1.character");
+        let body = body.expect("physics lists body@1.character");
+        let want = [
+            ("slope_limit", "deg = 45"),
+            ("step.height", "m = 0.3"),
+            ("step.width", "m = the capsule's radius"),
+            ("snap", "m = 0.2"),
+            ("offset", "m = 0.01"),
+            ("jump.height", "m = 1"),
+        ];
+        for (field, default) in want {
+            let got = &body["fields"][format!("character.{field}")];
+            assert_eq!(got, default, "character.{field} in {body}");
+        }
     }
 }
