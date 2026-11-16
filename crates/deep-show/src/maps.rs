@@ -8,7 +8,9 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use deep_canvas_scene3d::light::{map_field, map_role, map_uses, Texels, DECODED_CAP};
+use deep_canvas_scene3d::light::{
+    cover_texels, map_field, map_role, map_uses, Texels, COVER_ROLE, DECODED_CAP,
+};
 use deep_canvas_scene3d::look::Look3;
 use deep_canvas_scene3d::scene::Scene;
 use deep_codecs::DECODE_WORKER;
@@ -55,18 +57,30 @@ impl Hub<'_> {
     ) -> Result<BTreeMap<String, Arc<Texels>>, Unfit> {
         let mut out = BTreeMap::new();
         let mut decoded = 0u64;
-        for (sha, uses) in map_uses(scene) {
-            let role = map_role(&uses);
-            let key = format!("{sha}:{role}");
+        // Each map once per role it's made for; a cover's (#1383) as RGBA8 texels, which the
+        // fragment stage filters itself.
+        let mut jobs = Vec::new();
+        for (sha, mut uses) in map_uses(scene) {
+            if uses.remove(COVER_ROLE) {
+                let at = cover_texels(&sha);
+                jobs.push((sha.clone(), "base_color", false, at.clone(), at));
+            }
+            if !uses.is_empty() {
+                let role = map_role(&uses);
+                let key = format!("{sha}:{role}");
+                jobs.push((sha.clone(), role, cfg!(target_os = "macos"), key, sha));
+            }
+        }
+        for (sha, role, bc, key, at) in jobs {
             if !self.media.maps.contains_key(&key) {
-                let Some(t) = self.transcode(doc, &sha, role)? else {
+                let Some(t) = self.transcode(doc, &sha, role, bc)? else {
                     continue;
                 };
                 self.media.maps.insert(key.clone(), Arc::new(t));
             }
             let t = self.media.maps[&key].clone();
             decoded += t.data.len() as u64;
-            out.insert(sha, t);
+            out.insert(at, t);
         }
         if decoded > DECODED_CAP {
             return Err(unfit("over_budget", "maps"));
@@ -74,9 +88,15 @@ impl Hub<'_> {
         Ok(out)
     }
 
-    /// Map `sha` made ready for `role` in the decode worker; `None` for an image that is neither
-    /// in the store nor a material's map, which draws without it.
-    fn transcode(&mut self, doc: &Value, sha: &str, role: &str) -> Result<Option<Texels>, Unfit> {
+    /// Map `sha` made ready for `role` in the decode worker, in a block format when `bc`; `None`
+    /// for an image that is neither in the store nor a material's map, which draws without it.
+    fn transcode(
+        &mut self,
+        doc: &Value,
+        sha: &str,
+        role: &str,
+        bc: bool,
+    ) -> Result<Option<Texels>, Unfit> {
         let root = self.scenario.evidence.clone();
         let field = map_field(doc, sha);
         if crate::evidence::read(&root, sha).is_none() && !embedded(doc, sha, &root) {
@@ -87,10 +107,11 @@ impl Hub<'_> {
         }
         let at = field.unwrap_or_else(|| "maps".into());
         let path = root.join(&sha[..2]).join(&sha[2..]);
-        let out =
-            std::env::temp_dir().join(format!("deep-show-map-{}-{sha}-{role}", std::process::id()));
-        let job = json!({"op": "transcode", "path": path, "role": role,
-                         "bc": cfg!(target_os = "macos"), "out": out});
+        let out = std::env::temp_dir().join(format!(
+            "deep-show-map-{}-{sha}-{role}-{bc}",
+            std::process::id()
+        ));
+        let job = json!({"op": "transcode", "path": path, "role": role, "bc": bc, "out": out});
         let (reply, _) = self.media_job(DECODE_WORKER, job);
         let side = |k: usize| u32::try_from(reply["size"][k].as_u64()?).ok();
         let (Some(format), Some(w), Some(h), Some(mips)) = (

@@ -10,6 +10,7 @@
 pub mod ao;
 mod backdrop;
 pub mod clouds;
+mod cover;
 pub mod created;
 pub mod cull;
 mod diag;
@@ -87,6 +88,7 @@ const SHADER: &str = concat!(
     include_str!("ao_shade.wgsl"),
     include_str!("ambient.wgsl"),
     include_str!("tint.wgsl"),
+    include_str!("cover.wgsl"),
     include_str!("caps.wgsl"),
     include_str!("inset_lit.wgsl"),
     include_str!("inset.wgsl")
@@ -1540,6 +1542,8 @@ pub struct Renderer {
     ies: local::Tables,
     /// The terrain overlays' cells (#537).
     tints: tint::Store,
+    /// #1383: the terrain plates' cover.
+    covers: cover::Store,
     /// The projected insets (#506), and the unlit ones' pass with the clip-to-world matrix it
     /// reads, made when one draws.
     insets: inset::Store,
@@ -2011,7 +2015,7 @@ fn lights_bind(
     locals: &wgpu::TextureView,
     ies: &local::Tables,
     grid: &wgpu::Buffer,
-    [tints, insets]: [&wgpu::Buffer; 2],
+    [tints, insets, covers]: [&wgpu::Buffer; 3],
 ) -> wgpu::BindGroup {
     let cube = env.cube.as_ref().map_or(&env.stub, |c| &c.view);
     let to = env.to.as_ref().map_or(&env.stub, |c| &c.view);
@@ -2042,6 +2046,7 @@ fn lights_bind(
             wgpu::BindingResource::TextureView(env.bg[1].as_ref().map_or(&env.stub, |c| &c.view)),
             tints.as_entire_binding(),
             insets.as_entire_binding(),
+            covers.as_entire_binding(),
         ],
     )
 }
@@ -2714,6 +2719,7 @@ impl Renderer {
                 },
                 tint::entry(),
                 inset::entry(),
+                cover::entry(),
             ],
         });
         let oit = oit::Oit::new(d);
@@ -2770,6 +2776,7 @@ impl Renderer {
         });
         let tints = tint::Store::new(d);
         let insets = inset::Store::new(d);
+        let covers = cover::Store::new(d);
         let lights_bind = lights_bind(
             d,
             &lights_layout,
@@ -2781,7 +2788,7 @@ impl Renderer {
             &cascade_stub(d),
             &ies,
             &cluster_buffer,
-            [&tints.buffer, &insets.buffer],
+            [&tints.buffer, &insets.buffer, &covers.buffer],
         );
         let ao = ao::Passes::new(device);
         let maps = maps::Store::new(d, &device.queue);
@@ -3036,6 +3043,7 @@ impl Renderer {
             shadow_mark,
             ies,
             tints,
+            covers,
             insets,
             unlit: None,
             to_world: None,
@@ -3710,7 +3718,7 @@ impl Renderer {
             locals,
             &self.ies,
             &self.cluster_buffer,
-            [&self.tints.buffer, &self.insets.buffer],
+            [&self.tints.buffer, &self.insets.buffer, &self.covers.buffer],
         );
         self.lights_generation += 1;
     }
@@ -4390,7 +4398,8 @@ impl Renderer {
         // #537: the terrain overlays' changed rows, before the batches bind the lights' group.
         let keep = self.planted.overlay_keeps_grid_on_seek;
         let remade = self.insets.ensure(device, &scene.projected, &scene.texels);
-        if self.tints.upload(device, &scene.tints, keep) | remade {
+        let covered = self.covers.upload(device, &scene.covers, &scene.texels);
+        if self.tints.upload(device, &scene.tints, keep) | remade | covered {
             self.rebind_lights(device);
         }
         self.counts.upload_ms.extend(self.tints.upload_ms.clone());
@@ -4399,6 +4408,8 @@ impl Renderer {
         }
         self.sways.move_all(device, scene);
         self.counts.overlay_rows = self.tints.table(device, &scene.tints, &self.picks);
+        self.covers
+            .table(device, &scene.covers, &self.picks, &scene.texels);
         self.insets
             .write(device, &scene.projected, &scene.texels, &self.picks);
         if self.insets.unlit && self.unlit.is_none() {

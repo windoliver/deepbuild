@@ -373,6 +373,18 @@ fn extras(kind: &str) -> Vec<P> {
                 json!([]),
             )
             .takes("[{grid: <logic>.<name>, size: [cols, rows: u16], origin?: [m, m], cell?: m, roles: [role | none] ≤ 16, opacity?: 0..1}] ≤ 2"),
+            // #1383: a terrain plate's cover, materials laid by fields of the ground, which shades
+            // it and rebuilds nothing (Builder plate: terrain).
+            p(
+                "cover",
+                "[cover] ≤ 4",
+                "",
+                Value::Null,
+                S,
+                Value::Null,
+                json!([]),
+            )
+            .takes("[{material: <material@1>, where?: {slope?, height?, curvature?: {min?, max?}, aspect?: {direction: deg, min?, max?}}, blend?: m, projection?: uv | triplanar | auto, modify?: [{kind: wet | dust, where?, amount: 0..1}] ≤ 2}] ≤ 4"),
         ],
         _ => Vec::new(),
     }

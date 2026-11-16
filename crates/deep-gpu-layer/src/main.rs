@@ -409,6 +409,10 @@ pub enum Planted {
     LoopCallsCutLights,
     LoopWorldNormal,
     LoopViewAway,
+    // #1383: a cover entry under auto or triplanar sampled by the ground's (x, z) at every slope;
+    // triplanar weights from the shading normal.
+    CoverKeepsPlanarUv,
+    TriplanarByShadedNormal,
     // #483: the structural steps' wrong programs.
     IterateFeedsFirst,
     SortTiesDecreasing,
@@ -722,6 +726,8 @@ impl Planted {
             "loop_calls_cut_lights" => Planted::LoopCallsCutLights,
             "loop_world_normal" => Planted::LoopWorldNormal,
             "loop_view_away" => Planted::LoopViewAway,
+            "cover_keeps_planar_uv" => Planted::CoverKeepsPlanarUv,
+            "triplanar_by_shaded_normal" => Planted::TriplanarByShadedNormal,
             "iterate_feeds_first" => Planted::IterateFeedsFirst,
             "sort_ties_decreasing" => Planted::SortTiesDecreasing,
             "compact_by_atomic" => Planted::CompactByAtomic,

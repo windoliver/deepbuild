@@ -11,7 +11,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use deep_canvas_scene3d::light::{map_field, map_role, map_uses, Texels, DECODED_CAP};
+use deep_canvas_scene3d::light::{
+    cover_texels, map_field, map_role, map_uses, Texels, COVER_ROLE, DECODED_CAP,
+};
 use deep_canvas_scene3d::scene::Scene;
 use deep_codecs::{Caps, Helper, DECODE_WORKER};
 use serde_json::{json, Value};
@@ -66,9 +68,35 @@ pub fn prepare(
     let mut texels = BTreeMap::new();
     let mut receipt = Vec::new();
     let mut decoded = 0u64;
-    for (sha, roles) in map_uses(scene) {
-        let role = role(&roles, planted);
-        let key = format!("{sha}:{role}");
+    // Each map once per role it's made for; a cover's (#1383) as RGBA8, never a block format,
+    // since the fragment stage filters a cover's texels itself.
+    let mut jobs = Vec::new();
+    for (sha, mut roles) in map_uses(scene) {
+        if roles.remove(COVER_ROLE) {
+            let at = cover_texels(&sha);
+            jobs.push((
+                sha.clone(),
+                roles.clone(),
+                "base_color",
+                false,
+                at.clone(),
+                at,
+            ));
+        }
+        if !roles.is_empty() {
+            let role = role(&roles, planted);
+            let key = format!("{sha}:{role}");
+            jobs.push((
+                sha.clone(),
+                roles,
+                role,
+                cfg!(target_os = "macos"),
+                key,
+                sha,
+            ));
+        }
+    }
+    for (sha, roles, role, bc, key, at) in jobs {
         let transcoded = !app.made.ready.contains_key(&key);
         if transcoded {
             let Some(path) = paths.get(&sha) else {
@@ -79,7 +107,7 @@ pub fn prepare(
             };
             let out =
                 std::env::temp_dir().join(format!("deep-gpu-map-{}-{key}", std::process::id()));
-            let job = json!({"op": "transcode", "path": path, "role": role, "bc": cfg!(target_os = "macos"), "out": out});
+            let job = json!({"op": "transcode", "path": path, "role": role, "bc": bc, "out": out});
             let reply = decoder(app)?.ask(&job);
             let (Some(format), Some(size), Some(mips)) = (
                 reply["format"].as_str(),
@@ -106,7 +134,7 @@ pub fn prepare(
         let (t, source) = &app.made.ready[&key];
         decoded += t.data.len() as u64;
         receipt.push(json!({"sha256": sha, "source": source, "format": t.format, "roles": roles, "transcoded": transcoded}));
-        texels.insert(sha, t.clone());
+        texels.insert(at, t.clone());
     }
     if decoded > DECODED_CAP {
         let mut r = refused(

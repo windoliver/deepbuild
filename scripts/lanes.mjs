@@ -610,6 +610,8 @@ timed.push('tests/acceptance/2017/ac3-budgets.test.ts');
 // (tests/acceptance/2017-redraft-ac2/DISPUTE.md); its blind redraft runs in its place.
 alone.push('tests/acceptance/2017-redraft-ac2/');
 byHand.push('tests/acceptance/2017/ac2-light-holds.test.ts');
+// #1383's files each build deep-gpu and draw terrain cover on the Metal GPU; ac8-taste writes docs/evidence/1383/.
+alone.push('tests/acceptance/1383/');
 // #173's files each build deep-gpu and draw the castle through frame history's window on the GPU; its
 // budgets and envelope read timings and play 60 s runs on the reference Mac.
 alone.push('tests/acceptance/173/');

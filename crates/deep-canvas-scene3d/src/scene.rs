@@ -877,6 +877,8 @@ pub struct Scene {
     pub probes: Vec<crate::probe::Probe>,
     /// Each terrain plate's overlays at t (#537), which tint its cover's base color.
     pub tints: Vec<crate::tints::Tint>,
+    /// Each terrain plate's cover at t (#1383): its entries and their weights per sample.
+    pub covers: Vec<crate::cover::Cover>,
     /// #462: each box, cylinder and sphere item's shape and world matrix (its size applied) at t,
     /// drawn or not, by ID: the world-space volumes a look region's mask names.
     pub volumes: BTreeMap<String, (Shape, [[f64; 4]; 3])>,
@@ -3342,6 +3344,7 @@ pub(crate) fn evaluate_compiled(
     let mut probe_items: Vec<crate::probe::Wanted> = Vec::new();
     // The IES tables the lights name (#446).
     let mut tables: Vec<Arc<crate::ies::Distribution>> = Vec::new();
+    let mut covers = Vec::new();
     for layer_id in &order {
         let Some(list) = by_layer.get_mut(layer_id) else {
             continue;
@@ -3684,6 +3687,35 @@ pub(crate) fn evaluate_compiled(
                             crate::surface::grid_line(id, &built, params, look, solid.model)?
                         {
                             layer.lines.push(l);
+                        }
+                    }
+                    // #1383: a terrain plate's cover, from its full-detail mesh before tiles
+                    // replace it.
+                    if k == "plate@1" {
+                        let plate = layer.solids.last().expect("just pushed");
+                        let under = match &plate.material {
+                            Some(m) => crate::cover::Shading {
+                                base: [m.base[0], m.base[1], m.base[2]],
+                                roughness: m.roughness,
+                                metallic: m.metallic,
+                            },
+                            None => crate::cover::Shading {
+                                base: plate.color.map(|c| light::srgb_decode(c)),
+                                roughness: 0.5,
+                                metallic: 0.0,
+                            },
+                        };
+                        let built = plate.mesh.as_ref().expect("a built mesh");
+                        if let Some(c) = crate::cover::of(
+                            id,
+                            params,
+                            |m| items.get(m),
+                            look,
+                            built,
+                            model,
+                            under,
+                        )? {
+                            covers.push(c);
                         }
                     }
                     // #2017: a plate with levels draws as its tiles, each at the level its error
@@ -4255,6 +4287,7 @@ pub(crate) fn evaluate_compiled(
         read_foam: false,
         probes,
         tints: crate::tints::tints(map, look, t)?,
+        covers,
         volumes,
         stroked: BTreeMap::new(),
         pictures: insets.pictures,
