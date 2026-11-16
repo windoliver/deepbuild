@@ -1,0 +1,57 @@
+# node --test tests/acceptance/2574/wide.test.mjs, at base 1ab891283 (a detached worktree of it), 2026-11-15
+✖ AC3 table: a change to packages/b/src/index.ts selects t2 and t3; t1, which starts package a, is wide (8.696837ms)
+✔ AC3 table: a change to packages/a/src/main.ts selects t1 and t2, and nothing is wide (1.810741ms)
+✔ AC3: a test that imports the changed file is selected as before, not wide (5.926846ms)
+✖ AC3 (informative): on the real tree, a hub change selects far fewer files and lists the rest as WIDE (9647.971899ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 2
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 9922.887606
+
+✖ failing tests:
+
+test at tests/acceptance/2574/wide.test.mjs:45:1
+✖ AC3 table: a change to packages/b/src/index.ts selects t2 and t3; t1, which starts package a, is wide (8.696837ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+    [
+      'packages/b/test/t2.test.mjs',
+  +   'tests/t1.test.mjs'
+  -   'tests/t3.test.mjs'
+    ]
+  
+      at TestContext.<anonymous> (file://<base-1ab891283>/tests/acceptance/2574/wide.test.mjs:48:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ 'packages/b/test/t2.test.mjs', 'tests/t1.test.mjs' ],
+    expected: [ 'packages/b/test/t2.test.mjs', 'tests/t3.test.mjs' ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2574/wide.test.mjs:70:1
+✖ AC3 (informative): on the real tree, a hub change selects far fewer files and lists the rest as WIDE (9647.971899ms)
+  AssertionError [ERR_ASSERTION]: selected 1275 test files, expected about 115
+      at TestContext.<anonymous> (file://<base-1ab891283>/tests/acceptance/2574/wide.test.mjs:78:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
