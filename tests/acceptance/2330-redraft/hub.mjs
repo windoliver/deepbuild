@@ -17,6 +17,7 @@ export async function runHub() {
   const start = Number(process.env.ACC2330_START);
   assert(Number.isFinite(start) && start > 0, 'INVALID: missing real hub spawn timestamp');
   record('boot', { start, mode });
+  process.on('SIGINT', () => process.exit(0)); // owned cleanup reports normal exit, including descendant counters
   // Owner disappearance is cleanup, not a fixture lifetime/deadline.
   setInterval(() => {
     try { process.kill(Number(process.env.ACC2330_OWNER), 0); } catch { process.exit(99); }

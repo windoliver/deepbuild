@@ -139,9 +139,15 @@ async function sample(cli, kind) {
   } finally {
     loads.push(loadavg()[0]);
     for (const row of events(log)) if (row.kind === 'spawn' && Number.isInteger(row.child)) hubs.add(row.child);
-    for (const pid of hubs) { try { process.kill(pid, 'SIGKILL'); } catch (e) { if (e.code !== 'ESRCH') throw e; } }
+    for (const pid of hubs) {
+      // The detached peer has no parent left to reap its counter: stop it normally and wait for its exit.
+      try {
+        process.kill(pid, 'SIGINT');
+        await until(() => { try { process.kill(pid, 0); return false; } catch (e) { if (e.code === 'ESRCH') return true; throw e; } });
+      } catch (e) { if (e.code !== 'ESRCH') throw e; }
+    }
     hubs.clear();
-    for (const child of children) child.kill('SIGKILL');
+    for (const child of children) child.kill('SIGINT');
     await until(() => children.size === 0);
   }
 }
