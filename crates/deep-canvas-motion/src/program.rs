@@ -1539,7 +1539,7 @@ impl Program {
                         Iv::new(seconds(a) - e, seconds(b) + e)
                     }
                     Src::Channel(c) => {
-                        channel_window(&self.motion.channels[c], a, b, value(c, a), value(c, b))
+                        channel_window(&self.motion.channels[c], 0, a, b, value(c, a), value(c, b))
                     }
                     Src::Base(base) => Iv::point(base),
                 })
@@ -2558,15 +2558,15 @@ fn layouts(
 /// A keyed channel's bound over the flicks [a, b], given its values there: those and every key
 /// inside, every value a segment that overlaps the window reaches, widened by its modifiers.
 /// Only for a channel [`channel_bound`] settles.
-fn channel_window(c: &doc::Channel, a: i64, b: i64, at_a: f64, at_b: f64) -> Iv {
+fn channel_window(c: &doc::Channel, comp: usize, a: i64, b: i64, at_a: f64, at_b: f64) -> Iv {
     let keys = &c.curve.keys;
     let (mut lo, mut hi) = (at_a.min(at_b), at_a.max(at_b));
     for (i, k) in keys.iter().enumerate() {
         if (a..=b).contains(&k.t) {
-            (lo, hi) = (lo.min(k.value[0]), hi.max(k.value[0]));
+            (lo, hi) = (lo.min(k.value[comp]), hi.max(k.value[comp]));
         }
         if let Some(next) = keys.get(i + 1).filter(|n| k.t < b && n.t > a) {
-            for (v, _) in segment_reach(k, next, 0) {
+            for (v, _) in segment_reach(k, next, comp) {
                 (lo, hi) = (lo.min(v), hi.max(v));
             }
         }
@@ -3589,13 +3589,11 @@ impl Program {
         let lone: Vec<usize> = (0..self.channels.len())
             .filter(|&c| (self.channels[c].0..self.channels[c].0 + self.channels[c].1).contains(&s))
             .collect();
-        // A window reads a channel's first component, so only a one-wide channel has one.
+        // #457: a wide channel's window reads the component the slot holds.
         if let ([c], true) = (lone.as_slice(), self.time_only(s)) {
-            if self.channels[*c].1 != 1 {
-                return None;
-            }
+            let comp = s - self.channels[*c].0;
             let ch = &self.motion.channels[*c];
-            return channel_bound(ch).map(|_| channel_window(ch, a, b, at_a, at_b));
+            return channel_bound(ch).map(|_| channel_window(ch, comp, a, b, at_a, at_b));
         }
         let f = deep_canvas::grammar::FLICKS_PER_SECOND as f64;
         self.slot_bound_over(s, Iv::new(a as f64 / f, b as f64 / f))

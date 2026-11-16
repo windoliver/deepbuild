@@ -792,6 +792,10 @@ byHand.push('tests/acceptance/184/ac07-bots-refused.test.ts', 'tests/acceptance/
 // #2516: each file builds deep-gpu and reads linear targets; castle costs require a timed grant.
 alone.push('tests/acceptance/2516/');
 timed.push('tests/acceptance/2516/timing.test.ts');
+// #457's files each build deep-show; ac1, ac9 and ac10 draw on the Metal GPU. ac9-budgets judges the loop's budgets on
+// the reference Mac, and ac10-shots writes docs/evidence/457/ and waits on your taste call in tests/acceptance/457/TASTE.json.
+alone.push('tests/acceptance/457/');
+timed.push('tests/acceptance/457/ac9-budgets.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },

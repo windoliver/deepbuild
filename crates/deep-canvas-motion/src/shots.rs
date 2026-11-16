@@ -2410,8 +2410,11 @@ pub fn posed(doc: &Value, t: i64) -> Option<Value> {
     params.insert("position".into(), json!(pose.position));
     params.insert("target".into(), json!(pose.target));
     params.insert("roll".into(), json!(pose.roll));
+    // #457: a lens gives its own field of view; the two together are refused.
     if pose.perspective() {
-        params.insert("fov".into(), json!(pose.fov));
+        if !params.contains_key("lens") {
+            params.insert("fov".into(), json!(pose.fov));
+        }
     } else {
         params.insert("view_width".into(), json!(pose.view_width));
     }

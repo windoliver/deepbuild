@@ -163,6 +163,21 @@ impl Hub<'_> {
                     json!({"code": "not_presented", "reason": "unsupported_platform", "t": t}),
                 );
             };
+            // #457: what each reduction this frame runs adds, on the GPU and in readback.
+            let (cost, bytes) = (
+                self.light_cost.clone(),
+                deep_scene3d_render::exposure::readback_bytes(targets.size) as f64,
+            );
+            let reduce = deep_canvas::registry::Reduce(std::sync::Arc::new(move |q| {
+                let start = std::time::Instant::now();
+                let out = (reduce.0)(q);
+                if let Ok(mut c) = cost.lock() {
+                    c[0] += start.elapsed().as_secs_f64() * 1000.0;
+                    c[1] += bytes;
+                    c[2] += 1.0;
+                }
+                out
+            }));
             frames.push(Frame {
                 t,
                 size: targets.size,

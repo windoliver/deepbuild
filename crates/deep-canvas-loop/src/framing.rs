@@ -5,11 +5,15 @@
 //! its fix the camera's distance or roll as one patch op, or a level camera and a lens shift, in
 //! closed form.
 
-use deep_canvas::ops::{atan2, deg, sqrt, tan};
+use deep_canvas::ops::{asin, atan2, cos, deg, rad, sin, sqrt, tan};
+use std::cell::Cell;
+
 use deep_canvas::registry::{Raised, Report};
 use deep_canvas_scene3d::scene::{Camera, Scene, Shape2};
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 
+use crate::occluded::{self, Occluders, Share};
+use crate::paths;
 use crate::scene::{self, blocked};
 
 pub const KIND: &str = "camera.framing";
@@ -24,6 +28,15 @@ struct Opts {
     horizon_max: f64,
     /// Off unless the input names it (#468).
     verticals_max: Option<f64>,
+    /// #457: the most of a kept item's in-frame sample points other items may hide, the points
+    /// per kept item, the items that never occlude, and the planted program's additive stops.
+    occluded_max: f64,
+    samples: usize,
+    except: Vec<String>,
+    add_occludes: bool,
+    /// The planted programs: patterns seeded by item order; a cutaway hiding whole items.
+    by_order: bool,
+    cut_whole: bool,
 }
 
 /// One checked time's reading.
@@ -37,6 +50,8 @@ struct Reading {
     under: Vec<String>,
     /// The kept item whose projected vertical edge leans most, and its lean in degrees.
     lean: Option<(String, f64)>,
+    /// #457: each kept item's occluded share.
+    occluded: Vec<Share>,
 }
 
 impl Reading {
@@ -107,7 +122,54 @@ fn overlay_boxes(doc: &Value, scene: &Scene) -> Vec<(String, [f64; 4])> {
     out
 }
 
-fn read(doc: &Value, scene: &Scene, t: i64, keep: &[String], o: &Opts) -> Result<Reading, Value> {
+/// What a check run times through the host's clock (the loop reads none): the occluded share and
+/// the camera path measures, in ms, on the main reading alone.
+pub struct Timer<'a> {
+    clock: Option<&'a dyn Fn() -> f64>,
+    occluded: Cell<f64>,
+    paths: Cell<f64>,
+}
+
+impl<'a> Timer<'a> {
+    pub fn new(clock: Option<&'a dyn Fn() -> f64>) -> Timer<'a> {
+        Timer {
+            clock,
+            occluded: Cell::new(0.0),
+            paths: Cell::new(0.0),
+        }
+    }
+
+    fn time<T>(&self, into: &Cell<f64>, on: bool, f: impl FnOnce() -> T) -> T {
+        match self.clock.filter(|_| on) {
+            Some(clock) => {
+                let start = clock();
+                let out = f();
+                into.set(into.get() + clock() - start);
+                out
+            }
+            None => f(),
+        }
+    }
+
+    /// `{occluded_ms, paths_ms}`, where a clock ran.
+    pub fn timing(&self) -> Map<String, Value> {
+        let mut out = Map::new();
+        if self.clock.is_some() {
+            out.insert("occluded_ms".into(), json!(self.occluded.get()));
+            out.insert("paths_ms".into(), json!(self.paths.get()));
+        }
+        out
+    }
+}
+
+fn read(
+    doc: &Value,
+    scene: &Scene,
+    t: i64,
+    keep: &[String],
+    o: &Opts,
+    timer: Option<&Timer<'_>>,
+) -> Result<Reading, Value> {
     let cam = &scene.camera;
     let (safe, inner) = frames(doc, cam, o);
     let side = (safe[2] - safe[0]).min(safe[3] - safe[1]);
@@ -142,6 +204,35 @@ fn read(doc: &Value, scene: &Scene, t: i64, keep: &[String], o: &Opts) -> Result
         .collect();
     under.dedup();
     let horizon = deg(atan2(cam.roll[1], cam.roll[0])).abs();
+    let occluded = |_: ()| {
+        let occ = Occluders::new(scene, &o.except, o.add_occludes, o.cut_whole);
+        keep.iter()
+            .map(|id| {
+                // The planted program seeds a pattern by the item's place in draw order.
+                let seed = if o.by_order {
+                    let mut order: Vec<(&str, &String)> = doc["items"]
+                        .as_object()
+                        .into_iter()
+                        .flatten()
+                        .map(|(k, v)| (v["order"].as_str().unwrap_or(""), k))
+                        .collect();
+                    order.sort();
+                    order
+                        .iter()
+                        .position(|(_, k)| *k == id)
+                        .unwrap_or(0)
+                        .to_string()
+                } else {
+                    id.clone()
+                };
+                occluded::share(scene, &occ, id, o.samples, &seed)
+            })
+            .collect()
+    };
+    let occluded = match timer {
+        Some(tm) => tm.time(&tm.occluded, true, || occluded(())),
+        None => occluded(()),
+    };
     Ok(Reading {
         t,
         cut,
@@ -149,6 +240,79 @@ fn read(doc: &Value, scene: &Scene, t: i64, keep: &[String], o: &Opts) -> Result
         horizon,
         under,
         lean: lean(scene, keep),
+        occluded,
+    })
+}
+
+/// #457: a flat (2D) document's reading at `t`: each kept item's box in u through the camera's
+/// pose at t (its view width about its target, y down), held inside the safe frame less its
+/// margin and spanning `fill` of its shorter side, as a 3D reading holds its projected points.
+fn read_flat(doc: &Value, t: i64, keep: &[String], o: &Opts) -> Result<Reading, Value> {
+    let size: Vec<f64> = doc
+        .get("size")
+        .and_then(Value::as_array)
+        .map(|a| a.iter().filter_map(Value::as_f64).collect())
+        .unwrap_or_default();
+    let [w, h] = [
+        size.first().copied().unwrap_or(1.0),
+        size.get(1).copied().unwrap_or(1.0),
+    ];
+    let posed = deep_canvas_motion::shots::posed(doc, t);
+    let (_, cam) = scene::camera_of(posed.as_ref().unwrap_or(doc))
+        .ok_or_else(|| blocked("ref_unresolved", KIND, &[], "camera"))?;
+    let p = &cam["params"];
+    let target: Vec<f64> = p["target"]
+        .as_array()
+        .map(|a| a.iter().filter_map(Value::as_f64).collect())
+        .unwrap_or_default();
+    let (tx, ty) = (
+        target.first().copied().unwrap_or(w / 2.0),
+        target.get(1).copied().unwrap_or(h / 2.0),
+    );
+    let width = p["view_width"].as_f64().unwrap_or(w);
+    let k = w / width;
+    let safe = doc.get("safe").and_then(Value::as_f64).unwrap_or(24.0);
+    let sf = [safe, safe, w - safe, h - safe];
+    let m = o.margin * (sf[2] - sf[0]).min(sf[3] - sf[1]);
+    let inner = [sf[0] + m, sf[1] + m, sf[2] - m, sf[3] - m];
+    let mut cut = Vec::new();
+    let mut bbox = [
+        f64::INFINITY,
+        f64::INFINITY,
+        f64::NEG_INFINITY,
+        f64::NEG_INFINITY,
+    ];
+    for id in keep {
+        let b: Vec<f64> = doc
+            .pointer(&format!("/items/{id}/params/box"))
+            .and_then(Value::as_array)
+            .map(|a| a.iter().filter_map(Value::as_f64).collect())
+            .unwrap_or_default();
+        let [x, y, bw, bh] = <[f64; 4]>::try_from(b)
+            .map_err(|_| {
+                blocked("not_drawn", KIND, std::slice::from_ref(id), &format!("items/{id}"))
+            })?;
+        let px = |u: f64, v: f64| [(u - tx) * k + w / 2.0, (v - ty) * k + h / 2.0];
+        let (a, c) = (px(x, y), px(x + bw, y + bh));
+        bbox = [
+            bbox[0].min(a[0]),
+            bbox[1].min(a[1]),
+            bbox[2].max(c[0]),
+            bbox[3].max(c[1]),
+        ];
+        if a[0] < inner[0] || a[1] < inner[1] || c[0] > inner[2] || c[1] > inner[3] {
+            cut.push(id.clone());
+        }
+    }
+    let side = (sf[2] - sf[0]).min(sf[3] - sf[1]);
+    Ok(Reading {
+        t,
+        cut,
+        fill: (bbox[2] - bbox[0]).max(bbox[3] - bbox[1]) / side,
+        horizon: p["roll"].as_f64().unwrap_or(0.0).abs(),
+        under: Vec::new(),
+        lean: None,
+        occluded: Vec::new(),
     })
 }
 
@@ -377,8 +541,80 @@ fn distance_op(
     Some((op(at("view_width"), json!(width)), words))
 }
 
+/// #457: one orbit (`az`) or elevation (`el`) step of the camera, in degrees, as one patch op
+/// with its words: an orbiting camera steps its own azimuth or elevation; one with a position
+/// turns that position about its target. None for a camera it can't step, or past straight up
+/// or down.
+fn orbit_step(doc: &Value, az: f64, el: f64) -> Option<(Value, String)> {
+    let (cam_id, item) = scene::camera_of(doc)?;
+    let params = item.get("params")?;
+    let at = |p: &str| format!("items/{cam_id}/params/{p}");
+    let op = |path: String, value: Value| json!({"op": "set", "id": cam_id, "path": path, "value": value});
+    let words = if az != 0.0 {
+        format!("orbit the camera {az:+}°")
+    } else {
+        format!(
+            "{} the camera {}°",
+            if el > 0.0 { "raise" } else { "lower" },
+            el.abs()
+        )
+    };
+    if let Some(o) = params.get("orbit").filter(|o| o.is_object()) {
+        let num = |k: &str, d: f64| o.get(k).and_then(Value::as_f64).unwrap_or(d);
+        if az != 0.0 {
+            return Some((
+                op(at("orbit/azimuth"), json!(num("azimuth", 45.0) + az)),
+                words,
+            ));
+        }
+        let e = num("elevation", 30.0) + el;
+        return (e.abs() < 90.0).then(|| (op(at("orbit/elevation"), json!(e)), words));
+    }
+    let v3 = |v: Option<&Value>| -> Option<[f64; 3]> {
+        let a: Vec<f64> = v?.as_array()?.iter().filter_map(Value::as_f64).collect();
+        <[f64; 3]>::try_from(a).ok()
+    };
+    let p = v3(params.get("position"))?;
+    let t = v3(params.get("target")).unwrap_or([0.0; 3]);
+    let d = [p[0] - t[0], p[1] - t[1], p[2] - t[2]];
+    let r = sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+    if r <= 0.0 {
+        return None;
+    }
+    let e = deg(asin((d[1] / r).clamp(-1.0, 1.0))) + el;
+    if e.abs() >= 90.0 {
+        return None;
+    }
+    let (e, a) = (rad(e), rad(deg(atan2(d[0], d[2])) + az));
+    let moved = [
+        t[0] + r * cos(e) * sin(a),
+        t[1] + r * sin(e),
+        t[2] + r * cos(e) * cos(a),
+    ];
+    Some((op(at("position"), json!(moved)), words))
+}
+
+/// The smallest orbit or elevation step that `passes`: 5° steps out to 90° either way, then each
+/// degree up to the first that passed.
+fn least_step(doc: &Value, passes: impl Fn(&Value) -> bool) -> Option<(Value, String)> {
+    const DIRS: [(f64, f64); 4] = [(1.0, 0.0), (-1.0, 0.0), (0.0, 1.0), (0.0, -1.0)];
+    let at = |m: u32| {
+        DIRS.iter()
+            .filter_map(|&(a, e)| orbit_step(doc, a * f64::from(m), e * f64::from(m)))
+            .find(|(op, _)| passes(op))
+    };
+    let coarse = (5..=90).step_by(5).find(|&m| at(m).is_some())?;
+    ((coarse - 4)..=coarse).find_map(at)
+}
+
 pub fn report(lowered: &Value, input: &Value) -> Report {
+    report_with(lowered, input, &Timer::new(None))
+}
+
+/// The check run with `timer`, through which the host times its parts (#457).
+pub fn report_with(lowered: &Value, input: &Value, timer: &Timer<'_>) -> Report {
     let mut out = Report::default();
+    let planted = input.get("planted").and_then(Value::as_str);
     // Values the design lists alone; anything else is refused, never read loosely.
     for (field, only) in [("inside", "safe"), ("cut", "refuse"), ("overlay", "avoid")] {
         if input.get(field).is_some_and(|v| v != only) {
@@ -397,6 +633,23 @@ pub fn report(lowered: &Value, input: &Value) -> Report {
         },
         horizon_max: crate::number(input, "/horizon_max", 1.0).min(1.0),
         verticals_max: input.get("verticals_max").and_then(Value::as_f64),
+        occluded_max: crate::number(input, "/occluded_max", 0.4).min(0.4),
+        samples: input
+            .get("occluded_samples")
+            .and_then(Value::as_u64)
+            .map_or(64, |n| n.clamp(1, u64::from(u16::MAX)) as usize),
+        except: input
+            .get("except")
+            .and_then(Value::as_array)
+            .map(|a| {
+                a.iter()
+                    .filter_map(|v| v.as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default(),
+        add_occludes: planted == Some(occluded::PLANTED_ADD_OCCLUDES),
+        by_order: planted == Some(occluded::PLANTED_BY_ORDER),
+        cut_whole: planted == Some(occluded::PLANTED_CUT_WHOLE),
     };
     let keep = match scene::kept(lowered, input, "keep", KIND) {
         Ok(k) => k,
@@ -427,20 +680,173 @@ pub fn report(lowered: &Value, input: &Value) -> Report {
     if !out.blocked.is_empty() {
         return out;
     }
-    let read_all = |doc: &Value| -> Result<Vec<(Reading, Scene)>, Value> {
+    let flat = !(deep_canvas_scene3d::scene::has_3d(lowered)
+        || lowered.pointer("/requires/modules/scene3d").is_some());
+    let paths_o = paths::Opts::read(input);
+    // The document as it is, then at each value of each of the brief's sweeps.
+    let mut runs: Vec<(Value, Option<(String, Value)>)> = vec![(lowered.clone(), None)];
+    let swept = paths::sweeps(lowered, input);
+    for (id, values, _) in &swept {
+        for v in values {
+            runs.push((
+                paths::with_control(lowered, id, v),
+                Some((id.clone(), v.clone())),
+            ));
+        }
+    }
+    for (k, (doc, sweep)) in runs.iter().enumerate() {
+        let main = k == 0;
+        let one = judged(doc, input, &o, &keep, &times, flat, main.then_some(timer));
+        let tag = |mut v: Value| {
+            if let Some((c, value)) = sweep {
+                v["sweep"] = json!({"control": c, "value": value});
+            }
+            v
+        };
+        if let Some(b) = one.blocked.into_iter().next() {
+            out.blocked.push(tag(b));
+            continue;
+        }
+        if main {
+            out.results.extend(one.results);
+        }
+        for (id, r, actual) in one.raised {
+            // A failure at a sweep's value the document as it is doesn't have is the sweep's.
+            if !main
+                && out
+                    .raised
+                    .iter()
+                    .any(|(i, x, _)| *i == id && x.code == r.code && x.what == r.what)
+            {
+                continue;
+            }
+            out.raised.push((id, r, tag(actual)));
+        }
+        // The camera path measures, at this value.
+        let found = timer.time(&timer.paths, main, || {
+            paths::measure(doc, input, &paths_o, &keep, &times, None)
+        });
+        record(&mut out, found, sweep.as_ref(), main);
+    }
+    // Between a slider's samples, clearance bounded over each stretch of its values.
+    for (id, values, _) in swept.iter().filter(|s| s.2) {
+        let vs: Vec<f64> = values.iter().filter_map(Value::as_f64).collect();
+        for w in vs.windows(2) {
+            let found = paths::measure(
+                lowered,
+                input,
+                &paths_o,
+                &keep,
+                &times,
+                Some((id, w[0], w[1])),
+            );
+            record(&mut out, found, Some(&(id.clone(), Value::Null)), false);
+        }
+    }
+    // A span only sampled never passes the check: it's refused, naming the shot and the span.
+    if out.raised.is_empty() {
+        if let Some(Value::Array(est)) = out.results.first().map(|r| r["estimates"].clone()) {
+            if let Some(e) = est.first() {
+                let mut b = blocked("estimate", KIND, &[], "shots");
+                b["estimate"] = e.clone();
+                out.blocked.push(b);
+            }
+        }
+    }
+    out
+}
+
+/// The path readings `found` into the report: each listed on the first checked time's results,
+/// each failure raised with what it measured, `sweep` naming a control and its value.
+fn record(out: &mut Report, found: paths::Found, sweep: Option<&(String, Value)>, listed: bool) {
+    if let Some(first) = out.results.first_mut() {
+        let list = first["paths"].as_array().cloned().unwrap_or_default();
+        let mut list = list;
+        if listed {
+            list.extend(found.readings.iter().map(paths::Reading::json));
+        }
+        first["paths"] = Value::Array(list);
+        if !found.estimates.is_empty() {
+            let mut est = first["estimates"].as_array().cloned().unwrap_or_default();
+            est.extend(found.estimates.iter().cloned());
+            first["estimates"] = Value::Array(est);
+        }
+    }
+    for r in found.readings.iter().filter(|r| r.fails) {
+        let mut actual = json!({"measure": r.measure, "shot": r.shot, "t": r.t, "item": r.item,
+                                "value": r.value, "limit": r.limit});
+        let mut path = format!("items/{}", r.item);
+        let what = match (r.measure, &r.key) {
+            ("clearance", _) => format!("the camera passes {:.3} m from {}, inside its clearance of {:.3} m", r.value, r.item, r.limit),
+            ("corners", Some((c, k))) => {
+                actual["key"] = json!(k);
+                path = format!("channels/{c}/keys/{k}");
+                format!("the camera's velocity jumps {:.2} m/s at key {k}, past a tenth of the shot's mean speed: set its keys to auto tangents", r.value)
+            }
+            ("raster_max", _) => format!("{} is magnified {:.2}× past its own pixels, past raster_max {}", r.item, r.value, r.limit),
+            ("focus_coc_max", _) => format!("{}'s centre blurs to a circle of confusion of {:.2} px, past focus_coc_max {}: move the focus to it", r.item, r.value, r.limit),
+            _ => format!("{} reads {:.3}", r.measure, r.value),
+        };
+        match (sweep, r.at) {
+            (Some((c, _)), Some(v)) => actual["sweep"] = json!({"control": c, "value": v}),
+            (Some((c, v)), None) if !v.is_null() => {
+                actual["sweep"] = json!({"control": c, "value": v})
+            }
+            _ => {}
+        }
+        let raised = Raised {
+            code: CODE,
+            severity: "error",
+            path,
+            what,
+            fix_ops: None,
+        };
+        out.raised.push((r.item.clone(), raised, actual));
+    }
+}
+
+/// One run of the framing measures on `lowered`: its readings at each checked time and what
+/// fails them, each fix checked on a copy.
+fn judged(
+    lowered: &Value,
+    input: &Value,
+    o: &Opts,
+    keep: &[String],
+    times: &[i64],
+    flat: bool,
+    timer: Option<&Timer<'_>>,
+) -> Report {
+    let mut out = Report::default();
+    let keep = keep.to_vec();
+    let read_all = |doc: &Value| -> Result<Vec<(Reading, Option<Scene>)>, Value> {
         times
             .iter()
             .map(|&t| {
+                if flat {
+                    return Ok((read_flat(doc, t, &keep, o)?, None));
+                }
                 // A shot poses the camera at each time, as the frame draws it (#506: the main
                 // shot's kept items).
                 let posed = deep_canvas_motion::shots::posed(doc, t);
                 let doc = posed.as_ref().unwrap_or(doc);
                 let s = scene::evaluate(doc, input, t, KIND)?;
-                Ok((read(doc, &s, t, &keep, &o)?, s))
+                Ok((read(doc, &s, t, &keep, o, None)?, Some(s)))
             })
             .collect()
     };
-    let readings = match read_all(lowered) {
+    let readings = match times
+        .iter()
+        .map(|&t| {
+            if flat {
+                return Ok((read_flat(lowered, t, &keep, o)?, None));
+            }
+            let posed = deep_canvas_motion::shots::posed(lowered, t);
+            let doc = posed.as_ref().unwrap_or(lowered);
+            let s = scene::evaluate(doc, input, t, KIND)?;
+            Ok((read(doc, &s, t, &keep, o, timer)?, Some(s)))
+        })
+        .collect::<Result<Vec<_>, Value>>()
+    {
         Ok(r) => r,
         Err(b) => {
             out.blocked.push(b);
@@ -454,23 +860,27 @@ pub fn report(lowered: &Value, input: &Value) -> Report {
             "t": r.t, "keep": keep, "cut": r.cut, "fill": r.fill, "range": o.fill,
             "horizon": r.horizon, "under": r.under,
             "verticals": r.lean.as_ref().map(|(id, a)| json!({"item": id, "angle": a})),
+            "occluded": r.occluded.iter().map(|x| json!({
+                "item": x.item, "share": x.share, "occluders": x.occluders,
+                "in_frame": x.in_frame, "points": x.points,
+            })).collect::<Vec<_>>(),
         }));
     }
     // The subject: cut by the frame, or spanning outside `fill`; one fix moves the camera.
-    if let Some((r, s)) = readings.iter().find(|(r, _)| !r.framed(&o)) {
+    if let Some((r, s)) = readings.iter().find(|(r, _)| !r.framed(o)) {
         // The fix is named as ops only when every checked time reads framed with it applied.
         // The smallest move that keeps them inside the frame first; else the one that sets
         // them in the middle of `fill`.
         let fix = [false, true]
             .into_iter()
-            .filter_map(|middle| distance_op(lowered, s, &keep, &o, middle))
+            .filter_map(|middle| distance_op(lowered, s.as_ref()?, &keep, o, middle))
             .find(|(op, _)| {
                 let fixed = scene::with_set(
                     lowered,
                     op["path"].as_str().unwrap_or_default(),
                     op["value"].clone(),
                 );
-                read_all(&fixed).is_ok_and(|rs| rs.iter().all(|(r, _)| r.framed(&o)))
+                read_all(&fixed).is_ok_and(|rs| rs.iter().all(|(r, _)| r.framed(o)))
             });
         let fault = if r.cut.is_empty() {
             format!("the kept items span {:.2} of the safe frame's shorter side, outside {:?}", r.fill, o.fill)
@@ -519,19 +929,22 @@ pub fn report(lowered: &Value, input: &Value) -> Report {
             .find(|(r, _)| r.lean.as_ref().is_some_and(|l| l.1 > max))
         {
             let (item, angle) = r.lean.clone().unwrap_or_default();
-            let fix = level_ops(lowered, s).filter(|(ops, _)| {
-                let fixed = ops.iter().fold(lowered.clone(), |d, op| {
-                    scene::with_set(
-                        &d,
-                        op["path"].as_str().unwrap_or_default(),
-                        op["value"].clone(),
-                    )
+            let fix = s
+                .as_ref()
+                .and_then(|s| level_ops(lowered, s))
+                .filter(|(ops, _)| {
+                    let fixed = ops.iter().fold(lowered.clone(), |d, op| {
+                        scene::with_set(
+                            &d,
+                            op["path"].as_str().unwrap_or_default(),
+                            op["value"].clone(),
+                        )
+                    });
+                    read_all(&fixed).is_ok_and(|rs| {
+                        rs.iter()
+                            .all(|(r, _)| r.lean.as_ref().is_none_or(|l| l.1 <= max))
+                    })
                 });
-                read_all(&fixed).is_ok_and(|rs| {
-                    rs.iter()
-                        .all(|(r, _)| r.lean.as_ref().is_none_or(|l| l.1 <= max))
-                })
-            });
             let words = match &fix {
                 Some((ops, pitch)) => format!(
                     ": level the camera (it pitches {pitch:.2}°) and shift the lens to {}",
@@ -554,6 +967,54 @@ pub fn report(lowered: &Value, input: &Value) -> Report {
                 json!({"t": r.t, "item": item, "angle": angle, "max": max, "camera": cam_id}),
             ));
         }
+    }
+    // #457: a kept item other items hide past occluded_max; its fix is the smallest orbit or
+    // elevation step, found on evaluated data, under which every checked time reads under it.
+    let hidden = |r: &Reading| -> Option<(String, f64, Vec<String>)> {
+        r.occluded
+            .iter()
+            .filter(|x| x.share > o.occluded_max)
+            .max_by(|a, b| a.share.total_cmp(&b.share))
+            .map(|x| (x.item.clone(), x.share, x.occluders.clone()))
+    };
+    if let Some((r, (item, share, occluders))) =
+        readings.iter().find_map(|(r, _)| hidden(r).map(|h| (r, h)))
+    {
+        let fix = least_step(lowered, |op| {
+            let fixed = scene::with_set(
+                lowered,
+                op["path"].as_str().unwrap_or_default(),
+                op["value"].clone(),
+            );
+            read_all(&fixed).is_ok_and(|rs| {
+                rs.iter().all(|(r, _)| {
+                    r.occluded
+                        .iter()
+                        .all(|x| x.item != item || x.share < o.occluded_max)
+                })
+            })
+        });
+        let words = match &fix {
+            Some((_, w)) => format!(": {w}"),
+            None => String::new(),
+        };
+        let raised = Raised {
+            code: CODE,
+            severity: "error",
+            path: format!("items/{cam_id}/params"),
+            what: format!(
+                "{share:.2} of {item}'s points in frame are hidden by {}, past occluded_max {}{words}",
+                occluders.join(", "),
+                o.occluded_max
+            ),
+            fix_ops: fix.map(|(op, _)| vec![op]),
+        };
+        out.raised.push((
+            item.clone(),
+            raised,
+            json!({"t": r.t, "item": item, "share": share, "occluders": occluders,
+                   "max": o.occluded_max, "camera": cam_id}),
+        ));
     }
     // An overlay over the subject: no camera move clears it in closed form, so its fix is text.
     if let Some((r, _)) = readings.iter().find(|(r, _)| !r.under.is_empty()) {
