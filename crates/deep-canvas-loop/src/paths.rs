@@ -324,6 +324,49 @@ impl<'a> Rig<'a> {
         Some(out)
     }
 
+    /// What the camera's param at `path` (a one-wide field, such as `view_width`) holds over the
+    /// flicks `[a, b]`: its slot's window or driver bound, or its value where nothing writes it.
+    fn param_bound(&self, bound: &Program, path: &[&str], a: i64, b: i64) -> Option<Iv> {
+        let written = self.program.fields.iter().find(|f| {
+            f.item == Some(self.cam_item)
+                && f.written
+                && f.width == 1
+                && f.path.iter().map(String::as_str).eq(path.iter().copied())
+        });
+        let Some(f) = written else {
+            let (p, q) = (self.pose(a)?, self.pose(b)?);
+            return (p.width == q.width).then(|| Iv::point(p.width));
+        };
+        let s = f.slot;
+        let iv = if self.program.time_only(s) {
+            let (sa, sb) = (self.state(a), self.state(b));
+            self.program
+                .slot_window(s, a, b, sa.slots[s], sb.slots[s])?
+        } else {
+            bound.slot_bound_over(s, Iv::new(a as f64 / F, b as f64 / F))?
+        };
+        iv.is_bounded().then_some(iv)
+    }
+
+    /// The camera's target over `[a, b]` where it holds still: nothing writes it and the pose
+    /// at both ends aims at one point.
+    fn still_target(&self, a: i64, b: i64) -> Option<V3> {
+        let writes = self.program.fields.iter().any(|f| {
+            f.item == Some(self.cam_item)
+                && f.written
+                && f.path.get(1).is_some_and(|p| p == "target" || p == "orbit")
+        });
+        let (p, q) = (self.pose(a)?, self.pose(b)?);
+        let keeps = match self.move_over(a, b)? {
+            None => !writes,
+            Some((m, _)) => matches!(
+                m,
+                Move::Hold | Move::Push | Move::Pull | Move::LogZoom | Move::LensZoom
+            ),
+        };
+        (keeps && p.target == q.target).then_some(p.target)
+    }
+
     /// Whether anything but the camera moves: the solids then differ from time to time.
     fn others_move(&self) -> bool {
         (0..self.program.items.len())
@@ -727,6 +770,43 @@ impl Clearance<'_> {
     }
 }
 
+/// How a span settled: its bound stayed within the limit, a time inside read past it, or no
+/// bound decided it within the depth (an estimate).
+enum Settled {
+    Within,
+    Past(i64, f64),
+    Estimate,
+}
+
+/// Settles `[a, b]` for a measure whose most over a span `most` bounds and whose value at a time
+/// `at` reads: halved, its middle read, until the bound stays within `limit` or a reading passes
+/// it.
+fn settle(
+    a: i64,
+    b: i64,
+    depth: u32,
+    limit: f64,
+    most: &dyn Fn(i64, i64) -> Option<f64>,
+    at: &dyn Fn(i64) -> Option<f64>,
+) -> Settled {
+    match most(a, b) {
+        Some(m) if m <= limit => return Settled::Within,
+        None => return Settled::Estimate,
+        _ => {}
+    }
+    let m = a + (b - a) / 2;
+    if let Some(v) = at(m).filter(|v| *v > limit) {
+        return Settled::Past(m, v);
+    }
+    if depth >= DEPTH || b - a <= 1 {
+        return Settled::Estimate;
+    }
+    match settle(a, m, depth + 1, limit, most, at) {
+        Settled::Within => settle(m, b, depth + 1, limit, most, at),
+        other => other,
+    }
+}
+
 /// The times one shot is sampled at: every 1/rate s from its start, its end, and every key in it.
 fn samples(start: i64, end: i64, rate: i64, keys: &[(String, String, i64, bool)]) -> Vec<i64> {
     let mut out = scene::sampled(&[(start, end)], rate);
@@ -832,9 +912,11 @@ pub(crate) fn measure(
         return found;
     }
     corners(&rig, &shots, o, &keys, &mut found);
-    raster(doc, input, &rig, &shots, o, &keys, &mut found);
+    raster(doc, input, &rig, &bound, &shots, o, &keys, &mut found);
     if flat.as_ref().is_some_and(|s| s.dof.is_some()) {
-        focus(doc, input, &rig, &shots, o, keep, &keys, moving, &mut found);
+        focus(
+            doc, input, &rig, &bound, &shots, o, keep, &keys, moving, &mut found,
+        );
     }
     found
 }
@@ -931,6 +1013,7 @@ fn png_size(bytes: &[u8]) -> Option<[f64; 2]> {
     Some([f64::from(be(16)), f64::from(be(20))])
 }
 
+#[allow(clippy::too_many_arguments)]
 /// raster_max: each image or video in frame, its export px per source px, from the view width
 /// the camera shows and the picture's own pixels; bounded between samples by the view width's
 /// range where the shot holds or zooms monotonely.
@@ -938,6 +1021,7 @@ fn raster(
     doc: &Value,
     input: &Value,
     rig: &Rig<'_>,
+    bound: &Program,
     shots: &[(Option<String>, i64, i64)],
     o: &Opts,
     keys: &[(String, String, i64, bool)],
@@ -1012,10 +1096,11 @@ fn raster(
             }
             found.readings.extend(worst);
         }
-        // Between samples the view width moves only under a hold or a monotone zoom.
+        // Between samples: a hold or a monotone zoom is bounded by its samples; a keyed view
+        // width by its own interval form, halved until it decides.
         if !o.sampled_only {
             for w in ts.windows(2) {
-                let held = matches!(
+                let monotone = matches!(
                     rig.move_over(w[0], w[1]),
                     Some(Some((
                         Move::Hold
@@ -1026,26 +1111,61 @@ fn raster(
                             | Move::LogZoom,
                         true
                     )))
-                ) || (rig.move_over(w[0], w[1]) == Some(None)
-                    && rig.pose(w[0]) == rig.pose(w[1]));
-                if !held {
-                    found
-                        .estimates
-                        .push(json!({"measure": "raster_max", "shot": shot, "span": [w[0], w[1]]}));
+                );
+                if monotone {
+                    continue;
+                }
+                for (id, _, per_u) in &pictures {
+                    let most = |a: i64, b: i64| {
+                        rig.move_over(a, b)?
+                            .is_none()
+                            .then(|| rig.param_bound(bound, &["params", "view_width"], a, b))
+                            .flatten()
+                            .filter(|vw| vw.lo > 0.0)
+                            .map(|vw| export / vw.lo / per_u)
+                    };
+                    let at = |t: i64| {
+                        rig.pose(t)
+                            .filter(|p| p.width > 0.0)
+                            .map(|p| export / p.width / per_u)
+                    };
+                    match settle(w[0], w[1], 0, o.raster_max, &most, &at) {
+                        Settled::Within => {}
+                        Settled::Past(t, value) => found.readings.push(Reading {
+                            shot: shot.clone(),
+                            t,
+                            measure: "raster_max",
+                            item: id.clone(),
+                            value,
+                            limit: o.raster_max,
+                            fails: true,
+                            key: None,
+                            at: None,
+                        }),
+                        Settled::Estimate => found.estimates.push(
+                            json!({"measure": "raster_max", "shot": shot, "span": [w[0], w[1]]}),
+                        ),
+                    }
                 }
             }
         }
     }
 }
 
+/// What the depth of field reads at a time: each kept item's centre, the CoC's `k` and focus
+/// distance, and an orthographic view's own CoC where it is one.
+type Lens = (Vec<Option<V3>>, f64, f64, bool, f64);
+
 /// focus_coc_max: the circle of confusion at each kept item's centre, from the lens in closed
-/// form at its evaluated distance, read at each sample; where the eye and focus hold over a span
-/// the reading holds over it.
+/// form at its evaluated depth, read at each sample; between samples bounded from the box that
+/// holds the eye and a still target, the depth's interval through them, and the lens and focus
+/// held (no channel or driver writes them), halved until the bound decides.
 #[allow(clippy::too_many_arguments)]
 fn focus(
     doc: &Value,
     input: &Value,
     rig: &Rig<'_>,
+    bound: &Program,
     shots: &[(Option<String>, i64, i64)],
     o: &Opts,
     keep: &[String],
@@ -1053,27 +1173,20 @@ fn focus(
     moving: bool,
     found: &mut Found,
 ) {
-    for (shot, start, end) in shots {
-        let ts = samples(*start, *end, o.rate, keys);
-        let still = !moving && ts.windows(2).all(|w| rig.pose(w[0]) == rig.pose(w[1]));
-        let read_at: Vec<i64> = if still {
-            ts.iter().take(1).copied().collect()
-        } else {
-            ts.clone()
-        };
-        let mut worst: Vec<Option<Reading>> = vec![None; keep.len()];
-        for &t in &read_at {
-            let posed = deep_canvas_motion::shots::posed(doc, t);
-            let Ok(s) = scene::evaluate(
-                posed.as_ref().unwrap_or(doc),
-                input,
-                t.max(0),
-                crate::framing::KIND,
-            ) else {
-                continue;
-            };
-            let Some(dof) = s.dof.as_ref() else { continue };
-            for (k, id) in keep.iter().enumerate() {
+    // Each kept item's centre and the dof's `k` and focus at `t`.
+    let read = |t: i64| -> Option<Lens> {
+        let posed = deep_canvas_motion::shots::posed(doc, t);
+        let s = scene::evaluate(
+            posed.as_ref().unwrap_or(doc),
+            input,
+            t.max(0),
+            crate::framing::KIND,
+        )
+        .ok()?;
+        let dof = s.dof.as_ref()?;
+        let centres = keep
+            .iter()
+            .map(|id| {
                 let (mut lo, mut hi) = ([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]);
                 for solid in s
                     .layers
@@ -1091,39 +1204,110 @@ fn focus(
                         }
                     }
                 }
-                if !lo[0].is_finite() {
-                    continue;
+                lo[0]
+                    .is_finite()
+                    .then(|| std::array::from_fn(|j| (lo[j] + hi[j]) / 2.0))
+            })
+            .collect();
+        Some((centres, dof.k, dof.focus, dof.orthographic, dof.ortho_coc))
+    };
+    let coc = |t: i64, k: usize| -> Option<f64> {
+        let (centres, kk, s, ortho, oc) = read(t)?;
+        if ortho {
+            return Some(oc);
+        }
+        let c = centres[k]?;
+        let p = rig.pose(t)?;
+        let f: V3 = std::array::from_fn(|j| p.target[j] - p.eye[j]);
+        let l = sqrt(f[0] * f[0] + f[1] * f[1] + f[2] * f[2]);
+        let d = (0..3).map(|j| (c[j] - p.eye[j]) * f[j] / l).sum::<f64>();
+        (d > 0.0).then(|| kk * (d - s).abs() / d)
+    };
+    // Whether a channel or driver writes the lens, the aperture, the field of view or the dof.
+    let optics_move = ["channels", "drivers"].iter().any(|k| {
+        doc[*k].as_object().into_iter().flatten().any(|(_, c)| {
+            c["target"].as_str().is_some_and(|t| {
+                ["/dof", "/lens", "/aperture", "/fov", "/view_width"]
+                    .iter()
+                    .any(|x| t.contains(x))
+            })
+        })
+    });
+    for (shot, start, end) in shots {
+        let ts = samples(*start, *end, o.rate, keys);
+        let still = !moving && ts.windows(2).all(|w| rig.pose(w[0]) == rig.pose(w[1]));
+        let read_at: Vec<i64> = if still {
+            ts.iter().take(1).copied().collect()
+        } else {
+            ts.clone()
+        };
+        let mut worst: Vec<Option<Reading>> = vec![None; keep.len()];
+        let note = |worst: &mut Vec<Option<Reading>>, k: usize, t: i64, value: f64| {
+            if worst[k].as_ref().is_none_or(|w| value > w.value + 1e-12) {
+                worst[k] = Some(Reading {
+                    shot: shot.clone(),
+                    t,
+                    measure: "focus_coc_max",
+                    item: keep[k].clone(),
+                    value,
+                    limit: o.focus_coc_max,
+                    fails: value > o.focus_coc_max,
+                    key: None,
+                    at: None,
+                });
+            }
+        };
+        for &t in &read_at {
+            for k in 0..keep.len() {
+                if let Some(v) = coc(t, k) {
+                    note(&mut worst, k, t, v);
                 }
-                let c: V3 = std::array::from_fn(|j| (lo[j] + hi[j]) / 2.0);
-                let d = s.camera.to_view(c)[2];
-                let value = if dof.orthographic {
-                    dof.ortho_coc
-                } else if d > 0.0 {
-                    dof.k * (d - dof.focus).abs() / d
-                } else {
-                    continue;
-                };
-                if worst[k].as_ref().is_none_or(|w| value > w.value + 1e-12) {
-                    worst[k] = Some(Reading {
-                        shot: shot.clone(),
-                        t,
-                        measure: "focus_coc_max",
-                        item: id.clone(),
-                        value,
-                        limit: o.focus_coc_max,
-                        fails: value > o.focus_coc_max,
-                        key: None,
-                        at: None,
-                    });
+            }
+        }
+        if !still && !o.sampled_only {
+            for w in ts.windows(2) {
+                for k in 0..keep.len() {
+                    if worst[k].as_ref().is_some_and(|r| r.fails) {
+                        continue;
+                    }
+                    // The most blur over a span: the depth's interval from the eye's box to the
+                    // still centre along the aim at a still target, at its ends.
+                    let most = |a: i64, b: i64| -> Option<f64> {
+                        if moving || optics_move {
+                            return None;
+                        }
+                        let (centres, kk, s, ortho, oc) = read(a)?;
+                        if ortho {
+                            return Some(oc);
+                        }
+                        let c = centres[k]?;
+                        let (e, tg) = (rig.eye_box(bound, a, b)?, rig.still_target(a, b)?);
+                        let u: [Iv; 3] = std::array::from_fn(|j| Iv::point(c[j]).sub(e[j]));
+                        let v: [Iv; 3] = std::array::from_fn(|j| Iv::point(tg[j]).sub(e[j]));
+                        let dot = (0..3).fold(Iv::point(0.0), |acc, j| acc.add(u[j].mul(v[j])));
+                        let len = deep_canvas::interval::sqrt(
+                            (0..3).fold(Iv::point(0.0), |acc, j| acc.add(v[j].sqr())),
+                        );
+                        if len.lo <= 0.0 {
+                            return None;
+                        }
+                        let d = dot.div(len);
+                        (d.lo > 0.0 && d.is_bounded())
+                            .then(|| kk * (1.0 - s / d.lo).abs().max((1.0 - s / d.hi).abs()))
+                    };
+                    let at = |t: i64| coc(t, k);
+                    match settle(w[0], w[1], 0, o.focus_coc_max, &most, &at) {
+                        Settled::Within => {}
+                        Settled::Past(t, v) => note(&mut worst, k, t, v),
+                        Settled::Estimate => {
+                            found.estimates.push(json!({"measure": "focus_coc_max",
+                            "shot": shot, "item": keep[k], "span": [w[0], w[1]]}))
+                        }
+                    }
                 }
             }
         }
         found.readings.extend(worst.into_iter().flatten());
-        if !still && !o.sampled_only {
-            found
-                .estimates
-                .push(json!({"measure": "focus_coc_max", "shot": shot, "span": [start, end]}));
-        }
     }
 }
 
@@ -1161,4 +1345,69 @@ pub(crate) fn sweeps(doc: &Value, input: &Value) -> Vec<(String, Vec<Value>, boo
             }
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::{json, Value};
+
+    /// A box 3 m out under a 50 mm lens at f/1.4 focused at 3 m, and a camera a driver bobs
+    /// 0.5 m along its view 15 times a second: at every 30 Hz sample it stands 3 m out, in focus.
+    fn bobbing_focus() -> Value {
+        json!({
+            "format": 1, "profile": "scene", "size": [1920, 1080], "camera": "cam",
+            "transport": {"span": "1s"},
+            "shots": {"s": {"start": "0s", "end": "1s", "camera": "cam", "move": "hold", "keyed": true}},
+            "drivers": {"bob": {"target": "items/cam/params/position/2",
+                                "expr": "3 + 0.5 * sin(30 * pi * t)", "vars": {"t": "time"}}},
+            "items": {
+                "cam": {"id": "cam", "kind": "camera@1", "params": {"projection": "perspective",
+                    "position": [0, 0, 3], "target": [0, 0, 0], "near": 0.05, "far": 100,
+                    "lens": {"focal_length": 50, "sensor": [36, 24], "fit": "horizontal"},
+                    "aperture": {"f_stop": 1.4, "blades": 0}}},
+                "box": {"id": "box", "kind": "mark.box@1", "params": {"size": [0.4, 0.4, 0.4]},
+                        "at": {"pos": [0, 0, 0]}},
+                "fx": {"id": "fx", "kind": "effect@1", "params": {"kind": "dof", "dof": {"focus": 3,
+                    "coc": "physical", "taps": 64, "rotate": "pixel_hash", "far_over_near": "refuse"}}}
+            }
+        })
+    }
+
+    fn focus(input: &Value) -> Vec<super::Reading> {
+        let keep = ["box".to_string()];
+        super::measure(
+            &bobbing_focus(),
+            input,
+            &super::Opts::read(input),
+            &keep,
+            &[0],
+            None,
+        )
+        .readings
+        .into_iter()
+        .filter(|r| r.measure == "focus_coc_max")
+        .collect()
+    }
+
+    #[test]
+    fn focus_is_bounded_between_samples() {
+        let input = json!({"kind": "camera.framing", "keep": ["box"]});
+        let read = focus(&input);
+        let f = read.iter().find(|r| r.fails);
+        // At 1/60 s the eye is 3.5 m out: 0.05² × 0.5 ÷ (1.4 × 3.5 × 2.95) m × 1920 px ÷ 36 mm
+        // = 4.6 px, past 1.5, so the bound must find a failure there.
+        let f = f.unwrap_or_else(|| panic!("no focus failure between samples: {read:?}"));
+        assert!(
+            (f.t as f64 / 705_600_000.0 - 1.0 / 60.0).abs() < 1.0 / 300.0,
+            "{f:?}"
+        );
+        // The samples alone stand in focus: read only there, nothing fails.
+        let planted =
+            json!({"kind": "camera.framing", "keep": ["box"], "planted": super::PLANTED_SAMPLED});
+        assert!(
+            focus(&planted).iter().all(|r| !r.fails),
+            "{:?}",
+            focus(&planted)
+        );
+    }
 }
