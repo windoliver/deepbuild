@@ -6,7 +6,7 @@
 import { execFile } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { parse as parseYaml } from 'yaml';
+import { parseYaml } from './yaml.js';
 import { isRecord as isObj } from '@deepbuild/contracts';
 import type { ClaimCheck } from './gate-runner.js';
 
