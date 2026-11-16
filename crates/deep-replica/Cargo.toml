@@ -98,6 +98,12 @@ name = "acceptance_326_panels_planted"
 path = "../../tests/acceptance/326/panels/planted.rs"
 harness = false
 
+# #1620: independently drafted wrong-loader probe; validate before replacing the stale original.
+[[test]]
+name = "acceptance_1620_planted_loader"
+path = "../../tests/acceptance/1620/planted_loader_proposal.rs"
+harness = false
+
 # AC7's two planted hosts, redrafted blind: gpui-shell's own loader, so they load the fixtures
 # whatever the app's loader admits.
 [[test]]
