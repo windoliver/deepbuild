@@ -833,6 +833,8 @@ byHand.push('tests/acceptance/184/ac07-bots-refused.test.ts', 'tests/acceptance/
 alone.push('tests/acceptance/555/');
 // #1048's files start replicas and hubs and play rules.legal's samples, a 100,000-step soak and model runs for minutes.
 alone.push('tests/acceptance/1048/');
+// #458's pairs, relations and views files each build deep-show or deep-gpu and hold the GPU; its suite files run scripts only.
+alone.push('tests/acceptance/458/pairs/', 'tests/acceptance/458/relations/', 'tests/acceptance/458/views/');
 
 // #2516: each file builds deep-gpu and reads linear targets; castle costs require a timed grant.
 alone.push('tests/acceptance/2516/');
@@ -943,6 +945,10 @@ export const checks = [
   // #1427: the motion check on the shipped journeys for Needs you, a session page and the project page.
   { name: 'motion', commands: [['cargo', 'build', '--locked', '-p', 'deep-replica', '--bin', 'deep-drive'], [process.execPath, 'scripts/motion.mjs']], fix: 'Make the motion each finding above names settle, fade or fly as declared,.' },
   { name: 'canvas kit', commands: [[process.execPath, 'scripts/canvas-kit.mjs']], fix: 'Repair the canvas module and part each line above names; run the kit call alone to replay a failing seed.' },
+  // #458: the parity suite's quick lane, the kit's fixtures and their planted-fault twins on Vello CPU and the noop
+  // backend, no GPU, after the fixture scan over every canvas fixture and its evidence. What can't run reads BLOCKED
+  // in its row, for the release bar to weigh; the lane fails on what ran and didn't hold.
+  { name: 'parity suite quick', commands: [['cargo', 'build', '--locked', '--bin', 'deep-show'], [process.execPath, 'scripts/fixture-scan.mjs'], [process.execPath, 'scripts/parity-suite.mjs', 'run', 'quick']], fix: 'Remove or redact what each fixture scan line names; repair the fixture each FAIL line names, give a fixture an INVALID line names a planted-fault twin that fails, and read both results of an INCONCLUSIVE one before running it again on a new commit.' },
   // Build first, so a broken build fails this lane instead of comparing a stale binary.
   { name: 'parity quick', commands: [['cargo', 'build', '--workspace', '--locked'], [process.execPath, 'scripts/parity.mjs']], fix: 'Repair the Rust build, the CLI behavior or the cross-binary help/version mismatch.' },
   // The proof lanes (#569): the test guard, fails before on the merge base, the trace lane, and the
@@ -1051,6 +1057,14 @@ export const releaseLanes = [
       ['env', 'DEEP_HARNESS_LIVE=1', process.execPath, 'node_modules/vitest/vitest.mjs', 'run', '--root', 'tests/acceptance/27', 'session.live.test.ts'],
     ],
     fix: 'Repair what each failing test names; a BLOCKED run names what is missing, such as CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token` for the settings-tamper sessions.',
+  },
+  {
+    // #458's: the parity suite's other lanes on the release commit (full on the GPU, cross on a second machine, the
+    // optional oracle lanes), then the release report, which applies the bar to every fixture's rows of that commit:
+    // each must-pass fixture PASS, each other PASS or BLOCKED with an owner and a reason.
+    name: 'parity suite release',
+    commands: [...['full', 'cross', 'oracle'].map((lane) => [process.execPath, 'scripts/parity-suite.mjs', 'run', lane]), [process.execPath, 'scripts/parity-suite.mjs', 'report']],
+    fix: 'Repair the fixture each FAIL line names; a fixture the bar names needs a PASS on the release commit when it is must-pass, and otherwise a PASS or a BLOCKED row with an owner and a reason in scripts/parity-suite.json.',
   },
   {
     // #140's validation lane: the GPU fixtures once with Metal's API and shader validation on and the shader
