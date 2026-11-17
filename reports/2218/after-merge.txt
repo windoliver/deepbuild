@@ -1,18 +1,49 @@
-After the merge with main 78307b1c4 (merge commit eda286640). No build grant came: the merged tree's build was queued 21:33 and had not started by 22:20, so the acceptance suite, #2205's suite and affected.mjs were not run on the merged tree.
+After the merge with main 78307b1c4 (merge commit eda286640), on the merged tree, 2026-11-16. The load is the
+machine's 1-minute load on 18 cores; other sessions were running.
 
-node node_modules/typescript/bin/tsc -p packages/hub/tsconfig.json --noEmit: exit 0
+Build, under the throttle's build grant:
+  npm run build --workspaces && cargo build --locked -p deep-hook: exit 0
 
-node node_modules/vitest/vitest.mjs run packages/hub/test/spec-checks.test.ts packages/hub/test/gate-runner.test.ts (run directly, once):
- ✓ packages/hub/test/spec-checks.test.ts > a spec check with runs: 0 is missing a count the hub can read, naming the value 6ms
- ✓ packages/hub/test/spec-checks.test.ts > a spec check with accept: 250% is missing a count the hub can read, naming the value 1ms
- ✓ packages/hub/test/spec-checks.test.ts > a spec check with min_tests: five is missing a count the hub can read, naming the value 1ms
- ✓ packages/hub/test/gate-runner.test.ts > a slow run outdated by a newer claim > is recorded stale only when the newer claim changed its check's inputs, naming that claim; the same tree stopped again
- ✓ packages/hub/test/gate-runner.test.ts > a slow run outdated by a newer claim > a run no newer claim changed the inputs of ends with no run.stale 1586ms
- ✓ packages/hub/test/gate-runner.test.ts > a spec check's runs on one claim (#2218) > after a run fails, two more start and no fourth: three failures are its FAIL 2509ms
- ✓ packages/hub/test/gate-runner.test.ts > a spec check's runs on one claim (#2218) > runs that fail with no record kept, as when the runner itself throws, still end at three 2410ms
- ✓ packages/hub/test/gate-runner.test.ts > a spec check's runs on one claim (#2218) > two clean runs that read different files, and so land on different keys, both count for the claim 3526ms
- ✓ packages/hub/test/gate-runner.test.ts > a spec check's runs on one claim (#2218) > a run that didn't count ends its runs: no other starts, and the check never passes on it 2449ms
- ✓ packages/hub/test/gate-runner.test.ts > a check pinned to a commit of its own (#325) > a timing run that failed under load and passed rerun alone (#352): a later claim on that commit gets the rerun
- ✓ packages/hub/test/gate-runner.test.ts > a check pinned to a commit of its own (#325) > a drift rerun of a timing check that fails under load again is set aside and rerun alone again; the old run un
- Test Files  2 passed (2)
-      Tests  11 passed (11)
+Hub typecheck:
+  node node_modules/typescript/bin/tsc -p packages/hub/tsconfig.json --noEmit: exit 0
+
+The two unit files (run directly, once):
+  node node_modules/vitest/vitest.mjs run packages/hub/test/spec-checks.test.ts packages/hub/test/gate-runner.test.ts
+  Test Files  2 passed (2)
+       Tests  11 passed (11)
+
+The blind suite and #2205's suite, each file alone, under the throttle's test grant:
+  node node_modules/vitest/vitest.mjs run tests/acceptance/2218 tests/acceptance/2205 --no-file-parallelism --reporter=verbose
+
+Run 1, 13:14 to 13:36, load 45 to 55. The six #2218 tests passed. One of #2205's eight failed: its fixture's claim
+read INCONCLUSIVE, "snapshot over budget", after 944 s, with no run of its check.
+ × tests/acceptance/2205/spec-checks.test.ts > AC1 #2205.a7438bd1 a name the done claim lists that checks doesn't define stands on the claim as BLOCKED, naming it > AC1 #2205.a7438bd1 with claims: {done: {checks: [unit, typechek]}} and unit and typecheck defined, a claim whose unit check passes is BLOCKED, naming typechek 944692
+   → the done claim names unit, which checks defines with a run line, and the session's fix makes its test pass, so unit runs on the claim and passes: claim:01M7K3D9NCD1NTVFBFC14DVYC5: verdict INCONCLUSIVE ["snapshot over budget: ? untracked files"]; its runs: none: expected [] to include 'passed'
+ ✓ tests/acceptance/2205/spec-checks.test.ts > AC2 #2205.df00835d an entry the gate can't turn into a run stands on the claim as BLOCKED, naming it > AC2 #2205.df00835d with checks.checkout written as {type: journey, file: .deepbuild/journeys/checkout.yaml} and named by the done claim, the claim is BLOCKED, naming checkout 45599
+ ✓ tests/acceptance/2205/spec-checks.test.ts > AC3 #2205.e7406ea9 a done.yaml that doesn't parse makes the claim BLOCKED, naming the file and where the parser stopped > AC3 #2205.e7406ea9 with a done.yaml that ends inside an open checks: [ on its line 12, the claim is BLOCKED, naming .deepbuild/done.yaml and line 12, and is neve
+ ✓ tests/acceptance/2205/spec-checks.test.ts > AC4 #2205.98714b31 the twin: defined checks with run lines are judged as today, and a repo with no done.yaml gets no spec check and no BLOCKED > AC4 #2205.98714b31 with claims: {done: {checks: [unit, typecheck]}}, both defined with run lines and unit with min_tests as the design wri
+ ✓ tests/acceptance/2205/spec-checks.test.ts > AC4 #2205.98714b31 the twin: defined checks with run lines are judged as today, and a repo with no done.yaml gets no spec check and no BLOCKED > AC4 #2205.98714b31 in a repo with no done.yaml the claim runs its definition's check and no spec check, and is not BLOCKED 14894ms
+ ✓ tests/acceptance/2205/spec-checks.test.ts > Scope #2205 a name checks doesn't define and an entry the gate can't turn into a run each stand on the claim as BLOCKED, naming the check, with you as owner, in every shape the spec gives them > Scope #2205 no claims block: the claim takes every check, so unit runs and passes, and c
+ ✓ tests/acceptance/2205/spec-checks.test.ts > Scope #2205 a name checks doesn't define and an entry the gate can't turn into a run each stand on the claim as BLOCKED, naming the check, with you as owner, in every shape the spec gives them > Scope #2205 no run line on a command entry: with checks.typecheck written as {type: comm
+ ✓ tests/acceptance/2205/spec-checks.test.ts > Scope #2205 a name checks doesn't define and an entry the gate can't turn into a run each stand on the claim as BLOCKED, naming the check, with you as owner, in every shape the spec gives them > Scope #2205 no checks block: with claims: {done: {checks: [typecheck]}} and nothing unde
+ ✓ tests/acceptance/2218/accept.test.ts > AC2 #2218.fbc757ce a spec check's accept reaches the claim's check > AC2 #2218.fbc757ce with accept: 10%, a check whose every run is clean is given 29 runs on the claim, and the claim passes on no fewer 25279ms
+ ✓ tests/acceptance/2218/min-tests.test.ts > AC3 #2218.a145523d a spec check's min_tests is read > AC3 #2218.a145523d a suite that runs 3 tests passes with min_tests: 3, and with min_tests: 5 is INVALID, naming the check, 3 and 5 25089ms
+ ✓ tests/acceptance/2218/unread.test.ts > AC4 #2218.1a2df3f9 a key the hub doesn't read makes the claim BLOCKED > AC4 #2218.1a2df3f9 a spec whose check has dedline: 30m makes the claim BLOCKED, naming dedline and its line, with you as owner 12465ms
+ ✓ tests/acceptance/2218/unread.test.ts > AC4 #2218.1a2df3f9 a key the hub doesn't read makes the claim BLOCKED > AC4 #2218.1a2df3f9 a spec with a top-level chekcs: block makes the claim BLOCKED, naming chekcs and its line, with you as owner 11776ms
+ ✓ tests/acceptance/2218/runs.test.ts > AC1 #2218.21b6bc5c a spec check's runs reach the claim's check > AC1 #2218.21b6bc5c with runs: 3, a check that passes on its first run and fails on its second gives the claim INCONCLUSIVE, naming the check as passed and failed on real runs of the commit 11969ms
+ ✓ tests/acceptance/2218/twin.test.ts > AC5 #2218.cb279bf8 the twin: this repo's own done.yaml > AC5 #2218.cb279bf8 a claim in a trusted repo whose spec is this repo's own done.yaml runs every check it names and passes: no key is refused 11693ms
+ Test Files  1 failed | 5 passed (6)
+      Tests  1 failed | 13 passed (14)
+
+Run 2, #2205's file alone, 14:03 to 14:09, load 100 to 185: 8 passed. AC1 there has a fail and a pass on the merged
+tree, so it reads INCONCLUSIVE, not PASS; the other seven passed twice.
+ ✓ tests/acceptance/2205/spec-checks.test.ts > AC1 #2205.a7438bd1 a name the done claim lists that checks doesn't define stands on the claim as BLOCKED, naming it > AC1 #2205.a7438bd1 with claims: {done: {checks: [unit, typechek]}} and unit and typecheck defined, a claim whose unit check passes is BLOCKED, naming typechek 56261m
+ ✓ tests/acceptance/2205/spec-checks.test.ts > AC2 #2205.df00835d an entry the gate can't turn into a run stands on the claim as BLOCKED, naming it > AC2 #2205.df00835d with checks.checkout written as {type: journey, file: .deepbuild/journeys/checkout.yaml} and named by the done claim, the claim is BLOCKED, naming checkout 48020
+ ✓ tests/acceptance/2205/spec-checks.test.ts > AC3 #2205.e7406ea9 a done.yaml that doesn't parse makes the claim BLOCKED, naming the file and where the parser stopped > AC3 #2205.e7406ea9 with a done.yaml that ends inside an open checks: [ on its line 12, the claim is BLOCKED, naming .deepbuild/done.yaml and line 12, and is neve
+ ✓ tests/acceptance/2205/spec-checks.test.ts > AC4 #2205.98714b31 the twin: defined checks with run lines are judged as today, and a repo with no done.yaml gets no spec check and no BLOCKED > AC4 #2205.98714b31 with claims: {done: {checks: [unit, typecheck]}}, both defined with run lines and unit with min_tests as the design wri
+ ✓ tests/acceptance/2205/spec-checks.test.ts > AC4 #2205.98714b31 the twin: defined checks with run lines are judged as today, and a repo with no done.yaml gets no spec check and no BLOCKED > AC4 #2205.98714b31 in a repo with no done.yaml the claim runs its definition's check and no spec check, and is not BLOCKED 24942ms
+ ✓ tests/acceptance/2205/spec-checks.test.ts > Scope #2205 a name checks doesn't define and an entry the gate can't turn into a run each stand on the claim as BLOCKED, naming the check, with you as owner, in every shape the spec gives them > Scope #2205 no claims block: the claim takes every check, so unit runs and passes, and c
+ ✓ tests/acceptance/2205/spec-checks.test.ts > Scope #2205 a name checks doesn't define and an entry the gate can't turn into a run each stand on the claim as BLOCKED, naming the check, with you as owner, in every shape the spec gives them > Scope #2205 no run line on a command entry: with checks.typecheck written as {type: comm
+ ✓ tests/acceptance/2205/spec-checks.test.ts > Scope #2205 a name checks doesn't define and an entry the gate can't turn into a run each stand on the claim as BLOCKED, naming the check, with you as owner, in every shape the spec gives them > Scope #2205 no checks block: with claims: {done: {checks: [typecheck]}} and nothing unde
+ Test Files  1 passed (1)
+      Tests  8 passed (8)
