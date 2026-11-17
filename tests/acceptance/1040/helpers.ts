@@ -203,14 +203,16 @@ function countProgram(control: string, write: string): Program {
   programs.set(key, p);
   return p;
 }
-/** AC8's `mem`: reads btn_a, btn_b and reveal. An entry of btn_a sets the i32 at FLAG_AT to 1, one of btn_b to 2, and neither writes
+/** AC8's `mem`: reads btn_a, btn_b and reveal. While the i32 at FLAG_AT is 0 (the first button
+ * pressed keeps it, so the piece stays within the page's caps), an entry of btn_a sets it to 1, one of btn_b to 2, and neither writes
  * anything; an entry of reveal writes the flag to its f64 `shown`. */
 function memoryProgram(): Program {
   const known = programs.get('memory');
   if (known) return known;
   const l = layoutOf(['btn_a', 'btn_b', 'reveal'], { shown: { type: 'f64' } });
   const shownAt = l.write('shown');
-  const setFlag = (control: string, v: number): number[] => [...i32(l.read(control)), ...LOAD_I32, ...IF, ...i32(FLAG_AT), ...i32(v), ...STORE_I32, ...END];
+  // if the control has an entry and the flag is still 0 (i32.eqz): flag = v
+  const setFlag = (control: string, v: number): number[] => [...i32(l.read(control)), ...LOAD_I32, ...IF, ...i32(FLAG_AT), ...LOAD_I32, 0x45, ...IF, ...i32(FLAG_AT), ...i32(v), ...STORE_I32, ...END, ...END];
   const p = logicModule([
     ...setFlag('btn_a', 1), ...setFlag('btn_b', 2),
     // if reveal: shown = f64(i32 at FLAG_AT)
@@ -483,7 +485,7 @@ export function mapsDoc(evidence: string, size: 2048 | 1024): JsonObject {
 // `throw` on each entry of the choice `pick` sends it up at 1 + 10 × pick m/s (Control: a choice reads as its option's
 // index: soft 1 m/s, hard 11 m/s). Stage `aim` (0.1 s) waits for pick, `look` (0.45 s) for the choice `go`, `after`
 // (1.0 s) ends it. At `look` the soft ball has landed and rests, the hard one still rises inside the chimney: the same
-// picture at the same step; at `after` the hard ball shows above the chimney.
+// picture at the same step (the ball itself draws only from `after` on); at `after` the hard ball shows above the chimney.
 
 /** Every surface is unlit (Material: `unlit`), each its own flat color: at the base a hidden ball that moves still changed
  * the lit frame around it (572 pixels at `look`, by up to 11 code values), and an unlit surface takes no light. */
@@ -522,6 +524,8 @@ export function dropDoc(): JsonObject {
       after: { kind: 'stage', name: 'After', t: '1s' },
     },
     worlds: { [DROP.world]: world },
+    // The ball draws only from `after` on, so nothing drawn at `look` can depend on where it is.
+    channels: { show_ball: shownOver('ball', 1, null) },
   });
 }
 

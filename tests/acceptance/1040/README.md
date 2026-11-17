@@ -170,10 +170,12 @@ All made at test time in `helpers.ts`; no personal data; CC0. Control and item I
 - **The maps** (`mapsDoc`; AC6): a slab under four UASTC KTX2 maps with full mip chains (#423's writer): base color and
   emission sRGB, metallic-roughness and normal linear; at 2,048 px and at 1,024 px.
 - **The memory piece** (`memoryDoc`; AC8): presses `btn_a`, `btn_b`, `reveal`; the logic item `mem` sets a flag at byte
-  8,192 of its memory on an entry of A (1) or B (2), writing nothing, and writes it to `shown` on an entry of reveal;
-  two marks show 1 or 2.
+  8,192 of its memory on an entry of A (1) or B (2) while it is still 0, writing nothing, and writes it to `shown` on
+  an entry of reveal; two marks show 1 or 2. The first button pressed keeps the flag, so at most 34 states are
+  reached: 2 before any press, and 8 control values × 2 readouts for each flag.
 - **The chimney** (`dropDoc`; AC9): a ball inside an opaque box, thrown up at 1 m/s (soft) or 11 m/s (hard) by the
-  waited choice `pick`; stages `aim` (0.1 s), `look` (0.45 s, waits for `go`), `after` (1 s). Every surface is unlit.
+  waited choice `pick`; stages `aim` (0.1 s), `look` (0.45 s, waits for `go`), `after` (1 s). Every surface is unlit,
+  and the ball draws only from `after` on (an opacity channel held at 0 until 1 s).
 
 ## The server, the browser and the shim adapter
 
@@ -227,7 +229,7 @@ sha256}, note?}`. This job writes no TASTE.json and takes no picture; no other c
   and release in one edge is read the same). In the app's tracks a press is the value 1 and a release 0; `mem` acts on
   any entry, so the value's form doesn't change a picture.
 - **A page's logic key** (AC8): the logic item's full state. Under a key that also counts the clock, a piece with
-  buttons a marker doesn't wait for has no bound; this fixture holds at most 8 × 7 states by controls and state.
+  buttons a marker doesn't wait for has no bound; this fixture holds at most 34 states by controls and state.
 - **The two launches** (AC9) are one waited choice, read in the launch's `data` expression as its option's index
   (Control), so that the page's states stay few; their controls differ, and the planted page leaves controls out. The
   base may already keep the two states apart (it keys by the core's carried-state list); the planted page is then

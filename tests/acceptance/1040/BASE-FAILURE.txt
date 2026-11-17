@@ -11,7 +11,9 @@ Observed at the base by the coordinator, who ran this draft's documents against 
   case); the controls are now `btn_a` and `btn_b`. Every other document here is presented.
 - the chimney's stills at `look` differed between the two launches in 572 pixels (up to 11 code values): a hidden
   moving ball still changed the lit frame. Every surface is now unlit. Not run again: whether unlit surfaces make the
-  two stills equal is unverified, and the test's fixture assertion says so if they don't.
+  two stills equal is unverified, and the test's fixture assertion says so if they don't. (Redraft: they still
+  differed, 09c6f2b4… against 642a6134…, so the ball now draws only from `after` on; and the memory piece, refused
+  past the page's caps with three free momentary buttons, keeps the first flag set: 34 states at most.)
 - the base's index page names each bundled face by its face file name in its `fonts` list; `indexFailures` now reads
   only paths under a SHA-256 name.
 - Chrome's profile folder sometimes failed to remove right after the kill (ENOTEMPTY); the removal now retries.
