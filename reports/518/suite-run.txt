@@ -79,3 +79,73 @@ AssertionError: BLOCKED: this criterion compares with the merge base, and deep-s
 
 # Not run: the budgets.test.ts rerun and tests/acceptance/518-redraft-ac10/open.test.ts. Both waited hours for a grant at a
 # one-minute load above 800 on 18 cores; the machine's hourly disk cleanup then removed target/, and the base build with it.
+
+# Second merged tree (e5f5046a7: main merged again at 6f1dd3a7e, after it had moved 282 commits and conflicted in three files)
+# target/ was built from nothing: cargo build --locked --bin deep-show --no-default-features --features full,test-encode-tools (exit 0, 47m 31s)
+# and --features full (exit 0). Then each file once, one at a time under one build grant, 2026-11-17 01:14 to 02:15. The one-minute load ran
+# from 430 down to 170 on 18 cores. Not rerun here: open.test.ts (kept by hand; its blind redraft runs in its place).
+
+== registered.test.ts
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+
+== av1.test.ts
+     × AC2 #518.3c98d3de on a machine whose decode worker can't decode AV1, the test AV1 tool doesn't qualify and the export is BLOCKED, naming the codec av1, and never delivered 5ms
+AssertionError: BLOCKED: this leg is judged on a machine whose decode worker can't decode AV1, and this one's decoded a frame of an AV1 file; this is not a pass
+ Test Files  1 failed (1)
+      Tests  1 failed | 3 passed (4)
+
+== handoff.test.ts
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+
+== slots.test.ts
+ Test Files  1 passed (1)
+      Tests  4 passed (4)
+
+== trust.test.ts
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+
+== blocked.test.ts
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+
+== memory.test.ts
+AC12 #518.3e752f74 the encode job's peak resident memory: 41.1 MiB on the 60 s film, 18.9 MiB on its 6 s cut
+     × AC12 #518.3e752f74 the encode job's peak memory on the 60 s fixture film as a PNG sequence stays within 10% of its 6 s cut's at the same size 19464ms
+AssertionError: the encode job's peak memory: peak memory: the encode job's peak on the 60 s film is 41.1 MiB, more than 10% over the 6 s cut's 18.9 MiB (41882 $TMPDIR/deep-501-bins-roYmDj/deep-show-; 46324 (deep-show-full)): expected [ Array(1) ] to deeply equal []
+ Test Files  1 failed (1)
+      Tests  1 failed | 3 passed (4)
+
+== planes.test.ts
+     × AC7 #518.c5c5c15e the 60 s fixture film's 1,440 frames and the 1080p ramp's ten convert to exactly the CPU reference's Y and CbCr planes, on the reference Mac and on the software adapter 42195ms
+AssertionError: BLOCKED: no software adapter can be opened here, so the criterion's software leg isn't judged: {"outcome":"refused","code":"software_adapter_unavailable","adapter":"software","why":"no software adapter opens in this build (#230); the frames draw and hash on the GPU only","core":"core@0.0.0","set_digest":"c6bed156756e586416e70a08ffbf41807c5edb9ec0d5a6a8ac70e19907357494"}; this is not a pass
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+
+== taste.test.ts
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+
+== tests/acceptance/518-redraft-ac10/open.test.ts (its first run)
+AC10 #518.f259d9bf growth 1.70 s (between 1.50 and 6.86 s) over 3 pairs; the 2.0 s open: wall 3.83, 3.63, 3.72 s, first frame at 0.65, 0.23, 0.25 s, open timed at 2.14, 2.17, 2.12 s; the 0 s open: wall 7.10, 2.13, 1.93 s, first frame at 5.62, 0.29, 0.24 s, open timed at 0.16, 0.18, 0.12 s; the one-minute load is 219.9, above the 18 cores
+     × AC10 #518.f259d9bf with a stub tool whose open takes 2.0 s the fixture film's wall time grows by at most 0.2 s over a stub whose open takes 0 s, and the receipt times each open 22556ms
+AssertionError: INCONCLUSIVE: encoder open: the film's wall time grew by 1.70 s through the tool whose open takes 2.0 s, over 0.2 s, so the open isn't hidden behind the film's preparing (growth 1.70 s (between 1.50 and 6.86 s) over 3 pairs; the 2.0 s open: wall 3.83, 3.63, 3.72 s, first frame at 0.65, 0.23, 0.25 s, open timed at 2.14, 2.17, 2.12 s; the 0 s open: wall 7.10, 2.13, 1.93 s, first frame at 5.62, 0.29, 0.24 s, open timed at 0.16, 0.18, 0.12 s; the one-minute load is 219.9, above the 18 cores); and the one-minute load is 219.9, above the 18 cores, so the clock readings don't count; this is not a pass
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+
+# The pinned base again (target/ had been cleaned): built from a clean checkout of d8c46f0d5 with the helper's cargo arguments (exit 0, 1m 31s),
+# then base.test.ts and budgets.test.ts once each under one build grant, 2026-11-17 03:59 to 04:13. The one-minute load was 32 at the start of
+# base.test.ts and 22 at the start of budgets.test.ts, on 18 cores. budgets.test.ts ran under a build grant, not the timed grant its lane gives it.
+
+== base.test.ts (second merged tree)
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+
+== budgets.test.ts (second merged tree)
+AC8 #518.b0585e2f a 10 s 1080p60 export, this build over the merge base: 59.84 s over 58.87 s, 80.37 s over 63.03 s, 58.51 s over 57.57 s, 58.38 s over 57.65 s, 58.35 s over 57.65 s (ratios 1.016, 1.275, 1.016, 1.013, 1.012 against 1.05) on Mac17,10 macOS 26B8119: INCONCLUSIVE (the five runs are neither all within 1.05 nor all over it by more than the 25.1% margin)
+     × AC8 #518.b0585e2f on the reference Mac a 10 s 1080p60 export as H.264 with AAC takes under 1.05 times the merge base's time (five pairs after a warm-up) 731709ms
+AssertionError: INCONCLUSIVE: a 10 s 1080p60 export, this build over the merge base: 59.84 s over 58.87 s, 80.37 s over 63.03 s, 58.51 s over 57.57 s, 58.38 s over 57.65 s, 58.35 s over 57.65 s (ratios 1.016, 1.275, 1.016, 1.013, 1.012 against 1.05) on Mac17,10 macOS 26B8119: INCONCLUSIVE (the five runs are neither all within 1.05 nor all over it by more than the 25.1% margin); this is not a pass
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
