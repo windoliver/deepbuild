@@ -137,6 +137,22 @@ function unticked({ number, body }) {
   return section === undefined ? null : [...section.matchAll(/^\s*- \[ \] (.+)$/gm)].map(([, text]) => criterionId(number, text));
 }
 
+function ticked(issue, tree) {
+  const name = `${tree}-trace.json`, heading = /^###\s+Acceptance criteria\s*$/m.exec(issue.body);
+  if (!heading) return issue;
+  let proven;
+  try {
+    proven = new Set(JSON.parse(readFileSync(join(homedir(), '.deepbuild', 'lanes', name), 'utf8')).tests.filter(({ state }) => state === 'PASS').map(({ id }) => id));
+  } catch {
+    return issue;
+  }
+  const from = heading.index + heading[0].length, next = issue.body.slice(from).search(/^#{1,6}\s/m), to = next < 0 ? issue.body.length : from + next;
+  const section = issue.body.slice(from, to).replace(/^([ \t]*)- \[ \] (.+?)(\r?)$/gm, (line, indent, text, cr) => (proven.has(criterionId(issue.number, text)) ? `${indent}- [x] ${text}${cr}\n${indent}  - Proved by the trace lane's record \`${name}\`${cr}` : line));
+  const body = issue.body.slice(0, from) + section + issue.body.slice(to);
+  if (body !== issue.body) gh('issue', 'edit', issue.number, '--body', body);
+  return { ...issue, body };
+}
+
 // A miss files its follow-up first, so a failed call leaves the commit for the next window with nothing half said.
 function miss({ commit, base, tests }, issues) {
   const missed = tests.filter(({ state }) => state === 'FAIL').map(({ id, note }) => `- \`${id}\`: ${note}`).join('\n');
@@ -173,15 +189,16 @@ for (const [at, commit] of commits.entries()) {
   const record = measured(commit);
   // A holder that died took the window with it, so what ran after is no measurement. The mark stays.
   if (!inWindow()) blocked(`the window closed while measuring ${commit}`, outside);
+  const tree = git('rev-parse', `${record.change}^{tree}`);
   // Its issues are read before its record is written, which names each criterion they leave unticked that no task names.
   let read;
   try {
-    read = issues.get(commit).map((number) => ({ number, ...JSON.parse(gh('issue', 'view', number, '--json', 'state,body')) }));
+    read = issues.get(commit).map((number) => ticked({ number, ...JSON.parse(gh('issue', 'view', number, '--json', 'state,body')) }, tree));
   } catch (error) {
     blocked(`${commit}'s issues weren't read: ${error.message}`, 'Sign in to gh; the next window measures this commit again.');
   }
   const unmeasured = read.flatMap((issue) => (unticked(issue) ?? []).filter((id) => !record.named.has(id)));
-  writeRecord(`budget-window ${commit}`, record.state, git('rev-parse', `${record.change}^{tree}`), record.tests, { commit, base: record.base, unmeasured, notReached: record.notReached });
+  writeRecord(`budget-window ${commit}`, record.state, tree, record.tests, { commit, base: record.base, unmeasured, notReached: record.notReached });
   console.log(`${record.state} budget-window: ${commit} against ${record.base}, ${record.tests.length} tasks run, ${record.notReached.length} not reached`);
   try {
     if (record.state === 'FAIL') miss(record, issues.get(commit));

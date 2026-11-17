@@ -1,0 +1,14 @@
+{
+  "issue": 172,
+  "criterion": "#172.f6838f04",
+  "verdict": "looks_right",
+  "who": "Claude (claude-opus-5-5), on the owner's delegation in the session (\"validate screenshot for me and close the gaps\", Nov 15, 2026); not the owner's own call",
+  "when": "2026-11-16T06:53:28Z",
+  "screenshots": {
+    "player-lab.png": "8df86505338c2a8a6a51c5b96f955ab5481ffcb99b55844ffd7a9bb024e760b2",
+    "player-stage-descent.png": "5ae0ded66abd037470e46d493dd3a99a881d0805b8e806dc4e319bdb2d94de11",
+    "player-bad-fragment.png": "7d30387c422bbe3dc816cbb92badf0f58b5a776cd2e8cca226f37d94c17913ae",
+    "player-lab.webm": "affb5af820efcfbe8a808413b21cb57679284f8047384467d6dd5a833fab3809"
+  },
+  "note": "Checked each against the app and the piece. player-lab.png: the lab 1 s in, its first kick's ball in flight at x 3 m, 0.37 m up, toward the goal at 8 m, drawn by scene3d's renderer on WebGPU with the framing, colors and goal post the app's own 3D render of the lab gives; the score bar sits above the view as the fixture places it. player-lab.webm: the ball rests until the 0.5 s kick, arcs toward the goal, lands and tumbles on, as the player's evaluated pose reads; 602 frames over the 10 s play, median 17 ms. player-stage-descent.png: at 12 s the dot at x 226, y 60 of 320 x 180, as its drivers give (10 + 18 t; 20 + 0.4 (2000 - 1900)), over the ground and the ink band. player-bad-fragment.png: at the start (dot at x 10) with the notice naming \"t=abc\"."
+}

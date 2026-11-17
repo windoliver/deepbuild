@@ -584,6 +584,14 @@ pub fn check(doc: &Map<String, Value>, look: &Look, min: Option<f64>) -> Vec<Iss
     issues.extend(numbers(doc).1);
     issues.extend(story_issues(items));
     issues.extend(text_cap_issues(items));
+    // #2031: a lit group's cap, nesting and light colors, each named.
+    let mut lights = crate::light::problems(items);
+    lights.extend(crate::light::ranges(doc));
+    let lit_refused = !lights.is_empty();
+    issues.extend(lights.into_iter().map(|p| Issue {
+        fix: "Keep at most 16 lights on one lit group, light only one group on a path from the root, and give each light a look role that isn't a status color.".into(),
+        ..Issue::error(p.code, &p.id, p.path, p.actual, &p.what)
+    }));
     // Status can show wherever a status binding is.
     let status_shows = doc
         .get("status_bindings")
@@ -621,6 +629,10 @@ pub fn check(doc: &Map<String, Value>, look: &Look, min: Option<f64>) -> Vec<Iss
             Planted::None,
         );
         if let Err(r) = built {
+            // The frame refuses a lit group's problem as the issues above name it.
+            if lit_refused {
+                break;
+            }
             // `items/<id>/…`, or `items/<id>: …` for a pair.
             let id = r
                 .path

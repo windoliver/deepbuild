@@ -94,13 +94,114 @@ fn dist2(p: V3, [a, b, c]: [V3; 3]) -> f64 {
     ])
 }
 
+/// A node, one cache line: the ray queries spend most of their time waiting on nodes.
+#[repr(align(64))]
 struct Node {
     min: V3,
     max: V3,
-    /// Leaf: `start..end` into `order`; inner: children at `start` and `end`.
-    start: usize,
-    end: usize,
+    /// Leaf: `start..end` into `order`; inner: children at `start` and `end` (a tree of fewer
+    /// than 2^32 triangles).
+    start: u32,
+    end: u32,
     leaf: bool,
+}
+
+/// The bounds of `boxes`.
+fn bounds(boxes: impl IntoIterator<Item = (V3, V3)>) -> (V3, V3) {
+    let mut min = [f64::INFINITY; 3];
+    let mut max = [f64::NEG_INFINITY; 3];
+    for (lo, hi) in boxes {
+        for k in 0..3 {
+            min[k] = min[k].min(lo[k]);
+            max[k] = max[k].max(hi[k]);
+        }
+    }
+    (min, max)
+}
+
+/// The most rays [`Bvh::blocks_each`] takes at once.
+pub(crate) const PACKET: usize = 8;
+
+/// Whether the ray from `o` with direction reciprocals `inv` passes through `node`'s box.
+fn slab(node: &Node, o: V3, inv: V3) -> bool {
+    let (mut lo, mut hi) = (0.0f64, f64::INFINITY);
+    for k in 0..3 {
+        let (a, b) = ((node.min[k] - o[k]) * inv[k], (node.max[k] - o[k]) * inv[k]);
+        let (a, b) = if a <= b { (a, b) } else { (b, a) };
+        // A NaN slab (d[k] = 0 with o on the slab's plane) leaves the range as it was.
+        lo = if a > lo { a } else { lo };
+        hi = if b < hi { b } else { hi };
+    }
+    lo <= hi
+}
+
+/// Which of [`PACKET`] rays, their origins and direction reciprocals by axis, pass through
+/// `node`'s box: `slab` for each, written lane by lane so the rays are tested side by side.
+fn slabs(node: &Node, o: &[[f64; PACKET]; 3], inv: &[[f64; PACKET]; 3]) -> u8 {
+    let mut lo = [0.0f64; PACKET];
+    let mut hi = [f64::INFINITY; PACKET];
+    for k in 0..3 {
+        for r in 0..PACKET {
+            let (a, b) = (
+                (node.min[k] - o[k][r]) * inv[k][r],
+                (node.max[k] - o[k][r]) * inv[k][r],
+            );
+            let (a, b) = if a <= b { (a, b) } else { (b, a) };
+            lo[r] = if a > lo[r] { a } else { lo[r] };
+            hi[r] = if b < hi[r] { b } else { hi[r] };
+        }
+    }
+    (0..PACKET).fold(0, |m, r| m | (u8::from(lo[r] <= hi[r]) << r))
+}
+
+/// Whether the ray from `o` along `d` meets triangle `abc` past `near` (Möller-Trumbore).
+fn meets([a, b, c]: [V3; 3], o: V3, d: V3, near: f64) -> bool {
+    let (e1, e2) = (sub(b, a), sub(c, a));
+    let (p, det) = facing(e1, e2, d);
+    meets_facing(a, e1, e2, d, p, det, o, near)
+}
+
+/// The ray's direction `d` crossed with a triangle's edge `e2`, and the determinant it makes
+/// with the other edge `e1`.
+fn facing(e1: V3, e2: V3, d: V3) -> (V3, f64) {
+    let p = [
+        d[1] * e2[2] - d[2] * e2[1],
+        d[2] * e2[0] - d[0] * e2[2],
+        d[0] * e2[1] - d[1] * e2[0],
+    ];
+    (p, dot(e1, p))
+}
+
+/// `meets` for the triangle at `a` with edges `e1` and `e2`, given what `facing` makes of the
+/// ray's direction `d`.
+#[allow(clippy::too_many_arguments)]
+fn meets_facing(a: V3, e1: V3, e2: V3, d: V3, p: V3, det: f64, o: V3, near: f64) -> bool {
+    if det.abs() < 1e-18 {
+        return false;
+    }
+    let s = sub(o, a);
+    let u = dot(s, p) / det;
+    if u < 0.0 {
+        return false;
+    }
+    let q = [
+        s[1] * e1[2] - s[2] * e1[1],
+        s[2] * e1[0] - s[0] * e1[2],
+        s[0] * e1[1] - s[1] * e1[0],
+    ];
+    let v = dot(d, q) / det;
+    if v < 0.0 || u + v > 1.0 {
+        return false;
+    }
+    dot(e2, q) / det > near
+}
+
+/// What building a [`Bvh`] reads: each triangle's centre key and bounds, and room for one node's
+/// keys.
+struct Build {
+    centres: Vec<V3>,
+    boxes: Vec<(V3, V3)>,
+    keys: Vec<(i64, usize)>,
 }
 
 /// A bounding-volume hierarchy over a mesh's triangles, for nearest-surface and ray queries.
@@ -114,37 +215,36 @@ impl Bvh {
     pub(crate) fn new(tris: Vec<[V3; 3]>) -> Bvh {
         let mut bvh = Bvh {
             order: (0..tris.len()).collect(),
+            // Each leaf holds two triangles or more, so there are fewer nodes than triangles.
+            nodes: Vec::with_capacity(tris.len()),
             tris,
-            nodes: Vec::new(),
         };
         if !bvh.tris.is_empty() {
-            bvh.build(0, bvh.tris.len());
+            let mut build = Build {
+                centres: Vec::with_capacity(bvh.tris.len()),
+                boxes: Vec::with_capacity(bvh.tris.len()),
+                keys: Vec::new(),
+            };
+            for &[a, b, c] in &bvh.tris {
+                // Each triangle's corners summed per axis, the key its node splits on.
+                build
+                    .centres
+                    .push([a[0] + b[0] + c[0], a[1] + b[1] + c[1], a[2] + b[2] + c[2]]);
+                build.boxes.push(bounds([(a, a), (b, b), (c, c)]));
+            }
+            bvh.build(0, bvh.tris.len(), &mut build);
         }
         bvh
     }
 
-    fn bounds(&self, range: &[usize]) -> (V3, V3) {
-        let mut min = [f64::INFINITY; 3];
-        let mut max = [f64::NEG_INFINITY; 3];
-        for &t in range {
-            for v in self.tris[t] {
-                for k in 0..3 {
-                    min[k] = min[k].min(v[k]);
-                    max[k] = max[k].max(v[k]);
-                }
-            }
-        }
-        (min, max)
-    }
-
-    fn build(&mut self, start: usize, end: usize) -> usize {
-        let (min, max) = self.bounds(&self.order[start..end]);
+    fn build(&mut self, start: usize, end: usize, b: &mut Build) -> usize {
+        let (min, max) = bounds(self.order[start..end].iter().map(|&t| b.boxes[t]));
         let at = self.nodes.len();
         self.nodes.push(Node {
             min,
             max,
-            start,
-            end,
+            start: start as u32,
+            end: end as u32,
             leaf: true,
         });
         if end - start <= 4 {
@@ -153,15 +253,23 @@ impl Bvh {
         let axis = (0..3)
             .max_by(|&a, &b| (max[a] - min[a]).total_cmp(&(max[b] - min[b])))
             .unwrap_or(0);
-        let tris = &self.tris;
-        let centre = |t: usize| tris[t][0][axis] + tris[t][1][axis] + tris[t][2][axis];
-        self.order[start..end].sort_by(|&a, &b| centre(a).total_cmp(&centre(b)).then(a.cmp(&b)));
         let mid = (start + end) / 2;
-        let left = self.build(start, mid);
-        let right = self.build(mid, end);
+        // The halves a sort by centre would make, ties to the lower index (a leaf's order never
+        // changes what a query finds), on keys that order as `total_cmp` does.
+        b.keys.clear();
+        b.keys.extend(self.order[start..end].iter().map(|&t| {
+            let bits = b.centres[t][axis].to_bits() as i64;
+            (bits ^ (((bits >> 63) as u64) >> 1) as i64, t)
+        }));
+        b.keys.select_nth_unstable(mid - start);
+        for (o, (_, t)) in self.order[start..end].iter_mut().zip(&b.keys) {
+            *o = *t;
+        }
+        let left = self.build(start, mid, b);
+        let right = self.build(mid, end, b);
         let node = &mut self.nodes[at];
-        node.start = left;
-        node.end = right;
+        node.start = left as u32;
+        node.end = right as u32;
         node.leaf = false;
         at
     }
@@ -178,59 +286,94 @@ impl Bvh {
     /// Whether the ray from `o` along `d` meets a triangle past `near` (Möller-Trumbore, against
     /// each box by slabs).
     pub(crate) fn blocks(&self, o: V3, d: V3, near: f64) -> bool {
-        let mut stack = if self.nodes.is_empty() {
-            Vec::new()
-        } else {
-            vec![0usize]
-        };
-        while let Some(n) = stack.pop() {
-            let node = &self.nodes[n];
-            let (mut lo, mut hi) = (0.0f64, f64::INFINITY);
-            for k in 0..3 {
-                let inv = 1.0 / d[k];
-                let (a, b) = ((node.min[k] - o[k]) * inv, (node.max[k] - o[k]) * inv);
-                let (a, b) = if a <= b { (a, b) } else { (b, a) };
-                // A NaN slab (d[k] = 0 with o on the slab's plane) leaves the range as it was.
-                lo = if a > lo { a } else { lo };
-                hi = if b < hi { b } else { hi };
-            }
-            if lo > hi {
+        let inv = d.map(|x| 1.0 / x);
+        // A balanced tree of fewer than 2^64 triangles is under 64 nodes deep.
+        let mut stack = [0u32; 64];
+        let mut top = usize::from(!self.nodes.is_empty());
+        while top > 0 {
+            top -= 1;
+            let node = &self.nodes[stack[top] as usize];
+            if !slab(node, o, inv) {
                 continue;
             }
             if !node.leaf {
-                stack.push(node.start);
-                stack.push(node.end);
+                stack[top] = node.start;
+                stack[top + 1] = node.end;
+                top += 2;
                 continue;
             }
-            for &t in &self.order[node.start..node.end] {
-                let [a, b, c] = self.tris[t];
-                let (e1, e2) = (sub(b, a), sub(c, a));
-                let p = [
-                    d[1] * e2[2] - d[2] * e2[1],
-                    d[2] * e2[0] - d[0] * e2[2],
-                    d[0] * e2[1] - d[1] * e2[0],
-                ];
-                let det = dot(e1, p);
-                if det.abs() < 1e-18 {
-                    continue;
-                }
-                let s = sub(o, a);
-                let u = dot(s, p) / det;
-                let q = [
-                    s[1] * e1[2] - s[2] * e1[1],
-                    s[2] * e1[0] - s[0] * e1[2],
-                    s[0] * e1[1] - s[1] * e1[0],
-                ];
-                let v = dot(d, q) / det;
-                if u < 0.0 || v < 0.0 || u + v > 1.0 {
-                    continue;
-                }
-                if dot(e2, q) / det > near {
-                    return true;
-                }
+            if self.order[node.start as usize..node.end as usize]
+                .iter()
+                .any(|&t| meets(self.tris[t], o, d, near))
+            {
+                return true;
             }
         }
         false
+    }
+
+    /// Whether each of up to [`PACKET`] rays `(o, d, near)` meets a triangle past its `near`, as
+    /// `blocks` finds for it alone: the rays go down the tree together, each tested against a
+    /// box only while it is inside every box above.
+    pub(crate) fn blocks_each(&self, rays: &[(V3, V3, f64)]) -> [bool; PACKET] {
+        let mut blocked = [false; PACKET];
+        let rays = &rays[..rays.len().min(PACKET)];
+        let Some(&spare) = rays.first() else {
+            return blocked;
+        };
+        // Each ray's origin and direction reciprocals by axis, the slots past the last ray filled
+        // with the first and never read.
+        let ray = |r: usize| rays.get(r).copied().unwrap_or(spare);
+        let o: [[f64; PACKET]; 3] = std::array::from_fn(|k| std::array::from_fn(|r| ray(r).0[k]));
+        let inv: [[f64; PACKET]; 3] =
+            std::array::from_fn(|k| std::array::from_fn(|r| 1.0 / ray(r).1[k]));
+        // Each node waiting, with the rays inside every box above it.
+        let mut stack = [(0u32, 0u8); 64];
+        let all = ((1u16 << rays.len()) - 1) as u8;
+        let mut top = usize::from(!self.nodes.is_empty());
+        stack[0] = (0, all);
+        let mut done = 0u8;
+        while top > 0 {
+            top -= 1;
+            let (n, waiting) = stack[top];
+            let node = &self.nodes[n as usize];
+            let inside = slabs(node, &o, &inv) & waiting & !done;
+            if inside == 0 {
+                continue;
+            }
+            if !node.leaf {
+                stack[top] = (node.start, inside);
+                stack[top + 1] = (node.end, inside);
+                top += 2;
+                continue;
+            }
+            // Each triangle's edges once for the rays, and what a direction makes of them once for
+            // the rays along it, bit for bit.
+            for &t in &self.order[node.start as usize..node.end as usize] {
+                let [a, b, c] = self.tris[t];
+                let (e1, e2) = (sub(b, a), sub(c, a));
+                let mut along: Option<(V3, V3, f64)> = None;
+                let mut each = inside & !done;
+                while each != 0 {
+                    let r = each.trailing_zeros() as usize;
+                    each &= each - 1;
+                    let (o, d, near) = rays[r];
+                    let (p, det) = match along {
+                        Some((e, p, det)) if e.map(f64::to_bits) == d.map(f64::to_bits) => (p, det),
+                        _ => facing(e1, e2, d),
+                    };
+                    along = Some((d, p, det));
+                    if meets_facing(a, e1, e2, d, p, det, o, near) {
+                        blocked[r] = true;
+                        done |= 1 << r;
+                    }
+                }
+            }
+            if done == all {
+                break;
+            }
+        }
+        blocked
     }
 
     /// The nearest triangle to `p`: its squared distance and its index, the lower on a tie.
@@ -246,14 +389,14 @@ impl Bvh {
                 continue;
             }
             if node.leaf {
-                for &t in &self.order[node.start..node.end] {
+                for &t in &self.order[node.start as usize..node.end as usize] {
                     let d = dist2(p, self.tris[t]);
                     if d < best.0 || (d == best.0 && best.1.is_some_and(|b| t < b)) {
                         best = (d, Some(t));
                     }
                 }
             } else {
-                let (l, r) = (node.start, node.end);
+                let (l, r) = (node.start as usize, node.end as usize);
                 let (dl, dr) = (
                     Bvh::box_dist2(&self.nodes[l], p),
                     Bvh::box_dist2(&self.nodes[r], p),

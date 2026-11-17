@@ -35,7 +35,12 @@ fn height(scene: &Scene, id: &str) -> Result<f64, Value> {
     if lo.is_finite() && hi.is_finite() {
         Ok(hi - lo)
     } else {
-        Err(blocked("not_drawn", KIND, &[id.to_string()], &format!("items/{id}")))
+        Err(blocked(
+            "not_drawn",
+            KIND,
+            &[id.to_string()],
+            &format!("items/{id}"),
+        ))
     }
 }
 
@@ -97,8 +102,8 @@ pub fn report(lowered: &Value, input: &Value) -> Report {
             let cures = scene::evaluate(&fixed, input, t, KIND)
                 .and_then(|s| height(&s, id))
                 .is_ok_and(|h| in_band(h, range));
-            let fix_ops = cures
-                .then(|| vec![json!({"op": "set", "id": id, "path": path, "value": nearest})]);
+            let fix_ops =
+                cures.then(|| vec![json!({"op": "set", "id": id, "path": path, "value": nearest})]);
             let raised = Raised {
                 code: CODE,
                 severity: "error",

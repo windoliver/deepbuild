@@ -1,0 +1,4 @@
+The command did not start: timed out after 60 minutes waiting for the shared build grant. No test/build result.
+
+INCONCLUSIVE no grant: no build grant came within 60 min
+  Fix: Wait for the other sessions' builds and proofs on this machine, then run again.

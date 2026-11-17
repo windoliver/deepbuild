@@ -4,7 +4,8 @@
 // play_184 test): a token moved one cell per `arrow` press (0 north, 1 east, 2 south, 3 west), `won` at the exit, and
 // the route bot, a logic bot that walks the shortest route. A play goes through `replica(plant)`, the caller's replica,
 // a planted one for the replay twin; the kit's pieces are named here and handed over by `pieces()`.
-// playtest.not_live's subject and twin are #1046's.
+// playtest.not_live's subject and twin are #1046's. #555's codes plant on the same maze: a band and an expectation the
+// route bot can't hold, a play interface naming an array the maze doesn't publish, and a range its presses pass.
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { fail, Finding } from '@deepbuild/conformance';
@@ -50,6 +51,10 @@ const RULES = {
   trap: { id: 'trap-fails', rule: 'A trap in the piece\'s logic fails its run with playtest.trap, naming the item, the step and the entries it read.', code: 'playtest.trap', message: 'passed a run whose logic trapped' },
   budget: { id: 'within-ceiling', rule: 'A step whose logic fuel passes its class\'s ceiling fails playtest.over_budget, naming the step, its fuel and the ceiling.', code: 'playtest.over_budget', message: 'passed a step past its ceiling' },
   replay: { id: 'replays-exactly', rule: 'A run\'s track played again without its bot reaches the same full-state hashes, or fails playtest.replay naming the first step that differs.', code: 'playtest.replay', message: 'passed a run whose track doesn\'t replay' },
+  band: { id: 'share-in-band', rule: 'The share of a bot\'s runs that reach a goal lies in its band, or fails playtest.band naming the bot, the goal, the share and the band.', code: 'playtest.band', message: 'passed a share outside its band' },
+  expect: { id: 'expected-miss', rule: 'A run of a bot that must miss a goal and reaches it fails playtest.expect, naming the run and the step.', code: 'playtest.expect', message: 'passed a run that reached a goal it must miss' },
+  missing: { id: 'interface-published', rule: 'A name the play interface declares that the piece publishes no array of the right type for fails play.missing, naming it, before any run.', code: 'play.missing', message: 'passed a piece missing a declared name' },
+  range: { id: 'within-range', rule: 'A published value outside its name\'s range fails play.out_of_range, naming the name, the row, the value and the step.', code: 'play.out_of_range', message: 'passed a value outside its range' },
 } as const;
 type Rule = keyof typeof RULES;
 const rules: SlotRule[] = Object.values(RULES).map(({ id, rule }) => ({ id, rule }));
@@ -63,6 +68,10 @@ const fixtures = (): Fixture[] => [
   fixture('planted-trap', input('maze-trap', [POLICY], { goals: [] }), { outcome: 'failed', rule: 'trap' }),
   fixture('planted-busy', input('maze-busy', [ROUTE_BOT()], { span: { steps: 8 }, goals: [], stuck: undefined as never }), { outcome: 'failed', rule: 'budget' }),
   fixture('planted-replay', input('maze', [ROUTE_BOT()], {}, 'drops-first-bot-entry'), { outcome: 'failed', rule: 'replay' }),
+  fixture('planted-band', input('maze', [{ ...ROUTE_BOT(), share: { won: [0, 0.5] } }]), { outcome: 'failed', rule: 'band' }),
+  fixture('planted-expect', input('maze', [{ ...ROUTE_BOT(), expect: { won: 'miss' } }]), { outcome: 'failed', rule: 'expect' }),
+  fixture('planted-missing', input('maze', [ROUTE_BOT()], { play: { turn: 'maze.turn' } }), { outcome: 'failed', rule: 'missing' }),
+  fixture('planted-range', input('maze', [ROUTE_BOT()], { play: { values: { presses: { name: 'maze.presses', range: [0, 3] } } } }), { outcome: 'failed', rule: 'range' }),
 ];
 
 export interface PlaytestFill extends CheckRunnerFill { kind: 'playtest'; play: (i: CaseInput) => Promise<CheckResult> }

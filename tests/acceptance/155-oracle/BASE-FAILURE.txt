@@ -1,0 +1,48 @@
+Base commit: 0e5572731 (0e55727311da14cb0c4644f9afd5e33c9505fefa, origin/main); no implementation of #155.
+Built as tests/acceptance/155/BASE-FAILURE.txt says.
+Command: NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/155-oracle --testTimeout=600000
+  --no-file-parallelism (the Bash sandbox off)
+Date: 2026-11-15  Machine: macOS 27.2 (Apple silicon)  Node: v24.22.2. <repo> is the worktree.
+Result: Test Files 1 failed (1); Tests 1 failed (1); about 41 s.
+
+The hub started, deepbuild/score and test/clicks installed, the click was fetched under the standing rule, score_plan
+answered the stem and score.render rendered it; then media_mix of the strokes film answered bad_media "spawn ticks: a
+template's src.asset" (no generator source), so "the strokes film: media_mix answers a mix" failed. Upstream's check
+never ran on a mix.
+
+
+ RUN  v5.0.5 <repo>/tests/acceptance/155-oracle
+
+ ❯ sample-accurate.test.ts (1 test | 1 failed) 36432ms
+   ❯ AC8 #155.ec088f1d oracle: upstream's sample-accurate scheduling, run on spawned voices on stroke occurrences (1)
+     × AC8 #155.ec088f1d impulses started by nine stroke occurrences inside and across 128-sample quanta land on exactly their sample and nowhere else; a mixer that starts voices per quantum is rejected 31130ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  sample-accurate.test.ts > AC8 #155.ec088f1d oracle: upstream's sample-accurate scheduling, run on spawned voices on stroke occurrences > AC8 #155.ec088f1d impulses started by nine stroke occurrences inside and across 128-sample quanta land on exactly their sample and nowhere else; a mixer that starts voices per quantum is rejected
+AssertionError: the strokes film: media_mix answers a mix; got {"code":"bad_media","what":"spawn ticks: a template's src.asset","core":"core@0.0.0","set_digest":"4820e8840d7a55ee203054249d8cd339a1743553a687bfa290cba985e2cc7d98"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ mixOf ../155/helpers.ts:230:97
+    228| export function mixOf(reply: JsonObject | undefined, asks: SegmentAsk[…
+    229|   const r = obj(reply, what);
+    230|   expect('mix' in r && !isBlocked(r), `${what}: media_mix answers a mi…
+       |                                                                                                 ^
+    231|   const m = obj(r['mix'], `${what}: mix`);
+    232|   expect(int(m['sample_rate'], `${what}: mix.sample_rate`), `${what}: …
+ ❯ sample-accurate.test.ts:137:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  01:52:56
+   Duration  40.60s (tests 91%, transform 9%)
+
+exit 1

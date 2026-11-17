@@ -14,6 +14,9 @@ export const API = Object.freeze([
   { method: 'deep.registerCheck', needs: null },
   { method: 'deep.registerResolver', needs: null },
   { method: 'deep.registerSource', needs: null },
+  // #210: a port the package answers: the entries and rows it takes, the sources it gives for a document's `in`,
+  // and whether its gear makes sound. The app's Connect prompt names it; it opens nothing by itself.
+  { method: 'deep.registerPort', needs: null },
   // #364: a handle for a secret the manifest names, never its value.
   { method: 'deep.secret', needs: null },
   { method: 'deep.registerEnvironment', needs: null },
@@ -76,6 +79,8 @@ export const API = Object.freeze([
   { method: 'deep.canvas.read', needs: 'canvas' },
   // #184: a piece played headless in a replica, from the seed and entries the running check's input gives.
   { method: 'deep.canvas.play', needs: 'canvas' },
+  // #1048: a plug-in's model source, asked through the hub (from a recording when it replays), as a model bot asks it.
+  { method: 'deep.source.ask', needs: null },
 ].map((m) => Object.freeze(m)));
 
 /**

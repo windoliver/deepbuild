@@ -5,6 +5,9 @@
 //! fresh copy of the piece; nothing carries from one call to the next, and it needs no launched window. While it
 //! plays, the process runs at background priority, as the checks process does.
 //!
+//! A play with `probe` (#1048) plays the run's track once instead and, at each step asked for, tests each entry in a
+//! throwaway copy of the state the run reached there (`deep_logic::probe`), for rules.legal and logic.edges.
+//!
 //! The piece is the logic module's piece (`piece`: seed, class, controls, items) or a canvas document (`document`),
 //! each program from `assets` (`{sha256: base64}`) or the evidence store at `evidence`. A frame is the replica's
 //! render of the piece's state at that step: each logic item's arrays as bands of grey squares, one byte a square,
@@ -27,37 +30,88 @@ const SIZE: (u32, u32) = (640, 360);
 const CELL: u32 = 10;
 const ROW: usize = (SIZE.0 / CELL) as usize;
 
-pub fn run(call: &Value, plant: Option<Plant>, out: &Path) -> Result<Value, Fail> {
-    background();
-    let piece = match (call.get("piece"), call.get("document")) {
-        (Some(p), None) => p.clone(),
-        (None, Some(d)) => {
-            piece_of(d).ok_or_else(|| fail("refused", "the document has no logic item to play"))?
-        }
-        _ => return Err(fail("bad_input", "play takes a document or a piece")),
-    };
-    let inline = call.get("assets").cloned().unwrap_or(json!({}));
-    let own = piece.get("assets").cloned().unwrap_or(json!({}));
-    let evidence = call
-        .get("evidence")
-        .and_then(Value::as_str)
-        .map(PathBuf::from);
-    let stored = |sha: &str| -> Option<Vec<u8>> {
-        if let Some(b) = inline
+/// The call's piece, and its programs by hash: inline `assets`, the piece's own, or the evidence store.
+struct Stored {
+    piece: Value,
+    inline: Value,
+    own: Value,
+    evidence: Option<PathBuf>,
+}
+
+impl Stored {
+    fn of(call: &Value) -> Result<Stored, Fail> {
+        let piece = match (call.get("piece"), call.get("document")) {
+            (Some(p), None) => p.clone(),
+            (None, Some(d)) => piece_of(d)
+                .ok_or_else(|| fail("refused", "the document has no logic item to play"))?,
+            _ => return Err(fail("bad_input", "play takes a document or a piece")),
+        };
+        Ok(Stored {
+            inline: call.get("assets").cloned().unwrap_or(json!({})),
+            own: piece.get("assets").cloned().unwrap_or(json!({})),
+            evidence: call
+                .get("evidence")
+                .and_then(Value::as_str)
+                .map(PathBuf::from),
+            piece,
+        })
+    }
+    fn get(&self, sha: &str) -> Option<Vec<u8>> {
+        if let Some(b) = self
+            .inline
             .get(sha)
-            .or_else(|| own.get(sha))
+            .or_else(|| self.own.get(sha))
             .and_then(Value::as_str)
         {
             return B64.decode(b).ok();
         }
-        let root = evidence
+        let root = self
+            .evidence
             .as_ref()
             .filter(|_| sha.len() == 64 && sha.is_ascii())?;
         std::fs::read(root.join(&sha[..2]).join(&sha[2..])).ok()
-    };
+    }
+}
+
+/// A refusal from the play mode as the drive's failure, with what it names: an undeclared
+/// control, a play interface's missing name (#555) or an action it doesn't declare.
+fn refusal(e: Value) -> Fail {
+    let code = e
+        .get("code")
+        .and_then(Value::as_str)
+        .unwrap_or("refused")
+        .to_string();
+    let what = e.get("what").map_or_else(
+        || e.to_string(),
+        |w| w.as_str().map_or_else(|| w.to_string(), str::to_string),
+    );
+    ["control", "name", "action"]
+        .iter()
+        .fold(fail(&code, what), |f, k| match e.get(*k) {
+            Some(v) => f.with(k, v.clone()),
+            None => f,
+        })
+}
+
+pub fn run(call: &Value, plant: Option<Plant>, out: &Path) -> Result<Value, Fail> {
+    background();
+    let s = Stored::of(call)?;
+    let (piece, stored) = (&s.piece, |sha: &str| s.get(sha));
+    // #1048: a play with `probe` plays the run's track once and tests entries in throwaway copies
+    // of its states (`deep_logic::probe`).
+    if call.get("probe").is_some_and(|p| !p.is_null()) {
+        return deep_logic::probe::probe(
+            piece,
+            &stored,
+            call,
+            &deep_canvas_input::kit::edge_values,
+        )
+        .map_err(refusal);
+    }
     let plants = Plants {
         drops_first_bot_entry: plant == Some(Plant::DropsFirstBotEntry),
         entry_on_change: plant == Some(Plant::EntryOnChange),
+        ignores_links: plant == Some(Plant::IgnoresLinks),
     };
     let asked: Vec<i64> = call
         .get("frames")
@@ -85,21 +139,7 @@ pub fn run(call: &Value, plant: Option<Plant>, out: &Path) -> Result<Value, Fail
         }
         Some(json!({"step": k, "sha256": sha}))
     };
-    let reply = play(&piece, &stored, call, plants, &mut frame).map_err(|e| {
-        let code = e
-            .get("code")
-            .and_then(Value::as_str)
-            .unwrap_or("refused")
-            .to_string();
-        let what = e.get("what").map_or_else(
-            || e.to_string(),
-            |w| w.as_str().map_or_else(|| w.to_string(), str::to_string),
-        );
-        match e.get("control") {
-            Some(c) => fail(&code, what).with("control", c.clone()),
-            None => fail(&code, what),
-        }
-    })?;
+    let reply = play(piece, &stored, call, plants, &mut frame).map_err(refusal)?;
     if let Some(e) = error {
         return Err(fail("blocked", format!("{}: {e}", dir.display())));
     }

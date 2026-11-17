@@ -1,0 +1,15 @@
+Captured check output; paths redacted, trailing padding removed.
+
+✔ #1624 AC3 the unit lane runs no block that lists tests/acceptance/1330/start.live.test.ts (58764.642875ms)
+✔ #1624 AC3 the unit lane still runs #1330 siblings, and the listing excludes an existing by-hand live file (0.466875ms)
+✔ #1624 AC1 tests/acceptance/308, 45 and 1017 budgets.test.ts run in the alone block and not the parallel one (0.145583ms)
+✔ #1624 AC1 tests/preflight.test.mjs › the unit lane runs each reference-Mac budget file alone passes (1915.312041ms)
+✔ the unit lane runs each reference-Mac budget file alone, after the parallel block (1431.60475ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 64365.61

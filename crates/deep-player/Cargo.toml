@@ -1,0 +1,51 @@
+[package]
+name = "deep-player"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+# Issue #172: the web player, the canvas core built for wasm32 on one thread. It seals the canvas
+# modules it carries, plays a bundle's document on its recorded input track with physics in
+# process on the pinned backend and logic on the browser's own WebAssembly engine, and answers
+# `probe()`. Its glue to the page (wasm-bindgen) keeps it outside the canvas lint's scope; every
+# value a check reads is computed by the canvas crates it links.
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+deep-canvas = { path = "../deep-canvas" }
+deep-canvas-seams = { path = "../deep-canvas-seams" }
+deep-canvas-marks = { path = "../deep-canvas-marks" }
+deep-canvas-graph = { path = "../deep-canvas-graph" }
+deep-canvas-record = { path = "../deep-canvas-record" }
+deep-canvas-sheet = { path = "../deep-canvas-sheet" }
+deep-canvas-cells = { path = "../deep-canvas-cells" }
+deep-canvas-vector = { path = "../deep-canvas-vector" }
+deep-canvas-motion = { path = "../deep-canvas-motion" }
+deep-canvas-input = { path = "../deep-canvas-input" }
+deep-canvas-scene3d = { path = "../deep-canvas-scene3d" }
+deep-canvas-media = { path = "../deep-canvas-media" }
+deep-canvas-effects = { path = "../deep-canvas-effects" }
+deep-canvas-loop = { path = "../deep-canvas-loop" }
+deep-canvas-physics = { path = "../deep-canvas-physics" }
+deep-physics-rapier = { path = "../deep-physics-rapier" }
+deep-canvas-sandbox = { path = "../deep-canvas-sandbox" }
+deep-logic = { path = "../deep-logic" }
+deep-play = { path = "../deep-play" }
+deep-marks-raster = { path = "../deep-marks-raster" }
+deep-images = { path = "../deep-images" }
+deep-gpu = { path = "../deep-gpu" }
+deep-scene3d-render = { path = "../deep-scene3d-render" }
+deep-text = { path = "../deep-text" }
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
+sha2 = "0.10"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys = "=0.3.106"
+wasm-bindgen = "=0.2.129"
+wasm-bindgen-futures = "=0.4.79"
+web-sys = { version = "=0.3.106", features = ["HtmlCanvasElement", "console"] }
+# On wasm32 without atomics wgpu's handles are Send only with this feature: the player runs on one
+# thread, so the 3D renderer's worker paths are never taken.
+wgpu = { version = "30", default-features = false, features = ["std", "wgsl", "webgpu", "fragile-send-sync-non-atomic-wasm"] }

@@ -7,7 +7,7 @@ R2's checks for work beyond code (#68), each a `check.kind@1` plug-in under the 
 ## Where new code goes
 
 - `src/index.ts`: the plug-in entry, each kind's budget and its fill (`workFill`, `workKit`); `src/types.ts`: the shapes.
-- `src/run.ts`: one run, the kind's work in `runtime/probe.mjs` in a process group of its own so the deadline can end it.
+- `src/run.ts`: one run of `runtime/probe.mjs` through the check context's `host@1`, with only its service endpoint and one exact source port granted (the source connection is reused); standalone kit fixtures alone run locally without a host.
 - `src/kit.ts`: each kind's `check.kind@1` kit with its planted fault; `src/draft.ts`: the drafting job's pick of kinds.
 - Tests: `test/`; the acceptance suite in `tests/acceptance/68` is never edited.
 

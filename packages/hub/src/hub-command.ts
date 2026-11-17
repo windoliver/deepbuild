@@ -48,7 +48,8 @@ async function stopInstalled(): Promise<number> {
     process.stderr.write(`${why}\n`);
     return 3;
   }
-  await stopIfRunning(installedRoot());
+  const stopped = await stopIfRunning(installedRoot());
+  if (stopped !== 0) return stopped;
   process.stdout.write('The hub stopped. It starts again at your next login, or with deep hub start.\n');
   return 0;
 }

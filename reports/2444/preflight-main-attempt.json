@@ -1,0 +1,231 @@
+{
+  "before": {
+    "date": "2026-11-15T21:53:58.021Z",
+    "commit": "f989212187f28d65ab7e80c3a22545d5edaee37e",
+    "main": "f989212187f28d65ab7e80c3a22545d5edaee37e",
+    "status": "",
+    "machine": {
+      "model": "Mac17,10",
+      "chip": "Apple M5 Max",
+      "memoryBytes": 68719476736,
+      "power": "ac",
+      "lowPowerMode": false,
+      "thermalState": "fair",
+      "macosBuild": "26B8119"
+    },
+    "cores": 18,
+    "load": [
+      38.87939453125,
+      32.70556640625,
+      36.57763671875
+    ],
+    "budget": {
+      "margin": 0.5,
+      "limits": {
+        "elapsedMs": 900000
+      },
+      "initialReason": "Issue #12 first measurement: the merge base has no local check workload. After an untimed warm-up build on both sides, time the typecheck, lint, unit and parity lanes once and measure native peak RSS. The five-minute ceiling comes from issue #12 and covers the checks with their builds; elapsed time and memory are compared with the warm merge base using a 50% margin.",
+      "changeReason": "Raised from 300 s to 900 s on 2026-10-22: the checks outgrew five minutes on the reference Mac (Mac15,12, M3, 16 GB, mains power). At a036872, at load 6 to 14, the unit lane alone took about 790 s: the parallel vitest block 135 s, the one-at-a-time block 557 s (#16 339 s of it: budgets.test.ts 128 s, crash-redraft 116 s), cargo test 62 s and node --test 38 s; typecheck, lint, catalogue drift, corpus and parity add about 40 s. The files that time a frozen budget must run with nothing beside them (#664), and they alone take about 260 s, 115 s of it the fixed sleep of #16's idle-CPU test, so no schedule brings the checks under 300 s; with everything that may overlap overlapped, the floor is about 450 to 500 s. Full preflights read 706 to 1118 s, all on a loaded machine."
+    }
+  },
+  "after": {
+    "date": "2026-11-15T21:57:34.316Z",
+    "elapsedMs": 215982.979958,
+    "code": null,
+    "signal": "SIGTERM",
+    "load": [
+      109.67822265625,
+      64.595703125,
+      48.6591796875
+    ],
+    "machine": {
+      "model": "Mac17,10",
+      "chip": "Apple M5 Max",
+      "memoryBytes": 68719476736,
+      "power": "ac",
+      "lowPowerMode": false,
+      "thermalState": "fair",
+      "macosBuild": "26B8119"
+    },
+    "status": "",
+    "main": "f989212187f28d65ab7e80c3a22545d5edaee37e"
+  },
+  "samples": [
+    {
+      "elapsedMs": 0,
+      "load": [
+        38.87939453125,
+        32.70556640625,
+        36.57763671875
+      ]
+    },
+    {
+      "elapsedMs": 10002.798291,
+      "load": [
+        37.203125,
+        32.537109375,
+        36.4716796875
+      ]
+    },
+    {
+      "elapsedMs": 20003.973041,
+      "load": [
+        33.8564453125,
+        31.97509765625,
+        36.22607421875
+      ]
+    },
+    {
+      "elapsedMs": 30005.154958000003,
+      "load": [
+        33.0390625,
+        31.84716796875,
+        36.1298828125
+      ]
+    },
+    {
+      "elapsedMs": 40006.060000000005,
+      "load": [
+        31.89892578125,
+        31.62548828125,
+        36
+      ]
+    },
+    {
+      "elapsedMs": 50007.528041000005,
+      "load": [
+        33.09912109375,
+        31.89892578125,
+        36.04638671875
+      ]
+    },
+    {
+      "elapsedMs": 60008.715166,
+      "load": [
+        32.42041015625,
+        31.78759765625,
+        35.9580078125
+      ]
+    },
+    {
+      "elapsedMs": 70009.695666,
+      "load": [
+        35.533203125,
+        32.45703125,
+        36.1455078125
+      ]
+    },
+    {
+      "elapsedMs": 80011.257125,
+      "load": [
+        51.974609375,
+        36.10595703125,
+        37.3984375
+      ]
+    },
+    {
+      "elapsedMs": 90010.714,
+      "load": [
+        62.20556640625,
+        38.79248046875,
+        38.3349609375
+      ]
+    },
+    {
+      "elapsedMs": 100012.126375,
+      "load": [
+        68.76220703125,
+        40.984375,
+        39.11865234375
+      ]
+    },
+    {
+      "elapsedMs": 110012.61375,
+      "load": [
+        72.56494140625,
+        42.72607421875,
+        39.7587890625
+      ]
+    },
+    {
+      "elapsedMs": 120013.90000000001,
+      "load": [
+        74.80322265625,
+        44.1845703125,
+        40.31005859375
+      ]
+    },
+    {
+      "elapsedMs": 130015.54275000001,
+      "load": [
+        76.2939453125,
+        45.49853515625,
+        40.82080078125
+      ]
+    },
+    {
+      "elapsedMs": 140017.046458,
+      "load": [
+        104.435546875,
+        52.39892578125,
+        43.31591796875
+      ]
+    },
+    {
+      "elapsedMs": 150019.61525,
+      "load": [
+        103.32080078125,
+        53.88134765625,
+        43.9482421875
+      ]
+    },
+    {
+      "elapsedMs": 160020.817083,
+      "load": [
+        101.845703125,
+        55.18701171875,
+        44.52685546875
+      ]
+    },
+    {
+      "elapsedMs": 170022.380041,
+      "load": [
+        100.90185546875,
+        56.5283203125,
+        45.12744140625
+      ]
+    },
+    {
+      "elapsedMs": 180023.599458,
+      "load": [
+        102.5693359375,
+        58.32666015625,
+        45.8974609375
+      ]
+    },
+    {
+      "elapsedMs": 190025.181458,
+      "load": [
+        99.41259765625,
+        59.10595703125,
+        46.31884765625
+      ]
+    },
+    {
+      "elapsedMs": 200031.132875,
+      "load": [
+        101.1552734375,
+        60.8125,
+        47.07421875
+      ]
+    },
+    {
+      "elapsedMs": 210030.818416,
+      "load": [
+        104.34033203125,
+        62.7998046875,
+        47.9384765625
+      ]
+    }
+  ]
+}
