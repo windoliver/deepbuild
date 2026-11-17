@@ -22,8 +22,11 @@ import { AC, DROP, TIMEOUT, appStills, dropDoc, entry, exportPage, failsNaming, 
 const shows = useShow([FULL]);
 const temp = useTemp();
 const PLANTED = 'page_keys_by_picture_and_logic';
-const pick = (v: string): JsonObject => entry(0.15, 'pick', v);
-const go = entry(0.6, 'go', 'on');
+// The app's entries sit where a page stamps them (Export: playable page, "stamped on the frame grid where it rests"):
+// pick at 0.1 s, where the piece first rests at `aim`, and go at frame 14 of 30 a second (329,280,000 flicks), where
+// the play rests at `look`. The ball's flight runs on the clock, so another launch time is another picture at `after`.
+const pick = (v: string): JsonObject => entry(0.1, 'pick', v);
+const go: JsonObject = { ...entry(0, 'go', 'on'), t: 329_280_000 };
 const PATHS: Record<string, { track: JsonObject[]; marker: string }> = {
   'soft, at look': { track: [pick('soft')], marker: 'look' },
   'hard, at look': { track: [pick('hard')], marker: 'look' },

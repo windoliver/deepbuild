@@ -237,7 +237,9 @@ sha256}, note?}`. This job writes no TASTE.json and takes no picture; no other c
 - **The app's still after k flips** (AC2): a png_seq still at 4 s on a track of k flips; for k = 0 at 0 s, since an
   export with no entry on its track plays the piece's own tour (#903).
 - **"The same picture"** (AC9): the two states' stills decode to one raw frame hash, the app's at `look`.
-  **"Next frames differ"**: their successors by `go`, at `after`, decode apart.
+  **"Next frames differ"**: their successors by `go`, at `after`, decode apart. The app's tracks put pick at 0.1 s
+  and go at frame 14 (329,280,000 flicks), the frame-grid clocks where a page stamps them, since the flight runs on
+  the clock.
 - **"An input track whose hash equals the app's"** (AC3): the recorded entries loaded whole into the hub give the
   app's hash (`track`); a bundle file's SHA-256 equals it, so the bundle keeps the track in the app's own form.
 - **"Passes export.fidelity"** (AC3): decoded from the bundle's bytes by the app's decode worker, a clip holds its
