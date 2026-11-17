@@ -1,0 +1,3546 @@
+{
+ "lane": "quick",
+ "commit": "67542064c4810b4ea96334b95eb79d2d34889cce",
+ "rows": [
+  {
+   "fixture": "parity/kernel/board.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "moved",
+     "verdict": "FAIL"
+    },
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [
+    {
+     "name": "snapshot",
+     "verdict": "PASS",
+     "reason": null,
+     "twin": {
+      "name": "moved",
+      "verdict": "FAIL"
+     }
+    }
+   ],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "b64057d86ee57788626ced2f696a004337bca942daab5f360145eac01faa4ca4"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/building/house.figure",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "3741edb75a954b93f93beafb7a635f75f7994aeed318152f5932dba2f2fa58cd"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/cells/grid.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "b2ddfda83ef843f39cf590cbfcbfeb863c8b69acf92b0de83ac9cb90b35f46e7"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/data/points.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "moved",
+     "verdict": "FAIL"
+    },
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [
+    {
+     "name": "snapshot",
+     "verdict": "PASS",
+     "reason": null,
+     "twin": {
+      "name": "moved",
+      "verdict": "FAIL"
+     }
+    }
+   ],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "d19f242c4d4c39186b5411579a3162917da9a4bf08374da2aff5aff2433b33ba"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/data/race.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "moved",
+     "verdict": "FAIL"
+    },
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [
+    {
+     "name": "snapshot",
+     "verdict": "PASS",
+     "reason": null,
+     "twin": {
+      "name": "moved",
+      "verdict": "FAIL"
+     }
+    }
+   ],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "0b36c50219482f11cb619231a4215b2159c365d2046faeccf235fe95d5319e2e"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/data/decimated.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "5b0976dc6a41d576f2369b96223ffe0601315b7ceacbb5ea29d421b9812991df"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/effects/same-machine-check.figure",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "dc1a2f0e9d272bff9fdd3615d1c90cf10f225e8f4063322eb4ec497234247f2a"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/effects/composed-in-core-view.figure",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "40b3f40f362a0cdd9d916df096d4f2126347fd28753fcf2afda80d00a6b1a179"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/effects/live-only-material.figure",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "0ac8181adaedd78b1d82759d6a0d42e34a6c8566c81bcfac7e430b859cb139b3"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/effects/scattered-write.figure",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "b6e8d174c6a07ec3b2d96497bb594ba2ff368a4b414d85d45b0fa183b4b28094"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/effects/tint-operator-status-color.figure",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "024c46b1c5128c4261a9961983863f207bf8807529ee36f534dfe92be29b50ad"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/effects/tint-cost-understated.figure",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "7b01cf82350751ca4aa7e207145381acc13ea0818b50303220375c2b06ee0069"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/effects/tint-operator-cycle.figure",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "10803a9436ccdddbaf70ca6e55eb1a777d2eea767028556741872fba80e99378"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/effects/tint-operator-limit.figure",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "83bce07100a36e58680b6a01ef3abbf0aa910560eb174b9f3e57933f5969d56c"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/effects/tint-operator-source.figure",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "60fcb5f6dc5e999a9b113ede93c5a11e8bc9fc989d92a641cd80ec85fb6ef386"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/effects/tint-operator-type.figure",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "554a3a0fd664c025d8176e0803f038f45c165b3699e2595806a6332627fa0542"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/effects/tint-operator-unbounded.figure",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "c451bbf25ba0b54158cc1b127dd4f8e9fce1126e916958bb61c8aac9387367df"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/effects/tint-operator-unknown-op.figure",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "595e3cc3f36ad393f220f81450fdcc91e1ea8b5d62005f114ef4ddde0b1b89dc"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/effects/shadowed-box.figure",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "011ee827f9eab441f768d3e6cf1d4bec441f8519e9d249e670329b923bc4b6c7"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/effects/audit-unread.figure",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "042d91f70bc2571b56e97df63872a5f4af9b20e1c19db5a3f75616c40f805254"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/export/export-glow.film",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "06f48ff9c747909c2daf11c4e354ad5486f4309774900373257f7a1a71d4e9d7"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/export/export-spring.film",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "8d7ccf7b8820765024f6118ae27bf9dbdd4635e963ea889cff6799a25d839420"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/export/export-status.film",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "0e53ad503cf2c9db1358824088430c07631e91ebd1eebb37fdca0d51c24b3e10"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/graph/layered.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "7149f33be9a75368e9cdf74a8682a006263587153747d1a4e3200e76b03bc1c7"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/graph/tie.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "6dbdd04cada680e64be26091d9b696649a01c9b3552fc05688b5bb4c752c1f15"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/graph/over_budget.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "c5a0ee4d6b340fd445c49fe69c62f1ac6d793e4d1e0f117b1fa3b600f741c649"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/logic/counter.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "eae2ed9b08f4ffb39ca9d9121fad5106fd91fadb24cceae520ef3933853027be"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/logic/logic-determinism.figure",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "f998b5bcec71ec7d12295f612fe3b94edb98d1c4da39432a72261bbfc87deea2"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/logic/logic-budget.figure",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "55c3aaddcd90a6f5bf600869b77a17cb66ed52ee24b5d43a62ce860d5d468335"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/look/roles.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "moved",
+     "verdict": "FAIL"
+    },
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [
+    {
+     "name": "snapshot",
+     "verdict": "PASS",
+     "reason": null,
+     "twin": {
+      "name": "moved",
+      "verdict": "FAIL"
+     }
+    }
+   ],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "99fb27c6d418e509499582cc88bc9feda0c25912bdd6b146962c0a4585fa2a55"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/look/finish.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "7d0779359a363eef80feaa83fefd75412f62b36510db45330ad6717149cbb890"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/scene3d/loop-scale-door.figure",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "81940a78f1acbee16dc2fb249485e502db0af52399fe4adcd82e8b7388192b5f"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/scene3d/loop-scale-door-clean.figure",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "0f1c5b74a1d96901274187fd8e7f38cdd461bc29c52955db8f9efa2c3f7e59b3"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/scene3d/loop-framing-horizon.figure",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "dd963afa681b44da225df066e1200cf96adfdb05299d27d39d02c0e7c22812e7"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/scene3d/loop-framing-clean.figure",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "1181896950c43e43cc40a98e27e7710fe8e19155cae8fdf80c56228548f6c6ce"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/scene3d/loop-exposure-clipped.figure",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "93978bbee5ebf5e0461563c2b82d1406a73a367a30ae0ea637bb1b777d954655"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/scene3d/loop-exposure-clean.figure",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "db17d2b689873d93ac7ef4e7cbc983d8a75c804ae5f667b048f78557b5672daa"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/scene3d/loop-contrast-muted.figure",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "27612826fa131a5e68675cf22831fc43765737dd00babfc926e2118cae32fc09"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/scene3d/loop-contrast-clean.figure",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "d1c822e039dd319a3e60e98892a03e6ca6e3283abbe22caa90f2a4759df07503"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/scene3d/loop-noise-reseeds.figure",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "f9af918eb88a5e109c2b2b19ca7840ed103dacdac4245b4a19483198d0a7f65e"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/scene3d/loop-noise-clean.figure",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "f80d28ab8f56ed8ec9f9932ae5ae6e242391204b447694aa77792a0bdf789043"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/scene3d/shading-unreadable.figure",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "103af32a100ee7149b7290c49e7caafd960675834d17b930db773f1f1bf6233d"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/scene3d/shading-degenerate.figure",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "05c14bc9a233b76afc82271ee244bc1ce7d810156bd13c04e846c2f0a0c43b93"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/scene3d/shading-flipped.figure",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "b997487e3908758a307facacdd2b8267c7fb26a3bb0b9e90b8f35eb7c1bdf131"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/scene3d/shading-inconsistent.figure",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "9e7bd6d8369a56a6e1d00676cfe38c52c2fd7efdb2d5519d83cc14de7c26e2de"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/scene3d/shading-inward.figure",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "611b1d9d828ec3386d58777613ee1e5d934e08dd566836b9e8d9f821ca84d588"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/scene3d/shading-quad-ratio.figure",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "52b5f25235005a786ee0e320f084e14cef445895447bb8ad1045e6e39a9d3244"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/scene3d/shading-uv.figure",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "38e07bc20b6fc7625484dd7084a5083fd511c7f85c650e232f58274bd910a095"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/marks2d/board.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "moved",
+     "verdict": "FAIL"
+    },
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [
+    {
+     "name": "snapshot",
+     "verdict": "PASS",
+     "reason": null,
+     "twin": {
+      "name": "moved",
+      "verdict": "FAIL"
+     }
+    }
+   ],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "560832162fb77ad1c06070757be9d784c887397c05542244edd0765c9f184770"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/media/bell.scene",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "planted-call",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "580ad0f67ec820cf3f211e27892091884696f45fe90ff8a81877260299a768be"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/media/reverb.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "852dc5a0ddba1c7c66b13d8610803339524ab0d8948fe3c923d0978440d676c4"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/motion/score-pad-too-low.film",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "508387b1cc3bedb69447e2d30d8d28abd2438715dba326bc8b1bcecbb7c040e4"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/motion/score-note-too-long.film",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "2c603198aa72c20a5ff33128d18736ac58a8b4409d0e1e119a3db9eacbeb631e"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/motion/score-unknown-source.film",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "b0e1a76b645acc3a462548898dc7199a0130f6b95179969d6aebbe07c62019d7"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/motion/score-unknown-preset.film",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "8f51101b9cba108e70b1003ea295990e90cf7ba1b2e25aeff7b50a8fcb049e98"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/motion/score-unknown-instrument.film",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "36534e75395bc948f888e87d96599b0e5babf26c402a8eb05577dc3e931e72c6"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/motion/score-bad-pitch.film",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "4a4ac9a853174a43edc7cc7a1690720f1742f729b0645b450b8d542283099a3a"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/motion/score-time-unresolved.film",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "646cc05169420ad9b48e215bd41850dc397b9fb6fa1afadc1c318a73ab2d57b3"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/motion/score-bad-duration.film",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "e438c1c6d0ec04f3bdcd79de587f5b466d1e68486688baf87d9260b4ff453b9a"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/motion/score-bad-loop.film",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "856b04b8b46bd7a4d8d1442e676633d2b88be4938f9521ab2ed645b1e84976b4"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/motion/sound-lock-off-palette.film",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "a6e59c33decef963dfb8fb9298d0edb6233ff049f86641734d2845180cb3dffb"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/motion/score-check-unread.film",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "fd6d630e48921590ccc160d8ca5d1200f80e9ac1aaa0f9e87f29a9dbd03095fd"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/motion/slide.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "moved",
+     "verdict": "FAIL"
+    },
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [
+    {
+     "name": "snapshot",
+     "verdict": "PASS",
+     "reason": null,
+     "twin": {
+      "name": "moved",
+      "verdict": "FAIL"
+     }
+    }
+   ],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "38e90826861665e3d30d1578794e9a80f64a819edbb3fcd54bf30e9a9b3be255"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/physics/late-joint.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "fd96f4a90277230a0e70965a1e5c9689bddf6ab37ad563c27c9148e2bce1ef8f"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/physics/vehicle-lap.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "7a50b2cbfa26ae6655164a1406d59718259cc54290f11248307ab650ade6f397"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/record/level.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "67931a8577e4de83f9de605cdfa17c24bea43c00348056647f7322fd146152d1"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/scene3d/figure.figure",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "3176a582a3d7d31ba7b13a5fe0068a169f7bb71bf842f0b300c8b688f63a6b0e"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/scene3d/lights.figure",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "968b852aa91a1b17775493c3d355d9dfe0b4d0f88477ab50bfa7b31e66c50235"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/scene3d/stack.figure",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "92a1c112d6379c9260b51a8d0c16edb94125f2c3ac44887e37a9de8d46f5a585"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/scene3d/garden.figure",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "390ff79eb88a49f396a88ba8abac64be4bc7183cb98d296b113d69bf30be35f4"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/scene3d/rest-no-support.figure",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "48e1013e1412a52b3b6e1bdf15df48920441ef3155f46349dccb2fd2fc9be639"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/sheet/variants.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "3aa45e906146867e12759a0d34c3becff877fce5725f7d7c544016f7ae104bc9"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/text/counter.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "moved",
+     "verdict": "FAIL"
+    },
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [
+    {
+     "name": "snapshot",
+     "verdict": "PASS",
+     "reason": null,
+     "twin": {
+      "name": "moved",
+      "verdict": "FAIL"
+     }
+    }
+   ],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "d727c73df7aec66ed19c7c47d03e6d8cf86ff6497d6980a9b1ed7dab9d0d6aff"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/text/status.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "moved",
+     "verdict": "FAIL"
+    },
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [
+    {
+     "name": "snapshot",
+     "verdict": "PASS",
+     "reason": null,
+     "twin": {
+      "name": "moved",
+      "verdict": "FAIL"
+     }
+    }
+   ],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "3abf5732001a941f0925ad9a643ccd5aef2f65b9fb143374efa43fbd368ffcef"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/vector/formula.figure",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "missing-parent",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "52794df5cead49aac0f17d231ae1201ef2d116190468f1e7842589f92d2eae60"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/vector/paint.figure",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "missing-parent",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "89f18c762aba88b1d85b40cd3e39aeb16633792e4847944011f93d8d6cb97f30"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/kernel/clean-rebuild-fuzz.scene",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "part_runs_half",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "8043d3e8684b13aa790d46b87f97d93da092d0b7cdba5abc87232a8815720e4e"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/kernel/patch-fuzz.scene",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "fuzzer_runs_none",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "a9e81ffda7bd0eae00bbe9d1d9c9d5d6636d0b5ed9b391ef87522ba3dc5b61bc"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/repair-loop.scene",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "stale_fix_never_rebases",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "39ebbfd0f119ca309549396a35349b51c5d7dded51eba9740ef797bc7ab27a31"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/agent-decision.scene",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "accepts_agent_decisions",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "4ad9eb4c99e2da990e2d60ee5b1ec216b67c1be424d7bd7ae7122db2793ae5cf"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/code-unknown-field.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "979c5f1996e8b0d8566265680c0d3f26e8d31dba38af98f65e7f45329bffe711"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/code-unknown-kind.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "e6af95b352ab89f36654114fda58a838db034bef10d31dee78de6131ea61d67e"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/code-kind-too-new.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "ae267686663515e3d4246f2b324135ece0673978ed2ca06944b7b030c6539a80"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/code-module-missing.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "4cf0dbce68de14a90307e09c1714940610851b0379f408d8d9e1650c992ee8d1"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/code-out-of-range.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "0834eeb09ece7020cdca8eace0d47ca17815a037df4e0a7d162921dd02cd57cb"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/code-ref-unresolved.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "f7d23cde65fc580ea76d3fea8dbb02a9c5c44bbbba0ce48942cbcb663e9aec39"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/code-cycle.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "2aa4441836a665d051902165c157637d1c0e50609e4b9bda4f2c5b675aef62c7"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/code-bad-unit.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "0a748a5cc5d9f33cb57a543fff84201bc6af9f93f90a3f39e816916439235b4b"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/code-bad-path.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "1c80dcf4e2cd789db04058dfb39cba58a43868bc1ffd74112030ea77e600a51a"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/code-bad-handle.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "e31e400381db2ebe9eb40a3c209f8501f16776a0d50531170da98bb2c9058c32"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/code-bad-id.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "87aa96015f1e9bb0ce90c1aac42a798fc35ba003e449eaf87aac511205bcb3c8"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/code-bad-time.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "bf64575f3a606408443e24b05869c9d5f6efa2ece2bb39d394dcd2fbf80dbaab"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/code-status-color-unbound.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "e9d09a4adb6ad66f1e1e869d2c27f4e957b4b5106ead7c8a99da7ffc9cf7886d"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/code-number-unsourced.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "missing-parent",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "446e6abc6ce7d344781742ac9bb0686533fbf2fd463d3701a609978e02bf55e8"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/code-bound-typed-over.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "missing-parent",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "ae71724d6d1301eed136adfd1d5abd12a17e349329a4c48550dbe34a39e53ebe"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/code-not-your-layer.scene",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "dropped-calls",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "f2be69b13d6a2a552ec534228ad9f9df12faf02c446bccc09cb9e2976b894280"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/code-stale-base.scene",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "dropped-calls",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "ab10fe80fa5b4ceab41dd906e29bb072b4311319aeaab65064f9fbfc0a26db36"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/code-undo-conflict.scene",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "dropped-calls",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "f426731ea0a89506839dd53ce94494a24f27254380c250c4122fa36acd55408d"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/code-over-quota.scene",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "dropped-calls",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "adcb58a992cbbda49b5876a870ed7aaf4828f0992391561260b4f1afb2db682b"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/code-too-large.scene",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "dropped-calls",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "106072be657b92dc48cf36e6d15f6b1ad4e9c8f39b6dfa5ca73607cbece9c837"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/code-record-view.scene",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "dropped-calls",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "a25e6ce422bc2e35d772dd8fdd51440249c0a942e8eb6b787b65dfe1a844aa17"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/code-over-budget.scene",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "dropped-calls",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "a6d4ea815e9da658401d3b1f9920337004984b8d9edca97630ced435c6e45a03"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/text-bad-format.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "missing-parent",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "4891c00556fd4195be4111499af508e241a072131ff19b5c32f44ec24bf50976"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/text-format-notation.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "missing-parent",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "09522ed76700f5e47048d488b46b093a634c0184bd85c4751d988776d583284b"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/marks2d-bad-paint.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "missing-parent",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "812b71cf34f68a56dcbeaa772cde32d9287a2e3b8f3a4573f4ce77ed530a77a8"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/marks2d-role-unresolved.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "missing-parent",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "a20829dd057eb7b01f8fe8f79d0935b7b41b8731334c8d7b0bd5ae54d816f43e"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/marks2d-gradient-kind.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "missing-parent",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "d71bf8d35ed6f1b7be5d62505291ef8f02cfa3c2f68ef9e98fa33f04dcd13ec5"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/marks2d-gradient-stops.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "missing-parent",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "38598102056da408ece6cfc2032a727df698bf119d5a9bcda86ee7620cd9a29d"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/marks2d-bad-path-data.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "missing-parent",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "cd96a5532b0535ecc0ab41aef1ba795f1f5215223f3c2481b535e0bda54720ea"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/text-status-slot-kind.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "7c5ed3b0b7a3fcb1e631e18824a6fb2990b0e4667a473bca880ce2c509dfa1e6"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/text-status-too-small.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "d01cd402685c4c3172c7868f4330ffdd1f41ae4aebbee0c1bb22a287545d1d00"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/marks2d-mask-r2.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "missing-parent",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "5b74f983dd251664b9164e3a0f12211e52591aeeea3c9cfbebdf5add336ffc47"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/marks2d-mask-depth.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "missing-parent",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "5e1a7bd0587c576994d9b0bc08936a9c590cad65383993e23a26881519103bfe"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/marks2d-mask-writer.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "2915974b23544afbe6e9679fa5f1bfa4bc9c970b63e94765b37041bc7831a52a"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/marks2d-bad-asset.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "missing-parent",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "74d263eb98d8db252b5649a3c9c7d6c7574f11d5831648819b8d6a5e3deb7e8f"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/marks2d-alt-missing.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "missing-parent",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "061d08cba9d70644101957ec44a6e08da7b5d8fea494cc9b7b1406d7d3b7e7e7"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/marks2d-bad-column.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "186db26ca2841fcc727bfa781366ed8290b64f93420436ca16deba289d72cba3"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/marks2d-asset-missing.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "6a46a345e12ee5b6956b7261180cce0103701520a7ec1a327a587ba98d72e971"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/marks2d-bad-transform.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "b96dccea0dd99e63fcde9213acffe67422917f15db380c216927159de93c771a"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/marks2d-log-domain.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "a3d6a48e18d3b3cf0b6cd5873150e32b1929a229cbbc753efb41d736596e4411"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/marks2d-scale-type.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "234c9f909d5b3d6bbbb95180a5a8e2b2df7f39757178821a56d44ef78f2a7aa3"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/marks2d-bad-scale.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "a3124b58c01f475277196dab96e5017e35b3958516b307d22628ea9df39caac7"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/marks2d-bad-encode.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "52790941936c2736363a9b8795a6a1e9881a82ec68ab1a3e820e624322cf95c0"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/marks2d-key-not-unique.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "8fb9a623c67df0e0378ecaa72537887edcbac8ea7ef34ec59e5e54d72db4c53b"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/marks2d-bad-axis.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "missing-parent",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "ae399e0f2ca8ed7a44b1f3af8ecc011745d93e5ec959a2a7fba2c80011d89c85"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/marks2d-bad-doc.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "86f7252c0925141df669da501466296bd5bd5db3b21d7ccabf22b0f9fbf63ee4"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/marks2d-relation-cycle.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "missing-parent",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "8889d623f2c71a3d87b9662b30c70770c6a4c2eef8cd80577db7c52879c78928"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/motion-bad-interp.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "02e57cf4fe0ec4dc2d58251b5e7c17ed40a1abd7f9ad6538114ed03c55fb5207"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/motion-bad-space.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "a2023db46d166a1be015bbf6dcf4a1b2faf24ceec36b320d4186ba42fe903a07"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/motion-bad-type.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "7e0a3cd4689d618e64eeda1bd2c0f7b4e00f70323f283bc48b765222eaa6e86a"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/code-bad-rate.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "f476427079ed4fd3fec01d64c937e667720912137103a4e5a32da78addfa8fc4"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/motion-bad-marker-kind.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "0f9bf3ca6f1881ad874bbe0e6bec8bab6c9d61986c1eb19939ef30994550488d"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/motion-marker-order.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "040134882b37456182b264f03cb9ad2af398b25fdbf489e5a6dbc65008172ee4"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/motion-waits-for-class.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "2ca32dcb4afbdc72baaacafd36e85619b7d1651b34cd769075180795c7620883"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/motion-too-many-paths.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "6f281a344db4fd424995d27fdd42e0e63e2213eca443254cbd75a078816e8101"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/motion-time-unresolved.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "aa8b136fc20690d52c00eaba554c3babb054860f39bdb9a2c8c796010d3f1fe5"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/motion-placement-cycle.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "a0913390195491a4cc28b7e8e4c1bb7c97c5091d73da2e3e4e862699e743c365"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/motion-transition-kind.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "81410e8b78585e0fd1cf8118ff25e60b23bb735e8cbf3a3a104ec191f26f4593"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/motion-transition-gap.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "2ce00ed1f81b918a4c52376da7ccd16720e3d2b270a8fbe3101dfbf629392e7d"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/motion-occurrence-undeclared.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "307f60ff4ffad9cf429cf564557b2f70eed6b60398427619945ed0508a940e7d"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/motion-arrange-unsatisfied.figure",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "42389075bea58a5367c97c5a59263d55bad3f1a41fda14a95242ed4ffaec06e0"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/motion-cue-overlap.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "bd3b5c58cfbaf0833101a0047c2df014b3614f3ad582648cd48fb853c5a75016"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/graph-layout-relayout-needed.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "336d91cde71da3547395e9af1340a8727b6a39a166ce45e49e74833cf24eb5c8"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/record-salience-duplicate-id.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "0869fa5dbf5385843ed6ef06ac8f3ff7c099e1565bd5ef34370860cf308c02ad"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/sheet-sheet-does-not-fit.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "33da4eee14c478e26dfe135d1e88c13128887047e3e107da8cfe98faf7ea40ec"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/sheet-sheet-highlight-outside.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "fc654d276ac9a398b153a61165809c402a3c507c2d2350bcbdb2f98223e76f5c"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/code-migrated.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "00264576e6d8ba4605474893b08d2064eff33227616502d73aa090c53ff803ef"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/code-pack-missing.board",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "unknown-kind",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "1f786faf0e760b1a1dc9374021284be8020958593cb1035a26f8dd60d86a567c"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  },
+  {
+   "fixture": "parity/framework/code-derived-item.scene",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "dropped-calls",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "472a33e91efc4d0e68c17437afe4045e4171bdb9415cb7a163ae08c82734a1d7"
+    }
+   ],
+   "reading": false,
+   "backend": "vello_cpu"
+  }
+ ],
+ "ended": []
+}

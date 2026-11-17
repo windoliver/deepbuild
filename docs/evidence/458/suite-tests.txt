@@ -1,0 +1,10 @@
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/458/suite
+
+
+ Test Files  6 passed (6)
+      Tests  12 passed (12)
+   Start at  23:46:48
+   Duration  21.95s (tests 98%, import 1%)
+
+exit 0
