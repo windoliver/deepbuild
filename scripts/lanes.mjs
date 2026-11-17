@@ -853,7 +853,7 @@ alone.push('tests/acceptance/192/voxel/');
 timed.push('tests/acceptance/192/voxel/ac10-budgets.test.ts');
 // #192's pack files (blind) each build deep-show; budget-ceilings and budget-fields also build the merge base's in
 // its own target folder and run 256 MiB providers.
-alone.push('tests/acceptance/192/packs/');
+alone.push('tests/acceptance/192/packs/', 'tests/acceptance/192/packs-redraft-ac12/');
 
 // #1624: this live session spends plan usage and is explicitly run by hand, not as a skipped unit test.
 byHand.push('tests/acceptance/1330/start.live.test.ts');
