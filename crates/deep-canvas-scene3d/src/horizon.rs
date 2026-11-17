@@ -261,11 +261,12 @@ mod tests {
         // atan(100 ÷ (256 − z)).
         let (h, size) = plate(513, 1.0, |_, z| if z >= 256.0 { 100.0 } else { 0.0 });
         let t = bake(size, 513, 513, &h, [33, 33]);
-        // +Z is azimuth 4 (a quarter turn from +X).
+        // +Z is azimuth 4 (a quarter turn from +X); the trace is exact, so each texel keeps the
+        // code of the closed form.
         for j in [0usize, 4, 8, 12] {
             let z = j as f64 * 16.0;
             let want = atan(100.0 / (256.0 - z));
-            assert!((t.at(16, j, 4) - want).abs() < rad(0.05), "texel {j}");
+            assert_eq!(t.code_at(16, j, 4), code(want), "texel {j}");
             assert_eq!(t.at(16, j, 12), 0.0, "away from the wall");
         }
     }
