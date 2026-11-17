@@ -87,7 +87,11 @@ pub fn output_channels(
 ) -> Result<(), Value> {
     let step = step_flicks(w);
     for (oid, o) in w.outputs.iter().filter(|(_, o)| !o.from.ends_with("#*")) {
-        let Some(to) = &o.to else { continue };
+        // #182: a `to` that names a readout, not an item path, draws no channel: the readout reads
+        // the bake's series of the output.
+        let Some(to) = o.to.as_ref().filter(|t| t.contains('/')) else {
+            continue;
+        };
         let states = bodies[&o.from].as_array().cloned().unwrap_or_default();
         let poses: Vec<_> = frames
             .iter()
