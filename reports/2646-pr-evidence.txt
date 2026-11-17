@@ -1,0 +1,207 @@
+Actual local check output. Home and task paths are redacted; assertions and measured values are unchanged.
+
+=== POST-MERGE RUNNER ===
+deep lease: DeepBuild isn't set up here (no hub token), so `nice -n 10 sh <job>/pr-checks.sh` runs unleased
+START pr-workspaces-build 2026-11-17T17:25:30Z
+END pr-workspaces-build exit=0 2026-11-17T17:35:45Z
+START pr-hook-build 2026-11-17T17:35:46Z
+END pr-hook-build exit=0 2026-11-17T17:37:50Z
+START pr-base-build 2026-11-17T17:37:50Z
+END pr-base-build exit=0 2026-11-17T17:46:23Z
+START pr-acceptance 2026-11-17T17:46:23Z
+END pr-acceptance exit=0 2026-11-17T18:00:53Z
+START pr-affected 2026-11-17T18:00:53Z
+<job>/pr-checks.sh: line 8: 57162 Killed: 9               "$@" > "$out/$name.log" 2>&1
+END pr-affected exit=137 2026-11-17T18:18:13Z
+
+=== POST-MERGE ACCEPTANCE ===
+PROOF #2646 the minute pass on this checkout: {"rows_over_120_minutes":10,"rows_by_minute":"0 3 0 0 4 0 0 0 0 3 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0","statements":20,"sessions":604,"states_the_clock_moved":[["2646b000-0000-4000-8000-000000000001",2,"needs you/waiting","quiet/quiet"],["2646f000-0000-4000-8000-000000000001",5,"finished/finished","quiet/quiet"],["2646a000-0000-4000-8000-000000000001",10,"working/working","quiet/quiet"]],"promised":"flagged/promised"}
+PROOF #2646 the minute pass on the merge base: {"rows_over_120_minutes":218676,"rows_by_minute":"3026 1814 1816 1814 1814 1816 1814 1814 1814 1812 1814 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812 1812","statements":23,"sessions":604,"states_the_clock_moved":[["2646b000-0000-4000-8000-000000000001",2,"needs you/waiting","quiet/quiet"],["2646f000-0000-4000-8000-000000000001",5,"finished/finished","quiet/quiet"],["2646a000-0000-4000-8000-000000000001",10,"working/working","quiet/quiet"]],"promised":"flagged/promised"}
+▶ #2646.11122565 the minute pass with 30 days of history and no live session
+  ✔ #2646.11122565 the minute pass reads under 1% of the rows it reads on the merge base, and the states it reports equal the merge base's at each of 120 minutes on a test clock (136936.809125ms)
+PROOF #2646 the planted pass: {"minute":1,"session":"2646c000-0000-4000-8000-000000000001","own":"no state","base":"flagged/promised"}
+  ✔ #2646.11122565 a planted pass that skips a session whose promise falls due fails, naming the session (3233.184333ms)
+✔ #2646.11122565 the minute pass with 30 days of history and no live session (140170.768917ms)
+▶ the judgement fails a wrong count and never passes a missing one
+  ✔ a fifth means a fifth: 21% fails, 19% passes, and a missing count or too few pairs is INCONCLUSIVE (6.146666ms)
+✔ the judgement fails a wrong count and never passes a missing one (6.576416ms)
+▶ #2646 the ask check
+  ✔ #2646.98036aec on a record of 200,000 events with one live session of 20,000 events holding three undelivered asks, the ask check's plan names the partial index, it returns the merge base's rows, and it retires at most a fifth of the merge base's instructions (21844.96275ms)
+✔ #2646 the ask check (21845.373125ms)
+▶ #2646 the asks core at a hub's start
+  ✔ #2646.9ca53003 at a hub's start on #16's 30-day record, the asks core decodes no event whose kind it does not apply, and its asks, tasks and stops equal the merge base's (13696.857625ms)
+✔ #2646 the asks core at a hub's start (13697.588834ms)
+▶ #2646 the minute pass
+  ✔ #2646.11122565 with 30 days of history and no live session, the minute pass reads under 1% of the rows it reads on the merge base, and reports the merge base's states at each of 120 minutes on a test clock (544322.065583ms)
+✔ #2646 the minute pass (544322.841417ms)
+▶ #2646 the state pass
+  ✔ #2646.44dd0631 over 200 state passes whose touched sets all differ, across eight live sessions, the core compiles at most 16 statements for the pass, and a statement another read compiled before them is still compiled after (84830.953833ms)
+✔ #2646 the state pass (84831.752125ms)
+ℹ tests 7
+ℹ suites 6
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 869397.423709
+
+=== POST-MERGE ASKS NEGATIVE CONTROL BUILD EXIT ===
+0
+
+=== POST-MERGE ASKS NEGATIVE CONTROL (exit 1 expected) ===
+▶ #2646 the asks core at a hub's start
+  ✖ #2646.9ca53003 at a hub's start on #16's 30-day record, the asks core decodes no event whose kind it does not apply, and its asks, tasks and stops equal the merge base's (161480.524416ms)
+✖ #2646 the asks core at a hub's start (161481.912875ms)
+ℹ tests 1
+ℹ suites 1
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 181046.620792
+
+✖ failing tests:
+
+test at tests/acceptance/2646/asks-kinds.test.mjs:71:3
+✖ #2646.9ca53003 at a hub's start on #16's 30-day record, the asks core decodes no event whose kind it does not apply, and its asks, tasks and stops equal the merge base's (161480.524416ms)
+  AssertionError [ERR_ASSERTION]: the asks core's asks, tasks and stops differ from the merge base's after the hub's start:
+  ask:01M5SAKH5R0000000000002S21 reads open, unanswered, not shown, and open, unanswered, shown on the merge base
+  It missed ask:01M5SAKH5R0000000000002S21, raised after its session's last tool call: a core that reads no tool.before still holds it for a step it never sees.
+  
+  1 !== 0
+  
+      at TestContext.<anonymous> (file://<job>/pr-asks-twin/tests/acceptance/2646/asks-kinds.test.mjs:82:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Promise.all (index 0)
+      at async Suite.run (node:internal/test_runner/test:1905:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+=== POST-MERGE NEGATIVE CONTROL OBSERVATION ===
+deep lease: DeepBuild isn't set up here (no hub token), so `nice -n 10 sh <job>/pr-asks-twin.sh` runs unleased
+PASS: frozen post-merge asks twin is rejected naming the missed ask
+
+=== HISTORICAL PAIRED BUDGETS, PRE-INTEGRATION BASE 9ae04c6cd ===
+deep lease: DeepBuild isn't set up here (no hub token), so `nice -n 10 node --test tests/acceptance/2646/budgets.long.test.mjs` runs unleased
+▶ #2646 the four budget tasks against the merge base
+  ✖ #2646.0e7e5ac3 hub-history retires no more instructions than on the merge base (745929.817917ms)
+  ✖ #2646.0e7e5ac3 hub-idle retires no more instructions than on the merge base (333513.444ms)
+  ✔ #2646.0e7e5ac3 asks-inbox-10k retires no more instructions than on the merge base (405491.07925ms)
+  ✖ #2646.0e7e5ac3 deep-status-30 retires no more instructions than on the merge base (198162.039875ms)
+✖ #2646 the four budget tasks against the merge base (1683097.351584ms)
+ℹ tests 4
+ℹ suites 1
+ℹ pass 1
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1683301.551375
+
+✖ failing tests:
+
+test at tests/acceptance/2646/budgets.long.test.mjs:35:3
+✖ #2646.0e7e5ac3 hub-history retires no more instructions than on the merge base (745929.817917ms)
+  AssertionError [ERR_ASSERTION]: INCONCLUSIVE: hub-history: instructions retired are missing in 20 of 20 pairs; no count covers (forked), /usr/bin/sandbox-exec, <job>/base/packages/supervisor/dist/helper
+  {"change":null,"seed":1405,"pAbove":null,"pBelow":null,"pairs":[{"current":null,"base":null},{"current":null,"base":null},{"current":null,"base":null},{"current":null,"base":null},{"current":null,"base":null},{"current":null,"base":null},{"current":null,"base":null},{"current":null,"base":null},{"current":null,"base":null},{"current":null,"base":null},{"current":null,"base":null},{"current":null,"base":null},{"current":null,"base":null},{"current":null,"base":null},{"current":null,"base":null},{"current":null,"base":null},{"current":null,"base":null},{"current":null,"base":null},{"current":null,"base":null},{"current":null,"base":null}]}
+  + actual - expected
+  
+  + 'INCONCLUSIVE'
+  - 'PASS'
+  
+      at task (file://<job>/work/tests/acceptance/2646/budgets.long.test.mjs:31:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Promise.all (index 0)
+      at async Suite.run (node:internal/test_runner/test:1905:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'INCONCLUSIVE',
+    expected: 'PASS',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2646/budgets.long.test.mjs:36:3
+✖ #2646.0e7e5ac3 hub-idle retires no more instructions than on the merge base (333513.444ms)
+  AssertionError [ERR_ASSERTION]: INCONCLUSIVE: hub-idle: instructions retired are missing in 20 of 20 pairs; no count covers (forked), /usr/bin/sandbox-exec, <job>/work/packages/supervisor/dist/helper, <job>/base/packages/supervisor/dist/helper
+  {"change":null,"seed":1405,"pAbove":null,"pBelow":null,"pairs":[{"current":null,"base":null},{"current":null,"base":null},{"current":null,"base":null},{"current":null,"base":null},{"current":null,"base":null},{"current":null,"base":null},{"current":null,"base":null},{"current":null,"base":null},{"current":null,"base":null},{"current":null,"base":null},{"current":null,"base":null},{"current":null,"base":null},{"current":null,"base":null},{"current":null,"base":null},{"current":null,"base":null},{"current":null,"base":null},{"current":null,"base":null},{"current":null,"base":null},{"current":null,"base":null},{"current":null,"base":null}]}
+  + actual - expected
+  
+  + 'INCONCLUSIVE'
+  - 'PASS'
+  
+      at task (file://<job>/work/tests/acceptance/2646/budgets.long.test.mjs:31:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Suite.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'INCONCLUSIVE',
+    expected: 'PASS',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2646/budgets.long.test.mjs:38:3
+✖ #2646.0e7e5ac3 deep-status-30 retires no more instructions than on the merge base (198162.039875ms)
+  AssertionError [ERR_ASSERTION]: INCONCLUSIVE: deep-status-30: instructions retired are missing in 20 of 20 pairs; no count covers (forked), /usr/bin/sandbox-exec, <job>/base/packages/supervisor/dist/helper
+  {"change":null,"seed":1405,"pAbove":null,"pBelow":null,"pairs":[{"current":null,"base":null},{"current":null,"base":null},{"current":null,"base":null},{"current":null,"base":null},{"current":null,"base":null},{"current":null,"base":null},{"current":null,"base":null},{"current":null,"base":null},{"current":null,"base":null},{"current":null,"base":null},{"current":null,"base":null},{"current":null,"base":null},{"current":null,"base":null},{"current":null,"base":null},{"current":null,"base":null},{"current":null,"base":null},{"current":null,"base":null},{"current":null,"base":null},{"current":null,"base":null},{"current":null,"base":null}]}
+  + actual - expected
+  
+  + 'INCONCLUSIVE'
+  - 'PASS'
+  
+      at task (file://<job>/work/tests/acceptance/2646/budgets.long.test.mjs:31:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Suite.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'INCONCLUSIVE',
+    expected: 'PASS',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+=== HISTORICAL #993 PLATFORM SETUP FAILURE ===
+deep lease: DeepBuild isn't set up here (no hub token), so `nice -n 10 node node_modules/vitest/vitest.mjs run --no-file-parallelism packages/hub/test/state-table.test.ts packages/hub/test/monitor-ends.test.ts packages/hub/test/overridden.test.ts tests/acceptance/993/hub-check.test.ts` runs unleased
+
+ RUN  v5.0.5 <job>/work
+
+stderr | tests/acceptance/993/hub-check.test.ts
+vitest-setup: stopping 2 process(es) this file left running:
+  60140 (node)
+  60193 (node)
+
+ ❯ tests/acceptance/993/hub-check.test.ts (1 test | 1 failed) 250805ms
+   ❯ AC2 #993.e11861a0 the hub checks the hook program itself, every 10 minutes (1)
+     × AC2 #993.e11861a0 with the deep-hook program removed under a running hub and no hook since, within 10 minutes every open Claude Code session's row reads watch-only, BLOCKED, hooks can't run, and deep status says the same 249971ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/993/hub-check.test.ts > AC2 #993.e11861a0 the hub checks the hook program itself, every 10 minutes > AC2 #993.e11861a0 with the deep-hook program removed under a running hub and no hook since, within 10 minutes every open Claude Code session's row reads watch-only, BLOCKED, hooks can't run, and deep status says the same
+Error: BLOCKED: deep setup must exit 0 in the test home: exit null (SIGKILL), killed at the timeout, stdout "", stderr "deep setup: deep-confirm's key wasn't set up (deep-confirm made no key: the Secure Enclave made no key: The operation couldn’t be completed. (OSStatus error -25308.)), so no answer from the CLI counts until it is; run deep setup again.\nInstalling Claude Code with its maker's own installer…\n"
+ ❯ setUp tests/acceptance/993/helpers.ts:279:29
+
+ ❯ tests/acceptance/993/hub-check.test.ts:39:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 3 passed (4)
+      Tests  1 failed | 16 passed (17)
+   Start at  01:35:01
+   Duration  348.67s (tests 99%)
+
+
+=== POST-MERGE AFFECTED: PARTIAL, INCONCLUSIVE ===
+WIDE 458 more see the change only through a process that starts another package (--wide runs them): cargo test -p deep-app packages/cli/test/engines.test.ts packages/conformance/src/gate.test.ts packages/github/test/github.test.ts packages/pi/test/guards.test.ts packages/pi/test/lifecycle.test.ts tests/acceptance/1015/budgets.test.ts tests/acceptance/1015/claude.test.ts tests/acceptance/1015/codex.test.ts tests/acceptance/1015/focused.test.ts tests/acceptance/1015/gpu.test.ts tests/acceptance/1015/memory.test.ts tests/acceptance/1015/waiter.test.ts tests/acceptance/1016/pool.test.ts tests/acceptance/1016/recovery.test.ts tests/acceptance/1016/toolchain.test.ts tests/acceptance/1016/workers.test.ts tests/acceptance/1017/budgets.test.ts tests/acceptance/1017/dogfood.test.ts tests/acceptance/1017/floor.test.ts tests/acceptance/1017/keys.test.ts tests/acceptance/1017/placement.test.ts tests/acceptance/1017/readonly.test.ts tests/acceptance/1017/stale.test.ts tests/acceptance/1017/toolchains.test.ts tests/acceptance/1022/compact.test.ts tests/acceptance/1022/replay.test.ts tests/acceptance/1022/slash.test.ts tests/acceptance/1023/ac1-three-ends.test.ts tests/acceptance/1023/ac2-answer-by-task.test.ts tests/acceptance/1023/ac2-hub-status.test.ts tests/acceptance/1023/ac3-planted.test.ts tests/acceptance/1023/live-ctrl-c.live.test.ts tests/acceptance/1024/live.test.ts tests/acceptance/1024/one-row.test.ts tests/acceptance/1097/budgets.test.ts tests/acceptance/1097/computed.test.ts tests/acceptance/1097/depth.test.ts tests/acceptance/1097/install.test.ts tests/acceptance/1097/warn.test.ts tests/acceptance/1106/ca.test.ts tests/acceptance/1106/evidence.test.ts tests/acceptance/1106/refusals.test.ts tests/acceptance/1106/standin.test.ts tests/acceptance/120/codex.test.ts tests/ac
+INCONCLUSIVE: this task's affected process tree was stopped after 16:47 amid nested resource waits; partial output is not a complete affected verdict. WIDE 458 were not run.
