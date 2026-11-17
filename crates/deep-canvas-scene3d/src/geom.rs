@@ -62,6 +62,9 @@ pub struct Mesh {
     /// A terrain tile's plate's full-detail normals, which its pixels read at every level
     /// (#2017; uv1 is the place on the plate's grid), or none.
     pub terrain: Option<std::sync::Arc<crate::terrain::Normals>>,
+    /// A terrain plate's horizon table, baked with it (#1381; uv1 is the place on the plate's
+    /// grid), or none.
+    pub horizon: Option<std::sync::Arc<crate::horizon::Horizon>>,
 }
 
 /// What a mesh-edge line draws.
