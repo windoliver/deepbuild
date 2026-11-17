@@ -1,0 +1,80 @@
+#1040: why every test fails at the base 80561d40c ("Merge pull request #2726"). Mostly a note, not a run.
+
+What this job ran at the base: the type check (`node node_modules/typescript/bin/tsc -p
+tests/acceptance/1040/tsconfig.json`: exit 0), `vitest list --root tests/acceptance/1040` (18 tests in 10 files), and a
+scratch leg (not committed) of the browser driver, server, recorder and shim on hand-written pages (README). No
+deep-show, deep-logic or export was built or run by this job: the machine was shared, its one-minute load 800 to 940.
+Where each test stops is read from the base's code, and said so below.
+
+Observed at the base by the coordinator, who ran this draft's documents against deep-show (full), and built in:
+- the first draft's memory piece was refused at `deep show` (`bad_id` at controls/A and controls/B: IDs are lower
+  case); the controls are now `btn_a` and `btn_b`. Every other document here is presented.
+- the chimney's stills at `look` differed between the two launches in 572 pixels (up to 11 code values): a hidden
+  moving ball still changed the lit frame. Every surface is now unlit. Not run again: whether unlit surfaces make the
+  two stills equal is unverified, and the test's fixture assertion says so if they don't.
+- the base's index page names each bundled face by its face file name in its `fonts` list; `indexFailures` now reads
+  only paths under a SHA-256 name.
+- Chrome's profile folder sometimes failed to remove right after the kill (ENOTEMPTY); the removal now retries.
+- the quiz's options are hidden outside their question by an opacity channel.
+- with no entry on the track, the app's export plays the document's own tour (#903), so the flip counter's still
+  at 4 s on an empty track holds the tour's flips; the app's still after 0 flips is now taken at 0 s.
+
+What the base has, from its code:
+- crates/deep-show/src/export/web.rs: the web export writes a bundle; its receipt always reads `fallback: "page"` and
+  `gpu_needs: {features: [], any_of: [], limits: {}}`; no file entry carries `fallback`; the bundle holds no fallback
+  page; the input track is written as the call's entries, not in the form the `track` call hashes.
+- crates/deep-player/web/element.js: the index page's element fetches every file and opens the GPU without asking
+  what the adapter has; a file that fails to arrive stops it with a notice naming its path and hash.
+- crates/deep-show/src/main.rs: an unknown scenario `planted` name answers `{"ok": false, "code": "bad_input"}`; the
+  five names here are unknown.
+- crates/deep-canvas-export/src/page/list.rs: the page lists toggles, choices and stages only (a press is a warning);
+  past 64 states it names the carried state's module (`logic`), never the item.
+- crates/deep-logic: a choice's string entry is left out of a number's slot; a boolean entry doesn't parse.
+
+Per test (each from the code unless it says observed):
+
+- quiz.test.ts
+  - AC1: the export is delivered, `fallback` reads page and the bundle matches its receipt; fails in helpers.ts
+    `fallbackOf` at "the receipt marks exactly one file as the fallback page's index … it marks none".
+- pages.test.ts
+  - AC7 quiz: the page is exported with 27 end states (their controls differ); the logic never reads an answer, so
+    every app still shows one score: fails at "the fixture: the app shows the four scores apart" (expected 1 to be 4).
+    If the base's page export refuses the quiz first, it fails in `pageExported` at "the quiz page is exported".
+- flips.test.ts
+  - AC2 tour page: fails at "the receipt's fallback reads tour_only" (it reads page); if the base's export refuses
+    the boolean entries of the scripted track first, in `webReceipt` at "is exported".
+  - AC2 live: `appLogic` on boolean entries fails at "the logic call answers, not refuses", or, if it answers, the
+    test fails at "the receipt's fallback reads tour_only".
+  - AC2 + AC7 refusal: the page isn't exported; fails at "nothing is written in out's folder" if the base leaves its
+    temporary folder, else at "the refusal names the logic item tally" (the base names `logic` and `logic.state`, or
+    answers bad_input for the boolean entries).
+- game.test.ts
+  - AC4: fails at "the game's receipt reads tour_only" (it reads page).
+- bundle.test.ts
+  - AC3 read back: the bundle matches its receipt and holds the texture; fails at "the bundle holds the input track
+    whose hash is the app's". Past that it would fail in `fallbackOf`.
+  - AC3 planted font and texture: the clean export is delivered and holds fonts; the planted run fails in helpers.ts
+    `run` at "deep-show run takes the scenario (planted web_leaves_out_font)". The texture leg isn't reached; on its
+    own it would pass at the base, whose player already stops on a missing file, naming it.
+- cutaway.test.ts
+  - AC5 first: fails at "the lab's gpu_needs lists WebGPU's clip-distances feature" (it lists nothing).
+  - AC5 planted: fails in `run` at "takes the scenario (planted web_index_checks_webgpu_only)".
+- maps.test.ts
+  - AC6 2,048 px: fails at "gpu_needs.any_of holds [texture-compression-bc, texture-compression-astc] as one entry".
+  - AC6 1,024 px: gpu_needs names neither feature (it names nothing); fails in `fallbackOf` (no file marked).
+  - AC6 planted: fails in `run` at "takes the scenario (planted web_index_requires_every_any_of)".
+- memory.test.ts
+  - AC8 page: the fixture holds (press entries are numbers); the page lists no press, so it fails at "the memory
+    piece's page", listing "no momentary press then release of A from its start".
+  - AC8 planted: fails in `run` at "takes the scenario (planted page_keys_logic_by_step_hash)".
+- launches.test.ts
+  - AC9 page: observed on the first draft: both launches fire at the base (the hard ball shows above the chimney at
+    `after`), and the lit stills at `look` differed, so that draft failed at "the fixture: at look the soft and the
+    hard launch draw the same picture". With the surfaces now unlit this was not run again. If the fixture holds,
+    the base's page already keys states by the core's carried-state list, the world's among it, so this test may
+    pass at the base; the criterion's wrong program is then the planted page alone.
+  - AC9 planted: fails in `run` at "takes the scenario (planted page_keys_by_picture_and_logic)", once the fixture
+    holds; before that, at the same fixture assertion.
+- taste.test.ts
+  - AC10: INCONCLUSIVE: "the check run's screenshots are not in docs/evidence/1040/: fallback-quiz.png,
+    fallback-game-tour.png; this is not a pass".
