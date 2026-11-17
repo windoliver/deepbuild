@@ -12,6 +12,7 @@ pub mod frame_checks;
 pub mod guard;
 pub mod memory;
 pub mod meter;
+pub mod nv12;
 pub mod over_class;
 pub mod pixel_hash;
 pub mod render;

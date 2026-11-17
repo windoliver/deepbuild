@@ -686,12 +686,6 @@ pub enum Body {
     Undo { patch: String, of: String },
 }
 
-pub struct PatchCall {
-    pub via: Via,
-    pub doc: String,
-    pub body: Body,
-}
-
 mod call;
 pub use call::*;
 
@@ -1561,6 +1555,8 @@ impl<'a> Hub<'a> {
             Call::ExportRun(job) => self.export_run(job),
             Call::Session { doc, set } => self.session_reply(doc, set.as_ref()),
             Call::FrameHash { frames, software } => self.frame_hash(frames, *software),
+            Call::FramePlanes { frames, software } => self.frame_planes(frames, *software),
+            Call::EncodeQualify(tool) => self.encode_qualify(tool),
             Call::CrossMachine(wavs) => self.cross_machine(wavs),
             Call::PixelHash(frames) => self.pixel_hash(frames),
             Call::Play {
