@@ -1,0 +1,43 @@
+The #182 suite at the base this worktree stands on, 1ab89128 ("Merge pull request #2597 …", no implementation of #182).
+
+NOT RUN at the base. On this Mac (Mac17,10, not a reference Mac, shared with other sessions) the 1-minute load stood
+between 370 and 460 on 18 cores, and the machine's build throttle (scripts/throttle.mjs, the repo's lease for builds)
+held one build grant for over 90 minutes with 32 build requests queued. This worktree had no target folder, so the base
+run needed fresh builds of deep-physics (three profiles), deep-show's full set, rustdoc JSON of the physics crates and a
+linux/amd64 Docker build; a queued `cargo build --locked -p deep-physics-rapier --bin deep-physics --features
+test-backends` waited in the throttle for about 40 minutes without starting and was stopped (by its own task, nothing
+else). What follows is read from the base's code, not from a run.
+
+Checked here without a cargo build: every file type-checks (`npx tsc -p tests/acceptance/182/tsconfig.json`, exit 0),
+and criterion 6's counter program, assembled by ac6-readers.test.ts's encoder, validates and runs in Node's
+WebAssembly engine, counting 2 landings on the read sequence 1,1,1,0,0,1,1,0,1 for an i32 slot and for an f64 slot.
+
+Why each test fails at the base (the surface is absent; no judge is reached):
+
+- Every world the suite builds holds a `kind: "character"` body and declares `jump`, `place` and `crouch` inputs. The
+  base's world reader refuses the kind (`physics.unsupported` at bodies/<id>/kind, "a character body isn't run by this
+  backend interface yet; #182 brings it"), `jump` (`physics.unsupported`, naming #182), and `place` and `crouch` (no
+  such input kinds); a `move` entry's `velocity` isn't a field of `move`; the `character` field isn't a body field.
+  So `bake`, `seek`, `golden` and `determinism` answer `{"ok": false, "issues": [...]}` and every test that reads a
+  bake's states fails in `statesOf` ("… ran: {ok: false …}"): ac1 (both), ac2, ac3, ac4, ac5's first and golden
+  tests, ac6's first test and its counter test (whose expected values come from a bake first), ac10's first test,
+  ac11's first test and the structural part of its second (the release build bakes no character), ac12's first,
+  ac13's first, ac14 (both), ac15's first, ac16's first, ac17's first.
+- Every test backend this suite names (no_character_controller, steps_too_high, ignores_snap, ground_distance_1mm,
+  ignores_launch_airborne) is refused at startup with `{"ok":false,"code":"bad_input"}` and exit 2 (the base's
+  test-backends build knows only #191's eight): ac7's second test (and Rapier's test build refuses its world's kind
+  first), ac8 (both), ac9 (both), ac10's second, ac13's second.
+- Every planted name this suite adds (slope_limit_ignored, checkpoint_drops_vertical, kit_passes_excluded,
+  character_as_kinematic, place_keeps_vertical, ceiling_keeps_upward, crouch_stands_on_release,
+  corner_one_wall_at_a_time) is refused at startup, exit 2: ac1's, ac5's, ac12's, ac14's, ac15's, ac16's and ac17's
+  second tests and ac9's second.
+- `behavior_fixtures` holds no character fixture and no fixture `steps` or `track`; `behavior_kit` reports no
+  `character/…` result (ac8, ac9's first, ac10's first).
+- ac7's first test: the one-capsule body is refused (its kind), and each refused variant also carries the kind's
+  refusal. Its third test: no public struct field `slope_limit` exists in deep-canvas-physics or deep-physics-rapier
+  (the scan of public items for Rapier types is expected to hold at the base, as #2009's does).
+- ac5's kit test: deep-show's physics module registers only the `parity/physics/late-joint.board` fixture, so neither
+  part runs a `parity/physics/character-course.` case.
+- ac6's counter: deep-logic refuses a read of `course.hero.grounded` ("names no control or logic item of this piece"),
+  and deep-show's world refuses the character body.
+- ac11's second test: off a reference Mac it skips as INCONCLUSIVE after its structural part, which fails at the base.

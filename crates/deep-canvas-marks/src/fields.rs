@@ -194,6 +194,19 @@ pub fn apply(
             }
         };
         let (xs, ys) = (steps(0), steps(1));
+        // #2031: a lit band's lights travel with its children (the first copy's place: a repeat's
+        // copies share the one list).
+        let place = crate::place::Place::of(&items[gid]);
+        let lights = out
+            .get_mut(gid)
+            .and_then(|g| g.pointer_mut("/params/light/lights"))
+            .and_then(Value::as_array_mut);
+        for l in lights.into_iter().flatten() {
+            let w = crate::scene::pair(l.get("at")).map(|a| place.at(a));
+            if let Some(a) = w.and_then(|w| place.back([w[0] + o[0], w[1] + o[1]])) {
+                l["at"] = Value::from(a.to_vec());
+            }
+        }
         for id in &under {
             let item = out.remove(id).unwrap_or(Value::Null);
             for (i, dx) in xs.iter().enumerate() {

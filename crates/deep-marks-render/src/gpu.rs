@@ -273,6 +273,25 @@ pub fn refusal<'a>(marks: impl IntoIterator<Item = &'a Drawn>) -> Option<Value> 
     })
 }
 
+/// [`refusal`] for a live view drawn by Vello GPU alone, which lights nothing (#2031): a lit
+/// group is refused too, naming its light; the GPU layer draws it.
+pub fn live_refusal<'a>(marks: impl IntoIterator<Item = &'a Drawn> + Clone) -> Option<Value> {
+    let lit = marks
+        .clone()
+        .into_iter()
+        .flat_map(|d| &d.scopes)
+        .find_map(|s| match s {
+            Scope::Opacity {
+                item,
+                effect: Some(e),
+                ..
+            } if e.light.is_some() => item.strip_suffix("#light"),
+            _ => None,
+        });
+    let lit = lit.map(|g| refused("module_missing", &format!("items/{g}/params/light")));
+    refusal(marks).or(lit)
+}
+
 /// What a drawing asks beyond its marks.
 #[derive(Clone, Copy, Debug)]
 pub struct Options {

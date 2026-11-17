@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "full",
-  "set_digest": "9234b4bec4a1d9ce85275fef0463044347d219b96b60bf4bd12ae1117def5828",
+  "set_digest": "f4a506326d5cffb8d1d0938823ab22ac817acc98c25cb07b993d8eb27c79b1a7",
   "runtime_digest": "b0d9637fcffe5b58be4a3025853302613578659fa143fc9ca6bd110364894ab8",
   "interfaces": {
     "building@1": {
@@ -209,7 +209,7 @@
       }
     },
     "logic@1": {
-      "digest": "6f34b6e8cf2e19f7a2bc6bfe04c0623e9ec1a516811cd0e76d48778f5757100e",
+      "digest": "1d115c4a4e4c1759d89afdad4757c100e6537a076aa4e0a651f5e0643339cff4",
       "reference": "logic",
       "kit": [
         "fixtures",
@@ -422,7 +422,7 @@
       }
     },
     "physics@1": {
-      "digest": "23a666b0dca4f83717a1720a58c8998a98d6cd760d20918a5ee05d899bcb931a",
+      "digest": "f48e8b0d1eb431d5b799b0a2151e6b2e6ec8ab77f7e6454bf5ff479dc1cf5479",
       "reference": "deep-physics-rapier",
       "kit": [
         "fixtures",
@@ -605,7 +605,7 @@
       }
     },
     "scene3d@1": {
-      "digest": "5a5d0f86438d912e2c10c3ef916357b614a38090725129dbb37ccf7f96501641",
+      "digest": "6c960bf0ee6cefaaee99fb43b9a2598880065746f4950a2d56de32f4a86f06e8",
       "reference": "scene3d",
       "kit": [
         "fixtures",

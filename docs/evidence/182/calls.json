@@ -1,0 +1,622 @@
+[
+ {
+  "call": "view3d",
+  "look": "look-182-demo",
+  "doc": "course.json",
+  "size": [
+   1280,
+   720
+  ],
+  "fps": 30,
+  "from": 9,
+  "frames": 1,
+  "capture": [
+   9
+  ],
+  "targets": [
+   "final"
+  ],
+  "tracks": {
+   "lab": [
+    {
+     "step": 0,
+     "kind": "move",
+     "target": "hero",
+     "data": {
+      "velocity": [
+       2,
+       0,
+       0
+      ]
+     }
+    },
+    {
+     "step": 96,
+     "kind": "jump",
+     "target": "hero",
+     "data": {
+      "height": 1
+     }
+    },
+    {
+     "step": 960,
+     "kind": "jump",
+     "target": "hero",
+     "data": {
+      "height": 1
+     }
+    }
+   ]
+  }
+ },
+ {
+  "call": "view3d",
+  "look": "look-182-demo",
+  "doc": "course.json",
+  "size": [
+   1280,
+   720
+  ],
+  "fps": 30,
+  "from": 38,
+  "frames": 1,
+  "capture": [
+   38
+  ],
+  "targets": [
+   "final"
+  ],
+  "tracks": {
+   "lab": [
+    {
+     "step": 0,
+     "kind": "move",
+     "target": "hero",
+     "data": {
+      "velocity": [
+       2,
+       0,
+       0
+      ]
+     }
+    },
+    {
+     "step": 96,
+     "kind": "jump",
+     "target": "hero",
+     "data": {
+      "height": 1
+     }
+    },
+    {
+     "step": 960,
+     "kind": "jump",
+     "target": "hero",
+     "data": {
+      "height": 1
+     }
+    }
+   ]
+  }
+ },
+ {
+  "call": "view3d",
+  "look": "look-182-demo",
+  "doc": "course.json",
+  "size": [
+   1280,
+   720
+  ],
+  "fps": 30,
+  "from": 96,
+  "frames": 1,
+  "capture": [
+   96
+  ],
+  "targets": [
+   "final"
+  ],
+  "tracks": {
+   "lab": [
+    {
+     "step": 0,
+     "kind": "move",
+     "target": "hero",
+     "data": {
+      "velocity": [
+       2,
+       0,
+       0
+      ]
+     }
+    },
+    {
+     "step": 96,
+     "kind": "jump",
+     "target": "hero",
+     "data": {
+      "height": 1
+     }
+    },
+    {
+     "step": 960,
+     "kind": "jump",
+     "target": "hero",
+     "data": {
+      "height": 1
+     }
+    }
+   ]
+  }
+ },
+ {
+  "call": "view3d",
+  "look": "look-182-demo",
+  "doc": "course.json",
+  "size": [
+   1280,
+   720
+  ],
+  "fps": 30,
+  "from": 177,
+  "frames": 1,
+  "capture": [
+   177
+  ],
+  "targets": [
+   "final"
+  ],
+  "tracks": {
+   "lab": [
+    {
+     "step": 0,
+     "kind": "move",
+     "target": "hero",
+     "data": {
+      "velocity": [
+       2,
+       0,
+       0
+      ]
+     }
+    },
+    {
+     "step": 96,
+     "kind": "jump",
+     "target": "hero",
+     "data": {
+      "height": 1
+     }
+    },
+    {
+     "step": 960,
+     "kind": "jump",
+     "target": "hero",
+     "data": {
+      "height": 1
+     }
+    }
+   ]
+  }
+ },
+ {
+  "call": "view3d",
+  "look": "look-182-demo",
+  "doc": "course.json",
+  "size": [
+   1280,
+   720
+  ],
+  "fps": 30,
+  "from": 252,
+  "frames": 1,
+  "capture": [
+   252
+  ],
+  "targets": [
+   "final"
+  ],
+  "tracks": {
+   "lab": [
+    {
+     "step": 0,
+     "kind": "move",
+     "target": "hero",
+     "data": {
+      "velocity": [
+       2,
+       0,
+       0
+      ]
+     }
+    },
+    {
+     "step": 96,
+     "kind": "jump",
+     "target": "hero",
+     "data": {
+      "height": 1
+     }
+    },
+    {
+     "step": 960,
+     "kind": "jump",
+     "target": "hero",
+     "data": {
+      "height": 1
+     }
+    }
+   ]
+  }
+ },
+ {
+  "call": "view3d",
+  "look": "look-182-demo",
+  "doc": "course.json",
+  "size": [
+   1280,
+   720
+  ],
+  "fps": 30,
+  "from": 299,
+  "frames": 1,
+  "capture": [
+   299
+  ],
+  "targets": [
+   "final"
+  ],
+  "tracks": {
+   "lab": [
+    {
+     "step": 0,
+     "kind": "move",
+     "target": "hero",
+     "data": {
+      "velocity": [
+       2,
+       0,
+       0
+      ]
+     }
+    },
+    {
+     "step": 96,
+     "kind": "jump",
+     "target": "hero",
+     "data": {
+      "height": 1
+     }
+    },
+    {
+     "step": 960,
+     "kind": "jump",
+     "target": "hero",
+     "data": {
+      "height": 1
+     }
+    }
+   ]
+  }
+ },
+ {
+  "call": "view3d",
+  "look": "look-182-demo",
+  "doc": "course.json",
+  "size": [
+   960,
+   540
+  ],
+  "fps": 30,
+  "from": 0,
+  "frames": 300,
+  "capture": "every",
+  "targets": [
+   "final"
+  ],
+  "tracks": {
+   "lab": [
+    {
+     "step": 0,
+     "kind": "move",
+     "target": "hero",
+     "data": {
+      "velocity": [
+       2,
+       0,
+       0
+      ]
+     }
+    },
+    {
+     "step": 96,
+     "kind": "jump",
+     "target": "hero",
+     "data": {
+      "height": 1
+     }
+    },
+    {
+     "step": 960,
+     "kind": "jump",
+     "target": "hero",
+     "data": {
+      "height": 1
+     }
+    }
+   ]
+  }
+ },
+ {
+  "call": "view3d",
+  "look": "look-182-demo",
+  "doc": "course.json",
+  "size": [
+   480,
+   270
+  ],
+  "fps": 15,
+  "from": 0,
+  "frames": 150,
+  "capture": "every",
+  "targets": [
+   "final"
+  ],
+  "tracks": {
+   "lab": [
+    {
+     "step": 0,
+     "kind": "move",
+     "target": "hero",
+     "data": {
+      "velocity": [
+       2,
+       0,
+       0
+      ]
+     }
+    },
+    {
+     "step": 96,
+     "kind": "jump",
+     "target": "hero",
+     "data": {
+      "height": 1
+     }
+    },
+    {
+     "step": 960,
+     "kind": "jump",
+     "target": "hero",
+     "data": {
+      "height": 1
+     }
+    }
+   ]
+  }
+ },
+ {
+  "call": "view3d",
+  "look": "look-182-demo",
+  "doc": "limits.json",
+  "size": [
+   1280,
+   720
+  ],
+  "fps": 30,
+  "from": 149,
+  "frames": 1,
+  "capture": [
+   149
+  ],
+  "targets": [
+   "final"
+  ],
+  "tracks": {
+   "lab": [
+    {
+     "step": 0,
+     "kind": "move",
+     "target": "a40",
+     "data": {
+      "velocity": [
+       2,
+       0,
+       0
+      ]
+     }
+    },
+    {
+     "step": 0,
+     "kind": "move",
+     "target": "b50",
+     "data": {
+      "velocity": [
+       2,
+       0,
+       0
+      ]
+     }
+    },
+    {
+     "step": 0,
+     "kind": "move",
+     "target": "c30",
+     "data": {
+      "velocity": [
+       2,
+       0,
+       0
+      ]
+     }
+    },
+    {
+     "step": 0,
+     "kind": "move",
+     "target": "d50",
+     "data": {
+      "velocity": [
+       2,
+       0,
+       0
+      ]
+     }
+    }
+   ]
+  }
+ },
+ {
+  "call": "view3d",
+  "look": "look-182-demo",
+  "doc": "limits.json",
+  "size": [
+   960,
+   540
+  ],
+  "fps": 30,
+  "from": 0,
+  "frames": 150,
+  "capture": "every",
+  "targets": [
+   "final"
+  ],
+  "tracks": {
+   "lab": [
+    {
+     "step": 0,
+     "kind": "move",
+     "target": "a40",
+     "data": {
+      "velocity": [
+       2,
+       0,
+       0
+      ]
+     }
+    },
+    {
+     "step": 0,
+     "kind": "move",
+     "target": "b50",
+     "data": {
+      "velocity": [
+       2,
+       0,
+       0
+      ]
+     }
+    },
+    {
+     "step": 0,
+     "kind": "move",
+     "target": "c30",
+     "data": {
+      "velocity": [
+       2,
+       0,
+       0
+      ]
+     }
+    },
+    {
+     "step": 0,
+     "kind": "move",
+     "target": "d50",
+     "data": {
+      "velocity": [
+       2,
+       0,
+       0
+      ]
+     }
+    }
+   ]
+  }
+ },
+ {
+  "call": "view3d",
+  "look": "look-182-demo",
+  "doc": "limits.json",
+  "size": [
+   480,
+   270
+  ],
+  "fps": 15,
+  "from": 0,
+  "frames": 75,
+  "capture": "every",
+  "targets": [
+   "final"
+  ],
+  "tracks": {
+   "lab": [
+    {
+     "step": 0,
+     "kind": "move",
+     "target": "a40",
+     "data": {
+      "velocity": [
+       2,
+       0,
+       0
+      ]
+     }
+    },
+    {
+     "step": 0,
+     "kind": "move",
+     "target": "b50",
+     "data": {
+      "velocity": [
+       2,
+       0,
+       0
+      ]
+     }
+    },
+    {
+     "step": 0,
+     "kind": "move",
+     "target": "c30",
+     "data": {
+      "velocity": [
+       2,
+       0,
+       0
+      ]
+     }
+    },
+    {
+     "step": 0,
+     "kind": "move",
+     "target": "d50",
+     "data": {
+      "velocity": [
+       2,
+       0,
+       0
+      ]
+     }
+    }
+   ]
+  }
+ },
+ {
+  "call": "view3d",
+  "look": "look-182-demo",
+  "doc": "path.json",
+  "size": [
+   1280,
+   720
+  ],
+  "fps": 30,
+  "from": 0,
+  "frames": 1,
+  "capture": [
+   0
+  ],
+  "targets": [
+   "final"
+  ]
+ }
+]
