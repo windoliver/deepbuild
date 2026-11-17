@@ -1,0 +1,17 @@
+{
+  "issue": 903,
+  "criterion": "#903.1034b873",
+  "verdict": "looks_right",
+  "who": "The implementing session's agent (Claude Fable 5.2), on the owner's delegation in session (\"You judge it\")",
+  "when": "2026-11-16T01:40:45+00:00",
+  "screenshots": {
+    "pointer-press.png": "2c4167e1ccee0a91dea62ca315e801b014d410fbed6e99880bbe60344f06d66f",
+    "pointer-slider.png": "270509097d55a00d6fea629a3b1f81689327bed68c2de72f081fd18728e7c1ba",
+    "pointer-toggle.png": "414fb501bdf813794f8ef1211b829711e9d4824312ee97f74449b7e4c0cba25f",
+    "export-1920x1080.png": "34b47c65688b5c535faf2f1945292ff4f91302d2eeae27c8dbb0763b3fc92919"
+  },
+  "recordings": {
+    "tour-pointer.apng": "9ea25ad38e04dbf4010b83d1faa4475fd5ecc0fe9e252c5213b975526015e1c8"
+  },
+  "note": "Checked each still whole and at a 3x crop around the pointer, and all 73 frames of the recording as crops around where the pointer is. The arrow is ink with a ground outline and reads on the muted buttons, the accent track and the ground. At the press and the toggle its tip is on the button's centre with an accent ring about it, which widens and thins over frames 2.0 to 2.2 s and 8.0 to 8.2 s and is gone by 2.3 s and 8.3 s. From 4 s to 6 s the tip stays on the thumb's centre in every frame while the thumb crosses the track, and it rests there until it leaves for the toggle. The glides run straight between controls with no jump. The exported frame shows the same pointer at the film's own size. One reservation, recorded and not held against the call: before its first glide the pointer rests at the frame's centre, which on this board lies on the slider's track."
+}

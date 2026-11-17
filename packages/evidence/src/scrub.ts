@@ -32,9 +32,16 @@ const folded = (bytes: Buffer) => (text: Buffer, at: number) => {
   for (let j = 0; j < bytes.length; j++) if (FOLD[text[at + j]!] !== bytes[j]) return -1;
   return at + bytes.length;
 };
-for (const keyword of new Set(rules.flatMap((rule) => rule.keywords))) {
+// Index each rule once instead of scanning every rule again for each keyword.
+const byKeyword = new Map<string, Rule[]>();
+for (const rule of rules) for (const keyword of new Set(rule.keywords)) {
+  const group = byKeyword.get(keyword);
+  if (group) group.push(rule);
+  else byKeyword.set(keyword, [rule]);
+}
+for (const [keyword, rules] of byKeyword) {
   const bytes = Buffer.from(keyword.toLowerCase(), 'latin1');
-  const needle: Needle = { match: folded(bytes), rules: rules.filter((rule) => rule.keywords.includes(keyword)) };
+  const needle: Needle = { match: folded(bytes), rules };
   if (bytes.length >= 3) add(keywordBits, keywords, bytes, needle);
   // A two-byte keyword is found by each three bytes it can start.
   else for (let next = 0; next < 256; next++) if (FOLD[next] === next) add(keywordBits, keywords, Buffer.from([...bytes, next]), needle);

@@ -10,7 +10,10 @@ pub mod exposure;
 mod fixtures;
 pub mod framing;
 pub mod noise;
+mod occluded;
+mod paths;
 mod pixels;
+pub mod review;
 pub mod scale;
 mod scene;
 pub mod uv;
@@ -29,7 +32,7 @@ pub const KIND: &str = "geometry.shading";
 /// The wrong programs #453's and #1935's criteria plant in geometry.shading, and #1938's in
 /// render.contrast, each reachable only through a proof surface's `planted`, which the hub puts in
 /// the check's input.
-pub const PLANTED: [&str; 10] = [
+pub const PLANTED: [&str; 16] = [
     "no_weld",
     "one_winding_sum",
     "degenerate_exact_zero",
@@ -41,6 +44,13 @@ pub const PLANTED: [&str; 10] = [
     "uv_overlap_from_boxes",
     // #1938's: render.contrast holds text to 3:1.
     contrast::PLANTED_MIN_3,
+    // #457's, in camera.framing's occluded share and camera paths.
+    occluded::PLANTED_ADD_OCCLUDES,
+    occluded::PLANTED_BY_ORDER,
+    occluded::PLANTED_CUT_WHOLE,
+    paths::PLANTED_HALF_DIAGONAL,
+    paths::PLANTED_SAMPLED,
+    paths::PLANTED_SWEEP_SAMPLES,
 ];
 
 /// The most IDs a result lists per field.
@@ -116,28 +126,49 @@ fn register(r: &mut Registrar) {
     })
     .check_report(report);
     // #1938's kinds on evaluated data: they hold on any machine.
-    r.check(scale::KIND, "any", &[scale::CODE, "loop.unreadable"], |l, i| {
-        issues(scale::report(l, i))
-    })
+    r.check(
+        scale::KIND,
+        "any",
+        &[scale::CODE, "loop.unreadable"],
+        |l, i| issues(scale::report(l, i)),
+    )
     .check_report(scale::report);
-    r.check(framing::KIND, "any", &[framing::CODE, "loop.unreadable"], |l, i| {
-        issues(framing::report(l, i))
-    })
+    r.check(
+        framing::KIND,
+        "any",
+        &[framing::CODE, "loop.unreadable"],
+        |l, i| issues(framing::report(l, i)),
+    )
     .check_report(framing::report);
     // #1938's kinds on pixels: they hold on the machine that drew them.
-    r.check(exposure::KIND, "same", &[exposure::CODE, "loop.unreadable"], |l, i| {
-        issues(exposure::report(l, i, &[]))
-    })
+    r.check(
+        exposure::KIND,
+        "same",
+        &[exposure::CODE, "loop.unreadable"],
+        |l, i| issues(exposure::report(l, i, &[])),
+    )
     .check_frames(1, exposure::report);
-    r.check(contrast::KIND, "same", &[contrast::CODE, "loop.unreadable"], |l, i| {
-        issues(contrast::report(l, i, &[]))
-    })
+    r.check(
+        contrast::KIND,
+        "same",
+        &[contrast::CODE, "loop.unreadable"],
+        |l, i| issues(contrast::report(l, i, &[])),
+    )
     .check_frames(1, contrast::report);
     // Noise reads each checked time drawn twice: the time, and the next frame.
-    r.check(noise::KIND, "same", &[noise::CODE, "loop.unreadable"], |l, i| {
-        issues(noise::report(l, i, &[]))
-    })
+    r.check(
+        noise::KIND,
+        "same",
+        &[noise::CODE, "loop.unreadable"],
+        |l, i| issues(noise::report(l, i, &[])),
+    )
     .check_frames(2, noise::report);
+    // #456's: a model's reading only its host makes, with the model it names; run anywhere else
+    // it reads nothing, so it is BLOCKED, never passed.
+    r.check(review::KIND, "same", &["loop.unreadable"], |l, i| {
+        issues(unhosted(l, i, &[]))
+    })
+    .check_frames(1, unhosted);
     r.code(
         "loop.unreadable",
         "What a loop check can't read: a mesh geometry.shading can't (missing, compressed data no pinned tool decoded, not triangles, away from its bind pose, or UV sets asked at a resolution over 4,096 px), or a document or subject a check can't evaluate.",
@@ -232,6 +263,15 @@ fn issues(out: Report) -> Vec<(String, Raised)> {
         .map(|(id, raised, _)| (id, raised))
         .chain(unread)
         .collect()
+}
+
+/// render.review outside a host that calls its model: BLOCKED, naming what it lacks.
+fn unhosted(_: &Value, _: &Value, _: &[deep_canvas::registry::Frame]) -> Report {
+    Report {
+        blocked: vec![json!({"code": "no_model", "ids": [], "path": "kind",
+            "ask": "run render.review where the host names its model"})],
+        ..Report::default()
+    }
 }
 
 /// A reading as a failure's text gives it: to four decimals.
@@ -436,16 +476,11 @@ pub fn report(lowered: &Value, input: &Value) -> Report {
         }
         let prims: Vec<&Prim> = read.iter().map(|(_, p)| p).collect();
         let c = count::count(&prims, &opts);
-        let tris: Vec<[count::V3; 3]> = prims
-            .iter()
-            .flat_map(|p| {
-                p.indices
-                    .as_chunks::<3>()
-                    .0
-                    .iter()
-                    .map(|t| t.map(|i| p.positions[i as usize]))
-            })
-            .collect();
+        let mut tris: Vec<[count::V3; 3]> = Vec::with_capacity(c.triangles);
+        for p in &prims {
+            let corners = |t: &[u32; 3]| t.map(|i| p.positions[i as usize]);
+            tris.extend(p.indices.as_chunks::<3>().0.iter().map(corners));
+        }
         let hidden: Vec<usize> = measures::hidden(&tris)
             .into_iter()
             .enumerate()

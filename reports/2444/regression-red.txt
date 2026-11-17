@@ -1,0 +1,197 @@
+Trailing blank padding in captured output removed.
+Before implementation, base 1c4d1f0e2aaad8c6a6573848823566d04ff73d17 plus pre-existing working edits.
+Command: node --test tests/listed-failures.test.mjs (installed Rust toolchain bin added to PATH)
+Exit: 1
+Checkout and temporary paths redacted.
+
+✖ Vitest lists only the exact failing test ID, not its passing or newly failing sibling (43241.006667ms)
+✖ Cargo results use the same rerunnable IDs as the known-failure list (27843.262083ms)
+✖ the real unit Cargo command runs a later unlisted target after a listed failure, and still fails (30497.679667ms)
+✖ listed evidence is never PASS; an unrun state or a crashed runner is never excused by that ID (58.995417ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 0
+ℹ fail 4
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 103769.755541
+
+✖ failing tests:
+
+test at tests/listed-failures.test.mjs:34:1
+✖ Vitest lists only the exact failing test ID, not its passing or newly failing sibling (43241.006667ms)
+  AssertionError [ERR_ASSERTION]: RUN unit
+  deep lease: DeepBuild isn't set up here (no hub token), so `/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node node_modules/vitest/vitest.mjs run --reporter=default --reporter=<checkout>/scripts/proof-vitest-reporter.mjs -t ^listed$|^passes$` runs unleased
+
+   RUN  v5.0.5 <temporary>/deep-listed-sj8w1h
+
+   ❯ tests/example.test.ts (3 tests | 1 failed | 1 skipped) 5ms
+     × listed 4ms
+     ✓ passes 0ms
+     ↓ new failure
+
+  ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+   FAIL  tests/example.test.ts > listed
+  AssertionError: expected 1 to be 2 // Object.is equality
+
+  - Expected
+  + Received
+
+  - 2
+  + 1
+
+   ❯ tests/example.test.ts:2:36
+        1| import { test, expect } from 'vitest';
+        2|     test('listed', () => expect(1).toBe(2));
+         |                                    ^
+        3|     test('passes', () => expect(1).toBe(1));
+        4|     test('new failure', () => expect(2).toBe(3));
+
+  ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+   Test Files  1 failed (1)
+        Tests  1 failed | 1 passed | 1 skipped (3)
+     Start at  10:34:42
+     Duration  2.84s (transform 62%, import 33%, worker 4%, tests 1%)
+  FAIL unit: AssertionError: expected 1 to be 2 // Object.is equality
+    Fix: fixture
+    Elapsed: 16.60 s
+
+
+  1 !== 0
+
+      at TestContext.<anonymous> (file://<checkout>/tests/listed-failures.test.mjs:43:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/listed-failures.test.mjs:59:1
+✖ Cargo results use the same rerunnable IDs as the known-failure list (27843.262083ms)
+  AssertionError [ERR_ASSERTION]: RUN unit
+  deep lease: DeepBuild isn't set up here (no hub token), so `cargo test --workspace --locked` runs unleased
+     Compiling lane-fixture v0.0.0 (<temporary>/deep-listed-zPzRa0)
+      Finished `test` profile [unoptimized + debuginfo] target(s) in 17.43s
+       Running unittests src/lib.rs (target/debug/deps/lane_fixture-d5949b30081d9576)
+
+  running 1 test
+  test listed_on_main ... FAILED
+
+  failures:
+
+  ---- listed_on_main stdout ----
+
+  thread 'listed_on_main' (39042544) panicked at src/lib.rs:2:23:
+  assertion `left == right` failed: listed failure ran
+    left: 1
+   right: 2
+  note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+  failures:
+      listed_on_main
+
+  test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+  error: test failed, to rerun pass `--lib`
+  FAIL unit: thread 'listed_on_main' (39042544) panicked at src/lib.rs:2:23:
+    Fix: fixture
+    Elapsed: 26.84 s
+
+
+  1 !== 0
+
+      at TestContext.<anonymous> (file://<checkout>/tests/listed-failures.test.mjs:62:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/listed-failures.test.mjs:67:1
+✖ the real unit Cargo command runs a later unlisted target after a listed failure, and still fails (30497.679667ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /later unlisted target ran/. Input:
+
+  'RUN unit\n' +
+    "deep lease: DeepBuild isn't set up here (no hub token), so `cargo test --workspace --locked` runs unleased\n" +
+    '   Compiling lane-fixture v0.0.0 (<temporary>/deep-listed-nWQfWT)\n' +
+    '    Finished `test` profile [unoptimized + debuginfo] target(s) in 19.38s\n' +
+    '     Running unittests src/lib.rs (target/debug/deps/lane_fixture-d5949b30081d9576)\n' +
+    '\n' +
+    'running 1 test\n' +
+    'test listed_on_main ... FAILED\n' +
+    '\n' +
+    'failures:\n' +
+    '\n' +
+    '---- listed_on_main stdout ----\n' +
+    '\n' +
+    "thread 'listed_on_main' (39050087) panicked at src/lib.rs:2:23:\n" +
+    'assertion `left == right` failed: listed failure ran\n' +
+    '  left: 1\n' +
+    ' right: 2\n' +
+    'note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n' +
+    '\n' +
+    '\n' +
+    'failures:\n' +
+    '    listed_on_main\n' +
+    '\n' +
+    'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s\n' +
+    '\n' +
+    'error: test failed, to rerun pass `--lib`\n' +
+    "FAIL unit: thread 'listed_on_main' (39050087) panicked at src/lib.rs:2:23:\n" +
+    '  Fix: fixture\n' +
+    '  Elapsed: 29.76 s\n'
+
+      at TestContext.<anonymous> (file://<checkout>/tests/listed-failures.test.mjs:70:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: "RUN unit\ndeep lease: DeepBuild isn't set up here (no hub token), so `cargo test --workspace --locked` runs unleased\n   Compiling lane-fixture v0.0.0 (<temporary>/deep-listed-nWQfWT)\n    Finished `test` profile [unoptimized + debuginfo] target(s) in 19.38s\n     Running unittests src/lib.rs (target/debug/deps/lane_fixture-d5949b30081d9576)\n\nrunning 1 test\ntest listed_on_main ... FAILED\n\nfailures:\n\n---- listed_on_main stdout ----\n\nthread 'listed_on_main' (39050087) panicked at src/lib.rs:2:23:\nassertion `left == right` failed: listed failure ran\n  left: 1\n right: 2\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n\n\nfailures:\n    listed_on_main\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s\n\nerror: test failed, to rerun pass `--lib`\nFAIL unit: thread 'listed_on_main' (39050087) panicked at src/lib.rs:2:23:\n  Fix: fixture\n  Elapsed: 29.76 s\n",
+    expected: /later unlisted target ran/,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tests/listed-failures.test.mjs:77:1
+✖ listed evidence is never PASS; an unrun state or a crashed runner is never excused by that ID (58.995417ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+  false !== true
+
+      at TestContext.<anonymous> (file://<checkout>/tests/listed-failures.test.mjs:82:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

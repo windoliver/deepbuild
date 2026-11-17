@@ -1,0 +1,25 @@
+[package]
+name = "deep-play"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+# Issue #172: the played form, as the app and the web player both make it: a document's worlds
+# baked on the pinned physics backend and its logic items stepped over the transport's span on its
+# input track, written into the form its readers read; each logic program inlined; the core's
+# column view over it. Both hosts call these, so the player evaluates what the app does.
+[dependencies]
+deep-canvas = { path = "../deep-canvas" }
+deep-canvas-cells = { path = "../deep-canvas-cells" }
+deep-canvas-marks = { path = "../deep-canvas-marks" }
+deep-canvas-media = { path = "../deep-canvas-media" }
+deep-canvas-motion = { path = "../deep-canvas-motion" }
+deep-canvas-physics = { path = "../deep-canvas-physics" }
+deep-canvas-scene3d = { path = "../deep-canvas-scene3d" }
+deep-canvas-vector = { path = "../deep-canvas-vector" }
+deep-logic = { path = "../deep-logic" }
+deep-marks-raster = { path = "../deep-marks-raster" }
+deep-physics-rapier = { path = "../deep-physics-rapier" }
+deep-text = { path = "../deep-text" }
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }

@@ -27,7 +27,7 @@
 // once a period while a view that binds its source is shown, as the app reports it; and a series call lands as one
 // batch file named by one reading.batch event, its windows' rollups as files named by reading.rollup events
 // (./series.ts), so a bound value resolves at a frame's pinned log position.
-import { createPublicKey, randomUUID, verify as verifySignature } from 'node:crypto';
+import { createHash, createPublicKey, randomUUID, verify as verifySignature } from 'node:crypto';
 import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createServer, type AddressInfo, type Socket } from 'node:net';
@@ -92,7 +92,9 @@ export type Plant = 'hub-unless-agent-built' | 'grants-only-in-record-query' | '
   // #989's hosted terminals: hosts that keep the start size, drop the bottom rows, keep every byte, read a FIFO or
   // block their output on input; hubs that leave a closed terminal's files, throw once input is full, or stop or
   // read as ended a host of another protocol version.
-  | TerminalPlant;
+  | TerminalPlant
+  // #184's: a host that plays any seed a check runner passes to deep.canvas.play.
+  | 'plays-any-seed';
 
 /** One hook request to every loaded handler of its kind (#350). */
 export interface HookRequest {
@@ -180,6 +182,11 @@ export interface ExtensionHostOptions {
    * its reply. Without one, a read is refused.
    */
   canvas?: (call: Record<string, unknown>) => Promise<Record<string, unknown>>;
+  /**
+   * The replica `deep.canvas.play` plays through (#184): the hub's own, which takes a play call naming the piece by
+   * `<doc>@<rev>` and answers the replica's reply. Without one, a play is refused.
+   */
+  replica?: (call: Record<string, unknown>) => Promise<Record<string, unknown>>;
   /**
    * The first-party pieces the hub runs itself, env-local among them (#103): each a provider in the composition graph,
    * whose users are the pieces whose runs used what it provides. A version the host last saw otherwise is a new one.
@@ -513,6 +520,24 @@ function schemaBreak(name: string, schema: unknown, value: unknown): string | un
     return `/ (its schema can't be read: ${message(e)})`;
   }
 }
+/**
+ * What a check's input gives `deep.canvas.play` (Check input: plug-in reads, #184): the piece, the seed, the runs (20
+ * by default), the bots and the recorded tracks it may play; a playtest's input holds more, which the host ignores.
+ */
+interface PlayInput { piece?: unknown; seed?: unknown; runs?: unknown; bots?: unknown; tracks?: unknown; play?: unknown }
+/** One play a running check made: its seed, its bot, its track's hash and whether it read values. */
+interface Played { seed: number; bot: unknown; track: string; values: boolean }
+/** JSON with every object's keys sorted, so two values parsed apart compare. */
+const canonical = (v: unknown): string => JSON.stringify(v, (_k, x: unknown) => (isPlain(x) ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) : x));
+/** Run i's seed: hash(the check's seed, i), the first 8 bytes of SHA-256(seed as u64 LE, i as u32 LE) big-endian, shifted right 11 bits to stay a JSON-safe integer. */
+function runSeed(seed: number, i: number): number {
+  const b = Buffer.alloc(12);
+  b.writeBigUInt64LE(BigInt(seed));
+  b.writeUInt32LE(i, 8);
+  return Number(createHash('sha256').update(b).digest().readBigUInt64BE(0) >> 11n);
+}
+/** A bot as a play runs it: without the authorship, bands and expectations a check's input adds (#184, #555). */
+const botOf = (bot: unknown): unknown => (isPlain(bot) ? Object.fromEntries(Object.entries(bot).filter(([k]) => k !== 'by' && k !== 'share' && k !== 'expect')) : bot);
 const nothing = (outcome: CheckResult['outcome'], failure?: string): CheckResult => ({
   outcome, testsRun: 0, evidence: [], read: [], mask: null,
   failures: failure ? [{ test: 'extension host', file: '', line: 0, stack: null, assertion: false, message: failure }] : [],
@@ -548,6 +573,8 @@ class Host implements ExtensionHost {
   private readonly exts = new Map<string, Ext>();
   /** The content keys each running check's `deep.canvas.read` calls returned, by the package running it (#411). */
   private readonly canvasKeys = new Map<Ext, string[]>();
+  /** Each running check's input and the plays its `deep.canvas.play` calls made, by the package running it (#184). */
+  private readonly plays = new Map<Ext, { input: PlayInput | undefined; played: Played[]; tracks: Set<string> }>();
   /** The packages you approved run-as-you for, by ID. */
   private runAsYou: Record<string, boolean>;
   private readonly terminals: Terminals;
@@ -1497,7 +1524,8 @@ class Host implements ExtensionHost {
       reasons.push(`its deepbuild.json can't be read: ${message(e)}`);
     }
     if (manifest) {
-      const held = checkManifest(manifest);
+      const released = entry.builtBy === null && this.options.release.some((r) => r.id === entry.id && r.version === entry.version && r.digest === digest);
+      const held = checkManifest(manifest, released);
       if (!held.ok) for (const i of held.issues) reasons.push(`its manifest fails extension.manifest@1 at ${i.path || '/'}: ${i.code} ${i.actual}`);
       else if (manifest.id !== entry.id || manifest.version !== entry.version) reasons.push(`its manifest names ${manifest.id}@${manifest.version}, not ${entry.id}@${entry.version}`);
       else if (manifest.digest !== digest) reasons.push(`its manifest's digest ${manifest.digest} isn't its files' digest ${digest}`);
@@ -1989,6 +2017,46 @@ class Host implements ExtensionHost {
         this.canvasKeys.get(ext)?.push(...keys);
         return reply;
       }
+      case 'deep.canvas.play': {
+        // A piece played headless in a replica, from the seed and entries the running check's input gives, as the
+        // writer bot (#184): never a piece outside the grant, a seed, bot or track the input doesn't give.
+        const [target, run] = args;
+        const at = typeof target === 'string' ? target.lastIndexOf('@') : -1;
+        const rev = at > 0 ? Number((target as string).slice(at + 1)) : NaN;
+        if (typeof target !== 'string' || !Number.isSafeInteger(rev) || rev < 0) throw Error('deep.canvas.play takes "<doc>@<rev>" first');
+        if (!(ext.entry.grant.docs ?? []).includes(target.slice(0, at))) throw Error(`deep.canvas.play: ${id}'s grant doesn't name the piece ${target}`);
+        const r = (isPlain(run) ? run : {}) as Record<string, unknown>;
+        const running = this.plays.get(ext);
+        const input = running?.input;
+        if (!running || !input) throw Error(`deep.canvas.play: ${id} plays only from a running check's input, and none gives one`);
+        if (input.piece !== undefined && input.piece !== target) throw Error(`deep.canvas.play: ${id}'s check input gives the piece ${String(input.piece)}, not ${target}`);
+        const seed = r.seed;
+        const runs = typeof input.runs === 'number' ? input.runs : 20;
+        const given = typeof input.seed === 'number' && (seed === input.seed || Array.from({ length: runs }, (_, i) => runSeed(input.seed as number, i)).includes(seed as number));
+        if (!given && this.options.plant !== 'plays-any-seed') throw Error(`deep.canvas.play: seed ${String(seed)} isn't one ${id}'s check input gives`);
+        const bots = Array.isArray(input.bots) ? input.bots.map((b) => canonical(botOf(b))) : [];
+        if (r.bot !== undefined && !bots.includes(canonical(botOf(r.bot)))) throw Error(`deep.canvas.play: the bot ${canonical(r.bot).slice(0, 200)} isn't one ${id}'s check input gives`);
+        // #555: the play interface a run reads is the one the input's brief locked, never one the runner passes.
+        if (r.play !== undefined && canonical(r.play) !== canonical(input.play)) throw Error(`deep.canvas.play: the play interface isn't the one ${id}'s check input gives`);
+        if (r.track !== undefined) {
+          const tracks = Array.isArray(input.tracks) ? input.tracks.map(canonical) : [];
+          const track = canonical(r.track);
+          if (!tracks.includes(track) && !running.tracks.has(track)) throw Error(`deep.canvas.play: the track isn't one ${id}'s check input gives or a play of this run recorded`);
+        }
+        if (!this.options.replica) throw Error('deep.canvas.play: this hub has no replica');
+        const reply = await this.options.replica({ ...r, call: 'play', piece: target });
+        if (reply.ok !== true) {
+          const e = (isPlain(reply.error) ? reply.error : {}) as Record<string, unknown>;
+          throw Error(`deep.canvas.play: ${String(e.code ?? 'refused')}: ${String(e.message ?? '')}${e.control !== undefined ? ` (control ${String(e.control)})` : ''}`);
+        }
+        const values = isPlain(reply.values) && Object.values(reply.values).some((v) => Array.isArray(v) && v.length > 0);
+        running.played.push({ seed: seed as number, bot: r.bot === undefined ? undefined : canonical(botOf(r.bot)), track: String(reply.track), values });
+        if (Array.isArray(reply.entries)) running.tracks.add(canonical(reply.entries));
+        // #1048: a probe's track for each copy that trapped or broke a range, the run's recorded entries and what it
+        // put, which the check plays again in a fresh replica.
+        if (Array.isArray(reply.tests)) for (const t of reply.tests as { track?: unknown }[]) if (Array.isArray(t?.track)) running.tracks.add(canonical(t.track));
+        return reply;
+      }
       case 'deep.registerCheck': {
         const [type] = args;
         if (typeof type !== 'string') throw Error('deep.registerCheck takes the check kind first');
@@ -2082,6 +2150,10 @@ class Host implements ExtensionHost {
       }
       case 'deep.work.fetch':
         return this.sourceHost.workFetch(ext, args[0], args[1]);
+      // #1048: a plug-in's model source asked through the hub, as a model bot asks it between steps.
+      case 'deep.source.ask':
+        quiet();
+        return this.sourceHost.ask(ext, args[0], args[1]);
       case 'deep.channel.fetch': {
         // Only a send or read of its own under way: the hub's call, with the channel's settings and token.
         const [call, request] = args;
@@ -2533,6 +2605,40 @@ class Host implements ExtensionHost {
     if (!this.reaches(ext, e.kind) || (!ext.released && projects && !projects.includes(e.project ?? ''))) return undefined;
     return JSON.parse(toJson(text || ext.released ? e : contentFree(e)));
   }
+  /**
+   * What a passed run of a check whose input gives a seed lacks (Check input: plug-in reads, #184): each run its input
+   * asks (each bot's run i, at hash(seed, i)) played, its track's hash in the evidence and values read, and testsRun
+   * counting them all; each lack names the run and its seed.
+   */
+  private unplayed(ext: Ext, result: CheckResult): string[] {
+    const running = this.plays.get(ext);
+    const input = running?.input;
+    if (!running || typeof input?.seed !== 'number') return [];
+    const runs = typeof input.runs === 'number' ? input.runs : 20;
+    const bots: (string | undefined)[] = Array.isArray(input.bots) && input.bots.length ? input.bots.map((b) => canonical(botOf(b))) : [undefined];
+    const lacks: string[] = [];
+    // Each run's track, one copy a run: runs that recorded the same track need as many copies among the evidence.
+    const byTrack = new Map<string, string[]>();
+    bots.forEach((bot, b) => {
+      for (let i = 0; i < runs; i++) {
+        const seed = runSeed(input.seed as number, i);
+        const name = `${bots.length > 1 || bot !== undefined ? `bot ${b} ` : ''}run ${i} (seed ${seed})`;
+        const plays = running.played.filter((p) => p.seed === seed && (bot === undefined || p.bot === bot));
+        if (!plays.length) lacks.push(`${name}: it was never played`);
+        else if (!plays.some((p) => p.values)) lacks.push(`${name}'s values: its play read none`);
+        else byTrack.set(plays[0]!.track, [...(byTrack.get(plays[0]!.track) ?? []), name]);
+      }
+    });
+    for (const [track, names] of byTrack) {
+      const copies = result.evidence.filter((e) => e === track).length;
+      if (copies >= names.length) continue;
+      // Runs that recorded one track can't be told apart by it: each is named as one that may lack its copy.
+      if (!copies) lacks.push(...names.map((n) => `${n}'s track among its evidence`));
+      else lacks.push(`a copy of its track for each of ${names.join(', ')}, which recorded the same track: ${copies} of ${names.length} among its evidence`);
+    }
+    if (result.testsRun !== runs * bots.length) lacks.push(`counting its ${runs * bots.length} runs: it counted ${result.testsRun}`);
+    return lacks;
+  }
   private kindOwner(kind: string): Ext | undefined {
     for (const ext of this.exts.values()) if (ext.kinds.includes(kind)) return ext;
     return undefined;
@@ -2975,11 +3081,17 @@ class Host implements ExtensionHost {
     const bad = badDeadline('deadline', ctx.deadline);
     if (bad) throw Error(`a check run's ${bad}`);
     const ext = this.kindOwner(kind);
-    if (!ext?.ask || (await this.revoked(ext))) return nothing('missing', `no loaded extension registered the check kind ${kind}`);
+    if (!ext?.ask || (await this.revoked(ext))) {
+      // A kind an installed package holds but no load registered names that package (#184): its plug-in is off.
+      const off = Object.values(this.entries).find((e) => e.holds.includes(kind));
+      return nothing('missing', off ? `the check kind ${kind} is ${off.id}'s, which is installed but not loaded` : `no loaded extension registered the check kind ${kind}`);
+    }
     // A run in a first-party piece's output, such as env-local's environment, makes the check's piece its user (#103).
     if (ctx.environment !== undefined) await this.usedFirstParty(ext.entry.id, ctx.environment);
     try {
       this.canvasKeys.set(ext, []);
+      const input = (spec as CheckSpec & { play?: unknown }).play;
+      this.plays.set(ext, { input: isPlain(input) ? input as PlayInput : undefined, played: [], tracks: new Set() });
       const result = await this.ask(ext, ctx.deadline, kind, 'run', { type: kind, spec, ctx: this.checkContext(ext, ctx) });
       const read = this.canvasKeys.get(ext) ?? [];
       const { isCheckResult } = await import('@deepbuild/conformance');
@@ -2989,12 +3101,15 @@ class Host implements ExtensionHost {
       // A pass built on canvas reads holds only with their content keys as its evidence (Check input: plug-in reads).
       const missing = read.filter((k) => !result.evidence.includes(k));
       if (result.outcome === 'passed' && missing.length) return nothing('failed', `${ext.entry.id}'s ${kind} reported passed without the content keys its deep.canvas.read calls returned as evidence (${missing.length} missing, first ${missing[0]})`);
+      const unplayed = result.outcome === 'passed' ? this.unplayed(ext, result) : [];
+      if (unplayed.length) return { ...nothing('failed'), failures: unplayed.map((m) => ({ test: 'extension host', file: '', line: 0, stack: null, assertion: false, message: `${ext.entry.id}'s ${kind} reported passed without ${m}` })) };
       return result;
     } catch (e) {
       if (e instanceof Overran) return nothing('overran', `${ext.entry.id}'s ${kind} ran past its deadline of ${ctx.deadline} ms${ext.place === 'sandbox' ? ', and was stopped' : ''}`);
       throw e;
     } finally {
       this.canvasKeys.delete(ext);
+      this.plays.delete(ext);
     }
   }
   async deliver(events: Event[]): Promise<void> {

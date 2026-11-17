@@ -1,0 +1,95 @@
+# #1410: does Node's fsync reach F_FULLFSYNC on macOS 27.2.1? Same probe (fullfsync-probe/run.sh) as fullfsync-mac.txt, rerun on the owner's Mac after its upgrade from 14.7.7.
+# Reading: 62 SHIM F_FULLFSYNC lines for 62 calls (3 APIs x 20, FileHandle.sync, a folder fsyncSync), no "SHIM fsync" and no F_BARRIERFSYNC line.
+# Timings were taken at load 20 and are not a measurement; the syscall lines are the proof.
+# Output below is as the Mac runner wrote it, home folder shown as ~.
+
+head 30270f61461c8be4af2a80ef5c0be28821992e12
+sw_vers 27.2.1
+node v24.22.0
+Now drawing from 'AC Power'
+load { 19.71 20.42 20.79 } 2026-11-14 01:55:25
+
+== Sat Nov 14 09:55:25 UTC 2026 27.2.1 arm64 node=~/.nvm/versions/node/v24.22.0/bin/node
+CodeDirectory v=20500 size=949840 flags=0x10000(runtime) hashes=29672+7 location=embedded
+	[Key] com.apple.security.cs.allow-dyld-environment-variables
+== C baseline
+fsync: mean 0.08 ms
+fcntl(F_FULLFSYNC): mean 3.49 ms
+== Node under the interposer
+node v24.22.0 darwin arm64 libuv 1.52.1
+MARK fs.fsyncSync begin
+SHIM fcntl F_FULLFSYNC fd=11
+MARK fs.fsyncSync end
+SHIM fcntl F_FULLFSYNC fd=11
+SHIM fcntl F_FULLFSYNC fd=11
+SHIM fcntl F_FULLFSYNC fd=11
+SHIM fcntl F_FULLFSYNC fd=11
+SHIM fcntl F_FULLFSYNC fd=11
+SHIM fcntl F_FULLFSYNC fd=11
+SHIM fcntl F_FULLFSYNC fd=11
+SHIM fcntl F_FULLFSYNC fd=11
+SHIM fcntl F_FULLFSYNC fd=11
+SHIM fcntl F_FULLFSYNC fd=11
+SHIM fcntl F_FULLFSYNC fd=11
+SHIM fcntl F_FULLFSYNC fd=11
+SHIM fcntl F_FULLFSYNC fd=11
+SHIM fcntl F_FULLFSYNC fd=11
+SHIM fcntl F_FULLFSYNC fd=11
+SHIM fcntl F_FULLFSYNC fd=11
+SHIM fcntl F_FULLFSYNC fd=11
+SHIM fcntl F_FULLFSYNC fd=11
+SHIM fcntl F_FULLFSYNC fd=11
+fs.fsyncSync: median 2.95 ms, min 1.62, max 4.22
+MARK fs.fdatasyncSync begin
+SHIM fcntl F_FULLFSYNC fd=11
+MARK fs.fdatasyncSync end
+SHIM fcntl F_FULLFSYNC fd=11
+SHIM fcntl F_FULLFSYNC fd=11
+SHIM fcntl F_FULLFSYNC fd=11
+SHIM fcntl F_FULLFSYNC fd=11
+SHIM fcntl F_FULLFSYNC fd=11
+SHIM fcntl F_FULLFSYNC fd=11
+SHIM fcntl F_FULLFSYNC fd=11
+SHIM fcntl F_FULLFSYNC fd=11
+SHIM fcntl F_FULLFSYNC fd=11
+SHIM fcntl F_FULLFSYNC fd=11
+SHIM fcntl F_FULLFSYNC fd=11
+SHIM fcntl F_FULLFSYNC fd=11
+SHIM fcntl F_FULLFSYNC fd=11
+SHIM fcntl F_FULLFSYNC fd=11
+SHIM fcntl F_FULLFSYNC fd=11
+SHIM fcntl F_FULLFSYNC fd=11
+SHIM fcntl F_FULLFSYNC fd=11
+SHIM fcntl F_FULLFSYNC fd=11
+SHIM fcntl F_FULLFSYNC fd=11
+fs.fdatasyncSync: median 2.93 ms, min 1.71, max 3.88
+MARK fs.fsync (callback) begin
+SHIM fcntl F_FULLFSYNC fd=11
+MARK fs.fsync (callback) end
+SHIM fcntl F_FULLFSYNC fd=11
+SHIM fcntl F_FULLFSYNC fd=11
+SHIM fcntl F_FULLFSYNC fd=11
+SHIM fcntl F_FULLFSYNC fd=11
+SHIM fcntl F_FULLFSYNC fd=11
+SHIM fcntl F_FULLFSYNC fd=11
+SHIM fcntl F_FULLFSYNC fd=11
+SHIM fcntl F_FULLFSYNC fd=11
+SHIM fcntl F_FULLFSYNC fd=11
+SHIM fcntl F_FULLFSYNC fd=11
+SHIM fcntl F_FULLFSYNC fd=11
+SHIM fcntl F_FULLFSYNC fd=11
+SHIM fcntl F_FULLFSYNC fd=11
+SHIM fcntl F_FULLFSYNC fd=11
+SHIM fcntl F_FULLFSYNC fd=11
+SHIM fcntl F_FULLFSYNC fd=11
+SHIM fcntl F_FULLFSYNC fd=11
+SHIM fcntl F_FULLFSYNC fd=11
+SHIM fcntl F_FULLFSYNC fd=11
+fs.fsync (callback): median 2.94 ms, min 1.84, max 4.25
+MARK FileHandle.sync begin
+SHIM fcntl F_FULLFSYNC fd=11
+MARK FileHandle.sync end
+MARK folder fsyncSync begin
+SHIM fcntl F_FULLFSYNC fd=11
+MARK folder fsyncSync end
+run.sh exit=0

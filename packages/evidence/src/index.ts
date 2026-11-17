@@ -120,6 +120,8 @@ export interface EvidenceStore {
   retain(input: RetainInput): Promise<RetainResult>;
   /** The only way evidence leaves the machine: by hash, after your yes where one is needed. */
   send(request: SendRequest, boundary: SendBoundary): Promise<Receipt>;
+  /** Syncs each named file, its folder and that folder's name in the root, before a FULL commit names them (#1410). */
+  sync(sha256s: readonly string[]): Promise<void>;
 }
 
 export class EvidenceError extends Error {
@@ -170,6 +172,11 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
   // reasons to one journal; the last line for a hash wins.
   const journal = join(root, 'records.jsonl');
   const folders = new Set<string>(); // made in this process
+  // Files and folders synced in this process: a FULL commit naming one again syncs nothing (#1410). A file is here by
+  // the inode synced and its last change, and only once its folders are synced too, so one replaced since, by anyone,
+  // or whose folder's sync failed, is synced again.
+  const synced = new Map<string, string>();
+  const stampOf = (s: { ino: bigint; ctimeNs: bigint }) => `${s.ino}:${s.ctimeNs}`;
   if (!options.readOnly) await mkdir(root, { recursive: true });
   const index = new Map<string, Stored>();
   // Your yes per file and destination, by the reasons it answered.
@@ -185,7 +192,9 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
   for (const entry of index.values()) remember(entry);
   if (!options.readOnly && lines.length > 2 * (index.size + approved.size) + 1000) {
     const kept = [...index.values(), ...[...approved].map(([pair, reasons]): Approval => ({ approved: pair, reasons: [...reasons] }))];
-    await writeAtomic(journal, kept.map((entry) => `${JSON.stringify(entry)}\n`).join(''));
+    // It replaces a journal whose lines a FULL commit may have synced, so it lasts before it does (#1410).
+    await writeAtomic(journal, kept.map((entry) => `${JSON.stringify(entry)}\n`).join(''), true);
+    await syncOne(root);
   }
   // The journal stays open while lines come, and closes once they stop for a second: opening it for each line cost
   // more than writing it (8 to 22 ms on a Mac whose scanner reads a file each time it is closed after a write).
@@ -212,11 +221,23 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
     void tail.then(() => { if (queues.get(sha) === tail) queues.delete(sha); });
     return run;
   };
-  async function writeAtomic(path: string, data: Uint8Array | string) {
+  /** Replaces the file at the path whole; `lasting` syncs the new one first, for a file that may have been synced. */
+  async function writeAtomic(path: string, data: Uint8Array | string, lasting = false) {
     if (!folders.has(dirname(path))) { await mkdir(dirname(path), { recursive: true }); folders.add(dirname(path)); }
     const temp = join(dirname(path), `.tmp-${randomUUID()}`);
     await writeFile(temp, data);
+    if (lasting) await syncOne(temp);
     await rename(temp, path);
+  }
+  /** Syncs what is at the path now, and says which file that was; nothing when it is gone. */
+  async function syncOne(path: string): Promise<string | undefined> {
+    const handle = await open(path, 'r').catch((error: NodeJS.ErrnoException) => { if (error.code !== 'ENOENT') throw error; });
+    if (!handle) return undefined;
+    try {
+      const stamp = stampOf(await handle.stat({ bigint: true }));
+      await handle.sync();
+      return stamp;
+    } finally { await handle.close(); }
   }
   const exists = (path: string) => access(path).then(() => true, () => false);
   const onDisk = async (sha: string) => (await exists(fileOf(sha))) || (await exists(packedOf(sha))) || exists(partsOf(sha));
@@ -239,16 +260,19 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
     const existed = index.has(sha) && await onDisk(sha);
     await options.hooks?.afterExistsCheck?.(sha);
     return serial(sha, async () => {
-      if (file || !existed || !(await onDisk(sha))) {
+      // A file already there, whoever wrote it, may be one a FULL commit synced: what replaces it lasts first (#1410).
+      const there = await onDisk(sha);
+      if (file || !existed || !there) {
         if (joined) {
           await writeAtomic(partsOf(sha), JSON.stringify(joined.parts));
         } else if (file) {
           const path = fileOf(sha);
           await mkdir(dirname(path), { recursive: true });
+          if (there) await syncOne(file.file);
           await rename(file.file, path);
         } else {
           const data = bytes as Uint8Array;
-          await (PACKED.has(request.kind) ? writeAtomic(packedOf(sha), await pack(data)) : writeAtomic(fileOf(sha), data));
+          await (PACKED.has(request.kind) ? writeAtomic(packedOf(sha), await pack(data), there) : writeAtomic(fileOf(sha), data, there));
         }
       }
       const earlier = index.get(sha);
@@ -448,6 +472,33 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
         removed.push(sha);
       })));
       return { removed };
+    },
+
+    // Off the caller's thread, on libuv's pool, so the hub's core answers hooks meanwhile. A file this process didn't
+    // write, or wrote before a restart, is synced too: nothing says its writer did. A rename lasts once its folder is
+    // synced, and a folder made since the last cut once the root is.
+    async sync(sha256s) {
+      // A file that is gone has nothing to sync, and reads as missing; one that can't be looked at refuses the sync.
+      const unsynced = async (path: string) => stat(path, { bigint: true }).then((s) => (synced.get(path) === stampOf(s) ? [] : [path]), (error: NodeJS.ErrnoException) => {
+        if (error.code !== 'ENOENT') throw error;
+        return undefined;
+      });
+      const where = async (sha: string) => (!HASH.test(sha) ? [] : await unsynced(fileOf(sha)) ?? await unsynced(packedOf(sha)) ?? []);
+      // Again while any is unsynced: a file replaced during the pass is a new file its folder's sync made last.
+      for (;;) {
+        const files = (await Promise.all([...new Set(sha256s)].map(where))).flat();
+        if (!files.length) return;
+        const stamps = await Promise.all(files.map(syncOne));
+        const folders = [...new Set(files.map((path) => dirname(path)))];
+        // The root holds the name of each folder this process hasn't synced yet, and its own parent the root's, once.
+        const above = folders.some((folder) => !synced.has(folder)) ? [root, ...(synced.has(dirname(root)) ? [] : [dirname(root)])] : [];
+        await Promise.all([...folders, ...above].map(syncOne));
+        for (const path of [...folders, ...above]) synced.set(path, '');
+        // A file is found by its line in the journal, written before its put returned: it counts as synced once that is.
+        await journaled.catch(() => undefined);
+        await syncOne(journal);
+        for (const [i, path] of files.entries()) { const stamp = stamps[i]; if (stamp !== undefined) synced.set(path, stamp); }
+      }
     },
 
     async send({ files, via, destination }, boundary) {

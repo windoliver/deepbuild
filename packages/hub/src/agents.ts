@@ -420,7 +420,8 @@ export class Agents {
   }
 
   // -- Who is installed: the command each agent's facts name, on your login shell's PATH.
-  private loginPath(): string {
+  /** The login PATH setup recorded, or the hub's own: where an agent's program is found, as DeepBuild's jobs find it. */
+  loginPath(): string {
     try {
       const c = JSON.parse(readFileSync(join(this.o.root, 'config.json'), 'utf8')) as Obj;
       const p = isObj(c.runner) ? c.runner.login_path : undefined;

@@ -24,6 +24,9 @@ pub fn modules() -> Vec<Module> {
     out.push(deep_canvas_test_modules::sim::b_false_bit());
     #[cfg(feature = "test-sim-b-off")]
     out.push(deep_canvas_test_modules::sim::b_off());
+    // Issue #191: B adding one unit at step 300 of a recorded input track.
+    #[cfg(feature = "test-sim-b-plus-one")]
+    out.push(deep_canvas_test_modules::sim::b_plus_one());
     #[cfg(feature = "test-sim-c")]
     out.push(deep_canvas_test_modules::sim::c());
     // Issue #1920: A and B at version 1.0.1, and B with its pin's feature changed.

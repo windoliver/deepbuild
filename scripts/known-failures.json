@@ -1,12 +1,8 @@
 {
   "failures": {
-    "cargo -p deep-replica --test acceptance_326_panels_planted › base_loader_reaches_the_network": "fails on main 772f5482: the base loader reaches the network (#1620, added 2026-10-31)",
-    "cargo -p deep-replica --test acceptance_327_card": "fails on main 772f5482: #327's blind card suite fails (#1620, added 2026-10-31)",
-    "packages/hub/test/memory-overrule.test.ts › deep memory overrule › stays overruled across a re-read of the transcript, and a new prompt rejects it again": "failed on main 772f5482 at load 50 in one run, not re-run; may be load (#1621, added 2026-10-31)",
-    "tests/acceptance/56/decision.test.mjs › #56 scope import(\"effect/Effect\") is timed on Node 22, and the command that times it measures this Node": "fails on main 772f5482: the Effect bench is timed on Node 22, not this Node (#1622, added 2026-10-31)",
-    "tests/acceptance/56/decision.test.mjs › #56.31f12028 [effect] the bench holds 50 sessions' hooks and prints the variant's hold latency, memory and leaked handles": "fails on main 772f5482: the Effect bench is timed on Node 22, not this Node (#1622, added 2026-10-31)",
-    "tests/acceptance/882/lint.test.mjs › #882.f3bc7068 crates/deep-app/src holds no color literal: no rgb(0x, rgba(0x, hsla(, hex inside rgb(...) or \"#rrggbb\" line": "fails on main 2721ca7b: the judge counts crates/deep-app/src/cells.rs:386-387, two lines the guard passes by their dated exceptions; #1458 fixed #1623's three (#1623, added 2026-10-31)",
-    "tests/preflight.test.mjs › the unit lane runs each reference-Mac budget file alone, after the parallel block": "fails on main 772f5482: it reads tests/acceptance/plans.ts as a folder (ENOTDIR) (#1624, added 2026-10-31)"
+    "tests/acceptance/1463/list.test.ts › #1463.f9ab70a8 › #1463.f9ab70a8: on one fixture, the app's list and deep status --json hold the same rows, IDs, words and order at one log_pos": "fails on main d8c46f0d5: the window draws see's rows, by their ids, in their order: expected [ …(5) ] to deeply equal []. The window draws Needs you's asks first, each with its kind in the state-word slot (#1461), against the judge's rows' order and word; a blind redraft (#2668, added 2026-11-15)",
+    "tests/acceptance/1463/words.test.ts › #1463.cc5d1e3f › #1463.cc5d1e3f: 992/agree still holds": "fails on main d8c46f0d5: tests/acceptance/992's agree.test.ts must pass as it is: exit 1. It fails as 992/agree does, below (#2668, added 2026-11-15)",
+    "tests/acceptance/992/agree.test.ts › AC3 #992.45c506d1 › AC3 #992.45c506d1: for each of 12 recorded sessions covering every state, deep status and the app's row name the same state; a planted app that maps waiting to Working fails, naming the session": "fails on main d8c46f0d5: deep status and the app name these sessions differently. It finds deep status's rows by short ID and knows six words, where #2018 gave each session one name and the word says done; a blind redraft (#2668, added 2026-11-15)"
   },
   "lint": {
     "canvas-lint: crates/deep-canvas-cells/src/recording.rs the env! macro, the building machine's environment compiled into the check": 1,
@@ -35,6 +31,10 @@
     "canvas-lint: crates/deep-canvas-marks/src/implicit.rs use of a disallowed type `std::collections::HashMap` (clippy::disallowed_types)": 5,
     "canvas-lint: crates/deep-canvas-marks/src/scene.rs a static item, state a check could carry between runs": 3,
     "canvas-lint: crates/deep-canvas-marks/src/story.rs a static item, state a check could carry between runs": 2,
+    "canvas-lint: crates/deep-canvas-marks/src/vector_field.rs a static item, state a check could carry between runs": 3,
+    "canvas-lint: crates/deep-canvas-marks/src/warp.rs a static item, state a check could carry between runs": 3,
+    "canvas-lint: crates/deep-canvas-media/src/heard/mod.rs a static item, state a check could carry between runs": 1,
+    "canvas-lint: crates/deep-canvas-media/src/heard/normalizer.rs a static item, state a check could carry between runs": 1,
     "canvas-lint: crates/deep-canvas-media/src/lib.rs a static item, state a check could carry between runs": 1,
     "canvas-lint: crates/deep-canvas-motion/src/arrange.rs use of a disallowed method `f64::sqrt` (clippy::disallowed_methods)": 1,
     "canvas-lint: crates/deep-canvas-motion/src/held.rs use of a disallowed method `f64::powi` (clippy::disallowed_methods)": 1,
@@ -103,15 +103,7 @@
     "canvas-lint: crates/deep-text/src/fonts.rs a raw pointer (ptr::), an address that differs per process and target": 1,
     "canvas-lint: crates/deep-text/src/fonts.rs a static item, state a check could carry between runs": 1,
     "canvas-lint: crates/deep-text/src/lib.rs a build predicate (feature), code that computes differently per build": 1,
-    "canvas-lint: embedded-io is resolved at 0.4.0 for postcard and 0.6.1 for postcard, but the listing audits one version": 1,
-    "clippy: tests/acceptance/1141/app/bulk.rs manual implementation of `.is_multiple_of()`": 3,
-    "clippy: tests/acceptance/1141/app/environment.rs manual implementation of `.is_multiple_of()`": 1,
-    "clippy: tests/acceptance/327/ac3_redraft.rs needlessly taken reference of both operands": 1,
-    "clippy: tests/acceptance/327/card.rs this `map_or` can be simplified": 4,
-    "clippy: tests/acceptance/327/card.rs unused import: `Phase`": 1,
-    "clippy: tests/acceptance/327/card.rs unused variable: `card`": 1,
-    "clippy: tests/acceptance/327/common.rs this `map_or` can be simplified": 1,
-    "clippy: tests/acceptance/327/planted.rs this `map_or` can be simplified": 1
+    "canvas-lint: embedded-io is resolved at 0.4.0 for postcard and 0.6.1 for postcard, but the listing audits one version": 1
   },
   "lintIssues": {
     "canvas-lint: crates/deep-canvas-cells/src/recording.rs the env! macro, the building machine's environment compiled into the check": "#1967's unit test reading the crate's oracle recordings (#2381, added 2026-11-12)",
@@ -140,6 +132,10 @@
     "canvas-lint: crates/deep-canvas-marks/src/implicit.rs use of a disallowed type `std::collections::HashMap` (clippy::disallowed_types)": "a std float method, HashMap or clock call the lint is right about, to route through the crate (#2382, added 2026-11-12)",
     "canvas-lint: crates/deep-canvas-marks/src/scene.rs a static item, state a check could carry between runs": "a content-keyed cache or a read-only table in a static (#2381, added 2026-11-12)",
     "canvas-lint: crates/deep-canvas-marks/src/story.rs a static item, state a check could carry between runs": "a content-keyed cache or a read-only table in a static (#2381, added 2026-11-12)",
+    "canvas-lint: crates/deep-canvas-marks/src/vector_field.rs a static item, state a check could carry between runs": "a content-keyed cache, or the clock that times it, in a static (#2381, added 2026-11-16)",
+    "canvas-lint: crates/deep-canvas-marks/src/warp.rs a static item, state a check could carry between runs": "a content-keyed cache, or the clock that times it, in a static (#2381, added 2026-11-16)",
+    "canvas-lint: crates/deep-canvas-media/src/heard/mod.rs a static item, state a check could carry between runs": "a read-only table in a static (#2381, added 2026-11-16)",
+    "canvas-lint: crates/deep-canvas-media/src/heard/normalizer.rs a static item, state a check could carry between runs": "a read-only table in a static (#2381, added 2026-11-16)",
     "canvas-lint: crates/deep-canvas-media/src/lib.rs a static item, state a check could carry between runs": "PLANTED_NOW, the planted-program switch deep-show's scenario sets (#2381, added 2026-11-12)",
     "canvas-lint: crates/deep-canvas-motion/src/arrange.rs use of a disallowed method `f64::sqrt` (clippy::disallowed_methods)": "a std float method, HashMap or clock call the lint is right about, to route through the crate (#2382, added 2026-11-12)",
     "canvas-lint: crates/deep-canvas-motion/src/held.rs use of a disallowed method `f64::powi` (clippy::disallowed_methods)": "a std float method, HashMap or clock call the lint is right about, to route through the crate (#2382, added 2026-11-12)",
@@ -217,6 +213,7 @@
     "tests/acceptance/16/address.test.ts › AC2 #16.818c41e7 every client takes the hub's address from one setting and passes through a forwarded socket › AC2 the app (#34): its socket client's tests pass against the hub through the forwarded socket the setting names"
   ],
   "skips": [
+    {"id": "tests/acceptance/2063/ac1-recorded-tracker.test.mjs › #2063.1fc4ef66 criterion 1: on the recorded tracker copy (77 open issues of November 14) the lane fails with an empty list, naming plan.overlay, move.feel, process.conserve, archive.scene and stack.slot with their issues, and passes with the list recorded that day, which holds each name beside a recorded issue that names it", "note": "", "reason": "retired with the owner's approval on #2063's PR #2572: its recorded list holds brief.uncited, which the owner ruled an event kind; ac1-recorded-tracker-exact.test.mjs is criterion 1's test", "approval": "#2063, owner's ruling on brief.uncited"},
     {
       "id": "packages/pi/test/lifecycle.test.ts › the pi package › a hub restarted mid-turn leaves the turn's stop judged",
       "note": "",
@@ -456,6 +453,24 @@
       "note": "",
       "reason": "retired by #2560: vitest's default 5 s judges it, and one run of the whole conformance lint takes longer (6.6 s on the Linux dev machine): 313-redraft-2560/packaging.test.ts is its test, with suite 313's 600 s",
       "approval": "#2560, its first choice (the owner's touch-key tag on this commit)"
+    },
+    {
+      "id": "cargo -p deep-replica --test acceptance_326_panels_planted › clip_only_host_fails_on_the_dialog",
+      "note": "retired:",
+      "reason": "retired by #1620: the app's loader refuses the fixtures this first draft mounts; redraft-ac7/planted_redraft.rs is AC7's planted host",
+      "approval": "#2444, the owner's call in its session (this commit lands only with the owner's touch-key tag)"
+    },
+    {
+      "id": "cargo -p deep-replica --test acceptance_326_panels_planted › unclipped_layouts_paint_outside_their_slot",
+      "note": "retired:",
+      "reason": "retired by #1620: the app's loader refuses the fixtures this first draft mounts; redraft-ac7/planted_redraft.rs is AC7's planted host",
+      "approval": "#2444, the owner's call in its session (this commit lands only with the owner's touch-key tag)"
+    },
+    {
+      "id": "cargo -p deep-replica --test acceptance_326_panels_planted › base_loader_reaches_the_network",
+      "note": "retired:",
+      "reason": "retired by #1620: the loader refuses a Git dependency before it fetches, so this wrong program reaches no host; tests/acceptance/1620/planted_loader_proposal.rs is its blind replacement",
+      "approval": "#2444, the owner's call in its session (this commit lands only with the owner's touch-key tag)"
     }
   ]
 }

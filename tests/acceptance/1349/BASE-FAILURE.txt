@@ -1,0 +1,37 @@
+The base run of tests/acceptance/1349, once, on 2026-11-15, at 21eb8748d ("Design: starting from nothing (#1349)"),
+on this Mac (macOS, Apple silicon, Node 24.22.2), after `npm ci && npm run build --workspaces` and the two deep-drive
+builds (plain and env-plants), with the suite's files untracked beside the commit:
+
+  node node_modules/vitest/vitest.mjs run --root tests/acceptance/1349 --no-file-parallelism --testTimeout=600000 journey plants clean-account
+  node node_modules/vitest/vitest.mjs run --root tests/acceptance/1349 --no-file-parallelism --testTimeout=600000 first-screen
+
+Result: 14 failed, 1 passed (15 tests, 4 files).
+
+first-screen.test.ts (the replica, real; no runtime folder needed)
+  PASS  AC7 #1349.72be1f28 with no agent found, the first screen's only control that writes is the one Set up button
+        The base already shows one button on the first screen; the criterion's wrong program is what fails there.
+  FAIL  AC7 #1349.72be1f28 (wrong program) install-button-beside-set-up
+        install-button-beside-set-up: the judgement must fail on the planted program, and it passed: expected 0 to be greater than 0
+        Reason: the base has no such plant, so the planted screen is the plain one.
+  FAIL  AC8 #1349.8524225c with no agent found, the first screen's Claude Code row says Set up installs it
+        the first screen lists 0 install steps (nodes setup-step:install:<agent>), not one: []; its ids are
+        ["page/welcome","setup-agent:claude-code","setup-step:hooks:claude-code","setup-step:history:claude-code",
+        "setup-line:adds","setup-line:never","setup-line:undo","set-up"]
+        Reason: setup's list has no install row; the base's screen names Claude Code only as an agent it adds hooks to.
+
+journey.test.ts (7 tests: AC1, AC2, AC3, AC4, AC5, AC6, AC8's record half)
+  FAIL  each, BLOCKED: no scripts/app-runtime.mjs, so the app's runtime folder can't be built (design: Starting from nothing)
+        Reason: the surface doesn't exist on the base. The journey needs the runtime folder before it opens the
+        replica, so nothing past that was run, and nothing is a pass.
+
+plants.test.ts (AC2 system-git, AC6 closes-on-return, AC8 installs-other-agent)
+  FAIL  each, BLOCKED: no scripts/app-runtime.mjs, so the app's runtime folder can't be built (design: Starting from nothing)
+        Reason: as above; each plant needs a Set up from the runtime folder.
+
+clean-account.test.ts (AC1 and AC6's recorded run)
+  FAIL  each, INCONCLUSIVE: the clean account's run isn't recorded: docs/evidence/1349/ lacks clean-account.mov,
+        clean-account.json, deepbuild; this is not a pass
+        Reason: no recorded run exists; the implementer makes it.
+
+Not runnable on the base, so not shown here: the runner's first-reading gate in this world (README, The runner's
+first-reading gate). The base has no sign-in task, which the world relies on to let a job run without a reading.

@@ -15,14 +15,18 @@ use std::collections::BTreeMap;
 
 use deep_canvas::grammar::FLICKS_PER_SECOND;
 use deep_canvas::ops;
+use deep_canvas_motion::doc::Feel;
 use deep_canvas_motion::follow::{Follow, Model, Segment};
 use serde_json::{json, Map, Value};
 
+use crate::tour::{Drawn, Layout, Run, Tour};
 use crate::track::{Entry, Sample, Track, Writer};
 
 const F: i64 = FLICKS_PER_SECOND;
 /// Motion inside this many px of the press is discarded, once, at the start of a drag.
 pub const THRESHOLD_PX: f64 = 3.0;
+/// The planted tour pointer that takes hits takes them within this many px of its tip.
+const POINTER_HIT_PX: f64 = 12.0;
 
 /// How a control kind takes input and what its value is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -89,6 +93,14 @@ pub struct Planted {
     pub scroll_rounds_each_frame: bool,
     /// #542: a snapping scroll control ends a gesture on the nearest snap point.
     pub scroll_snaps_to_nearest: bool,
+    /// #903: the tour pointer moves by the frames played, so a seek leaves it where it was.
+    pub pointer_frame_clock: bool,
+    /// #903: every glide of the tour pointer starts `glide` before its key.
+    pub pointer_glide_before_key: bool,
+    /// #903: the tour pointer is a hit target, and a press on it reaches no control.
+    pub pointer_takes_hits: bool,
+    /// #1048: the kind's entry declares no edge values.
+    pub no_edges: bool,
 }
 
 impl Planted {
@@ -108,6 +120,9 @@ impl Planted {
             "scanning_lookup" => p.scanning_lookup = true,
             "scroll_rounds_each_frame" => p.scroll_rounds_each_frame = true,
             "scroll_snaps_to_nearest" => p.scroll_snaps_to_nearest = true,
+            "tour_pointer_frame_clock" => p.pointer_frame_clock = true,
+            "tour_pointer_glide_before_key" => p.pointer_glide_before_key = true,
+            "tour_pointer_takes_hits" => p.pointer_takes_hits = true,
             _ => return None,
         }
         Some(p)
@@ -190,14 +205,6 @@ enum Gesture {
     },
 }
 
-#[derive(Clone, Debug)]
-struct Tour {
-    keys: Vec<(String, Vec<(i64, Value)>)>,
-    idle_after: i64,
-    resume_after: i64,
-    period: i64,
-}
-
 /// What a follow channel built so far: its source's changes and its segments.
 #[derive(Clone, Debug, Default)]
 struct Channel {
@@ -227,6 +234,12 @@ pub struct Session {
     interrupted: bool,
     frozen_origin: Option<i64>,
     tour: Option<Tour>,
+    /// #903: the runs of the tour your gestures stopped, in time order.
+    runs: Vec<Run>,
+    /// #903: where the tour pointer starts the tour's next run: where your gesture stopped it.
+    home: [f64; 2],
+    /// The time the session last played to, which a seek leaves as it is.
+    played_to: i64,
     hover: BTreeMap<usize, (bool, Vec<(i64, f64)>)>,
     built: BTreeMap<String, Channel>,
     /// #542: the document's scroll controls.
@@ -244,17 +257,6 @@ fn refused(code: &'static str, path: impl Into<String>) -> Refused {
     Refused {
         code,
         path: path.into(),
-    }
-}
-
-fn flicks(seconds: f64) -> i64 {
-    // Whole flicks for the decimal seconds a document writes.
-    let x = seconds * F as f64;
-    let r = x as i64;
-    if x - r as f64 >= 0.5 {
-        r + 1
-    } else {
-        r
     }
 }
 
@@ -280,10 +282,7 @@ impl Session {
                 }
             }
         }
-        let tour = match doc.get("tour") {
-            Some(t) => tour_of(t)?,
-            None => None,
-        };
+        let tour = doc.get("tour").map(Tour::of).transpose()?;
         let frame = (i64::from(fps.1) * F) / i64::from(fps.0.max(1));
         Ok(Session {
             controls,
@@ -308,6 +307,9 @@ impl Session {
             interrupted: false,
             frozen_origin: None,
             tour,
+            runs: Vec::new(),
+            home: [viewport[0] / 2.0, viewport[1] / 2.0],
+            played_to: 0,
             hover: BTreeMap::new(),
             built: BTreeMap::new(),
             scrolls: scrolls::Scrolls::of(doc),
@@ -325,6 +327,14 @@ impl Session {
         [
             self.target[0] + (px[0] - self.viewport[0] / 2.0) * self.scale,
             self.target[1] + (px[1] - self.viewport[1] / 2.0) * self.scale,
+        ]
+    }
+
+    /// The viewport px a point in u is drawn at.
+    fn px(&self, w: [f64; 2]) -> [f64; 2] {
+        [
+            (w[0] - self.target[0]) / self.scale + self.viewport[0] / 2.0,
+            (w[1] - self.target[1]) / self.scale + self.viewport[1] / 2.0,
         ]
     }
 
@@ -368,7 +378,7 @@ impl Session {
     fn current(&self, i: usize) -> Value {
         let c = &self.controls[i];
         match self.track.last_at(&c.id, self.playhead) {
-            Some(e) => e.value.clone(),
+            Some(e) => e.value_at(self.playhead),
             None => c.default.clone(),
         }
     }
@@ -387,7 +397,7 @@ impl Session {
         } else {
             self.track.last_at(&c.id, t)
         };
-        let mut v = e.map_or_else(|| c.default.clone(), |e| e.value.clone());
+        let mut v = e.map_or_else(|| c.default.clone(), |e| e.value_at(t));
         if self.planted.recompute {
             let px = e.and_then(|e| e.samples.as_ref()?.last()?.px);
             if let Some(px) = px {
@@ -492,13 +502,26 @@ impl Session {
         Some(self.last_end + wait)
     }
 
-    /// A gesture of yours starts at `t`: a tour under way yields to it.
+    /// A gesture of yours starts at `t`: a tour under way yields to it, and its pointer stops
+    /// where it is, to fade there and to start the tour's next run from there.
     fn begin(&mut self, t: i64) {
         if self.frozen_origin.is_some() {
             return;
         }
-        if self.origin().is_some_and(|o| o <= t) {
+        if let Some(origin) = self.origin().filter(|o| *o <= t) {
             self.interrupted = true;
+            let run = Run {
+                origin,
+                home: self.home,
+                end: None,
+            };
+            if let Some(stopped) = self.pointer_in(&run, t) {
+                self.home = stopped.tip;
+            }
+            self.runs.push(Run {
+                end: Some(t),
+                ..run
+            });
         }
     }
 
@@ -517,57 +540,45 @@ impl Session {
         let frames = t.div_euclid(self.frame) - p0.div_euclid(self.frame);
         let mut appended = 0;
         if let (Some(origin), Some(tour)) = (self.origin(), self.tour.clone()) {
-            let mut due: Vec<(i64, usize, Value)> = Vec::new();
-            let looping = tour.period > 0;
-            let first = if looping {
-                ((p0 - origin) / tour.period - 1).max(0)
-            } else {
-                0
+            let first = (tour.lap(origin, p0) - 1).max(0);
+            let stops = match origin <= t {
+                true => tour.stops(origin, first, tour.lap(origin, t)),
+                false => Vec::new(),
             };
-            let mut k = first;
-            loop {
-                let base = origin + k * tour.period;
-                if base > t {
-                    break;
-                }
-                for (ci, (_, keys)) in tour.keys.iter().enumerate() {
-                    for (kt, v) in keys {
-                        if looping && *kt >= tour.period {
-                            continue;
-                        }
-                        let at = base + kt;
-                        if at > p0 && (at < t || (inclusive && at == t)) {
-                            due.push((at, ci, v.clone()));
-                        }
-                    }
-                }
-                if !looping {
-                    break;
-                }
-                k += 1;
-            }
-            due.sort_by_key(|a| (a.0, a.1));
-            for (at, ci, value) in due {
-                if self.track.last_t().is_some_and(|last| at < last) {
+            let due = |at: i64| at > p0 && (at < t || (inclusive && at == t));
+            for stop in stops.iter().filter(|s| due(s.t)) {
+                if self.track.last_t().is_some_and(|last| stop.t < last) {
                     continue;
                 }
                 if self.planted.tour_ignores_you && self.frozen_origin.is_none() {
                     self.frozen_origin = Some(origin);
                 }
-                self.track.append(Entry {
-                    t: at,
-                    seq: 0,
-                    control: tour.keys[ci].0.clone(),
-                    value,
-                    samples: None,
-                    writer: Writer::Tour,
-                    serial: None,
-                });
+                self.track.append(tour.entry(stop));
                 appended += 1;
             }
         }
+        self.played_to = t;
         self.playhead = t;
         (frames, appended as u64, appended)
+    }
+
+    /// #903: the tour pointer a frame at `t` draws in `run`.
+    fn pointer_in(&self, run: &Run, t: i64) -> Option<Drawn> {
+        let eager = self.planted.pointer_glide_before_key;
+        let tour = self.tour.as_ref()?;
+        tour.pointer(run, t, self, Feel::default().ease, eager)
+    }
+
+    /// #903: the tour pointer a frame at `t` draws: in the run under way, or in the last one
+    /// your gesture stopped, where it fades.
+    fn pointer_at(&self, t: i64) -> Option<Drawn> {
+        let under_way = self.origin().filter(|o| *o <= t).map(|origin| Run {
+            origin,
+            home: self.home,
+            end: None,
+        });
+        let stopped = self.runs.iter().rev().find(|r| r.origin <= t).copied();
+        self.pointer_in(&under_way.or(stopped)?, t)
     }
 
     // -------------------------------------------------------------------------------- entries
@@ -647,6 +658,16 @@ impl Session {
                 let (frames, work, appended) = self.advance(need_t()?, true);
                 Ok(json!({"frames": frames, "input_work": work, "appended": appended}))
             }
+            "tour_pointer" => {
+                // Planted: the pointer as the last frame played left it.
+                let at = match self.planted.pointer_frame_clock {
+                    true => self.played_to.div_euclid(self.frame) * self.frame,
+                    false => self.playhead,
+                };
+                let drawn = self.pointer_at(at);
+                let opacity = drawn.map_or(0.0, |d| d.opacity);
+                Ok(json!({"tip": drawn.map(|d| d.tip), "opacity": opacity}))
+            }
             "drag" => {
                 if let Some(t) = t {
                     self.advance(t, true);
@@ -683,7 +704,7 @@ impl Session {
             self.track.last_at(control, t)
         };
         match e {
-            Some(e) => e.value.clone(),
+            Some(e) => e.value_at(t),
             None => self
                 .index(control)
                 .map_or(Value::Null, |i| self.controls[i].default.clone()),
@@ -696,6 +717,12 @@ impl Session {
             "down" => {
                 self.advance(t, false);
                 if self.gesture.is_some() {
+                    return Ok(json!({"appended": 0, "dropped": 0}));
+                }
+                // Planted: a press on the tour pointer is the pointer's.
+                let on_pointer =
+                    |d: Drawn| ops::hypot(d.tip[0] - px[0], d.tip[1] - px[1]) <= POINTER_HIT_PX;
+                if self.planted.pointer_takes_hits && self.pointer_at(t).is_some_and(on_pointer) {
                     return Ok(json!({"appended": 0, "dropped": 0}));
                 }
                 let Some(g) = self.press(w, px, t, mods)? else {
@@ -1273,6 +1300,32 @@ impl Session {
     }
 }
 
+/// #903: what the tour pointer reads of a session's layout: a number control's handle where its
+/// value puts it, and the item a press, a toggle, a choice or a stages control is hit through.
+impl Layout for Session {
+    fn anchor(&self, control: &str, value: &Value, _: i64) -> Option<[f64; 2]> {
+        let c = self.controls.iter().find(|c| c.id == control)?;
+        let r = match c.behavior {
+            Behavior::Number | Behavior::Turn | Behavior::Path => {
+                self.knob(c, self.number(c, value))?
+            }
+            Behavior::Hover => return None,
+            Behavior::Choice | Behavior::Toggle | Behavior::Press | Behavior::Stages => {
+                // A choice's or a stage's key lands on the target of the option it picks.
+                let picks = |(o, _): &&(String, String)| Some(o.as_str()) == value.as_str();
+                let (_, item) = c.targets.iter().find(picks).or(c.targets.first())?;
+                *self.items.get(item)?
+            }
+        };
+        Some(self.px([r[0] + r[2] / 2.0, r[1] + r[3] / 2.0]))
+    }
+
+    fn presses(&self, control: &str) -> bool {
+        let pressed = |c: &Control| matches!(c.behavior, Behavior::Press | Behavior::Toggle);
+        self.controls.iter().any(|c| c.id == control && pressed(c))
+    }
+}
+
 fn fine(b: Behavior) -> f64 {
     if b == Behavior::Turn {
         0.1
@@ -1345,198 +1398,8 @@ fn camera_of(doc: &Value) -> ([f64; 2], Option<f64>) {
     }
 }
 
-fn control_of(id: &str, c: &Value, extra: &[(&str, Behavior)]) -> Result<Option<Control>, Refused> {
-    let Some(kind) = c.get("kind").and_then(Value::as_str) else {
-        return Ok(None);
-    };
-    // #542: a scroll control's steps are `scrolls`'; a text control takes no pointer here.
-    if matches!(kind, "scroll" | "text") {
-        return Ok(None);
-    }
-    let Some(behavior) = KINDS
-        .iter()
-        .chain(extra.iter())
-        .find(|(n, _)| *n == kind)
-        .map(|(_, b)| *b)
-    else {
-        return Err(refused("out_of_range", format!("controls/{id}/kind")));
-    };
-    let class = match c.get("class").and_then(Value::as_str) {
-        Some("view") | Some("viewer") => Class::View,
-        Some(_) => Class::Document,
-        None if behavior == Behavior::Hover => Class::View,
-        None => Class::Document,
-    };
-    let range = c.get("range").and_then(Value::as_array);
-    let r = |k: usize, d: f64| {
-        range
-            .and_then(|a| a.get(k))
-            .and_then(Value::as_f64)
-            .unwrap_or(d)
-    };
-    let top = if behavior == Behavior::Turn {
-        360.0
-    } else {
-        1.0
-    };
-    let (min, max) = (r(0, 0.0), r(1, top));
-    // A value is clamped into the range, which panics on a range that runs high to low.
-    if min > max {
-        return Err(refused("out_of_range", format!("controls/{id}/range")));
-    }
-    let options: Vec<String> = c
-        .get("options")
-        .and_then(Value::as_array)
-        .map(|a| {
-            a.iter()
-                .filter_map(|o| o.as_str().map(str::to_string))
-                .collect()
-        })
-        .unwrap_or_default();
-    let stages: Vec<(String, Vec<String>)> = c
-        .get("stages")
-        .and_then(Value::as_object)
-        .map(|m| {
-            m.iter()
-                .map(|(sid, s)| {
-                    let keys = s
-                        .get("keys")
-                        .and_then(Value::as_array)
-                        .map(|a| {
-                            a.iter()
-                                .filter_map(|k| k.as_str().map(str::to_string))
-                                .collect()
-                        })
-                        .unwrap_or_default();
-                    (sid.clone(), keys)
-                })
-                .collect()
-        })
-        .unwrap_or_default();
-    let default = match c.get("default") {
-        Some(d) => d.clone(),
-        None => match behavior {
-            Behavior::Number | Behavior::Turn | Behavior::Path | Behavior::Hover => json!(min),
-            Behavior::Toggle => json!(false),
-            Behavior::Stages => stages.first().map_or(Value::Null, |s| json!(s.0)),
-            _ => Value::Null,
-        },
-    };
-    let handle = match c.get("handle") {
-        Some(h) => {
-            let item = h
-                .get("item")
-                .and_then(Value::as_str)
-                .unwrap_or("")
-                .to_string();
-            let along = match h.get("along") {
-                Some(Value::String(a)) => {
-                    let travel = num(h.get("travel")).unwrap_or(100.0);
-                    Along::Axis(if a == "y" { 1 } else { 0 }, travel)
-                }
-                Some(Value::Object(o)) => {
-                    let points: Vec<[f64; 2]> = o
-                        .get("polyline")
-                        .and_then(Value::as_array)
-                        .map(|a| a.iter().filter_map(|p| pair(Some(p))).collect())
-                        .unwrap_or_default();
-                    if points.len() < 2 {
-                        return Err(refused(
-                            "out_of_range",
-                            format!("controls/{id}/handle/along"),
-                        ));
-                    }
-                    Along::Path(points)
-                }
-                _ => {
-                    return Err(refused(
-                        "out_of_range",
-                        format!("controls/{id}/handle/along"),
-                    ))
-                }
-            };
-            Some((item, along))
-        }
-        None => None,
-    };
-    let targets = c
-        .get("targets")
-        .and_then(Value::as_object)
-        .map(|m| {
-            m.iter()
-                .filter_map(|(k, v)| Some((k.clone(), v.as_str()?.to_string())))
-                .collect()
-        })
-        .unwrap_or_default();
-    let smoothing = match c.get("smoothing") {
-        Some(Value::Object(o)) => match o.get("follow") {
-            Some(model) => {
-                let mut f = Map::new();
-                f.insert("source".into(), json!(format!("controls/{id}/value")));
-                f.insert("model".into(), model.clone());
-                let spec = deep_canvas_motion::doc::follow_spec(
-                    &f,
-                    &format!("controls/{id}/smoothing/follow"),
-                )
-                .map_err(|r| refused(r.code, r.path))?;
-                Some(spec.model)
-            }
-            None => None,
-        },
-        _ => None,
-    };
-    Ok(Some(Control {
-        id: id.into(),
-        behavior,
-        class,
-        min,
-        max,
-        default,
-        increment: num(c.get("increment")),
-        options,
-        stages,
-        keys: c
-            .get("keys")
-            .and_then(Value::as_object)
-            .cloned()
-            .unwrap_or_default(),
-        handle,
-        targets,
-        smoothing,
-    }))
-}
-
-fn tour_of(t: &Value) -> Result<Option<Tour>, Refused> {
-    let Some(keys) = t.get("keys").and_then(Value::as_object) else {
-        return Err(refused("bad_doc", "tour/keys"));
-    };
-    let mut out = Vec::new();
-    let mut last = 0;
-    for (control, list) in keys {
-        let mut ks = Vec::new();
-        for (i, k) in list.as_array().into_iter().flatten().enumerate() {
-            let a = k
-                .as_array()
-                .ok_or_else(|| refused("bad_doc", format!("tour/keys/{control}/{i}")))?;
-            let s = a
-                .first()
-                .and_then(Value::as_f64)
-                .ok_or_else(|| refused("bad_doc", format!("tour/keys/{control}/{i}")))?;
-            let at = flicks(s);
-            last = last.max(at);
-            ks.push((at, a.get(1).cloned().unwrap_or(Value::Null)));
-        }
-        out.push((control.clone(), ks));
-    }
-    let secs = |k: &str, d: f64| num(t.get(k)).unwrap_or(d);
-    let looping = t.get("loop").and_then(Value::as_bool).unwrap_or(true);
-    Ok(Some(Tour {
-        keys: out,
-        idle_after: flicks(secs("idle_after", 1.4)),
-        resume_after: flicks(secs("resume_after", 3.6)),
-        period: if looping { last } else { 0 },
-    }))
-}
+mod control;
+use control::*;
 
 /// The point at fraction `f` of a polyline's arc length.
 fn point_at(points: &[[f64; 2]], f: f64) -> [f64; 2] {

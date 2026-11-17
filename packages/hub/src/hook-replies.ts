@@ -1,8 +1,8 @@
 // Hook replies formatted for the agent: the hub's settled reply, with the core's or an extension's words.
-import { isRecord as isObj } from '@deepbuild/contracts';
+import { isRecord as isObj } from '@deepbuild/contracts/runtime';
 import type { Part } from './context-fit.js';
 import { heavyDenial } from './heavy.js';
-import { adapterOf } from './hookmap.js';
+import { adapterOf } from './adapter-facts.js';
 import type { Reply as WaitReply } from './waits.js';
 import { line, type ExtensionReply, type HookMeta, type Plant } from './wire.js';
 

@@ -17,5 +17,5 @@ Core foundation, under the record: `node:` built-ins only, no workspace package.
 
 ## Deviations
 
-- `gitleaks`: gitleaks' default rules vendored unchanged at tag v8.30.1 with their MIT license; `gitleaks.toml` is upstream's generated file, so never edit it, and `src/patterns.ts` converts its Go RE2 patterns at load.
+- `gitleaks`: gitleaks' default rules vendored unchanged at tag v8.30.1 with their MIT license; `gitleaks.toml` is upstream's generated file, so never edit it, and `build-patterns.mjs` converts its Go RE2 patterns into `dist/patterns.json` during the package build. `src/patterns.ts` reads those unchanged conversions; no conversion is deferred to the first prompt. The scrub's keyword index is built once without scanning every rule for each keyword.
 - `src/fields.ts`: ported from makecindy/cindy `redact.ts` at commit 82d44ec under Apache-2.0; its header keeps the license notice and lists what changed from the original, so keep both.

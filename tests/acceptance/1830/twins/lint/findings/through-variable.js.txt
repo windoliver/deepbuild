@@ -1,0 +1,13 @@
+// A planted suite's helpers for #1830 AC1: judgeLimit held in a variable. Each line marked `finding` gives it no loads.
+import * as bench from '../../../scripts/benchmark.mjs';
+import { fingerprint, judgeLimit } from '../../../scripts/benchmark.mjs';
+
+const judge = bench.judgeLimit;
+const decide = judgeLimit;
+const machine = fingerprint();
+const runs = [11, 12, 11, 13, 12];
+export const first = judge({ limit: 20, runs, fingerprint: machine }); // finding
+export const second = decide({ limit: 20, runs, fingerprint: machine }); // finding
+export const third = judge({ limit: 20, runs, fingerprint: machine, loads: runs.map(() => ({ start: 1, end: 1 })) });
+const other = (input) => input;
+export const fourth = other({ limit: 20, runs, fingerprint: machine });

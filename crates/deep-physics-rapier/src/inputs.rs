@@ -60,6 +60,20 @@ fn num(v: &Value, key: &str) -> f64 {
     v.get(key).and_then(Value::as_f64).unwrap_or(0.0)
 }
 
+/// #251: the refusal of a vehicle's input on a body that isn't one.
+fn not_vehicle(i: &Input) -> Box<Refusal> {
+    let what = format!(
+        "{} moves a vehicle body, and {} isn't one",
+        i.kind, i.target
+    );
+    Box::new(refusal(
+        "physics.not_vehicle",
+        "inputs/target".into(),
+        json!(i.target),
+        what,
+    ))
+}
+
 impl Rapier {
     /// Applies each of a step's inputs, in order, or refuses one that names no body.
     pub(crate) fn apply(&mut self, inputs: &[Input]) -> Result<(), Box<Refusal>> {
@@ -77,6 +91,10 @@ impl Rapier {
                 )));
             };
             let d = &i.data;
+            // #182: a character body's move, jump, launch, place and crouch.
+            if self.character_input(&i.kind, &i.target, d) {
+                continue;
+            }
             match i.kind.as_str() {
                 "launch" => {
                     let rb = &mut self.world.bodies[h];
@@ -127,6 +145,41 @@ impl Rapier {
                     if d.get("keeps_velocity") == Some(&json!(false)) {
                         let rb = &mut self.world.bodies[h];
                         rb.set_linvel(Vector::ZERO, true);
+                        rb.set_angvel(Vector::ZERO, true);
+                    }
+                }
+                // #191: the body and its colliders leave the world's steps; a sensor it was in
+                // writes its exit on this step.
+                "deactivate" => self.world.bodies[h].set_enabled(false),
+                // #251: a vehicle body holds each until its next.
+                "drive" | "steer" | "brake" => {
+                    let key = if i.kind == "steer" { "angle" } else { "force" };
+                    if !self.vehicles.hold(&i.target, &i.kind, num(d, key)) {
+                        return Err(not_vehicle(i));
+                    }
+                }
+                // #251: the chassis set at the pose, still; its wheels back at rest, each that
+                // touched writing its contact_end; the drive, steer and brake it holds kept.
+                "place" => {
+                    let Some((pos, rot)) = d.get("pose").and_then(|p| from(&json!({"from": p})))
+                    else {
+                        let what = format!("place on {} needs its pose", i.target);
+                        return Err(Box::new(refusal(
+                            "physics.missing_field",
+                            "inputs/data/pose".into(),
+                            d.clone(),
+                            what,
+                        )));
+                    };
+                    let Some(rows) = self.vehicles.place(&i.target, &self.uses) else {
+                        return Err(not_vehicle(i));
+                    };
+                    self.wheel_rows.extend(rows);
+                    let rb = &mut self.world.bodies[h];
+                    let rot = rot.map_or(*rb.rotation(), |r| rotation(&r));
+                    rb.set_position(Pose::from_parts(v3(pos), rot), true);
+                    rb.set_linvel(Vector::ZERO, true);
+                    if self.vehicles.plant != crate::VehiclePlant::PlaceKeepsAngular {
                         rb.set_angvel(Vector::ZERO, true);
                     }
                 }

@@ -17,5 +17,5 @@
       "default": "./dist/scrubbing.js"
     }
   },
-  "scripts": { "build": "tsc -p tsconfig.json" }
+  "scripts": { "build": "node build-patterns.mjs && tsc -p tsconfig.json" }
 }

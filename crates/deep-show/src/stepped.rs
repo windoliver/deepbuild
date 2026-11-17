@@ -318,18 +318,7 @@ impl crate::hub::Hub<'_> {
     }
 }
 
-/// A world's span: its own, within the transport's (World: `span`).
-fn span_of(doc: &Value, world: &Value, transport: i64) -> i64 {
-    world
-        .get("span")
-        .and_then(|s| deep_canvas_media::doc::time(doc, Some(s)))
-        .map_or(transport, |s| s.min(transport))
-}
-
-/// The steps a world of `form` bakes over: its span's, within the transport's.
-pub(crate) fn steps_of(form: &Value, world: &Value, transport: i64, step: i64) -> i64 {
-    (span_of(form, world, transport) + step - 1) / step
-}
+pub(crate) use deep_play::worlds::{span_of, steps_of};
 
 /// The runs of a `start_on: {control, each}` strip (Placement's input rule, on a strip): each
 /// matching entry of the document's input track starts one at its flick, the strip's `start` an

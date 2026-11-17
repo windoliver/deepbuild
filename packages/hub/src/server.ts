@@ -14,10 +14,11 @@ import type { HookRequestLine } from '@deepbuild/adapters';
 import { writerGeneration } from '@deepbuild/record/meta';
 import { claudeSettings, readJson, relations, HOLD_MARGIN_MS, STOP_HOLD_MS, type Relation } from './claude-settings.js';
 import { stopTimeoutS } from './codex-settings.js';
+import { Conn, type Role } from './connection.js';
 import { contractAdapter, rpcTable, type DeprecatedNotice } from './contracts.js';
 import type { CoreMessage, CoreRequest } from './core-worker.js';
 import { prCommands } from './pr-commands.js';
-import { registry } from './hookmap.js';
+import { registry } from './adapter-facts.js';
 import { agentReply, allowReply, contextParts, coreReplyLine, EMPTY_REPLY, heavyReply, withWaits } from './hook-replies.js';
 import { takeLock, type Lock } from './lock.js';
 import { reaches } from './memory.js';
@@ -31,7 +32,7 @@ import { identityAt, idOf, type Identity } from './identity.js';
 import { plantedStart } from './plant.js';
 import { gatesOff } from './watch.js';
 import { AUTHORITY, CONTRACT, EXTENSION_HOLD_MS, FEATURES, line, plantOf, refuse, refusal, Refused, STAGE_HOLD_MS, ulid, VERSION, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Parsed, type Plant, type Refusal, type Scope, type Scoped, SCREEN_TOOLS, type StageReach, type VfsSettings } from './wire.js';
-import { isRecord as isObj } from '@deepbuild/contracts';
+import { isRecord as isObj } from '@deepbuild/contracts/runtime';
 import { writeSynced } from './vfs.js';
 
 /** How often the hub checks that its lock file is still the one it holds (#909): the design says at least once a minute. */
@@ -48,8 +49,6 @@ const BEHIND = 10_000;
 const BEHIND_BYTES = 8 << 20;
 const STALL_MS = 100;
 
-/** A person's connection (#1337) reads only what that person may see. */
-type Role = 'hook' | 'app' | 'cli' | 'mcp' | 'person';
 /** Which roles may call each method. A hook connection may only send its one request. */
 const ALLOWED = new Map<string, readonly Role[]>([
   // A promotion (#1334): the drain, the health check's fixture claim and the rollback's one notice.
@@ -110,6 +109,8 @@ const ALLOWED = new Map<string, readonly Role[]>([
   ['session.note', ['app']], ['ask.later', ['app']], ['session.pause', ['app']],
   // A session's name from the Session menu's Rename, and why a session reads as it does, for `deep status <session> --why` (#2018).
   ['session.rename', ['app']], ['row.why', ['app', 'cli', 'person']],
+  // A sign-in task's one button (#1349): the agent's own sign-in command, started from the app alone.
+  ['signin.open', ['app']],
   // A send-back planted for a session's next stop, served only to a hub a test started with DEEP_HUB_TEST_SEND_BACK=1 (#25).
   ['test.send_back', ['cli']],
   // The hub's clock stepped forward, served only to a hub a test started with DEEP_HUB_TEST_CLOCK_STEPS=1 (#965).
@@ -310,45 +311,6 @@ async function parserInline(held: string[], plant: Plant, dir: string): Promise<
   };
 }
 
-class Conn {
-  role: Role | undefined;
-  name = '';
-  session: string | null = null;
-  parent: { pid: number; start: string } | undefined;
-  /** For a deep mcp, the folder it runs in: which known worktree's spec an unbound deep_search reads. */
-  cwd: string | undefined;
-  /** For an app or cli connection, the process its hello names as its own: the peer check starts there. */
-  peer: { pid: number; start: string } | undefined;
-  /** The person whose credential the connection presented (#1337); none for the owner. */
-  person: string | undefined;
-  /**
-   * A connection over the network listener (#1338), with the ID of the key its TLS handshake proved, if any: it says
-   * hello first, with a credential bound to that key, or it gets nothing.
-   */
-  remote: { key: string | undefined } | undefined;
-  /** A network connection that carries hooks its machine spooled while the link was down (#1338), one per line. */
-  spool = false;
-  first = true;
-  done = false;
-  /** A waiter's connection: its close tells the core the waiter is gone. */
-  waiter = false;
-  queue: Promise<void> = Promise.resolve();
-  pending: Buffer[] = [];
-  size = 0;
-  readonly subs = new Set<string>();
-  /** Its deep mcp calls in flight, each `<connection>:<call ID>`: a cancel or the connection's close tells the core their caller is gone (#1923). */
-  readonly calls = new Set<string>();
-  constructor(readonly id: number, readonly sock: net.Socket) {}
-  write(o: object): void {
-    if (!this.done && this.sock.writable) this.sock.write(line(o));
-  }
-  end(): void {
-    if (this.done) return;
-    this.done = true;
-    this.sock.end();
-  }
-}
-
 /**
  * One subscription: how many of its frames the socket holds and hasn't taken, and their bytes, the frames waiting
  * beyond those, and since when it has taken none.
@@ -484,15 +446,12 @@ class Hub {
     // The lock is held and nothing listens there, so whatever is at the socket's path is a dead hub's: removed, then
     // made again only you can open.
     rmSync(this.root.socket, { force: true });
-    const umask = process.umask(0o177);
-    try {
-      await new Promise<void>((resolve, reject) => {
-        this.server.once('error', reject);
-        this.server.listen(this.root.socket, () => { this.server.off('error', reject); resolve(); });
-      });
-    } finally {
-      process.umask(umask);
-    }
+    // The private root denies other users from creation, including before chmod. Changing the process's umask
+    // here would also strip the search bits from directories the core's worker is creating (#2594).
+    await new Promise<void>((resolve, reject) => {
+      this.server.once('error', reject);
+      this.server.listen(this.root.socket, () => { this.server.off('error', reject); resolve(); });
+    });
     chmodSync(this.root.socket, 0o600);
     this.ino = statSync(this.root.socket).ino;
     await this.syncNetwork();
@@ -672,13 +631,14 @@ class Hub {
   }
 
   private async line(conn: Conn, parts: Buffer[]): Promise<void> {
-    if (conn.done && !conn.first) return;
+    if (this.stopping || (conn.done && !conn.first)) return;
     const first = conn.first;
     conn.first = false;
     const size = parts.reduce((sum, p) => sum + p.length, 0);
     // A small line is copied out of the socket's buffer, so only its own bytes cross to the parser.
     const chunks = size > BIG ? parts : [parts.length === 1 ? Buffer.from(parts[0]!) : Buffer.concat(parts)];
     const parsed = await this.parsers.parse(chunks, first);
+    if (this.stopping) return;
     if (parsed.kind === 'hook' && this.plant === 'log-raw-command') {
       // The planted wrong program: the command as the hook sent it, unscrubbed, in the hub's log.
       try { process.stderr.write(`deep hub: call ${String((JSON.parse(Buffer.concat(chunks).toString('utf8')) as { payload?: { tool_input?: { command?: unknown } } }).payload?.tool_input?.command)}\n`); } catch { /* not JSON */ }
@@ -1318,7 +1278,7 @@ class Hub {
     switch (method) {
       case 'hub.stop':
         conn.write({ id, result: { stopping: true } });
-        return void this.stop('requested');
+        return void this.stop('requested', conn.sock);
       case 'gates.off':
       case 'gates.on': {
         const off = method === 'gates.off';
@@ -1397,15 +1357,17 @@ class Hub {
   }
 
   /** A stop with its reason recorded: no new connections, the core's clean stop, then only our own socket removed. */
-  async stop(reason: string): Promise<void> {
+  async stop(reason: string, requester?: net.Socket): Promise<void> {
     if (this.stopping) return;
     this.stopping = true;
+    // Its close is the CLI's completion signal: keep only this socket until cleanup and process exit.
+    requester?.pause();
     clearTimeout(this.waitTimer);
     this.server.close();
     this.network?.close();
     // The stop-answers-waiting plant (#823) keeps the connections until the core stops, so a waiting call is answered.
     const answers = this.plant === 'stop-answers-waiting';
-    if (!answers) for (const conn of this.conns) conn.sock.destroy();
+    if (!answers) for (const conn of this.conns) if (conn.sock !== requester) conn.sock.destroy();
     try {
       await Promise.race([this.core.request({ op: 'stop', reason }), new Promise((_, reject) => setTimeout(() => reject(Error('the core took over 20 s to stop')), 20_000))]);
     } catch (error) {
@@ -1484,6 +1446,8 @@ export async function runHub(options: { root?: string; safe?: boolean }): Promis
   // Everything the hub writes, the record and the evidence included, is readable only by you.
   process.umask(0o077);
   mkdirSync(root.dir, { recursive: true, mode: 0o700 });
+  // mkdir's mode applies only to a new root; an existing dev or installed root must protect the socket too.
+  chmodSync(root.dir, 0o700);
   if (plant === 'unlink-before-lock') rmSync(root.socket, { force: true });
   const lock = takeLock(root.lock);
   if (!lock) {

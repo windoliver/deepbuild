@@ -11,7 +11,7 @@ use crate::roles::{self, Row};
 pub const BACKEND_CAP: &str = "physics.backend_cap";
 
 /// The codes this module adds to the check catalog: each with its meaning and fix.
-pub const CODES: [(&str, &str, &str); 8] = [
+pub const CODES: [(&str, &str, &str); 9] = [
     (BACKEND_CAP, "The backend this build pins can't run the field as written; the issue names the field and the backend.", "Set the field to what the backend runs (most often 0), or use a construct the backend has."),
     ("physics.unsupported", "The field is in physics.world@1 but this backend interface doesn't run it yet; the issue names the issue that brings it.", "Remove the field until that issue lands."),
     ("physics.missing_field", "A required world field is missing.", "Add the field."),
@@ -19,6 +19,7 @@ pub const CODES: [(&str, &str, &str); 8] = [
     ("physics.no_group", "A shape is a member of no collision group, so physics.pairs can't place it in the matrix.", "Name at least one group in the shape's member, or give it a role."),
     (crate::doc::OPEN_MESH, "A soft volume's source mesh isn't closed: some edge isn't on exactly two triangles; the issue names the first such edge by its two particles.", "Close the source mesh (or build the volume from a closed item), or draw it as cloth instead."),
     (SCALED, "A body is bound to an item, or built per element of an instancer, whose world transform scales it; a body's shapes carry sizes in metres and its pose has no scale.", "Size the shape in metres instead (double a box's half extents rather than scale its item) and draw the item at scale 1."),
+    (crate::fast::FAST_BODY, "A dynamic body with ccd off moves farther in one step than half its thinnest extent, so it can pass through a wall thinner than it; the issue names the body, the step, its move and that half.", "Turn the body's ccd on, or slow it."),
     (MASS_RATIO, "A joint's two dynamic bodies' masses, declared or density × volume, differ by more than 10:1, so the chain jitters or blows apart.", "Bring the two masses within 10:1: declare the lighter body's mass, or raise its density."),
 ];
 
@@ -71,6 +72,7 @@ pub fn check(doc: &Value, caps: &Caps, table: &[Row]) -> Result<World, Vec<Refus
     let expanded = roles::expand(doc, table)?;
     let doc = &expanded.doc;
     let mut out = refused_by(doc, caps);
+    out.extend(crate::doc::flat(doc));
     match read(doc) {
         Ok(w) if out.is_empty() => {
             out.extend(springs(&w));
@@ -171,6 +173,67 @@ fn refused_by(doc: &Value, caps: &Caps) -> Vec<Refusal> {
                     v,
                     caps,
                     "has no tangent speed; it must be 0",
+                ));
+            }
+        }
+    }
+    // #191: a world needing a feature the backend doesn't claim.
+    let claims = |c: &str| caps.claims.contains(&c);
+    if !claims("ccd") {
+        for (id, b) in doc
+            .get("bodies")
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten()
+        {
+            if let Some(v) = b.get("ccd").filter(|v| v.as_bool() == Some(true)) {
+                out.push(cap(
+                    format!("bodies/{id}/ccd"),
+                    v,
+                    caps,
+                    "claims no swept collision (ccd)",
+                ));
+            }
+        }
+    }
+    // #251: a vehicle body on a backend with no vehicle controller, naming the body.
+    if !claims("vehicle_controller") {
+        for (id, b) in doc
+            .get("bodies")
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten()
+        {
+            if let Some(v) = b.get("kind").filter(|k| *k == "vehicle") {
+                let what = format!("claims no vehicle controller to move vehicle body {id}");
+                out.push(cap(format!("bodies/{id}/kind"), v, caps, &what));
+            }
+        }
+    }
+    if !claims("soft_bodies") {
+        if let Some(v) = doc
+            .get("soft")
+            .filter(|s| s.as_object().is_some_and(|m| !m.is_empty()))
+        {
+            out.push(cap("soft".into(), v, caps, "claims no soft bodies"));
+        }
+    }
+    // #182: a character body needs the backend's character controller.
+    if !claims("character_controller") {
+        for (id, b) in doc
+            .get("bodies")
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten()
+        {
+            if let Some(v) = b.get("kind").filter(|k| k.as_str() == Some("character")) {
+                out.push(cap(
+                    format!("bodies/{id}/kind"),
+                    v,
+                    caps,
+                    &format!(
+                        "claims no character controller, so character body {id} can't run on it"
+                    ),
                 ));
             }
         }

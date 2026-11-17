@@ -36,6 +36,10 @@ pub mod empties;
 #[cfg(feature = "fixtures")]
 pub mod events;
 pub mod gpu_view;
+#[cfg(all(feature = "hdr-fixture", target_os = "macos"))]
+pub mod hdr_fixture;
+#[cfg(target_os = "macos")]
+pub mod hdr_layer;
 pub mod hub;
 /// #1486: chrome thumbnails through the one image service.
 pub mod images;
@@ -349,7 +353,7 @@ pub fn init(cx: &mut App) {
     let faces = deep_text::FACES
         .iter()
         .filter(|face| face.family == code.as_ref() || Some(face.family) == canvas)
-        .map(|face| std::borrow::Cow::Borrowed(face.bytes))
+        .map(|face| std::borrow::Cow::Borrowed(face.bytes()))
         .collect();
     let _ = cx.text_system().add_fonts(faces);
     gpui_shell::components::init(cx);

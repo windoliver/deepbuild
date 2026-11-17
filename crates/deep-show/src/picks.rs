@@ -201,17 +201,32 @@ fn seek_to(world: &World, to: i64, steps: i64, regions: bool) -> Result<Value, V
     let mut w = world.restore(from, None)?;
     let mut r = Record::default();
     r.regions = regions.then(Default::default);
-    let mut until = to + 1;
-    w.run(until, &mut r, &mut |_, _| {});
     let ids: Vec<String> = w.piece.items.iter().map(|i| i.id.clone()).collect();
     let after = |r: &Record| {
         ids.iter()
             .filter_map(|id| r.deep(id).into_iter().find(|(k, _)| *k > to))
             .next()
     };
-    while after(&r).is_none() && until < steps {
+    // #1164: each step from `to` through the first checkpoint after it, as `logic`'s rows.
+    let piece = w.piece.clone();
+    let mut ran = Vec::new();
+    let mut until = from;
+    while until <= to || (after(&r).is_none() && until < steps) {
         until += 1;
         w.run(until, &mut r, &mut |_, _| {});
+        let k = until - 1;
+        if k >= to {
+            let hash: Map<String, Value> = r
+                .rows()
+                .get(&k)
+                .map(|(items, _)| {
+                    ids.iter()
+                        .filter_map(|id| Some((id.clone(), items.get(id)?.get("hash")?.clone())))
+                        .collect()
+                })
+                .unwrap_or_default();
+            ran.push(json!({"step": k, "hash": hash, "arrays": arrays_of(&w, &piece)}));
+        }
     }
     let mut hashes = Map::new();
     for id in &ids {
@@ -235,7 +250,9 @@ fn seek_to(world: &World, to: i64, steps: i64, regions: bool) -> Result<Value, V
         json!({"step": k, "deep_hash": deep})
     });
     let read = r.regions.as_ref().and_then(|m| m.get(&to).cloned());
-    Ok(json!({"to": to, "from": from, "regions": read, "hashes": hashes, "checkpoint": checkpoint}))
+    Ok(
+        json!({"to": to, "from": from, "regions": read, "hashes": hashes, "checkpoint": checkpoint, "steps": ran}),
+    )
 }
 
 /// `piece` stepped from 0 to `count` − 1 on `entries`: each step's hash and arrays per item, as
@@ -280,21 +297,7 @@ fn step_rows(
                 .filter_map(|i| Some((i.id.clone(), row?.get(&i.id)?.get(f)?.clone())))
                 .collect()
         };
-        let mut arrays = Map::new();
-        for (n, item) in piece.items.iter().enumerate() {
-            let region = world.write_region(n);
-            for w in &item.writes {
-                let Some(e) = item.write(&w.name) else {
-                    continue;
-                };
-                let bytes = &region[e.offset as usize..(e.offset + e.size) as usize];
-                let values = bytes
-                    .chunks_exact(w.ty.size() as usize)
-                    .map(|b| w.ty.value(b))
-                    .collect();
-                arrays.insert(format!("{}.{}", item.id, w.name), Value::Array(values));
-            }
-        }
+        let arrays = arrays_of(world, piece);
         let mut step = json!({"step": k, "t": k * len, "hash": field("hash"), "arrays": arrays});
         if full {
             for f in ["fuel", "service_ns", "mirror_ns"] {
@@ -311,6 +314,26 @@ fn step_rows(
         }
     }
     (steps, None)
+}
+
+/// Each item's arrays as its write region holds them now, by `<item>.<name>`.
+fn arrays_of(world: &World, piece: &Piece) -> Map<String, Value> {
+    let mut arrays = Map::new();
+    for (n, item) in piece.items.iter().enumerate() {
+        let region = world.write_region(n);
+        for w in &item.writes {
+            let Some(e) = item.write(&w.name) else {
+                continue;
+            };
+            let bytes = &region[e.offset as usize..(e.offset + e.size) as usize];
+            let values = bytes
+                .chunks_exact(w.ty.size() as usize)
+                .map(|b| w.ty.value(b))
+                .collect();
+            arrays.insert(format!("{}.{}", item.id, w.name), Value::Array(values));
+        }
+    }
+    arrays
 }
 
 /// Whether a logic item of `form` reads control `c`.
@@ -504,13 +527,21 @@ impl Hub<'_> {
             .enter(doc, control, value, t, serial)?
             .into_iter()
             .collect();
-        let Some(mut form) = self
+        if self
             .forms
             .get(doc)
-            .filter(|f| read_by_logic(f, control))
-            .cloned()
-        else {
-            return Ok(appended);
+            .is_some_and(|f| read_by_logic(f, control))
+        {
+            self.rebake(doc, t);
+        }
+        Ok(appended)
+    }
+
+    /// The document's logic baked again on its track, as an export bakes it, so the live
+    /// session draws what its rules make of the track; then shown at `t`.
+    pub(crate) fn rebake(&mut self, doc: &str, t: i64) {
+        let Some(mut form) = self.forms.get(doc).cloned() else {
+            return;
         };
         let track = self.track_json(doc);
         if self.inline_occurrences(&mut form, &track).is_ok() {
@@ -518,7 +549,6 @@ impl Hub<'_> {
             self.forms.insert(doc.to_string(), form);
             self.replay(doc, t);
         }
-        Ok(appended)
     }
 
     /// The roving focus on the stop the scope holds: a pick control with `focus` enters at its
@@ -748,12 +778,17 @@ impl Hub<'_> {
             Ok(None) => return json!({"code": "no_logic"}),
             Err(i) => return json!({"code": i.code, "issues": [i.to_json()]}),
         };
-        let entries: Vec<Entry> = read.iter().filter_map(Entry::parse).collect();
+        let mut entries: Vec<Entry> = read.iter().filter_map(Entry::parse).collect();
+        match self.world_reads(&form, &read, &piece) {
+            Ok(w) => entries.extend(w.iter().filter_map(Entry::parse)),
+            Err(i) => return json!({"code": i.code, "issues": [i.to_json()]}),
+        }
         let planted = deep_logic::Planted {
             services_after_checkpoint: self.planted(crate::hub::Planted::Physics(
                 crate::physics::Planted::ResultsAfterCheckpoint,
             )),
-            ..Default::default()
+            // #1164's restore and check twins, named by the scenario.
+            ..self.scenario.logic_planted.unwrap_or_default()
         };
         let mut rec = Record::default();
         rec.regions = l.regions.then(Default::default);

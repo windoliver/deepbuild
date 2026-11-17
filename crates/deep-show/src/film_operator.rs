@@ -177,7 +177,9 @@ pub(crate) fn draw(
         w,
         h,
         px: rgba
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .map(|c| [0, 1, 2, 3].map(|k| f64::from(c[k]) / 255.0))
             .collect(),
     };

@@ -8,7 +8,7 @@ use std::f32::consts::PI;
 
 use deep_canvas_physics::backend::{
     Backend, BodyState, Canonical, Checkpoint, Held, Hit, Input, JointState, Query, ShapeRef,
-    State, Targets,
+    State, Targets, VehicleState, FIELDS,
 };
 use deep_canvas_physics::bake::{Build, Pin};
 use deep_canvas_physics::caps::{Caps, RAPIER3D};
@@ -35,6 +35,7 @@ pub fn leaked_world() -> rapier3d::prelude::PhysicsWorld {
 pub mod bound;
 pub mod cast;
 pub mod channels;
+mod character;
 pub mod fp;
 mod inputs;
 mod joints;
@@ -45,6 +46,8 @@ pub mod runner;
 pub mod scene;
 mod soft;
 pub mod source;
+mod vehicle;
+pub use vehicle::Plant as VehiclePlant;
 
 /// #1919 criterion 1's test backend (`test-count-calls`): each backend-interface call this process
 /// made, by method, `query`'s by kind (`query.ray`), which `backend_calls` answers.
@@ -116,6 +119,35 @@ pub enum Twin {
     ForcePerStep,
     /// A kinematic solve that ends its iteration cap past its tolerance reports success.
     SolveCapSuccess,
+    /// #191's test backends, each wrong one way: friction combined by the average and
+    /// restitution by the minimum whatever the world declares; joint limits skipped; `query()`
+    /// blind to collision groups; gravity 2% strong; swept collision off for the whole world; and
+    /// sensors left on the engine's default pair filter, which skips kinematic–static pairs.
+    FrictionAverage,
+    RestitutionMin,
+    NoJointLimits,
+    QueryIgnoresGroups,
+    GravityOff2,
+    NoSweep,
+    DefaultPairFilter,
+    /// #182's wrong character controllers: one that climbs steps a quarter higher than its step
+    /// height; one that ignores snap; one whose ground distance is 0.001 m; a character stepped
+    /// as a plain kinematic body; one that keeps its upward speed under a ceiling; one that
+    /// takes a launch only on the ground; a place that keeps its vertical speed; a crouch that
+    /// stands on release; one that resolves each wall of a corner alone; a checkpoint that
+    /// leaves out each character's vertical speed; and one that climbs under 45° whatever the
+    /// body's slope limit.
+    StepsHigher,
+    IgnoresSnap,
+    GroundNear,
+    PlainKinematic,
+    KeepsUpward,
+    LaunchGroundedOnly,
+    PlaceKeepsVertical,
+    StandsOnRelease,
+    EachWallAlone,
+    CheckpointWithoutVertical,
+    SlopeIgnored,
 }
 
 /// A Rapier world behind the backend interface.
@@ -165,6 +197,17 @@ pub struct Rapier {
     soft: soft::Softs,
     particle_capacity: u64,
     checkpoint_every: u64,
+    /// #191: a test backend's name and caps in place of Rapier's (`runner::kit`).
+    pub test: Option<(&'static str, &'static Caps)>,
+    /// #182: the character bodies, in canonical (priority, ID) order; the contacts the step's
+    /// places and moves wrote; the world's up and the size of its gravity.
+    walkers: Vec<character::Walker>,
+    walked: Vec<Raw>,
+    up: Vector,
+    fall: f32,
+    /// #251: its vehicle bodies, and the wheel contacts this step's places and drives wrote.
+    pub(crate) vehicles: vehicle::Vehicles,
+    wheel_rows: Vec<Raw>,
 }
 
 fn v3(a: [f64; 3]) -> Vector {
@@ -379,14 +422,29 @@ impl Rapier {
             .position(pose(&u.offset))
             .friction(m.friction as f32)
             .restitution(m.restitution as f32)
-            .friction_combine_rule(combine(w.friction_rule))
-            .restitution_combine_rule(combine(w.restitution_rule))
+            .friction_combine_rule(combine(match self.twin {
+                Twin::FrictionAverage => Rule::Average,
+                _ => w.friction_rule,
+            }))
+            .restitution_combine_rule(combine(match self.twin {
+                Twin::RestitutionMin => Rule::Min,
+                _ => w.restitution_rule,
+            }))
             .collision_groups(InteractionGroups::new(
                 Group::from_bits_retain(u.member),
                 Group::from_bits_retain(u.collides),
                 InteractionTestMode::And,
             ))
             .sensor(u.sensor);
+        // #191: a sensor reports every body that overlaps it, kinematic ones included, which the
+        // engine's default pair filter would skip against a static or kinematic sensor.
+        if u.sensor && self.twin != Twin::DefaultPairFilter {
+            c = c.active_collision_types(
+                ActiveCollisionTypes::default()
+                    | ActiveCollisionTypes::KINEMATIC_FIXED
+                    | ActiveCollisionTypes::KINEMATIC_KINEMATIC,
+            );
+        }
         if b.kind != BodyKind::Dynamic || w.mode == Mode::Kinematic || b.mass.is_some() {
             return Some(c);
         }
@@ -447,7 +505,7 @@ impl Rapier {
                 let mut b = RevoluteJointBuilder::new(axis)
                     .local_anchor1(p1)
                     .local_anchor2(p2);
-                if let Some([lo, hi]) = j.limits {
+                if let Some([lo, hi]) = j.limits.filter(|_| self.twin != Twin::NoJointLimits) {
                     b = b.limits([deg(lo), deg(hi)]);
                 }
                 if let Some(m) = &j.motor {
@@ -468,7 +526,7 @@ impl Rapier {
                 let mut b = PrismaticJointBuilder::new(axis)
                     .local_anchor1(p1)
                     .local_anchor2(p2);
-                if let Some([lo, hi]) = j.limits {
+                if let Some([lo, hi]) = j.limits.filter(|_| self.twin != Twin::NoJointLimits) {
                     b = b.limits([lo as f32, hi as f32]);
                 }
                 if let Some(m) = &j.motor {
@@ -766,11 +824,14 @@ impl Rapier {
 
 impl Backend for Rapier {
     fn id(&self) -> String {
-        format!("{}@{}", RAPIER3D.backend, RAPIER3D.version)
+        match self.test {
+            Some((name, _)) => name.into(),
+            None => format!("{}@{}", RAPIER3D.backend, RAPIER3D.version),
+        }
     }
 
     fn caps(&self) -> &'static Caps {
-        &RAPIER3D
+        self.test.map_or(&RAPIER3D, |t| t.1)
     }
 
     fn build(&mut self, w: &World) -> Result<(), Vec<Refusal>> {
@@ -805,6 +866,9 @@ impl Backend for Rapier {
             .collect();
         self.step = 0;
         self.world.gravity = v3(w.gravity);
+        if self.twin == Twin::GravityOff2 {
+            self.world.gravity *= 1.02;
+        }
         let p = &mut self.world.integration_parameters;
         p.dt = (1.0 / w.step_rate) as f32;
         // The world's substeps are the solver's iterations, not repeated steps (World and backend).
@@ -817,7 +881,7 @@ impl Backend for Rapier {
             w.solver.contact_damping as f32,
         );
         p.normalized_max_linear_velocity = w.solver.max_speed as f32;
-        p.max_ccd_substeps = usize::from(w.solver.ccd);
+        p.max_ccd_substeps = usize::from(w.solver.ccd && self.twin != Twin::NoSweep);
         let mut handles = BTreeMap::new();
         for id in deep_canvas_physics::occurrence::built_order(w) {
             let b = &w.bodies[id];
@@ -840,6 +904,10 @@ impl Backend for Rapier {
             let builder = match b.kind {
                 BodyKind::Static => RigidBodyBuilder::fixed(),
                 BodyKind::Dynamic if w.mode != Mode::Kinematic => RigidBodyBuilder::dynamic(),
+                // #182: a character body never sleeps, so its controller's target always moves it.
+                BodyKind::Character => {
+                    RigidBodyBuilder::kinematic_position_based().can_sleep(false)
+                }
                 _ => RigidBodyBuilder::kinematic_position_based(),
             };
             let mut rb = builder
@@ -849,8 +917,15 @@ impl Backend for Rapier {
                 .linear_damping(b.linear_damping as f32)
                 .angular_damping(b.angular_damping as f32)
                 .gravity_scale(b.gravity_scale as f32)
-                .ccd_enabled(b.ccd)
-                .can_sleep(b.sleep && w.solver.sleep.on)
+                .ccd_enabled(b.ccd && self.twin != Twin::NoSweep)
+                // #191: a body with ccd is also met by the contacts its next step reaches, so its
+                // contact begins in the step it hits, not the one after.
+                .soft_ccd_prediction(if b.ccd && self.twin != Twin::NoSweep {
+                    (w.solver.max_speed / w.step_rate) as f32
+                } else {
+                    0.0
+                })
+                .can_sleep(b.sleep && w.solver.sleep.on && b.kind != BodyKind::Character)
                 .enabled(b.active)
                 .locked_axes(locks)
                 .build();
@@ -889,7 +964,10 @@ impl Backend for Rapier {
         for (id, j) in &w.joints {
             self.joint(&handles, id, j, &mut out);
         }
+        self.vehicles.build(w, &handles);
         self.kinematic(w);
+        self.walked.clear();
+        self.characters_build(w);
         self.soft.build(w, &mut self.world, &handles);
         self.particle_capacity = w.capacity.get("particles").copied().unwrap_or(u64::MAX);
         self.checkpoint_every = w.checkpoint_every;
@@ -903,12 +981,38 @@ impl Backend for Rapier {
 
     fn step(&mut self, inputs: &[Input], targets: &Targets) -> Result<(), Box<Refusal>> {
         tally("step");
+        self.wheel_rows.clear();
         self.apply(inputs)?;
+        self.walk();
         let before = self.before();
         let start = self.start();
         let watched = self.readings();
         self.aim(targets);
         self.push();
+        let vehicles = self.vehicles.ids();
+        // #251: a world never stepped has no broad phase yet, so a wheel's ray would meet nothing
+        // on the first step; it is built first, as the world stands.
+        if self.step == 0 && !vehicles.is_empty() {
+            // #2306: a joint puts its bodies in the engine's islands when it is inserted, before
+            // any step, and the collision pass then takes every body's insertion without putting
+            // the rest in them, which a debug build refuses; so a world with a joint seeds only
+            // its broad phase's boxes, and its first step finds its contacts.
+            if self.world.impulse_joints.is_empty() {
+                self.world.detect_collisions(&(), &());
+            } else {
+                let params = self.world.integration_parameters;
+                let enabled = self.world.colliders.iter().filter(|(_, c)| c.is_enabled());
+                let all: Vec<ColliderHandle> = enabled.map(|(h, _)| h).collect();
+                for h in all {
+                    let aabb = self.world.colliders[h]
+                        .compute_broad_phase_aabb(&params, &self.world.bodies);
+                    self.world.broad_phase.set_aabb(&params, h, aabb);
+                }
+            }
+        }
+        for id in vehicles {
+            self.drive_vehicle(&id)?;
+        }
         self.pull();
         let (particles, quarantined) = (
             self.soft.particles(&self.world),
@@ -922,6 +1026,7 @@ impl Backend for Rapier {
         self.world.integration_parameters.warmstart_coefficient = warm;
         self.step += 1;
         self.last = self.gather(&before);
+        self.last.append(&mut self.walked);
         let turned = self.turned(&start);
         self.last.extend(turned);
         let broken = self.breaks();
@@ -931,6 +1036,9 @@ impl Backend for Rapier {
         let jams: Vec<Raw> = self.jams.iter().map(|j| joints::fault(j, "jam")).collect();
         self.last.extend(jams);
         self.last.extend(torn);
+        self.last.append(&mut self.wheel_rows);
+        let touched = self.vehicles.touch(&self.world, &self.uses);
+        self.last.extend(touched);
         let faults = self.soft_faults(particles, &quarantined);
         self.last.extend(faults);
         // #524: a world with soft bodies continues from its own checkpoint at every checkpoint's
@@ -1000,8 +1108,11 @@ impl Backend for Rapier {
                     values: vec![
                         p.x, p.y, p.z, q.x, q.y, q.z, q.w, v.x, v.y, v.z, w.x, w.y, w.z,
                     ],
+                    names: &FIELDS,
                 }
             })
+            .chain(self.character_canonical())
+            .chain(self.vehicles.canonical())
             .chain(self.soft.canonical(&self.world))
             .collect()
     }
@@ -1028,7 +1139,9 @@ impl Backend for Rapier {
             step: self.step,
             state: [
                 bincode::serialize(&self.world).expect("a Rapier world serializes"),
+                self.vehicles.bytes(),
                 self.soft.bytes(),
+                self.character_bytes(),
                 self.grab_bytes(),
             ]
             .concat(),
@@ -1063,7 +1176,9 @@ impl Backend for Rapier {
             ))
         })?;
         self.world = world;
+        let rest = self.vehicles.restore(rest);
         let rest = self.soft.restore(rest);
+        let rest = self.characters_of(rest);
         self.grabs = Rapier::grabs_of(rest);
         self.step = cp.step;
         self.last.clear();
@@ -1079,7 +1194,16 @@ impl Backend for Rapier {
             Query::Sweep { .. } => "query.sweep",
             Query::Overlap { .. } => "query.overlap",
         });
+        let groups = if self.twin == Twin::QueryIgnoresGroups {
+            u32::MAX
+        } else {
+            groups
+        };
         self.hits(q, groups)
+    }
+
+    fn characters(&self) -> Vec<deep_canvas_physics::backend::CharacterState> {
+        self.character_states()
     }
 
     fn move_character(
@@ -1119,6 +1243,19 @@ impl Backend for Rapier {
         let to = rb.translation() + moved.translation;
         self.world.bodies[h].set_next_kinematic_translation(to);
         Ok(back(moved.translation))
+    }
+
+    fn drive_vehicle(&mut self, body: &str) -> Result<(), Box<Refusal>> {
+        tally("drive_vehicle");
+        self.vehicles.drive(body, &mut self.world).ok_or_else(|| {
+            let what = format!("{body} isn't a vehicle body, so no vehicle controller moves it");
+            let path = format!("bodies/{body}");
+            Box::new(refusal("physics.not_vehicle", path, json!(body), what))
+        })
+    }
+
+    fn vehicles(&self) -> Vec<VehicleState> {
+        self.vehicles.read()
     }
 
     /// Each collider's own ray cast at its placed pose, so a world never stepped answers too.

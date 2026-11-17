@@ -10,7 +10,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import type { Grant, Host, Supervisor } from '@deepbuild/supervisor';
-import { parse } from 'yaml';
+import { parse } from './yaml.js';
 import {
   composeRefusal, composed, daemon, dockerEnv, downStack, get, isObj, newRun, quote, readEnvironment, seedRecordAt, sleep, stackValues, step,
   type Environment, type SeedRecord, type Take,

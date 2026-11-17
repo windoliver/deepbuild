@@ -7,9 +7,9 @@
 // small enough to wait the longest ask deadline; `deep waiter` is only the planted Node waiter that polls.
 // #1100: it runs the rows of the one list of steps (setup-steps.ts) the app's first-launch screen names before the click,
 // and records each step it took as a `setup.step` event.
-import { execFile, execFileSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { homedir, userInfo } from 'node:os';
+import { execFile, execFileSync, spawn } from 'node:child_process';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { homedir, tmpdir, userInfo } from 'node:os';
 import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -22,10 +22,11 @@ import { Confirmer } from './confirm.js';
 import { claudeCommand, claudeSettings, installedRecord, longestDeadline, ourGroups, relations, withHooks, withoutOurs, writeJson } from './claude-settings.js';
 import { codexConfig, codexHooks, codexRelations, fixedHook, forgetEntries, recordedHome, recordedServer, recordEntries, withEntries, withoutEntries, withoutServer, withServer } from './codex-settings.js';
 import { call } from './client.js';
+import { installShipped } from './installer.js';
 import { deepHook, hubAddress, installedPrograms, installedRoot, lastingNode, rootOf } from './paths.js';
 import { activePlant as plant } from './plant.js';
 import { removeService, startHub, stopIfRunning } from './service.js';
-import { changes, doing, key, onPath, planned as plannedRows, saying, setUpLine, type Row } from './setup-steps.js';
+import { changes, doing, installers, key, lands, onPath, planned as plannedRows, saying, setUpLine, type Row } from './setup-steps.js';
 import { Devices } from './trusted.js';
 import { shellQuote as q } from './shell.js';
 import { isRecord as isObj } from '@deepbuild/contracts';
@@ -102,11 +103,16 @@ async function install(cli: string, quiet = false): Promise<Said> {
       return said(stopped(root, 1, `${file} ${read.refused}`, 'Fix the file, then Set up again.', done));
     }
   }
-  const rows = plannedRows();
+  // Only the press installs an agent (#1349): the first `deep` command never runs the install row.
+  const rows = plannedRows().filter((r) => !(quiet && r.step === 'install'));
   const record = setupRecord(root);
   try {
+    // Set up from the app's runtime folder (#1349), that folder becomes a version first, so every entry below names
+    // versions/current, which outlives the app being moved; set up from an installed version, there's nothing to copy.
+    if (existsSync(join(REPO, 'runtime', 'node')) && !REPO.startsWith(join(root, 'versions'))) installShipped(root, REPO, deepbuild);
     await draftAskSettings(root);
     recordLoginPath(root);
+    gitRuns();
     blocking = installRules(root);
     await enrollConfirm(root, tell);
     // An installed version's fixed programs, which every update keeps (#41); a checkout's own build otherwise.
@@ -147,7 +153,7 @@ async function install(cli: string, quiet = false): Promise<Said> {
     };
     const left: Record<string, string> = { 'hooks:codex': 'Fix the file and run deep setup again.', 'plugin:paseo': "Run deep setup again once paseo's daemon runs.", 'package:pi': 'Run deep setup again.' };
     for (const row of rows.filter((r) => r.step !== 'history')) {
-      const step = steps[key(row)];
+      const step = row.step === 'install' ? () => installAgent(root, row.agent!) : steps[key(row)];
       if (!step) throw Error(`the list of steps names ${key(row)}, which setup has no step for`);
       try {
         await saying(doing(row), step);
@@ -336,12 +342,16 @@ async function enrollConfirm(root: string, tell: (text: string) => void): Promis
   if (why) tell(`deep setup: deep-confirm's key wasn't set up (${why}), so no answer from the CLI counts until it is; run deep setup again.\n`);
 }
 /** Your login shell's PATH, so the hub, started with a login service's short PATH, runs the same claude and codex. */
-function recordLoginPath(root: string): void {
+function recordLoginPath(root: string, also: readonly string[] = []): void {
   let path = process.env.PATH ?? '';
   try {
     const shown = execFileSync(process.env.SHELL || '/bin/sh', ['-l', '-c', 'printf %s "$PATH"'], { encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] });
     if (shown.trim()) path = shown.trim();
   } catch { /* the shell this process runs in */ }
+  // The shipped git first (#1349), so every session and job runs it and no system git; then the folder an agent's own
+  // installer just put its program in, which your login shell may not list yet.
+  const first = [join(root, 'versions', 'current', 'git', 'bin'), ...also].filter((dir) => existsSync(dir));
+  path = [...first, ...path.split(':').filter((dir) => dir && !first.includes(dir))].join(':');
   editConfig(root, (c) => { c.runner = { ...(isObj(c.runner) ? c.runner : {}), login_path: path }; });
 }
 /**
@@ -378,7 +388,8 @@ async function undo(): Promise<number> {
   const root = installedRoot();
   const record = setupRecord(root);
   if (plant() !== 'undo-keeps-login-service') removeService();
-  await stopIfRunning(root);
+  const stopped = await stopIfRunning(root);
+  if (stopped !== 0) return stopped;
   const settingsFile = claudeSettings();
   const userFile = claudeJson();
   let yours: string | undefined;
@@ -444,6 +455,56 @@ export function removeCodex(root: string, record = setupRecord(root)): string[] 
   return notes;
 }
 
+/**
+ * With no agent found (#1349), the first agent's own installer, as adapters/install.json names it for this platform:
+ * fetched over HTTPS, or DEEP_HUB_TEST_INSTALLER's local script in its place, and run with the system's shell. Its
+ * output goes to stderr, which the app shows behind Show output and nothing keeps. Then its program's folder joins
+ * the PATH sessions and jobs take, since your login shell may not list it yet.
+ */
+async function installAgent(root: string, agent: string): Promise<void> {
+  const facts = installers()[agent];
+  const on = facts?.[process.platform] as { installer: string; shell: string } | undefined;
+  const program = lands(agent);
+  if (!facts || !on || !program) throw Error(`adapters/install.json names no installer of ${agent} for this platform`);
+  const script = process.env.DEEP_HUB_TEST_INSTALLER ? readFileSync(process.env.DEEP_HUB_TEST_INSTALLER, 'utf8') : await fetchInstaller(on.installer);
+  const dir = mkdtempSync(join(tmpdir(), 'deep-install-'));
+  try {
+    writeFileSync(join(dir, 'install.sh'), script, { mode: 0o700 });
+    await new Promise<void>((done, failed) => {
+      const child = spawn(on.shell, [join(dir, 'install.sh')], { stdio: ['ignore', 'pipe', 'pipe'], timeout: 600_000 });
+      child.stdout.pipe(process.stderr, { end: false });
+      child.stderr.pipe(process.stderr, { end: false });
+      child.on('error', failed);
+      child.on('close', (code) => (code === 0 ? done() : failed(Error(`${facts.name}'s own installer stopped (exit ${String(code)})`))));
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+  if (!existsSync(program)) throw Error(`${facts.name}'s own installer finished, but there is no ${program}`);
+  recordLoginPath(root, [dirname(program)]);
+}
+/**
+ * Workspaces keep their history with git (#1349): Set up makes one throwaway repo before the hub starts, so a machine
+ * whose git can't run stops Set up here, naming the call that failed, never later at your first topic or quietly.
+ */
+function gitRuns(): void {
+  const dir = mkdtempSync(join(tmpdir(), 'deep-git-'));
+  try {
+    execFileSync('git', ['init', '-q', dir], { stdio: ['ignore', 'pipe', 'pipe'], timeout: 30_000 });
+  } catch (error) {
+    const said = String((error as { stderr?: unknown }).stderr ?? '').trim().split('\n').at(-1) || (error as Error).message;
+    throw Error(`git init failed, so workspaces can't keep their history: ${said}`);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+/** An installer's script from its maker's address: HTTPS only, within a minute. */
+async function fetchInstaller(url: string): Promise<string> {
+  if (!url.startsWith('https://')) throw Error(`the installer's address ${url} isn't HTTPS`);
+  const res = await fetch(url, { signal: AbortSignal.timeout(60_000), redirect: 'follow' });
+  if (!res.ok || !res.url.startsWith('https://')) throw Error(`${url} answered ${res.status}`);
+  return res.text();
+}
 /** DeepBuild's pi package (#40), added through pi's own manager at the one version its facts pin, said before it is (#2019); the first `deep` command keeps it off stdout (#1100). */
 function installPi(root: string, pi: string, quiet = false): void {
   const source = readFacts<{ install: { source: string } }>('pi.facts.json').install.source;
