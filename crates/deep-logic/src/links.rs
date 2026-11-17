@@ -9,6 +9,7 @@ use deep_canvas_sandbox::link::{self, Object};
 use deep_canvas_sandbox::rewrite::hash;
 use serde_json::{json, Value};
 
+use crate::interfaces::{Interface, Origin};
 use crate::Planted;
 
 /// The most libraries an item may reach.
@@ -22,6 +23,8 @@ pub struct Entry {
     pub exports: Vec<String>,
     pub fixtures: Vec<String>,
     pub needs: Vec<(String, String)>,
+    /// The interfaces it claims, `name@major` (#416).
+    pub implements: Vec<String>,
 }
 
 /// A pack installed in the document's store, as its version names its libraries.
@@ -31,7 +34,11 @@ pub struct Pack {
     pub id: String,
     /// The working agent wrote it: its libraries bind only the agent's own claims.
     pub agent: bool,
+    /// Where it came from: a first-party pack's interfaces bind every claim (#416).
+    pub origin: Origin,
     pub libs: BTreeMap<String, Entry>,
+    /// The interfaces it declares, by `name@major` (#416).
+    pub interfaces: BTreeMap<String, Interface>,
 }
 
 fn pairs(v: Option<&Value>) -> Option<Vec<(String, String)>> {
@@ -75,26 +82,56 @@ impl Pack {
                         .collect::<Option<_>>()?,
                     fixtures,
                     needs: pairs(e.get("needs"))?,
+                    implements: e.get("implements").map_or(Some(Vec::new()), |i| {
+                        i.as_array()?
+                            .iter()
+                            .map(|x| x.as_str().map(str::to_string))
+                            .collect()
+                    })?,
                 },
             );
         }
+        let id = format!(
+            "{}@{}",
+            v.get("name")?.as_str()?,
+            v.get("version")?.as_str()?
+        );
+        let origin = match v.get("origin").and_then(Value::as_str) {
+            Some("agent") => Origin::Agent,
+            Some("first_party") => Origin::FirstParty,
+            _ => Origin::Installed,
+        };
+        let mut interfaces = BTreeMap::new();
+        for (label, i) in v
+            .get("interfaces")
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten()
+        {
+            let name = v.get("name")?.as_str()?;
+            let iface = Interface::parse(label, i, name, &id, origin)?;
+            interfaces.insert(iface.name.clone(), iface);
+        }
         Some(Pack {
-            id: format!(
-                "{}@{}",
-                v.get("name")?.as_str()?,
-                v.get("version")?.as_str()?
-            ),
-            agent: v.get("origin").and_then(Value::as_str) == Some("agent"),
+            id,
+            agent: origin == Origin::Agent,
+            origin,
             libs,
+            interfaces,
         })
     }
 }
 
-/// The piece's packs; None when one isn't a pack.
+/// The build's first-party packs (#416), then the piece's; None when one isn't a pack.
 pub fn packs(piece: &Value) -> Option<Vec<Pack>> {
-    piece.get("packs").map_or(Some(Vec::new()), |p| {
-        p.as_array()?.iter().map(Pack::parse).collect()
-    })
+    let mut packs = crate::first_party::parsed().to_vec();
+    packs.extend(piece.get("packs").map_or(Some(Vec::new()), |p| {
+        p.as_array()?
+            .iter()
+            .map(Pack::parse)
+            .collect::<Option<Vec<_>>>()
+    })?);
+    Some(packs)
 }
 
 /// An item's links as declared: `(name@version, asset)`.
@@ -112,6 +149,11 @@ pub struct Lib {
     pub fixtures: Vec<String>,
     pub exports: Vec<String>,
     pub bytes: Vec<u8>,
+    /// Its pack entry's needs and the interfaces it claims (#416), and the names a program
+    /// imports those by, `lib:<name>@<major>`: each as its pack declares it.
+    pub needs: Vec<(String, String)>,
+    pub implements: Vec<String>,
+    pub answers: Vec<String>,
 }
 
 impl Lib {
@@ -219,6 +261,15 @@ pub fn resolve(
                 fixtures: entry.fixtures.clone(),
                 exports: entry.exports.clone(),
                 bytes,
+                needs: entry.needs.clone(),
+                implements: entry.implements.clone(),
+                answers: entry
+                    .implements
+                    .iter()
+                    .map(|n| {
+                        crate::interfaces::declared(packs, n).map_or(n.clone(), |i| i.label.clone())
+                    })
+                    .collect(),
             },
         );
     }
@@ -316,6 +367,7 @@ pub fn merge(program: &[u8], libs: &[Lib], planted: &Planted) -> Result<Merged, 
             label: &l.label,
             bytes: &l.bytes,
             exports: &l.exports,
+            implements: &l.answers,
         })
         .collect();
     let linked = link::link(program, &objects, planted.pack_check_skips_library_subset)

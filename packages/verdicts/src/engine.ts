@@ -308,6 +308,11 @@ function judge(claim: ClaimInput, sel: Selection, c: ClaimCheck): Judged {
       row('BLOCKED', `missing ${cause}, owner ${r.missing?.owner ?? 'unknown'}`, `missing ${cause}`, cause, r.missing?.owner === 'you' ? cause : undefined);
     }
     if (runs.some((r) => r.outcome === 'ran_nothing' || (r.outcome === 'passed' && r.tests_run === 0))) row('INVALID', 'ran nothing');
+    // A pass that counted fewer tests than the check's `min_tests` names both counts (#2218); none at all ran nothing, above.
+    const least = c.min_tests ?? 0;
+    for (const ran of unique(runs.flatMap((r) => (r.outcome === 'passed' && r.tests_run > 0 && r.tests_run < least ? [r.tests_run] : []))).sort((a, b) => a - b)) {
+      row('INVALID', `ran ${ran} ${ran === 1 ? 'test' : 'tests'}, fewer than the ${least} its min_tests names`, `ran fewer tests than the ${least} its min_tests names`, `a run that counts ${least} tests or more`);
+    }
     for (const [run, outcomes] of [...(sel.conflicts.get(id) ?? [])].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
       row('INVALID', `two records of ${run} differ (${sorted(outcomes).join(', ')}), so neither counts`, 'two records of one run ID differ', 'one record per run ID');
     }

@@ -1,0 +1,223 @@
+{
+ "lane": "full",
+ "commit": "d53661684afc563ebee34d5936130ea44eb13ef0",
+ "rows": [
+  {
+   "fixture": "parity/relation/exposure-doubles.scene",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "exposure_after_tone_map",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "434519809747ae4d1f3440b484996fa80a06f4d0354f74eb99655f9e451c6d26"
+    }
+   ],
+   "reading": false,
+   "backend": "metal",
+   "adapter": {
+    "name": "Apple M5 Max",
+    "driver": ""
+   }
+  },
+  {
+   "fixture": "parity/relation/lights-add.scene",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "light_sum_clamped",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "434519809747ae4d1f3440b484996fa80a06f4d0354f74eb99655f9e451c6d26"
+    }
+   ],
+   "reading": false,
+   "backend": "metal",
+   "adapter": {
+    "name": "Apple M5 Max",
+    "driver": ""
+   }
+  },
+  {
+   "fixture": "parity/relation/ortho-shift.scene",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "ortho_camera_snaps_to_grid",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "434519809747ae4d1f3440b484996fa80a06f4d0354f74eb99655f9e451c6d26"
+    }
+   ],
+   "reading": false,
+   "backend": "metal",
+   "adapter": {
+    "name": "Apple M5 Max",
+    "driver": ""
+   }
+  },
+  {
+   "fixture": "parity/relation/sphere-turn.scene",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "shades_by_local_tangent",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "434519809747ae4d1f3440b484996fa80a06f4d0354f74eb99655f9e451c6d26"
+    }
+   ],
+   "reading": false,
+   "backend": "metal",
+   "adapter": {
+    "name": "Apple M5 Max",
+    "driver": ""
+   }
+  },
+  {
+   "fixture": "parity/relation/occluder-never-brightens.scene",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "shadow_brightens",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "434519809747ae4d1f3440b484996fa80a06f4d0354f74eb99655f9e451c6d26"
+    }
+   ],
+   "reading": false,
+   "backend": "metal",
+   "adapter": {
+    "name": "Apple M5 Max",
+    "driver": ""
+   }
+  },
+  {
+   "fixture": "parity/relation/instances-keep-hash.scene",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "instances_skip_normal_target",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "434519809747ae4d1f3440b484996fa80a06f4d0354f74eb99655f9e451c6d26"
+    }
+   ],
+   "reading": false,
+   "backend": "metal",
+   "adapter": {
+    "name": "Apple M5 Max",
+    "driver": ""
+   }
+  },
+  {
+   "fixture": "parity/relation/translation.scene",
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you",
+   "since": null,
+   "age_days": null,
+   "twins": [
+    {
+     "name": "absolute_f32_world_positions",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "PASS",
+     "digest": "434519809747ae4d1f3440b484996fa80a06f4d0354f74eb99655f9e451c6d26"
+    }
+   ],
+   "reading": false,
+   "backend": "metal",
+   "adapter": {
+    "name": "Apple M5 Max",
+    "driver": ""
+   }
+  },
+  {
+   "fixture": "parity/relation/light-level.scene",
+   "verdict": "BLOCKED",
+   "reason": "the renderer's 16-bit float linear target holds a pixel to about 1e-3 relative and the relation asks 1e-4; the planted cut is caught, the rule itself waits for a wider linear chain",
+   "owner": "you",
+   "since": "2026-11-17T18:29:30.294Z",
+   "age_days": 0,
+   "twins": [
+    {
+     "name": "light_cut_absolute_illuminance",
+     "verdict": "FAIL"
+    }
+   ],
+   "comparisons": [],
+   "results": [
+    {
+     "verdict": "FAIL",
+     "digest": "a88ddf37fd4b4e01edff6196644e14eefb37a280913adc39d2ac2c10220ce505"
+    }
+   ],
+   "reading": false,
+   "backend": "metal",
+   "adapter": {
+    "name": "Apple M5 Max",
+    "driver": ""
+   }
+  }
+ ],
+ "ended": []
+}

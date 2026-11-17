@@ -319,10 +319,21 @@ fn capacity(w: &World) -> Vec<Refusal> {
     out
 }
 
-/// A spring or motor stiffer than the step resolves: above (step rate × substeps) ÷ 4 Hz (Joint).
+/// A spring or motor stiffer than the step resolves: above (step rate × substeps) ÷ 4 Hz (Joint);
+/// and (#2309) a contact, a spring too, stiffer than the step settles: above a sixth.
 fn springs(w: &World) -> Vec<Refusal> {
     let most = w.step_rate * f64::from(w.substeps) / 4.0;
     let mut out = Vec::new();
+    let hz = w.solver.contact_hz;
+    let settles = crate::doc::most_contact_hz(w.step_rate, f64::from(w.substeps));
+    if hz > settles {
+        out.push(Refusal {
+            code: "out_of_range",
+            path: "solver/contact_hz".into(),
+            actual: hz.into(),
+            what: format!("solver/contact_hz at {hz} Hz is stiffer than a contact settles at this step, so nothing on it ever rests: at most (step_rate × substeps) ÷ 6 = {settles} Hz"),
+        });
+    }
     for (id, j) in &w.joints {
         let hz = [
             ("spring", j.spring.as_ref().map(|s| s.hz)),

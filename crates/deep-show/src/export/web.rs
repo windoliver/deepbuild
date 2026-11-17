@@ -324,6 +324,13 @@ fn element(guard: Option<Guard>) -> String {
             "    const can = await gate(bundle.gpu_needs);",
             "    const n = bundle.gpu_needs;\n    const can = await gate({ ...n, features: [...n.features, ...n.any_of.flat()], any_of: [] });",
         ),
+        // Planted (#1045 AC1): no accessibility tree beside the canvas, and no live region.
+        Some(Guard::WebNoTree) => ELEMENT.replace("    this.#keepTree();\n", ""),
+        // Planted (#1045 AC1): each readout announced on every frame drawn, changed or not.
+        Some(Guard::WebAnnouncesEveryFrame) => ELEMENT.replace(
+            "      if (was !== undefined && was !== text) said.push(text);",
+            "      said.push(text);",
+        ),
         _ => ELEMENT.to_string(),
     }
 }
@@ -455,6 +462,8 @@ impl Hub<'_> {
             Guard::WebLeavesOutFont,
             Guard::WebIndexChecksWebgpuOnly,
             Guard::WebIndexRequiresEveryAnyOf,
+            Guard::WebNoTree,
+            Guard::WebAnnouncesEveryFrame,
         ]
         .into_iter()
         .find(|g| self.planted(Planted::Export(*g)))
@@ -480,6 +489,20 @@ impl Hub<'_> {
                 "why": format!("the web player's bundle can't carry {}", names.join(", "))}),
             );
         }
+        // #210: a port is the app's own, never the bundle's: each is named in the receipt's
+        // `refused` and left out of the document the player reads.
+        let ports: Vec<String> = doc
+            .get("ports")
+            .and_then(Value::as_object)
+            .map(|p| p.keys().cloned().collect())
+            .unwrap_or_default();
+        let mut carried = doc.clone();
+        if !self.planted(Planted::WebExportKeepsPort) {
+            if let Some(d) = carried.as_object_mut() {
+                d.remove("ports");
+            }
+        }
+        let doc = &carried;
         let guard = self.web_guard();
         let root = self.scenario.evidence.clone();
         let mut files = Files::default();
@@ -491,7 +514,7 @@ impl Hub<'_> {
         // The document as the app's frames draw it, and the recorded input track as the hub holds
         // it (#1164's `track` call), its bytes the ones its hash is of, so it is the app's by hash.
         let doc_bytes = serde_json::to_vec(doc).map_err(|_| json!({"code": "bad_input"}))?;
-        let (_, doc_sha) = files.put(doc_bytes, Some("json"), Map::new());
+        let (doc_path, doc_sha) = files.put(doc_bytes, Some("json"), Map::new());
         let mut held = deep_canvas_input::track::Track::default();
         for e in &job.track {
             let e = crate::track_call::entry_of(e).ok_or_else(
@@ -661,6 +684,17 @@ impl Hub<'_> {
                 "issues": [{"code": "export.fidelity", "what": why}]}),
             );
         }
+        // The bundle's document carries no port: one it keeps fails the read-back, naming it.
+        let kept: Vec<String> = all
+            .get(&doc_path)
+            .and_then(|b| serde_json::from_slice::<Value>(b).ok())
+            .and_then(|d| Some(d.get("ports")?.as_object()?.keys().cloned().collect()))
+            .unwrap_or_default();
+        if !kept.is_empty() {
+            let _ = std::fs::remove_dir_all(&temp);
+            return Err(json!({"outcome": "failed", "code": "export.fidelity",
+                "issues": [{"code": "export.fidelity", "what": format!("the bundle's document keeps the port {}; a web player carries no port", kept.join(", "))}]}));
+        }
         let _ = std::fs::remove_dir_all(&out);
         if std::fs::rename(&temp, &out).is_err() {
             let _ = std::fs::remove_dir_all(&temp);
@@ -683,7 +717,8 @@ impl Hub<'_> {
             "fallback": if fallback["tour_only"] == true { "tour_only" } else { "page" },
             "sources": [],
             "bytes": all.values().map(Vec::len).sum::<usize>(),
-            "refused": [],
+            "refused": ports.iter().map(|n| json!({"item": n, "code": "web.port",
+                "why": format!("the port {n} is the app's own to open; the web player has no plug-in to send to")})).collect::<Vec<_>>(),
             "gpu_needs": needs,
             "files": receipt_files,
         }))

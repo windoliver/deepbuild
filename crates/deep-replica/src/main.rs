@@ -164,8 +164,9 @@ mod replica {
             }
         }
         let colors = view == deep_replica::TERMINAL_COLORS;
+        let connect = view == deep_replica::CONNECT_BEFORE || view == deep_replica::CONNECT_AFTER;
         // The first screen is the pane a person gets (#1454): the app's own layout for this HOME.
-        let layout = if colors {
+        let layout = if colors || connect {
             Layout {
                 center: vec![deep_app::views::EXTENSION.into()],
                 ..Layout::shipped("home")
@@ -184,6 +185,13 @@ mod replica {
                             dark: dark == Some(true),
                         })
                         .into(),
+                        cx,
+                    );
+                }
+                if connect {
+                    let open = view == deep_replica::CONNECT_AFTER;
+                    deep_app::open::place_extension(
+                        cx.new(|_| deep_replica::kit::ConnectPrompt { open }).into(),
                         cx,
                     );
                 }
