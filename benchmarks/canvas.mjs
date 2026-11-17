@@ -4,7 +4,7 @@
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { loadavg, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { performance } from 'node:perf_hooks';
@@ -591,9 +591,13 @@ workloads['cell-grid-60hz'] = terminal(true);
 // the task's targets in benchmarks/budgets.json, refusing a reading of any other build. The perf lane compares each
 // command with the merge base as it does every task.
 const RUNS = 5;
+// Each run carries the one-minute load at its start and end, as measureOnce names them: judgeLimit's loads (#1830).
 const runs = (once) => {
   once(true);
-  return Array.from({ length: RUNS }, () => once(false));
+  return Array.from({ length: RUNS }, () => {
+    const loadStart = loadavg()[0];
+    return { ...once(false), loadStart, loadEnd: loadavg()[0] };
+  });
 };
 const toolchain = () => spawnSync('rustc', ['-V'], { cwd: root, encoding: 'utf8' }).stdout.trim();
 function release(pkg, bin) {
@@ -857,6 +861,106 @@ workloads['lens-focus'] = () => {
   }
 };
 
+// #508: a figure's budgets at 1080p on a release `deep-gpu`, the documents tests/acceptance/508/ac4-budgets.test.ts
+// draws: the turbofan fixture at 120 fps with its throttle moved to the top at 1 s, the redrawn frame's `wall_ms`
+// (frame 120 must differ from the untouched run's and frame 119 must not); 500 boxes in five assemblies taken apart
+// while the camera orbits, the worst `wall_ms` of frames 1 to 599 at 120 fps; and a projected inset over the left half
+// of a floor, lit and unlit, less the floor alone, the difference of the median `gpu_ms` over 120 frames. One warm-up
+// run and five, each a fresh process.
+const HD = [1920, 1080];
+const SKY = { kind: 'sky@1', params: { top: [0.15, 0.3, 0.75, 1], low: [0.45, 0.6, 0.85, 1], ambient_top: [0.25, 0.25, 0.25], ambient_low: [0.1, 0.1, 0.1] } };
+const asSession = (doc) => {
+  const d = structuredClone(doc);
+  d.layers = { main: { writer: 'agent-a', title: 'Main', order: 'a0' } };
+  for (const item of Object.values(d.items)) item.layer = 'main';
+  return d;
+};
+function partsDoc() {
+  const items = {
+    cam: { kind: 'camera@1', params: { projection: 'perspective', target: [0, 1, 0], orbit: { azimuth: 0, elevation: 20, distance: 14 }, fov: 40, near: 0.05, far: 200 } },
+    sky: SKY,
+    sun: { kind: 'light.sun@1', params: { illuminance: 3, color: [1, 1, 1], shadow: false }, at: { rot: [-45, 30, 0] } },
+    metal: { kind: 'material@1', params: { base_color: [0.6, 0.6, 0.65, 1], roughness: 0.5 } },
+  };
+  const assemblies = {};
+  for (let a = 0; a < 5; a++) assemblies[`a${a}`] = { parent: a === 0 ? null : 'a0', at: { pos: [0, 0, 0] }, apart: a === 0 ? [0, 0, 0] : [0, 0.6 * a, 0], order: a, value: 0 };
+  for (let k = 0; k < 500; k++) {
+    const a = Math.floor(k / 100), i = k % 100;
+    items[`p${String(k).padStart(3, '0')}`] = { kind: 'mark.box@1', params: { size: [0.3, 0.12, 0.3] }, at: { pos: [(i % 10) * 0.4 - 1.8, a * 0.2, Math.floor(i / 10) * 0.4 - 1.8] }, material: 'metal', parent: `a${a}` };
+  }
+  const keys = { k0: { t: '0s', value: 0, interp: 'hold' }, k1: { t: '1s', value: 1, interp: 'hold' }, k2: { t: '3s', value: 0, interp: 'hold' } };
+  return asSession({
+    format: 1, id: 'parts-500', profile: 'figure', title: 'Five hundred parts', description: 'A 500-part figure taken apart while the camera orbits.',
+    size: HD, camera: 'cam', seed: 508, transport: { span: '5s' }, requires: { modules: { scene3d: '^1' } }, budget: { class: 'figure' },
+    assemblies, items,
+    channels: {
+      spin: { target: 'items/cam/params/orbit/azimuth', type: 'f32', keys: { k0: { t: '0s', value: 0, interp: 'linear' }, k1: { t: '5s', value: 180, interp: 'linear' } } },
+      take: { target: 'assemblies/apart', type: 'f32', mode: 'follow', follow: { source: { keys }, model: { transition: { span: '1s', interp: 'linear' } } } },
+    },
+  });
+}
+function insetDoc(shading) {
+  const items = {
+    cam: { kind: 'camera@1', params: { projection: 'orthographic', position: [0, 20 * Math.sin(Math.PI / 3), 20 * Math.cos(Math.PI / 3)], target: [0, 0, 0], view_width: 19.2, near: 0.05, far: 200 } },
+    sky: SKY,
+    sun: { kind: 'light.sun@1', params: { illuminance: 3, color: [1, 1, 1], shadow: false }, at: { rot: [-50, 30, 0] } },
+    ground: { kind: 'material@1', params: { base_color: [0.4, 0.4, 0.4, 1], roughness: 0.9 } },
+    floor: { kind: 'mark.box@1', params: { size: [40, 0.1, 40] }, at: { pos: [0, -0.05, 0] }, material: 'ground' },
+  };
+  if (shading) {
+    items.map = {
+      kind: 'inset@1', parent: 'floor', at: { pos: [-4.8, 0, 0] },
+      params: { size: [9.6, 14], px_per_unit: 20, content: { ground: { kind: 'rect@1', order: 'a0', params: { box: [0, 0, 192, 280], paint: { fill: { role: 'stone' } } } } }, project: { shading } },
+    };
+  }
+  return asSession({
+    format: 1, id: `inset-${shading ?? 'none'}`, profile: 'scene', title: 'A projected inset over half a frame', description: 'A floor with a projected inset over the left half of a 1080p frame.',
+    size: HD, camera: 'cam', seed: 508, transport: { span: '2s' }, requires: { modules: { scene3d: '^1', marks2d: '^1' } }, budget: { class: 'figure' }, items,
+  });
+}
+workloads['figure-budgets'] = () => {
+  const fingerprint = release('deep-gpu-layer', 'deep-gpu');
+  const look2d = JSON.parse(readFileSync(join(root, 'tests', 'acceptance', '465', 'fixtures', 'look.json'), 'utf8'));
+  const look = { ...look2d, id: 'figure-508', basis: 'physical', palette: { ...look2d.palette, night: '#101114', graphite: '#1b1d22', slate: '#8b8f97', stone: '#d9dde3' },
+    roles: { ...look2d.roles, ground: 'night', ink: 'graphite', muted: 'slate', stone: 'stone' }, tone_map: 'none', finish: [], deband: 'none', bloom: 'none', ao: 'none', ground_3d: { kind: 'none' } };
+  const fan = JSON.parse(readFileSync(join(root, 'tests', 'fixtures', 'figures', 'turbofan', 'figure.json'), 'utf8'));
+  const top = fan.controls.throttle.range[1];
+  const dir = mkdtempSync(join(tmpdir(), 'deep-canvas-bench-'));
+  try {
+    const write = (name, doc) => {
+      const path = join(dir, `${name}.json`);
+      writeFileSync(path, JSON.stringify(doc));
+      return path;
+    };
+    const fanDoc = write('turbofan', asSession(fan));
+    const track = [{ t: SEC, seq: 0, control: 'throttle', value: top, writer: 'you', player: 1 }];
+    const view = (doc, fps, frames, more = {}) => ({ call: 'view3d', doc, look, size: HD, fps, frames, timings: true, ...more });
+    const calls = [
+      view(fanDoc, 120, 181, { track }), view(fanDoc, 120, 181), view(write('parts', partsDoc()), 120, 600),
+      ...['lit', 'unlit', null].map((s) => view(write(`inset-${s ?? 'none'}`, insetDoc(s)), 60, 120)),
+    ];
+    const median = (xs) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
+    const measured = runs(() => {
+      const answer = once('deep-gpu', ['run'], { out: dir, calls });
+      const refused = answer.replies?.findIndex((r) => r.code);
+      if (answer.ok !== true || refused >= 0) throw Error(`deep-gpu answered ${JSON.stringify(answer.replies?.[refused] ?? answer).slice(0, 1500)}`);
+      const [tracked, untracked, parts, lit, unlit, bare] = answer.replies.map((r) => r.frames);
+      if (tracked[119].pixel_hash !== untracked[119].pixel_hash) throw Error('the turbofan: frame 119 differs before the throttle moves');
+      if (tracked[120].pixel_hash === untracked[120].pixel_hash) throw Error('the turbofan: frame 120 doesn\'t show the throttle moved at 1 s');
+      const plain = median(bare.map((f) => f.gpu_ms));
+      return {
+        redraw_wall_ms: tracked[120].wall_ms,
+        parts_wall_ms: Math.max(...parts.slice(1).map((f) => f.wall_ms)),
+        inset_lit_gpu_ms: Math.max(0, median(lit.map((f) => f.gpu_ms)) - plain),
+        inset_unlit_gpu_ms: Math.max(0, median(unlit.map((f) => f.gpu_ms)) - plain),
+      };
+    });
+    console.log(JSON.stringify({ task: 'canvas-figure-budgets', fingerprint, runs: measured }));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+};
+
 // #166: the water's GPU cost at 1080p on a release `deep-gpu`, each the difference of two sides' median `gpu_ms` over
 // 300 frames, the water against the same plate as a plain mirror (strength 1, blur 0, roughness 0), so the mirror's own
 // pass is in both: a 400 m lake filling the lower half of the frame (four waves, ripples, rain) seen level from 2 m, and
@@ -954,6 +1058,52 @@ workloads['water-shore'] = () => {
       return { shore_lake_gpu_ms: Math.max(0, lake - mirror), water_pass_ms: median(water), mirror_gpu_ms: mirror, bake_ms: answer.replies[2].frames[0]?.shore?.bake_ms ?? null };
     });
     console.log(JSON.stringify({ task: 'canvas-water-shore', fingerprint, runs: measured }));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+};
+
+// #968: a 30 m × 20 m sheet of water with flow along a straight curve down its middle (speed 1.5, cycle 2, a 3 m/s
+// breeze's waves and the default ripples), seen straight down so it fills a third of a 1080p frame, against the same
+// sheet with `water: {}`; the difference of the sides' median `gpu_ms` over 300 frames is what the flow adds. One
+// warm-up run and five, each a fresh process. The stage is tests/acceptance/968/budgets.test.ts's.
+function flowStage(flow) {
+  const size = [1920, 1080];
+  const height = Math.sqrt((3 * 30 * 20 * size[0]) / size[1]) / 2 / Math.tan(Math.PI / 6);
+  const items = {
+    cam: { kind: 'camera@1', params: { projection: 'perspective', position: [0, height, 0], target: [0, 0, 0], fov: 60, near: 0.1, far: 1000 } },
+    sky: { kind: 'sky@1', params: { top: [0.15, 0.3, 0.75, 1], low: [0.6, 0.7, 0.85, 1], ambient_top: [0.25, 0.25, 0.25], ambient_low: [0.1, 0.1, 0.1] } },
+    sun: { kind: 'light.sun@1', params: { illuminance: 3, color: [1, 1, 1], shadow: false }, at: { rot: [-30, 30, 0] } },
+    'sheet-water': { kind: 'material@1', params: { roughness: 0.05, water: flow ? { flow } : {} } },
+    c: { kind: 'curve@1', params: { points: [[-15, 0, 0], [15, 0, 0]], mode: 'linear' } },
+    sheet: { kind: 'plate@1', params: { grid: [256, 256], size: [30, 20] }, at: { pos: [0, 0, 0] }, material: 'sheet-water' },
+  };
+  let order = 0;
+  for (const [id, item] of Object.entries(items)) Object.assign(item, { id, name: id, order: `a${String(order++).padStart(3, '0')}`, layer: 'main' });
+  return { format: 1, id: `sheet-${flow ? 'flow' : 'still'}`, profile: 'scene', title: 'Flow', size, camera: 'cam', seed: 968, transport: { span: '30s' },
+    requires: { modules: { scene3d: '^1' } }, budget: { class: 'showpiece' }, layers: { main: { writer: 'agent:bench', title: 'main', order: 'a0' } }, items };
+}
+workloads['water-flow'] = () => {
+  const fingerprint = release('deep-gpu-layer', 'deep-gpu');
+  const look2d = JSON.parse(readFileSync(join(root, 'tests', 'acceptance', '465', 'fixtures', 'look.json'), 'utf8'));
+  const look = { ...look2d, id: 'filmic-968', basis: 'physical', palette: { ...look2d.palette, night: '#101114', graphite: '#1b1d22', slate: '#8b8f97', white: '#ffffff' },
+    roles: { ...look2d.roles, ground: 'night', ink: 'graphite', muted: 'slate' }, tone_map: 'filmic', exposure: 0, finish: [], deband: 'none', bloom: 'none', ao: 'none', ground_3d: { kind: 'none' } };
+  const dir = mkdtempSync(join(tmpdir(), 'deep-canvas-bench-'));
+  try {
+    const docs = Object.fromEntries(Object.entries({ flow: flowStage({ along: 'c', speed: 1.5, cycle: 2 }), still: flowStage(null) }).map(([k, d]) => {
+      const path = join(dir, `${k}.json`);
+      writeFileSync(path, JSON.stringify(d));
+      return [k, path];
+    }));
+    const side = (doc) => ({ call: 'view3d', doc, look, size: [1920, 1080], frames: 300, fps: 30, timings: true });
+    const median = (xs) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
+    const measured = runs(() => {
+      const answer = once('deep-gpu', ['run'], { out: dir, calls: [side(docs.flow), side(docs.still)] });
+      if (answer.ok !== true || answer.replies.some((r) => r.code)) throw Error(`deep-gpu answered ${JSON.stringify(answer).slice(0, 1500)}`);
+      const [flow, still] = answer.replies.map((r) => median(r.frames.map((f) => f.gpu_ms)));
+      return { flow_sheet_gpu_ms: Math.max(0, flow - still), still_gpu_ms: still };
+    });
+    console.log(JSON.stringify({ task: 'canvas-water-flow', fingerprint, runs: measured }));
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -1058,6 +1208,57 @@ workloads.ground = () => {
   }
 };
 
+// #1636's budgets: a 4-level tree of 4 children a fork, 12 sides and 10 rings (about 21,000 triangles) built by geometry
+// with timings, and a forest of 10,000 instances of 8 seeded variants, each in bark and leaf, drawn for one frame with
+// counts: the most color-pass draws any (variant, material) of the forest takes.
+const treeParams = (seed, more = {}) => ({ seed, levels: 4, length: 4, radius: 0.15, split: 3, angle: 40, roll: 30, gravity: 0.3,
+  leaves: { per_twig: 6, size: 0.12 }, segments: 8, rings: 8, ...more });
+const treeItem = (params, more = {}) => ({ kind: 'tree@1', params, material: 'bark', materials: { leaves: 'leaf' }, ...more });
+const treeStages = () => {
+  const pos = Array.from({ length: 10_000 }, (_, k) => [4 * (k % 100), 0, 4 * Math.floor(k / 100)]);
+  const variants = Array.from({ length: 8 }, (_, k) => `variant-${k + 1}`);
+  const materials = { bark: groundMaterial([0.36, 0.25, 0.16], 0.9), leaf: groundMaterial([0.25, 0.5, 0.18], 0.7) };
+  return {
+    budget: groundDoc('tree-1636', [640, 360], { cam: groundCamera([7, 5, 14], [0, 4, 0]), sun: groundSun, ...materials,
+      tree: treeItem(treeParams(2026, { split: 4, segments: 12, rings: 10 })) }),
+    forest: groundDoc('forest-1636', [512, 512], { sun: groundSun, ...materials,
+      cam: { kind: 'camera@1', params: { projection: 'orthographic', position: [198, 120, 198], target: [198, 0, 198], view_width: 440, near: 1, far: 300 } },
+      ...Object.fromEntries(variants.map((v, k) => [v, treeItem(treeParams(k + 1), { visible: false })])),
+      forest: { kind: 'instance@1', params: { of: variants, ids: pos.map((_, k) => k), proto: pos.map((_, k) => k % 8), pos, yaw: pos.map((_, k) => (k * 137.5) % 360), scale: pos.map(() => 1) } } }),
+  };
+};
+workloads.tree = () => {
+  const fingerprint = release('deep-show', 'deep-show');
+  release('deep-gpu-layer', 'deep-gpu');
+  const look2d = JSON.parse(readFileSync(join(root, 'tests', 'acceptance', '465', 'fixtures', 'look.json'), 'utf8'));
+  const look = { ...look2d, id: 'plain-1636', basis: 'physical', palette: { ...look2d.palette, night: '#101114', graphite: '#1b1d22', slate: '#8b8f97', white: '#ffffff' },
+    roles: { ...look2d.roles, ground: 'night', ink: 'graphite', muted: 'slate' }, tone_map: 'none', exposure: -Math.log2(1.2), finish: [], deband: 'none', bloom: 'none', ao: 'none', ground_3d: { kind: 'none' } };
+  const dir = mkdtempSync(join(tmpdir(), 'deep-canvas-bench-'));
+  try {
+    const stages = treeStages();
+    const forest = join(dir, 'forest.json');
+    writeFileSync(forest, JSON.stringify(stages.forest));
+    const measured = runs(() => {
+      const answer = once('deep-show', ['run'], { evidence: dir, sessions: GROUND_SESSION, processes: GROUND_PROCESSES, panels: { main: { rect: [0, 0, 1280, 720] } },
+        docs: { [DOC]: { panel: 'main' } }, calls: [{ call: 'deep_show', session: 's1', doc: DOC, document: stillAsAgent(stages.budget) },
+          { call: 'geometry', doc: DOC, items: ['tree'], t: '0s', timings: true }] });
+      if (answer.ok !== true || answer.replies[0]?.outcome !== 'presented' || answer.replies[1]?.code) throw Error(`deep-show answered ${JSON.stringify(answer).slice(0, 1500)}`);
+      const row = answer.replies[1].items.find((r) => r.id === 'tree');
+      const drawn = once('deep-gpu', ['run'], { out: dir, calls: [{ call: 'view3d', doc: forest, look, size: [512, 512], fps: 30, frames: 1, counts: true }] });
+      if (drawn.ok !== true || drawn.replies[0]?.code) throw Error(`deep-gpu answered ${JSON.stringify(drawn).slice(0, 1500)}`);
+      const groups = new Map();
+      for (const d of drawn.replies[0].frames[0].draws.filter((d) => d.pass === 'color' && d.of === 'forest')) {
+        const key = `${d.mesh} in ${d.material}`;
+        groups.set(key, (groups.get(key) ?? 0) + 1);
+      }
+      return { tree_build_ms: row.build_ms, tree_triangles: row.indices.length / 3, forest_draws_per_variant_material: Math.max(0, ...groups.values()), forest_groups: groups.size };
+    });
+    console.log(JSON.stringify({ task: 'canvas-tree', fingerprint, runs: measured }));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+};
+
 // #896's two boards of a run, the 1,000-item one first; `null` for a run with any other boards.
 const pair = (r) => {
   const [small, large] = r.boards ?? [];
@@ -1092,15 +1293,19 @@ const EFFICIENCY = {
   'canvas-flares-mirrors': { finish_gpu_ms: (r) => r.finish_gpu_ms, flare_gpu_ms: (r) => r.flare_gpu_ms, mirror_share: (r) => r.mirror_share, indexed_target_bytes: (r) => r.indexed_target_bytes },
   'canvas-water': { lake_gpu_ms: (r) => r.lake_gpu_ms, waves_vertex_ms: (r) => r.waves_vertex_ms },
   'canvas-lens-focus': { dof_gpu_ms: (r) => r.dof_gpu_ms },
+  'canvas-figure-budgets': Object.fromEntries(['redraw_wall_ms', 'parts_wall_ms', 'inset_lit_gpu_ms', 'inset_unlit_gpu_ms'].map((k) => [k, (r) => r[k]])),
   'canvas-occlusion': { gpu_fall: (r) => r.gpu_fall, pyramid_declared_error: (r) => r.pyramid_declared_error },
   'canvas-water-shore': { shore_lake_gpu_ms: (r) => r.shore_lake_gpu_ms },
+  'canvas-water-flow': { flow_sheet_gpu_ms: (r) => r.flow_sheet_gpu_ms },
   'canvas-ground': {
     bevel_ms: (r) => r.bevel_ms, subdivide_ms: (r) => r.subdivide_ms, distribute_ms: (r) => r.distribute_ms, arc_length_ms: (r) => r.arc_length_ms,
     still_steps: (r) => r.still_steps, sway_gpu_ms: (r) => r.sway_gpu_ms,
   },
+  'canvas-tree': { tree_build_ms: (r) => r.tree_build_ms, forest_draws_per_variant_material: (r) => r.forest_draws_per_variant_material },
   // #538: each reading by its own name (benchmarks/game-state.mjs).
   'canvas-axes3d': { axes_over_marks: (r) => r.axes_over_marks, still_maps: (r) => r.still_maps },
   'canvas-surface': { rebuild_128_ms: (r) => r.rebuild_128_ms },
+  'canvas-math': { math_over_hand: (r) => r.math_over_hand, frame_expansions: (r) => r.frame_expansions },
   'canvas-game-state': Object.fromEntries(['compare_ms', 'remap_row_us', 'remap_layer_ms', 'upload_slots_ms', 'overlay_upload_ms', 'fit_check_ms', 'idle_steps'].map((k) => [k, (r) => r[k]])),
   // #548: each reading by its own name (benchmarks/logic-budgets.mjs).
   'canvas-logic-budgets': Object.fromEntries(['occurrences_64_ms', 'linear_1000_vec3_ms', 'preview_4mib_ms', 'checkpoint_3_pages_ms'].map((k) => [k, (r) => r[k]])),
@@ -1110,7 +1315,7 @@ const EFFICIENCY = {
   'playtest-maze': { maze_40_runs_s: (r) => r.maze_40_runs_s, idle_work: (r) => r.idle_work },
   'playtest-throughput': { fixture_realtime_x: (r) => r.fixture_realtime_x },
 };
-const COUNTS = new Set(['summary_tokens', 'page_rows', 'frames', 'upload_bytes_per_item', 'indexed_target_bytes', 'still_steps', 'idle_steps', 'still_maps', 'still_code_steps', 'idle_work']);
+const COUNTS = new Set(['summary_tokens', 'page_rows', 'frames', 'upload_bytes_per_item', 'indexed_target_bytes', 'still_steps', 'idle_steps', 'still_maps', 'still_code_steps', 'idle_work', 'frame_expansions', 'forest_draws_per_variant_material']);
 /** Targets that are floors, each reading at or above its limit: judged as the limit on their negations (#184's multiple of real time). */
 const FLOORS = new Set(['fixture_realtime_x']);
 
@@ -1335,6 +1540,102 @@ workloads['look-switch'] = () => {
     return { samples: reply.switches.map(({ ms, ground }, i) => ({ from: walk[i], to: walk[i + 1], ms, ground })) };
   });
   console.log(JSON.stringify({ task: 'canvas-look-switch', fixture, fingerprint, runs: measured }));
+};
+
+// #463's art@1 looks (tests/acceptance/463/README.md, "AC2's reports"): a release `deep-gpu` plays the shared test
+// scene in each pack look by ID, its pack installed, at 1080p, 30 warm frames then 300 timed, one warm-up run and five,
+// each run a fresh process. `art-frames` times every look in 2D (`film2d`) and 3D (`view3d`); `art-regions` times each
+// look, the next look of the list, and the scene with a region in that next look whose edge stays in view, with each
+// side's pixel hash at frame 30; `art-switch` switches the 2D film between every ordered pair of looks.
+const ART_463 = join('tests', 'acceptance', '463', 'fixtures');
+const ART_PACK = () => [{ id: 'deepbuild/art', dir: join(root, 'packs', 'art-1.0.0') }];
+const ART_SIZE = [1920, 1080];
+const artLooks = () => Object.keys(JSON.parse(readFileSync(join(root, 'packs', 'art-1.0.0', 'pack.json'), 'utf8')).looks);
+/** A fixture's 2D film and the path of its 3D scene, written into `dir`. */
+function artScene(dir, file) {
+  const fixture = `${ART_463}/${file}`;
+  const scene = JSON.parse(readFileSync(join(root, fixture), 'utf8'));
+  const path = join(dir, file.replace('.json', '-3d.json'));
+  writeFileSync(path, JSON.stringify(scene['3d']));
+  return { fixture, flat: scene['2d'], deep: path };
+}
+const artFrames = (reply) => reply.frames.slice(WARM_UP).map(({ gpu_ms, cpu_ms }) => ({ gpu_ms, cpu_ms }));
+const artCall = (dim, scene, look, extra = {}) => dim === '2d'
+  ? { call: 'film2d', doc: scene.flat, look, packs: ART_PACK(), fps: 30, ...extra }
+  : { call: 'view3d', doc: scene.deep, look, packs: ART_PACK(), size: ART_SIZE, fps: 30, timings: true, ...extra };
+/** `body(dir)` with a scratch folder removed after it. */
+function inScratch(body) {
+  const dir = mkdtempSync(join(tmpdir(), 'deep-art-'));
+  try { return body(dir); } finally { rmSync(dir, { recursive: true, force: true }); }
+}
+
+workloads['art-frames'] = () => {
+  const fingerprint = release('deep-gpu-layer', 'deep-gpu');
+  const looks = artLooks();
+  inScratch((dir) => {
+    const scene = artScene(dir, 'scene.json');
+    const frames = WARM_UP + WARM_FRAMES;
+    const measured = runs(() => {
+      const flat = films(looks.map((look) => artCall('2d', scene, look, { frames })));
+      const deep = films(looks.map((look) => artCall('3d', scene, look, { frames })));
+      return { looks: Object.fromEntries(looks.map((look, i) => [look, {
+        '2d': { fixture: scene.fixture, size: ART_SIZE, frames: artFrames(flat[i]) },
+        '3d': { fixture: scene.fixture, size: ART_SIZE, frames: artFrames(deep[i]) },
+      }])) };
+    });
+    console.log(JSON.stringify({ task: 'canvas-art-frames', fingerprint, runs: measured }));
+  });
+};
+
+workloads['art-regions'] = () => {
+  const fingerprint = release('deep-gpu-layer', 'deep-gpu');
+  const looks = artLooks();
+  const pairs = looks.map((look, i) => ({ look, region: looks[(i + 1) % looks.length] }));
+  inScratch((dir) => {
+    const plain = artScene(dir, 'scene.json');
+    const edged = artScene(dir, 'scene-region.json');
+    const frames = WARM_UP + WARM_FRAMES;
+    const sides = (dim, { look, region }) => [
+      artCall(dim, plain, look, { frames }),
+      artCall(dim, plain, region, { frames }),
+      artCall(dim, edged, look, { frames, looks: { outer: look, inner: region } }),
+    ];
+    const hashAt = (dim, call) => dim === '2d'
+      ? { ...call, frames: WARM_UP + 1, hash: true }
+      : { ...call, frames: WARM_UP + 1, capture: [WARM_UP], targets: ['final'], timings: false };
+    const measured = runs(() => {
+      const byDim = Object.fromEntries(['2d', '3d'].map((dim) => {
+        const calls = pairs.flatMap((p) => sides(dim, p));
+        const timed = films(calls);
+        const hashed = films(calls.map((c) => hashAt(dim, c)));
+        return [dim, { timed, hashed }];
+      }));
+      return { pairs: pairs.map((p, k) => ({ ...p, ...Object.fromEntries(['2d', '3d'].map((dim) => {
+        const at = (j) => byDim[dim].timed[3 * k + j];
+        const hash = (j) => byDim[dim].hashed[3 * k + j].frames[WARM_UP].pixel_hash;
+        return [dim, {
+          fixture: edged.fixture,
+          outer: { frames: artFrames(at(0)) }, inner: { frames: artFrames(at(1)) }, edge: { frames: artFrames(at(2)) },
+          hashes: { outer: hash(0), inner: hash(1), edge: hash(2) },
+        }];
+      })) })) };
+    });
+    console.log(JSON.stringify({ task: 'canvas-art-regions', fingerprint, runs: measured }));
+  });
+};
+
+workloads['art-switch'] = () => {
+  const fingerprint = release('deep-gpu-layer', 'deep-gpu');
+  const fixture = `${ART_463}/scene.json`;
+  const doc = JSON.parse(readFileSync(join(root, fixture), 'utf8'))['2d'];
+  const walk = everyPair(artLooks());
+  const events = walk.slice(1).map((look, i) => ({ frame: SWITCH_EVERY * (i + 1), look }));
+  const measured = runs(() => {
+    const [reply] = films([{ call: 'film2d', doc, look: walk[0], packs: ART_PACK(), frames: SWITCH_EVERY * walk.length, events }]);
+    if (reply.switches?.length !== events.length) throw Error(`film2d timed ${reply.switches?.length} of ${events.length} switches`);
+    return { samples: reply.switches.map(({ ms, ground }, i) => ({ from: walk[i], to: walk[i + 1], ms, ground })) };
+  });
+  console.log(JSON.stringify({ task: 'canvas-art-switch', fixture, fingerprint, runs: measured }));
 };
 
 // #105: a bug capture of the second display through `deep-show run` on the virtual clock: picked, the chord held for
@@ -1563,6 +1864,8 @@ workloads.surface = async () => (await import('./surface.mjs')).surface({ releas
 // #1968's budgets: a long file's tokens mapped to runs, two versions aligned, a seek into a long terminal recording and a
 // still code item's steps per frame (benchmarks/code-film.mjs).
 workloads['code-film'] = async () => (await import('./code-film.mjs')).codeFilm({ release, once, runs });
+// #233's budgets: a math@1 document against its expansion written by hand, and a frame's own expansions (benchmarks/math.mjs).
+workloads.math = async () => (await import('./math.mjs')).math({ root, release, once, runs });
 workloads['between-steps'] = async () => (await import('./between-steps.mjs')).betweenSteps({ root, release, once, runs });
 // #184's budgets: the maze's 40 runs and replays on two replicas with no work added to a piece played without the
 // plug-in, and 20 runs of the 2-minute maze on four replicas as a multiple of real time (benchmarks/playtest.mjs).

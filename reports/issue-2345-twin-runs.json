@@ -1,0 +1,1038 @@
+{
+ "issue": 2345,
+ "commit": "1c4d1f0e2 (#2236 merged)",
+ "classing": "each failure classed by scripts/proof-runs.mjs atAssertion at 1c4d1f0e2: a framework assertion thrown under the test paths",
+ "ac2": {
+  "twin": "tests/acceptance/39/twins/takes-first-stamp (two fault lines over packages/hub/src/mcp-operations.ts)",
+  "file": "tests/acceptance/39/redraft-ac5/ac5.test.ts",
+  "pattern": "#39\\.de9f23ce",
+  "rounds": [
+   {
+    "run": 1,
+    "checkout": "clean",
+    "exit": 0,
+    "seconds": 4,
+    "load": 12,
+    "ended": true,
+    "cases": [
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls in that order, A's, then B's: each ask under its own session",
+      "status": "pass"
+     },
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls against that order, B's, then A's: each ask under its own session",
+      "status": "pass"
+     }
+    ],
+    "skipped": [],
+    "unhandled": []
+   },
+   {
+    "run": 1,
+    "checkout": "twin",
+    "exit": 1,
+    "seconds": 4,
+    "load": 13,
+    "ended": true,
+    "cases": [
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls in that order, A's, then B's: each ask under its own session",
+      "status": "pass"
+     },
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls against that order, B's, then A's: each ask under its own session",
+      "status": "fail",
+      "atAssertion": true,
+      "cause": "AssertionError: thread A (session 8710a068-4205-4998-a1ea-29acecef0d59, question \"Which header colour should the cart page use? (thread A, 860fb8a5)\"): its ask is filed once, under its own session 8710a068-4205-4998-a1ea-29acecef0d59, not under thread B's 0323b126-eb4c-422c-96a9-80a1a5978c04; its call replied {\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"ask\\\":\\\"ask:01M7HTG6Z65K5HH5CBCDM9J82R\\\",\\\"status\\\":\\\"provisional\\\",\\\"answer\\\":\\\"blue\\\",\\\"note\\\":\\\"Go on with blue for thread A: it is provisional and can be undone, and only steps that leave the machine wait for the answer.\\\"}\"}],\"isError\":false,\"structuredContent\":{\"ask\":\"ask:01M7HTG6Z65K5HH5CBCDM9J82R\",\"status\":\"provisional\",\"answer\":\"blue\",\"note\":\"Go on with blue for thread A: it is provisional and can be undone, and only steps that leave the machine wait for the answer.\"}}}: expected [ Array(1) ] to deeply equal [ Array(1) ]",
+      "frame": "tests/acceptance/39/redraft-ac5/ac5.test.ts"
+     }
+    ],
+    "skipped": [],
+    "unhandled": []
+   },
+   {
+    "run": 2,
+    "checkout": "clean",
+    "exit": 0,
+    "seconds": 3,
+    "load": 16,
+    "ended": true,
+    "cases": [
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls in that order, A's, then B's: each ask under its own session",
+      "status": "pass"
+     },
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls against that order, B's, then A's: each ask under its own session",
+      "status": "pass"
+     }
+    ],
+    "skipped": [],
+    "unhandled": []
+   },
+   {
+    "run": 2,
+    "checkout": "twin",
+    "exit": 1,
+    "seconds": 3,
+    "load": 15,
+    "ended": true,
+    "cases": [
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls in that order, A's, then B's: each ask under its own session",
+      "status": "pass"
+     },
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls against that order, B's, then A's: each ask under its own session",
+      "status": "fail",
+      "atAssertion": true,
+      "cause": "AssertionError: thread A (session 9fca9b8b-40b4-4008-ad02-ffc06b93bad0, question \"Which header colour should the cart page use? (thread A, 2d7a689b)\"): its ask is filed once, under its own session 9fca9b8b-40b4-4008-ad02-ffc06b93bad0, not under thread B's 0dab58ee-0582-4cdc-b31b-da83932e17de; its call replied {\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"ask\\\":\\\"ask:01M7HTGDGRXZXA7SG9R3NH5SQW\\\",\\\"status\\\":\\\"provisional\\\",\\\"answer\\\":\\\"blue\\\",\\\"note\\\":\\\"Go on with blue for thread A: it is provisional and can be undone, and only steps that leave the machine wait for the answer.\\\"}\"}],\"isError\":false,\"structuredContent\":{\"ask\":\"ask:01M7HTGDGRXZXA7SG9R3NH5SQW\",\"status\":\"provisional\",\"answer\":\"blue\",\"note\":\"Go on with blue for thread A: it is provisional and can be undone, and only steps that leave the machine wait for the answer.\"}}}: expected [ Array(1) ] to deeply equal [ Array(1) ]",
+      "frame": "tests/acceptance/39/redraft-ac5/ac5.test.ts"
+     }
+    ],
+    "skipped": [],
+    "unhandled": []
+   },
+   {
+    "run": 3,
+    "checkout": "clean",
+    "exit": 0,
+    "seconds": 3,
+    "load": 15,
+    "ended": true,
+    "cases": [
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls in that order, A's, then B's: each ask under its own session",
+      "status": "pass"
+     },
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls against that order, B's, then A's: each ask under its own session",
+      "status": "pass"
+     }
+    ],
+    "skipped": [],
+    "unhandled": []
+   },
+   {
+    "run": 3,
+    "checkout": "twin",
+    "exit": 1,
+    "seconds": 3,
+    "load": 15,
+    "ended": true,
+    "cases": [
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls in that order, A's, then B's: each ask under its own session",
+      "status": "pass"
+     },
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls against that order, B's, then A's: each ask under its own session",
+      "status": "fail",
+      "atAssertion": true,
+      "cause": "AssertionError: thread A (session 45b1b12d-01a4-47a5-883d-76a5733d754b, question \"Which header colour should the cart page use? (thread A, ff352f60)\"): its ask is filed once, under its own session 45b1b12d-01a4-47a5-883d-76a5733d754b, not under thread B's 8eccb213-cf09-417c-be2f-8d548afd1f2c; its call replied {\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"ask\\\":\\\"ask:01M7HTGM0P6ZMEGW17MS38ZP4S\\\",\\\"status\\\":\\\"provisional\\\",\\\"answer\\\":\\\"blue\\\",\\\"note\\\":\\\"Go on with blue for thread A: it is provisional and can be undone, and only steps that leave the machine wait for the answer.\\\"}\"}],\"isError\":false,\"structuredContent\":{\"ask\":\"ask:01M7HTGM0P6ZMEGW17MS38ZP4S\",\"status\":\"provisional\",\"answer\":\"blue\",\"note\":\"Go on with blue for thread A: it is provisional and can be undone, and only steps that leave the machine wait for the answer.\"}}}: expected [ Array(1) ] to deeply equal [ Array(1) ]",
+      "frame": "tests/acceptance/39/redraft-ac5/ac5.test.ts"
+     }
+    ],
+    "skipped": [],
+    "unhandled": []
+   },
+   {
+    "run": 4,
+    "checkout": "clean",
+    "exit": 0,
+    "seconds": 4,
+    "load": 14,
+    "ended": true,
+    "cases": [
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls in that order, A's, then B's: each ask under its own session",
+      "status": "pass"
+     },
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls against that order, B's, then A's: each ask under its own session",
+      "status": "pass"
+     }
+    ],
+    "skipped": [],
+    "unhandled": []
+   },
+   {
+    "run": 4,
+    "checkout": "twin",
+    "exit": 1,
+    "seconds": 4,
+    "load": 16,
+    "ended": true,
+    "cases": [
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls in that order, A's, then B's: each ask under its own session",
+      "status": "pass"
+     },
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls against that order, B's, then A's: each ask under its own session",
+      "status": "fail",
+      "atAssertion": true,
+      "cause": "AssertionError: thread A (session fbd14e12-0430-438f-a88d-addad404bf6c, question \"Which header colour should the cart page use? (thread A, 5951584a)\"): its ask is filed once, under its own session fbd14e12-0430-438f-a88d-addad404bf6c, not under thread B's 73cc3397-38b9-4b14-b58b-6e9db3800740; its call replied {\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"ask\\\":\\\"ask:01M7HTGVV95FRFN8CD7JAJ3JP6\\\",\\\"status\\\":\\\"provisional\\\",\\\"answer\\\":\\\"blue\\\",\\\"note\\\":\\\"Go on with blue for thread A: it is provisional and can be undone, and only steps that leave the machine wait for the answer.\\\"}\"}],\"isError\":false,\"structuredContent\":{\"ask\":\"ask:01M7HTGVV95FRFN8CD7JAJ3JP6\",\"status\":\"provisional\",\"answer\":\"blue\",\"note\":\"Go on with blue for thread A: it is provisional and can be undone, and only steps that leave the machine wait for the answer.\"}}}: expected [ Array(1) ] to deeply equal [ Array(1) ]",
+      "frame": "tests/acceptance/39/redraft-ac5/ac5.test.ts"
+     }
+    ],
+    "skipped": [],
+    "unhandled": []
+   },
+   {
+    "run": 5,
+    "checkout": "clean",
+    "exit": 0,
+    "seconds": 4,
+    "load": 16,
+    "ended": true,
+    "cases": [
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls in that order, A's, then B's: each ask under its own session",
+      "status": "pass"
+     },
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls against that order, B's, then A's: each ask under its own session",
+      "status": "pass"
+     }
+    ],
+    "skipped": [],
+    "unhandled": []
+   },
+   {
+    "run": 5,
+    "checkout": "twin",
+    "exit": 1,
+    "seconds": 3,
+    "load": 20,
+    "ended": true,
+    "cases": [
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls in that order, A's, then B's: each ask under its own session",
+      "status": "pass"
+     },
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls against that order, B's, then A's: each ask under its own session",
+      "status": "fail",
+      "atAssertion": true,
+      "cause": "AssertionError: thread A (session 8602f594-d79b-4ac5-9a38-4c1ce31cb7f8, question \"Which header colour should the cart page use? (thread A, dbfe6ea0)\"): its ask is filed once, under its own session 8602f594-d79b-4ac5-9a38-4c1ce31cb7f8, not under thread B's 7a26822b-fd4b-49e8-86b3-840556cb99fc; its call replied {\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"ask\\\":\\\"ask:01M7HTH39Z567SZ56ET1V2NKBT\\\",\\\"status\\\":\\\"provisional\\\",\\\"answer\\\":\\\"blue\\\",\\\"note\\\":\\\"Go on with blue for thread A: it is provisional and can be undone, and only steps that leave the machine wait for the answer.\\\"}\"}],\"isError\":false,\"structuredContent\":{\"ask\":\"ask:01M7HTH39Z567SZ56ET1V2NKBT\",\"status\":\"provisional\",\"answer\":\"blue\",\"note\":\"Go on with blue for thread A: it is provisional and can be undone, and only steps that leave the machine wait for the answer.\"}}}: expected [ Array(1) ] to deeply equal [ Array(1) ]",
+      "frame": "tests/acceptance/39/redraft-ac5/ac5.test.ts"
+     }
+    ],
+    "skipped": [],
+    "unhandled": []
+   },
+   {
+    "run": 6,
+    "checkout": "clean",
+    "exit": 0,
+    "seconds": 3,
+    "load": 21,
+    "ended": true,
+    "cases": [
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls in that order, A's, then B's: each ask under its own session",
+      "status": "pass"
+     },
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls against that order, B's, then A's: each ask under its own session",
+      "status": "pass"
+     }
+    ],
+    "skipped": [],
+    "unhandled": []
+   },
+   {
+    "run": 6,
+    "checkout": "twin",
+    "exit": 1,
+    "seconds": 3,
+    "load": 22,
+    "ended": true,
+    "cases": [
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls in that order, A's, then B's: each ask under its own session",
+      "status": "pass"
+     },
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls against that order, B's, then A's: each ask under its own session",
+      "status": "fail",
+      "atAssertion": true,
+      "cause": "AssertionError: thread A (session 25bea12a-f01d-4ce9-97f9-6da9d7cb840f, question \"Which header colour should the cart page use? (thread A, 254096d3)\"): its ask is filed once, under its own session 25bea12a-f01d-4ce9-97f9-6da9d7cb840f, not under thread B's 85dea08c-62d2-4c3e-9e34-fb70ebaf47d4; its call replied {\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"ask\\\":\\\"ask:01M7HTH9XVYWKQFVDE52T7X7Z4\\\",\\\"status\\\":\\\"provisional\\\",\\\"answer\\\":\\\"blue\\\",\\\"note\\\":\\\"Go on with blue for thread A: it is provisional and can be undone, and only steps that leave the machine wait for the answer.\\\"}\"}],\"isError\":false,\"structuredContent\":{\"ask\":\"ask:01M7HTH9XVYWKQFVDE52T7X7Z4\",\"status\":\"provisional\",\"answer\":\"blue\",\"note\":\"Go on with blue for thread A: it is provisional and can be undone, and only steps that leave the machine wait for the answer.\"}}}: expected [ Array(1) ] to deeply equal [ Array(1) ]",
+      "frame": "tests/acceptance/39/redraft-ac5/ac5.test.ts"
+     }
+    ],
+    "skipped": [],
+    "unhandled": []
+   },
+   {
+    "run": 7,
+    "checkout": "clean",
+    "exit": 0,
+    "seconds": 3,
+    "load": 22,
+    "ended": true,
+    "cases": [
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls in that order, A's, then B's: each ask under its own session",
+      "status": "pass"
+     },
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls against that order, B's, then A's: each ask under its own session",
+      "status": "pass"
+     }
+    ],
+    "skipped": [],
+    "unhandled": []
+   },
+   {
+    "run": 7,
+    "checkout": "twin",
+    "exit": 1,
+    "seconds": 3,
+    "load": 26,
+    "ended": true,
+    "cases": [
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls in that order, A's, then B's: each ask under its own session",
+      "status": "pass"
+     },
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls against that order, B's, then A's: each ask under its own session",
+      "status": "fail",
+      "atAssertion": true,
+      "cause": "AssertionError: thread A (session dbade33f-5788-4f04-bea3-0126ace0218e, question \"Which header colour should the cart page use? (thread A, 6e8f10c1)\"): its ask is filed once, under its own session dbade33f-5788-4f04-bea3-0126ace0218e, not under thread B's cbca5b8f-1995-415c-b8be-c9ccfba5b184; its call replied {\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"ask\\\":\\\"ask:01M7HTHGCQ0839G8X3NTVXM3DP\\\",\\\"status\\\":\\\"provisional\\\",\\\"answer\\\":\\\"blue\\\",\\\"note\\\":\\\"Go on with blue for thread A: it is provisional and can be undone, and only steps that leave the machine wait for the answer.\\\"}\"}],\"isError\":false,\"structuredContent\":{\"ask\":\"ask:01M7HTHGCQ0839G8X3NTVXM3DP\",\"status\":\"provisional\",\"answer\":\"blue\",\"note\":\"Go on with blue for thread A: it is provisional and can be undone, and only steps that leave the machine wait for the answer.\"}}}: expected [ Array(1) ] to deeply equal [ Array(1) ]",
+      "frame": "tests/acceptance/39/redraft-ac5/ac5.test.ts"
+     }
+    ],
+    "skipped": [],
+    "unhandled": []
+   },
+   {
+    "run": 8,
+    "checkout": "clean",
+    "exit": 0,
+    "seconds": 4,
+    "load": 30,
+    "ended": true,
+    "cases": [
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls in that order, A's, then B's: each ask under its own session",
+      "status": "pass"
+     },
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls against that order, B's, then A's: each ask under its own session",
+      "status": "pass"
+     }
+    ],
+    "skipped": [],
+    "unhandled": []
+   },
+   {
+    "run": 8,
+    "checkout": "twin",
+    "exit": 1,
+    "seconds": 4,
+    "load": 30,
+    "ended": true,
+    "cases": [
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls in that order, A's, then B's: each ask under its own session",
+      "status": "pass"
+     },
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls against that order, B's, then A's: each ask under its own session",
+      "status": "fail",
+      "atAssertion": true,
+      "cause": "AssertionError: thread A (session 2f781302-9bc7-433e-9bb7-ec460fb778b7, question \"Which header colour should the cart page use? (thread A, 8dfb2032)\"): its ask is filed once, under its own session 2f781302-9bc7-433e-9bb7-ec460fb778b7, not under thread B's 4c773b74-c68d-46d7-8196-f5332e4c087b; its call replied {\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"ask\\\":\\\"ask:01M7HTHQM8EMS6TZA8GDSDMPRD\\\",\\\"status\\\":\\\"provisional\\\",\\\"answer\\\":\\\"blue\\\",\\\"note\\\":\\\"Go on with blue for thread A: it is provisional and can be undone, and only steps that leave the machine wait for the answer.\\\"}\"}],\"isError\":false,\"structuredContent\":{\"ask\":\"ask:01M7HTHQM8EMS6TZA8GDSDMPRD\",\"status\":\"provisional\",\"answer\":\"blue\",\"note\":\"Go on with blue for thread A: it is provisional and can be undone, and only steps that leave the machine wait for the answer.\"}}}: expected [ Array(1) ] to deeply equal [ Array(1) ]",
+      "frame": "tests/acceptance/39/redraft-ac5/ac5.test.ts"
+     }
+    ],
+    "skipped": [],
+    "unhandled": []
+   },
+   {
+    "run": 9,
+    "checkout": "clean",
+    "exit": 0,
+    "seconds": 4,
+    "load": 32,
+    "ended": true,
+    "cases": [
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls in that order, A's, then B's: each ask under its own session",
+      "status": "pass"
+     },
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls against that order, B's, then A's: each ask under its own session",
+      "status": "pass"
+     }
+    ],
+    "skipped": [],
+    "unhandled": []
+   },
+   {
+    "run": 9,
+    "checkout": "twin",
+    "exit": 1,
+    "seconds": 3,
+    "load": 30,
+    "ended": true,
+    "cases": [
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls in that order, A's, then B's: each ask under its own session",
+      "status": "pass"
+     },
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls against that order, B's, then A's: each ask under its own session",
+      "status": "fail",
+      "atAssertion": true,
+      "cause": "AssertionError: thread A (session 367ad05f-6229-4107-b75a-59b17deaca64, question \"Which header colour should the cart page use? (thread A, 1ca2592b)\"): its ask is filed once, under its own session 367ad05f-6229-4107-b75a-59b17deaca64, not under thread B's 8c15e6d5-3fe0-49c7-8f7b-064cdcc5a411; its call replied {\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"ask\\\":\\\"ask:01M7HTHYCAS1RHH4AW6267RC4T\\\",\\\"status\\\":\\\"provisional\\\",\\\"answer\\\":\\\"blue\\\",\\\"note\\\":\\\"Go on with blue for thread A: it is provisional and can be undone, and only steps that leave the machine wait for the answer.\\\"}\"}],\"isError\":false,\"structuredContent\":{\"ask\":\"ask:01M7HTHYCAS1RHH4AW6267RC4T\",\"status\":\"provisional\",\"answer\":\"blue\",\"note\":\"Go on with blue for thread A: it is provisional and can be undone, and only steps that leave the machine wait for the answer.\"}}}: expected [ Array(1) ] to deeply equal [ Array(1) ]",
+      "frame": "tests/acceptance/39/redraft-ac5/ac5.test.ts"
+     }
+    ],
+    "skipped": [],
+    "unhandled": []
+   },
+   {
+    "run": 10,
+    "checkout": "clean",
+    "exit": 0,
+    "seconds": 3,
+    "load": 28,
+    "ended": true,
+    "cases": [
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls in that order, A's, then B's: each ask under its own session",
+      "status": "pass"
+     },
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls against that order, B's, then A's: each ask under its own session",
+      "status": "pass"
+     }
+    ],
+    "skipped": [],
+    "unhandled": []
+   },
+   {
+    "run": 10,
+    "checkout": "twin",
+    "exit": 1,
+    "seconds": 4,
+    "load": 28,
+    "ended": true,
+    "cases": [
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls in that order, A's, then B's: each ask under its own session",
+      "status": "pass"
+     },
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls against that order, B's, then A's: each ask under its own session",
+      "status": "fail",
+      "atAssertion": true,
+      "cause": "AssertionError: thread A (session 0a61c730-2002-460c-8117-3da4b12ba436, question \"Which header colour should the cart page use? (thread A, 3820e6ed)\"): its ask is filed once, under its own session 0a61c730-2002-460c-8117-3da4b12ba436, not under thread B's 5b22dc50-a51b-4e92-bd5c-8c4f703ad11f; its call replied {\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"ask\\\":\\\"ask:01M7HTJ50DPY0R7FQNEQ1X5A0Z\\\",\\\"status\\\":\\\"provisional\\\",\\\"answer\\\":\\\"blue\\\",\\\"note\\\":\\\"Go on with blue for thread A: it is provisional and can be undone, and only steps that leave the machine wait for the answer.\\\"}\"}],\"isError\":false,\"structuredContent\":{\"ask\":\"ask:01M7HTJ50DPY0R7FQNEQ1X5A0Z\",\"status\":\"provisional\",\"answer\":\"blue\",\"note\":\"Go on with blue for thread A: it is provisional and can be undone, and only steps that leave the machine wait for the answer.\"}}}: expected [ Array(1) ] to deeply equal [ Array(1) ]",
+      "frame": "tests/acceptance/39/redraft-ac5/ac5.test.ts"
+     }
+    ],
+    "skipped": [],
+    "unhandled": []
+   },
+   {
+    "run": 11,
+    "checkout": "clean",
+    "exit": 0,
+    "seconds": 3,
+    "load": 28,
+    "ended": true,
+    "cases": [
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls in that order, A's, then B's: each ask under its own session",
+      "status": "pass"
+     },
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls against that order, B's, then A's: each ask under its own session",
+      "status": "pass"
+     }
+    ],
+    "skipped": [],
+    "unhandled": []
+   },
+   {
+    "run": 11,
+    "checkout": "twin",
+    "exit": 1,
+    "seconds": 4,
+    "load": 27,
+    "ended": true,
+    "cases": [
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls in that order, A's, then B's: each ask under its own session",
+      "status": "pass"
+     },
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls against that order, B's, then A's: each ask under its own session",
+      "status": "fail",
+      "atAssertion": true,
+      "cause": "AssertionError: thread A (session ad66ce9b-06b8-4ae5-9ff4-c97577cbb0f4, question \"Which header colour should the cart page use? (thread A, 9e90076f)\"): its ask is filed once, under its own session ad66ce9b-06b8-4ae5-9ff4-c97577cbb0f4, not under thread B's df8ca10d-199f-4900-a51c-33abc19555ca; its call replied {\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"ask\\\":\\\"ask:01M7HTJBQKB305QS7W8W44AAFH\\\",\\\"status\\\":\\\"provisional\\\",\\\"answer\\\":\\\"blue\\\",\\\"note\\\":\\\"Go on with blue for thread A: it is provisional and can be undone, and only steps that leave the machine wait for the answer.\\\"}\"}],\"isError\":false,\"structuredContent\":{\"ask\":\"ask:01M7HTJBQKB305QS7W8W44AAFH\",\"status\":\"provisional\",\"answer\":\"blue\",\"note\":\"Go on with blue for thread A: it is provisional and can be undone, and only steps that leave the machine wait for the answer.\"}}}: expected [ Array(1) ] to deeply equal [ Array(1) ]",
+      "frame": "tests/acceptance/39/redraft-ac5/ac5.test.ts"
+     }
+    ],
+    "skipped": [],
+    "unhandled": []
+   },
+   {
+    "run": 12,
+    "checkout": "clean",
+    "exit": 0,
+    "seconds": 3,
+    "load": 27,
+    "ended": true,
+    "cases": [
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls in that order, A's, then B's: each ask under its own session",
+      "status": "pass"
+     },
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls against that order, B's, then A's: each ask under its own session",
+      "status": "pass"
+     }
+    ],
+    "skipped": [],
+    "unhandled": []
+   },
+   {
+    "run": 12,
+    "checkout": "twin",
+    "exit": 1,
+    "seconds": 3,
+    "load": 28,
+    "ended": true,
+    "cases": [
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls in that order, A's, then B's: each ask under its own session",
+      "status": "pass"
+     },
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls against that order, B's, then A's: each ask under its own session",
+      "status": "fail",
+      "atAssertion": true,
+      "cause": "AssertionError: thread A (session b5a4606a-5c8e-46a5-be1a-993a57a06477, question \"Which header colour should the cart page use? (thread A, 755e278c)\"): its ask is filed once, under its own session b5a4606a-5c8e-46a5-be1a-993a57a06477, not under thread B's 1a19081d-98ca-4110-a36f-43cf53330df0; its call replied {\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"ask\\\":\\\"ask:01M7HTJJ9W816G1838HMYZRSG1\\\",\\\"status\\\":\\\"provisional\\\",\\\"answer\\\":\\\"blue\\\",\\\"note\\\":\\\"Go on with blue for thread A: it is provisional and can be undone, and only steps that leave the machine wait for the answer.\\\"}\"}],\"isError\":false,\"structuredContent\":{\"ask\":\"ask:01M7HTJJ9W816G1838HMYZRSG1\",\"status\":\"provisional\",\"answer\":\"blue\",\"note\":\"Go on with blue for thread A: it is provisional and can be undone, and only steps that leave the machine wait for the answer.\"}}}: expected [ Array(1) ] to deeply equal [ Array(1) ]",
+      "frame": "tests/acceptance/39/redraft-ac5/ac5.test.ts"
+     }
+    ],
+    "skipped": [],
+    "unhandled": []
+   },
+   {
+    "run": 13,
+    "checkout": "clean",
+    "exit": 0,
+    "seconds": 3,
+    "load": 27,
+    "ended": true,
+    "cases": [
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls in that order, A's, then B's: each ask under its own session",
+      "status": "pass"
+     },
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls against that order, B's, then A's: each ask under its own session",
+      "status": "pass"
+     }
+    ],
+    "skipped": [],
+    "unhandled": []
+   },
+   {
+    "run": 13,
+    "checkout": "twin",
+    "exit": 1,
+    "seconds": 3,
+    "load": 27,
+    "ended": true,
+    "cases": [
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls in that order, A's, then B's: each ask under its own session",
+      "status": "pass"
+     },
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls against that order, B's, then A's: each ask under its own session",
+      "status": "fail",
+      "atAssertion": true,
+      "cause": "AssertionError: thread A (session 3bd37d32-c16d-43db-91d5-e353dfbdec5f, question \"Which header colour should the cart page use? (thread A, 7820b05a)\"): its ask is filed once, under its own session 3bd37d32-c16d-43db-91d5-e353dfbdec5f, not under thread B's 4a2e4e72-2aa0-493a-82b8-633042d2c465; its call replied {\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"ask\\\":\\\"ask:01M7HTJRW4MXSQEF218VDJS5TE\\\",\\\"status\\\":\\\"provisional\\\",\\\"answer\\\":\\\"blue\\\",\\\"note\\\":\\\"Go on with blue for thread A: it is provisional and can be undone, and only steps that leave the machine wait for the answer.\\\"}\"}],\"isError\":false,\"structuredContent\":{\"ask\":\"ask:01M7HTJRW4MXSQEF218VDJS5TE\",\"status\":\"provisional\",\"answer\":\"blue\",\"note\":\"Go on with blue for thread A: it is provisional and can be undone, and only steps that leave the machine wait for the answer.\"}}}: expected [ Array(1) ] to deeply equal [ Array(1) ]",
+      "frame": "tests/acceptance/39/redraft-ac5/ac5.test.ts"
+     }
+    ],
+    "skipped": [],
+    "unhandled": []
+   },
+   {
+    "run": 14,
+    "checkout": "clean",
+    "exit": 0,
+    "seconds": 3,
+    "load": 26,
+    "ended": true,
+    "cases": [
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls in that order, A's, then B's: each ask under its own session",
+      "status": "pass"
+     },
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls against that order, B's, then A's: each ask under its own session",
+      "status": "pass"
+     }
+    ],
+    "skipped": [],
+    "unhandled": []
+   },
+   {
+    "run": 14,
+    "checkout": "twin",
+    "exit": 1,
+    "seconds": 3,
+    "load": 25,
+    "ended": true,
+    "cases": [
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls in that order, A's, then B's: each ask under its own session",
+      "status": "pass"
+     },
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls against that order, B's, then A's: each ask under its own session",
+      "status": "fail",
+      "atAssertion": true,
+      "cause": "AssertionError: thread A (session ce4f8cf0-30b1-4daa-b6e8-b7880631351f, question \"Which header colour should the cart page use? (thread A, 956c1225)\"): its ask is filed once, under its own session ce4f8cf0-30b1-4daa-b6e8-b7880631351f, not under thread B's 25827fab-4094-41d3-b3b0-8dd751a23b7a; its call replied {\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"ask\\\":\\\"ask:01M7HTJZD4FWR958E09XX028QR\\\",\\\"status\\\":\\\"provisional\\\",\\\"answer\\\":\\\"blue\\\",\\\"note\\\":\\\"Go on with blue for thread A: it is provisional and can be undone, and only steps that leave the machine wait for the answer.\\\"}\"}],\"isError\":false,\"structuredContent\":{\"ask\":\"ask:01M7HTJZD4FWR958E09XX028QR\",\"status\":\"provisional\",\"answer\":\"blue\",\"note\":\"Go on with blue for thread A: it is provisional and can be undone, and only steps that leave the machine wait for the answer.\"}}}: expected [ Array(1) ] to deeply equal [ Array(1) ]",
+      "frame": "tests/acceptance/39/redraft-ac5/ac5.test.ts"
+     }
+    ],
+    "skipped": [],
+    "unhandled": []
+   },
+   {
+    "run": 15,
+    "checkout": "clean",
+    "exit": 0,
+    "seconds": 3,
+    "load": 25,
+    "ended": true,
+    "cases": [
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls in that order, A's, then B's: each ask under its own session",
+      "status": "pass"
+     },
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls against that order, B's, then A's: each ask under its own session",
+      "status": "pass"
+     }
+    ],
+    "skipped": [],
+    "unhandled": []
+   },
+   {
+    "run": 15,
+    "checkout": "twin",
+    "exit": 1,
+    "seconds": 3,
+    "load": 23,
+    "ended": true,
+    "cases": [
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls in that order, A's, then B's: each ask under its own session",
+      "status": "pass"
+     },
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls against that order, B's, then A's: each ask under its own session",
+      "status": "fail",
+      "atAssertion": true,
+      "cause": "AssertionError: thread A (session 9bd64949-28ea-423a-9b2f-e5bf996bf166, question \"Which header colour should the cart page use? (thread A, 79116a5d)\"): its ask is filed once, under its own session 9bd64949-28ea-423a-9b2f-e5bf996bf166, not under thread B's 11464488-a04e-4c92-9b19-5653c5b3f5be; its call replied {\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"ask\\\":\\\"ask:01M7HTK5WCG6H9X206VW21MS27\\\",\\\"status\\\":\\\"provisional\\\",\\\"answer\\\":\\\"blue\\\",\\\"note\\\":\\\"Go on with blue for thread A: it is provisional and can be undone, and only steps that leave the machine wait for the answer.\\\"}\"}],\"isError\":false,\"structuredContent\":{\"ask\":\"ask:01M7HTK5WCG6H9X206VW21MS27\",\"status\":\"provisional\",\"answer\":\"blue\",\"note\":\"Go on with blue for thread A: it is provisional and can be undone, and only steps that leave the machine wait for the answer.\"}}}: expected [ Array(1) ] to deeply equal [ Array(1) ]",
+      "frame": "tests/acceptance/39/redraft-ac5/ac5.test.ts"
+     }
+    ],
+    "skipped": [],
+    "unhandled": []
+   },
+   {
+    "run": 16,
+    "checkout": "clean",
+    "exit": 0,
+    "seconds": 3,
+    "load": 23,
+    "ended": true,
+    "cases": [
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls in that order, A's, then B's: each ask under its own session",
+      "status": "pass"
+     },
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls against that order, B's, then A's: each ask under its own session",
+      "status": "pass"
+     }
+    ],
+    "skipped": [],
+    "unhandled": []
+   },
+   {
+    "run": 16,
+    "checkout": "twin",
+    "exit": 1,
+    "seconds": 3,
+    "load": 23,
+    "ended": true,
+    "cases": [
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls in that order, A's, then B's: each ask under its own session",
+      "status": "pass"
+     },
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls against that order, B's, then A's: each ask under its own session",
+      "status": "fail",
+      "atAssertion": true,
+      "cause": "AssertionError: thread A (session c8e82142-191b-43ce-b766-b21988b79f87, question \"Which header colour should the cart page use? (thread A, b1673549)\"): its ask is filed once, under its own session c8e82142-191b-43ce-b766-b21988b79f87, not under thread B's d6759f9c-f1ef-4c3c-b9d7-2733bcb5ed71; its call replied {\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"ask\\\":\\\"ask:01M7HTKC54TWS3HF7HCJNMEX5G\\\",\\\"status\\\":\\\"provisional\\\",\\\"answer\\\":\\\"blue\\\",\\\"note\\\":\\\"Go on with blue for thread A: it is provisional and can be undone, and only steps that leave the machine wait for the answer.\\\"}\"}],\"isError\":false,\"structuredContent\":{\"ask\":\"ask:01M7HTKC54TWS3HF7HCJNMEX5G\",\"status\":\"provisional\",\"answer\":\"blue\",\"note\":\"Go on with blue for thread A: it is provisional and can be undone, and only steps that leave the machine wait for the answer.\"}}}: expected [ Array(1) ] to deeply equal [ Array(1) ]",
+      "frame": "tests/acceptance/39/redraft-ac5/ac5.test.ts"
+     }
+    ],
+    "skipped": [],
+    "unhandled": []
+   },
+   {
+    "run": 17,
+    "checkout": "clean",
+    "exit": 0,
+    "seconds": 3,
+    "load": 22,
+    "ended": true,
+    "cases": [
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls in that order, A's, then B's: each ask under its own session",
+      "status": "pass"
+     },
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls against that order, B's, then A's: each ask under its own session",
+      "status": "pass"
+     }
+    ],
+    "skipped": [],
+    "unhandled": []
+   },
+   {
+    "run": 17,
+    "checkout": "twin",
+    "exit": 1,
+    "seconds": 3,
+    "load": 21,
+    "ended": true,
+    "cases": [
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls in that order, A's, then B's: each ask under its own session",
+      "status": "pass"
+     },
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls against that order, B's, then A's: each ask under its own session",
+      "status": "fail",
+      "atAssertion": true,
+      "cause": "AssertionError: thread A (session 8f162b8d-dbe9-4020-91ea-1d566c0292ae, question \"Which header colour should the cart page use? (thread A, 54a9efed)\"): its ask is filed once, under its own session 8f162b8d-dbe9-4020-91ea-1d566c0292ae, not under thread B's 54a3d442-42f5-4e23-9204-0ab8ca7840c3; its call replied {\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"ask\\\":\\\"ask:01M7HTKJMBG8S1BY5HT5BA3H5A\\\",\\\"status\\\":\\\"provisional\\\",\\\"answer\\\":\\\"blue\\\",\\\"note\\\":\\\"Go on with blue for thread A: it is provisional and can be undone, and only steps that leave the machine wait for the answer.\\\"}\"}],\"isError\":false,\"structuredContent\":{\"ask\":\"ask:01M7HTKJMBG8S1BY5HT5BA3H5A\",\"status\":\"provisional\",\"answer\":\"blue\",\"note\":\"Go on with blue for thread A: it is provisional and can be undone, and only steps that leave the machine wait for the answer.\"}}}: expected [ Array(1) ] to deeply equal [ Array(1) ]",
+      "frame": "tests/acceptance/39/redraft-ac5/ac5.test.ts"
+     }
+    ],
+    "skipped": [],
+    "unhandled": []
+   },
+   {
+    "run": 18,
+    "checkout": "clean",
+    "exit": 0,
+    "seconds": 3,
+    "load": 21,
+    "ended": true,
+    "cases": [
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls in that order, A's, then B's: each ask under its own session",
+      "status": "pass"
+     },
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls against that order, B's, then A's: each ask under its own session",
+      "status": "pass"
+     }
+    ],
+    "skipped": [],
+    "unhandled": []
+   },
+   {
+    "run": 18,
+    "checkout": "twin",
+    "exit": 1,
+    "seconds": 3,
+    "load": 20,
+    "ended": true,
+    "cases": [
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls in that order, A's, then B's: each ask under its own session",
+      "status": "pass"
+     },
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls against that order, B's, then A's: each ask under its own session",
+      "status": "fail",
+      "atAssertion": true,
+      "cause": "AssertionError: thread A (session 07b124dc-1be2-47cc-8b4c-5d081e56c537, question \"Which header colour should the cart page use? (thread A, 2fd4d6bf)\"): its ask is filed once, under its own session 07b124dc-1be2-47cc-8b4c-5d081e56c537, not under thread B's bbe50db8-fe49-42ec-8189-6cb0b0ef6b58; its call replied {\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"ask\\\":\\\"ask:01M7HTKS1Z66X7EQQAKJ16HDCJ\\\",\\\"status\\\":\\\"provisional\\\",\\\"answer\\\":\\\"blue\\\",\\\"note\\\":\\\"Go on with blue for thread A: it is provisional and can be undone, and only steps that leave the machine wait for the answer.\\\"}\"}],\"isError\":false,\"structuredContent\":{\"ask\":\"ask:01M7HTKS1Z66X7EQQAKJ16HDCJ\",\"status\":\"provisional\",\"answer\":\"blue\",\"note\":\"Go on with blue for thread A: it is provisional and can be undone, and only steps that leave the machine wait for the answer.\"}}}: expected [ Array(1) ] to deeply equal [ Array(1) ]",
+      "frame": "tests/acceptance/39/redraft-ac5/ac5.test.ts"
+     }
+    ],
+    "skipped": [],
+    "unhandled": []
+   },
+   {
+    "run": 19,
+    "checkout": "clean",
+    "exit": 0,
+    "seconds": 3,
+    "load": 19,
+    "ended": true,
+    "cases": [
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls in that order, A's, then B's: each ask under its own session",
+      "status": "pass"
+     },
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls against that order, B's, then A's: each ask under its own session",
+      "status": "pass"
+     }
+    ],
+    "skipped": [],
+    "unhandled": []
+   },
+   {
+    "run": 19,
+    "checkout": "twin",
+    "exit": 1,
+    "seconds": 3,
+    "load": 19,
+    "ended": true,
+    "cases": [
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls in that order, A's, then B's: each ask under its own session",
+      "status": "pass"
+     },
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls against that order, B's, then A's: each ask under its own session",
+      "status": "fail",
+      "atAssertion": true,
+      "cause": "AssertionError: thread A (session 407bfe37-9132-4fd5-a293-b1bcf6b2d63e, question \"Which header colour should the cart page use? (thread A, 67e7c32c)\"): its ask is filed once, under its own session 407bfe37-9132-4fd5-a293-b1bcf6b2d63e, not under thread B's e11128b3-2e52-42a1-8309-72b13adeb97a; its call replied {\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"ask\\\":\\\"ask:01M7HTKZCH2X94YP3SSFC9P0Q7\\\",\\\"status\\\":\\\"provisional\\\",\\\"answer\\\":\\\"blue\\\",\\\"note\\\":\\\"Go on with blue for thread A: it is provisional and can be undone, and only steps that leave the machine wait for the answer.\\\"}\"}],\"isError\":false,\"structuredContent\":{\"ask\":\"ask:01M7HTKZCH2X94YP3SSFC9P0Q7\",\"status\":\"provisional\",\"answer\":\"blue\",\"note\":\"Go on with blue for thread A: it is provisional and can be undone, and only steps that leave the machine wait for the answer.\"}}}: expected [ Array(1) ] to deeply equal [ Array(1) ]",
+      "frame": "tests/acceptance/39/redraft-ac5/ac5.test.ts"
+     }
+    ],
+    "skipped": [],
+    "unhandled": []
+   },
+   {
+    "run": 20,
+    "checkout": "clean",
+    "exit": 0,
+    "seconds": 3,
+    "load": 19,
+    "ended": true,
+    "cases": [
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls in that order, A's, then B's: each ask under its own session",
+      "status": "pass"
+     },
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls against that order, B's, then A's: each ask under its own session",
+      "status": "pass"
+     }
+    ],
+    "skipped": [],
+    "unhandled": []
+   },
+   {
+    "run": 20,
+    "checkout": "twin",
+    "exit": 1,
+    "seconds": 3,
+    "load": 19,
+    "ended": true,
+    "cases": [
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls in that order, A's, then B's: each ask under its own session",
+      "status": "pass"
+     },
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls against that order, B's, then A's: each ask under its own session",
+      "status": "fail",
+      "atAssertion": true,
+      "cause": "AssertionError: thread A (session bcc7193b-5434-4e8e-9dff-bba20408f736, question \"Which header colour should the cart page use? (thread A, ff6768aa)\"): its ask is filed once, under its own session bcc7193b-5434-4e8e-9dff-bba20408f736, not under thread B's 91c98552-bfc5-4b40-9b2e-2bbeec2dd287; its call replied {\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"ask\\\":\\\"ask:01M7HTM5P3XHDT6ETRMA6RHBY1\\\",\\\"status\\\":\\\"provisional\\\",\\\"answer\\\":\\\"blue\\\",\\\"note\\\":\\\"Go on with blue for thread A: it is provisional and can be undone, and only steps that leave the machine wait for the answer.\\\"}\"}],\"isError\":false,\"structuredContent\":{\"ask\":\"ask:01M7HTM5P3XHDT6ETRMA6RHBY1\",\"status\":\"provisional\",\"answer\":\"blue\",\"note\":\"Go on with blue for thread A: it is provisional and can be undone, and only steps that leave the machine wait for the answer.\"}}}: expected [ Array(1) ] to deeply equal [ Array(1) ]",
+      "frame": "tests/acceptance/39/redraft-ac5/ac5.test.ts"
+     }
+    ],
+    "skipped": [],
+    "unhandled": []
+   }
+  ],
+  "not counted (load ~400: the hub stamped neither program's calls reliably)": [
+   {
+    "run": 1,
+    "checkout": "clean",
+    "exit": 0,
+    "seconds": 40,
+    "load": 360,
+    "ended": true,
+    "cases": [
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls in that order, A's, then B's: each ask under its own session",
+      "status": "pass"
+     },
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls against that order, B's, then A's: each ask under its own session",
+      "status": "pass"
+     }
+    ],
+    "skipped": [],
+    "unhandled": []
+   },
+   {
+    "run": 1,
+    "checkout": "twin",
+    "exit": 1,
+    "seconds": 33,
+    "load": 381,
+    "ended": true,
+    "cases": [
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls in that order, A's, then B's: each ask under its own session",
+      "status": "pass"
+     },
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls against that order, B's, then A's: each ask under its own session",
+      "status": "fail",
+      "atAssertion": true,
+      "cause": "AssertionError: thread A (session 3a66adc2-0368-4c3d-9555-60fb96244edb, question \"Which header colour should the cart page use? (thread A, 23395ee4)\"): its ask is filed once, under its own session 3a66adc2-0368-4c3d-9555-60fb96244edb, not under thread B's 8d289b73-a1bc-44ba-989d-603af6fa3fca; its call replied {\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"ask\\\":\\\"ask:01M7GVG5QRK87RWD34H8HK68G9\\\",\\\"status\\\":\\\"provisional\\\",\\\"answer\\\":\\\"blue\\\",\\\"note\\\":\\\"Go on with blue for thread A: it is provisional and can be undone, and only steps that leave the machine wait for the answer.\\\"}\"}],\"isError\":false,\"structuredContent\":{\"ask\":\"ask:01M7GVG5QRK87RWD34H8HK68G9\",\"status\":\"provisional\",\"answer\":\"blue\",\"note\":\"Go on with blue for thread A: it is provisional and can be undone, and only steps that leave the machine wait for the answer.\"}}}: expected [ Array(1) ] to deeply equal [ Array(1) ]",
+      "frame": "tests/acceptance/39/redraft-ac5/ac5.test.ts"
+     }
+    ],
+    "skipped": [],
+    "unhandled": []
+   },
+   {
+    "run": 2,
+    "checkout": "clean",
+    "exit": 1,
+    "seconds": 38,
+    "load": 405,
+    "ended": true,
+    "cases": [
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls in that order, A's, then B's: each ask under its own session",
+      "status": "pass"
+     },
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls against that order, B's, then A's: each ask under its own session",
+      "status": "fail",
+      "atAssertion": true,
+      "cause": "AssertionError: thread A (session 7aa1c380-7b4f-4735-ab38-70265ea08fa1, question \"Which header colour should the cart page use? (thread A, 3185f1b0)\"): its ask is filed once, under its own session 7aa1c380-7b4f-4735-ab38-70265ea08fa1, not under thread B's a6ce02db-ba34-4cfe-9ad1-caccd8a5cec9; its call replied {\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"code\\\":\\\"unbound\\\",\\\"retryable\\\":false,\\\"remediation\\\":\\\"This deep_ask call binds to no session: no PreToolUse stamped for it is unspent.\\\",\\\"path\\\":\\\"/params/arguments\\\",\\\"actual\\\":\\\"deep_ask\\\",\\\"evidence\\\":[]}\"}],\"isError\":true}}: expected [] to deeply equal [ Array(1) ]",
+      "frame": "tests/acceptance/39/redraft-ac5/ac5.test.ts"
+     }
+    ],
+    "skipped": [],
+    "unhandled": []
+   },
+   {
+    "run": 2,
+    "checkout": "twin",
+    "exit": 1,
+    "seconds": 38,
+    "load": 398,
+    "ended": true,
+    "cases": [
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls in that order, A's, then B's: each ask under its own session",
+      "status": "fail",
+      "atAssertion": true,
+      "cause": "AssertionError: thread A (session ab3cd584-0ff7-4b75-a92e-69743ae54453, question \"Which header colour should the cart page use? (thread A, 5e300b22)\"): its ask is filed once, under its own session ab3cd584-0ff7-4b75-a92e-69743ae54453, not under thread B's cf3144e4-2991-4be9-861d-3a78904ba5af; its call replied {\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"code\\\":\\\"unbound\\\",\\\"retryable\\\":false,\\\"remediation\\\":\\\"This deep_ask call binds to no session: no PreToolUse stamped for it is unspent.\\\",\\\"path\\\":\\\"/params/arguments\\\",\\\"actual\\\":\\\"deep_ask\\\",\\\"evidence\\\":[]}\"}],\"isError\":true}}: expected [] to deeply equal [ Array(1) ]",
+      "frame": "tests/acceptance/39/redraft-ac5/ac5.test.ts"
+     },
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls against that order, B's, then A's: each ask under its own session",
+      "status": "fail",
+      "atAssertion": true,
+      "cause": "AssertionError: thread A (session c9ad6ee6-69d5-4db3-b025-9e49fa04f603, question \"Which header colour should the cart page use? (thread A, e9aef888)\"): its ask is filed once, under its own session c9ad6ee6-69d5-4db3-b025-9e49fa04f603, not under thread B's 08eee6ec-0971-422a-be86-43258e58de83; its call replied {\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"ask\\\":\\\"ask:01M7GVJH97E2XPKZDVB7N1ZG9Q\\\",\\\"status\\\":\\\"provisional\\\",\\\"answer\\\":\\\"blue\\\",\\\"note\\\":\\\"Go on with blue for thread A: it is provisional and can be undone, and only steps that leave the machine wait for the answer.\\\"}\"}],\"isError\":false,\"structuredContent\":{\"ask\":\"ask:01M7GVJH97E2XPKZDVB7N1ZG9Q\",\"status\":\"provisional\",\"answer\":\"blue\",\"note\":\"Go on with blue for thread A: it is provisional and can be undone, and only steps that leave the machine wait for the answer.\"}}}: expected [ Array(1) ] to deeply equal [ Array(1) ]",
+      "frame": "tests/acceptance/39/redraft-ac5/ac5.test.ts"
+     }
+    ],
+    "skipped": [],
+    "unhandled": []
+   },
+   {
+    "run": 3,
+    "checkout": "clean",
+    "exit": 1,
+    "seconds": 32,
+    "load": 414,
+    "ended": true,
+    "cases": [
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls in that order, A's, then B's: each ask under its own session",
+      "status": "fail",
+      "atAssertion": true,
+      "cause": "AssertionError: thread A (session aef9db39-6b6d-4a82-b3f5-9526c9507649, question \"Which header colour should the cart page use? (thread A, aeb71782)\"): its ask is filed once, under its own session aef9db39-6b6d-4a82-b3f5-9526c9507649, not under thread B's 3fee12fc-0208-4cb2-9108-bf312c2f095c; its call replied {\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"code\\\":\\\"unbound\\\",\\\"retryable\\\":false,\\\"remediation\\\":\\\"This deep_ask call binds to no session: no PreToolUse stamped for it is unspent.\\\",\\\"path\\\":\\\"/params/arguments\\\",\\\"actual\\\":\\\"deep_ask\\\",\\\"evidence\\\":[]}\"}],\"isError\":true}}: expected [] to deeply equal [ Array(1) ]",
+      "frame": "tests/acceptance/39/redraft-ac5/ac5.test.ts"
+     },
+     {
+      "name": "AC5 #39.de9f23ce Two Codex threads on one daemon each call deep_ask, and each ask is filed under its own session \u203a AC5 #39.de9f23ce A's PreToolUse, then B's, both in the record; then the calls against that order, B's, then A's: each ask under its own session",
+      "status": "pass"
+     }
+    ],
+    "skipped": [],
+    "unhandled": []
+   }
+  ]
+ },
+ "ac3": {
+  "twin": "tests/acceptance/21/twins/plant-ignored (one fault line over packages/hub/src/spool.ts)",
+  "grant": "inside a timed window: node scripts/throttle.mjs timed, opened at load 12 with no other grant held",
+  "file": "tests/acceptance/21/replay.test.ts",
+  "pattern": "#21\\.9a5768d4.*\\(wrong program\\) a hub that appends a replayed event twice",
+  "runs": [
+   {
+    "run": 1,
+    "checkout": "clean",
+    "exit": 0,
+    "seconds": 34,
+    "load": 12,
+    "ended": true,
+    "cases": [
+     {
+      "name": "AC2 #21.9a5768d4 Over 1,000 real tool calls, with the hub stopped for 200 and SIGSTOPped for 200, no hook takes more than 50 ms over process start, and all 400 events are in the record once after the hub resumes \u203a AC2 #21.9a5768d4 (wrong program) a hub that appends a replayed event twice (DEEP_HUB_PLANT=replay-appends-twice) fails the same check, naming the call",
+      "status": "pass"
+     }
+    ],
+    "skipped": [
+     "AC2 #21.9a5768d4 Over 1,000 real tool calls, with the hub stopped for 200 and SIGSTOPped for 200, no hook takes more than 50 ms over process start, and all 400 events are in the record once after the hub resumes \u203a AC2 #21.9a5768d4 over a replayed day of 1,000 recorded tool calls, 200 with the hub stopped and 200 with it SIGSTOPped, every hook decides within 50 ms over process start and the 400 calls' events are in the record once after it resumes",
+     "AC2 #21.9a5768d4 Over 1,000 real tool calls, with the hub stopped for 200 and SIGSTOPped for 200, no hook takes more than 50 ms over process start, and all 400 events are in the record once after the hub resumes \u203a AC2 #21.9a5768d4 (wrong program) a hook that takes 60 ms longer while the hub is away fails the same check, naming the call"
+    ],
+    "unhandled": []
+   },
+   {
+    "run": 1,
+    "checkout": "twin",
+    "exit": 1,
+    "seconds": 33,
+    "load": 10,
+    "ended": true,
+    "cases": [
+     {
+      "name": "AC2 #21.9a5768d4 Over 1,000 real tool calls, with the hub stopped for 200 and SIGSTOPped for 200, no hook takes more than 50 ms over process start, and all 400 events are in the record once after the hub resumes \u203a AC2 #21.9a5768d4 (wrong program) a hub that appends a replayed event twice (DEEP_HUB_PLANT=replay-appends-twice) fails the same check, naming the call",
+      "status": "fail",
+      "atAssertion": true,
+      "cause": "AssertionError: the check names an event in the record twice: expected '' to match /in the record 2 times/",
+      "frame": "tests/acceptance/21/replay.test.ts"
+     }
+    ],
+    "skipped": [
+     "AC2 #21.9a5768d4 Over 1,000 real tool calls, with the hub stopped for 200 and SIGSTOPped for 200, no hook takes more than 50 ms over process start, and all 400 events are in the record once after the hub resumes \u203a AC2 #21.9a5768d4 over a replayed day of 1,000 recorded tool calls, 200 with the hub stopped and 200 with it SIGSTOPped, every hook decides within 50 ms over process start and the 400 calls' events are in the record once after it resumes",
+     "AC2 #21.9a5768d4 Over 1,000 real tool calls, with the hub stopped for 200 and SIGSTOPped for 200, no hook takes more than 50 ms over process start, and all 400 events are in the record once after the hub resumes \u203a AC2 #21.9a5768d4 (wrong program) a hook that takes 60 ms longer while the hub is away fails the same check, naming the call"
+    ],
+    "unhandled": []
+   }
+  ]
+ }
+}

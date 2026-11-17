@@ -1,9 +1,10 @@
 //! The GPU-layer adapter and its declared pass costs. Public entry remains the crate root.
 
 use crate::{
-    ao, clouds, cull, dof, hdr, history, inset, local, lock, read_texture, texture2d, After, Planted,
-    Post, Renderer, CASCADE_PASS, CULL_PASS, FLARE_PASS, GEOMETRY_PASS, LABEL_PASS, MIRROR_PASS,
-    MSAA, OUTLINE_PASS, OUTPUT_PASS, SHADOW_PASS, SHARPEN_PASS, UPSCALE_PASS, WATER_PASS,
+    ao, clouds, cull, dof, hdr, history, inset, local, lock, read_texture, texture2d, After,
+    Planted, Post, Renderer, CASCADE_PASS, CULL_PASS, FLARE_PASS, GEOMETRY_PASS, LABEL_PASS,
+    MIRROR_PASS, MSAA, OUTLINE_PASS, OUTPUT_PASS, SHADOW_PASS, SHARPEN_PASS, UPSCALE_PASS,
+    WATER_PASS,
 };
 use deep_canvas_scene3d::look::Look3;
 use deep_canvas_scene3d::scene::Scene;
@@ -67,6 +68,11 @@ pub struct Counts {
     pub counts_read_back: u32,
     /// Each indirect draw this frame: its instancer, its view and its batch (#484).
     pub indirect: Vec<(String, String, String)>,
+    /// #1636: each draw of a mesh the color pass issues this frame, as its layer's `draw_names`
+    /// name its first record: the item it draws for (an instancer, for its elements), the item
+    /// whose mesh it draws, its material's ID ("" for none), and the instances it draws (an
+    /// indirect draw: the records its cull reads).
+    pub draws: Vec<(String, String, String, u32)>,
     pub meshes_built: u32,
     /// The lights the light policy left out of this frame's view, by ID (#421).
     pub lights_left_out: Vec<String>,
@@ -121,6 +127,8 @@ pub struct PostFrame<'a> {
     pub picks: &'a BTreeMap<String, u32>,
     /// The core's velocity and emission targets this frame, where something reads them (#431).
     pub core: Vec<(&'static str, &'a wgpu::TextureView)>,
+    /// #463: the rectangle, px at `size`, a look region's other side draws inside (Scene::crop).
+    pub crop: Option<[u32; 4]>,
 }
 
 /// What a frame hands the passes after the finish (issue #382: the status guard and the status

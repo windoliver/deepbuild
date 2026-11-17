@@ -213,6 +213,7 @@ pub(super) fn run(
             orphaned: Vec::new(),
             channels: Map::new(),
             sections: lowered.sections,
+            placed: Vec::new(),
         });
     }
     out
@@ -295,7 +296,7 @@ pub(super) fn resolve_times(doc: &Value, expansions: &mut [Expansion], issues: &
         return;
     }
     let frame_rate = member(doc, "transport")
-        .and_then(|t| super::check::frame_rate_of(t))
+        .and_then(super::check::frame_rate_of)
         .unwrap_or((60, 1));
     let mut ctx = TimeContext {
         frame_rate,

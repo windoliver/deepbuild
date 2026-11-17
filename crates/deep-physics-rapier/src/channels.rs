@@ -48,6 +48,16 @@ pub fn pose_at(states: &[Value], t: i64, step: i64, hold: bool) -> Option<([f64;
     Some((pos, q.map(|x| x / n)))
 }
 
+/// #251: a bake reply's states by ID, the bodies' and each wheel's (`<body>#<wheel>`), for the
+/// outputs to item paths.
+pub fn states(reply: &Value) -> Value {
+    let mut all = reply["bodies"].clone();
+    if let (Some(all), Some(wheels)) = (all.as_object_mut(), reply["wheels"].as_object()) {
+        all.extend(wheels.clone());
+    }
+    all
+}
+
 /// A channel keyed at each of `values`' frames, linear between them.
 fn keyed(target: String, values: Vec<[f64; 3]>) -> Value {
     let keys: Map<String, Value> = values
@@ -77,7 +87,11 @@ pub fn output_channels(
 ) -> Result<(), Value> {
     let step = step_flicks(w);
     for (oid, o) in w.outputs.iter().filter(|(_, o)| !o.from.ends_with("#*")) {
-        let Some(to) = &o.to else { continue };
+        // #182: a `to` that names a readout, not an item path, draws no channel: the readout reads
+        // the bake's series of the output.
+        let Some(to) = o.to.as_ref().filter(|t| t.contains('/')) else {
+            continue;
+        };
         let states = bodies[&o.from].as_array().cloned().unwrap_or_default();
         let poses: Vec<_> = frames
             .iter()

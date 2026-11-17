@@ -74,7 +74,7 @@ pub fn first_field(recorded: &[Canonical], mine: &[Canonical]) -> Option<Value> 
             .find(|&i| b.values.get(i).map(|y| y.to_bits()) != Some(a.values[i].to_bits()))?;
         let (x, y) = (a.values[i], b.values.get(i).copied().unwrap_or(f32::NAN));
         Some(
-            json!({"id": a.id, "field": a.fields()[i], "values": [f64::from(x), f64::from(y)],
+            json!({"id": a.id, "field": a.field(i), "values": [f64::from(x), f64::from(y)],
                     "ulp_distance": ulp_distance(x, y)}),
         )
     })

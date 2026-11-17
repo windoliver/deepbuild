@@ -1,0 +1,6 @@
+Captured output; paths redacted. Full preflight remains unproven.
+
+FAIL known-failures.json: cargo -p deep-replica --test acceptance_326_panels_planted › base_loader_reaches_the_network was added 2026-10-31, more than 14 days ago: fix it, or take it out and let it fail
+FAIL known-failures.json: cargo -p deep-replica --test acceptance_327_card was added 2026-10-31, more than 14 days ago: fix it, or take it out and let it fail
+FAIL known-failures.json: packages/hub/test/memory-overrule.test.ts › deep memory overrule › stays overruled across a re-read of the transcript, and a new prompt rejects it again was added 2026-10-31, more than 14 days ago: fix it, or take it out and let it fail
+3 of 3 known failures fail

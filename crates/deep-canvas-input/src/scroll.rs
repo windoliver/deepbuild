@@ -97,7 +97,7 @@ impl Gesture {
     /// A pixel delta of `px` px, positive towards the range's end, with a step `per_step` px on
     /// screen: one step for each `per_step` the carried pixels cover.
     pub fn pixels(&mut self, spec: &Spec, at: &mut i32, px: f64, per_step: f64) -> Vec<i32> {
-        if !(per_step > 0.0) || !px.is_finite() {
+        if per_step.is_nan() || per_step <= 0.0 || !px.is_finite() {
             return Vec::new();
         }
         self.sum += px;
@@ -279,7 +279,7 @@ impl Router {
 
 /// The planted control's frame share: a frame's summed pixels rounded on their own, no carry.
 pub fn rounded_share(spec: &Spec, at: &mut i32, px: f64, per_step: f64) -> Vec<i32> {
-    if !(per_step > 0.0) {
+    if per_step.is_nan() || per_step <= 0.0 {
         return Vec::new();
     }
     Gesture::walk(spec, at, (px / per_step).round() as i64)

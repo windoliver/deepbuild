@@ -1,0 +1,335 @@
+Sun Nov 15 12:27:05 PST 2026
+d8c46f0d58162ff0a4a483544149316aec960637
+?? tests/acceptance/903/
+scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `npx vitest run --root tests/acceptance/903 --testTimeout=600000 --no-file-parallelism` runs unleased
+
+ RUN  v5.0.5 <repo>/tests/acceptance/903
+
+ ❯ ac6-export.test.ts (2 tests | 2 failed) 22900ms
+   ❯ AC6 #903.772321ac an export of the tour shows the pointer (2)
+     × AC6 #903.772321ac an export of the tour at 1920 × 1080 shows the pointer in its frames at each key's anchor, and with pointer.show false no pointer pixel draws 2597ms
+     × AC6 #903.772321ac the film's pixel hash is the same seeked and played, on the reference Mac 160ms
+ ❯ ac4-click-yield-resume.test.ts (3 tests | 3 failed) 801ms
+   ❯ AC4 #903.da7f464f the pointer takes no hit, yields to you and comes back (3)
+     × AC4 #903.da7f464f a click that lands where the pointer is drawn reaches the control under it 265ms
+     × AC4 #903.da7f464f your first gesture fades the pointer over 0.2 s, no pointer pixel draws while you drag, and after resume_after of quiet it reappears at its last position and glides to the next key 4ms
+     × AC4 #903.da7f464f a planted pointer that takes hits fails, naming the control the click never reached 6ms
+ ❯ ac8-taste.test.ts (1 test | 1 failed) 3356ms
+   ❯ AC8 #903.1034b873 the check run's pictures of the tour pointer, and the one taste call on them (1)
+     × AC8 #903.1034b873 the check run takes the three screenshots, the exported frame at 1920 × 1080 and the recording from the app's own frames, and the recorded call on exactly those bytes says they look right; with none the run is INCONCLUSIVE, never PASS 2478ms
+ ❯ ac1-keys-seek-play.test.ts (3 tests | 3 failed) 659ms
+   ❯ AC1 #903.dd86ae00 the pointer is on each control at its key, rides the slider's thumb, and is the same seeked and played (3)
+     × AC1 #903.dd86ae00 at the press key at 2 s, the slider key at 4 s and the toggle key at 8 s the pointer's tip is within 1 px of that control's anchor, and from 4 s to 6 s it stays within 1 px of the slider's thumb 115ms
+     × AC1 #903.dd86ae00 its positions at 120 sampled times are the same seeked and played 12ms
+     × AC1 #903.dd86ae00 a planted pointer that moves by the frame clock fails, naming the first sample that differs 8ms
+ ❯ ac5-show-changes-nothing.test.ts (1 test | 1 failed) 588ms
+   ❯ AC5 #903.b48e3025 showing the pointer changes no entry, value or hash (1)
+     × AC5 #903.b48e3025 the input track's hash and every evaluated control value are identical with pointer.show true and false 63ms
+ ❯ ac3-card-over-3d.test.ts (1 test | 1 failed) 3600ms
+   ❯ AC3 #903.92244161 a control on a card that rides a moving part (1)
+     × AC3 #903.92244161 at the key's time the pointer reaches the card's anchor within 1 px, where the moving part has carried the card 2511ms
+ ❯ ac2-keys-in-a-gap.test.ts (2 tests | 2 failed) 666ms
+   ❯ AC2 #903.406ccd5b two keys closer than the glide (2)
+     × AC2 #903.406ccd5b with two keys 0.2 s apart and glide 0.5 s, the pointer is at each key's anchor at that key's time 152ms
+     × AC2 #903.406ccd5b a planted pointer that always starts glide before its key fails, naming the earlier key 5ms
+ ❯ ac7-reduced-motion.test.ts (1 test | 1 failed) 661ms
+   ❯ AC7 #903.f0bb108a reduced motion (1)
+     × AC7 #903.f0bb108a under reduced motion the tour writes no entry and no pointer draws 143ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 14 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac1-keys-seek-play.test.ts > AC1 #903.dd86ae00 the pointer is on each control at its key, rides the slider's thumb, and is the same seeked and played > AC1 #903.dd86ae00 at the press key at 2 s, the slider key at 4 s and the toggle key at 8 s the pointer's tip is within 1 px of that control's anchor, and from 4 s to 6 s it stays within 1 px of the slider's thumb
+AssertionError: the tour board, played at 60 fps: deep-input plays the session and answers its `tour_pointer` ops (README: The surface under test); it answered {"ok":false,"code":"bad_input","path":"op"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ answerOf helpers.ts:279:159
+    277|   try { parsed = JSON.parse(text) as JsonValue; } catch { parsed = tex…
+    278|   const a = obj(parsed, `${what}: the answer`);
+    279|   expect(a['ok'], `${what}: deep-input plays the session and answers i…
+       |                                                                                                                                                               ^
+    280|   const track = arr(a['track'], `${what}: track`).map((e, i): Entry =>…
+    281|     const o = obj(e, `${what}: track[${i}]`);
+ ❯ helpers.ts:293:33
+ ❯ runInput helpers.ts:293:16
+ ❯ ac1-keys-seek-play.test.ts:77:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/14]⎯
+
+ FAIL  ac1-keys-seek-play.test.ts > AC1 #903.dd86ae00 the pointer is on each control at its key, rides the slider's thumb, and is the same seeked and played > AC1 #903.dd86ae00 its positions at 120 sampled times are the same seeked and played
+AssertionError: the tour board at 120 times, played at 30, 60 and 120 fps and seeked (session 1): deep-input plays the session and answers its `tour_pointer` ops (README: The surface under test); it answered {"ok":false,"code":"bad_input","path":"op"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ answerOf helpers.ts:279:159
+    277|   try { parsed = JSON.parse(text) as JsonValue; } catch { parsed = tex…
+    278|   const a = obj(parsed, `${what}: the answer`);
+    279|   expect(a['ok'], `${what}: deep-input plays the session and answers i…
+       |                                                                                                                                                               ^
+    280|   const track = arr(a['track'], `${what}: track`).map((e, i): Entry =>…
+    281|     const o = obj(e, `${what}: track[${i}]`);
+ ❯ helpers.ts:293:33
+ ❯ runInput helpers.ts:293:16
+ ❯ ac1-keys-seek-play.test.ts:90:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/14]⎯
+
+ FAIL  ac1-keys-seek-play.test.ts > AC1 #903.dd86ae00 the pointer is on each control at its key, rides the slider's thumb, and is the same seeked and played > AC1 #903.dd86ae00 a planted pointer that moves by the frame clock fails, naming the first sample that differs
+AssertionError: the planted pointer moved by the frame clock (tour_pointer_frame_clock): a failure names /the first sample that differs is sample \d+ \(t = \d+\.\d+ s\)/; the failures:
+  the seeked session gave no answer: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ failsNaming helpers.ts:96:170
+     94| export function failsNaming(failures: readonly string[], named: RegExp…
+     95|   expect(failures.length, `${what}: the criterion's check fails the pl…
+     96|   expect(failures.some((f) => named.every((n) => n.test(f))), `${what}…
+       |                                                                                                                                                                          ^
+     97| }
+     98|
+ ❯ ac1-keys-seek-play.test.ts:98:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/14]⎯
+
+ FAIL  ac2-keys-in-a-gap.test.ts > AC2 #903.406ccd5b two keys closer than the glide > AC2 #903.406ccd5b with two keys 0.2 s apart and glide 0.5 s, the pointer is at each key's anchor at that key's time
+AssertionError: two keys 0.2 s apart: deep-input plays the session and answers its `tour_pointer` ops (README: The surface under test); it answered {"ok":false,"code":"bad_input","path":"op"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ answerOf helpers.ts:279:159
+    277|   try { parsed = JSON.parse(text) as JsonValue; } catch { parsed = tex…
+    278|   const a = obj(parsed, `${what}: the answer`);
+    279|   expect(a['ok'], `${what}: deep-input plays the session and answers i…
+       |                                                                                                                                                               ^
+    280|   const track = arr(a['track'], `${what}: track`).map((e, i): Entry =>…
+    281|     const o = obj(e, `${what}: track[${i}]`);
+ ❯ helpers.ts:293:33
+ ❯ runInput helpers.ts:293:16
+ ❯ ac2-keys-in-a-gap.test.ts:36:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/14]⎯
+
+ FAIL  ac2-keys-in-a-gap.test.ts > AC2 #903.406ccd5b two keys closer than the glide > AC2 #903.406ccd5b a planted pointer that always starts glide before its key fails, naming the earlier key
+AssertionError: the planted pointer that starts glide before its key (tour_pointer_glide_before_key): a failure names /^the earlier key, on fire at 2 s: the pointer's tip is at /; the failures:
+  the session gave no answer: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ failsNaming helpers.ts:96:170
+     94| export function failsNaming(failures: readonly string[], named: RegExp…
+     95|   expect(failures.length, `${what}: the criterion's check fails the pl…
+     96|   expect(failures.some((f) => named.every((n) => n.test(f))), `${what}…
+       |                                                                                                                                                                          ^
+     97| }
+     98|
+ ❯ ac2-keys-in-a-gap.test.ts:43:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/14]⎯
+
+ FAIL  ac3-card-over-3d.test.ts > AC3 #903.92244161 a control on a card that rides a moving part > AC3 #903.92244161 at the key's time the pointer reaches the card's anchor within 1 px, where the moving part has carried the card
+AssertionError: the riding card is presented, its `tour` a field of the document the app takes (README: Documents); the reply's issues: [{"check":"document.validate","code":"unknown_field","severity":"error","ids":[],"path":"tour","actual":{"keys":{"card-switch":[[3,true,"hold"]]},"idle_after":0,"loop":false},"what":"not a field of the document envelope","fix":"Remove the field, or require the kind's minor that defines it."}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented helpers.ts:371:173
+    369|   const r = obj(reply, `${what}: the deep_show reply`);
+    370|   const errors = (Array.isArray(r['issues']) ? r['issues'] : []).filte…
+    371|   expect(r['outcome'], `${what} is presented, its \`tour\` a field of …
+       |                                                                                                                                                                             ^
+    372|   expect(errors, `${what} is presented with no error`).toEqual([]);
+    373| }
+ ❯ ac3-card-over-3d.test.ts:36:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/14]⎯
+
+ FAIL  ac4-click-yield-resume.test.ts > AC4 #903.da7f464f the pointer takes no hit, yields to you and comes back > AC4 #903.da7f464f a click that lands where the pointer is drawn reaches the control under it
+AssertionError: the tour board played to 6.4 s: deep-input plays the session and answers its `tour_pointer` ops (README: The surface under test); it answered {"ok":false,"code":"bad_input","path":"op"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ answerOf helpers.ts:279:159
+    277|   try { parsed = JSON.parse(text) as JsonValue; } catch { parsed = tex…
+    278|   const a = obj(parsed, `${what}: the answer`);
+    279|   expect(a['ok'], `${what}: deep-input plays the session and answers i…
+       |                                                                                                                                                               ^
+    280|   const track = arr(a['track'], `${what}: track`).map((e, i): Entry =>…
+    281|     const o = obj(e, `${what}: track[${i}]`);
+ ❯ helpers.ts:293:33
+ ❯ runInput helpers.ts:293:16
+ ❯ drawnAt ac4-click-yield-resume.test.ts:68:46
+ ❯ ac4-click-yield-resume.test.ts:80:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/14]⎯
+
+ FAIL  ac4-click-yield-resume.test.ts > AC4 #903.da7f464f the pointer takes no hit, yields to you and comes back > AC4 #903.da7f464f your first gesture fades the pointer over 0.2 s, no pointer pixel draws while you drag, and after resume_after of quiet it reappears at its last position and glides to the next key
+AssertionError: the tour board played to 6.4 s: deep-input plays the session and answers its `tour_pointer` ops (README: The surface under test); it answered {"ok":false,"code":"bad_input","path":"op"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ answerOf helpers.ts:279:159
+    277|   try { parsed = JSON.parse(text) as JsonValue; } catch { parsed = tex…
+    278|   const a = obj(parsed, `${what}: the answer`);
+    279|   expect(a['ok'], `${what}: deep-input plays the session and answers i…
+       |                                                                                                                                                               ^
+    280|   const track = arr(a['track'], `${what}: track`).map((e, i): Entry =>…
+    281|     const o = obj(e, `${what}: track[${i}]`);
+ ❯ helpers.ts:293:33
+ ❯ runInput helpers.ts:293:16
+ ❯ drawnAt ac4-click-yield-resume.test.ts:68:46
+ ❯ ac4-click-yield-resume.test.ts:90:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/14]⎯
+
+ FAIL  ac4-click-yield-resume.test.ts > AC4 #903.da7f464f the pointer takes no hit, yields to you and comes back > AC4 #903.da7f464f a planted pointer that takes hits fails, naming the control the click never reached
+AssertionError: the planted pointer that takes hits (tour_pointer_takes_hits): a failure names /never reached gain, the control under it/; the failures:
+  the planted program draws no pointer at 6.4 s, so no click can land on it: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ failsNaming helpers.ts:96:170
+     94| export function failsNaming(failures: readonly string[], named: RegExp…
+     95|   expect(failures.length, `${what}: the criterion's check fails the pl…
+     96|   expect(failures.some((f) => named.every((n) => n.test(f))), `${what}…
+       |                                                                                                                                                                          ^
+     97| }
+     98|
+ ❯ ac4-click-yield-resume.test.ts:135:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/14]⎯
+
+ FAIL  ac5-show-changes-nothing.test.ts > AC5 #903.b48e3025 showing the pointer changes no entry, value or hash > AC5 #903.b48e3025 the input track's hash and every evaluated control value are identical with pointer.show true and false
+AssertionError: the tour board with pointer.show true and false (session 1): deep-input plays the session and answers its `tour_pointer` ops (README: The surface under test); it answered {"ok":false,"code":"bad_input","path":"op"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ answerOf helpers.ts:279:159
+    277|   try { parsed = JSON.parse(text) as JsonValue; } catch { parsed = tex…
+    278|   const a = obj(parsed, `${what}: the answer`);
+    279|   expect(a['ok'], `${what}: deep-input plays the session and answers i…
+       |                                                                                                                                                               ^
+    280|   const track = arr(a['track'], `${what}: track`).map((e, i): Entry =>…
+    281|     const o = obj(e, `${what}: track[${i}]`);
+ ❯ helpers.ts:293:33
+ ❯ runInput helpers.ts:293:16
+ ❯ ac5-show-changes-nothing.test.ts:34:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/14]⎯
+
+ FAIL  ac6-export.test.ts > AC6 #903.772321ac an export of the tour shows the pointer > AC6 #903.772321ac an export of the tour at 1920 × 1080 shows the pointer in its frames at each key's anchor, and with pointer.show false no pointer pixel draws
+AssertionError: the tour board is presented, its `tour` a field of the document the app takes (README: Documents); the reply's issues: [{"check":"document.validate","code":"unknown_field","severity":"error","ids":[],"path":"tour","actual":{"keys":{"fire":[[2,1,"hold"]],"gain":[[4,0,"linear"],[6,1,"hold"]],"lamp":[[8,true,"hold"]]},"idle_after":0,"loop":false},"what":"not a field of the document envelope","fix":"Remove the field, or require the kind's minor that defines it."}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented helpers.ts:371:173
+    369|   const r = obj(reply, `${what}: the deep_show reply`);
+    370|   const errors = (Array.isArray(r['issues']) ? r['issues'] : []).filte…
+    371|   expect(r['outcome'], `${what} is presented, its \`tour\` a field of …
+       |                                                                                                                                                                             ^
+    372|   expect(errors, `${what} is presented with no error`).toEqual([]);
+    373| }
+ ❯ ac6-export.test.ts:125:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/14]⎯
+
+ FAIL  ac6-export.test.ts > AC6 #903.772321ac an export of the tour shows the pointer > AC6 #903.772321ac the film's pixel hash is the same seeked and played, on the reference Mac
+AssertionError: the tour board is presented, its `tour` a field of the document the app takes (README: Documents); the reply's issues: [{"check":"document.validate","code":"unknown_field","severity":"error","ids":[],"path":"tour","actual":{"keys":{"fire":[[2,1,"hold"]],"gain":[[4,0,"linear"],[6,1,"hold"]],"lamp":[[8,true,"hold"]]},"idle_after":0,"loop":false},"what":"not a field of the document envelope","fix":"Remove the field, or require the kind's minor that defines it."}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented helpers.ts:371:173
+    369|   const r = obj(reply, `${what}: the deep_show reply`);
+    370|   const errors = (Array.isArray(r['issues']) ? r['issues'] : []).filte…
+    371|   expect(r['outcome'], `${what} is presented, its \`tour\` a field of …
+       |                                                                                                                                                                             ^
+    372|   expect(errors, `${what} is presented with no error`).toEqual([]);
+    373| }
+ ❯ ac6-export.test.ts:157:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/14]⎯
+
+ FAIL  ac7-reduced-motion.test.ts > AC7 #903.f0bb108a reduced motion > AC7 #903.f0bb108a under reduced motion the tour writes no entry and no pointer draws
+AssertionError: the tour board with and without reduced motion (session 1): deep-input plays the session and answers its `tour_pointer` ops (README: The surface under test); it answered {"ok":false,"code":"bad_input","path":"op"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ answerOf helpers.ts:279:159
+    277|   try { parsed = JSON.parse(text) as JsonValue; } catch { parsed = tex…
+    278|   const a = obj(parsed, `${what}: the answer`);
+    279|   expect(a['ok'], `${what}: deep-input plays the session and answers i…
+       |                                                                                                                                                               ^
+    280|   const track = arr(a['track'], `${what}: track`).map((e, i): Entry =>…
+    281|     const o = obj(e, `${what}: track[${i}]`);
+ ❯ helpers.ts:293:33
+ ❯ runInput helpers.ts:293:16
+ ❯ ac7-reduced-motion.test.ts:23:31
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/14]⎯
+
+ FAIL  ac8-taste.test.ts > AC8 #903.1034b873 the check run's pictures of the tour pointer, and the one taste call on them > AC8 #903.1034b873 the check run takes the three screenshots, the exported frame at 1920 × 1080 and the recording from the app's own frames, and the recorded call on exactly those bytes says they look right; with none the run is INCONCLUSIVE, never PASS
+AssertionError: the tour board is presented, its `tour` a field of the document the app takes (README: Documents); the reply's issues: [{"check":"document.validate","code":"unknown_field","severity":"error","ids":[],"path":"tour","actual":{"keys":{"fire":[[2,1,"hold"]],"gain":[[4,0,"linear"],[6,1,"hold"]],"lamp":[[8,true,"hold"]]},"idle_after":0,"loop":false},"what":"not a field of the document envelope","fix":"Remove the field, or require the kind's minor that defines it."}]: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented helpers.ts:371:173
+    369|   const r = obj(reply, `${what}: the deep_show reply`);
+    370|   const errors = (Array.isArray(r['issues']) ? r['issues'] : []).filte…
+    371|   expect(r['outcome'], `${what} is presented, its \`tour\` a field of …
+       |                                                                                                                                                                             ^
+    372|   expect(errors, `${what} is presented with no error`).toEqual([]);
+    373| }
+ ❯ ac8-taste.test.ts:52:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/14]⎯
+
+
+ Test Files  8 failed (8)
+      Tests  14 failed (14)
+   Start at  12:27:06
+   Duration  34.13s (tests 99%)
+
+exit=1
+Sun Nov 15 12:27:41 PST 2026

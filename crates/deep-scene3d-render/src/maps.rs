@@ -523,7 +523,10 @@ impl Store {
         let views: Vec<&wgpu::TextureView> = keys
             .iter()
             .map(|k| match k {
-                Some(k) => self.views.get(k).map_or_else(|| &self.textures[k].1, |v| &v.0),
+                Some(k) => self
+                    .views
+                    .get(k)
+                    .map_or_else(|| &self.textures[k].1, |v| &v.0),
                 None => &self.white,
             })
             .collect();

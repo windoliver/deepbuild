@@ -1,7 +1,7 @@
 
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
-import { parse as parseYaml } from 'yaml';
+import { parseYaml } from './yaml.js';
 
 import { UsageTail } from '@deepbuild/readings';
 import { Numbers } from './numbers.js';
@@ -191,7 +191,7 @@ export class Core {
   /** The record's raw reads, as the helpers that take them call them: parameters bound. */
   private readonly raw: RecordStore['raw'] = (sql, params) => this.record.raw(sql, params);
   /** The log's pages, read-ahead and stream; a read waits for the appends in flight, and the owner's stream reads what the owner may see (#1337). */
-  private readonly log = new LogReads({ raw: this.raw, settled: () => Promise.allSettled([...this.inflight]), ownerSeen: () => this.state.seenBy(OWNER), emit: (sub, json, caught) => this.emit(sub, json, caught) });
+  private readonly log = new LogReads({ raw: this.raw, settled: () => Promise.allSettled([...this.inflight.keys()]), ownerSeen: () => this.state.seenBy(OWNER), emit: (sub, json, caught) => this.emit(sub, json, caught) });
   private asks!: Asks;
   /** Online model libraries (#1731): which are on, your standing rules, searches and fetches. */
   private libraries?: Libraries;
@@ -271,7 +271,7 @@ export class Core {
   private spaces!: WorkspaceService;
   /** The supervisor's runs (runs.ts). */
   private runs!: Runs;
-  private checkKinds!: CheckKinds;
+  private checkKinds!: () => Promise<CheckKinds>;
   private reviewRounds!: ReviewRounds;
   /** Each worktree's stack and every stack run a check started (#331, #332). */
   private stacks!: Stacks;
@@ -293,8 +293,11 @@ export class Core {
   }
   /** Each session's deep_drive replicas (#124). */
   private replicas!: Replicas;
-  /** Appends handed to the record and not yet settled: a read waits for them, so it sees every hook acknowledged before it. */
-  private readonly inflight = new Set<Promise<unknown>>();
+  /**
+   * Appends handed to the record and not yet settled, by event ID: a read waits for them, so it sees every hook
+   * acknowledged before it.
+   */
+  private readonly inflight = new Map<Promise<unknown>, string>();
   private readonly timers: NodeJS.Timeout[] = [];
   /**
    * Each background job's failures in a row, when the first of them was and the last one's error, cleared by its
@@ -492,7 +495,7 @@ export class Core {
       over: (session) => { const s = this.sessionStarts.runOf(session); return s !== undefined && !this.sessionStarts.live(s.run); },
     });
     this.delivery.answers = new Answers({
-      raw: this.raw, settled: () => Promise.allSettled([...this.inflight]),
+      raw: this.raw, settled: (except) => Promise.allSettled([...this.inflight].flatMap(([append, id]) => (id === except ? [] : [append]))),
       excluded: (id) => this.delivery.handed.has(id) || this.delivery.prompts.has(`ask:${id}`),
       delivered: options.plant === 'words-only-at-turn-start' ? undefined : (session) => { const live = this.state.live.get(session); if (live) live.words ??= 'answer'; },
       append: (data, v) => this.appendCore('delivery.outcome', data, { subject: data.delivery, ...(v === 2 ? { v } : {}) }),
@@ -567,14 +570,14 @@ export class Core {
         if (spec.kind === 'review') {
           const head = this.gate.snapshotOf(run.claim) ?? run.commit;
           const since = of.pr ? await this.reviewRounds.since(of.pr, run.claim) : null;
-          const { round, ...result } = await this.checkKinds.run({ ...spec, head, since } as CheckSpec, { checkout: join(this.root.dir, 'objects'), deadline, now: this.now }, of);
+          const { round, ...result } = await (await this.checkKinds()).run({ ...spec, head, since } as CheckSpec, { checkout: join(this.root.dir, 'objects'), deadline, now: this.now }, of);
           if (round && of.pr && run.commit === head) await this.reviewRounds.read(of.pr, run.claim, head, round);
           return result;
         }
-        return this.checkKinds.run(spec, { checkout, deadline, now: this.now }, of, { run: run.run, worktree: this.judging.claimFolder(run.claim) ?? checkout, stop });
+        return (await this.checkKinds()).run(spec, { checkout, deadline, now: this.now }, of, { run: run.run, worktree: this.judging.claimFolder(run.claim) ?? checkout, stop });
       },
     });
-    // The check kinds the hub holds (#1537): command, review, numbers and the work kinds, each with its routes.
+    // Check implementations load for a claim or a kinds listing, never for the first session or tool hook.
     this.reviewRounds = new ReviewRounds({ outcomes: this.providers.checks.reviewOutcomes, raw: this.raw, appendCore: (kind, data, extra) => this.appendCore(kind, data, extra), objects: join(this.root.dir, 'objects') });
     this.checkKinds = this.providers.checks.kinds({ host: () => this.host, supervisor: () => this.supervisor, checkouts: () => this.checkouts, store: join(this.root.dir, 'objects'), submit: (spec) => this.runner.submit(spec), wait: (job) => this.runner.wait(job), cancel: (job) => this.runner.cancel(job), plant: options.plant, extensions: () => this.extensions });
     this.replicas = new Replicas({ folder: join(this.root.dir, 'replicas'), now: this.now, leases: () => this.leases, plant: options.plant });
@@ -681,9 +684,13 @@ export class Core {
     let beat = { wall: Date.now(), at: this.now() };
     const landed = async (): Promise<number> => Number(((await this.record.raw(`SELECT COALESCE(MAX(log_pos), 0) AS pos FROM events WHERE kind IN ('agent.stop', 'verdict.made')`)) as { pos: number }[])[0]?.pos ?? 0);
     let ticked = await landed();
+    // An ask waiting for your next visit shows at its time, though nothing else lands then (#1345): while one waits,
+    // the asks are read once a minute on the hub's clock.
+    let looked = this.now();
     const due = async (): Promise<boolean> => {
       const pos = await landed();
       if (pos > ticked) { ticked = pos; return true; }
+      if (this.now() - looked >= 60_000 && (await this.record.raw(`SELECT 1 FROM asks WHERE status = 'open' AND batch_id IS NULL LIMIT 1`)).length) { looked = this.now(); return true; }
       return (await this.record.raw(`SELECT 1 FROM asks WHERE status IN ('open', 'later') AND (deadline <= ? OR kind = 'unblock') LIMIT 1`, [this.now()])).length > 0;
     };
     // The hook programs are checked at start and every 10 minutes on the hub's clock (#993): no hook arrives to say they can't run.
@@ -874,7 +881,7 @@ export class Core {
       token: async () => process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken(),
       gateToken: (repo) => this.gateToken(repo), gateApp: () => this.forgeApp('gate'),
       landingToken: (repo) => (this.landingTokens ??= this.providers.forge.gateTokens(this.options.forge, () => this.forgeApp('gate'), true))(repo),
-      judge: (r) => this.judging.judgeLanding(r),
+      judge: (r) => this.judging.judgeLanding(r), verdict: (claim) => this.judging.recorded(claim),
       sendBack: (r) => this.delivery.landingSendBack(r),
       appendCore: (kind, data, extra) => this.appendCore(kind, data, extra),
     });
@@ -997,7 +1004,7 @@ export class Core {
     await this.delivery.restore();
     await this.acceptance.open();
     // The work runs (#1332), once the starts are reconciled with what still runs: a pass every 2 s from the record and the forge.
-    (this.work = new Work({ api: this.options.forge ?? 'https://api.github.com', token: async () => process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken(), repoOf: (remote) => this.providers.forge.repoOf(remote), raw: (q, p) => this.record.raw(q, p), appendCore: (kind, data, extra) => this.appendCore(kind, data, extra), starts: () => this.sessionStarts, landing: () => this.landing, asks: () => this.asks, now: this.now, plant: this.options.plant, spaces: () => this.spaces, judgeTask: (r) => this.judging.judgeTask(r), due: () => this.control.briefsDue() })).open();
+    (this.work = new Work({ api: this.options.forge ?? 'https://api.github.com', token: async () => process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? await ghToken(), repoOf: (remote) => this.providers.forge.repoOf(remote), raw: (q, p) => this.record.raw(q, p), appendCore: (kind, data, extra) => this.appendCore(kind, data, extra), starts: () => this.sessionStarts, landing: () => this.landing, asks: () => this.asks, now: this.now, plant: this.options.plant, spaces: () => this.spaces, judgeTask: (r) => this.judging.judgeTask(r), answered: (claim, req, ask, answer) => this.judging.answered(claim, req, ask, answer), due: () => this.control.briefsDue() })).open();
     // The session map and what its notices delivered, and the loop rule's count, read back (#352).
     await this.siblings.restore().catch(() => undefined);
     for (const timer of this.timers) timer.unref();
@@ -1084,7 +1091,7 @@ export class Core {
     if (this.lost) throw Error(this.blocked);
     const appended = this.record.append(connection, input);
     // No read waits for a backfill: nobody was acknowledged for its events.
-    if (!backfill) this.inflight.add(appended);
+    if (!backfill) this.inflight.set(appended, input.id);
     try {
       await appended;
     } catch (error) {
@@ -1313,7 +1320,7 @@ export class Core {
     // A spooled line whose hook the hub already recorded live changes nothing: no count, no stamp, no append.
     if (replayed && /^[0-9A-HJKMNP-TV-Z]{26}$/.test(meta.id)) {
       // Its live copy may be acknowledged and still on its way to the record.
-      await Promise.allSettled([...this.inflight]);
+      await Promise.allSettled([...this.inflight.keys()]);
       const known = await this.record.raw(`SELECT json_extract(data, '$.late') AS late FROM events WHERE id ${this.options.plant === 'replay-keeps-place-by-id' ? '>=' : '='} ? LIMIT 1`, [meta.id]);
       if (known.length) {
         // Unless deep-hook gave up on an acknowledgement the hub sent just too late: the live copy is in the record
@@ -2344,7 +2351,8 @@ export class Core {
           this.delivery.unread.delete(ask);
           if (woken) await this.delivery.answers.outcome(ask, 'next_prompt', 'delivered');
         }
-        const waiting = await this.delivery.answers.waitingFor(meta.session);
+        // Never behind the prompt's own event, which answers no ask: a resume commits FULL once the evidence it names is synced (#1410).
+        const waiting = await this.delivery.answers.waitingFor(meta.session, undefined, meta.id);
         if (status && !waiting.length && !r.later.length && !this.delivery.promiseDueFor(meta.session)) {
           // The prompt's event read as the session working; it stays as it was, since no model runs on it.
           const live = this.state.live.get(meta.session);
@@ -2480,7 +2488,7 @@ export class Core {
     const from = spliced?.get(meta.id)?.from;
     spliced?.delete(meta.id);
     if (from !== undefined) return from;
-    await Promise.allSettled([...this.inflight]);
+    await Promise.allSettled([...this.inflight.keys()]);
     const [row] = (await this.record.raw(`SELECT json_extract(data, '$.from') AS f FROM events WHERE id = ?`, [meta.id])) as { f: string | null }[];
     return row ? row.f ?? 'unknown' : undefined;
   }

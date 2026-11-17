@@ -200,7 +200,7 @@ pub(crate) fn mesh(
 /// across a smooth surface stays smooth and a split one stays sharp.
 fn normals(m: &Mesh) -> Vec<V3> {
     let mut acc = vec![[0.0; 3]; m.positions.len()];
-    for t in m.indices.chunks_exact(3) {
+    for t in m.indices.as_chunks::<3>().0 {
         let [a, b, c] = [t[0], t[1], t[2]].map(|i| m.positions[i as usize]);
         let n = cross(sub(b, a), sub(c, a));
         for i in t {

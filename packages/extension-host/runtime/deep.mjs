@@ -76,6 +76,8 @@ export const API = Object.freeze([
   { method: 'deep.canvas.read', needs: 'canvas' },
   // #184: a piece played headless in a replica, from the seed and entries the running check's input gives.
   { method: 'deep.canvas.play', needs: 'canvas' },
+  // #1048: a plug-in's model source, asked through the hub (from a recording when it replays), as a model bot asks it.
+  { method: 'deep.source.ask', needs: null },
 ].map((m) => Object.freeze(m)));
 
 /**

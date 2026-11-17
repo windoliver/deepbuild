@@ -117,6 +117,24 @@ impl Deref for Wgpu {
     }
 }
 
+/// A validation scope around a creation. In the web player (#172) a scope resolves only once the
+/// page's one thread yields, so none is pushed there: the device's uncaptured-error handler reports
+/// what it would have caught.
+#[cfg(not(target_arch = "wasm32"))]
+fn scoped(d: &wgpu::Device) -> Option<wgpu::ErrorScopeGuard> {
+    Some(d.push_error_scope(wgpu::ErrorFilter::Validation))
+}
+
+#[cfg(target_arch = "wasm32")]
+fn scoped(_: &wgpu::Device) -> Option<wgpu::ErrorScopeGuard> {
+    None
+}
+
+/// Whether the scope around a creation caught an error, the first creation then made again.
+fn popped(scope: Option<wgpu::ErrorScopeGuard>) -> bool {
+    scope.is_some_and(|s| pollster::block_on(s.pop()).is_some())
+}
+
 impl Wgpu {
     pub fn new(raw: wgpu::Device, counts: Arc<Counts>) -> Wgpu {
         Wgpu {
@@ -153,10 +171,10 @@ impl Wgpu {
                 std::thread::sleep(std::time::Duration::from_millis(ms));
             }
         }
-        let scope = self.raw.push_error_scope(wgpu::ErrorFilter::Validation);
+        let scope = scoped(&self.raw);
         let object = make();
         made.inspect(|n| add(n, 1));
-        if pollster::block_on(scope.pop()).is_some() {
+        if popped(scope) {
             made.inspect(|n| add(n, 1));
             return make();
         }
@@ -307,6 +325,18 @@ impl Deref for Queue {
 impl Queue {
     pub fn new(raw: wgpu::Queue, counts: Arc<Counts>) -> Queue {
         Queue { raw, counts }
+    }
+
+    /// Submits `buffers`; while a frame's spans are armed on this thread and none is open, after
+    /// the start of one (#2742).
+    pub fn submit<I: IntoIterator<Item = wgpu::CommandBuffer>>(
+        &self,
+        buffers: I,
+    ) -> wgpu::SubmissionIndex {
+        match crate::spans::armed() {
+            Some(spans) => spans.submit(&self.raw, buffers),
+            None => self.raw.submit(buffers),
+        }
     }
 
     pub fn write_buffer(&self, buffer: &wgpu::Buffer, offset: wgpu::BufferAddress, data: &[u8]) {

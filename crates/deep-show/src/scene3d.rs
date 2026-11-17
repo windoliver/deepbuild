@@ -17,32 +17,7 @@ use serde_json::{json, Value};
 
 use crate::snapshot::Unfit;
 
-/// The look a revision draws in here: the palette's roles, exposed as its camera's `exposure`
-/// says, an EV100 (#1938; Camera `camera@1`: lens), else at the unit exposure.
-pub(crate) fn look_of(doc: &Value, palette: &Palette) -> Look3 {
-    let mut look = Look3::from_roles(palette.clone());
-    let camera = doc
-        .get("camera")
-        .and_then(Value::as_str)
-        .and_then(|id| doc.get("items")?.get(id));
-    // #468: `from_lens` exposes from the lens's aperture, shutter and ISO at the frame rate.
-    let rate = doc
-        .get("transport")
-        .and_then(deep_canvas::document::frame_rate_of)
-        .filter(|(p, q)| *p > 0 && *q > 0)
-        .map_or(60.0, |(p, q)| f64::from(p) / f64::from(q));
-    let ev = camera
-        .and_then(|c| c.get("params")?.as_object())
-        .and_then(|p| {
-            deep_canvas_scene3d::lens::read(p, "", false)
-                .ok()?
-                .ev100(rate)
-        });
-    if let Some(ev) = ev {
-        look.exposure = deep_canvas_scene3d::finish::exposure_scale(ev);
-    }
-    look
-}
+pub(crate) use deep_play::scene::look_of;
 
 /// The rows of a frame of `size` render.exposure's reduction reads: all of them, or, under
 /// #2513's planted reduction, those in whole 32-row groups.
@@ -107,8 +82,25 @@ impl Gpu3 {
     }
 
     /// An evaluated scene drawn offscreen over the look's ground: straight RGBA, rows top-down.
+    /// When it has readouts or card lines, the picture is the draw with them as labels (#419, #504).
     pub fn draw(&mut self, scene: &Scene, look: &Look3) -> Option<Vec<u8>> {
-        let mut bytes = draw_offscreen(&self.device, &mut self.renderer, scene, look, None)?;
+        let over = if scene.readouts.is_empty() {
+            None
+        } else {
+            let mut sc = scene.clone();
+            deep_scene3d_render::readouts_as_labels(&mut sc);
+            Some(draw_offscreen(
+                &self.device,
+                &mut self.renderer,
+                &sc,
+                look,
+                None,
+            )?)
+        };
+        // The plain draw goes last even under readouts, so the ids, picks and light the renderer
+        // keeps for `targets`, `picks` and `light` are the frame's own, not its labels'.
+        let plain = draw_offscreen(&self.device, &mut self.renderer, scene, look, None)?;
+        let mut bytes = over.unwrap_or(plain);
         for p in bytes.as_chunks_mut::<4>().0 {
             p.swap(0, 2);
         }
@@ -126,26 +118,18 @@ impl Gpu3 {
         size: [u16; 2],
         assets: deep_canvas_scene3d::scene::Assets<'_>,
     ) -> Result<(Scene, Look3), Unfit> {
-        let mut doc = doc.clone();
-        if let Some(d) = doc.as_object_mut() {
-            d.insert("size".into(), json!(size));
-        }
-        deep_canvas_physics::skin::write(&mut doc, t);
-        let look = look_of(&doc, palette);
         let fills = Fills {
             outlines: &self.outlines,
             module: &self.fills,
             planted: self.planted.as_deref(),
             memo: None,
         };
-        let scene =
-            evaluate_any(&doc, t, &look, &mut self.labels, Some(assets), fills).map_err(|r| {
-                Unfit {
-                    code: r.code,
-                    path: r.path,
-                }
-            })?;
-        Ok((scene, look))
+        deep_play::scene::evaluate(doc, t, palette, size, &mut self.labels, assets, fills).map_err(
+            |r| Unfit {
+                code: r.code,
+                path: r.path,
+            },
+        )
     }
 
     /// #1401: an evaluated scene drawn offscreen as render-back draws it: straight RGBA, rows
@@ -202,14 +186,27 @@ impl Gpu3 {
 
     /// #2513: the last frame drawn, kept on this GPU for render.exposure to reduce after later
     /// frames draw: a frame's reduction in place of its linear image.
-    pub fn kept_light(&mut self, short: bool) -> Option<Reduce> {
+    /// #457: each reduction's GPU time (ms, by the pass's timestamps), the bytes it read back and
+    /// one run are added to `cost`.
+    pub fn kept_light(
+        &mut self,
+        short: bool,
+        cost: Arc<std::sync::Mutex<[f64; 3]>>,
+    ) -> Option<Reduce> {
         let reducer = self.reducer();
         let (pre_tone, ids, size) = self.renderer.light_source()?;
         let kept = Kept::copy(&self.device, pre_tone, ids, size);
         let device = self.device.clone();
         let rows = read_rows(size, short);
+        let bytes = deep_scene3d_render::exposure::readback_bytes(rows) as f64;
         Some(Reduce(Arc::new(move |q| {
-            kept.reduce(&device, &reducer, rows, q)
+            let (sums, gpu_ms) = kept.reduce(&device, &reducer, rows, q, true)?;
+            if let Ok(mut c) = cost.lock() {
+                c[0] += gpu_ms.unwrap_or(f64::NAN);
+                c[1] += bytes + if gpu_ms.is_some() { 16.0 } else { 0.0 };
+                c[2] += 1.0;
+            }
+            Some(sums)
         })))
     }
 

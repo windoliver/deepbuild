@@ -16,6 +16,11 @@ const GROUPS: u32 = 128;
 /// The sum of log2 is counted in steps of 2^-24.
 const STEPS: f64 = 16_777_216.0;
 
+/// The bytes one reduction of a `size` px frame reads back (#457): 20 per workgroup's partial.
+pub fn readback_bytes(size: [u32; 2]) -> u64 {
+    u64::from((size[0] * size[1]).div_ceil(GROUP).clamp(1, GROUPS)) * 20
+}
+
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct Params {
@@ -100,6 +105,21 @@ impl Reducer {
         size: [u32; 2],
         q: &LightQuery,
     ) -> Option<LightSums> {
+        self.reduce_timed(device, pre_tone, ids, size, q, false)
+            .map(|(s, _)| s)
+    }
+
+    /// As [`Reducer::reduce`], with `timed` the pass bracketed by timestamp writes where the
+    /// device has them (#457): its sums, and the GPU time the pass took in ms.
+    pub fn reduce_timed(
+        &self,
+        device: &Device,
+        pre_tone: &wgpu::TextureView,
+        ids: &wgpu::TextureView,
+        size: [u32; 2],
+        q: &LightQuery,
+        timed: bool,
+    ) -> Option<(LightSums, Option<f64>)> {
         let d = &device.device;
         let mut bits = vec![
             0u32;
@@ -132,7 +152,7 @@ impl Reducer {
         let uniform = init(bytemuck::bytes_of(&params), wgpu::BufferUsages::UNIFORM);
         let picks = init(bytemuck::cast_slice(&bits), wgpu::BufferUsages::STORAGE);
         let groups = (size[0] * size[1]).div_ceil(GROUP).clamp(1, GROUPS);
-        let bytes = u64::from(groups) * 20;
+        let bytes = readback_bytes(size);
         let partials = d.create_buffer(&wgpu::BufferDescriptor {
             label: Some(EXPOSURE_PASS),
             size: bytes,
@@ -165,19 +185,57 @@ impl Reducer {
                 },
             ],
         });
-        let out = read_back(device, EXPOSURE_PASS, bytes, |encoder, staging| {
+        // The pass's start and end ticks, resolved behind the partials.
+        let period = device
+            .timestamps
+            .period_ns
+            .filter(|_| timed && device.timestamps.query);
+        let stamps = period.map(|_| {
+            let set = d.create_query_set(&wgpu::QuerySetDescriptor {
+                label: Some(EXPOSURE_PASS),
+                ty: wgpu::QueryType::Timestamp,
+                count: 2,
+            });
+            let resolve = d.create_buffer(&wgpu::BufferDescriptor {
+                label: Some(EXPOSURE_PASS),
+                size: 16,
+                usage: wgpu::BufferUsages::QUERY_RESOLVE | wgpu::BufferUsages::COPY_SRC,
+                mapped_at_creation: false,
+            });
+            (set, resolve)
+        });
+        let total = bytes + if stamps.is_some() { 16 } else { 0 };
+        let out = read_back(device, EXPOSURE_PASS, total, |encoder, staging| {
             {
                 deep_gpu::counted::compute_pass();
                 let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                     label: Some(EXPOSURE_PASS),
-                    timestamp_writes: None,
+                    timestamp_writes: stamps.as_ref().map(|(set, _)| {
+                        wgpu::ComputePassTimestampWrites {
+                            query_set: set,
+                            beginning_of_pass_write_index: Some(0),
+                            end_of_pass_write_index: Some(1),
+                        }
+                    }),
                 });
                 pass.set_pipeline(&self.pipeline);
                 pass.set_bind_group(0, &bind, &[]);
                 pass.dispatch_workgroups(groups, 1, 1);
             }
             encoder.copy_buffer_to_buffer(&partials, 0, staging, 0, bytes);
+            if let Some((set, resolve)) = &stamps {
+                encoder.resolve_query_set(set, 0..2, resolve, 0);
+                encoder.copy_buffer_to_buffer(resolve, 0, staging, bytes, 16);
+            }
         })?;
+        let gpu_ms = period.map(|ns| {
+            let tick = |k: usize| {
+                let at = bytes as usize + 8 * k;
+                u64::from_le_bytes(std::array::from_fn(|j| out[at + j]))
+            };
+            tick(1).saturating_sub(tick(0)) as f64 * f64::from(ns) / 1e6
+        });
+        let out = &out[..bytes as usize];
         let mut s = LightSums::default();
         let mut steps = 0i64;
         for p in out.as_chunks::<20>().0 {
@@ -188,7 +246,7 @@ impl Reducer {
             steps += (i64::from(word(16) as i32) << 32) + i64::from(word(12));
         }
         s.log2 = steps as f64 / STEPS;
-        Some(s)
+        Some((s, gpu_ms))
     }
 }
 
@@ -241,7 +299,8 @@ impl Kept {
         reducer: &Reducer,
         size: [u32; 2],
         q: &LightQuery,
-    ) -> Option<LightSums> {
-        reducer.reduce(device, &self.pre_tone, &self.ids, size, q)
+        timed: bool,
+    ) -> Option<(LightSums, Option<f64>)> {
+        reducer.reduce_timed(device, &self.pre_tone, &self.ids, size, q, timed)
     }
 }

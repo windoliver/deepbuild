@@ -40,14 +40,17 @@ mod groups;
 mod guard;
 mod hdr;
 mod host;
-mod insets;
 mod indexed;
+mod insets;
 mod interp_suite;
 mod levels;
 mod live;
+mod lightfx;
 mod liveview;
 mod lod;
+mod look_ops;
 mod marks2d;
+mod op_transition;
 mod opframe;
 mod paintfx;
 mod parity;
@@ -57,7 +60,6 @@ mod plugin;
 mod print2d;
 mod records;
 mod reference;
-mod op_transition;
 mod regions;
 mod scene;
 mod seam;
@@ -177,6 +179,11 @@ pub enum Planted {
     PassOffByTwo,
     BloomWithoutKaris,
     PassesOneGpu,
+    /// #508's wrong programs (tests/acceptance/508/README.md: Surfaces this job invents, 10): a
+    /// plume's haze run before the check readbacks are taken, so they read its bent pixels; and
+    /// the film effects taking their time from the wall clock instead of the frame's t.
+    HazeFeedsCheckReadback,
+    EffectReadsWallClock,
     /// #379's wrong programs (tests/acceptance/379/README.md: Planted programs).
     SumsPassIntervals,
     AllocatesPerFrame,
@@ -212,6 +219,8 @@ pub enum Planted {
     ShoreFieldFromCentre,
     /// #268: waves at full amplitude by the shore, ignoring its field.
     ShoreCalmIgnoresField,
+    /// #968: the flow's noise moved in one phase, jumping back at every wrap.
+    WaterFlowSinglePhase,
     /// #854's wrong program: the renderer compiles its pipelines in the first frame.
     CompilesOnFirstFrame,
     /// #777's wrong programs (tests/acceptance/777/README.md: Planted programs).
@@ -316,6 +325,9 @@ pub enum Planted {
     /// environment prefiltered one mip a frame; the specular lobe uncompensated, or compensated on
     /// environment light alone; metallic premixed into one F0 before shading.
     DrawsBlack,
+    /// #463's wrong program (tests/acceptance/463/README.md: Planted programs): `art.halftone_pop`
+    /// drawn with `art.dot`'s passes.
+    HalftonePopTakesDotPasses,
     InkFillFlat,
     RimKeepsFirst,
     DropsClouds,
@@ -480,6 +492,12 @@ pub enum Planted {
     AxesModAppliesTransform,
     Axes3dOwnTickRule,
     AxesModMapsEveryFrame,
+    /// #2031's wrong programs (tests/acceptance/2031/README.md: Planted programs).
+    LightLinearFalloff,
+    LightEncodedSum,
+    LightDefaultAmbientZero,
+    LightEveryChild,
+    LightStaleList,
 }
 
 impl Planted {
@@ -503,6 +521,11 @@ impl Planted {
             "backdrop_past_coverage" => Planted::BackdropPastCoverage,
             "backdrop_reads_status" => Planted::BackdropReadsStatus,
             "bevel_lit_opposite" => Planted::BevelLitOpposite,
+            "light_linear_falloff" => Planted::LightLinearFalloff,
+            "light_encoded_sum" => Planted::LightEncodedSum,
+            "light_default_ambient_zero" => Planted::LightDefaultAmbientZero,
+            "light_every_child" => Planted::LightEveryChild,
+            "light_stale_list" => Planted::LightStaleList,
             "vivid_light_as_linear_light" => Planted::VividLightAsLinearLight,
             "dissolve_reads_playback" => Planted::DissolveReadsPlayback,
             "pass_linear_in_2d" => Planted::PassLinearIn2d,
@@ -541,6 +564,8 @@ impl Planted {
             "pass_off_by_two" => Planted::PassOffByTwo,
             "bloom_without_karis" => Planted::BloomWithoutKaris,
             "passes_one_gpu" => Planted::PassesOneGpu,
+            "haze_feeds_check_readback" => Planted::HazeFeedsCheckReadback,
+            "effect_reads_wall_clock" => Planted::EffectReadsWallClock,
             "sums_pass_intervals" => Planted::SumsPassIntervals,
             "allocates_per_frame" => Planted::AllocatesPerFrame,
             "compiles_at_swap" => Planted::CompilesAtSwap,
@@ -566,6 +591,7 @@ impl Planted {
             "water_foam_keeps_state" => Planted::WaterFoamKeepsState,
             "shore_field_from_centre" => Planted::ShoreFieldFromCentre,
             "shore_calm_ignores_field" => Planted::ShoreCalmIgnoresField,
+            "water_flow_single_phase" => Planted::WaterFlowSinglePhase,
             "compiles_on_first_frame" => Planted::CompilesOnFirstFrame,
             "budgets_each_window" => Planted::BudgetsEachWindow,
             "steps_main_window" => Planted::StepsMainWindow,
@@ -653,6 +679,7 @@ impl Planted {
             "anisotropy_one" => Planted::AnisotropyOne,
             "normal_map_as_srgb" => Planted::NormalMapAsSrgb,
             "draws_black" => Planted::DrawsBlack,
+            "halftone_pop_takes_dot_passes" => Planted::HalftonePopTakesDotPasses,
             "ink_fill_flat" => Planted::InkFillFlat,
             "rim_keeps_first" => Planted::RimKeepsFirst,
             "drops_clouds" => Planted::DropsClouds,
