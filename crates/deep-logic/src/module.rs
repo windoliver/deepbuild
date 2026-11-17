@@ -189,10 +189,17 @@ fn register(r: &mut Registrar) {
     .fixture_assets(vec![bytes]);
     // #548: deep_run's logic kinds (Check input: logic kinds), each on the lowered document's
     // logic items, their programs read from the assets the check names.
-    r.check("logic.determinism", "any", &["logic.determinism"], |d, i| issues(determinism(d, i)))
-        .check_report(determinism);
-    r.check("logic.budget", "any", &["logic.budget"], |d, i| issues(budget(d, i)))
-        .check_report(budget);
+    r.check(
+        "logic.determinism",
+        "any",
+        &["logic.determinism"],
+        |d, i| issues(determinism(d, i)),
+    )
+    .check_report(determinism);
+    r.check("logic.budget", "any", &["logic.budget"], |d, i| {
+        issues(budget(d, i))
+    })
+    .check_report(budget);
     r.code(
         "logic.determinism",
         "Seeking a logic item doesn't equal playing it: a step or full-state hash, an array or a continuation probe differs.",
@@ -356,7 +363,12 @@ fn piece_of(doc: &Value) -> Result<Rc<Piece>, OpError> {
     let seed = doc.get("seed").and_then(Value::as_i64).unwrap_or(0);
     // The document's controls, so an item that reads one reads its input entries (#544's Fire).
     let controls = doc.get("controls").cloned().unwrap_or(json!({}));
-    let piece = json!({"seed": seed, "controls": controls, "items": items, "assets": assets});
+    let mut piece = json!({"seed": seed, "controls": controls, "items": items, "assets": assets});
+    // #182: the worlds' character readings an item may read.
+    let reads = crate::play::world_reads(doc);
+    if !reads.is_empty() {
+        piece["world_reads"] = json!(reads);
+    }
     // A service answers on the document's worlds, so a piece that asks one is the document's.
     let key = match asks {
         true => sha256_hex(&canonical(&json!([piece, doc]))),
@@ -516,8 +528,10 @@ fn fixture_step(state: &mut Value, input: &StepInput<'_>) {
 /// program a fixture asset, since a kit fixture has no evidence store. It names no other module's
 /// kind, which the kit's seal of this module alone would refuse as unknown.
 fn planted(r: &mut Registrar, code: &str, body: &str) {
-    let text = format!(r#"(module (memory (export "memory") 1 1) (global (export "reads_at") i32 (i32.const 0))
-        (global (export "writes_at") i32 (i32.const 1024)) (func (export "init") (param i64)) (func (export "step") (param i64) {body}))"#);
+    let text = format!(
+        r#"(module (memory (export "memory") 1 1) (global (export "reads_at") i32 (i32.const 0))
+        (global (export "writes_at") i32 (i32.const 1024)) (func (export "init") (param i64)) (func (export "step") (param i64) {body}))"#
+    );
     let program = wat::parse_str(text).expect("a planted program");
     let sha = deep_canvas::canon::sha256_hex(&program);
     let doc = json!({
@@ -538,7 +552,11 @@ fn planted(r: &mut Registrar, code: &str, body: &str) {
 
 /// What a report raises, as a check over items gives it.
 fn issues(report: Report) -> Vec<(String, Raised)> {
-    report.raised.into_iter().map(|(id, r, _)| (id, r)).collect()
+    report
+        .raised
+        .into_iter()
+        .map(|(id, r, _)| (id, r))
+        .collect()
 }
 
 /// The lowered document's logic items as one checked piece, its input track, and the steps its
@@ -550,7 +568,12 @@ fn baked(doc: &Value, input: &Value) -> Result<(Rc<Piece>, Vec<Entry>, i64), Val
         .into_iter()
         .flatten()
         .filter(|(_, i)| i["kind"] == "logic@1")
-        .map(|(id, i)| (id.clone(), json!({"kind": "logic@1", "params": i.get("params").cloned().unwrap_or(json!({}))})))
+        .map(|(id, i)| {
+            (
+                id.clone(),
+                json!({"kind": "logic@1", "params": i.get("params").cloned().unwrap_or(json!({}))}),
+            )
+        })
         .collect();
     let line = json!({"seed": doc.get("seed").and_then(Value::as_i64).unwrap_or(0),
         "controls": doc.get("controls").cloned().unwrap_or(json!({})), "items": items,
@@ -568,7 +591,12 @@ fn baked(doc: &Value, input: &Value) -> Result<(Rc<Piece>, Vec<Entry>, i64), Val
         .pointer("/transport/span")
         .map_or(Ok(0), |v| deep_canvas::document::duration(doc, v))
         .map_err(|e| json!({"what": format!("the transport's span: {e}")}))?;
-    let steps = piece.items.iter().map(|i| (span + i.step - 1) / i.step.max(1)).max().unwrap_or(0);
+    let steps = piece
+        .items
+        .iter()
+        .map(|i| (span + i.step - 1) / i.step.max(1))
+        .max()
+        .unwrap_or(0);
     Ok((Rc::new(piece), entries, steps))
 }
 
@@ -577,9 +605,24 @@ fn raised(kind: &'static str, failures: &[Value], piece: &Piece) -> Vec<(String,
     failures
         .iter()
         .map(|f| {
-            let item = f["item"].as_str().or_else(|| piece.items.first().map(|i| i.id.as_str())).unwrap_or_default().to_string();
-            let what = format!("{kind}: {}", f.get("rule").or_else(|| f.get("run")).map_or_else(|| f.to_string(), Value::to_string));
-            let r = Raised { code: kind, severity: "error", path: format!("items/{item}"), what, fix_ops: None };
+            let item = f["item"]
+                .as_str()
+                .or_else(|| piece.items.first().map(|i| i.id.as_str()))
+                .unwrap_or_default()
+                .to_string();
+            let what = format!(
+                "{kind}: {}",
+                f.get("rule")
+                    .or_else(|| f.get("run"))
+                    .map_or_else(|| f.to_string(), Value::to_string)
+            );
+            let r = Raised {
+                code: kind,
+                severity: "error",
+                path: format!("items/{item}"),
+                what,
+                fix_ops: None,
+            };
             (item, r, f.clone())
         })
         .collect()
@@ -611,14 +654,25 @@ fn determinism(doc: &Value, input: &Value) -> Report {
     }
     // A trap in any run fails the check that ran it (Check input: logic kinds).
     let mut rec = Record::default();
-    match World::new(piece.clone(), track_of(&entries), false, Default::default(), &mut rec, None) {
+    match World::new(
+        piece.clone(),
+        track_of(&entries),
+        false,
+        Default::default(),
+        &mut rec,
+        None,
+    ) {
         Ok(mut w) => w.run(steps, &mut rec, &mut |_, _| {}),
         Err(e) => {
             out.blocked.push(e);
             return out;
         }
     }
-    let mut failures: Vec<Value> = rec.traps.iter().map(|t| json!({"rule": "trap", "item": t["item"], "trap": t})).collect();
+    let mut failures: Vec<Value> = rec
+        .traps
+        .iter()
+        .map(|t| json!({"rule": "trap", "item": t["item"], "trap": t}))
+        .collect();
     match crate::checks::determinism(&piece, &entries, steps, &at, Default::default()) {
         Ok(v) => failures.extend(v["failures"].as_array().cloned().unwrap_or_default()),
         Err(e) => out.blocked.push(e),
@@ -627,7 +681,8 @@ fn determinism(doc: &Value, input: &Value) -> Report {
     if let Some(c @ ("cross_machine" | "web")) = input.get("compare").and_then(Value::as_str) {
         out.blocked.push(json!({"compare": c, "ask": format!("logic.determinism {c} replays the golden on another host; it hasn't run")}));
     }
-    out.results.push(json!({"kind": "logic.determinism", "steps": steps, "at": at}));
+    out.results
+        .push(json!({"kind": "logic.determinism", "steps": steps, "at": at}));
     out
 }
 
@@ -642,14 +697,29 @@ fn budget(doc: &Value, input: &Value) -> Report {
             return out;
         }
     };
-    let share = input.get("fuel_share").and_then(Value::as_f64).unwrap_or(0.5);
+    let share = input
+        .get("fuel_share")
+        .and_then(Value::as_f64)
+        .unwrap_or(0.5);
     let on: Vec<String> = input
         .get("on")
         .and_then(Value::as_array)
-        .map(|a| a.iter().filter_map(Value::as_str).map(str::to_string).collect())
+        .map(|a| {
+            a.iter()
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect()
+        })
         .unwrap_or_else(|| vec!["app".into()]);
     let mut rec = Record::default();
-    match World::new(piece.clone(), track_of(&entries), false, Default::default(), &mut rec, None) {
+    match World::new(
+        piece.clone(),
+        track_of(&entries),
+        false,
+        Default::default(),
+        &mut rec,
+        None,
+    ) {
         Ok(mut w) => w.run(steps, &mut rec, &mut |_, _| {}),
         Err(e) => {
             out.blocked.push(e);
@@ -657,11 +727,17 @@ fn budget(doc: &Value, input: &Value) -> Report {
         }
     }
     // A trap fails the check that ran it (Check input: logic kinds).
-    let mut failures: Vec<Value> = rec.traps.iter().map(|t| json!({"rule": "trap", "item": t["item"], "trap": t})).collect();
+    let mut failures: Vec<Value> = rec
+        .traps
+        .iter()
+        .map(|t| json!({"rule": "trap", "item": t["item"], "trap": t}))
+        .collect();
     let reply = crate::budget::budget(&piece, &rec, share, &on, Default::default());
     failures.extend(reply["failures"].as_array().cloned().unwrap_or_default());
     out.raised = raised("logic.budget", &failures, &piece);
-    out.blocked.extend(reply["blocked"].as_array().cloned().unwrap_or_default());
-    out.results.push(json!({"kind": "logic.budget", "report": reply["report"]}));
+    out.blocked
+        .extend(reply["blocked"].as_array().cloned().unwrap_or_default());
+    out.results
+        .push(json!({"kind": "logic.budget", "report": reply["report"]}));
     out
 }

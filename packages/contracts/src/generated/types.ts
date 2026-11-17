@@ -4352,6 +4352,25 @@ export interface BriefMade {
   evidence?: Array<string>;
 }
 
+/** brief.uncited@1 */
+export interface BriefUncited {
+  v: 1;
+  id: string;
+  kind: "brief.uncited";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    job: string;
+    sentence: string;
+  };
+  evidence?: Array<string>;
+}
+
 /** build.rolled_back@1 */
 export interface BuildRolledBack {
   v: 1;

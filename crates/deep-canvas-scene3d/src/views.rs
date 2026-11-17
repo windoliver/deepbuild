@@ -51,27 +51,56 @@ pub struct Placed {
 
 /// Each view overlay of `doc` in a frame of `size` px: `size` a share of the safe frame's width
 /// and height, in its bottom-right corner (Overlay: `overlay.view@1`), its border in its role.
-pub fn placed(doc: &Value, size: [u32; 2], look: Option<&crate::look::Look3>) -> Result<Vec<Placed>, Refused> {
-    let safe = doc.get("safe").and_then(Value::as_f64).unwrap_or(24.0).max(0.0);
+pub fn placed(
+    doc: &Value,
+    size: [u32; 2],
+    look: Option<&crate::look::Look3>,
+) -> Result<Vec<Placed>, Refused> {
+    let safe = doc
+        .get("safe")
+        .and_then(Value::as_f64)
+        .unwrap_or(24.0)
+        .max(0.0);
     let mut out = Vec::new();
-    for (id, item) in doc.get("items").and_then(Value::as_object).into_iter().flatten() {
+    for (id, item) in doc
+        .get("items")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+    {
         if item.get("kind").and_then(Value::as_str) != Some(KIND) {
             continue;
         }
         let path = format!("items/{id}/params");
         let p = item.get("params").cloned().unwrap_or(Value::Null);
         let Some(camera) = p.get("camera").and_then(Value::as_str) else {
-            return Err(Refused { code: "bad_input", path: format!("{path}/camera") });
+            return Err(Refused {
+                code: "bad_input",
+                path: format!("{path}/camera"),
+            });
         };
         let share = match p.get("size").and_then(Value::as_array).map(Vec::as_slice) {
             None => [0.3, 0.3],
             Some([w, h]) => match (w.as_f64(), h.as_f64()) {
                 (Some(w), Some(h)) if w > 0.0 && w <= 1.0 && h > 0.0 && h <= 1.0 => [w, h],
-                _ => return Err(Refused { code: "out_of_range", path: format!("{path}/size") }),
+                _ => {
+                    return Err(Refused {
+                        code: "out_of_range",
+                        path: format!("{path}/size"),
+                    })
+                }
             },
-            _ => return Err(Refused { code: "out_of_range", path: format!("{path}/size") }),
+            _ => {
+                return Err(Refused {
+                    code: "out_of_range",
+                    path: format!("{path}/size"),
+                })
+            }
         };
-        let (fw, fh) = (f64::from(size[0]) - 2.0 * safe, f64::from(size[1]) - 2.0 * safe);
+        let (fw, fh) = (
+            f64::from(size[0]) - 2.0 * safe,
+            f64::from(size[1]) - 2.0 * safe,
+        );
         let w = (share[0] * fw).round().max(1.0);
         let h = (share[1] * fh).round().max(1.0);
         let x = (f64::from(size[0]) - safe - w).max(0.0);
@@ -120,7 +149,10 @@ pub fn lay(view: &Placed, picture: &[u8], frame: &mut [u8], size: [u32; 2], bord
 /// level deep), and of what draws only what its `include` keeps (all, with none) less `exclude`.
 pub fn document(doc: &Value, view: &Placed) -> Value {
     let mut out = doc.clone();
-    let params = doc.pointer(&format!("/items/{}/params", view.id)).cloned().unwrap_or(Value::Null);
+    let params = doc
+        .pointer(&format!("/items/{}/params", view.id))
+        .cloned()
+        .unwrap_or(Value::Null);
     let map = doc.as_object().cloned().unwrap_or_default();
     let keep = crate::inset::kept_view(&map, &params);
     if let Some(o) = out.as_object_mut() {
@@ -128,7 +160,8 @@ pub fn document(doc: &Value, view: &Placed) -> Value {
         if let Some(items) = o.get_mut("items").and_then(Value::as_object_mut) {
             items.retain(|id, item| {
                 let kind = item.get("kind").and_then(Value::as_str).unwrap_or("");
-                let draws = crate::scene::is_3d(kind) || kind.starts_with("light.") || kind == "sky@1";
+                let draws =
+                    crate::scene::is_3d(kind) || kind.starts_with("light.") || kind == "sky@1";
                 kind != KIND && (!draws || keep.as_ref().is_none_or(|k| k.contains(id)))
             });
         }
@@ -163,14 +196,18 @@ pub fn framed(doc: &Value) -> Vec<Framed> {
             .get(frame)
             .and_then(|f| f.pointer("/params/box"))
             .and_then(Value::as_array)
-            .map_or([0.0; 2], |b| [0, 1].map(|k| b.get(k).and_then(Value::as_f64).unwrap_or(0.0)));
+            .map_or([0.0; 2], |b| {
+                [0, 1].map(|k| b.get(k).and_then(Value::as_f64).unwrap_or(0.0))
+            });
         let mut held = BTreeSet::from([frame.to_string()]);
         loop {
             let more: Vec<String> = items
                 .iter()
                 .filter(|(c, i)| {
                     !held.contains(*c)
-                        && i.get("parent").and_then(Value::as_str).is_some_and(|p| held.contains(p))
+                        && i.get("parent")
+                            .and_then(Value::as_str)
+                            .is_some_and(|p| held.contains(p))
                 })
                 .map(|(c, _)| c.clone())
                 .collect();
@@ -316,7 +353,9 @@ mod tests {
         let c = camera();
         let m = moved(&c, &by);
         for p in [[0.0, 0.0, -3.0], [0.4, -0.2, -1.5], [-1.0, 1.0, 0.5]] {
-            let q = std::array::from_fn(|r| by[r][0] * p[0] + by[r][1] * p[1] + by[r][2] * p[2] + by[r][3]);
+            let q = std::array::from_fn(|r| {
+                by[r][0] * p[0] + by[r][1] * p[1] + by[r][2] * p[2] + by[r][3]
+            });
             let a = c.project(p).unwrap();
             let b = m.project(q).unwrap();
             assert!((0..3).all(|k| (a[k] - b[k]).abs() < 1e-9), "{a:?} {b:?}");

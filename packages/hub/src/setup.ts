@@ -389,7 +389,8 @@ async function undo(): Promise<number> {
   const root = installedRoot();
   const record = setupRecord(root);
   if (plant() !== 'undo-keeps-login-service') removeService();
-  await stopIfRunning(root);
+  const stopped = await stopIfRunning(root);
+  if (stopped !== 0) return stopped;
   const settingsFile = claudeSettings();
   const userFile = claudeJson();
   let yours: string | undefined;

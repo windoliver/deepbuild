@@ -245,7 +245,7 @@ fn scenario(mut replica: Replica) -> Vec<String> {
         replica.click(posted);
         replica.advance(ms(50));
         match replica.card(posted.device) {
-            Some(card) if &card == &ask.handle => {}
+            Some(card) if card == ask.handle => {}
             other => failures.push(format!("{}: clicking its notification opened {other:?}, not its card", ask.handle)),
         }
         match replica.card_seen(posted.device) {

@@ -85,7 +85,7 @@ it('processes a fresh hook normally after the spool it triggers, including queue
     const send = after.conn.send.bind(after.conn);
     const spool = resolve(dirname(session.transcript), '../../../.deepbuild/spool');
     mkdirSync(spool, { recursive: true });
-    after.conn.send = (line) => { writeFileSync(join(spool, 'spool.jsonl'), `${JSON.stringify({ ...line, id: ulid(Date.now() - 1000) })}\n`); return send(line); };
+    after.conn.send = (line) => { writeFileSync(join(spool, 'spool.jsonl'), `${JSON.stringify({ ...(line as object), id: ulid(Date.now() - 1000) })}\n`); return send(line); };
     const sent = after.send();
     await until(() => w!.events.some((e) => e.id === sent.id), 5000);
     expect(w.events.some((e) => e.id === sent.id), 'the fresh hook is recorded').toBe(true);

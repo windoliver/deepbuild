@@ -1,0 +1,59 @@
+# packages/evidence at c3c58e9c on the owner's Mac, same run as acceptance-mac.txt; as the Mac runner saved it; the run's own lines give the commit, macOS version, power, time and load.
+
+== head c3c58e9c9c0207a816324452627ec89b7761c0af packages/evidence
+== command: (cd packages/evidence && npx vitest run --reporter=verbose)
+sw_vers 27.2.1 node v24.22.0 Now drawing from 'AC Power'
+== start 2026-11-15 01:28:32 load { 23.24 32.90 27.21 } thermal 1
+non-root user: uid 501
+
+ RUN  v5.0.5 ~/private/dbc-1410g/packages/evidence
+
+ ✓ test/webm.test.ts > detects a WebM and holds it whole only with its Segment finalized 1ms
+ ✓ test/sync-gone.test.ts > a file removed after the sync looked at it and before it opened it has nothing to sync (#1410) 15ms
+ ✓ test/asset-file.test.ts > #1820 keeps a downloaded file by its bytes, independently of the staging file, with its license 21ms
+ ✓ test/asset-file-integrity.test.ts > #1820 a file intake repairs corrupt cached bytes and never keeps a file that changed after the download checked it 27ms
+ ✓ test/sync-journal.test.ts > a sync makes the store's line for each file durable too, so a file that survives a cut is still found by its hash (#1410) 19ms
+ ✓ test/sync-journal.test.ts > a file whose journal sync failed is synced again by the next sync that names it (#1410) 17ms
+ ✓ test/sync-journal.test.ts > a journal compacted at open is synced before it replaces the old one, and its folder after (#1410) 16ms
+ ✓ test/sync-journal.test.ts > a file put again by path over one already stored is synced before it replaces it, so a synced file stays whole (#1410) 17ms
+ ✓ test/sync-journal.test.ts > bytes put over a file on disk the store's journal doesn't hold, as deep-show writes them, are synced before they replace it (#1410) 13ms
+ ✓ test/evidence.test.ts > retention of a series and of map layers > drops uncited batches after 24 hours and uncited minute rollups after 7 days; cited ones and hour rollups follow 30 days 24ms
+ ✓ test/evidence.test.ts > retention of a series and of map layers > keeps an installed layer's newest rows file for each parent and level, and lets it go once the layer is removed 9ms
+ ✓ test/evidence.test.ts > video step times > keeps where each step starts and ends, and refuses a step that runs backwards 1ms
+ ✓ test/evidence.test.ts > your yes to a send > holds after the store reopens, so the same file to the same host is never asked about twice 1ms
+ ✓ test/evidence.test.ts > the scrub by field name > keeps JSON parseable, plain and escaped once, with every secret-named value masked and the rest unchanged 142ms
+ ✓ test/evidence.test.ts > the scrub by field name > masks a field's value when a held value covers all or part of its name 1ms
+ ✓ test/evidence.test.ts > the scrub by field name > keeps JSON parseable when a held value is a secret field's whole value 0ms
+ ✓ test/evidence.test.ts > the scrub by field name > ends a value inside a JSON string at that string, and leaves empty values and the next field alone 1ms
+ ✓ test/evidence.test.ts > the scrub by field name > reads a name after an escaped newline, a value quoted inside a JSON string twice, and `&` outside a query 0ms
+ ✓ test/evidence.test.ts > the scrub by field name > leaves a string that ends at a secret name and its separator, as a prompt does, and reads JSON after a log prefix 1ms
+ ✓ test/evidence.test.ts > the scrub by field name > keeps pretty-printed JSON parseable with a secret field's object or array value across lines 1ms
+ ✓ test/evidence.test.ts > the scrub by field name > keeps JSON escaped twice parseable with quotes inside its strings, and a value longer than 16 KB whole 3ms
+ ✓ test/evidence.test.ts > the scrub by field name > reads an unclosed JSON value only as far as the text stays JSON, so later lines keep their own masks 1ms
+ ✓ test/evidence.test.ts > the scrub by field name > ends a value that runs to the end of its line at the string it sits in, pretty-printed or escaped 1ms
+ ✓ test/evidence.test.ts > the scrub by field name > ends an unclosed value escaped in a string at that string 0ms
+ ✓ test/evidence.test.ts > the scrub by field name > masks JSON escaped twice, keys and all 0ms
+ ✓ test/evidence.test.ts > the scrub by field name > ends a bare value before sentence punctuation and a bracket it did not open 0ms
+ ✓ test/evidence.test.ts > the scrub by field name > masks a bare value after `name: ` to the end of its line or string, with a YAML tag or anchor, and a doubled quote 2ms
+ ✓ test/evidence.test.ts > the scrub by field name > masks the value after a type annotation and a quoted value after a string prefix 0ms
+ ✓ test/evidence.test.ts > the scrub by field name > masks the value after a nested, generic or quoted annotation, and inside triple quotes 0ms
+ ✓ test/evidence.test.ts > the scrub by field name > masks the value after a Rust, Kotlin or TypeScript annotation, escaped in a string or not, and keeps comparisons and comments 0ms
+ ✓ test/evidence.test.ts > the scrub by field name > reads compound assignments and an optional member as separators, and counts flags as words 0ms
+ ✓ test/evidence.test.ts > the scrub by field name > keeps a path through a secret-named module and a file position in a secret-named file 0ms
+ ✓ test/evidence.test.ts > the scrub by field name > masks a value whose scheme prefix sits in braces, with the hash after it 0ms
+ ✓ test/evidence.test.ts > the scrub by field name > ends a URL user's password at the host 83ms
+ ✓ test/evidence.test.ts > the scrub by field name > masks a private key block whose first line a field also masks 0ms
+ ✓ test/evidence.test.ts > the scrub by field name > reads a megabyte of dense names and values in linear time 519ms
+ ✓ test/evidence.test.ts > the scrub by field name > reads a megabyte-long word of names after `name: ` in linear time 809ms
+ ✓ test/evidence.test.ts > sync: a file counts as synced only once it and its folder are (#1410) > after a sync that failed at the folder, the next sync of the same file fails again rather than passing unsynced 16ms
+ ✓ test/evidence.test.ts > sync: a file counts as synced only once it and its folder are (#1410) > a file put again by path is a new file on disk, so it is synced again 17ms
+ ✓ test/evidence.test.ts > sync: a file counts as synced only once it and its folder are (#1410) > a file replaced while its sync runs is synced again before the sync returns 18ms
+ ✓ test/evidence.test.ts > sync: a file counts as synced only once it and its folder are (#1410) > a named file that cannot be looked at refuses the sync; only one that is gone has nothing to sync 1ms
+
+ Test Files  6 passed (6)
+      Tests  41 passed (41)
+   Start at  01:28:32
+   Duration  1.80s (tests 81%, transform 11%, import 7%, worker 1%)
+
+== end 2026-11-15 01:28:34 load { 23.24 32.90 27.21 } thermal 1
+vitest exit=0

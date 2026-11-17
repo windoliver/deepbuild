@@ -53,7 +53,10 @@ test.
   ignored, so the lane must parse the JSON itself. Every call is logged.
 - **The fixture is 40 open issues, newest first, #9640 down to #9601.** Their bodies name only catalogued
   kinds (`verdict.made`, `claim.made`, `user.ask`, `tool.before`, `ask.created`) and backticked names that
-  aren't kinds (`rules.json`, `hold_until_ms`). The planted body is #9605, the 36th, so a lane that keeps
+  aren't kinds (`rules.json`, `hold_until_ms`). The fake `gh` also brings its own list of names that aren't
+  event kinds (#2063, a redraft): it replaces the copy's `scripts/not-event-kinds.txt` with an empty one,
+  because the checkout's list names real issues that this tracker doesn't hold. The live test has no fake
+  `gh` and keeps the checkout's list. The planted body is #9605, the 36th, so a lane that keeps
   gh's default limit misses it. The real repo has more than 500 open issues, so the lane needs `--limit`
   (or paging) anyway.
 - **Offline is a fake `gh` that fails every call but `--version`.** It prints what `gh` prints when it can't

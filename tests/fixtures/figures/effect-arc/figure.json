@@ -1,0 +1,23 @@
+{
+  "format": 1,
+  "id": "effect-arc",
+  "profile": "scene",
+  "title": "An arc between two posts",
+  "description": "An arc jumping between two posts.",
+  "size": [1920,1080],
+  "camera": "cam",
+  "seed": 508,
+  "requires": {
+    "modules": {"scene3d":"^1","effects":"^1"}
+  },
+  "transport": {
+    "span": "4s",
+    "frame_rate": [30,1]
+  },
+  "items": {
+    "cam": {"id":"cam","kind":"camera@1","name":"Camera","order":"a000","params":{"projection":"perspective","position":[0,2,6],"target":[0,0.6,0],"fov":40}},
+    "post-a": {"id":"post-a","kind":"mark.box@1","name":"Post A","order":"a001","params":{"size":[0.2,2,0.2],"paint":{"fill":{"role":"ink"}}},"at":{"pos":[-1.5,1,0]}},
+    "post-b": {"id":"post-b","kind":"mark.box@1","name":"Post B","order":"a002","params":{"size":[0.2,2,0.2],"paint":{"fill":{"role":"ink"}}},"at":{"pos":[1.5,1,0]}},
+    "spark": {"id":"spark","kind":"effect@1","name":"Arc","order":"a003","params":{"kind":"arc","anchor":"post-a","axis":[1,0,0],"arc":{"to":"post-b","intensity":6,"width":2,"jitter":10,"rate":12,"waves":6,"role":"caption"}},"at":{"pos":[0,0,0]}}
+  }
+}

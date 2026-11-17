@@ -1,0 +1,17 @@
+# #1410: what the hub's own verdicts sync and what they list, Linux, 2026-11-13 (terminal-verdict-probe-linux.png is this text rendered)
+# Six verdicts from real command runs: each lists no evidence of its own, so retention is as on main, and has its run's stdout and stderr
+# synced before its FULL commit; all 12 files were in the store when synced.
+
+$ git rev-parse HEAD
+c6a240cbcf6f0541fe8ff04f0c2af17433ca7355
+$ date -u; uptime
+Fri Nov 13 03:42:50 PM UTC 2026
+load average: 6.47, 6.01, 4.24
+(one temporary line in each of packages/record/dist/index.js and packages/evidence/dist/index.js writes what a FULL commit syncs to a scratch file; both restored after)
+$ npx vitest run --root packages/hub test/gate-runner.test.ts test/gate-stop.test.ts test/verdict-chat.test.ts test/verdict-stop.test.ts test/checks-not-started.test.ts
+ Test Files  5 passed (5)
+      Tests  20 passed (20)
+exit=0
+$ sort probe.out | uniq -c
+      6 FULL commit: verdict.made lists 0 of its own; hashes synced before it: 2
+     12 store.sync: file in store loose=true packed=false

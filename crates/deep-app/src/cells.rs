@@ -384,14 +384,18 @@ mod tests {
 
     #[::core::prelude::v1::test]
     fn a_screen_from_the_hubs_reply_keeps_each_rows_runs_and_its_fills_off_the_ground() {
-        let reply = json!({"revision": 2, "cols": 4, "bg": "#101010", "fg": "#e8e8e8", "cursor": {"x": 2, "y": 0}, "text": ["ab"], // color-literal-exception: the program's own colors on the wire, which a terminal draws as they come; review 2027-05-05
-            "runs": [[[0, 2, "#e8e8e8", "#101010"], [2, 3, "#e8e8e8", "#d81b9a"], [3, 4, "#e8e8e8", "#101010"]]]}); // color-literal-exception: the program's own colors on the wire, which a terminal draws as they come; review 2027-05-05
+        let (ansi, bg, fg) = crate::chrome::terminal(false);
+        let fill = ansi[5];
+        assert_ne!(fill, bg, "the fixture has one non-background fill");
+        let hex = |c: [u8; 3]| format!("#{:02x}{:02x}{:02x}", c[0], c[1], c[2]);
+        let reply = json!({"revision": 2, "cols": 4, "bg": hex(bg), "fg": hex(fg), "cursor": {"x": 2, "y": 0}, "text": ["ab"],
+            "runs": [[[0, 2, hex(fg), hex(bg)], [2, 3, hex(fg), hex(fill)], [3, 4, hex(fg), hex(bg)]]]});
         let screen = Screen::from_reply(&reply).expect("a cells reply");
         assert_eq!((screen.revision, screen.cols), (2, 4));
         assert_eq!(screen.rows[0].text, "ab");
-        assert_eq!(screen.rows[0].runs[0], (0..2, [0xe8; 3]));
-        assert_eq!(screen.rows[0].fills, [(2, 3, [0xd8, 0x1b, 0x9a])]);
-        assert_eq!((screen.fg, screen.cursor), ([0xe8; 3], (2, 0)));
+        assert_eq!(screen.rows[0].runs[0], (0..2, fg));
+        assert_eq!(screen.rows[0].fills, [(2, 3, fill)]);
+        assert_eq!((screen.fg, screen.cursor), (fg, (2, 0)));
         assert!(Screen::from_reply(&json!({"code": "page_closed"})).is_none());
     }
 
