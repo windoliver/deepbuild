@@ -98,17 +98,7 @@ impl Reader {
             Some("static") => BodyKind::Static,
             Some("dynamic" | "vehicle") => BodyKind::Dynamic,
             Some("kinematic") => BodyKind::Kinematic,
-            Some("character") => {
-                let what =
-                    "a character body isn't run by this backend interface yet; #182 brings it";
-                self.refuse(
-                    "physics.unsupported",
-                    join(p, "kind"),
-                    &b["kind"],
-                    what.into(),
-                );
-                BodyKind::Static
-            }
+            Some("character") => BodyKind::Character,
             _ => {
                 let what = "a body's kind must be static, kinematic, dynamic, character or vehicle";
                 let at = b.get("kind").unwrap_or(&Value::Null);

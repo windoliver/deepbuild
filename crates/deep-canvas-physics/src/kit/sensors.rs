@@ -4,7 +4,7 @@
 //! `sensor_enter` at step 75, 0.625 s, one `sensor_exit` at step 165, 1.375 s, each within a step); a
 //! character `place`d inside at step 300 and out at step 360; and a dynamic body inside from the start,
 //! which enters at step 1 and, deactivated at step 240, exits then. The character and `place` cells
-//! need a character controller and join with the character body (#182).
+//! need a character controller (#182).
 
 use serde_json::{json, Value};
 
@@ -60,8 +60,12 @@ fn cell(sensor: &str, crosser: &str) -> Fixture {
     match crosser {
         "dynamic" => w["bodies"]["mover"]["velocity"] = json!({"linear": [2, 0, 0]}),
         "kinematic" => f.moves = vec![("mover", [2.0, 0.0, 0.0])],
-        // Walked at 2 m/s by #182's `move` input, which joins with the character body.
-        "character" => f.caps = vec!["character_controller"],
+        // Walked at 2 m/s by #182's `move` input.
+        "character" => {
+            w["inputs"] = json!({"walk": {"kind": "move", "targets": ["mover"]}});
+            f.track = json!([{"step": 0, "kind": "move", "target": "mover", "data": {"velocity": [2, 0, 0]}}]);
+            f.caps = vec!["character_controller"];
+        }
         "placed" => {
             w["inputs"] = json!({"place": {"kind": "place", "targets": ["mover"]}});
             f.track = json!([{"step": 299, "kind": "place", "target": "mover", "data": {"pose": {"pos": [0, 1, 0]}}},

@@ -5,7 +5,11 @@
 //! world on a fixed joint with `breaks_at: {force: 15 N, over_steps: 3}`, past it from the first
 //! step, and declares a poke of a second body at the step whose checkpoint a late entry restores.
 //! `test-physics-checkpoint-drops-break-steps` plants a checkpoint that leaves out each joint's
-//! count of steps past `breaks_at`, so it is restored as 0.
+//! count of steps past `breaks_at`, so it is restored as 0. #182: the same world holds the
+//! character course 20 m along z (a 1 m gap, a 30° ramp rising 2 m, a 0.3 m step), whose fixture
+//! `parity/physics/character-course.board` walks its character body over the gap with a jump and
+//! onto the ramp's foot, so seeks and late entries restore a character's own state, mid-jump
+//! included.
 
 use deep_canvas::registry::{Registrar, StepInput, Stepper};
 use deep_canvas_physics::backend::{Backend, Checkpoint, Input, Targets};
@@ -22,17 +26,45 @@ const HZ: i64 = 120;
 /// crossed its threshold on the step before it.
 const RESTORED: i64 = 2;
 
-/// The fixture's world: `heavy` (2 kg) on `snap`, and `puck`, free, which the entry pokes.
+/// The course's lane along z (#182), clear of the joint's bodies.
+const LANE: f64 = 20.0;
+
+/// The fixture's world: `heavy` (2 kg) on `snap`, and `puck`, free, which the entry pokes; and
+/// (#182) the character course, `hero` standing on its start.
 fn world() -> Value {
     let hang = |x: f64, mass: f64| {
         json!({"kind": "dynamic", "shapes": [{"shape": "tall", "contact_material": "block"}],
                                           "pose": {"pos": [x, 1.5, 0]}, "mass": mass, "sleep": false})
     };
+    let mut shapes = json!({"tall": {"kind": "box", "half": [0.25, 0.5, 0.25]},
+                            "capsule": {"kind": "capsule", "half_height": 0.6, "radius": 0.3}});
+    let mut bodies = json!({"heavy": hang(-2.0, 2.0), "puck": hang(4.0, 1.0),
+                            "hero": {"kind": "character", "shapes": [{"shape": "capsule", "contact_material": "block"}],
+                                     "pose": {"pos": [0, 0.91, LANE]}, "character": {"slope_limit": 45, "step": {"height": 0.35}}}});
+    let crest = 5.0 + 2.0 / (30f64).to_radians().tan();
+    let slab = |x0: f64, x1: f64, y0: f64, y1: f64| {
+        (
+            json!({"kind": "box", "half": [(x1 - x0) / 2.0, (y1 - y0) / 2.0, 2.0]}),
+            json!([(x0 + x1) / 2.0, (y0 + y1) / 2.0, LANE]),
+        )
+    };
+    let mut part = |id: &str, (shape, pos): (Value, Value)| {
+        shapes[id] = shape;
+        bodies[id] = json!({"kind": "static", "shapes": [{"shape": id, "contact_material": "block"}], "pose": {"pos": pos}});
+    };
+    part("pit", slab(-4.0, 31.0, -5.0, -4.0));
+    part("start", slab(-3.0, 2.0, -1.0, 0.0));
+    part("shelf", slab(3.0, 5.0, -1.0, 0.0));
+    let wedge = json!({"kind": "convex", "points": [[5, 0, LANE - 2.0], [5, 0, LANE + 2.0], [crest, 0, LANE - 2.0],
+                       [crest, 0, LANE + 2.0], [crest, 2, LANE - 2.0], [crest, 2, LANE + 2.0]]});
+    part("ramp", (wedge, json!([0, 0, 0])));
+    part("top", slab(crest, 11.0, -1.0, 2.0));
+    part("step", slab(11.0, 30.0, -1.0, 2.3));
     json!({"kind": "physics.world@1", "dimensions": 3, "step_rate": HZ, "substeps": 4, "gravity": [0, -9.81, 0],
-           "mode": "dynamic", "capacity": {"bodies": 2, "shapes": 2, "joints": 1, "contacts": 8, "particles": 0},
+           "mode": "dynamic", "capacity": {"bodies": 16, "shapes": 16, "joints": 1, "contacts": 64, "particles": 0},
            "contact_materials": {"block": {"friction": 0.5, "restitution": 0, "density": 1000}},
-           "shapes": {"tall": {"kind": "box", "half": [0.25, 0.5, 0.25]}},
-           "bodies": {"heavy": hang(-2.0, 2.0), "puck": hang(4.0, 1.0)},
+           "shapes": shapes, "bodies": bodies,
+           "inputs": {"walk": {"kind": "move", "targets": ["hero"]}, "hop": {"kind": "jump", "targets": ["hero"]}},
            "joints": {"snap": {"kind": "fixed", "a": "world", "b": "heavy", "frame_a": {"anchor": [-2, 2, 0]},
                                "frame_b": {"anchor": [0, 0.5, 0]}, "breaks_at": {"force": 15, "over_steps": 3}}}})
 }
@@ -151,9 +183,22 @@ pub(super) fn register(r: &mut Registrar) {
     r.parity(
         "physics",
         "late-joint",
-        board,
+        board.clone(),
         json!({"checks": [{"kind": "document.determinism"}], "oracles": ["seek_play"], "codes": [],
                "at_times": ["0s", "0.25s"], "inputs": [{"step": RESTORED, "kind": "poke", "target": "puck", "data": {"push": [1, 0, 0]}}]}),
+    );
+    // #182: the character course, walked from the restored step and jumped over its gap, over
+    // 3 s: past its landing on the far side and onto the ramp's foot.
+    let mut course = board;
+    course["title"] = json!("Character course");
+    course["description"] = json!("A fixture of the physics module: a character body walking a course with a gap, a ramp and a step, and jumping.");
+    r.parity(
+        "physics",
+        "character-course",
+        course,
+        json!({"checks": [{"kind": "document.determinism"}], "oracles": ["seek_play"], "codes": [], "at_times": ["0s", "3s"],
+               "inputs": [{"step": RESTORED, "kind": "move", "target": "hero", "data": {"velocity": [2, 0, 0]}},
+                          {"step": RESTORED + 96, "kind": "jump", "target": "hero", "data": {"height": 1}}]}),
     );
 }
 
