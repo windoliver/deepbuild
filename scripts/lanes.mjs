@@ -752,6 +752,9 @@ alone.push('tests/acceptance/172/', 'tests/acceptance/172-oracle/');
 // #549's files each build deep-show (one, three feature sets) and the shipped relay, start relays and headless Chrome,
 // and play live matches in real time.
 alone.push('tests/acceptance/549/', 'tests/acceptance/549-oracle/');
+// Criterion 2's third test went to a blind redraft, which runs beside the first draft until the owner rules
+// (tests/acceptance/549/DISPUTE.md).
+alone.push('tests/acceptance/549-redraft-ac2/');
 timed.push('tests/acceptance/172/budgets.test.ts', 'tests/acceptance/172/images.test.ts');
 // #172's first-draft refusal test shows a device control without the role the document check requires, so that piece is
 // never presented and its export can't refuse it by name (tests/acceptance/172/DISPUTE.md); its blind redraft runs in its

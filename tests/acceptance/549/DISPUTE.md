@@ -19,6 +19,21 @@ the third connection with the ID one digit off, joining received a start message
 ```
 
 The test went to a fresh run of the blind job with the same inputs and the criterion (never the work, the diff or this
-dispute), given the base fact above about the shipped relay. Its redraft is `tests/acceptance/549-redraft-ac2/`; this
-file's third test moves to the by-hand list (`scripts/lanes.mjs`) when the redraft lands. The file's other three tests
-are not disputed.
+dispute), given the base fact above about the shipped relay. Its redraft is `tests/acceptance/549-redraft-ac2/`: the
+same test with each third connection given an ID of its own, so none can fill a match with another. The file's other
+three tests are not disputed.
+
+## The redraft on the work
+
+Run on November 17, 2026 at `8b42e8c71`, under a build grant:
+
+```
+ RUN  v5.0.5 ~/doneright-549/tests/acceptance/549-redraft-ac2
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Duration  446.98s (tests 100%)
+```
+
+The redraft passes where the first draft fails, so by the design's Dogfooding rule the dispute comes to the owner once,
+with both drafts and the failing output above. Until the owner rules, both run (`scripts/lanes.mjs`), and the first
+draft's third test still fails.
