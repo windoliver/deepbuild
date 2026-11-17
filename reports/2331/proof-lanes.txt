@@ -1,0 +1,51 @@
+# The proof lanes on 686a94488 (main 06e231702 + the kit), in the order they ran. Nothing is left out but the bays' file lists.
+
+## node scripts/proof.mjs guard — 2026-11-16
+PASS guard: 1 commit checked: no guarded edit lacks its own approved proposal
+proof: wall time 968.7 s
+
+## node scripts/proof.mjs before trace — first run, 2026-11-16: the change bay had no target/, so no deep-hook
+BAY claim {"role":"base","use":"before","base":"06e231702bb4bf5c2ede8a4c76f40e4255e0e7a3","tree":"65f86aabaec06579a098883b3f9e2a83bd524966","overlay":{"files":11528,"hash":"0a3cbf3f0a49d088d90302406ae271ca3b1022bdd49d62d3a5fd3812b8059d9d"},"seal":"intact","cold":false,"installed":false,"written":353,"deleted":37}
+BAY claim {"role":"change","use":"before","tree":"efccf5608332a063a6ee65345df7d9039a42c839","overlay":null,"seal":"intact","cold":false,"installed":false,"written":366,"deleted":38}
+BAY claim {"role":"change","use":"twin tests/acceptance/2331/twins/locale-clock","tree":"efccf5608332a063a6ee65345df7d9039a42c839","overlay":{"files":1,"hash":"831bd6bba77f5cc225138996c63444bfe30e8c53b6c7b73906c6d173d0416d28"},"seal":"intact","cold":false,"installed":false,"written":0,"deleted":36}
+BAY claim {"role":"change","use":"twin tests/acceptance/2331/twins/utc-clock","tree":"efccf5608332a063a6ee65345df7d9039a42c839","overlay":{"files":1,"hash":"ee46d96009a8606277b1f711b10931c07a32a7abd5aadf42c0ed58c57f11edb2"},"seal":"intact","cold":false,"installed":false,"written":1,"deleted":35}
+FAIL before: tests/acceptance/2331/inbox.test.ts › #2331.04651a1b › #2331.04651a1b: deep inbox, the hub up, writes each ask's default and its time and constructs no date or number formatter: fails on the change (Error: BLOCKED: no deep-hook under target/debug; run cargo build --locked -p deep-hook first)
+  Fix: Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.
+FAIL before: tests/acceptance/2331/inbox.test.ts › #2331.04651a1b › #2331.04651a1b: deep inbox, the hub down, says since when, writes each ask's default and its time, and constructs no date or number formatter: fails on the change (Error: BLOCKED: no deep-hook under target/debug; run cargo build --locked -p deep-hook first)
+  Fix: Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.
+PASS before: tests/acceptance/2331/week.test.ts › #2331.aee6e8f0 › #2331.aee6e8f0: in America/New_York, whose clocks go back an hour at 02:00 on Sun 1 Nov 2026, so 01:00-01:59 comes twice, when and so clock return today's text for every minute of the week: failed on utc-clock at its assertion
+PASS before: tests/acceptance/2331/week.test.ts › #2331.aee6e8f0 › #2331.aee6e8f0: in Australia/Lord_Howe, whose clocks go forward half an hour at 02:00 on Sun 4 Oct 2026, from UTC+10:30 to UTC+11, when and so clock return today's text for every minute of the week: failed on utc-clock at its assertion
+PASS before: tests/acceptance/2331/week.test.ts › #2331.aee6e8f0 › #2331.aee6e8f0: in America/Havana, whose clocks go forward an hour at midnight on Sun 8 Mar 2026, so that day starts at 01:00, when and so clock return today's text for every minute of the week: failed on utc-clock at its assertion
+FAIL trace: Closes #2331 refused: this change is Part of #2331; open: #2331.04651a1b
+  Fix: Tag a test with each open criterion and make it fail on a wrong program, say Part of #n instead of Closes #n, or drop the tag of a criterion the issue no longer holds.
+BAY release {"role":"base","status":null,"targetBytes":0,"touched":0}
+BAY release {"role":"change","status":null,"targetBytes":0,"touched":1}
+proof: wall time 4845.3 s
+
+## node scripts/proof.mjs before trace — second run, 2026-11-17, after cargo build -p deep-hook in the change bay: the workspace build was stopped at the lane's 20 minutes
+BAY claim {"role":"base","use":"before","base":"06e231702bb4bf5c2ede8a4c76f40e4255e0e7a3","tree":"65f86aabaec06579a098883b3f9e2a83bd524966","overlay":{"files":11528,"hash":"0a3cbf3f0a49d088d90302406ae271ca3b1022bdd49d62d3a5fd3812b8059d9d"},"seal":"intact","cold":false,"installed":false,"written":0,"deleted":37}
+BAY claim {"role":"change","use":"before","tree":"efccf5608332a063a6ee65345df7d9039a42c839","overlay":null,"seal":"intact","cold":false,"installed":false,"written":0,"deleted":0}
+BLOCKED before: tests/acceptance/2331/inbox.test.ts: cannot run on the change: npm run build --workspaces --if-present failed: spawnSync /opt/homebrew/Cellar/node@24/24.22.2_2/bin/node ETIMEDOUT
+  Fix: Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.
+BLOCKED before: tests/acceptance/2331/judges.test.ts: cannot run on the change: npm run build --workspaces --if-present failed: spawnSync /opt/homebrew/Cellar/node@24/24.22.2_2/bin/node ETIMEDOUT
+  Fix: Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.
+BLOCKED before: tests/acceptance/2331/week.test.ts: cannot run on the change: npm run build --workspaces --if-present failed: spawnSync /opt/homebrew/Cellar/node@24/24.22.2_2/bin/node ETIMEDOUT
+  Fix: Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.
+PASS before: no tagged test to run on the merge base
+FAIL trace: Closes #2331 refused: this change is Part of #2331; open: #2331.04651a1b, #2331.aee6e8f0
+  Fix: Tag a test with each open criterion and make it fail on a wrong program, say Part of #n instead of Closes #n, or drop the tag of a criterion the issue no longer holds.
+BAY release {"role":"base","status":null,"targetBytes":0,"touched":0}
+BAY release {"role":"change","status":null,"targetBytes":757997839,"touched":0}
+proof: wall time 2739.4 s
+
+## node scripts/proof.mjs before trace — third run, 2026-11-17
+INCONCLUSIVE before: tests/acceptance/2331/inbox.test.ts: cannot run on the change: INCONCLUSIVE no grant: no bay pair came within 30 min
+  Fix: Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.
+INCONCLUSIVE before: tests/acceptance/2331/judges.test.ts: cannot run on the change: INCONCLUSIVE no grant: no bay pair came within 30 min
+  Fix: Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.
+INCONCLUSIVE before: tests/acceptance/2331/week.test.ts: cannot run on the change: INCONCLUSIVE no grant: no bay pair came within 30 min
+  Fix: Make each tagged test fail on the merge base at its assertion, or name a planted wrong program its criterion fails in tests/acceptance/<issue>/twins.json; a merge base that cannot install is repaired on main.
+PASS before: no tagged test to run on the merge base
+FAIL trace: Closes #2331 refused: this change is Part of #2331; open: #2331.04651a1b, #2331.aee6e8f0
+  Fix: Tag a test with each open criterion and make it fail on a wrong program, say Part of #n instead of Closes #n, or drop the tag of a criterion the issue no longer holds.
+proof: wall time 1808.9 s
