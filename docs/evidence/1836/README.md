@@ -10,6 +10,7 @@ deep-hook binary), on the branch and on the merge base. Run by hand on the Spark
 - `suite-merge.txt`: the branch with main `b1fc9abb2` merged, rebuilt: both pass again.
 - `suite-final.txt`: the final head `37514122a` (main `f7d661d67` merged), at load 53: both pass. Three earlier runs at this head, at load 114 to 246, came back BLOCKED on deep-hook's 50 ms sync, which is no verdict.
 - `affected-r8-summary.txt`: `node scripts/affected.mjs` at the final head, under an isolated HOME (the shared test slots were held by other runs). FAIL: 515 new, 45 already failing on main; the new ones are being sorted against main.
+- `lint-vs-main.txt`: r8's 15 lint-lane sources, each lint's findings counted at the head against main `f7d661d67`: every count matches main, the color-literal lane once the app's served panel copies are in both trees.
 - `suite-base.txt`: the merge base `c740dede7` with the same tests. The merge runs with no ask
   (deep-hook exits 0, nothing held), and the plant isn't there yet.
   It ran in the blind job's own worktree, at its commit `87b20a7c0`, which is `37824538d` before the cherry-pick
