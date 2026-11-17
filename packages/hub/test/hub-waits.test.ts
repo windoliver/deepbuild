@@ -30,7 +30,7 @@ afterEach(async () => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-async function standIn(): Promise<{ calls: string[]; idle(): boolean; gone(): Promise<void> }> {
+async function standIn(): Promise<{ calls: string[]; gone(): Promise<void> }> {
   const calls: string[] = [];
   const open = new Set<net.Socket>();
   const server = net.createServer((sock) => {
@@ -54,10 +54,10 @@ async function standIn(): Promise<{ calls: string[]; idle(): boolean; gone(): Pr
   await new Promise<void>((done) => server.listen(rootOf(dir).socket, done));
   return {
     calls,
-    idle: () => open.size === 0,
     gone: () => new Promise((done) => {
       servers.splice(servers.indexOf(server), 1);
       server.close(() => done());
+      for (const socket of open) socket.destroy();
     }),
   };
 }
@@ -80,12 +80,11 @@ it('deep hub start returns within 20 ms of the hub\'s socket answering, not at t
 it('deep hub stop returns within 20 ms of the hub going, and never while its socket still answers', async () => {
   const hub = await standIn();
   const stopped = settled(stopHub({ root: dir }));
-  await until(() => hub.calls.length > 0 && hub.idle());
+  await until(() => hub.calls.length > 0);
   expect(hub.calls).toEqual(['hub.stop']);
   for (let i = 0; i < 5; i++) {
     await vi.advanceTimersByTimeAsync(100);
     await real(50);
-    await until(() => hub.idle());
   }
   expect(stopped(), 'the hub still answers').toBe('pending');
   await hub.gone();

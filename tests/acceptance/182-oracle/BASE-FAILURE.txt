@@ -1,0 +1,13 @@
+The #182 Oracle lane at the base this worktree stands on, 1ab89128 (no implementation of #182).
+
+NOT RUN at the base, for the reason tests/acceptance/182/BASE-FAILURE.txt gives (a 1-minute load near 400 on 18 cores
+and a build throttle holding 32 queued build requests; no target folder in this worktree). Read from the base's code:
+
+- Every world here holds `kind: "character"` bodies with `character` fields and `move {velocity}` entries. The base's
+  world reader refuses the kind (`physics.unsupported`, naming #182), the `character` body field and the move's
+  `velocity` field, so every `bake` answers `{"ok": false, "issues": [...]}` and each test fails in `statesOf`
+  before any upstream assertion runs: all five tests in both files.
+- The wrong programs they run (`--planted slope_limit_ignored`, `--planted character_as_kinematic`,
+  `--backend ground_distance_1mm`) are refused at startup with exit 2.
+
+`npx tsc -p tests/acceptance/182-oracle/tsconfig.json` exits 0.

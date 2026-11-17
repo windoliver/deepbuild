@@ -40,7 +40,7 @@ it('cancels an unfinished JSON body with the same signal that reached the header
   let watchdog: ReturnType<typeof setTimeout> | undefined;
   try {
     const done = liveFetch(`http://127.0.0.1:${address.port}`, undefined, AbortSignal.timeout(100))('/issue', 1);
-    const result = await Promise.race([done, new Promise<undefined>((resolve) => { watchdog = setTimeout(resolve, 1000); })]);
+    const result = await Promise.race([done, new Promise<undefined>((resolve) => { watchdog = setTimeout(() => resolve(undefined), 1000); })]);
     expect(result, 'stalled response-body wait must end at the caller deadline, not its per-request 20 s timeout').toBeDefined();
     expect(result?.body, 'a truncated body never supplies issue data').toBeUndefined();
   } finally {

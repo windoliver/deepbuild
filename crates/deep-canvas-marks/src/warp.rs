@@ -422,6 +422,7 @@ impl Warp {
         ]
     }
 
+    #[allow(clippy::wrong_self_convention)]
     fn from_plane(&self, q: P) -> P {
         [
             self.origin[0] + q[0] * self.unit,
@@ -588,7 +589,10 @@ impl Warp {
             if near <= SURE * tolerance {
                 return false;
             }
-            if !(near <= tolerance) {
+            if near
+                .partial_cmp(&tolerance)
+                .is_none_or(std::cmp::Ordering::is_gt)
+            {
                 return true;
             }
             let want = self.enclosure(at);
@@ -597,7 +601,9 @@ impl Warp {
             }
             let d = [0, 1].map(|i| (got[i] - want[i].lo).abs().max((got[i] - want[i].hi).abs()));
             let far = deep_canvas::ops::hypot(d[0], d[1]);
-            !(far * MIDDLE <= tolerance)
+            (far * MIDDLE)
+                .partial_cmp(&tolerance)
+                .is_none_or(std::cmp::Ordering::is_gt)
         })
     }
 }
@@ -832,6 +838,7 @@ pub fn bind(items: &mut Map<String, Value>, seconds: f64, value: &dyn Fn(&str) -
 /// each item under it carries, which the frame checks against the group's `max_points`.
 #[derive(Default)]
 pub(crate) struct Warps {
+    #[allow(clippy::type_complexity)]
     pub(crate) read: std::cell::RefCell<BTreeMap<String, Option<Arc<(Warp, crate::place::Place)>>>>,
     pub(crate) points: std::cell::RefCell<BTreeMap<String, BTreeMap<String, u64>>>,
 }
@@ -857,6 +864,7 @@ impl Warps {
 
 /// Carried paths kept by their content key, so a warp whose inputs didn't change since a frame
 /// carried them costs a lookup, and a seek finds what playing made.
+#[allow(clippy::type_complexity)]
 static CARRIED: Mutex<BTreeMap<ContentKey, Arc<(Vec<Vec<Verb>>, usize, u64)>>> =
     Mutex::new(BTreeMap::new());
 /// The most carried paths kept.

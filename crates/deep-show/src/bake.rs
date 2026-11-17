@@ -721,6 +721,8 @@ impl Hub<'_> {
     /// The drawn form's bakes and logic items, inlined at check (#503, #544), and the issues of
     /// either and of its point sets from a video (#503).
     pub(crate) fn inline_baked(&mut self, form: &mut Value) -> Vec<Issue> {
+        // #192: each provider's output by its hash, before any logic item reads it.
+        self.sandbox.fill(&self.startup.sealed, form);
         let mut issues = self.bake_declared(form);
         issues.extend(self.point_sets_checked(form));
         if let Err(i) = self.inline_occurrences(form, &[]) {

@@ -1,0 +1,45 @@
+===== tests/acceptance/1835/window.test.mjs on the change | 13:07:02 | load { 91.38 68.84 62.38 }
+✔ #1835.fb2cf14f a fixture issue with three criteria and a Part of change whose trace lane proved the first two: after it lands, those two lines are ticked, each naming the lane's record, and the third is not (67575.439458ms)
+✔ #1835.5f2ccf69 with the third criterion a budget, a passing window closes the fixture issue, naming its commit (2.30975ms)
+✔ #1835.5f2ccf69 with the third criterion unproven and not a budget, the fixture issue stays open, naming it (1.085583ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 67801.131542
+exit 0 | 13:08:10 | load { 57.91 61.56 60.03 }
+===== tests/acceptance/1874/window.test.mjs on the change | 13:08:10 | load { 57.91 61.56 60.03 }
+✔ #1874.31be6d55 a commit naming an issue whose unticked budget criterion no task names leaves that issue open, and its record names the criterion as unmeasured (74044.3755ms)
+✔ #1874.5b585ee4 a commit naming an issue whose only unticked criterion says "in the local preflight", and which no task names, leaves the issue open (6.350458ms)
+✔ #1874.e31e7828 a commit naming an issue with no `### Acceptance criteria` section closes nothing (1.672209ms)
+✔ #1874.cbb20ab2 a commit whose issue's budget criteria are each named by a task that passed, with every other criterion ticked, closes the issue (1.404375ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 74397.024584
+exit 0 | 13:09:25 | load { 61.49 61.13 59.97 }
+===== tests/acceptance/569/trace.test.mjs (HOME in a scratch folder), on the change before its last correction to scripts/budget-window.mjs
+✔ #569.4ad4295a tests tagging criteria 1 and 2 of a three-criterion issue: Closes is refused, the change reads Part of, naming criterion 3 (1729.581625ms)
+✔ #569.4ad4295a with every criterion tagged by a test that ran, failed on the merge base and passes, Closes passes the trace lane (1307.987125ms)
+✔ #569.4ad4295a a change that says Part of passes the trace lane and still names criterion 3 as open (1364.614125ms)
+✔ #569.4ad4295a a skipped test for criterion 3 is no test that ran: Closes is refused, naming criterion 3 (1412.670958ms)
+✔ #569.4ad4295a a test for criterion 3 that passes on the merge base failed on no wrong program: Closes is refused, naming criterion 3 (1400.92525ms)
+✔ #569.4ad4295a a tag naming a criterion the edited issue no longer holds fails the lane, naming the tag (1510.817792ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 8789.902417
+exit 0
+Mon Nov 16 00:43:23 PST 2026
+ 0:43  up 2 days, 10:52, 18 users, load averages: 39.24 43.48 56.16

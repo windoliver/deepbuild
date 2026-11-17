@@ -1,0 +1,64 @@
+How the #508 acceptance suite fails at the base, 0e5572731 (main).
+
+One quick run of the files that stop before any cargo build, and reasoning for the rest. No Rust was built: the
+surfaces plainly don't exist at the base. The type check passes:
+
+  $ npx tsc -p tests/acceptance/508/tsconfig.json
+  (no output, exit 0)
+
+The run (macOS, this worktree at 0e5572731, nothing in target/):
+
+  $ npx vitest run --root tests/acceptance/508 --testTimeout=600000 --no-file-parallelism \
+      ac1-skill.test.ts ac1-skill.live.test.ts ac2-fixtures.test.ts ac4-budgets.test.ts ac6-effects.test.ts taste.test.ts
+  Test Files  5 failed | 1 skipped (6)
+       Tests  7 failed | 2 skipped (9)
+
+ac1-skill.test.ts
+  AC1 #508.9e5770bb the skill is generated from the kinds' schemas, and the Claude Code and Codex runs …
+    BLOCKED: the generated skill …/skills/deepbuild-canvas/SKILL.md isn't there; this is not a pass
+    (Past it: no scripts/canvas-skill.mjs, so "--check exits 1"; no docs/evidence/508/agents/*.run.json, BLOCKED.)
+
+ac1-skill.live.test.ts
+  2 tests skipped: DEEP_SKILL_LIVE is not set (by hand only). With it set at the base, each is BLOCKED at the missing
+  skill before any session starts.
+
+ac2-fixtures.test.ts
+  AC2 #508.4f6ed3e6 the turbofan fixture runs as a document …
+    BLOCKED: the fixture tests/fixtures/figures/turbofan/figure.json isn't delivered (README: Surfaces this job invents)
+  AC2 #508.4f6ed3e6 the image-layers fixture runs as a document …
+    BLOCKED: the fixture tests/fixtures/figures/image-layers/figure.json isn't delivered
+
+ac4-budgets.test.ts
+  AC4 #508.822d5a2c a control change redraws within one frame, a 500-part figure holds 120 fps, …
+    AC4 #508.822d5a2c: the budgets' place in the perf lane:
+      benchmarks/budgets.json has no task for #508.822d5a2c (its criteria or its initialReason naming #508)
+      scripts/lanes.mjs does not list tests/acceptance/508/ac4-budgets.test.ts in timed, the local preflight's perf step
+    (Past it, by reasoning: the turbofan fixture is BLOCKED, and `view3d` has no `track` field, so a moved throttle
+    would never reach frame 120.)
+
+ac6-effects.test.ts
+  AC6 #508.86fb5cf5 each of wave_field, plume, arc and airflow draws its fixture, …
+    BLOCKED: the fixture tests/fixtures/figures/effect-wave-field/figure.json isn't delivered
+  AC6 #508.86fb5cf5 a planted effect that reads the wall clock (--planted effect_reads_wall_clock) …
+    BLOCKED: the fixture tests/fixtures/figures/effect-wave-field/figure.json isn't delivered
+    (Past it, by reasoning: `effect@1` takes only `kind: flare | dof` (crates/deep-canvas-scene3d/src/spec.rs), so a
+    wave_field, plume, arc or airflow item is refused; `Planted::parse` doesn't know effect_reads_wall_clock, so
+    `deep-gpu run --planted effect_reads_wall_clock` prints {"ok": false, "code": "bad_input"} and exits 2.)
+
+taste.test.ts
+  AC5 #508.745c64c0 the run writes the plume with haze …
+    BLOCKED: the fixture tests/fixtures/figures/turbofan/figure.json isn't delivered
+    (With the fixtures and no TASTE.json: "INCONCLUSIVE: no taste call is recorded …; this is not a pass".)
+
+Not run, by reasoning from the base's code (it needs a deep-gpu build):
+
+ac3-haze.test.ts
+  AC3 #508.c1610aa6 the haze of 4 px at 0.5 m moves no board pixel more than 4 px, …
+    `effect@1` with `params.kind: "plume"` isn't a kind the base's spec takes (flare | dof), and `checks` isn't a
+    target view3d knows: its parse refuses the call with "targets are final, linear, ids, pre_tone, dirt, scene,
+    backdrop, depth, reflection, foam and coc" (crates/deep-gpu-layer/src/view3d.rs), so `drawnOf` fails at
+    "the plume with haze was drawn, not refused". (Past it: no `footprints` in any frame, so "the frame reports no
+    footprint for the effect plume" at frames 0, 45 and 90.)
+  AC3 #508.c1610aa6 a planted haze that writes into a check's readback (--planted haze_feeds_check_readback) …
+    `Planted::parse` doesn't know the name: `deep-gpu run --planted haze_feeds_check_readback` exits 2 with
+    bad_input, so runGpu fails at "deep-gpu run --planted haze_feeds_check_readback exited 0".

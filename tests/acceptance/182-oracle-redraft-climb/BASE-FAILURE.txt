@@ -1,0 +1,27 @@
+How the #182 Oracle climb port fails at the base, 1ab891283 (no implementation of #182), read from the base's code: this
+job built nothing and ran nothing (its task said not to build at the base). This worktree stands on 9ae04c6cd, whose
+crates/deep-canvas-physics and crates/deep-physics-rapier equal the base's (`git diff --stat 1ab891283 HEAD` on both is
+empty).
+
+The build, `cargo build --locked -p deep-physics-rapier --bin deep-physics`, is the one #2009 brought, so it is expected
+to succeed. The test then fails at its first assertion, on the real program's bake, before the planted run:
+
+- `deep-physics` reads the bake line, and `Run::build` runs `check` on the world. The document reader refuses both
+  character bodies (crates/deep-canvas-physics/src/doc.rs, `Reader::body`), so the reply is `{"ok": false, "issues": [...]}`
+  with four document.validate issues:
+  - `bodies/can_climb/character` and `bodies/cannot_climb/character`, code `unknown_field`: "… is not a field here; the
+    fields are kind, shapes, pose, velocity, mass, inertia, damping, gravity_scale, ccd, sleep, locks, follow, active,
+    anchors, priority";
+  - `bodies/can_climb/kind` and `bodies/cannot_climb/kind`, code `physics.unsupported`: "a character body isn't run by this
+    backend interface yet; #182 brings it".
+- So `characterStates` fails `the climb is baked: {"ok":false,"issues":[…]}: expected false to be true`, and the test
+  fails there.
+
+Had it got that far:
+- The track would be refused too: `move`'s only field at the base is `to` (crates/deep-canvas-physics/src/doc/inputs.rs,
+  `KINDS`), so `data.velocity` is `unknown_field` ("track/0/velocity is not a field of move; its fields are to").
+- No state carries `character` (runner.rs `state` writes pos, rot, linear, angular and contact_impulse only).
+- `deep-physics --planted slope_limit_ignored` is no name in `runner::PLANTED` or `runner::kit::PLANTED`, so main.rs
+  prints `{"ok":false,"code":"bad_input"}` and exits 2, failing `deep-physics --planted slope_limit_ignored exits 0`.
+
+The type-check, `npx tsc -p tests/acceptance/182-oracle-redraft-climb/tsconfig.json`, exits 0.

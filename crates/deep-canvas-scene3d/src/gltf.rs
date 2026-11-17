@@ -3,6 +3,7 @@
 //! read to one node's mesh in the node's own space: every triangle primitive's positions,
 //! normals (made from its faces where it has none) and indices. Only what a mesh needs is read.
 
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 
 use serde_json::{json, Value};
@@ -23,14 +24,41 @@ fn u32_at(b: &[u8], at: usize) -> Option<u32> {
     Some(u32::from_le_bytes(b.get(at..at + 4)?.try_into().ok()?))
 }
 
+/// A `gen@1` provider's mesh output as the asset store holds it (#192): little-endian `u32
+/// vertex_count, u32 index_count, f32 positions[3n], f32 normals[3n], f32 uv0[2n], u32 indices`,
+/// exactly that long, read as a glTF of one node whose one primitive's accessors view those bytes.
+fn provided(bytes: &[u8]) -> Option<(Value, Vec<u8>)> {
+    let n = u32_at(bytes, 0)? as usize;
+    let ni = u32_at(bytes, 4)? as usize;
+    if bytes.len() != 8 + 32 * n + 4 * ni {
+        return None;
+    }
+    let view = |at: usize, len: usize| json!({"buffer": 0, "byteOffset": at, "byteLength": len});
+    let float = |view: usize, ty: &str| json!({"bufferView": view, "componentType": 5126, "count": n, "type": ty});
+    let doc = json!({
+        "asset": {"version": "2.0"},
+        "buffers": [{"byteLength": bytes.len()}],
+        "bufferViews": [view(8, 12 * n), view(8 + 12 * n, 12 * n), view(8 + 24 * n, 8 * n), view(8 + 32 * n, 4 * ni)],
+        "accessors": [float(0, "VEC3"), float(1, "VEC3"), float(2, "VEC2"),
+                      {"bufferView": 3, "componentType": 5125, "count": ni, "type": "SCALAR"}],
+        "meshes": [{"primitives": [{"attributes": {"POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2}, "indices": 3}]}],
+        "nodes": [{"mesh": 0}],
+        "scenes": [{"nodes": [0]}],
+        "scene": 0,
+    });
+    Some((doc, bytes.to_vec()))
+}
+
 /// The document's JSON and its binary chunk (empty for a JSON file).
 fn split(bytes: &[u8]) -> Result<(Value, Vec<u8>), Fault> {
     if bytes.len() > MAX_BYTES {
         return Err(bad("larger than 64 MB"));
     }
     if bytes.get(..4) != Some(b"glTF") {
-        let json = serde_json::from_slice(bytes).map_err(|_| bad("neither GLB nor glTF JSON"))?;
-        return Ok((json, Vec::new()));
+        return match serde_json::from_slice(bytes) {
+            Ok(json) => Ok((json, Vec::new())),
+            Err(_) => provided(bytes).ok_or_else(|| bad("neither GLB nor glTF JSON")),
+        };
     }
     if u32_at(bytes, 4) != Some(2) {
         return Err(bad("not glTF 2.0"));
@@ -57,21 +85,28 @@ fn split(bytes: &[u8]) -> Result<(Value, Vec<u8>), Fault> {
 
 /// Buffer `i`'s bytes: the GLB's binary chunk, a base64 data URI, or an external file the host
 /// resolved by hash (`ext`, by buffer index; #423).
-fn buffer(doc: &Value, bin: &[u8], ext: &[Option<Vec<u8>>], i: usize) -> Result<Vec<u8>, Fault> {
+fn buffer<'a>(
+    doc: &Value,
+    bin: &'a [u8],
+    ext: &'a [Option<Vec<u8>>],
+    i: usize,
+) -> Result<Cow<'a, [u8]>, Fault> {
     let b = doc
         .pointer(&format!("/buffers/{i}"))
         .ok_or_else(|| bad("a missing buffer"))?;
     if let Some(Some(bytes)) = ext.get(i) {
-        return Ok(bytes.clone());
+        return Ok(Cow::Borrowed(bytes));
     }
     match b.get("uri").and_then(Value::as_str) {
-        None => Ok(bin.to_vec()),
+        None => Ok(Cow::Borrowed(bin)),
         Some(uri) => {
             let data = uri
                 .split_once(";base64,")
                 .map(|(_, d)| d)
                 .ok_or_else(|| bad("an external buffer"))?;
-            deep_canvas::base64::decode(data).ok_or_else(|| bad("a buffer's base64"))
+            deep_canvas::base64::decode(data)
+                .map(Cow::Owned)
+                .ok_or_else(|| bad("a buffer's base64"))
         }
     }
 }
@@ -88,6 +123,24 @@ fn accessor_in(
     i: usize,
     width: usize,
 ) -> Result<Vec<Vec<f64>>, Fault> {
+    Ok(numbers_in(doc, bin, ext, i, width)?
+        .chunks(width)
+        .map(<[f64]>::to_vec)
+        .collect())
+}
+
+/// Accessor `i`'s numbers, row after row of `width`.
+fn numbers(doc: &Value, bin: &[u8], i: usize, width: usize) -> Result<Vec<f64>, Fault> {
+    numbers_in(doc, bin, &[], i, width)
+}
+
+fn numbers_in(
+    doc: &Value,
+    bin: &[u8],
+    ext: &[Option<Vec<u8>>],
+    i: usize,
+    width: usize,
+) -> Result<Vec<f64>, Fault> {
     let a = doc
         .pointer(&format!("/accessors/{i}"))
         .ok_or_else(|| bad("a missing accessor"))?;
@@ -133,7 +186,7 @@ fn accessor_rows(
     component: u64,
     size: usize,
     normalized: bool,
-) -> Result<Vec<Vec<f64>>, Fault> {
+) -> Result<Vec<f64>, Fault> {
     let base = view.get("byteOffset").and_then(Value::as_u64).unwrap_or(0) as usize
         + a.get("byteOffset").and_then(Value::as_u64).unwrap_or(0) as usize;
     let stride = view
@@ -144,33 +197,32 @@ fn accessor_rows(
     if stride < size * width {
         return Err(bad("a byte stride under its element"));
     }
-    (0..count)
-        .map(|r| {
-            (0..width)
-                .map(|c| {
-                    let at = base + r * stride + c * size;
-                    let b = data
-                        .get(at..at + size)
-                        .ok_or_else(|| bad("an accessor past its buffer"))?;
-                    let v = match component {
-                        5120 => f64::from(b[0] as i8),
-                        5121 => f64::from(b[0]),
-                        5122 => f64::from(i16::from_le_bytes([b[0], b[1]])),
-                        5123 => f64::from(u16::from_le_bytes([b[0], b[1]])),
-                        5125 => f64::from(u32::from_le_bytes([b[0], b[1], b[2], b[3]])),
-                        _ => f64::from(f32::from_le_bytes([b[0], b[1], b[2], b[3]])),
-                    };
-                    Ok(match (normalized, component) {
-                        (true, 5120) => (v / 127.0).max(-1.0),
-                        (true, 5121) => v / 255.0,
-                        (true, 5122) => (v / 32767.0).max(-1.0),
-                        (true, 5123) => v / 65535.0,
-                        _ => v,
-                    })
-                })
-                .collect()
-        })
-        .collect()
+    // A row past the buffer fails, so the rows kept never outnumber what it holds.
+    let mut out = Vec::with_capacity(count.min(data.len() / stride.max(1) + 1) * width);
+    for r in 0..count {
+        for c in 0..width {
+            let at = base + r * stride + c * size;
+            let b = data
+                .get(at..at + size)
+                .ok_or_else(|| bad("an accessor past its buffer"))?;
+            let v = match component {
+                5120 => f64::from(b[0] as i8),
+                5121 => f64::from(b[0]),
+                5122 => f64::from(i16::from_le_bytes([b[0], b[1]])),
+                5123 => f64::from(u16::from_le_bytes([b[0], b[1]])),
+                5125 => f64::from(u32::from_le_bytes([b[0], b[1], b[2], b[3]])),
+                _ => f64::from(f32::from_le_bytes([b[0], b[1], b[2], b[3]])),
+            };
+            out.push(match (normalized, component) {
+                (true, 5120) => (v / 127.0).max(-1.0),
+                (true, 5121) => v / 255.0,
+                (true, 5122) => (v / 32767.0).max(-1.0),
+                (true, 5123) => v / 65535.0,
+                _ => v,
+            });
+        }
+    }
+    Ok(out)
 }
 
 /// The node's index: `node` as a number, or the node of that name.
@@ -475,14 +527,11 @@ pub fn primitives(bytes: &[u8], node: &Value) -> Result<Primitives, Fault> {
             continue;
         }
         let pos_i = pos_i.ok_or_else(|| bad("a primitive without positions"))? as usize;
-        let positions: Vec<V3> = accessor(&doc, &bin, pos_i, 3)?
-            .into_iter()
-            .map(|r| [r[0], r[1], r[2]])
-            .collect();
+        let positions: Vec<V3> = numbers(&doc, &bin, pos_i, 3)?.as_chunks().0.to_vec();
         let indices: Vec<u32> = match idx_i {
-            Some(i) => accessor(&doc, &bin, i as usize, 1)?
+            Some(i) => numbers(&doc, &bin, i as usize, 1)?
                 .into_iter()
-                .map(|r| r[0] as u32)
+                .map(|x| x as u32)
                 .collect(),
             None => (0..positions.len() as u32).collect(),
         };
@@ -491,10 +540,7 @@ pub fn primitives(bytes: &[u8], node: &Value) -> Result<Primitives, Fault> {
         }
         let normals = match nrm_i {
             Some(i) => {
-                let n: Vec<V3> = accessor(&doc, &bin, i as usize, 3)?
-                    .into_iter()
-                    .map(|r| [r[0], r[1], r[2]])
-                    .collect();
+                let n: Vec<V3> = numbers(&doc, &bin, i as usize, 3)?.as_chunks().0.to_vec();
                 if n.len() != positions.len() {
                     return Err(bad("normals that don't match its positions"));
                 }

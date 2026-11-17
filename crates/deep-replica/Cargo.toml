@@ -19,6 +19,8 @@ crc32fast = "1"
 image = { version = "0.25", default-features = false, features = ["png"] }
 # Issue #184: the play mode steps a piece's logic and a logic bot's, as the logic module does.
 deep-logic = { path = "../deep-logic" }
+# #1048: logic.edges puts each control kind's edge values, as its control@1 entry declares them.
+deep-canvas-input = { path = "../deep-canvas-input" }
 base64 = "0.22"
 
 # Issue #1408: the wrong programs a test selects with DEEP_DRIVE_PLANT and, through the app, DEEP_HUB_PLANT, read only in
@@ -96,6 +98,12 @@ harness = false
 [[test]]
 name = "acceptance_326_panels_planted"
 path = "../../tests/acceptance/326/panels/planted.rs"
+harness = false
+
+# #1620: independently drafted wrong-loader probe; validate before replacing the stale original.
+[[test]]
+name = "acceptance_1620_planted_loader"
+path = "../../tests/acceptance/1620/planted_loader_proposal.rs"
 harness = false
 
 # AC7's two planted hosts, redrafted blind: gpui-shell's own loader, so they load the fixtures

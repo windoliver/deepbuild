@@ -147,7 +147,13 @@ pub fn crossed(a: [f64; 2], b: [f64; 2]) -> Vec<[i64; 2]> {
         let edge = c[k] as f64 + 0.5 * step[k] as f64;
         (edge - a[k]) / d[k]
     });
-    let delta = d.map(|v| if v == 0.0 { f64::INFINITY } else { 1.0 / v.abs() });
+    let delta = d.map(|v| {
+        if v == 0.0 {
+            f64::INFINITY
+        } else {
+            1.0 / v.abs()
+        }
+    });
     let mut out = Vec::new();
     while c != end && out.len() < 1 << 16 {
         let k = usize::from(next[1] < next[0]);
@@ -182,7 +188,11 @@ mod tests {
         assert_eq!(cells.last(), Some(&[3, 2]));
         let mut at = [0, 0];
         for c in cells {
-            assert_eq!((c[0] - at[0]).abs() + (c[1] - at[1]).abs(), 1, "{c:?} after {at:?}");
+            assert_eq!(
+                (c[0] - at[0]).abs() + (c[1] - at[1]).abs(),
+                1,
+                "{c:?} after {at:?}"
+            );
             at = c;
         }
     }
