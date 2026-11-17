@@ -1,4 +1,4 @@
-# The proof lanes on 686a94488 (main 06e231702 + the kit), in the order they ran. Nothing is left out but the bays' file lists.
+# The proof lanes on 686a94488 (main 06e231702 + the kit) and, for the last run, 35054aa2c, in the order they ran. Nothing is left out but the bays' file lists.
 
 ## node scripts/proof.mjs guard — 2026-11-16
 PASS guard: 1 commit checked: no guarded edit lacks its own approved proposal
@@ -49,3 +49,18 @@ PASS before: no tagged test to run on the merge base
 FAIL trace: Closes #2331 refused: this change is Part of #2331; open: #2331.04651a1b, #2331.aee6e8f0
   Fix: Tag a test with each open criterion and make it fail on a wrong program, say Part of #n instead of Closes #n, or drop the tag of a criterion the issue no longer holds.
 proof: wall time 1808.9 s
+
+## node scripts/proof.mjs before trace — fourth run, 2026-11-17, on 35054aa2c, which adds only reports/ to 686a94488. The change bay came up cold, so while the lane was on its base copy, cargo build --locked --offline -q -p deep-hook was run by hand in the change bay under a throttle build grant: the lane does not build deep-hook, and the kit's README names it as a prerequisite
+BAY claim {"role":"base","use":"before","base":"06e231702bb4bf5c2ede8a4c76f40e4255e0e7a3","tree":"65f86aabaec06579a098883b3f9e2a83bd524966","overlay":{"files":11528,"hash":"0a3cbf3f0a49d088d90302406ae271ca3b1022bdd49d62d3a5fd3812b8059d9d"},"seal":"intact","cold":false,"installed":false,"written":100,"deleted":67}
+BAY claim {"role":"change","use":"before","tree":"c109e70264176b525f2246c9e796cf748948440b","overlay":null,"seal":"broken","cold":true,"installed":true,"written":128,"deleted":70}
+BAY claim {"role":"change","use":"twin tests/acceptance/2331/twins/locale-clock","tree":"c109e70264176b525f2246c9e796cf748948440b","overlay":{"files":1,"hash":"831bd6bba77f5cc225138996c63444bfe30e8c53b6c7b73906c6d173d0416d28"},"seal":"broken","cold":false,"installed":false,"written":0,"deleted":36}
+BAY claim {"role":"change","use":"twin tests/acceptance/2331/twins/utc-clock","tree":"c109e70264176b525f2246c9e796cf748948440b","overlay":{"files":1,"hash":"ee46d96009a8606277b1f711b10931c07a32a7abd5aadf42c0ed58c57f11edb2"},"seal":"broken","cold":false,"installed":false,"written":1,"deleted":36}
+PASS before: tests/acceptance/2331/inbox.test.ts › #2331.04651a1b › #2331.04651a1b: deep inbox, the hub up, writes each ask's default and its time and constructs no date or number formatter: failed on locale-clock at its assertion
+PASS before: tests/acceptance/2331/inbox.test.ts › #2331.04651a1b › #2331.04651a1b: deep inbox, the hub down, says since when, writes each ask's default and its time, and constructs no date or number formatter: failed on locale-clock at its assertion
+PASS before: tests/acceptance/2331/week.test.ts › #2331.aee6e8f0 › #2331.aee6e8f0: in America/New_York, whose clocks go back an hour at 02:00 on Sun 1 Nov 2026, so 01:00-01:59 comes twice, when and so clock return today's text for every minute of the week: failed on utc-clock at its assertion
+PASS before: tests/acceptance/2331/week.test.ts › #2331.aee6e8f0 › #2331.aee6e8f0: in Australia/Lord_Howe, whose clocks go forward half an hour at 02:00 on Sun 4 Oct 2026, from UTC+10:30 to UTC+11, when and so clock return today's text for every minute of the week: failed on utc-clock at its assertion
+PASS before: tests/acceptance/2331/week.test.ts › #2331.aee6e8f0 › #2331.aee6e8f0: in America/Havana, whose clocks go forward an hour at midnight on Sun 8 Mar 2026, so that day starts at 01:00, when and so clock return today's text for every minute of the week: failed on utc-clock at its assertion
+PASS trace: Closes #2331: each of its 2 criteria has a tagged test that ran, passed and failed on a wrong program
+BAY release {"role":"base","status":null,"targetBytes":21803738821,"touched":0}
+BAY release {"role":"change","status":null,"targetBytes":757997795,"touched":1}
+proof: wall time 2087.3 s
