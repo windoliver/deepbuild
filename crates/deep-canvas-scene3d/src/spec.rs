@@ -362,6 +362,17 @@ fn extras(kind: &str) -> Vec<P> {
                 json!({"height": "position.x * 0.25", "size": [4, 4], "spacing": 0.5}),
             )
             .takes("{height: m | expr | {wave} | {noise}, size: [m, m], spacing?: m, tile?: m, lod_levels?: u8 ≤ 6}"),
+            // #1381: a terrain plate's horizon table, baked with it (Builder plate: terrain).
+            p(
+                "horizon",
+                "horizon",
+                "",
+                Value::Null,
+                G,
+                json!({"azimuths": 16, "size": 17}),
+                json!({"azimuths": 16, "size": 33}),
+            )
+            .takes("{azimuths: 16, size: 2..257 = 257}"),
             // #537: a terrain plate's overlays tint its cover and rebuild nothing (Builder plate: terrain overlays).
             p(
                 "overlays",
@@ -387,7 +398,8 @@ fn mesh_asset() -> Spec {
         kind: "mesh.asset@1",
         module: "scene3d",
         params: vec![
-            p("sha256", "sha256", "", Value::Null, G, json!(a), json!(b)),
+            p("sha256", "sha256", "", Value::Null, G, json!(a), json!(b))
+                .takes("sha256 | {gen: <pack>.<provider>, params}"),
             p("node", "index | name", "", json!(0), G, json!(0), json!(1))
                 .takes("index | name | {scene: index}"),
             shade(),

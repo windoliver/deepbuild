@@ -222,9 +222,13 @@ fn run_view(
     // The core targets the document's operators read, built only then (#431); the planted core
     // builds both for every frame.
     let builds_all = app.planted == Some(Planted::BuildsUnreadTargets);
+    // #458: naming the velocity target in `targets` is a read of it.
     let want = deep_scene3d_render::targets::Want {
-        velocity: builds_all || deep_canvas_effects::module::reads_core(&args.doc, "velocity"),
+        velocity: builds_all
+            || args.targets.contains("velocity")
+            || deep_canvas_effects::module::reads_core(&args.doc, "velocity"),
         emission: builds_all || deep_canvas_effects::module::reads_core(&args.doc, "emission"),
+        normal: app.relation_reads.contains("geometry_normal"),
     };
     session3::core_targets(app, want)?;
     let opening = opening.elapsed();
@@ -272,9 +276,11 @@ fn run_view(
         "normal",
         "coc",
         "checks",
+        "velocity",
     ]
     .iter()
-    .any(|t| args.targets.contains(*t));
+    .any(|t| args.targets.contains(*t))
+        || !app.relation_reads.is_empty();
     // The bloom's lens dirt (#418): a PNG the assets name, its red channel ÷ 255, or seeded, made
     // once for the whole call; and as the `dirt` target, sampled at each pixel of the frame.
     let dirt = match args.look_json["bloom"]["dirt"]["texture"].as_str() {
@@ -317,6 +323,10 @@ fn run_view(
     );
     // Level of detail and the light cut, chosen from each frame's view (#425).
     let mut selection = crate::lod::Selection::new(app.planted);
+    // #1381: the compute passes drawing began before this frame, and every horizon table a frame
+    // has drawn, held so a table baked anew is never one seen before.
+    let mut passes_before = deep_gpu::counted::compute_passes();
+    let mut horizons: Vec<Arc<deep_canvas_scene3d::horizon::Horizon>> = Vec::new();
     let drawn_scale = if args.surface.scale < 1.0 && !noop {
         args.surface.scale
     } else {
@@ -565,7 +575,27 @@ fn run_view(
                 .ground_points
                 .as_ref()
                 .map(|(item, _)| crate::lod::tiles_of(&scene, item));
-            let (choices, cut) = selection.apply(&mut scene, drawn_scale, noop);
+            let (choices, mut cut) = selection.apply(&mut scene, drawn_scale, noop);
+            // #458's planted policy: a point or spot light is shaded only while its illuminance
+            // at the eye, (power ÷ 4π) ÷ d², is at least 0.05 lx.
+            if app.planted == Some(Planted::LightCutAbsoluteIlluminance) {
+                use deep_canvas_scene3d::light::LightKind;
+                let eye = scene.camera.eye;
+                let lit = |l: &deep_canvas_scene3d::light::Light| {
+                    let d2: f64 = (0..3).map(|k| (l.pos[k] - eye[k]).powi(2)).sum();
+                    !matches!(l.kind, LightKind::Point | LightKind::Spot)
+                        || l.intensity / d2 >= 0.05
+                };
+                let (kept, dark): (Vec<_>, Vec<_>) = cut
+                    .shaded
+                    .iter()
+                    .copied()
+                    .partition(|&(i, _)| lit(&scene.lights[i]));
+                cut.left_out
+                    .extend(dark.iter().map(|&(i, _)| scene.lights[i].id.clone()));
+                cut.shaded = kept;
+                scene.light_cut = Some(cut.clone());
+            }
             // #506's planted core: a view overlay shaded with the main view's light cut.
             if let (Some(s), Some(Planted::OneLightCutPerFrame)) = (sub.as_ref(), app.planted) {
                 let main =
@@ -630,6 +660,19 @@ fn run_view(
             crate::trails::plant(&mut scene, app.planted, t);
             let trails = crate::trails::report(&scene, &call["trails"]);
             let scene = Arc::new(scene);
+            // #1381: the horizon tables this frame's build baked: those no earlier frame drew.
+            let mut baked = 0u32;
+            for h in scene
+                .layers
+                .iter()
+                .flat_map(|l| &l.solids)
+                .filter_map(|s| s.mesh.as_ref()?.horizon.clone())
+            {
+                if !horizons.iter().any(|seen| Arc::ptr_eq(seen, &h)) {
+                    horizons.push(h);
+                    baked += 1;
+                }
+            }
             let selected = levels.select(&composed, &scene);
             let settled = levels.settle(&selected);
             let seeding = match app.planted {
@@ -968,9 +1011,29 @@ fn run_view(
             let plan = deep_canvas_scene3d::samples::plan(n_all, pixel, looks, blur_n > 0);
             let velocity_on =
                 blur.is_some_and(|b| b.method == deep_canvas_scene3d::samples::Method::Velocity);
+            // #458: a relation's lighting-only side draws the scene on a white albedo.
+            let mut moving = if app.relation_reads.contains("lighting") {
+                Arc::new(deep_scene3d_render::white(&scene))
+            } else {
+                scene.clone()
+            };
+            // #458's planted view: an orthographic camera's place in its own plane snaps to a
+            // 0.1 m grid before the view is built.
+            if app.planted == Some(Planted::OrthoCameraSnapsToGrid) && !moving.camera.perspective {
+                let mut sc = (*moving).clone();
+                let cam = &mut sc.camera;
+                for axis in [cam.right, cam.up] {
+                    let along: f64 = (0..3).map(|k| cam.target[k] * axis[k]).sum();
+                    let by = (along / 0.1).round() * 0.1 - along;
+                    for k in 0..3 {
+                        cam.eye[k] += by * axis[k];
+                        cam.target[k] += by * axis[k];
+                    }
+                }
+                moving = Arc::new(sc);
+            }
             // Motion blur by velocity: the renderer's velocity target reads the evaluations at
             // t ± s/2, never an earlier frame.
-            let mut moving = scene.clone();
             if let (true, Some(b)) = (velocity_on, blur) {
                 let open = at_time(t - (shutter / 2.0).round() as i64, &mut labels)?;
                 let close = at_time(t + (shutter / 2.0).round() as i64, &mut labels)?;
@@ -1715,6 +1778,40 @@ fn run_view(
                 if let (Some(n), true) = (&drawn.normal, args.targets.contains("normal")) {
                     frame.insert("normal".into(), json!(write_named(out, n, "f32")?));
                 }
+                // #458: the core's velocity target as the frame built it, two f32 a pixel.
+                if let (Some(v), true) = (&drawn.velocity, args.targets.contains("velocity")) {
+                    frame.insert("velocity".into(), json!(write_named(out, v, "f32")?));
+                }
+                // #458: what a relation reads beside these: the solids' normals, and the linear
+                // image the tone map reads, after exposure.
+                if let (Some(n), true) = (
+                    &drawn.geometry_normal,
+                    app.relation_reads.contains("geometry_normal"),
+                ) {
+                    frame.insert("geometry_normal".into(), json!(write_named(out, n, "f32")?));
+                }
+                if let (Some(pre), true) = (&drawn.pre_tone, app.relation_reads.contains("exposed"))
+                {
+                    // The planted output pass exposes after the tone map, so what the tone map
+                    // reads isn't exposed.
+                    let scale = if app.planted == Some(Planted::ExposureAfterToneMap) {
+                        1.0
+                    } else {
+                        scene.exposure.unwrap_or(args.look.exposure)
+                    };
+                    let exposed: Vec<u8> = pre
+                        .as_chunks::<16>()
+                        .0
+                        .iter()
+                        .flat_map(|p| {
+                            let c =
+                                |k: usize| f32::from_le_bytes([p[k], p[k + 1], p[k + 2], p[k + 3]]);
+                            let e = |k: usize| ((f64::from(c(k)) * scale) as f32).to_le_bytes();
+                            [e(0), e(4), e(8), c(12).to_le_bytes()].concat()
+                        })
+                        .collect();
+                    frame.insert("exposed".into(), json!(write_named(out, &exposed, "f32")?));
+                }
                 // #468: each pixel's signed circle of confusion, f32.
                 if let (Some(c), true) = (&drawn.coc, args.targets.contains("coc")) {
                     frame.insert("coc".into(), json!(write_named(out, c, "f32")?));
@@ -1874,6 +1971,9 @@ fn run_view(
                     .collect();
                 frame.insert("draws".into(), json!(draws));
                 frame.insert("meshes_built".into(), json!(c.meshes_built));
+                frame.insert("horizons_baked".into(), json!(baked));
+                let passes = deep_gpu::counted::compute_passes();
+                frame.insert("compute_passes".into(), json!(passes - passes_before));
                 frame.insert("axes_mapped".into(), json!(axes_mapped));
                 frame.insert(
                     "terrain_tiles_selected".into(),
@@ -1886,10 +1986,17 @@ fn run_view(
             if args.lod {
                 frame.insert("lod".into(), crate::lod::rows(&choices));
             }
+            passes_before = deep_gpu::counted::compute_passes();
             if let (Some((item, at)), Some(tiles)) = (&args.ground_points, &tiles) {
+                let light = crate::lod::Light {
+                    scene: &scene,
+                    last_split: drawn.counts.cascade_splits.last().copied(),
+                    unbaked: app.planted == Some(Planted::TerrainNoHorizonBake),
+                    by_slope: app.planted == Some(Planted::TerrainOcclusionFromSlope),
+                };
                 frame.insert(
                     "ground_points".into(),
-                    crate::lod::ground_points(item, at, tiles, &choices),
+                    crate::lod::ground_points(item, at, tiles, &choices, &light),
                 );
             }
             if args.cull_report && capture && !noop {

@@ -255,7 +255,7 @@ export interface McpOperationsPort {
   index: Promise<IndexFill | undefined>;
   mcpCall(params: Obj, context: CallContext): Promise<unknown>;
   agentConnection(session: string): Connection;
-  checksOf(worktree: string): Map<string, { run: string; deadline?: unknown; type?: string; host?: string }>;
+  checksOf(worktree: string): Map<string, { run: string; deadline?: unknown; type?: string; host?: string; runs?: unknown; accept?: unknown; min_tests?: unknown }>;
   pinOf(worktree: string, question: string): Promise<Obj>;
   propose(session: string, args: Obj): Promise<Obj>;
 }

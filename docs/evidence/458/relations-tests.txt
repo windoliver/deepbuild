@@ -1,0 +1,124 @@
+== tests/acceptance/458/relations/relations.test.ts
+deep lease: DeepBuild isn't set up here (no hub token), so `npx vitest run --root tests/acceptance/458/relations relations.test.ts --no-file-parallelism --testTimeout=900000` runs unleased
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/458/relations
+
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  10:23:23
+   Duration  41.76s (tests 100%)
+
+exit 0
+
+== tests/acceptance/458/relations/software-adapter.test.ts
+deep lease: DeepBuild isn't set up here (no hub token), so `npx vitest run --root tests/acceptance/458/relations software-adapter.test.ts --no-file-parallelism --testTimeout=900000` runs unleased
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/458/relations
+
+ ❯ software-adapter.test.ts (2 tests | 1 failed) 172631ms
+   ❯ #458 criterion 12: the full lane on a software adapter (2)
+     × AC12 #458.d7eebc1a: forced onto a real software adapter by the Vulkan loader's driver setting, every GPU fixture reports BLOCKED, naming the adapter and its device type, and the planted lane passes there and fails, naming the adapter 7ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  software-adapter.test.ts > #458 criterion 12: the full lane on a software adapter > AC12 #458.d7eebc1a: forced onto a real software adapter by the Vulkan loader's driver setting, every GPU fixture reports BLOCKED, naming the adapter and its device type, and the planted lane passes there and fails, naming the adapter
+AssertionError: BLOCKED: a real software adapter needs Linux with the Vulkan loader and a software rasterizer's driver manifest (lvp_icd.*.json under /usr/share/vulkan/icd.d); this is darwin with 0 such manifests. Run this file on such a machine; this is not a pass
+ ❯ blocked helpers.ts:66:17
+     64| /** A platform need is missing here: never a pass. */
+     65| export function blocked(reason: string): never {
+     66|   return expect.fail(`BLOCKED: ${reason}; this is not a pass`);
+       |                 ^
+     67| }
+     68| /** The GPU layer draws these pixels on macOS's Metal device, the refe…
+ ❯ software-adapter.test.ts:119:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+   Start at  10:30:01
+   Duration  172.87s (tests 100%)
+
+exit 1
+
+== tests/acceptance/458/relations/translation.test.ts
+deep lease: DeepBuild isn't set up here (no hub token), so `npx vitest run --root tests/acceptance/458/relations translation.test.ts --no-file-parallelism --testTimeout=900000` runs unleased
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/458/relations
+
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  10:24:08
+   Duration  14.50s (tests 100%)
+
+exit 0
+
+== tests/acceptance/458/relations/light-level.test.ts
+deep lease: DeepBuild isn't set up here (no hub token), so `npx vitest run --root tests/acceptance/458/relations light-level.test.ts --no-file-parallelism --testTimeout=900000` runs unleased
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/458/relations
+
+ ❯ light-level.test.ts (2 tests | 1 failed) 24756ms
+   ❯ #458 criterion 14: light-level invariance (2)
+     × AC14 #458.52b742e2: every light's power, the sky and every emission at 1/100 with exposure up log2 100 EV and bloom's threshold off leaves every linear pixel after exposure within 1e-4 relative 11738ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  light-level.test.ts > #458 criterion 14: light-level invariance > AC14 #458.52b742e2: every light's power, the sky and every emission at 1/100 with exposure up log2 100 EV and bloom's threshold off leaves every linear pixel after exposure within 1e-4 relative
+AssertionError: every linear pixel after exposure is within 1e-4 relative:
+  light-level: pixel (0, 0) channel 0 reads 0.0032285850029438734, the relation gives 0.00322500872425735
+  light-level: pixel (1, 0) channel 0 reads 0.0032285850029438734, the relation gives 0.00322500872425735
+  light-level: pixel (2, 0) channel 0 reads 0.0032285850029438734, the relation gives 0.0032265980262309313
+  light-level: pixel (3, 0) channel 0 reads 0.0032285850029438734, the relation gives 0.0032265980262309313
+  light-level: pixel (4, 0) channel 0 reads 0.0032285850029438734, the relation gives 0.0032265980262309313
+  light-level: pixel (5, 0) channel 0 reads 0.0032285850029438734, the relation gives 0.0032265980262309313
+  light-level: pixel (6, 0) channel 0 reads 0.0032285850029438734, the relation gives 0.0032265980262309313
+  light-level: pixel (7, 0) channel 0 reads 0.0032285850029438734, the relation gives 0.0032265980262309313
+  light-level: pixel (8, 0) channel 0 reads 0.0032285850029438734, the relation gives 0.0032265980262309313
+  light-level: pixel (9, 0) channel 0 reads 0.0032285850029438734, the relation gives 0.0032281875610351562
+  light-level: pixel (10, 0) channel 0 reads 0.0032285850029438734, the relation gives 0.0032281875610351562
+  light-level: pixel (11, 0) channel 0 reads 0.0032310683745890856, the relation gives 0.0032281875610351562: expected [ …(63808) ] to deeply equal []
+  ... 63795 lines left out: one line a pixel past the tolerance ...
++   "light-level: pixel (301, 199) channel 0 reads 0.0756978988647461, the relation gives 0.07568359375",
++   "light-level: pixel (302, 199) channel 0 reads 0.07549921423196793, the relation gives 0.0754801407456398",
++   "light-level: pixel (303, 199) channel 0 reads 0.07526079565286636, the relation gives 0.0752766951918602",
++   "light-level: pixel (304, 199) channel 0 reads 0.07506211847066879, the relation gives 0.0750732421875",
++   "light-level: pixel (305, 199) channel 1 reads 0.0756581649184227, the relation gives 0.07568359375",
++   "light-level: pixel (306, 199) channel 0 reads 0.07470449060201645, the relation gives 0.0746663436293602",
++   "light-level: pixel (307, 199) channel 0 reads 0.07450580596923828, the relation gives 0.0745137557387352",
++   "light-level: pixel (308, 199) channel 1 reads 0.07510185241699219, the relation gives 0.0750732421875",
++   "light-level: pixel (309, 199) channel 1 reads 0.07490316778421402, the relation gives 0.074920654296875",
++   "light-level: pixel (310, 199) channel 0 reads 0.07394949346780777, the relation gives 0.0739034041762352",
++   "light-level: pixel (311, 199) channel 1 reads 0.07454553991556168, the relation gives 0.0745137557387352",
++   "light-level: pixel (312, 199) channel 1 reads 0.0743468627333641, the relation gives 0.0743611678481102",
++   "light-level: pixel (313, 199) channel 1 reads 0.07418791204690933, the relation gives 0.07415771484375",
++   "light-level: pixel (314, 199) channel 1 reads 0.07398923486471176, the relation gives 0.074005126953125",
++   "light-level: pixel (315, 199) channel 1 reads 0.07383028417825699, the relation gives 0.0738016739487648",
++   "light-level: pixel (316, 199) channel 0 reads 0.07291635125875473, the relation gives 0.0728352889418602",
++   "light-level: pixel (317, 199) channel 0 reads 0.07271766662597656, the relation gives 0.0726827010512352",
++   "light-level: pixel (318, 199) channel 0 reads 0.07255872339010239, the relation gives 0.0725301131606102",
++   "light-level: pixel (319, 199) channel 0 reads 0.07239977270364761, the relation gives 0.0723775252699852",
++ ]
+
+ ❯ none helpers.ts:74:73
+     72| /** No failures; the message lists them. */
+     73| export function none(failures: readonly string[], what: string): void {
+     74|   expect(failures, `${what}:\n  ${failures.slice(0, 12).join('\n  ')}`…
+       |                                                                         ^
+     75| }
+     76| /** A planted program's run: this suite's own check must fail on it, a…
+ ❯ light-level.test.ts:46:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+   Start at  10:24:25
+   Duration  25.51s (tests 99%, import 1%)
+
+exit 1
+

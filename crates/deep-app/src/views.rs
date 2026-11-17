@@ -1094,7 +1094,7 @@ pub(crate) fn label(
 }
 
 /// A page's title: the title role, so a page has one voice (#1458).
-fn title(
+pub(crate) fn title(
     id: impl Into<ElementId>,
     text: impl Into<SharedString>,
 ) -> ObservedElement<Stateful<Div>> {

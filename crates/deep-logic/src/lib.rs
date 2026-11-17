@@ -101,6 +101,8 @@ pub struct Planted {
     /// #1164: the restore a seek to step 225 starts from zeroes the u32 at the program's
     /// `moves_at`, a count it keeps only in memory.
     pub restore_zeroes_move_count: bool,
+    /// #210: an `each` reading's read region that keeps only the last value a step received.
+    pub read_region_keeps_last: bool,
     /// #860: a rewind that puts back only each item's arrays as the stop left them, leaving the
     /// rest of its memory and its globals as they stood when the rewind came.
     pub rewind_restores_arrays_only: bool,
@@ -157,6 +159,7 @@ impl Planted {
             "preview_writes_item_memory" => p.preview_writes_item_memory = true,
             "preview_runs_on_hover_only" => p.preview_runs_on_hover_only = true,
             "restore_zeroes_move_count" => p.restore_zeroes_move_count = true,
+            "read_region_keeps_last" => p.read_region_keeps_last = true,
             "rewind_restores_arrays_only" => p.rewind_restores_arrays_only = true,
             "rewind_clears_seen" => p.rewind_clears_seen = true,
             _ => return None,
@@ -731,7 +734,7 @@ impl Logic {
         let keys = keys(&piece, &entries);
         Ok(json!({
             "ok": true, "items": items(&piece), "keys": keys, "steps": rec.steps_json(&piece, only), "occurrences": rec.occurrences(&piece), "checkpoints": rec.checkpoints, "ranges": rec.ranges_json(&piece, only), "ring": world.ring(),
-            "traps": libraries_in(&piece, rec.traps), "budgets": budgets, "saves": saves, "frames": frames, "restores": restores_out, "probes": probes_out, "seeks": seeks_out, "peeks": peeks,
+            "traps": libraries_in(&piece, rec.traps), "issues": rec.issues, "budgets": budgets, "saves": saves, "frames": frames, "restores": restores_out, "probes": probes_out, "seeks": seeks_out, "peeks": peeks,
             "track": entries.iter().map(Entry::to_json).collect::<Vec<_>>(), "closed": world.branches.closed_json(),
         }))
     }
@@ -1316,6 +1319,7 @@ impl Logic {
             "step": to,
             "failed": w.failed(),
             "steps": rec.steps_json(&w.piece, None),
+            "issues": rec.issues,
             "track": track,
             "deep_hash": w.deep_hashes(),
             "saves": saves,
@@ -1332,7 +1336,24 @@ impl Logic {
             .ok_or_else(|| bad("session"))?;
         let w = self.sessions.get_mut(s).ok_or_else(|| bad("session"))?;
         let mut e = line.get("entry").cloned().ok_or_else(|| bad("entry"))?;
-        if e.get("reading").is_some() {
+        if let Some(reading) = e.get("reading").and_then(Value::as_str).map(str::to_string) {
+            // A value whose as-of time is later than its arrival is refused before it's
+            // recorded, naming it (Logic: readings): a reading's time is never the piece's.
+            let arrived = line
+                .get("arrived")
+                .or_else(|| e.get("arrived"))
+                .and_then(Value::as_i64);
+            if let (Some(at), Some(as_of)) = (arrived, e.get("as_of").and_then(Value::as_i64)) {
+                if as_of > at {
+                    let source = reading.trim_start_matches("reading:");
+                    let source = source.split_once('#').map_or(source, |(s, _)| s);
+                    return Err(
+                        json!({"ok": false, "code": "reading_refused", "why": "as_of", "source": source,
+                        "reading": reading, "as_of": as_of, "arrived": at,
+                        "what": format!("a value of {source} whose as-of time is {} µs after its arrival", as_of - at)}),
+                    );
+                }
+            }
             e["t"] = json!(0);
             e["writer"] = json!("plugin");
         }

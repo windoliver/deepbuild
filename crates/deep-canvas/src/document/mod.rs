@@ -122,6 +122,8 @@ pub const ENVELOPE_KEYS: &[&str] = &[
     "tour",
     // #860: the logic module's rewind, its stops, depth and carried seen array.
     "rewind",
+    // #210: a piece's ports, each its declared way out to one plug-in and back (Port).
+    "ports",
 ];
 
 /// An item's keys (Item and kind), in this slice.
