@@ -1,0 +1,6 @@
+6aed45758dc30684b6537504f1b0b3afc6371f9616f03cdde08d75689550e21d  tests/acceptance/1835/helpers.mjs
+06ca6964c9b8512bccd84c0d49ab511754d0b916bc7036459808190d71074ca9  tests/acceptance/1835/twins/closes-unproven/scripts/budget-window.mjs
+b20b2334471d74400ab335c6a8d9e4892840cd32d674ee30292714e01fa55db9  tests/acceptance/1835/twins/names-no-record/scripts/budget-window.mjs
+b7008888b7d82db21943d8be18bb02d83990a0dccdd43ab4a22973f9c8cfc26d  tests/acceptance/1835/twins/names-on-the-line/scripts/budget-window.mjs
+e38424218eaff323bf1665f926e7145a1f9f6a343410dd5230171f9acdffe57f  tests/acceptance/1835/twins/ticks-every-line/scripts/budget-window.mjs
+38eb869b21bc3ce35a5c93b0e79381d522bfae8e09e58e3232d92d967160b2b8  tests/acceptance/1835/window.test.mjs

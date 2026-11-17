@@ -1,0 +1,397 @@
+===== twin ticks-every-line (the change's proof.mjs, the twin's budget-window.mjs) | 11:30:37 | load { 19.87 12.36 11.00 }
+✖ #1835.fb2cf14f a fixture issue with three criteria and a Part of change whose trace lane proved the first two: after it lands, those two lines are ticked, each naming the lane's record, and the third is not (44717.630833ms)
+✖ #1835.5f2ccf69 with the third criterion a budget, a passing window closes the fixture issue, naming its commit (1.709042ms)
+✖ #1835.5f2ccf69 with the third criterion unproven and not a budget, the fixture issue stays open, naming it (0.901917ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 0
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 45152.712917
+
+✖ failing tests:
+
+test at tests/acceptance/1835/window.test.mjs:51:1
+✖ #1835.fb2cf14f a fixture issue with three criteria and a Part of change whose trace lane proved the first two: after it lands, those two lines are ticked, each naming the lane's record, and the third is not (44717.630833ms)
+  AssertionError [ERR_ASSERTION]: the landing ticked #9601.aaa6fd01, the third criterion of #9601 ("`fixture-bench` stays within its p50 budget on a reference Mac"), which the trace lane left open
+  #9601's body after a668b81ec8856aedaf7461975b808a1c6e97d98f landed:
+  A fixture issue for #1835.
+  
+  ### Acceptance criteria
+  - [x] The sum of two numbers is their total
+    - proven by the trace lane's record `949288e5a3392225730fed2de10afba1897df320-trace.json`
+  - [x] Half a number is it divided by two
+    - proven by the trace lane's record `949288e5a3392225730fed2de10afba1897df320-trace.json`
+  - [x] `fixture-bench` stays within its p50 budget on a reference Mac
+    - proven by the trace lane's record `949288e5a3392225730fed2de10afba1897df320-trace.json`
+  
+  ### Proof
+  The issue's body before and after the landing.
+  
+  records:
+  {"lane":"budget-window 15ce60168ba093f5303b62922ffdaeb9cf1f8e9b","state":"PASS","host":"<host>","platform":"darwin-arm64","tree":"4d58271320d5d46b47a8000830cd7e61fb4a22ed","tests":[{"id":"fixture-bench","state":"PASS"}],"commit":"15ce60168ba093f5303b62922ffdaeb9cf1f8e9b","base":"10695e38d5fe67f09649027c6caab798b131c6ea","unmeasured":[],"notReached":[]}
+  {"lane":"trace","state":"PASS","host":"<host>","platform":"darwin-arm64","tree":"4d58271320d5d46b47a8000830cd7e61fb4a22ed","tests":[{"id":"#9602.c8ae54e8","state":"PASS"},{"id":"#9602.78d9ff43","state":"PASS"},{"id":"#9602.db36b607","state":"INCONCLUSIVE","note":"no tagged test ran, passed and failed on a wrong program"}]}
+  {"lane":"budget-window a668b81ec8856aedaf7461975b808a1c6e97d98f","state":"PASS","host":"<host>","platform":"darwin-arm64","tree":"949288e5a3392225730fed2de10afba1897df320","tests":[{"id":"fixture-bench","state":"PASS"}],"commit":"a668b81ec8856aedaf7461975b808a1c6e97d98f","base":"10695e38d5fe67f09649027c6caab798b131c6ea","unmeasured":[],"notReached":[]}
+  {"lane":"trace","state":"PASS","host":"<host>","platform":"darwin-arm64","tree":"949288e5a3392225730fed2de10afba1897df320","tests":[{"id":"#9601.c8ae54e8","state":"PASS"},{"id":"#9601.78d9ff43","state":"PASS"},{"id":"#9601.aaa6fd01","state":"INCONCLUSIVE","note":"no tagged test ran, passed and failed on a wrong program"}]}
+  gh calls:
+  ["issue","view","9601","--json","body","-q",".body"]
+  ["issue","view","9602","--json","body","-q",".body"]
+  ["issue","view","9601","--json","state,body"]
+  ["issue","edit","9601","--body","A fixture issue for #1835.\n\n### Acceptance criteria\n- [x] The sum of two numbers is their total\n  - proven by the trace lane's record `949288e5a3392225730fed2de10afba1897df320-trace.json`\n- [x] Half a number is it divided by two\n  - proven by the trace lane's record `949288e5a3392225730fed2de10afba1897df320-trace.json`\n- [x] `fixture-bench` stays within its p50 budget on a reference Mac\n  - proven by the trace lane's record `949288e5a3392225730fed2de10afba1897df320-trace.json`\n\n### Proof\nThe issue's body before and after the landing.\n"]
+  ["issue","view","9602","--json","state,body"]
+  ["issue","edit","9602","--body","A fixture issue for #1835.\n\n### Acceptance criteria\n- [x] The sum of two numbers is their total\n  - proven by the trace lane's record `4d58271320d5d46b47a8000830cd7e61fb4a22ed-trace.json`\n- [x] Half a number is it divided by two\n  - proven by the trace lane's record `4d58271320d5d46b47a8000830cd7e61fb4a22ed-trace.json`\n- [x] Doubling a number multiplies it by two\n  - proven by the trace lane's record `4d58271320d5d46b47a8000830cd7e61fb4a22ed-trace.json`\n\n### Proof\nThe issue's body before and after the landing.\n"]
+  throttle log:
+  {"at":"2026-11-16T19:30:46.043Z","event":"granted","class":"timed","grant":"top-level","id":"e54e67bfd35b7273","pid":44218,"index":1,"load":2,"cores":18,"wait":5}
+  {"at":"2026-11-16T19:30:46.044Z","event":"window-open","id":"e54e67bfd35b7273","pid":44218}
+  {"at":"2026-11-16T19:30:46.332Z","event":"window-close","id":"e54e67bfd35b7273","pid":44218}
+  {"at":"2026-11-16T19:30:46.333Z","event":"released","class":"timed","id":"e54e67bfd35b7273","pid":44218}
+  {"at":"2026-11-16T19:30:56.106Z","event":"granted","class":"timed","grant":"top-level","id":"9528e4f22e0fe711","pid":47231,"index":1,"load":2,"cores":18,"wait":5}
+  {"at":"2026-11-16T19:30:56.107Z","event":"window-open","id":"9528e4f22e0fe711","pid":47231}
+  {"at":"2026-11-16T19:31:23.459Z","event":"window-close","id":"9528e4f22e0fe711","pid":47231}
+  {"at":"2026-11-16T19:31:23.492Z","event":"released","class":"timed","id":"9528e4f22e0fe711","pid":47231}
+  samples: 96
+  exit 0
+  stdout:
+  NOTE budget-window: no task of 1944e3b7f6479d29e00dbd81518c0fca709243a9 could be placed, so each runs: Cannot find package 'typescript' imported from <tmp>/deep-1116-61WAJF/mac/scripts/affected.mjs
+  PASS budget-window: a668b81ec8856aedaf7461975b808a1c6e97d98f against 10695e38d5fe67f09649027c6caab798b131c6ea, 1 tasks run, 0 not reached
+  NOTE budget-window: no task of 315f407695e412b6bc3444774b5d6b05ecd5a75e could be placed, so each runs: Cannot find package 'typescript' imported from <tmp>/deep-1116-61WAJF/mac/scripts/affected.mjs
+  PASS budget-window: 15ce60168ba093f5303b62922ffdaeb9cf1f8e9b against 10695e38d5fe67f09649027c6caab798b131c6ea, 1 tasks run, 0 not reached
+  PASS budget-window: 2 commits measured up to 15ce60168ba093f5303b62922ffdaeb9cf1f8e9b
+  
+  stderr:
+  
+      at TestContext.<anonymous> (file://<base checkout>/tests/acceptance/1835/window.test.mjs:66:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1835/window.test.mjs:71:1
+✖ #1835.5f2ccf69 with the third criterion a budget, a passing window closes the fixture issue, naming its commit (1.709042ms)
+  AssertionError [ERR_ASSERTION]: a passing window left #9601 open, though the trace lane proved its first two criteria and the task names its third, a budget
+  A fixture issue for #1835.
+  
+  ### Acceptance criteria
+  - [x] The sum of two numbers is their total
+    - proven by the trace lane's record `949288e5a3392225730fed2de10afba1897df320-trace.json`
+  - [x] Half a number is it divided by two
+    - proven by the trace lane's record `949288e5a3392225730fed2de10afba1897df320-trace.json`
+  - [x] `fixture-bench` stays within its p50 budget on a reference Mac
+    - proven by the trace lane's record `949288e5a3392225730fed2de10afba1897df320-trace.json`
+  
+  ### Proof
+  The issue's body before and after the landing.
+  
+  records:
+  {"lane":"budget-window 15ce60168ba093f5303b62922ffdaeb9cf1f8e9b","state":"PASS","host":"<host>","platform":"darwin-arm64","tree":"4d58271320d5d46b47a8000830cd7e61fb4a22ed","tests":[{"id":"fixture-bench","state":"PASS"}],"commit":"15ce60168ba093f5303b62922ffdaeb9cf1f8e9b","base":"10695e38d5fe67f09649027c6caab798b131c6ea","unmeasured":[],"notReached":[]}
+  {"lane":"trace","state":"PASS","host":"<host>","platform":"darwin-arm64","tree":"4d58271320d5d46b47a8000830cd7e61fb4a22ed","tests":[{"id":"#9602.c8ae54e8","state":"PASS"},{"id":"#9602.78d9ff43","state":"PASS"},{"id":"#9602.db36b607","state":"INCONCLUSIVE","note":"no tagged test ran, passed and failed on a wrong program"}]}
+  {"lane":"budget-window a668b81ec8856aedaf7461975b808a1c6e97d98f","state":"PASS","host":"<host>","platform":"darwin-arm64","tree":"949288e5a3392225730fed2de10afba1897df320","tests":[{"id":"fixture-bench","state":"PASS"}],"commit":"a668b81ec8856aedaf7461975b808a1c6e97d98f","base":"10695e38d5fe67f09649027c6caab798b131c6ea","unmeasured":[],"notReached":[]}
+  {"lane":"trace","state":"PASS","host":"<host>","platform":"darwin-arm64","tree":"949288e5a3392225730fed2de10afba1897df320","tests":[{"id":"#9601.c8ae54e8","state":"PASS"},{"id":"#9601.78d9ff43","state":"PASS"},{"id":"#9601.aaa6fd01","state":"INCONCLUSIVE","note":"no tagged test ran, passed and failed on a wrong program"}]}
+  gh calls:
+  ["issue","view","9601","--json","body","-q",".body"]
+  ["issue","view","9602","--json","body","-q",".body"]
+  ["issue","view","9601","--json","state,body"]
+  ["issue","edit","9601","--body","A fixture issue for #1835.\n\n### Acceptance criteria\n- [x] The sum of two numbers is their total\n  - proven by the trace lane's record `949288e5a3392225730fed2de10afba1897df320-trace.json`\n- [x] Half a number is it divided by two\n  - proven by the trace lane's record `949288e5a3392225730fed2de10afba1897df320-trace.json`\n- [x] `fixture-bench` stays within its p50 budget on a reference Mac\n  - proven by the trace lane's record `949288e5a3392225730fed2de10afba1897df320-trace.json`\n\n### Proof\nThe issue's body before and after the landing.\n"]
+  ["issue","view","9602","--json","state,body"]
+  ["issue","edit","9602","--body","A fixture issue for #1835.\n\n### Acceptance criteria\n- [x] The sum of two numbers is their total\n  - proven by the trace lane's record `4d58271320d5d46b47a8000830cd7e61fb4a22ed-trace.json`\n- [x] Half a number is it divided by two\n  - proven by the trace lane's record `4d58271320d5d46b47a8000830cd7e61fb4a22ed-trace.json`\n- [x] Doubling a number multiplies it by two\n  - proven by the trace lane's record `4d58271320d5d46b47a8000830cd7e61fb4a22ed-trace.json`\n\n### Proof\nThe issue's body before and after the landing.\n"]
+  throttle log:
+  {"at":"2026-11-16T19:30:46.043Z","event":"granted","class":"timed","grant":"top-level","id":"e54e67bfd35b7273","pid":44218,"index":1,"load":2,"cores":18,"wait":5}
+  {"at":"2026-11-16T19:30:46.044Z","event":"window-open","id":"e54e67bfd35b7273","pid":44218}
+  {"at":"2026-11-16T19:30:46.332Z","event":"window-close","id":"e54e67bfd35b7273","pid":44218}
+  {"at":"2026-11-16T19:30:46.333Z","event":"released","class":"timed","id":"e54e67bfd35b7273","pid":44218}
+  {"at":"2026-11-16T19:30:56.106Z","event":"granted","class":"timed","grant":"top-level","id":"9528e4f22e0fe711","pid":47231,"index":1,"load":2,"cores":18,"wait":5}
+  {"at":"2026-11-16T19:30:56.107Z","event":"window-open","id":"9528e4f22e0fe711","pid":47231}
+  {"at":"2026-11-16T19:31:23.459Z","event":"window-close","id":"9528e4f22e0fe711","pid":47231}
+  {"at":"2026-11-16T19:31:23.492Z","event":"released","class":"timed","id":"9528e4f22e0fe711","pid":47231}
+  samples: 96
+  exit 0
+  stdout:
+  NOTE budget-window: no task of 1944e3b7f6479d29e00dbd81518c0fca709243a9 could be placed, so each runs: Cannot find package 'typescript' imported from <tmp>/deep-1116-61WAJF/mac/scripts/affected.mjs
+  PASS budget-window: a668b81ec8856aedaf7461975b808a1c6e97d98f against 10695e38d5fe67f09649027c6caab798b131c6ea, 1 tasks run, 0 not reached
+  NOTE budget-window: no task of 315f407695e412b6bc3444774b5d6b05ecd5a75e could be placed, so each runs: Cannot find package 'typescript' imported from <tmp>/deep-1116-61WAJF/mac/scripts/affected.mjs
+  PASS budget-window: 15ce60168ba093f5303b62922ffdaeb9cf1f8e9b against 10695e38d5fe67f09649027c6caab798b131c6ea, 1 tasks run, 0 not reached
+  PASS budget-window: 2 commits measured up to 15ce60168ba093f5303b62922ffdaeb9cf1f8e9b
+  
+  stderr:
+  
+  
+  'OPEN' !== 'CLOSED'
+  
+      at TestContext.<anonymous> (file://<base checkout>/tests/acceptance/1835/window.test.mjs:75:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'OPEN',
+    expected: 'CLOSED',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1835/window.test.mjs:79:1
+✖ #1835.5f2ccf69 with the third criterion unproven and not a budget, the fixture issue stays open, naming it (0.901917ms)
+  AssertionError [ERR_ASSERTION]: the record of #9602's commit doesn't name #9602.db36b607, and only it, as what keeps the issue open: {"lane":"budget-window 15ce60168ba093f5303b62922ffdaeb9cf1f8e9b","state":"PASS","host":"<host>","platform":"darwin-arm64","tree":"4d58271320d5d46b47a8000830cd7e61fb4a22ed","tests":[{"id":"fixture-bench","state":"PASS"}],"commit":"15ce60168ba093f5303b62922ffdaeb9cf1f8e9b","base":"10695e38d5fe67f09649027c6caab798b131c6ea","unmeasured":[],"notReached":[]}
+  A fixture issue for #1835.
+  
+  ### Acceptance criteria
+  - [x] The sum of two numbers is their total
+    - proven by the trace lane's record `4d58271320d5d46b47a8000830cd7e61fb4a22ed-trace.json`
+  - [x] Half a number is it divided by two
+    - proven by the trace lane's record `4d58271320d5d46b47a8000830cd7e61fb4a22ed-trace.json`
+  - [x] Doubling a number multiplies it by two
+    - proven by the trace lane's record `4d58271320d5d46b47a8000830cd7e61fb4a22ed-trace.json`
+  
+  ### Proof
+  The issue's body before and after the landing.
+  
+  + actual - expected
+  
+  + []
+  - [
+  -   '#9602.db36b607'
+  - ]
+  
+      at TestContext.<anonymous> (file://<base checkout>/tests/acceptance/1835/window.test.mjs:83:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [],
+    expected: [ '#9602.db36b607' ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+exit 1 | 11:31:23 | load { 14.32 12.07 10.97 }
+===== twin names-no-record (the change's proof.mjs, the twin's budget-window.mjs) | 11:31:23 | load { 14.32 12.07 10.97 }
+✖ #1835.fb2cf14f a fixture issue with three criteria and a Part of change whose trace lane proved the first two: after it lands, those two lines are ticked, each naming the lane's record, and the third is not (79276.865042ms)
+✔ #1835.5f2ccf69 with the third criterion a budget, a passing window closes the fixture issue, naming its commit (2.267709ms)
+✔ #1835.5f2ccf69 with the third criterion unproven and not a budget, the fixture issue stays open, naming it (1.020625ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 2
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 79443.429083
+
+✖ failing tests:
+
+test at tests/acceptance/1835/window.test.mjs:51:1
+✖ #1835.fb2cf14f a fixture issue with three criteria and a Part of change whose trace lane proved the first two: after it lands, those two lines are ticked, each naming the lane's record, and the third is not (79276.865042ms)
+  AssertionError [ERR_ASSERTION]: the ticked line of #9601.c8ae54e8 doesn't name the lane's record caab29d57fc2aec9403331776b5876ad6094fb83-trace.json
+  #9601's body after 937fb5e4afcb1199c0d6e54d046175ee01cd53f7 landed:
+  A fixture issue for #1835.
+  
+  ### Acceptance criteria
+  - [x] The sum of two numbers is their total
+  - [x] Half a number is it divided by two
+  - [ ] `fixture-bench` stays within its p50 budget on a reference Mac
+  
+  ### Proof
+  The issue's body before and after the landing.
+  
+  records:
+  {"lane":"budget-window 2167a6b2688117201d50d4d69da1795822f448d5","state":"PASS","host":"<host>","platform":"darwin-arm64","tree":"4565ec8cd6f93efb5f5c351ac30412c9aed7270d","tests":[{"id":"fixture-bench","state":"PASS"}],"commit":"2167a6b2688117201d50d4d69da1795822f448d5","base":"4a950fcf10105e75a3f83e661fea679f8906f319","unmeasured":["#9602.db36b607"],"notReached":[]}
+  {"lane":"trace","state":"PASS","host":"<host>","platform":"darwin-arm64","tree":"4565ec8cd6f93efb5f5c351ac30412c9aed7270d","tests":[{"id":"#9602.c8ae54e8","state":"PASS"},{"id":"#9602.78d9ff43","state":"PASS"},{"id":"#9602.db36b607","state":"INCONCLUSIVE","note":"no tagged test ran, passed and failed on a wrong program"}]}
+  {"lane":"budget-window 937fb5e4afcb1199c0d6e54d046175ee01cd53f7","state":"PASS","host":"<host>","platform":"darwin-arm64","tree":"caab29d57fc2aec9403331776b5876ad6094fb83","tests":[{"id":"fixture-bench","state":"PASS"}],"commit":"937fb5e4afcb1199c0d6e54d046175ee01cd53f7","base":"4a950fcf10105e75a3f83e661fea679f8906f319","unmeasured":[],"notReached":[]}
+  {"lane":"trace","state":"PASS","host":"<host>","platform":"darwin-arm64","tree":"caab29d57fc2aec9403331776b5876ad6094fb83","tests":[{"id":"#9601.c8ae54e8","state":"PASS"},{"id":"#9601.78d9ff43","state":"PASS"},{"id":"#9601.aaa6fd01","state":"INCONCLUSIVE","note":"no tagged test ran, passed and failed on a wrong program"}]}
+  gh calls:
+  ["issue","view","9601","--json","body","-q",".body"]
+  ["issue","view","9602","--json","body","-q",".body"]
+  ["issue","view","9601","--json","state,body"]
+  ["issue","edit","9601","--body","A fixture issue for #1835.\n\n### Acceptance criteria\n- [x] The sum of two numbers is their total\n- [x] Half a number is it divided by two\n- [ ] `fixture-bench` stays within its p50 budget on a reference Mac\n\n### Proof\nThe issue's body before and after the landing.\n"]
+  ["issue","close","9601","--comment","The budget window measured 937fb5e4afcb1199c0d6e54d046175ee01cd53f7 against its merge base 4a950fcf10105e75a3f83e661fea679f8906f319: every budget passed, and a task names each criterion left open."]
+  ["issue","view","9602","--json","state,body"]
+  ["issue","edit","9602","--body","A fixture issue for #1835.\n\n### Acceptance criteria\n- [x] The sum of two numbers is their total\n- [x] Half a number is it divided by two\n- [ ] Doubling a number multiplies it by two\n\n### Proof\nThe issue's body before and after the landing.\n"]
+  throttle log:
+  {"at":"2026-11-16T19:31:29.199Z","event":"granted","class":"timed","grant":"top-level","id":"ef05dae911bbd1f1","pid":55379,"index":1,"load":2,"cores":18,"wait":5}
+  {"at":"2026-11-16T19:31:29.200Z","event":"window-open","id":"ef05dae911bbd1f1","pid":55379}
+  {"at":"2026-11-16T19:31:30.236Z","event":"window-close","id":"ef05dae911bbd1f1","pid":55379}
+  {"at":"2026-11-16T19:31:30.237Z","event":"released","class":"timed","id":"ef05dae911bbd1f1","pid":55379}
+  {"at":"2026-11-16T19:31:52.139Z","event":"granted","class":"timed","grant":"top-level","id":"1d282fec5649d2ba","pid":58923,"index":1,"load":2,"cores":18,"wait":5}
+  {"at":"2026-11-16T19:31:52.140Z","event":"window-open","id":"1d282fec5649d2ba","pid":58923}
+  {"at":"2026-11-16T19:32:42.934Z","event":"window-close","id":"1d282fec5649d2ba","pid":58923}
+  {"at":"2026-11-16T19:32:42.974Z","event":"released","class":"timed","id":"1d282fec5649d2ba","pid":58923}
+  samples: 96
+  exit 0
+  stdout:
+  NOTE budget-window: no task of 6d71ca3e68731444e968ee06e08d5fe760bf1e24 could be placed, so each runs: Cannot find package 'typescript' imported from <tmp>/deep-1116-IEgY8P/mac/scripts/affected.mjs
+  PASS budget-window: 937fb5e4afcb1199c0d6e54d046175ee01cd53f7 against 4a950fcf10105e75a3f83e661fea679f8906f319, 1 tasks run, 0 not reached
+  NOTE budget-window: no task of f80e6ba8c3b155434814aa5d1f4acb56c673a00a could be placed, so each runs: Cannot find package 'typescript' imported from <tmp>/deep-1116-IEgY8P/mac/scripts/affected.mjs
+  PASS budget-window: 2167a6b2688117201d50d4d69da1795822f448d5 against 4a950fcf10105e75a3f83e661fea679f8906f319, 1 tasks run, 0 not reached
+  PASS budget-window: 2 commits measured up to 2167a6b2688117201d50d4d69da1795822f448d5
+  
+  stderr:
+  
+      at TestContext.<anonymous> (file://<base checkout>/tests/acceptance/1835/window.test.mjs:67:58)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+exit 1 | 11:32:43 | load { 9.36 11.02 10.66 }
+===== twin names-on-the-line (the change's proof.mjs, the twin's budget-window.mjs) | 11:32:43 | load { 9.36 11.02 10.66 }
+✖ #1835.fb2cf14f a fixture issue with three criteria and a Part of change whose trace lane proved the first two: after it lands, those two lines are ticked, each naming the lane's record, and the third is not (50028.148417ms)
+✔ #1835.5f2ccf69 with the third criterion a budget, a passing window closes the fixture issue, naming its commit (2.218166ms)
+✔ #1835.5f2ccf69 with the third criterion unproven and not a budget, the fixture issue stays open, naming it (1.263208ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 2
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 50527.08425
+
+✖ failing tests:
+
+test at tests/acceptance/1835/window.test.mjs:51:1
+✖ #1835.fb2cf14f a fixture issue with three criteria and a Part of change whose trace lane proved the first two: after it lands, those two lines are ticked, each naming the lane's record, and the third is not (50028.148417ms)
+  AssertionError [ERR_ASSERTION]: #9601 no longer holds its three criteria, each with the text and the ID it had before the landing
+  #9601's body after d2c172e74ee46b5428559b74dda93e53df308e9a landed:
+  A fixture issue for #1835.
+  
+  ### Acceptance criteria
+  - [x] The sum of two numbers is their total (proven by the trace lane's record `fbd2641731bf6d1281b7137b0c40fcaa5f2b5e46-trace.json`)
+  - [x] Half a number is it divided by two (proven by the trace lane's record `fbd2641731bf6d1281b7137b0c40fcaa5f2b5e46-trace.json`)
+  - [ ] `fixture-bench` stays within its p50 budget on a reference Mac
+  
+  ### Proof
+  The issue's body before and after the landing.
+  
+  records:
+  {"lane":"budget-window f3d996ab098f6f63a3319987c5664369a3f6188e","state":"PASS","host":"<host>","platform":"darwin-arm64","tree":"8d3d05763ca4668d151ff3890f14020843079628","tests":[{"id":"fixture-bench","state":"PASS"}],"commit":"f3d996ab098f6f63a3319987c5664369a3f6188e","base":"4177671ebb0827e6cd0ec9bf69da9d18c0585194","unmeasured":["#9602.db36b607"],"notReached":[]}
+  {"lane":"trace","state":"PASS","host":"<host>","platform":"darwin-arm64","tree":"8d3d05763ca4668d151ff3890f14020843079628","tests":[{"id":"#9602.c8ae54e8","state":"PASS"},{"id":"#9602.78d9ff43","state":"PASS"},{"id":"#9602.db36b607","state":"INCONCLUSIVE","note":"no tagged test ran, passed and failed on a wrong program"}]}
+  {"lane":"budget-window d2c172e74ee46b5428559b74dda93e53df308e9a","state":"PASS","host":"<host>","platform":"darwin-arm64","tree":"fbd2641731bf6d1281b7137b0c40fcaa5f2b5e46","tests":[{"id":"fixture-bench","state":"PASS"}],"commit":"d2c172e74ee46b5428559b74dda93e53df308e9a","base":"4177671ebb0827e6cd0ec9bf69da9d18c0585194","unmeasured":[],"notReached":[]}
+  {"lane":"trace","state":"PASS","host":"<host>","platform":"darwin-arm64","tree":"fbd2641731bf6d1281b7137b0c40fcaa5f2b5e46","tests":[{"id":"#9601.c8ae54e8","state":"PASS"},{"id":"#9601.78d9ff43","state":"PASS"},{"id":"#9601.aaa6fd01","state":"INCONCLUSIVE","note":"no tagged test ran, passed and failed on a wrong program"}]}
+  gh calls:
+  ["issue","view","9601","--json","body","-q",".body"]
+  ["issue","view","9602","--json","body","-q",".body"]
+  ["issue","view","9601","--json","state,body"]
+  ["issue","edit","9601","--body","A fixture issue for #1835.\n\n### Acceptance criteria\n- [x] The sum of two numbers is their total (proven by the trace lane's record `fbd2641731bf6d1281b7137b0c40fcaa5f2b5e46-trace.json`)\n- [x] Half a number is it divided by two (proven by the trace lane's record `fbd2641731bf6d1281b7137b0c40fcaa5f2b5e46-trace.json`)\n- [ ] `fixture-bench` stays within its p50 budget on a reference Mac\n\n### Proof\nThe issue's body before and after the landing.\n"]
+  ["issue","close","9601","--comment","The budget window measured d2c172e74ee46b5428559b74dda93e53df308e9a against its merge base 4177671ebb0827e6cd0ec9bf69da9d18c0585194: every budget passed, and a task names each criterion left open."]
+  ["issue","view","9602","--json","state,body"]
+  ["issue","edit","9602","--body","A fixture issue for #1835.\n\n### Acceptance criteria\n- [x] The sum of two numbers is their total (proven by the trace lane's record `8d3d05763ca4668d151ff3890f14020843079628-trace.json`)\n- [x] Half a number is it divided by two (proven by the trace lane's record `8d3d05763ca4668d151ff3890f14020843079628-trace.json`)\n- [ ] Doubling a number multiplies it by two\n\n### Proof\nThe issue's body before and after the landing.\n"]
+  throttle log:
+  {"at":"2026-11-16T19:32:48.354Z","event":"granted","class":"timed","grant":"top-level","id":"284f684e27183c88","pid":67623,"index":1,"load":2,"cores":18,"wait":5}
+  {"at":"2026-11-16T19:32:48.356Z","event":"window-open","id":"284f684e27183c88","pid":67623}
+  {"at":"2026-11-16T19:32:48.560Z","event":"window-close","id":"284f684e27183c88","pid":67623}
+  {"at":"2026-11-16T19:32:48.561Z","event":"released","class":"timed","id":"284f684e27183c88","pid":67623}
+  {"at":"2026-11-16T19:33:04.545Z","event":"granted","class":"timed","grant":"top-level","id":"3d12396c6b31bb74","pid":71919,"index":1,"load":2,"cores":18,"wait":5}
+  {"at":"2026-11-16T19:33:04.546Z","event":"window-open","id":"3d12396c6b31bb74","pid":71919}
+  {"at":"2026-11-16T19:33:33.584Z","event":"window-close","id":"3d12396c6b31bb74","pid":71919}
+  {"at":"2026-11-16T19:33:33.629Z","event":"released","class":"timed","id":"3d12396c6b31bb74","pid":71919}
+  samples: 96
+  exit 0
+  stdout:
+  NOTE budget-window: no task of f45432a14523c5f7b6184141ed9a007de77585e5 could be placed, so each runs: Cannot find package 'typescript' imported from <tmp>/deep-1116-wpsqOr/mac/scripts/affected.mjs
+  PASS budget-window: d2c172e74ee46b5428559b74dda93e53df308e9a against 4177671ebb0827e6cd0ec9bf69da9d18c0585194, 1 tasks run, 0 not reached
+  NOTE budget-window: no task of 5bf0a27384e050fbbc7f174a1468521c5561c67c could be placed, so each runs: Cannot find package 'typescript' imported from <tmp>/deep-1116-wpsqOr/mac/scripts/affected.mjs
+  PASS budget-window: f3d996ab098f6f63a3319987c5664369a3f6188e against 4177671ebb0827e6cd0ec9bf69da9d18c0585194, 1 tasks run, 0 not reached
+  PASS budget-window: 2 commits measured up to f3d996ab098f6f63a3319987c5664369a3f6188e
+  
+  stderr:
+  
+  + actual - expected
+  
+    [
+  +   '#9601.ecee120f',
+  +   '#9601.e27d4480',
+  -   '#9601.c8ae54e8',
+  -   '#9601.78d9ff43',
+      '#9601.aaa6fd01'
+    ]
+  
+      at TestContext.<anonymous> (file://<base checkout>/tests/acceptance/1835/window.test.mjs:64:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ '#9601.ecee120f', '#9601.e27d4480', '#9601.aaa6fd01' ],
+    expected: [ '#9601.c8ae54e8', '#9601.78d9ff43', '#9601.aaa6fd01' ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+exit 1 | 11:33:33 | load { 10.65 11.22 10.77 }
+===== twin closes-unproven (the change's proof.mjs, the twin's budget-window.mjs) | 11:33:33 | load { 10.65 11.22 10.77 }
+✔ #1835.fb2cf14f a fixture issue with three criteria and a Part of change whose trace lane proved the first two: after it lands, those two lines are ticked, each naming the lane's record, and the third is not (290998.346208ms)
+✔ #1835.5f2ccf69 with the third criterion a budget, a passing window closes the fixture issue, naming its commit (3.453208ms)
+✖ #1835.5f2ccf69 with the third criterion unproven and not a budget, the fixture issue stays open, naming it (1.683458ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 2
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 291833.146625
+
+✖ failing tests:
+
+test at tests/acceptance/1835/window.test.mjs:79:1
+✖ #1835.5f2ccf69 with the third criterion unproven and not a budget, the fixture issue stays open, naming it (1.683458ms)
+  AssertionError [ERR_ASSERTION]: the window closed #9602, whose third criterion #9602.db36b607 ("Doubling a number multiplies it by two") no test and no task proves
+  records:
+  {"lane":"budget-window f0ed6e4fb0c6dd9b9fa94736e5cd7d68da93cc22","state":"PASS","host":"<host>","platform":"darwin-arm64","tree":"d4b0c7cf0978e2e79145fd8d3188072e343d3cd6","tests":[{"id":"fixture-bench","state":"PASS"}],"commit":"f0ed6e4fb0c6dd9b9fa94736e5cd7d68da93cc22","base":"5c8028c841e5ce89f09e84d5e207506c9d9e7f86","unmeasured":[],"notReached":[]}
+  {"lane":"trace","state":"PASS","host":"<host>","platform":"darwin-arm64","tree":"d4b0c7cf0978e2e79145fd8d3188072e343d3cd6","tests":[{"id":"#9601.c8ae54e8","state":"PASS"},{"id":"#9601.78d9ff43","state":"PASS"},{"id":"#9601.aaa6fd01","state":"INCONCLUSIVE","note":"no tagged test ran, passed and failed on a wrong program"}]}
+  {"lane":"budget-window 39d8e4b305f2f2a568857cdf4816ec37337bba61","state":"PASS","host":"<host>","platform":"darwin-arm64","tree":"fb963d3405dfe5030143202419420aedf69bb866","tests":[{"id":"fixture-bench","state":"PASS"}],"commit":"39d8e4b305f2f2a568857cdf4816ec37337bba61","base":"5c8028c841e5ce89f09e84d5e207506c9d9e7f86","unmeasured":["#9602.db36b607"],"notReached":[]}
+  {"lane":"trace","state":"PASS","host":"<host>","platform":"darwin-arm64","tree":"fb963d3405dfe5030143202419420aedf69bb866","tests":[{"id":"#9602.c8ae54e8","state":"PASS"},{"id":"#9602.78d9ff43","state":"PASS"},{"id":"#9602.db36b607","state":"INCONCLUSIVE","note":"no tagged test ran, passed and failed on a wrong program"}]}
+  gh calls:
+  ["issue","view","9601","--json","body","-q",".body"]
+  ["issue","view","9602","--json","body","-q",".body"]
+  ["issue","view","9601","--json","state,body"]
+  ["issue","edit","9601","--body","A fixture issue for #1835.\n\n### Acceptance criteria\n- [x] The sum of two numbers is their total\n  - proven by the trace lane's record `d4b0c7cf0978e2e79145fd8d3188072e343d3cd6-trace.json`\n- [x] Half a number is it divided by two\n  - proven by the trace lane's record `d4b0c7cf0978e2e79145fd8d3188072e343d3cd6-trace.json`\n- [ ] `fixture-bench` stays within its p50 budget on a reference Mac\n\n### Proof\nThe issue's body before and after the landing.\n"]
+  ["issue","close","9601","--comment","The budget window measured f0ed6e4fb0c6dd9b9fa94736e5cd7d68da93cc22 against its merge base 5c8028c841e5ce89f09e84d5e207506c9d9e7f86: every budget passed, and a task names each criterion left open."]
+  ["issue","view","9602","--json","state,body"]
+  ["issue","edit","9602","--body","A fixture issue for #1835.\n\n### Acceptance criteria\n- [x] The sum of two numbers is their total\n  - proven by the trace lane's record `fb963d3405dfe5030143202419420aedf69bb866-trace.json`\n- [x] Half a number is it divided by two\n  - proven by the trace lane's record `fb963d3405dfe5030143202419420aedf69bb866-trace.json`\n- [ ] Doubling a number multiplies it by two\n\n### Proof\nThe issue's body before and after the landing.\n"]
+  ["issue","close","9602","--comment","The budget window measured 39d8e4b305f2f2a568857cdf4816ec37337bba61 against its merge base 5c8028c841e5ce89f09e84d5e207506c9d9e7f86: every budget passed, and a task names each criterion left open."]
+  throttle log:
+  {"at":"2026-11-16T19:33:44.256Z","event":"granted","class":"timed","grant":"top-level","id":"c60a580ac5095ab8","pid":80182,"index":1,"load":2,"cores":18,"wait":5}
+  {"at":"2026-11-16T19:33:44.257Z","event":"window-open","id":"c60a580ac5095ab8","pid":80182}
+  {"at":"2026-11-16T19:33:44.629Z","event":"window-close","id":"c60a580ac5095ab8","pid":80182}
+  {"at":"2026-11-16T19:33:44.630Z","event":"released","class":"timed","id":"c60a580ac5095ab8","pid":80182}
+  {"at":"2026-11-16T19:34:34.697Z","event":"granted","class":"timed","grant":"top-level","id":"1761ab26c80a586a","pid":87676,"index":1,"load":2,"cores":18,"wait":5}
+  {"at":"2026-11-16T19:34:34.698Z","event":"window-open","id":"1761ab26c80a586a","pid":87676}
+  {"at":"2026-11-16T19:38:25.850Z","event":"window-close","id":"1761ab26c80a586a","pid":87676}
+  {"at":"2026-11-16T19:38:25.911Z","event":"released","class":"timed","id":"1761ab26c80a586a","pid":87676}
+  samples: 96
+  exit 0
+  stdout:
+  NOTE budget-window: no task of 3443bb290f2ff176df1de2553e089cd09579206a could be placed, so each runs: Cannot find package 'typescript' imported from <tmp>/deep-1116-Tc95gI/mac/scripts/affected.mjs
+  PASS budget-window: f0ed6e4fb0c6dd9b9fa94736e5cd7d68da93cc22 against 5c8028c841e5ce89f09e84d5e207506c9d9e7f86, 1 tasks run, 0 not reached
+  NOTE budget-window: no task of 4c5877beddf7c8a195fab104a5b543dacf1eea77 could be placed, so each runs: Cannot find package 'typescript' imported from <tmp>/deep-1116-Tc95gI/mac/scripts/affected.mjs
+  PASS budget-window: 39d8e4b305f2f2a568857cdf4816ec37337bba61 against 5c8028c841e5ce89f09e84d5e207506c9d9e7f86, 1 tasks run, 0 not reached
+  PASS budget-window: 2 commits measured up to 39d8e4b305f2f2a568857cdf4816ec37337bba61
+  
+  stderr:
+  
+  
+  'CLOSED' !== 'OPEN'
+  
+      at TestContext.<anonymous> (file://<base checkout>/tests/acceptance/1835/window.test.mjs:82:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'CLOSED',
+    expected: 'OPEN',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+exit 1 | 11:38:26 | load { 68.58 30.80 18.49 }

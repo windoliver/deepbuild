@@ -1,0 +1,83 @@
+#192 packs suite at its base, 06e231702 ("Merge pull request #2735 …"), on this Mac (macOS arm64), November 16, 2026.
+
+WHAT RAN
+
+1. The fixture assembler. #238's (tests/acceptance/238/wat), which the brief named, doesn't build at the base:
+
+     $ cargo build --locked --manifest-path tests/acceptance/238/wat/Cargo.toml --target-dir target/acceptance-238-wat
+     warning: patch `citationberg v0.7.0 (…)` was not used in the crate graph      (and 10 more such lines)
+     error: cannot update the lock file tests/acceptance/238/wat/Cargo.lock because --locked was passed to prevent this
+     exit 101
+
+   Its lockfile lists 7 [[patch.unused]] entries; the repo's .cargo/config.toml now patches 11 crates. #533's lists the
+   same 7. #544's (tests/acceptance/544/wat) lists the 11 and builds: "Finished `dev` profile … in 14.08s", exit 0.
+   The suite uses #544's.
+
+2. Every fixture, assembled by #544's assembler (exit 0) and run as written in Node 24's own WebAssembly engine, with
+   params and assets laid out as the README's surface says (a dev script, not committed):
+
+     quad          {"trap":null,"n":4,"ni":6,"bytes":65536}
+     trap_max      n=0 null, n=1 null, n=4 null, n=15 null, n=16 unreachable, n=17 null
+     ceiling       trap null, n 4, ni 6, memory 268435456 bytes, out_at 268431360
+     memory_2mib   trap null, n 4, ni 6, memory 2097152 bytes, byte 2097151 = 1
+     voxel_mesher  with no asset: unreachable; with the 32^3 grid holding the block [11, 21)^3: trap null, n 2400,
+                   ni 3600, bounds [2.75, 2.75, 2.75] to [5.25, 5.25, 5.25], 0 triangles wound against their normal,
+                   0 directed edges without exactly one opposite (closed), 91208 bytes,
+                   sha256 aeedba2ffa2107bf2270fef3072aded31c3f39ca3afd179a35384a2750e4c951
+
+3. npx tsc -p tests/acceptance/192/packs/tsconfig.json: exit 0. `vitest list --root tests/acceptance/192/packs`
+   collects the 4 tests (outside, pack-check, budget-ceilings, budget-fields), exit 0.
+
+WHAT DIDN'T RUN, AND WHY
+
+The deep-show legs. Each needs deep-show `full,test-mesh-item` built at the base (and deep-sandbox, for the fixtures
+through the base's own check, rewrite and runner), and builds on this Mac take the one build grant
+(scripts/throttle.mjs build). The request was queued at 14:35 PST behind ten others; at 17:05 it was still third in
+line, the grant held since 15:33 by another session's deep-show build, the load averages 924, 938 and 949 on 18
+cores. It was withdrawn, as the coordinating session asked, rather than wait hours. So no deep-show reply below was
+observed; each first failure is read from the base's code.
+
+THE FIRST FAILURE OF EACH FILE AT THE BASE (read from the code, not run)
+
+outside.test.ts (#192.562b7ffc)
+  The Node leg passes (above). At the base nothing checks a providers entry at install:
+  crates/deep-canvas/src/document/packs.rs only refuses `providers` with module_missing in a build without the sandbox
+  module, and deep-show's Host::vet (crates/deep-show/src/sandbox.rs) reads only layouts, presets and entries. So
+  test/checkkinds, test/builders and test/operators install, and the test fails at:
+    each pack whose providers entry names a check kind, a builder or an operator is refused at install, with an issue
+    at providers/mesher/<key>: expected [] to equal three rows "test/<pack>@1.0.0 (providers.mesher.<key>): outcome
+    installed, issues []"
+
+pack-check.test.ts (#192.ac23e07b)
+  The Node leg passes. test/trapmaxok installs; its document's check runs trap_max at n = 0 (the base copies no params
+  into memory) to its quad with no trap, as #238's seal test shows a provider document presenting with no error. Then
+  test/trapmax installs too (no pack-check run at the base), and the test fails at:
+    test/trapmax@1.0.0 (range [1, 16]) fails its pack check: outcome installed, issues []: expected 'installed' to be
+    'refused'
+
+budget-ceilings.test.ts (#192.e8dea9d2)
+  The Node leg passes. `failures(here)` is non-empty at the base, its first entry naming budget/fuel:
+    test/fuelover@1.0.0, whose provider fuel_over states budget {fuel: 10,000,000,001}, isn't refused at check naming
+    the provider and budget/fuel (an issue at providers/fuel_over/budget/fuel): outcome installed, issues []
+  then memoryover's (budget/memory), and ceilings.at_ceiling's: Host::rewrite checks every provider under
+  Budget::of(role, None, 0), 64 MiB, so the 4,096-page program is refused at the document's check (a `refused` trap).
+  The test fails at "this build meets criterion 12". The merge-base leg after it (which, at the base, is the same
+  build) isn't reached.
+
+budget-fields.test.ts (#192.e1a673a1)
+  The Node leg passes. `failures(here)` is non-empty, its first entry the memory trap's:
+    test/memoryone@1.0.0's provider grows, which states budget {memory: 1} and holds a 2 MiB memory, doesn't trap on
+    memory at its pack check, naming the provider (an issue at providers/grows whose actual.trap.kind is memory):
+    outcome installed, issues []
+  then memoryneg's (budget/memory) and stackbig's (budget/stack). The test fails at "this build meets criterion 13".
+
+THE MERGE-BASE LEGS (what they expect of the base, read from the same code; not run)
+
+budget-ceilings: both refused packs install (no providers check); at their documents' check Host::make runs each:
+Budget::of takes fuel 10,000,000,001 as given and ignores `memory` (it reads `memory_mib`), so both write their quad,
+trap null; runs rises by 2 (ceilings' program is refused before its run, so not 3). failures(base)[0] names budget/fuel.
+
+budget-fields: memoryone and stackbig install; memoryone.grows runs under the 64 MiB default (its 32 pages pass the
+check) and writes its quad, trap null; stackbig.deep_stack runs, Budget::of clamping 5,000,000,000 to 2,097,151 under
+the native stack (since 9b9532449; the issue's 705,032,704 is the code before it, so the test doesn't assert it); the
+installs run nothing. failures(base)[0] holds "trap on memory".
