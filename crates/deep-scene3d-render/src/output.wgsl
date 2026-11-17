@@ -17,6 +17,8 @@ struct Tone {
     graded: u32,
     // Where the curves end (#177): 1 for SDR, the display's headroom for the HDR surface.
     top: f32,
+    // #458's planted output: 1 applies the exposure after the tone map.
+    late: u32,
     // The white balance's rows on linear sRGB.
     wb0: vec4<f32>,
     wb1: vec4<f32>,
@@ -176,10 +178,16 @@ fn tone_fs(@builtin(position) p: vec4<f32>) -> @location(0) vec4<f32> {
 // to `top`: linear light before the encode.
 fn finish_linear(value: vec3<f32>, top: f32) -> vec3<f32> {
     var linear = value * tone.exposure;
+    if tone.late == 1u {
+        linear = value;
+    }
     if tone.graded == 1u {
         linear = vec3<f32>(dot(tone.wb0.xyz, linear), dot(tone.wb1.xyz, linear), dot(tone.wb2.xyz, linear));
     }
     var mapped = tone_curve(linear, top);
+    if tone.late == 1u {
+        mapped = mapped * tone.exposure;
+    }
     if tone.graded == 1u {
         mapped = clamp(cdl(mapped, top), vec3<f32>(0.0), vec3<f32>(top));
     }

@@ -3,6 +3,7 @@
 // tests/acceptance/458/suite: A lane's runner). It decides no verdict of the suite's: it draws and reports.
 //
 //   node scripts/parity-runner.mjs quick
+//   node scripts/parity-runner.mjs full
 //
 // The quick lane runs the canvas kit's fixtures through the built `deep-show run`, on Vello CPU and wgpu's noop
 // backend, with no GPU: each fixture's own cases, then its planted-fault twins. A twin is one of three kinds: a
@@ -10,6 +11,10 @@
 // `value`); a planted fault in the document (`path` and `value`), judged as the fixture is; or a planted program
 // (`planted`, with the kit `part` it breaks), for a scene one of the kit's own parts runs. A binary that isn't built
 // answers BLOCKED for every request.
+//
+// The full lane runs the GPU fixtures through the built `deep-gpu run`'s `full_lane` call, on the adapter the device
+// reports: the rendering relations, each once, then all of them once under each planted program a twin names
+// (`planted`). On a CPU or software adapter the binary answers BLOCKED for each, naming the adapter.
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
@@ -19,13 +24,43 @@ import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const [lane] = process.argv.slice(2);
-if (lane !== 'quick') {
-  console.error('usage: node scripts/parity-runner.mjs quick');
+if (lane !== 'quick' && lane !== 'full') {
+  console.error('usage: node scripts/parity-runner.mjs quick|full');
   process.exit(2);
 }
 const requests = readFileSync(0, 'utf8').split('\n').filter((line) => line.trim()).map((line) => JSON.parse(line));
 const reply = (answers) => process.stdout.write(answers.map((a) => `${JSON.stringify(a)}\n`).join(''));
 const sha256 = (value) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+
+if (lane === 'full') {
+  const out = mkdtempSync(join(tmpdir(), 'deep-parity-full-'));
+  /** One run of the lane's GPU fixtures, under a planted program or none: each fixture's row, and the adapter. */
+  const ran = (planted) => {
+    const run = spawnSync(join(root, process.env.CARGO_TARGET_DIR ?? 'target', 'debug', 'deep-gpu'), ['run', ...(planted ? ['--planted', planted] : [])], { cwd: root, input: `${JSON.stringify({ out, calls: [{ call: 'adapter' }, { call: 'full_lane', store: join(out, 'goldens'), configured: {} }] })}\n`, encoding: 'utf8', maxBuffer: 2 ** 30 });
+    let answer;
+    try { answer = JSON.parse((run.stdout ?? '').split('\n')[0]); } catch { answer = undefined; }
+    const [seam, full] = answer?.ok === true ? answer.replies : [];
+    if (!Array.isArray(full?.fixtures)) return { reason: `deep-gpu didn't run the full lane (${run.error?.message ?? full?.code ?? answer?.code ?? `status ${run.status}`}); build it with cargo build --locked --bin deep-gpu` };
+    return { backend: seam.backend, adapter: { name: full.adapter.name, driver: full.adapter.driver }, rows: new Map(full.fixtures.map((f) => [f.fixture, f])) };
+  };
+  try {
+    const own = ran();
+    const under = new Map([...new Set(requests.filter((r) => r.twin?.planted).map((r) => r.twin.planted))].map((planted) => [planted, ran(planted)]));
+    reply(requests.map((r) => {
+      const run = r.twin ? under.get(r.twin.planted) : own;
+      if (!run) return { verdict: 'BLOCKED', reason: 'a twin of the full lane names the planted program that breaks its fixture' };
+      if (run.reason) return { verdict: 'BLOCKED', reason: run.reason };
+      const row = run.rows.get(r.fixture);
+      if (!row) return { verdict: 'BLOCKED', reason: 'the full lane lists no such fixture' };
+      // The runner's words are PASS, FAIL and BLOCKED.
+      const verdict = row.result === 'PASS' || row.result === 'BLOCKED' ? row.result : 'FAIL';
+      return { verdict, ...(row.reason ? { reason: row.reason } : {}), digest: sha256([r.twin?.planted ?? null, row.result, row.reason ?? null]), backend: run.backend, adapter: run.adapter };
+    }));
+  } finally {
+    rmSync(out, { recursive: true, force: true });
+  }
+  process.exit(0);
+}
 
 /** The scenes the kit's own parts run, by the part. */
 const PART_SCENES = { 'parity/kernel/clean-rebuild-fuzz.scene': 'clean_rebuild', 'parity/kernel/patch-fuzz.scene': 'patch_fuzz', 'parity/framework/repair-loop.scene': 'repair_loop' };

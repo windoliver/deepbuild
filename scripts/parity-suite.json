@@ -1,5 +1,5 @@
 {
-  "lanes": {"quick":{"runner":["node","scripts/parity-runner.mjs","quick"]}},
+  "lanes": {"quick":{"runner":["node","scripts/parity-runner.mjs","quick"]},"full":{"runner":["node","scripts/parity-runner.mjs","full"]}},
   "fixtures": [
     {"name":"parity/kernel/board.board","lanes":["quick"],"backends":["vello_cpu"],"owner":"you","twins":[{"name":"moved","comparison":"snapshot","path":"items/a/params/box","value":[22,16,64,40]},{"name":"unknown-kind","path":"items/planted","value":{"id":"planted","name":"Planted fault","order":"zz","kind":"planted.fault@1","params":{}}}]},
     {"name":"parity/building/house.figure","lanes":["quick"],"backends":["vello_cpu"],"owner":"you","twins":[{"name":"unknown-kind","path":"items/planted","value":{"id":"planted","name":"Planted fault","order":"zz","kind":"planted.fault@1","params":{}}}]},
@@ -149,8 +149,18 @@
     {"name":"parity/framework/sheet-sheet-highlight-outside.board","lanes":["quick"],"backends":["vello_cpu"],"owner":"you","twins":[{"name":"unknown-kind","path":"items/planted","value":{"id":"planted","name":"Planted fault","order":"zz","kind":"planted.fault@1","params":{}}}]},
     {"name":"parity/framework/code-migrated.board","lanes":["quick"],"backends":["vello_cpu"],"owner":"you","twins":[{"name":"unknown-kind","path":"items/planted","value":{"id":"planted","name":"Planted fault","order":"zz","kind":"planted.fault@1","params":{}}}]},
     {"name":"parity/framework/code-pack-missing.board","lanes":["quick"],"backends":["vello_cpu"],"owner":"you","twins":[{"name":"unknown-kind","path":"items/planted","value":{"id":"planted","name":"Planted fault","order":"zz","kind":"planted.fault@1","params":{}}}]},
-    {"name":"parity/framework/code-derived-item.scene","lanes":["quick"],"backends":["vello_cpu"],"owner":"you","twins":[{"name":"dropped-calls","path":"calls","value":[]}]}
+    {"name":"parity/framework/code-derived-item.scene","lanes":["quick"],"backends":["vello_cpu"],"owner":"you","twins":[{"name":"dropped-calls","path":"calls","value":[]}]},
+    {"name":"parity/relation/exposure-doubles.scene","lanes":["full"],"backends":["metal"],"owner":"you","twins":[{"name":"exposure_after_tone_map","planted":"exposure_after_tone_map"}]},
+    {"name":"parity/relation/lights-add.scene","lanes":["full"],"backends":["metal"],"owner":"you","twins":[{"name":"light_sum_clamped","planted":"light_sum_clamped"}]},
+    {"name":"parity/relation/ortho-shift.scene","lanes":["full"],"backends":["metal"],"owner":"you","twins":[{"name":"ortho_camera_snaps_to_grid","planted":"ortho_camera_snaps_to_grid"}]},
+    {"name":"parity/relation/sphere-turn.scene","lanes":["full"],"backends":["metal"],"owner":"you","twins":[{"name":"shades_by_local_tangent","planted":"shades_by_local_tangent"}]},
+    {"name":"parity/relation/occluder-never-brightens.scene","lanes":["full"],"backends":["metal"],"owner":"you","twins":[{"name":"shadow_brightens","planted":"shadow_brightens"}]},
+    {"name":"parity/relation/instances-keep-hash.scene","lanes":["full"],"backends":["metal"],"owner":"you","twins":[{"name":"instances_skip_normal_target","planted":"instances_skip_normal_target"}]},
+    {"name":"parity/relation/translation.scene","lanes":["full"],"backends":["metal"],"owner":"you","twins":[{"name":"absolute_f32_world_positions","planted":"absolute_f32_world_positions"}]},
+    {"name":"parity/relation/light-level.scene","lanes":["full"],"backends":["metal"],"owner":"you","twins":[{"name":"light_cut_absolute_illuminance","planted":"light_cut_absolute_illuminance"}]}
   ],
-  "waivers": [],
+  "waivers": [
+    {"fixture":"parity/relation/light-level.scene","reason":"the renderer's 16-bit float linear target holds a pixel to about 1e-3 relative and the relation asks 1e-4; the planted cut is caught, the rule itself waits for a wider linear chain"}
+  ],
   "expected_failures": []
 }

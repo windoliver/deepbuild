@@ -39,6 +39,9 @@ pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
         },
         emission_thresholds_color: p == Some(Planted::EmissionThresholdsColor),
         instanced_skips_velocity: p == Some(Planted::InstancedSkipsVelocity),
+        instances_skip_normal: p == Some(Planted::InstancesSkipNormalTarget),
+        exposure_after_tone_map: p == Some(Planted::ExposureAfterToneMap),
+        absolute_positions: p == Some(Planted::AbsoluteF32WorldPositions),
         sample_grad_implicit: p == Some(Planted::SampleGradImplicit),
         backdrop_after_see_through: p == Some(Planted::BackdropAfterSeeThrough),
         encodes_twice: p == Some(Planted::EncodesTwice),
@@ -133,6 +136,10 @@ pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
             Planted::LoopCallsCutLights,
             Planted::LoopWorldNormal,
             Planted::LoopViewAway,
+            // #458's.
+            Planted::LightSumClamped,
+            Planted::ShadesByLocalTangent,
+            Planted::ShadowBrightens,
         ]
         .iter()
         .position(|q| p == Some(*q))
@@ -586,6 +593,8 @@ pub struct Drawn {
     pub coc: Option<Vec<u8>>,
     /// #458: the core's velocity target while the frame builds it, f32 x, y a pixel.
     pub velocity: Option<Vec<u8>>,
+    /// #458: the solids' world normals while the frame builds that target, f32 RGBA.
+    pub geometry_normal: Option<Vec<u8>>,
 }
 
 /// Draws frame `n` of `scene` under `look`: the frame is rendered into a free slot and waited
@@ -760,6 +769,11 @@ pub fn draw_on(
                 },
                 velocity: if read_targets && !noop {
                     r.read_velocity(&device)
+                } else {
+                    None
+                },
+                geometry_normal: if read_targets && !noop {
+                    r.read_geometry_normal(&device)
                 } else {
                     None
                 },

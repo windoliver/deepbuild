@@ -35,6 +35,7 @@ mod fixtures;
 mod flat;
 mod flows2d;
 mod frames;
+mod full_lane;
 mod golden;
 mod groups;
 mod guard;
@@ -60,6 +61,7 @@ mod print2d;
 mod records;
 mod reference;
 mod regions;
+mod relation;
 mod scene;
 mod seam;
 mod session3;
@@ -119,6 +121,16 @@ pub enum Planted {
     /// group whose blend is multiply as screen.
     InstancedSkipsVelocity,
     GpuLayerMultiplyAsScreen,
+    /// #458's wrong programs (tests/acceptance/458/relations/README.md: Planted programs).
+    LightSumClamped,
+    ExposureAfterToneMap,
+    OrthoCameraSnapsToGrid,
+    ShadesByLocalTangent,
+    ShadowBrightens,
+    InstancesSkipNormalTarget,
+    LaneAdapterFromConfiguration,
+    AbsoluteF32WorldPositions,
+    LightCutAbsoluteIlluminance,
     /// #430's wrong programs (tests/acceptance/430/README.md: Planted programs).
     GroupPassAtLayerEnd,
     GroupPassReadsEarlier,
@@ -509,6 +521,15 @@ impl Planted {
             "period_first_octave" => Planted::PeriodFirstOctave,
             "instanced_skips_velocity" => Planted::InstancedSkipsVelocity,
             "gpu_layer_multiply_as_screen" => Planted::GpuLayerMultiplyAsScreen,
+            "light_sum_clamped" => Planted::LightSumClamped,
+            "exposure_after_tone_map" => Planted::ExposureAfterToneMap,
+            "ortho_camera_snaps_to_grid" => Planted::OrthoCameraSnapsToGrid,
+            "shades_by_local_tangent" => Planted::ShadesByLocalTangent,
+            "shadow_brightens" => Planted::ShadowBrightens,
+            "instances_skip_normal_target" => Planted::InstancesSkipNormalTarget,
+            "lane_adapter_from_configuration" => Planted::LaneAdapterFromConfiguration,
+            "absolute_f32_world_positions" => Planted::AbsoluteF32WorldPositions,
+            "light_cut_absolute_illuminance" => Planted::LightCutAbsoluteIlluminance,
             "group_pass_at_layer_end" => Planted::GroupPassAtLayerEnd,
             "group_pass_reads_earlier" => Planted::GroupPassReadsEarlier,
             "group_pass_past_grow" => Planted::GroupPassPastGrow,
@@ -820,6 +841,11 @@ pub struct App {
     pub vello: marks2d::Gate,
     /// The run's decode worker and the maps it made (#423).
     pub made: textures::Made,
+    /// #458: what a `relation` call's draw reads beside view3d's own targets (`exposed`,
+    /// `geometry_normal`, `lighting`); empty for every other call.
+    pub relation_reads: std::collections::BTreeSet<&'static str>,
+    /// #458: the adapter the full lane's configuration names, which only the planted lane reads.
+    pub lane_adapter: Option<full_lane::Adapter>,
 }
 
 pub fn refused(code: &str, reason: impl Into<String>) -> Value {
@@ -1011,6 +1037,8 @@ impl App {
             Some("decisions") => compare::decisions(self),
             Some("plugin") => plugin::call(self, out, call),
             Some("view3d") => view3d::call(self, out, call),
+            Some("relation") => relation::call(self, out, call),
+            Some("full_lane") => full_lane::call(self, out, call),
             Some("particles") => particles::call(self, out, call),
             Some("trail") => trails::call(self, out, call),
             Some("simplify") => simplify::call(out, call),
@@ -1256,6 +1284,8 @@ fn main() {
         validation,
         vello,
         made: Default::default(),
+        relation_reads: Default::default(),
+        lane_adapter: None,
     };
     serve(|out, call| app.call(out, call));
 }
