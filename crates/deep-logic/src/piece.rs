@@ -834,6 +834,19 @@ pub struct Piece {
     pub machine: Vec<String>,
     /// The document by hash, which a save names but isn't bound to.
     pub document: String,
+    /// #860: its rewind, when it declares one.
+    pub rewind: Option<Rewind>,
+}
+
+/// #860: a piece's `rewind: {stops, depth, seen?}`: the item whose stops array marks the steps a
+/// reader stops at, with that array's bytes in its write region; how many stops back a rewind
+/// may go; and the seen array the piece carries across branches, by item and bytes.
+#[derive(Clone, Debug)]
+pub struct Rewind {
+    pub item: usize,
+    pub stops: (u32, u32),
+    pub depth: u16,
+    pub seen: Option<(usize, u32, u32)>,
 }
 
 impl Piece {

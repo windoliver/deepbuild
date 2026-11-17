@@ -105,6 +105,10 @@ pub enum Guard {
     WebIndexChecksWebgpuOnly,
     /// #1040: the index page needs every feature of each `any_of` set.
     WebIndexRequiresEveryAnyOf,
+    /// #1490: the web export takes the smallest player set whatever modules the document uses.
+    WebPicksSmallestSet,
+    /// #1490: the web export takes the full player set whatever modules the document uses.
+    WebPicksFullSet,
     /// #1045: the web player keeps no accessibility tree beside its canvas, and no live region.
     WebNoTree,
     /// #1045: the web player announces each readout on every frame it draws, changed or not.
@@ -188,6 +192,8 @@ pub(crate) fn planted(name: &str) -> Option<Planted> {
         "page_keys_by_picture_and_logic" => Planted::Export(G::PageKeysByPictureAndLogic),
         "web_index_checks_webgpu_only" => Planted::Export(G::WebIndexChecksWebgpuOnly),
         "web_index_requires_every_any_of" => Planted::Export(G::WebIndexRequiresEveryAnyOf),
+        "web_picks_smallest_set" => Planted::Export(G::WebPicksSmallestSet),
+        "web_picks_full_set" => Planted::Export(G::WebPicksFullSet),
         "web_no_tree" => Planted::Export(G::WebNoTree),
         "web_announces_every_frame" => Planted::Export(G::WebAnnouncesEveryFrame),
         other => Planted::Export(G::Codec(CODEC_PLANTS.iter().find(|p| **p == other)?)),

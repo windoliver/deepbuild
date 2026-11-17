@@ -31,7 +31,7 @@ use serde_json::{json, Map, Value};
 use crate::bake::handed;
 use crate::piece::{self, History, Piece};
 use crate::services::Service;
-use crate::world::{track_of, Entry, Record, World};
+use crate::world::{carry_of, track_of, Entry, Record, World};
 use crate::Planted;
 
 /// The interface this module implements, apart from the logic item kind of that name.
@@ -394,6 +394,10 @@ fn piece_of(doc: &Value) -> Result<Rc<Piece>, OpError> {
     if let Some(libraries) = doc.get("libraries") {
         piece["packs"] = libraries.clone();
     }
+    // #860: its rewind, whose seen array a step puts back where the current branch carries it.
+    if let Some(rewind) = doc.get("rewind") {
+        piece["rewind"] = rewind.clone();
+    }
     // #182: the worlds' character readings an item may read.
     let reads = crate::play::world_reads(doc);
     if !reads.is_empty() {
@@ -472,6 +476,11 @@ fn step(v: &mut View<'_>) -> Result<(), OpError> {
         Some(s) => World::from_saved(piece.clone(), track, &s.saved, Planted::default()),
     }
     .map_err(failed)?;
+    // #860: the track is the current branch; the seen values it carries in are the host's run's,
+    // which read the closed branches too.
+    if let Some(carry) = doc.pointer("/branch/carry").and_then(carry_of) {
+        world.branches.carry = carry;
+    }
     world.run_through(t, &mut rec);
     // A trapped item never draws its last arrays as if it ran on (Logic: `logic.trap`).
     let trapped = world.failed();

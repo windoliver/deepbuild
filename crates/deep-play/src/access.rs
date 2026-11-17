@@ -20,16 +20,27 @@ fn text(v: Option<&Value>) -> String {
     v.and_then(Value::as_str).unwrap_or("").to_string()
 }
 
+/// The 3D module's kinds, which a player set without scene3d (#1490) doesn't know.
+#[cfg(feature = "scene3d")]
+fn scene3d_kind(kind: &str) -> bool {
+    deep_canvas_scene3d::scene::is_3d(kind)
+        || kind == deep_canvas_scene3d::scene::OVERLAY
+        || kind == deep_canvas_scene3d::inset::KIND
+        || kind == deep_canvas_scene3d::views::KIND
+}
+
+#[cfg(not(feature = "scene3d"))]
+fn scene3d_kind(_: &str) -> bool {
+    false
+}
+
 /// Whether this build knows a kind: the marks module or scene3d draws it, or the kernel registers it.
 pub fn knows(kind: &str) -> bool {
     deep_canvas_marks::scene::KINDS.contains(&kind)
-        || deep_canvas_scene3d::scene::is_3d(kind)
-        || kind == deep_canvas_scene3d::scene::OVERLAY
+        || scene3d_kind(kind)
         // A readout (#419), such as the overlay that discloses an exaggerated length (#1183).
         || kind == "overlay.text@1"
         // #506: an inset, and a view of the document from another camera in a rect of the frame.
-        || kind == deep_canvas_scene3d::inset::KIND
-        || kind == deep_canvas_scene3d::views::KIND
         // The vector module's kind (#1162): an item the view draws, hears and points at.
         || kind == "vector@1"
         // A logic item (#544): baked at check into the occurrence lists its readers read; it draws nothing.

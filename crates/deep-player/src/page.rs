@@ -2,13 +2,10 @@
 //! page fetches every file the bundle names and checks it against its SHA-256 before it hands it
 //! here; nothing here reaches the network, a store or anything outside the bundle.
 
-use std::collections::{BTreeMap, HashMap};
-use std::sync::Arc;
+use std::collections::HashMap;
 
 use deep_canvas::registry::Sealed;
 use deep_canvas_marks::look::{self, Look};
-use deep_canvas_scene3d::light::{material_maps, Texels};
-use deep_codecs::maps::Role;
 use serde_json::{json, Value};
 use wasm_bindgen::prelude::*;
 
@@ -41,7 +38,7 @@ pub struct Player {
     /// Each picture's level file by its source's SHA-256.
     levels: HashMap<String, String>,
     /// Each texture map the document's materials name, ready for the device, by its SHA-256.
-    maps: BTreeMap<String, Arc<Texels>>,
+    maps: crate::draw::Maps,
 }
 
 #[wasm_bindgen]
@@ -65,7 +62,7 @@ impl Player {
             store: std::sync::Arc::new(deep_images::Store::memory()),
             draw: None,
             levels: HashMap::new(),
-            maps: BTreeMap::new(),
+            maps: Default::default(),
         })
     }
 
@@ -203,8 +200,18 @@ impl Player {
     /// makes it (Export: web player): BC where the device has texture-compression-bc, ASTC 4 × 4
     /// where it has only texture-compression-astc, RGBA8 otherwise.
     pub fn attach(&mut self, gpu: crate::gpu::Gpu) -> Result<(), JsValue> {
+        #[cfg(feature = "full")]
         let blocks = gpu.blocks();
         self.gpu = Some(gpu);
+        #[cfg(feature = "full")]
+        self.ready_maps(blocks)?;
+        Ok(())
+    }
+
+    #[cfg(feature = "full")]
+    fn ready_maps(&mut self, blocks: deep_codecs::maps::Blocks) -> Result<(), JsValue> {
+        use deep_canvas_scene3d::light::{material_maps, Texels};
+        use deep_codecs::maps::Role;
         let Some(p) = self.played.as_ref() else {
             return Ok(());
         };
@@ -218,9 +225,9 @@ impl Player {
                 format: r.format.into(),
                 size: r.size,
                 mips: r.mips,
-                data: Arc::new(r.data),
+                data: std::sync::Arc::new(r.data),
             };
-            self.maps.insert(sha, Arc::new(texels));
+            self.maps.insert(sha, std::sync::Arc::new(texels));
         }
         Ok(())
     }
@@ -239,6 +246,7 @@ impl Player {
         };
         match draw.frame(p, size, &self.maps) {
             crate::draw::Frame::Pixels(rgba) => gpu.show(&rgba, size),
+            #[cfg(feature = "full")]
             crate::draw::Frame::Scene(scene, look, over) => gpu.show3d(&scene, &look, &over, size),
         }
     }
@@ -253,6 +261,17 @@ impl Player {
             p.enter(self.sealed, control, value, &read).map_err(fail)?;
         }
         Ok(())
+    }
+
+    /// #860: the viewer's back. On a piece that declares rewind it is a rewind to the stop before,
+    /// at the shown time, which the piece plays on from as the app's does; whether it wrote one.
+    pub fn back(&mut self) -> Result<bool, JsValue> {
+        let files = &self.files;
+        let read = |sha: &str| files.get(sha).cloned();
+        match self.played.as_mut() {
+            Some(p) => p.back(self.sealed, &read).map_err(fail),
+            None => Ok(false),
+        }
     }
 
     /// The document's accessibility tree (#1045), as JSON `[{id, role, name, …}]` in reading

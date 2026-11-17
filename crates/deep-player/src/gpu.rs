@@ -2,11 +2,15 @@
 //! bundle's `gpu_needs` (its features, and its limits laid over WebGPU's spec defaults), never the
 //! adapter's own limits, so WebGPU's validation catches any use past them on every machine. Each
 //! frame's pixels, sRGB-encoded RGBA, are uploaded and drawn onto the page's canvas, whose
-//! format keeps them as they are: an sRGB canvas.
+//! format keeps them as they are: an sRGB canvas. Only the full set (#1490) carries the GPU layer
+//! and scene3d's renderer, for its 3D frames.
 
+#[cfg(feature = "full")]
 use std::sync::Arc;
 
+#[cfg(feature = "full")]
 use deep_canvas_scene3d::look::Look3;
+#[cfg(feature = "full")]
 use deep_canvas_scene3d::scene::Scene;
 use serde_json::Value;
 use wasm_bindgen::prelude::*;
@@ -117,7 +121,9 @@ pub struct Gpu {
     /// writer layers over a 3D frame.
     over: wgpu::RenderPipeline,
     /// The device as the 3D renderer draws on it, and the renderer, made on the first 3D frame.
+    #[cfg(feature = "full")]
     deep: Arc<deep_gpu::device::Device>,
+    #[cfg(feature = "full")]
     scene: Option<deep_scene3d_render::Renderer>,
     layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
@@ -125,6 +131,7 @@ pub struct Gpu {
     backend: String,
     adapter: String,
     /// The features the device was asked for and given.
+    #[cfg_attr(not(feature = "full"), allow(dead_code))]
     features: wgpu::Features,
 }
 
@@ -266,6 +273,7 @@ pub async fn open_gpu(canvas: web_sys::HtmlCanvasElement, needs: String) -> Resu
         ..Default::default()
     });
     let info = adapter.get_info();
+    #[cfg(feature = "full")]
     let deep = deep_gpu::device::Device::from_parts(
         device.clone(),
         queue.clone(),
@@ -288,7 +296,9 @@ pub async fn open_gpu(canvas: web_sys::HtmlCanvasElement, needs: String) -> Resu
         format,
         pipeline,
         over,
+        #[cfg(feature = "full")]
         deep,
+        #[cfg(feature = "full")]
         scene: None,
         layout,
         sampler,
@@ -326,6 +336,7 @@ impl Gpu {
 
     /// The block formats the device samples (Material: texture maps): BC where it has
     /// texture-compression-bc, else ASTC 4 × 4 where it has texture-compression-astc, else none.
+    #[cfg(feature = "full")]
     pub fn blocks(&self) -> deep_codecs::maps::Blocks {
         use deep_codecs::maps::Blocks;
         if self
@@ -358,6 +369,7 @@ impl Gpu {
 
     /// Draws `scene` in `look` onto the canvas with scene3d's renderer, as the app's 3D frames are
     /// drawn, and `over` (the 2D writer layers, straight RGBA with no ground) over it.
+    #[cfg(feature = "full")]
     pub fn show3d(&mut self, scene: &Scene, look: &Look3, over: &[u8], size: [u32; 2]) -> bool {
         let Some(frame) = self.frame() else {
             return false;

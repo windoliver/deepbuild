@@ -770,6 +770,8 @@ alone.push('tests/acceptance/172-redraft-ac2/');
 byHand.push('tests/acceptance/172/refusals.test.ts');
 // #1045's files each build deep-show (full) and drive headless Chrome with WebGPU on.
 alone.push('tests/acceptance/1045/');
+// #1490's files each build deep-show (full) and export bundles, and its parity file drives headless Chrome with WebGPU on.
+alone.push('tests/acceptance/1490/');
 // #1969's files each build deep-canvas-render or deep-show and draw typed text through them.
 alone.push('tests/acceptance/1969/');
 // #142's files each build deep-show, render every film recipe's example on both stages, and time them; ac6 builds
@@ -855,6 +857,8 @@ alone.push('tests/acceptance/1040/');
 alone.push('tests/acceptance/458/pairs/', 'tests/acceptance/458/relations/', 'tests/acceptance/458/views/');
 // #192's dungeon files build deep-show and deep-sandbox, and ac05 also deep-sandbox for Linux x86_64 in Docker.
 alone.push('tests/acceptance/192/dungeon/');
+// #860's files build deep-logic, deep-drive, deep-show and #533's assembler, and start replicas, a hub and headless Chrome.
+alone.push('tests/acceptance/860/');
 
 // #2516: each file builds deep-gpu and reads linear targets; castle costs require a timed grant.
 alone.push('tests/acceptance/2516/');
