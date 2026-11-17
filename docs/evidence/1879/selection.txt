@@ -1,0 +1,36 @@
+#1879 selection at head 307e9aeb7 against base 06e231702 (affected.mjs --list --slow, run by hand in blocks)
+
+Run conditions, 2026-11-16, Linux Spark: load 227 to 316, swap 15/15 GB full, no ENOSPC in any log.
+
+Both selections, sel1879-head and sel1879-base, started 14:18. They were stopped part-way at 19:58 by the
+coordinating session's and spark control's request because memory ran short (8 GB available, swap full).
+Only the parallel blocks finished on both sides:
+  parallel vitest (196 files): head 75 failing tests, base 78
+  parallel node (156 files):   head 98 failing tests, base 89
+Not run on either side: alone vitest (102 files) and cargo -p (1 crate).
+
+At about 14:40, while both selections ran, target/plant-* and target/base-1* were deleted in both trees at spark
+control's request to free disk. Builds that used them started over, which made build-bound tests slower.
+
+Files failing only at head, all INCONCLUSIVE (run under the load above; none cleared):
+  packages/hub/test/codex-hub.test.ts    "This stop isn't held" reading missing (a timing-built case)
+  packages/hub/test/gate-stop.test.ts    no run.finished yet when the stop was held (data undefined)
+  tests/acceptance/1879/floor.test.ts    inner 316: buildDeepHook() beforeAll timed out at 900 s (no 316 test ran)
+  tests/acceptance/1002/twins.test.ts    600 s timeout
+  tests/acceptance/821/verdict-proofs.test.mjs  eight 60 s timeouts
+  tests/acceptance/2330/lifecycle.test.mjs      60 ms / 30 ms hub start/stop budgets
+None of these sets --safe; without it, head's code path equals base's (safe adds nothing to CoreOptions and the
+conformance check runs as before).
+
+affected.mjs printed no INCONCLUSIVE line. Its WIDE line: 1076 more see the change only through a process that
+starts another package (--wide runs them); not run.
+
+One rerun of each, head then base, 20:13 to 20:46 at load 150 to 263 (unit rr1879; a pass here clears nothing):
+  codex-hub      fails on both sides (head 14 cases, base 11, mostly the same; the cases change run to run)
+  gate-stop      head fails a different case (:135, 101 s against base's 12 s; its settle waits 90 s), base passes
+  1879/floor     passes at head (no base twin)
+  1879/starts    AC2 hits the 5 s vitest default at head again
+  1002/twins, 821/verdict-proofs  pass on both sides; 2330/lifecycle fails on both
+
+Still to run once the hold ends, alone at low load, at head and base: the alone vitest and cargo -p blocks, the
+files above (316's deep-hook prebuilt first), and tests/acceptance/1879/starts.test.ts AC2.
