@@ -10,8 +10,10 @@
 import { createHash } from 'node:crypto';
 import type { CheckResult, Failure } from '@deepbuild/conformance';
 import { kindOf, lower, refusal } from './bots.ts';
-import { goalTest, lockRefusal, outOfRange, ranged } from './iface.ts';
+import { declared, goalTest, legalPaths, linkOffGrid, linksOf, lockRefusal, outOfRange, ranged } from './iface.ts';
 import { firstDiffering, goalSteps, outcomeOf, type Judged } from './judge.ts';
+import { actingSteps, modelReplies, type Ask } from './model.ts';
+import { onReferenceMac, soakFailure, windowsOf } from './soak.ts';
 import type { Bot, Outcome, Play, PlayAnswer, PlaytestInput, Span } from './types.ts';
 
 const FLICKS = 705_600_000;
@@ -26,15 +28,16 @@ export function runSeed(seed: number, i: number): number {
   return Number(createHash('sha256').update(b).digest().readBigUInt64BE(0) >> 11n);
 }
 
-const failure = (test: string, message: string, assertion = true): Failure => ({ test, file: '', line: 0, stack: null, assertion, message });
+export const failure = (test: string, message: string, assertion = true): Failure => ({ test, file: '', line: 0, stack: null, assertion, message });
 /** A span or a stuck rule's time as the piece's steps. */
-const steps = (s: Span, step: number): number => (typeof s === 'number' ? Math.round((s * FLICKS) / step) : s.steps);
+export const steps = (s: Span, step: number): number => (typeof s === 'number' ? Math.round((s * FLICKS) / step) : s.steps);
 
-interface Ran { test: string; bot: number; seed: number; outcome: Outcome; first: PlayAnswer; replay: PlayAnswer; reached: Map<string, number> }
+/** A run played and replayed; a model bot's run carries how its replay ends by the same rule. */
+interface Ran { test: string; bot: number; seed: number; outcome: Outcome; first: PlayAnswer; replay: PlayAnswer; reached: Map<string, number>; model?: { replayed: Outcome } }
 
-const ended = (failures: Failure[], evidence: string[] = [], testsRun = 0): CheckResult => ({ outcome: 'failed', testsRun, failures, evidence, read: [], mask: null });
+export const ended = (failures: Failure[], evidence: string[] = [], testsRun = 0): CheckResult => ({ outcome: 'failed', testsRun, failures, evidence, read: [], mask: null });
 /** A refusal's words led by the code the replica names: the host's message without its prefix, or a replica's error. */
-function said(e: unknown): string {
+export function said(e: unknown): string {
   const raw = String((e as Error)?.message ?? e);
   try {
     const j = JSON.parse(raw) as { code?: unknown; message?: unknown };
@@ -43,7 +46,10 @@ function said(e: unknown): string {
   return raw.replace(/^deep\.canvas\.play: (?:refused: )?/, '');
 }
 
-export async function runPlaytest(input: PlaytestInput, play: Play): Promise<CheckResult> {
+/** A run as the result lists it (#1048): counted false for a model bot's, whose runs count only through replay. */
+export interface RunShown { test: string; seed: number; track: string; outcome: Outcome; replay: string; frames: string[]; counted: boolean }
+
+export async function runPlaytest(input: PlaytestInput, play: Play, ask?: Ask): Promise<CheckResult & { runs: RunShown[] }> {
   const runs = input.runs ?? 20;
   const span = input.span ?? 120;
   const iface = input.play;
@@ -64,28 +70,51 @@ export async function runPlaytest(input: PlaytestInput, play: Play): Promise<Che
     if (why) return ended([failure(`bot ${b}`, `refused before any run: ${why}`, false)]);
   }
   const bounds = iface ? ranged(iface) : [];
-  const values = [...new Set([input.stuck?.measure, ...reads, ...bounds.map((r) => r.path)].filter((v): v is string => v !== undefined))];
+  const links = iface && linksOf(iface);
+  const values = [...new Set([input.stuck?.measure, ...reads, ...bounds.map((r) => r.path), links?.rows, links?.count].filter((v): v is string => v !== undefined))];
   const common = { span, values, ...(input.piece_seed ? { piece_seed: input.piece_seed } : {}), ...(iface ? { play: iface } : {}) };
   const jobs = input.bots.flatMap((bot, b) => Array.from({ length: runs }, (_, i) => ({ bot, b, test: `bot ${b} run ${i}`, seed: runSeed(input.seed, i) })));
   const ran: Ran[] = [];
   let refused: Failure | undefined;
+  // A model bot's prompt reads the interface's names, never one the brief hides from players.
+  const hidden = new Set((iface?.['hidden'] as string[] | undefined) ?? []);
+  const shownNames = iface ? Object.fromEntries(declared(iface).filter((d) => !hidden.has(d.name)).map((d) => [d.name, typeof d.at === 'string' ? d.at : d.at.name])) : {};
+  const legal = iface && legalPaths(iface);
   const next = async (): Promise<void> => {
     for (let job = jobs.shift(); job && !refused; job = jobs.shift()) {
       const { test, seed } = job;
+      const bot = lower(job.bot);
       let first: PlayAnswer;
+      let rows: number[][] | undefined;
       try {
-        first = await play(input.piece, { ...common, seed, bot: lower(job.bot), frames: [0] });
+        if ('model' in job.bot) {
+          // A model bot's run: its replies, grown by playing to each of its turns and asking, then the run itself.
+          const step = (await play(input.piece, { ...common, seed, bot, rows: [], span: { steps: 1 }, frames: [] })).step;
+          const total = steps(span, step);
+          const asked = await modelReplies({
+            bot: job.bot.model, steps: total, legal: legal!, names: shownNames, actions: Object.keys(iface?.actions ?? {}),
+            playTo: (n, r) => play(input.piece, { ...common, values: [...new Set([...common.values, legal!.rows, legal!.count, ...Object.values(shownNames)])], seed, bot, rows: r, span: { steps: n }, frames: [] }),
+            ask: ask ?? (async () => ({ text: '' })),
+          });
+          rows = asked.rows;
+          first = await play(input.piece, { ...common, seed, bot, rows, frames: [0] });
+        } else {
+          first = await play(input.piece, { ...common, seed, bot, frames: [0] });
+        }
       } catch (e) {
         refused = failure(test, `refused: ${String((e as Error)?.message ?? e)}`, false);
         return;
       }
       const stuck = input.stuck && { measure: input.stuck.measure, by: input.stuck.by ?? 1, within: steps(input.stuck.within ?? 10, first.step) };
-      const outcome = outcomeOf(first, goals, stuck);
+      // A model run's stuck rule counts only the steps at which its track holds a bot entry, run and replay alike.
+      const acting = rows ? actingSteps(rows) : undefined;
+      const outcome = outcomeOf(first, goals, stuck, acting);
       const every = input.frames?.every ? steps(input.frames.every, first.step) : 0;
       const keep = [...new Set([0, outcome.step, ...(every ? Array.from({ length: Math.floor((first.steps - 1) / every) + 1 }, (_, n) => n * every) : [])])].filter((k) => k < first.steps);
       const replay = await play(input.piece, { ...common, seed, track: first.entries, frames: keep });
       const reached = new Map([...goalSteps(first, goals)].flatMap(([g, k]) => (k === undefined ? [] : [[g, k] as const])));
-      ran.push({ test, bot: job.b, seed, outcome, first, replay, reached });
+      const model = rows ? { replayed: outcomeOf(replay, goals, stuck, acting) } : undefined;
+      ran.push({ test, bot: job.b, seed, outcome, first, replay, reached, model });
     }
   };
   // The interface taken by the piece before any run, then each bot: a play of no step at the check's own seed, which the
@@ -115,6 +144,14 @@ export async function runPlaytest(input: PlaytestInput, play: Play): Promise<Che
   const evidence: string[] = [];
   for (const r of ran) {
     evidence.push(r.first.track, r.replay.track, ...[...r.first.frames, ...r.replay.frames].map((f) => f.sha256));
+    // A model run's stuck, trap or over-budget outcome stands only when its track, played again without the model,
+    // fails the same way at the same step; otherwise the run is refused.
+    const o = r.outcome;
+    const failing = o.kind === 'stuck' || o.kind === 'trap' || o.kind === 'over_budget';
+    if (r.model && failing && (r.model.replayed.kind !== o.kind || r.model.replayed.step !== o.step)) {
+      failures.push(failure(r.test, `refused: ${r.test} (seed ${r.seed}), a model bot's run, ended ${o.kind} at step ${o.step}, and its track played again without the model ends ${r.model.replayed.kind} at step ${r.model.replayed.step}, so it counts for nothing`, false));
+      continue;
+    }
     const message = told(r);
     if (message) failures.push(failure(r.test, message, r.outcome.kind !== 'invalid'));
     const differs = firstDiffering(r.first, r.replay);
@@ -123,10 +160,19 @@ export async function runPlaytest(input: PlaytestInput, play: Play): Promise<Che
       const out = outOfRange(r.first.values[path] ?? [], range);
       if (out) failures.push(failure(r.test, `play.out_of_range: ${r.test} (seed ${r.seed}): ${name} row ${out.row} is ${out.value} at step ${out.step}, outside [${range[0]}, ${range[1]}]`));
     }
+    const off = links && linkOffGrid(r.first.values[links.rows] ?? [], r.first.values[links.count] ?? [], links.cells);
+    if (off) failures.push(failure(r.test, `play.out_of_range: ${r.test} (seed ${r.seed}): links row ${off.row} names cell ${off.cell} at step ${off.step}, off the grid's cells 0 to ${links!.cells - 1}`));
   }
+  const shown: RunShown[] = ran.map((r) => ({
+    test: r.test, seed: r.seed, track: r.first.track, outcome: r.outcome, replay: r.replay.track,
+    frames: [...r.first.frames, ...r.replay.frames].map((f) => f.sha256), counted: !r.model,
+  }));
   // A refused bot ends the check before any run: nothing was played to reach or miss a goal.
-  if (refused) return { outcome: 'failed', testsRun: ran.length, failures: [refused, ...failures], evidence, read: [], mask: null };
-  const counted = ran.filter((r) => r.outcome.kind !== 'invalid');
+  if (refused) return { outcome: 'failed', testsRun: ran.length, failures: [refused, ...failures], evidence, read: [], mask: null, runs: shown };
+  // The soak: one long run of its bot, read every `every` steps against the brief's limits.
+  if (input.soak) failures.push(...(await soaked(input, common, play)));
+  // Goals, bands and expectations rest on counted runs: never a model bot's.
+  const counted = ran.filter((r) => r.outcome.kind !== 'invalid' && !r.model);
   for (const g of input.goals ?? []) {
     if (g.each) {
       for (const r of counted.filter((x) => !x.reached.has(g.name))) failures.push(failure(r.test, `playtest.goal_missed: ${r.test} (seed ${r.seed}) never reached ${g.name}, which each run must`));
@@ -136,7 +182,23 @@ export async function runPlaytest(input: PlaytestInput, play: Play): Promise<Che
   }
   for (const [b, bot] of input.bots.entries()) failures.push(...held(b, bot, counted.filter((r) => r.bot === b)));
   const outcome = !failures.length ? 'passed' : failures.every((f) => !f.assertion) ? 'ran_nothing' : 'failed';
-  return { outcome, testsRun: ran.length, failures, evidence, read: [], mask: null };
+  return { outcome, testsRun: ran.length, failures, evidence, read: [], mask: null, runs: shown };
+}
+
+/** The soak's failures: its run refused, or playtest.soak at the first window over a limit. */
+async function soaked(input: PlaytestInput, common: { span: Span; values: string[] }, play: Play): Promise<Failure[]> {
+  const soak = input.soak!;
+  const every = soak.every ?? 3_600;
+  const name = `the soak of ${kindOf(soak.bot as Bot)}`;
+  let answer: PlayAnswer;
+  try {
+    answer = await play(input.piece, { ...common, values: [], seed: input.seed, bot: lower(soak.bot as Bot), span: { steps: soak.steps }, frames: [], soak: { every } });
+  } catch (e) {
+    return [failure('soak', `refused: ${name}: ${said(e)}`, false)];
+  }
+  if (answer.trap) return [failure('soak', `playtest.trap: ${name}: ${String(answer.trap['item'])} trapped at step ${String(answer.trap['step'])} (${String(answer.trap['kind'])})`)];
+  const why = soakFailure(name, windowsOf(answer, every), soak.limits, onReferenceMac());
+  return why ? [failure('soak', why)] : [];
 }
 
 /**

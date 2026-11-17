@@ -24,6 +24,7 @@ use objc2_app_kit::NSView;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use serde_json::{json, Value};
 
+use crate::chrome::{self, Typed};
 use crate::hdr_layer::{self, HdrLayer};
 
 fn planted(name: &str) -> bool {
@@ -106,7 +107,11 @@ impl Scenario {
                 let options = c["options"].as_array().into_iter().flatten();
                 let options = options.filter_map(|o| o["label"].as_str().map(str::to_string));
                 let rect = floats::<4>(&c["rect"], "card.rect").unwrap_or_default();
-                (c["question"].as_str().unwrap_or_default().to_string(), options.collect(), rect.map(|v| v as f32))
+                (
+                    c["question"].as_str().unwrap_or_default().to_string(),
+                    options.collect(),
+                    rect.map(|v| v as f32),
+                )
             }),
             divide: s["divide_by_headroom"] == true,
         })
@@ -307,51 +312,66 @@ struct Root {
 }
 
 impl Render for Root {
-    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        let colors = *chrome::of(window);
+        let sizes = chrome::sizes();
         let [r, g, b] = self.page.map(|c| f32::from(c) / 255.);
         let paint = self.paint.clone();
-        div().size_full().bg(Rgba { r, g, b, a: 1. }).child(
-            canvas(
-                |_, _, _| {},
-                move |_, _, window, _| {
-                    let p = paint.borrow();
-                    let (Some([x, y, w, h]), Some(ui)) = (p.view, &p.ui) else {
-                        return;
-                    };
-                    let bounds = Bounds {
-                        origin: point(px(x), px(y)),
-                        size: size(px(w), px(h)),
-                    };
-                    if p.hdr {
-                        crate::gpu_view::paint_clear(ui, bounds, window);
-                    } else {
-                        crate::gpu_view::paint(ui, bounds, window);
-                    }
-                },
+        div()
+            .size_full()
+            .bg(Rgba { r, g, b, a: 1. })
+            .child(
+                canvas(
+                    |_, _, _| {},
+                    move |_, _, window, _| {
+                        let p = paint.borrow();
+                        let (Some([x, y, w, h]), Some(ui)) = (p.view, &p.ui) else {
+                            return;
+                        };
+                        let bounds = Bounds {
+                            origin: point(px(x), px(y)),
+                            size: size(px(w), px(h)),
+                        };
+                        if p.hdr {
+                            crate::gpu_view::paint_clear(ui, bounds, window);
+                        } else {
+                            crate::gpu_view::paint(ui, bounds, window);
+                        }
+                    },
+                )
+                .size_full(),
             )
-            .size_full(),
-        )
-        .children(self.card.clone().map(|(question, options, [x, y, w, h])| {
-            let ink = Rgba { r: 0.08, g: 0.08, b: 0.08, a: 1. };
-            div()
-                .absolute()
-                .left(px(x))
-                .top(px(y))
-                .w(px(w))
-                .h(px(h))
-                .overflow_hidden()
-                .rounded(px(12.))
-                .bg(Rgba { r: 0.98, g: 0.98, b: 0.97, a: 1. })
-                .p(px(20.))
-                .flex()
-                .flex_col()
-                .gap(px(16.))
-                .text_color(ink)
-                .child(div().text_size(px(18.)).child(question))
-                .child(div().flex().gap(px(12.)).children(options.into_iter().map(|o| {
-                    div().px(px(14.)).py(px(8.)).rounded(px(8.)).bg(Rgba { r: 0.91, g: 0.93, b: 0.94, a: 1. }).child(o)
-                })))
-        }))
+            .children(self.card.clone().map(|(question, options, [x, y, w, h])| {
+                div()
+                    .absolute()
+                    .left(px(x))
+                    .top(px(y))
+                    .w(px(w))
+                    .h(px(h))
+                    .overflow_hidden()
+                    .rounded(sizes.radius)
+                    .bg(colors.raised)
+                    .p(sizes.space(4))
+                    .flex()
+                    .flex_col()
+                    .gap(sizes.space(3))
+                    .text_color(colors.ink_primary)
+                    .child(div().typed(sizes.title).child(question))
+                    .child(
+                        div()
+                            .flex()
+                            .gap(sizes.space(2))
+                            .children(options.into_iter().map(|o| {
+                                div()
+                                    .px(sizes.space(3))
+                                    .py(sizes.space(1))
+                                    .rounded(sizes.radius)
+                                    .bg(colors.hover)
+                                    .typed(sizes.body)
+                                    .child(o)
+                            })),
+                    )
+            }))
     }
 }
 
@@ -390,7 +410,9 @@ pub fn run(path: &str, cx: &mut App) {
         let last = LAST_FRAME.load(std::sync::atomic::Ordering::SeqCst);
         let now = START.elapsed().as_secs();
         if now.saturating_sub(last) > 20 {
-            eprintln!("deep-app --hdr: no frame for 20 s: the screen is locked or the window is hidden");
+            eprintln!(
+                "deep-app --hdr: no frame for 20 s: the screen is locked or the window is hidden"
+            );
             std::process::exit(3);
         }
     });
@@ -493,7 +515,10 @@ static START: std::sync::LazyLock<Instant> = std::sync::LazyLock::new(Instant::n
 static LAST_FRAME: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 fn step(window: &mut Window, cx: &mut App, run: Rc<RefCell<Option<Run>>>, k: u64) {
-    LAST_FRAME.store(START.elapsed().as_secs(), std::sync::atomic::Ordering::SeqCst);
+    LAST_FRAME.store(
+        START.elapsed().as_secs(),
+        std::sync::atomic::Ordering::SeqCst,
+    );
     let mut guard = run.borrow_mut();
     let r = guard.as_mut().expect("the run");
     let scale = window.scale_factor();
@@ -710,7 +735,8 @@ fn compose(
                 continue;
             }
             let hdr = if a >= 1.0 { [0.0; 3] } else { under(x, y) };
-            let decode = |c: u8| deep_canvas_marks::finish::srgb_decode(f64::from(c) / 255.0) as f32;
+            let decode =
+                |c: u8| deep_canvas_marks::finish::srgb_decode(f64::from(c) / 255.0) as f32;
             for i in 0..3 {
                 let linear = (decode(p[i]) + (1.0 - a) * hdr[i]) / divide;
                 let e = deep_canvas_marks::finish::srgb_encode(f64::from(linear)) as f32 * 255.0;

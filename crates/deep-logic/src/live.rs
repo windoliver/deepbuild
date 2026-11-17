@@ -45,7 +45,11 @@ fn baked(world: &World, rec: &Record) -> Value {
     let piece = &world.piece;
     // Each checkpoint as the bake keeps it: its step and full-state hash, never the time it took.
     let mut checkpoints = rec.checkpoints.clone();
-    for c in checkpoints.values_mut().filter_map(Value::as_array_mut).flatten() {
+    for c in checkpoints
+        .values_mut()
+        .filter_map(Value::as_array_mut)
+        .flatten()
+    {
         if let Some(o) = c.as_object_mut() {
             o.remove("ns");
         }
@@ -190,7 +194,13 @@ fn worker(line: Value, planted: Planted, inbox: Receiver<Latched>, outbox: Sende
     let mut rec = Record::default();
     let mut reported = 0;
     let mut view: BTreeMap<String, Vec<u8>> = BTreeMap::new();
-    for Latched { t, set, hover, baked: wants } in inbox {
+    for Latched {
+        t,
+        set,
+        hover,
+        baked: wants,
+    } in inbox
+    {
         if wants {
             if outbox.send(baked(&world, &rec)).is_err() {
                 return;
@@ -409,7 +419,13 @@ fn front(
     // Each ended step's full-state hashes and what a frame draws from it, until a reset drops it.
     let mut ended: BTreeMap<i64, (Map<String, Value>, Vec<Shown>)> = BTreeMap::new();
     let mut fork_at: Option<i64> = None;
-    for Latched { t, set, hover, baked } in inbox {
+    for Latched {
+        t,
+        set,
+        hover,
+        baked,
+    } in inbox
+    {
         // A pipelined item has no preview, and its logic thread keeps no session bake.
         if baked {
             let no = json!({"ok": false, "code": "bad_input", "what": "baked: a pipelined view keeps no session bake"});
@@ -419,7 +435,15 @@ fn front(
             continue;
         }
         let mut took = set.is_none().then_some(None);
-        if to.send(Latched { t, set, hover, baked }).is_err() {
+        if to
+            .send(Latched {
+                t,
+                set,
+                hover,
+                baked,
+            })
+            .is_err()
+        {
             return;
         }
         let start = cpu_ns();

@@ -2052,6 +2052,9 @@ class Host implements ExtensionHost {
         const values = isPlain(reply.values) && Object.values(reply.values).some((v) => Array.isArray(v) && v.length > 0);
         running.played.push({ seed: seed as number, bot: r.bot === undefined ? undefined : canonical(botOf(r.bot)), track: String(reply.track), values });
         if (Array.isArray(reply.entries)) running.tracks.add(canonical(reply.entries));
+        // #1048: a probe's track for each copy that trapped or broke a range, the run's recorded entries and what it
+        // put, which the check plays again in a fresh replica.
+        if (Array.isArray(reply.tests)) for (const t of reply.tests as { track?: unknown }[]) if (Array.isArray(t?.track)) running.tracks.add(canonical(t.track));
         return reply;
       }
       case 'deep.registerCheck': {
@@ -2147,6 +2150,10 @@ class Host implements ExtensionHost {
       }
       case 'deep.work.fetch':
         return this.sourceHost.workFetch(ext, args[0], args[1]);
+      // #1048: a plug-in's model source asked through the hub, as a model bot asks it between steps.
+      case 'deep.source.ask':
+        quiet();
+        return this.sourceHost.ask(ext, args[0], args[1]);
       case 'deep.channel.fetch': {
         // Only a send or read of its own under way: the hub's call, with the channel's settings and token.
         const [call, request] = args;

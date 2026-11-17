@@ -1,6 +1,11 @@
 // Issue #378: scene3d's draws into the linear and object-ID targets, and the output pass.
 // Pixels are y down from the top left; a fragment's position is its pixel centre.
 
+// #172: derivatives here are read inside branches on per-pixel values, as the app's own compiler
+// takes them; the browser's WebGPU refuses that unless this check is off. Nothing it computes
+// changes.
+diagnostic(off, derivative_uniformity);
+
 struct Frame {
     clip: mat4x4<f32>,
     right: vec4<f32>,
@@ -251,7 +256,7 @@ const OF: u32 = 64u;
 const MASKS_INDEPENDENT: bool = false;
 
 fn band_hash(px: vec2<u32>, key: u32) -> u32 {
-    var h = px.x * 0x8da6b343u ^ px.y * 0xd8163841u ^ key * 0xcb1ab31fu;
+    var h = (px.x * 0x8da6b343u) ^ (px.y * 0xd8163841u) ^ (key * 0xcb1ab31fu);
     h = (h ^ (h >> 16u)) * 0x7feb352du;
     h = (h ^ (h >> 15u)) * 0x846ca68bu;
     return h ^ (h >> 16u);
@@ -1856,7 +1861,7 @@ fn area_light(li: Light, p: vec3<f32>, n: vec3<f32>, v: vec3<f32>, s: Surface, a
 
 // A seeded integer hash to [0, 1).
 fn hash3(p: vec3<i32>, seed: u32) -> f32 {
-    var h = bitcast<u32>(p.x) * 73856093u ^ bitcast<u32>(p.y) * 19349663u ^ bitcast<u32>(p.z) * 83492791u ^ seed * 2654435761u;
+    var h = (bitcast<u32>(p.x) * 73856093u) ^ (bitcast<u32>(p.y) * 19349663u) ^ (bitcast<u32>(p.z) * 83492791u) ^ (seed * 2654435761u);
     h = (h ^ (h >> 16u)) * 0x45d9f3bu;
     h = (h ^ (h >> 16u)) * 0x45d9f3bu;
     h = h ^ (h >> 16u);
@@ -2160,7 +2165,7 @@ fn direct(in: MeshOut, n: vec3<f32>, s: Surface, spread: f32, curved: bool) -> D
     var removed = 0.0;
     let reach = cluster_at(in.pos.xy, in.world);
     for (var i = 0u; i < lights.count.x; i++) {
-        if (reach >> i & 1u) == 0u {
+        if ((reach >> i) & 1u) == 0u {
             continue;
         }
         let li = lights.items[i];

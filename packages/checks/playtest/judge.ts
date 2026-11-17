@@ -24,8 +24,11 @@ export function goalSteps(play: PlayAnswer, goals: Judged[]): Map<string, number
   }));
 }
 
-/** A run's outcome, with the step it happened. `within` counts steps. */
-export function outcomeOf(play: PlayAnswer, goals: Judged[], stuck: { measure: string; by: number; within: number } | undefined): Outcome {
+/**
+ * A run's outcome, with the step it happened. `within` counts steps; with `active` (#1048, a model bot's run), only the
+ * steps it says the bot was acting in count toward it, so steps in which the bot sent nothing never end a run stuck.
+ */
+export function outcomeOf(play: PlayAnswer, goals: Judged[], stuck: { measure: string; by: number; within: number } | undefined, active?: (k: number) => boolean): Outcome {
   if (play.bot_trap) return { kind: 'invalid', step: Number(play.bot_trap['step'] ?? 0), why: `its bot trapped at its step ${String(play.bot_trap['step'])} (${String(play.bot_trap['kind'])})` };
   const reached = [...goalSteps(play, goals).values()];
   const done = goals.length && reached.every((k) => k !== undefined) ? Math.max(...(reached as number[])) : undefined;
@@ -40,9 +43,12 @@ export function outcomeOf(play: PlayAnswer, goals: Judged[], stuck: { measure: s
     const list = play.values[stuck.measure] ?? [];
     const until = Math.min(done ?? Infinity, list.length);
     let anchor = 0;
+    let still = 0;
     for (let k = 1; k < until; k++) {
-      if (moved(list[k], list[anchor]) >= stuck.by) anchor = k;
-      else if (k - anchor >= stuck.within) {
+      if (moved(list[k], list[anchor]) >= stuck.by) {
+        anchor = k;
+        still = 0;
+      } else if ((still += !active || active(k) ? 1 : 0) >= stuck.within) {
         failures.push({ kind: 'stuck', step: k, from_step: anchor, measure: stuck.measure });
         break;
       }

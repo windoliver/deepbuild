@@ -70,7 +70,7 @@ pub const SANDBOX_PART: &str = "sandbox";
 
 /// The parts a module that fills `control@1` adds (#308): each of that registry's kit rules run
 /// on every control kind the module fills.
-pub const CONTROL_PARTS: [&str; 4] = ["replay", "read_region", "keyboard", "input"];
+pub const CONTROL_PARTS: [&str; 5] = ["replay", "read_region", "keyboard", "input", "edges"];
 
 /// The part a module that declares registries adds (#200): each kit rule isolated by a planted
 /// wrong entry that breaks it alone.

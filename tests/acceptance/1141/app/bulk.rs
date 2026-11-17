@@ -124,14 +124,14 @@ pub fn event(n: u64) -> Value {
             json!({ "run": format!("run:{}", id(n - 1)), "outcome": "passed", "exit": 0 }),
         ),
         503 => verdict(n, of(n - 3), n - 3),
-        _ if r % 97 == 0 => event_in(
+        _ if r.is_multiple_of(97) => event_in(
             n,
             of(n),
             "session.attention",
             "hook",
             json!({ "state": "working" }),
         ),
-        _ if r % 3 == 0 => event_in(
+        _ if r.is_multiple_of(3) => event_in(
             n,
             of(n),
             "tool.after",
@@ -174,7 +174,7 @@ pub fn tail(from: u64) -> Vec<Value> {
 
 /// The state [`tail`] leaves session `k` in.
 pub fn expected(k: u64) -> State {
-    if k % 2 == 0 {
+    if k.is_multiple_of(2) {
         State::Pass
     } else {
         State::NeedsYou

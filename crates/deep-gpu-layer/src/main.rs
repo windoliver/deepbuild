@@ -40,15 +40,17 @@ mod groups;
 mod guard;
 mod hdr;
 mod host;
-mod insets;
 mod indexed;
+mod insets;
 mod interp_suite;
 mod levels;
 mod live;
+mod lightfx;
 mod liveview;
 mod lod;
 mod look_ops;
 mod marks2d;
+mod op_transition;
 mod opframe;
 mod paintfx;
 mod parity;
@@ -58,7 +60,6 @@ mod plugin;
 mod print2d;
 mod records;
 mod reference;
-mod op_transition;
 mod regions;
 mod scene;
 mod seam;
@@ -174,6 +175,11 @@ pub enum Planted {
     PassOffByTwo,
     BloomWithoutKaris,
     PassesOneGpu,
+    /// #508's wrong programs (tests/acceptance/508/README.md: Surfaces this job invents, 10): a
+    /// plume's haze run before the check readbacks are taken, so they read its bent pixels; and
+    /// the film effects taking their time from the wall clock instead of the frame's t.
+    HazeFeedsCheckReadback,
+    EffectReadsWallClock,
     /// #379's wrong programs (tests/acceptance/379/README.md: Planted programs).
     SumsPassIntervals,
     AllocatesPerFrame,
@@ -482,6 +488,12 @@ pub enum Planted {
     AxesModAppliesTransform,
     Axes3dOwnTickRule,
     AxesModMapsEveryFrame,
+    /// #2031's wrong programs (tests/acceptance/2031/README.md: Planted programs).
+    LightLinearFalloff,
+    LightEncodedSum,
+    LightDefaultAmbientZero,
+    LightEveryChild,
+    LightStaleList,
 }
 
 impl Planted {
@@ -505,6 +517,11 @@ impl Planted {
             "backdrop_past_coverage" => Planted::BackdropPastCoverage,
             "backdrop_reads_status" => Planted::BackdropReadsStatus,
             "bevel_lit_opposite" => Planted::BevelLitOpposite,
+            "light_linear_falloff" => Planted::LightLinearFalloff,
+            "light_encoded_sum" => Planted::LightEncodedSum,
+            "light_default_ambient_zero" => Planted::LightDefaultAmbientZero,
+            "light_every_child" => Planted::LightEveryChild,
+            "light_stale_list" => Planted::LightStaleList,
             "vivid_light_as_linear_light" => Planted::VividLightAsLinearLight,
             "dissolve_reads_playback" => Planted::DissolveReadsPlayback,
             "pass_linear_in_2d" => Planted::PassLinearIn2d,
@@ -543,6 +560,8 @@ impl Planted {
             "pass_off_by_two" => Planted::PassOffByTwo,
             "bloom_without_karis" => Planted::BloomWithoutKaris,
             "passes_one_gpu" => Planted::PassesOneGpu,
+            "haze_feeds_check_readback" => Planted::HazeFeedsCheckReadback,
+            "effect_reads_wall_clock" => Planted::EffectReadsWallClock,
             "sums_pass_intervals" => Planted::SumsPassIntervals,
             "allocates_per_frame" => Planted::AllocatesPerFrame,
             "compiles_at_swap" => Planted::CompilesAtSwap,

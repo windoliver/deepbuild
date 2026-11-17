@@ -1,9 +1,10 @@
 //! The GPU-layer adapter and its declared pass costs. Public entry remains the crate root.
 
 use crate::{
-    ao, clouds, cull, dof, hdr, history, inset, local, lock, read_texture, texture2d, After, Planted,
-    Post, Renderer, CASCADE_PASS, CULL_PASS, FLARE_PASS, GEOMETRY_PASS, LABEL_PASS, MIRROR_PASS,
-    MSAA, OUTLINE_PASS, OUTPUT_PASS, SHADOW_PASS, SHARPEN_PASS, UPSCALE_PASS, WATER_PASS,
+    ao, clouds, cull, dof, hdr, history, inset, local, lock, read_texture, texture2d, After,
+    Planted, Post, Renderer, CASCADE_PASS, CULL_PASS, FLARE_PASS, GEOMETRY_PASS, LABEL_PASS,
+    MIRROR_PASS, MSAA, OUTLINE_PASS, OUTPUT_PASS, SHADOW_PASS, SHARPEN_PASS, UPSCALE_PASS,
+    WATER_PASS,
 };
 use deep_canvas_scene3d::look::Look3;
 use deep_canvas_scene3d::scene::Scene;
