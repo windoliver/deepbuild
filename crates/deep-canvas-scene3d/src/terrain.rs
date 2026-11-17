@@ -146,7 +146,24 @@ pub fn build(params: &Value, cap_in_metres: bool) -> Result<Terrain, Fault> {
 /// The builder: the drawn plate, split along the other diagonal under the planted builder; the
 /// cap read in metres under the planted cap.
 pub fn built(params: &Value, planted: Option<&str>) -> Result<Mesh, Fault> {
-    Ok(build(params, planted == Some(CAP_IN_METRES))?.mesh(planted == Some(OTHER_DIAGONAL)))
+    let t = build(params, planted == Some(CAP_IN_METRES))?;
+    let mut m = t.mesh(planted == Some(OTHER_DIAGONAL));
+    // #1381: its horizon table, when it asks for one, baked with it once per content key.
+    if let Some(texels) = crate::horizon::asked(params)? {
+        m.horizon = Some(std::sync::Arc::new(crate::horizon::of_terrain(&t, texels)));
+    }
+    Ok(m)
+}
+
+/// #1381: a terrain plate's uv1, each vertex's place on its grid: x ÷ size + ½, z ÷ size + ½.
+pub fn places(kind: &str, params: &Value, m: &Mesh) -> Option<Vec<[f64; 2]>> {
+    let (size, _) = grid(of_params(params).filter(|_| kind == "plate@1")?, false).ok()?;
+    Some(
+        m.positions
+            .iter()
+            .map(|p| [p[0] / size[0] + 0.5, p[2] / size[1] + 0.5])
+            .collect(),
+    )
 }
 
 /// Its vertex and triangle counts from its params alone, its own cap in samples in place of a
@@ -357,6 +374,7 @@ impl Plate<'_> {
                     .map(|(k, &error)| {
                         let mut m = self.level([c0, c1, r0, r1], 1 << k, drop, sides);
                         m.terrain = Some(normals.clone());
+                        m.horizon = self.full.horizon.clone();
                         let mut h = deep_canvas::schedule::Hasher::new("scene3d.terrain.tile");
                         h.bytes(&hash.to_le_bytes());
                         for n in [i, j, k, tc, levels] {

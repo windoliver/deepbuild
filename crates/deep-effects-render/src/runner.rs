@@ -455,6 +455,7 @@ impl Runner {
         let Pipeline::Compute(pipeline) = &self.pipeline else {
             unreachable!("a compute operator dispatches")
         };
+        deep_gpu::counted::compute_pass();
         let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some(&self.compiled.checked.op.id),
             timestamp_writes: timestamps,
@@ -480,6 +481,7 @@ impl Runner {
         let Pipeline::Compute(pipeline) = &self.pipeline else {
             unreachable!("a compute operator dispatches")
         };
+        deep_gpu::counted::compute_pass();
         let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some(&self.compiled.checked.op.id),
             timestamp_writes: timestamps,

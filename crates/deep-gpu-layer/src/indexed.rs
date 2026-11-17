@@ -658,6 +658,7 @@ impl Indexer {
                 .collect::<Vec<_>>(),
         });
         {
+            deep_gpu::counted::compute_pass();
             let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some(OPERATOR),
                 timestamp_writes: None,

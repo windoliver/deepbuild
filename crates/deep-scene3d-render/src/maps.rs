@@ -10,6 +10,7 @@ use std::sync::Arc;
 
 use bytemuck::{Pod, Zeroable};
 use deep_canvas_scene3d::light::{InsetMap, Maps, Texels, Wrap};
+use deep_canvas_scene3d::horizon::Horizon;
 use deep_canvas_scene3d::terrain::Normals;
 
 /// The maps in the order the shader numbers them: base color, metallic-roughness, normal,
@@ -19,6 +20,31 @@ pub const SLOTS: usize = 5;
 /// A terrain tile's plate's full-detail normals (#2017), bound after any input a material
 /// operator adds.
 pub const TERRAIN_NORMALS: u32 = 40;
+/// A terrain plate's horizon table (#1381), bound after its normals: a read-only storage buffer,
+/// since the fragment stage's sampled textures are at the device's 16.
+pub const TERRAIN_HORIZON: u32 = 41;
+
+/// A terrain plate's own tables a solid's pixels read: its full-detail normals (#2017) and its
+/// horizon table (#1381).
+#[derive(Clone, Copy, Default)]
+pub struct Ground<'a> {
+    pub normals: Option<&'a Normals>,
+    pub horizon: Option<&'a Horizon>,
+}
+
+impl<'a> Ground<'a> {
+    /// A built mesh's.
+    pub fn of(m: Option<&'a deep_canvas_scene3d::geom::Mesh>) -> Ground<'a> {
+        Ground {
+            normals: m.and_then(|m| m.terrain.as_deref()),
+            horizon: m.and_then(|m| m.horizon.as_deref()),
+        }
+    }
+
+    pub fn is_none(&self) -> bool {
+        self.normals.is_none() && self.horizon.is_none()
+    }
+}
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
@@ -87,6 +113,11 @@ pub fn layout_entries() -> Vec<wgpu::BindGroupLayoutEntry> {
         },
         count: None,
     });
+    entries.push(crate::buffer_entry(
+        TERRAIN_HORIZON,
+        wgpu::ShaderStages::FRAGMENT,
+        wgpu::BufferBindingType::Storage { read_only: true },
+    ));
     entries
 }
 
@@ -102,6 +133,8 @@ pub fn layout(d: &deep_gpu::counted::Wgpu) -> wgpu::BindGroupLayout {
 pub struct Store {
     pub layout: wgpu::BindGroupLayout,
     textures: BTreeMap<String, (wgpu::Texture, wgpu::TextureView)>,
+    /// #1381: terrain plates' horizon tables by key, and the stand-in a solid without one binds.
+    horizons: BTreeMap<String, wgpu::Buffer>,
     samplers: BTreeMap<([Wrap; 2], u8), wgpu::Sampler>,
     /// This frame's texels by image hash (the scene's).
     pub texels: BTreeMap<String, Arc<Texels>>,
@@ -170,6 +203,7 @@ impl Store {
             }),
             layout,
             textures: BTreeMap::new(),
+            horizons: BTreeMap::new(),
             samplers: BTreeMap::new(),
             texels: BTreeMap::new(),
             views: BTreeMap::new(),
@@ -193,7 +227,7 @@ impl Store {
         queue: &deep_gpu::counted::Queue,
         maps: &Maps,
         taps: u8,
-        terrain: Option<&Normals>,
+        terrain: Ground<'_>,
     ) -> u32 {
         let present: String = maps
             .slots()
@@ -207,7 +241,12 @@ impl Store {
         if !present.contains('1') && terrain.is_none() {
             return 0;
         }
-        let normals = terrain.map_or(String::new(), |n| format!("|{:016x}", n.key));
+        let normals = terrain
+            .normals
+            .map_or(String::new(), |n| format!("|{:016x}", n.key))
+            + &terrain
+                .horizon
+                .map_or(String::new(), |h| format!("|h{:016x}", h.key));
         let made = maps
             .base_color
             .as_ref()
@@ -371,6 +410,33 @@ impl Store {
         key
     }
 
+    /// #1381: a terrain plate's horizon table as a storage buffer: its texels a side in the first
+    /// 16 bytes, then each texel's 16 bytes row by row; uploaded once by its key, and a stand-in
+    /// of one empty table for a solid without one.
+    fn horizon(
+        &mut self,
+        d: &deep_gpu::counted::Wgpu,
+        h: Option<&Horizon>,
+    ) -> String {
+        let key = h.map_or("horizon:none".to_string(), |h| format!("horizon:{:016x}", h.key));
+        if !self.horizons.contains_key(&key) {
+            let mut words: Vec<[u32; 4]> = vec![h.map_or([0; 4], |h| [h.cols, h.rows, 0, 0])];
+            words.extend(h.map_or(&[][..], |h| &h.texels[..]));
+            let bytes: &[u8] = bytemuck::cast_slice(&words);
+            let buffer = d.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("scene3d terrain horizon"),
+                contents: bytes,
+                usage: wgpu::BufferUsages::STORAGE,
+            });
+            if h.is_some() {
+                self.uploads += 1;
+                self.bytes += bytes.len() as u64;
+            }
+            self.horizons.insert(key.clone(), buffer);
+        }
+        key
+    }
+
     fn bind(
         &mut self,
         d: &deep_gpu::counted::Wgpu,
@@ -379,7 +445,7 @@ impl Store {
         taps: u8,
     ) -> wgpu::BindGroup {
         let layout = self.layout.clone();
-        self.bind_with(d, queue, maps, taps, None, &layout, Vec::new())
+        self.bind_with(d, queue, maps, taps, Ground::default(), &layout, Vec::new())
     }
 
     /// `maps`' bind group in `layout`, with a terrain tile's plate's normals (#2017) and `extra`
@@ -391,13 +457,14 @@ impl Store {
         queue: &deep_gpu::counted::Queue,
         maps: &Maps,
         taps: u8,
-        terrain: Option<&Normals>,
+        terrain: Ground<'_>,
         layout: &wgpu::BindGroupLayout,
         extra: Vec<wgpu::BindGroupEntry<'_>>,
     ) -> wgpu::BindGroup {
-        let normals = terrain.map(|n| self.normals(d, queue, n));
+        let normals = terrain.normals.map(|n| self.normals(d, queue, n));
+        let horizon = self.horizon(d, terrain.horizon);
         let mut u = MapsUniform::zeroed();
-        u.has[3] = u32::from(normals.is_some());
+        u.has[3] = u32::from(normals.is_some()) | (u32::from(terrain.horizon.is_some()) << 1);
         let slots = maps.slots().map(|(_, s)| s);
         let mut keys: [Option<String>; SLOTS] = Default::default();
         let mut wraps = [([Wrap::Repeat; 2], 1u8); SLOTS];
@@ -483,6 +550,10 @@ impl Store {
                     .as_ref()
                     .map_or(&self.white, |k| &self.textures[k].1),
             ),
+        });
+        entries.push(wgpu::BindGroupEntry {
+            binding: TERRAIN_HORIZON,
+            resource: self.horizons[&horizon].as_entire_binding(),
         });
         entries.extend(extra);
         d.create_bind_group(&wgpu::BindGroupDescriptor {

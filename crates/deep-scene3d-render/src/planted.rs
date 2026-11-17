@@ -122,4 +122,9 @@ pub struct Planted {
     pub warms_per_item: bool,
     /// #537: a terrain overlay keeps the grid it holds when a frame seeks to another step.
     pub overlay_keeps_grid_on_seek: bool,
+    /// #1381: a terrain plate's horizon table is never read: nothing past the cascades shadows it
+    /// and nothing occludes its sky.
+    pub horizon_unbaked: bool,
+    /// #1381: a terrain plate's sky occlusion from its slope alone, (1 + n.y) ÷ 2.
+    pub occlusion_from_slope: bool,
 }

@@ -395,7 +395,8 @@ struct MapSlot {
 struct Maps {
     slots: array<MapSlot, 5>,
     // x: which maps it has (bit k for map k); y: which read uv1 (bit k); z: 1 to rebuild a
-    // normal map's z and skip its stored one; w: 1 for a terrain tile's normals (#2017).
+    // normal map's z and skip its stored one; w: bit 0 for a terrain tile's normals (#2017),
+    // bit 1 for a terrain plate's horizon table (#1381).
     has: vec4<u32>,
     // x: the normal map's scale; y: the occlusion strength; z: the alpha cutoff (mask);
     // w: the alpha mode's coverage from the base color factor alone.
@@ -415,6 +416,10 @@ struct Maps {
 @group(3) @binding(10) var sampler_emission: sampler;
 // A terrain tile's plate's full-detail normals (#2017): x and z per sample, row by row.
 @group(3) @binding(40) var terrain_n: texture_2d<f32>;
+// A terrain plate's horizon table (#1381): its texels a side in element 0's x and y, then per
+// texel row by row 16 azimuths' horizon angle codes, azimuth k in byte k % 4 (low first) of word
+// k ÷ 4, azimuth 0 along +X turning toward +Z.
+@group(3) @binding(41) var<storage, read> terrain_h: array<vec4<u32>>;
 
 fn map_uv(k: u32, uv: vec4<f32>) -> vec2<f32> {
     let t = select(uv.xy, uv.zw, (maps.has.y & (1u << k)) != 0u);
@@ -897,6 +902,11 @@ fn tangent_to_world(in: MeshOut, n: vec3<f32>, m: vec3<f32>) -> vec3<f32> {
 // the part's own pixels and adds back. Every diffuse below is times `sss_keep` (1 − the weight on
 // a subsurface part, else 1); with `sss_only` the lights shade the diffuse alone, as the share.
 var<private> sss_keep: f32 = 1.0;
+// #1381: on a terrain plate with a horizon table, the key sun's visibility past the cascades
+// and the sky's occlusion; 1 and 1 elsewhere.
+var<private> far_on: bool = false;
+var<private> far_sun: f32 = 1.0;
+var<private> far_sky: f32 = 1.0;
 var<private> sss_only: bool = false;
 // Set by `sss_fs`: shade the share too, into `sss_share`, with the exit factor it's over.
 var<private> sss_pass: bool = false;
@@ -1118,6 +1128,8 @@ const P_SHADOW_ONE: u32 = 2097152u;
 const P_CALLS_CUT: u32 = 4194304u;
 const P_WORLD_N: u32 = 8388608u;
 const P_VIEW_AWAY: u32 = 16777216u;
+// #1381's: a terrain plate's sky occlusion from its slope alone, (1 + n.y) ÷ 2.
+const P_SKY_BY_SLOPE: u32 = 33554432u;
 
 fn planted(bit: u32) -> bool {
     return (lights.count.z & bit) != 0u;
@@ -1358,6 +1370,46 @@ fn terrain_normal(in: MeshOut) -> vec3<f32> {
     }
     let qv = vec3<f32>(unpack2x16snorm(in.mask.y), unpack2x16snorm(in.mask.z).x);
     return rotate_q(vec4<f32>(qv, sqrt(max(1.0 - dot(qv, qv), 0.0))), n);
+}
+
+// A terrain plate's horizon at a pixel (#1381): the four texels' codes around its place on the
+// plate's grid (uv1) mixed, then read as angles (horizon.rs `angle`: tan(c ÷ 255 · atan 4π) ÷
+// 8). x: the key sun's visibility, a smoothstep of its elevation less the horizon toward it, both
+// in the plate's own space, across its ±0.27°; y: the sky's occlusion, 1 − mean sin² h over the
+// 16 azimuths, h at least 0.
+fn horizon_at(in: MeshOut, toward: vec3<f32>) -> vec2<f32> {
+    let size = vec2<i32>(terrain_h[0].xy);
+    let g = in.uv.zw * vec2<f32>(size - vec2<i32>(1));
+    let c = clamp(vec2<i32>(floor(g)), vec2<i32>(0), max(size - vec2<i32>(2), vec2<i32>(0)));
+    let f = clamp(g - vec2<f32>(c), vec2<f32>(0.0), vec2<f32>(1.0));
+    var codes = array<vec4<f32>, 4>(vec4<f32>(0.0), vec4<f32>(0.0), vec4<f32>(0.0), vec4<f32>(0.0));
+    let w = vec4<f32>((1.0 - f.x) * (1.0 - f.y), f.x * (1.0 - f.y), (1.0 - f.x) * f.y, f.x * f.y);
+    var at = array<vec2<i32>, 4>(vec2<i32>(0, 0), vec2<i32>(1, 0), vec2<i32>(0, 1), vec2<i32>(1, 1));
+    for (var k = 0u; k < 4u; k++) {
+        let q = c + at[k];
+        let t = terrain_h[1 + q.y * size.x + q.x];
+        for (var j = 0u; j < 4u; j++) {
+            codes[j] += w[k] * unpack4x8unorm(t[j]);
+        }
+    }
+    let top = atan(4.0 * PI);
+    var sin2 = 0.0;
+    var hs: array<vec4<f32>, 4>;
+    for (var j = 0u; j < 4u; j++) {
+        hs[j] = tan(codes[j] * top) / 8.0;
+        let s = sin(hs[j]);
+        sin2 += dot(s, s);
+    }
+    // The sun in the plate's own space: the part's rotation undone.
+    let qv = vec3<f32>(unpack2x16snorm(in.mask.y), unpack2x16snorm(in.mask.z).x);
+    let sun = rotate_q(vec4<f32>(-qv, sqrt(max(1.0 - dot(qv, qv), 0.0))), normalize(toward));
+    let x = fract(atan2(sun.z, sun.x) / TAU + 1.0) * 16.0;
+    let k0 = min(u32(x), 15u);
+    let k1 = (k0 + 1u) % 16u;
+    let h = mix(hs[k0 / 4u][k0 % 4u], hs[k1 / 4u][k1 % 4u], x - f32(k0));
+    let half = radians(0.27);
+    let lit = smoothstep(-half, half, asin(clamp(sun.y, -1.0, 1.0)) - h);
+    return vec2<f32>(lit, 1.0 - sin2 / 16.0);
 }
 
 // A terrain normal stored as its x and z, its y ≥ 0 rebuilt.
@@ -1733,9 +1785,11 @@ fn lit_share(world: vec3<f32>, n: vec3<f32>, curved: bool, px: vec2<f32>) -> f32
             let lit = cascade_lit(i, world, n, curved, px);
             let near = select(0.0, lights.splits[max(i, 1u) - 1u], i > 0u);
             let edge = far - 0.1 * (far - near);
-            if lights.forward.w > 0.5 && d > edge {
-                var next = 1.0;
-                if i + 1u < count {
+            // A terrain plate's horizon fades in over the last cascade's far tenth (#1381).
+            let last = i + 1u == count;
+            if (lights.forward.w > 0.5 || (far_on && last)) && d > edge {
+                var next = far_sun;
+                if !last {
                     next = cascade_lit(i + 1u, world, n, curved, px);
                 }
                 return mix(lit, next, (d - edge) / max(far - edge, 1e-6));
@@ -1743,7 +1797,8 @@ fn lit_share(world: vec3<f32>, n: vec3<f32>, curved: bool, px: vec2<f32>) -> f32
             return lit;
         }
     }
-    return 1.0;
+    // Past the last cascade, a terrain plate's horizon shadows it (#1381).
+    return far_sun;
 }
 
 // Which of the shaded lights reach a fragment: a bit each, by the policy's order.
@@ -2344,8 +2399,19 @@ fn share(in: MeshOut, front: bool, keyed: bool) -> Share {
 fn shade(in0: MeshOut, front: bool, local_n: vec3<f32>, g: array<vec4<f32>, 2>, keyed: bool) -> Targets {
     var in = in0;
     // A terrain tile shades from its plate's full-detail normals at every level (#2017).
-    if maps.has.w != 0u {
+    if (maps.has.w & 1u) != 0u {
         in.normal = terrain_normal(in);
+    }
+    // A terrain plate's horizon: the key sun past the cascades and the sky's occlusion (#1381).
+    if (maps.has.w & 2u) != 0u {
+        let key = select(frame.light.xyz, -lights.items[max(lights.count.y, 1u) - 1u].dir.xyz, lights.count.y > 0u);
+        let h = horizon_at(in, key);
+        far_on = true;
+        far_sun = h.x;
+        far_sky = h.y;
+        if planted(P_SKY_BY_SLOPE) {
+            far_sky = 0.5 + 0.5 * normalize(in.normal).y;
+        }
     }
     // A cutaway hides what lies past its planes (#424); with a cap, a back face seen through the
     // cut shades as the cut face: a matte surface of the cap's role on its plane, facing along
@@ -2399,7 +2465,7 @@ fn shade(in0: MeshOut, front: bool, local_n: vec3<f32>, g: array<vec4<f32>, 2>, 
                 m.n = coat_n;
             }
         }
-        m.occlusion = m.occlusion * op_occlusion;
+        m.occlusion = m.occlusion * op_occlusion * far_sky;
         // Its coverage: the material's alpha (times its base color map's) times the item's
         // opacity (#418). A mask with maps keeps its coverage here, from the map.
         var alpha = m.alpha;
@@ -2482,7 +2548,7 @@ fn shade(in0: MeshOut, front: bool, local_n: vec3<f32>, g: array<vec4<f32>, 2>, 
         direct = direct * lit_share(in.world, n, curved, in.pos.xy) * contact_at(in.pos.xy);
     }
     let albedo = projected(tinted(select(paint(in.color), in.tangent.rgb, tinted_by_vertex(in)), in.pick, in.local), in.pick, in.world, n);
-    let lit = ambient * occlusion(in.pos.xy, in.world, normalize(in.normal), albedo) + vec3<f32>(direct);
+    let lit = ambient * occlusion(in.pos.xy, in.world, normalize(in.normal), albedo) * far_sky + vec3<f32>(direct);
     let a = in.emission.w;
     return targets(vec4<f32>(fogged(adjusted(albedo * lit + in.emission.rgb, in.op.w), in.world) * a, a), in.pick);
 }

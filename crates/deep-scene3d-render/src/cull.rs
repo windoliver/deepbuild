@@ -332,6 +332,7 @@ impl Occlude {
     /// The test against `pyramid`, then the compaction and the draw's count.
     pub fn record(&self, encoder: &mut wgpu::CommandEncoder, pyramid: &Pyramid) {
         {
+            deep_gpu::counted::compute_pass();
             let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some("scene3d occlusion"),
                 timestamp_writes: None,
@@ -401,6 +402,7 @@ impl Run {
         writes: Option<wgpu::ComputePassTimestampWrites<'_>>,
     ) {
         {
+            deep_gpu::counted::compute_pass();
             let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some("scene3d cull"),
                 timestamp_writes: writes
@@ -938,6 +940,7 @@ impl Pyramid {
         encoder: &mut wgpu::CommandEncoder,
         timestamp_writes: Option<wgpu::ComputePassTimestampWrites<'_>>,
     ) {
+        deep_gpu::counted::compute_pass();
         let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some(PYRAMID_PASS),
             timestamp_writes,

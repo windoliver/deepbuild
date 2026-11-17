@@ -598,6 +598,8 @@ struct SolidRecord {
 
 /// #446's planted wrong program's bit in the shader's planted word (scene3d.wgsl).
 const FILTER_IN_TEXELS: u32 = 1 << 30;
+/// #1381's planted sky occlusion from a terrain plate's slope alone (scene3d.wgsl: `P_SKY_BY_SLOPE`).
+const OCCLUSION_FROM_SLOPE: u32 = 1 << 25;
 /// A solid the shadow pass leaves out (`cast_shadow: false`).
 const NO_CAST: u32 = 1;
 /// A solid no shadow falls on (`receive_shadow: false`), for the passes that shade one.
@@ -3887,6 +3889,11 @@ impl Renderer {
                 0
             }
             | if self.planted.ids_ignore_mask { 8 } else { 0 }
+            | if self.planted.occlusion_from_slope {
+                OCCLUSION_FROM_SLOPE
+            } else {
+                0
+            }
             | if self.planted.local.filter_in_texels {
                 FILTER_IN_TEXELS
             } else {
@@ -5840,14 +5847,19 @@ impl Renderer {
                 s,
                 clear(s) && !matches!(kind_of(s), BLEND | FADE | GLASS),
             );
-            // A terrain tile's pixels read its plate's full-detail normals (#2017).
-            let terrain = s.mesh.as_ref().and_then(|m| m.terrain.as_deref());
+            // A terrain tile's pixels read its plate's full-detail normals (#2017) and a terrain
+            // plate's its horizon table (#1381).
+            let mut terrain = crate::maps::Ground::of(s.mesh.as_deref());
+            // #1381's planted plate: its table is never read.
+            if self.planted.horizon_unbaked {
+                terrain.horizon = None;
+            }
             let maps = match (&s.maps, &s.material) {
                 (Some(m), Some(_)) => {
                     self.maps
                         .group(&device.device, &device.queue, m, taps, terrain)
                 }
-                _ if terrain.is_some() => self.maps.group(
+                _ if !terrain.is_none() => self.maps.group(
                     &device.device,
                     &device.queue,
                     &light::Maps::default(),

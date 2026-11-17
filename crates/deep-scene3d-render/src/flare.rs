@@ -409,6 +409,7 @@ impl Flarer {
         Some(Box::new(move |encoder| {
             encoder.clear_buffer(&shares, 0, None);
             {
+                deep_gpu::counted::compute_pass();
                 let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                     label: Some(FLARE_PASS),
                     timestamp_writes: None,

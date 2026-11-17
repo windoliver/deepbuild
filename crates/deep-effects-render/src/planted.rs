@@ -109,6 +109,7 @@ impl Pre {
                 beginning_of_pass_write_index: Some(at + 2 * k as u32),
                 end_of_pass_write_index: Some(at + 2 * k as u32 + 1),
             });
+            deep_gpu::counted::compute_pass();
             let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some("planted structural step"),
                 timestamp_writes: writes,
@@ -127,6 +128,7 @@ impl Pre {
     ) {
         let last = self.dispatches.len().saturating_sub(1);
         for (k, (p, g, n)) in self.dispatches.iter().enumerate() {
+            deep_gpu::counted::compute_pass();
             let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some("planted structural step"),
                 timestamp_writes: crate::structural::spanned(writes.as_ref(), k, last),

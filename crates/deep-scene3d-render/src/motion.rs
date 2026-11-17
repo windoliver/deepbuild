@@ -798,6 +798,7 @@ impl Frame {
         end(encoder, q);
         let q = query(encoder);
         {
+            deep_gpu::counted::compute_pass();
             let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some("scene3d.motion resolve"),
                 timestamp_writes: q.as_ref().and_then(|q| q.compute_pass_timestamp_writes()),

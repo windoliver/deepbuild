@@ -151,6 +151,10 @@ pub enum Planted {
     OverlayKeepsGridOnSeek,
     LineReadsPreviousStep,
     PartPoseInWorldSpace,
+    /// #1381's wrong programs (tests/acceptance/1381/README.md: Assumed surfaces 5): a terrain
+    /// plate whose horizon table is never read, and its sky occlusion from its slope alone.
+    TerrainNoHorizonBake,
+    TerrainOcclusionFromSlope,
     /// #378's wrong programs (tests/acceptance/378/README.md: Planted programs).
     ForwardZ,
     EncodesTwice,
@@ -760,6 +764,8 @@ impl Planted {
             "overlay_keeps_grid_on_seek" => Planted::OverlayKeepsGridOnSeek,
             "line_reads_previous_step" => Planted::LineReadsPreviousStep,
             "part_pose_in_world_space" => Planted::PartPoseInWorldSpace,
+            "terrain_no_horizon_bake" => Planted::TerrainNoHorizonBake,
+            "terrain_occlusion_from_slope" => Planted::TerrainOcclusionFromSlope,
             _ => return None,
         })
     }

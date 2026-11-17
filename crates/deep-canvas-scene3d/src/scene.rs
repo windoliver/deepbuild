@@ -754,7 +754,8 @@ fn cascades(params: &Value, path: &str) -> Result<Cascades, Refused> {
         None => {}
         Some(Value::String(s)) if s == "auto" => {}
         Some(v) => {
-            c.far = Some(num(Some(v)).filter(|f| *f > 0.0).ok_or_else(|| Refused {
+            // #1381: 0 sets the cascades to zero range, so past them the horizon alone shades.
+            c.far = Some(num(Some(v)).filter(|f| *f >= 0.0).ok_or_else(|| Refused {
                 code: "out_of_range",
                 path: format!("{path}/shadow_far"),
             })?)

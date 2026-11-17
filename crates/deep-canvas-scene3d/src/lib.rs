@@ -23,6 +23,7 @@ pub mod geom;
 pub mod gltf;
 pub mod gpu;
 pub mod history;
+pub mod horizon;
 pub mod hit;
 pub mod hull;
 pub mod ies;

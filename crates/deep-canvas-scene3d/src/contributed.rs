@@ -422,6 +422,39 @@ fn names(v: &Value) -> Vec<&str> {
     }
 }
 
+/// #1381: a terrain plate's mesh, its horizon table's bake among it, kept by the plate's own
+/// content (its place aside, its time where its stack reads time) between a run's frames, so a
+/// frame that changed nothing it reads, such as one where only the sun moved, builds nothing.
+/// Every other item is built afresh.
+fn plate(
+    ask: &Ask<'_>,
+    (doc, id, item): (&Value, &str, &Value),
+    seconds: f64,
+    fills: Fills<'_>,
+) -> Result<Mesh, Refused> {
+    let terrain = item.get("kind").and_then(Value::as_str) == Some("plate@1")
+        && item.get("params").and_then(crate::terrain::of_params).is_some();
+    let Some(memo) = ask.memo.filter(|_| terrain) else {
+        return crate::scene::mesh_of(doc, id, item, seconds, fills);
+    };
+    let mut own = item.clone();
+    if let Some(o) = own.as_object_mut() {
+        o.remove("at");
+    }
+    if crate::stack::reads_time_by_kind(item) {
+        own["\u{0}t"] = Value::from(seconds);
+    }
+    let key = serde_json::json!({"plate": own, "planted": fills.planted}).to_string();
+    if let Some((_, m)) = memo.borrow().meshes.get(id).filter(|m| m.0 == key) {
+        return Ok(m.clone());
+    }
+    let mesh = crate::scene::mesh_of(doc, id, item, seconds, fills)?;
+    memo.borrow_mut()
+        .meshes
+        .insert(id.to_string(), (key, mesh.clone()));
+    Ok(mesh)
+}
+
 /// A builder's mesh after its stack (#226), where it carries a module's deform: built from the
 /// document with what the deform reads as at t, and kept by its key, so a frame where neither the
 /// item nor what its deform reads changed builds and maps nothing.
@@ -432,7 +465,7 @@ pub(crate) fn built(
     fills: Fills<'_>,
 ) -> Result<Mesh, Refused> {
     if carried(item).is_empty() {
-        return crate::scene::mesh_of(doc, id, item, seconds, fills);
+        return plate(ask, (doc, id, item), seconds, fills);
     }
     let mut own = item.clone();
     if let Some(o) = own.as_object_mut() {

@@ -425,6 +425,7 @@ impl Step {
             Draw::Render(p) => p,
             Draw::Compute(p, out, groups) => {
                 return outside(|| {
+                    deep_gpu::counted::compute_pass();
                     let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                         label: Some(self.name),
                         timestamp_writes: timestamps.map(|t| wgpu::ComputePassTimestampWrites {

@@ -1179,6 +1179,10 @@ fn run_view(
     );
     // Level of detail and the light cut, chosen from each frame's view (#425).
     let mut selection = crate::lod::Selection::new(app.planted);
+    // #1381: the compute passes drawing began before this frame, and every horizon table a frame
+    // has drawn, held so a table baked anew is never one seen before.
+    let mut passes_before = deep_gpu::counted::compute_passes();
+    let mut horizons: Vec<Arc<deep_canvas_scene3d::horizon::Horizon>> = Vec::new();
     let drawn_scale = if args.surface.scale < 1.0 && !noop {
         args.surface.scale
     } else {
@@ -1489,6 +1493,19 @@ fn run_view(
             crate::trails::plant(&mut scene, app.planted, t);
             let trails = crate::trails::report(&scene, &call["trails"]);
             let scene = Arc::new(scene);
+            // #1381: the horizon tables this frame's build baked: those no earlier frame drew.
+            let mut baked = 0u32;
+            for h in scene
+                .layers
+                .iter()
+                .flat_map(|l| &l.solids)
+                .filter_map(|s| s.mesh.as_ref()?.horizon.clone())
+            {
+                if !horizons.iter().any(|seen| Arc::ptr_eq(seen, &h)) {
+                    horizons.push(h);
+                    baked += 1;
+                }
+            }
             let selected = levels.select(&composed, &scene);
             let settled = levels.settle(&selected);
             let seeding = match app.planted {
@@ -2588,6 +2605,9 @@ fn run_view(
                     .collect();
                 frame.insert("indirect_draws".into(), json!(draws));
                 frame.insert("meshes_built".into(), json!(c.meshes_built));
+                frame.insert("horizons_baked".into(), json!(baked));
+                let passes = deep_gpu::counted::compute_passes();
+                frame.insert("compute_passes".into(), json!(passes - passes_before));
                 frame.insert("axes_mapped".into(), json!(axes_mapped));
                 frame.insert(
                     "terrain_tiles_selected".into(),
@@ -2600,10 +2620,17 @@ fn run_view(
             if args.lod {
                 frame.insert("lod".into(), crate::lod::rows(&choices));
             }
+            passes_before = deep_gpu::counted::compute_passes();
             if let (Some((item, at)), Some(tiles)) = (&args.ground_points, &tiles) {
+                let light = crate::lod::Light {
+                    scene: &scene,
+                    last_split: drawn.counts.cascade_splits.last().copied(),
+                    unbaked: app.planted == Some(Planted::TerrainNoHorizonBake),
+                    by_slope: app.planted == Some(Planted::TerrainOcclusionFromSlope),
+                };
                 frame.insert(
                     "ground_points".into(),
-                    crate::lod::ground_points(item, at, tiles, &choices),
+                    crate::lod::ground_points(item, at, tiles, &choices, &light),
                 );
             }
             if args.cull_report && capture && !noop {

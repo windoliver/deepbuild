@@ -167,6 +167,7 @@ impl Reducer {
         });
         let out = read_back(device, EXPOSURE_PASS, bytes, |encoder, staging| {
             {
+                deep_gpu::counted::compute_pass();
                 let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                     label: Some(EXPOSURE_PASS),
                     timestamp_writes: None,

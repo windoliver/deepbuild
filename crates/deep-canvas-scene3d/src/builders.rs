@@ -2170,7 +2170,11 @@ fn annotate(m: &mut Mesh, kind: &str, p: &Value, ctx: &Ctx<'_>) -> Result<(), Fa
     };
     m.uv0 = crate::uv::uv0(m, proj, uv_scale, natural.as_deref(), fallback);
     if CHARTED.contains(&kind) {
-        m.uv1 = crate::uv::uv1(m, natural.as_deref());
+        // A terrain plate's chart is its own grid, which its horizon table is read on (#1381).
+        m.uv1 = match crate::terrain::places(kind, p, m) {
+            Some(uv) => uv,
+            None => crate::uv::uv1(m, natural.as_deref()),
+        };
     }
     let span = (hi[1] - lo[1]).max(1e-12);
     let height = m.positions.iter().map(|q| (q[1] - lo[1]) / span).collect();

@@ -123,6 +123,7 @@ impl Closed {
         bound: &Bound,
         timestamps: Option<wgpu::ComputePassTimestampWrites<'_>>,
     ) {
+        deep_gpu::counted::compute_pass();
         let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some("particles closed form"),
             timestamp_writes: timestamps,
