@@ -184,6 +184,22 @@ pub fn inline_logic(
     let Some(doc) = form.as_object_mut() else {
         return Ok(());
     };
+    // And for a host whose own track the form takes later, the entries closed; for the canvas's
+    // logic module, which steps the current branch afresh, the seen values it carries in.
+    let b = &world.branches;
+    if b.off.is_empty() && b.carry.is_empty() {
+        doc.remove("branch");
+    } else {
+        let off: Vec<Value> = b
+            .off
+            .iter()
+            .map(|e| json!([e.t, e.control, e.seq]))
+            .collect();
+        doc.insert(
+            "branch".into(),
+            json!({"off": off, "carry": b.carry_json()}),
+        );
+    }
     let lists = doc.entry("occurrences").or_insert_with(|| json!({}));
     for (id, rows) in rec.occurrences(&piece) {
         let flat: Vec<Value> = rows

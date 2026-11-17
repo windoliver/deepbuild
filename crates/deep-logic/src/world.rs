@@ -26,7 +26,7 @@ use crate::services;
 pub use crate::track::{track_of, Entry, Given, To, Track, REWIND};
 use crate::Planted;
 pub(crate) use rewind::{branch_opened, fits};
-pub use rewind::{Branch, Branches};
+pub use rewind::{carry_of, Branch, Branches};
 
 /// The exports the rewrite gave a logic item's program: its mutable globals (with their types) and
 /// the page bitmap's words.

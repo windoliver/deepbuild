@@ -48,6 +48,25 @@ impl Branches {
                 .collect(),
         )
     }
+
+    /// The seen values the current branch carries, as a save and a drawn form keep them:
+    /// `[[step, base64]]`, each by the step after its stop.
+    pub fn carry_json(&self) -> Value {
+        Value::Array(
+            self.carry
+                .iter()
+                .map(|(p, s)| json!([p, B64.encode(s)]))
+                .collect(),
+        )
+    }
+}
+
+/// A carry as [`Branches::carry_json`] writes it; None when it doesn't decode.
+pub fn carry_of(v: &Value) -> Option<Vec<(i64, Vec<u8>)>> {
+    v.as_array()?
+        .iter()
+        .map(|c| Some((c.get(0)?.as_i64()?, B64.decode(c.get(1)?.as_str()?).ok()?)))
+        .collect()
 }
 
 /// A rewind entry the piece takes: it declares a rewind, and one back n stops goes back at most
@@ -302,7 +321,7 @@ impl World {
         json!({
             "stops": stops, "track": read, "off": off.map(Entry::to_json).collect::<Vec<_>>(),
             "closed": closed.iter().map(|c| json!({"stop": c.stop, "rewind": c.rewind, "t": c.t, "seen": B64.encode(&c.seen)})).collect::<Vec<_>>(),
-            "carry": b.carry.iter().map(|(p, s)| json!([p, B64.encode(s)])).collect::<Vec<_>>(),
+            "carry": b.carry_json(),
         })
     }
 }
@@ -327,11 +346,7 @@ pub(crate) fn branch_opened(v: &Value) -> Option<(Branches, Vec<Entry>)> {
             })
         })
         .collect::<Option<_>>()?;
-    let carry = v["carry"]
-        .as_array()?
-        .iter()
-        .map(|c| Some((c.get(0)?.as_i64()?, bytes(c.get(1)?)?)))
-        .collect::<Option<_>>()?;
+    let carry = carry_of(&v["carry"])?;
     let stops = v["stops"]
         .as_array()?
         .iter()
