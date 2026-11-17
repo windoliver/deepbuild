@@ -222,14 +222,43 @@ pub struct Region {
     pub read: Read,
 }
 
+/// A source's shape (Logic: readings): what one of its values holds.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Shape {
+    Scalar,
+    /// A vector of `n` numbers, at most 16.
+    Vec(u32),
+    /// A fixed record of `bytes` bytes, at most 256, in a data layout `name@version`.
+    Layout {
+        name: String,
+        bytes: u32,
+    },
+    /// Up to `n` named values a call; a piece reads one, `reading:<source>#<series>`, as a scalar.
+    Series(u32),
+}
+
+impl Shape {
+    /// One value's bytes in a read region: an f64 each for scalar and vec, the layout's bytes
+    /// padded to 8.
+    pub fn size(&self) -> u32 {
+        match self {
+            Shape::Scalar | Shape::Series(_) => 8,
+            Shape::Vec(n) => 8 * n,
+            Shape::Layout { bytes, .. } => align8(*bytes),
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Read {
     Control,
     /// A reading (Logic: readings): with `each`, every value recorded since the step before, at
-    /// most `max` a step, any more waiting; else the last value recorded.
+    /// most `max` a step, any more waiting, and past four steps' worth the oldest dropped; else
+    /// the last value recorded. Each value is laid out as its `shape` says.
     Reading {
         each: bool,
         max: u32,
+        shape: Shape,
     },
     /// Another item's array: its index in the piece, and the bytes of its write region it is.
     Array {
@@ -800,6 +829,36 @@ pub struct Piece {
     pub document: String,
 }
 
+impl Piece {
+    /// The reading a track entry's `reading:<source>` or `reading:<source>#<series>` names, as
+    /// a step reads it; None for a source the piece doesn't declare, or a whole series.
+    pub fn reading(&self, control: &str) -> Option<Read> {
+        match checks::series_read(control, &self.sources) {
+            Some(r) => Some(r),
+            None => match self.sources.get(control)? {
+                Read::Reading {
+                    shape: Shape::Series(_),
+                    ..
+                } => None,
+                r @ Read::Reading { .. } => Some(r.clone()),
+                _ => None,
+            },
+        }
+    }
+}
+
+/// Whether `value` is one of `shape`'s (Logic: readings): a number for a scalar or one series,
+/// `n` numbers for a vector of `n`, and exactly the layout's bytes for a record.
+pub fn fits(shape: &Shape, value: &crate::track::Given) -> bool {
+    use crate::track::Given;
+    match (shape, value) {
+        (Shape::Scalar | Shape::Series(_), Given::Number(_)) => true,
+        (Shape::Vec(n), Given::Vector(v)) => v.len() == *n as usize,
+        (Shape::Layout { bytes, .. }, Given::Record(b)) => b.len() == *bytes as usize,
+        _ => false,
+    }
+}
+
 /// An item's immutable i32 global's value, by its export name.
 pub(crate) fn global_at(bytes: &[u8], name: &str) -> Option<u32> {
     let mut inits = Vec::new();
@@ -1032,30 +1091,92 @@ fn emits_of(v: Option<&Value>) -> Result<Vec<Emit>, Vec<Value>> {
 mod checks;
 pub use checks::*;
 
-/// A source as the piece declares it (Logic: readings): scalar values, delivered `latest` (a
-/// step reads the last one) or `each` (every one since the step before, at most `max_per_step`).
+/// The most named values a series source's call holds (Series).
+pub const SERIES_MAX: u64 = 10_000;
+/// The most bytes a layout-shaped reading's record holds.
+pub const RECORD_MAX: u64 = 256;
+/// The most numbers a vector-shaped reading holds.
+pub const VEC_MAX: u64 = 16;
+
+/// A tagged field, `"tag"` or `{"tag": {..}}`, as `(tag, its fields)`; `flat` also takes the
+/// fields beside the tag on `src` itself (`"delivery": "each", "max_per_step": 16`).
+fn tagged<'a>(v: &'a Value, src: &'a Value) -> Option<(&'a str, &'a Value)> {
+    match v {
+        Value::String(s) => Some((s.as_str(), src)),
+        Value::Object(m) if m.len() == 1 => m.iter().next().map(|(k, f)| (k.as_str(), f)),
+        _ => None,
+    }
+}
+
+/// A source as the piece declares it (Logic: readings): its shape (scalar, a vector of up to 16,
+/// a fixed record of at most 256 B in a data layout, or a series of up to 10,000 named values),
+/// and its delivery, `latest` (a step reads the last value) or `each` (every one since the step
+/// before, at most `max_per_step`).
 fn source(name: &str, src: &Value) -> Result<Read, Refused> {
     let refused = |what: String| {
         Refused(json!({"ok": false, "code": "bad_input", "what": what, "source": name}))
     };
-    if src.get("shape").map_or(Some("scalar"), Value::as_str) != Some("scalar") {
-        return Err(refused(format!(
-            "{name}: only scalar sources are built yet"
-        )));
-    }
-    let max = src
+    let n = |f: &Value, k: &str| f.get(k).and_then(Value::as_u64);
+    let shape = match src.get("shape").map(|v| tagged(v, src)) {
+        None => Shape::Scalar,
+        Some(Some(("scalar", _))) => Shape::Scalar,
+        Some(Some(("vec", f))) => match n(f, "n").filter(|n| (1..=VEC_MAX).contains(n)) {
+            Some(n) => Shape::Vec(n as u32),
+            None => {
+                return Err(refused(format!(
+                    "{name}: a vec shape holds 1 to {VEC_MAX} numbers"
+                )))
+            }
+        },
+        Some(Some(("layout", f))) => {
+            let layout = f
+                .get("name")
+                .or_else(|| f.get("layout"))
+                .and_then(Value::as_str);
+            match (layout.filter(|l| l.contains('@')), n(f, "bytes").filter(|b| (1..=RECORD_MAX).contains(b))) {
+                (Some(l), Some(b)) => Shape::Layout { name: l.to_string(), bytes: b as u32 },
+                _ => {
+                    return Err(refused(format!(
+                        "{name}: a layout shape names its data layout name@version and holds 1 to {RECORD_MAX} bytes"
+                    )))
+                }
+            }
+        }
+        Some(Some(("series", f))) => match n(f, "n").filter(|n| (1..=SERIES_MAX).contains(n)) {
+            Some(n) => Shape::Series(n as u32),
+            None => {
+                return Err(refused(format!(
+                    "{name}: a series holds 1 to {SERIES_MAX} named values"
+                )))
+            }
+        },
+        _ => {
+            return Err(refused(format!(
+                "{name}: shape is scalar, vec, layout or series"
+            )))
+        }
+    };
+    let (delivery, fields) = match src.get("delivery").map(|v| tagged(v, src)) {
+        None => ("latest", src),
+        Some(Some(d)) => d,
+        Some(None) => return Err(refused(format!("{name}: delivery is latest or each"))),
+    };
+    let max = fields
         .get("max_per_step")
+        .or_else(|| src.get("max_per_step"))
         .map_or(Some(PER_STEP as u64), Value::as_u64)
         .filter(|n| (1..=PER_STEP as u64).contains(n))
         .ok_or_else(|| refused(format!("{name}: max_per_step is 1 to {PER_STEP}")))?;
-    match src.get("delivery").map_or(Some("latest"), Value::as_str) {
-        Some("latest") => Ok(Read::Reading {
+    match delivery {
+        "latest" => Ok(Read::Reading {
             each: false,
             max: 1,
+            shape,
         }),
-        Some("each") => Ok(Read::Reading {
+        "each" => Ok(Read::Reading {
             each: true,
             max: max as u32,
+            shape,
         }),
         _ => Err(refused(format!("{name}: delivery is latest or each"))),
     }

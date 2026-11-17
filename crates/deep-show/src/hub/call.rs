@@ -352,6 +352,8 @@ pub enum Call {
     Media(Box<crate::media::MediaCall>),
     /// The device gate: documents of strips, Play, the gate's fields, the device's output (#498).
     Gate(Box<crate::gate::GateCall>),
+    /// #210: a port's Connect, its state, the shell's mute and a play's seek.
+    Ports(Box<crate::ports::PortCall>),
     /// #507: present mode's state, the presenter view and the menu bar's count.
     Present(crate::present::PresentCall),
     /// #499: the media module's mix.
@@ -401,6 +403,8 @@ pub struct Eval {
 
 pub struct Scenario {
     pub evidence: PathBuf,
+    /// #210: the hours the shell holds quiet, `(from, to)` in flicks.
+    pub quiet_hours: Vec<(i64, i64)>,
     pub sessions: BTreeMap<String, Session>,
     pub processes: Vec<Process>,
     pub panels: BTreeMap<String, Panel>,

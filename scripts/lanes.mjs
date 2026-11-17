@@ -848,6 +848,10 @@ timed.push('tests/acceptance/457/ac9-budgets.test.ts');
 // in a linux/amd64 container; ac8-budget judges the build budget on the reference Mac.
 alone.push('tests/acceptance/1636/');
 timed.push('tests/acceptance/1636/ac8-budget.test.ts');
+// #210's files build deep-show (full) or deep-logic, and the web export's runs a headless browser; ac8-budgets judges
+// the delivery and read budgets on the reference Mac, and ac9-taste waits on your taste call in tests/acceptance/210/TASTE.json.
+alone.push('tests/acceptance/210/');
+timed.push('tests/acceptance/210/ac8-budgets.test.ts');
 // #2031's files build deep-gpu (ac7 also the merge base's binaries) and draw on Metal; ac8 judges the lights' GPU budget.
 alone.push('tests/acceptance/2031/');
 timed.push('tests/acceptance/2031/ac8-budget.test.ts');

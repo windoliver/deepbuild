@@ -67,6 +67,7 @@ mod placement;
 mod planted;
 mod played;
 mod points;
+mod ports;
 mod present;
 mod preview;
 mod print;
@@ -448,6 +449,9 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
     }
     if let Some(p) = present::parse_call(name, c) {
         return Some(Call::Present(p));
+    }
+    if let Some(p) = ports::parse_call(name, c) {
+        return Some(Call::Ports(Box::new(p)));
     }
     let doc = || Some(c.get("doc")?.as_str()?.to_string());
     let time = |key: &str, default: i64| -> Option<i64> {
@@ -1546,6 +1550,11 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "assumes_bt601" => Planted::AssumesBt601,
                 "lookup_floors_frame_rate" => Planted::LookupFloorsFrameRate,
                 "seek_reads_proxy" => Planted::SeekReadsProxy,
+                // #210: a port's wrong programs.
+                "port_sends_on_seek" => Planted::PortSendsOnSeek,
+                "mute_leaves_port_sending" => Planted::MuteLeavesPortSending,
+                "gate_trusts_document_sound" => Planted::GateTrustsDocumentSound,
+                "web_export_keeps_port" => Planted::WebExportKeepsPort,
                 "shipped_panels_ungated" => Planted::ShippedPanelsUngated,
                 "comparer_matches_hash" => Planted::ComparerMatchesHash,
                 "keeps_voices_on_switch" => Planted::KeepsVoicesOnSwitch,
@@ -1721,7 +1730,17 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             })
             .collect::<Option<_>>()?,
     };
+    // #210: the hours the shell holds quiet, each `{from, to}` in flicks.
+    let quiet_hours = match input.get("quiet_hours") {
+        None => Vec::new(),
+        Some(list) => list
+            .as_array()?
+            .iter()
+            .map(|h| Some((h.get("from")?.as_i64()?, h.get("to")?.as_i64()?)))
+            .collect::<Option<_>>()?,
+    };
     Some(Scenario {
+        quiet_hours,
         evidence: PathBuf::from(input.get("evidence")?.as_str()?),
         packs,
         notes,
