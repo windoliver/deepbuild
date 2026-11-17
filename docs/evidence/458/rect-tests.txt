@@ -1,0 +1,66 @@
+== tests/acceptance/458/views/rect/rectangle.test.ts
+deep lease: DeepBuild isn't set up here (no hub token), so `npx vitest run --root tests/acceptance/458/views/rect rectangle.test.ts --no-file-parallelism --testTimeout=900000` runs unleased
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/458/views/rect
+
+ ❯ rectangle.test.ts (5 tests | 5 failed) 5045ms
+   ❯ #458 view-rectangle invariance (5)
+     × AC15 #458.fd784061 the fixture drawn at 960 × 540 alone and into the rectangle at (317, 211) of a 2560 × 1440 target has equal ID targets bit for bit and its color, normal, depth and velocity within one code value on every pixel of the rectangle 2449ms
+     × AC15 #458.fd784061 a planted bloom that clamps its taps to the target's edge instead of the view's brightens pixels within 32 px of the rectangle's edge and fails, naming the target and the first pixel 99ms
+     × AC15 #458.fd784061 a planted ambient-occlusion pass that scales its coordinates by the target's size fails the same way, naming the target and the first pixel 93ms
+     × AC16 #458.c54b3af2 in the same run every pixel outside the rectangle keeps its noise bit for bit in every target 356ms
+     × AC16 #458.c54b3af2 a planted pass that clears the whole target fails, naming the target and the first pixel outside 20ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  rectangle.test.ts > #458 view-rectangle invariance > AC15 #458.fd784061 the fixture drawn at 960 × 540 alone and into the rectangle at (317, 211) of a 2560 × 1440 target has equal ID targets bit for bit and its color, normal, depth and velocity within one code value on every pixel of the rectangle
+AssertionError: the fixture alone and in its rectangle, seed 458 is answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ answered helpers.ts:131:77
+  ... 70 lines left out: one line a pixel past the tolerance ...
+       |                                                                             ^
+    132|   return reply;
+    133| }
+ ❯ rectangleOf helpers.ts:231:3
+ ❯ draw rectangle.test.ts:30:10
+ ❯ theRun rectangle.test.ts:34:45
+ ❯ rectangle.test.ts:96:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  rectangle.test.ts > #458 view-rectangle invariance > AC16 #458.c54b3af2 a planted pass that clears the whole target fails, naming the target and the first pixel outside
+AssertionError: deep-gpu run --planted clears_whole_target exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ run helpers.ts:119:144
+    117|   expect(timedOut, `${name} finished within its timeout`).toBe(false);
+    118|   const stdout = r.stdout ?? '';
+    119|   expect(r.status, `${name} exits 0 (${r.signal ?? 'no signal'}); stdo…
+       |                                                                                                                                                ^
+    120|   const lines = stdout.split('\n').filter((l) => l !== '');
+    121|   expect(lines.length, `${name}: one answer line`).toBe(1);
+ ❯ draw rectangle.test.ts:30:33
+ ❯ rectangle.test.ts:111:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  5 failed (5)
+   Start at  10:29:04
+   Duration  5.30s (tests 98%, transform 1%, import 1%)
+
+exit 1
+

@@ -1,0 +1,21 @@
+# The #192 dungeon acceptance suite's own fixture assembler, copied from #190's suite (tests/acceptance/190/wat):
+# WebAssembly text to bytes (the `wat` crate), and with --library or --program a relocatable object as the
+# WebAssembly tool conventions' Linking.md lays one out (README: Relocatable objects). Each output is validated by
+# `wasmparser`. Test tooling only, outside the workspace (the empty [workspace] table) with its own lockfile; it
+# shares no code with the linker under test.
+[package]
+name = "acceptance-192-dungeon-wat"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+[[bin]]
+name = "acceptance-192-dungeon-wat"
+path = "src/main.rs"
+
+[dependencies]
+wat = "=1.263.0"
+wasmparser = "=0.263.0"
+
+[workspace]

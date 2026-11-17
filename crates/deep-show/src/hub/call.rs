@@ -1,5 +1,11 @@
 use super::*;
 
+pub struct PatchCall {
+    pub via: Via,
+    pub doc: String,
+    pub body: Body,
+}
+
 pub enum Call {
     /// #411: deep_query, and deep.canvas.read for a check plug-in.
     SceneQuery(Box<crate::query::Query>),
@@ -142,6 +148,13 @@ pub enum Call {
         frames: Vec<([u32; 2], String)>,
         software: bool,
     },
+    /// #518: the export's GPU conversion pass on given BGRA8 frames.
+    FramePlanes {
+        frames: Vec<([u32; 2], String)>,
+        software: bool,
+    },
+    /// #518: the encode job kind's qualification run on one tool, by name@version.
+    EncodeQualify(String),
     /// #501: the cross-machine audio check on two float WAVs.
     CrossMachine([String; 2]),
     /// #1897: the GPU pixel hash on frames from the evidence store, beside its CPU twin.
@@ -352,6 +365,8 @@ pub enum Call {
     Media(Box<crate::media::MediaCall>),
     /// The device gate: documents of strips, Play, the gate's fields, the device's output (#498).
     Gate(Box<crate::gate::GateCall>),
+    /// #210: a port's Connect, its state, the shell's mute and a play's seek.
+    Ports(Box<crate::ports::PortCall>),
     /// #507: present mode's state, the presenter view and the menu bar's count.
     Present(crate::present::PresentCall),
     /// #499: the media module's mix.
@@ -401,6 +416,8 @@ pub struct Eval {
 
 pub struct Scenario {
     pub evidence: PathBuf,
+    /// #210: the hours the shell holds quiet, `(from, to)` in flicks.
+    pub quiet_hours: Vec<(i64, i64)>,
     pub sessions: BTreeMap<String, Session>,
     pub processes: Vec<Process>,
     pub panels: BTreeMap<String, Panel>,
@@ -473,6 +490,8 @@ pub struct Scenario {
     pub delays: Vec<crate::stepped::Delay>,
     /// The packs installed in the store before the first call (#306), each `(owner/name, dir)`.
     pub packs: Vec<(String, PathBuf)>,
+    /// #518: the encode tools the hub holds from installed plug-ins, in registration order.
+    pub job_tools: Vec<crate::export::tools::Tool>,
     /// #1961: your notes the hub holds when the run starts, each `{note, doc, item, …}`.
     pub notes: Vec<Value>,
     /// #200: the hub's installed slot fills, each `{slot, fill, kit}` with the kit result the hub

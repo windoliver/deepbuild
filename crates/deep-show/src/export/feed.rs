@@ -2,9 +2,12 @@
 //! (Export: encode job: a copy through memory), so no frame is stored raw and the tool holds one
 //! frame. A 4:2:0 codec gets the frame's NV12 planes, made by the one exact conversion; ProRes
 //! 4444 and PNG get its BGRA8 bytes. A tool that takes no frame for 10 s stops the export, naming
-//! the frame.
+//! the frame. This is the build's own tools' wire (#518): each frame is answered before the next
+//! is sent, so the tool never holds more than one; a plug-in's tool speaks `program.rs`'s.
 
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
 use deep_codecs::Helper;
@@ -21,12 +24,28 @@ pub(crate) struct Part {
     /// The next frame it takes, and the frame after its last.
     next: i64,
     end: i64,
-    nv12: bool,
+    /// The frames' size it was opened for.
+    pub size: [u16; 2],
+    /// #518: the open's seconds as the tool timed it, once the tool has answered its open.
+    pub opened: Option<f64>,
+    /// Set when the job is dropped unfinished: the tool still waits for its frames, so the run
+    /// ends that process before it asks the tool anything else.
+    unfinished: Arc<AtomicBool>,
+    done: bool,
+}
+
+impl Drop for Part {
+    fn drop(&mut self) {
+        if !self.done {
+            self.unfinished.store(true, Ordering::Relaxed);
+        }
+    }
 }
 
 impl Part {
-    /// Opens the job `ask` (its `frames`, `first` and `format` set here) for frames
-    /// `first..first + n`.
+    /// Asks the tool to open the job `ask` (its `frames`, `first` and `format` set here) for
+    /// frames `first..first + n`, without waiting for its answer (#518): the open runs beside
+    /// the export's preparing, and [`Part::push`] hears its answer before the first frame.
     pub(crate) fn open(
         tool: &mut Helper,
         mut ask: Value,
@@ -34,41 +53,56 @@ impl Part {
         first: i64,
         n: i64,
         nv12: bool,
+        unfinished: Arc<AtomicBool>,
     ) -> Result<Part, Value> {
         ask["frames"] = json!(n);
         ask["first"] = json!(first);
         ask["out"] = json!(path);
         ask["format"] = json!(if nv12 { "nv12" } else { "bgra" });
-        match tool.feed(&ask, &[], WAIT) {
-            Some(r) if r.get("ready").is_some() => Ok(Part {
-                path,
-                next: first,
-                end: first + n,
-                nv12,
-            }),
-            Some(r) => Err(json!({"code": "writer_failed", "frame": first, "reply": r,
-                "what": format!("the encode tool refused the part starting at frame {first}")})),
-            None => Err(stalled(first)),
+        let size = [0, 1].map(|i| ask["size"][i].as_u64().unwrap_or(0) as u16);
+        if !tool.send(&ask) {
+            return Err(stalled(first));
+        }
+        Ok(Part {
+            path,
+            next: first,
+            end: first + n,
+            size,
+            opened: None,
+            unfinished,
+            done: false,
+        })
+    }
+
+    /// The tool's answer to its open, heard once: its encoder is open.
+    fn ready(&mut self, tool: &mut Helper) -> Result<(), Value> {
+        if self.opened.is_some() {
+            return Ok(());
+        }
+        match tool.hear_within(WAIT) {
+            Some(r) if r.get("ready").is_some() => {
+                self.opened = Some(r["ready"]["open_seconds"].as_f64().unwrap_or(0.0));
+                Ok(())
+            }
+            Some(r) => Err(
+                json!({"outcome": "failed", "code": "writer_failed", "frame": self.next, "reply": r,
+                "what": format!("the encode tool refused the part starting at frame {}", self.next)}),
+            ),
+            None => Err(stalled(self.next)),
         }
     }
 
-    /// Hands frame `k` (straight BGRA8 rows, `size`) to the tool; `key` asks for a key frame.
+    /// Hands frame `k` to the tool as `bytes`, its NV12 planes or its straight BGRA8 rows as
+    /// it was opened for; `key` asks for a key frame.
     pub(crate) fn push(
         &mut self,
         tool: &mut Helper,
         k: i64,
-        bgra: &[u8],
-        size: [u32; 2],
+        bytes: &[u8],
         key: bool,
     ) -> Result<(), Value> {
         debug_assert_eq!(k, self.next);
-        let nv12;
-        let bytes: &[u8] = if self.nv12 {
-            nv12 = deep_gpu::frame_checks::nv12(bgra, size[0], size[1]);
-            &nv12
-        } else {
-            bgra
-        };
+        self.ready(tool)?;
         match tool.feed(
             &json!({"frame": k, "bytes": bytes.len(), "key": key}),
             bytes,
@@ -85,11 +119,14 @@ impl Part {
     }
 
     /// The part, once its last frame is in: the tool's reply.
-    pub(crate) fn finish(self, tool: &mut Helper) -> Result<Value, Value> {
+    pub(crate) fn finish(mut self, tool: &mut Helper) -> Result<Value, Value> {
         if self.next != self.end {
             return Err(json!({"code": "writer_failed", "frame": self.next,
                 "what": format!("the part ended at frame {} before its last frame {}", self.next, self.end - 1)}));
         }
+        self.ready(tool)?;
+        // Answered or not, the tool is past this job: it waits for no more of its frames.
+        self.done = true;
         match tool.feed(&json!({"end": true}), &[], FINISH) {
             Some(r) if r.get("error").is_none() && r.get("refused").is_none() => Ok(r),
             Some(r) => Err(json!({"code": "writer_failed", "frame": self.end - 1, "reply": r})),
@@ -98,8 +135,15 @@ impl Part {
     }
 }
 
-/// The issue for a tool that took no frame within its wait.
-fn stalled(k: i64) -> Value {
-    json!({"code": "encoder_stalled", "frame": k,
-        "what": format!("the encode tool took no frame for {} s at frame {k}", WAIT.as_secs())})
+/// The export stopped at frame `k`, which the tool took nothing of within its wait: the frame
+/// that found no free slot.
+pub(crate) fn stalled(k: i64) -> Value {
+    super::stopped(
+        k,
+        "encoder_stalled",
+        &format!(
+            "the encode tool let no frame go for {} s, so frame {k} found no free slot",
+            WAIT.as_secs()
+        ),
+    )
 }

@@ -66,6 +66,11 @@ pub fn piece_of(form: &Value) -> Option<Value> {
     if let Some(class) = form.pointer("/budget/class") {
         piece["class"] = class.clone();
     }
+    // #192: the libraries the document's pinned packs carry, a provider's library form among
+    // them, which its items' `links` reach (#190).
+    if let Some(libraries) = form.get("libraries") {
+        piece["packs"] = libraries.clone();
+    }
     Some(piece)
 }
 
