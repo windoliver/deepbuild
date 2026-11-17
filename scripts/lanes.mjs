@@ -33,7 +33,7 @@ export const alone = ['tests/acceptance/149/', 'tests/acceptance/1523/', 'tests/
   'tests/acceptance/453/',
   'tests/acceptance/1633/', 'packages/hub/test/reopened-items.test.ts',
   'tests/acceptance/46/', 'packages/github/test/',
-  'tests/acceptance/1172/', 'tests/acceptance/2078/', 'tests/acceptance/2218/',
+  'tests/acceptance/1172/', 'tests/acceptance/2078/', 'tests/acceptance/2218/', 'tests/acceptance/2698/',
   'tests/acceptance/1454/',
   'tests/acceptance/1459/',
   'tests/acceptance/1463/',
@@ -839,8 +839,6 @@ alone.push('tests/acceptance/192/dungeon/');
 // #2516: each file builds deep-gpu and reads linear targets; castle costs require a timed grant.
 alone.push('tests/acceptance/2516/');
 timed.push('tests/acceptance/2516/timing.test.ts');
-// #2698's files read real processes' counts under the machine's own load, and its task files start hubs: one file at a time.
-alone.push('tests/acceptance/2698/');
 // #457's files each build deep-show; ac1, ac9 and ac10 draw on the Metal GPU. ac9-budgets judges the loop's budgets on
 // the reference Mac, and ac10-shots writes docs/evidence/457/ and waits on your taste call in tests/acceptance/457/TASTE.json.
 alone.push('tests/acceptance/457/');

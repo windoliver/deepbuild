@@ -261,7 +261,7 @@ const modes = {
     return { events, pagedMs };
   },
   // The hub left idle: after fifteen seconds to settle, the CPU it uses over five more, and its resident memory, with
-  // the wakeups, instructions, CPU time and footprint of the hub and each child it keeps over the span around them.
+  // the wakeups, instructions, CPU time and footprint of the hub and each child it keeps over twenty from the same start.
   async idle(home) {
     const { hub } = await start(home);
     await sleep(15_000);
@@ -272,6 +272,9 @@ const modes = {
     await sleep(5000);
     const idleCpuPercent = ((cpu() - before) / 5) * 100;
     const rssBytes = Number(ps('rss')) * 1024;
+    // The reader's span runs fifteen seconds more. Over five, a settled hub's rate differs by a fifth from one run to
+    // the next; twenty end before the work the hub does once, about 47 s after its socket answers (#2698).
+    await sleep(15_000);
     const read = reading.stop();
     await stop(hub);
     const aSecond = (count) => (count === null ? null : count / (read.spanMs / 1000));
