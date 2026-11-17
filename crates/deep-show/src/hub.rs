@@ -1336,7 +1336,7 @@ impl<'a> Hub<'a> {
     /// The record as one frame reads it: every object's state and reading.
     pub fn record(&self) -> Record {
         let mut record = Record::default();
-        for (handle, o) in &self.scenario.record {
+        for (handle, o) in self.scenario.record.iter() {
             if let Some(state) = &o.state {
                 record.states.insert(handle.clone(), state.clone());
             }

@@ -286,7 +286,9 @@ export type Plant =
   | 'pending-across-restart' | 'applies-stale-undo'
   // #2646's: a state pass that leaves out each session whose promise fell due, and an asks core whose reads of the log
   // leave tool.before out of their kinds.
-  | 'pass-skips-due-promise' | 'state-pass-skips-due-promise' | 'asks-without-tool-before';
+  | 'pass-skips-due-promise' | 'state-pass-skips-due-promise' | 'asks-without-tool-before'
+  // #1868's: a hub that builds the asks and readings of the canvas core's world once and reads them so ever after.
+  | 'world-built-once';
 const PLANTS: readonly string[] = [
   'statusline-user-settings-only', 'window-unknown-as-zero', 'window-carried-from-other-repo', 'sends-block-whole',
   'box-applies-at-once', 'box-ignores-revision',
@@ -397,6 +399,7 @@ const PLANTS: readonly string[] = [
   'status-lists-every-ask',
   'pending-across-restart', 'applies-stale-undo',
   'pass-skips-due-promise', 'state-pass-skips-due-promise', 'asks-without-tool-before',
+  'world-built-once',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;

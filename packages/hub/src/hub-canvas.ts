@@ -22,6 +22,8 @@ import { refuse, ulid } from './wire.js';
 
 import type { Session, CallContext } from './session-types.js';
 type Obj = Record<string, unknown>;
+/** A handle's ID, as the record's tables keep it. */
+const bare = (handle: string): string => handle.replace(/^[a-z_]+:/, '');
 export interface HubCanvasOptions {
   doneSpec(cwd: string): unknown;
   root: Root; now: () => number; plant: Plant | undefined;
@@ -55,19 +57,76 @@ export class HubCanvas {
 
   private readonly appOpen = (): boolean => Date.now() - this.appSeen < 250;
 
+  /**
+   * The record's part of the world (#1868): each ask's state and each reading's latest value by name. It is built from
+   * the record at the first canvas call and kept up from the event stream after: an appended event marks what it
+   * changed, and the next canvas call reads only that, so a call with nothing new reads no event and no ask.
+   */
+  private readonly worldRecord: Obj = {};
+  /** Counts each change to `worldRecord`, so the canvas core is sent the world again only when it changed. */
+  private worldRev = 0;
+  /** The log position of the newest reading in `worldRecord`; undefined until the first build. */
+  private readingsAt: number | undefined;
+  private readingsBehind = false;
+  private readonly asksBehind = new Set<string>();
+  private catching: Promise<void> = Promise.resolve();
+
+  /** An event the record took: what it changes in the world is read at the next canvas call. */
+  appended(input: EventInput): void {
+    const { kind, data } = input;
+    if (kind === 'reading.recorded') this.readingsBehind = true;
+    else if (kind === 'ask.created') this.asksBehind.add(input.id);
+    else if (kind === 'ask.batched') { for (const a of isObj(data) && Array.isArray(data.asks) ? data.asks : []) if (isObj(a) && typeof a.ask === 'string') this.asksBehind.add(bare(a.ask)); }
+    else if (kind === 'decision.applied') { if (isObj(data) && typeof data.ask === 'string') this.asksBehind.add(bare(data.ask)); }
+    else if ((kind.startsWith('ask.') || kind === 'default.undone') && typeof input.subject === 'string') this.asksBehind.add(bare(input.subject));
+  }
+
+  /** One at a time, so two calls never read the same change twice out of order. */
+  private caughtUp(): Promise<void> {
+    this.catching = this.catching.then(() => this.catchUp(), () => this.catchUp());
+    return this.catching;
+  }
+  private async catchUp(): Promise<void> {
+    const state = (a: { session_id: string | null; status: string }) => ({ session: a.session_id, state: a.status === 'open' || a.status === 'later' ? 'needs_you' : 'done' });
+    const first = this.readingsAt === undefined;
+    // The planted world is built once: what the record gained since is never read (#1868's wrong program).
+    if (!first && this.options.plant === 'world-built-once') return;
+    // What is marked from here on is read by the next call: an event that lands during these reads is read twice at worst.
+    const asks = first ? undefined : [...this.asksBehind];
+    this.asksBehind.clear();
+    if (first || asks!.length) {
+      const rows = (first ? await this.options.record().raw('SELECT id, session_id, status FROM asks')
+        : await this.options.record().raw('SELECT id, session_id, status FROM asks WHERE id IN (SELECT value FROM json_each(?))', [JSON.stringify(asks)])
+          // A read that fails leaves its asks marked, for the next call.
+          .catch((error: unknown) => { for (const id of asks!) this.asksBehind.add(id); throw error; })) as { id: string; session_id: string | null; status: string }[];
+      for (const a of rows) {
+        // An event that leaves an ask as it read (shown again, put off) changes nothing the canvas core is sent.
+        const was = this.worldRecord[`ask:${a.id}`] as ReturnType<typeof state> | undefined;
+        const is = state(a);
+        if (was?.state === is.state && was.session === is.session) continue;
+        this.worldRecord[`ask:${a.id}`] = is;
+        this.worldRev++;
+      }
+    }
+    if (first || this.readingsBehind) {
+      this.readingsBehind = false;
+      const rows = (await this.options.record().raw("SELECT e.log_pos AS log_pos, e.session_id AS session, e.data AS data FROM events e WHERE e.kind = 'reading.recorded' AND e.log_pos > ? ORDER BY e.log_pos", [this.readingsAt ?? 0])
+        .catch((error: unknown) => { this.readingsBehind = true; throw error; })) as { log_pos: number | bigint; session: string | null; data: string }[];
+      for (const r of rows) {
+        const d = JSON.parse(r.data) as Obj;
+        if (typeof d.reading === 'string' && typeof d.value === 'number') this.worldRecord[d.reading] = { session: r.session, value: d.value, as_of: Number(d.as_of ?? 0) };
+      }
+      this.readingsAt = Number(rows.at(-1)?.log_pos ?? this.readingsAt ?? 0);
+      if (rows.length) this.worldRev++;
+    }
+  }
+
   /** The world the canvas core reads: the hub's live sessions, the record's asks and readings, and the world file. */
   private async canvasWorld(): Promise<CanvasWorld> {
     const file = { ...this.worldFile.read(), packs: await this.options.libraries()?.packs.installed(this.canvas()) ?? [] };
     const sessions = [...this.options.sessions().values()].filter((s) => !s.ended).map((s) => ({ id: s.id, thread: s.thread, name: nameOf(file, s.id, s.agent) }));
-    const record: Obj = {};
-    const asks = (await this.options.record().raw('SELECT id, session_id, status FROM asks')) as { id: string; session_id: string | null; status: string }[];
-    for (const a of asks) record[`ask:${a.id}`] = { session: a.session_id, state: a.status === 'open' || a.status === 'later' ? 'needs_you' : 'done' };
-    const readings = (await this.options.record().raw("SELECT e.session_id AS session, e.data AS data FROM events e WHERE e.kind = 'reading.recorded' ORDER BY e.log_pos")) as { session: string | null; data: string }[];
-    for (const r of readings) {
-      const d = JSON.parse(r.data) as Obj;
-      if (typeof d.reading === 'string' && typeof d.value === 'number') record[d.reading] = { session: r.session, value: d.value, as_of: Number(d.as_of ?? 0) };
-    }
-    return { sessions, record, file, docs: [...this.shownDocs] };
+    await this.caughtUp();
+    return { sessions, record: this.worldRecord, recordRev: this.worldRev, file, docs: [...this.shownDocs] };
   }
 
   private canvas(): Canvas {

@@ -424,7 +424,8 @@ pub struct Scenario {
     pub docs: BTreeMap<String, String>,
     /// #504: the claim or ask each document was minted for (`docs.<id>.for`), where named.
     pub docs_for: BTreeMap<String, String>,
-    pub record: BTreeMap<String, RecordObject>,
+    /// Shared (#1868): `canvas` reads its world's record once and plays every call on it.
+    pub record: std::sync::Arc<BTreeMap<String, RecordObject>>,
     /// #629: a replay's run record entries, each as a `run` call's reply gave it (`record` as a
     /// list).
     pub runs: Vec<Value>,
