@@ -87,6 +87,187 @@ impl Budget {
     }
 }
 
+/// A pack provider's `budget` (Provider `gen@1`, #192): `fuel` from 1 to 10,000,000,000 and
+/// `memory` from 1 to 256 MiB, each defaulting as `Budget::of`'s provider role does, and no other
+/// key. A refusal names the field, `budget/<key>`, and why.
+pub fn provider_budget(v: Option<&Value>) -> Result<Budget, (String, String)> {
+    let mut budget = Budget::of("provider", None, 0);
+    let Some(v) = v else { return Ok(budget) };
+    let Some(fields) = v.as_object() else {
+        return Err(("budget".into(), format!("{v} is not an object")));
+    };
+    for (key, value) in fields {
+        let field = format!("budget/{key}");
+        let (most, unit) = match key.as_str() {
+            "fuel" => (10_000_000_000, ""),
+            "memory" => (256, " MiB"),
+            _ => {
+                return Err((
+                    field,
+                    format!("`{key}` is no field of a provider's budget (fuel, memory)"),
+                ))
+            }
+        };
+        let n = value
+            .as_i64()
+            .filter(|n| (1..=most).contains(n))
+            .ok_or_else(|| {
+                (
+                    field.clone(),
+                    format!("{value} is outside 1 to {most}{unit}"),
+                )
+            })?;
+        match key.as_str() {
+            "fuel" => budget.fuel = n,
+            _ => budget.memory = n as u64 * MIB,
+        }
+    }
+    Ok(budget)
+}
+
+/// The integer and bool types of a provider's params; every other is a float.
+const INTEGERS: &[&str] = &["i32", "i64", "u32", "u64", "bool"];
+
+/// The bytes at a provider's `params_at` (Provider `gen@1`, #192): every param of `schema` but a
+/// `mesh` one (which comes in among the assets), in the order of the names sorted by byte, each 8
+/// bytes little-endian, an integer or bool as i64 and a float as f64; a param `given` leaves out
+/// takes its schema default. A value that isn't a constant number is an error naming the param.
+pub fn param_bytes(
+    schema: &serde_json::Map<String, Value>,
+    given: &serde_json::Map<String, Value>,
+) -> Result<Vec<u8>, String> {
+    let mut out = Vec::with_capacity(8 * schema.len());
+    for (name, spec) in schema {
+        let ty = spec.get("type").and_then(Value::as_str).unwrap_or("f64");
+        if ty == "mesh" {
+            continue;
+        }
+        let value = given
+            .get(name)
+            .or_else(|| spec.get("default"))
+            .unwrap_or(&Value::Null);
+        let n = match value {
+            Value::Bool(b) => f64::from(u8::from(*b)),
+            Value::Number(n) => n.as_f64().unwrap_or(0.0),
+            Value::Null => 0.0,
+            _ => return Err(name.clone()),
+        };
+        if INTEGERS.contains(&ty) {
+            out.extend_from_slice(&value.as_i64().unwrap_or(n as i64).to_le_bytes());
+        } else {
+            out.extend_from_slice(&n.to_le_bytes());
+        }
+    }
+    Ok(out)
+}
+
+/// The bytes at `assets_at`, as a logic item's: each asset as a u32 little-endian length, then
+/// its bytes, in order.
+pub fn asset_bytes(assets: &[Vec<u8>]) -> Vec<u8> {
+    let mut out = Vec::new();
+    for a in assets {
+        out.extend_from_slice(&(a.len() as u32).to_le_bytes());
+        out.extend_from_slice(a);
+    }
+    out
+}
+
+/// A provider's output bytes from `out_at` as its `out` declares them (#192): a mesh's whole
+/// layout, `u32 vertex_count, u32 index_count`, then 32 bytes a vertex and 4 an index, at most
+/// `max_vertices`; or a data asset's (or rows', or pages') bytes after its u32 length, at most its
+/// cap. Past a cap is `over_cap`.
+pub fn output_bytes(ran: &Ran, out: &Value) -> Result<Vec<u8>, (&'static str, String)> {
+    let at = ran
+        .out_at
+        .ok_or(("out", "a provider exports out_at".to_string()))? as usize;
+    let m = &ran.memory;
+    let word = |i: usize| {
+        m.get(i..i + 4)
+            .map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]) as u64)
+            .ok_or(("over_cap", format!("the output runs past memory at {i}")))
+    };
+    let (start, len) = if let Some(mesh) = out.get("mesh") {
+        let (n, ni) = (word(at)?, word(at + 4)?);
+        let cap = mesh["max_vertices"].as_u64().unwrap_or(262_144);
+        if n > cap {
+            return Err((
+                "over_cap",
+                format!("the mesh has {n} vertices, past its cap of {cap}"),
+            ));
+        }
+        (at, 8 + 32 * n + 4 * ni)
+    } else {
+        let len = word(at)?;
+        let cap = out
+            .pointer("/data/max_bytes")
+            .and_then(Value::as_u64)
+            .unwrap_or(16 << 20)
+            .min(16 << 20);
+        if len > cap {
+            return Err((
+                "over_cap",
+                format!("the data asset is {len} bytes, past its cap of {cap}"),
+            ));
+        }
+        (at + 4, len)
+    };
+    m.get(start..start + len as usize)
+        .map(<[u8]>::to_vec)
+        .ok_or((
+            "over_cap",
+            format!("the output's {len} bytes run past memory"),
+        ))
+}
+
+impl Sandbox {
+    /// One provider run off any document or pack (#192): `program` checked and rewritten under
+    /// its `budget`, its params laid out at `params_at` and `assets` at `assets_at`, `gen(seed)`,
+    /// and its output's bytes; a trap, or a refusal as a trap of kind `refused`, is `Ok(Err)`; a
+    /// provider entry this can't read is `Err` with the reply.
+    pub fn provide(
+        &self,
+        program: &[u8],
+        provider: &Value,
+        given: &serde_json::Map<String, Value>,
+        seed: i64,
+        assets: &[Vec<u8>],
+    ) -> Result<Result<Vec<u8>, Value>, Value> {
+        let bad = |what: String| json!({"ok": false, "code": "bad_input", "what": what});
+        let budget =
+            provider_budget(provider.get("budget")).map_err(|(f, w)| bad(format!("{f}: {w}")))?;
+        let schema = provider["params"].as_object().cloned().unwrap_or_default();
+        let params = param_bytes(&schema, given)
+            .map_err(|p| bad(format!("param `{p}` is not a constant number")))?;
+        let rw = match self.rewrite(program, "provider", &budget) {
+            Ok((rw, _)) => rw,
+            Err(Ok(r)) => {
+                return Ok(Err(
+                    json!({"kind": "refused", "refusals": refusals_json(&r)}),
+                ))
+            }
+            Err(Err(e)) => return Err(json!({"ok": false, "code": "rewrite_failed", "what": e})),
+        };
+        let ran = self
+            .run_with(
+                &rw.bytes,
+                "provider",
+                seed,
+                &budget,
+                &[],
+                &[],
+                &[("params_at", &params), ("assets_at", &asset_bytes(assets))],
+                RUN_DEADLINE,
+                Offsets::Written,
+            )
+            .map_err(|e| json!({"ok": false, "code": "run_failed", "what": e}))?;
+        if let Some(t) = &ran.trap {
+            return Ok(Err(trap_json(&Some(t.clone()))));
+        }
+        Ok(output_bytes(&ran, &provider["out"])
+            .map_err(|(kind, what)| json!({"kind": kind, "what": what})))
+    }
+}
+
 /// Where a trap's offset is counted: in the program as written (what a `run` reports), or in the
 /// rewritten program that runs everywhere (what sandbox@1's kit compares, so two implementations
 /// that stop at one instruction of the program as written but at two of the rewritten one differ).
@@ -190,6 +371,34 @@ impl Sandbox {
         deadline: Duration,
         at: Offsets,
     ) -> Result<Ran, String> {
+        self.run_with(
+            rewritten,
+            role,
+            seed,
+            budget,
+            reads,
+            input,
+            &[],
+            deadline,
+            at,
+        )
+    }
+
+    /// `run`, with bytes copied into memory before any call, each at the immutable global it
+    /// names: a provider's params at `params_at` and its assets at `assets_at` (#192).
+    #[allow(clippy::too_many_arguments)]
+    pub fn run_with(
+        &self,
+        rewritten: &[u8],
+        role: &str,
+        seed: i64,
+        budget: &Budget,
+        reads: &[(u32, u32)],
+        input: &[u8],
+        writes: &[(&str, &[u8])],
+        deadline: Duration,
+        at: Offsets,
+    ) -> Result<Ran, String> {
         // A validator's memory is its asset plus 4 MiB, whatever the program declares (#415).
         let pages = (role == "validator").then(|| budget.memory.div_ceil(PAGE));
         let mut r = Runner::sized(
@@ -205,6 +414,13 @@ impl Sandbox {
             stack: budget.stack,
             deadline: Some(deadline),
         };
+        for (global, bytes) in writes {
+            let at = match r.global(global) {
+                Some(Val::I32(a)) => a as usize,
+                _ => return Err(format!("a {role} exports the immutable global {global}")),
+            };
+            r.write("memory", at, bytes)?;
+        }
         let mut calls = Vec::new();
         if r.exports(START) {
             calls.push(call(START, vec![]));
@@ -322,6 +538,26 @@ impl Sandbox {
                         json!({"ok": true, "hash": out.hash, "trap": trap_json(&r.trap), "result": r.result, "reads": r.reads})
                     }
                     Err(e) => json!({"ok": false, "code": "run_failed", "what": e}),
+                }
+            }
+            // #192: one provider run as a document's check runs it, with its output's bytes.
+            Some("provide") => {
+                let (Some(bytes), Some(provider)) = (
+                    line.pointer("/provider/program")
+                        .and_then(Value::as_str)
+                        .and_then(|p| B64.decode(p).ok()),
+                    line.get("provider"),
+                ) else {
+                    return bad();
+                };
+                let Some(seed) = line.get("seed").and_then(Value::as_i64) else {
+                    return bad();
+                };
+                let given = line.get("params").and_then(Value::as_object).cloned();
+                match self.provide(&bytes, provider, &given.unwrap_or_default(), seed, &[]) {
+                    Ok(Ok(out)) => json!({"ok": true, "trap": null, "bytes": B64.encode(out)}),
+                    Ok(Err(trap)) => json!({"ok": true, "trap": trap, "bytes": null}),
+                    Err(e) => e,
                 }
             }
             Some("kit") => self.kit(),

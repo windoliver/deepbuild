@@ -833,6 +833,8 @@ byHand.push('tests/acceptance/184/ac07-bots-refused.test.ts', 'tests/acceptance/
 alone.push('tests/acceptance/555/');
 // #1048's files start replicas and hubs and play rules.legal's samples, a 100,000-step soak and model runs for minutes.
 alone.push('tests/acceptance/1048/');
+// #192's dungeon files build deep-show and deep-sandbox, and ac05 also deep-sandbox for Linux x86_64 in Docker.
+alone.push('tests/acceptance/192/dungeon/');
 
 // #2516: each file builds deep-gpu and reads linear targets; castle costs require a timed grant.
 alone.push('tests/acceptance/2516/');
@@ -859,6 +861,14 @@ byHand.push('tests/acceptance/182-oracle/character-controller-rapier.test.ts');
 
 // #2742's files build deep-gpu; ac1 compares two films' GPU time on any Mac, and ac2 runs #417's suite.
 alone.push('tests/acceptance/2742/');
+
+// #192's voxel files each build deep-show per feature set (and the merge base's); ac10-budgets times the voxel mesher's
+// run at check on the reference Mac.
+alone.push('tests/acceptance/192/voxel/');
+timed.push('tests/acceptance/192/voxel/ac10-budgets.test.ts');
+// #192's pack files (blind) each build deep-show; budget-ceilings and budget-fields also build the merge base's in
+// its own target folder and run 256 MiB providers.
+alone.push('tests/acceptance/192/packs/', 'tests/acceptance/192/packs-redraft-ac12/');
 
 // #1624: this live session spends plan usage and is explicitly run by hand, not as a skipped unit test.
 byHand.push('tests/acceptance/1330/start.live.test.ts');
