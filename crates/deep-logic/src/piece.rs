@@ -526,6 +526,9 @@ pub struct Item {
     pub link_ns: u64,
     /// Each library's fixture records, by its hash, as the logic module ran them.
     pub fixtures: BTreeMap<String, Value>,
+    /// Each library's interface records, by its hash: each interface it implements with that
+    /// interface's fixtures as they ran on it (#416).
+    pub interfaces: BTreeMap<String, Value>,
     /// The kinds it emits, in declaration order, and where its emit region starts: `emits_at`.
     pub emits: Vec<Emit>,
     pub emits_at: u32,
@@ -685,7 +688,8 @@ impl Item {
         let libraries: Vec<Value> = self
             .libraries
             .iter()
-            .map(|l| json!({"name": l.label, "hash": l.hash, "pack": l.pack, "fixtures": self.fixtures.get(&l.hash).cloned().unwrap_or(json!([]))}))
+            .map(|l| json!({"name": l.label, "hash": l.hash, "pack": l.pack, "fixtures": self.fixtures.get(&l.hash).cloned().unwrap_or(json!([])),
+                "interfaces": self.interfaces.get(&l.hash).cloned().unwrap_or(json!([]))}))
             .collect();
         let mut out = json!({"program": self.program, "hash": self.hash, "layout": self.layout.to_json(), "assets_at": self.assets_at,
             "linked": linked, "libraries": libraries, "link_ns": self.link_ns,

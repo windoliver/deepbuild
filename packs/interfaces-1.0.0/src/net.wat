@@ -1,0 +1,12 @@
+(module
+  (import "env" "__linear_memory" (memory 1 1))
+  (import "lib:nn.mlp@1" "forward" (func $forward (param i32 i32 i32 i32)))
+  (global (export "reads_at") i32 (i32.const 0))
+  (global (export "writes_at") i32 (i32.const 4096))
+  (global (export "assets_at") i32 (i32.const 32768))
+  (func (export "init") (param $seed i64))
+  (func (export "step") (param $k i64)
+    (call $forward (i32.const 32772) (i32.add (i32.const 32776) (i32.load (i32.const 32768))) (i32.const 16384) (i32.const 20480))
+    (f64.store (i32.const 4096) (f64.promote_f32 (f32.load (i32.const 16384))))
+    (f64.store (i32.const 4104) (f64.promote_f32 (f32.load (i32.const 16388)))))
+  (data (i32.const 8192) "\00"))

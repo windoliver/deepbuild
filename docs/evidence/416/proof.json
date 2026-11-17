@@ -1,0 +1,806 @@
+{
+  "interfaces": {
+    "physics2d.lib@1": {
+      "exports": [
+        {
+          "name": "world",
+          "params": [
+            "i32",
+            "f64",
+            "i32",
+            "f64"
+          ],
+          "results": []
+        },
+        {
+          "name": "body",
+          "params": [
+            "i32",
+            "f64",
+            "f64",
+            "f64",
+            "f64",
+            "f64",
+            "f64",
+            "f64"
+          ],
+          "results": [
+            "i32"
+          ]
+        },
+        {
+          "name": "step",
+          "params": [
+            "i32",
+            "f64"
+          ],
+          "results": []
+        },
+        {
+          "name": "x",
+          "params": [
+            "i32",
+            "i32"
+          ],
+          "results": [
+            "f64"
+          ]
+        },
+        {
+          "name": "y",
+          "params": [
+            "i32",
+            "i32"
+          ],
+          "results": [
+            "f64"
+          ]
+        }
+      ],
+      "digest": "51f6d8d9b1eb44371566c5e3fd0a65de1698243dcad43451e6132fcdf9d6d0f7",
+      "planted": [
+        "ada0ca199c8a177c6da253465d7959b4ed74e1ae52720957008c2e8dffe03a59"
+      ],
+      "fixtures": [
+        {
+          "id": "a6f6e7af9478067f1d0b5996649cc4ccd25a5335b64d462b8ebb99578ee062c0",
+          "name": "slide",
+          "steps": 240,
+          "expect": {
+            "arrays": {
+              "239": {
+                "distance": [
+                  3.1855249745158
+                ]
+              }
+            },
+            "tolerance": {
+              "rel": 0.03
+            }
+          },
+          "answer": "The physics behavior kit's slide: v² ÷ 2μg with v = 5 m/s, g = 9.81 m/s² and μ = √(0.2 × 0.8) = 0.4, the geometric mean, is 3.186 m within 3%; the box has stopped by 2 s (v ÷ μg = 1.27 s), the distance at step 239 of 120 Hz."
+        },
+        {
+          "id": "2debaa37a4b66b88257cef2907829e2e8039217c5c4844d03b91713b877b0a9f",
+          "name": "fall",
+          "steps": 120,
+          "expect": {
+            "arrays": {
+              "119": {
+                "drop": [
+                  4.905
+                ]
+              }
+            },
+            "tolerance": {
+              "rel": 0.01
+            }
+          },
+          "answer": "The physics behavior kit's free fall: ½gt² with g = 9.81 m/s² and t = 1 s is 4.905 m within 1%, the drop at step 119 of 120 Hz from 10 m up, which never reaches the ground."
+        }
+      ]
+    },
+    "fsm@1": {
+      "exports": [
+        {
+          "name": "start",
+          "params": [
+            "i32",
+            "i32",
+            "i32",
+            "i64"
+          ],
+          "results": []
+        },
+        {
+          "name": "step",
+          "params": [
+            "i32",
+            "i32",
+            "i64",
+            "i32"
+          ],
+          "results": [
+            "i32"
+          ]
+        }
+      ],
+      "digest": "b6b9a4c7e1849e64811189b8ef4eebe38f69ea72b32209cbc109fcd605948fa1",
+      "planted": [
+        "48cbd7aa9e21a8efbaa3bf8d3ace32c5cc83baf67effbaaeaa9964678d035d68"
+      ],
+      "fixtures": [
+        {
+          "id": "d22a1c04dda562d0b90fda10e57c793ba80488812069893a8d9b2df96302cb1f",
+          "name": "door",
+          "steps": 60,
+          "expect": {
+            "arrays": {
+              "0": {
+                "state": [
+                  0
+                ]
+              },
+              "1": {
+                "state": [
+                  0
+                ]
+              },
+              "2": {
+                "state": [
+                  0
+                ]
+              },
+              "3": {
+                "state": [
+                  0
+                ]
+              },
+              "4": {
+                "state": [
+                  0
+                ]
+              },
+              "5": {
+                "state": [
+                  0
+                ]
+              },
+              "6": {
+                "state": [
+                  0
+                ]
+              },
+              "7": {
+                "state": [
+                  0
+                ]
+              },
+              "8": {
+                "state": [
+                  0
+                ]
+              },
+              "9": {
+                "state": [
+                  0
+                ]
+              },
+              "10": {
+                "state": [
+                  1
+                ]
+              },
+              "11": {
+                "state": [
+                  1
+                ]
+              },
+              "12": {
+                "state": [
+                  1
+                ]
+              },
+              "13": {
+                "state": [
+                  1
+                ]
+              },
+              "14": {
+                "state": [
+                  1
+                ]
+              },
+              "15": {
+                "state": [
+                  1
+                ]
+              },
+              "16": {
+                "state": [
+                  1
+                ]
+              },
+              "17": {
+                "state": [
+                  1
+                ]
+              },
+              "18": {
+                "state": [
+                  1
+                ]
+              },
+              "19": {
+                "state": [
+                  1
+                ]
+              },
+              "20": {
+                "state": [
+                  1
+                ]
+              },
+              "21": {
+                "state": [
+                  1
+                ]
+              },
+              "22": {
+                "state": [
+                  1
+                ]
+              },
+              "23": {
+                "state": [
+                  1
+                ]
+              },
+              "24": {
+                "state": [
+                  1
+                ]
+              },
+              "25": {
+                "state": [
+                  1
+                ]
+              },
+              "26": {
+                "state": [
+                  1
+                ]
+              },
+              "27": {
+                "state": [
+                  1
+                ]
+              },
+              "28": {
+                "state": [
+                  1
+                ]
+              },
+              "29": {
+                "state": [
+                  1
+                ]
+              },
+              "30": {
+                "state": [
+                  1
+                ]
+              },
+              "31": {
+                "state": [
+                  1
+                ]
+              },
+              "32": {
+                "state": [
+                  1
+                ]
+              },
+              "33": {
+                "state": [
+                  1
+                ]
+              },
+              "34": {
+                "state": [
+                  1
+                ]
+              },
+              "35": {
+                "state": [
+                  1
+                ]
+              },
+              "36": {
+                "state": [
+                  1
+                ]
+              },
+              "37": {
+                "state": [
+                  1
+                ]
+              },
+              "38": {
+                "state": [
+                  1
+                ]
+              },
+              "39": {
+                "state": [
+                  1
+                ]
+              },
+              "40": {
+                "state": [
+                  2
+                ]
+              },
+              "41": {
+                "state": [
+                  2
+                ]
+              },
+              "42": {
+                "state": [
+                  2
+                ]
+              },
+              "43": {
+                "state": [
+                  2
+                ]
+              },
+              "44": {
+                "state": [
+                  2
+                ]
+              },
+              "45": {
+                "state": [
+                  2
+                ]
+              },
+              "46": {
+                "state": [
+                  2
+                ]
+              },
+              "47": {
+                "state": [
+                  2
+                ]
+              },
+              "48": {
+                "state": [
+                  2
+                ]
+              },
+              "49": {
+                "state": [
+                  2
+                ]
+              },
+              "50": {
+                "state": [
+                  2
+                ]
+              },
+              "51": {
+                "state": [
+                  2
+                ]
+              },
+              "52": {
+                "state": [
+                  2
+                ]
+              },
+              "53": {
+                "state": [
+                  2
+                ]
+              },
+              "54": {
+                "state": [
+                  2
+                ]
+              },
+              "55": {
+                "state": [
+                  2
+                ]
+              },
+              "56": {
+                "state": [
+                  2
+                ]
+              },
+              "57": {
+                "state": [
+                  2
+                ]
+              },
+              "58": {
+                "state": [
+                  2
+                ]
+              },
+              "59": {
+                "state": [
+                  2
+                ]
+              }
+            },
+            "tolerance": "exact"
+          },
+          "answer": "fsm@1's rule: the door starts closed at step 0; the open event at step 10 takes it to opening, entered at step 10; its 30-step timer is due at 10 + 30, so the state is open from step 40 and opening from 10 to 39."
+        }
+      ]
+    },
+    "nn.mlp@1": {
+      "exports": [
+        {
+          "name": "forward",
+          "params": [
+            "i32",
+            "i32",
+            "i32",
+            "i32"
+          ],
+          "results": []
+        }
+      ],
+      "digest": "26cd73554857c58532fbe5249405592cbbdca078771d6385ebba169544ba5b72",
+      "planted": [
+        "8c161537340dc326bfead35b179933d0d60dc7d89a60896f02802db36497b41b"
+      ],
+      "fixtures": [
+        {
+          "id": "4b652aafd9afbf8e64179cd4e694c50490484327ac26271f9643f767dadc7c03",
+          "name": "4-8-2",
+          "steps": 1,
+          "expect": {
+            "arrays": {
+              "0": {
+                "out": [
+                  -0.10192935168743134,
+                  0.3919026851654053
+                ]
+              }
+            },
+            "tolerance": "exact"
+          },
+          "answer": "nn.mlp@1's rule worked by hand in binary32 (each product and each sum rounded once, to nearest, ties to even; max(sum, 0) after the hidden layer) on the table's 4-8-2 network (seeded values in (−1, 1), seed 417) and input; each output widened to f64. A multiply and add fused into one rounding gives -0.10192935168743134, 0.39190271496772766."
+        }
+      ]
+    }
+  },
+  "pack_check": {
+    "ok": true,
+    "pack": "interfaces@1.0.0",
+    "installed": true,
+    "libraries": [],
+    "interfaces": [
+      {
+        "name": "fsm@1",
+        "label": "fsm@1",
+        "digest": "b6b9a4c7e1849e64811189b8ef4eebe38f69ea72b32209cbc109fcd605948fa1",
+        "judged": [
+          {
+            "planted": "48cbd7aa9e21a8efbaa3bf8d3ace32c5cc83baf67effbaaeaa9964678d035d68",
+            "fails": "d22a1c04dda562d0b90fda10e57c793ba80488812069893a8d9b2df96302cb1f"
+          }
+        ]
+      },
+      {
+        "name": "nn.mlp@1",
+        "label": "nn.mlp@1",
+        "digest": "26cd73554857c58532fbe5249405592cbbdca078771d6385ebba169544ba5b72",
+        "judged": [
+          {
+            "planted": "8c161537340dc326bfead35b179933d0d60dc7d89a60896f02802db36497b41b",
+            "fails": "4b652aafd9afbf8e64179cd4e694c50490484327ac26271f9643f767dadc7c03"
+          }
+        ]
+      },
+      {
+        "name": "physics2d.lib@1",
+        "label": "physics2d.lib@1",
+        "digest": "51f6d8d9b1eb44371566c5e3fd0a65de1698243dcad43451e6132fcdf9d6d0f7",
+        "judged": [
+          {
+            "planted": "ada0ca199c8a177c6da253465d7959b4ed74e1ae52720957008c2e8dffe03a59",
+            "fails": "a6f6e7af9478067f1d0b5996649cc4ccd25a5335b64d462b8ebb99578ee062c0"
+          }
+        ]
+      }
+    ]
+  },
+  "planted_refused": {
+    "physics2d.lib@1": {
+      "ok": false,
+      "code": "link_refused",
+      "item": "fixture",
+      "refusals": [
+        {
+          "rule": "interface",
+          "interface": "physics2d.lib@1",
+          "library": "planted_physics2d_lib@1",
+          "fixture": "a6f6e7af9478067f1d0b5996649cc4ccd25a5335b64d462b8ebb99578ee062c0",
+          "step": 239,
+          "array": "distance",
+          "index": 0,
+          "expected": 3.1855249745158,
+          "actual": 2.543213867187511,
+          "tolerance": {
+            "rel": 0.03
+          },
+          "what": "planted_physics2d_lib@1 fails physics2d.lib@1's fixture a6f6e7af9478067f1d0b5996649cc4ccd25a5335b64d462b8ebb99578ee062c0: distance[0] at step 239 is 2.543213867187511, outside 3.1855249745158 within {\"rel\":0.03}"
+        }
+      ]
+    },
+    "fsm@1": {
+      "ok": false,
+      "code": "link_refused",
+      "item": "fixture",
+      "refusals": [
+        {
+          "rule": "interface",
+          "interface": "fsm@1",
+          "library": "planted_fsm@1",
+          "fixture": "d22a1c04dda562d0b90fda10e57c793ba80488812069893a8d9b2df96302cb1f",
+          "step": 40,
+          "array": "state",
+          "index": 0,
+          "expected": 2,
+          "actual": 1,
+          "tolerance": "exact",
+          "what": "planted_fsm@1 fails fsm@1's fixture d22a1c04dda562d0b90fda10e57c793ba80488812069893a8d9b2df96302cb1f: state[0] at step 40 is 1, outside 2 within \"exact\""
+        }
+      ]
+    },
+    "nn.mlp@1": {
+      "ok": false,
+      "code": "link_refused",
+      "item": "fixture",
+      "refusals": [
+        {
+          "rule": "interface",
+          "interface": "nn.mlp@1",
+          "library": "planted_nn_mlp@1",
+          "fixture": "4b652aafd9afbf8e64179cd4e694c50490484327ac26271f9643f767dadc7c03",
+          "step": 0,
+          "array": "out",
+          "index": 1,
+          "expected": 0.3919026851654053,
+          "actual": 0.39190271496772766,
+          "tolerance": "exact",
+          "what": "planted_nn_mlp@1 fails nn.mlp@1's fixture 4b652aafd9afbf8e64179cd4e694c50490484327ac26271f9643f767dadc7c03: out[1] at step 0 is 0.39190271496772766, outside 0.3919026851654053 within \"exact\""
+        }
+      ]
+    }
+  },
+  "claims": {
+    "agents_interface": {
+      "ok": true,
+      "verdict": "INCONCLUSIVE",
+      "asks": [
+        {
+          "kind": "approval",
+          "interface": "mine.fsm@1",
+          "why": "fsm_table@1 implements mine.fsm@1, an interface from a pack the working agent wrote (mine@1.0.0): its fixtures bind only its author's own claims until you approve the pack"
+        }
+      ]
+    },
+    "first_party": {
+      "ok": true,
+      "verdict": "PASS",
+      "asks": []
+    },
+    "under_outside_interface_binds_all": {
+      "ok": true,
+      "verdict": "PASS",
+      "asks": []
+    }
+  },
+  "deep_kinds": {
+    "install": "installed",
+    "fill": [
+      "first_party_pack",
+      "pack"
+    ],
+    "binds": "author",
+    "resolve": "check",
+    "entries": [
+      {
+        "name": "fsm@1",
+        "origin": "first_party",
+        "available": true,
+        "kit": {
+          "verdict": "PASS",
+          "entry": "fsm@1",
+          "rules": [
+            {
+              "rule": "fixtures",
+              "verdict": "PASS"
+            },
+            {
+              "rule": "planted",
+              "verdict": "PASS"
+            },
+            {
+              "rule": "planted_fails",
+              "verdict": "PASS"
+            },
+            {
+              "rule": "digest",
+              "verdict": "PASS"
+            }
+          ]
+        },
+        "exports": [
+          {
+            "name": "start",
+            "params": [
+              "i32",
+              "i32",
+              "i32",
+              "i64"
+            ],
+            "results": []
+          },
+          {
+            "name": "step",
+            "params": [
+              "i32",
+              "i32",
+              "i64",
+              "i32"
+            ],
+            "results": [
+              "i32"
+            ]
+          }
+        ],
+        "fixtures": [
+          "d22a1c04dda562d0b90fda10e57c793ba80488812069893a8d9b2df96302cb1f"
+        ]
+      },
+      {
+        "name": "nn.mlp@1",
+        "origin": "first_party",
+        "available": true,
+        "kit": {
+          "verdict": "PASS",
+          "entry": "nn.mlp@1",
+          "rules": [
+            {
+              "rule": "fixtures",
+              "verdict": "PASS"
+            },
+            {
+              "rule": "planted",
+              "verdict": "PASS"
+            },
+            {
+              "rule": "planted_fails",
+              "verdict": "PASS"
+            },
+            {
+              "rule": "digest",
+              "verdict": "PASS"
+            }
+          ]
+        },
+        "exports": [
+          {
+            "name": "forward",
+            "params": [
+              "i32",
+              "i32",
+              "i32",
+              "i32"
+            ],
+            "results": []
+          }
+        ],
+        "fixtures": [
+          "4b652aafd9afbf8e64179cd4e694c50490484327ac26271f9643f767dadc7c03"
+        ]
+      },
+      {
+        "name": "physics2d.lib@1",
+        "origin": "first_party",
+        "available": true,
+        "kit": {
+          "verdict": "PASS",
+          "entry": "physics2d.lib@1",
+          "rules": [
+            {
+              "rule": "fixtures",
+              "verdict": "PASS"
+            },
+            {
+              "rule": "planted",
+              "verdict": "PASS"
+            },
+            {
+              "rule": "planted_fails",
+              "verdict": "PASS"
+            },
+            {
+              "rule": "digest",
+              "verdict": "PASS"
+            }
+          ]
+        },
+        "exports": [
+          {
+            "name": "world",
+            "params": [
+              "i32",
+              "f64",
+              "i32",
+              "f64"
+            ],
+            "results": []
+          },
+          {
+            "name": "body",
+            "params": [
+              "i32",
+              "f64",
+              "f64",
+              "f64",
+              "f64",
+              "f64",
+              "f64",
+              "f64"
+            ],
+            "results": [
+              "i32"
+            ]
+          },
+          {
+            "name": "step",
+            "params": [
+              "i32",
+              "f64"
+            ],
+            "results": []
+          },
+          {
+            "name": "x",
+            "params": [
+              "i32",
+              "i32"
+            ],
+            "results": [
+              "f64"
+            ]
+          },
+          {
+            "name": "y",
+            "params": [
+              "i32",
+              "i32"
+            ],
+            "results": [
+              "f64"
+            ]
+          }
+        ],
+        "fixtures": [
+          "a6f6e7af9478067f1d0b5996649cc4ccd25a5335b64d462b8ebb99578ee062c0",
+          "2debaa37a4b66b88257cef2907829e2e8039217c5c4844d03b91713b877b0a9f"
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,18 @@
+Criterion 7, interface half: a piece that names no interface gains no work at check.
+
+The piece: tests/acceptance/416/interfaces/ac07-budgets.test.ts's `plain` counter beside `door`, which links
+fsm_table@1 by name from an entry that implements nothing. Head: this branch's deep-logic. Base: deep-logic built
+from `git merge-base HEAD origin/main` (3c124dee5) into target/acceptance-416-base. Mac17,10 (M5 Max), load
+average about 300 throughout, so not the reference Mac.
+
+CPU time (user + sys, /usr/bin/time -p) of one process running 40 `check` calls, 9 runs each:
+  head: 0.11 0.09 0.10 0.09 0.09 0.09 0.09 0.11 0.08  (median 0.09 s)
+  base: 0.10 0.09 0.09 0.11 0.10 0.09 0.10 0.11 0.11  (median 0.10 s)
+
+Wall time of the same, 7 alternating rounds (noisy under this load):
+  head: 1068 425 481 372 375 277 175 ms  (median 375.5 ms)
+  base:  658 489 421 400 286 147 125 ms  (median 400.4 ms)
+
+The blind test's own wall-time comparison (40 checks, median of 7 alternating rounds, limit base + 5% + 5 ms) read
+248 ms against the base's 178 ms in one run at this load; its fuel-per-step and receipt legs passed. On the
+reference Mac in a quiet preflight it is the test to read.

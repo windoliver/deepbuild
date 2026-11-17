@@ -731,6 +731,7 @@ const PACK_KEYS: &[&str] = &[
     "providers",
     "layouts",
     "libs",
+    "interfaces",
     "kinds",
     "corpus",
 ];

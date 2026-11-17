@@ -581,11 +581,16 @@ pub fn check_bound(
         .and_then(Value::as_object)
         .cloned()
         .unwrap_or_default();
+    // The build's first-party packs' assets come with them (#416).
+    let first_party = crate::first_party::assets();
     check_in(
         piece,
         planted,
         history,
-        &|sha| B64.decode(assets.get(sha)?.as_str()?).ok(),
+        &|sha| {
+            B64.decode(assets.get(sha).or(first_party.get(sha))?.as_str()?)
+                .ok()
+        },
         services,
     )
 }
@@ -862,6 +867,7 @@ pub fn check_in(
             linked,
             link_ns,
             fixtures: BTreeMap::new(),
+            interfaces: BTreeMap::new(),
             saves,
             emits: d.emits.clone(),
             emits_at: emits_at.unwrap_or(0),
