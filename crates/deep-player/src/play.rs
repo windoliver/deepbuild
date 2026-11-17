@@ -9,6 +9,7 @@ use std::rc::Rc;
 
 use deep_canvas::registry::Sealed;
 use deep_canvas::schedule::{Options, Scheduler, Session};
+use deep_canvas_motion::program::Program;
 use deep_canvas_physics::caps::RAPIER3D;
 use deep_canvas_physics::check::check;
 use deep_canvas_physics::occurrence::step_flicks;
@@ -42,6 +43,11 @@ pub struct Played {
     sched: Scheduler<'static>,
     session: Session,
     doc: Value,
+    /// The form's motion program, which a readout's values are evaluated by at the shown time.
+    motion: Option<Program>,
+    /// Whether the form has anything a readout says (an item's template or a figure's card), so a
+    /// frame of a piece with none evaluates nothing for its readouts.
+    reads_out: bool,
     track: Vec<Value>,
     /// The piece's step in flicks: its worlds' and logic items' least, else a 60th of a second.
     pub step: i64,
@@ -88,9 +94,21 @@ impl Played {
         let mut sched = Scheduler::new(sealed, Options::default());
         let mut session = Session::new(0, tokens);
         session.load(&mut sched, &form);
+        let motion = form.as_object().and_then(|m| Program::compile(m).ok());
+        let reads_out = form.get("card").is_some()
+            || form
+                .get("items")
+                .and_then(Value::as_object)
+                .is_some_and(|items| {
+                    items
+                        .values()
+                        .any(|i| i.pointer("/params/template").is_some())
+                });
         Ok(Played {
             sched,
             session,
+            motion,
+            reads_out,
             doc: form,
             track: track.to_vec(),
             step,
@@ -187,6 +205,31 @@ impl Played {
         out.insert("checkpoint_hashes".into(), Value::Object(checkpoints));
         out.insert("values".into(), Value::Object(self.values()));
         out
+    }
+
+    /// The document's accessibility tree (#1045): the one the app gives its accessibility seam,
+    /// made by the app's own function from the form this player plays, each control's node
+    /// marked `control` so the page makes it a Tab stop. The player hides no item a view would.
+    pub fn tree(&self) -> Vec<Value> {
+        let controls = self.doc.get("controls").and_then(Value::as_object);
+        let mut nodes = deep_play::access::tree(&self.doc, &[]);
+        for n in &mut nodes {
+            let id = n["id"].as_str().unwrap_or_default();
+            if controls.is_some_and(|c| c.contains_key(id)) {
+                n["control"] = json!(true);
+            }
+        }
+        nodes
+    }
+
+    /// Each readout heard and what it says in the frame shown (#1045), as the app's `see` reads
+    /// it: the form's values at the shown time filled into each readout's template. Reads only.
+    pub fn readouts(&self) -> BTreeMap<String, String> {
+        if !self.reads_out {
+            return BTreeMap::new();
+        }
+        let shown = deep_play::access::data_at(&self.doc, self.motion.as_ref(), self.t());
+        deep_play::access::readouts(&shown, &[])
     }
 
     /// Evaluated data by stable ID: each logic array `<logic ID>.<name>` as `eval`'s `arrays`

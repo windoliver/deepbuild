@@ -2,6 +2,7 @@
 //! evaluates what the app does: worlds baked, logic items stepped, programs inlined and the core's
 //! column view over the result.
 
+pub mod access;
 pub mod cast;
 pub mod derive;
 pub mod drawing;

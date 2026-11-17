@@ -33,7 +33,7 @@ export const alone = ['tests/acceptance/149/', 'tests/acceptance/1523/', 'tests/
   'tests/acceptance/453/',
   'tests/acceptance/1633/', 'packages/hub/test/reopened-items.test.ts',
   'tests/acceptance/46/', 'packages/github/test/',
-  'tests/acceptance/1172/', 'tests/acceptance/2078/',
+  'tests/acceptance/1172/', 'tests/acceptance/2078/', 'tests/acceptance/2218/',
   'tests/acceptance/1454/',
   'tests/acceptance/1459/',
   'tests/acceptance/1463/',
@@ -314,6 +314,9 @@ alone.push('tests/acceptance/1732/');
 // #190's files build deep-logic here, at the merge base and for Linux x86_64 in Docker, start headless Chrome, and read
 // CPU and wall times.
 alone.push('tests/acceptance/190/');
+// #416's interface files build deep-logic here, at the merge base and for Linux x86_64 in Docker, start headless
+// Chrome, and time checks and frames against the merge base's.
+alone.push('tests/acceptance/416/interfaces/');
 
 // #1477's suite opens real windows and times them against the lane's rule: one file at a time, both files timed.
 alone.push('tests/acceptance/1477/');
@@ -580,6 +583,16 @@ alone.push('tests/acceptance/306-redraft-1958/');
 // budgets.test.ts reads the machine's load.
 alone.push('tests/acceptance/157/', 'tests/acceptance/157-oracle/');
 timed.push('tests/acceptance/157/budgets.test.ts');
+// #518's files each build deep-show (most with test-encode-tools too) and export films through the GPU, an encode tool
+// and a fresh decode worker; registered.test.ts starts a hub, base.test.ts and budgets.test.ts build the merge base,
+// and budgets.test.ts, open.test.ts and slots.test.ts read a clock and the machine's load.
+alone.push('tests/acceptance/518/');
+timed.push('tests/acceptance/518/budgets.test.ts', 'tests/acceptance/518/slots.test.ts');
+// #518's first-draft AC10 file times a 2.0 s open against a film that prepares for about 1 s, which no export can hide
+// (tests/acceptance/518-redraft-ac10/DISPUTE.md); its blind redraft runs in its place.
+alone.push('tests/acceptance/518-redraft-ac10/');
+timed.push('tests/acceptance/518-redraft-ac10/open.test.ts');
+byHand.push('tests/acceptance/518/open.test.ts');
 // #162's files each build deep-show (atomic.test.ts with test-export-guards) and export to Lottie through the pinned
 // reference renderer; the import legs start a hub and run its import job; budgets.test.ts times both.
 alone.push('tests/acceptance/162/', 'tests/acceptance/162-oracle/');
@@ -755,6 +768,8 @@ timed.push('tests/acceptance/172/budgets.test.ts', 'tests/acceptance/172/images.
 // place.
 alone.push('tests/acceptance/172-redraft-ac2/');
 byHand.push('tests/acceptance/172/refusals.test.ts');
+// #1045's files each build deep-show (full) and drive headless Chrome with WebGPU on.
+alone.push('tests/acceptance/1045/');
 // #1969's files each build deep-canvas-render or deep-show and draw typed text through them.
 alone.push('tests/acceptance/1969/');
 // #142's files each build deep-show, render every film recipe's example on both stages, and time them; ac6 builds
@@ -833,6 +848,8 @@ byHand.push('tests/acceptance/184/ac07-bots-refused.test.ts', 'tests/acceptance/
 alone.push('tests/acceptance/555/');
 // #1048's files start replicas and hubs and play rules.legal's samples, a 100,000-step soak and model runs for minutes.
 alone.push('tests/acceptance/1048/');
+// #458's pairs, relations and views files each build deep-show or deep-gpu and hold the GPU; its suite files run scripts only.
+alone.push('tests/acceptance/458/pairs/', 'tests/acceptance/458/relations/', 'tests/acceptance/458/views/');
 // #192's dungeon files build deep-show and deep-sandbox, and ac05 also deep-sandbox for Linux x86_64 in Docker.
 alone.push('tests/acceptance/192/dungeon/');
 
@@ -848,6 +865,10 @@ timed.push('tests/acceptance/457/ac9-budgets.test.ts');
 // in a linux/amd64 container; ac8-budget judges the build budget on the reference Mac.
 alone.push('tests/acceptance/1636/');
 timed.push('tests/acceptance/1636/ac8-budget.test.ts');
+// #210's files build deep-show (full) or deep-logic, and the web export's runs a headless browser; ac8-budgets judges
+// the delivery and read budgets on the reference Mac, and ac9-taste waits on your taste call in tests/acceptance/210/TASTE.json.
+alone.push('tests/acceptance/210/');
+timed.push('tests/acceptance/210/ac8-budgets.test.ts');
 // #2031's files build deep-gpu (ac7 also the merge base's binaries) and draw on Metal; ac8 judges the lights' GPU budget.
 alone.push('tests/acceptance/2031/');
 timed.push('tests/acceptance/2031/ac8-budget.test.ts');
@@ -858,6 +879,8 @@ timed.push('tests/acceptance/2031/ac8-budget.test.ts');
 alone.push('tests/acceptance/182/', 'tests/acceptance/182-oracle/controllers-py-rapier.test.ts', 'tests/acceptance/182-oracle-redraft-climb/');
 timed.push('tests/acceptance/182/ac11-budgets.test.ts');
 byHand.push('tests/acceptance/182-oracle/character-controller-rapier.test.ts');
+// #2309's files build deep-physics (shipped and release), its wasm32 library and the merge base's release build.
+alone.push('tests/acceptance/2309/');
 
 // #2742's files build deep-gpu; ac1 compares two films' GPU time on any Mac, and ac2 runs #417's suite.
 alone.push('tests/acceptance/2742/');
@@ -869,6 +892,10 @@ timed.push('tests/acceptance/192/voxel/ac10-budgets.test.ts');
 // #192's pack files (blind) each build deep-show; budget-ceilings and budget-fields also build the merge base's in
 // its own target folder and run 256 MiB providers.
 alone.push('tests/acceptance/192/packs/', 'tests/acceptance/192/packs-redraft-ac12/');
+// #416's layout files (blind) each build deep-show and a wat assembler; budgets also builds the merge base's deep-show
+// in its own kept folder and judges a 16 MiB asset's validation on the reference Mac.
+alone.push('tests/acceptance/416/layouts/');
+timed.push('tests/acceptance/416/layouts/budgets.test.ts');
 
 // #1624: this live session spends plan usage and is explicitly run by hand, not as a skipped unit test.
 byHand.push('tests/acceptance/1330/start.live.test.ts');
@@ -908,9 +935,14 @@ byHand.push('tests/acceptance/124-redraft-1830/ac5-budgets.live.test.ts', 'tests
 // #2444: these two landed calling the reference-Mac timing helpers with no entry here, so #1114's grep failed on main.
 timed.push('tests/acceptance/568-redraft-1830/judge.test.mjs', 'tests/acceptance/903/ac6-export.test.ts', 'tests/acceptance/508/ac6-effects.test.ts');
 
+// #1381's files each build deep-gpu and draw 4,097 × 4,097-sample plates on the Metal GPU; ac6-budget judges the
+// horizon's 0.1 ms at 1080p on the reference Mac.
+alone.push('tests/acceptance/1381/');
+timed.push('tests/acceptance/1381/ac6-budget.test.ts');
+
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
-  { name: 'lint', commands: [['cargo', 'fmt', '--all', '--', '--check'], [process.execPath, 'scripts/repo-rules.mjs'], ['cargo', 'clippy', '--workspace', '--all-targets', '--locked', '--', '-D', 'warnings'], [process.execPath, 'scripts/vendor-rebase.mjs', 'check'], [process.execPath, 'scripts/canvas-lint.mjs'], [process.execPath, 'scripts/size-ratchet.mjs'], [process.execPath, 'scripts/conformance-lint.mjs'], [process.execPath, 'scripts/slots-check.mjs'], [process.execPath, 'scripts/canvas-closures.mjs', 'closures'], [process.execPath, 'scripts/canvas-closures.mjs', 'drift'], [process.execPath, 'scripts/record-reader-guard.mjs'], [process.execPath, 'scripts/render-lint.mjs'], [process.execPath, 'scripts/plant-lint.mjs'], [process.execPath, 'scripts/loads-lint.mjs'], [process.execPath, 'scripts/blocking-call-guard.mjs'], [process.execPath, 'scripts/keymap-guard.mjs'], [process.execPath, 'scripts/color-literal-guard.mjs'], [process.execPath, 'scripts/guide.mjs', '--check'], [process.execPath, 'scripts/panel-catalog.mjs'], [process.execPath, 'scripts/known-failures-check.mjs'], [process.execPath, 'scripts/fetch-lock.mjs', 'lint']], fix: 'Format Rust with cargo fmt, follow the Fix line under each repo rule above, fix the clippy warnings, follow the Fix line under each canvas-lint finding and each size FAIL line, or repair the enum closure, code mapping, rule fake or planted code each conformance-lint FAIL line names, declare the slot each slots-check FAIL line names with its interface, kit and planted fill, give each canvas list a closure-lint FAIL line names its closure or make the reference table and packages/contracts/canvas-closures.json agree where a drift FAIL line says they differ, read the record through the one reader in crates/deep-app/src/record.rs from each module a record-reader FAIL line names, put each plant read a plant FAIL line names under its cargo feature, give each judgeLimit call a loads FAIL line names its loads, move each blocking call a blocking-call FAIL line names off the UI thread or give it its reason, give each chord a keymap FAIL line names a free key, no ⌃, or the variant_of its ⌥ needs, draw each color a color-literal FAIL line names from the role it names, regenerate the extension guide with node scripts/guide.mjs, follow the Fix line under each panel-catalog FAIL line, or give each known failure a known-failures FAIL line names an open issue and the date it was added, fixing it or taking it out once 14 days have passed, or pin each scripts/fetch-lock.json row a fetch-lock FAIL line names to a commit with its sha256, size and credit.' },
+  { name: 'lint', commands: [['cargo', 'fmt', '--all', '--', '--check'], [process.execPath, 'scripts/repo-rules.mjs'], ['cargo', 'clippy', '--workspace', '--all-targets', '--locked', '--', '-D', 'warnings'], [process.execPath, 'scripts/vendor-rebase.mjs', 'check'], [process.execPath, 'scripts/canvas-lint.mjs'], [process.execPath, 'scripts/size-ratchet.mjs'], [process.execPath, 'scripts/conformance-lint.mjs'], [process.execPath, 'scripts/slots-check.mjs'], [process.execPath, 'scripts/canvas-closures.mjs', 'closures'], [process.execPath, 'scripts/canvas-closures.mjs', 'drift'], [process.execPath, 'scripts/record-reader-guard.mjs'], [process.execPath, 'scripts/render-lint.mjs'], [process.execPath, 'scripts/plant-lint.mjs'], [process.execPath, 'scripts/loads-lint.mjs'], [process.execPath, 'scripts/blocking-call-guard.mjs'], [process.execPath, 'scripts/ask-sources-guard.mjs'], [process.execPath, 'scripts/keymap-guard.mjs'], [process.execPath, 'scripts/color-literal-guard.mjs'], [process.execPath, 'scripts/guide.mjs', '--check'], [process.execPath, 'scripts/panel-catalog.mjs'], [process.execPath, 'scripts/known-failures-check.mjs'], [process.execPath, 'scripts/fetch-lock.mjs', 'lint']], fix: 'Format Rust with cargo fmt, follow the Fix line under each repo rule above, fix the clippy warnings, follow the Fix line under each canvas-lint finding and each size FAIL line, or repair the enum closure, code mapping, rule fake or planted code each conformance-lint FAIL line names, declare the slot each slots-check FAIL line names with its interface, kit and planted fill, give each canvas list a closure-lint FAIL line names its closure or make the reference table and packages/contracts/canvas-closures.json agree where a drift FAIL line says they differ, read the record through the one reader in crates/deep-app/src/record.rs from each module a record-reader FAIL line names, put each plant read a plant FAIL line names under its cargo feature, give each judgeLimit call a loads FAIL line names its loads, move each blocking call a blocking-call FAIL line names off the UI thread or give it its reason, give each source an ask-source FAIL line names its row in packages/asks/sources.json, give each chord a keymap FAIL line names a free key, no ⌃, or the variant_of its ⌥ needs, draw each color a color-literal FAIL line names from the role it names, regenerate the extension guide with node scripts/guide.mjs, follow the Fix line under each panel-catalog FAIL line, or give each known failure a known-failures FAIL line names an open issue and the date it was added, fixing it or taking it out once 14 days have passed, or pin each scripts/fetch-lock.json row a fetch-lock FAIL line names to a commit with its sha256, size and credit.' },
   { name: 'unit', commands: [
     // The canvas, text and marks acceptance files each build a binary before spawning it, and cargo
     // clones the binary into target/debug anew on every build, fresh or not, so a file spawning it
@@ -966,6 +998,10 @@ export const checks = [
   // #1427: the motion check on the shipped journeys for Needs you, a session page and the project page.
   { name: 'motion', commands: [['cargo', 'build', '--locked', '-p', 'deep-replica', '--bin', 'deep-drive'], [process.execPath, 'scripts/motion.mjs']], fix: 'Make the motion each finding above names settle, fade or fly as declared,.' },
   { name: 'canvas kit', commands: [[process.execPath, 'scripts/canvas-kit.mjs']], fix: 'Repair the canvas module and part each line above names; run the kit call alone to replay a failing seed.' },
+  // #458: the parity suite's quick lane, the kit's fixtures and their planted-fault twins on Vello CPU and the noop
+  // backend, no GPU, after the fixture scan over every canvas fixture and its evidence. What can't run reads BLOCKED
+  // in its row, for the release bar to weigh; the lane fails on what ran and didn't hold.
+  { name: 'parity suite quick', commands: [['cargo', 'build', '--locked', '--bin', 'deep-show'], [process.execPath, 'scripts/fixture-scan.mjs'], [process.execPath, 'scripts/parity-suite.mjs', 'run', 'quick']], fix: 'Remove or redact what each fixture scan line names; repair the fixture each FAIL line names, give a fixture an INVALID line names a planted-fault twin that fails, and read both results of an INCONCLUSIVE one before running it again on a new commit.' },
   // Build first, so a broken build fails this lane instead of comparing a stale binary.
   { name: 'parity quick', commands: [['cargo', 'build', '--workspace', '--locked'], [process.execPath, 'scripts/parity.mjs']], fix: 'Repair the Rust build, the CLI behavior or the cross-binary help/version mismatch.' },
   // The proof lanes (#569): the test guard, fails before on the merge base, the trace lane, and the
@@ -1074,6 +1110,14 @@ export const releaseLanes = [
       ['env', 'DEEP_HARNESS_LIVE=1', process.execPath, 'node_modules/vitest/vitest.mjs', 'run', '--root', 'tests/acceptance/27', 'session.live.test.ts'],
     ],
     fix: 'Repair what each failing test names; a BLOCKED run names what is missing, such as CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token` for the settings-tamper sessions.',
+  },
+  {
+    // #458's: the parity suite's other lanes on the release commit (full on the GPU, cross on a second machine, the
+    // optional oracle lanes), then the release report, which applies the bar to every fixture's rows of that commit:
+    // each must-pass fixture PASS, each other PASS or BLOCKED with an owner and a reason.
+    name: 'parity suite release',
+    commands: [...['full', 'cross', 'oracle'].map((lane) => [process.execPath, 'scripts/parity-suite.mjs', 'run', lane]), [process.execPath, 'scripts/parity-suite.mjs', 'report']],
+    fix: 'Repair the fixture each FAIL line names; a fixture the bar names needs a PASS on the release commit when it is must-pass, and otherwise a PASS or a BLOCKED row with an owner and a reason in scripts/parity-suite.json.',
   },
   {
     // #140's validation lane: the GPU fixtures once with Metal's API and shader validation on and the shader

@@ -1042,6 +1042,11 @@ fn check_envelope(doc: &Value, issues: &mut Vec<Issue>) {
             )),
         }
     }
+    // #210: a piece's ports, at most 8, each naming its plug-in and, out and in, only what the
+    // document has: a control, a logic item's occurrence list, or a reading.
+    if let Some(ports) = envelope.get("ports") {
+        check_ports(envelope, ports, issues);
+    }
     for key in ["id", "profile", "title"] {
         if let Some(value) = envelope.get(key) {
             if !value.is_string() {
@@ -2566,5 +2571,90 @@ pub(crate) fn resolve(
             Ok(())
         }
         _ => unreachable(),
+    }
+}
+
+/// The most ports a document declares (#210).
+const MAX_PORTS: usize = 8;
+
+/// #210: `ports: {name → {plugin, out: [control ID | occurrence list], in: [reading ID], sound}}`.
+fn check_ports(envelope: &Map<String, Value>, ports: &Value, issues: &mut Vec<Issue>) {
+    let bad = |at: String, value: &Value, what: &str| {
+        Issue::envelope("out_of_range", at, value.clone(), what)
+    };
+    let Some(ports) = ports.as_object() else {
+        issues.push(bad("ports".into(), ports, "not an object of ports by name"));
+        return;
+    };
+    if ports.len() > MAX_PORTS {
+        issues.push(bad(
+            "ports".into(),
+            &json!(ports.len()),
+            "more than 8 ports",
+        ));
+    }
+    let controls = envelope.get("controls").and_then(Value::as_object);
+    let items = envelope.get("items").and_then(Value::as_object);
+    for (name, port) in ports {
+        let at = format!("ports/{name}");
+        let Some(port) = port.as_object() else {
+            issues.push(bad(at, port, "not an object"));
+            continue;
+        };
+        for (key, value) in port {
+            if !["plugin", "out", "in", "sound"].contains(&key.as_str()) {
+                issues.push(Issue::envelope(
+                    "unknown_field",
+                    format!("{at}/{key}"),
+                    value.clone(),
+                    "not a field of a port",
+                ));
+            }
+        }
+        if !port.get("plugin").is_some_and(Value::is_string) {
+            issues.push(bad(
+                format!("{at}/plugin"),
+                &Value::Null,
+                "a port names its plug-in",
+            ));
+        }
+        if port.get("sound").is_some_and(|s| !s.is_boolean()) {
+            issues.push(bad(format!("{at}/sound"), &port["sound"], "not a boolean"));
+        }
+        for side in ["out", "in"] {
+            let Some(list) = port.get(side) else { continue };
+            let Some(list) = list.as_array() else {
+                issues.push(bad(format!("{at}/{side}"), list, "not a list of names"));
+                continue;
+            };
+            for (i, entry) in list.iter().enumerate() {
+                let here = format!("{at}/{side}/{i}");
+                let Some(id) = entry.as_str() else {
+                    issues.push(bad(here, entry, "not a name"));
+                    continue;
+                };
+                let known = if side == "in" {
+                    id.starts_with("reading:")
+                } else if let Some(item) = id.strip_suffix(".occurrences") {
+                    items
+                        .and_then(|m| m.get(item))
+                        .is_some_and(|i| i.get("kind").and_then(Value::as_str) == Some("logic@1"))
+                } else {
+                    controls.is_some_and(|c| c.contains_key(id))
+                };
+                if !known {
+                    issues.push(Issue::envelope(
+                        "ref_unresolved",
+                        here,
+                        entry.clone(),
+                        if side == "in" {
+                            "a port reads a reading (`reading:<source>`)"
+                        } else {
+                            "a port sends a control of the document or a logic item's occurrence list"
+                        },
+                    ));
+                }
+            }
+        }
     }
 }

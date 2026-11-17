@@ -148,6 +148,12 @@ pub enum Twin {
     EachWallAlone,
     CheckpointWithoutVertical,
     SlopeIgnored,
+    /// #2309's: a check that holds `solver.contact_hz` to a quarter of (step rate × substeps), as
+    /// it holds a joint's spring; a contact with a static body held at the same frequency as any
+    /// other; and a world that writes no `contact_hz` held at 30 Hz whatever its step.
+    ContactsAtAQuarter,
+    StaticContactSame,
+    Contact30,
 }
 
 /// A Rapier world behind the backend interface.
@@ -876,8 +882,9 @@ impl Backend for Rapier {
         p.contact_softness =
             SpringCoefficients::new(w.solver.contact_hz as f32, w.solver.contact_damping as f32);
         // Rapier holds a contact with a fixed body at twice the frequency; the world keeps that.
+        let fixed = if self.twin == Twin::StaticContactSame { 1.0 } else { 2.0 };
         p.static_contact_softness = SpringCoefficients::new(
-            2.0 * w.solver.contact_hz as f32,
+            fixed * w.solver.contact_hz as f32,
             w.solver.contact_damping as f32,
         );
         p.normalized_max_linear_velocity = w.solver.max_speed as f32;

@@ -62,6 +62,20 @@ fn add(n: &AtomicU64, by: u64) {
     n.fetch_add(by, Ordering::Relaxed);
 }
 
+/// #1381: the compute passes this process's drawing began. Each render module's pass counts itself
+/// as it begins; a pass the harness runs to read a frame back, hash it or check it doesn't.
+static COMPUTE_PASSES: AtomicU64 = AtomicU64::new(0);
+
+/// Counts one compute pass a frame's drawing begins.
+pub fn compute_pass() {
+    add(&COMPUTE_PASSES, 1);
+}
+
+/// The compute passes drawing began so far; two readings' difference is what a frame ran.
+pub fn compute_passes() -> u64 {
+    COMPUTE_PASSES.load(Ordering::Relaxed)
+}
+
 /// The device's kept shaders, layouts and pipelines, by what they are made from: a second document
 /// opened in the process makes none of them again (#1903's `first frame wait`).
 #[derive(Debug, Default)]

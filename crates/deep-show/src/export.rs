@@ -18,8 +18,14 @@ mod guards;
 mod lottie;
 mod page;
 mod pdf;
+mod planes;
+mod program;
+mod qualify;
 #[cfg(feature = "test-export-guards")]
 mod test_guards;
+#[cfg(feature = "test-encode-tools")]
+pub(crate) mod test_tools;
+pub(crate) mod tools;
 mod web;
 
 use std::collections::BTreeMap;
@@ -69,6 +75,18 @@ pub enum Guard {
     PageTargetsOnImage,
     /// #468: the glTF export drops a camera's lens shift without a warning.
     GltfDropsShift,
+    /// #518: the hand-off never gives the encode job the last frame's buffer.
+    HandoffDropsLast,
+    /// #518: a frame waits for a free slot with no deadline.
+    WaitsForSlotForever,
+    /// #518: the conversion pass rounds each block's chroma down, not to nearest.
+    Nv12RoundsDown,
+    /// #518: the export removes what is at the destination before it finds its tool.
+    ClearsDestinationFirst,
+    /// #518: the encode tool's session opens only after the first frame is drawn.
+    OpensAfterFirstFrame,
+    /// #518: a slot's index is sent before the GPU has put the frame in it.
+    SendsBeforeHash,
     /// #172: the web export writes the export's time into the index page.
     WebIndexExportTime,
     /// #172: the web export writes a test variant of the player, which alone has probe().
@@ -77,12 +95,21 @@ pub enum Guard {
     WebRequestsAdapterLimits,
     /// #172: the web player writes a fragment `control.<ID>=<value>` as an input entry.
     WebFragmentWritesEntry,
+    /// #1045: the web player keeps no accessibility tree beside its canvas, and no live region.
+    WebNoTree,
+    /// #1045: the web player announces each readout on every frame it draws, changed or not.
+    WebAnnouncesEveryFrame,
     /// A wrong encoder, muxer or reader in the helper processes, by its name there.
     Codec(&'static str),
 }
 
+/// #518: the encode job that reads every frame before it codes the first: the export hands a
+/// tool each frame as soon as it is hashed, and the PNG sequence writer keeps them all.
+pub(crate) const READS_ALL_FIRST: Guard = Guard::Codec("encode_reads_all_frames_first");
+
 /// The helper processes' wrong programs (#157), by the names they answer to.
-const CODEC_PLANTS: [&str; 18] = [
+const CODEC_PLANTS: [&str; 19] = [
+    "encode_reads_all_frames_first",
     "encode_full_range_bt601",
     "h264_full_range_under_limited_tags",
     "prores_fed_full_range",
@@ -136,17 +163,25 @@ pub(crate) fn planted(name: &str) -> Option<Planted> {
         "page_keys_by_picture" => Planted::Export(G::PageKeysByPicture),
         "page_targets_on_image" => Planted::Export(G::PageTargetsOnImage),
         "gltf_drops_shift" => Planted::Export(G::GltfDropsShift),
+        "handoff_drops_last_buffer" => Planted::Export(G::HandoffDropsLast),
+        "export_waits_for_slot_forever" => Planted::Export(G::WaitsForSlotForever),
+        "nv12_rounds_chroma_down" => Planted::Export(G::Nv12RoundsDown),
+        "export_clears_destination_first" => Planted::Export(G::ClearsDestinationFirst),
+        "export_opens_tool_after_first_frame" => Planted::Export(G::OpensAfterFirstFrame),
+        "handoff_sends_before_hash" => Planted::Export(G::SendsBeforeHash),
         "web_index_export_time" => Planted::Export(G::WebIndexExportTime),
         "web_probe_test_variant" => Planted::Export(G::WebProbeTestVariant),
         "web_requests_adapter_limits" => Planted::Export(G::WebRequestsAdapterLimits),
         "web_fragment_writes_entry" => Planted::Export(G::WebFragmentWritesEntry),
+        "web_no_tree" => Planted::Export(G::WebNoTree),
+        "web_announces_every_frame" => Planted::Export(G::WebAnnouncesEveryFrame),
         other => Planted::Export(G::Codec(CODEC_PLANTS.iter().find(|p| **p == other)?)),
     })
 }
 
 impl Hub<'_> {
     /// Whether #157's wrong program `g` is planted.
-    fn guard_planted(&self, g: Guard) -> bool {
+    pub(crate) fn guard_planted(&self, g: Guard) -> bool {
         self.scenario.planted == Some(Planted::Export(g))
     }
 }
@@ -343,6 +378,10 @@ pub struct Job {
     /// #169: the page's own clips are tagged with their pixels' transfer, sRGB, so a browser
     /// draws them as it draws the page's stills; never read from a request.
     pub srgb: bool,
+    /// #518: `tool: name@version`, the encode tool that encodes in place of the first qualified
+    /// one for the codec, and `brief: {tools}`, the tools the brief pins.
+    pub tool: Option<String>,
+    pub pins: Vec<String>,
 }
 
 impl Default for Job {
@@ -374,6 +413,8 @@ impl Default for Job {
             notes: false,
             page: Value::Null,
             srgb: false,
+            tool: None,
+            pins: Vec::new(),
         }
     }
 }
@@ -392,18 +433,6 @@ impl Default for Captions {
             profile: None,
             files: vec!["srt".into()],
             mode: "open".into(),
-        }
-    }
-}
-
-impl Job {
-    /// The export.target@1 entry that writes the job's codec: `video` for the movie codecs,
-    /// `png` for a PNG sequence, otherwise the target the codec names.
-    pub fn target(&self) -> &str {
-        match self.codec.as_str() {
-            "h264" | "hevc" | "hevc_alpha" | "prores_4444" | "gif" => "video",
-            "png_seq" => "png",
-            other => other,
         }
     }
 }
@@ -543,6 +572,15 @@ pub fn parse(c: &Map<String, Value>) -> Option<Job> {
             .cloned()
             .unwrap_or(Value::Null),
         srgb: false,
+        tool: crate::optional(c.get("tool"), |t| Some(t.as_str()?.to_string()))?,
+        pins: c
+            .get("brief")
+            .and_then(|b| b.get("tools"))
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(|t| t.as_str().map(str::to_string))
+            .collect(),
     })
 }
 

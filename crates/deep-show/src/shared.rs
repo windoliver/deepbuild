@@ -252,22 +252,9 @@ pub fn writer_of_text(text: &str) -> Option<Writer> {
     })
 }
 
-/// Whether this build knows a kind: the marks module or scene3d draws it, or the kernel registers it.
-pub fn knows(kind: &str) -> bool {
-    deep_canvas_marks::scene::KINDS.contains(&kind)
-        || deep_canvas_scene3d::scene::is_3d(kind)
-        || kind == deep_canvas_scene3d::scene::OVERLAY
-        // A readout (#419), such as the overlay that discloses an exaggerated length (#1183).
-        || kind == "overlay.text@1"
-        // #506: an inset, and a view of the document from another camera in a rect of the frame.
-        || kind == deep_canvas_scene3d::inset::KIND
-        || kind == deep_canvas_scene3d::views::KIND
-        // The vector module's kind (#1162): an item the view draws, hears and points at.
-        || kind == "vector@1"
-        // A logic item (#544): baked at check into the occurrence lists its readers read; it draws nothing.
-        || kind == "logic@1"
-        || !matches!(lookup(&registry(), kind), Lookup::UnknownKind)
-}
+/// Whether this build knows a kind, and the items that draw: deep-play's (#1045), which the web
+/// player's accessibility tree reads as the app's does.
+pub use deep_play::access::{draws, knows};
 
 /// The layer whose `writer` is this writer's text, if the document has one.
 pub fn layer_of(doc: &Value, writer: &Writer) -> Option<String> {
@@ -277,38 +264,6 @@ pub fn layer_of(doc: &Value, writer: &Writer) -> Option<String> {
         .iter()
         .find(|(_, l)| l.get("writer").and_then(Value::as_str) == Some(text.as_str()))
         .map(|(id, _)| id.clone())
-}
-
-/// The items that draw: of a kind this build knows, visible, and every parent they name there.
-/// An item whose parent is gone hides, and only it and what hangs from it.
-pub fn draws(doc: &Value) -> Vec<String> {
-    let empty = Map::new();
-    let items = doc
-        .get("items")
-        .and_then(Value::as_object)
-        .unwrap_or(&empty);
-    let mut out: Vec<String> = items
-        .iter()
-        .filter(|(_, item)| {
-            item.get("kind").and_then(Value::as_str).is_some_and(knows)
-                && item.get("visible") != Some(&Value::Bool(false))
-        })
-        .filter(|(id, _)| {
-            let mut at = id.as_str();
-            for _ in 0..=items.len() {
-                match items[at].get("parent").and_then(Value::as_str) {
-                    None => return true,
-                    Some(p) if items.contains_key(p) => at = p,
-                    // #504: an item joins an assembly by naming it as its parent.
-                    Some(p) => return doc.get("assemblies").and_then(|a| a.get(p)).is_some(),
-                }
-            }
-            false
-        })
-        .map(|(id, _)| id.clone())
-        .collect();
-    out.sort();
-    out
 }
 
 /// The document as the marks module draws it: only the items that draw.
