@@ -66,34 +66,26 @@ function commands(pids) {
   if (listing.status > 1 || listing.error) throw Error(`ps failed: ${listing.error?.message ?? listing.stderr.trim()}`);
   return new Map(listing.stdout.split('\n').map((line) => line.match(/^\s*(\d+)\s+(.*)$/)).filter(Boolean).map(([, pid, args]) => [Number(pid), args]));
 }
-// node --test or vitest, by its command line: the program itself, never a word a shell was given.
+// node --test or vitest, by its command line: the program itself, never a word a shell was given, and --test only
+// among node's own options, before its script: a command line that carries the word further on is no test run.
 const testRunner = (args) => {
-  const [program, script, ...rest] = args.trim().split(/\s+/);
+  const [program, ...words] = args.trim().split(/\s+/);
   const vitest = (word = '') => /(^|\/)vitest(\.m?js)?$|\/vitest\/(vitest\.m?js|dist\/)/.test(word);
-  return vitest(program) || (/^node/.test(basename(program)) && ([script, ...rest].includes('--test') || vitest(script)));
+  const script = words.findIndex((word) => !word.startsWith('-'));
+  return vitest(program) || (/^node/.test(basename(program)) && (words.slice(0, script < 0 ? words.length : script).includes('--test') || vitest(words[script])));
 };
 
 /**
  * The table's folder (#2744): the machine's, under the user's home from the password database, so a HOME of a run's
  * own never splits it. Only inside a test run, read from the process table, does a request keep a table of its own:
- * DEEP_THROTTLE_TABLE's folder, or else its HOME's, unless DEEP_THROTTLE names a grant of the machine's table, which
- * a run's tests inherit: a test's build then counts under its run's grant, whatever HOME it has. Outside a test run,
- * DEEP_THROTTLE_TABLE is refused, never read.
+ * DEEP_THROTTLE_TABLE's folder, or else its HOME's. Outside a test run, DEEP_THROTTLE_TABLE is refused, never read.
  */
 let chosen;
 function folder() {
   if (chosen) return chosen;
-  const machine = join(userInfo().homedir, '.deepbuild', 'throttle');
   const inTest = [...commands(ancestors()).values()].some(testRunner);
   if (!inTest && process.env.DEEP_THROTTLE_TABLE) throw Error('DEEP_THROTTLE_TABLE is read only inside a test run (node --test or vitest); unset it to use the machine\'s table');
-  if (!inTest || process.env.DEEP_THROTTLE_TABLE) return (chosen = process.env.DEEP_THROTTLE_TABLE || machine);
-  // The table is replaced whole by a rename, so it reads whole without its lock.
-  const [, cls, id] = (process.env.DEEP_THROTTLE ?? '').match(/^([a-z-]+):([0-9a-f]+)$/) ?? [];
-  let named = false;
-  try {
-    named = !!id && JSON.parse(readFileSync(join(machine, 'table.json'), 'utf8')).grants.some((grant) => grant.id === id && grant.class === cls);
-  } catch {}
-  return (chosen = named ? machine : join(homedir(), '.deepbuild', 'throttle'));
+  return (chosen = inTest ? process.env.DEEP_THROTTLE_TABLE || join(homedir(), '.deepbuild', 'throttle') : join(userInfo().homedir, '.deepbuild', 'throttle'));
 }
 
 // The table is one file, rewritten whole under a lock file only one process can create, held for a read and a write;
