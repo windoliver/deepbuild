@@ -51,6 +51,7 @@ impl Groups {
                 .passes_on(device)
                 .ground(device, page, layer.size, linear)
             {
+                deep_gpu::spans::done_with(&t.create_view(&Default::default()));
                 stack = Some(self.copied(device, &t, layer.size));
             }
         }
@@ -72,6 +73,8 @@ impl Groups {
             Some(stack) => stack,
             None => self.take(device, layer.size, ACC),
         };
+        // #2742: whatever the frame's timing spans hold open ends once the layer is composed.
+        deep_gpu::spans::done_with(&stack.create_view(&Default::default()));
         Ok((stack, inputs, costs))
     }
 
@@ -86,6 +89,7 @@ impl Groups {
         let mut encoder = device.device.create_command_encoder(&Default::default());
         encoder.copy_texture_to_texture(t.as_image_copy(), copy.as_image_copy(), whole(size));
         device.queue.submit([encoder.finish()]);
+        deep_gpu::spans::done_with(&copy.create_view(&Default::default()));
         copy
     }
 
@@ -170,6 +174,7 @@ impl Groups {
             let before = self.copied(device, &done, layer.size);
             let view = before.create_view(&Default::default());
             self.passes_on(device).relief(device, page, &view, &done);
+            deep_gpu::spans::done_with(&done.create_view(&Default::default()));
             self.give(&before);
         }
         Ok((done, run.inputs.unwrap_or_default(), run.costs))
@@ -193,11 +198,13 @@ impl Groups {
         let mut encoder = d.create_command_encoder(&Default::default());
         self.resolve_as(d, &mut encoder, &view, &encoded_view, ACC, x.space, true);
         x.device.queue.submit([encoder.finish()]);
+        deep_gpu::spans::done_with(&encoded_view);
         let moved = self.take(x.device, x.size, ACC);
         let moved_view = moved.create_view(&Default::default());
         self.stage
             .get_or_insert_with(|| Stage::new(x.device))
             .guard_into(x.device, guard, &encoded_view, &moved_view);
+        deep_gpu::spans::done_with(&moved_view);
         for rect in written {
             let mix = Mix {
                 mode: REPLACE,
