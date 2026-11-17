@@ -60,7 +60,7 @@ pub(super) fn resolve(items: &mut Map<String, Value>, expansions: &[Expansion]) 
         })
     };
     let rewrite = |v: &mut Value| {
-        if let Some(new) = v.as_str().and_then(|t| name(t)) {
+        if let Some(new) = v.as_str().and_then(name) {
             *v = Value::String(new);
         }
     };

@@ -113,19 +113,23 @@ pub fn built_order(w: &World) -> Vec<&String> {
     ids
 }
 
-/// Each ID's rank in canonical order, (priority, ID) over the world's bodies, then its joints by
-/// ID, then its soft bodies by ID (A timeline as data over a pinned backend: order is canonical by
-/// (priority, ID)).
+/// Each ID's rank in canonical order, (priority, ID) over the world's bodies, each vehicle body's
+/// wheels (`<body>#<wheel>`, #251) right after it, then its joints by ID, then its soft bodies by
+/// ID (A timeline as data over a pinned backend: order is canonical by (priority, ID)).
 pub fn ranks(w: &World) -> BTreeMap<String, u32> {
     let mut bodies: Vec<&String> = w.bodies.keys().collect();
     bodies.sort_by_key(|id| (w.bodies[*id].priority, id_order(id)));
-    let ids = bodies
+    let mut ids = Vec::new();
+    for id in bodies {
+        ids.push(id.clone());
+        let names = w.bodies[id].vehicle.iter().flat_map(|v| v.wheels.keys());
+        ids.extend(names.map(|n| format!("{id}#{n}")));
+    }
+    let ids = ids
         .into_iter()
-        .chain(w.joints.keys())
-        .chain(w.soft.keys());
-    ids.enumerate()
-        .map(|(i, id)| (id.clone(), i as u32))
-        .collect()
+        .chain(w.joints.keys().cloned())
+        .chain(w.soft.keys().cloned());
+    ids.enumerate().map(|(i, id)| (id, i as u32)).collect()
 }
 
 fn flip(v: [f32; 3]) -> [f32; 3] {

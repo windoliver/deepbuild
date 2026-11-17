@@ -6,7 +6,9 @@ import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { readFacts } from '@deepbuild/adapters';
+import { onPath } from './paths.js';
 import { activePlant as plant } from './plant.js';
+export { onPath } from './paths.js';
 
 /**
  * Where a row's agent is found: always, a home folder (an env variable naming it first), a program on PATH (with its
@@ -28,7 +30,6 @@ export interface Row {
 const LIST = JSON.parse(readFileSync(new URL('../../../contracts/setup-steps.json', import.meta.url), 'utf8')) as { steps: Row[] };
 /** A row's key, `<step>:<agent>`, as setup's runners, its stop record and the screen's nodes name it. */
 export const key = (row: Row): string => (row.agent ? `${row.step}:${row.agent}` : row.step);
-export const onPath = (name: string): string | undefined => (process.env.PATH ?? '').split(':').map((dir) => join(dir, name)).find((file) => file.startsWith('/') && existsSync(file));
 /** Each agent's own installer and its plan, by agent (adapters/install.json). */
 export interface Installer { name: string; plan: { paid: boolean; page: string; price?: string; read?: string }; [platform: string]: unknown }
 export const installers = (): Record<string, Installer> => readFacts<{ agents: Record<string, Installer> }>('install.json').agents;

@@ -1,0 +1,24 @@
+{
+  "id": "deepbuild/foley-render",
+  "version": "1.0.0",
+  "digest": "d1:f666e040799dfcf40f40800b27ce2e580eb8306d9045ad7e6375b065e5ce68f0",
+  "checks": [
+    "foley.render.variants"
+  ],
+  "jobs": [
+    "foley.render"
+  ],
+  "job_tools": [
+    {
+      "kind": "foley.render",
+      "tool": "foley-render@1.0.0"
+    }
+  ],
+  "requires": {
+    "preview": [
+      "deep.registerCheck",
+      "deep.registerJob",
+      "deep.registerJobTool"
+    ]
+  }
+}

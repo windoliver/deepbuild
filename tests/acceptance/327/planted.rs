@@ -181,7 +181,7 @@ mod suite {
             click(&mut replica, 0, On::Send);
             let answers = answers_for(&replica, &ask);
             assert!(
-                answers.iter().all(|a| a.get("option").map_or(true, serde_json::Value::is_null)),
+                answers.iter().all(|a| a.get("option").is_none_or(serde_json::Value::is_null)),
                 "{ask}: the card read the typed \"yes\" as allow and sent an option: {answers:?}"
             );
         });

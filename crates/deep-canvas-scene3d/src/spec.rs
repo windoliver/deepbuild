@@ -387,7 +387,8 @@ fn mesh_asset() -> Spec {
         kind: "mesh.asset@1",
         module: "scene3d",
         params: vec![
-            p("sha256", "sha256", "", Value::Null, G, json!(a), json!(b)),
+            p("sha256", "sha256", "", Value::Null, G, json!(a), json!(b))
+                .takes("sha256 | {gen: <pack>.<provider>, params}"),
             p("node", "index | name", "", json!(0), G, json!(0), json!(1))
                 .takes("index | name | {scene: index}"),
             shade(),
@@ -1193,12 +1194,26 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
             fixture: json!({"it": item("sky@1", json!({"top": [0.2, 0.4, 0.8, 1], "low": [0.8, 0.8, 0.7, 1]}))}),
         },
         // #465, #468: an Effect item; scene3d draws `kind: flare` (Effect: flare) and `kind: dof`
-        // (Effect: dof).
+        // (Effect: dof). #508: the film kinds, which the effects module ranges and draws; each
+        // kind's params sit under its name.
         "effect@1" => Spec {
             kind: "effect@1",
             module: "scene3d",
             params: vec![
-                p("kind", "flare | dof", "", json!("flare"), S, json!("flare"), json!("flare")),
+                p("kind", "flare | dof | wave_field | plume | arc | airflow", "", json!("flare"), S, json!("flare"), json!("flare")),
+                p("anchor", "ID", "", Value::Null, S, json!("it"), json!("it")),
+                p("axis", "vec3", "", json!([0, 1, 0]), S, json!([0, 1, 0]), json!([1, 0, 0])),
+                p("seed", "item | u64", "", json!("item"), S, json!("item"), json!(7))
+                    .takes("item | u64"),
+                p("resolution", "full | half | quarter", "", json!("half"), S, json!("half"), json!("full")),
+                p("wave_field", "{amplitude, wavelength: m, speed: m/s, radius: m, role}", "", Value::Null, S, json!({"amplitude": 1}), json!({"amplitude": 2}))
+                    .takes("{amplitude?: 0 to 64, wavelength?: 0.001 to 1000 m, speed?: -1000 to 1000 m/s, radius?: 0.001 to 10000 m, role?: role}"),
+                p("plume", "{radius: m, reach: m, heat, shock_cells, turbulence: m, seed, haze: {strength: px, scale: m}}", "", Value::Null, S, json!({"reach": 2}), json!({"reach": 3}))
+                    .takes("{radius?: 0.001 to 100 m, reach?: 0 to 1000 m, heat?: 0 to 64, shock_cells?: 0 to 4, turbulence?: 0 to 100 m, seed?: 0 to 4294967295, haze?: {strength?: 0 to 32 px, scale?: 0.001 to 100 m}}"),
+                p("arc", "{to: ID, intensity, width: px, jitter: px, rate: Hz, waves, role}", "", Value::Null, S, json!({"intensity": 4}), json!({"intensity": 2}))
+                    .takes("{to: ID, intensity?: 0 to 64, width?: 0.25 to 64 px, jitter?: 0 to 256 px, rate?: 0 to 120 Hz, waves?: 1 to 64, role?: role}"),
+                p("airflow", "{paths: [ID], around: {axis, copies, span: [deg, deg]}, count, speed: m/s, length: m, fade: {in: s, out: s}}", "", Value::Null, S, json!({"count": 64}), json!({"count": 128}))
+                    .takes("{paths: [curve ID] ≤ 8 (at least 1), around?: {axis?: vec3, copies?: 1 to 16, span?: [-360 to 360 deg, -360 to 360 deg]}, count?: 1 to 65536, speed?: 0.001 to 1000 m/s, length?: 0.001 to 1000 m, fade?: {in?: 0 to 60 s, out?: 0 to 60 s}}"),
                 p(
                     "dof",
                     "{focus: ID | m, coc: physical, max_coc: px, taps: 64 | 96 | 128, rotate: pixel_hash, far_over_near: refuse, projection: perspective | orthographic, ortho_coc: px per m, band: {center: ID | screen y, width, feather, angle: deg, amount: px}}",
@@ -1738,6 +1753,57 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
             reads: None,
             fixture: json!({"it": item("coil@1", json!({"radius": 0.2, "pitch": 0.05, "wire": 0.01, "turns": 3, "paint": {"fill": {"role": "accent"}}}))}),
         },
+        "tree@1" => Spec {
+            kind: "tree@1",
+            module: "scene3d",
+            params: vec![
+                p("seed", "u32", "", json!(0), G, json!(0), json!(1)),
+                ranged(p("levels", "u8", "", json!(4), G, json!(3), json!(4)), 1.0, 5.0),
+                ranged(p("length", "m", "m", json!(4), G, json!(4), json!(3)), 0.001, 1000.0),
+                ranged(
+                    p("radius", "m", "m", json!(0.15), G, json!(0.15), json!(0.2)),
+                    0.0001,
+                    100.0,
+                ),
+                ranged(
+                    p("exponent", "f32", "", json!(2.0), G, json!(2.0), json!(2.5)),
+                    1.0,
+                    4.0,
+                ),
+                ranged(p("split", "u8", "", json!(3), G, json!(3), json!(2)), 1.0, 8.0),
+                ranged(
+                    p("angle", "deg", "deg", json!(40), G, json!(40), json!(30)),
+                    0.0,
+                    90.0,
+                ),
+                ranged(
+                    p("roll", "deg", "deg", json!(137.5), G, json!(137.5), json!(90)),
+                    -360.0,
+                    360.0,
+                ),
+                ranged(
+                    p("gravity", "f32", "", json!(0), G, json!(0), json!(0.4)),
+                    -4.0,
+                    4.0,
+                ),
+                p(
+                    "leaves",
+                    "{per_twig: u8 ≤ 64, size: m}",
+                    "",
+                    Value::Null,
+                    G,
+                    json!({"per_twig": 4, "size": 0.1}),
+                    json!({"per_twig": 6, "size": 0.15}),
+                )
+                .takes("{per_twig: u8, size: m}"),
+                ranged(p("segments", "u16", "", json!(8), G, json!(8), json!(6)), 3.0, 64.0),
+                ranged(p("rings", "u16", "", json!(8), G, json!(8), json!(6)), 2.0, 64.0),
+                shade(),
+                paint(),
+            ],
+            reads: None,
+            fixture: json!({"it": item("tree@1", json!({"seed": 1, "levels": 3, "length": 2, "radius": 0.1, "leaves": {"per_twig": 4, "size": 0.1}, "paint": {"fill": {"role": "accent"}}}))}),
+        },
         "plate@1" => Spec {
             kind: "plate@1",
             module: "scene3d",
@@ -2038,7 +2104,7 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
 }
 
 /// scene3d's kinds, in the order the `kinds` call lists them.
-pub const SCENE3D: [&str; 27] = [
+pub const SCENE3D: [&str; 28] = [
     "mark.box@1",
     "mark.cylinder@1",
     "mark.sphere@1",
@@ -2063,6 +2129,7 @@ pub const SCENE3D: [&str; 27] = [
     "display@1",
     "hull@1",
     "surface@1",
+    "tree@1",
     "curve@1",
     "mesh.asset@1",
     "mesh.sequence@1",
@@ -2073,440 +2140,8 @@ pub fn scene3d() -> Vec<Spec> {
     SCENE3D.iter().filter_map(|k| of_scene3d(k)).collect()
 }
 
-/// One of the building module's kinds (Building module), built alone.
-fn of_building(kind: &str) -> Option<Spec> {
-    let wall = |a: [f64; 2], b: [f64; 2]| {
-        item(
-            "arch.wall@1",
-            json!({"a": a, "b": b, "thickness": 0.2, "height": 2.7, "justify": "center", "outside": "left", "cut_height": 1.2}),
-        )
-    };
-    let walls = json!({"w": wall([0.0, 0.0], [4.0, 0.0]), "w2": wall([4.0, 0.0], [4.0, 3.0])});
-    let with = |extra: Value| {
-        let mut m: Map<String, Value> = walls.as_object().cloned().unwrap_or_default();
-        m.extend(extra.as_object().cloned().unwrap_or_default());
-        Value::Object(m)
-    };
-    let rect = json!([[-1, -1], [9, -1], [9, 7], [-1, 7]]);
-    Some(match kind {
-        "arch.wall@1" => Spec {
-            kind: "arch.wall@1",
-            module: "building",
-            params: vec![
-                p(
-                    "a",
-                    "[m, m]",
-                    "m",
-                    Value::Null,
-                    G,
-                    json!([0, 0]),
-                    json!([0, 0.5]),
-                ),
-                p(
-                    "b",
-                    "[m, m]",
-                    "m",
-                    Value::Null,
-                    G,
-                    json!([4, 0]),
-                    json!([4, 1]),
-                ),
-                ranged(
-                    p("thickness", "m", "m", json!(0.2), G, json!(0.2), json!(0.3)),
-                    0.0,
-                    10.0,
-                ),
-                ranged(
-                    p("height", "m", "m", json!(2.7), G, json!(2.7), json!(3)),
-                    0.0,
-                    1000.0,
-                ),
-                p(
-                    "justify",
-                    "center | left | right",
-                    "",
-                    json!("center"),
-                    G,
-                    json!("center"),
-                    json!("left"),
-                ),
-                p(
-                    "outside",
-                    "left | right | none",
-                    "",
-                    json!("none"),
-                    G,
-                    json!("left"),
-                    json!("right"),
-                ),
-                ranged(
-                    p("cut_height", "m", "m", json!(1.2), G, json!(1.2), json!(1)),
-                    0.0,
-                    1000.0,
-                ),
-                paint(),
-            ],
-            reads: Some(&["siblings", "children"]),
-            fixture: json!({"it": wall([0.0, 0.0], [4.0, 0.0]), "w2": wall([4.0, 0.0], [4.0, 3.0])}),
-        },
-        "arch.opening@1" => Spec {
-            kind: "arch.opening@1",
-            module: "building",
-            params: vec![
-                p(
-                    "wall",
-                    "wall ID",
-                    "",
-                    Value::Null,
-                    G,
-                    json!("w"),
-                    json!("w2"),
-                ),
-                p(
-                    "type",
-                    "door | window",
-                    "",
-                    json!("door"),
-                    G,
-                    json!("door"),
-                    json!("window"),
-                ),
-                ranged(
-                    p("at_along", "m", "m", json!(0), G, json!(1), json!(1.5)),
-                    0.0,
-                    1000.0,
-                ),
-                ranged(
-                    p("width", "m", "m", json!(0.9), G, json!(0.9), json!(1)),
-                    0.0,
-                    100.0,
-                ),
-                ranged(
-                    p("height", "m", "m", json!(2.1), G, json!(2.1), json!(1.5)),
-                    0.0,
-                    100.0,
-                ),
-                ranged(
-                    p("sill", "m", "m", json!(0), G, json!(0), json!(0.5)),
-                    0.0,
-                    100.0,
-                ),
-                p(
-                    "swing",
-                    "in | out",
-                    "",
-                    json!("in"),
-                    G,
-                    json!("in"),
-                    json!("out"),
-                ),
-                p(
-                    "hinge",
-                    "left | right",
-                    "",
-                    json!("left"),
-                    G,
-                    json!("left"),
-                    json!("right"),
-                ),
-                ranged(
-                    p("open", "0..1", "", json!(0), G, json!(0), json!(0.5)),
-                    0.0,
-                    1.0,
-                ),
-                paint(),
-            ],
-            reads: Some(&["refs"]),
-            fixture: with(
-                json!({"it": {"kind": "arch.opening@1", "parent": "w", "params": {"wall": "w", "type": "door", "at_along": 1, "width": 0.9, "height": 2.1, "sill": 0}}}),
-            ),
-        },
-        "arch.slab@1" => Spec {
-            kind: "arch.slab@1",
-            module: "building",
-            params: vec![
-                p(
-                    "outline",
-                    "polygon",
-                    "m",
-                    Value::Null,
-                    G,
-                    rect.clone(),
-                    json!([[-1, -1], [8, -1], [8, 7], [-1, 7]]),
-                ),
-                p(
-                    "holes",
-                    "[polygon | item ID]",
-                    "m",
-                    json!([]),
-                    G,
-                    json!([]),
-                    json!([[[1, 1], [2, 1], [2, 2], [1, 2]]]),
-                ),
-                ranged(
-                    p(
-                        "thickness",
-                        "m",
-                        "m",
-                        json!(0.2),
-                        G,
-                        json!(0.2),
-                        json!(0.25),
-                    ),
-                    0.0,
-                    100.0,
-                ),
-                paint(),
-            ],
-            reads: Some(&["refs"]),
-            fixture: json!({"it": item("arch.slab@1", json!({"outline": rect, "thickness": 0.2}))}),
-        },
-        "arch.roof@1" => Spec {
-            kind: "arch.roof@1",
-            module: "building",
-            params: vec![
-                p(
-                    "type",
-                    "gable | hip | shed | flat | mansard | gambrel | dutch | conical",
-                    "",
-                    json!("gable"),
-                    G,
-                    json!("gable"),
-                    json!("hip"),
-                ),
-                p(
-                    "size",
-                    "[m, m]",
-                    "m",
-                    Value::Null,
-                    G,
-                    json!([4.4, 3.4]),
-                    json!([5, 3]),
-                ),
-                ranged(
-                    p("pitch", "deg", "deg", json!(30), G, json!(30), json!(40)),
-                    0.0,
-                    89.0,
-                ),
-                ranged(
-                    p("overhang", "m", "m", json!(0), G, json!(0.2), json!(0.3)),
-                    0.0,
-                    100.0,
-                ),
-                ranged(
-                    p("parapet", "m", "m", json!(0), G, json!(0), json!(0.3)),
-                    0.0,
-                    100.0,
-                ),
-                paint(),
-            ],
-            reads: Some(&[]),
-            fixture: json!({"it": item("arch.roof@1", json!({"type": "gable", "size": [4.4, 3.4], "pitch": 30, "overhang": 0.2}))}),
-        },
-        "arch.stair@1" => Spec {
-            kind: "arch.stair@1",
-            module: "building",
-            params: vec![
-                p(
-                    "type",
-                    "straight | l | u | spiral",
-                    "",
-                    json!("straight"),
-                    G,
-                    json!("straight"),
-                    json!("l"),
-                ),
-                ranged(
-                    p("rise", "m", "m", json!(2.7), G, json!(2.6), json!(3)),
-                    0.0,
-                    100.0,
-                ),
-                ranged(
-                    p("width", "m", "m", json!(0.9), G, json!(0.9), json!(1)),
-                    0.0,
-                    100.0,
-                ),
-                p(
-                    "turn",
-                    "left | right",
-                    "",
-                    json!("left"),
-                    G,
-                    json!("left"),
-                    json!("right"),
-                ),
-                ranged(
-                    p("split", "u16", "", json!(0), G, json!(0), json!(6)),
-                    0.0,
-                    1000.0,
-                ),
-                p(
-                    "rails",
-                    "none | left | right | both",
-                    "",
-                    json!("none"),
-                    G,
-                    json!("none"),
-                    json!("both"),
-                ),
-                paint(),
-            ],
-            reads: Some(&[]),
-            fixture: json!({"it": item("arch.stair@1", json!({"type": "straight", "rise": 2.6, "width": 0.9}))}),
-        },
-        "arch.zone@1" => Spec {
-            kind: "arch.zone@1",
-            module: "building",
-            params: vec![
-                p(
-                    "outline",
-                    "polygon",
-                    "m",
-                    Value::Null,
-                    G,
-                    rect.clone(),
-                    json!([[-1, -1], [8, -1], [8, 7], [-1, 7]]),
-                ),
-                p(
-                    "holes",
-                    "[polygon | item ID]",
-                    "m",
-                    json!([]),
-                    G,
-                    json!([]),
-                    json!([[[1, 1], [2, 1], [2, 2], [1, 2]]]),
-                ),
-                p(
-                    "name",
-                    "text",
-                    "",
-                    json!(""),
-                    "text",
-                    json!("Room"),
-                    json!("Hall"),
-                ),
-                p(
-                    "floor",
-                    "level ID",
-                    "",
-                    Value::Null,
-                    G,
-                    json!("l1"),
-                    json!("l2"),
-                ),
-            ],
-            reads: Some(&["refs"]),
-            fixture: json!({
-                "l1": item("arch.level@1", json!({"elevation": 0, "height": 2.7})),
-                "l2": item("arch.level@1", json!({"elevation": 3, "height": 2.7})),
-                "it": item("arch.zone@1", json!({"outline": rect, "name": "Room", "floor": "l1"})),
-            }),
-        },
-        "arch.level@1" => Spec {
-            kind: "arch.level@1",
-            module: "building",
-            params: vec![
-                p("elevation", "m", "m", json!(0), G, json!(0), json!(3)),
-                ranged(
-                    p("height", "m", "m", json!(2.7), G, json!(2.7), json!(3)),
-                    0.0,
-                    1000.0,
-                ),
-            ],
-            reads: Some(&[]),
-            fixture: json!({"it": item("arch.level@1", json!({"elevation": 0, "height": 2.7}))}),
-        },
-        "arch.guard_rail@1" => Spec {
-            kind: "arch.guard_rail@1",
-            module: "building",
-            params: vec![
-                p(
-                    "around",
-                    "item ID",
-                    "",
-                    Value::Null,
-                    G,
-                    json!("deck"),
-                    json!("deck2"),
-                ),
-                p(
-                    "except",
-                    "[edge index]",
-                    "",
-                    json!([]),
-                    G,
-                    json!([]),
-                    json!([0]),
-                ),
-                p(
-                    "skip_along_walls",
-                    "bool",
-                    "",
-                    json!(false),
-                    G,
-                    json!(false),
-                    json!(true),
-                ),
-                paint(),
-            ],
-            reads: Some(&["refs", "siblings"]),
-            fixture: with(json!({
-                "deck": item("arch.slab@1", json!({"outline": [[0, 0], [4, 0], [4, 3], [0, 3]], "thickness": 0.2})),
-                "deck2": item("arch.slab@1", json!({"outline": [[0, 0], [5, 0], [5, 3], [0, 3]], "thickness": 0.2})),
-                "it": item("arch.guard_rail@1", json!({"around": "deck"})),
-            })),
-        },
-        _ => return None,
-    })
-}
-
-/// The building module's kinds' schemas.
-pub fn building() -> Vec<Spec> {
-    crate::building::KINDS
-        .iter()
-        .filter_map(|k| of_building(k))
-        .collect()
-}
-
-/// A spec's entry for the registry: every param of JSON type, which the kind's reader checks.
-pub fn entry(spec: &Spec, family: &'static str, name: &'static str) -> Entry {
-    Entry {
-        family,
-        name,
-        versions: vec![Version {
-            major: 1,
-            minor: 0,
-            params: spec
-                .params
-                .iter()
-                .map(|q| Param {
-                    name: q.name,
-                    ty: ParamType::Json(q.declared()),
-                    unit: q.unit,
-                    default: q.default.clone(),
-                    min: None,
-                    max: None,
-                    minor: 0,
-                    module: "",
-                    operator: "",
-                })
-                .collect(),
-        }],
-        migrations: Vec::new(),
-    }
-}
-
-/// Every spec, scene3d's then the building module's.
-pub fn all() -> Vec<Spec> {
-    let mut out = scene3d();
-    out.extend(building());
-    out
-}
-
-/// The spec of `kind`.
-pub fn of(kind: &str) -> Option<Spec> {
-    of_scene3d(kind).or_else(|| of_building(kind))
-}
+mod building;
+pub use building::*;
 
 /// A kind's dirty map: each param's path to its class. The planted `slab_size_as_shading` maps
 /// slab@1's rebuild-class size to shading (AC8's wrong program).
@@ -2545,78 +2180,5 @@ pub fn params_of(item: &Value, kind: &str, geometry: bool, planted: Option<&str>
     Value::Object(out)
 }
 
-/// The params resolved: each one the item gives, the schema's default for the rest.
-pub fn resolved(spec: &Spec, params: &Value, geometry: bool, planted: Option<&str>) -> Value {
-    let mut out = Map::new();
-    for ((path, class), q) in dirty(spec, planted).into_iter().zip(&spec.params) {
-        if (class == G) != geometry {
-            continue;
-        }
-        let v = params
-            .get(&path["params/".len()..])
-            .cloned()
-            .unwrap_or_else(|| q.default.clone());
-        let v = match q.name {
-            "overlays" => crate::tints::resolved(v),
-            _ => v,
-        };
-        out.insert(q.name.to_string(), v);
-    }
-    Value::Object(out)
-}
-
-/// The `kinds` call's row of a spec.
-pub fn row(spec: &Spec, planted: Option<&str>) -> Value {
-    let params: Map<String, Value> = spec
-        .params
-        .iter()
-        .map(|q| {
-            let mut v = json!({"type": q.ty, "unit": q.unit, "default": q.default,
-                               "live": q.ty == "m" || q.ty == "deg" || q.ty == "f32",
-                               "cost": if q.class == G { "rebuild" } else { "transform" }});
-            if let (Some(min), Some(max)) = (q.min, q.max) {
-                v["min"] = json!(min);
-                v["max"] = json!(max);
-            }
-            (q.name.to_string(), v)
-        })
-        .collect();
-    let dirty: Map<String, Value> = dirty(spec, planted)
-        .into_iter()
-        .map(|(k, c)| (k, json!(c)))
-        .collect();
-    let sweep: Map<String, Value> = spec
-        .params
-        .iter()
-        .map(|q| (format!("params/{}", q.name), json!([q.sweep.0, q.sweep.1])))
-        .collect();
-    let mut items = Map::new();
-    items.insert(
-        "cam".into(),
-        json!({"kind": "camera@1", "params": {"projection": "perspective", "position": [6, 5, 8], "target": [0, 0.5, 0], "fov": 40}}),
-    );
-    if let Some(fx) = spec.fixture.as_object() {
-        items.extend(fx.clone());
-    }
-    for (k, (id, v)) in items.iter_mut().enumerate() {
-        v["id"] = json!(id);
-        v["name"] = json!(id);
-        v["order"] = json!(format!("a{k:03}"));
-    }
-    let modules = if spec.module == "building" {
-        json!({"scene3d": "^1", "building": "^1"})
-    } else {
-        json!({"scene3d": "^1"})
-    };
-    let document = json!({
-        "format": 1, "profile": "scene", "title": format!("The {} fixture", spec.kind),
-        "description": format!("One {} for the sweep of its paths.", spec.kind),
-        "size": [480, 360], "camera": "cam", "requires": {"modules": modules}, "items": items,
-    });
-    let mut out = json!({"kind": spec.kind, "module": spec.module, "params": params, "dirty": dirty,
-                         "fixture": {"document": document, "item": "it"}, "sweep": sweep});
-    if let Some(reads) = spec.reads {
-        out["reads"] = json!(reads);
-    }
-    out
-}
+mod row;
+pub use row::*;

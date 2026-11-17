@@ -1,0 +1,321 @@
+{
+ "format": 1,
+ "id": "doc-508-plume",
+ "profile": "scene",
+ "title": "A plume with haze before a checkerboard",
+ "description": "A plume with haze before a checkerboard: a #508 effect fixture, drawn from its params.",
+ "size": [
+  480,
+  270
+ ],
+ "seed": 508,
+ "camera": "cam",
+ "transport": {
+  "span": "4s"
+ },
+ "requires": {
+  "modules": {
+   "scene3d": "^1",
+   "effects": "^1"
+  }
+ },
+ "layers": {
+  "main": {
+   "writer": "agent-a",
+   "title": "Main",
+   "order": "a0"
+  }
+ },
+ "items": {
+  "cam": {
+   "id": "cam",
+   "name": "cam",
+   "order": "a000",
+   "layer": "main",
+   "kind": "camera@1",
+   "params": {
+    "projection": "perspective",
+    "position": [
+     0,
+     1.2,
+     5
+    ],
+    "target": [
+     0,
+     1,
+     0
+    ],
+    "fov": 40
+   }
+  },
+  "board": {
+   "id": "board",
+   "name": "board",
+   "order": "a001",
+   "layer": "main",
+   "kind": "mark.box@1",
+   "params": {
+    "size": [
+     4,
+     3,
+     0.02
+    ],
+    "paint": {
+     "fill": {
+      "role": "muted"
+     }
+    }
+   },
+   "at": {
+    "pos": [
+     0,
+     1.2,
+     -1.5
+    ]
+   }
+  },
+  "t0": {
+   "id": "t0",
+   "name": "t0",
+   "order": "a002",
+   "layer": "main",
+   "kind": "mark.box@1",
+   "params": {
+    "size": [
+     1,
+     0.75,
+     0.02
+    ],
+    "paint": {
+     "fill": {
+      "role": "ink"
+     }
+    }
+   },
+   "at": {
+    "pos": [
+     -1.5,
+     0.075,
+     -1.47
+    ]
+   }
+  },
+  "t1": {
+   "id": "t1",
+   "name": "t1",
+   "order": "a003",
+   "layer": "main",
+   "kind": "mark.box@1",
+   "params": {
+    "size": [
+     1,
+     0.75,
+     0.02
+    ],
+    "paint": {
+     "fill": {
+      "role": "ink"
+     }
+    }
+   },
+   "at": {
+    "pos": [
+     0.5,
+     0.075,
+     -1.47
+    ]
+   }
+  },
+  "t2": {
+   "id": "t2",
+   "name": "t2",
+   "order": "a004",
+   "layer": "main",
+   "kind": "mark.box@1",
+   "params": {
+    "size": [
+     1,
+     0.75,
+     0.02
+    ],
+    "paint": {
+     "fill": {
+      "role": "ink"
+     }
+    }
+   },
+   "at": {
+    "pos": [
+     -0.5,
+     0.825,
+     -1.47
+    ]
+   }
+  },
+  "t3": {
+   "id": "t3",
+   "name": "t3",
+   "order": "a005",
+   "layer": "main",
+   "kind": "mark.box@1",
+   "params": {
+    "size": [
+     1,
+     0.75,
+     0.02
+    ],
+    "paint": {
+     "fill": {
+      "role": "ink"
+     }
+    }
+   },
+   "at": {
+    "pos": [
+     1.5,
+     0.825,
+     -1.47
+    ]
+   }
+  },
+  "t4": {
+   "id": "t4",
+   "name": "t4",
+   "order": "a006",
+   "layer": "main",
+   "kind": "mark.box@1",
+   "params": {
+    "size": [
+     1,
+     0.75,
+     0.02
+    ],
+    "paint": {
+     "fill": {
+      "role": "ink"
+     }
+    }
+   },
+   "at": {
+    "pos": [
+     -1.5,
+     1.575,
+     -1.47
+    ]
+   }
+  },
+  "t5": {
+   "id": "t5",
+   "name": "t5",
+   "order": "a007",
+   "layer": "main",
+   "kind": "mark.box@1",
+   "params": {
+    "size": [
+     1,
+     0.75,
+     0.02
+    ],
+    "paint": {
+     "fill": {
+      "role": "ink"
+     }
+    }
+   },
+   "at": {
+    "pos": [
+     0.5,
+     1.575,
+     -1.47
+    ]
+   }
+  },
+  "t6": {
+   "id": "t6",
+   "name": "t6",
+   "order": "a008",
+   "layer": "main",
+   "kind": "mark.box@1",
+   "params": {
+    "size": [
+     1,
+     0.75,
+     0.02
+    ],
+    "paint": {
+     "fill": {
+      "role": "ink"
+     }
+    }
+   },
+   "at": {
+    "pos": [
+     -0.5,
+     2.325,
+     -1.47
+    ]
+   }
+  },
+  "t7": {
+   "id": "t7",
+   "name": "t7",
+   "order": "a009",
+   "layer": "main",
+   "kind": "mark.box@1",
+   "params": {
+    "size": [
+     1,
+     0.75,
+     0.02
+    ],
+    "paint": {
+     "fill": {
+      "role": "ink"
+     }
+    }
+   },
+   "at": {
+    "pos": [
+     1.5,
+     2.325,
+     -1.47
+    ]
+   }
+  },
+  "plume": {
+   "id": "plume",
+   "name": "plume",
+   "order": "a010",
+   "layer": "main",
+   "kind": "effect@1",
+   "params": {
+    "kind": "plume",
+    "axis": [
+     0,
+     1,
+     0
+    ],
+    "resolution": "half",
+    "plume": {
+     "radius": 0.15,
+     "reach": 1.8,
+     "heat": 1.5,
+     "shock_cells": 2,
+     "turbulence": 0.15,
+     "seed": 7,
+     "haze": {
+      "strength": 4,
+      "scale": 0.5
+     }
+    }
+   },
+   "at": {
+    "pos": [
+     0,
+     0.2,
+     0
+    ]
+   }
+  }
+ }
+}

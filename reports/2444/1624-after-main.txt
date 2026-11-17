@@ -1,0 +1,13 @@
+Captured output; paths redacted. Full preflight remains unproven.
+
+✔ #1114.f3e38214 every test file calling a timing helper is in lanes.mjs timed list, by a grep of the tree (2996.362583ms)
+✔ #1624 AC2 tests/acceptance/1114/timed-list.test.mjs passes (5308.112208ms)
+✔ #1624 AC2 lanes.mjs timed list covers each of the 14 files the issue names (66.739083ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 5511.972625

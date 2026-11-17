@@ -22,7 +22,7 @@ it.each([
   const record = await openRecord({ path: join(home, 'record.db'), now: Date.now });
   const asks = await openAsks({ record, now: Date.now, deliver: () => undefined });
   const supervisor = await openSupervisor({ record, asks, now: Date.now, settings: { asks: { unblock: { deadline_ms: 60_000 } } } });
-  const host = await openExtensionHost({ home, record, supervisor, trust: await openTrust({ record, now: Date.now }), now: Date.now });
+  const host = await openExtensionHost({ home, record, supervisor, trust: await openTrust({ record, now: Date.now }), now: Date.now, release: [] });
   const original = process.kill;
   const probe = vi.spyOn(process, 'kill').mockImplementation(((given: number, signal: NodeJS.Signals | number) => {
     if (given !== pid || signal !== 0) return original(given, signal);

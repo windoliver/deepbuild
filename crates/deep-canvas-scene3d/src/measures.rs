@@ -9,7 +9,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use deep_canvas::ops::{atan2, cos, sin, sqrt};
 use serde_json::{json, Map, Value};
 
-use crate::deviation::Bvh;
+use crate::deviation::{Bvh, PACKET};
 use crate::geom::{add, cross, dot, length, scale, sub, unit, Mesh, V3};
 use crate::poly::Poly;
 
@@ -224,42 +224,87 @@ pub fn hidden(tris: &[[V3; 3]]) -> Vec<bool> {
     };
     let bvh = Bvh::new(tris.to_vec());
     let dirs = directions();
-    tris.iter()
-        .map(|&[a, b, c]| {
-            let n = cross(sub(b, a), sub(c, a));
-            if length(n) == 0.0 {
-                return false;
-            }
+    // A face's two sides, none for a face with no area.
+    let sides = |[a, b, c]: [V3; 3]| {
+        let n = cross(sub(b, a), sub(c, a));
+        (length(n) != 0.0).then(|| {
             let n = unit(n);
-            let points = SAMPLES.map(|w| add(add(scale(a, w[0]), scale(b, w[1])), scale(c, w[2])));
-            // Each side's directions, turned into its hemisphere, and the one nearest its normal.
-            let sides = [n, scale(n, -1.0)].map(|side| {
-                let d = dirs.map(|d| {
-                    if dot(d, side) < 0.0 {
-                        scale(d, -1.0)
-                    } else {
-                        d
-                    }
-                });
-                let best = (0..RAYS)
-                    .max_by(|&i, &j| dot(d[i], side).total_cmp(&dot(d[j], side)))
-                    .unwrap_or(0);
-                (side, d, best)
-            });
-            let escapes = |q: V3, (side, d, _): &(V3, [V3; RAYS], usize), i: usize| {
-                !bvh.blocks(add(q, scale(*side, off)), d[i], off * 1e-3)
-            };
-            // The answer is the same in any order; a face that sees out mostly does so along the
-            // direction nearest a side's normal, so those are tried first, then every one.
-            let sees_out = sides
-                .iter()
-                .any(|s| points.iter().any(|&q| escapes(q, s, s.2)))
-                || sides
-                    .iter()
-                    .any(|s| points.iter().any(|&q| (0..RAYS).any(|i| escapes(q, s, i))));
-            !sees_out
+            [n, scale(n, -1.0)]
         })
-        .collect()
+    };
+    // A face's ray from sample point `k` along direction `i` turned into side `s`'s hemisphere,
+    // as occlusion turns it.
+    let ray = |[a, b, c]: [V3; 3], sides: [V3; 2], (k, s, i): (usize, usize, usize)| {
+        let w = SAMPLES[k];
+        let q = add(add(scale(a, w[0]), scale(b, w[1])), scale(c, w[2]));
+        let side = sides[s];
+        let d = if dot(dirs[i], side) < 0.0 {
+            scale(dirs[i], -1.0)
+        } else {
+            dirs[i]
+        };
+        (add(q, scale(side, off)), d, off * 1e-3)
+    };
+    // The direction nearest a normal.
+    let best = |n: V3| {
+        (0..RAYS)
+            .max_by(|&i, &j| dot(dirs[i], n).abs().total_cmp(&dot(dirs[j], n).abs()))
+            .unwrap_or(0)
+    };
+    // Every ray of a face with normal `n`: each point of each side along the best direction,
+    // then along every one.
+    let every = |n: V3| {
+        let best = best(n);
+        let points = (0..2).flat_map(|s| (0..SAMPLES.len()).map(move |k| (k, s)));
+        let all = points
+            .clone()
+            .flat_map(|(k, s)| (0..RAYS).map(move |i| (k, s, i)));
+        points.map(move |(k, s)| (k, s, best)).chain(all)
+    };
+    // The answer is the same in any order. A face that sees out mostly does so the way the face
+    // before it did, so each run of faces first tries that way from their centroids, their rays
+    // down the tree together; a face it doesn't see out of tries every ray.
+    let mut hidden = Vec::with_capacity(tris.len());
+    // The side and direction the last face that saw out did so along.
+    let mut last: Option<(usize, usize)> = None;
+    for run in tris.chunks(PACKET) {
+        let faces: [Option<[V3; 2]>; PACKET] =
+            std::array::from_fn(|j| run.get(j).and_then(|&t| sides(t)));
+        let mut first = [(0, 0); PACKET];
+        let mut rays = [([0.0; 3], [0.0; 3], 0.0); PACKET];
+        let mut m = 0;
+        for (j, (&t, f)) in run.iter().zip(&faces).enumerate() {
+            if let Some(f) = *f {
+                first[j] = last.unwrap_or_else(|| (0, best(f[0])));
+                rays[m] = ray(t, f, (0, first[j].0, first[j].1));
+                m += 1;
+            }
+        }
+        let blocked = bvh.blocks_each(&rays[..m]);
+        let mut r = 0;
+        for (j, (&t, f)) in run.iter().zip(&faces).enumerate() {
+            let Some(f) = *f else {
+                hidden.push(false);
+                continue;
+            };
+            let seen = if blocked[r] {
+                every(f[0])
+                    .find(|&k| {
+                        let (o, d, near) = ray(t, f, k);
+                        !bvh.blocks(o, d, near)
+                    })
+                    .map(|(_, s, i)| (s, i))
+            } else {
+                Some(first[j])
+            };
+            r += 1;
+            if seen.is_some() {
+                last = seen;
+            }
+            hidden.push(seen.is_none());
+        }
+    }
+    hidden
 }
 
 /// The elements of a built item's part in a domain, in index order (Recipe: repeat over

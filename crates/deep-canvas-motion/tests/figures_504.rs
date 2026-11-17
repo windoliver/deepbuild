@@ -150,6 +150,26 @@ fn a_take_apart_starts_in_order_stays_in_0_1_and_comes_back_reversed() {
     );
 }
 
+/// #508: a follow on `assemblies/apart` with no stagger takes every assembly apart at once.
+#[test]
+fn an_unstaggered_take_apart_moves_every_assembly_together() {
+    let mut d = take_apart(json!([]));
+    d["channels"] = json!({"take": {"target": "assemblies/apart", "mode": "follow", "follow": {
+        "source": {"keys": {"k0": {"t": "0s", "value": 0, "interp": "hold"}, "k1": {"t": "1s", "value": 1, "interp": "hold"}}},
+        "model": {"transition": {"span": "1s", "interp": "linear"}}}}});
+    let p = compile(&d, Planted::None);
+    let ms = |m: i64| S * m / 1000;
+    assert_eq!(share(&p, &at(&p, ms(900)), "lid"), 0.0);
+    let s = at(&p, ms(1500));
+    let lid = share(&p, &s, "lid");
+    assert!(lid > 0.0 && lid < 1.0, "half way: {lid}");
+    for id in ["body", "base"] {
+        assert_eq!(share(&p, &s, id), lid, "{id} moves with lid");
+    }
+    let s = at(&p, ms(2500));
+    assert_eq!(pos(&p, &s, "part-base"), [0.0, 0.0, 3.0]);
+}
+
 #[test]
 fn a_take_apart_reversed_mid_move_turns_back_from_where_it_is() {
     // Closed 0.3 s after opening: body (rank 1) opened at 1.2 s and turns back at 1.5 s

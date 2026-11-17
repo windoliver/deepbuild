@@ -215,7 +215,10 @@ impl Point {
             o.insert("ray".into(), json!({"origin": origin, "dir": dir}));
         }
         if let Some((keys, truncated)) = &self.units {
-            o.insert("units".into(), json!({"keys": keys, "truncated": truncated}));
+            o.insert(
+                "units".into(),
+                json!({"keys": keys, "truncated": truncated}),
+            );
         }
         Value::Object(o)
     }

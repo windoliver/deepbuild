@@ -1,0 +1,292 @@
+Base: f989212187f28d65ab7e80c3a22545d5edaee37e
+Command: node --test --test-concurrency=1 tests/acceptance/2444/preflight-known-failures.test.mjs tests/listed-failures.test.mjs
+Exit: 1. Paths redacted; trailing padding removed.
+
+✔ AC1 #2444.3bfdfb07 control: the fixture runs for real, a lane with only passing tests PASSes and an unlisted failure fails it (923.293459ms)
+✖ AC1 #2444.3bfdfb07 a unit lane failing only on a listed test prints it LISTED with the issue its entry names and PASSes, exit 0 (434.655458ms)
+✖ AC1 #2444.3bfdfb07 beside a listed failure, an unlisted one still fails the lane and is not LISTED (418.600208ms)
+✔ AC1 #2444.3bfdfb07 with no entry for a failing test, the lane fails and prints no LISTED line (417.893125ms)
+✔ AC1 #2444.3bfdfb07 wrong runners fail these assertions (AssertionError, not an import or setup error) (0.803458ms)
+✔ evidence reader (fixture only; does not prove AC2): accepts a complete in-budget record and rejects each way a run can fall short (1.173875ms)
+﹣ AC2 #2444.1bff92b0 a full scripts/preflight on a clean checkout of main on a reference Mac exits 0, every lane PASS, checks within the preflight budget (0.087125ms) # INCONCLUSIVE: unmeasured: no dated full-run output; record one on a reference Mac (README) and set DEEP_2444_FULL_RUN to its file
+✖ Vitest lists only the exact failing test ID, not its passing or newly failing sibling (1980.849208ms)
+✖ Cargo results use the same rerunnable IDs as the known-failure list (591.150208ms)
+✖ the real unit Cargo command runs a later unlisted target after a listed failure, and still fails (640.665917ms)
+✖ listed evidence is never PASS; an unrun state or a crashed runner is never excused by that ID (1.117541ms)
+✖ an unrun row sharing a listed failure ID keeps its own state in the evidence (1.632417ms)
+✖ an unfinished Vitest report cannot turn a listed failure and missing results into PASS (1.20625ms)
+ℹ tests 13
+ℹ suites 0
+ℹ pass 4
+ℹ fail 8
+ℹ cancelled 0
+ℹ skipped 1
+ℹ todo 0
+ℹ duration_ms 5532.781875
+
+✖ failing tests:
+
+test at tests/acceptance/2444/preflight-known-failures.test.mjs:82:1
+✖ AC1 #2444.3bfdfb07 a unit lane failing only on a listed test prints it LISTED with the issue its entry names and PASSes, exit 0 (434.655458ms)
+  AssertionError [ERR_ASSERTION]: the listed failure is not printed as LISTED with the issue its entry names
+      at Object.listedOnly (file://<checkout>/tests/acceptance/2444/preflight-known-failures.test.mjs:52:12)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2444/preflight-known-failures.test.mjs:83:9)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'RUN unit\nscripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node --test --test-reporter=file://<checkout>/scripts/proof-reporter.mjs --test-reporter-destination=<temporary>/deep-preflight-output-uOkL90/report --test-reporter=spec --test-reporter-destination=stdout listed.test.mjs ok.test.mjs` runs unleased\n✖ listed on main (0.332625ms)\n✔ fine (0.363625ms)\nℹ tests 2\nℹ suites 0\nℹ pass 1\nℹ fail 1\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 55.973458\n\n✖ failing tests:\n\ntest at listed.test.mjs:2:1\n✖ listed on main (0.332625ms)\n  Error: planted failure\n      at TestContext.<anonymous> (file://<temporary>/deep-2444-ztZizc/listed.test.mjs:2:38)\n      at Test.runInAsyncScope (node:async_hooks:227:14)\n      at Test.run (node:internal/test_runner/test:1402:25)\n      at Test.start (node:internal/test_runner/test:1262:17)\n      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17)\nFAIL unit: listed.test.mjs › listed on main: planted failure\n  Fix: none\n  Elapsed: 0.37 s\n',
+    expected: /^LISTED listed\.test\.mjs › listed on main.*#90441/m,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2444/preflight-known-failures.test.mjs:86:1
+✖ AC1 #2444.3bfdfb07 beside a listed failure, an unlisted one still fails the lane and is not LISTED (418.600208ms)
+  AssertionError [ERR_ASSERTION]: the listed failure is not printed as LISTED with its issue beside an unlisted one
+      at Object.both (file://<checkout>/tests/acceptance/2444/preflight-known-failures.test.mjs:58:12)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2444/preflight-known-failures.test.mjs:87:9)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'RUN unit\nscripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node --test --test-reporter=file://<checkout>/scripts/proof-reporter.mjs --test-reporter-destination=<temporary>/deep-preflight-output-O65eD8/report --test-reporter=spec --test-reporter-destination=stdout listed.test.mjs unlisted.test.mjs ok.test.mjs` runs unleased\n✖ listed on main (0.389875ms)\n✔ fine (0.304916ms)\n✖ fresh break (0.331666ms)\nℹ tests 3\nℹ suites 0\nℹ pass 1\nℹ fail 2\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 58.71225\n\n✖ failing tests:\n\ntest at listed.test.mjs:2:1\n✖ listed on main (0.389875ms)\n  Error: planted failure\n      at TestContext.<anonymous> (file://<temporary>/deep-2444-EoS3b6/listed.test.mjs:2:38)\n      at Test.runInAsyncScope (node:async_hooks:227:14)\n      at Test.run (node:internal/test_runner/test:1402:25)\n      at Test.start (node:internal/test_runner/test:1262:17)\n      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17)\n\ntest at unlisted.test.mjs:2:1\n✖ fresh break (0.331666ms)\n  Error: planted failure\n      at TestContext.<anonymous> (file://<temporary>/deep-2444-EoS3b6/unlisted.test.mjs:2:35)\n      at Test.runInAsyncScope (node:async_hooks:227:14)\n      at Test.run (node:internal/test_runner/test:1402:25)\n      at Test.start (node:internal/test_runner/test:1262:17)\n      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17)\nFAIL unit: listed.test.mjs › listed on main: planted failure\n  Fix: none\n  Elapsed: 0.36 s\n',
+    expected: /^LISTED listed\.test\.mjs › listed on main.*#90441/m,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tests/listed-failures.test.mjs:34:1
+✖ Vitest lists only the exact failing test ID, not its passing or newly failing sibling (1980.849208ms)
+  AssertionError [ERR_ASSERTION]: RUN unit
+  scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node node_modules/vitest/vitest.mjs run --reporter=default --reporter=<checkout>/scripts/proof-vitest-reporter.mjs -t ^listed$|^passes$` runs unleased
+
+   RUN  v5.0.5 <temporary>/deep-listed-qCv9YJ
+
+   ❯ tests/example.test.ts (3 tests | 1 failed | 1 skipped) 5ms
+     × listed 4ms
+     ✓ passes 0ms
+     ↓ new failure
+
+  ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+   FAIL  tests/example.test.ts > listed
+  AssertionError: expected 1 to be 2 // Object.is equality
+
+  - Expected
+  + Received
+
+  - 2
+  + 1
+
+   ❯ tests/example.test.ts:2:36
+        1| import { test, expect } from 'vitest';
+        2|     test('listed', () => expect(1).toBe(2));
+         |                                    ^
+        3|     test('passes', () => expect(1).toBe(1));
+        4|     test('new failure', () => expect(2).toBe(3));
+
+  ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+   Test Files  1 failed (1)
+        Tests  1 failed | 1 passed | 1 skipped (3)
+     Start at  13:54:54
+     Duration  121ms (import 32%, transform 31%, tests 24%, worker 13%, environment 1%)
+  FAIL unit: tests/example.test.ts › listed: expected 1 to be 2 // Object.is equality
+    Fix: fixture
+    Elapsed: 1.13 s
+
+
+  1 !== 0
+
+      at TestContext.<anonymous> (file://<checkout>/tests/listed-failures.test.mjs:43:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/listed-failures.test.mjs:59:1
+✖ Cargo results use the same rerunnable IDs as the known-failure list (591.150208ms)
+  AssertionError [ERR_ASSERTION]: RUN unit
+  scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `cargo test --workspace --locked` runs unleased
+     Compiling lane-fixture v0.0.0 (<temporary>/deep-listed-Dvi7cL)
+      Finished `test` profile [unoptimized + debuginfo] target(s) in 0.29s
+       Running unittests src/lib.rs (target/debug/deps/lane_fixture-d5949b30081d9576)
+
+  running 1 test
+  test listed_on_main ... FAILED
+
+  failures:
+
+  ---- listed_on_main stdout ----
+
+  thread 'listed_on_main' (43042530) panicked at src/lib.rs:2:23:
+  assertion `left == right` failed: listed failure ran
+    left: 1
+   right: 2
+  note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+  failures:
+      listed_on_main
+
+  test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+  error: test failed, to rerun pass `--lib`
+  FAIL unit: cargo lane_fixture src/lib.rs › listed_on_main
+    Fix: fixture
+    Elapsed: 0.54 s
+
+
+  1 !== 0
+
+      at TestContext.<anonymous> (file://<checkout>/tests/listed-failures.test.mjs:62:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/listed-failures.test.mjs:67:1
+✖ the real unit Cargo command runs a later unlisted target after a listed failure, and still fails (640.665917ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /later unlisted target ran/. Input:
+
+  'RUN unit\n' +
+    'scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `cargo test --workspace --locked` runs unleased\n' +
+    '   Compiling lane-fixture v0.0.0 (<temporary>/deep-listed-owiDGq)\n' +
+    '    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.24s\n' +
+    '     Running unittests src/lib.rs (target/debug/deps/lane_fixture-d5949b30081d9576)\n' +
+    '\n' +
+    'running 1 test\n' +
+    'test listed_on_main ... FAILED\n' +
+    '\n' +
+    'failures:\n' +
+    '\n' +
+    '---- listed_on_main stdout ----\n' +
+    '\n' +
+    "thread 'listed_on_main' (43042888) panicked at src/lib.rs:2:23:\n" +
+    'assertion `left == right` failed: listed failure ran\n' +
+    '  left: 1\n' +
+    ' right: 2\n' +
+    'note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n' +
+    '\n' +
+    '\n' +
+    'failures:\n' +
+    '    listed_on_main\n' +
+    '\n' +
+    'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n' +
+    '\n' +
+    'error: test failed, to rerun pass `--lib`\n' +
+    'FAIL unit: cargo lane_fixture src/lib.rs › listed_on_main\n' +
+    '  Fix: fixture\n' +
+    '  Elapsed: 0.58 s\n'
+
+      at TestContext.<anonymous> (file://<checkout>/tests/listed-failures.test.mjs:70:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: "RUN unit\nscripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `cargo test --workspace --locked` runs unleased\n   Compiling lane-fixture v0.0.0 (<temporary>/deep-listed-owiDGq)\n    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.24s\n     Running unittests src/lib.rs (target/debug/deps/lane_fixture-d5949b30081d9576)\n\nrunning 1 test\ntest listed_on_main ... FAILED\n\nfailures:\n\n---- listed_on_main stdout ----\n\nthread 'listed_on_main' (43042888) panicked at src/lib.rs:2:23:\nassertion `left == right` failed: listed failure ran\n  left: 1\n right: 2\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n\n\nfailures:\n    listed_on_main\n\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\nerror: test failed, to rerun pass `--lib`\nFAIL unit: cargo lane_fixture src/lib.rs › listed_on_main\n  Fix: fixture\n  Elapsed: 0.58 s\n",
+    expected: /later unlisted target ran/,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tests/listed-failures.test.mjs:77:1
+✖ listed evidence is never PASS; an unrun state or a crashed runner is never excused by that ID (1.117541ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+  false !== true
+
+      at TestContext.<anonymous> (file://<checkout>/tests/listed-failures.test.mjs:82:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/listed-failures.test.mjs:99:1
+✖ an unrun row sharing a listed failure ID keeps its own state in the evidence (1.632417ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+
+    [
+  +   'FAIL',
+  -   'LISTED',
+      'BLOCKED',
+      'INCONCLUSIVE'
+    ]
+
+      at TestContext.<anonymous> (file://<checkout>/tests/listed-failures.test.mjs:104:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ 'FAIL', 'BLOCKED', 'INCONCLUSIVE' ],
+    expected: [ 'LISTED', 'BLOCKED', 'INCONCLUSIVE' ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/listed-failures.test.mjs:108:1
+✖ an unfinished Vitest report cannot turn a listed failure and missing results into PASS (1.20625ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+
+  + undefined
+  - 'INCONCLUSIVE'
+
+      at TestContext.<anonymous> (file://<checkout>/tests/listed-failures.test.mjs:114:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: 'INCONCLUSIVE',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

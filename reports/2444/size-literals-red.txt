@@ -1,0 +1,9 @@
+Captured check output; paths redacted, trailing padding removed.
+
+PASS color literal: crates/deep-app/src and crates/deep-app/panels read every color from the look's roles
+FAIL size literal: crates/deep-app/src/hdr_fixture.rs:343: `px(12.)` names a size; read it from the look's type, space, radius or shell (crates/deep-canvas-marks/looks/clean.json) through crate::chrome::sizes(), or end the line with // size-literal-exception: <reason>; review <YYYY-MM-DD>
+FAIL size literal: crates/deep-app/src/hdr_fixture.rs:345: `px(20.)` names a size; read it from the look's type, space, radius or shell (crates/deep-canvas-marks/looks/clean.json) through crate::chrome::sizes(), or end the line with // size-literal-exception: <reason>; review <YYYY-MM-DD>
+FAIL size literal: crates/deep-app/src/hdr_fixture.rs:348: `px(16.)` names a size; read it from the look's type, space, radius or shell (crates/deep-canvas-marks/looks/clean.json) through crate::chrome::sizes(), or end the line with // size-literal-exception: <reason>; review <YYYY-MM-DD>
+FAIL size literal: crates/deep-app/src/hdr_fixture.rs:350: `px(18.)` names a size; read it from the look's type, space, radius or shell (crates/deep-canvas-marks/looks/clean.json) through crate::chrome::sizes(), or end the line with // size-literal-exception: <reason>; review <YYYY-MM-DD>
+FAIL size literal: crates/deep-app/src/hdr_fixture.rs:351: `px(12.)` names a size; read it from the look's type, space, radius or shell (crates/deep-canvas-marks/looks/clean.json) through crate::chrome::sizes(), or end the line with // size-literal-exception: <reason>; review <YYYY-MM-DD>
+FAIL size literal: crates/deep-app/src/hdr_fixture.rs:352: `px(14.)` names a size; read it from the look's type, space, radius or shell (crates/deep-canvas-marks/looks/clean.json) through crate::chrome::sizes(), or end the line with // size-literal-exception: <reason>; review <YYYY-MM-DD>

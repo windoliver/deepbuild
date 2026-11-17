@@ -1,0 +1,11 @@
+Captured check output; paths redacted, trailing padding removed.
+
+✔ #882.f3bc7068 the guard passes the app, and fails each planted literal naming its file and line (the views.rs one with the role to use); an exception at its place with a reason and a review date passes (11012.812708ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 11271.015875

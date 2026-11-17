@@ -42,7 +42,16 @@ pub fn bleed(rgba: &mut [u8], size: [u32; 2]) {
                 continue;
             }
             let (mut sum, mut n) = ([0u32; 3], 0u32);
-            for (dx, dy) in [(-1, -1), (0, -1), (1, -1), (-1, 0), (1, 0), (-1, 1), (0, 1), (1, 1)] {
+            for (dx, dy) in [
+                (-1, -1),
+                (0, -1),
+                (1, -1),
+                (-1, 0),
+                (1, 0),
+                (-1, 1),
+                (0, 1),
+                (1, 1),
+            ] {
                 let (nx, ny) = (x + dx, y + dy);
                 if nx < 0 || ny < 0 || nx >= w || ny >= h {
                     continue;
@@ -220,7 +229,9 @@ fn named_frame(ctx: &Ctx, layers: &[Layer3], at: &str) -> Option<(Affine3, Optio
         let pos = crate::scene::size3(a.get("pos"), [0.0; 3]).unwrap_or([0.0; 3]);
         let rot = crate::scene::size3(a.get("rot"), [0.0; 3]).unwrap_or([0.0; 3]);
         let local = crate::scene::local_of(pos, rot, [1.0; 3], [1.0; 3]);
-        let layer = layers.iter().position(|l| l.solids.iter().any(|s| s.id == id));
+        let layer = layers
+            .iter()
+            .position(|l| l.solids.iter().any(|s| s.id == id));
         return Some((orthonormal(&mul(&(ctx.world)(id), &local)), layer));
     }
     for (k, layer) in layers.iter().enumerate() {
@@ -249,7 +260,11 @@ fn named_frame(ctx: &Ctx, layers: &[Layer3], at: &str) -> Option<(Affine3, Optio
             }
             let z = unit(n);
             // The item's x across the face, or its y on a face that looks along x.
-            let across = if z[0].abs() > 0.99 { [0.0, 1.0, 0.0] } else { [1.0, 0.0, 0.0] };
+            let across = if z[0].abs() > 0.99 {
+                [0.0, 1.0, 0.0]
+            } else {
+                [1.0, 0.0, 0.0]
+            };
             let x = unit([
                 across[0] - dot(across, z) * z[0],
                 across[1] - dot(across, z) * z[1],
@@ -371,7 +386,12 @@ fn picture_key(id: &str, doc: &Value) -> String {
 fn window_mesh(size: [f64; 2]) -> Mesh {
     let (x, y) = (size[0] / 2.0, size[1] / 2.0);
     let mut m = Mesh {
-        positions: vec![[-x, y, PROUD], [x, y, PROUD], [x, -y, PROUD], [-x, -y, PROUD]],
+        positions: vec![
+            [-x, y, PROUD],
+            [x, y, PROUD],
+            [x, -y, PROUD],
+            [-x, -y, PROUD],
+        ],
         normals: vec![[0.0, 0.0, 1.0]; 4],
         indices: vec![0, 3, 2, 0, 2, 1],
         faces: vec![0, 0],
@@ -415,7 +435,10 @@ fn window_maps(sha: String, inset: InsetMap) -> Arc<Maps> {
 
 /// An unlit white material: a view's picture drawn as it is, for the frame's output to tone map
 /// once.
-fn picture_material(look: &crate::look::Look3, id: &str) -> Result<Option<crate::light::Material>, Refused> {
+fn picture_material(
+    look: &crate::look::Look3,
+    id: &str,
+) -> Result<Option<crate::light::Material>, Refused> {
     let mat = json!({"kind": "material@1", "params": {"base_color": [1, 1, 1, 1], "unlit": true, "double_sided": true}});
     let item = json!({"material": "picture"});
     crate::light::material(&item, |_| Some(&mat), look, id)
@@ -430,7 +453,9 @@ pub(crate) fn evaluate(
     let mut out = Insets::default();
     let items = ctx.doc.get("items").and_then(Value::as_object);
     for (id, _) in items.into_iter().flatten() {
-        let Some(item) = (ctx.get)(id).filter(|i| i.get("kind").and_then(Value::as_str) == Some(KIND)) else {
+        let Some(item) =
+            (ctx.get)(id).filter(|i| i.get("kind").and_then(Value::as_str) == Some(KIND))
+        else {
             continue;
         };
         if item.get("visible") == Some(&Value::Bool(false)) {
@@ -438,18 +463,19 @@ pub(crate) fn evaluate(
         }
         let path = format!("items/{id}/params");
         let empty = Map::new();
-        let p = item.get("params").and_then(Value::as_object).unwrap_or(&empty);
+        let p = item
+            .get("params")
+            .and_then(Value::as_object)
+            .unwrap_or(&empty);
         let Some(size) = pair(p.get("size")).filter(|s| s[0] > 0.0 && s[1] > 0.0) else {
             return refused("out_of_range", format!("{path}/size"));
         };
         let ppu = match p.get("px_per_unit") {
             None => DEFAULT_TEXELS / size[0].max(size[1]),
-            v => num(v)
-                .filter(|v| *v > 0.0)
-                .ok_or_else(|| Refused {
-                    code: "out_of_range",
-                    path: format!("{path}/px_per_unit"),
-                })?,
+            v => num(v).filter(|v| *v > 0.0).ok_or_else(|| Refused {
+                code: "out_of_range",
+                path: format!("{path}/px_per_unit"),
+            })?,
         };
         let texels = size.map(|s| (s * ppu).round().clamp(1.0, 8192.0) as u32);
         let picture = match p.get("content").and_then(Value::as_object) {
@@ -470,8 +496,11 @@ pub(crate) fn evaluate(
             let Some((key, content)) = picture else {
                 return refused("bad_input", format!("{path}/content"));
             };
-            let data = content.values().any(|e| e.get("role").and_then(Value::as_str) == Some("data"));
-            out.projected.push(projected(ctx, id, item, project, size, key, data, layers)?);
+            let data = content
+                .values()
+                .any(|e| e.get("role").and_then(Value::as_str) == Some("data"));
+            out.projected
+                .push(projected(ctx, id, item, project, size, key, data, layers)?);
             continue;
         }
         let Some(face) = p.get("face").and_then(Value::as_str) else {
@@ -512,13 +541,21 @@ pub(crate) fn evaluate(
                 if window.material.is_none() {
                     let c = window.color.map(|v| f64::from(v) / 255.0);
                     let mat = json!({"kind": "material@1", "params": {"base_color": [srgb(c[0]), srgb(c[1]), srgb(c[2]), 1]}});
-                    window.material = crate::light::material(&json!({"material": "face"}), |_| Some(&mat), look, id)?;
+                    window.material = crate::light::material(
+                        &json!({"material": "face"}),
+                        |_| Some(&mat),
+                        look,
+                        id,
+                    )?;
                 }
                 window.maps = Some(window_maps(key.clone(), InsetMap::Over));
             }
             (None, Some(view)) => {
                 let eye = view.get("map").and_then(Value::as_str) == Some("eye");
-                let camera = view.get("camera").and_then(Value::as_str).filter(|c| *c != "none");
+                let camera = view
+                    .get("camera")
+                    .and_then(Value::as_str)
+                    .filter(|c| *c != "none");
                 let keep = kept_view(ctx.doc, view);
                 window.material = picture_material(look, id)?;
                 let plant = ctx.planted == Some("eye_inset_centred_frustum");
@@ -542,7 +579,10 @@ pub(crate) fn evaluate(
                         camera: ctx.camera.clone(),
                         size: [ctx.camera.size[0] as u32, ctx.camera.size[1] as u32],
                         keep,
-                        eye: Some(Eye { by, plane: (n, dot(n, o)) }),
+                        eye: Some(Eye {
+                            by,
+                            plane: (n, dot(n, o)),
+                        }),
                     });
                 } else {
                     let cam = if eye {
@@ -594,7 +634,11 @@ fn srgb(c: f64) -> f64 {
 /// corners.
 fn centred(main: &Camera, at: &Affine3, size: [f64; 2], texels: [u32; 2]) -> Camera {
     let centre = [at[0][3], at[1][3], at[2][3]];
-    let forward = unit([centre[0] - main.eye[0], centre[1] - main.eye[1], centre[2] - main.eye[2]]);
+    let forward = unit([
+        centre[0] - main.eye[0],
+        centre[1] - main.eye[1],
+        centre[2] - main.eye[2],
+    ]);
     let right = unit(cross(forward, [0.0, 1.0, 0.0]));
     let up = cross(right, forward);
     let mut c = Camera {
@@ -649,10 +693,16 @@ fn projected(
         })
         .map(|s| s.id.clone())
         .collect();
-    let from = project.get("from").and_then(Value::as_str).unwrap_or("down");
+    let from = project
+        .get("from")
+        .and_then(Value::as_str)
+        .unwrap_or("down");
     // The box's own frame: x and z across its size, y against the cast.
     let (place, eye) = match from {
-        "down" => (frame(origin, [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]), None),
+        "down" => (
+            frame(origin, [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]),
+            None,
+        ),
         // Along its own −y, its x and z across.
         "axis" => (orthonormal_y(&world), None),
         c => {
@@ -664,7 +714,10 @@ fn projected(
                     path: format!("{path}/from"),
                 })?;
             let cam = crate::scene::camera(params, size, ctx.bounds, &format!("items/{c}/params"))?;
-            (frame(cam.eye, cam.right, cam.up, cam.forward.map(|v| -v)), Some(cam))
+            (
+                frame(cam.eye, cam.right, cam.up, cam.forward.map(|v| -v)),
+                Some(cam),
+            )
         }
     };
     let inv = rigid_inverse(&place);
@@ -677,7 +730,9 @@ fn projected(
                 .filter(|s| solids.contains(&s.id))
                 .flat_map(crate::scene::corners_of)
                 .map(|p| apply(&inv, p)[1]);
-            let (lo, hi) = ys.fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), y| (a.min(y), b.max(y)));
+            let (lo, hi) = ys.fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), y| {
+                (a.min(y), b.max(y))
+            });
             if lo.is_finite() {
                 (lo - 1.0, hi + 1.0)
             } else {
@@ -693,7 +748,12 @@ fn projected(
         }
     };
     let row = |k: usize, s: f64, o: f64| -> [f64; 4] {
-        [inv[k][0] / s, inv[k][1] / s, inv[k][2] / s, (inv[k][3] - o) / s]
+        [
+            inv[k][0] / s,
+            inv[k][1] / s,
+            inv[k][2] / s,
+            (inv[k][3] - o) / s,
+        ]
     };
     let to_box = match &eye {
         None => [
@@ -704,7 +764,9 @@ fn projected(
         ],
         Some(cam) => {
             // The camera's clip, with u and v across its frame and depth from its near plane.
-            let c = cam.clip(crate::scene::Depth::Forward { far: cam.far.max(cam.near + 1.0) });
+            let c = cam.clip(crate::scene::Depth::Forward {
+                far: cam.far.max(cam.near + 1.0),
+            });
             let w = c[3];
             [
                 std::array::from_fn(|k| (c[0][k] + w[k]) / 2.0),
@@ -768,7 +830,10 @@ pub fn refusals(doc: &Value) -> Vec<Value> {
     for (id, i) in of(KIND) {
         let view = i.pointer("/params/view");
         let eye = view.and_then(|v| v.get("map")).and_then(Value::as_str) == Some("eye");
-        let camera = view.and_then(|v| v.get("camera")).and_then(Value::as_str).filter(|c| *c != "none");
+        let camera = view
+            .and_then(|v| v.get("camera"))
+            .and_then(Value::as_str)
+            .filter(|c| *c != "none");
         if eye && camera.is_some() {
             out.push(json!({"code": "bad_input", "severity": "error", "path": format!("items/{id}/params/view/camera"), "ids": [id],
                 "what": format!("the eye inset {id} names a camera; an eye inset takes the viewing camera's eye")}));
@@ -778,7 +843,10 @@ pub fn refusals(doc: &Value) -> Vec<Value> {
     let map = doc.as_object().expect("items came from an object");
     for (id, v) in &views {
         let held = kept(map, &names(v.pointer("/params/include")));
-        for (inner, _) in views.iter().filter(|(o, _)| o != id && held.contains(o.as_str())) {
+        for (inner, _) in views
+            .iter()
+            .filter(|(o, _)| o != id && held.contains(o.as_str()))
+        {
             out.push(json!({"code": "nested_view", "severity": "error", "path": format!("items/{inner}"), "ids": [inner],
                 "what": format!("the view overlay {inner} is inside the view overlay {id}; views nest one level deep")}));
         }

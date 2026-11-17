@@ -1,0 +1,39 @@
+# #555's acceptance tests on the base, 1ab891283 ("Merge pull request #2597 …"), on macOS. Home paths redacted.
+#
+# One short run of the four files, after npm ci and npm run build --workspaces:
+#   NO_COLOR=1 npx vitest run --root tests/acceptance/555 --testTimeout=600000 --no-file-parallelism
+# Every test fails first at the lock: the base's playtest plug-in exports no lockPlay, so nothing past it runs.
+
+ RUN  v5.0.5 <worktree>/tests/acceptance/555
+     × #555.c6cb5bbb the bands and the expectation hold, a run reaching no goal plays 4,000 steps, every run replays to the same hashes 11ms
+     × #555.f6861216 a name declared with a unit the canvas doesn't name is refused when the brief is locked, naming the unit 8ms
+     × #555.f6861216 hp in [0, 100] passes on the correct crawler 1ms
+     × #555.f6861216 the twin whose potion heals to 120 fails play.out_of_range at the step it drinks, naming hp, row 0, 120 and the step 0ms
+     × #555.2e7fd78d the twin whose hero cell lags a step fails playtest.band, naming the descender, deep, its share and [0.9, 1] 8ms
+     × #555.2e7fd78d the twin whose monsters never attack fails playtest.band on dead for the waiting policy with a share of 0 0ms
+     × #555.2e7fd78d the twin that moves the hero down every 500 steps fails playtest.expect, naming the waiting policy's first run and the step depth reached 3 0ms
+     × #555.4e926f67 the twin that publishes no turn array fails play.missing, naming turn, before any run 8ms
+     × #555.4e926f67 a policy or a bot that names an action the interface doesn't declare is refused before any run, naming the action 0ms
+
+ FAIL  ac01-crawler.test.ts > … > #555.c6cb5bbb the bands and the expectation hold, a run reaching no goal plays 4,000 steps, every run replays to the same hashes
+AssertionError: the playtest plug-in exports lockPlay(play), which locks a play interface in the brief: expected 'undefined' to be 'function' // Object.is equality
+Expected: "function"
+Received: "undefined"
+ ❯ lockPlay helpers.ts:193:126
+    191| export async function lockPlay(play: Obj): Promise<Obj> {
+    192|   const entry = await playtestEntry();
+    193|   expect(typeof entry['lockPlay'], 'the playtest plug-in exports lockP…
+
+… the other eight failures are the same assertion at the same line (ac02 × 3, ac03 × 2, ac04 × 3).
+
+ Test Files  4 failed (4)
+      Tests  9 failed (9)
+
+# Past the lock, the base has none of the rest either (read from its code, not run): its plug-in's bot slot
+# registers no first-party bot (lower() throws "no first-party bot descender is registered"); deep-drive's play reads
+# a policy's values only as numbers ("bot.policy: a pick draws from a list of values" for "wait") and takes no `play`;
+# the plug-in reads no `play`, goal expression, `share` or `expect`.
+# What the base does do, which the suite relies on (seen in plays of the crawler here): deep-drive plays the crawler
+# from a run's seed with `piece_seed: run` for a span in steps, takes and records point entries and entries on
+# actions controls, and replays a track to the same hashes; a base playtest of a waiting policy with numeric values
+# through this suite's pool and hub passes its runs.

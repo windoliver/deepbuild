@@ -1,0 +1,23 @@
+Current-base fixture verification: exit 0; 12 passed; AC2 unrun, not PASS.
+
+✔ AC1 #2444.3bfdfb07 control: the fixture runs for real, a lane with only passing tests PASSes and an unlisted failure fails it (1084.207584ms)
+✔ AC1 #2444.3bfdfb07 a unit lane failing only on a listed test prints it LISTED with the issue its entry names and PASSes, exit 0 (609.483125ms)
+✔ AC1 #2444.3bfdfb07 beside a listed failure, an unlisted one still fails the lane and is not LISTED (758.154958ms)
+✔ AC1 #2444.3bfdfb07 with no entry for a failing test, the lane fails and prints no LISTED line (697.792625ms)
+✔ AC1 #2444.3bfdfb07 wrong runners fail these assertions (AssertionError, not an import or setup error) (0.879291ms)
+✔ evidence reader (fixture only; does not prove AC2): accepts a complete in-budget record and rejects each way a run can fall short (1.343ms)
+﹣ AC2 #2444.1bff92b0 a full scripts/preflight on a clean checkout of main on a reference Mac exits 0, every lane PASS, checks within the preflight budget (0.0965ms) # INCONCLUSIVE: unmeasured: no dated full-run output; record one on a reference Mac (README) and set DEEP_2444_FULL_RUN to its file
+✔ Vitest lists only the exact failing test ID, not its passing or newly failing sibling (3458.096833ms)
+✔ Cargo results use the same rerunnable IDs as the known-failure list (983.552625ms)
+✔ the real unit Cargo command runs a later unlisted target after a listed failure, and still fails (1598.798708ms)
+✔ listed evidence is never PASS; an unrun state or a crashed runner is never excused by that ID (2.397208ms)
+✔ an unrun row sharing a listed failure ID keeps its own state in the evidence (2.524208ms)
+✔ an unfinished Vitest report cannot turn a listed failure and missing results into PASS (11.989042ms)
+ℹ tests 13
+ℹ suites 0
+ℹ pass 12
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 1
+ℹ todo 0
+ℹ duration_ms 9431.014375

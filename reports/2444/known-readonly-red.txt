@@ -1,0 +1,138 @@
+Unchanged existing checks on ccbdefd1 plus #2444 runner fix; four expected failures.
+
+✖ #1114.f3e38214 every test file calling a timing helper is in lanes.mjs timed list, by a grep of the tree (1536.755625ms)
+✖ #1114.f3e38214 a planted timed list missing one file fails the grep check, naming the file (459.6875ms)
+✖ #882.f3bc7068 crates/deep-app/src holds no color literal: no rgb(0x, rgba(0x, hsla(, hex inside rgb(...) or "#rrggbb" line (22.327875ms)
+✖ the unit lane runs each reference-Mac budget file alone, after the parallel block (27.823375ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 0
+ℹ fail 4
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2228.258709
+
+✖ failing tests:
+
+test at tests/acceptance/1114/timed-list.test.mjs:8:1
+✖ #1114.f3e38214 every test file calling a timing helper is in lanes.mjs timed list, by a grep of the tree (1536.755625ms)
+  AssertionError [ERR_ASSERTION]: files that call environmentProblem, judgeTiming, judgeLimit, referenceMacProblem, notReference but are not in lanes.mjs's timed list:
+  tests/acceptance/1015/budgets.test.ts
+  tests/acceptance/1017/budgets.test.ts
+  tests/acceptance/1425/budgets.test.ts
+  tests/acceptance/148/budgets.test.ts
+  tests/acceptance/149/budgets.test.ts
+  tests/acceptance/1515/budgets.test.ts
+  tests/acceptance/1555/budget-load.test.mjs
+  tests/acceptance/160/budgets.test.ts
+  tests/acceptance/167/budgets.test.ts
+  tests/acceptance/222/budgets.test.ts
+  tests/acceptance/308/budgets.test.ts
+  tests/acceptance/405/budgets.test.ts
+  tests/acceptance/408/machines.test.ts
+  tests/acceptance/45/budgets.test.ts
+  tests/acceptance/501/exports.test.ts
+  tests/acceptance/67/budgets.test.ts
+  tests/acceptance/824/sessions/budgets.long.test.ts
+  tests/acceptance/990/access.test.ts
+  tests/acceptance/990/queries.test.ts
+  tests/acceptance/990/taste.test.ts
+  + actual - expected
+
+  + [
+  +   'tests/acceptance/1015/budgets.test.ts',
+  +   'tests/acceptance/1017/budgets.test.ts',
+  +   'tests/acceptance/1425/budgets.test.ts',
+  +   'tests/acceptance/148/budgets.test.ts',
+  +   'tests/acceptance/149/budgets.test.ts',
+  +   'tests/acceptance/1515/budgets.test.ts',
+  +   'tests/acceptance/1555/budget-load.test.mjs',
+  +   'tests/acceptance/160/budgets.test.ts',
+  +   'tests/acceptance/167/budgets.test.ts',
+  +   'tests/acceptance/222/budgets.test.ts',
+  +   'tests/acceptance/308/budgets.test.ts',
+  +   'tests/acceptance/405/budgets.test.ts',
+  +   'tests/acceptance/408/machines.test.ts',
+  +   'tests/acceptance/45/budgets.test.ts',
+  +   'tests/acceptance/501/exports.test.ts',
+  +   'tests/acceptance/67/budgets.test.ts',
+  +   'tests/acceptance/824/sessions/budgets.long.test.ts',
+  +   'tests/acceptance/990/access.test.ts',
+  +   'tests/acceptance/990/queries.test.ts',
+  +   'tests/acceptance/990/taste.test.ts'
+  + ]
+  - []
+
+      at assertTimed (file://<checkout>/tests/acceptance/1114/helpers.mjs:75:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/1114/timed-list.test.mjs:11:3)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'tests/acceptance/1015/budgets.test.ts', 'tests/acceptance/1017/budgets.test.ts', 'tests/acceptance/1425/budgets.test.ts', 'tests/acceptance/148/budgets.test.ts', 'tests/acceptance/149/budgets.test.ts', 'tests/acceptance/1515/budgets.test.ts', 'tests/acceptance/1555/budget-load.test.mjs', 'tests/acceptance/160/budgets.test.ts', 'tests/acceptance/167/budgets.test.ts', 'tests/acceptance/222/budgets.test.ts', 'tests/acceptance/308/budgets.test.ts', 'tests/acceptance/405/budgets.test.ts', 'tests/acceptance/408/machines.test.ts', 'tests/acceptance/45/budgets.test.ts', 'tests/acceptance/501/exports.test.ts', 'tests/acceptance/67/budgets.test.ts', 'tests/acceptance/824/sessions/budgets.long.test.ts', 'tests/acceptance/990/access.test.ts', 'tests/acceptance/990/queries.test.ts', 'tests/acceptance/990/taste.test.ts' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1114/timed-list.test.mjs:14:1
+✖ #1114.f3e38214 a planted timed list missing one file fails the grep check, naming the file (459.6875ms)
+  AssertionError [ERR_ASSERTION]: no entry of the timed list covers tests/acceptance/1015/budgets.test.ts
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/1114/timed-list.test.mjs:20:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/882/lint.test.mjs:12:1
+✖ #882.f3bc7068 crates/deep-app/src holds no color literal: no rgb(0x, rgba(0x, hsla(, hex inside rgb(...) or "#rrggbb" line (22.327875ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+
+  + [
+  +   `crates/deep-app/src/cells.rs:387: let reply = json!({"revision": 2, "cols": 4, "bg": "#101010", "fg": "#e8e8e8", "cursor": {"x": 2, "y": 0}, "text": ["ab"], // color-literal-exception: the program's own colors on the wire, which a terminal draws as they come; review 2027-05-05`,
+  +   `crates/deep-app/src/cells.rs:388: "runs": [[[0, 2, "#e8e8e8", "#101010"], [2, 3, "#e8e8e8", "#d81b9a"], [3, 4, "#e8e8e8", "#101010"]]]}); // color-literal-exception: the program's own colors on the wire, which a terminal draws as they come; review 2027-05-05`
+  + ]
+  - []
+
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/882/lint.test.mjs:13:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ `crates/deep-app/src/cells.rs:387: let reply = json!({"revision": 2, "cols": 4, "bg": "#101010", "fg": "#e8e8e8", "cursor": {"x": 2, "y": 0}, "text": ["ab"], // color-literal-exception: the program's own colors on the wire, which a terminal draws as they come; review 2027-05-05`, `crates/deep-app/src/cells.rs:388: "runs": [[[0, 2, "#e8e8e8", "#101010"], [2, 3, "#e8e8e8", "#d81b9a"], [3, 4, "#e8e8e8", "#101010"]]]}); // color-literal-exception: the program's own colors on the wire, which a terminal draws as they come; review 2027-05-05` ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/preflight.test.mjs:181:1
+✖ the unit lane runs each reference-Mac budget file alone, after the parallel block (27.823375ms)
+  Error: ENOTDIR: not a directory, scandir '<checkout>/tests/acceptance/plans.ts/'
+      at readdirSync (node:fs:1630:26)
+      at file://<checkout>/tests/preflight.test.mjs:187:25
+      at Array.flatMap (<anonymous>)
+      at TestContext.<anonymous> (file://<checkout>/tests/preflight.test.mjs:187:6)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    errno: -20,
+    code: 'ENOTDIR',
+    syscall: 'scandir',
+    path: '<checkout>/tests/acceptance/plans.ts/'
+  }
