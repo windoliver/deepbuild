@@ -1,0 +1,60 @@
+# The six new-failure files that could reach the changed code, each run alone with vitest
+## at main f7d661d67 (detached worktree, its own npm ci node_modules)
+ci 0
+build 0
+hook 0
+== tests/acceptance/1002/first-screen-redraft/twins.test.ts
+     × a planted spike window, no shell, fails naming the count 1801027ms
+     × a setup that writes its record first opens on "0 asks need you" and fails, naming the count 900142ms
+     × a setup that writes its record first, whose hub doesn't start, is never offered again and fails 900251ms
+     × a Set up that finishes without its record fails, naming the record 900351ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  4 failed (4)
+== tests/acceptance/1556/lint.test.ts
+     × #1556.3f28018e a planted Command::output in deep-app's UI code fails the lint lane, naming the line 3600133ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  1 failed (1)
+== tests/acceptance/1556/twins.test.ts
+     × #1556 (control clippy) a clippy setting banning Command::output, planted beside the plant, fails the lane's narrowed clippy naming the line 3600210ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  1 failed | 12 passed (13)
+== tests/acceptance/33/bootstrap.test.ts
+     × AC4 #33.6932417b this checkout's .deepbuild/done.yaml runs the repo's test and typecheck commands, approved by the maintainer's signed tag 1461ms
+     × AC4 #33.6932417b a repo gated on a hand-written bootstrap alone: tests pass and typecheck fails → sent back, FAIL, naming the typecheck 101ms
+     × AC4 #33.6932417b (wrong program) a gate that counts only a drafted spec as approved (DEEP_HUB_PLANT=drafted-spec-only) stays watch-only and fails the scenario 34ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  3 failed (3)
+== tests/acceptance/82/pending.test.ts
+     × AC12 #82.be677619 item 95: R1's run still to come and R2 waiting on your answer, the stop is let through, the claim stays open, and its open items name R1's run and R2's answer 2704ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  1 failed (1)
+== tests/acceptance/993/hub-check.test.ts
+     × AC2 #993.e11861a0 with the deep-hook program removed under a running hub and no hook since, within 10 minutes every open Claude Code session's row reads watch-only, BLOCKED, hooks can't run, a
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  1 failed (1)
+## at 13a35ce37
+== tests/acceptance/1002/first-screen-redraft/twins.test.ts
+     × a planted spike window, no shell, fails naming the count 1800459ms
+     × a setup that writes its record first opens on "0 asks need you" and fails, naming the count 212069ms
+     × a setup that writes its record first, whose hub doesn't start, is never offered again and fails 65ms
+     × a Set up that finishes without its record fails, naming the record 34ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  4 failed (4)
+== tests/acceptance/1556/lint.test.ts
+      Tests  1 passed (1)
+== tests/acceptance/1556/twins.test.ts
+      Tests  13 passed (13)
+== tests/acceptance/33/bootstrap.test.ts
+     × AC4 #33.6932417b this checkout's .deepbuild/done.yaml runs the repo's test and typecheck commands, approved by the maintainer's signed tag 709ms
+     × AC4 #33.6932417b a repo gated on a hand-written bootstrap alone: tests pass and typecheck fails → sent back, FAIL, naming the typecheck 89ms
+     × AC4 #33.6932417b (wrong program) a gate that counts only a drafted spec as approved (DEEP_HUB_PLANT=drafted-spec-only) stays watch-only and fails the scenario 39ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  3 failed (3)
+== tests/acceptance/82/pending.test.ts
+      Tests  1 passed (1)
+== tests/acceptance/993/hub-check.test.ts
+     × AC2 #993.e11861a0 with the deep-hook program removed under a running hub and no hook since, within 10 minutes every open Claude Code session's row reads watch-only, BLOCKED, hooks can't run, a
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+      Tests  1 failed (1)
+## lints at main f7d661d67, FAIL lines: color-literal-guard 6, record-reader-guard 1, size-ratchet 62, repo-rules 58, canvas-lint 53, vendor-rebase 40
+## the same lints in the affected run at 13a35ce37: color-literal-guard 18 (12 more, all in ignored crates/deep-app/panels/*/@deepbuild/ build outputs), record-reader-guard 1, size-ratchet 62, repo-rules 58, canvas-lint 54, vendor-rebase 19

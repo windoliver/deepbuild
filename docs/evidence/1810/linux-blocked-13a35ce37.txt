@@ -1,0 +1,9 @@
+# the two replica tests of tests/acceptance/1810 on Linux at 13a35ce37 (-t 'replica|same log position'): BLOCKED, the replica draws on macOS only
+     × #1810.eebcb4a2: the replica's list (the app itself, on macOS) says 1 at deep status --json's log position 16731ms
+     × #1810.eebcb4a2: with two asks answered and one open, deep and the app's list say 1 at the same log position 4ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+Error: BLOCKED: the replica draws on macOS only; this is linux
+     43| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+Error: BLOCKED: the replica draws on macOS only; this is linux
+     54| export const blocked = (why: string): never => { throw Error(`BLOCKED:…
+      Tests  2 failed | 1 skipped (3)

@@ -1,0 +1,15 @@
+# packages/hub/test/verdict-chat.test.ts with packages/hub/src/verdict-chat.ts and packages/verdicts/src/line.ts at main f7d661d67 (the fix reverted), on Linux
+   ✓ isStatusQuestion (2)
+     ✓ matches the four questions, in any case, with or without a one-word tag in parentheses 4ms
+     ✓ never matches a prompt that asks for work, a statement, one that only starts like a status question, or an instruction in the parentheses 0ms
+     ✓ with no claim yet the session is working; the answer carries the time, the next step, the count, the worktree, the session, how to resume it and its link 1ms
+     ✓ a turn without a claim answers with the session's own state, the next step on you when it waits or is stuck 0ms
+     ✓ with a claim the first line is its verdict line, timed from the verdict; the time reads in s, m, h or d 0ms
+     × a line too wide for the room the count leaves gives its reasons way, never its outcome, and ends in the count (#1810) 25ms
+   ✓ claimState (1)
+     ✓ a check whose requirement the record holds a stand-in for is marked proven on one; a check without is not (#874) 199ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+Expected: "says done · 2 checks wait for the loop · next: DeepBuild (for 1m) · needs you: 3"
+Received: "says done · 2 checks wait for the loop · the pool is full, its lease is held by another run (for 1m) · needs you: 3"
+ Test Files  1 failed (1)
+      Tests  1 failed | 6 passed (7)
