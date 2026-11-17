@@ -69,9 +69,35 @@ impl Hub<'_> {
         lists
     }
 
-    /// `form` with its revealed texts' lists baked into `occurrences`, as Spawn reads a list.
+    /// #155: the `markers.<kind>` lists `doc`'s markers compile, when a spawn reads one; none
+    /// when it has no motion to compile.
+    fn marker_lists(&self, doc: &Value) -> serde_json::Map<String, Value> {
+        let Some(map) = doc.as_object() else {
+            return serde_json::Map::new();
+        };
+        let read = map
+            .get("spawns")
+            .and_then(Value::as_object)
+            .is_some_and(|s| {
+                s.values().any(|sp| {
+                    sp.pointer("/on/list")
+                        .and_then(Value::as_str)
+                        .is_some_and(|l| l.starts_with("markers."))
+                })
+            });
+        if !read {
+            return serde_json::Map::new();
+        }
+        deep_canvas_motion::program::Program::compile(map)
+            .map(|p| deep_canvas_motion::emits::marker_lists(&p))
+            .unwrap_or_default()
+    }
+
+    /// `form` with its revealed texts' lists and its markers' lists baked into `occurrences`, as
+    /// Spawn reads a list.
     pub(crate) fn inline_reveals(&self, form: &mut Value) {
-        let lists = self.reveal_lists(form);
+        let mut lists = self.reveal_lists(form);
+        lists.extend(self.marker_lists(form));
         if lists.is_empty() {
             return;
         }

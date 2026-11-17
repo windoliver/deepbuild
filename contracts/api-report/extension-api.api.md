@@ -65,6 +65,13 @@ export interface Deep {
     "schedule.read"(params: {
         source: string;
     }): Promise<unknown>;
+    "source.ask"(params: {
+        name: string;
+        request: {
+            provider: string;
+            prompt: string;
+        };
+    }): Promise<unknown>;
     "store.get"(params: {
         kind: string;
         key: string;

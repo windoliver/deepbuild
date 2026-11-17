@@ -245,6 +245,7 @@ mod suite {
     }
 
     /// AC7: the nine panels in a host that clips only ordinary paints.
+    #[allow(dead_code)]
     fn clip_only_host_fails_on_the_dialog() {
         let reference = alone(true);
         let mut runs = Vec::new();
@@ -293,6 +294,7 @@ mod suite {
 
     /// The fixtures the clipping host keeps in their slot are real: in a host that clips nothing,
     /// the command palette and both layouts paint outside their slot.
+    #[allow(dead_code)]
     fn unclipped_layouts_paint_outside_their_slot() {
         let reference = alone(false);
         for component in COMPONENTS
@@ -371,6 +373,7 @@ mod suite {
 
     /// AC5's load half: the base's loader fetches a manifest's dependency, so the load check fails
     /// on it.
+    #[allow(dead_code)]
     fn base_loader_reaches_the_network() {
         let scratch = Scratch::new();
         let listener = Listener::new();
@@ -418,22 +421,19 @@ mod suite {
                 network_fixture_connects_when_granted,
             ),
             (
-                "clip_only_host_fails_on_the_dialog",
-                clip_only_host_fails_on_the_dialog,
-            ),
-            (
-                "unclipped_layouts_paint_outside_their_slot",
-                unclipped_layouts_paint_outside_their_slot,
-            ),
-            (
-                "base_loader_reaches_the_network",
-                base_loader_reaches_the_network,
-            ),
-            (
                 "a_view_with_its_own_subscription_disagrees",
                 a_view_with_its_own_subscription_disagrees,
             ),
         ]);
+        // Retired, each printed so no run drops it silently: the app's loader now refuses what these first
+        // drafts mount or plant, and a blind replacement runs in the place of each (#1620).
+        for (name, by) in [
+            ("clip_only_host_fails_on_the_dialog", "redraft-ac7/planted_redraft.rs"),
+            ("unclipped_layouts_paint_outside_their_slot", "redraft-ac7/planted_redraft.rs"),
+            ("base_loader_reaches_the_network", "tests/acceptance/1620/planted_loader_proposal.rs"),
+        ] {
+            println!("test {name} ... ignored, retired: {by} runs in its place");
+        }
         drop(home);
         code
     }

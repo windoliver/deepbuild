@@ -1704,5 +1704,49 @@
       ],
       "additionalProperties": false
     }
+  },
+  {
+    "method": "deep.source.ask",
+    "variants": null,
+    "since": "R6",
+    "stability": "preview",
+    "tracking": "#1048",
+    "preview_since": "R6",
+    "decide_by": "R9",
+    "digest": "d1:d0835533deaa7af647e1972af79858f1e2f367ea8118be8b50466f1db38390cb",
+    "params": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "A model source the package's manifest lists (variant model), such as ext.playtest.model."
+        },
+        "request": {
+          "type": "object",
+          "properties": {
+            "provider": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The model, name@version; a live call goes to its name's host, which the grant must name."
+            },
+            "prompt": {
+              "type": "string",
+              "description": "What the model is asked."
+            }
+          },
+          "required": [
+            "provider",
+            "prompt"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "name",
+        "request"
+      ],
+      "additionalProperties": false
+    }
   }
 ]

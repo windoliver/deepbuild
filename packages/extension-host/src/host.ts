@@ -524,7 +524,7 @@ function schemaBreak(name: string, schema: unknown, value: unknown): string | un
  * What a check's input gives `deep.canvas.play` (Check input: plug-in reads, #184): the piece, the seed, the runs (20
  * by default), the bots and the recorded tracks it may play; a playtest's input holds more, which the host ignores.
  */
-interface PlayInput { piece?: unknown; seed?: unknown; runs?: unknown; bots?: unknown; tracks?: unknown }
+interface PlayInput { piece?: unknown; seed?: unknown; runs?: unknown; bots?: unknown; tracks?: unknown; play?: unknown }
 /** One play a running check made: its seed, its bot, its track's hash and whether it read values. */
 interface Played { seed: number; bot: unknown; track: string; values: boolean }
 /** JSON with every object's keys sorted, so two values parsed apart compare. */
@@ -536,8 +536,8 @@ function runSeed(seed: number, i: number): number {
   b.writeUInt32LE(i, 8);
   return Number(createHash('sha256').update(b).digest().readBigUInt64BE(0) >> 11n);
 }
-/** A bot as a play runs it: its policy or logic, without the names and authorship a check's input adds. */
-const botOf = (bot: unknown): unknown => (isPlain(bot) ? Object.fromEntries(Object.entries(bot).filter(([k]) => k === 'policy' || k === 'logic')) : bot);
+/** A bot as a play runs it: without the authorship, bands and expectations a check's input adds (#184, #555). */
+const botOf = (bot: unknown): unknown => (isPlain(bot) ? Object.fromEntries(Object.entries(bot).filter(([k]) => k !== 'by' && k !== 'share' && k !== 'expect')) : bot);
 const nothing = (outcome: CheckResult['outcome'], failure?: string): CheckResult => ({
   outcome, testsRun: 0, evidence: [], read: [], mask: null,
   failures: failure ? [{ test: 'extension host', file: '', line: 0, stack: null, assertion: false, message: failure }] : [],
@@ -2036,6 +2036,8 @@ class Host implements ExtensionHost {
         if (!given && this.options.plant !== 'plays-any-seed') throw Error(`deep.canvas.play: seed ${String(seed)} isn't one ${id}'s check input gives`);
         const bots = Array.isArray(input.bots) ? input.bots.map((b) => canonical(botOf(b))) : [];
         if (r.bot !== undefined && !bots.includes(canonical(botOf(r.bot)))) throw Error(`deep.canvas.play: the bot ${canonical(r.bot).slice(0, 200)} isn't one ${id}'s check input gives`);
+        // #555: the play interface a run reads is the one the input's brief locked, never one the runner passes.
+        if (r.play !== undefined && canonical(r.play) !== canonical(input.play)) throw Error(`deep.canvas.play: the play interface isn't the one ${id}'s check input gives`);
         if (r.track !== undefined) {
           const tracks = Array.isArray(input.tracks) ? input.tracks.map(canonical) : [];
           const track = canonical(r.track);
@@ -2050,6 +2052,9 @@ class Host implements ExtensionHost {
         const values = isPlain(reply.values) && Object.values(reply.values).some((v) => Array.isArray(v) && v.length > 0);
         running.played.push({ seed: seed as number, bot: r.bot === undefined ? undefined : canonical(botOf(r.bot)), track: String(reply.track), values });
         if (Array.isArray(reply.entries)) running.tracks.add(canonical(reply.entries));
+        // #1048: a probe's track for each copy that trapped or broke a range, the run's recorded entries and what it
+        // put, which the check plays again in a fresh replica.
+        if (Array.isArray(reply.tests)) for (const t of reply.tests as { track?: unknown }[]) if (Array.isArray(t?.track)) running.tracks.add(canonical(t.track));
         return reply;
       }
       case 'deep.registerCheck': {
@@ -2145,6 +2150,10 @@ class Host implements ExtensionHost {
       }
       case 'deep.work.fetch':
         return this.sourceHost.workFetch(ext, args[0], args[1]);
+      // #1048: a plug-in's model source asked through the hub, as a model bot asks it between steps.
+      case 'deep.source.ask':
+        quiet();
+        return this.sourceHost.ask(ext, args[0], args[1]);
       case 'deep.channel.fetch': {
         // Only a send or read of its own under way: the hub's call, with the channel's settings and token.
         const [call, request] = args;

@@ -2,7 +2,7 @@
 //! crate's own types only, so no engine type crosses it. `occurrences` reports what a step wrote
 //! (#2011's sensor entries and exits, #1918's other kinds), which the module sorts; `query` and
 //! `move_character` (#1919) keep every spatial query and character move behind it, and
-//! `drive_vehicle` joins it with #251; the hash reads `canonical` (golden.rs).
+//! `drive_vehicle` (#251) every vehicle's; the hash reads `canonical` (golden.rs).
 
 use std::collections::BTreeMap;
 
@@ -119,23 +119,45 @@ pub const PARTICLE_FIELDS: [&str; 6] = [
     "pos.x", "pos.y", "pos.z", "linear.x", "linear.y", "linear.z",
 ];
 
-/// One body's or one particle's (`<soft>#<address>`) canonical state: the backend's own f32
-/// value of each of `FIELDS` or `PARTICLE_FIELDS`, never converted, so a hash of it reads exactly
-/// what the backend steps.
+/// #182: the fields of a character body's own state in the canonical state, after every
+/// body's (Checkpoint ring: `hash`): the walk it wants, its vertical speed, grounded, sliding and
+/// crouched as 0 or 1, and how many shapes it touches; then each touched shape use as its body's
+/// place in canonical order and its index, both named `touching`.
+pub const CHARACTER_FIELDS: [&str; 8] = [
+    "wants.x", "wants.y", "wants.z", "vertical", "grounded", "sliding", "crouched", "touching",
+];
+
+/// #182: one character body's own state as a step left it (Body `body@1`: character: State).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct CharacterState {
+    pub id: String,
+    /// m/s: the walk it wants, its part along up dropped.
+    pub wants: [f32; 3],
+    /// m/s along up.
+    pub vertical: f32,
+    pub grounded: bool,
+    pub sliding: bool,
+    pub crouched: bool,
+    /// The shape uses its controller touched in its last step, sorted.
+    pub touching: Vec<ShapeRef>,
+}
+
+/// One body's, one particle's (`<soft>#<address>`), one vehicle body's own or one wheel's
+/// (`<body>#<wheel>`, #251), or one character body's own (#182) canonical state: the backend's own
+/// f32 value of each of its `names` (`FIELDS`, `PARTICLE_FIELDS`, `HELD_FIELDS`, `WHEEL_FIELDS` or
+/// `CHARACTER_FIELDS`), never converted, so a hash of it reads exactly what the backend steps.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Canonical {
     pub id: String,
     pub values: Vec<f32>,
+    pub names: &'static [&'static str],
 }
 
 impl Canonical {
-    /// The names of its values.
-    pub fn fields(&self) -> &'static [&'static str] {
-        if self.values.len() == PARTICLE_FIELDS.len() {
-            &PARTICLE_FIELDS
-        } else {
-            &FIELDS
-        }
+    /// The name of its value `i`: its names', and past them (#182) `touching`, the two values
+    /// each shape use a character body touches adds.
+    pub fn field(&self, i: usize) -> &'static str {
+        self.names.get(i).copied().unwrap_or("touching")
     }
 }
 
@@ -185,6 +207,34 @@ pub fn turn(a0: f64, a1: f64) -> i32 {
         _ => 0,
     }
 }
+
+/// #251: one wheel of a vehicle body as a step left it: its spin and the turn it made in that
+/// step (deg), whether its ray met a shape, its suspension's length (m) and its steer (deg).
+#[derive(Clone, Debug, PartialEq)]
+pub struct WheelState {
+    pub name: String,
+    pub spin: f64,
+    pub spin_rate: f64,
+    pub touching: bool,
+    pub length: f64,
+    pub steer: f64,
+}
+
+/// #251: one vehicle body's own state: its wheels by name, and the drive (N), steer (deg) and
+/// brake (N) it holds.
+#[derive(Clone, Debug, PartialEq)]
+pub struct VehicleState {
+    pub id: String,
+    pub wheels: Vec<WheelState>,
+    pub drive: f64,
+    pub steer: f64,
+    pub brake: f64,
+}
+
+/// #251: a vehicle body's own fields in the canonical state, after every body's: the drive, steer
+/// and brake it holds, under the body's ID; then each wheel's, under `<body>#<wheel>`.
+pub const HELD_FIELDS: [&str; 3] = ["drive", "steer", "brake"];
+pub const WHEEL_FIELDS: [&str; 3] = ["spin", "spin_rate", "touching"];
 
 /// A deep checkpoint: the backend's whole-world state as its own bytes, stamped with the backend
 /// and the version that wrote them, which no other version loads (Checkpoint ring).
@@ -256,6 +306,9 @@ pub trait Backend {
     /// Every shape use `q` meets among those in `groups`, sorted by distance, then shape use: the
     /// one way physics.query, physics.cast@1 and nav.reach reach the engine's spatial queries.
     fn query(&self, q: &Query, groups: u32) -> Vec<Hit>;
+    /// #182: each character body's own state as the last step left it, in canonical (priority,
+    /// ID) order.
+    fn characters(&self) -> Vec<CharacterState>;
     /// Moves character body `body` by `translation` m through the backend's character
     /// controller, which sets its kinematic target for the next step, sliding along what it
     /// meets; the translation it took, or the refusal naming a body that can't move so.
@@ -267,4 +320,11 @@ pub trait Backend {
     /// #2014: how far along the unit `dir` the ray from `from` first meets a shape of the world
     /// as built or last stepped, within `max` m; none when it meets nothing.
     fn ray(&self, from: [f64; 3], dir: [f64; 3], max: f64) -> Option<f64>;
+    /// #251: moves vehicle body `body` one step through the backend's vehicle controller: each
+    /// wheel's ray cast down its chassis against the world as the last step left it, and its
+    /// springs, drive, brakes and grip pushing the chassis over the coming step, from the drive,
+    /// steer and brake it holds; or the refusal naming a body that isn't a vehicle.
+    fn drive_vehicle(&mut self, body: &str) -> Result<(), Box<Refusal>>;
+    /// #251: every vehicle body's own state, by ID.
+    fn vehicles(&self) -> Vec<VehicleState>;
 }
