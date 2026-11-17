@@ -264,7 +264,7 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
       const there = await onDisk(sha);
       if (file || !existed || !there) {
         if (joined) {
-          await writeAtomic(partsOf(sha), JSON.stringify(joined.parts));
+          await writeAtomic(partsOf(sha), JSON.stringify(joined.parts), there);
         } else if (file) {
           const path = fileOf(sha);
           await mkdir(dirname(path), { recursive: true });
@@ -483,10 +483,13 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
         if (error.code !== 'ENOENT') throw error;
         return undefined;
       });
-      const where = async (sha: string) => (!HASH.test(sha) ? [] : await unsynced(fileOf(sha)) ?? await unsynced(packedOf(sha)) ?? []);
+      const where = async (sha: string) => (!HASH.test(sha) ? [] : await unsynced(fileOf(sha)) ?? await unsynced(packedOf(sha)) ?? await unsynced(partsOf(sha)) ?? []);
+      // A joined copy is its manifest and the files of the parts it lists, a part that is joined in turn too.
+      const named = new Set(sha256s);
+      for (const sha of named) for (const part of index.get(sha)?.parts ?? []) named.add(part);
       // Again while any is unsynced: a file replaced during the pass is a new file its folder's sync made last.
       for (;;) {
-        const files = (await Promise.all([...new Set(sha256s)].map(where))).flat();
+        const files = (await Promise.all([...named].map(where))).flat();
         if (!files.length) return;
         const stamps = await Promise.all(files.map(syncOne));
         const folders = [...new Set(files.map((path) => dirname(path)))];
