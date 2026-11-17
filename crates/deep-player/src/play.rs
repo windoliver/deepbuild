@@ -536,7 +536,8 @@ pub fn sha256_hex(bytes: &[u8]) -> String {
         .collect()
 }
 
-#[cfg(test)]
+// The logic module's sets (#1490: game2d and full) run the logic item this test plays.
+#[cfg(all(test, feature = "game2d"))]
 mod tests {
     use super::*;
 
