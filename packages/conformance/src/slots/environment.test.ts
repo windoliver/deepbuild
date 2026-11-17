@@ -12,6 +12,8 @@ import type { EnvironmentFill, EnvSpec, Handle, Lease } from './environment.js';
 
 const kit = () => slotKits().find((k) => k.slot === 'environment@1')!;
 const path = process.env.PATH;
+/** For the tests' own readings of the whole process table, which is over Node's 1 MiB default on a busy machine. */
+const PS_TABLE = { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 } as const;
 afterEach(() => { process.env.PATH = path; });
 
 describe('the environment kit and the process table', () => {
@@ -309,7 +311,7 @@ PATH=/bin:/usr/bin:/usr/sbin exec ps "$@"
         spawn(process.execPath, ['-e', spawner], { stdio: 'ignore', env: { ...process.env, RUN: tokens.get(handle.id)! } }).unref();
       },
     };
-    const stragglers = (): number[] => execFileSync('ps', ['-Awwo', 'pid=,command='], { encoding: 'utf8' }).split('\n').filter((l) => [...tokens.values()].some((t) => l.includes(t))).map((l) => Number(l.trim().split(/\s+/)[0]));
+    const stragglers = (): number[] => execFileSync('ps', ['-Awwo', 'pid=,command='], PS_TABLE).split('\n').filter((l) => [...tokens.values()].some((t) => l.includes(t))).map((l) => Number(l.trim().split(/\s+/)[0]));
     try {
       const report = await runKit(k, respawning, { parts: ['fixed'] });
       expect(report.cases.map((c) => [c.outcome, ...c.codes])).toEqual([['FAIL', 'process_left'], ['FAIL', 'process_left']]);
@@ -332,7 +334,7 @@ PATH=/bin:/usr/bin:/usr/sbin exec ps "$@"
         siblings.push(sibling);
         const until = Date.now() + 3000;
         // Wait for the child to appear in the table, so the kit's first reading sees it.
-        while (Date.now() < until && !execFileSync('ps', ['-Awwo', 'ppid=,command='], { encoding: 'utf8' }).split('\n').some((l) => l.trim().startsWith(`${sibling.pid} `))) { /* spin */ }
+        while (Date.now() < until && !execFileSync('ps', ['-Awwo', 'ppid=,command='], PS_TABLE).split('\n').some((l) => l.trim().startsWith(`${sibling.pid} `))) { /* spin */ }
         return clean!.up(spec, lease, checkout);
       },
       down: (handle) => { clean!.down(handle); for (const s of siblings) s.kill('SIGTERM'); },
@@ -399,7 +401,7 @@ PATH=/bin:/usr/bin:/usr/sbin exec ps "$@"
       }) as unknown as Handle,
       down: (handle) => { for (const c of children) if (c.pid === handle.pid) c.kill('SIGTERM'); },
     };
-    const grandchildren = (): string[] => execFileSync('ps', ['-Awwo', 'pid=,command='], { encoding: 'utf8' }).split('\n').filter((l) => l.includes('/environment/helper.mjs') && !l.trim().split(/\s+/).some((w) => w.startsWith('run-')));
+    const grandchildren = (): string[] => execFileSync('ps', ['-Awwo', 'pid=,command='], PS_TABLE).split('\n').filter((l) => l.includes('/environment/helper.mjs') && !l.trim().split(/\s+/).some((w) => w.startsWith('run-')));
     try {
       const report = await runKit(k, quiet, { parts: ['fixed'] });
       expect(report.cases.map((c) => [c.outcome, ...c.codes])).toEqual([['FAIL', 'untagged_process'], ['FAIL', 'untagged_process']]);
@@ -429,7 +431,7 @@ PATH=/bin:/usr/bin:/usr/sbin exec ps "$@"
     expect(report.cases.map((c) => `${c.outcome}: ${c.message}`)).toEqual(['FAIL: the fill threw: Error: down refused', 'FAIL: the fill threw: Error: down refused']);
     // Each environment was asked twice, and the second asking was waited for: by now nothing of them is left.
     expect(asked.map((h) => h.id)).toEqual([asked[0]!.id, asked[0]!.id, asked[2]!.id, asked[2]!.id]);
-    const left = execFileSync('ps', ['-Awwo', 'pid=,command='], { encoding: 'utf8' }).split('\n').filter((l) => l.includes('/environment/server.mjs') && asked.some((h) => l.includes(` ${h.port} `)));
+    const left = execFileSync('ps', ['-Awwo', 'pid=,command='], PS_TABLE).split('\n').filter((l) => l.includes('/environment/server.mjs') && asked.some((h) => l.includes(` ${h.port} `)));
     expect(left).toEqual([]);
   });
 
@@ -453,7 +455,7 @@ PATH=/bin:/usr/bin:/usr/sbin exec ps "$@"
     try {
       const report = await runKit(k, squatted, { parts: ['fixed'] });
       expect(report.cases.map((c) => [c.outcome, ...c.codes])).toEqual([['BLOCKED', 'fixture_down'], ['BLOCKED', 'fixture_down']]);
-      const helpers = execFileSync('ps', ['-Awwo', 'pid=,command='], { encoding: 'utf8' }).split('\n').filter((l) => l.includes('/environment/helper.mjs') && tokens.some((t) => l.includes(t)));
+      const helpers = execFileSync('ps', ['-Awwo', 'pid=,command='], PS_TABLE).split('\n').filter((l) => l.includes('/environment/helper.mjs') && tokens.some((t) => l.includes(t)));
       expect(helpers).toEqual([]);
     } finally {
       for (const s of squatters) s.kill('SIGKILL');
@@ -465,7 +467,7 @@ PATH=/bin:/usr/bin:/usr/sbin exec ps "$@"
     const run = 'run-marker-test-token';
     // The marker's folder does not exist, so the marker can't be written after the helper was started.
     const child = spawn(process.execPath, [server, '0', '/health', 'tok', '10', '/nonexistent-deep-env/ready', run, 'helper'], { stdio: 'ignore' });
-    const helpers = (): string[] => execFileSync('ps', ['-Awwo', 'pid=,command='], { encoding: 'utf8' }).split('\n').filter((l) => l.includes('/environment/helper.mjs') && l.includes(run));
+    const helpers = (): string[] => execFileSync('ps', ['-Awwo', 'pid=,command='], PS_TABLE).split('\n').filter((l) => l.includes('/environment/helper.mjs') && l.includes(run));
     try {
       // The server listens (on a port of its own) and the marker step has run once the helper is gone; give it a moment.
       const until = Date.now() + 3000;
@@ -546,7 +548,7 @@ PATH=/bin:/usr/bin:/usr/sbin exec ps "$@"
     // The late handles were taken down by the kit's late hand, so the servers are gone.
     await new Promise((resolve) => setTimeout(resolve, 600));
     expect(downs.length).toBe(2);
-    const left = execFileSync('ps', ['-Awwo', 'pid=,command='], { encoding: 'utf8' }).split('\n').filter((l) => l.includes('/environment/server.mjs') && downs.some((h) => l.includes(` ${h.port} `)));
+    const left = execFileSync('ps', ['-Awwo', 'pid=,command='], PS_TABLE).split('\n').filter((l) => l.includes('/environment/server.mjs') && downs.some((h) => l.includes(` ${h.port} `)));
     expect(left).toEqual([]);
   }, 40_000);
 
