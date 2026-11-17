@@ -214,7 +214,7 @@
   "motion": {
     "version": "1.0.0",
     "digest": "fa3b261d76b2aca520756953c1fc8418f32938f08a296c000cda6ca24d18c14e",
-    "verdict": "PASS",
+    "verdict": "FAIL",
     "parts": {
       "fixtures": "PASS",
       "clean_rebuild": "PASS",
@@ -224,7 +224,7 @@
       "schedule": "PASS",
       "repair_loop": "PASS",
       "time_order": "PASS",
-      "catalog": "PASS",
+      "catalog": "FAIL",
       "migration": "PASS",
       "registries": "PASS"
     }

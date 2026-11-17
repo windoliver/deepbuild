@@ -495,6 +495,10 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
     ]);
     r.fixture("moving-garden", moving, None)
         .sidecar(json!({"codes": []}));
+    // #2363: motion's arrangement operators get their nodes here, since the solids an
+    // arrangement places are this module's and the r1 set holds motion without them.
+    r.fixture("arrangement", arrangement(), None)
+        .sidecar(json!({"codes": []}));
     // #2013: a ball told to rest on a shelf it doesn't stand over, which raises `no_support`.
     r.fixture("rest-no-support", unsupported(), None)
         .planted()
@@ -557,6 +561,23 @@ pub fn garden() -> Value {
                        "params": {"of": ["bush", "flower"], "from": {"distribute": {
                            "on": "ground", "mode": "poisson", "min_distance": 0.5, "margin": 0.5,
                            "prune": "larger_first", "avoid": ["table"], "seed": 2013}}}}
+        }
+    })
+}
+
+/// A small box an `arrange@1` places near a larger one, without passing into it.
+fn arrangement() -> Value {
+    json!({
+        "format": 1, "profile": "figure", "title": "Two arranged boxes",
+        "description": "A small box placed near a larger one without passing into it.",
+        "size": [320, 200], "requires": {"modules": {"scene3d": "^1", "motion": "^1"}},
+        "items": {
+            "fixed": {"id": "fixed", "kind": "mark.box@1", "name": "Fixed", "order": "a0",
+                "params": {"size": [1, 1, 1]}},
+            "near": {"id": "near", "kind": "mark.box@1", "name": "Near", "order": "a1",
+                "params": {"size": [0.4, 0.4, 0.4]}, "at": {"pos": [3, 0, 0]}},
+            "set": {"id": "set", "kind": "arrange@1", "name": "Arrangement", "order": "a2",
+                "params": {"items": ["near"], "relations": [{"a": "near", "rel": "near", "b": "fixed", "d": 0.5}]}}
         }
     })
 }
