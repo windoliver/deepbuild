@@ -214,7 +214,7 @@
   "motion": {
     "version": "1.0.0",
     "digest": "fa3b261d76b2aca520756953c1fc8418f32938f08a296c000cda6ca24d18c14e",
-    "verdict": "FAIL",
+    "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
       "clean_rebuild": "PASS",
@@ -224,7 +224,7 @@
       "schedule": "PASS",
       "repair_loop": "PASS",
       "time_order": "PASS",
-      "catalog": "FAIL",
+      "catalog": "PASS",
       "migration": "PASS",
       "registries": "PASS"
     }
@@ -260,7 +260,7 @@
   },
   "record": {
     "version": "1.0.0",
-    "digest": "65f77a1cb350e333bb96a1f36a254f4d489bbb36a3a919391654a723b30c1021",
+    "digest": "bb898cbc9fb55e00fbb24481f1a3970e63ed3c3dfe26e249fce8168444c9ef34",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -303,7 +303,7 @@
   },
   "sheet": {
     "version": "1.0.0",
-    "digest": "d24e60e7c85d9663922617ca0d3c22f8d53e23caf3564cbc6ea1480cb4b57f18",
+    "digest": "2e95dc90884799f26e95ce8ad59f06509d8e63e2daa07bc8f5a71ac4340aca0e",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",

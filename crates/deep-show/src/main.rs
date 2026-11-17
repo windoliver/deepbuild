@@ -1815,6 +1815,12 @@ fn answer(command: &str, startup: &Startup, line: &str) -> Value {
     };
     match command {
         "run" => {
+            // #2363: a fixture the `fixtures` call lists carries its assets, so its document
+            // opens in a reader's fresh store; one left unwritten is the show's own refusal.
+            let listed = startup.sealed.fixtures.iter().filter(|(_, f)| !f.planted);
+            for bytes in listed.flat_map(|(_, f)| &f.assets) {
+                let _ = evidence::put(&scenario.evidence, bytes);
+            }
             let replies = jobs::around(&scenario, startup, |background| {
                 let mut hub = hub::Hub::new(&scenario, startup);
                 hub.background = background;
