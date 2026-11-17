@@ -168,7 +168,7 @@ fn evaluate(app: &App, call: &Value) -> Result<Evaluated, Value> {
     };
     let planted = match app.planted {
         Some(Planted::SectorsSourceOver) => scene::Planted::SectorsSourceOver,
-        _ => scene::Planted::None,
+        p => crate::lightfx::scene_plant(p).unwrap_or(scene::Planted::None),
     };
     let frame = scene::frame_planted(&flat_doc, &flat, (&palette, &ty), &record, 1.0, planted)
         .map_err(|r| refused(r.code, r.path))?;
@@ -1263,7 +1263,13 @@ pub fn window2d(app: &mut App, out: &str, call: &Value) -> Value {
                 None => return Err(path),
             }
         }
-        over.push(picture_of(&status_picture(app, call, &ev)?));
+        let mut status = status_picture(app, call, &ev)?;
+        if app.planted == Some(Planted::LightEveryChild) {
+            let marks = layer::status_marks(&ev.doc, &ev.items, &ev.record, &call["look"])?;
+            let palette = layer::palette(&call["look"], "light")?;
+            crate::lightfx::lit_status(&mut status, &marks, &ev.items, &palette);
+        }
+        over.push(picture_of(&status));
         app.window(ev.size)?;
         let opened = match surface {
             Some(marks) => Some(open2(

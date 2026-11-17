@@ -1,0 +1,15 @@
+# Criterion 2: the public text lane with this change's list over main and every open issue, 2026-11-16, macOS arm64.
+== by hand on this branch (node scripts/public-text.mjs), before pushing
+public text: 160 dependency and adapter names read as not listed
+public text: 65 changed files, 19 commit messages and 1212 open issues name no studied product
+exit=0
+== the blind live test (node --test tests/acceptance/2405/ac2-open-issues.live.test.mjs): the lane on main with the
+== checkout's list, through runLanes, the machine's throttle and the lease
+1. 07:43 to 08:14 UTC, the one build slot held by another session's build all along: no verdict
+﹣ #2405.67f3c930 AC2 (live): with the checkout's list, the public text lane run on main, which reads every open issue, reads no finding (1866376.509458ms) # INCONCLUSIVE: the public text lane couldn't read the open issues of windoliver/deepbuild or didn't finish, so it has no verdict:
+INCONCLUSIVE public text: no grant: no build grant came within 30 min
+2. 08:21 UTC, once the slot was free
+✔ #2405.67f3c930 AC2 (live): with the checkout's list, the public text lane run on main, which reads every open issue, reads no finding (187431.9435ms)
+public text: 160 dependency and adapter names read as not listed
+public text: 0 changed files, 0 commit messages and 1207 open issues name no studied product
+PASS public text (146.30 s)

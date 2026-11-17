@@ -45,8 +45,20 @@ impl Sub {
 
 /// The call's fields a view overlay's run never takes: what reads or reports the main view.
 const MAIN_ONLY: [&str; 14] = [
-    "window", "clicks", "capture", "targets", "timings", "cold", "latency", "determinism",
-    "viewer", "overlays", "light_cut", "evaluate", "sway", "strokes",
+    "window",
+    "clicks",
+    "capture",
+    "targets",
+    "timings",
+    "cold",
+    "latency",
+    "determinism",
+    "viewer",
+    "overlays",
+    "light_cut",
+    "evaluate",
+    "sway",
+    "strokes",
 ];
 
 /// Each view overlay of `doc` (the call's document, `size` px), drawn by its own run of `call`.
@@ -76,14 +88,14 @@ pub(super) fn run_all(
             o.insert("doc".into(), json!(path));
             o.insert("size".into(), json!([p.rect[2], p.rect[3]]));
         }
-        let dir = std::env::temp_dir().join(format!(
-            "deep-gpu-view-{}-{}",
-            std::process::id(),
-            p.id
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("deep-gpu-view-{}-{}", std::process::id(), p.id));
         std::fs::create_dir_all(&dir)
             .map_err(|e| refused("not_written", format!("{}: {e}", p.id)))?;
-        let held = Shown { placed: p, dir: dir.clone() };
+        let held = Shown {
+            placed: p,
+            dir: dir.clone(),
+        };
         let mut sub = Some(Sub {
             dir,
             count: 0,
@@ -101,7 +113,9 @@ pub(super) fn run_all(
 /// border in its role around the rect.
 pub(super) fn composite(shown: &[Shown], k: usize, bgra: &mut [u8], size: [u32; 2]) {
     for s in shown {
-        let Ok(frame) = std::fs::read(s.dir.join(format!("{k}.bgra"))) else { continue };
+        let Ok(frame) = std::fs::read(s.dir.join(format!("{k}.bgra"))) else {
+            continue;
+        };
         let [r, g, b] = s.placed.border;
         views::lay(&s.placed, &frame, bgra, size, [b, g, r, 255]);
     }

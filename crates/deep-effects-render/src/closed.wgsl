@@ -650,7 +650,10 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
         let l = max(uf(22u, 2u), 1e-6);
         var s0 = 0.0;
         if (shape == 3u) { s0 = r5 * uf(22u, 2u); }
-        let c = curve_at((s0 + uf(22u, 3u) * age) / l);
+        // It's gone once it runs off either end of its curve, never held there.
+        let u = (s0 + uf(22u, 3u) * age) / l;
+        if (u < 0.0 || u > 1.0) { return; }
+        let c = curve_at(u);
         pos = c[0];
         vel = c[1] * uf(22u, 3u);
     } else if (motion == 4u) {

@@ -133,4 +133,17 @@ fn entries(r: &mut Registrar, hand: fn(&[Value], &[Value]) -> Vec<[u64; 2]>) {
         "time",
         "simulate",
     );
+    r.tool_entry("deep_kinds", &character_entry());
+}
+
+/// #182: the character body as `deep_kinds` lists it, through this module's tool entry: its kind,
+/// its one capsule, and each field of `character` with its unit and default.
+fn character_entry() -> String {
+    let fields: serde_json::Map<String, Value> = crate::doc::CHARACTER_FIELDS
+        .iter()
+        .map(|(k, v)| (format!("character.{k}"), json!(v)))
+        .collect();
+    json!({"name": "body@1.character", "kind": "character",
+           "shapes": "one capsule, and no follow channel", "fields": fields})
+    .to_string()
 }

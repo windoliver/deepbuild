@@ -1,0 +1,23 @@
+{
+  "format": 1,
+  "id": "effect-wave-field",
+  "profile": "scene",
+  "title": "Ripples on a floor",
+  "description": "A wave field spreading from a block in the middle of a floor.",
+  "size": [1920,1080],
+  "camera": "cam",
+  "seed": 508,
+  "requires": {
+    "modules": {"scene3d":"^1","effects":"^1"}
+  },
+  "transport": {
+    "span": "4s",
+    "frame_rate": [30,1]
+  },
+  "items": {
+    "cam": {"id":"cam","kind":"camera@1","name":"Camera","order":"a000","params":{"projection":"perspective","position":[0,2,6],"target":[0,0.6,0],"fov":40}},
+    "floor": {"id":"floor","kind":"mark.box@1","name":"Floor","order":"a001","params":{"size":[8,0.1,8],"paint":{"fill":{"role":"muted"}}},"at":{"pos":[0,-0.05,0]}},
+    "centre": {"id":"centre","kind":"mark.box@1","name":"Centre","order":"a002","params":{"size":[0.2,0.2,0.2],"paint":{"fill":{"role":"ink"}}},"at":{"pos":[0,0.1,0]}},
+    "ripple": {"id":"ripple","kind":"effect@1","name":"Wave field","order":"a003","params":{"kind":"wave_field","anchor":"centre","axis":[0,1,0],"wave_field":{"amplitude":2,"wavelength":0.6,"speed":0.8,"radius":3,"role":"caption"}},"at":{"pos":[0,0,0]}}
+  }
+}

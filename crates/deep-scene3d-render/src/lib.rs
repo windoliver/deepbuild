@@ -21,16 +21,18 @@ mod glass;
 pub mod hdr;
 pub mod held;
 pub mod history;
+pub mod inset;
 pub mod local;
 pub mod maps;
 mod mesh;
-mod module;
 pub mod mirror;
+mod module;
 mod motion;
 mod oit;
 mod op;
 mod planted;
 pub mod print;
+mod readouts;
 mod set;
 pub mod shadow;
 pub mod sss;
@@ -40,7 +42,6 @@ mod sway;
 pub mod targets;
 mod ties;
 mod tint;
-pub mod inset;
 pub mod water;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -63,9 +64,13 @@ use deep_gpu::render::Pass;
 use deep_gpu::surface::FORMAT;
 
 pub use crate::diag::{draw_offscreen_diag, Diag, DiagCounts};
-pub use crate::module::{draw_offscreen, timed, AfterFrame, Counts, HdrFrame, Module3, PostFrame, Profiler, Shared, LIGHT, PYRAMID_NS_PER_PX};
-pub use crate::planted::Planted;
 use crate::mesh::Mesh;
+pub use crate::module::{
+    draw_offscreen, timed, AfterFrame, Counts, HdrFrame, Module3, PostFrame, Profiler, Shared,
+    LIGHT, PYRAMID_NS_PER_PX,
+};
+pub use crate::planted::Planted;
+pub use crate::readouts::{lay_over, readouts_as_labels};
 use crate::set::Set;
 use crate::surface::{Low, Surface, Upscale, LABEL_PASS, OUTLINE_PASS, SHARPEN_PASS, UPSCALE_PASS};
 
@@ -1253,6 +1258,14 @@ const LOBES_BIT: u32 = 1 << 29;
 const MASK_BIT: u32 = 1 << 28;
 const MAPS_INDEX: u32 = MASK_BIT - 1;
 
+/// A draw of a mesh a batch's bundle records (#1636): an opaque set's, by its key, or a
+/// see-through record's, by its place in the batch's `clear`.
+#[derive(Clone, Copy)]
+enum Call {
+    Set(SetKey),
+    Clear(usize),
+}
+
 /// A 3D writer layer's batch: its instance sets and its encoding.
 #[derive(Default)]
 struct Batch {
@@ -1277,6 +1290,8 @@ struct Batch {
     clear_draws: Vec<((Shape, u32), u8)>,
     /// Each see-through draw's material operator key (#431), 0 for none, as `clear_draws`.
     clear_ops: Vec<u64>,
+    /// #1636: each draw of a mesh its bundle records, with the instances it draws.
+    calls: Vec<(Call, u32)>,
     /// The resources and draws the bundle binds and records, as it was encoded, and this
     /// frame's, gathered in a buffer kept from frame to frame.
     key: Vec<u64>,
@@ -1488,436 +1503,8 @@ struct Uniforms {
     lobes: Written,
 }
 
-pub struct Renderer {
-    planted: Planted,
-    /// The buffer #1903's planted `uploads_every_transform` writes every item's transform into.
-    planted_transforms: Option<wgpu::Buffer>,
-    /// The diagnostic views' pipelines (#427), made on first use.
-    diag: Option<Box<diag::Pipes>>,
-    /// Motion blur by velocity (#419): its pipelines, and this frame's pass when it blurs.
-    motion: motion::MotionPass,
-    motion_frame: Option<motion::Frame>,
-    /// The core's velocity and emission targets (#431), built only while read, and this frame's
-    /// draws of them.
-    pub core: targets::Core,
-    velocity_frame: Option<motion::TargetFrame>,
-    emission_frame: Option<targets::EmissionFrame>,
-    epoch: u64,
-    /// The material maps' textures and bind groups (#423), and the look's default taps.
-    maps: maps::Store,
-    filter_taps: u8,
-    frame_buffer: wgpu::Buffer,
-    frame_bind: wgpu::BindGroup,
-    frame_layout: wgpu::BindGroupLayout,
-    /// Each material operator's pipeline, by [`op::key`], compiled the first time a prepared
-    /// scene holds it, or why it can't draw (#429).
-    materials: BTreeMap<u64, Result<op::MatOp, String>>,
-    /// Each material operator's group with one solid's maps, by (operator, maps) key.
-    op_binds: BTreeMap<(u64, u32), wgpu::BindGroup>,
-    /// Each material operator with a light response that a solid drew through, by key: its ID
-    /// and the time it last drew at (#485).
-    answering: BTreeMap<u64, (String, f64)>,
-    /// The time each operator last raised `light_response.range` at, so it raises once a time.
-    raised: BTreeMap<String, u64>,
-    /// The material operators that change nothing their parts shade with, by key: their parts
-    /// draw as their materials' own (#485).
-    plain_ops: BTreeSet<u64>,
-    /// The lights this frame's policy shades and the DFG table, for the solids' shading (#421).
-    lights_buffer: wgpu::Buffer,
-    lights_bind: wgpu::BindGroup,
-    lights_layout: wgpu::BindGroupLayout,
-    dfg_buffer: wgpu::Buffer,
-    /// Bumped whenever the lights' bind group is made again (the cascades' texture, the
-    /// environment's cubes): a new bind group is a new resource in the draw key.
-    lights_generation: u64,
-    /// The key sun's cascades (#422).
-    cascaded: Cascaded,
-    /// The local lights' shadow maps (#446).
-    locals: local::Locals,
-    /// What a shadow frame's `light.w` holds: −1, or −2 to pancake its near plane.
-    shadow_mark: f32,
-    /// The IES tables' atlas (#446).
-    ies: local::Tables,
-    /// The terrain overlays' cells (#537).
-    tints: tint::Store,
-    /// The projected insets (#506), and the unlit ones' pass with the clip-to-world matrix it
-    /// reads, made when one draws.
-    insets: inset::Store,
-    unlit: Option<inset::Unlit>,
-    to_world: Option<[f32; 16]>,
-    /// The light grid this frame, and the buffer its cells are in (#446).
-    clusters: Option<clusters::Grid>,
-    cluster_buffer: wgpu::Buffer,
-    /// The environment's prefilter and cubes (#422).
-    env: EnvState,
-    /// Whether this frame has a sky, which draws first; its pipeline once compiled (#422); the
-    /// video background that draws in its place (#503).
-    sky: bool,
-    sky_pipeline: Option<wgpu::RenderPipeline>,
-    backdrop: backdrop::Backdrop,
-    /// This frame's point sets from a depth video, as the effects wrote them (#503).
-    clouds: clouds::Clouds,
-    /// This frame's puffs, back to front, and their pipeline once compiled (#422).
-    puffs: Option<(wgpu::Buffer, u32)>,
-    puff_records: Set,
-    puff_pipeline: Option<wgpu::RenderPipeline>,
-    /// The see-through solids' pipelines, blend and add, each compiled the first time a batch
-    /// draws one.
-    solid_layout: wgpu::PipelineLayout,
-    clear_pipelines: [Option<wgpu::RenderPipeline>; 6],
-    /// Blend and add over the glass, which draws after the resolve (#428, #1173).
-    late_pipelines: [Option<wgpu::RenderPipeline>; 2],
-    /// This frame's adjust table (#424), each distinct adjust once, entry k + 1 at k.
-    adjust_buffer: wgpu::Buffer,
-    adjusts: Vec<AdjustEntry>,
-    /// This frame's lobe table (#428), each distinct lobe set once, entry k + 1 at k.
-    lobe_buffer: wgpu::Buffer,
-    lobe_table: Vec<LobeEntry>,
-    /// The opaque scene's copy with mips while a scene holds a transmissive part (#428), and the
-    /// texel that stands in for it.
-    glass: Option<glass::Glass>,
-    glass_stub: wgpu::TextureView,
-    /// The subsurface share and spread while a scene holds a part whose subsurface spreads
-    /// (#481).
-    subsurface: Option<sss::Subsurface>,
-    /// Whether the DFG buffer holds the sheen table yet (#428).
-    sheen_written: bool,
-    /// The per-pixel resolve's lists (#424), and its resolve and sorted-fallback pipelines once
-    /// a frame draws a per-pixel item.
-    oit: oit::Oit,
-    oit_pipelines: Option<[wgpu::RenderPipeline; 2]>,
-    /// Each solid's rank by ID (#421), ranked again each frame (#450); and which way the planted
-    /// ties_by_submission submits this frame.
-    ties: crate::ties::Ties,
-    flip: bool,
-    tone_buffer: wgpu::Buffer,
-    /// What each per-frame uniform last uploaded (#1903).
-    written: Uniforms,
-    output_layout: wgpu::BindGroupLayout,
-    /// What the passes after the finish cover this frame (their layer, which the view holds), as
-    /// the output pass's undithered mask; one clear texel with none (#418).
-    covered: (Option<std::sync::Arc<[u8]>>, wgpu::TextureView),
-    mesh_pipeline: wgpu::RenderPipeline,
-    /// The opaque material solids' pipelines culling back faces, and front faces (mirrored).
-    mesh_culled: [wgpu::RenderPipeline; 2],
-    /// The solids' pipeline in a frame with a capped cutaway, its caps at their plane's depth,
-    /// compiled the first time one draws; and whether this frame has one (#424).
-    cut_pipeline: Option<wgpu::RenderPipeline>,
-    /// The GPU cull's kernels and the pipelines that read a row list, compiled the first time a
-    /// batch needs them (#484); the groups those pipelines lay out; this frame's stale views.
-    rows: Option<Rows>,
-    row_groups: [wgpu::BindGroupLayout; 4],
-    cull_runs: Vec<cull::Run>,
-    /// The document's instances outputs (#484), which their instancers draw from.
-    sources: Vec<cull::Source>,
-    /// Draws every batch from the CPU's f64 cull, the reference a GPU frame is judged against.
-    cpu_cull: bool,
-    /// #1637: whether the camera's lists are culled by occlusion too (a view's `occlusion: off`
-    /// clears it); the camera's prepass depth and pyramid; and this frame's occluders and tests.
-    occlusion: bool,
-    pyramid: Option<Arc<cull::Pyramid>>,
-    occluders: Vec<(usize, RowDraw)>,
-    occlude_runs: Vec<cull::Occlude>,
-    /// This frame's light probes (#427), whose captures see every solid (#1637's report).
-    probe_ids: Vec<String>,
-    capped: bool,
-    /// Ambient occlusion's prepass, passes and the solids' group 2 (#418).
-    ao: ao::Passes,
-    /// The scene3d shader module and the solids' vertex layouts, which the ao prepass shares.
-    scene_module: wgpu::ShaderModule,
-    families: Families,
-    output_pipeline: wgpu::RenderPipeline,
-    /// The output pass into the finished frame, for the passes after the finish (#382).
-    output_f32: wgpu::RenderPipeline,
-    /// The finished frame (status::FINISHED), made when a frame has passes after the finish.
-    finished: Option<(wgpu::Texture, wgpu::TextureView, [u32; 2])>,
-    /// #464: the look's print finish for the frame being drawn (its fields, the frame's values,
-    /// the ground, each item's color for its separations), the pass, and the frame it reads.
-    print: Option<(
-        Arc<deep_canvas_marks::print::Print>,
-        deep_canvas_marks::print::Frame,
-        [u8; 3],
-    )>,
-    print_colors: BTreeMap<String, [u8; 3]>,
-    printer: Option<Arc<Mutex<print::Printer>>>,
-    print_source: Option<(wgpu::TextureView, [u32; 2], wgpu::TextureFormat)>,
-    /// #465: the mirror's pass, made when a frame first has a mirror, and whether this frame has.
-    mirrorer: Option<Box<mirror::Mirrorer>>,
-    mirroring: bool,
-    /// #506: each view inset's own renderer, by the inset's ID, drawn whole before this view's
-    /// geometry, one level deep.
-    views: BTreeMap<String, Box<Renderer>>,
-    /// #465: the flare's passes, made when a frame first has a flare, and whether this frame has.
-    flarer: Option<Box<flare::Flarer>>,
-    flaring: bool,
-    /// #468: the depth of field's passes, made when a frame first has one, and whether this
-    /// frame has.
-    doffer: Option<Box<dof::Dofer>>,
-    dofing: bool,
-    /// #166: the water's pass, made when a frame first has water, and whether this frame has.
-    waterer: Option<Box<water::Waterer>>,
-    watering: bool,
-    /// #166: view3d's `reflection` target while a frame asks for it: each mirror part's lookup.
-    reflection: Option<(wgpu::Texture, wgpu::TextureView, [u32; 2])>,
-    /// #268: view3d's `foam` target while a frame asks for it: the water's foam share.
-    foam: Option<(wgpu::Texture, wgpu::TextureView, [u32; 2])>,
-    /// #968: view3d's `normal` target while a frame asks for it: the water's shaded normal.
-    normal: Option<(wgpu::Texture, wgpu::TextureView, [u32; 2])>,
-    /// The pass resolving the geometry pass's object IDs and depth (#1173), and the planted
-    /// resolve_accumulates_frames' blend of the previous frame.
-    resolve: wgpu::RenderPipeline,
-    accumulate: Option<wgpu::RenderPipeline>,
-    /// Render pipelines this renderer compiled, so a patch's new ones can be counted (#379).
-    compiled: u32,
-    /// Each pipeline it compiled, by name, in the order it compiled them (#854).
-    names: Vec<&'static str>,
-    /// Each pipeline made, with its items, feature set and target (#432); how many of `names`
-    /// it has logged; and what the next new names were made for, by name.
-    pub log: created::Log,
-    logged: usize,
-    made_for: BTreeMap<&'static str, (Vec<String>, String, String)>,
-    /// Whether the warm-up makes the shadow maps' pipelines: not under the planted
-    /// warms_view_only, which leaves them to the first frame (#432).
-    pub warm_shadows: bool,
-    /// The opaque solids' pipelines that shade extra lobes, by cull: none, back, front (#432).
-    lobed: [Option<wgpu::RenderPipeline>; 3],
-    /// The glass copy's mip pass, kept once made (#432).
-    glass_kit: Option<glass::Kit>,
-    /// Whether a mask-alpha part casts this frame: its sets draw into shadow maps only then.
-    mask_casts: bool,
-    meshes: BTreeMap<Shape, Mesh>,
-    /// The swaying meshes' rest vertices, weights and params (#2016).
-    sways: sway::Sways,
-    batches: BTreeMap<String, Batch>,
-    /// The glyph atlas, held while a frame draws a label, and the layout and sampler it binds by.
-    atlas: Option<AtlasTexture>,
-    mask: (wgpu::BindGroupLayout, wgpu::Sampler),
-    picks: BTreeMap<String, u32>,
-    next_generation: u64,
-    targets: Option<Targets>,
-    /// The batches this frame draws, in layer order.
-    order: Vec<String>,
-    ground: [f64; 4],
-    counts: Counts,
-    /// The planted slow_gpu_frame twin's pipeline.
-    busy: Option<wgpu::RenderPipeline>,
-    shadow: Shadow,
-    /// This frame's camera: world to clip (column-major), the eye and the near plane.
-    camera: Camera,
-    /// The camera's view axis this frame (#166's `depth` target reads along it).
-    forward: [f64; 3],
-    pub profiler: Option<Profiler>,
-    /// #463: the scene's crop (Scene::crop) this frame.
-    crop: Option<[f64; 4]>,
-    /// The next frame's HDR surface and the headroom it rolls off to (#177), and the pass once
-    /// a view first presents HDR.
-    pub hdr: Option<HdrFrame>,
-    hdr_pass: Option<hdr::HdrPass>,
-    /// The look's deband amplitude, which the HDR pass allows between the slot and the output.
-    deband: f32,
-    /// The GPU surface it draws through, and the upscale's pipelines once compiled (#386).
-    pub surface: Surface,
-    pub upscale: Option<Arc<Upscale>>,
-    /// Frame history resolves this frame (#173): lines 1 device px or thinner, outlines and
-    /// labels draw after it at display size, through the camera unjittered; `jitter` is its
-    /// window frame's offset, display px right and down, added to the scene's.
-    pub history: bool,
-    pub jitter: [f64; 2],
-    /// The window a view's frames draw into and what this frame does with it (#173).
-    pub frame_history: history::State,
-    /// The key sun's cascade maps at this many times their size: 2 at the climb's top rung
-    /// (#425), else 1.
-    pub shadow_scale: u32,
-    /// The frame's full size, and its targets below scale 1.
-    size: [u32; 2],
-    low: Option<Low>,
-    low_bytes: Option<u64>,
-    outlines: Outlines,
-    /// The linear image this frame's output pass reads when passes between geometry and output
-    /// wrote one (#418's `pre_tone`); `None`, the linear target.
-    pre_tone: Option<wgpu::TextureView>,
-    /// The output pass's bind group over a post module's own target, with that target and the
-    /// covered mask it binds.
-    post_bind: Option<(wgpu::TextureView, wgpu::TextureView, wgpu::BindGroup)>,
-}
-
-/// The pass that draws thin lines and outlines at full size after the upscale (#386).
-struct Outlines {
-    pipeline: wgpu::RenderPipeline,
-    /// The screen-size labels' pass after the upscale, over the same frame and depth (#1174).
-    labels: wgpu::RenderPipeline,
-    layout: wgpu::BindGroupLayout,
-    /// The camera over the full-size slot, and over the internal size (the planted programs').
-    display: wgpu::Buffer,
-    internal: wgpu::Buffer,
-    /// Each with the core's depth target, made with the targets.
-    binds: Option<[wgpu::BindGroup; 2]>,
-    /// The solids' strokes, and the status outlines.
-    strokes: Set,
-    statuses: Set,
-}
-
-/// A box's silhouette from `cam`: each edge between a face turned toward the camera and one
-/// turned away, in world space. `model` maps the unit box (rows of a 3×4 matrix).
-fn silhouette(
-    model: &[[f64; 4]; 3],
-    cam: &deep_canvas_scene3d::scene::Camera,
-) -> Vec<[[f64; 3]; 2]> {
-    let col = |c: usize| [model[0][c], model[1][c], model[2][c]];
-    let at = |l: [f64; 3]| {
-        let mut p = [0.0; 3];
-        for (r, v) in p.iter_mut().enumerate() {
-            *v = model[r][0] * l[0] + model[r][1] * l[1] + model[r][2] * l[2] + model[r][3];
-        }
-        p
-    };
-    let cross = |a: [f64; 3], b: [f64; 3]| {
-        [
-            a[1] * b[2] - a[2] * b[1],
-            a[2] * b[0] - a[0] * b[2],
-            a[0] * b[1] - a[1] * b[0],
-        ]
-    };
-    let dot = |a: [f64; 3], b: [f64; 3]| a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-    let det = dot(col(0), cross(col(1), col(2)));
-    // Whether face `axis` on side `t` (0: −, 1: +) faces the camera. Its normal is the inverse
-    // transpose's column, from the other two columns' cross product.
-    let facing = |axis: usize, t: usize| {
-        let n = cross(col((axis + 1) % 3), col((axis + 2) % 3));
-        let sign = if t == 1 { 1.0 } else { -1.0 } * det.signum();
-        let mut centre = [0.0; 3];
-        centre[axis] = t as f64 - 0.5;
-        let toward = if cam.perspective {
-            let c = at(centre);
-            [cam.eye[0] - c[0], cam.eye[1] - c[1], cam.eye[2] - c[2]]
-        } else {
-            [-cam.forward[0], -cam.forward[1], -cam.forward[2]]
-        };
-        dot(n, toward) * sign > 0.0
-    };
-    let mut out = Vec::new();
-    for axis in 0..3 {
-        let (b, c) = ((axis + 1) % 3, (axis + 2) % 3);
-        for tb in 0..2 {
-            for tc in 0..2 {
-                if facing(b, tb) == facing(c, tc) {
-                    continue;
-                }
-                let mut p = [0.0; 3];
-                p[b] = tb as f64 - 0.5;
-                p[c] = tc as f64 - 0.5;
-                p[axis] = -0.5;
-                let start = at(p);
-                p[axis] = 0.5;
-                out.push([start, at(p)]);
-            }
-        }
-    }
-    out
-}
-
-/// A builder's mesh's contour as seen from `cam` (#1162): in world space, each edge between a
-/// triangle that faces the camera and one that doesn't, and each edge only one triangle holds
-/// when that one faces it. Vertices at one position are one, so a mesh with split normals has
-/// the same edges as its welded form.
-fn contour(
-    mesh: &deep_canvas_scene3d::geom::Mesh,
-    model: &[[f64; 4]; 3],
-    cam: &deep_canvas_scene3d::scene::Camera,
-) -> Vec<[[f64; 3]; 2]> {
-    use std::collections::BTreeMap;
-    let at = |l: [f64; 3]| {
-        let mut p = [0.0; 3];
-        for (r, v) in p.iter_mut().enumerate() {
-            *v = model[r][0] * l[0] + model[r][1] * l[1] + model[r][2] * l[2] + model[r][3];
-        }
-        p
-    };
-    let world: Vec<[f64; 3]> = mesh.positions.iter().map(|p| at(*p)).collect();
-    // One index per distinct position, by its bits.
-    let mut weld: BTreeMap<[u64; 3], u32> = BTreeMap::new();
-    let ids: Vec<u32> = world
-        .iter()
-        .enumerate()
-        .map(|(i, p)| *weld.entry(p.map(f64::to_bits)).or_insert(i as u32))
-        .collect();
-    let sub = |a: [f64; 3], b: [f64; 3]| [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
-    let mut faces_by_edge: BTreeMap<(u32, u32), Vec<bool>> = BTreeMap::new();
-    for t in mesh.indices.as_chunks::<3>().0 {
-        let [a, b, c] = t.map(|i| ids[i as usize]);
-        let [pa, pb, pc] = [a, b, c].map(|i| world[i as usize]);
-        let (u, v) = (sub(pb, pa), sub(pc, pa));
-        let n = [
-            u[1] * v[2] - u[2] * v[1],
-            u[2] * v[0] - u[0] * v[2],
-            u[0] * v[1] - u[1] * v[0],
-        ];
-        let toward = if cam.perspective {
-            sub(cam.eye, pa)
-        } else {
-            [-cam.forward[0], -cam.forward[1], -cam.forward[2]]
-        };
-        let front = n[0] * toward[0] + n[1] * toward[1] + n[2] * toward[2] > 0.0;
-        for (x, y) in [(a, b), (b, c), (c, a)] {
-            if x != y {
-                faces_by_edge
-                    .entry((x.min(y), x.max(y)))
-                    .or_default()
-                    .push(front);
-            }
-        }
-    }
-    // In screen px about the eye: an edge whose both sides the mesh covers all along it is a
-    // fold inside the outline (a mitre seen across a corner), never the outline itself.
-    let proj = |p: [f64; 3]| {
-        let d = sub(p, cam.eye);
-        let dot = |a: [f64; 3]| d[0] * a[0] + d[1] * a[1] + d[2] * a[2];
-        let k = if cam.perspective {
-            cam.scale / dot(cam.forward).max(1e-9)
-        } else {
-            cam.scale
-        };
-        [dot(cam.right) * k, dot(cam.up) * k]
-    };
-    let flat: Vec<[[f64; 2]; 3]> = mesh
-        .indices
-        .as_chunks::<3>()
-        .0
-        .iter()
-        .map(|t| t.map(|i| proj(world[ids[i as usize] as usize])))
-        .collect();
-    let covered = |q: [f64; 2]| {
-        flat.iter().any(|[a, b, c]| {
-            let side = |p: [f64; 2], r: [f64; 2]| {
-                (r[0] - p[0]) * (q[1] - p[1]) - (r[1] - p[1]) * (q[0] - p[0])
-            };
-            let (x, y, z) = (side(*a, *b), side(*b, *c), side(*c, *a));
-            (x >= 0.0 && y >= 0.0 && z >= 0.0) || (x <= 0.0 && y <= 0.0 && z <= 0.0)
-        })
-    };
-    let outer = |a: [f64; 3], b: [f64; 3]| {
-        let (pa, pb) = (proj(a), proj(b));
-        let (dx, dy) = (pb[0] - pa[0], pb[1] - pa[1]);
-        let len = (dx * dx + dy * dy).sqrt();
-        if len < 1e-9 {
-            return false;
-        }
-        let n = [-dy / len * 1.5, dx / len * 1.5];
-        [0.125, 0.375, 0.625, 0.875].iter().any(|s| {
-            let m = [pa[0] + dx * s, pa[1] + dy * s];
-            !covered([m[0] + n[0], m[1] + n[1]]) || !covered([m[0] - n[0], m[1] - n[1]])
-        })
-    };
-    faces_by_edge
-        .into_iter()
-        .filter(|(_, f)| match f.as_slice() {
-            [one] => *one,
-            many => many.iter().any(|x| *x) && many.iter().any(|x| !*x),
-        })
-        .map(|((a, b), _)| [world[a as usize], world[b as usize]])
-        .filter(|[a, b]| outer(*a, *b))
-        .collect()
-}
+mod renderer;
+pub use renderer::*;
 
 fn rgb4(v: [f64; 3]) -> [f32; 4] {
     [v[0] as f32, v[1] as f32, v[2] as f32, 0.0]
@@ -4456,6 +4043,7 @@ impl Renderer {
             let order = &self.order;
             self.batches.retain(|id, _| order.contains(id));
         }
+        self.count_draws(scene);
         self.update_culls(device);
         self.ensure_casters(device, scene);
         self.motion_frame = self.targets.as_ref().and_then(|t| {
@@ -4978,6 +4566,7 @@ impl Renderer {
                 self.prepare_batch(device, layer, &scene.camera);
             }
             self.sways.move_all(device, scene);
+            self.count_draws(scene);
             self.update_culls(device);
             return;
         }
@@ -5020,6 +4609,7 @@ impl Renderer {
         self.counts.instances_written += written;
         self.counts.replayed += scene.layers.len() as u32;
         self.sways.move_all(device, scene);
+        self.count_draws(scene);
         self.update_culls(device);
     }
 
@@ -5139,6 +4729,40 @@ impl Renderer {
             self.compiled += 1;
             self.names.push("scene3d.rows_cut");
         }
+    }
+
+    /// #1636: this frame's draws of meshes in the color pass, each named by its layer's
+    /// `draw_names` for its first record's item and its shape.
+    fn count_draws(&mut self, scene: &Scene) {
+        let mut draws = Vec::new();
+        for layer in &scene.layers {
+            let Some(batch) = self.batches.get(&layer.id).filter(|b| b.bundle.is_some()) else {
+                continue;
+            };
+            for &(call, instances) in &batch.calls {
+                let (owner, shape) = match call {
+                    Call::Set(key) => {
+                        (batch.solids.get(&key).and_then(|s| s.owners.first()), key.0)
+                    }
+                    Call::Clear(k) => match batch.clear_draws.get(k) {
+                        Some(((shape, _), _)) => (batch.clear.owners.get(k), *shape),
+                        None => (None, Shape::Box),
+                    },
+                };
+                let Some(item) = owner.and_then(|o| o.split('#').next()) else {
+                    continue;
+                };
+                // A shape its level of detail chose is named as its item's first.
+                let names = &layer.draw_names;
+                let named = names.get(&(item.to_string(), shape)).or_else(|| {
+                    let first = names.range((item.to_string(), Shape::Box)..).next();
+                    first.filter(|((i, _), _)| i == item).map(|(_, n)| n)
+                });
+                let (mesh, material) = named.cloned().unwrap_or((item.to_string(), String::new()));
+                draws.push((item.to_string(), mesh, material, instances));
+            }
+        }
+        self.counts.draws = draws;
     }
 
     /// Each culled batch's lists, for every view this frame draws it into: the stale views'
@@ -6119,10 +5743,14 @@ impl Renderer {
         batch.casters.retain(|_, set| set.count > 0);
         let mut fed_uploads: BTreeMap<String, BTreeSet<u32>> = BTreeMap::new();
         for (key, set) in batch.solids.iter_mut().chain(batch.casters.iter_mut()) {
-            let started = std::time::Instant::now();
+            let started = web_time::Instant::now();
             set.finish(device, &mut next, &mut written);
             if layer.fed.contains_key(&key.3) {
-                let owner = set.owners.first().and_then(|o| o.split('#').next()).unwrap_or_default();
+                let owner = set
+                    .owners
+                    .first()
+                    .and_then(|o| o.split('#').next())
+                    .unwrap_or_default();
                 let ms = started.elapsed().as_secs_f64() * 1000.0;
                 *self.counts.upload_ms.entry(owner.to_string()).or_default() += ms;
             }
@@ -6323,9 +5951,10 @@ impl Renderer {
             return;
         }
         std::mem::swap(&mut batch.key, &mut batch.next_key);
-        let bundle = self.encode(device, &layer.id);
+        let (bundle, calls) = self.encode(device, &layer.id);
         let batch = self.batches.get_mut(&layer.id).expect("made above");
         batch.bundle = Some(bundle);
+        batch.calls = calls;
         // An instancer's elements draw as its instanced batch, which names the instancer (#1921).
         let elements: BTreeSet<&str> = layer
             .solids
@@ -6500,9 +6129,10 @@ impl Renderer {
         draws
     }
 
-    /// Records a batch's draws into a render bundle.
-    fn encode(&self, device: &Device, id: &str) -> wgpu::RenderBundle {
+    /// Records a batch's draws into a render bundle, with each draw of a mesh it records (#1636).
+    fn encode(&self, device: &Device, id: &str) -> (wgpu::RenderBundle, Vec<(Call, u32)>) {
         let batch = &self.batches[id];
+        let mut calls = Vec::new();
         let mut enc =
             device
                 .device
@@ -6525,10 +6155,12 @@ impl Renderer {
         // detailed band's pixel quads and move their shading's derivatives with GPU timing.
         let (detailed, lower): (Vec<_>, Vec<_>) =
             batch.solids.iter().partition(|(_, set)| !set.lower);
-        for ((shape, maps, op, _), set) in detailed.into_iter().chain(lower) {
+        for (key, set) in detailed.into_iter().chain(lower) {
+            let (shape, maps, op, _) = key;
             let (Some(buffer), Some(mesh)) = (&set.buffer, self.meshes.get(shape)) else {
                 continue;
             };
+            calls.push((Call::Set(*key), set.len()));
             let index = *maps & MAPS_INDEX;
             // An instancer's batch draws the rows its cull kept for the camera, by the count the
             // GPU wrote (#484).
@@ -6610,6 +6242,7 @@ impl Renderer {
                         enc.set_vertex_buffer(1, buffer.slice(..));
                         enc.set_index_buffer(mesh.indices.slice(..), wgpu::IndexFormat::Uint32);
                         enc.draw_indexed(0..mesh.count, 0, k..k + 1);
+                        calls.push((Call::Clear(k as usize), 1));
                     }
                     continue;
                 }
@@ -6620,6 +6253,7 @@ impl Renderer {
                     enc.set_vertex_buffer(1, buffer.slice(..));
                     enc.set_index_buffer(mesh.indices.slice(..), wgpu::IndexFormat::Uint32);
                     enc.draw_indexed(0..mesh.count, 0, k..k + 1);
+                    calls.push((Call::Clear(k as usize), 1));
                     continue;
                 }
                 for &p in kinds {
@@ -6632,6 +6266,7 @@ impl Renderer {
                     enc.set_vertex_buffer(1, buffer.slice(..));
                     enc.set_index_buffer(mesh.indices.slice(..), wgpu::IndexFormat::Uint32);
                     enc.draw_indexed(0..mesh.count, 0, k..k + 1);
+                    calls.push((Call::Clear(k as usize), 1));
                 }
             }
         }
@@ -6657,7 +6292,8 @@ impl Renderer {
             enc.set_bind_group(1, &atlas.bind, &[]);
             enc.draw(0..6, 0..batch.labels.len());
         }
-        enc.finish(&wgpu::RenderBundleDescriptor { label: Some(id) })
+        let bundle = enc.finish(&wgpu::RenderBundleDescriptor { label: Some(id) });
+        (bundle, calls)
     }
 
     /// What the GPU drew for `solid` in the frame just drawn (#2016): the gust its sway used,
@@ -7391,7 +7027,15 @@ impl Renderer {
             let (linear, ids) = (t.linear_view.clone(), t.ids_view.clone());
             let reflection = self.reflection.as_ref().map(|r| r.1.clone());
             let keep = self.planted.keeps_mirror;
-            jobs.extend(m.jobs(device, slot, &linear, &ids, reflection, &self.profiler, keep));
+            jobs.extend(m.jobs(
+                device,
+                slot,
+                &linear,
+                &ids,
+                reflection,
+                &self.profiler,
+                keep,
+            ));
         }
         // #166: the water over the bed the geometry left, under the mirror's picture.
         if let (true, Some(w), Some(t)) =

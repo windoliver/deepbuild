@@ -41,6 +41,8 @@ pub enum Plant {
     DropsFirstBotEntry,
     /// A logic bot's play makes an entry only when its value changes, not its serial (#184 criterion 10).
     EntryOnChange,
+    /// The explorer and the descender walk as if the grid had no links (#1048 criterion 4).
+    IgnoresLinks,
 }
 
 impl Plant {
@@ -60,6 +62,7 @@ impl Plant {
             "menu-release-always" => Some(Plant::MenuReleaseAlways),
             "drops-first-bot-entry" => Some(Plant::DropsFirstBotEntry),
             "entry-on-change" => Some(Plant::EntryOnChange),
+            "explorer-ignores-links" => Some(Plant::IgnoresLinks),
             _ => None,
         }
     }

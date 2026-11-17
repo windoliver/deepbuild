@@ -142,6 +142,26 @@ const MAX_ISOLATED: usize = 32;
 /// 10-bit code, and operators run on [`LINEAR`], so a pass's input is copied there.
 const ACC: wgpu::TextureFormat = wgpu::TextureFormat::Rgba32Float;
 
+/// #2031: how far past their own marks the groups inside `marks` draw: a paint part's margin or
+/// a pass's grow, the largest.
+fn past_marks(marks: &[Drawn]) -> f64 {
+    let past = |s: &Scope| match s {
+        Scope::Opacity {
+            effect: Some(e), ..
+        } => {
+            let paint = e.paint.as_ref().map_or(0.0, |p| f64::from(p.margin()));
+            let passes = e.passes.iter().map(|p| p.grow.unwrap_or(0.0));
+            passes.fold(paint, f64::max)
+        }
+        _ => 0.0,
+    };
+    marks
+        .iter()
+        .flat_map(|d| &d.scopes)
+        .map(past)
+        .fold(0.0, f64::max)
+}
+
 /// The px `r` (u, `[x, y, w, h]`) grown by `grow` covers of a `size` target, `[x, y, w, h]`.
 fn px(r: [f64; 4], grow: f64, size: [u32; 2]) -> [u32; 4] {
     let (w, h) = (f64::from(size[0]), f64::from(size[1]));
@@ -207,6 +227,7 @@ pub struct Groups {
     stage: Option<Stage>,
     drawn: Option<drawn::Drawn>,
     paintfx: Option<crate::paintfx::PaintFx>,
+    lightfx: Option<crate::lightfx::LightFx>,
     mips: Option<deep_effects_render::mips::Mips>,
 }
 
@@ -451,6 +472,7 @@ impl Groups {
             stage: None,
             drawn: None,
             paintfx: None,
+            lightfx: None,
             mips: None,
         }
     }
@@ -877,7 +899,35 @@ impl Groups {
             }
             None => None,
         };
+        // #2031: a lit group's run of lit children, lit at each pixel over their bounds grown by
+        // what a paint part or a pass inside draws past them.
+        let lit = match effect.as_deref().and_then(|e| e.light.clone()) {
+            Some(light) => {
+                let zoom = x.options.zoom;
+                let grow = past_marks(&inside);
+                let rect = px(bounds.map(|v| v * zoom), (grow + 1.0) * zoom, x.size);
+                let out = self.take(x.device, x.size, ACC);
+                let device = x.device;
+                self.lightfx
+                    .get_or_insert_with(|| crate::lightfx::LightFx::new(device, ACC))
+                    .run(
+                        device,
+                        &light,
+                        zoom,
+                        x.space == Space::Linear,
+                        &view,
+                        rect,
+                        &out,
+                    );
+                Some((out, grow))
+            }
+            None => None,
+        };
         let (shown, cover, rect) = match effect.as_deref() {
+            Some(e) if e.light.is_some() => {
+                let (out, grow) = lit.as_ref().expect("lit above");
+                (out.create_view(&Default::default()), false, *grow)
+            }
             Some(e) if e.paint.is_some() => {
                 let (out, _) = painted.as_ref().expect("painted above");
                 let grow = e.paint.as_ref().map_or(0.0, |p| f64::from(p.margin()));
@@ -945,6 +995,9 @@ impl Groups {
         self.composite(x.device, into, m, x.size);
         self.give(&children);
         if let Some((out, _)) = &painted {
+            self.give(out);
+        }
+        if let Some((out, _)) = &lit {
             self.give(out);
         }
         Ok(())
@@ -1288,277 +1341,4 @@ fn upload(device: &Device, image: &image::RgbaImage, size: [u32; 2]) -> wgpu::Te
     )
 }
 
-impl Groups {
-    /// `image` laid over the empty target `into`, in `space`.
-    fn laid(
-        &mut self,
-        device: &Device,
-        image: &image::RgbaImage,
-        into: &wgpu::Texture,
-        size: [u32; 2],
-        decode: bool,
-    ) {
-        let texture = upload(device, image, size);
-        let source = texture.create_view(&Default::default());
-        let mix = Mix {
-            decode,
-            ..Mix::over(&source, size)
-        };
-        self.composite(device, into, mix, size);
-    }
-
-    /// `layer` composed: its target, in the space it composites in, and each blend's inputs.
-    pub fn compose(
-        &mut self,
-        device: &Device,
-        vello: &mut Vello2d,
-        layer: &Layer<'_>,
-    ) -> Result<(wgpu::Texture, Vec<BlendInputs>, Vec<Value>), Value> {
-        self.free.append(&mut self.taken);
-        // A frame isolates at most 32 groups (Frame and group).
-        let drawn = layer
-            .layers
-            .iter()
-            .flat_map(|l| l.iter())
-            .flat_map(|m| &m.scopes);
-        let mut groups = BTreeSet::new();
-        for s in drawn {
-            if matches!(s, Scope::Opacity { item, .. } if !item.contains('#')) {
-                groups.insert(s.item());
-                if groups.len() > MAX_ISOLATED {
-                    return Err(refused("operator_limit", format!("items/{}", s.item())));
-                }
-            }
-        }
-        let mut stack: Option<wgpu::Texture> = None;
-        let mut inputs = Vec::new();
-        let mut costs = Vec::new();
-        if let (true, Some(page)) = (layer.ground, layer.page) {
-            let linear = layer.base.is_some();
-            if let Some(t) = self
-                .passes_on(device)
-                .ground(device, page, layer.size, linear)
-            {
-                stack = Some(self.copied(device, &t, layer.size));
-            }
-        }
-        for marks in layer.layers {
-            let (done, kept, cost) = self.one(device, vello, layer, marks)?;
-            inputs.extend(kept);
-            costs.extend(cost);
-            stack = Some(match stack {
-                Some(under) => {
-                    let view = done.create_view(&Default::default());
-                    self.composite(device, &under, Mix::over(&view, layer.size), layer.size);
-                    self.give(&done);
-                    under
-                }
-                None => done,
-            });
-        }
-        let stack = match stack {
-            Some(stack) => stack,
-            None => self.take(device, layer.size, ACC),
-        };
-        Ok((stack, inputs, costs))
-    }
-
-    /// A frame's own copy of `t`.
-    fn copied(&mut self, device: &Device, t: &wgpu::Texture, size: [u32; 2]) -> wgpu::Texture {
-        let copy = self.take(device, size, ACC);
-        let mut encoder = device.device.create_command_encoder(&Default::default());
-        encoder.copy_texture_to_texture(t.as_image_copy(), copy.as_image_copy(), whole(size));
-        device.queue.submit([encoder.finish()]);
-        copy
-    }
-
-    /// The page's ground alone, read back: what `layers` answers for its `ground` row.
-    pub fn ground(
-        &mut self,
-        device: &Device,
-        page: &Page,
-        size: [u32; 2],
-    ) -> Result<Option<Picture>, Value> {
-        let Some(t) = self.passes_on(device).ground(device, page, size, false) else {
-            return Ok(None);
-        };
-        let d = &device.device;
-        let format = wgpu::TextureFormat::Rgba8Unorm;
-        let out = target(d, size, format);
-        let view = out.create_view(&Default::default());
-        let mut encoder = d.create_command_encoder(&Default::default());
-        self.finish(d, &mut encoder, &t, &view, format, false);
-        let image =
-            deep_marks_render::gpu::read_back(d, &device.queue, encoder, &out, size, format)?;
-        Ok(Some(Picture {
-            image,
-            floats: Some(f32_bytes(&read_texture(device, &t, 0).1)),
-            inputs: Vec::new(),
-            costs: Vec::new(),
-        }))
-    }
-
-    /// One writer layer composed alone.
-    fn one(
-        &mut self,
-        device: &Device,
-        vello: &mut Vello2d,
-        layer: &Layer<'_>,
-        marks: &[Arc<Drawn>],
-    ) -> Result<(wgpu::Texture, Vec<BlendInputs>, Vec<Value>), Value> {
-        let linear = layer.base.is_some();
-        let done = self.take(device, layer.size, ACC);
-        if let Some(base) = layer.base {
-            self.laid(device, base, &done, layer.size, true);
-        }
-        let other = layer.other.map(|image| {
-            let t = target(&device.device, layer.size, ACC);
-            self.laid(device, image, &t, layer.size, linear);
-            t
-        });
-        let marks: Vec<Drawn> = marks.iter().map(|m| (**m).clone()).collect();
-        let mut run = Run {
-            device,
-            vello,
-            size: layer.size,
-            options: layer.options,
-            space: if linear {
-                Space::Linear
-            } else {
-                Space::Encoded
-            },
-            clock: layer.clock,
-            roles: layer.roles,
-            packs: layer.packs,
-            canonical: layer.canonical,
-            planted: layer.planted,
-            around: Vec::new(),
-            inputs: layer.keep.then(Vec::new),
-            written: Vec::new(),
-            other,
-            late: Vec::new(),
-            page: layer.page,
-            all: &marks,
-            costs: Vec::new(),
-        };
-        self.marks(&mut run, &marks, &done)?;
-        for (group, k) in std::mem::take(&mut run.late) {
-            self.late(&mut run, &group, k, &done)?;
-        }
-        if let Some(guard) = layer.guard {
-            let written = std::mem::take(&mut run.written);
-            self.guarded(&run, guard, &written, &done);
-        }
-        if let Some(page) = layer.page.filter(|p| p.relief.is_some()) {
-            let before = self.copied(device, &done, layer.size);
-            let view = before.create_view(&Default::default());
-            self.passes_on(device).relief(device, page, &view, &done);
-            self.give(&before);
-        }
-        Ok((done, run.inputs.unwrap_or_default(), run.costs))
-    }
-
-    /// Moves what `written` holds of `done` past the status guard, which reads sRGB-encoded pixels.
-    fn guarded(&mut self, x: &Run<'_>, guard: &Guard, written: &[[u32; 4]], done: &wgpu::Texture) {
-        if written.is_empty() {
-            return;
-        }
-        let d = &x.device.device;
-        let view = done.create_view(&Default::default());
-        let encoded = self.take(x.device, x.size, ACC);
-        let encoded_view = encoded.create_view(&Default::default());
-        let mut encoder = d.create_command_encoder(&Default::default());
-        self.resolve_as(d, &mut encoder, &view, &encoded_view, ACC, x.space, true);
-        x.device.queue.submit([encoder.finish()]);
-        let moved = self.take(x.device, x.size, ACC);
-        let moved_view = moved.create_view(&Default::default());
-        self.stage
-            .get_or_insert_with(|| Stage::new(x.device))
-            .guard_into(x.device, guard, &encoded_view, &moved_view);
-        for rect in written {
-            let mix = Mix {
-                mode: REPLACE,
-                decode: x.space == Space::Linear,
-                straight: true,
-                rect: *rect,
-                ..Mix::over(&moved_view, x.size)
-            };
-            self.composite(x.device, done, mix, x.size);
-        }
-    }
-
-    /// `--planted`: a group's passes run on the finished layer, over its bounds + grow.
-    fn late(
-        &mut self,
-        x: &mut Run<'_>,
-        run: &[Drawn],
-        k: usize,
-        into: &wgpu::Texture,
-    ) -> Result<(), Value> {
-        let Scope::Opacity {
-            item,
-            effect: Some(e),
-            ..
-        } = &run[0].scopes[k]
-        else {
-            return Ok(());
-        };
-        let inside: Vec<Drawn> = run.iter().map(|d| without(d, k)).collect();
-        let bounds = union(&inside);
-        let view = into.create_view(&Default::default());
-        let (passed, grow) = self.passes(x, item, e, bounds, &view)?;
-        let mix = Mix {
-            mode: REPLACE,
-            rect: px(bounds, grow, x.size),
-            ..Mix::over(&passed, x.size)
-        };
-        self.composite(x.device, into, mix, x.size);
-        Ok(())
-    }
-
-    /// The composed layer into `view`, premultiplied and sRGB-encoded.
-    pub fn finish(
-        &mut self,
-        device: &deep_gpu::counted::Wgpu,
-        encoder: &mut wgpu::CommandEncoder,
-        done: &wgpu::Texture,
-        view: &wgpu::TextureView,
-        format: wgpu::TextureFormat,
-        linear: bool,
-    ) {
-        let layer = done.create_view(&Default::default());
-        let space = if linear {
-            Space::Linear
-        } else {
-            Space::Encoded
-        };
-        self.resolve(device, encoder, &layer, view, format, space);
-    }
-
-    /// `layer` drawn and read back.
-    pub fn picture(
-        &mut self,
-        device: &Device,
-        vello: &mut Vello2d,
-        layer: &Layer<'_>,
-    ) -> Result<Picture, Value> {
-        let d = &device.device;
-        let (done, inputs, costs) = self.compose(device, vello, layer)?;
-        let format = wgpu::TextureFormat::Rgba8Unorm;
-        let out = target(d, layer.size, format);
-        let view = out.create_view(&Default::default());
-        let mut encoder = d.create_command_encoder(&Default::default());
-        self.finish(d, &mut encoder, &done, &view, format, layer.base.is_some());
-        let image =
-            deep_marks_render::gpu::read_back(d, &device.queue, encoder, &out, layer.size, format)?;
-        let floats = layer
-            .keep
-            .then(|| f32_bytes(&read_texture(device, &done, 0).1));
-        Ok(Picture {
-            image,
-            floats,
-            inputs,
-            costs,
-        })
-    }
-}
+mod compose;
