@@ -214,6 +214,17 @@ In R1 · preview · `d1:d746974fa9afd5e951f76f9af38954b0ad7f436f2120dc974da65e5e
 
 Answers an ask with an option and the decision that covers it. The core applies the answer only when that decision is active and of the ask's kind and scope; otherwise the ask reaches you.
 
+### `deep.registerPort`
+
+In R1 · preview · `d1:c1a0515e41f2a3869341f5cb779d2ce7e1098964f8aa4a1f1645968f95b4538c`
+
+The plug-in's side of a piece's port: it lists the entries and the occurrence rows it takes and the sources it gives for readings in, each a source the plug-in registers, and says whether its gear makes sound, which makes the plug-in a device gate owner whatever the document says. Registering opens nothing: a port opens only after a person clicks Connect, and sends only while the piece plays live.
+
+| Parameter | Type | Required |
+|---|---|---|
+| `name` | string, `^[a-z][a-z0-9_.-]*$` | yes |
+| `port` | object | yes |
+
 ### `deep.registerEnvironment`
 
 In R1 · preview · `d1:1e34ef8a97474d44b1cbff77e9b435e5e6b18ac4123956b0d29066f1a990dd5a`
