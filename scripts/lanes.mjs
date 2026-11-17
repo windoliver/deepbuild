@@ -314,6 +314,9 @@ alone.push('tests/acceptance/1732/');
 // #190's files build deep-logic here, at the merge base and for Linux x86_64 in Docker, start headless Chrome, and read
 // CPU and wall times.
 alone.push('tests/acceptance/190/');
+// #416's interface files build deep-logic here, at the merge base and for Linux x86_64 in Docker, start headless
+// Chrome, and time checks and frames against the merge base's.
+alone.push('tests/acceptance/416/interfaces/');
 
 // #1477's suite opens real windows and times them against the lane's rule: one file at a time, both files timed.
 alone.push('tests/acceptance/1477/');
@@ -889,6 +892,10 @@ timed.push('tests/acceptance/192/voxel/ac10-budgets.test.ts');
 // #192's pack files (blind) each build deep-show; budget-ceilings and budget-fields also build the merge base's in
 // its own target folder and run 256 MiB providers.
 alone.push('tests/acceptance/192/packs/', 'tests/acceptance/192/packs-redraft-ac12/');
+// #416's layout files (blind) each build deep-show and a wat assembler; budgets also builds the merge base's deep-show
+// in its own kept folder and judges a 16 MiB asset's validation on the reference Mac.
+alone.push('tests/acceptance/416/layouts/');
+timed.push('tests/acceptance/416/layouts/budgets.test.ts');
 
 // #1624: this live session spends plan usage and is explicitly run by hand, not as a skipped unit test.
 byHand.push('tests/acceptance/1330/start.live.test.ts');

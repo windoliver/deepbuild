@@ -14,8 +14,10 @@ pub mod bake;
 pub mod bindings;
 pub mod budget;
 pub mod checks;
+pub mod first_party;
 mod fixtures;
 pub mod grid_bot;
+pub mod interfaces;
 pub mod judder;
 pub mod keyframes;
 pub mod lane;
@@ -101,6 +103,8 @@ pub struct Planted {
     /// #1164: the restore a seek to step 225 starts from zeroes the u32 at the program's
     /// `moves_at`, a count it keeps only in memory.
     pub restore_zeroes_move_count: bool,
+    /// #416: a resolver that gives an outside pack's interface a first-party pack's binding.
+    pub outside_interface_binds_all: bool,
     /// #210: an `each` reading's read region that keeps only the last value a step received.
     pub read_region_keeps_last: bool,
 }
@@ -154,6 +158,7 @@ impl Planted {
             "preview_writes_item_memory" => p.preview_writes_item_memory = true,
             "preview_runs_on_hover_only" => p.preview_runs_on_hover_only = true,
             "restore_zeroes_move_count" => p.restore_zeroes_move_count = true,
+            "outside_interface_binds_all" => p.outside_interface_binds_all = true,
             "read_region_keeps_last" => p.read_region_keeps_last = true,
             _ => return None,
         }
@@ -387,6 +392,9 @@ pub struct Logic {
     /// Each library's fixture records by its hash and fixtures, once run on this core, and those running.
     verified: BTreeMap<String, Result<Value, Vec<Value>>>,
     verifying: BTreeSet<String>,
+    /// The library an interface's fixture runs on, by hash, while it runs (#416): it is under
+    /// test there, so its own fixtures aren't asked of it again.
+    under_test: Option<String>,
 }
 
 fn bad(what: &str) -> Value {
@@ -624,6 +632,7 @@ impl Logic {
             Some("step") => self.step(line).unwrap_or_else(|e| e),
             Some("query") => self.query(line).unwrap_or_else(|e| e),
             Some("pack_check") => self.pack_check(line).unwrap_or_else(|e| e),
+            Some("first_party") => first_party::reply(),
             Some("claim") => self.claim(line).unwrap_or_else(|e| e),
             Some("append") => self.append(line).unwrap_or_else(|e| e),
             Some("open_save") => self.open_save(line).unwrap_or_else(|e| e),
