@@ -175,7 +175,7 @@ All made at test time in `helpers.ts`; no personal data; CC0. Control and item I
   reached: 2 before any press, and 8 control values × 2 readouts for each flag.
 - **The chimney** (`dropDoc`; AC9): a ball inside an opaque box, thrown at (1.5 × pick, 1 + 10 × pick, 0) m/s by the
   waited choice `pick` (soft: 1 m/s straight up; hard: 11 m/s up and 1.5 m/s along x); stages `aim` (0.1 s), `look`
-  (0.45 s, waits for `go`), `after` (4 s); 4.5 s long. Every surface is unlit, and the ball draws only past `look` (an
+  (0.45 s, waits for `go`), `after` (4 s); 4.5 s long. Every surface but the ball is unlit, and the ball draws only past `look` (an
   opacity channel held at 0 until 0.5 s of the document's time). In the world the ball is a block, so it slides to rest
   after landing where a sphere would roll on; at `after` nothing moves, the hard ball at rest on the floor in view.
 

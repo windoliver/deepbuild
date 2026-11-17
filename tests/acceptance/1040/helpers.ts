@@ -490,9 +490,10 @@ export function mapsDoc(evidence: string, size: 2048 | 1024): JsonObject {
 // 2.3 s after its launch and stops; at `after` nothing moves, the hard ball shows at rest on the floor and the soft
 // one is inside the chimney.
 
-/** Every surface is unlit (Material: `unlit`), each its own flat color: at the base a hidden ball that moves still changed
+/** Every surface but the ball is unlit (Material: `unlit`; the ball, hidden at `look` by its opacity, keeps the default
+ * material, under which the base draws it), each its own flat color: at the base a hidden ball that moves still changed
  * the lit frame around it (572 pixels at `look`, by up to 11 code values), and an unlit surface takes no light. */
-const DROP_COLORS: Record<string, V3> = { ground: [0.25, 0.3, 0.2], left: [0.5, 0.35, 0.2], right: [0.2, 0.35, 0.5], chimney: [0.45, 0.45, 0.5], ball: [0.9, 0.2, 0.1] };
+const DROP_COLORS: Record<string, V3> = { ground: [0.25, 0.3, 0.2], left: [0.5, 0.35, 0.2], right: [0.2, 0.35, 0.5], chimney: [0.45, 0.45, 0.5] };
 export const DROP = { size: [480, 360] as Size, rate: [30, 1] as Rate, world: 'drop_world' };
 export function dropDoc(): JsonObject {
   const world = world60({
@@ -514,7 +515,7 @@ export function dropDoc(): JsonObject {
     left: box3([1, 6, 1], [-3, 3, -2], { material: 'left_mat' }),
     right: box3([1, 2, 1], [3, 1, -2], { material: 'right_mat' }),
     chimney: box3([1, 4, 1], [0, 2, 0], { material: 'chimney_mat' }),
-    ball: { kind: 'mark.sphere@1', params: { size: [0.22, 0.22, 0.22] }, at: { pos: [0, 0.11, 0] }, material: 'ball_mat' },
+    ball: { kind: 'mark.sphere@1', params: { size: [0.22, 0.22, 0.22] }, at: { pos: [0, 0.11, 0] } },
   }, {
     requires: { modules: { scene3d: '^1' } },
     controls: {
