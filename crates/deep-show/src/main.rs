@@ -1352,7 +1352,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 // #548's deep_query region map that lays the reads out by name.
                 || *p == logic::MAP_READS_BY_NAME
                 // #466's boil and blur in deep-show's frames.
-                || films::PLANTED.contains(p)
+                || films::PLANTED.contains(p) || sandbox::PLANTED.contains(p)
                 || caption_design::PLANTED.contains(p)
         })
         .map(str::to_string);
@@ -2181,7 +2181,7 @@ fn modules(set: BuildSet) -> Vec<Module> {
             m.manifest.implementation.equivalence = deep_canvas::registry::Equivalence::Measured;
             m
         } else {
-            deep_canvas_sandbox::module::module()
+            sandbox::shipped(deep_canvas_sandbox::module::module())
         });
     }
     // Issue #533: the logic module, on sandbox, its arrays column sources (#535); `test-logic-patch` seals a patch release of the
@@ -2195,7 +2195,7 @@ fn modules(set: BuildSet) -> Vec<Module> {
         } else if cfg!(feature = "test-logic-needs-physics") {
             logic_needs_physics()
         } else {
-            deep_logic::module::module()
+            sandbox::shipped(deep_logic::module::module())
         };
         // A build without physics refuses the logic items that need it (#533); one with it binds
         // physics.cast@1 for the items that ask it between steps (#213).

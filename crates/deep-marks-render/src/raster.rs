@@ -17,6 +17,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use deep_canvas_marks::data;
+use deep_canvas_marks::light;
 use deep_canvas_marks::look::Look;
 use deep_canvas_marks::path::Verb;
 use deep_canvas_marks::scene::{self, Mark, Planted, Record, Rgb};
@@ -31,8 +32,8 @@ use serde_json::{json, Map, Value};
 use vello_cpu::kurbo::{Affine, Cap, RoundedRect, Shape};
 use vello_cpu::peniko::{Fill as FillRule, FontData, ImageAlphaType};
 use vello_cpu::{
-    Image, ImageSource, Level, Pixmap, RasterizerSettings, RenderContext, RenderMode,
-    RenderSettings, Resources,
+    Image, ImageSource, Level, PixelMetadata, Pixmap, RasterizerSettings, RenderContext,
+    RenderMode, RenderSettings, Resources,
 };
 
 use crate::asset;
@@ -1168,159 +1169,6 @@ fn draw(req: &Request, kept: &RefCell<asset::Kept>) -> Result<Value, Value> {
     Ok(answer)
 }
 
-/// Each group that names a blend mode and that `marks` draw through, by its item ID, in the order
-/// they first draw.
-fn blended<'a>(marks: impl IntoIterator<Item = &'a Drawn>) -> Vec<(String, Blend)> {
-    let mut out: Vec<(String, Blend)> = Vec::new();
-    for drawn in marks {
-        for s in &drawn.scopes {
-            if let Scope::Opacity {
-                item,
-                blend: Some(blend),
-                ..
-            } = s
-            {
-                if !out.iter().any(|(g, _)| g == item) {
-                    out.push((item.clone(), *blend));
-                }
-            }
-        }
-    }
-    out
-}
-
-/// A blended group's two 8-bit premultiplied inputs, as the layer composited them.
-struct Inputs {
-    group: String,
-    blend: Blend,
-    backdrop: Pixmap,
-    source: Pixmap,
-}
-
-/// `pixmap` over the whole canvas, pixel for pixel.
-fn put(ctx: &mut RenderContext, pixmap: Pixmap) {
-    let at = *ctx.transform();
-    ctx.set_transform(Affine::IDENTITY);
-    ctx.reset_paint_transform();
-    ctx.set_paint(Image {
-        image: ImageSource::Pixmap(Arc::new(pixmap)),
-        sampler: sampler(scene::ImageSampling::Nearest),
-    });
-    ctx.fill_rect(&rect([
-        0.0,
-        0.0,
-        f64::from(ctx.width()),
-        f64::from(ctx.height()),
-    ]));
-    ctx.set_transform(at);
-}
-
-/// One writer layer's `marks` drawn by `p`. A layer that holds a group in a blend mode draws
-/// alone, so the group blends only with what its own layer drew before it, and each such group
-/// is composited from two 8-bit premultiplied pictures, that backdrop and its own content drawn
-/// isolated: the inputs a golden's expected value applies the formula to (Frame and group: blend
-/// modes), which this returns.
-fn composite<'s>(
-    p: &mut Painter<'s, RenderContext>,
-    marks: &[&Drawn],
-    new_ctx: &dyn Fn() -> RenderContext,
-    raster: RasterizerSettings,
-) -> Result<Vec<Inputs>, Value> {
-    if blended(marks.iter().copied()).is_empty() {
-        p.marks(marks.iter().copied())?;
-        return Ok(Vec::new());
-    }
-    let sub = |p: &Painter<'s, RenderContext>| Painter {
-        store: p.store,
-        kept: p.kept,
-        zoom: p.zoom,
-        spans_apart: p.spans_apart,
-        anim: p.anim.clone(),
-        ..Painter::on(new_ctx())
-    };
-    let render = |q: &mut Painter<'s, RenderContext>| {
-        let mut pixmap = Pixmap::new(q.ctx.width(), q.ctx.height());
-        q.ctx.render_with(&mut pixmap, &mut q.resources, raster);
-        pixmap
-    };
-    let mut inputs = Vec::new();
-    let mut layer = sub(p);
-    let mut i = 0;
-    while i < marks.len() {
-        // The next mark inside a group that names a blend, and the group's run of marks.
-        let found = marks[i..].iter().enumerate().find_map(|(k, d)| {
-            d.scopes.iter().enumerate().find_map(|(at, s)| match s {
-                Scope::Opacity {
-                    item,
-                    alpha,
-                    blend: Some(b),
-                    ..
-                } => Some((i + k, at, item.clone(), *alpha, *b)),
-                _ => None,
-            })
-        });
-        let Some((start, at, group, alpha, blend)) = found else {
-            layer.marks(marks[i..].iter().copied())?;
-            break;
-        };
-        let end = marks[start..]
-            .iter()
-            .position(|d| !d.scopes.iter().any(|s| s.item() == group))
-            .map_or(marks.len(), |n| start + n);
-        layer.marks(marks[i..start].iter().copied())?;
-        let backdrop = render(&mut layer);
-        let mut content = sub(p);
-        let inside: Vec<Drawn> = marks[start..end]
-            .iter()
-            .map(|d| Drawn {
-                scopes: d.scopes[at + 1..].to_vec(),
-                ..(*d).clone()
-            })
-            .collect();
-        content.marks(inside.iter())?;
-        p.texts.append(&mut content.texts);
-        let source = render(&mut content);
-        // #467: a part an item's paint builds from its coverage, which `source` holds.
-        let part = match &marks[start].scopes[at] {
-            Scope::Opacity {
-                effect: Some(e), ..
-            } => e.paint.clone(),
-            _ => None,
-        };
-        let source = match part {
-            Some(part) => painted(&source, &part, p.zoom as f32),
-            None => source,
-        };
-        // What the layer drew so far keeps its texts' readings.
-        p.texts.append(&mut layer.texts);
-        layer = sub(p);
-        put(&mut layer.ctx, backdrop.clone());
-        let outer = &marks[start].scopes[..at];
-        layer
-            .scopes
-            .enter(&mut layer.ctx, &mut layer.resources, outer);
-        let mode = (blend != Blend::Normal).then(|| deep_marks_vello::blend_mode(blend));
-        Canvas::push_layer(&mut layer.ctx, None, mode, Some(alpha as f32), None);
-        put(&mut layer.ctx, source.clone());
-        layer.ctx.pop_layer();
-        layer
-            .scopes
-            .enter(&mut layer.ctx, &mut layer.resources, &[]);
-        p.scopes.offscreen += 3;
-        inputs.push(Inputs {
-            group,
-            blend,
-            backdrop,
-            source,
-        });
-        i = end;
-    }
-    p.texts.append(&mut layer.texts);
-    let drawn = render(&mut layer);
-    put(&mut p.ctx, drawn);
-    Ok(inputs)
-}
-
 /// #467: each text's bounds grown by what its paint draws past its run (a drop's copy, an outer
 /// glow or bevel), and its drop's glyphs under `drop`; a number whose bounds then pass its box
 /// doesn't fit and fails (Honest numbers), naming it.
@@ -1827,6 +1675,7 @@ pub fn planted_path(name: &str) -> Option<Planted> {
         deep_canvas_marks::warp::ANCHORS_ONLY => Some(Planted::WarpAnchorsOnly),
         "merge_zero_fills" => Some(Planted::MergeZeroFills),
         "repeater_evaluates_at_t" => Some(Planted::RepeaterEvaluatesAtT),
+        "light_stale_list" => Some(Planted::LightStaleList),
         _ => {
             let op = name.strip_prefix("moved:")?;
             OPS.iter().find(|o| **o == op).map(|o| Planted::Moved(o))
@@ -1857,5 +1706,7 @@ pub(crate) fn clock_ms() -> f64 {
         * 1000.0
 }
 
+mod composite;
 mod path_answer;
+use composite::composite;
 pub use path_answer::*;
