@@ -2,7 +2,7 @@
 // can't see is BLOCKED, never a pass.) Two kit runs on the same fixture at once share no run token, so neither
 // sees the other's processes.
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
-import { chmodSync, existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -93,6 +93,29 @@ exit 1
       const report = await runKit(k, fill!, { parts: ['fixed'] });
       expect(report.cases.map((c) => [c.outcome, ...c.codes])).toEqual([['BLOCKED', 'ps_unavailable'], ['BLOCKED', 'ps_unavailable']]);
       expect(report.cases[0]!.message).toMatch(/ETIMEDOUT/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it('reads BLOCKED, and runs ps once, when the table is more than the kit has room for', async () => {
+    const k = kit();
+    const [fill] = cleanFills(k);
+    // The real ps, but its whole-table reading prints 68 MB, past the kit's 64 MiB, and notes each such run.
+    const dir = mkdtempSync(join(tmpdir(), 'deep-env-ps-'));
+    writeFileSync(join(dir, 'ps'), `#!/bin/sh
+case "$1" in -A*) echo run >> '${join(dir, 'runs')}'; head -c 68000000 /dev/zero | tr '\\0' 'x'; exit 0 ;; esac
+PATH=/bin:/usr/bin:/usr/sbin exec ps "$@"
+`);
+    chmodSync(join(dir, 'ps'), 0o755);
+    process.env.PATH = `${dir}:/bin:/usr/bin:/usr/sbin`;
+    try {
+      const report = await runKit(k, fill!, { parts: ['fixed'] });
+      expect(report.cases.map((c) => [c.outcome, ...c.codes])).toEqual([['BLOCKED', 'ps_unavailable'], ['BLOCKED', 'ps_unavailable']]);
+      expect(report.cases[0]!.message).toMatch(/ENOBUFS/);
+      // Each case reads the whole table twice, before up and at its clean-up. An overflow is not run again, since
+      // it would overflow the same way: a retry would make these eight.
+      expect(readFileSync(join(dir, 'runs'), 'utf8')).toBe('run\n'.repeat(4));
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
