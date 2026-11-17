@@ -480,12 +480,15 @@ export function mapsDoc(evidence: string, size: 2048 | 1024): JsonObject {
   }, { requires: { modules: { scene3d: '^1' } }, assets });
 }
 
-// AC9's piece: a 3D film, 480 × 360 at 30 fps, 1.4 s, in present mode. The world `drop_world` (60 Hz): a ball (0.11 m, 0.43 kg)
-// at rest on the floor inside a chimney, an opaque box 1 × 4 × 1 m that hides it until it rises past 3.9 m; the launch
-// `throw` on each entry of the choice `pick` sends it up at 1 + 10 × pick m/s (Control: a choice reads as its option's
-// index: soft 1 m/s, hard 11 m/s). Stage `aim` (0.1 s) waits for pick, `look` (0.45 s) for the choice `go`, `after`
-// (1.0 s) ends it. At `look` the soft ball has landed and rests, the hard one still rises inside the chimney: the same
-// picture at the same step (the ball itself draws only past `look`, from 0.5 s); at `after` the hard ball shows above the chimney.
+// AC9's piece: a 3D film, 480 × 360 at 30 fps, 4.5 s, in present mode. The world `drop_world` (60 Hz): a ball (a 0.22 m
+// block of 0.43 kg in the world, so it slides to rest where a sphere would roll on; drawn as a sphere) at rest on the
+// floor inside a chimney, an opaque box 1 × 4 × 1 m; the launch `throw` on each entry of the choice `pick` sends it off
+// at (1.5 × pick, 1 + 10 × pick, 0) m/s (Control: a choice reads as its option's index: soft 1 m/s straight up, hard
+// 11 m/s up and 1.5 m/s along x). Stage `aim` (0.1 s) waits for pick, `look` (0.45 s) for the choice `go`, `after`
+// (4 s) ends it. At `look` the soft ball has landed and rests and the hard one is in flight: the same picture at the
+// same step, since the ball itself draws only past `look`, from 0.5 s. The hard ball lands about 3.4 m along x some
+// 2.3 s after its launch and stops; at `after` nothing moves, the hard ball shows at rest on the floor and the soft
+// one is inside the chimney.
 
 /** Every surface is unlit (Material: `unlit`), each its own flat color: at the base a hidden ball that moves still changed
  * the lit frame around it (572 pixels at `look`, by up to 11 code values), and an unlit surface takes no light. */
@@ -495,16 +498,16 @@ export function dropDoc(): JsonObject {
   const world = world60({
     seed: 1040,
     contact_materials: { clay: { friction: 0.9, restitution: 0, density: 1000 } },
-    shapes: { floor: { kind: 'box', half: [10, 0.1, 10] }, ball: { kind: 'sphere', radius: 0.11 } },
+    shapes: { floor: { kind: 'box', half: [10, 0.1, 10] }, ball: { kind: 'box', half: [0.11, 0.11, 0.11] } },
     bodies: {
       floor: { kind: 'static', shapes: [{ shape: 'floor', contact_material: 'clay' }], pose: { pos: [0, -0.1, 0] } },
       ball: { kind: 'dynamic', shapes: [{ shape: 'ball', contact_material: 'clay' }], pose: { pos: [0, 0.11, 0] }, mass: 0.43 },
     },
     checkpoint: { every: 6 },
-    inputs: { throw: { kind: 'launch', targets: ['ball'], on: { control: 'pick', each: 'entry' }, data: { linear: 'vec3(0, 1 + 10 * pick, 0)' } } },
+    inputs: { throw: { kind: 'launch', targets: ['ball'], on: { control: 'pick', each: 'entry' }, data: { linear: 'vec3(1.5 * pick, 1 + 10 * pick, 0)' } } },
     outputs: { ball: { from: 'ball', read: 'pose', to: 'items/ball/at' } },
   });
-  return scene(DOC.drop, 'Two launches up a chimney', 'film', '1.4s', DROP.rate, DROP.size, {
+  return scene(DOC.drop, 'Two launches up a chimney', 'film', '4.5s', DROP.rate, DROP.size, {
     cam: perspective([0, 3.5, 10], [0, 3.5, 0], 45),
     ...Object.fromEntries(Object.entries(DROP_COLORS).map(([id, c]) => [`${id}_mat`, { kind: 'material@1', params: { base_color: [...c, 1], unlit: true } }])),
     ground: box3([12, 0.1, 12], [0, -0.05, 0], { material: 'ground_mat' }),
@@ -521,7 +524,7 @@ export function dropDoc(): JsonObject {
     markers: {
       aim: { kind: 'stage', name: 'Aim', t: '0.1s', waits_for: 'pick' },
       look: { kind: 'stage', name: 'Look', t: '0.45s', waits_for: 'go' },
-      after: { kind: 'stage', name: 'After', t: '1s' },
+      after: { kind: 'stage', name: 'After', t: '4s' },
     },
     worlds: { [DROP.world]: world },
     // The ball draws only past `look` (from 0.5 s of the document's time, between the two stages: the still at `after`

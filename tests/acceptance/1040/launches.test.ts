@@ -2,9 +2,10 @@
 // moving, export as two states whose next frames differ; a page keyed by the picture and the logic alone fails this
 // fixture"
 //
-// The piece (helpers.ts `dropDoc`): a ball inside an opaque chimney, launched up at 1 m/s (soft) or 11 m/s (hard) by the
-// waited choice `pick`; at the stage `look` the soft ball has landed and rests while the hard one still rises inside
-// the chimney, both hidden; after `go`, at the stage `after`, the hard ball shows above the chimney. No logic item.
+// The piece (helpers.ts `dropDoc`): a ball inside an opaque chimney, launched at 1 m/s up (soft) or 11 m/s up and 1.5 m/s
+// aside (hard) by the waited choice `pick`; at the stage `look` the soft ball has landed and rests while the hard one
+// is in flight, the ball not yet drawn; after `go`, at the stage `after`, nothing moves and the hard ball shows at rest
+// on the floor. No logic item.
 // asserts:
 //   - the fixture, in the app (png_seq stills on each path's input track): at marker `look` the two launches draw the
 //     same picture; at marker `after` they draw apart;
@@ -24,7 +25,7 @@ const temp = useTemp();
 const PLANTED = 'page_keys_by_picture_and_logic';
 // The app's entries sit where a page stamps them (Export: playable page, "stamped on the frame grid where it rests"):
 // pick at 0.1 s, where the piece first rests at `aim`, and go at frame 14 of 30 a second (329,280,000 flicks), where
-// the play rests at `look`. The ball's flight runs on the clock, so another launch time is another picture at `after`.
+// the play rests at `look`, so the app's ball and the page's fly alike.
 const pick = (v: string): JsonObject => entry(0.1, 'pick', v);
 const go: JsonObject = { ...entry(0, 'go', 'on'), t: 329_280_000 };
 const PATHS: Record<string, { track: JsonObject[]; marker: string }> = {
@@ -41,7 +42,7 @@ function app(): Map<string, string> {
   const stills = appStills(shows(FULL), temp(), dropDoc(), Object.entries(PATHS).map(([name, p]) => ({ name, track: p.track, range: { still: { marker: p.marker } } })),
     { size: DROP.size, rate: DROP.rate }, temp(), 'the chimney');
   expect(stills.get('soft, at look'), 'the fixture: at look the soft and the hard launch draw the same picture').toBe(stills.get('hard, at look'));
-  expect(stills.get('soft, after'), 'the fixture: at after the hard ball shows above the chimney and the soft one doesn\'t').not.toBe(stills.get('hard, after'));
+  expect(stills.get('soft, after'), 'the fixture: at after the hard ball shows on the floor and the soft one doesn\'t').not.toBe(stills.get('hard, after'));
   fixture = stills;
   return stills;
 }
