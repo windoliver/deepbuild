@@ -149,3 +149,21 @@ AC8 #518.b0585e2f a 10 s 1080p60 export, this build over the merge base: 59.84 s
 AssertionError: INCONCLUSIVE: a 10 s 1080p60 export, this build over the merge base: 59.84 s over 58.87 s, 80.37 s over 63.03 s, 58.51 s over 57.57 s, 58.38 s over 57.65 s, 58.35 s over 57.65 s (ratios 1.016, 1.275, 1.016, 1.013, 1.012 against 1.05) on Mac17,10 macOS 26B8119: INCONCLUSIVE (the five runs are neither all within 1.05 nor all over it by more than the 25.1% margin); this is not a pass
  Test Files  1 failed (1)
       Tests  1 failed | 1 passed (2)
+
+# memory.test.ts once more on the second merged tree, as a diagnosis of the failed reading: the same file, unchanged, beside a sampler that
+# keeps every sample (ps -ax -o pid,ppid,rss,command, about five a second) of every process whose command names the test's deep-show binary.
+# 2026-11-17 10:21, one-minute load 196 on 18 cores, under a build grant, after target/ was built again (it had been cleaned).
+
+== memory.test.ts (second run on the second merged tree)
+ Test Files  1 passed (1)
+      Tests  4 passed (4)
+
+# What the sampler saw: each run of deep-show in the file's order, and the peak resident memory of each child it started.
+#   frame count leg (the suite's slow tool)   run 20671: decode-worker 22363, 22.0 MiB
+#   6 s cut as a PNG sequence                 run 22577: encode-tool 22618, 18.9 MiB; decode-worker 22765, 21.9 MiB
+#   60 s film as a PNG sequence               run 22821: encode-tool 22871, 19.0 MiB; decode-worker 24466, 22.1 MiB
+#   planted frame count leg                   run 24955: decode-worker 25624, 22.2 MiB
+#   planted 6 s cut                           run 25827: encode-tool 25874, 27.9 MiB; decode-worker 26051, 22.0 MiB
+#   planted 60 s film                         run 26111: encode-tool 26146, 109.3 MiB; decode-worker 28259, 22.1 MiB
+# The failed reading's 41.1 MiB equals the encode tool's 19.0 MiB and the decode worker's 22.1 MiB together. In this run the sampler caught
+# no process in the "(deep-show-full)" form that the failed reading's message lists, so that a decode worker takes that form is not shown.
