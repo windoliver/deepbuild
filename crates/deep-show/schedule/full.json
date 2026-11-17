@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "full",
-  "set_digest": "c6bed156756e586416e70a08ffbf41807c5edb9ec0d5a6a8ac70e19907357494",
+  "set_digest": "1e1baacd16d220846b4f12de6b16b49834a5de84b8c6dee5524096f41e3f35bb",
   "runtime_digest": "b0d9637fcffe5b58be4a3025853302613578659fa143fc9ca6bd110364894ab8",
   "interfaces": {
     "building@1": {
