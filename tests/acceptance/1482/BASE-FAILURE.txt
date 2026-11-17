@@ -1,0 +1,104 @@
+Base-commit failure output for tests/acceptance/1482 (issue #1482: a hover frame has a budget, and a frame that changes
+nothing is caught)
+
+Base: 80561d40c ("Merge pull request #2726 …"), worktree clean but for this folder.
+Machine: Apple M5 Max, 18 cores, 64 GiB, Darwin 27.2.0; one-minute load average 527 before the run and 535 after
+(other sessions' builds), so no timing could have counted here in any case.
+Built: npm ci; npm run build --workspaces; CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 cargo build --locked -p
+       deep-replica --bin deep-drive --features env-plants (through scripts/lease; 43 min under that load).
+
+Run once:  CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 sh scripts/lease npx vitest run --root tests/acceptance/1482
+           --no-file-parallelism --testTimeout=600000
+           (scripts/lease: "DeepBuild isn't set up here (no hub token), so … runs unleased")
+
+Result: nothing passes at the base: 25 of 25 tests fail, in 131 s. Every failure is a missing surface, test by test:
+
+hover.test.ts (8 failed)
+  - AC2 AC3 AC5 AC6 the shipped app reads PASS …; AC2 planted hover-notifies-root; AC3 planted animates-unchanged: the
+    launch reply has no read_back: the base ignores the new launch fields (arm, read_back, accessibility) and launches
+    its app. AssertionError: launch answers the read-back it runs, read_back: "tiles": {"replica":"replica:8798x1",
+    "window":{"size":[968,792],"scale":2},"locale":"en-US","frames":"dirty","ok":true,"t":0}: expected undefined to be
+    'tiles'. (The two DEEP_HUB_PLANT names are ones the base app doesn't know, so it ignores them and fails the same way.)
+  - AC4 read-back off: the same missing read_back, with "off".
+  - AC4 read-back failing: BLOCKED: deep-drive didn't say {"ready": true} with DEEP_DRIVE_PLANT=read-back-fails:
+    {"ready":false,"error":"no planted replica read-back-fails"}
+  - AC5 planted notifies-root-per-move, and AC5's counting reader (which reads that run): BLOCKED, "no planted replica
+    notifies-root-per-move".
+  - AC6 planted drops-notify-record: BLOCKED, "no planted replica drops-notify-record".
+counts.test.ts (9 failed)
+  - AC9 (both), AC10, AC11's counts (both), AC12 (both), AC13 (both): the missing read_back at launch, with "off".
+    (AC9's, AC11's, AC12's and AC13's DEEP_HUB_PLANT names are ignored at the base.)
+wheel.test.ts (3 failed)
+  - AC7 uniform_list, AC7 list: the missing read_back at launch (the base ignores arm: "lists" and opens its app).
+  - AC7 planted: BLOCKED, "no planted replica wheel-notifies-every-event".
+access.test.ts (3 failed)
+  - AC8, all three: the 100 sibling frames' replica fails at the missing read_back at launch, so whether cached views
+    meet the first criterion is never read, and nothing is passed as not applicable.
+bench.test.ts (2 failed)
+  - AC1 and AC11's timing: the release bench doesn't build: "error: the package 'deep-replica' does not contain this
+    feature: frame-clocks".
+
+What lies past that first failure was checked by hand on the same base binary (one deep-drive process on the suite's
+1,000-row fixture, launched as the suite launches it; a script in the session's scratchpad, not in this folder), so each
+later step also fails for a missing surface, not for a wrong expected value:
+  - launch with arm, read_back and accessibility -> {"replica":"replica:4797x1","window":{"size":[968,792],"scale":2},
+    "locale":"en-US","frames":"dirty","ok":true,"t":0}: no arm, read_back or accessibility in the reply
+  - see -> 22 session rows wholly in the 1936 x 1584 window, each 64 device px tall, the first at y 176, the last at
+    y 1520 (its bottom on the window's bottom edge): the journeys' rows are there
+  - {"call":"act","act":{"kind":"hover","point":[…]}}  -> refused: "act hover needs a locator"
+  - {"call":"act","locator":{"id":"session:…"},"act":{"kind":"wheel","dy":10,"events":120}} -> refused: "\"wheel\" is
+    no action; they are click, double_click, context_click, type, press, drag, scroll, hover and set"
+  - {"call":"refresh"}       -> refused: "\"refresh\" is no call; the calls are launch, act, open, notification,
+                                wait_for, see, probe, screenshot, record, motion, expect, feed, resize, menus, close,
+                                ui_check and motion_check"
+  - {"call":"accessibility"} -> refused the same way
+  - {"call":"close"}         -> frames holds claim, clean, steps and findings only: no list, entities, root,
+                                read_back, zero_tile_frames or changed_area
+
+Run 1, as vitest printed it (trimmed to the summary; each failure's lines are quoted above):
+
+ RUN  v5.0.5 <repo>/tests/acceptance/1482
+ ❯ counts.test.ts (9 tests | 9 failed) 42324ms
+   ❯ #1482 the count journeys on the 1,000-row list (9)
+     × AC9 an event from an unrelated session renders 0 views on the page 16499ms
+     × AC9 a planted page that redraws for every session fails, naming the view 4040ms
+     × AC10 three runs of each journey give identical counts 3275ms
+     × AC11 the hover over 10,000 rows builds the same rows and elements per frame as over 1,000, and no frame builds more rows than the window shows 4167ms
+     × AC11 a planted list that builds a row out of view fails, naming the count 2949ms
+     × AC12 a write that equals what is shown, from a hub tick, a reading or a setter, notifies 0 entities and draws 0 frames 2900ms
+     × AC12 a planted setter that notifies without comparing fails, naming the entity 2786ms
+     × AC13 one row's title changes in the 1,000-row list: the frame builds at most the rows on screen and renders no view outside the list 2613ms
+     × AC13 a planted page that redraws with the list fails, naming the view 2990ms
+ ❯ hover.test.ts (8 tests | 8 failed) 45679ms
+   ❯ #1482 the hover journey over the 1,000-row list, judged from its own report (8)
+     × AC2 AC3 AC5 AC6 the shipped app reads PASS: each move draws, every frame names its notify and its views, no view outside the list is notified, and at most 1% of frames change no tile 38801ms
+     × AC2 a planted notify at the window root, on each row the pointer enters or leaves, fails, naming the root view 1906ms
+     × AC3 a planted animation of an unchanged value fails, naming the view 2999ms
+     × AC4 a run with the read-back off reads INCONCLUSIVE, never PASS 1822ms
+     × AC4 a run whose read-back fails reads INCONCLUSIVE, never PASS 22ms
+     × AC5 a planted extra notify on the window root per pointer move fails, naming the notified entity's view 28ms
+     × AC5 a reader that only counts repainted views passes that plant, and fails AC5's test 0ms
+     × AC6 a frame with neither a notify nor a refresh named reads INCONCLUSIVE, never PASS 28ms
+ ❯ access.test.ts (3 tests | 3 failed) 14905ms
+   ❯ #1482 AC8 cached views, if they meet the first criterion (3)
+     × AC8 with no assistive tech, a cached view renders 0 times over 100 sibling frames 14760ms
+     × AC8 with accessibility active, a frame that doesn't redraw a cached view keeps its nodes, action listeners and focus, node for node with a frame after a refresh 2ms
+     × AC8 the plain case, GPUI's reuse copying no accessibility nodes, fails, naming the node 0ms
+ ❯ bench.test.ts (2 tests | 2 failed) 653ms
+   ❯ #1482 the release replica journey, timed (2)
+     × AC1 hovering 200 rows at 1936 × 1584: CPU per frame under 2 ms at p95, under 25% of a complete frame's, judged at the lane's margin 514ms
+     × AC11 the same hover over 10,000 rows: CPU per frame within the lane's margin of 1,000 rows 137ms
+ ❯ wheel.test.ts (3 tests | 3 failed) 13865ms
+   ❯ #1482 AC7 wheel events at the end of a list (3)
+     × AC7 120 wheel events at the end of a uniform_list repaint 0 views and draw at most 1 frame; a wheel 1 px from the end moves exactly 1 px, then nothing 11995ms
+     × AC7 120 wheel events at the end of a list repaint 0 views and draw at most 1 frame; a wheel 1 px from the end moves exactly 1 px, then nothing 1780ms
+     × AC7 a planted notify on every wheel event fails, naming the view 31ms
+
+ Test Files  5 failed (5)
+      Tests  25 failed (25)
+   Duration  131.21s (tests 92%, transform 6%, import 2%)
+
+Not run: none of these tests has run against an implementation (none exists), so no test here has been seen to pass,
+and no judge here has read a real frames report. The release bench's runs, the lane's judgeLimit on them, and the
+10,000-row launch were never reached at the base. The judges and journeys were type-checked
+(node node_modules/typescript/bin/tsc -p tests/acceptance/1482/tsconfig.json, exit 0) but not exercised on data.
