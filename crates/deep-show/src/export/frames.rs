@@ -2,6 +2,10 @@
 //! GPU (its BLAKE3 digest, film.blank's and film.wrap's readings, frames.finite's count) and given
 //! to the writer as it is drawn, never stored raw; the writers the targets name; and the machine's
 //! GPU lease the export holds while it draws.
+//!
+//! Issue #518: the writer is an encode job in the tool that registers the codec, opened before the
+//! first frame is drawn; a 4:2:0 codec's tool is handed each frame's NV12 planes from the GPU's
+//! conversion pass, once the frame's hash and planes are done.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -13,7 +17,8 @@ use serde_json::{json, Value};
 
 #[cfg(feature = "test-export-guards")]
 use super::test_guards;
-use super::{feed, stopped, Guard, Job, Shard};
+use super::tools::{Run as Run_, Tool};
+use super::{feed, program, stopped, Guard, Job, Shard};
 use crate::hub::{Hub, Planted};
 
 impl Hub<'_> {
@@ -80,7 +85,9 @@ impl Hub<'_> {
                     .map(|g| g.device().clone())
                     .ok_or_else(|| stopped(k, "gpu_unavailable", "no GPU to hash the frames on"))?;
                 let joins = self.scenario.planted == Some(Planted::ChunkTreeWrongOrder);
-                run.seen = Some(Seen::new(gpu, size, joins));
+                // #518: a 4:2:0 codec's tool reads the conversion pass's planes of each frame.
+                let nv12 = sink.nv12().then(|| self.nv12_pass(&gpu));
+                run.seen = Some(Seen::new(gpu, size, joins, nv12));
             }
             let keep = if self.guard_planted(Guard::WrapAgainstSecond) {
                 1
@@ -112,15 +119,130 @@ impl Hub<'_> {
                         "what": format!("frame {k}'s float target from `{item}` holds {} non-finite values, the first at {:?}", found.count, found.first)}));
                 }
             }
+            // Planted (#518): the hand-off never gives the encode job the last frame's buffer.
+            if run.dropped == Some(k) {
+                continue;
+            }
+            // The frame is handed over once its hash and its planes are done on the GPU.
+            let planes = match sink.nv12() {
+                true => Some(seen.converted().map_err(|()| {
+                    stopped(
+                        k,
+                        "device_lost",
+                        &format!("the GPU device was lost at frame {k}"),
+                    )
+                })?),
+                false => None,
+            };
             let key = k == shard.frames.start || run.chapters.contains(&k);
-            self.sink_push(sink, shard, k, &px, size, key, &run.scratch)?;
+            let bytes = planes.as_deref().unwrap_or(&px);
+            self.sink_push(sink, &shard.frames, k, bytes, size, key, run)?;
         }
         self.sink_end_shard(sink)
     }
 
-    /// The writer the target names, before its first frame: the encode tool for media's video
-    /// (a part per shard, joined after) and png (one sequence), or a test module's writer, which
-    /// takes the frames' rows into the delivery.
+    /// #518: opens the sink's next encode job at `size`, for `frames` when it is a shard's part
+    /// and for the whole film when it is a sequence. Nothing waits for the tool's answer here, so
+    /// an open asked for before the first frame is drawn runs beside the export's preparing.
+    pub(super) fn sink_open(
+        &mut self,
+        sink: &mut Sink,
+        frames: &std::ops::Range<i64>,
+        size: [u16; 2],
+        run: &Run,
+    ) -> Result<(), Value> {
+        // Planted: the job is told of one frame fewer when the dropped frame is among its own.
+        let count = |f: &std::ops::Range<i64>| {
+            f.end - f.start - i64::from(run.dropped.is_some_and(|l| f.contains(&l)))
+        };
+        let stale = self.media.encoder_stale.clone();
+        match sink {
+            Sink::Parts {
+                open,
+                done,
+                ask,
+                ext,
+                nv12,
+                ..
+            } => {
+                let mut ask = ask.clone();
+                ask["size"] = json!(size);
+                let path = run.scratch.join(format!("part{}.{ext}", done.len()));
+                let (first, n) = (frames.start, count(frames));
+                *open = Some(feed::Part::open(
+                    self.encode_tool()?,
+                    ask,
+                    path,
+                    first,
+                    n,
+                    *nv12,
+                    stale,
+                )?);
+            }
+            Sink::Png {
+                open, out, frames, ..
+            } => {
+                let ask = json!({"op": "export.png", "size": size});
+                let (first, n) = (frames.start, count(frames));
+                *open = Some(feed::Part::open(
+                    self.encode_tool()?,
+                    ask,
+                    out.clone(),
+                    first,
+                    n,
+                    false,
+                    stale,
+                )?);
+            }
+            Sink::Program {
+                tool,
+                open,
+                out,
+                frames,
+                ask,
+                part,
+            } => {
+                let Run_::Program { argv, cwd } = &tool.run else {
+                    return Err(json!({"code": "no_writer", "tool": tool.id}));
+                };
+                if let Some(part) = part.as_mut() {
+                    *part = run.scratch.join("part0.mp4");
+                }
+                let mut ask = ask.clone();
+                ask["size"] = json!(size);
+                ask["frames"] = json!(count(frames));
+                ask["first"] = json!(frames.start);
+                ask["out"] = json!(part.as_ref().unwrap_or(&*out));
+                let planted = program::Planted {
+                    waits_forever: self.guard_planted(Guard::WaitsForSlotForever),
+                    no_window: self.guard_planted(super::READS_ALL_FIRST),
+                    before_hash: self.guard_planted(Guard::SendsBeforeHash),
+                };
+                // A tool that takes GPU surfaces is handed a ring of `frame_delay` + 2 slots.
+                #[cfg(target_os = "macos")]
+                let ring = match (tool.surface, self.gpu3().map(|g| g.device().clone())) {
+                    (true, Some(gpu)) => {
+                        let ring = program::Slots::new(gpu, size, tool.window())?;
+                        ask["ring"] = json!(ring.name);
+                        ask["slots"] = json!(tool.window());
+                        Some(ring)
+                    }
+                    _ => None,
+                };
+                #[cfg(not(target_os = "macos"))]
+                let ring = None;
+                let session = program::Session::start(tool, argv, cwd, &ask, planted, ring)?;
+                *open = Some((session, size));
+            }
+            Sink::Raw(_) => {}
+        }
+        Ok(())
+    }
+
+    /// The writer the target names, before its first frame: the encode tool that registers the
+    /// codec (#518) for media's video (a part per shard, joined after) and png (one sequence),
+    /// the build's own or a plug-in's program, or a test module's writer, which takes the
+    /// frames' rows into the delivery.
     #[allow(clippy::too_many_arguments)]
     pub(super) fn sink_for(
         &mut self,
@@ -130,29 +252,55 @@ impl Hub<'_> {
         entry: &Value,
         temp: &Path,
         (p, q): (u32, u32),
-        frames: i64,
+        frames: std::ops::Range<i64>,
+        tool: Option<&Tool>,
     ) -> Result<Sink, Value> {
-        match (target, entry["writer"].as_str()) {
-            ("video", Some("media")) => {
+        let nv12 = super::tools::yuv420(&job.codec);
+        match (target, entry["writer"].as_str(), tool) {
+            ("video" | "png", Some("media"), Some(tool))
+                if matches!(tool.run, Run_::Program { .. }) =>
+            {
+                // The job as the tool's wire gives it: its frames' format, and the kind's params.
+                let ask = json!({"op": "open", "format": if nv12 { "nv12" } else { "bgra8" },
+                    "conversion": nv12.then_some(deep_gpu::nv12::VERSION), "frame_rate": [p, q], "color": "bt709",
+                    "alpha": if job.alpha { "straight" } else { "none" },
+                    "params": {"codec": job.codec, "keyframe_interval": job.keyframe_interval, "quality": job.quality}});
+                Ok(Sink::Program {
+                    tool: tool.clone(),
+                    open: None,
+                    out: temp.to_path_buf(),
+                    frames,
+                    ask,
+                    part: (target == "video").then(PathBuf::new),
+                })
+            }
+            ("video", Some("media"), Some(tool)) => {
                 let grain = self.has_grain(doc);
+                let mut ask = transfer(
+                    json!({"op": "export.part", "codec": job.codec, "rate": [p, q], "quality": job.quality, "grain": grain,
+                    "keyframe_interval": job.keyframe_interval}),
+                    job,
+                );
+                if let Run_::Own(Some(ms)) = &tool.run {
+                    ask["stub_open_ms"] = json!(ms);
+                }
                 Ok(Sink::Parts {
+                    tool: tool.clone(),
                     open: None,
                     done: Vec::new(),
                     encoder: Value::Null,
-                    ask: transfer(
-                        json!({"op": "export.part", "codec": job.codec, "rate": [p, q], "quality": job.quality, "grain": grain,
-                        "keyframe_interval": job.keyframe_interval}),
-                        job,
-                    ),
+                    ask,
                     ext: if job.codec == "prores_4444" {
                         "mov"
                     } else {
                         "mp4"
                     },
-                    nv12: job.codec != "prores_4444",
+                    nv12,
+                    opened: None,
                 })
             }
-            ("png", Some("media")) => Ok(Sink::Png {
+            ("png", Some("media"), Some(tool)) => Ok(Sink::Png {
+                tool: tool.clone(),
                 open: None,
                 out: temp.to_path_buf(),
                 frames,
@@ -169,64 +317,45 @@ impl Hub<'_> {
         }
     }
 
-    /// Hands frame `k` to the writer as it is drawn.
+    /// Hands frame `k`, one of `frames`, to the writer as it is drawn: `bytes` are its NV12
+    /// planes when the sink takes them, else its BGRA8 rows.
     #[allow(clippy::too_many_arguments)]
     pub(super) fn sink_push(
         &mut self,
         sink: &mut Sink,
-        shard: &Shard,
+        frames: &std::ops::Range<i64>,
         k: i64,
-        bgra: &[u8],
+        bytes: &[u8],
         size: [u16; 2],
         key: bool,
-        scratch: &Path,
+        run: &Run,
     ) -> Result<(), Value> {
-        let px = [u32::from(size[0]), u32::from(size[1])];
-        match sink {
-            Sink::Parts {
-                open,
-                done,
-                ask,
-                ext,
-                nv12,
-                ..
-            } => {
-                if open.is_none() {
-                    let mut ask = ask.clone();
-                    ask["size"] = json!(size);
-                    let path = scratch.join(format!("part{}.{ext}", done.len()));
-                    let n = shard.frames.end - shard.frames.start;
-                    *open = Some(feed::Part::open(
-                        self.encode_tool()?,
-                        ask,
-                        path,
-                        shard.frames.start,
-                        n,
-                        *nv12,
-                    )?);
-                }
-                let part = open.as_mut().expect("opened above");
-                part.push(self.encode_tool()?, k, bgra, px, key)
+        if !matches!(sink, Sink::Raw(_)) {
+            // A job opened ahead for another size than the frames drew is ended and opened again.
+            if sink.open_size().is_some_and(|s| s != size) {
+                self.sink_abort(sink);
             }
-            Sink::Png { open, out, frames } => {
-                if open.is_none() {
-                    let ask = json!({"op": "export.png", "size": size});
-                    *open = Some(feed::Part::open(
-                        self.encode_tool()?,
-                        ask,
-                        out.clone(),
-                        k,
-                        *frames,
-                        false,
-                    )?);
-                }
+            if sink.open_size().is_none() {
+                self.sink_open(sink, frames, size, run)?;
+            }
+        }
+        match sink {
+            Sink::Parts { open, .. } => {
+                let part = open.as_mut().expect("opened above");
+                part.push(self.encode_tool()?, k, bytes, key)
+            }
+            Sink::Png { open, .. } => {
                 open.as_mut()
                     .expect("opened above")
-                    .push(self.encode_tool()?, k, bgra, px, false)
+                    .push(self.encode_tool()?, k, bytes, false)
+            }
+            Sink::Program { open, .. } => {
+                let (session, _) = open.as_mut().expect("opened above");
+                session.push(k, bytes, key)
             }
             Sink::Raw(file) => {
                 use std::io::Write as _;
-                file.write_all(bgra).map_err(|e| {
+                file.write_all(bytes).map_err(|e| {
                     stopped(
                         k,
                         "export_unwritable",
@@ -237,17 +366,30 @@ impl Hub<'_> {
         }
     }
 
+    /// #518: ends a sink's open encode job without its file: the build's own tool by ending its
+    /// process, whose stdin then closes, and a plug-in's program by its own PID.
+    pub(super) fn sink_abort(&mut self, sink: &mut Sink) {
+        match sink {
+            Sink::Parts { open, .. } | Sink::Png { open, .. } => drop(open.take()),
+            Sink::Program { open, .. } => drop(open.take()),
+            Sink::Raw(_) => {}
+        }
+        self.end_stale_encoder();
+    }
+
     /// A shard's part, finished once its last frame is in.
     pub(super) fn sink_end_shard(&mut self, sink: &mut Sink) -> Result<(), Value> {
         if let Sink::Parts {
             open,
             done,
             encoder,
+            opened,
             ..
         } = sink
         {
             if let Some(part) = open.take() {
                 let path = part.path.clone();
+                *opened = opened.or(part.opened);
                 let reply = part.finish(self.encode_tool()?)?;
                 *encoder = reply["encoder"].clone();
                 done.push(path);
@@ -275,25 +417,60 @@ impl Hub<'_> {
         let failed =
             |reply: &Value| json!({"code": "writer_failed", "target": target, "reply": reply});
         let pid = |hub: &mut Hub| hub.encode_tool().map(|t| t.pid).unwrap_or(0);
+        // The join of a film's video parts with its sound and timecode, at the temporary name.
+        let join = |parts: Value| {
+            let sound = audio.exists().then(|| json!({"path": audio, "sample_rate": hz, "channels": 2, "codec": job.audio_codec}));
+            json!({"op": "export.join", "parts": parts, "out": temp, "audio": sound,
+                "timecode": {"start_frame": start, "drop_frame": tc.drop > 0, "rate": tc.nominal}})
+        };
+        // #518: the receipt's encoder names the tool, name and version; what the tool's own
+        // encoder calls itself stays beside it.
+        let named = |tool: &Tool, hardware: Value, own: &Value| {
+            let (name, version) = tool.name_version();
+            json!({"name": name, "version": version, "hardware": hardware, "quality_floor": own["quality_floor"],
+                "library": {"name": own["name"], "version": own["version"]}})
+        };
         match sink {
             Sink::Parts {
-                done, mut encoder, ..
+                tool,
+                done,
+                encoder,
+                opened,
+                ..
             } => {
-                let sound = audio.exists().then(|| json!({"path": audio, "sample_rate": hz, "channels": 2, "codec": job.audio_codec}));
-                let ask = json!({"op": "export.join", "parts": done, "out": temp, "audio": sound,
-                    "timecode": {"start_frame": start, "drop_frame": tc.drop > 0, "rate": tc.nominal}});
-                let (reply, pid) = self.media_job(ENCODE_TOOL, ask);
+                let (reply, pid) = self.media_job(ENCODE_TOOL, join(json!(done)));
                 reply.get("frames").ok_or_else(|| failed(&reply))?;
+                let mut encoder = named(&tool, encoder["hardware"].clone(), &encoder);
                 encoder["process"] = json!({"pid": pid, "role": ENCODE_TOOL});
-                Ok(json!({"encoder": encoder, "audio": reply["audio"]}))
+                Ok(json!({"encoder": encoder, "audio": reply["audio"], "open": opened}))
             }
-            Sink::Png { open, .. } => {
+            Sink::Png { tool, open, .. } => {
                 let part = open.ok_or_else(|| json!({"code": "no_frames"}))?;
+                let opened = part.opened;
                 let reply = part.finish(self.encode_tool()?)?;
                 reply.get("frames").ok_or_else(|| failed(&reply))?;
-                Ok(
-                    json!({"encoder": {"name": "png", "process": {"pid": pid(self), "role": ENCODE_TOOL}}}),
-                )
+                let mut encoder = named(&tool, json!(tool.hardware), &reply["encoder"]);
+                encoder["process"] = json!({"pid": pid(self), "role": ENCODE_TOOL});
+                Ok(json!({"encoder": encoder, "open": opened}))
+            }
+            Sink::Program {
+                tool, open, part, ..
+            } => {
+                let (session, _) = open.ok_or_else(|| json!({"code": "no_frames"}))?;
+                let opened = session.opened();
+                let handoff = session.handoff();
+                let done = session.finish()?;
+                let mut encoder = named(&tool, json!(tool.hardware), &Value::Null);
+                // The tool's own report, as it gave it: never trusted, and no check reads it.
+                encoder["report"] = done["report"].clone();
+                // A film's video part is joined with its sound and timecode, as the build's own.
+                let mut sound = Value::Null;
+                if let Some(part) = part {
+                    let (reply, _) = self.media_job(ENCODE_TOOL, join(json!([part])));
+                    reply.get("frames").ok_or_else(|| failed(&reply))?;
+                    sound = reply["audio"].clone();
+                }
+                Ok(json!({"encoder": encoder, "audio": sound, "open": opened, "handoff": handoff}))
             }
             Sink::Raw(file) => {
                 drop(file);
@@ -307,23 +484,58 @@ impl Hub<'_> {
 
 /// Where an export's frames go as they are drawn.
 pub(super) enum Sink {
-    /// Media's video: a part per shard, each opened at its first frame, joined after.
+    /// Media's video: a part per shard, each opened before its first frame, joined after.
     Parts {
+        tool: Tool,
         open: Option<feed::Part>,
         done: Vec<PathBuf>,
         encoder: Value,
         ask: Value,
         ext: &'static str,
         nv12: bool,
+        /// The first part's open, in seconds, as the tool timed it.
+        opened: Option<f64>,
     },
     /// Media's PNG sequence: one job over every frame, writing the folder at `out`.
     Png {
+        tool: Tool,
         open: Option<feed::Part>,
         out: PathBuf,
-        frames: i64,
+        frames: std::ops::Range<i64>,
+    },
+    /// #518: a plug-in's encode tool, a program of its own: one job over every frame, writing
+    /// `out`, opened for the size beside it.
+    Program {
+        tool: Tool,
+        open: Option<(program::Session, [u16; 2])>,
+        out: PathBuf,
+        frames: std::ops::Range<i64>,
+        ask: Value,
+        /// A film's video, which the tool writes here and the join gives its sound and timecode.
+        part: Option<PathBuf>,
     },
     /// A test module's writer: the frames' BGRA8 rows, one after another, in the delivery.
     Raw(std::fs::File),
+}
+
+impl Sink {
+    /// Whether the sink's tool reads each frame as the conversion pass's NV12 planes.
+    pub(super) fn nv12(&self) -> bool {
+        match self {
+            Sink::Parts { nv12, .. } => *nv12,
+            Sink::Program { ask, .. } => ask["format"] == "nv12",
+            Sink::Png { .. } | Sink::Raw(_) => false,
+        }
+    }
+
+    /// The size its open encode job was opened for, when one is open.
+    fn open_size(&self) -> Option<[u16; 2]> {
+        match self {
+            Sink::Parts { open, .. } | Sink::Png { open, .. } => open.as_ref().map(|p| p.size),
+            Sink::Program { open, .. } => open.as_ref().map(|(_, size)| *size),
+            Sink::Raw(_) => None,
+        }
+    }
 }
 
 /// What an export keeps while it draws: the GPU's reading of its frames, the frames' size, the
@@ -339,6 +551,8 @@ pub(super) struct Run {
     pub(super) kept: Vec<Vec<u8>>,
     /// frames.finite's issues: each frame whose float target held a non-finite value.
     pub(super) nonfinite: Vec<Value>,
+    /// #518, planted: the frame whose buffer the hand-off never gives the encode job.
+    pub(super) dropped: Option<i64>,
 }
 
 impl Run {
@@ -352,16 +566,19 @@ impl Run {
             chapters,
             kept: Vec::new(),
             nonfinite: Vec::new(),
+            dropped: None,
         }
     }
 }
 
 /// What the GPU reads of each frame as it is drawn: its BLAKE3 digest and its readings for
-/// film.blank and film.wrap, both one frame late, and the frame the wrap is measured against.
+/// film.blank and film.wrap, both one frame late, the frame the wrap is measured against, and
+/// (#518) for a 4:2:0 codec the frame's NV12 planes by the conversion pass.
 pub(super) struct Seen {
     gpu: Arc<deep_gpu::device::Device>,
     hasher: deep_gpu::blake3::Frames,
     stats: deep_gpu::frame_checks::Stats,
+    planes: Option<deep_gpu::nv12::Planes>,
     hashes: Vec<[u8; 32]>,
     reads: Vec<deep_gpu::frame_checks::Reading>,
     pushed: usize,
@@ -372,6 +589,7 @@ impl Seen {
         gpu: Arc<deep_gpu::device::Device>,
         size: [u16; 2],
         joins_right_left: bool,
+        nv12: Option<deep_gpu::nv12::Nv12>,
     ) -> Seen {
         let planted = deep_gpu::blake3::Planted { joins_right_left };
         let hasher = deep_gpu::blake3::Blake3::new(&gpu.device, planted).frames(
@@ -384,10 +602,12 @@ impl Seen {
             &gpu.queue,
             &hasher,
         );
+        let planes = nv12.map(|n| n.planes(&gpu.device, &gpu.queue, &hasher, size.map(u32::from)));
         Seen {
             gpu,
             hasher,
             stats,
+            planes,
             hashes: Vec::new(),
             reads: Vec::new(),
             pushed: 0,
@@ -403,6 +623,15 @@ impl Seen {
         }
         self.pushed += 1;
         Ok(())
+    }
+
+    /// #518: the NV12 planes of the frame just pushed, by the conversion pass on the GPU, taken
+    /// through memory for a tool that takes no surface; they are whole only once the frame's
+    /// hash is done too, since the GPU runs the frame's work in order.
+    pub(super) fn converted(&mut self) -> Result<Vec<u8>, ()> {
+        let planes = self.planes.as_mut().ok_or(())?;
+        planes.after_push().map_err(|_| ())?;
+        planes.finish().map_err(|_| ())?.ok_or(())
     }
 
     /// Every frame's digest and reading, and, when the film loops, the last frame's change to

@@ -82,6 +82,10 @@ pub const RULES_PAGE: &str = "rules";
 /// The replica's view of the look's 16 terminal colors on the terminal's background (#1003).
 pub const TERMINAL_COLORS: &str = "terminal-colors";
 
+/// The app's Connect prompt for a piece's port (#210), before you click Connect and after it opens.
+pub const CONNECT_BEFORE: &str = "connect-before";
+pub const CONNECT_AFTER: &str = "connect-after";
+
 /// `--view <id> --out <out>` from the command line, the view a shipped one (or `--first-screen`), and where `replica`
 /// takes them, `--appearance <light|dark>` as whether macOS is set to dark (#882) and `--bound <file>`, the runs and
 /// bound values to draw (#629); else the usage error is printed under `bin`'s name and the exit code is 2. The replica
@@ -144,7 +148,9 @@ pub fn view_args(bin: &str, out: &str, replica: bool) -> Result<ViewArgs, i32> {
         eprintln!("usage: {bin} --view <id> --out <{out}>");
         return Err(2);
     };
-    let extra = (replica && view == TERMINAL_COLORS) || view == RULES_PAGE;
+    let extra = (replica
+        && [TERMINAL_COLORS, CONNECT_BEFORE, CONNECT_AFTER].contains(&view.as_str()))
+        || view == RULES_PAGE;
     if view != FIRST_SCREEN && !extra && !deep_app::views::SHIPPED_VIEWS.contains(&view.as_str()) {
         let shipped = deep_app::views::SHIPPED_VIEWS;
         eprintln!("{bin}: {view} is not a shipped view; the views are {shipped:?}");

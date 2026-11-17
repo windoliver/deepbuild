@@ -1,0 +1,50 @@
+
+ RUN  v5.0.5 <base>
+
+ ❯ packages/checks-work/test/probe-host.test.ts (5 tests | 2 failed) 4462ms
+   × a refused host start is missing and never falls back to local execution 588ms
+   × a supervised service reaches its declared loopback endpoint 751ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/checks-work/test/probe-host.test.ts > a refused host start is missing and never falls back to local execution
+AssertionError: expected 'failed' to be 'missing' // Object.is equality
+
+Expected: "missing"
+Received: "failed"
+
+ ❯ packages/checks-work/test/probe-host.test.ts:42:26
+     40|   await scope.close();
+     41|   const result = await runProbe(probe, {}, { checkout: dir, deadline: …
+     42|   expect(result.outcome).toBe('missing');
+       |                          ^
+     43|   expect(result.testsRun).toBe(0);
+     44|   expect(result.failures[0]).toMatchObject({ assertion: false, message…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  packages/checks-work/test/probe-host.test.ts > a supervised service reaches its declared loopback endpoint
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ packages/checks-work/test/probe-host.test.ts:62:103
+     60|     expect(requests).toBe(1);
+     61|     const events = await record.read({ after: 0, limit: 1000 });
+     62|     expect(events.some(e => e.kind === 'process.tracked' && (e.data as…
+       |                                                                                                       ^
+     63|   } finally { await scope.close(); server.closeAllConnections(); await…
+     64| }, 30_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 3 passed (5)
+   Start at  16:05:37
+   Duration  15.17s (transform 63%, tests 32%, worker 4%, import 1%)
+
