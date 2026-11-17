@@ -173,11 +173,12 @@ All made at test time in `helpers.ts`; no personal data; CC0. Control and item I
   8,192 of its memory on an entry of A (1) or B (2) while it is still 0, writing nothing, and writes it to `shown` on
   an entry of reveal; two marks show 1 or 2. The first button pressed keeps the flag, so at most 34 states are
   reached: 2 before any press, and 8 control values × 2 readouts for each flag.
-- **The chimney** (`dropDoc`; AC9): a ball inside an opaque box, thrown at (1.5 × pick, 1 + 10 × pick, 0) m/s by the
-  waited choice `pick` (soft: 1 m/s straight up; hard: 11 m/s up and 1.5 m/s along x); stages `aim` (0.1 s), `look`
-  (0.45 s, waits for `go`), `after` (4 s); 4.5 s long. Every surface but the ball is unlit, and the ball draws only past `look` (an
-  opacity channel held at 0 until 0.5 s of the document's time). In the world the ball is a block, so it slides to rest
-  after landing where a sphere would roll on; at `after` nothing moves, the hard ball at rest on the floor in view.
+- **The chimney** (`dropDoc`; AC9): a ball half a metre up inside an opaque box, in a world with no gravity and nothing
+  to hit, its linear damping 4 a second; the waited choice `pick` launches it along x at 8 × pick m/s (soft: not at
+  all; hard: 8 m/s, which the damping brings to rest about 2 m along, beside the chimney); stages `aim` (0.1 s), `look`
+  (0.45 s, waits for `go`), `after` (4 s); 4.5 s long. Every surface but the ball is unlit, and the ball draws only
+  past `look` (an opacity channel held at 0 until 0.5 s of the document's time). At `look` the hard ball still moves;
+  at `after` nothing does.
 
 ## The server, the browser and the shim adapter
 

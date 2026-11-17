@@ -2,10 +2,10 @@
 // moving, export as two states whose next frames differ; a page keyed by the picture and the logic alone fails this
 // fixture"
 //
-// The piece (helpers.ts `dropDoc`): a ball inside an opaque chimney, launched at 1 m/s up (soft) or 11 m/s up and 1.5 m/s
-// aside (hard) by the waited choice `pick`; at the stage `look` the soft ball has landed and rests while the hard one
-// is in flight, the ball not yet drawn; after `go`, at the stage `after`, nothing moves and the hard ball shows at rest
-// on the floor. No logic item.
+// The piece (helpers.ts `dropDoc`): a ball inside an opaque chimney, with no gravity and a linear damping, launched
+// along x at 0 m/s (soft) or 8 m/s (hard) by the waited choice `pick`; at the stage `look` the soft ball rests while the
+// hard one still moves, the ball not yet drawn; after `go`, at the stage `after`, nothing moves and the hard ball shows
+// at rest beside the chimney. No logic item.
 // asserts:
 //   - the fixture, in the app (png_seq stills on each path's input track): at marker `look` the two launches draw the
 //     same picture; at marker `after` they draw apart;
@@ -42,7 +42,7 @@ function app(): Map<string, string> {
   const stills = appStills(shows(FULL), temp(), dropDoc(), Object.entries(PATHS).map(([name, p]) => ({ name, track: p.track, range: { still: { marker: p.marker } } })),
     { size: DROP.size, rate: DROP.rate }, temp(), 'the chimney');
   expect(stills.get('soft, at look'), 'the fixture: at look the soft and the hard launch draw the same picture').toBe(stills.get('hard, at look'));
-  expect(stills.get('soft, after'), 'the fixture: at after the hard ball shows on the floor and the soft one doesn\'t').not.toBe(stills.get('hard, after'));
+  expect(stills.get('soft, after'), 'the fixture: at after the hard ball shows beside the chimney and the soft one doesn\'t').not.toBe(stills.get('hard, after'));
   fixture = stills;
   return stills;
 }

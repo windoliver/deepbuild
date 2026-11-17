@@ -480,15 +480,14 @@ export function mapsDoc(evidence: string, size: 2048 | 1024): JsonObject {
   }, { requires: { modules: { scene3d: '^1' } }, assets });
 }
 
-// AC9's piece: a 3D film, 480 × 360 at 30 fps, 4.5 s, in present mode. The world `drop_world` (60 Hz): a ball (a 0.22 m
-// block of 0.43 kg in the world, so it slides to rest where a sphere would roll on; drawn as a sphere) at rest on the
-// floor inside a chimney, an opaque box 1 × 4 × 1 m; the launch `throw` on each entry of the choice `pick` sends it off
-// at (1.5 × pick, 1 + 10 × pick, 0) m/s (Control: a choice reads as its option's index: soft 1 m/s straight up, hard
-// 11 m/s up and 1.5 m/s along x). Stage `aim` (0.1 s) waits for pick, `look` (0.45 s) for the choice `go`, `after`
-// (4 s) ends it. At `look` the soft ball has landed and rests and the hard one is in flight: the same picture at the
-// same step, since the ball itself draws only past `look`, from 0.5 s. The hard ball lands about 3.4 m along x some
-// 2.3 s after its launch and stops; at `after` nothing moves, the hard ball shows at rest on the floor and the soft
-// one is inside the chimney.
+// AC9's piece: a 3D film, 480 × 360 at 30 fps, 4.5 s, in present mode. The world `drop_world` (60 Hz, no gravity, nothing
+// to hit): a ball (0.11 m, 0.43 kg, linear damping 4 a second) at rest half a metre up inside a chimney, an opaque box
+// 1 × 4 × 1 m; the launch `throw` on each entry of the choice `pick` sends it off along x at 8 × pick m/s (Control: a
+// choice reads as its option's index: soft 0 m/s, hard 8 m/s). Stage `aim` (0.1 s) waits for pick, `look` (0.45 s) for
+// the choice `go`, `after` (4 s) ends it. At `look` the soft ball rests and the hard one still moves, at about 2 m/s:
+// the same picture at the same step, since the ball itself draws only past `look`, from 0.5 s. The damping brings the
+// hard ball to rest about 2 m along x (8 ÷ 4), outside the chimney, well before `after`, where nothing moves: the hard
+// ball shows beside the chimney and the soft one is inside it.
 
 /** Every surface but the ball is unlit (Material: `unlit`; the ball, hidden at `look` by its opacity, keeps the default
  * material, under which the base draws it), each its own flat color: at the base a hidden ball that moves still changed
@@ -497,15 +496,12 @@ const DROP_COLORS: Record<string, V3> = { ground: [0.25, 0.3, 0.2], left: [0.5, 
 export const DROP = { size: [480, 360] as Size, rate: [30, 1] as Rate, world: 'drop_world' };
 export function dropDoc(): JsonObject {
   const world = world60({
-    seed: 1040,
+    seed: 1040, gravity: [0, 0, 0],
     contact_materials: { clay: { friction: 0.9, restitution: 0, density: 1000 } },
-    shapes: { floor: { kind: 'box', half: [10, 0.1, 10] }, ball: { kind: 'box', half: [0.11, 0.11, 0.11] } },
-    bodies: {
-      floor: { kind: 'static', shapes: [{ shape: 'floor', contact_material: 'clay' }], pose: { pos: [0, -0.1, 0] } },
-      ball: { kind: 'dynamic', shapes: [{ shape: 'ball', contact_material: 'clay' }], pose: { pos: [0, 0.11, 0] }, mass: 0.43 },
-    },
+    shapes: { ball: { kind: 'sphere', radius: 0.11 } },
+    bodies: { ball: { kind: 'dynamic', shapes: [{ shape: 'ball', contact_material: 'clay' }], pose: { pos: [0, 0.5, 0] }, mass: 0.43, damping: { linear: 4 } } },
     checkpoint: { every: 6 },
-    inputs: { throw: { kind: 'launch', targets: ['ball'], on: { control: 'pick', each: 'entry' }, data: { linear: 'vec3(1.5 * pick, 1 + 10 * pick, 0)' } } },
+    inputs: { throw: { kind: 'launch', targets: ['ball'], on: { control: 'pick', each: 'entry' }, data: { linear: 'vec3(8 * pick, 0, 0)' } } },
     outputs: { ball: { from: 'ball', read: 'pose', to: 'items/ball/at' } },
   });
   return scene(DOC.drop, 'Two launches up a chimney', 'film', '4.5s', DROP.rate, DROP.size, {
@@ -515,7 +511,7 @@ export function dropDoc(): JsonObject {
     left: box3([1, 6, 1], [-3, 3, -2], { material: 'left_mat' }),
     right: box3([1, 2, 1], [3, 1, -2], { material: 'right_mat' }),
     chimney: box3([1, 4, 1], [0, 2, 0], { material: 'chimney_mat' }),
-    ball: { kind: 'mark.sphere@1', params: { size: [0.22, 0.22, 0.22] }, at: { pos: [0, 0.11, 0] } },
+    ball: { kind: 'mark.sphere@1', params: { size: [0.22, 0.22, 0.22] }, at: { pos: [0, 0.5, 0] } },
   }, {
     requires: { modules: { scene3d: '^1' } },
     controls: {
