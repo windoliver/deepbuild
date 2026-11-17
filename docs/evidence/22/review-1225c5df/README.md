@@ -31,3 +31,17 @@ Disclosed, not changed:
 `guard-1225c5df1.txt`: `node scripts/proof.mjs guard` at 1225c5df1 passes, 79 commits. The full `affected.mjs` run at
 1225c5df1 (affected-22-17: isolated HOME, so outside the shared throttle table, and MemoryMax=32G) was stopped with no
 results when this review landed: INCONCLUSIVE, superseded by the run at the fixed head.
+
+## The review of that fix (02efdf793), and its follow-up
+
+A second fresh agent read 02efdf793. It confirmed the hub test's timing and found the fix incomplete: half a surrogate
+pair in `words` or `token` still made the record refuse the answer (`not_json`) while the decision was saved.
+`answer()` now refuses text that is over 8192 characters or not well-formed, for both fields.
+- `failing-first-surrogate.txt`: the widened test on 02efdf793's code: a decision is saved.
+- `mutant-no-words-check.txt`, `mutant-no-token-check.txt`: the test with either field's check taken out: it fails.
+- `passing-refused.txt` (replaced): the asks package after the follow-up, 83 of 83.
+
+It also noted, not changed: over-long words to a closed ask or a sign-in task are now refused before the
+`answer.refused` event or the no-op main had; under a beat gap over 10 s the hub's `away()` could show the batch for a
+hub without `batchDue()`. The full run at 6107127d1 (affected-22-18) was stopped with no results for this follow-up:
+INCONCLUSIVE.

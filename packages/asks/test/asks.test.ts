@@ -459,9 +459,11 @@ describe('an answer that saves a decision (#319.43d13eb3, #22)', () => {
   it('saves no decision when the record would refuse the answer: words over the answer\'s limit are refused first', async () => {
     await start('S1', 'T1');
     const handle = await asks.raise(agent('S1'), 'deep_ask.taste', taste('header'));
-    await expect(asks.answer(card, handle, { option: 'green', words: 'w'.repeat(8193) })).rejects.toThrow();
-    expect(await events('ask.answered'), 'the ask is not answered').toEqual([]);
-    expect(await events('decision.created'), 'so no decision is saved for the next ask of its kind').toEqual([]);
+    for (const refused of [{ words: 'w'.repeat(8193) }, { words: 'half a pair \uD83D' }, { token: 't'.repeat(8193) }, { token: '\uD83D' }]) {
+      await expect(asks.answer(card, handle, { option: 'green', ...refused }), Object.keys(refused)[0]).rejects.toThrow();
+      expect(await events('ask.answered'), 'the ask is not answered').toEqual([]);
+      expect(await events('decision.created'), 'so no decision is saved for the next ask of its kind').toEqual([]);
+    }
     await asks.answer(card, handle, { option: 'green', words: 'w'.repeat(8192) });
     expect((await events('decision.created')).map((e) => (e.data as Obj).answer), 'words at the limit answer as before').toEqual(['green']);
   });
