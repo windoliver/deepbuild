@@ -210,6 +210,7 @@ impl Player {
         };
         match draw.frame(p, size) {
             crate::draw::Frame::Pixels(rgba) => gpu.show(&rgba, size),
+            #[cfg(feature = "full")]
             crate::draw::Frame::Scene(scene, look, over) => gpu.show3d(&scene, &look, &over, size),
         }
     }
@@ -224,6 +225,18 @@ impl Player {
             p.enter(self.sealed, control, value, &read).map_err(fail)?;
         }
         Ok(())
+    }
+
+    /// The document's accessibility tree (#1045), as JSON `[{id, role, name, …}]` in reading
+    /// order: the one the app gives its accessibility seam, read through the core.
+    pub fn tree(&self) -> String {
+        Value::Array(self.played.as_ref().map(Played::tree).unwrap_or_default()).to_string()
+    }
+
+    /// Each readout heard and what it says in the frame shown (#1045), as JSON `{id: text}`.
+    pub fn readouts(&self) -> String {
+        let readouts = self.played.as_ref().map(Played::readouts);
+        json!(readouts.unwrap_or_default()).to_string()
     }
 
     /// What the player holds at its shown time, as JSON; it writes nothing and changes no state.

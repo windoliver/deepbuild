@@ -1135,6 +1135,11 @@ const P_WORLD_N: u32 = 8388608u;
 const P_VIEW_AWAY: u32 = 16777216u;
 // #1381's: a terrain plate's sky occlusion from its slope alone, (1 + n.y) ÷ 2.
 const P_SKY_BY_SLOPE: u32 = 33554432u;
+// #458's: the summed light stops at 1.0; the specular lobe is stretched along the part's own +X;
+// a shadowed light's share is multiplied by 2 − visibility.
+const P_SUM_CLAMPED: u32 = 67108864u;
+const P_LOCAL_TANGENT: u32 = 134217728u;
+const P_SHADOW_BRIGHTENS: u32 = 268435456u;
 
 fn planted(bit: u32) -> bool {
     return (lights.count.z & bit) != 0u;
@@ -2168,6 +2173,9 @@ fn answer_light(in: MeshOut, n: vec3<f32>, v: vec3<f32>, s: Surface, i: u32, cur
     if planted(P_SHADOW_ONE) {
         shadow = 1.0;
     }
+    if planted(P_SHADOW_BRIGHTENS) {
+        shadow = 2.0 - shadow;
+    }
     let w = lights.answers[i].x;
     let radiance = select(vec3<f32>(0.0), a.e / w, w > 0.0);
     let hash = bitcast<u32>(lights.answers[i].y);
@@ -2199,8 +2207,27 @@ fn answer_ambient(in: MeshOut, n: vec3<f32>, s: Surface, occ: f32) -> vec3<f32> 
         s.base, in.emission.w, s.metallic, s.rough, s.level));
 }
 
+// #458's planted lobe: the part's own +X along the surface, the direction its x grows in.
+fn local_x(in: MeshOut) -> vec3<f32> {
+    let wx = dpdx(in.world);
+    let wy = dpdy(in.world);
+    let lx = dpdx(in.local.x);
+    let ly = dpdy(in.local.x);
+    let a = dot(wx, wx);
+    let b = dot(wx, wy);
+    let c = dot(wy, wy);
+    let det = a * c - b * b;
+    let g = ((lx * c - ly * b) * wx + (ly * a - lx * b) * wy) / max(det, 1e-30);
+    let len = length(g);
+    return select(vec3<f32>(0.0), g / len, len > 1e-8);
+}
+
 fn direct(in: MeshOut, n: vec3<f32>, s: Surface, spread: f32, curved: bool) -> Direct {
     let v = select(normalize(lights.view.xyz), normalize(lights.view.xyz - in.world), lights.view.w > 0.5);
+    var local_t = vec3<f32>(0.0);
+    if planted(P_LOCAL_TANGENT) {
+        local_t = local_x(in);
+    }
     let rough = clamp(s.rough, 0.045, 1.0);
     // Geometric specular antialiasing (Kaplanyan): the normal's change across the pixel widens
     // the lobe.
@@ -2251,7 +2278,12 @@ fn direct(in: MeshOut, n: vec3<f32>, s: Surface, spread: f32, curved: bool) -> D
             if s.k != 0u {
                 add = extra_lobes(n, v, l, s, a2, dfg_v) * e;
             } else if nl > 0.0 {
-                let b = lobes(n, v, l, s, a2, dfg_v);
+                var a2l = a2;
+                if planted(P_LOCAL_TANGENT) {
+                    let ht = dot(local_t, normalize(v + l));
+                    a2l = clamp(a2 * (1.0 + 60.0 * ht * ht), 0.0, 1.0);
+                }
+                let b = lobes(n, v, l, s, a2l, dfg_v);
                 add = (b.diffuse + b.spec) * e * nl;
             }
         }
@@ -2270,7 +2302,7 @@ fn direct(in: MeshOut, n: vec3<f32>, s: Surface, spread: f32, curved: bool) -> D
             total += y;
             removed += y * (1.0 - lit);
         } else {
-            add = add * lit;
+            add = add * select(lit, 2.0 - lit, planted(P_SHADOW_BRIGHTENS));
         }
         // A thin subsurface part lets the key sun through from behind by the thickness its
         // cascades measure, exp(−d ÷ radius), into its share (#481).
@@ -2291,6 +2323,9 @@ fn direct(in: MeshOut, n: vec3<f32>, s: Surface, spread: f32, curved: bool) -> D
             out += response_light(LightIn(to_view(n), to_view(v), to_view(n), vec3<f32>(0.0), 1.0, 0u,
                 s.base, in.emission.w, s.metallic, s.rough, s.level));
         }
+    }
+    if planted(P_SUM_CLAMPED) {
+        out = min(out, vec3<f32>(1.0));
     }
     return Direct(out, select(0.0, removed / total, total > 0.0));
 }

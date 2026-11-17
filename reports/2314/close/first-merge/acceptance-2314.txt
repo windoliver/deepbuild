@@ -1,0 +1,21 @@
+$ node --test --test-concurrency=1 --test-reporter=spec tests/acceptance/2314/probes.test.mjs
+Mon Nov 16 08:13:32 UTC 2026
+ 0:13  up 2 days, 10:22, 18 users, load averages: 92.22 87.16 99.40
+(node:79663) ExperimentalWarning: stripTypeScriptTypes is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+▶ issue #2314: check probes use the real host@1
+  ✔ AC1: checks-numbers records tracked and ended for its real probe (111.636583ms)
+  ✔ AC1: checks-work records tracked and ended for its real probe (130.46075ms)
+  ✔ AC2: a detached probe descendant is gone when the overran run resolves (4837.700667ms)
+✔ issue #2314: check probes use the real host@1 (15625.1525ms)
+ℹ tests 3
+ℹ suites 1
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 15775.026625
+exit=0
+Mon Nov 16 08:13:48 UTC 2026
+ 0:13  up 2 days, 10:22, 18 users, load averages: 102.99 89.88 100.15

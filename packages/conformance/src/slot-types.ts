@@ -3,6 +3,7 @@
 // spreading either. The check runner's spec, context and result are here as well, since check.kind@1 is the
 // one slot whose fill's answer has a published shape of its own (a closed run outcome, never a verdict).
 import type { JsonValue } from '@deepbuild/contracts';
+import type { Host } from '@deepbuild/supervisor';
 import type { Random } from './generator.js';
 import type { Verdict } from './types.js';
 
@@ -15,8 +16,8 @@ export interface SlotFill { slot: string; revision: number; variant?: string; [m
 
 /** check@1's spec: the kind, the command, the declared input paths, the depth, the oracle and the contract it holds to. */
 export interface CheckSpec { kind: string; runner: string; inputs: string[]; depth: string; oracle: 'code' | 'model' | 'person'; contract: string | null }
-/** What a check run gets: the folder it runs in, the ms it may take, and the clock. */
-export interface CheckContext { checkout: string; deadline: number; now(): number }
+/** What a check run gets: its folder, time and clock; hub runs also get a host whose wait proves cleanup. */
+export interface CheckContext { checkout: string; deadline: number; now(): number; host?: Host }
 /** One failed test, from the tool's own report: where it failed and whether as the framework's assertion failure. */
 export interface Failure { /** A test still running when its deadline came. */ unended?: boolean; test: string; file: string; line: number; stack: string | null; assertion: boolean; message: string }
 /** What a check runner returns: a closed run outcome, never a verdict; the files the run read, relative to the checkout; the mask it found in the command, or null. */

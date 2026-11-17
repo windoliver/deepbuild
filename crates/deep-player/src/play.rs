@@ -2,17 +2,26 @@
 //! the form made by the app's own calls ([`deep_play::form::played`]), evaluated by the core's
 //! scheduler with the player's sealed modules. Each world's bake and each logic item's replay are
 //! the app's (`physics_bake`, the `logic` call), so `probe()` reads the step hashes and full-state
-//! hashes the app reads; evaluated data is read as the app's `eval` reads it.
+//! hashes the app reads; evaluated data is read as the app's `eval` reads it. A set without
+//! physics and logic (#1490: figure) runs no world or logic item: the export gives it no document
+//! that has one.
 
 use std::collections::BTreeMap;
+#[cfg(feature = "game2d")]
 use std::rc::Rc;
 
 use deep_canvas::registry::Sealed;
 use deep_canvas::schedule::{Options, Scheduler, Session};
+use deep_canvas_motion::program::Program;
+#[cfg(feature = "game2d")]
 use deep_canvas_physics::caps::RAPIER3D;
+#[cfg(feature = "game2d")]
 use deep_canvas_physics::check::check;
+#[cfg(feature = "game2d")]
 use deep_canvas_physics::occurrence::step_flicks;
+#[cfg(feature = "game2d")]
 use deep_logic::world::{track_of, Entry, Record, World};
+#[cfg(feature = "game2d")]
 use deep_physics_rapier::runner::Run;
 use serde_json::{json, Map, Value};
 
@@ -35,6 +44,7 @@ struct Run1 {
 }
 
 /// Each world's or logic item's run, by ID.
+#[cfg(feature = "game2d")]
 type Runs = BTreeMap<String, Run1>;
 
 /// A played piece.
@@ -42,6 +52,11 @@ pub struct Played {
     sched: Scheduler<'static>,
     session: Session,
     doc: Value,
+    /// The form's motion program, which a readout's values are evaluated by at the shown time.
+    motion: Option<Program>,
+    /// Whether the form has anything a readout says (an item's template or a figure's card), so a
+    /// frame of a piece with none evaluates nothing for its readouts.
+    reads_out: bool,
     track: Vec<Value>,
     /// The piece's step in flicks: its worlds' and logic items' least, else a 60th of a second.
     pub step: i64,
@@ -81,16 +96,33 @@ impl Played {
         let span = deep_canvas_media::doc::time(&form, form.pointer("/transport/span"))
             .unwrap_or(0)
             .max(0);
+        #[allow(unused_mut)]
         let mut steps: Vec<i64> = Vec::new();
+        #[cfg(feature = "game2d")]
         let worlds = worlds(&form, track, span, &mut steps)?;
+        #[cfg(feature = "game2d")]
         let (logic, rewritten) = logic(sealed, &form, track, read, span, &mut steps)?;
+        #[cfg(not(feature = "game2d"))]
+        let (worlds, logic, rewritten) = Default::default();
         let step = steps.into_iter().min().unwrap_or(FLICKS / 60).max(1);
         let mut sched = Scheduler::new(sealed, Options::default());
         let mut session = Session::new(0, tokens);
         session.load(&mut sched, &form);
+        let motion = form.as_object().and_then(|m| Program::compile(m).ok());
+        let reads_out = form.get("card").is_some()
+            || form
+                .get("items")
+                .and_then(Value::as_object)
+                .is_some_and(|items| {
+                    items
+                        .values()
+                        .any(|i| i.pointer("/params/template").is_some())
+                });
         Ok(Played {
             sched,
             session,
+            motion,
+            reads_out,
             doc: form,
             track: track.to_vec(),
             step,
@@ -189,6 +221,31 @@ impl Played {
         out
     }
 
+    /// The document's accessibility tree (#1045): the one the app gives its accessibility seam,
+    /// made by the app's own function from the form this player plays, each control's node
+    /// marked `control` so the page makes it a Tab stop. The player hides no item a view would.
+    pub fn tree(&self) -> Vec<Value> {
+        let controls = self.doc.get("controls").and_then(Value::as_object);
+        let mut nodes = deep_play::access::tree(&self.doc, &[]);
+        for n in &mut nodes {
+            let id = n["id"].as_str().unwrap_or_default();
+            if controls.is_some_and(|c| c.contains_key(id)) {
+                n["control"] = json!(true);
+            }
+        }
+        nodes
+    }
+
+    /// Each readout heard and what it says in the frame shown (#1045), as the app's `see` reads
+    /// it: the form's values at the shown time filled into each readout's template. Reads only.
+    pub fn readouts(&self) -> BTreeMap<String, String> {
+        if !self.reads_out {
+            return BTreeMap::new();
+        }
+        let shown = deep_play::access::data_at(&self.doc, self.motion.as_ref(), self.t());
+        deep_play::access::readouts(&shown, &[])
+    }
+
     /// Evaluated data by stable ID: each logic array `<logic ID>.<name>` as `eval`'s `arrays`
     /// reads it, each path a world output or a driver writes as `eval`'s `paths` reads it, and each
     /// control's `controls/<ID>/value`.
@@ -215,7 +272,14 @@ impl Played {
         out
     }
 
+    /// The logic items' arrays, `<logic ID>.<name>`: none in a set without logic.
+    #[cfg(not(feature = "game2d"))]
+    fn arrays(&self) -> Vec<String> {
+        Vec::new()
+    }
+
     /// The logic items' arrays, `<logic ID>.<name>`.
+    #[cfg(feature = "game2d")]
     fn arrays(&self) -> Vec<String> {
         let items = self.doc.get("items").and_then(Value::as_object);
         let mut out = Vec::new();
@@ -300,6 +364,7 @@ fn held(cps: &[Checkpoint], k: i64) -> Value {
 
 /// Each world of `form` baked on `track` as the app's `physics_bake` bakes it, with its
 /// checkpoints; each world's step added to `steps`.
+#[cfg(feature = "game2d")]
 fn worlds(
     form: &Value,
     track: &[Value],
@@ -365,6 +430,7 @@ fn worlds(
 
 /// Each logic item of `form` replayed on `track` over the span as the app's `logic` call replays
 /// it, with its checkpoints; each item's step added to `steps`.
+#[cfg(feature = "game2d")]
 fn logic(
     sealed: &Sealed,
     form: &Value,

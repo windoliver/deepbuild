@@ -90,6 +90,7 @@ pub fn array(sched: &Scheduler<'_>, s: &Session, name: &str, t: i64) -> Value {
         .as_ref()
         .and_then(|v| v.as_typed::<f64>())
         .map(|x| json!(*x));
+    #[cfg(feature = "logic")]
     let logic = || {
         let state = s.array(sched, deep_logic::module::STATE)?;
         let state = state.as_typed::<deep_logic::module::State>()?;
@@ -98,6 +99,8 @@ pub fn array(sched: &Scheduler<'_>, s: &Session, name: &str, t: i64) -> Value {
             _ => None,
         }
     };
+    #[cfg(not(feature = "logic"))]
+    let logic = || None;
     let bands = || {
         s.document()
             .and_then(|d| deep_canvas::columns::map(d.get("arrays")?.get(name)?, t, None, false))
