@@ -410,6 +410,7 @@ fn draw2(
             gate(app, marks)?;
             let options = Options {
                 shifts_fill: app.planted == Some(Planted::ShiftsFillTwoCodes),
+                multiply_as_screen: app.planted == Some(Planted::GpuLayerMultiplyAsScreen),
                 ..Options::default()
             };
             let asks = Asks {
@@ -1129,6 +1130,7 @@ pub(crate) fn open2(
         built: None,
         options: Options {
             shifts_fill: app.planted == Some(Planted::ShiftsFillTwoCodes),
+            multiply_as_screen: app.planted == Some(Planted::GpuLayerMultiplyAsScreen),
             ..Options::default()
         },
         error: error.clone(),

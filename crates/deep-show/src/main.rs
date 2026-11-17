@@ -1479,6 +1479,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "recipe_rules_twice" => Planted::RulesEvaluatedTwice,
                 "kit_tests_defaults_only" => Planted::KitDefaultsOnly,
                 "expander_hash_map_order" => Planted::ExpandsInHashOrder,
+                "expansion_drops_stroke" => Planted::ExpansionDropsStroke,
                 "migration_stops_at_first_fault" => Planted::MigrationFirstFault,
                 "migration_one_major_per_document" => Planted::MigrationOneMajor,
                 "migration_zero_as_left_out" => Planted::MigrationZeroAsLeftOut,

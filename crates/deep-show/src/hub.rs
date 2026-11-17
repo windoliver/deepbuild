@@ -219,6 +219,8 @@ pub enum Planted {
     KitDefaultsOnly,
     /// #202: the expander walks an instance's inputs in a hash map's order.
     ExpandsInHashOrder,
+    /// #458: a recipe's expansion drops one derived item's stroke.
+    ExpansionDropsStroke,
     /// #1956: the pack check of a kind's migration stops at its first fault.
     MigrationFirstFault,
     /// #1959: the loader takes one saved major for the whole document.
@@ -896,6 +898,7 @@ impl<'a> Hub<'a> {
         }
         let pack_planted = PackPlanted {
             seed_by_order: scenario.planted == Some(Planted::SeedsByExpansionOrder),
+            drops_stroke: scenario.planted == Some(Planted::ExpansionDropsStroke),
             overwrite_broken_out: scenario.planted == Some(Planted::ReexpansionOverwritesBrokenOut),
             skip_requires_modules: scenario.planted == Some(Planted::PackCheckSkipsRequiresModules),
             key_by_name: matches!(

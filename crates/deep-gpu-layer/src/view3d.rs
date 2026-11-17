@@ -222,8 +222,11 @@ fn run_view(
     // The core targets the document's operators read, built only then (#431); the planted core
     // builds both for every frame.
     let builds_all = app.planted == Some(Planted::BuildsUnreadTargets);
+    // #458: naming the velocity target in `targets` is a read of it.
     let want = deep_scene3d_render::targets::Want {
-        velocity: builds_all || deep_canvas_effects::module::reads_core(&args.doc, "velocity"),
+        velocity: builds_all
+            || args.targets.contains("velocity")
+            || deep_canvas_effects::module::reads_core(&args.doc, "velocity"),
         emission: builds_all || deep_canvas_effects::module::reads_core(&args.doc, "emission"),
     };
     session3::core_targets(app, want)?;
@@ -272,6 +275,7 @@ fn run_view(
         "normal",
         "coc",
         "checks",
+        "velocity",
     ]
     .iter()
     .any(|t| args.targets.contains(*t));
@@ -1714,6 +1718,10 @@ fn run_view(
                 }
                 if let (Some(n), true) = (&drawn.normal, args.targets.contains("normal")) {
                     frame.insert("normal".into(), json!(write_named(out, n, "f32")?));
+                }
+                // #458: the core's velocity target as the frame built it, two f32 a pixel.
+                if let (Some(v), true) = (&drawn.velocity, args.targets.contains("velocity")) {
+                    frame.insert("velocity".into(), json!(write_named(out, v, "f32")?));
                 }
                 // #468: each pixel's signed circle of confusion, f32.
                 if let (Some(c), true) = (&drawn.coc, args.targets.contains("coc")) {

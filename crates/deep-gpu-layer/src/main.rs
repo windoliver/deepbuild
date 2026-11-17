@@ -114,6 +114,11 @@ pub enum Planted {
     NoDivergenceRule,
     BackdropAfterSeeThrough,
     PeriodFirstOctave,
+    /// #458's wrong programs (tests/acceptance/458/pairs/README.md: Planted programs): an
+    /// `instance@1`'s elements write nothing to the velocity target; the GPU layer composites a
+    /// group whose blend is multiply as screen.
+    InstancedSkipsVelocity,
+    GpuLayerMultiplyAsScreen,
     /// #430's wrong programs (tests/acceptance/430/README.md: Planted programs).
     GroupPassAtLayerEnd,
     GroupPassReadsEarlier,
@@ -502,6 +507,8 @@ impl Planted {
             "no_divergence_rule" => Planted::NoDivergenceRule,
             "backdrop_after_see_through" => Planted::BackdropAfterSeeThrough,
             "period_first_octave" => Planted::PeriodFirstOctave,
+            "instanced_skips_velocity" => Planted::InstancedSkipsVelocity,
+            "gpu_layer_multiply_as_screen" => Planted::GpuLayerMultiplyAsScreen,
             "group_pass_at_layer_end" => Planted::GroupPassAtLayerEnd,
             "group_pass_reads_earlier" => Planted::GroupPassReadsEarlier,
             "group_pass_past_grow" => Planted::GroupPassPastGrow,

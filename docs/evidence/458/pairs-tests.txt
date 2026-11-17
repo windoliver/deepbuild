@@ -1,0 +1,33 @@
+== tests/acceptance/458/pairs/instances.test.ts
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/458/pairs
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  01:01:27
+   Duration  171.18s (tests 98%, transform 1%)
+
+exit 0
+== tests/acceptance/458/pairs/pairs.test.ts
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/458/pairs
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  01:04:46
+   Duration  594.45s (tests 100%)
+
+exit 0
+== tests/acceptance/458/pairs/generated.test.ts
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/458/pairs
+
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  01:15:10
+   Duration  190.19s (tests 99%, transform 1%)
+
+exit 0

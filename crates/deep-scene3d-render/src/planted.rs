@@ -16,6 +16,8 @@ pub struct Planted {
     pub ao: ao::Planted,
     /// #431: the emission target is the color target's excess over 1, never the emitted radiance.
     pub emission_thresholds_color: bool,
+    /// #458: the core velocity target leaves out an instancer's elements.
+    pub instanced_skips_velocity: bool,
     /// #431: a material operator's `sample_grad` takes implicit derivatives.
     pub sample_grad_implicit: bool,
     /// #431: the opaque scene's copy is taken after the see-through parts draw.

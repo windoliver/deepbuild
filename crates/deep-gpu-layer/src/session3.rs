@@ -38,6 +38,7 @@ pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
             _ => deep_scene3d_render::ao::Planted::None,
         },
         emission_thresholds_color: p == Some(Planted::EmissionThresholdsColor),
+        instanced_skips_velocity: p == Some(Planted::InstancedSkipsVelocity),
         sample_grad_implicit: p == Some(Planted::SampleGradImplicit),
         backdrop_after_see_through: p == Some(Planted::BackdropAfterSeeThrough),
         encodes_twice: p == Some(Planted::EncodesTwice),
@@ -583,6 +584,8 @@ pub struct Drawn {
     pub normal: Option<Vec<u8>>,
     /// #468: the depth of field's signed circle of confusion in px, f32 a pixel.
     pub coc: Option<Vec<u8>>,
+    /// #458: the core's velocity target while the frame builds it, f32 x, y a pixel.
+    pub velocity: Option<Vec<u8>>,
 }
 
 /// Draws frame `n` of `scene` under `look`: the frame is rendered into a free slot and waited
@@ -752,6 +755,11 @@ pub fn draw_on(
                 },
                 coc: if read_targets && !noop {
                     r.read_coc(&device)
+                } else {
+                    None
+                },
+                velocity: if read_targets && !noop {
+                    r.read_velocity(&device)
                 } else {
                     None
                 },

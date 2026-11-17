@@ -273,11 +273,13 @@ fn draw_list(
     scene: &Scene,
     motion: &Motion,
     meshes: &std::collections::BTreeMap<Shape, Mesh>,
+    skip_elements: bool,
 ) -> (Vec<Draw>, Vec<Instance>) {
     let mut draws = Vec::new();
     let mut instances: Vec<Instance> = Vec::new();
     for s in scene.layers.iter().flat_map(|l| &l.solids) {
-        if s.cast_only || s.alpha <= 0.0 {
+        // #458's planted path: an instancer's elements, `<instancer>#<id>`, are left out.
+        if s.cast_only || s.alpha <= 0.0 || skip_elements && s.id.contains('#') {
             continue;
         }
         let (Some(m), Some(at)) = (meshes.get(&s.shape), motion.solids.get(&s.id)) else {
@@ -435,6 +437,7 @@ impl MotionPass {
         wanted: bool,
         meshes: &std::collections::BTreeMap<Shape, Mesh>,
         size: [u32; 2],
+        skip_elements: bool,
     ) -> Option<TargetFrame> {
         if !wanted {
             self.travel = None;
@@ -513,7 +516,7 @@ impl MotionPass {
             self.compiled.push("scene3d.velocity");
         }
         let pipe = self.target.clone().expect("built above");
-        let (draws, instances) = draw_list(device, scene, motion, meshes);
+        let (draws, instances) = draw_list(device, scene, motion, meshes, skip_elements);
         let uniform = uniform_of(scene, motion, size, 1, size);
         let (held, bind) = self.travel.get_or_insert_with(|| {
             let held = Held::new(d, "scene3d.velocity uniform");
@@ -559,7 +562,7 @@ impl MotionPass {
             pipes.draw.clone(),
             [pipes.tile.clone(), pipes.near.clone(), pipes.gather.clone()],
         );
-        let (draws, instances) = draw_list(device, scene, motion, meshes);
+        let (draws, instances) = draw_list(device, scene, motion, meshes, false);
         let tile = motion.tile_px.max(1);
         let tiles = [size[0].div_ceil(tile), size[1].div_ceil(tile)];
         let uniform = uniform_of(scene, motion, size, tile, tiles);

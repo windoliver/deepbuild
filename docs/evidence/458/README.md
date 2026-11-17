@@ -12,5 +12,10 @@ Made on 2026-11-16 on an Apple M5 Max (macOS, arm64), from this branch's `deep-s
   average over 400.
 - `suite-tests.txt`: the suite group's blind tests (`tests/acceptance/458/suite/`, criteria 1 to 6 and 8) on this
   branch, 12 of 12.
+- `pairs-tests.txt`: the pairs group's blind tests (`tests/acceptance/458/pairs/`, criteria 7, 9 and 11) on this
+  branch, each file run once: the 25 instances against the 25 items in the ID, normal, depth and velocity targets at
+  10 times, with `instanced_skips_velocity` failing the velocity target alone; the five pairs with no golden, with
+  `expansion_drops_stroke` failing the recipe's pair at the dropped stroke's first pixel; and the generated figures,
+  films and programs, with `gpu_layer_multiply_as_screen` and `rewrite_rotl_as_rotr` each failing on its seed.
 
 The fixture scan over the checkout (`node scripts/fixture-scan.mjs`) read 206 files and fixtures and found nothing.

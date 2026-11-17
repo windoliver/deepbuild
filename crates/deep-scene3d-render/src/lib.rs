@@ -4281,9 +4281,10 @@ impl Renderer {
         };
         self.core.ensure(&device.device, size);
         let wanted = self.core.velocity.is_some();
-        self.velocity_frame = self
-            .motion
-            .target_frame(device, scene, wanted, &self.meshes, size);
+        let skip_elements = self.planted.instanced_skips_velocity;
+        self.velocity_frame =
+            self.motion
+                .target_frame(device, scene, wanted, &self.meshes, size, skip_elements);
         let draws: Vec<targets::EmissionDraw> = self
             .order
             .iter()
@@ -7961,6 +7962,20 @@ impl Renderer {
                 .0
                 .iter()
                 .flat_map(|p| p[..12].to_vec())
+                .collect(),
+        )
+    }
+
+    /// #458: view3d's `velocity` target, f32 x, y a pixel, rows top-down: the core's velocity
+    /// target as this frame built it; `None` in a frame that doesn't build it.
+    pub fn read_velocity(&self, device: &Device) -> Option<Vec<u8>> {
+        let (t, v) = self.targets.as_ref().zip(self.core.velocity.as_ref())?;
+        let half = read_texture(device, &v.texture, t.size, 4)?;
+        Some(
+            half.as_chunks::<2>()
+                .0
+                .iter()
+                .flat_map(|h| f16_to_f32(u16::from_le_bytes(*h)).to_le_bytes())
                 .collect(),
         )
     }

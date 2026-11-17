@@ -58,6 +58,8 @@ pub struct Faults {
     pub skip_copy_pages: bool,
     /// The page tracker leaves the pages a `memory.fill` writes unmarked (#547).
     pub skip_fill_pages: bool,
+    /// Copies every `i64.rotl` as `i64.rotr` (#458).
+    pub rotl_as_rotr: bool,
 }
 
 /// The exported global names a logic item's program gains (#531): each mutable global of the
@@ -937,6 +939,7 @@ impl Body<'_> {
                         mark(&mut e, None);
                     }
                 }
+                Operator::I64Rotl if faults.rotl_as_rotr => e.op(I::I64Rotr),
                 _ if c.mark.is_some() && store(op).is_some() => {
                     // [addr, value]: the store, then its bytes marked.
                     let (offset, size, t) = store(op).expect("a store");

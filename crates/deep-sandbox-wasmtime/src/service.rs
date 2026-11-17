@@ -44,6 +44,7 @@ impl Planted {
             "check_parser_defaults" => p.parser_defaults = true,
             "mapper_reports_unreachable" => p.engine.every_trap_unreachable = true,
             "rewrite_grow_returns_minus_one" => p.rewrite.grow_returns = true,
+            "rewrite_rotl_as_rotr" => p.rewrite.rotl_as_rotr = true,
             _ => return None,
         }
         Some(p)
