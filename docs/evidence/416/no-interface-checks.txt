@@ -14,5 +14,6 @@ Wall time of the same, 7 alternating rounds (noisy under this load):
   base:  658 489 421 400 286 147 125 ms  (median 400.4 ms)
 
 The blind test's own wall-time comparison (40 checks, median of 7 alternating rounds, limit base + 5% + 5 ms) read
-248 ms against the base's 178 ms in one run at this load; its fuel-per-step and receipt legs passed. On the
-reference Mac in a quiet preflight it is the test to read.
+248 ms against the base's 178 ms in one draft run at this load, and passed in the run of the committed suite at
+438158228 (acceptance-interfaces-438158228.txt), as did its fuel-per-step, receipt and frame legs. On the reference
+Mac in a quiet preflight it is the test to read.
