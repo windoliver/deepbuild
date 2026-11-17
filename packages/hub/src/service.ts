@@ -138,8 +138,8 @@ async function waitForStop(path: string, connection: Connection): Promise<void> 
  * Waits for a hub that is still exiting (#2570), for as long as a hub gets to answer: one told to stop closes its
  * socket before its process ends, and holds the root's lock until then. A start asked for in between starts nothing:
  * a dev hub refuses on the lock, and a service manager does nothing for a job that still runs, then leaves one that
- * exits 0 stopped. Whether a hub answers meanwhile: one that is starting holds the lock too. It spends the start's one
- * budget (`deadline`), which the new hub's wait gets what is left of: the owner's reading of #2570's second criterion.
+ * exits 0 stopped. Whether a hub answers meanwhile: one that is starting holds the lock too. It waits until `deadline`;
+ * the new hub's wait then gets 15 s of its own from the ask, as before (the owner's reading of #2570's second criterion).
  * 'held' when the budget ran out with the lock still held: a hub started then would come up after the start failed.
  */
 async function exiting(root: { lock: string; socket: string }, deadline: number): Promise<'answers' | 'free' | 'held'> {
@@ -326,7 +326,7 @@ export async function startHub(options: { root?: string; cli: string }): Promise
   // still counts as running, then leaves it stopped once it exits 0 (#2570). So it is asked again while no hub answers:
   // `launch` starts a stopped job and leaves a running one alone. An error on a later ask is the first ask's to report.
   const again = options.root ? undefined : () => void launch(serviceFile());
-  if (await waitForHub(root.socket, deadline, again)) return 0;
+  if (await waitForHub(root.socket, Date.now() + WAIT_MS, again)) return 0;
   return noHub();
 }
 
