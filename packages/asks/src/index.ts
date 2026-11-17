@@ -648,6 +648,8 @@ class AsksCore implements Asks {
       if (image !== undefined && (typeof image !== 'string' || !SHA256.test(image))) throw new AskRefused('a screenshot is named by its SHA-256, in lower-case hex', { field: 'image' });
       if (option === undefined && words === undefined && image === undefined) throw new AskRefused('an answer chooses an option or says something', { field: 'option' });
       if (token !== undefined && (typeof token !== 'string' || !token)) throw new AskRefused('the click token is text', { field: 'token' });
+      // The record refuses longer text, and a refused answer must save no decision (they share one commit).
+      for (const [field, text] of [['words', words], ['token', token]] as const) if (typeof text === 'string' && [...text].length > 8192) throw new AskRefused(`${field} are at most 8192 characters`, { field });
       if (steps !== undefined && (!Array.isArray(steps) || !steps.every((i) => Number.isInteger(i) && (i as number) >= 0))) throw new AskRefused('steps are the indices of the batch to run', { field: 'steps' });
       const now = this.options.now();
       if (via === 'channel') {

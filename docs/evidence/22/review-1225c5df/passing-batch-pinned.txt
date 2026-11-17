@@ -1,0 +1,11 @@
+
+ RUN  v5.0.5 <repo>
+
+ ✓ packages/hub/test/asleep.test.ts (3 tests | 2 skipped) 81133ms
+   ✓ a hub that stays up shows an ask waiting for its batch at the batch time, with no stop, verdict or deadline due, after you change the batches 80994ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 2 skipped (3)
+   Start at  01:48:44
+   Duration  83.03s (tests 99%)
+

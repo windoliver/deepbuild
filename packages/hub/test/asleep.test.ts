@@ -88,8 +88,9 @@ it('a hub that stays up shows an ask waiting for its batch at the batch time, wi
   for (const p of [home, root]) mkdirSync(p);
   // Batches every 8 h, as setup drafts them: the ask, due in two days, waits for the next one.
   draftAskSettings(root);
-  // Start at least 30 s before a batch time, so the ask is seen waiting first, even with a slow hub start.
-  while (Date.now() % 60_000 > 30_000) await pause(250);
+  // Start 30 to 50 s before a batch time, so the ask is seen waiting first, even with a slow hub start, and the hub's
+  // once-a-minute look for an ask with no batch (#1345), 60 s after its start, comes too late to show this batch in time.
+  while (Date.now() % 60_000 < 10_000 || Date.now() % 60_000 > 30_000) await pause(250);
   const now = Date.now();
   const batch = (Math.floor(now / 60_000) + 1) * 60_000;
   const record = await openRecord({ path: join(root, 'ledger.db'), now: () => now });

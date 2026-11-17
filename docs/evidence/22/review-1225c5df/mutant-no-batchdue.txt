@@ -1,0 +1,37 @@
+
+ RUN  v5.0.5 <repo>
+
+ ❯ packages/hub/test/asleep.test.ts (3 tests | 1 failed | 2 skipped) 54045ms
+   ↓ a hub that slept with an ask waiting for its batch moves its deadline later by the time it slept
+   × a hub that stays up shows an ask waiting for its batch at the batch time, with no stop, verdict or deadline due, after you change the batches 53886ms
+   ↓ the hub's list holds an ask from the batch that shows it, not while it waits for that batch
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/hub/test/asleep.test.ts > a hub that stays up shows an ask waiting for its batch at the batch time, with no stop, verdict or deadline due, after you change the batches
+AssertionError: the 2026-11-17T09:51:00.000Z batch shows it within 5 s of its time: expected [] to deeply equal [ 'batch:2026-11-17T09:51:00.000Z' ]
+
+- Expected
++ Received
+
+- [
+-   "batch:2026-11-17T09:51:00.000Z",
+- ]
++ []
+
+ ❯ packages/hub/test/asleep.test.ts:114:132
+    112|   // The beat is 1 s; 5 s leaves room for a loaded machine, as the hub…
+    113|   while (Date.now() < batch + 5000) await pause(250);
+    114|   expect((await batched()).map((e) => e.data.batch), `the ${new Date(b…
+       |                                                                                                                                    ^
+    115| }, 120_000);
+    116|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 skipped (3)
+   Start at  01:50:11
+   Duration  54.93s (tests 99%, transform 1%)
+
