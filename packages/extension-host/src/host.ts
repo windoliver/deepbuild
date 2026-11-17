@@ -2049,7 +2049,8 @@ class Host implements ExtensionHost {
           const e = (isPlain(reply.error) ? reply.error : {}) as Record<string, unknown>;
           throw Error(`deep.canvas.play: ${String(e.code ?? 'refused')}: ${String(e.message ?? '')}${e.control !== undefined ? ` (control ${String(e.control)})` : ''}`);
         }
-        const values = isPlain(reply.values) && Object.values(reply.values).some((v) => Array.isArray(v) && v.length > 0);
+        // #556: an array recorded only at the steps it changed is read as surely as one read at every step.
+        const values = [reply.values, reply.changes].some((r) => isPlain(r) && Object.values(r).some((v) => Array.isArray(v) && v.length > 0));
         running.played.push({ seed: seed as number, bot: r.bot === undefined ? undefined : canonical(botOf(r.bot)), track: String(reply.track), values });
         if (Array.isArray(reply.entries)) running.tracks.add(canonical(reply.entries));
         // #1048: a probe's track for each copy that trapped or broke a range, the run's recorded entries and what it
