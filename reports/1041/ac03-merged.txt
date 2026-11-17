@@ -1,0 +1,10 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `node node_modules/vitest/vitest.mjs run --root tests/acceptance/1041 ac03-persistent.test.ts --testTimeout=3600000` runs unleased
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/1041
+
+
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Start at  13:31:11
+   Duration  141.80s (tests 100%)
+

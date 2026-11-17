@@ -1,0 +1,10 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `node node_modules/vitest/vitest.mjs run --root docs/evidence/1041 shoot.test.mjs --testTimeout=900000` runs unleased
+
+ RUN  v5.0.5 <checkout>/docs/evidence/1041
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  13:44:08
+   Duration  134.11s (tests 100%)
+

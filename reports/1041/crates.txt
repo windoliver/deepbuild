@@ -1,0 +1,23 @@
+# cargo clippy --locked -p deep-logic -p deep-player -p deep-play --all-targets -- -D warnings
+    Finished `dev` profile [unoptimized] target(s) in 5m 47s
+
+# cargo test --locked -p deep-logic -p deep-player -p deep-play
+     Running unittests src/lib.rs (target/debug/deps/deep_logic-92e6060149654d83)
+test result: ok. 24 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+     Running unittests src/main.rs (target/debug/deps/deep_logic-408f74e6bfa7d16f)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests/controls_542.rs (target/debug/deps/controls_542-02cebe8b35f54eb3)
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+     Running tests/fixture_once.rs (target/debug/deps/fixture_once-a20d30be46aea3bd)
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.25s
+     Running tests/library_trap.rs (target/debug/deps/library_trap-15c8427b1455f43e)
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.27s
+     Running tests/play_184.rs (target/debug/deps/play_184-081a4d039a19d991)
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.47s
+     Running unittests src/lib.rs (target/debug/deps/deep_play-7b5393ab3a8aee56)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running unittests src/lib.rs (target/debug/deps/deep_player-898476f3604e9c5f)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
