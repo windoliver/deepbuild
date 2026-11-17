@@ -1,0 +1,37 @@
+== node benchmarks/hub.mjs cold-start
+{"bench":"hub","mode":"cold-start","coldMs":3468.4865419999996}
+exit=0
+== node benchmarks/hub.mjs idle
+{"bench":"hub","mode":"idle","idleCpuPercent":6.4,"rssBytes":80756736}
+exit=0
+== node benchmarks/status.mjs
+file://<worktree>/packages/record/dist/index.js:356
+            throw new RecordError('schema', `${issue.code} at ${issue.path || '/'}: ${issue.remediation} (${kind} ${String(input.id)}${input.subject ? ` on ${String(input.subject)}` : ''})`, { path: issue.path });
+                  ^
+
+RecordError: unlisted_field at /data/subject: Remove the field, or connect with the contract version that lists it. (ask.created 01M7M9QEW700000000000002B3)
+    at SqliteRecord.prepare (file://<worktree>/packages/record/dist/index.js:356:19)
+    at SqliteRecord.appendNow (file://<worktree>/packages/record/dist/index.js:405:31)
+    at file://<worktree>/packages/record/dist/index.js:385:102
+    at async SqliteRecord.append (file://<worktree>/packages/record/dist/index.js:388:34)
+    at async file://<base>/benchmarks/status.mjs:46:14 {
+  code: 'schema',
+  path: '/data/subject',
+  kind: undefined,
+  id: undefined
+}
+
+Node.js v24.22.2
+exit=1
+== node benchmarks/mcp.mjs
+file://<base>/benchmarks/mcp.mjs:90
+    if (!reply.result || reply.result.isError) throw Error(`${name} failed: ${JSON.stringify(reply).slice(0, 500)}`);
+                                                     ^
+
+Error: deep_status failed: {"jsonrpc":"2.0","id":2,"result":{"content":[{"type":"text","text":"{\"code\":\"unavailable\",\"retryable\":true,\"remediation\":\"The DeepBuild hub is unreachable (no answer on its socket); nothing was recorded. Call again once it is back.\",\"path\":\"\",\"actual\":\"\",\"evidence\":[]}"}],"isError":true}}
+    at call (file://<base>/benchmarks/mcp.mjs:90:54)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file://<base>/benchmarks/mcp.mjs:94:18
+
+Node.js v24.22.2
+exit=1
