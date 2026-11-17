@@ -6,10 +6,23 @@ import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSy
 import net from 'node:net';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readSinceStart, startReading, unread } from './process-reader.mjs';
 
 const CLI = fileURLToPath(new URL('../packages/cli/dist/main.js', import.meta.url));
 const DAY = 86_400_000;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const READINGS = { instructions: 'instructions', cpuMs: 'CPU time', wakeups: 'wakeups', footprintBytes: 'footprint' };
+
+/**
+ * The reader's reading as a mode's last line gives it: its span, the hub's own readings, the same for each child the
+ * hub keeps, each through `each`, and INCONCLUSIVE naming every reading that is missing (#2698).
+ */
+function report(reading, pid, each = (process) => process) {
+  const own = reading.processes.find((process) => process.pid === pid);
+  const children = reading.processes.filter((process) => process !== own);
+  const named = [own, ...children].flatMap((process) => Object.keys(READINGS).map((name) => [`${process === own ? 'the hub' : "the hub's child"} ${process.pid}'s ${READINGS[name]}`, process[name]]));
+  return { spanMs: reading.spanMs, hub: each(own), children: children.map(each), ...unread(Object.fromEntries(named)) };
+}
 
 /** One connection: resolves with each line the hub writes, through `onLine`, until it closes. */
 function exchange(socket, request) {
@@ -127,20 +140,6 @@ async function stop(hub) {
 const modes = {
   // The core's ready line, not its earlier socket hello. The counter excludes children and shutdown.
   async 'start-to-ready'(home) {
-    // Same kernel counter as the perf lane, compiled outside the hub's measured interval.
-    const counter = join(home, 'read-instructions');
-    let readable = false;
-    if (process.platform === 'darwin') try {
-      execFileSync('cc', ['-O2', '-Wall', '-Werror', '-o', counter, fileURLToPath(new URL('./read-instructions.c', import.meta.url))], { stdio: 'pipe' });
-      readable = true;
-    } catch { /* no compiler: the count below stays missing */ }
-    const readInstructions = (pid) => {
-      if (!readable) return null;
-      try {
-        const count = Number(execFileSync(counter, [String(pid)], { encoding: 'utf8' }).trim());
-        return Number.isSafeInteger(count) && count > 0 ? count : null;
-      } catch { return null; }
-    };
     mkdirSync(join(home, '.deepbuild'), { recursive: true });
     writeFileSync(join(home, '.deepbuild', 'rules.json'), readFileSync(new URL('../crates/deep-hook/default-rules.json', import.meta.url)));
     const t0 = performance.now();
@@ -162,7 +161,8 @@ const modes = {
             try { line = JSON.parse(text); } catch { continue; }
             if (line.ready !== true || line.pid !== hub.pid) continue;
             const readyMs = performance.now() - t0;
-            const instructions = readInstructions(hub.pid);
+            // Same kernel counter as the perf lane, for the hub's own process from its start.
+            const { instructions } = readSinceStart(hub.pid).processes[0];
             resolve({ readyMs, instructions, ...(instructions === null ? { status: 'INCONCLUSIVE', reason: 'hub instruction counter unavailable' } : {}) });
           }
         });
@@ -173,11 +173,12 @@ const modes = {
       await ended;
     }
   },
-  // From spawning the hub to its socket answering.
+  // From spawning the hub to its socket answering, and what the hub and each child it keeps cost from their starts to then.
   async 'cold-start'(home) {
     const { hub, coldMs } = await start(home);
+    const reading = readSinceStart(hub.pid);
     await stop(hub);
-    return { coldMs };
+    return { coldMs, ...report(reading, hub.pid) };
   },
   // 1,000 PreToolUse requests, one connection each, as deep-hook makes them: the round trip at p95.
   async 'round-trip'(home) {
@@ -259,18 +260,22 @@ const modes = {
     await stop(hub);
     return { events, pagedMs };
   },
-  // The hub left idle: after two seconds to settle, the CPU it uses over five more, and its resident memory.
+  // The hub left idle: after fifteen seconds to settle, the CPU it uses over five more, and its resident memory, with
+  // the wakeups, instructions, CPU time and footprint of the hub and each child it keeps over the span around them.
   async idle(home) {
     const { hub } = await start(home);
-    await sleep(2000);
+    await sleep(15_000);
     const ps = (field) => execFileSync('ps', ['-o', `${field}=`, '-p', String(hub.pid)], { encoding: 'utf8' }).trim();
     const cpu = () => ps('time').split(/[:.]/).map(Number).reduce((acc, part, i, all) => (i === all.length - 1 ? acc + part / 100 : acc * 60 + part), 0);
+    const reading = startReading(hub.pid);
     const before = cpu();
     await sleep(5000);
     const idleCpuPercent = ((cpu() - before) / 5) * 100;
     const rssBytes = Number(ps('rss')) * 1024;
+    const read = reading.stop();
     await stop(hub);
-    return { idleCpuPercent, rssBytes };
+    const aSecond = (count) => (count === null ? null : count / (read.spanMs / 1000));
+    return { idleCpuPercent, rssBytes, ...report(read, hub.pid, ({ pid, instructions, cpuMs, wakeups, footprintBytes }) => ({ pid, wakeups, instructionsPerSecond: aSecond(instructions), cpuMsPerSecond: aSecond(cpuMs), footprintBytes })) };
   },
 };
 
