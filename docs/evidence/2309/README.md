@@ -2,7 +2,7 @@
 
 Readings from this change's `deep-physics` (Rapier 0.36.1, macOS arm64) on five and ten 1 m cubes (density 1000,
 friction 0.5) stacked on a static floor at 120 Hz, 720 steps. Speeds are each cube's fastest in the sixth second.
-The blind suite (`tests/acceptance/2309/`, commit fb3190b51) reads 12 of 12 on this change; at the base it read 8 failing at assertions and 4 passing.
+The blind suite (`tests/acceptance/2309/`, commit fb3190b51) reads 12 of 12 on this change (AC1 and AC3 in the first run, AC2 and AC4 in the rerun after the kit fix, below); at the base it read 8 failing at assertions and 4 passing.
 
 ## Refusals (check)
 
