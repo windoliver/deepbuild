@@ -10,7 +10,7 @@
 //   - the page's manifest holds exactly 27 states held at the marker `end`, whose q1, q2 and q3 are each of the 27
 //     answer combinations once;
 //   - the fixture: the app's own stills at the end of the 27 paths (png_seq stills at marker `end` on the input track
-//     that answers the three questions in turn, #169's) show the four scores apart;
+//     that answers each question at its stop, where a page stamps it) show the four scores apart;
 //   - each end state's still, decoded to BGRA8 and hashed with BLAKE3, equals the app's still at the end of its path.
 // Wrong programs: the merge base, where the quiz's logic never reads an answer, so every path ends on one score and
 // the fixture fails; and the page with the all-right and all-wrong paths' stills swapped (scores 3 and 0), which fails

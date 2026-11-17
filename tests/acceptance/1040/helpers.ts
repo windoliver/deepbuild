@@ -311,9 +311,9 @@ export function quizDoc(evidence: string): JsonObject {
     assets: { scorer_program: programAsset(program) },
   });
 }
-/** The answers' input track: each question answered 0.5 s after the timeline reaches it (on the clock: 1.5, 3.0, 4.5 s;
- * #169's). */
-export const answersTrack = (a: readonly string[]): JsonObject[] => [entry(1.5, 'q1', a[0]!), entry(3.0, 'q2', a[1]!), entry(4.5, 'q3', a[2]!)];
+/** The answers' input track: each question answered at its stop, where a page stamps it (the clocks where the plays
+ * rest: 1, 2 and 3 s), so no wait runs and the clock the logic steps on stays the document's time the score is read at. */
+export const answersTrack = (a: readonly string[]): JsonObject[] => [entry(1, 'q1', a[0]!), entry(2, 'q2', a[1]!), entry(3, 'q3', a[2]!)];
 export const QUIZ_PATHS: string[][] = QUIZ.options.flatMap((a) => QUIZ.options.flatMap((b) => QUIZ.options.map((c) => [a, b, c])));
 export const pathName = (a: readonly string[]): string => `q1=${a[0]} q2=${a[1]} q3=${a[2]}`;
 
