@@ -105,6 +105,10 @@ pub fn decide(app: &mut App, call: &Value) -> Value {
     if call["via"] != "you" {
         return json!({"outcome": "refused", "code": "not_your_decision", "reason": "only your decision blesses a golden"});
     }
+    // #458: no golden is blessed on a CPU or software adapter.
+    if let Some(reason) = crate::full_lane::software(app) {
+        return json!({"outcome": "refused", "code": "software_adapter", "reason": reason});
+    }
     // #1903: your limits for the envelope's calibration metrics.
     if call["decision"].get("limits").is_some() {
         return crate::envelope::decide_limits(call);
@@ -259,6 +263,10 @@ pub fn golden(app: &mut App, out: &str, call: &Value) -> Value {
     let (Some(store), Some(fixture)) = (call["store"].as_str(), call["fixture"].as_str()) else {
         return refused("bad_input", "golden takes a store and a fixture");
     };
+    // #458: nor compared there, before any fingerprint or pixel is read.
+    if let Some(reason) = crate::full_lane::software(app) {
+        return json!({"verdict": "BLOCKED", "reason": reason});
+    }
     // #422: `hash` compares the two images' RGBA8 pixels exactly, after the same guards.
     let oracle = if call["oracle"] == "hash" {
         "hash"

@@ -1,0 +1,64 @@
+{
+  "id": "pairs.badge",
+  "version": "1.0",
+  "title": "Badge",
+  "license": "MIT",
+  "author": "the #458 acceptance suite, pairs group",
+  "description": "A stroked plate 40 units square, and n stroked pips 12 units square to its right, 24 units apart. No two of its items touch.",
+  "inputs": {
+    "n": {
+      "type": "integer",
+      "default": 3,
+      "min": 1,
+      "max": 6,
+      "about": "how many pips"
+    }
+  },
+  "steps": {
+    "plate": {
+      "op": "mark",
+      "kind": "rect@1",
+      "params": {
+        "box": [0, 0, 40, 40],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          },
+          "stroke": {
+            "role": "ink",
+            "width": 2
+          }
+        }
+      },
+      "at": {
+        "pos": [0, 0, 0]
+      }
+    },
+    "pips": {
+      "op": "mark",
+      "kind": "rect@1",
+      "repeat": {
+        "count": "n",
+        "as": "i"
+      },
+      "params": {
+        "box": [0, 0, 12, 12],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          },
+          "stroke": {
+            "role": "ink",
+            "width": 2
+          }
+        }
+      },
+      "at": {
+        "pos": ["56 + 24 * i", 14, 0]
+      }
+    }
+  },
+  "outputs": {
+    "parts": ["plate", "pips"]
+  }
+}

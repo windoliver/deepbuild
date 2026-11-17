@@ -30,6 +30,7 @@ mod module;
 mod motion;
 mod oit;
 mod op;
+mod origin;
 mod planted;
 pub mod print;
 mod readouts;
@@ -63,7 +64,7 @@ use deep_gpu::encode::Job;
 use deep_gpu::render::Pass;
 use deep_gpu::surface::FORMAT;
 
-pub use crate::diag::{draw_offscreen_diag, Diag, DiagCounts};
+pub use crate::diag::{draw_offscreen_diag, white, Diag, DiagCounts};
 use crate::mesh::Mesh;
 pub use crate::module::{
     draw_offscreen, timed, AfterFrame, Counts, HdrFrame, Module3, PostFrame, Profiler, Shared,
@@ -2733,6 +2734,7 @@ impl Renderer {
             core: targets::Core::default(),
             velocity_frame: None,
             emission_frame: None,
+            normal_frame: None,
             batches: BTreeMap::new(),
             atlas: None,
             mask: (mask_layout, sampler),
@@ -2769,6 +2771,7 @@ impl Renderer {
             low_bytes: None,
             outlines,
             pre_tone: None,
+            origin: [0.0; 3],
             post_bind: None,
         }
     }
@@ -3863,6 +3866,25 @@ impl Renderer {
     /// Takes the frame's scene: the uniforms, each batch's changed records, and the batches
     /// whose draw key changed encoded again. What it did is in [`Renderer::counts`].
     pub fn prepare(&mut self, device: &Device, scene: &Scene, look: &Look3) {
+        let placed = self.placed(scene);
+        self.prepare_placed(device, placed.as_ref().unwrap_or(scene), look);
+    }
+
+    /// #458: `scene` moved by its view's origin, which this keeps, so its positions reach the GPU
+    /// relative to that origin; `None` where it draws as it stands. The planted renderer uploads
+    /// every position as the world has it.
+    pub(crate) fn placed(&mut self, scene: &Scene) -> Option<Scene> {
+        let moved = if self.planted.absolute_positions {
+            None
+        } else {
+            origin::moved(scene)
+        };
+        self.origin = moved.as_ref().map_or([0.0; 3], |_| origin::of(scene));
+        moved
+    }
+
+    /// [`Renderer::prepare`] for a scene already placed about its origin.
+    fn prepare_placed(&mut self, device: &Device, scene: &Scene, look: &Look3) {
         self.crop = scene.crop;
         self.probe_ids = scene.probes.iter().map(|p| p.id.clone()).collect();
         // Level of detail at this view (#425): a scene whose solids still carry bands or mesh
@@ -3877,7 +3899,7 @@ impl Renderer {
                 shadow_texels(&chosen, side),
             );
             deep_canvas_scene3d::lod::resolve(&mut chosen, &choices);
-            return self.prepare(device, &chosen, look);
+            return self.prepare_placed(device, &chosen, look);
         }
         // #166: the water's parts draw in a pass of their own, after the mirror's view.
         if let Some(w) = scene.water.clone() {
@@ -3887,7 +3909,7 @@ impl Renderer {
                 for layer in &mut dry.layers {
                     layer.solids.retain(|s| !wet(s));
                 }
-                self.prepare(device, &dry, look);
+                self.prepare_placed(device, &dry, look);
                 self.prepare_water(device, scene, &w);
                 return;
             }
@@ -4288,9 +4310,10 @@ impl Renderer {
         };
         self.core.ensure(&device.device, size);
         let wanted = self.core.velocity.is_some();
-        self.velocity_frame = self
-            .motion
-            .target_frame(device, scene, wanted, &self.meshes, size);
+        let skip_elements = self.planted.instanced_skips_velocity;
+        self.velocity_frame =
+            self.motion
+                .target_frame(device, scene, wanted, &self.meshes, size, skip_elements);
         let draws: Vec<targets::EmissionDraw> = self
             .order
             .iter()
@@ -4314,6 +4337,52 @@ impl Renderer {
             self.lights_bind.clone(),
             self.ao.shade().clone(),
         ];
+        self.normal_frame = self.core.normal.is_some().then(|| {
+            // #458: each opaque solid's own record, so the target reads what the geometry drew;
+            // the planted path leaves out an instancer's elements, `<instancer>#<id>`.
+            let skip = self.planted.instances_skip_normal;
+            let winding = !self.planted.winding_ignores_determinant;
+            let (mut records, mut draws) = (Vec::new(), Vec::new());
+            for s in scene.layers.iter().flat_map(|l| &l.solids) {
+                let Some(mesh) = self.meshes.get(&s.shape) else {
+                    continue;
+                };
+                if s.cast_only || s.alpha < 1.0 || skip && s.id.contains('#') {
+                    continue;
+                }
+                let pick = self.picks.get(&s.id).copied().unwrap_or(0);
+                records.push(solid_record(s, pick, 0, winding, false, 0));
+                draws.push((mesh.vertices.clone(), mesh.indices.clone(), mesh.count));
+            }
+            if records.is_empty() {
+                records.push(SolidRecord::zeroed());
+            }
+            let instances = deep_gpu::alloc::outside(|| {
+                let buffer = device.device.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some("scene3d.normal instances"),
+                    size: std::mem::size_of_val(records.as_slice()) as u64,
+                    usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                    mapped_at_creation: false,
+                });
+                device
+                    .queue
+                    .write_buffer(&buffer, 0, bytemuck::cast_slice(&records));
+                buffer
+            });
+            targets::NormalFrame {
+                pipe: self
+                    .core
+                    .normal_pipe(device, &self.scene_module, &self.solid_layout),
+                binds: [
+                    self.frame_bind.clone(),
+                    self.lights_bind.clone(),
+                    self.ao.shade().clone(),
+                    self.maps.by_index(0).clone(),
+                ],
+                instances,
+                draws,
+            }
+        });
         let threshold = self.planted.emission_thresholds_color.then_some(&linear);
         self.emission_frame = self.core.emission_frame(
             device,
@@ -4338,9 +4407,15 @@ impl Renderer {
             .as_ref()
             .zip(self.core.emission.as_ref())
             .map(|(f, e)| (f.clone(), e.view.clone()));
-        (velocity.is_some() || emission.is_some()).then(|| CoreDraws {
+        let normal = self
+            .normal_frame
+            .as_ref()
+            .zip(self.core.normal.as_ref())
+            .map(|(f, n)| (f.clone(), n.view.clone()));
+        (velocity.is_some() || emission.is_some() || normal.is_some()).then(|| CoreDraws {
             velocity,
             emission,
+            normal,
             depth: t.depth_view.clone(),
         })
     }
@@ -4529,6 +4604,23 @@ impl Renderer {
         look: &Look3,
         moved: &[(usize, usize)],
     ) {
+        // #458: a view whose origin changed prepares whole, since every position did.
+        let was = self.origin;
+        let placed = self.placed(scene);
+        let scene = placed.as_ref().unwrap_or(scene);
+        if self.origin != was {
+            return self.prepare_placed(device, scene, look);
+        }
+        self.prepare_moved_placed(device, scene, look, moved);
+    }
+
+    fn prepare_moved_placed(
+        &mut self,
+        device: &Device,
+        scene: &Scene,
+        look: &Look3,
+        moved: &[(usize, usize)],
+    ) {
         self.crop = scene.crop;
         self.planted_per_item(device, scene);
         // See-through parts reorder as the camera moves, so a frame holding one prepares whole;
@@ -4543,7 +4635,7 @@ impl Renderer {
             || scene.mirror.is_some()
             || scene.water.is_some()
         {
-            return self.prepare(device, scene, look);
+            return self.prepare_placed(device, scene, look);
         }
         // A tie rank is a function of the frame, so a part whose rank the move changed rewrites
         // too, and a frame draws the same however it was reached (#149, #450).
@@ -4562,7 +4654,7 @@ impl Renderer {
             };
             match index {
                 Some(k) => lobes.push(k),
-                None => return self.prepare(device, scene, look),
+                None => return self.prepare_placed(device, scene, look),
             }
         }
         let generation = self.ao.generation;
@@ -5284,7 +5376,7 @@ impl Renderer {
             saturation: look.grade.saturation as f32,
             graded: u32::from(!look.grade.is_identity()),
             top: 1.0,
-            _pad: [0; 3],
+            _pad: [u32::from(self.planted.exposure_after_tone_map), 0, 0],
             wb: look
                 .grade
                 .white_balance()
@@ -7977,6 +8069,34 @@ impl Renderer {
         )
     }
 
+    /// #458: the normal target, f32 RGBA a pixel (the world normal, 1 where a solid shows), rows
+    /// top-down; `None` in a frame that doesn't build it.
+    pub fn read_geometry_normal(&self, device: &Device) -> Option<Vec<u8>> {
+        let (t, n) = self.targets.as_ref().zip(self.core.normal.as_ref())?;
+        let half = read_texture(device, &n.texture, t.size, 8)?;
+        Some(
+            half.as_chunks::<2>()
+                .0
+                .iter()
+                .flat_map(|h| f16_to_f32(u16::from_le_bytes(*h)).to_le_bytes())
+                .collect(),
+        )
+    }
+
+    /// #458: view3d's `velocity` target, f32 x, y a pixel, rows top-down: the core's velocity
+    /// target as this frame built it; `None` in a frame that doesn't build it.
+    pub fn read_velocity(&self, device: &Device) -> Option<Vec<u8>> {
+        let (t, v) = self.targets.as_ref().zip(self.core.velocity.as_ref())?;
+        let half = read_texture(device, &v.texture, t.size, 4)?;
+        Some(
+            half.as_chunks::<2>()
+                .0
+                .iter()
+                .flat_map(|h| f16_to_f32(u16::from_le_bytes(*h)).to_le_bytes())
+                .collect(),
+        )
+    }
+
     /// #166: view3d's `depth` target, f32 a pixel, rows top-down: at each pixel's centre, the
     /// distance in m along the view axis from the eye to what the depth target holds there;
     /// infinite where nothing is drawn.
@@ -8463,6 +8583,7 @@ fn per_pixel_pass(
 struct CoreDraws {
     velocity: Option<(motion::TargetFrame, wgpu::TextureView)>,
     emission: Option<(targets::EmissionFrame, wgpu::TextureView)>,
+    normal: Option<(targets::NormalFrame, wgpu::TextureView)>,
     depth: wgpu::TextureView,
 }
 
@@ -8472,6 +8593,9 @@ impl CoreDraws {
             f.record(encoder, view, &self.depth);
         }
         if let Some((f, view)) = &self.emission {
+            f.record(encoder, view, &self.depth);
+        }
+        if let Some((f, view)) = &self.normal {
             f.record(encoder, view, &self.depth);
         }
     }
