@@ -1600,7 +1600,7 @@ impl Renderer {
             if !self.gate.enabled {
                 return Err(gpui_lacks(&item));
             }
-            if let Some(r) = crate::gpu::refusal(marks.iter().copied()) {
+            if let Some(r) = crate::gpu::live_refusal(marks.iter().copied()) {
                 return Err(r);
             }
             let images = (session.store.clone(), session.plant);
