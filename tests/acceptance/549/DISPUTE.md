@@ -34,6 +34,11 @@ Run on November 17, 2026 at `8b42e8c71`, under a build grant:
    Duration  446.98s (tests 100%)
 ```
 
-The redraft passes where the first draft fails, so by the design's Dogfooding rule the dispute comes to the owner once,
-with both drafts and the failing output above. Until the owner rules, both run (`scripts/lanes.mjs`), and the first
-draft's third test still fails.
+The redraft passes where the first draft fails, so by the design's Dogfooding rule the dispute came to the owner once,
+with both drafts and the failing output above.
+
+## The owner's call
+
+November 17, 2026, in the session that built this change: "Redraft proves it". Criterion 2's third-connection half is
+proved by the redraft, which runs in the first draft's place (`scripts/lanes.mjs`); this file, with its other three
+tests, which pass and are not disputed, runs by hand.
