@@ -1,18 +1,23 @@
 #192 criterion 12 redraft against the merge base 06e231702, on this Mac (macOS arm64), November 16, 2026.
 
-WHAT RAN
+THE BASE BINARY
 
-The merge base's deep-show `full,test-mesh-item`, the binary the coordinating session had built
-(target/acceptance-192-packs-base/06e231702bb4/deep-show-full+test-mesh-item), copied to the same place in this
-worktree, where the helpers' baseShow() takes it.
+The merge base's deep-show `full,test-mesh-item`: first the binary the coordinating session had built, copied to
+target/acceptance-192-packs-base/06e231702bb4/deep-show-full+test-mesh-item in this worktree, where the helpers'
+baseShow() takes it; then, at 23:05, this checkout's own build put in its place (`cargo build --locked --bin deep-show
+--no-default-features --features full,test-mesh-item` under the build grant, exit 0). This checkout's Rust code is the
+merge base's: its own commits touch only tests/ and scripts/lanes.mjs.
 
-A dev copy of budget-ceilings.test.ts (not committed) that drives that base binary in both legs, runs the merge-base
-leg first and then requires this build's judge to fail first naming budget/fuel:
+THE MERGE-BASE LEG
+
+A dev copy of budget-ceilings.test.ts (not committed) that drives the base binary in both legs, runs the merge-base
+leg first and then requires this build's judge to fail first naming budget/fuel. Run twice, once on each binary:
 
   $ node node_modules/vitest/vitest.mjs run --root tests/acceptance/192/packs-redraft-ac12 dev-ceilings.test.ts --testTimeout=600000
    Test Files  1 passed (1)
         Tests  1 passed (1)
-     Duration  46.85s
+     Duration  46.85s          (the coordinating session's binary)
+     Duration  8.85s           (this checkout's build)
 
 So at the merge base, on the redraft's scenario:
 - test/fuelover and test/memoryover both install: no refusal.
@@ -20,13 +25,22 @@ So at the merge base, on the redraft's scenario:
   two providers' keys differ by `out.mesh.max_vertices`, 4 and 8), and each `provided` row holds the quad with no trap.
 - failures(base)[0] names budget/fuel: the base fails this test, naming the first.
 
-WHAT DIDN'T RUN
+THE COMMITTED FILE AT THE BASE
 
-The committed file itself, at the base: its first leg builds this checkout's deep-show, and the machine's one build
-grant was not free (load averages above 500 on 18 cores). At the base that leg is the same binary as above, and it
-fails at "this build meets criterion 12" with the list whose first entry is
+  $ node node_modules/vitest/vitest.mjs run --root tests/acceptance/192/packs-redraft-ac12 budget-ceilings.test.ts --testTimeout=600000
+   × #192.e8dea9d2 fuel 10,000,000,001 is refused naming budget/fuel and memory 257 naming budget/memory, …
+  AssertionError: this build meets criterion 12: expected [ …(4) ] to deeply equal []
+  + "test/fuelover@1.0.0, whose provider fuel_over states budget {fuel: 10,000,000,001}, isn't refused at check naming
+     the provider and budget/fuel (an issue at providers/fuel_over/budget/fuel): outcome installed, issues []",
+  + "test/memoryover@1.0.0, whose provider memory_over states budget {memory: 257}, isn't refused at check naming the
+     provider and budget/memory (an issue at providers/memory_over/budget/memory): outcome installed, issues []",
+  + "the document naming ceilings.at_ceiling isn't presented without an error: {… "code":"provider_trap", …
+     "trap":{"kind":"refused","what":"memory 0 holds 4096 pages, past the memory budget of 67108864 …",
+  + "ceilings.at_ceiling (budget 10,000,000,000 and 256) didn't run at the document's check to its one-quad mesh in the
+     top 4 KiB of its 256 MiB memory: {… "trap":{"kind":"refused", …"
+   ❯ budget-ceilings.test.ts:84:61
+   Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Duration  4.89s
 
-  test/fuelover@1.0.0, whose provider fuel_over states budget {fuel: 10,000,000,001}, isn't refused at check naming
-  the provider and budget/fuel (an issue at providers/fuel_over/budget/fuel): outcome installed, issues []
-
-(the dev copy asserted exactly that list's first entry). The redraft has not run against any implementation.
+The redraft has not run against any implementation.
