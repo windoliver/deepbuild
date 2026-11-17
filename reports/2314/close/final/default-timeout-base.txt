@@ -1,0 +1,47 @@
+$ node node_modules/vitest/vitest.mjs run --reporter=verbose --no-file-parallelism tests/acceptance/87/numbers/speed.test.ts tests/acceptance/87/gate/replay-lane.test.ts
+Mon Nov 16 21:58:17 UTC 2026
+13:58  up 3 days, 7 mins, 19 users, load averages: 33.73 48.50 43.87
+
+ RUN  v5.0.5 <base>
+
+ × tests/acceptance/87/gate/replay-lane.test.ts > AC21 #87.7649e9da a change to the review check's prompt is replayed on the merge base and the change, and every finding that moves is listed > AC21 #87.7649e9da the planted prompt change that drops the planted bug's finding fails no test, is listed with both runs and fails the preflight until the maintainer's yes on that list 14796ms
+   → Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ × tests/acceptance/87/numbers/speed.test.ts > a speed claim cites a timing check that names its baseline, toolchains and machine, and times both sides on cold caches > "1.8× faster than the merge base" passes on a change twenty times faster and never on equal work; "the library" with no release is INVALID; another driver is INCONCLUSIVE; an unflushed repeat is INVALID 13093ms
+   → Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ✓ tests/acceptance/87/numbers/speed.test.ts > a speed claim cites a timing check that names its baseline, toolchains and machine, and times both sides on cold caches > wrong program: a numbers check that accepts a baseline named only by library fails this test (the "the library" claim is not INVALID) 2929ms
+ ✓ tests/acceptance/87/numbers/speed.test.ts > a speed claim cites a timing check that names its baseline, toolchains and machine, and times both sides on cold caches > wrong program: a numbers check that counts a side run under a toolchain it doesn't name fails this test (another driver is not INCONCLUSIVE) 2147ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/87/gate/replay-lane.test.ts > AC21 #87.7649e9da a change to the review check's prompt is replayed on the merge base and the change, and every finding that moves is listed > AC21 #87.7649e9da the planted prompt change that drops the planted bug's finding fails no test, is listed with both runs and fails the preflight until the maintainer's yes on that list
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ tests/acceptance/87/gate/replay-lane.test.ts:78:3
+     76|
+     77| describe(`${AC21} a change to the review check's prompt is replayed on…
+     78|   it(`${AC21} the planted prompt change that drops the planted bug's f…
+       |   ^
+     79|     const s = scene(BASE, [{ files: { 'packages/checks-review/src/prom…
+     80|     const env = { ...process.env };
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/acceptance/87/numbers/speed.test.ts > a speed claim cites a timing check that names its baseline, toolchains and machine, and times both sides on cold caches > "1.8× faster than the merge base" passes on a change twenty times faster and never on equal work; "the library" with no release is INVALID; another driver is INCONCLUSIVE; an unflushed repeat is INVALID
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ tests/acceptance/87/numbers/speed.test.ts:37:3
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  2 failed | 2 passed (4)
+   Start at  13:58:18
+   Duration  35.08s (tests 98%, transform 2%)
+
+exit=1
+Mon Nov 16 21:58:53 UTC 2026
+13:58  up 3 days, 7 mins, 19 users, load averages: 41.46 48.62 44.09

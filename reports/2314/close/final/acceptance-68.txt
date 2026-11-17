@@ -1,0 +1,52 @@
+$ node node_modules/vitest/vitest.mjs run --reporter=verbose --root tests/acceptance/68 --testTimeout=600000
+Mon Nov 16 20:29:02 UTC 2026
+12:29  up 2 days, 22:38, 20 users, load averages: 187.90 134.79 155.47
+
+ RUN  v5.0.5 <change>/tests/acceptance/68
+
+ ✓ document.test.ts > AC3 a document with one number that does not match its source fails, naming the number and the source > AC3 the report writing 1,250 where its cited source says 1240 fails, naming 1,250 and sources/q3.json; the fixed report passes 229ms
+ ✓ proof.test.ts > Proof: the data and message kinds fail on a planted fault and pass on the fix > Proof data: east orders totalling 200 where 150 must hold fail at the check's assertion; the fixed table passes 229ms
+ ✓ drafting.test.ts > Proof: a requirement no kind can check becomes an early question > Proof drafting: R1-R4 get checks of their kinds; R5, a money check no registered kind serves, becomes one early question quoting it 237ms
+ × service.test.ts > AC4 a service check run from where its users are fails when the endpoint answers outside its floor > AC4 the endpoint answering its users after 300 ms against a 100 ms latency floor fails, every request from 127.0.0.1; the fast endpoint passes 362ms
+   → the check sent requests to the endpoint: expected 0 to be greater than 0
+ ✓ proof.test.ts > Proof: the data and message kinds fail on a planted fault and pass on the fix > Proof message: a mail delivered to a Maildir but never seen fails, naming the acknowledgement; the seen mail passes 207ms
+ ✓ model-opinion.test.ts > AC5 the service kind can not turn a model's opinion into PASS > AC5 service: on the fixed work its check passes with code as its oracle, and is never PASS with a model as its oracle 498ms
+ ✓ budgets.test.ts > AC6 the service kind declares its time and cost budget, and the gate refuses it with none > AC6 service: declares a time and a cost budget, the gate admits it, refuses it without one naming the kind, and its run keeps to its time 546ms
+ ✓ budgets.test.ts > AC6 the data kind declares its time and cost budget, and the gate refuses it with none > AC6 data: declares a time and a cost budget, the gate admits it, refuses it without one naming the kind, and its run keeps to its time 90ms
+ ✓ model-opinion.test.ts > AC5 the data kind can not turn a model's opinion into PASS > AC5 data: on the fixed work its check passes with code as its oracle, and is never PASS with a model as its oracle 189ms
+ ✓ budgets.test.ts > AC6 the document kind declares its time and cost budget, and the gate refuses it with none > AC6 document: declares a time and a cost budget, the gate admits it, refuses it without one naming the kind, and its run keeps to its time 75ms
+ ✓ budgets.test.ts > AC6 the message kind declares its time and cost budget, and the gate refuses it with none > AC6 message: declares a time and a cost budget, the gate admits it, refuses it without one naming the kind, and its run keeps to its time 237ms
+ ✓ model-opinion.test.ts > AC5 the document kind can not turn a model's opinion into PASS > AC5 document: on the fixed work its check passes with code as its oracle, and is never PASS with a model as its oracle 317ms
+ ✓ model-opinion.test.ts > AC5 the message kind can not turn a model's opinion into PASS > AC5 message: on the fixed work its check passes with code as its oracle, and is never PASS with a model as its oracle 146ms
+ ✓ planted-failure.test.ts > AC1 the service kind ships with a planted failure it catches, run in its conformance test > AC1 service: its kit's planted failure is caught by the kind and missed by a runner that reports passed on any work 2161ms
+ ✓ planted-failure.test.ts > AC1 the data kind ships with a planted failure it catches, run in its conformance test > AC1 data: its kit's planted failure is caught by the kind and missed by a runner that reports passed on any work 651ms
+ ✓ planted-failure.test.ts > AC1 the document kind ships with a planted failure it catches, run in its conformance test > AC1 document: its kit's planted failure is caught by the kind and missed by a runner that reports passed on any work 673ms
+ ✓ planted-failure.test.ts > AC1 the message kind ships with a planted failure it catches, run in its conformance test > AC1 message: its kit's planted failure is caught by the kind and missed by a runner that reports passed on any work 885ms
+ ✓ kit.test.ts > AC2 the service kind passes check.kind@1, and its two planted runners each fail it with their own message > AC2 service: the kind passes its kit, fixed and seeded; past-deadline and dropped-output each fail it with their own message 7606ms
+ ✓ kit.test.ts > AC2 the data kind passes check.kind@1, and its two planted runners each fail it with their own message > AC2 data: the kind passes its kit, fixed and seeded; past-deadline and dropped-output each fail it with their own message 3657ms
+ ✓ kit.test.ts > AC2 the document kind passes check.kind@1, and its two planted runners each fail it with their own message > AC2 document: the kind passes its kit, fixed and seeded; past-deadline and dropped-output each fail it with their own message 4000ms
+ ✓ kit.test.ts > AC2 the message kind passes check.kind@1, and its two planted runners each fail it with their own message > AC2 message: the kind passes its kit, fixed and seeded; past-deadline and dropped-output each fail it with their own message 3551ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  service.test.ts > AC4 a service check run from where its users are fails when the endpoint answers outside its floor > AC4 the endpoint answering its users after 300 ms against a 100 ms latency floor fails, every request from 127.0.0.1; the fast endpoint passes
+AssertionError: the check sent requests to the endpoint: expected 0 to be greater than 0
+ ❯ service.test.ts:14:68
+     12|     const r = await runOn(fault);
+     13|     const seen = await fault.seen();
+     14|     expect(seen.length, 'the check sent requests to the endpoint').toB…
+       |                                                                    ^
+     15|     expect(seen.filter((a) => a !== USERS), `every request left from w…
+     16|     expect(r.outcome, shown(r)).toBe('failed');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 7 passed (8)
+      Tests  1 failed | 20 passed (21)
+   Start at  12:29:03
+   Duration  19.37s (tests 90%, transform 7%, import 2%)
+
+exit=1
+Mon Nov 16 20:29:22 UTC 2026
+12:29  up 2 days, 22:38, 20 users, load averages: 191.44 139.07 156.52

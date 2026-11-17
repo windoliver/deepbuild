@@ -1,0 +1,26 @@
+$ node node_modules/vitest/vitest.mjs run --reporter=verbose --root tests/acceptance/87/review --testTimeout=600000
+Mon Nov 16 20:30:25 UTC 2026
+12:30  up 2 days, 22:39, 20 users, load averages: 367.42 191.24 174.21
+
+ RUN  v5.0.5 <change>/tests/acceptance/87/review
+
+ ✓ preexisting.test.ts > AC a finding on a context line is pre-existing: a follow-up on the verdict line, never a send-back > the unchecked JSON.parse at src/config.ts:4, a context line, shows as pre-existing and sends nothing back 4081ms
+ ✓ one-rule.test.ts > AC findings of one rule go back as one item listing every site > three unchecked JSON.parse sites in two files come back as one unchecked-parse item listing all three 4087ms
+ ✓ free-text.test.ts > AC a finding without a file, line, rule and quoted text is dropped, and the reviewer's free text never reaches the working agent > four findings each missing one field are dropped and counted; the complete one is sent back with none of the prose 4309ms
+ ✓ dropped.test.ts > AC a finding quoting text not at its cited line, and one citing a rule not in the wiki's rubric, are each dropped and counted > both are dropped and counted, and the clean twin is not sent back 4309ms
+ ✓ planted-bug.test.ts > AC a planted bug found by the review comes back as one send-back > the planted unchecked JSON.parse comes back as one send-back with one item at src/orders.ts:8, and the claim is FAIL with one send-back 4312ms
+ ✓ rereview.test.ts > AC a re-review reads only what changed since the commit it last reviewed, and doesn't send an open item again > round 2 on B reads only A..B: the line-40 finding stays the first send-back's open item and no new item cites a line B didn't touch 5325ms
+ ✓ clean-twin.test.ts > AC the clean twin of the planted-bug diff is not sent back, and a requirement resting on a model alone is INCONCLUSIVE with one ask > the planted bug is sent back and its clean twin is not; the planted reviewer sends the twin back 6399ms
+ ✓ clean-twin.test.ts > AC the clean twin of the planted-bug diff is not sent back, and a requirement resting on a model alone is INCONCLUSIVE with one ask > a requirement whose only oracle is the review, a model, is INCONCLUSIVE with one ask naming it, never PASS 942ms
+ ✓ outcomes.test.ts > AC each sent-back finding is recorded as fixed or left, with the commit that decided it > over the recorded rounds, every sent-back item ends fixed or left as recorded, decided by the recorded commit 16292ms
+ ✓ kit.test.ts > AC the review kind passes check.kind@1, and its two planted runners each fail it with their own message > the review kind passes its kit, fixed and seeded; past-deadline and dropped-output each fail it with their own message 16609ms
+ ✓ replay.test.ts > AC a replay of 20 recorded Codex review rounds gives the same send-backs with no click > each of the twenty rounds sends back what it sent when recorded, the same on a second replay 24812ms
+
+ Test Files  10 passed (10)
+      Tests  11 passed (11)
+   Start at  12:30:25
+   Duration  25.49s (tests 96%, transform 3%, import 1%)
+
+exit=0
+Mon Nov 16 20:30:51 UTC 2026
+12:30  up 2 days, 22:39, 20 users, load averages: 351.33 201.10 178.23

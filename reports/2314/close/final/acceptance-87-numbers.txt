@@ -1,0 +1,23 @@
+$ node node_modules/vitest/vitest.mjs run --reporter=verbose --root tests/acceptance/87/numbers --testTimeout=600000
+Mon Nov 16 20:30:06 UTC 2026
+12:30  up 2 days, 22:39, 20 users, load averages: 266.78 161.61 163.64
+
+ RUN  v5.0.5 <change>/tests/acceptance/87/numbers
+
+ ✓ sample.test.ts > a term the change adds runs on a read-only sample of real data, and one that changes no result there fails, showing the sample > the filter status <> 'test' changes nothing on a sample with no test orders and fails, naming it and the sample; status <> 'refunded' passes 159ms
+ ✓ dashboard.test.ts > a dashboard number three times too high fails with both values shown > the dashboard stating October revenue as 4,500 where its query returns 1500 fails at the assertion showing both; stating 1,500 passes 224ms
+ ✓ proof.test.ts > Proof: a numbers check against a seeded wrong total > a rollup seeded with 1,850 where the raw orders sum to 1500 fails at the assertion showing both; the rollup holding 1,500 passes 232ms
+ ✓ budget.test.ts > budgets: a numbers re-run within twice the original query's time > re-running a dashboard number on 300,000 rows takes at most twice the query's own time, fastest of five each 2355ms
+ ✓ kit.test.ts > the numbers kind passes check.kind@1, and its two planted runners each fail it with their own message > numbers: the kind passes its kit, fixed and seeded; past-deadline and dropped-output each fail it with their own message 2752ms
+ ✓ speed.test.ts > a speed claim cites a timing check that names its baseline, toolchains and machine, and times both sides on cold caches > "1.8× faster than the merge base" passes on a change twenty times faster and never on equal work; "the library" with no release is INVALID; another driver is INCONCLUSIVE; an unflushed repeat is INVALID 13030ms
+ ✓ speed.test.ts > a speed claim cites a timing check that names its baseline, toolchains and machine, and times both sides on cold caches > wrong program: a numbers check that accepts a baseline named only by library fails this test (the "the library" claim is not INVALID) 2708ms
+ ✓ speed.test.ts > a speed claim cites a timing check that names its baseline, toolchains and machine, and times both sides on cold caches > wrong program: a numbers check that counts a side run under a toolchain it doesn't name fails this test (another driver is not INCONCLUSIVE) 2973ms
+
+ Test Files  6 passed (6)
+      Tests  8 passed (8)
+   Start at  12:30:06
+   Duration  19.23s (tests 91%, transform 7%, import 1%)
+
+exit=0
+Mon Nov 16 20:30:25 UTC 2026
+12:30  up 2 days, 22:39, 20 users, load averages: 367.42 191.24 174.21

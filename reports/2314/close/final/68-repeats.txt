@@ -1,0 +1,24 @@
+#68's suite by its README command, repeated on the change (6ea56bb6e) and the merge base (b4df8a2dd), under a test grant.
+Runs b-68-copy-*, change-* and base-* use a copy of the suite whose service.test.ts has the same steps and assertions and also
+prints the whole result when the endpoint saw no request; c-68-change is the suite itself. load = 1, 5 and 15 minutes, at the run's end.
+The second set was stopped by hand after five runs; a sixth, the base, had its folder removed under it and is not listed.
+
+First set, the change first in each pair:
+b-68-copy-change-1 exit=0 load=50.69 50.18 44.78  Tests 21 passed (21)
+b-68-copy-base-1 exit=0 load=62.35 52.87 45.90  Tests 21 passed (21)
+b-68-copy-change-2 exit=1 load=66.45 54.62 46.73  Tests 3 failed | 18 passed (21)
+b-68-copy-base-2 exit=0 load=67.31 55.87 47.42  Tests 21 passed (21)
+b-68-copy-change-3 exit=1 load=65.25 56.22 47.78  Tests 1 failed | 20 passed (21)
+b-68-copy-base-3 exit=0 load=64.44 56.65 48.13  Tests 21 passed (21)
+b-68-copy-change-4 exit=0 load=67.84 58.39 49.03  Tests 21 passed (21)
+b-68-copy-base-4 exit=0 load=58.10 56.80 48.68  Tests 21 passed (21)
+b-68-copy-change-5 exit=1 load=49.83 54.92 48.19  Tests 2 failed | 19 passed (21)
+b-68-copy-base-5 exit=0 load=36.32 50.90 46.99  Tests 21 passed (21)
+c-68-change exit=1 load=51.04 53.06 47.90  Tests 2 failed | 19 passed (21)
+
+Second set, the side that goes first alternating:
+change-1 exit=1 load=115.81 96.09 107.58  Tests 1 failed | 20 passed (21) kit:AC2 message,
+base-1 exit=1 load=80.23 94.27 104.57  Tests 4 failed | 17 passed (21) model-opinion:AC5 service,service:AC4 the,kit:AC2 document,kit:AC2 message,
+base-2 exit=1 load=116.72 114.56 111.55  Tests 4 failed | 17 passed (21) service:AC4 the,budgets:AC6 message,kit:AC2 document,kit:AC2 message,
+change-2 exit=1 load=117.50 120.45 114.87  Tests 6 failed | 15 passed (21) model-opinion:AC5 service,budgets:AC6 service,budgets:AC6 data,budgets:AC6 document,service:AC4 the,kit:AC2 message,
+change-3 exit=1 load=242.20 180.05 143.56  Tests 5 failed | 16 passed (21) budgets:AC6 service,service:AC4 the,budgets:AC6 message,kit:AC2 document,kit:AC2 message,
