@@ -848,6 +848,19 @@ timed.push('tests/acceptance/457/ac9-budgets.test.ts');
 // in a linux/amd64 container; ac8-budget judges the build budget on the reference Mac.
 alone.push('tests/acceptance/1636/');
 timed.push('tests/acceptance/1636/ac8-budget.test.ts');
+// #2031's files build deep-gpu (ac7 also the merge base's binaries) and draw on Metal; ac8 judges the lights' GPU budget.
+alone.push('tests/acceptance/2031/');
+timed.push('tests/acceptance/2031/ac8-budget.test.ts');
+// #182's files build deep-physics (shipped, test-backends and release) and deep-show; ac5-course also builds deep-physics
+// for Linux x86_64 in a linux/amd64 container, and ac11-budgets judges its timings on the reference Mac. The oracle's
+// climb port went to a blind redraft (182-oracle/DISPUTE.md): on the owner's word, the redraft runs and the first
+// draft's file, with its other two tests, runs by hand.
+alone.push('tests/acceptance/182/', 'tests/acceptance/182-oracle/controllers-py-rapier.test.ts', 'tests/acceptance/182-oracle-redraft-climb/');
+timed.push('tests/acceptance/182/ac11-budgets.test.ts');
+byHand.push('tests/acceptance/182-oracle/character-controller-rapier.test.ts');
+
+// #2742's files build deep-gpu; ac1 compares two films' GPU time on any Mac, and ac2 runs #417's suite.
+alone.push('tests/acceptance/2742/');
 
 // #192's voxel files each build deep-show per feature set (and the merge base's); ac10-budgets times the voxel mesher's
 // run at check on the reference Mac.

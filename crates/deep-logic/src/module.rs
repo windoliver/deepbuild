@@ -374,6 +374,11 @@ fn piece_of(doc: &Value) -> Result<Rc<Piece>, OpError> {
     if let Some(libraries) = doc.get("libraries") {
         piece["packs"] = libraries.clone();
     }
+    // #182: the worlds' character readings an item may read.
+    let reads = crate::play::world_reads(doc);
+    if !reads.is_empty() {
+        piece["world_reads"] = json!(reads);
+    }
     // A service answers on the document's worlds, so a piece that asks one is the document's.
     let key = match asks {
         true => sha256_hex(&canonical(&json!([piece, doc]))),

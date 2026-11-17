@@ -1657,7 +1657,9 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         })
         .map(|(at, clock)| match (at, clock) {
             (Some(t), Some(_)) => t.as_i64().filter(|t| *t >= 0),
+            // With no clock every call arrives at 0, so an arrival of 0 says nothing more.
             (None, None) => Some(0),
+            (Some(t), None) => t.as_i64().filter(|t| *t == 0),
             _ => None,
         })
         .collect::<Option<_>>()?;

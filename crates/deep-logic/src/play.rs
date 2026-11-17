@@ -59,6 +59,10 @@ pub fn piece_of(form: &Value) -> Option<Value> {
         "controls": form.get("controls").cloned().unwrap_or(json!({})),
         "items": items,
     });
+    let reads = world_reads(form);
+    if !reads.is_empty() {
+        piece["world_reads"] = json!(reads);
+    }
     if let Some(class) = form.pointer("/budget/class") {
         piece["class"] = class.clone();
     }
@@ -68,6 +72,29 @@ pub fn piece_of(form: &Value) -> Option<Value> {
         piece["packs"] = libraries.clone();
     }
     Some(piece)
+}
+
+/// #182: each character reading a document's worlds declare as outputs, `<world ID>.<body
+/// ID>.<read>` (grounded, sliding or crouched), which a logic item may read; the host steps the
+/// worlds and records each one's values on the track.
+pub fn world_reads(form: &Value) -> Vec<String> {
+    form.get("worlds")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+        .flat_map(|(w, doc)| {
+            doc.get("outputs")
+                .and_then(Value::as_object)
+                .into_iter()
+                .flatten()
+                .filter_map(move |(_, o)| {
+                    let read = o.get("read")?.as_str()?;
+                    let from = o.get("from")?.as_str()?;
+                    matches!(read, "grounded" | "sliding" | "crouched")
+                        .then(|| format!("{w}.{from}.{read}"))
+                })
+        })
+        .collect()
 }
 
 /// A refusal before any step, naming what.

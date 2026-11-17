@@ -72,6 +72,8 @@ pub enum BodyKind {
     /// Moved only to its `follow` channel's pose at each step's time (#1918).
     Kinematic,
     Dynamic,
+    /// #182: one capsule the backend's character controller moves (Body `body@1`: character).
+    Character,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -95,6 +97,8 @@ pub struct Body {
     pub lock_angular: [bool; 3],
     pub active: bool,
     pub anchors: BTreeMap<String, [f64; 3]>,
+    /// #182: a character body's own fields.
+    pub character: Option<Character>,
     /// #251: a vehicle body's wheels; its kind is then dynamic.
     pub vehicle: Option<Vehicle>,
 }
@@ -227,12 +231,14 @@ pub struct World {
     pub solve: Option<Solve>,
 }
 
+mod character;
 pub mod data;
 mod heightfield;
 mod inputs;
 mod reads;
 mod soft;
 mod vehicle;
+pub use character::{Character, FIELDS as CHARACTER_FIELDS};
 pub use heightfield::HEIGHTFIELD_SAMPLES;
 pub use inputs::{resolved, Input, On, INPUTS_LATER};
 pub use reads::{probe_pose, probe_shape, Output, Read, Skin, Solve, READS};
@@ -1018,6 +1024,7 @@ impl Reader {
                 "active",
                 "anchors",
                 "priority",
+                "character",
                 "vehicle",
             ],
         );
@@ -1129,6 +1136,7 @@ impl Reader {
                 self.vec3(&one, name, &join(p, "anchors"), [0.0; 3]),
             );
         }
+        let character = self.character(b, p, kind, &uses, shapes);
         Body {
             kind,
             follow,
@@ -1154,6 +1162,7 @@ impl Reader {
             lock_angular: self.bools3(locks, "angular", &join(p, "locks")),
             active: self.flag(b, "active", p, true),
             anchors,
+            character,
             vehicle,
         }
     }

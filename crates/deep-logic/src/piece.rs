@@ -237,6 +237,10 @@ pub enum Read {
         offset: u32,
     },
     Seed,
+    /// #182: a world's reading of a character body, `<world ID>.<body ID>.<read>` (grounded,
+    /// sliding or crouched), an i32 of 0 or 1 as the last physics step before the logic step's
+    /// time left it: logic steps first at a shared time and reads physics only from earlier steps.
+    World,
     /// Mirror j's range list (Logic: mirror reads).
     Mirror(usize),
     /// A write entry.
