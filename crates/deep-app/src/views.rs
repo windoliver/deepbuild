@@ -1152,7 +1152,26 @@ fn drew(name: &'static str, bounds: Bounds<Pixels>) {
 
 /// Forgets the views laid out in earlier frames; [`crate::canvas::clear_items`] calls it.
 pub(crate) fn forget_drawn() {
-    DRAWN.with(|drawn| drawn.borrow_mut().clear());
+    DRAWN.with(|drawn| LEFT.with(|left| *left.borrow_mut() = std::mem::take(&mut *drawn.borrow_mut())));
+}
+
+thread_local! {
+    /// What [`forget_drawn`] cleared: where the views laid out before it were (#1482).
+    static LEFT: RefCell<Vec<(&'static str, Bounds<Pixels>)>> = const { RefCell::new(Vec::new()) };
+}
+
+/// A cached view GPUI reused doesn't lay out again: the places it had stay, by name (#1482).
+pub fn keep_drawn(reused: &[&'static str]) {
+    LEFT.with(|left| {
+        DRAWN.with(|drawn| {
+            let mut drawn = drawn.borrow_mut();
+            for (name, bounds) in left.borrow().iter() {
+                if reused.contains(name) && !drawn.iter().any(|(n, _)| n == name) {
+                    drawn.push((name, *bounds));
+                }
+            }
+        });
+    });
 }
 
 /// Each shipped view laid out since the last frame began, by its panel name, with its bounds in window points (#1458).

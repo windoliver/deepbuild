@@ -95,6 +95,12 @@ impl Replica {
             .into_iter()
             .filter(|f| f.window == window)
             .collect();
+        let reused: Vec<&'static str> = drawn
+            .iter()
+            .flat_map(|f| f.reused.iter())
+            .filter_map(|e| deep_app::views::view_name(*e))
+            .collect();
+        deep_app::views::keep_drawn(&reused);
         let pending = gpui_kit::frame_counts::take_notified();
         let rows = deep_app::views::take_rows_built();
         let (drew, cost) = clock.map_or((false, None), |(drew, cost)| (drew, cost));
