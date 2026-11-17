@@ -1057,7 +1057,12 @@ fn map_job(data: &[u8], job: &Job, planted: &Planted) -> Value {
     } else {
         "png"
     };
-    match maps::ready(data, role, bc, planted.is("applies_image_gamma")) {
+    let blocks = if bc {
+        maps::Blocks::Bc
+    } else {
+        maps::Blocks::None
+    };
+    match maps::ready(data, role, blocks, planted.is("applies_image_gamma")) {
         Ok(r) => match std::fs::write(out, &r.data) {
             Ok(()) => {
                 let mut v = r.json();

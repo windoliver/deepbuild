@@ -161,15 +161,22 @@ pub fn escape(text: &str) -> String {
 /// opens from a file, where a request for `manifest.json` is refused). `<html>` names no state
 /// until the player shows one, so a reader that waits for `data-deep-state` finds the page built.
 pub fn index_html(doc: &Value, manifest: &Value) -> String {
+    index_html_at(doc, manifest, "player/player.css", "player/player.js")
+}
+
+/// The index page with the player's styles at `css` and its script at `js`: a web player's
+/// bundle names every file by its hash (#1040).
+pub fn index_html_at(doc: &Value, manifest: &Value, css: &str, js: &str) -> String {
     let title = escape(doc["title"].as_str().unwrap_or("DeepBuild piece"));
     let data = escape(&manifest.to_string());
+    let (css, js) = (escape(css), escape(js));
     format!(
         "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n\
          <meta http-equiv=\"Content-Security-Policy\" content=\"{POLICY}\">\n\
          <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n\
-         <title>{title}</title>\n<link rel=\"stylesheet\" href=\"player/player.css\">\n</head>\n<body>\n\
+         <title>{title}</title>\n<link rel=\"stylesheet\" href=\"{css}\">\n</head>\n<body>\n\
          <main id=\"page\"></main>\n<template id=\"deep-manifest\">{data}</template>\n\
-         <script src=\"player/player.js\"></script>\n</body>\n</html>\n"
+         <script src=\"{js}\"></script>\n</body>\n</html>\n"
     )
 }
 

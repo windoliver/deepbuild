@@ -2,9 +2,11 @@
 //! Vello CPU over the look's ground (sRGB-encoded RGBA, rows top-down); a 3D document's scene for
 //! scene3d's renderer on the GPU, with its 2D writer layers to lay over it.
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use deep_canvas_scene3d::contributed::Fills;
+use deep_canvas_scene3d::light::{map_uses, Texels};
 use deep_canvas_scene3d::look::Look3;
 use deep_canvas_scene3d::scene::{has_3d, Labels, Scene};
 use deep_marks_raster::Renderer;
@@ -35,8 +37,14 @@ impl Draw {
         }
     }
 
-    /// The frame the session last evaluated, at `size` pixels.
-    pub fn frame(&mut self, p: &Played, size: [u32; 2]) -> Frame {
+    /// The frame the session last evaluated, at `size` pixels, a 3D frame's maps from `maps` (by
+    /// SHA-256, as the player made them ready at load).
+    pub fn frame(
+        &mut self,
+        p: &Played,
+        size: [u32; 2],
+        maps: &BTreeMap<String, Arc<Texels>>,
+    ) -> Frame {
         let px = size.map(|v| v.clamp(1, 8192) as u16);
         let fill = |rgba: [u8; 4]| rgba.repeat((size[0] * size[1]) as usize);
         let [r, g, b] = p.ground;
@@ -68,7 +76,12 @@ impl Draw {
             fills,
         );
         match evaluated {
-            Ok((scene, look)) => {
+            Ok((mut scene, look)) => {
+                for (sha, _) in map_uses(&scene) {
+                    if let Some(t) = maps.get(&sha) {
+                        scene.texels.insert(sha, t.clone());
+                    }
+                }
                 let over = layers(self, None).unwrap_or_else(|| fill([0, 0, 0, 0]));
                 Frame::Scene(Box::new(scene), Box::new(look), over)
             }

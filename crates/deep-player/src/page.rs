@@ -2,10 +2,13 @@
 //! page fetches every file the bundle names and checks it against its SHA-256 before it hands it
 //! here; nothing here reaches the network, a store or anything outside the bundle.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
+use std::sync::Arc;
 
 use deep_canvas::registry::Sealed;
 use deep_canvas_marks::look::{self, Look};
+use deep_canvas_scene3d::light::{material_maps, Texels};
+use deep_codecs::maps::Role;
 use serde_json::{json, Value};
 use wasm_bindgen::prelude::*;
 
@@ -37,6 +40,8 @@ pub struct Player {
     draw: Option<crate::draw::Draw>,
     /// Each picture's level file by its source's SHA-256.
     levels: HashMap<String, String>,
+    /// Each texture map the document's materials name, ready for the device, by its SHA-256.
+    maps: BTreeMap<String, Arc<Texels>>,
 }
 
 #[wasm_bindgen]
@@ -60,6 +65,7 @@ impl Player {
             store: std::sync::Arc::new(deep_images::Store::memory()),
             draw: None,
             levels: HashMap::new(),
+            maps: BTreeMap::new(),
         })
     }
 
@@ -120,8 +126,9 @@ impl Player {
                 .ok_or_else(|| fail(format!("the bundle holds no file {sha}")))
         };
         let doc: Value = serde_json::from_slice(text(doc)?).map_err(fail)?;
+        // The track as the app holds it: its entries and its fork (#1040).
         let track: Value = serde_json::from_slice(text(track)?).map_err(fail)?;
-        let track = track.as_array().cloned().unwrap_or_default();
+        let track = track["entries"].as_array().cloned().unwrap_or_default();
         let logic: Value = serde_json::from_str(logic).map_err(fail)?;
         let files = &self.files;
         let read = |sha: &str| files.get(sha).cloned();
@@ -191,9 +198,31 @@ impl Player {
         .to_string()
     }
 
-    /// The canvas's GPU, which every frame draws on from now.
-    pub fn attach(&mut self, gpu: crate::gpu::Gpu) {
+    /// The canvas's GPU, which every frame draws on from now, and each texture map the document's
+    /// materials name made ready for it, at load on this one thread, as the app's decode worker
+    /// makes it (Export: web player): BC where the device has texture-compression-bc, ASTC 4 × 4
+    /// where it has only texture-compression-astc, RGBA8 otherwise.
+    pub fn attach(&mut self, gpu: crate::gpu::Gpu) -> Result<(), JsValue> {
+        let blocks = gpu.blocks();
         self.gpu = Some(gpu);
+        let Some(p) = self.played.as_ref() else {
+            return Ok(());
+        };
+        for (sha, role) in material_maps(p.document()) {
+            let role = Role::read(role).unwrap_or(Role::Data);
+            let bytes = (self.files.get(&sha))
+                .ok_or_else(|| fail(format!("the bundle holds no map {sha}")))?;
+            let r = deep_codecs::maps::ready(bytes, role, blocks, false)
+                .map_err(|e| fail(format!("the map {sha} doesn't load: {e}")))?;
+            let texels = Texels {
+                format: r.format.into(),
+                size: r.size,
+                mips: r.mips,
+                data: Arc::new(r.data),
+            };
+            self.maps.insert(sha, Arc::new(texels));
+        }
+        Ok(())
     }
 
     /// Draws the frame the session last evaluated onto the canvas; whether it drew.
@@ -208,7 +237,7 @@ impl Player {
         let Some(gpu) = self.gpu.as_mut() else {
             return false;
         };
-        match draw.frame(p, size) {
+        match draw.frame(p, size, &self.maps) {
             crate::draw::Frame::Pixels(rgba) => gpu.show(&rgba, size),
             crate::draw::Frame::Scene(scene, look, over) => gpu.show3d(&scene, &look, &over, size),
         }

@@ -35,6 +35,8 @@ deep-logic = { path = "../deep-logic" }
 deep-play = { path = "../deep-play" }
 deep-marks-raster = { path = "../deep-marks-raster" }
 deep-images = { path = "../deep-images" }
+# #1040: KTX2 maps transcoded at load, on the page's one thread, by the decode worker's own code.
+deep-codecs = { path = "../deep-codecs" }
 deep-gpu = { path = "../deep-gpu" }
 deep-scene3d-render = { path = "../deep-scene3d-render" }
 deep-text = { path = "../deep-text" }

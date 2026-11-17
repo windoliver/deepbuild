@@ -77,6 +77,16 @@ pub enum Guard {
     WebRequestsAdapterLimits,
     /// #172: the web player writes a fragment `control.<ID>=<value>` as an input entry.
     WebFragmentWritesEntry,
+    /// #1040: the web export leaves out one font it names.
+    WebLeavesOutFont,
+    /// #1040: the page keys each logic item by its step hash alone.
+    PageKeysLogicByStepHash,
+    /// #1040: the page keys each state by its picture and the logic module's carried state alone.
+    PageKeysByPictureAndLogic,
+    /// #1040: the index page starts the player wherever WebGPU is.
+    WebIndexChecksWebgpuOnly,
+    /// #1040: the index page needs every feature of each `any_of` set.
+    WebIndexRequiresEveryAnyOf,
     /// A wrong encoder, muxer or reader in the helper processes, by its name there.
     Codec(&'static str),
 }
@@ -140,6 +150,11 @@ pub(crate) fn planted(name: &str) -> Option<Planted> {
         "web_probe_test_variant" => Planted::Export(G::WebProbeTestVariant),
         "web_requests_adapter_limits" => Planted::Export(G::WebRequestsAdapterLimits),
         "web_fragment_writes_entry" => Planted::Export(G::WebFragmentWritesEntry),
+        "web_leaves_out_font" => Planted::Export(G::WebLeavesOutFont),
+        "page_keys_logic_by_step_hash" => Planted::Export(G::PageKeysLogicByStepHash),
+        "page_keys_by_picture_and_logic" => Planted::Export(G::PageKeysByPictureAndLogic),
+        "web_index_checks_webgpu_only" => Planted::Export(G::WebIndexChecksWebgpuOnly),
+        "web_index_requires_every_any_of" => Planted::Export(G::WebIndexRequiresEveryAnyOf),
         other => Planted::Export(G::Codec(CODEC_PLANTS.iter().find(|p| **p == other)?)),
     })
 }

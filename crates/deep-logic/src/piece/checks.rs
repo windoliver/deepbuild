@@ -892,7 +892,16 @@ pub fn check_in(
         .and_then(Value::as_object)
         .into_iter()
         .flatten()
-        .filter_map(|(id, c)| Some((id.clone(), Limit::of(c)?)))
+        .filter_map(|(id, c)| {
+            let choice = c.get("kind").and_then(Value::as_str) == Some("choice");
+            let options = || deep_canvas::document::variants::option_names(piece, c);
+            let limit = if choice {
+                Limit::Choice(options())
+            } else {
+                Limit::of(c)?
+            };
+            Some((id.clone(), limit))
+        })
         .collect();
     Ok(Piece {
         seed,

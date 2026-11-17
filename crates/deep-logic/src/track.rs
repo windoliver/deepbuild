@@ -32,6 +32,10 @@ impl Given {
         if let Some(n) = v.as_f64() {
             return Some(Given::Number(n));
         }
+        // #1040: a toggle's entry reads as 1 when on and 0 when off.
+        if let Some(on) = v.as_bool() {
+            return Some(Given::Number(f64::from(u8::from(on))));
+        }
         if v.get("phase").is_some() {
             return Point::parse(v).map(Given::Point);
         }

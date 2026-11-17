@@ -32,7 +32,7 @@ impl Hub<'_> {
 }
 
 /// An entry in the form [`Entry::to_json`] writes; `seq` is the track's to give again.
-fn entry_of(v: &Value) -> Option<Entry> {
+pub(crate) fn entry_of(v: &Value) -> Option<Entry> {
     let (control, value) = match v.get("present") {
         Some(p) => (String::new(), p.clone()),
         None => (

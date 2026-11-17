@@ -6,8 +6,6 @@ pub mod play;
 pub mod seal;
 
 #[cfg(target_arch = "wasm32")]
-mod cxx;
-#[cfg(target_arch = "wasm32")]
 mod draw;
 #[cfg(target_arch = "wasm32")]
 mod gpu;
