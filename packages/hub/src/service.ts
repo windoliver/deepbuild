@@ -13,6 +13,7 @@ const LABEL = 'com.deepbuild.hub';
 const UNIT = 'deepbuild-hub.service';
 const WAIT_MS = 15_000;
 const STEP_MS = 10;
+const ASK_MS = 1000;
 /** The file limit the login service raises the hub's to: a connection per hook in flight, the record, evidence and runs. */
 const FILES = 8192;
 type Obj = Record<string, unknown>;
@@ -74,7 +75,9 @@ function connect(path: string, timeoutMs = 2000): Promise<Connection> {
 const answers = (path: string, timeoutMs = 2000) => connect(path, timeoutMs).then((c) => { c.close(); return true; }, () => false);
 /** The hub's hello at `path`, which names its start ID and contract; undefined when no hub answers. */
 export const helloAt = (path: string): Promise<Obj | undefined> => connect(path).then((c) => { c.close(); return c.hello; }, () => undefined);
-async function waitForHub(path: string, deadline: number): Promise<boolean> {
+/** `again`, when given, asks the service manager once more about every ASK_MS while no hub answers (#2570). */
+async function waitForHub(path: string, deadline: number, again?: () => void): Promise<boolean> {
+  let asked = Date.now();
   let wake = () => {};
   let watcher: ReturnType<typeof watch> | undefined;
   try {
@@ -84,6 +87,10 @@ async function waitForHub(path: string, deadline: number): Promise<boolean> {
   try {
     while (Date.now() < deadline) {
       if (await answers(path, Math.min(2000, deadline - Date.now()))) return true;
+      if (again && Date.now() - asked >= ASK_MS) {
+        asked = Date.now();
+        again();
+      }
       await new Promise<void>((done) => {
         // A socket file may appear before listen(), with no second filesystem event. Keep that race short too.
         const retry = setTimeout(done, Math.min(STEP_MS, Math.max(0, deadline - Date.now())));
@@ -315,7 +322,11 @@ export async function startHub(options: { root?: string; cli: string }): Promise
       return 3;
     }
   }
-  if (await waitForHub(root.socket, deadline)) return 0;
+  // An installed hub's old process can still run after its lock is free, and a service manager does nothing for a job it
+  // still counts as running, then leaves it stopped once it exits 0 (#2570). So it is asked again while no hub answers:
+  // `launch` starts a stopped job and leaves a running one alone. An error on a later ask is the first ask's to report.
+  const again = options.root ? undefined : () => void launch(serviceFile());
+  if (await waitForHub(root.socket, deadline, again)) return 0;
   return noHub();
 }
 
