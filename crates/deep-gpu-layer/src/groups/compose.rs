@@ -35,10 +35,20 @@ impl Groups {
             .flat_map(|m| &m.scopes);
         let mut groups = BTreeSet::new();
         for s in drawn {
-            if matches!(s, Scope::Opacity { item, .. } if !item.contains('#')) {
-                groups.insert(s.item());
+            // #2031: a lit group's runs draw offscreen as the group, so it counts once.
+            let group = match s {
+                Scope::Opacity { item, .. } if !item.contains('#') => Some(item.as_str()),
+                Scope::Opacity {
+                    item,
+                    effect: Some(e),
+                    ..
+                } if e.light.is_some() => item.strip_suffix("#light"),
+                _ => None,
+            };
+            if let Some(group) = group {
+                groups.insert(group);
                 if groups.len() > MAX_ISOLATED {
-                    return Err(refused("operator_limit", format!("items/{}", s.item())));
+                    return Err(refused("operator_limit", format!("items/{group}")));
                 }
             }
         }
