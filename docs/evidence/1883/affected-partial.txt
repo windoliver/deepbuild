@@ -1,4 +1,4 @@
-# Partial affected.mjs run at fd352108b, stopped after 60 of 169 alone groups (unsharded, capped unit), superseded by the sharded run at the final head.
+# Partial affected.mjs run at fd352108b, stopped after 60 of 169 alone groups (unsharded, capped unit); raw, before main's known failures are set apart, so it proves nothing alone. The full run at bfd7a58b9 is in the PR body.
 # Groups 39 and 40 hit the machine's ENOSPC and are void. Per-test counts, then each non-pass file with its count (raw, before main's known failures are set apart):
 {"INCONCLUSIVE":29,"pass":494,"fail":416,"end":46,"no-grant":10,"skip":78}
 INCONCLUSIVE tests/acceptance/67/budgets.test.ts x1

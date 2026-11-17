@@ -1,0 +1,11 @@
+# tests/acceptance/1883-redraft-lane run alone at this branch under the repo's own vitest config (the lane's; no --testTimeout):
+# NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/1883-redraft-lane
+
+ RUN  v5.0.5 <repo>
+
+
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Start at  19:52:31
+   Duration  38.04s (tests 95%, transform 5%)
+
