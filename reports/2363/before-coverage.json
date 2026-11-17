@@ -1,0 +1,550 @@
+{
+ "build_set": "full",
+ "set_digest": "b01ba1ef7525071040632a5b5666597636e6eedc18a3eb9628e7a6a2f9fbbeb5",
+ "operators": 49,
+ "fixtures": 45,
+ "uncovered": [
+  "data.columns",
+  "data.follow_stream",
+  "data.vector_field",
+  "logic.step",
+  "marks2d.place",
+  "marks2d.relations",
+  "marks2d.warp",
+  "motion.arrange",
+  "motion.arrangelive",
+  "motion.flip",
+  "record.salience",
+  "scene3d.rebuild",
+  "scene3d.restlive",
+  "sheet.place",
+  "text.copy",
+  "text.copy_columns",
+  "vector.glyphs",
+  "vector.paint"
+ ],
+ "unpresented": [
+  {
+   "fixture": "logic/counter",
+   "outcome": "refused",
+   "codes": [
+    "logic_refused:error"
+   ]
+  }
+ ],
+ "unevaluated": [
+  {
+   "fixture": "logic/counter",
+   "outcome": "refused",
+   "code": "no_revision"
+  }
+ ],
+ "digests": {
+  "building": "6c932b2a8efa56170d153ff1eebd957b04800110bf99d2da4385d651a2cc2bd5",
+  "cells": "2b72c9757df0c5cc3a578bbc5ba4595714c8e291458c26958bd777c880549049",
+  "data": "75d055f587754b84d7405262fad9f52dbb0b16a8560d1534e1875f49df412e97",
+  "effects": "47efff0e92f65196c99d6ba9bbe39a782aa62eb4e031e5cb60132976c8fd9a7b",
+  "export": "34526b4e8e03053b5515c9c0ccc3c0151cb2219375ce731e109658532ed51988",
+  "graph": "8245f5f5ac084732c688dcedafe59f7d7e3931a37df0533426b5a1388932cd24",
+  "input": "e65249671ed96cf758617d3f9e202cfd7401bf7c1ed804b4d410c90df61e325e",
+  "logic": "6f34b6e8cf2e19f7a2bc6bfe04c0623e9ec1a516811cd0e76d48778f5757100e",
+  "look": "6e85fd95006b91596f17c25bd0c3070dce4f3f1ac38a5f3c521422d4f9338001",
+  "loop": "72b690e1540d77eeea053c3460b2b70b823f4495247344ece5d2677a73f05c01",
+  "marks2d": "bacf98ca04edf98558b5e2b1980eb586ba97ae3486a5738c779b8a80950bc4e9",
+  "media": "16ba0318533d04e814906d17e911f9c632fb8b1089227252dad47ec6b392c1a2",
+  "motion": "fa3b261d76b2aca520756953c1fc8418f32938f08a296c000cda6ca24d18c14e",
+  "net": "7b4fcb5e872422d3812fae697247c15110c61a23e8de64702c3e13f2e6275bd7",
+  "physics": "23a666b0dca4f83717a1720a58c8998a98d6cd760d20918a5ee05d899bcb931a",
+  "record": "65f77a1cb350e333bb96a1f36a254f4d489bbb36a3a919391654a723b30c1021",
+  "sandbox": "bd698eefad2d6419fdbbc919a75ae9369d1266261a54f3572d1f6356ed5c2d3f",
+  "scene3d": "0d41a64f50690f5839c7ea0caa735c9e0753263593c95a0ac7fa06be03cedd41",
+  "sheet": "d24e60e7c85d9663922617ca0d3c22f8d53e23caf3564cbc6ea1480cb4b57f18",
+  "text": "adc297495eb1a9be4918d0a7e9620be4f459deb800ea168ecd3ca5a995d98350",
+  "vector": "0de50548636508ccbcf2ee8a4efd85632b4bd29f4da366e88350cdf4b0df4f62"
+ },
+ "kinds": {
+  "salience@1": null,
+  "sheet@1": null
+ },
+ "byFixture": {
+  "core/board": [
+   "core.fields",
+   "core.lower",
+   "core.transform",
+   "core.world",
+   "look.palette",
+   "marks2d.frame",
+   "marks2d.item",
+   "text.shape"
+  ],
+  "building/house": [
+   "building.build",
+   "building.shade",
+   "core.fields",
+   "core.lower",
+   "core.transform",
+   "core.world",
+   "look.palette",
+   "marks2d.frame"
+  ],
+  "cells/grid": [
+   "cells.grid",
+   "core.fields",
+   "core.lower",
+   "core.transform",
+   "core.world",
+   "look.palette",
+   "marks2d.frame"
+  ],
+  "data/points": [
+   "core.fields",
+   "core.lower",
+   "core.transform",
+   "core.world",
+   "data.scale",
+   "look.palette",
+   "marks2d.frame"
+  ],
+  "data/race": [
+   "core.fields",
+   "core.lower",
+   "core.transform",
+   "core.world",
+   "data.scale",
+   "look.palette",
+   "marks2d.frame",
+   "marks2d.item",
+   "motion.channels",
+   "motion.clock",
+   "motion.compile",
+   "text.counter",
+   "text.shape"
+  ],
+  "data/decimated": [
+   "core.fields",
+   "core.lower",
+   "core.transform",
+   "core.world",
+   "data.decimate",
+   "look.palette",
+   "marks2d.frame"
+  ],
+  "effects/shadowed-box": [
+   "core.fields",
+   "core.lower",
+   "core.transform",
+   "core.world",
+   "look.palette",
+   "marks2d.frame",
+   "motion.placed",
+   "scene3d.lights",
+   "scene3d.mark",
+   "scene3d.shade"
+  ],
+  "effects/audit-unread": [
+   "core.fields",
+   "core.lower",
+   "core.transform",
+   "core.world",
+   "look.palette",
+   "marks2d.frame",
+   "motion.placed",
+   "scene3d.mark",
+   "scene3d.shade"
+  ],
+  "graph/layered": [
+   "core.fields",
+   "core.lower",
+   "core.transform",
+   "core.world",
+   "graph.layout",
+   "look.palette",
+   "marks2d.frame",
+   "marks2d.item",
+   "text.shape"
+  ],
+  "graph/tie": [
+   "core.fields",
+   "core.lower",
+   "core.transform",
+   "core.world",
+   "graph.layout",
+   "look.palette",
+   "marks2d.frame"
+  ],
+  "graph/over_budget": [
+   "core.fields",
+   "core.lower",
+   "core.transform",
+   "core.world",
+   "graph.layout",
+   "look.palette",
+   "marks2d.frame"
+  ],
+  "logic/counter": [],
+  "look/roles": [
+   "core.fields",
+   "core.lower",
+   "core.transform",
+   "core.world",
+   "look.palette",
+   "marks2d.frame",
+   "marks2d.item"
+  ],
+  "look/finish": [
+   "core.fields",
+   "core.lower",
+   "core.transform",
+   "core.world",
+   "look.finish",
+   "look.palette",
+   "marks2d.frame"
+  ],
+  "loop/loop-scale-door": [
+   "building.build",
+   "building.shade",
+   "core.fields",
+   "core.lower",
+   "core.transform",
+   "core.world",
+   "look.palette",
+   "marks2d.frame"
+  ],
+  "loop/loop-scale-door-clean": [
+   "building.build",
+   "building.shade",
+   "core.fields",
+   "core.lower",
+   "core.transform",
+   "core.world",
+   "look.palette",
+   "marks2d.frame"
+  ],
+  "loop/loop-framing-horizon": [
+   "core.fields",
+   "core.lower",
+   "core.transform",
+   "core.world",
+   "look.palette",
+   "marks2d.frame",
+   "motion.placed",
+   "scene3d.mark",
+   "scene3d.shade"
+  ],
+  "loop/loop-framing-clean": [
+   "core.fields",
+   "core.lower",
+   "core.transform",
+   "core.world",
+   "look.palette",
+   "marks2d.frame",
+   "motion.placed",
+   "scene3d.mark",
+   "scene3d.shade"
+  ],
+  "loop/loop-exposure-clipped": [
+   "core.fields",
+   "core.lower",
+   "core.transform",
+   "core.world",
+   "look.palette",
+   "marks2d.frame",
+   "motion.placed",
+   "scene3d.lights",
+   "scene3d.mark",
+   "scene3d.shade"
+  ],
+  "loop/loop-exposure-clean": [
+   "core.fields",
+   "core.lower",
+   "core.transform",
+   "core.world",
+   "look.palette",
+   "marks2d.frame",
+   "motion.placed",
+   "scene3d.lights",
+   "scene3d.mark",
+   "scene3d.shade"
+  ],
+  "loop/loop-contrast-muted": [
+   "core.fields",
+   "core.lower",
+   "core.transform",
+   "core.world",
+   "look.palette",
+   "marks2d.frame",
+   "scene3d.mark",
+   "scene3d.shade"
+  ],
+  "loop/loop-contrast-clean": [
+   "core.fields",
+   "core.lower",
+   "core.transform",
+   "core.world",
+   "look.palette",
+   "marks2d.frame",
+   "scene3d.mark",
+   "scene3d.shade"
+  ],
+  "loop/loop-noise-reseeds": [
+   "core.fields",
+   "core.lower",
+   "core.transform",
+   "core.world",
+   "look.palette",
+   "marks2d.frame",
+   "motion.channels",
+   "motion.clock",
+   "motion.compile",
+   "motion.placed",
+   "scene3d.lights",
+   "scene3d.mark",
+   "scene3d.shade"
+  ],
+  "loop/loop-noise-clean": [
+   "core.fields",
+   "core.lower",
+   "core.transform",
+   "core.world",
+   "look.palette",
+   "marks2d.frame",
+   "motion.placed",
+   "scene3d.lights",
+   "scene3d.mark",
+   "scene3d.shade"
+  ],
+  "loop/shading-unreadable": [
+   "core.fields",
+   "core.lower",
+   "core.transform",
+   "core.world",
+   "look.palette",
+   "marks2d.frame",
+   "scene3d.build",
+   "scene3d.shade"
+  ],
+  "loop/shading-degenerate": [
+   "core.fields",
+   "core.lower",
+   "core.transform",
+   "core.world",
+   "look.palette",
+   "marks2d.frame",
+   "scene3d.build",
+   "scene3d.shade"
+  ],
+  "loop/shading-flipped": [
+   "core.fields",
+   "core.lower",
+   "core.transform",
+   "core.world",
+   "look.palette",
+   "marks2d.frame",
+   "scene3d.build",
+   "scene3d.shade"
+  ],
+  "loop/shading-inconsistent": [
+   "core.fields",
+   "core.lower",
+   "core.transform",
+   "core.world",
+   "look.palette",
+   "marks2d.frame",
+   "scene3d.build",
+   "scene3d.shade"
+  ],
+  "loop/shading-inward": [
+   "core.fields",
+   "core.lower",
+   "core.transform",
+   "core.world",
+   "look.palette",
+   "marks2d.frame",
+   "scene3d.build",
+   "scene3d.shade"
+  ],
+  "loop/shading-quad-ratio": [
+   "core.fields",
+   "core.lower",
+   "core.transform",
+   "core.world",
+   "look.palette",
+   "marks2d.frame",
+   "scene3d.build",
+   "scene3d.shade"
+  ],
+  "loop/shading-uv": [
+   "core.fields",
+   "core.lower",
+   "core.transform",
+   "core.world",
+   "look.palette",
+   "marks2d.frame",
+   "scene3d.build",
+   "scene3d.shade"
+  ],
+  "marks2d/board": [
+   "core.fields",
+   "core.lower",
+   "core.transform",
+   "core.world",
+   "look.palette",
+   "marks2d.frame",
+   "marks2d.item",
+   "text.shape"
+  ],
+  "media/bell": [
+   "core.fields",
+   "core.lower",
+   "core.transform",
+   "core.world",
+   "look.palette",
+   "marks2d.frame",
+   "motion.placed",
+   "scene3d.mark",
+   "scene3d.shade"
+  ],
+  "media/reverb": [
+   "core.fields",
+   "core.lower",
+   "core.transform",
+   "core.world",
+   "look.palette",
+   "marks2d.frame",
+   "motion.placed",
+   "scene3d.mark",
+   "scene3d.shade"
+  ],
+  "motion/slide": [
+   "core.fields",
+   "core.lower",
+   "core.transform",
+   "core.world",
+   "look.palette",
+   "marks2d.frame",
+   "marks2d.item",
+   "motion.channels",
+   "motion.clock",
+   "motion.compile",
+   "text.shape"
+  ],
+  "physics/late-joint": [
+   "core.fields",
+   "core.lower",
+   "core.transform",
+   "core.world",
+   "look.palette",
+   "marks2d.frame",
+   "motion.placed",
+   "scene3d.mark",
+   "scene3d.shade"
+  ],
+  "physics/vehicle-lap": [
+   "core.fields",
+   "core.lower",
+   "core.transform",
+   "core.world",
+   "look.palette",
+   "marks2d.frame",
+   "motion.placed",
+   "scene3d.mark",
+   "scene3d.shade"
+  ],
+  "record/level": [
+   "core.fields",
+   "core.lower",
+   "core.transform",
+   "core.world",
+   "look.palette",
+   "marks2d.frame",
+   "marks2d.item",
+   "text.shape"
+  ],
+  "scene3d/figure": [
+   "core.fields",
+   "core.lower",
+   "core.transform",
+   "core.world",
+   "look.palette",
+   "marks2d.frame",
+   "motion.placed",
+   "scene3d.mark",
+   "scene3d.shade"
+  ],
+  "scene3d/lights": [
+   "core.fields",
+   "core.lower",
+   "core.transform",
+   "core.world",
+   "look.palette",
+   "marks2d.frame",
+   "scene3d.lights",
+   "scene3d.mark",
+   "scene3d.shade"
+  ],
+  "scene3d/stack": [
+   "core.fields",
+   "core.lower",
+   "core.transform",
+   "core.world",
+   "look.palette",
+   "marks2d.frame",
+   "motion.placed",
+   "scene3d.mark",
+   "scene3d.shade",
+   "scene3d.stack"
+  ],
+  "scene3d/garden": [
+   "core.fields",
+   "core.lower",
+   "core.transform",
+   "core.world",
+   "look.palette",
+   "marks2d.frame",
+   "motion.compile",
+   "motion.placed",
+   "scene3d.build",
+   "scene3d.rest",
+   "scene3d.rested",
+   "scene3d.scatter",
+   "scene3d.shade"
+  ],
+  "sheet/variants": [
+   "core.fields",
+   "core.lower",
+   "core.transform",
+   "core.world",
+   "look.palette",
+   "marks2d.frame",
+   "marks2d.item",
+   "text.shape"
+  ],
+  "text/counter": [
+   "core.fields",
+   "core.lower",
+   "core.transform",
+   "core.world",
+   "look.palette",
+   "marks2d.frame",
+   "marks2d.item",
+   "motion.channels",
+   "motion.clock",
+   "motion.compile",
+   "text.animate",
+   "text.counter",
+   "text.shape"
+  ],
+  "text/status": [
+   "core.fields",
+   "core.lower",
+   "core.status",
+   "core.transform",
+   "core.world",
+   "look.palette",
+   "marks2d.frame",
+   "marks2d.item",
+   "text.shape",
+   "text.status"
+  ]
+ }
+}
