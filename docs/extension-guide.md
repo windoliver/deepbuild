@@ -507,6 +507,17 @@ For a check runner: a piece played headless in a replica on its virtual clock, a
 | `doc` | string | yes |
 | `run` | object | yes |
 
+### `deep.source.ask`
+
+Arrives in R6 · preview · `d1:d0835533deaa7af647e1972af79858f1e2f367ea8118be8b50466f1db38390cb`
+
+A plug-in asks a model source its manifest lists for a reply to a prompt. The hub makes the call, from a recording when replaying, and the plug-in gets the answer's status and body, or no answer and why; it never reaches the network itself.
+
+| Parameter | Type | Required |
+|---|---|---|
+| `name` | string | yes |
+| `request` | object | yes |
+
 ## Slots
 
 Each kind of thing a package registers fills a slot: its interface with a frozen digest, how many pieces may fill it, its kit in the conformance package and the planted wrong fills that kit must fail. A second fill of a slot that takes one is refused at install unless its manifest says it replaces the first.
