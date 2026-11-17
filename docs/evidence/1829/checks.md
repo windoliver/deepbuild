@@ -97,6 +97,9 @@ FAIL affected: 196 new, 44 already failing on main, 1 inconclusive or blocked, 0
 ```
 
 - **Passed:** `tests/ask-sources-guard.test.mjs` (6/6), `tests/acceptance/1829/check.test.ts` and the planted-file test of `tests/acceptance/1829/ask.test.ts`.
-- **BLOCKED, so unrun at this head:** the first test of `tests/acceptance/1829/ask.test.ts` (AC1's fourth set). The build output was cleared for disk, and it says "no deep-hook is built". It passed at 6c79c47b8, and 4ebc851de changes only the guard and its test.
+- **AC1's fourth set, `tests/acceptance/1829/ask.test.ts`:** BLOCKED in that run ("no deep-hook is built": the build output had been cleared for disk). With `deep-hook` rebuilt at 8d4b91260 (4ebc851de plus this evidence), a first run straight after the build failed its first test on the #120 fixture's 30-second wait ("timed out ... waiting for the waiter"), before the promise was set. The next run, alone at load 67, passed 2/2.
 - **The 196 "new":** all are lint findings of the kinds in the table above (size 62, deps 50, code mappings 24, vendor-rebase 19, color literal 12, canvas-lint 10, secrets 8, size literal 6, drift 2, slots 2, record reader 1), run because a script changed. None names the ask-source guard or a file this PR changes. There was no WIDE line.
 - **The guard over a trial merge with main (de1b08f54):** PASS, 82. The merge has no conflict.
+- **A second independent review, of 4ebc851de alone:** clean. Against the guard before it, each of the four cases passed or crashed; now each fails or is BLOCKED, and no legitimate form it tried (a keyed raise called, bound to `raise`, or through `.call` and `.apply`) is refused.
+- **`node scripts/proof.mjs guard` at 8d4b91260:** PASS, 14 commits checked.
+- **Not run when the PR went ready (the owner's call, 2026-11-17):** the 18 unsettled files of the comparison above, and the `scripts/lanes.mjs` lint-lane line until the release preflight.
