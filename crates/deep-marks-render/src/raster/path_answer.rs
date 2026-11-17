@@ -22,6 +22,8 @@ pub fn path_answer(
         };
         let (palette, ty) = (&palette, &ty);
         let mut frames = Vec::with_capacity(req.times.len());
+        // #2031: a lit group's light list as the frame before took it (the planted evaluator's).
+        let mut before: Option<Value> = None;
         for &t in &req.times {
             // #223: what the warps map is counted until the frame reports it, the evaluation's
             // placing pass included, which carries them first (the line's first frame from before
@@ -43,6 +45,19 @@ pub fn path_answer(
                 .map_err(|r| refused(r.code, &r.path))?
             {
                 frames.push(json!({"t": t, "parallax": {"offset": o}}));
+                continue;
+            }
+            // #2031: a lit group's frame is its light list evaluated at t.
+            if let Some(light) = items
+                .get(&req.item)
+                .and_then(deep_canvas_marks::light::evaluated)
+            {
+                let shown = match (&before, req.planted == Planted::LightStaleList) {
+                    (Some(kept), true) => kept.clone(),
+                    _ => light.clone(),
+                };
+                before = Some(light);
+                frames.push(json!({"t": t, "light": shown}));
                 continue;
             }
             // The build alone is timed: the item through its ops, its heads and its digest (a

@@ -1,0 +1,80 @@
+#2031 acceptance suite at the base, 52aa05fd3 (Merge pull request #2729), before any implementation.
+
+Run once on this Mac (macOS arm64, Metal; load average near 200 on 18 cores), leased, one file at a time:
+  PATH=$HOME/.rustup/toolchains/1.99.1-aarch64-apple-darwin/bin:$PATH CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    scripts/lease node node_modules/vitest/vitest.mjs run --root tests/acceptance/2031 --no-file-parallelism \
+    --testTimeout=600000 ac1 ac2 ac3 ac4 ac5 ac6 ac8
+deep-canvas-render and deep-gpu were each built once (cargo build --locked). 15 tests, 15 failed, each at its own
+assertion for missing behavior; none failed to load or crashed. ac1-falloff.test.ts was run a second time alone after
+its first test's assertion was changed to report a count and twenty pixels instead of a diff of every failing pixel;
+the lines below are from that run for it.
+
+ac1-falloff.test.ts
+  × every pixel reads within 1 code value of the closed form
+      pixels more than 1 code off the CPU f64 closed form, such as:
+        pixel (0, 0) at d = 361.33 px reads [255, 255, 255, 255], the closed form gives 0 …
+      (printed: 261304 of 262144 pixels off the form; pixel (355, 255) reads 255, 255, 255, 255, the form 198)
+  × a planted linear falloff reads 188 where the form gives 198 at d = 100 px, and fails naming that pixel
+      deep-gpu run --planted light_linear_falloff exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}: expected 2 to be +0
+
+ac2-sum.test.ts
+  × each light alone reads 137 and the two together read 188, within 1 code
+      light a alone: pixel (128, 64) reads 255, 255, 255, not 137 within 1 code
+      light b alone: pixel (128, 64) reads 255, 255, 255, not 137 within 1 code
+      both lights: pixel (128, 64) reads 255, 255, 255, not 188 within 1 code
+  × a planted sum in encoded space reads 255 and fails, naming the pixel
+      deep-gpu run --planted light_encoded_sum exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}: expected 2 to be +0
+
+ac3-default.test.ts
+  × a lit group that names no lights and no ambient draws white at 137, and with its light removed at 255
+      the lit group with light {}: 15360 of 15360 pixels are more than 1 code off 137, such as (0, 0) reads 255, 255, 255 …
+  × a planted default ambient of 0 reads 0 and fails
+      deep-gpu run --planted light_default_ambient_zero exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}: expected 2 to be +0
+
+ac4-unlit.test.ts
+  × the unlit text and the status badge hash as in the fixture with no light, and the white rect beside them reads 137
+      sheet: 6720 of 6720 pixels are more than 1 code off 137, such as (204, 124) at 255, 255, 255
+      (the badge and the label hash alike: the base reads no light, so it draws the two documents alike)
+  × a planted pass that lights every child darkens the badge and fails, naming the item
+      deep-gpu run --planted light_every_child exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}: expected 2 to be +0
+
+ac5-seek-play.test.ts
+  × the evaluated light list at 1 s, 3 s and 5 s is the same by seeking and by playing, and follows its channels
+      path answers the lit group's frames, not a refusal: {"ok":false,"code":"ref_unresolved","path":"items/lamps"}: expected false to be true
+  × a planted evaluator that keeps the frame before's light list differs after the seek and fails, naming the frame
+      path answers the lit group's frames under light_stale_list, not a refusal: {"ok":false,"code":"bad_input"}: expected false to be true
+  × the frames at 1 s, 3 s and 5 s have the same pixel hash by seeking and by playing
+      the lights move: the played frames 30, 90 and 150 hash apart: expected 1 to be 3
+      (printed: played and sought frames 30, 90 and 150 all 1516b21572cd…: no light is drawn, so nothing moves)
+  × a planted evaluator that keeps the frame before's light list draws a seek unlike the play and fails, naming the frame
+      deep-gpu run --planted light_stale_list exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}: expected 2 to be +0
+
+ac6-refusals.test.ts
+  × 16 lights pass; 17 are refused reading lights: 17, cap: 16; the inner lit group and the status-role light are each named
+      seventeen lights on lamps: the check answers ok true, not a refusal
+      seventeen lights on lamps: no error names lamps and reads lights: 17, cap: 16; errors: none
+      a lit group inside a lit group: no error names the inner group tray; errors: none
+      a light in a status role: no error names the light items/lamps/params/light/lights/1; errors: none
+      (the 16-light document passed: no error)
+  × a planted check that accepts the 17th light fails
+      check takes the line with planted light_accepts_seventeenth: {"ok":false,"code":"bad_input"}: expected 'bad_input' not to be 'bad_input'
+
+ac8-budget.test.ts
+  × 16 lights over a 1920 × 1080 lit group cost under 1 ms of GPU time a frame, on the reference Mac
+      the lit side draws its lights: its first frame hashes apart from the plain side's: expected 'b770bd29bd67…' not to be 'b770bd29bd67…'
+      (printed: first run: lit 1.094 ms, plain 1.030 ms, the lights 0.064 ms a frame (median of 120 frames each))
+
+ac7-unlit-fixtures.test.ts: not run at the base. It guards behavior the base already has: at the base the merge base
+(git merge-base HEAD origin/main) is the base itself, so the two sides are one program and the test holds by
+construction, and a full run would build both binaries a second time at the merge base, which this shared, loaded Mac
+was asked not to do. Its wrong programs are changes this base doesn't have (a lit pass on every group, a default ambient
+on a group with no light, a moved draw path). Checked instead, with a throwaway test deleted before the commit: the
+helpers it calls (parityFixtures, framesOf) over the checkout's own tree with the checkout's binaries on both sides
+found the eleven fixtures (160's burst.film, loader.film, path-ops.scene; 373's adjust.board, arcs.figure,
+groups.figure, marks.figure, masks.board, star.figure, stroke-gradient.figure; 391's patch-equals-rebuild.board), none
+naming a light; two independent draws gave the same frames, paths and refusals; and every fixture had at least one
+picture (marks.figure through raster with its suite's store; masks.board through raster and layers by vello_cpu).
+
+Also checked: npx tsc --noEmit -p tests/acceptance/2031 exits 0. The closed forms in helpers.ts give the criteria's
+numbers: 198 at pixel (355, 255) under one light (a linear falloff 188), 137 and 188 for one and two lights of 0.25
+in linear light (two encoded 137s summed clamp to 255), and 137 for white at the default ambient 0.25.

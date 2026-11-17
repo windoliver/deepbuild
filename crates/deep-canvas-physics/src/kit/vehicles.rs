@@ -160,9 +160,143 @@ fn contacts() -> Fixture {
     )
 }
 
-/// The five, in report order.
+/// #2306: the fixture car set down on `ground`'s top at `at` (x, z), springs at rest length, in a
+/// world that also holds `parts`' shapes, bodies and joints; the floor and car take material
+/// `material`.
+fn on(ground: f64, at: [f64; 2], parts: Value, material: &str) -> Value {
+    let mut w = car_world(0.0);
+    w["bodies"]["car"]["pose"]["pos"] = json!([at[0], ground + REST + RADIUS, at[1]]);
+    for key in ["contact_materials", "shapes", "bodies", "joints"] {
+        for (k, v) in parts[key].as_object().into_iter().flatten() {
+            w[key][k] = v.clone();
+        }
+    }
+    for id in ["floor", "car"] {
+        w["bodies"][id]["shapes"][0]["contact_material"] = json!(material);
+    }
+    w
+}
+
+/// A dynamic slab of `mass` kg and half extents `half` lying on the floor.
+fn slab(mass: f64, half: [f64; 3], material: &str) -> Value {
+    json!({"shapes": {"slab": {"kind": "box", "half": half}},
+           "bodies": {"slab": {"kind": "dynamic", "shapes": [{"shape": "slab", "contact_material": material}],
+                               "mass": mass, "sleep": false, "pose": {"pos": [0, half[1], 0]}}}})
+}
+
+/// The weight: set down on a 100 kg slab, 8 × 0.2 × 6 m, the slab's contact impulse over each step
+/// of the fourth second reads (1,000 + 100) × g times the step's length, within 1%.
+fn weight() -> Fixture {
+    let m = Measure::Load {
+        body: "slab",
+        from: 3 * HZ as usize,
+        to: 4 * HZ as usize,
+    };
+    let w = on(0.2, [0.0, 0.0], slab(100.0, [4.0, 0.1, 3.0], "m"), "m");
+    vehicle(
+        fixture(
+            "vehicle_weight",
+            w,
+            4 * HZ as u64,
+            m,
+            1100.0 * G,
+            Tolerance::Relative(0.01),
+        ),
+        json!([]),
+    )
+}
+
+/// The beam: braked at 4,000 N with its centre 2.5 m from the pivot of a level 10 m beam of
+/// 200 kg hinged at its middle to the world with limits of ±15°, from 0.5 s on the hinge reads
+/// 15° toward the car, within 0.1°.
+fn beam() -> Fixture {
+    let axis = [1.0, 0.0, 0.0];
+    let parts = json!({"shapes": {"beam": {"kind": "box", "half": [1.5, 0.1, 5.0]}},
+        "bodies": {"beam": {"kind": "dynamic", "shapes": [{"shape": "beam", "contact_material": "m"}],
+                            "mass": 200, "sleep": false, "pose": {"pos": [0, 2, 0]}}},
+        "joints": {"pivot": {"kind": "hinge", "a": "world", "b": "beam",
+                             "frame_a": {"anchor": [0, 2, 0], "axis": axis}, "frame_b": {"anchor": [0, 0, 0], "axis": axis},
+                             "limits": {"min": -15, "max": 15}}}});
+    let m = Measure::Angle {
+        joint: "pivot",
+        from: HZ as usize / 2,
+    };
+    vehicle(
+        fixture(
+            "vehicle_beam",
+            on(2.1, [0.0, 2.5], parts, "m"),
+            2 * HZ as u64,
+            m,
+            15.0,
+            Tolerance::Deg(0.1),
+        ),
+        json!([entry(0, "brake", json!({"force": 4000}))]),
+    )
+}
+
+/// The slab: settled on a free 1,000 kg slab, 60 × 0.2 × 6 m, on a floor, slab and floor of
+/// friction 0, a drive of 2,000 N for 2 s moves the slab at 4.00 m/s the other way, within 2%.
+fn slab_back() -> Fixture {
+    let mut parts = slab(1000.0, [3.0, 0.1, 30.0], "ice");
+    parts["contact_materials"] = json!({"ice": material(0.0, 0.0)});
+    let step = SETTLE as usize + 2 * HZ as usize;
+    let m = Measure::Speed { body: "slab", step };
+    vehicle(
+        fixture(
+            "vehicle_slab",
+            on(0.2, [0.0, 0.0], parts, "ice"),
+            step as u64,
+            m,
+            4.0,
+            Tolerance::Relative(0.02),
+        ),
+        json!([entry(SETTLE, "drive", json!({"force": 2000}))]),
+    )
+}
+
+/// The platform: braked at 4,000 N and set down moving with a kinematic platform that holds
+/// 2 m/s along its axle, it is within 0.02 m of its place on the platform 3 s on.
+fn platform() -> Fixture {
+    let parts = json!({"shapes": {"platform": {"kind": "box", "half": [10, 0.1, 4]}},
+        "bodies": {"platform": {"kind": "kinematic", "shapes": [{"shape": "platform", "contact_material": "m"}],
+                                "pose": {"pos": [0, 0.5, 0]}}}});
+    let step = 3 * HZ as usize;
+    let m = Measure::Carried {
+        body: "car",
+        ground: "platform",
+        step,
+    };
+    let mut f = vehicle(
+        fixture(
+            "vehicle_platform",
+            on(0.6, [0.0, 0.0], parts, "m"),
+            step as u64,
+            m,
+            0.0,
+            Tolerance::M(0.02),
+        ),
+        json!([
+            entry(0, "launch", json!({"linear": [2, 0, 0]})),
+            entry(0, "brake", json!({"force": 4000}))
+        ]),
+    );
+    f.moves = vec![("platform", [2.0, 0.0, 0.0])];
+    f
+}
+
+/// The nine, in report order.
 pub fn all() -> Vec<Fixture> {
-    vec![sag(), brake(), drive(), turn(), contacts()]
+    vec![
+        sag(),
+        brake(),
+        drive(),
+        turn(),
+        contacts(),
+        weight(),
+        beam(),
+        slab_back(),
+        platform(),
+    ]
 }
 
 fn body<'a>(s: &'a State, id: &str) -> Option<&'a BodyState> {

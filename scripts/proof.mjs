@@ -5,6 +5,7 @@
 // program; mutation (release and on demand) mutates the lines the change adds. Lifecycle, crash and
 // replay run when the change touches their paths (the replay: the verdict engine's or the review
 // check's, #87), and lifecycle and crash in full at release.
+import { exactTree, writeRecord } from './lanes.mjs';
 import { Blocked, listFiles, readApprovals, readChange, readIssue } from './proof-change.mjs';
 import { guard } from './proof-guard.mjs';
 import { before, mutation, prepareRuns, removeTemporaries } from './proof-runs.mjs';
@@ -42,10 +43,11 @@ try {
   if (lanes.has('guard')) guard({ root, change, issue: issue?.blocked && !issue.number ? null : issue }, approvals, say);
 
   if (lanes.has('before') || lanes.has('mutation')) {
+    const tree = lanes.has('trace') && exactTree(root);
     const runs = prepareRuns({ root, change, issue: issue?.number ? issue : null }, { coverage: lanes.has('mutation') });
     const kills = lanes.has('mutation') ? mutation({ root, change }, runs, say, print) : new Map();
     const proven = lanes.has('before') ? before(runs, kills, say, print) : before(runs, kills, () => {}, () => {});
-    if (lanes.has('trace')) trace(issue, runs, proven);
+    if (lanes.has('trace')) trace(issue, runs, proven, tree);
   }
 
   const touched = change.whole.map(({ path }) => path);
@@ -77,19 +79,25 @@ process.exitCode = failed ? 1 : 0;
 
 // A criterion is proven when one of its tagged tests ran on the change, passed, wasn't skipped, and
 // failed on a wrong program in this run.
-function trace(issue, runs, proven) {
+function trace(issue, runs, proven, tree) {
   const fix = 'Tag a test with each open criterion and make it fail on a wrong program, say Part of #n instead of Closes #n, or drop the tag of a criterion the issue no longer holds.';
   if (!issue) return say('PASS', 'trace', 'the change names no issue (no Closes #n or Part of #n line)');
   if (issue.blocked) return say('BLOCKED', 'trace', issue.blocked, 'Name one issue in the change, and sign in to gh or set DEEP_PROOF_ISSUES to a folder holding <n>.md.');
   if (!issue.criteria.length) return say('BLOCKED', 'trace', `#${issue.number} lists no criterion as a - [ ] line under ### Acceptance criteria, so nothing can be traced`, 'Give the issue its acceptance criteria under ### Acceptance criteria.');
+  let state = 'PASS';
+  const fail = (detail) => {
+    state = 'FAIL';
+    say('FAIL', 'trace', detail, fix);
+  };
   const ids = new Set(issue.criteria.map(({ id }) => id));
   const prefix = `#${issue.number}.`;
   for (const path of runs.files) {
     const tags = runs.tests.filter((test) => test.path === path).flatMap(({ tags: list }) => list);
-    for (const tag of new Set(tags)) if (tag.startsWith(prefix) && !ids.has(tag)) say('FAIL', 'trace', `${tag} names no criterion of #${issue.number} (${path})`, fix);
+    for (const tag of new Set(tags)) if (tag.startsWith(prefix) && !ids.has(tag)) fail(`${tag} names no criterion of #${issue.number} (${path})`);
   }
   const open = issue.criteria.filter(({ id }) => !runs.tests.some((test) => test.tags.includes(id) && proven.has(test.key))).map(({ id }) => id);
-  if (issue.word === 'Closes' && open.length) say('FAIL', 'trace', `Closes #${issue.number} refused: this change is Part of #${issue.number}; open: ${open.join(', ')}`, fix);
+  if (issue.word === 'Closes' && open.length) fail(`Closes #${issue.number} refused: this change is Part of #${issue.number}; open: ${open.join(', ')}`);
   else if (open.length) say('PASS', 'trace', `Part of #${issue.number}; open: ${open.join(', ')}`);
   else say('PASS', 'trace', `${issue.word} #${issue.number}: each of its ${issue.criteria.length} criteria has a tagged test that ran, passed and failed on a wrong program`);
+  writeRecord('trace', state, tree, issue.criteria.map(({ id }) => (open.includes(id) ? { id, state: 'INCONCLUSIVE', note: 'no tagged test ran, passed and failed on a wrong program' } : { id, state: 'PASS' })));
 }

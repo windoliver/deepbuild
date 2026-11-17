@@ -60,6 +60,41 @@ pub fn inline_programs(form: &mut Value, read: &dyn Fn(&str) -> Option<Vec<u8>>)
             );
         }
     }
+    // #192: each logic item's data assets and linked libraries by their hash, with the pinned
+    // packs' libraries the hub listed, which the logic module's steps read as a piece's assets.
+    let shas: Vec<String> = items
+        .values()
+        .filter(|i| i["kind"] == deep_logic::module::INTERFACE)
+        .flat_map(|i| {
+            let assets = i
+                .pointer("/params/assets")
+                .and_then(Value::as_array)
+                .cloned();
+            let links = i
+                .pointer("/params/links")
+                .and_then(Value::as_array)
+                .cloned();
+            let links = links.into_iter().flatten().map(|l| l["asset"].clone());
+            assets
+                .into_iter()
+                .flatten()
+                .chain(links)
+                .collect::<Vec<_>>()
+        })
+        .filter_map(|v| v.as_str().map(str::to_string))
+        .collect();
+    let inlined: serde_json::Map<String, Value> = shas
+        .into_iter()
+        .filter_map(|sha| {
+            Some((
+                sha.clone(),
+                Value::String(deep_canvas::base64::encode(&read(&sha)?)),
+            ))
+        })
+        .collect();
+    if !inlined.is_empty() {
+        form["inlined"] = Value::Object(inlined);
+    }
 }
 
 /// Mark set columns that read a column source, resolved and narrowed by the core's column

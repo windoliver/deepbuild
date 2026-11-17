@@ -401,8 +401,11 @@ impl Hub<'_> {
                     .collect();
                 // #1958: a retired version stays listed, as retired.
                 let state = if self.packs.is_retired(&p.id.text()) { "retired" } else { "installed" };
+                // #192: its gen@1 providers, each with its params and output.
+                let providers = self.sandbox.providers_listed(&p.id.text());
                 json!({"pack": p.id.id, "version": p.id.version.to_string(), "state": state,
-                       "origin": self.pack_origin(&p.id.text()), "recipes": recipes, "aliases": aliases})
+                       "origin": self.pack_origin(&p.id.text()), "recipes": recipes, "aliases": aliases,
+                       "providers": providers})
             })
             .collect();
         Value::Array(packs)

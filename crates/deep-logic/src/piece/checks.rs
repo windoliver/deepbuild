@@ -326,10 +326,10 @@ pub(super) fn region_map(
         let (size, ty, read) = if let Some((size, ty)) = controls.get(r) {
             (*size, ty.to_string(), Read::Control)
         } else if let Some(read) = sources.get(r) {
-            let Read::Reading { max, .. } = read else {
-                unreachable!()
-            };
-            (8 + max * 16, "reading".to_string(), read.clone())
+            match read {
+                Read::Reading { max, .. } => (8 + max * 16, "reading".to_string(), read.clone()),
+                _ => (4, "i32".to_string(), Read::World),
+            }
         } else if let Some((other, "hover")) =
             r.split_once('.').filter(|(c, _)| controls.contains_key(*c))
         {
@@ -538,11 +538,21 @@ pub fn region_maps(
 }
 
 pub(super) type Controls = BTreeMap<String, (u32, &'static str)>;
-/// A piece's sources by the reading each delivers, `reading:<source>` (#533).
+/// A piece's sources by the reading each delivers, `reading:<source>` (#533), and (#182) the
+/// readings its worlds declare that a logic item may read, `world_reads`.
 pub(super) type Sources = BTreeMap<String, Read>;
 
 pub(super) fn sources_of(piece: &Value) -> Result<Sources, Refused> {
     let mut sources = BTreeMap::new();
+    for name in piece
+        .get("world_reads")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+    {
+        sources.insert(name.to_string(), Read::World);
+    }
     for (name, src) in piece
         .get("sources")
         .and_then(Value::as_object)
