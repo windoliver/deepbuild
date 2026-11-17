@@ -38,6 +38,10 @@ pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
             _ => deep_scene3d_render::ao::Planted::None,
         },
         emission_thresholds_color: p == Some(Planted::EmissionThresholdsColor),
+        instanced_skips_velocity: p == Some(Planted::InstancedSkipsVelocity),
+        instances_skip_normal: p == Some(Planted::InstancesSkipNormalTarget),
+        exposure_after_tone_map: p == Some(Planted::ExposureAfterToneMap),
+        absolute_positions: p == Some(Planted::AbsoluteF32WorldPositions),
         sample_grad_implicit: p == Some(Planted::SampleGradImplicit),
         backdrop_after_see_through: p == Some(Planted::BackdropAfterSeeThrough),
         encodes_twice: p == Some(Planted::EncodesTwice),
@@ -82,6 +86,8 @@ pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
         add_without_depth_test: p == Some(Planted::AddWithoutDepthTest),
         ids_by_draw_position: p == Some(Planted::IdsByDrawPosition),
         overlay_keeps_grid_on_seek: p == Some(Planted::OverlayKeepsGridOnSeek),
+        horizon_unbaked: p == Some(Planted::TerrainNoHorizonBake),
+        occlusion_from_slope: p == Some(Planted::TerrainOcclusionFromSlope),
         ids_ignore_mask: p == Some(Planted::IdsIgnoreMask),
         cuts_color_only: p == Some(Planted::CutsColorOnly),
         local: deep_scene3d_render::local::Planted {
@@ -135,7 +141,16 @@ pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
         ]
         .iter()
         .position(|q| p == Some(*q))
-        .map_or(0, |i| 16 << i),
+        .map_or(0, |i| 16 << i)
+            // #458's, above #1381's bit: scene3d.wgsl's `P_SUM_CLAMPED` and the two after it.
+            | [
+                Planted::LightSumClamped,
+                Planted::ShadesByLocalTangent,
+                Planted::ShadowBrightens,
+            ]
+            .iter()
+            .position(|q| p == Some(*q))
+            .map_or(0, |i| (1 << 26) << i),
         ..msaa_planted(p)
     }
 }
@@ -583,6 +598,10 @@ pub struct Drawn {
     pub normal: Option<Vec<u8>>,
     /// #468: the depth of field's signed circle of confusion in px, f32 a pixel.
     pub coc: Option<Vec<u8>>,
+    /// #458: the core's velocity target while the frame builds it, f32 x, y a pixel.
+    pub velocity: Option<Vec<u8>>,
+    /// #458: the solids' world normals while the frame builds that target, f32 RGBA.
+    pub geometry_normal: Option<Vec<u8>>,
 }
 
 /// Draws frame `n` of `scene` under `look`: the frame is rendered into a free slot and waited
@@ -752,6 +771,16 @@ pub fn draw_on(
                 },
                 coc: if read_targets && !noop {
                     r.read_coc(&device)
+                } else {
+                    None
+                },
+                velocity: if read_targets && !noop {
+                    r.read_velocity(&device)
+                } else {
+                    None
+                },
+                geometry_normal: if read_targets && !noop {
+                    r.read_geometry_normal(&device)
                 } else {
                     None
                 },

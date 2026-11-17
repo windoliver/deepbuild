@@ -120,6 +120,8 @@ pub const ENVELOPE_KEYS: &[&str] = &[
     "foley_materials",
     // #903: the input module's tour (Tour), its keys and its pointer.
     "tour",
+    // #210: a piece's ports, each its declared way out to one plug-in and back (Port).
+    "ports",
 ];
 
 /// An item's keys (Item and kind), in this slice.

@@ -1,0 +1,6 @@
+# The shop's definition of done (fixture for #2218 AC2): one check, which states the failure rate it accepts.
+claims:
+  done:
+    checks: [suite]
+checks:
+  suite: { type: command, run: "node --test tests/suite.js", accept: 10% }

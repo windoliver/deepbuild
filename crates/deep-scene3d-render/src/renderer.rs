@@ -14,6 +14,7 @@ pub struct Renderer {
     pub core: targets::Core,
     pub(super) velocity_frame: Option<motion::TargetFrame>,
     pub(super) emission_frame: Option<targets::EmissionFrame>,
+    pub(super) normal_frame: Option<targets::NormalFrame>,
     pub(super) epoch: u64,
     /// The material maps' textures and bind groups (#423), and the look's default taps.
     pub(super) maps: maps::Store,
@@ -248,6 +249,8 @@ pub struct Renderer {
     /// The linear image this frame's output pass reads when passes between geometry and output
     /// wrote one (#418's `pre_tone`); `None`, the linear target.
     pub(super) pre_tone: Option<wgpu::TextureView>,
+    /// #458: the origin the last scene it prepared was moved by.
+    pub(super) origin: [f64; 3],
     /// The output pass's bind group over a post module's own target, with that target and the
     /// covered mask it binds.
     pub(super) post_bind: Option<(wgpu::TextureView, wgpu::TextureView, wgpu::BindGroup)>,

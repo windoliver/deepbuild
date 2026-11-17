@@ -1,0 +1,19 @@
+# The #416 layouts acceptance suite's own fixture assembler, cut down from #531's (tests/acceptance/531/wat):
+# WebAssembly text to bytes (the `wat` crate), each output validated by `wasmparser`. Test tooling only, outside the
+# workspace (the empty [workspace] table) with its own lockfile; it shares no code with the sandbox module under test.
+[package]
+name = "acceptance-416-layouts-wat"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+[[bin]]
+name = "acceptance-416-layouts-wat"
+path = "src/main.rs"
+
+[dependencies]
+wat = "=1.263.0"
+wasmparser = "=0.263.0"
+
+[workspace]

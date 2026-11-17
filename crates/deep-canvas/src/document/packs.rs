@@ -53,6 +53,8 @@ pub struct Planted {
     pub walk_inputs: Option<WalkInputs>,
     /// Seeds derived items by expansion order, not by `(instance, step, index)`.
     pub seed_by_order: bool,
+    /// #458: an expansion makes one stroked derived item without its stroke.
+    pub drops_stroke: bool,
     /// A re-expansion writes over a broken-out item.
     pub overwrite_broken_out: bool,
     /// The pack check admits a pack without reading `requires.modules`.
@@ -731,6 +733,7 @@ const PACK_KEYS: &[&str] = &[
     "providers",
     "layouts",
     "libs",
+    "interfaces",
     "kinds",
     "corpus",
 ];

@@ -50,6 +50,11 @@ pub struct Solver {
     pub ccd: bool,
 }
 
+/// #2309: the stiffest contact a step settles, Hz: (step rate × substeps) ÷ 6.
+pub fn most_contact_hz(step_rate: f64, substeps: f64) -> f64 {
+    step_rate * substeps / 6.0
+}
+
 mod shape;
 pub use shape::*;
 
@@ -526,7 +531,8 @@ impl Reader {
             _ => Mode::Dynamic,
         };
         let capacity = self.capacity(m);
-        let solver = self.solver(m.get("solver").unwrap_or(&Value::Null));
+        let most = most_contact_hz(step_rate, substeps);
+        let solver = self.solver(m.get("solver").unwrap_or(&Value::Null), most);
         let combine = &self.obj(
             m.get("combine").unwrap_or(&Value::Null),
             "combine",
@@ -684,7 +690,8 @@ impl Reader {
         }
     }
 
-    fn solver(&mut self, v: &Value) -> Solver {
+    /// The solver; unwritten, `contact_hz` is the lower of 30 Hz and `most` (#2309).
+    fn solver(&mut self, v: &Value, most: f64) -> Solver {
         let p = "solver";
         let s = &self.obj(
             v,
@@ -704,8 +711,9 @@ impl Reader {
             "solver/sleep",
             &["on", "speed", "time"],
         );
+        let hz = most.min(30.0);
         Solver {
-            contact_hz: self.num(s, "contact_hz", p, 30.0, f64::MIN_POSITIVE, f64::MAX),
+            contact_hz: self.num(s, "contact_hz", p, hz, f64::MIN_POSITIVE, f64::MAX),
             contact_damping: self.num(s, "contact_damping", p, 10.0, 0.0, f64::MAX),
             max_speed: self.num(s, "max_speed", p, 400.0, f64::MIN_POSITIVE, f64::MAX),
             restitution_threshold: self.num(s, "restitution_threshold", p, 0.0, 0.0, f64::MAX),
