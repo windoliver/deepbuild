@@ -4,17 +4,27 @@ import { MessageChannel, Worker } from 'node:worker_threads';
 
 export interface Prefix { size: number; sha256: string; ended?: boolean; continuable?: boolean }
 export interface Part { bytes: Uint8Array; complete: boolean; cwd?: string; keys: { key: string; uuid?: string }[] }
+/** A part's target size. A megabyte: each cut scans its 64 KiB of lookahead again, a quarter of a 256 KiB part. */
+export const PART = 1024 * 1024;
 export const sourceStamp = (s: BigIntStats): string => `${s.dev}:${s.ino}:${s.size}:${s.mtimeNs}:${s.ctimeNs}`;
 export interface CopyResult extends Prefix { grew: boolean; ended: boolean; continuable: boolean }
 let queue = Promise.resolve();
+// One worker serves the small copies that follow each other and ends a second after the last, so a pass loads the
+// scrub's rules once, not once a transcript. After a large transcript it ends at once: the evidence store hashes that
+// copy in a worker of its own, and the two resident together added about 12 MB to a pass.
+const REUSE = 8 * 1024 * 1024;
+let worker: Worker | undefined;
+let idle: NodeJS.Timeout | undefined;
 
 export function copyTranscript(path: string, size: number, stamp: string, before: Prefix | undefined, stable: boolean, held: readonly string[], session: string, keep: (part: Part) => Promise<void>): Promise<CopyResult> {
   const run = queue.then(async () => {
-    const thread = new Worker(new URL(import.meta.url.endsWith('.ts') ? './copy-worker.ts' : './copy-worker.js', import.meta.url), { execArgv: [], resourceLimits: { maxYoungGenerationSizeMb: 2 } });
+    clearTimeout(idle);
+    const thread = worker ??= new Worker(new URL(import.meta.url.endsWith('.ts') ? './copy-worker.ts' : './copy-worker.js', import.meta.url), { execArgv: [], resourceLimits: { maxYoungGenerationSizeMb: 2 } });
+    thread.ref();
     const { port1, port2 } = new MessageChannel();
     try {
       return await new Promise<CopyResult>((resolve, reject) => {
-        const failed = (error: Error) => reject(error);
+        const failed = (error: Error) => { if (worker === thread) worker = undefined; reject(error); };
         const exited = (code: number) => failed(Error(`the transcript worker exited ${code}`));
         thread.once('error', failed);
         thread.once('exit', exited);
@@ -23,7 +33,7 @@ export function copyTranscript(path: string, size: number, stamp: string, before
           if (message.error) reject(Error(message.error));
           else if (message.result) resolve(message.result);
           else if (message.part) void keep(message.part).then(() => port1.postMessage({ ok: true }), (error: unknown) => {
-            // Wait for the worker's error reply and finally/close before the next job uses this thread.
+            // The worker answers with its own error once it has closed the transcript.
             port1.postMessage({ error: error instanceof Error ? error.message : String(error) });
           });
         });
@@ -31,9 +41,10 @@ export function copyTranscript(path: string, size: number, stamp: string, before
       });
     } finally {
       port1.close();
-      // The continuation is computed next in the evidence worker. Release this isolate first: keeping both
-      // resident added about 80 MB even for a 1 MB append. Awaiting termination also closes its file handles.
-      await thread.terminate();
+      thread.unref();
+      const end = () => { if (worker === thread) worker = undefined; return thread.terminate(); };
+      if (size < REUSE) idle = setTimeout(() => void end(), 1000).unref();
+      else await end();
     }
   });
   queue = run.then(() => undefined, () => undefined);

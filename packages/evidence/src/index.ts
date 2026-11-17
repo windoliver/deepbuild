@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash, randomUUID, type Hash } from 'node:crypto';
 import { isUtf8 } from 'node:buffer';
 import { createReadStream } from 'node:fs';
 import { access, copyFile, mkdir, open, readFile, rename, rm, stat, writeFile, type FileHandle } from 'node:fs/promises';
@@ -136,6 +136,9 @@ const KEPT_MS: Readonly<Record<string, number>> = { 'reading.batch': DAY, 'readi
 // The archive's transcript copies are kept compressed (#20): a heavy month of them fits in under 2 GB on disk.
 const PACKED: ReadonlySet<string> = new Set(['transcript-copy']);
 const JOURNAL_IDLE_MS = 1000;
+// A joined copy under this size keeps no resumable hash: reading it once more after a restart costs less than hashing
+// every small copy in JavaScript, about fifty times the instructions of the native hash.
+const RESUMABLE = 8 * 1024 * 1024;
 const pack = promisify(zstdCompress);
 const unpack = promisify(zstdDecompress);
 const REDACTIONS: readonly unknown[] = ['complete', 'incomplete', 'unknown'];
@@ -153,9 +156,12 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
   const packedOf = (sha: string) => `${fileOf(sha)}.zst`;
   const partsOf = (sha: string) => `${fileOf(sha)}.parts`;
   // Continuations persist with verified manifests. A prefix lookup uses its last part, not a scan of all evidence.
+  // A small joined copy made by this process keeps its running hash here instead, one for each copy still current,
+  // so a copy that gains parts goes on from it and reads none of the parts before.
+  const hashes = new Map<string, Hash>();
   const prefixes = new Map<string, Set<string>>();
   const remember = (entry: Stored) => {
-    if (entry.parts?.length && entry.continuation) {
+    if (entry.parts?.length && (entry.continuation || hashes.has(entry.sha256))) {
       const last = entry.parts.at(-1)!;
       (prefixes.get(last) ?? prefixes.set(last, new Set()).get(last)!).add(entry.sha256);
     }
@@ -221,7 +227,7 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
       : !Array.isArray(request.license?.allows) || typeof request.license.name !== 'string' ? 'evidence needs a license'
       : request.kind === 'layer.rows' && !request.layer ? 'a layer.rows file needs its layer, parent and level' : undefined;
 
-  async function save(peer: Peer, request: Common & { steps?: readonly Step[] }, bytes: Uint8Array | { file: string; sha256: string; size: number } | { parts: readonly string[]; sha256: string; size: number; continuation: DigestState }, type: Evidence['type'], redaction: Redaction, missing?: string): Promise<PutResult> {
+  async function save(peer: Peer, request: Common & { steps?: readonly Step[] }, bytes: Uint8Array | { file: string; sha256: string; size: number } | { parts: readonly string[]; sha256: string; size: number; continuation?: DigestState }, type: Evidence['type'], redaction: Redaction, missing?: string): Promise<PutResult> {
     const file = 'file' in bytes ? bytes : undefined;
     const joined = 'parts' in bytes ? bytes : undefined;
     const sha = file?.sha256 ?? joined?.sha256 ?? hashOf(bytes as Uint8Array);
@@ -248,7 +254,7 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
       const earlier = index.get(sha);
       const record: Stored = {
         sha256: sha, size: file?.size ?? joined?.size ?? (bytes as Uint8Array).length, type, kind: request.kind, source: request.source,
-        ...(joined && !existed ? { parts: [...joined.parts], continuation: joined.continuation } : earlier?.parts ? { parts: earlier.parts, ...(earlier.continuation ? { continuation: earlier.continuation } : {}) } : {}),
+        ...(joined && !existed ? { parts: [...joined.parts], ...(joined.continuation ? { continuation: joined.continuation } : {}) } : earlier?.parts ? { parts: earlier.parts, ...(earlier.continuation ? { continuation: earlier.continuation } : {}) } : {}),
         // The same bytes keep the most cautious origin and label any writer gave them.
         origin: fromAgent || peer.role === 'agent' || earlier?.origin === 'agent' ? 'agent' : peer.role,
         redaction: earlier && earlier.redaction !== 'complete' ? earlier.redaction : redaction,
@@ -317,17 +323,24 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
           for (let n = request.parts.length - 1; n >= 0 && !prefix; n--) {
             for (const sha of prefixes.get(request.parts[n]!) ?? []) {
               const found = index.get(sha);
-              if (found?.parts?.length === n + 1 && found.parts.every((p, k) => p === request.parts[k]) && found.continuation) {
-                if (new Digest(found.continuation).hex() !== sha) throw new EvidenceError('corrupt', `evidence ${sha} has a corrupt hash continuation`, sha);
+              if (found?.parts?.length === n + 1 && found.parts.every((p, k) => p === request.parts[k]) && (found.continuation || hashes.has(sha))) {
+                if (found.continuation && new Digest(found.continuation).hex() !== sha) throw new EvidenceError('corrupt', `evidence ${sha} has a corrupt hash continuation`, sha);
                 prefix = found; break;
               }
             }
           }
-          const start = prefix?.parts?.length ?? 0;
-          const added = async function* () { for (const part of request.parts.slice(start)) yield* chunks(part); };
-          const { sha256, state: continuation } = await continueDigest(prefix?.continuation, added());
+          const from = async function* (start: number) { for (const part of request.parts.slice(start)) yield* chunks(part); };
+          const running = prefix && hashes.get(prefix.sha256);
+          let sha256: string, continuation: DigestState | undefined;
+          if (size < RESUMABLE && (!prefix || running)) {
+            const hash = running ? running.copy() : createHash('sha256');
+            for await (const bytes of from(prefix?.parts?.length ?? 0)) hash.update(bytes);
+            sha256 = hash.copy().digest('hex');
+            hashes.set(sha256, hash);
+          } else ({ sha256, state: continuation } = await continueDigest(prefix?.continuation, from(prefix?.continuation ? prefix.parts!.length : 0)));
+          if (prefix && prefix.sha256 !== sha256) hashes.delete(prefix.sha256);
           const redaction = request.parts.some((p) => index.get(p)!.redaction !== 'complete') ? 'incomplete' : request.redaction;
-          return save(peer, request, { parts: request.parts, sha256, size, continuation }, 'text', redaction);
+          return save(peer, request, { parts: request.parts, sha256, size, ...(continuation ? { continuation } : {}) }, 'text', redaction);
         }
         const backwards = request.steps?.find(({ startMs, endMs }) => !(startMs >= 0 && endMs >= startMs));
         if (backwards) return refuse(`step ${backwards.step} must start at 0 ms or later and end no earlier than it starts`);
@@ -424,6 +437,7 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
         if (!expired(sha)) return; // stored again since the pass began
         const parts = index.get(sha)?.parts;
         index.delete(sha);
+        hashes.delete(sha);
         if (parts?.length) {
           const last = parts.at(-1)!;
           prefixes.get(last)?.delete(sha);

@@ -14,7 +14,8 @@ const sha = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('he
 test('a reopened store extends the verified concatenation without reading any preceding part', async () => {
   const root = await fsp.mkdtemp(join(tmpdir(), 'deep-parts-resume-'));
   try {
-    const first = Buffer.from('first résumé 🛒\n'.repeat(13000));
+    // Past the size under which a joined copy keeps no resumable hash and is read again after a restart.
+    const first = Buffer.from('first résumé 🛒\n'.repeat(480_000));
     const second = Buffer.from('second line\n'.repeat(1000));
     const third = Buffer.from('third line\n');
     const store = await openEvidenceStore({ root });
@@ -38,7 +39,7 @@ test('a reopened store extends the verified concatenation without reading any pr
     expect(old, 'the added part is read back; the old parts are not decompressed or hashed again after reopen').toEqual([]);
     expect(Buffer.from(await reopened.read(sha(Buffer.concat([first, second, third]))))).toEqual(Buffer.concat([first, second, third]));
   } finally { await fsp.rm(root, { recursive: true, force: true }); }
-});
+}, 120_000);
 
 test('continued hashes across block and UTF-8 boundaries equal Node SHA-256, including empty and repeated parts', async () => {
   const root = await fsp.mkdtemp(join(tmpdir(), 'deep-parts-digests-'));

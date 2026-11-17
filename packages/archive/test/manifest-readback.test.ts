@@ -8,7 +8,7 @@ afterAll(removeTemps);
 test('a corrupt parts manifest is refused before transcript.archived is appended', async () => {
   const w = await openWorld();
   try {
-    claudeTranscript(w.env, Array.from({ length: 15 }, (_, n) => ({ uuid: `m${n}`, role: 'user' as const, text: `message ${n} ${'safe text '.repeat(6000)}` })));
+    claudeTranscript(w.env, Array.from({ length: 40 }, (_, n) => ({ uuid: `m${n}`, role: 'user' as const, text: `message ${n} ${'safe text '.repeat(6000)}` })));
     let corrupted = false;
     w.bend = (sha) => {
       const path = join(evidenceOf(w.root), sha.slice(0, 2), `${sha.slice(2)}.parts`);

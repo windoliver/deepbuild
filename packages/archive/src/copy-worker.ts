@@ -5,9 +5,8 @@ import { open, type FileHandle } from 'node:fs/promises';
 import { once } from 'node:events';
 import { isMarkedAsUntransferable, parentPort, type MessagePort } from 'node:worker_threads';
 import { patternMatches, scrubPrefix, scrubReach } from '@deepbuild/evidence/scrubbing';
-import { sourceStamp, type CopyResult, type Part, type Prefix } from './copy.ts';
+import { PART, sourceStamp, type CopyResult, type Part, type Prefix } from './copy.ts';
 
-const PART = 256 * 1024;
 const STALE = Symbol('the copied prefix scrubs differently with what was added');
 const sha = (text: string) => createHash('sha256').update(text).digest('hex');
 type Obj = { [key: string]: unknown };
@@ -70,7 +69,7 @@ async function copy(file: FileHandle, { size, stable, held, session, port }: Job
   let ended = true, continuable = true, cwdFound = false;
   const flush = async (final: boolean | 'growing'): Promise<boolean> => {
     const complete = final ? used : buffer.lastIndexOf(10, used - 1) + 1;
-    if (complete <= context) return false;
+    if (complete <= context) { flushAt = used + PART; return false; }
     const pending = buffer.subarray(0, complete);
     const valid = isUtf8(pending);
     const decoded = valid ? pending : Buffer.from(pending.toString('utf8'));
@@ -120,7 +119,8 @@ async function copy(file: FileHandle, { size, stable, held, session, port }: Job
       const larger = Buffer.allocUnsafe(buffer.length * 2);
       buffer.copy(larger, 0, 0, used); buffer = larger;
     }
-    const { bytesRead } = await file.read(buffer, used, Math.min(PART, buffer.length - used, size - offset), offset);
+    // No further than the next flush: a flush scans all it holds, so what is read past it is scanned again.
+    const { bytesRead } = await file.read(buffer, used, Math.min(flushAt + 65_536 - used, buffer.length - used, size - offset), offset);
     if (!bytesRead) throw Error('the transcript shrank while being copied');
     used += bytesRead; offset += bytesRead;
   }

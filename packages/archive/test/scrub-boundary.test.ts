@@ -2,6 +2,7 @@
 import { writeFileSync } from 'node:fs';
 import { afterAll, expect, test } from 'vitest';
 import { archivedOf, claudeTranscript, dataOf, openArchiveOn, openWorld, redacted, removeTemps } from '../../../tests/acceptance/20/helpers.ts';
+import { PART } from '../src/copy.ts';
 
 afterAll(removeTemps);
 
@@ -17,7 +18,7 @@ for (const [name, secret, held] of [
     try {
       const t = claudeTranscript(w.env, []);
       const first = secret.indexOf('\n') + 1;
-      const pad = `${'safe line\n'.repeat(Math.floor((256 * 1024 - first - 10) / 10))}`;
+      const pad = `${'safe line\n'.repeat(Math.floor((PART - first - 10) / 10))}`;
       const source = pad + secret + 'last public line\n';
       writeFileSync(t.path, source);
       const archive = await openArchiveOn(w, { held: [...held] });
