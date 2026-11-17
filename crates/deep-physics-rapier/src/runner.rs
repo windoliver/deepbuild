@@ -31,6 +31,7 @@ use deep_canvas_physics::track::{self, Entry};
 use serde_json::{json, Map, Value};
 
 mod audit;
+pub mod contact;
 mod held;
 pub mod kit;
 #[cfg(not(target_arch = "wasm32"))]
@@ -249,29 +250,6 @@ fn rate(call: &Value) -> Result<(String, i64), Value> {
     bake::frame_rate(call.get("frame_rate").unwrap_or(&json!("60/1"))).map_err(
         |what| json!({"ok": false, "code": "bad_rate", "path": "frame_rate", "what": what}),
     )
-}
-
-/// This machine: its OS, its CPU architecture as Rust names it, its CPU as the OS names it, and the
-/// target triple this build is for (Golden: a golden "records the triple in its machine").
-fn machine(target: &str) -> Value {
-    let named = if cfg!(target_os = "macos") {
-        std::process::Command::new("sysctl")
-            .args(["-n", "machdep.cpu.brand_string"])
-            .output()
-            .ok()
-            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-    } else {
-        std::fs::read_to_string("/proc/cpuinfo").ok().and_then(|c| {
-            c.lines()
-                .find(|l| l.starts_with("model name"))
-                .and_then(|l| l.split(':').nth(1))
-                .map(|s| s.trim().to_string())
-        })
-    };
-    let cpu = named
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| std::env::consts::ARCH.to_string());
-    json!({"os": std::env::consts::OS, "arch": std::env::consts::ARCH, "cpu": cpu, "target": target})
 }
 
 /// A bake kept in `dir` under `key` (Bake: `store: evidence`), or none.
@@ -512,7 +490,8 @@ impl Run {
             Some(name)
                 if !kit::planted(name, &mut run)
                     && !vehicle::planted(name, &mut run)
-                    && !walk::planted(name, &mut run) =>
+                    && !walk::planted(name, &mut run)
+                    && !contact::planted(name, &mut run) =>
             {
                 return None
             }
@@ -595,7 +574,7 @@ impl Run {
     /// The world `v` holds, built, or the issues that refuse it.
     fn build(&self, v: &Value) -> Result<(World, Rapier), Value> {
         let refused = |e: Vec<Refusal>| refused(&e);
-        let w = vehicle::check(v, self).map_err(refused)?;
+        let w = contact::check(v, self).map_err(refused)?;
         let mut b = Rapier {
             restore_any_version: self.restore_any_version,
             reverse_pairs: cfg!(feature = "test-reverse-pairs"),
@@ -1026,7 +1005,7 @@ impl Run {
                         .collect();
                     json!({"ok": true, "golden": {
                         "bake_key": self.key(world, &reads, &track.json(), &rate, plan.steps, None),
-                        "runtime_digest": self.build.runtime_digest(), "machine": machine(&self.build.target),
+                        "runtime_digest": self.build.runtime_digest(), "machine": replay::machine(&self.build.target),
                         "step_hashes": t.step_hashes, "checkpoint_hashes": hashes,
                         "occurrences_hash": record["occurrences_hash"],
                         "record_on": self.build.target, "verify_on": verify_on}})

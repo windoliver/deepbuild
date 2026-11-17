@@ -1,6 +1,7 @@
 //! #2010: a golden replayed on this machine (Golden), moved here from runner.rs whole; #524 lets it
 //! name a scene's world, keyed with the scene's reads as its bake is; #251 replays it with the
-//! input track it was recorded with, keyed with that track as `golden` keys it.
+//! input track it was recorded with, keyed with that track as `golden` keys it. The machine a golden
+//! names, moved here too (#2309).
 
 use super::*;
 
@@ -120,4 +121,27 @@ impl Run {
         reply["report"] = json!({"first_step": k, "checkpoint": checkpoint, "field": field});
         Some(reply)
     }
+}
+
+/// This machine: its OS, its CPU architecture as Rust names it, its CPU as the OS names it, and the
+/// target triple this build is for (Golden: a golden "records the triple in its machine").
+pub(super) fn machine(target: &str) -> Value {
+    let named = if cfg!(target_os = "macos") {
+        std::process::Command::new("sysctl")
+            .args(["-n", "machdep.cpu.brand_string"])
+            .output()
+            .ok()
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+    } else {
+        std::fs::read_to_string("/proc/cpuinfo").ok().and_then(|c| {
+            c.lines()
+                .find(|l| l.starts_with("model name"))
+                .and_then(|l| l.split(':').nth(1))
+                .map(|s| s.trim().to_string())
+        })
+    };
+    let cpu = named
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| std::env::consts::ARCH.to_string());
+    json!({"os": std::env::consts::OS, "arch": std::env::consts::ARCH, "cpu": cpu, "target": target})
 }

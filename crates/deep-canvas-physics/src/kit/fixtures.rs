@@ -381,6 +381,35 @@ fn sleep_off() -> Fixture {
     )
 }
 
+/// #2309: five 1 m cubes stacked on the floor at rest. A contact is a spring at 30 Hz, twice that
+/// against the static floor, and two equal cubes share their contact's spring, so under its loads
+/// the stack's top sinks 2 × (4 + 3 + 2 + 1) × g ÷ (2π × 30)² + 5 × g ÷ (2π × 60)², 5.87 mm.
+fn resting_stack() -> Fixture {
+    let mut bodies = json!({"floor": floor("m")});
+    for i in 0..5 {
+        let pos = [0.0, f64::from(i) + 0.5, 0.0];
+        bodies[format!("cube{}", i + 1)] = dynamic("cube", "m", pos, json!({}));
+    }
+    let w = world(json!({"contact_materials": {"m": material(0.5, 0.0)},
+                         "shapes": {"cube": {"kind": "box", "half": [0.5, 0.5, 0.5]}, "floor": {"kind": "box", "half": [10, 0.1, 10]}},
+                         "bodies": bodies}));
+    let sink = |hz: f64| {
+        let w = 2.0 * std::f64::consts::PI * hz;
+        G / (w * w)
+    };
+    fixture(
+        "resting_stack",
+        w,
+        720,
+        Measure::Travel {
+            body: "cube5",
+            step: 720,
+        },
+        2.0 * 10.0 * sink(30.0) + 5.0 * sink(60.0),
+        Tolerance::M(0.0003),
+    )
+}
+
 /// The fast body: a 0.05 m sphere at 200 m/s with `ccd` on, its centre 10 m before a static wall
 /// 0.02 m thick and 2 m tall.
 pub fn fast_world(ccd: Option<bool>) -> Value {
@@ -478,6 +507,7 @@ pub fn all() -> Vec<Fixture> {
     ]);
     out.push(super::scan::queries());
     out.push(ccd_wall());
+    out.push(resting_stack());
     out.extend(super::sensors::all());
     out.extend(super::walks::all());
     out.extend(super::vehicles::all());
