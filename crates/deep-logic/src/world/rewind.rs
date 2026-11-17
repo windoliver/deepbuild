@@ -101,6 +101,28 @@ impl World {
         }
     }
 
+    /// The stops the current branch made before step `c`, which a world at `c` has made.
+    pub(super) fn stops_before(&self, c: i64) -> Vec<i64> {
+        self.branches
+            .stops
+            .iter()
+            .copied()
+            .filter(|k| *k < c)
+            .collect()
+    }
+
+    /// A fork of the track at step `k`, steps `len` flicks long: the rewinds and closed entries
+    /// after it go with the rest.
+    pub(super) fn fork_branches(&mut self, k: i64, len: i64) {
+        let b = &mut self.branches;
+        b.off.retain(|e| e.t <= (k - 1) * len);
+        b.closed.retain(|c| c.rewind < k);
+        let closed = &b.closed;
+        b.carry
+            .retain(|(p, _)| *p <= k || closed.iter().any(|c| c.stop + 1 == *p));
+        b.taken = b.taken.min(self.track.get(REWIND).map_or(0, Vec::len));
+    }
+
     /// The seen values the current branch carries in at step k, put back before it runs.
     pub(super) fn carry_in(&mut self, k: i64) {
         let Some((i, at, n)) = self.piece.rewind.as_ref().and_then(|r| r.seen) else {

@@ -997,16 +997,6 @@ impl World {
         Ok(())
     }
 
-    /// #860: the stops the current branch made before step `c`, which a world at `c` has made.
-    fn stops_before(&self, c: i64) -> Vec<i64> {
-        self.branches
-            .stops
-            .iter()
-            .copied()
-            .filter(|k| *k < c)
-            .collect()
-    }
-
     /// Seeks this world to its cache's keyframe at step `c`, in place, keeping its ring.
     pub fn seek_keyframe(&mut self, c: i64) -> Result<(), Failed> {
         let cache = self
@@ -1250,13 +1240,7 @@ impl World {
             }
         }
         // #860: the rewinds and closed entries after it go with the rest.
-        let b = &mut self.branches;
-        b.off.retain(|e| e.t <= (k - 1) * len);
-        b.closed.retain(|c| c.rewind < k);
-        let closed = &b.closed;
-        b.carry
-            .retain(|(p, _)| *p <= k || closed.iter().any(|c| c.stop + 1 == *p));
-        b.taken = b.taken.min(self.track.get(REWIND).map_or(0, Vec::len));
+        self.fork_branches(k, len);
     }
 
     /// A fresh instance per item, loaded from the checkpoint at step `c`: the last whole memory at
