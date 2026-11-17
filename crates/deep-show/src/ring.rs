@@ -878,6 +878,11 @@ impl Hub<'_> {
             timers.extend(script);
             defs.insert(id.clone(), def);
         }
+        // #210: the ports it registers (`deep.registerPort`), and the hosts its grant names.
+        let Some(registered) = crate::ports::manifest_ports(manifest) else {
+            return bad("ports");
+        };
+        self.ports.plugins.insert(plugin.to_string(), registered);
         self.ring.plugins.push(plugin.to_string());
         self.ring.sources.extend(new_sources);
         self.ring.bindings.extend(bindings);

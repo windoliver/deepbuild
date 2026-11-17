@@ -82,6 +82,8 @@ export interface Ext {
   environmentStops: Set<() => Promise<void>>;
   subscribed: Set<string>;
   routes: Set<string>;
+  /** #210: the ports it registers, by name. */
+  ports: Map<string, { entries: string[]; rows: string[]; sources: string[]; sound: boolean }>;
   /** The adapter names it registered. */
   adapters: Set<string>;
   /** The channels it registered (#65), by name, with what each reaches and whether it draws a plan's steps (#1580); their deliver and receive stay with the package. */

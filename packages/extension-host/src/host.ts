@@ -1596,7 +1596,7 @@ class Host implements ExtensionHost {
   private ext(entry: Entry, folder: string, manifest: Manifest, digest: string, place: Ext['place'], mode: Ext['mode']): Ext {
     const released = this.options.release.some((r) => r.id === entry.id && r.version === entry.version && r.digest === digest);
     return {
-      entry, project: entry.project && (existsSync(entry.project) ? realpathSync(entry.project) : entry.project), folder, manifest, digest, place, mode, run: place === 'sandbox' ? `run:${ulid(this.options.now())}` : null, kinds: [], environments: [], jobKinds: new Map(), jobTools: [], subscribed: new Set(), routes: new Set(),
+      entry, project: entry.project && (existsSync(entry.project) ? realpathSync(entry.project) : entry.project), folder, manifest, digest, place, mode, run: place === 'sandbox' ? `run:${ulid(this.options.now())}` : null, kinds: [], environments: [], jobKinds: new Map(), jobTools: [], subscribed: new Set(), routes: new Set(), ports: new Map(),
       released: released && place === 'hub', live: false, actions: new Map(), provides: new Set(), uses: new Map(), detached: false, reads: new Set(), refuseReads: new Set(), scopes: new Map(), callOf: new Map(), stores: new Map(), edgeReads: new Map(),
       adapters: new Set(), channels: new Map(), stateSources: [], leased: [], refusals: [], hubBound: this.hubBound(entry, folder, digest), sources: new Map(), views: new Map(), commands: new Map(), panels: new Map(), checkReads: new Map(), starts: 0, deadlines: new Map(),
       environmentStarts: new Set(), environmentStops: new Set(),
@@ -2187,6 +2187,19 @@ class Host implements ExtensionHost {
         ext.sources.set(source.name, source);
         // A work source (#66): each one you switched on over it gets its schedule again.
         if (!conformance && source.variant === 'stream' && source.work) await this.work.registered(source.name, ext.entry.id);
+        return null;
+      }
+      case 'deep.registerPort': {
+        // #210: what the package's port takes and gives; a document's port is opened by your Connect, never by this.
+        const [name, port] = args as [unknown, { entries?: unknown; rows?: unknown; sources?: unknown; sound?: unknown } | undefined];
+        if (typeof name !== 'string' || !/^[a-z][a-z0-9_.-]*$/.test(name)) throw Error(`deep.registerPort takes the port's name first, not ${JSON.stringify(name)}`);
+        const lists = (['entries', 'rows', 'sources'] as const).map((k) => port?.[k]);
+        if (!lists.every((l) => Array.isArray(l) && l.every((s) => typeof s === 'string'))) throw Error(`deep.registerPort: ${name} lists its entries, rows and sources as text`);
+        if (typeof port?.sound !== 'boolean') throw Error(`deep.registerPort: ${name} says whether its gear makes sound`);
+        // Each source it gives for `in` is one it registers.
+        const unknown = (port.sources as string[]).find((s) => !ext.sources.has(s));
+        if (unknown !== undefined) throw Error(`deep.registerPort: ${name} gives the source ${unknown}, which ${id} doesn't register`);
+        ext.ports.set(name, { entries: [...(port.entries as string[])], rows: [...(port.rows as string[])], sources: [...(port.sources as string[])], sound: port.sound });
         return null;
       }
       case 'deep.registerRoute': {

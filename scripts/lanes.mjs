@@ -846,6 +846,10 @@ timed.push('tests/acceptance/457/ac9-budgets.test.ts');
 // in a linux/amd64 container; ac8-budget judges the build budget on the reference Mac.
 alone.push('tests/acceptance/1636/');
 timed.push('tests/acceptance/1636/ac8-budget.test.ts');
+// #210's files build deep-show (full) or deep-logic, and the web export's runs a headless browser; ac8-budgets judges
+// the delivery and read budgets on the reference Mac, and ac9-taste waits on your taste call in tests/acceptance/210/TASTE.json.
+alone.push('tests/acceptance/210/');
+timed.push('tests/acceptance/210/ac8-budgets.test.ts');
 // #182's files build deep-physics (shipped, test-backends and release) and deep-show; ac5-course also builds deep-physics
 // for Linux x86_64 in a linux/amd64 container, and ac11-budgets judges its timings on the reference Mac. The oracle's
 // climb port went to a blind redraft (182-oracle/DISPUTE.md): on the owner's word, the redraft runs and the first

@@ -330,6 +330,20 @@ impl Hub<'_> {
                 "why": format!("the web player's bundle can't carry {}", names.join(", "))}),
             );
         }
+        // #210: a port is the app's own, never the bundle's: each is named in the receipt's
+        // `refused` and left out of the document the player reads.
+        let ports: Vec<String> = doc
+            .get("ports")
+            .and_then(Value::as_object)
+            .map(|p| p.keys().cloned().collect())
+            .unwrap_or_default();
+        let mut carried = doc.clone();
+        if !self.planted(Planted::WebExportKeepsPort) {
+            if let Some(d) = carried.as_object_mut() {
+                d.remove("ports");
+            }
+        }
+        let doc = &carried;
         let guard = self.web_guard();
         let root = self.scenario.evidence.clone();
         let mut files = Files::default();
@@ -340,7 +354,7 @@ impl Hub<'_> {
         let (element_path, _) = files.put(element.clone().into_bytes(), Some("js"), Map::new());
         // The document as the app's frames draw it, and the recorded input track.
         let doc_bytes = serde_json::to_vec(doc).map_err(|_| json!({"code": "bad_input"}))?;
-        let (_, doc_sha) = files.put(doc_bytes, Some("json"), Map::new());
+        let (doc_path, doc_sha) = files.put(doc_bytes, Some("json"), Map::new());
         let track_bytes =
             serde_json::to_vec(&job.track).map_err(|_| json!({"code": "bad_input"}))?;
         let (_, track_sha) = files.put(track_bytes, Some("json"), Map::new());
@@ -457,6 +471,17 @@ impl Hub<'_> {
                     "issues": [{"code": "export.fidelity", "what": format!("{name} doesn't read back as written")}]}));
             }
         }
+        // The bundle's document carries no port: one it keeps fails the read-back, naming it.
+        let kept: Vec<String> = all
+            .get(&doc_path)
+            .and_then(|b| serde_json::from_slice::<Value>(b).ok())
+            .and_then(|d| Some(d.get("ports")?.as_object()?.keys().cloned().collect()))
+            .unwrap_or_default();
+        if !kept.is_empty() {
+            let _ = std::fs::remove_dir_all(&temp);
+            return Err(json!({"outcome": "failed", "code": "export.fidelity",
+                "issues": [{"code": "export.fidelity", "what": format!("the bundle's document keeps the port {}; a web player carries no port", kept.join(", "))}]}));
+        }
         let _ = std::fs::remove_dir_all(&out);
         if std::fs::rename(&temp, &out).is_err() {
             let _ = std::fs::remove_dir_all(&temp);
@@ -480,7 +505,8 @@ impl Hub<'_> {
             "fallback": "page",
             "sources": [],
             "bytes": all.values().map(Vec::len).sum::<usize>(),
-            "refused": [],
+            "refused": ports.iter().map(|n| json!({"item": n, "code": "web.port",
+                "why": format!("the port {n} is the app's own to open; the web player has no plug-in to send to")})).collect::<Vec<_>>(),
             "gpu_needs": needs,
             "files": receipt_files,
         }))

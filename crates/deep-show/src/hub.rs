@@ -404,6 +404,14 @@ pub enum Planted {
     DropFrameEveryTenthMinute,
     /// #499: a canonical seek decodes its frame from the asset's short-GOP proxy.
     SeekReadsProxy,
+    /// #210: a port sends the steps a seek plays again.
+    PortSendsOnSeek,
+    /// #210: a mute silences the plug-in's output and leaves a sound port's out side sending.
+    MuteLeavesPortSending,
+    /// #210: the gate trusts the document's sound flag over the plug-in's port.
+    GateTrustsDocumentSound,
+    /// #210: the web export writes a port into its bundle.
+    WebExportKeepsPort,
     /// #498: the gate trusts a shipped panel: its own request to play sounds.
     ShippedPanelsUngated,
     /// #498: the reserved-sound comparer refuses only an asset whose hash is a reserved sound's.
@@ -794,6 +802,8 @@ pub struct Hub<'a> {
     pub media: crate::media::Media,
     /// The device gate's owners and their voices (#498).
     pub gate: crate::gate::Gate,
+    /// #210: the plug-ins' ports, their state and the pieces playing under them.
+    pub ports: crate::ports::Ports,
     /// The card's `rearm_on` changes the scenario reported, each when (#327).
     pub card_rearms: Vec<i64>,
     /// A press down the card holds until its release: its platform stamp and its option (#327).
@@ -990,6 +1000,7 @@ impl<'a> Hub<'a> {
             ),
             media: crate::media::Media::default(),
             gate: crate::gate::Gate::default(),
+            ports: crate::ports::Ports::default(),
             card_rearms: Vec::new(),
             card_down: None,
             card_answer: None,
@@ -1605,12 +1616,15 @@ impl<'a> Hub<'a> {
                 event,
                 t,
                 gesture,
-            } => match self.ring_input(panel, event) {
+            } => match self.piece_press(panel, event) {
                 Some(reply) => reply,
-                None => self
-                    .live_press(panel, event, *t)
-                    .err()
-                    .unwrap_or_else(|| self.input(panel, event, gesture)),
+                None => match self.ring_input(panel, event) {
+                    Some(reply) => reply,
+                    None => self
+                        .live_press(panel, event, *t)
+                        .err()
+                        .unwrap_or_else(|| self.input(panel, event, gesture)),
+                },
             },
             Call::World { doc, world } => self.world_call(doc, world),
             Call::Match { doc, steps } => self.match_call(doc, *steps),
@@ -1705,7 +1719,11 @@ impl<'a> Hub<'a> {
             Call::Gate(g) => self.gate_call(g),
             Call::Present(p) => self.present_call(p),
             Call::Mix(m) => self.mix_call(m),
-            Call::Audio(a) => self.audio_call(a),
+            Call::Audio(a) => match self.piece_audio(a) {
+                Some(reply) => reply,
+                None => self.audio_call(a),
+            },
+            Call::Ports(p) => self.ports_call(p),
             Call::RuntimeGolden(g) => self.golden_call(g),
             Call::Term(t) => self.term_call(t),
         };

@@ -94,6 +94,63 @@
     }
   },
   {
+    "method": "deep.registerPort",
+    "variants": null,
+    "since": "R1",
+    "stability": "preview",
+    "tracking": "#210",
+    "preview_since": "R1",
+    "decide_by": "R4",
+    "digest": "d1:c1a0515e41f2a3869341f5cb779d2ce7e1098964f8aa4a1f1645968f95b4538c",
+    "params": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_.-]*$"
+        },
+        "port": {
+          "type": "object",
+          "properties": {
+            "entries": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "rows": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "sources": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "sound": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "entries",
+            "rows",
+            "sources",
+            "sound"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "name",
+        "port"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
     "method": "deep.registerEnvironment",
     "variants": null,
     "since": "R1",

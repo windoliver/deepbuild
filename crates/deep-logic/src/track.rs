@@ -16,9 +16,16 @@ use crate::point::Point;
 #[allow(clippy::large_enum_variant)]
 pub enum Given {
     Number(f64),
-    Pick { set: u32, key: [i64; 2] },
+    Pick {
+        set: u32,
+        key: [i64; 2],
+    },
     Point(Point),
     Text(String),
+    /// A vector-shaped reading's numbers (Logic: readings).
+    Vector(Vec<f64>),
+    /// A layout-shaped reading's record: its bytes, at most 256.
+    Record(Vec<u8>),
 }
 
 impl From<f64> for Given {
@@ -28,6 +35,25 @@ impl From<f64> for Given {
 }
 
 impl Given {
+    /// A reading's value as its source delivers it: a number, a vector's numbers, or a layout
+    /// record's bytes in base64 (Logic: readings). Whether it fits the source's shape is the
+    /// module's to judge.
+    pub fn reading(v: &Value) -> Option<Given> {
+        use base64::Engine as _;
+        match v {
+            Value::Number(n) => n.as_f64().map(Given::Number),
+            Value::Array(a) => a
+                .iter()
+                .map(Value::as_f64)
+                .collect::<Option<_>>()
+                .map(Given::Vector),
+            Value::String(s) => base64::engine::general_purpose::STANDARD
+                .decode(s)
+                .ok()
+                .map(Given::Record),
+            _ => None,
+        }
+    }
     fn parse(v: &Value) -> Option<Given> {
         if let Some(n) = v.as_f64() {
             return Some(Given::Number(n));
@@ -53,6 +79,11 @@ impl Given {
             Given::Pick { set, key } => json!({"set": set, "key": key}),
             Given::Point(p) => p.to_json(),
             Given::Text(t) => json!(t),
+            Given::Vector(v) => json!(v),
+            Given::Record(b) => {
+                use base64::Engine as _;
+                json!(base64::engine::general_purpose::STANDARD.encode(b))
+            }
         }
     }
     /// The value as its control's read region lays it out: an f64 (8 B), a pick's `u32 set,
@@ -74,6 +105,8 @@ impl Given {
                 b.extend(t.as_bytes());
                 b
             }
+            Given::Vector(v) => v.iter().flat_map(|x| x.to_le_bytes()).collect(),
+            Given::Record(b) => b.clone(),
         }
     }
 }
@@ -103,9 +136,9 @@ impl Entry {
             control: reading
                 .or(v.get("control").and_then(Value::as_str))?
                 .to_string(),
-            // A reading's value is a number.
+            // A reading's value is a number, a vector's numbers or a layout record's bytes.
             value: match reading {
-                Some(_) => v.get("value")?.as_f64()?.into(),
+                Some(_) => Given::reading(v.get("value")?)?,
                 None => Given::parse(v.get("value")?)?,
             },
             writer: v

@@ -105,6 +105,8 @@ pub struct Record {
     /// When asked for (#184's play): each step's time by item, as `(item, ns)`, so a bot's steps
     /// are timed apart from the piece's. A reading, never part of a run.
     pub ns: Option<Vec<(usize, u64)>>,
+    /// Issues the steps raised, in step order: `reading.overflow {reading, step, dropped}`.
+    pub issues: Vec<Value>,
 }
 
 impl Record {
@@ -238,6 +240,8 @@ pub(crate) struct Live {
     filled: Option<Value>,
     /// #213: the CPU time updating its mirrors before the last step took, in ns: a proof reading.
     mirror_ns: u64,
+    /// #210: the ns the step took to take its reads and lay them out.
+    read_ns: u64,
     dirty: BTreeSet<u32>,
     /// The pages written since the last keyframe stored (crate::keyframes).
     pub(crate) kdirty: BTreeSet<u32>,
@@ -508,7 +512,7 @@ fn report(
 ) {
     let (items, arrays) = rec.steps.entry(k).or_default();
     let mut row = json!({"hash": hash.map(|h| format!("{h:016x}")), "fuel": fuel, "failed": l.failed, "pages": pages,
-                         "mirror_ns": l.mirror_ns, "service_ns": 0});
+                         "mirror_ns": l.mirror_ns, "service_ns": 0, "read_ns": l.read_ns});
     if let Some(f) = &l.filled {
         row["filled"] = f.clone();
     }
