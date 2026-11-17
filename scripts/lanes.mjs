@@ -854,6 +854,8 @@ alone.push('tests/acceptance/1048/');
 alone.push('tests/acceptance/458/pairs/', 'tests/acceptance/458/relations/', 'tests/acceptance/458/views/');
 // #192's dungeon files build deep-show and deep-sandbox, and ac05 also deep-sandbox for Linux x86_64 in Docker.
 alone.push('tests/acceptance/192/dungeon/');
+// #860's files build deep-logic, deep-drive, deep-show and #533's assembler, and start replicas, a hub and headless Chrome.
+alone.push('tests/acceptance/860/');
 
 // #2516: each file builds deep-gpu and reads linear targets; castle costs require a timed grant.
 alone.push('tests/acceptance/2516/');
