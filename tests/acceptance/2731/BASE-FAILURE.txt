@@ -1,0 +1,73 @@
+# Base run of tests/acceptance/2731 at 3c124dee5 (no fix), 2026-11-17, Linux, Node 24.22.0, procps-ng.
+# Before it, packages/conformance/dist (stale, built November 7) was rebuilt from the base's source, in the same kind of unit:
+#   npm run build -w packages/conformance
+# Command:
+#   systemd-run --user --quiet --wait --pipe --collect -p AppArmorProfile=claude-desktop -p MemoryMax=24G -p MemorySwapMax=2G -E PATH=... -E HOME=... -E NO_COLOR=1 --working-directory=<worktree> node node_modules/vitest/vitest.mjs run tests/acceptance/2731
+# Exit status 1. The worktree's path is written <worktree>; nothing else is cut.
+# The machine's own table was about 0.65 to 0.76 MiB; the 16 filler processes took it past 1.25 MiB (the tests' precondition held, before and after).
+#
+# AC1, both tests: FAIL for the reason the issue names, `ps failed: ps -Awwo: ENOBUFS` read as BLOCKED.
+# AC2, both tests: PASS at this base. AC2 is a guard ("still reads BLOCKED"): the base already reads a failing ps as BLOCKED
+# naming it. It fails on a program that reads PASS, FAIL or a BLOCKED that names neither ps nor its failure (README).
+
+
+ RUN  v5.0.5 <worktree>
+
+ ❯ tests/acceptance/2731/ps-table.test.ts (4 tests | 2 failed) 33160ms
+   ❯ #2731 AC1. With a process table over 1 MiB the kit reads its clean fill and the lint prints no ENOBUFS line (2)
+     × the environment kit's clean fill reads PASS on health-route and status-route 4361ms
+     × node scripts/conformance-lint.mjs prints no `ps failed: … ENOBUFS` line 11607ms
+   ✓ #2731 AC2. A ps that really fails still reads BLOCKED naming the failure, never PASS (2)
+     ✓ the environment kit's clean fill reads BLOCKED on health-route and status-route, naming the failure 1633ms
+     ✓ node scripts/conformance-lint.mjs never reads the environment@1 kit PASS, and its lines name the failure 14537ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2731/ps-table.test.ts > #2731 AC1. With a process table over 1 MiB the kit reads its clean fill and the lint prints no ENOBUFS line > the environment kit's clean fill reads PASS on health-route and status-route
+AssertionError: the clean fill on health-route: expected 'BLOCKED: the process table can\'t be …' to be 'PASS' // Object.is equality
+
+Expected: "PASS"
+Received: "BLOCKED: the process table can't be read (ps failed: ps -Awwo: ENOBUFS), so the state of the environment's processes is unknown"
+
+ ❯ tests/acceptance/2731/ps-table.test.ts:82:105
+     80|       const read = cases.get(id);
+     81|       expect(read, `the kit ran ${id}`).toBeDefined();
+     82|       expect(`${read!.outcome}${read!.message ? `: ${read!.message}` :…
+       |                                                                                                         ^
+     83|     }
+     84|   }, 120_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/acceptance/2731/ps-table.test.ts > #2731 AC1. With a process table over 1 MiB the kit reads its clean fill and the lint prints no ENOBUFS line > node scripts/conformance-lint.mjs prints no `ps failed: … ENOBUFS` line
+AssertionError: expected [ …(6) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "FAIL slot kit environment@1: clean fill health-route: the kit's reference fill reads BLOCKED on health-route: the process table can't be read (ps failed: ps -Awwo: ENOBUFS), so the state of the environment's processes is unknown",
++   "FAIL slot kit environment@1: clean fill status-route: the kit's reference fill reads BLOCKED on status-route: the process table can't be read (ps failed: ps -Awwo: ENOBUFS), so the state of the environment's processes is unknown",
++   "FAIL slot kit environment@1: planted proof ready-before-health: planted fill ready-before-health is first refused on health-route as BLOCKED \"the process table can't be read (ps failed: ps -Awwo: ENOBUFS), so the state of the environment's processes is unknown\" not with its own message \"reported ready before its health check answered\"",
++   "FAIL slot kit environment@1: planted proof unleased-port: planted fill unleased-port is first refused on health-route as BLOCKED \"the process table can't be read (ps failed: ps -Awwo: ENOBUFS), so the state of the environment's processes is unknown\" not with its own message \"bound a port outside its lease\"",
++   "FAIL slot kit environment@1: planted proof leaves-grandchild: planted fill leaves-grandchild is first refused on health-route as BLOCKED \"the process table can't be read (ps failed: ps -Awwo: ENOBUFS), so the state of the environment's processes is unknown\" not with its own message \"left its process running after down\"",
++   "FAIL slot kit environment@1: planted proof starts-in-worktree: planted fill starts-in-worktree is first refused on health-route as BLOCKED \"the process table can't be read (ps failed: ps -Awwo: ENOBUFS), so the state of the environment's processes is unknown\" not with its own message \"started its stack in the session's worktree instead of the checkout it was given\"",
++ ]
+
+ ❯ tests/acceptance/2731/ps-table.test.ts:95:71
+     93|     expect(status, 'the lint ended on its own, built').not.toBe(3);
+     94|     expect(environmentLines(lines).length, 'the lint reported the envi…
+     95|     expect(lines.filter((line) => /ps failed: .*ENOBUFS/.test(line))).…
+       |                                                                       ^
+     96|   }, 300_000);
+     97| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 2 passed (4)
+   Start at  01:41:08
+   Duration  37.92s (tests 89%, transform 10%, import 1%)
+
