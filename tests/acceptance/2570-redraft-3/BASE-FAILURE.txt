@@ -1,0 +1,54 @@
+# #2570 blind redraft 3, run at the base
+# sha: ed03dc60d51abe3d96cf61b766ecf92057a780eb (origin/main; the folder itself uncommitted at run time)
+# date: 2026-11-17T02:03:17Z
+# load (1/5/15 min): 254.06 254.02 223.58 on 20 cores
+# command: node node_modules/vitest/vitest.mjs run --no-file-parallelism tests/acceptance/2570-redraft-3/
+
+
+ RUN  v5.0.5 ~/deepbuild/.claude/worktrees/blind-2570-r3
+
+stdout | tests/acceptance/2570-redraft-3/start.test.ts
+{"suite":"#2570 redraft 3","sha":"ed03dc60d51abe3d96cf61b766ecf92057a780eb","date":"2026-11-17T02:03:22.340Z","node":"v24.22.0","platform":"linux","cores":20,"load":[255.34,254.28,223.83]}
+
+stdout | tests/acceptance/2570-redraft-3/start.test.ts > #2570.03ae960a with no hub and none exiting deep hub start starts one as today, also after a finished stop
+{"case":"fresh start","ms":2530,"load":258.68}
+
+stdout | tests/acceptance/2570-redraft-3/start.test.ts > #2570.03ae960a with no hub and none exiting deep hub start starts one as today, also after a finished stop
+{"case":"start after a finished stop","ms":846,"load":258.46}
+
+stdout | tests/acceptance/2570-redraft-3/start.test.ts > #2570.03ae960a a hub that never answers still fails at 15 s with today's message and exit 3
+{"case":"never answers","ms":15509,"pastWait":-85,"load":259.57}
+
+ ❯ tests/acceptance/2570-redraft-3/start.test.ts (3 tests | 1 failed) 72218ms
+   × #2570.0ed54a91 deep hub start asked for while a stopped hub's process is still exiting ends with a hub answering, exit 0 27463ms
+   ✓ #2570.03ae960a with no hub and none exiting deep hub start starts one as today, also after a finished stop 23250ms
+   ✓ #2570.03ae960a a hub that never answers still fails at 15 s with today's message and exit 3 19012ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2570-redraft-3/start.test.ts > #2570.0ed54a91 deep hub start asked for while a stopped hub's process is still exiting ends with a hub answering, exit 0
+AssertionError: deep hub start asked for 400 ms after the old hub (pid 2416388) closed its socket, while it was still exiting, returned after 15390 ms: exit 3
+stderr: deep hub start: no hub answered at unix:/tmp/d2570r3-z8zAIm/exiting/hub.sock within 15 s; see /tmp/d2570r3-z8zAIm/exiting/logs/hub.log
+
+hub.log: {"v":1,"ready":true,"pid":2416388,"socket":"/tmp/d2570r3-z8zAIm/exiting/hub.sock","start":"01M7KKX7N4GMNH8ZVXQSF88CVQ"}
+deep hub: a hub is already running on /tmp/d2570r3-z8zAIm/exiting: it holds the lock
+: expected 3 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 3
+
+ ❯ tests/acceptance/2570-redraft-3/start.test.ts:182:306
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 passed (3)
+   Start at  18:03:21
+   Duration  72.80s (tests 100%)
+
+exit: not captured (the PIPESTATUS read came back empty); vitest reported 1 failed, 2 passed

@@ -31,7 +31,7 @@ const MAPPING: Record<FamilyName, Record<string, Verdict>> = {
   doctor: {
     healthy: 'PASS', binary_missing: 'FAIL', version_uncovered: 'FAIL', hooks_missing: 'FAIL', hooks_disabled: 'FAIL', hooks_untrusted: 'FAIL', mcp_unregistered: 'FAIL',
     statusline_missing: 'FAIL', statusline_shadowed: 'INCONCLUSIVE', signed_out: 'BLOCKED', nested_session: 'FAIL', timing_relation_broken: 'FAIL', telemetry_unreadable: 'FAIL', not_checked: 'BLOCKED',
-    hub_unreachable: 'BLOCKED', disk_low: 'FAIL', ports_taken: 'FAIL', billing_api_key: 'FAIL', binary_differs: 'FAIL', token_expiring: 'BLOCKED', prompt_failed: 'FAIL', deprecated_used: 'FAIL', gpu_unsupported: 'FAIL', render_failed: 'FAIL', hook_program_missing: 'FAIL', job_failing: 'FAIL', notifications_off: 'FAIL', pack_refused: 'FAIL', unknown: 'INCONCLUSIVE',
+    hub_unreachable: 'BLOCKED', disk_low: 'FAIL', ports_taken: 'FAIL', billing_api_key: 'FAIL', binary_differs: 'FAIL', token_expiring: 'BLOCKED', prompt_failed: 'FAIL', deprecated_used: 'FAIL', gpu_unsupported: 'FAIL', render_failed: 'FAIL', hook_program_missing: 'FAIL', job_failing: 'FAIL', notifications_off: 'FAIL', pack_refused: 'FAIL', service_unpromoted: 'FAIL', unknown: 'INCONCLUSIVE',
   },
   exit: { '0': 'PASS', '1': 'FAIL', '2': 'INVALID', '3': 'INCONCLUSIVE' },
 };
@@ -52,24 +52,27 @@ export function codeFamilies(schemas?: readonly SchemaEntry[]): CodeFamily[] {
 let published: CodeFamily[] | undefined;
 
 /**
- * Enum values with no mapping to a verdict, and values of a verdict-shaped enum elsewhere (one listing PASS, as
- * verdict records do) that verdict.outcome@1 doesn't list: the verdict family has one source, so a
- * record's own outcome list can't grow past it. `pending` is a record's state before its verdict, not one.
+ * Enum values with no mapping to a verdict, and values of a verdict-shaped enum elsewhere (one listing PASS and
+ * FAIL, as verdict records do) that verdict.outcome@1 doesn't list: the verdict family has one source, so a
+ * record's own outcome list can't grow past it. `pending` is a record's state before its verdict, not one, and
+ * `none` a step that reads no verdict. A list of state words (a row's word, a session's state, an attempt's cause)
+ * holds PASS among words such as `sent back`, which stands where FAIL would: it is no verdict list.
  */
 export function unmappedCodes(schemas?: readonly SchemaEntry[]): { family: FamilyName; code: string }[] {
   const families = codeFamilies(schemas);
   const unmapped = families.flatMap((f) => f.codes.filter((code) => !Object.hasOwn(MAPPING[f.family], code)).map((code) => ({ family: f.family, code })));
-  const verdicts = new Set([...families.find((f) => f.family === 'verdict')!.codes, 'pending']);
+  const verdicts = new Set([...families.find((f) => f.family === 'verdict')!.codes, 'pending', 'none']);
+  const shaped = (values: readonly unknown[]): boolean => values.includes('PASS') && values.includes('FAIL');
   const outside = new Set<string>();
   const walk = (node: JsonValue | undefined): void => {
     if (Array.isArray(node)) return void node.forEach(walk);
     if (!isObject(node)) return;
-    if (Array.isArray(node.enum) && node.enum.includes('PASS')) for (const v of node.enum) if (!verdicts.has(String(v))) outside.add(String(v));
+    if (Array.isArray(node.enum) && shaped(node.enum)) for (const v of node.enum) if (!verdicts.has(String(v))) outside.add(String(v));
     // A union tagged by verdicts, as verdict records are: its tags are a verdict list too.
     if (Array.isArray(node.oneOf)) {
       const tags = new Map<string, string[]>();
       for (const branch of node.oneOf) if (isObject(branch) && isObject(branch.properties)) for (const [key, p] of Object.entries(branch.properties)) if (isObject(p) && typeof p.const === 'string') tags.set(key, [...(tags.get(key) ?? []), p.const]);
-      for (const values of tags.values()) if (values.includes('PASS')) for (const v of values) if (!verdicts.has(v)) outside.add(v);
+      for (const values of tags.values()) if (shaped(values)) for (const v of values) if (!verdicts.has(v)) outside.add(v);
     }
     for (const [key, child] of Object.entries(node)) if (key !== 'enum') walk(child);
   };

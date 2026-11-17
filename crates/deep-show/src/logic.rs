@@ -57,7 +57,13 @@ impl Hub<'_> {
 
     /// The document check's view of `form`'s readers ([`Hub::column_view`]), and #538's fit
     /// check over its copy tables, its time written to `timing` when the call asked for it.
-    pub(crate) fn checked_view(&mut self, doc: &str, form: &mut Value, t: i64, timing: Option<&mut Map<String, Value>>) -> Vec<Issue> {
+    pub(crate) fn checked_view(
+        &mut self,
+        doc: &str,
+        form: &mut Value,
+        t: i64,
+        timing: Option<&mut Map<String, Value>>,
+    ) -> Vec<Issue> {
         self.keep_first_positions(doc, form);
         let mut issues = self.column_view(form, t);
         let (unfit, ms) = copy_fit(form);
@@ -72,17 +78,30 @@ impl Hub<'_> {
     /// position in the order the document's first revision stored it, and a later revision's key
     /// reads the entry now at that position. Without the plant, nothing changes.
     pub(crate) fn keep_first_positions(&mut self, doc: &str, form: &mut Value) {
-        if self.scenario.module_planted.as_deref() != Some(deep_canvas_marks::copy::KEEPS_FIRST_POSITION) {
+        if self.scenario.module_planted.as_deref()
+            != Some(deep_canvas_marks::copy::KEEPS_FIRST_POSITION)
+        {
             return;
         }
-        let Some(copy) = form.pointer_mut("/data/copy").and_then(Value::as_object_mut) else {
+        let Some(copy) = form
+            .pointer_mut("/data/copy")
+            .and_then(Value::as_object_mut)
+        else {
             return;
         };
         for (locale, tables) in copy.iter_mut() {
             for (name, t) in tables.as_object_mut().into_iter().flatten() {
                 let Some(t) = t.as_object_mut() else { continue };
-                let now: Vec<String> = t.keys().filter(|k| k.parse::<i32>().is_ok()).cloned().collect();
-                let first = self.first_orders.entry(format!("{doc}/{locale}/{name}")).or_insert_with(|| now.clone()).clone();
+                let now: Vec<String> = t
+                    .keys()
+                    .filter(|k| k.parse::<i32>().is_ok())
+                    .cloned()
+                    .collect();
+                let first = self
+                    .first_orders
+                    .entry(format!("{doc}/{locale}/{name}"))
+                    .or_insert_with(|| now.clone())
+                    .clone();
                 let entries: Vec<Value> = now.iter().map(|k| t[k].clone()).collect();
                 for (pos, k) in first.iter().enumerate() {
                     if let (Some(e), true) = (entries.get(pos), t.contains_key(k)) {
@@ -113,7 +132,13 @@ impl Hub<'_> {
         self.inline_worlds(form, track)?;
         let piece = self.logic_piece(form, track)?;
         let drops = self.scenario.module_planted.as_deref() == Some("hand_over_drops_last_range");
-        deep_play::logic::inline_logic(form, piece, track, drops)
+        // #182: the values the items' world reads take, as entries beside the track's.
+        let mut track = track.to_vec();
+        if let Some(p) = &piece {
+            let read = self.world_reads(form, &track, p)?;
+            track.extend(read);
+        }
+        deep_play::logic::inline_logic(form, piece, &track, drops)
     }
 
     /// `form`'s logic items as one piece, checked by the logic module, each program read from the
@@ -136,20 +161,60 @@ impl Hub<'_> {
         )
     }
 
+    /// #182: the entries each world reading `piece`'s items read takes, the scene's worlds baked
+    /// on the core input track `core` (physics.rs: `logic_readings`); none when no item reads one.
+    pub(crate) fn world_reads(
+        &self,
+        form: &Value,
+        core: &[Value],
+        piece: &Piece,
+    ) -> Result<Vec<Value>, Box<Issue>> {
+        let mut names: Vec<String> = piece
+            .items
+            .iter()
+            .flat_map(|i| i.layout.entries.iter())
+            .filter(|e| e.read == deep_logic::piece::Read::World)
+            .map(|e| e.name.clone())
+            .collect();
+        if names.is_empty() {
+            return Ok(Vec::new());
+        }
+        names.sort();
+        names.dedup();
+        self.logic_readings(form, core, &names)
+    }
+
     /// #548: deep_query's logic read of `form`: each of `items` baked on `track` over the span
     /// (and to the last step asked): its region map with its layout digest, each asked step's
     /// arrays as that step left them and the fuel it used, its trap, null when none, and the
     /// hash of the bytes it runs.
-    pub(crate) fn logic_read(&self, form: &Value, items: &[String], steps: &[i64], track: &[Value]) -> Value {
+    pub(crate) fn logic_read(
+        &self,
+        form: &Value,
+        items: &[String],
+        steps: &[i64],
+        track: &[Value],
+    ) -> Value {
         let piece = match self.logic_piece(form, track) {
             Ok(Some(p)) => Rc::new(p),
             Ok(None) => return json!({"code": "no_logic"}),
             Err(i) => return json!({"code": i.code, "issues": [i.to_json()]}),
         };
-        let Some(entries) = track.iter().filter(|e| e.get("present").is_none()).map(Entry::parse).collect::<Option<Vec<_>>>() else {
+        let Some(mut entries) = track
+            .iter()
+            .filter(|e| e.get("present").is_none())
+            .map(Entry::parse)
+            .collect::<Option<Vec<_>>>()
+        else {
             return json!({"code": "bad_input", "what": "track: each entry is {t, control, value}"});
         };
-        let span = deep_canvas_media::doc::time(form, form.pointer("/transport/span")).unwrap_or(0).max(0);
+        match self.world_reads(form, track, &piece) {
+            Ok(read) => entries.extend(read.iter().filter_map(Entry::parse)),
+            Err(i) => return json!({"code": i.code, "issues": [i.to_json()]}),
+        }
+        let span = deep_canvas_media::doc::time(form, form.pointer("/transport/span"))
+            .unwrap_or(0)
+            .max(0);
         let count = piece
             .items
             .iter()
@@ -158,7 +223,14 @@ impl Hub<'_> {
             .max()
             .unwrap_or(0);
         let mut rec = Record::default();
-        let mut world = match World::new(piece.clone(), track_of(&entries), false, Default::default(), &mut rec, None) {
+        let mut world = match World::new(
+            piece.clone(),
+            track_of(&entries),
+            false,
+            Default::default(),
+            &mut rec,
+            None,
+        ) {
             Ok(w) => w,
             Err(e) => return e,
         };
@@ -167,7 +239,10 @@ impl Hub<'_> {
         let planted = self.scenario.module_planted.as_deref() == Some(MAP_READS_BY_NAME);
         let by_name = planted
             .then(|| {
-                let p = deep_logic::Planted { map_reads_by_name: true, ..Default::default() };
+                let p = deep_logic::Planted {
+                    map_reads_by_name: true,
+                    ..Default::default()
+                };
                 deep_logic::piece::region_maps(&piece_json(form)?, &p).ok()
             })
             .flatten();
@@ -177,7 +252,10 @@ impl Hub<'_> {
                 return json!({"code": "ref_unresolved", "item": id});
             };
             let region_map = match &by_name {
-                Some(maps) => maps.iter().find(|(m, _, _)| m == id).map_or(Value::Null, |(_, l, _)| l.to_json()),
+                Some(maps) => maps
+                    .iter()
+                    .find(|(m, _, _)| m == id)
+                    .map_or(Value::Null, |(_, l, _)| l.to_json()),
                 None => piece.items[i].layout.to_json(),
             };
             let prefix = format!("{id}.");
@@ -185,12 +263,23 @@ impl Hub<'_> {
             let read: Vec<Value> = steps
                 .iter()
                 .map(|k| {
-                    let arrays: Map<String, Value> = rec.arrays_at(&piece, *k).into_iter().filter(|(n, _)| n.starts_with(&prefix)).collect();
-                    let f = fuel.and_then(|f| f.iter().find(|(s, _)| s == k)).map(|(_, f)| *f);
+                    let arrays: Map<String, Value> = rec
+                        .arrays_at(&piece, *k)
+                        .into_iter()
+                        .filter(|(n, _)| n.starts_with(&prefix))
+                        .collect();
+                    let f = fuel
+                        .and_then(|f| f.iter().find(|(s, _)| s == k))
+                        .map(|(_, f)| *f);
                     json!({"step": k, "arrays": arrays, "fuel": f})
                 })
                 .collect();
-            let trap = rec.traps.iter().find(|t| t["item"] == json!(id)).cloned().unwrap_or(Value::Null);
+            let trap = rec
+                .traps
+                .iter()
+                .find(|t| t["item"] == json!(id))
+                .cloned()
+                .unwrap_or(Value::Null);
             // #1164: `hash`, the SHA-256 of the bytes the engine runs (sandbox@1's rewrite).
             out.insert(id.clone(), json!({"region_map": region_map, "steps": read, "trap": trap, "hash": piece.items[i].hash}));
         }
@@ -225,7 +314,11 @@ pub(crate) fn copy_fit(form: &Value) -> (Vec<Issue>, f64) {
     let started = std::time::Instant::now();
     let mut out = Vec::new();
     if let Some(doc) = form.as_object() {
-        deep_canvas_marks::copy::fit_issues(doc, &deep_canvas_marks::scene::Type::default(), &mut out);
+        deep_canvas_marks::copy::fit_issues(
+            doc,
+            &deep_canvas_marks::scene::Type::default(),
+            &mut out,
+        );
     }
     (out, started.elapsed().as_secs_f64() * 1000.0)
 }

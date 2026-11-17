@@ -1,0 +1,193 @@
+Captured check output; paths redacted.
+
+✖ #1624 AC2 tests/acceptance/1114/timed-list.test.mjs passes (2630.707375ms)
+✖ #1624 AC2 lanes.mjs timed list covers each of the 14 files the issue names (60.3805ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2777.407166
+
+✖ failing tests:
+
+test at tests/acceptance/1624/lanes.test.mjs:96:1
+✖ #1624 AC2 tests/acceptance/1114/timed-list.test.mjs passes (2630.707375ms)
+  AssertionError [ERR_ASSERTION]: #1114's grep test fails:
+  TAP version 13
+  # Subtest: \#1114.f3e38214 every test file calling a timing helper is in lanes.mjs timed list, by a grep of the tree
+  not ok 1 - \#1114.f3e38214 every test file calling a timing helper is in lanes.mjs timed list, by a grep of the tree
+    ---
+    duration_ms: 1683.975584
+    type: 'test'
+    location: '<checkout>/tests/acceptance/1114/timed-list.test.mjs:8:1'
+    failureType: 'testCodeFailure'
+    error: |-
+      files that call environmentProblem, judgeTiming, judgeLimit, referenceMacProblem, notReference but are not in lanes.mjs's timed list:
+      tests/acceptance/1015/budgets.test.ts
+      tests/acceptance/1017/budgets.test.ts
+      tests/acceptance/1425/budgets.test.ts
+      tests/acceptance/148/budgets.test.ts
+      tests/acceptance/149/budgets.test.ts
+      tests/acceptance/1515/budgets.test.ts
+      tests/acceptance/1555/budget-load.test.mjs
+      tests/acceptance/160/budgets.test.ts
+      tests/acceptance/167/budgets.test.ts
+      tests/acceptance/222/budgets.test.ts
+      tests/acceptance/308/budgets.test.ts
+      tests/acceptance/405/budgets.test.ts
+      tests/acceptance/408/machines.test.ts
+      tests/acceptance/45/budgets.test.ts
+      tests/acceptance/501/exports.test.ts
+      tests/acceptance/67/budgets.test.ts
+      tests/acceptance/824/sessions/budgets.long.test.ts
+      tests/acceptance/990/access.test.ts
+      tests/acceptance/990/queries.test.ts
+      tests/acceptance/990/taste.test.ts
+      + actual - expected
+
+      + [
+      +   'tests/acceptance/1015/budgets.test.ts',
+      +   'tests/acceptance/1017/budgets.test.ts',
+      +   'tests/acceptance/1425/budgets.test.ts',
+      +   'tests/acceptance/148/budgets.test.ts',
+      +   'tests/acceptance/149/budgets.test.ts',
+      +   'tests/acceptance/1515/budgets.test.ts',
+      +   'tests/acceptance/1555/budget-load.test.mjs',
+      +   'tests/acceptance/160/budgets.test.ts',
+      +   'tests/acceptance/167/budgets.test.ts',
+      +   'tests/acceptance/222/budgets.test.ts',
+      +   'tests/acceptance/308/budgets.test.ts',
+      +   'tests/acceptance/405/budgets.test.ts',
+      +   'tests/acceptance/408/machines.test.ts',
+      +   'tests/acceptance/45/budgets.test.ts',
+      +   'tests/acceptance/501/exports.test.ts',
+      +   'tests/acceptance/67/budgets.test.ts',
+      +   'tests/acceptance/824/sessions/budgets.long.test.ts',
+      +   'tests/acceptance/990/access.test.ts',
+      +   'tests/acceptance/990/queries.test.ts',
+      +   'tests/acceptance/990/taste.test.ts'
+      + ]
+      - []
+
+    code: 'ERR_ASSERTION'
+    name: 'AssertionError'
+    expected:
+    actual:
+      0: 'tests/acceptance/1015/budgets.test.ts'
+      1: 'tests/acceptance/1017/budgets.test.ts'
+      2: 'tests/acceptance/1425/budgets.test.ts'
+      3: 'tests/acceptance/148/budgets.test.ts'
+      4: 'tests/acceptance/149/budgets.test.ts'
+      5: 'tests/acceptance/1515/budgets.test.ts'
+      6: 'tests/acceptance/1555/budget-load.test.mjs'
+      7: 'tests/acceptance/160/budgets.test.ts'
+      8: 'tests/acceptance/167/budgets.test.ts'
+      9: 'tests/acceptance/222/budgets.test.ts'
+      10: 'tests/acceptance/308/budgets.test.ts'
+      11: 'tests/acceptance/405/budgets.test.ts'
+      12: 'tests/acceptance/408/machines.test.ts'
+      13: 'tests/acceptance/45/budgets.test.ts'
+      14: 'tests/acceptance/501/exports.test.ts'
+      15: 'tests/acceptance/67/budgets.test.ts'
+      16: 'tests/acceptance/824/sessions/budgets.long.test.ts'
+      17: 'tests/acceptance/990/access.test.ts'
+      18: 'tests/acceptance/990/queries.test.ts'
+      19: 'tests/acceptance/990/taste.test.ts'
+    operator: 'deepStrictEqual'
+    stack: |-
+      assertTimed (file://<checkout>/tests/acceptance/1114/helpers.mjs:75:10)
+      TestContext.<anonymous> (file://<checkout>/tests/acceptance/1114/timed-list.test.mjs:11:3)
+      Test.runInAsyncScope (node:async_hooks:227:14)
+      Test.run (node:internal/test_runner/test:1402:25)
+      Test.start (node:internal/test_runner/test:1262:17)
+      startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17)
+    ...
+  # Subtest: \#1114.f3e38214 a planted timed list missing one file fails the grep check, naming the file
+  not ok 2 - \#1114.f3e38214 a planted timed list missing one file fails the grep check, naming the file
+    ---
+    duration_ms: 617.369833
+    type: 'test'
+    location: '<checkout>/tests/acceptance/1114/timed-list.test.mjs:14:1'
+    failureType: 'testCodeFailure'
+    error: 'no entry of the timed list covers tests/acceptance/1015/budgets.test.ts'
+    code: 'ERR_ASSERTION'
+    name: 'AssertionError'
+    expected: true
+    actual: false
+    operator: '=='
+    stack: |-
+      TestContext.<anonymous> (file://<checkout>/tests/acceptance/1114/timed-list.test.mjs:20:12)
+      Test.runInAsyncScope (node:async_hooks:227:14)
+      Test.run (node:internal/test_runner/test:1402:25)
+      Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      Test.postRun (node:internal/test_runner/test:1542:19)
+      Test.run (node:internal/test_runner/test:1467:12)
+      async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)
+    ...
+  1..2
+  # tests 2
+  # suites 0
+  # pass 0
+  # fail 2
+  # cancelled 0
+  # skipped 0
+  # todo 0
+  # duration_ms 2563.350958
+
+
+
+  1 !== 0
+
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/1624/lanes.test.mjs:98:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1624/lanes.test.mjs:107:1
+✖ #1624 AC2 lanes.mjs timed list covers each of the 14 files the issue names (60.3805ms)
+  AssertionError [ERR_ASSERTION]: files missing from timed
+  + actual - expected
+
+  + [
+  +   'tests/acceptance/308/budgets.test.ts',
+  +   'tests/acceptance/45/budgets.test.ts',
+  +   'tests/acceptance/1017/budgets.test.ts',
+  +   'tests/acceptance/148/budgets.test.ts',
+  +   'tests/acceptance/1425/budgets.test.ts',
+  +   'tests/acceptance/67/budgets.test.ts',
+  +   'tests/acceptance/160/budgets.test.ts',
+  +   'tests/acceptance/167/budgets.test.ts',
+  +   'tests/acceptance/149/budgets.test.ts',
+  +   'tests/acceptance/1015/budgets.test.ts',
+  +   'tests/acceptance/1555/budget-load.test.mjs',
+  +   'tests/acceptance/990/queries.test.ts',
+  +   'tests/acceptance/990/access.test.ts',
+  +   'tests/acceptance/990/taste.test.ts'
+  + ]
+  - []
+
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/1624/lanes.test.mjs:113:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'tests/acceptance/308/budgets.test.ts', 'tests/acceptance/45/budgets.test.ts', 'tests/acceptance/1017/budgets.test.ts', 'tests/acceptance/148/budgets.test.ts', 'tests/acceptance/1425/budgets.test.ts', 'tests/acceptance/67/budgets.test.ts', 'tests/acceptance/160/budgets.test.ts', 'tests/acceptance/167/budgets.test.ts', 'tests/acceptance/149/budgets.test.ts', 'tests/acceptance/1015/budgets.test.ts', 'tests/acceptance/1555/budget-load.test.mjs', 'tests/acceptance/990/queries.test.ts', 'tests/acceptance/990/access.test.ts', 'tests/acceptance/990/taste.test.ts' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }

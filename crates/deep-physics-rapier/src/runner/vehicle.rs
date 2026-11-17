@@ -2,15 +2,16 @@
 //! `bake` and `restore` replies carry `vehicles`, each vehicle body's own state beside `bodies`,
 //! for the bodies `read` names; an output on a wheel's address `<body>#<wheel>` samples its `pose`
 //! (`{pos, rot}`, positions lerped and rotations nlerped between steps) or its `contact_count`
-//! (held from the step at or before the frame) into `outputs.series`; and #251's planted names.
+//! (held from the step at or before the frame) into `outputs.series`; and #251's and #2306's
+//! planted names.
 
 use super::*;
 use crate::VehiclePlant;
 use deep_canvas_physics::backend::VehicleState;
 use deep_canvas_physics::kit::Planted;
 
-/// #251's planted wrong programs, by name.
-pub const PLANTED: [&str; 10] = [
+/// #251's and #2306's planted wrong programs, by name.
+pub const PLANTED: [&str; 12] = [
     "spring_on_whole_mass",
     "brake_whole_force_each_wheel",
     "steer_clamps_angle",
@@ -21,6 +22,8 @@ pub const PLANTED: [&str; 10] = [
     "kit_counts_excluded_passed",
     "place_keeps_spin_rate",
     "place_keeps_angular_velocity",
+    "controller_as_is",
+    "grip_reads_chassis_only",
 ];
 
 /// Plants `name`, one of [`PLANTED`], in `run`; false for another name.
@@ -35,6 +38,8 @@ pub fn planted(name: &str, run: &mut Run) -> bool {
         "check_counts_wheels_only" => VehiclePlant::WheelsOnly,
         "place_keeps_spin_rate" => VehiclePlant::PlaceKeepsSpinRate,
         "place_keeps_angular_velocity" => VehiclePlant::PlaceKeepsAngular,
+        "controller_as_is" => VehiclePlant::GroundTakesNothing,
+        "grip_reads_chassis_only" => VehiclePlant::GripChassisOnly,
         "kit_counts_excluded_passed" => {
             run.kit_planted = Planted::CountsExcludedPassed;
             return true;

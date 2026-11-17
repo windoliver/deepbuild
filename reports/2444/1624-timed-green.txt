@@ -1,0 +1,14 @@
+Captured output; local paths redacted.
+
+✔ #1114.f3e38214 every test file calling a timing helper is in lanes.mjs timed list, by a grep of the tree (1880.024958ms)
+✔ #1114.f3e38214 a planted timed list missing one file fails the grep check, naming the file (1721.465ms)
+✔ #1624 AC2 tests/acceptance/1114/timed-list.test.mjs passes (3799.851917ms)
+✔ #1624 AC2 lanes.mjs timed list covers each of the 14 files the issue names (64.975583ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3937.674042

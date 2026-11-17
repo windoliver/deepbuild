@@ -47,7 +47,12 @@ impl Hub<'_> {
         };
         let key = format!(
             "{}|{}",
-            piece.items.iter().map(|i| i.content.as_str()).collect::<Vec<_>>().join(","),
+            piece
+                .items
+                .iter()
+                .map(|i| i.content.as_str())
+                .collect::<Vec<_>>()
+                .join(","),
             Value::Array(track)
         );
         let len = piece.items.first().map_or(1, |i| i.step.max(1));
@@ -63,7 +68,14 @@ impl Hub<'_> {
             .is_none_or(|p| p.key != key || p.world.at().is_none_or(|a| a > want));
         if stale {
             let mut rec = Record::default();
-            let Ok(world) = World::new(piece.clone(), track_of(&entries), false, Default::default(), &mut rec, None) else {
+            let Ok(world) = World::new(
+                piece.clone(),
+                track_of(&entries),
+                false,
+                Default::default(),
+                &mut rec,
+                None,
+            ) else {
                 return;
             };
             scope.preview = Some(Previewer { key, world });
@@ -72,7 +84,9 @@ impl Hub<'_> {
         p.world.run(want, &mut Record::default(), &mut |_, _| {});
         let mut values = BTreeMap::new();
         for (c, h) in &scope.points.hover {
-            let cell = h.as_array().and_then(|a| Some([a.first()?.as_f64()?, a.get(1)?.as_f64()?]));
+            let cell = h
+                .as_array()
+                .and_then(|a| Some([a.first()?.as_f64()?, a.get(1)?.as_f64()?]));
             values.insert(format!("{c}.hover"), deep_logic::point::hover(cell));
         }
         p.world.preview(&values);

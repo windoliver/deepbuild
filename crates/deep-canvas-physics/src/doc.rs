@@ -50,74 +50,8 @@ pub struct Solver {
     pub ccd: bool,
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct Material {
-    pub friction: f64,
-    pub restitution: f64,
-    pub density: Option<f64>,
-    pub rolling_resistance: f64,
-    pub tangent_speed: f64,
-    /// Such as "wood": a hit carries both sides' tags (#1918).
-    pub tag: Option<String>,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum Shape {
-    Sphere {
-        radius: f64,
-    },
-    Box {
-        half: [f64; 3],
-    },
-    Capsule {
-        half_height: f64,
-        radius: f64,
-    },
-    Cylinder {
-        half_height: f64,
-        radius: f64,
-    },
-    Plane {
-        normal: [f64; 3],
-    },
-    /// The hull of at most 64 points, rounded by `radius`.
-    Convex {
-        points: Vec<[f64; 3]>,
-        radius: f64,
-    },
-    /// Triangles over vertices; static only.
-    Mesh {
-        vertices: Vec<[f64; 3]>,
-        triangles: Vec<[u32; 3]>,
-    },
-    /// #2014: `rows` × `cols` heights, row by row, row along +Z and column along +X, spanning
-    /// `scale[0]` × `scale[2]` m centred on the body with each height times `scale[1]`; each cell
-    /// splits along the diagonal from its (column, row + 1) corner to its (column + 1, row) one,
-    /// as a terrain plate draws it. Static only.
-    Heightfield {
-        cols: usize,
-        rows: usize,
-        heights: Vec<f64>,
-        scale: [f64; 3],
-    },
-    /// Other shapes of the world by ID, each at its pose.
-    Compound {
-        children: Vec<(String, Pose)>,
-    },
-}
-
-/// A rotation as written: a quaternion `[x, y, z, w]` or Euler degrees `[x, y, z]`.
-#[derive(Clone, Debug, PartialEq)]
-pub enum Rot {
-    Quat([f64; 4]),
-    Deg([f64; 3]),
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct Pose {
-    pub pos: [f64; 3],
-    pub rot: Rot,
-}
+mod shape;
+pub use shape::*;
 
 /// A shape on a body (Shape: each use on a body).
 #[derive(Clone, Debug, PartialEq)]
@@ -138,6 +72,8 @@ pub enum BodyKind {
     /// Moved only to its `follow` channel's pose at each step's time (#1918).
     Kinematic,
     Dynamic,
+    /// #182: one capsule the backend's character controller moves (Body `body@1`: character).
+    Character,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -161,6 +97,8 @@ pub struct Body {
     pub lock_angular: [bool; 3],
     pub active: bool,
     pub anchors: BTreeMap<String, [f64; 3]>,
+    /// #182: a character body's own fields.
+    pub character: Option<Character>,
     /// #251: a vehicle body's wheels; its kind is then dynamic.
     pub vehicle: Option<Vehicle>,
 }
@@ -293,12 +231,14 @@ pub struct World {
     pub solve: Option<Solve>,
 }
 
+mod character;
 pub mod data;
 mod heightfield;
 mod inputs;
 mod reads;
 mod soft;
 mod vehicle;
+pub use character::{Character, FIELDS as CHARACTER_FIELDS};
 pub use heightfield::HEIGHTFIELD_SAMPLES;
 pub use inputs::{resolved, Input, On, INPUTS_LATER};
 pub use reads::{probe_pose, probe_shape, Output, Read, Skin, Solve, READS};
@@ -1084,6 +1024,7 @@ impl Reader {
                 "active",
                 "anchors",
                 "priority",
+                "character",
                 "vehicle",
             ],
         );
@@ -1195,6 +1136,7 @@ impl Reader {
                 self.vec3(&one, name, &join(p, "anchors"), [0.0; 3]),
             );
         }
+        let character = self.character(b, p, kind, &uses, shapes);
         Body {
             kind,
             follow,
@@ -1220,6 +1162,7 @@ impl Reader {
             lock_angular: self.bools3(locks, "angular", &join(p, "locks")),
             active: self.flag(b, "active", p, true),
             anchors,
+            character,
             vehicle,
         }
     }

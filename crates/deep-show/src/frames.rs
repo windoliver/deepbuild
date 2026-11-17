@@ -407,7 +407,8 @@ impl<'a> Hub<'a> {
         // Planted (#233): math@1 expands its instances again each frame.
         if self.scenario.pack_planted.as_deref() == Some(crate::math_twins::EXPANDS_EACH_FRAME) {
             if let Some(form) = self.forms.get(&e.doc) {
-                let again = crate::math_twins::expand_again(form, &self.startup.sealed, &self.packs);
+                let again =
+                    crate::math_twins::expand_again(form, &self.startup.sealed, &self.packs);
                 nodes.extend(again);
             }
         }
@@ -433,7 +434,11 @@ impl<'a> Hub<'a> {
             let raised = [
                 deep_canvas::columns::raised_at(doc, t),
                 deep_canvas_scene3d::arrays::raised_at(doc, t),
-                crate::logic::raised_at(doc, Some(t), view[deep_canvas::schedule::LOCALE].as_str().unwrap_or("en")),
+                crate::logic::raised_at(
+                    doc,
+                    Some(t),
+                    view[deep_canvas::schedule::LOCALE].as_str().unwrap_or("en"),
+                ),
             ];
             list.extend(raised.iter().flatten().map(|i| i.to_json()));
         }
@@ -442,7 +447,12 @@ impl<'a> Hub<'a> {
             let read: Map<String, Value> = e
                 .arrays
                 .iter()
-                .map(|name| (name.clone(), deep_play::read::array(&self.sched, evaluated, name, t)))
+                .map(|name| {
+                    (
+                        name.clone(),
+                        deep_play::read::array(&self.sched, evaluated, name, t),
+                    )
+                })
                 .collect();
             reply["arrays"] = Value::Object(read);
         }
@@ -740,13 +750,15 @@ impl<'a> Hub<'a> {
         let size = size.unwrap_or_else(|| snapshot::px(drawing.size));
         // #506: with its insets' pictures, its overlay frames at their anchors and its view
         // overlays (over3d.rs).
-        let mut rgba = self.frame3d(doc, t, size, Some(drawing)).map_err(|u| match u.code {
-            "unsupported_platform" => Unfit {
-                code: "gpu_unavailable",
-                path: "snapshots".into(),
-            },
-            _ => u,
-        })?;
+        let mut rgba = self
+            .frame3d(doc, t, size, Some(drawing))
+            .map_err(|u| match u.code {
+                "unsupported_platform" => Unfit {
+                    code: "gpu_unavailable",
+                    path: "snapshots".into(),
+                },
+                _ => u,
+            })?;
         self.caption_over(&mut rgba, size);
         Ok((rgba, size))
     }
@@ -803,7 +815,9 @@ impl<'a> Hub<'a> {
                 break;
             };
             let view = session_view(session, &Map::new());
-            let before = f.timings.then(|| crate::timings::mappings(&self.sched, session));
+            let before = f
+                .timings
+                .then(|| crate::timings::mappings(&self.sched, session));
             let _ = self.sched.take_json();
             let frame_started = Instant::now();
             let (ran, allocs) =
@@ -1074,7 +1088,10 @@ pub(crate) fn drawing_of(
 }
 
 /// Each text diff's tokens at the session's time, for the film block (#1968).
-pub(crate) fn diff_report(sched: &deep_canvas::schedule::Scheduler<'_>, session: &DocSession) -> Map<String, Value> {
+pub(crate) fn diff_report(
+    sched: &deep_canvas::schedule::Scheduler<'_>,
+    session: &DocSession,
+) -> Map<String, Value> {
     deep_play::drawing::diff_report(sched, session, &crate::film::program_of)
 }
 

@@ -24,11 +24,13 @@ const F: i64 = 705_600_000;
 const BOT: &str = "bot";
 
 /// The replica's planted faults (#184's twins): its recorded track drops the run's first bot
-/// entry; a logic bot's entry made only when its value changes, not its serial.
+/// entry; a logic bot's entry made only when its value changes, not its serial; (#1048) the
+/// explorer and the descender walk as if the grid had no links.
 #[derive(Clone, Copy, Default)]
 pub struct Plants {
     pub drops_first_bot_entry: bool,
     pub entry_on_change: bool,
+    pub ignores_links: bool,
 }
 
 /// A document's logic items as one piece, as the logic module checks one: its seed, its budget
@@ -57,14 +59,41 @@ pub fn piece_of(form: &Value) -> Option<Value> {
         "controls": form.get("controls").cloned().unwrap_or(json!({})),
         "items": items,
     });
+    let reads = world_reads(form);
+    if !reads.is_empty() {
+        piece["world_reads"] = json!(reads);
+    }
     if let Some(class) = form.pointer("/budget/class") {
         piece["class"] = class.clone();
     }
     Some(piece)
 }
 
+/// #182: each character reading a document's worlds declare as outputs, `<world ID>.<body
+/// ID>.<read>` (grounded, sliding or crouched), which a logic item may read; the host steps the
+/// worlds and records each one's values on the track.
+pub fn world_reads(form: &Value) -> Vec<String> {
+    form.get("worlds")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+        .flat_map(|(w, doc)| {
+            doc.get("outputs")
+                .and_then(Value::as_object)
+                .into_iter()
+                .flatten()
+                .filter_map(move |(_, o)| {
+                    let read = o.get("read")?.as_str()?;
+                    let from = o.get("from")?.as_str()?;
+                    matches!(read, "grounded" | "sliding" | "crouched")
+                        .then(|| format!("{w}.{from}.{read}"))
+                })
+        })
+        .collect()
+}
+
 /// A refusal before any step, naming what.
-fn refused(code: &str, what: Value) -> Value {
+pub(crate) fn refused(code: &str, what: Value) -> Value {
     json!({"ok": false, "code": code, "what": what})
 }
 
@@ -224,7 +253,7 @@ fn policy(
 /// on an actions control, its named action's index there with repeat 0; a cell on a point
 /// control, a press and a release of its first button there; on a pick on rows, the key in its
 /// first set; otherwise the row's first argument, an option's index.
-fn gesture(controls: &Value, action: &Action, [_, a, b]: [i32; 3]) -> Vec<Given> {
+pub(crate) fn gesture(controls: &Value, action: &Action, [_, a, b]: [i32; 3]) -> Vec<Given> {
     let control = &controls[&action.control];
     match control.get("kind").and_then(Value::as_str) {
         Some("actions") => {
@@ -268,6 +297,28 @@ fn gesture(controls: &Value, action: &Action, [_, a, b]: [i32; 3]) -> Vec<Given>
     }
 }
 
+/// The call's seed, and the piece with the run's seed in place of its own under `piece_seed: run`.
+pub(crate) fn seeded(piece: &Value, call: &Value) -> Result<(Value, u64), Value> {
+    let seed =
+        seed_of(call.get("seed")).ok_or_else(|| refused("bad_input", json!("seed: a u64")))?;
+    let mut piece = piece.clone();
+    match call
+        .get("piece_seed")
+        .and_then(Value::as_str)
+        .unwrap_or("own")
+    {
+        "own" => {}
+        "run" => piece["seed"] = json!(seed as i64),
+        other => {
+            return Err(refused(
+                "bad_input",
+                json!(format!("piece_seed is own or run, not {other}")),
+            ))
+        }
+    }
+    Ok((piece, seed))
+}
+
 /// Every control a bot names that the piece doesn't declare: refused before any run.
 fn undeclared(bot: &Value, declared: &dyn Fn(&str) -> bool) -> Option<String> {
     let names: Vec<String> = if let Some(p) = bot.get("policy") {
@@ -306,23 +357,7 @@ pub fn play(
     plants: Plants,
     frame: &mut dyn FnMut(i64, &World) -> Option<Value>,
 ) -> Result<Value, Value> {
-    let seed =
-        seed_of(call.get("seed")).ok_or_else(|| refused("bad_input", json!("seed: a u64")))?;
-    let mut piece = piece.clone();
-    match call
-        .get("piece_seed")
-        .and_then(Value::as_str)
-        .unwrap_or("own")
-    {
-        "own" => {}
-        "run" => piece["seed"] = json!(seed as i64),
-        other => {
-            return Err(refused(
-                "bad_input",
-                json!(format!("piece_seed is own or run, not {other}")),
-            ))
-        }
-    }
+    let (mut piece, seed) = seeded(piece, call)?;
     let controls = piece.get("controls").cloned().unwrap_or(json!({}));
     let bot = call.get("bot").filter(|b| !b.is_null());
     if let Some(c) = bot.and_then(|b| undeclared(b, &|c| controls.get(c).is_some())) {
@@ -385,6 +420,28 @@ pub fn play(
         .map(|b| GridBot::of(b, iface.as_ref(), seed))
         .transpose()?
         .flatten();
+    if let Some(w) = walker.as_mut() {
+        w.ignores_links = plants.ignores_links;
+    }
+    // #1048: a model bot's replies so far (the call's `rows`), each a row it chose after a step,
+    // `[step, action, a, b]`; one the piece doesn't list at that step sends no entry.
+    let chosen: BTreeMap<i64, [i32; 3]> = bot
+        .filter(|b| b.get("model").is_some())
+        .and_then(|_| call.get("rows"))
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|r| {
+            let n: Vec<i64> = r.as_array()?.iter().filter_map(Value::as_i64).collect();
+            (n.len() == 4).then(|| (n[0], [n[1] as i32, n[2] as i32, n[3] as i32]))
+        })
+        .collect();
+    if bot.is_some_and(|b| b.get("model").is_some()) && iface.is_none() {
+        return Err(refused(
+            "bad_input",
+            json!("a model bot plays a play interface's listed rows, and the play gives none"),
+        ));
+    }
     let bot_i = piece
         .items
         .iter()
@@ -448,6 +505,14 @@ pub fn play(
             let Some(name) = v.as_str() else {
                 return Ok(vec![Given::Number(v.as_f64().unwrap_or(0.0))]);
             };
+            // #1048: on a text control a string is a commit of that string, not an action's name.
+            if controls
+                .pointer(&format!("/{control}/kind"))
+                .and_then(Value::as_str)
+                == Some("text")
+            {
+                return Ok(vec![Given::Text(name.to_string())]);
+            }
             let action = iface
                 .as_ref()
                 .and_then(|i| i.actions.iter().find(|a| a.name == name && a.control == control))
@@ -479,6 +544,12 @@ pub fn play(
     let mut serials = vec![0.0; plays.len()];
     let mut last: Vec<Option<f64>> = vec![None; plays.len()];
     let mut bot_ran = -1;
+    // #1048: a soak's readings, every `soak.every` steps: the piece's own logic memories' size.
+    let every = call
+        .pointer("/soak/every")
+        .and_then(Value::as_i64)
+        .filter(|e| *e > 0);
+    let mut memory = Vec::new();
     for k in 0..steps {
         world.run_through(k * step, &mut rec);
         // A bot step that ran: each play whose serial differs from the step before puts its value
@@ -519,11 +590,19 @@ pub fn play(
                 }
             }
         }
-        // A first-party bot's row, as the entries a player's gesture on its action's control
-        // makes, stamped at the next step; none past the span's last step.
-        if let (Some(b), Some(iface)) = (walker.as_mut(), iface.as_ref()) {
+        // A first-party bot's row, or a model bot's listed reply, as the entries a player's
+        // gesture on its action's control makes, stamped at the next step; none past the span's
+        // last step.
+        if let Some(iface) = iface.as_ref() {
+            let row = match walker.as_mut() {
+                Some(b) => b.act(k, &world, iface),
+                None => chosen
+                    .get(&k)
+                    .copied()
+                    .filter(|r| iface.listed(&world).contains(r)),
+            };
             if k + 1 < steps {
-                if let Some(row) = b.act(k, &world, iface) {
+                if let Some(row) = row {
                     for value in gesture(&controls, &iface.actions[row[0] as usize], row) {
                         let control = iface.actions[row[0] as usize].control.clone();
                         let seq = world.track.get(&control).map_or(0, Vec::len) as u32;
@@ -569,6 +648,21 @@ pub fn play(
         }
         if let Some(f) = frame(k, &world) {
             frames.push(f);
+        }
+        // The sandbox lets no memory grow, so a memory's size is read as a save keeps it: its
+        // 64 KiB pages that hold a nonzero byte.
+        if every.is_some_and(|e| (k + 1) % e == 0 || k + 1 == steps) {
+            let bytes: usize = own
+                .iter()
+                .map(|i| {
+                    let m = world.lives[*i].memory();
+                    m.chunks(1 << 16)
+                        .filter(|p| p.iter().any(|b| *b != 0))
+                        .count()
+                        << 16
+                })
+                .sum();
+            memory.push(json!({"step": k, "bytes": bytes}));
         }
     }
     let is_bot = |t: &&Value| bot_i.is_some_and(|b| t["item"] == json!(piece.items[b].id));
@@ -637,5 +731,6 @@ pub fn play(
         "checkpoints": checkpoints,
         "final": end,
         "frames": frames,
+        "memory": memory,
     }))
 }
