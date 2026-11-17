@@ -174,8 +174,11 @@ impl Hub<'_> {
         let path = scratch.join(if alpha { "probe.mov" } else { "probe.mp4" });
         // The delivery's codec, colour properties and source format, at the encoder's highest
         // quality, so what the probe reads is the colour path and not the bitrate.
-        let ask = super::frames::transfer(json!({"op": "export.part", "codec": job.codec, "rate": [p, q], "size": size, "quality": "master",
-            "keyframe_interval": job.keyframe_interval}), job);
+        let ask = super::frames::transfer(
+            json!({"op": "export.part", "codec": job.codec, "rate": [p, q], "size": size, "quality": "master",
+            "keyframe_interval": job.keyframe_interval}),
+            job,
+        );
         let mut part = Part::open(self.encode_tool()?, ask, path.clone(), 0, 1, !alpha)?;
         part.push(self.encode_tool()?, 0, &bgra, px, true)?;
         part.finish(self.encode_tool()?)?;

@@ -133,6 +133,7 @@ pub(crate) fn clocked(
                 r#in: s.r#in + skip,
                 out: s.out,
                 rate: s.rate,
+                ramp: s.ramp,
                 gain: match &s.gain {
                     Gain::Keys(keys) => {
                         Gain::Keys(keys.iter().map(|&(t, db, l)| (moved(t), db, l)).collect())

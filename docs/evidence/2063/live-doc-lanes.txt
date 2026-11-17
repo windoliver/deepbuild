@@ -1,0 +1,13 @@
+# tests/acceptance/1336 and 1352's live doc-lane tests, 2026-11-15, linux/arm64, on the live tracker: at 4e1f83bf3, where a
+# missing scripts/not-event-kinds.txt failed the lane (their base folder has no list), and after the change, which reads it as empty.
+== 4e1f83bf3
+✖ #1336.94a30ea1 criterion 2 (live): with the new section in the design, the doc lanes (catalogue drift, design links and names, public text) find nothing the change brings
+✖ #1352.7a887cd4 criterion 2 (live): with the new section in the design, the doc lanes (catalogue drift, design links and names, public text) find nothing the change brings
+ℹ pass 0
+ℹ fail 2
+actual: [ "catalogue drift finds what the base's docs don't give:\n  brief.uncited (docs/technical-design.md)\n  brief.uncited (#2583)\n  brief.uncited (#1193)" ],
+== this change
+✔ #1336.94a30ea1 criterion 2 (live): with the new section in the design, the doc lanes (catalogue drift, design links and names, public text) find nothing the change brings
+✔ #1352.7a887cd4 criterion 2 (live): with the new section in the design, the doc lanes (catalogue drift, design links and names, public text) find nothing the change brings
+ℹ pass 2
+ℹ fail 0

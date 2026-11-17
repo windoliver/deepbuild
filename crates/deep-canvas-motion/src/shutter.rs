@@ -56,7 +56,7 @@ pub fn average(frames: &[Vec<u8>]) -> Vec<u8> {
         *slot = srgb_decode(v as f64 / 255.0);
     }
     let mut out = vec![0u8; first.len()];
-    for (i, px) in out.chunks_exact_mut(4).enumerate() {
+    for (i, px) in out.as_chunks_mut::<4>().0.iter_mut().enumerate() {
         let (mut rgb, mut a) = ([0.0f64; 3], 0.0f64);
         for f in frames {
             let p = &f[i * 4..i * 4 + 4];

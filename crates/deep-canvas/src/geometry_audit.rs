@@ -46,8 +46,8 @@ pub struct Seat {
 }
 
 /// A part: its ID, its true shape, the ends a wire or tube must land, whether motion (a
-/// driver, a channel or an assembly's value) places it, which holds it, and where a scene's item
-/// sits.
+/// driver, a channel or an assembly's value) places it, which holds it, where a scene's item
+/// sits, and the item it is one solid of, where an item is read as several.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Solid {
     pub id: String,
@@ -55,6 +55,26 @@ pub struct Solid {
     pub ends: Vec<V3>,
     pub moved: bool,
     pub seat: Option<Seat>,
+    pub part_of: Option<PartOf>,
+}
+
+/// #1636: a part that is one of an item's several solids (a tree's branches): the item, whose
+/// floating declaration is the part's too, and the joints where it may pass into the item's
+/// other parts.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PartOf {
+    pub item: String,
+    pub joints: Vec<Joint>,
+}
+
+/// Where a part may pass into another: the other part's ID and a ball in the world. Two of their
+/// pieces passing into each other where the midpoint of their closest points lies in the ball is
+/// no overlap.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Joint {
+    pub with: String,
+    pub at: V3,
+    pub r: f64,
 }
 
 /// What the audit allows (Geometry audit: Fields): the tolerances, the items declared floating,
@@ -444,6 +464,41 @@ pub fn pair_depth(a: &Solid, b: &Solid) -> f64 {
         .fold(f64::NEG_INFINITY, f64::max)
 }
 
+/// How far part `a` passes into part `b` outside the joints between them (#1636): the deepest of
+/// their pieces' pairs, leaving out each pair of capsules whose closest points' midpoint lies in
+/// a joint either names the other in; none when no joint joins them.
+fn depth_outside_joints(a: &Solid, b: &Solid) -> Option<f64> {
+    let joints: Vec<&Joint> = [(a, b), (b, a)]
+        .into_iter()
+        .flat_map(|(x, y)| {
+            x.part_of
+                .iter()
+                .flat_map(|p| &p.joints)
+                .filter(move |j| j.with == y.id)
+        })
+        .collect();
+    if joints.is_empty() {
+        return None;
+    }
+    let in_joint = |x: &Shape, y: &Shape| {
+        let (Shape::Capsule { a: p1, b: q1, .. }, Shape::Capsule { a: p2, b: q2, .. }) = (x, y)
+        else {
+            return false;
+        };
+        let (p, q) = seg_closest(*p1, *q1, *p2, *q2);
+        let mid = lerp(p, q, 0.5);
+        joints.iter().any(|j| len(sub(mid, j.at)) <= j.r)
+    };
+    Some(
+        a.shapes
+            .iter()
+            .flat_map(|x| b.shapes.iter().map(move |y| (x, y)))
+            .filter(|(x, y)| !in_joint(x, y))
+            .map(|(x, y)| depth(x, y))
+            .fold(f64::NEG_INFINITY, f64::max),
+    )
+}
+
 /// A part's world bounds.
 pub fn bounds(s: &Solid) -> [V3; 2] {
     let mut out = [[f64::INFINITY; 3], [f64::NEG_INFINITY; 3]];
@@ -576,12 +631,14 @@ pub fn audit(solids: &[Solid], cfg: &Config) -> Vec<Fault> {
         let (a, b) = (&solids[i], &solids[j]);
         let d = pair_depth(a, b);
         let allowed = cfg.related(&a.id, &b.id) || landed_on.contains(&(i, j));
-        if d > cfg.sunk && !allowed && !twins.contains(&(i, j)) {
+        // Two solids of one item pass into each other only outside the joints between them.
+        let sunk = depth_outside_joints(a, b).unwrap_or(d);
+        if sunk > cfg.sunk && !allowed && !twins.contains(&(i, j)) {
             out.push(Fault {
                 code: OVERLAP,
                 ids: vec![a.id.clone(), b.id.clone()],
-                by: d,
-                fix: format!("move {} or {} apart by {:.4} m", a.id, b.id, d),
+                by: sunk,
+                fix: format!("move {} or {} apart by {:.4} m", a.id, b.id, sunk),
                 // The move is the later part's, unless that one alone is declared floating, as a floor is.
                 change: apart(a, b).map(|v| {
                     match cfg.floating.contains(&b.id) && !cfg.floating.contains(&a.id) {
@@ -620,11 +677,19 @@ pub fn audit(solids: &[Solid], cfg: &Config) -> Vec<Fault> {
             }
         }
     }
-    // Held: joined by contacts or relations to a part motion places or to one declared floating
-    // (Geometry audit: scenes: every item rests on something unless declared floating).
+    // Held: joined by contacts or relations to a part motion places or to one declared floating,
+    // itself or as a solid of an item declared floating (Geometry audit: scenes: every item rests
+    // on something unless declared floating).
     let mut held = vec![false; n];
     let mut stack: Vec<usize> = (0..n)
-        .filter(|&i| solids[i].moved || cfg.floating.contains(&solids[i].id))
+        .filter(|&i| {
+            let s = &solids[i];
+            s.moved
+                || cfg.floating.contains(&s.id)
+                || s.part_of
+                    .as_ref()
+                    .is_some_and(|p| cfg.floating.contains(&p.item))
+        })
         .collect();
     for &i in &stack {
         held[i] = true;
@@ -846,6 +911,7 @@ mod tests {
             ends: vec![],
             moved: false,
             seat: None,
+            part_of: None,
         }
     }
 
@@ -870,6 +936,7 @@ mod tests {
             ends: vec![[0.0, 0.2, 0.0], [0.0, 0.6, 0.0]],
             moved: false,
             seat: None,
+            part_of: None,
         };
         let f = audit(&[base, top, sunk, loose, wire], &cfg);
         let got: Vec<(&str, Vec<&str>)> = f

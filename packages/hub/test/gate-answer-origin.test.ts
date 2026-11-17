@@ -38,6 +38,6 @@ it.each(['accept', 'split'])('typing %s without choosing an option does not sett
     const judging = new StopJudging({ settings: {}, services: { record, now, tasks, openItems }, state: () => ({ live: new Map() }), events: { append, connection: () => core } } as unknown as StopJudgingOptions);
     await judging.recoverGateAnswers();
     expect(await record.read({ after: 0, kinds: ['issue.drafted'] }), `words alone cannot split ${task}`).toHaveLength(0);
-    expect(await judging.closesGate('S1', 'gh pr create --body "Closes #42"'), `words alone cannot accept ${task}`).toContain('unproven');
+    expect(await judging.closesGate('S1', 'gh pr create --body "Closes #42"', dir), `words alone cannot accept ${task}`).toContain('unproven');
   } finally { await record.close(); rmSync(dir, { recursive: true, force: true }); }
 });

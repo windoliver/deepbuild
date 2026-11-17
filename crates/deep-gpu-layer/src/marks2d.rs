@@ -168,7 +168,7 @@ fn evaluate(app: &App, call: &Value) -> Result<Evaluated, Value> {
     };
     let planted = match app.planted {
         Some(Planted::SectorsSourceOver) => scene::Planted::SectorsSourceOver,
-        _ => scene::Planted::None,
+        p => crate::lightfx::scene_plant(p).unwrap_or(scene::Planted::None),
     };
     let frame = scene::frame_planted(&flat_doc, &flat, (&palette, &ty), &record, 1.0, planted)
         .map_err(|r| refused(r.code, r.path))?;
@@ -996,6 +996,8 @@ impl RenderModule for Module2 {
         let frame = self.marks.lock().unwrap_or_else(|e| e.into_inner()).clone();
         let (options, planted) = (self.options, self.planted);
         let (error, encoded) = (self.error.clone(), self.encoded.clone());
+        // #2742: what the looks' groups submit as they compose is timed on the GPU.
+        let _timed = encoded.as_ref().map(|e| e.spans.arm());
         let size = target.size;
         // #468: what the frame's draws encode, a composited group's included, from Vello GPU's
         // count before them to its count once the job has drawn.
@@ -1017,8 +1019,9 @@ impl RenderModule for Module2 {
             );
             let job: Job = Box::new(move |encoder| {
                 let drawn = draw(encoder);
-                if let Some(at) = &encoded {
-                    *at.lock().unwrap_or_else(|e| e.into_inner()) = Some((Instant::now(), fills()));
+                if let Some(enc) = &encoded {
+                    *enc.at.lock().unwrap_or_else(|e| e.into_inner()) =
+                        Some((Instant::now(), fills()));
                 }
                 *error.lock().unwrap_or_else(|e| e.into_inner()) = drawn.err();
             });
@@ -1098,8 +1101,8 @@ impl RenderModule for Module2 {
                 &slot,
                 None,
             );
-            if let Some(at) = &encoded {
-                *at.lock().unwrap_or_else(|e| e.into_inner()) = Some((begun, fills()));
+            if let Some(enc) = &encoded {
+                *enc.at.lock().unwrap_or_else(|e| e.into_inner()) = Some((begun, fills()));
             }
             *error.lock().unwrap_or_else(|e| e.into_inner()) = drawn.err();
         });
@@ -1263,7 +1266,13 @@ pub fn window2d(app: &mut App, out: &str, call: &Value) -> Value {
                 None => return Err(path),
             }
         }
-        over.push(picture_of(&status_picture(app, call, &ev)?));
+        let mut status = status_picture(app, call, &ev)?;
+        if app.planted == Some(Planted::LightEveryChild) {
+            let marks = layer::status_marks(&ev.doc, &ev.items, &ev.record, &call["look"])?;
+            let palette = layer::palette(&call["look"], "light")?;
+            crate::lightfx::lit_status(&mut status, &marks, &ev.items, &palette);
+        }
+        over.push(picture_of(&status));
         app.window(ev.size)?;
         let opened = match surface {
             Some(marks) => Some(open2(

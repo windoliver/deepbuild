@@ -108,10 +108,11 @@ const shown = (l: Listener): string => `${l.address}:${l.port}`;
 /**
  * The TCP addresses the given processes listen on, read from the open files table (lsof); null when it can't be read.
  * lsof ends with 1 both when it found nothing and on a failure it reports on stderr; only the silent 1 is an answer.
+ * -w keeps its warnings of mounts it can't stat (docker's, a remote desktop's) off stderr: they are no failure.
  * An address is as lsof names it: `127.0.0.1`, `*` for every interface, `[::1]`.
  */
 function listeners(pids: number[]): Listener[] | null {
-  const read = tool('lsof', ['-nP', '-a', '-iTCP', '-sTCP:LISTEN', '-p', pids.join(','), '-Fn']);
+  const read = tool('lsof', ['-w', '-nP', '-a', '-iTCP', '-sTCP:LISTEN', '-p', pids.join(','), '-Fn']);
   if (read.error || read.status === null || (read.status !== 0 && (read.status !== 1 || read.stderr.trim() !== ''))) return null;
   const seen = new Map<string, Listener>();
   for (const line of read.stdout.split('\n')) {
@@ -124,7 +125,7 @@ function listeners(pids: number[]): Listener[] | null {
 }
 /** The working folder of each given process, from the open files table (lsof); null when it can't be read. */
 function folders(pids: number[]): Map<number, string> | null {
-  const read = tool('lsof', ['-a', '-p', pids.join(','), '-d', 'cwd', '-Fpn']);
+  const read = tool('lsof', ['-w', '-a', '-p', pids.join(','), '-d', 'cwd', '-Fpn']);
   if (read.error || read.status === null || (read.status !== 0 && (read.status !== 1 || read.stderr.trim() !== ''))) return null;
   const found = new Map<number, string>();
   let pid = -1;

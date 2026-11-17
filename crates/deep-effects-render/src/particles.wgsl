@@ -18,10 +18,14 @@ struct Draw {
     kind: vec4<f32>,
     // A ribbon's (#450): the item's count, its segments, its width in px, its taper and its fade.
     ribbon: vec4<f32>,
+    // A ribbon's fade, then (#508) how many opacity keys draw piecewise linear (0: `life.zw`).
     ribbon_fade: vec4<f32>,
     // Each color stop's place in life, and its linear color.
     at: vec4<f32>,
     colors: array<vec4<f32>, 4>,
+    // #508: up to 12 opacity keys, each its place in life and its value.
+    fade_at: array<vec4<f32>, 3>,
+    fade_v: array<vec4<f32>, 3>,
 };
 
 @group(0) @binding(0) var<uniform> draw: Draw;
@@ -258,6 +262,38 @@ fn upsample_fs(@builtin(position) p: vec4<f32>) -> @location(0) vec4<f32> {
     return textureSampleLevel(half_target, half_sampler, uv, 0.0);
 }
 
+// #508: the same add from a full-size target and from a quarter-size one.
+@fragment
+fn upsample_full_fs(@builtin(position) p: vec4<f32>) -> @location(0) vec4<f32> {
+    let uv = p.xy / vec2<f32>(textureDimensions(half_target));
+    return textureSampleLevel(half_target, half_sampler, uv, 0.0);
+}
+
+@fragment
+fn upsample_quarter_fs(@builtin(position) p: vec4<f32>) -> @location(0) vec4<f32> {
+    let uv = p.xy * 0.25 / vec2<f32>(textureDimensions(half_target));
+    return textureSampleLevel(half_target, half_sampler, uv, 0.0);
+}
+
+// #508: the opacity at `l` of life from the keys, piecewise linear, held past the first and last.
+fn keyed(l: f32) -> f32 {
+    let n = i32(draw.ribbon_fade.y);
+    var lo = 0;
+    for (var i = 1; i < 12; i++) {
+        if i < n && draw.fade_at[i / 4][i % 4] <= l {
+            lo = i;
+        }
+    }
+    let hi = min(lo + 1, n - 1);
+    let a = draw.fade_at[lo / 4][lo % 4];
+    let b = draw.fade_at[hi / 4][hi % 4];
+    var f = 0.0;
+    if b > a {
+        f = clamp((l - a) / (b - a), 0.0, 1.0);
+    }
+    return mix(draw.fade_v[lo / 4][lo % 4], draw.fade_v[hi / 4][hi % 4], f);
+}
+
 fn shade(in: Out, at: vec2<f32>) -> vec4<f32> {
     let r2 = dot(at, at);
     if r2 > 1.0 {
@@ -275,6 +311,9 @@ fn shade(in: Out, at: vec2<f32>) -> vec4<f32> {
         // A streak or a ribbon: soft across, full along.
         shape = (1.0 - at.y * at.y) * in.alpha;
     }
-    let fade = mix(draw.life.z, draw.life.w, l) * (1.0 - l);
+    var fade = mix(draw.life.z, draw.life.w, l) * (1.0 - l);
+    if draw.ribbon_fade.y > 2.0 {
+        fade = keyed(l);
+    }
     return vec4<f32>(color_at(l) * shape * fade * draw.view.w, 0.0);
 }

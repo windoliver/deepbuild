@@ -27,6 +27,23 @@ const NO_CCD_CAPS: Caps = Caps {
     claims: &[],
     ..RAPIER3D
 };
+/// #182: a test backend's caps with Rapier's character controller.
+const CHARACTER_CAPS: Caps = Caps {
+    claims: &["ccd", "character_controller"],
+    ..RAPIER3D
+};
+/// #182: a test backend with no character controller, under its own name, so a refusal by its
+/// caps names it.
+const NO_CHARACTER_CAPS: Caps = Caps {
+    backend: "no_character_controller",
+    ..TEST_CAPS
+};
+/// #251: a test backend with no vehicle controller, under its own name, so a refusal by its caps
+/// names it.
+const NO_VEHICLE_CAPS: Caps = Caps {
+    backend: "no_vehicle_controller",
+    ..TEST_CAPS
+};
 
 /// A test backend: Rapier running `twin`, under `caps`, declaring `tolerances` of its own.
 pub struct TestBackend {
@@ -45,8 +62,8 @@ const fn test(name: &'static str, twin: Twin, caps: &'static Caps) -> TestBacken
     }
 }
 
-/// #191's test backends by name.
-pub const TEST_BACKENDS: [TestBackend; 8] = [
+/// #191's test backends by name, and #251's and #182's.
+pub const TEST_BACKENDS: [TestBackend; 14] = [
     test("friction_average", Twin::FrictionAverage, &TEST_CAPS),
     test("no_joint_limits", Twin::NoJointLimits, &TEST_CAPS),
     test("restitution_min", Twin::RestitutionMin, &TEST_CAPS),
@@ -60,6 +77,19 @@ pub const TEST_BACKENDS: [TestBackend; 8] = [
         caps: &TEST_CAPS,
         tolerances: Some(r#"{"free_fall": {"relative": 0.05}}"#),
     },
+    test("no_vehicle_controller", Twin::None, &NO_VEHICLE_CAPS),
+    // #182: no character controller in its caps; one climbing steps a quarter higher than its
+    // step height; one ignoring snap; one whose ground distance is 0.001 m; and one ignoring a
+    // launch off the ground.
+    test("no_character_controller", Twin::None, &NO_CHARACTER_CAPS),
+    test("steps_too_high", Twin::StepsHigher, &CHARACTER_CAPS),
+    test("ignores_snap", Twin::IgnoresSnap, &CHARACTER_CAPS),
+    test("ground_distance_1mm", Twin::GroundNear, &CHARACTER_CAPS),
+    test(
+        "ignores_launch_airborne",
+        Twin::LaunchGroundedOnly,
+        &CHARACTER_CAPS,
+    ),
 ];
 
 /// The test backend named `name`, in a `test-backends` build only.

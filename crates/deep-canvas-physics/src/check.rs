@@ -72,6 +72,7 @@ pub fn check(doc: &Value, caps: &Caps, table: &[Row]) -> Result<World, Vec<Refus
     let expanded = roles::expand(doc, table)?;
     let doc = &expanded.doc;
     let mut out = refused_by(doc, caps);
+    out.extend(crate::doc::flat(doc));
     match read(doc) {
         Ok(w) if out.is_empty() => {
             out.extend(springs(&w));
@@ -195,12 +196,46 @@ fn refused_by(doc: &Value, caps: &Caps) -> Vec<Refusal> {
             }
         }
     }
+    // #251: a vehicle body on a backend with no vehicle controller, naming the body.
+    if !claims("vehicle_controller") {
+        for (id, b) in doc
+            .get("bodies")
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten()
+        {
+            if let Some(v) = b.get("kind").filter(|k| *k == "vehicle") {
+                let what = format!("claims no vehicle controller to move vehicle body {id}");
+                out.push(cap(format!("bodies/{id}/kind"), v, caps, &what));
+            }
+        }
+    }
     if !claims("soft_bodies") {
         if let Some(v) = doc
             .get("soft")
             .filter(|s| s.as_object().is_some_and(|m| !m.is_empty()))
         {
             out.push(cap("soft".into(), v, caps, "claims no soft bodies"));
+        }
+    }
+    // #182: a character body needs the backend's character controller.
+    if !claims("character_controller") {
+        for (id, b) in doc
+            .get("bodies")
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten()
+        {
+            if let Some(v) = b.get("kind").filter(|k| k.as_str() == Some("character")) {
+                out.push(cap(
+                    format!("bodies/{id}/kind"),
+                    v,
+                    caps,
+                    &format!(
+                        "claims no character controller, so character body {id} can't run on it"
+                    ),
+                ));
+            }
         }
     }
     // #524: no backend this module runs takes a soft body's pressure (caps.declared).

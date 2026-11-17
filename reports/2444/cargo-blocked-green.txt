@@ -1,0 +1,15 @@
+Captured check output; paths redacted.
+
+✔ results come from the runners' reports and cargo's lines, each by an ID that reruns it (56.755709ms)
+✔ a Cargo harness BLOCKED case stays unproven even when its failed target is listed (2.427084ms)
+✔ cargo's ignored tests read as skips, with the reason cargo prints, and never as passes (1.408709ms)
+✔ Cargo results use the same rerunnable IDs as the known-failure list (1474.958625ms)
+✔ the real unit Cargo command runs a later unlisted target after a listed failure, and still fails (1367.090666ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3452.936541

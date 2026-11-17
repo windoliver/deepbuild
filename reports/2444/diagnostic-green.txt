@@ -1,0 +1,11 @@
+Unlisted diagnostic correction: exit 0; one test passed unchanged.
+
+✔ the unit failure summary names the unlisted test, not an earlier LISTED failure (579.096ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 659.264209
