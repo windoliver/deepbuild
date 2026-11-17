@@ -1,0 +1,70 @@
+Command: node --test tests/listed-diagnostic.test.mjs
+Exit: 1, before the diagnostic correction. Paths redacted; trailing padding removed.
+
+✖ the unit failure summary names the unlisted test, not an earlier LISTED failure (558.209083ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 631.405417
+
+✖ failing tests:
+
+test at tests/listed-diagnostic.test.mjs:9:1
+✖ the unit failure summary names the unlisted test, not an earlier LISTED failure (558.209083ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /^FAIL unit: example\.test\.mjs › new regression: new failure$/m. Input:
+
+  'RUN unit\n' +
+    'scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node --test --test-reporter=file://<checkout>/scripts/proof-reporter.mjs --test-reporter-destination=<temporary>/deep-preflight-output-Hspte7/report --test-reporter=spec --test-reporter-destination=stdout example.test.mjs` runs unleased\n' +
+    '✖ listed (0.73975ms)\n' +
+    '✖ new regression (0.106209ms)\n' +
+    'ℹ tests 2\n' +
+    'ℹ suites 0\n' +
+    'ℹ pass 0\n' +
+    'ℹ fail 2\n' +
+    'ℹ cancelled 0\n' +
+    'ℹ skipped 0\n' +
+    'ℹ todo 0\n' +
+    'ℹ duration_ms 78.747583\n' +
+    '\n' +
+    '✖ failing tests:\n' +
+    '\n' +
+    'test at example.test.mjs:2:5\n' +
+    '✖ listed (0.73975ms)\n' +
+    '  Error: old failure\n' +
+    '      at TestContext.<anonymous> (file://<temporary>/deep-listed-diagnostic-0pFN9z/example.test.mjs:2:34)\n' +
+    '      at Test.runInAsyncScope (node:async_hooks:227:14)\n' +
+    '      at Test.run (node:internal/test_runner/test:1402:25)\n' +
+    '      at Test.start (node:internal/test_runner/test:1262:17)\n' +
+    '      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17)\n' +
+    '\n' +
+    'test at example.test.mjs:3:5\n' +
+    '✖ new regression (0.106209ms)\n' +
+    '  Error: new failure\n' +
+    '      at TestContext.<anonymous> (file://<temporary>/deep-listed-diagnostic-0pFN9z/example.test.mjs:3:42)\n' +
+    '      at Test.runInAsyncScope (node:async_hooks:227:14)\n' +
+    '      at Test.run (node:internal/test_runner/test:1402:25)\n' +
+    '      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)\n' +
+    '      at Test.postRun (node:internal/test_runner/test:1542:19)\n' +
+    '      at Test.run (node:internal/test_runner/test:1467:12)\n' +
+    '      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)\n' +
+    'LISTED example.test.mjs › listed: old failure (known on main (#2444, added 2026-11-15))\n' +
+    'FAIL unit: example.test.mjs › listed: old failure\n' +
+    '  Fix: repair it\n' +
+    '  Elapsed: 0.48 s\n'
+
+      at TestContext.<anonymous> (file://<checkout>/tests/listed-diagnostic.test.mjs:26:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'RUN unit\nscripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node --test --test-reporter=file://<checkout>/scripts/proof-reporter.mjs --test-reporter-destination=<temporary>/deep-preflight-output-Hspte7/report --test-reporter=spec --test-reporter-destination=stdout example.test.mjs` runs unleased\n✖ listed (0.73975ms)\n✖ new regression (0.106209ms)\nℹ tests 2\nℹ suites 0\nℹ pass 0\nℹ fail 2\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 78.747583\n\n✖ failing tests:\n\ntest at example.test.mjs:2:5\n✖ listed (0.73975ms)\n  Error: old failure\n      at TestContext.<anonymous> (file://<temporary>/deep-listed-diagnostic-0pFN9z/example.test.mjs:2:34)\n      at Test.runInAsyncScope (node:async_hooks:227:14)\n      at Test.run (node:internal/test_runner/test:1402:25)\n      at Test.start (node:internal/test_runner/test:1262:17)\n      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17)\n\ntest at example.test.mjs:3:5\n✖ new regression (0.106209ms)\n  Error: new failure\n      at TestContext.<anonymous> (file://<temporary>/deep-listed-diagnostic-0pFN9z/example.test.mjs:3:42)\n      at Test.runInAsyncScope (node:async_hooks:227:14)\n      at Test.run (node:internal/test_runner/test:1402:25)\n      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)\n      at Test.postRun (node:internal/test_runner/test:1542:19)\n      at Test.run (node:internal/test_runner/test:1467:12)\n      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)\nLISTED example.test.mjs › listed: old failure (known on main (#2444, added 2026-11-15))\nFAIL unit: example.test.mjs › listed: old failure\n  Fix: repair it\n  Elapsed: 0.48 s\n',
+    expected: /^FAIL unit: example\.test\.mjs › new regression: new failure$/m,
+    operator: 'match',
+    diff: 'simple'
+  }

@@ -260,7 +260,7 @@ mod tests {
         let three = glyphs
             .iter()
             .filter_map(|g| g.atlas)
-            .last()
+            .next_back()
             .expect("the 3 has ink");
         let page = &after[three.page as usize];
         let ink = (three.y..three.y + three.h)

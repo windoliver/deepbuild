@@ -232,6 +232,7 @@ fn video_entry(brand: Brand, v: &Layout) -> Vec<u8> {
     if let Some(config) = v.config {
         let kind = match &v.fourcc {
             b"hvc1" | b"hev1" => b"hvcC",
+            b"av01" => b"av1C",
             _ => b"avcC",
         };
         e.extend(mp4_box(kind, config));

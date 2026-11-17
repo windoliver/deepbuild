@@ -747,7 +747,6 @@ fn depends_on(name: &str) -> Value {
     )
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

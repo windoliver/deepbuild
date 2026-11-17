@@ -119,10 +119,33 @@ pub const PARTICLE_FIELDS: [&str; 6] = [
     "pos.x", "pos.y", "pos.z", "linear.x", "linear.y", "linear.z",
 ];
 
+/// #182: the fields of a character body's own state in the canonical state, after every
+/// body's (Checkpoint ring: `hash`): the walk it wants, its vertical speed, grounded, sliding and
+/// crouched as 0 or 1, and how many shapes it touches; then each touched shape use as its body's
+/// place in canonical order and its index, both named `touching`.
+pub const CHARACTER_FIELDS: [&str; 8] = [
+    "wants.x", "wants.y", "wants.z", "vertical", "grounded", "sliding", "crouched", "touching",
+];
+
+/// #182: one character body's own state as a step left it (Body `body@1`: character: State).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct CharacterState {
+    pub id: String,
+    /// m/s: the walk it wants, its part along up dropped.
+    pub wants: [f32; 3],
+    /// m/s along up.
+    pub vertical: f32,
+    pub grounded: bool,
+    pub sliding: bool,
+    pub crouched: bool,
+    /// The shape uses its controller touched in its last step, sorted.
+    pub touching: Vec<ShapeRef>,
+}
+
 /// One body's, one particle's (`<soft>#<address>`), one vehicle body's own or one wheel's
-/// (`<body>#<wheel>`, #251) canonical state: the backend's own f32 value of each of its `names`
-/// (`FIELDS`, `PARTICLE_FIELDS`, `HELD_FIELDS` or `WHEEL_FIELDS`), never converted, so a hash of
-/// it reads exactly what the backend steps.
+/// (`<body>#<wheel>`, #251), or one character body's own (#182) canonical state: the backend's own
+/// f32 value of each of its `names` (`FIELDS`, `PARTICLE_FIELDS`, `HELD_FIELDS`, `WHEEL_FIELDS` or
+/// `CHARACTER_FIELDS`), never converted, so a hash of it reads exactly what the backend steps.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Canonical {
     pub id: String,
@@ -131,9 +154,10 @@ pub struct Canonical {
 }
 
 impl Canonical {
-    /// The names of its values.
-    pub fn fields(&self) -> &'static [&'static str] {
-        self.names
+    /// The name of its value `i`: its names', and past them (#182) `touching`, the two values
+    /// each shape use a character body touches adds.
+    pub fn field(&self, i: usize) -> &'static str {
+        self.names.get(i).copied().unwrap_or("touching")
     }
 }
 
@@ -282,6 +306,9 @@ pub trait Backend {
     /// Every shape use `q` meets among those in `groups`, sorted by distance, then shape use: the
     /// one way physics.query, physics.cast@1 and nav.reach reach the engine's spatial queries.
     fn query(&self, q: &Query, groups: u32) -> Vec<Hit>;
+    /// #182: each character body's own state as the last step left it, in canonical (priority,
+    /// ID) order.
+    fn characters(&self) -> Vec<CharacterState>;
     /// Moves character body `body` by `translation` m through the backend's character
     /// controller, which sets its kinematic target for the next step, sliding along what it
     /// meets; the translation it took, or the refusal naming a body that can't move so.

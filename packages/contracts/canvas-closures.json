@@ -22,6 +22,7 @@
   {"list": "Annotation shapes for `around`", "closures": [{"closed": "draw_path"}]},
   {"list": "Warp maps (`map`, `linear`, `complex`)", "closures": [{"closed": "interval_forms"}]},
   {"list": "Graph layouts", "closures": [{"registry": "graph.layout@1"}]},
+  {"list": "Map projections", "closures": [{"registry": "geo.projection@1"}]},
   {"list": "Recipe step ops", "closures": [{"closed": "record"}]},
   {"list": "The closed function list", "closures": [{"closed": "interval_forms"}]},
   {"list": "Eases", "closures": [{"registry": "ease@1"}]},

@@ -53,11 +53,16 @@ const CLASSES: [(&str, Class); 6] = [
     ("exit", Class::Exit),
 ];
 
-/// The grid as the interface declares it.
+/// The grid as the interface declares it. With `layers` above 1 (#1048), the cells are indexed
+/// layer by layer, a cell's y running on through the layers below (layer × height + row), so a
+/// surface and a cave are one grid; `links`, rows of (from cell, to cell, two_way) with a count,
+/// join cells a step can't, such as stairs, gates between layers and teleporters.
 #[derive(Debug)]
 struct Grid {
     cells: At,
     size: [i32; 2],
+    layers: i32,
+    links: Option<(At, At)>,
     /// `None` on a square grid; on a hex grid, whether it's pointy and whether odd rows (or
     /// columns) are offset.
     hex: Option<(bool, bool)>,
@@ -77,6 +82,9 @@ pub struct Iface {
     grid: Option<Grid>,
     unit_cell: Option<At>,
     me: usize,
+    /// Every name the interface declares, by its label, as resolved (#1048: what a throwaway
+    /// copy compares).
+    names: Vec<(String, At)>,
 }
 
 /// A declared name's array path: the name itself, or an object's `name`, `path` or `at` when the
@@ -160,8 +168,9 @@ impl Iface {
                 named.push((format!("units.{k}"), v, Want::Number));
             }
         }
+        let mut names = Vec::new();
         for (label, at, _) in &named {
-            resolve(piece, label, at, Want::Number)?;
+            names.push((label.clone(), resolve(piece, label, at, Want::Number)?));
         }
         let legal = |k: &str| play.pointer(&format!("/legal/{k}"));
         let rows = play
@@ -207,6 +216,29 @@ impl Iface {
             Some(g) => Some(Grid::of(g, piece)?),
             None => None,
         };
+        let pairs = [
+            ("legal.rows", rows.as_ref().map(|r| &r.0)),
+            ("legal.count", rows.as_ref().map(|r| &r.1)),
+            ("legal.score", score.as_ref()),
+            ("units.cell", unit_cell.as_ref()),
+        ];
+        names.extend(
+            pairs
+                .into_iter()
+                .filter_map(|(l, a)| Some((l.to_string(), a?.clone()))),
+        );
+        if let Some(g) = &grid {
+            names.push(("grid.cells".into(), g.cells.clone()));
+            names.extend(
+                g.floor
+                    .iter()
+                    .map(|f| ("grid.floor".to_string(), f.clone())),
+            );
+            if let Some((rows, count)) = &g.links {
+                names.push(("grid.links".into(), rows.clone()));
+                names.push(("grid.links.count".into(), count.clone()));
+            }
+        }
         let mut actions = Vec::new();
         for (name, a) in obj("actions").into_iter().flatten() {
             actions.push(Action {
@@ -234,7 +266,26 @@ impl Iface {
                 .pointer("/units/self")
                 .and_then(Value::as_u64)
                 .unwrap_or(0) as usize,
+            names,
         })
+    }
+
+    /// Each declared name's array now, by its label (#1048).
+    pub fn read(&self, world: &World) -> Vec<(String, Vec<Value>)> {
+        self.names
+            .iter()
+            .map(|(l, at)| {
+                (
+                    l.clone(),
+                    world.array(at.item, &at.array).unwrap_or_default(),
+                )
+            })
+            .collect()
+    }
+
+    /// The listed rows now (#1048: rules.legal puts each).
+    pub fn listed(&self, world: &World) -> Vec<[i32; 3]> {
+        self.rows(world)
     }
 
     /// The rows the piece lists now, `legal.count` of them, each naming a declared action; a row
@@ -264,15 +315,39 @@ impl Grid {
             ],
             _ => return Err(missing("grid.size", "it's [width, height]".into())),
         };
+        let layers = g.get("layers").and_then(Value::as_i64).unwrap_or(1).max(1) as i32;
         let cells = resolve(
             piece,
             "grid.cells",
             g.get("cells").unwrap_or(&Value::Null),
             Want::I32 {
-                count: Some((size[0].max(0) * size[1].max(0)) as u32),
+                count: Some((layers * size[0].max(0) * size[1].max(0)) as u32),
                 every: 1,
             },
         )?;
+        // `links: name` with `links.count: name` beside it, or `links: {rows, count}`.
+        let links = match g.get("links") {
+            None | Some(Value::Null) => None,
+            Some(l) => {
+                let rows = l.get("rows").unwrap_or(l);
+                let count = l
+                    .get("count")
+                    .or_else(|| g.get("links.count"))
+                    .unwrap_or(&Value::Null);
+                Some((
+                    resolve(
+                        piece,
+                        "grid.links",
+                        rows,
+                        Want::I32 {
+                            count: None,
+                            every: 3,
+                        },
+                    )?,
+                    resolve(piece, "grid.links.count", count, Want::Number)?,
+                ))
+            }
+        };
         let floor = g
             .get("floor")
             .map(|v| resolve(piece, "grid.floor", v, Want::Number))
@@ -306,6 +381,8 @@ impl Grid {
         Ok(Grid {
             cells,
             size,
+            layers,
+            links,
             hex,
             eight: g.get("moves").and_then(Value::as_u64) == Some(8),
             classes,
@@ -322,9 +399,39 @@ impl Grid {
             .map_or(Class::Blocked, |(c, _)| *c)
     }
 
+    /// Whether a cell lies on the grid: x across, y down through every layer.
+    fn holds(&self, [x, y]: [i32; 2]) -> bool {
+        (0..self.size[0]).contains(&x) && (0..self.layers * self.size[1]).contains(&y)
+    }
+
+    /// The links the piece lists now, `links.count` rows of (from, to, two_way), each as the
+    /// cells it joins; a row naming a cell off the grid joins nothing (the check names it).
+    fn links(&self, world: &World) -> Vec<([i32; 2], [i32; 2], bool)> {
+        let Some((rows, count)) = &self.links else {
+            return Vec::new();
+        };
+        let n = number(world, count).max(0.0) as usize;
+        let w = self.size[0];
+        let cell = |i: i32| [i.rem_euclid(w.max(1)), i.div_euclid(w.max(1))];
+        ints(world, rows)
+            .as_chunks::<3>()
+            .0
+            .iter()
+            .take(n)
+            .filter(|[f, t, _]| {
+                let all = self.layers * w * self.size[1];
+                (0..all).contains(f) && (0..all).contains(t)
+            })
+            .map(|[f, t, two]| (cell(*f), cell(*t), *two != 0))
+            .collect()
+    }
+
     /// A cell's neighbors in a fixed order: 4 or 8 on a square grid, 6 on a hex grid with its
-    /// offset.
+    /// offset, within its own layer.
     fn neighbors(&self, [x, y]: [i32; 2]) -> Vec<[i32; 2]> {
+        // A cell's row within its layer; a step never leaves the layer.
+        let h = self.size[1].max(1);
+        let (layer, y) = (y.div_euclid(h), y.rem_euclid(h));
         const FOUR: [[i32; 2]; 4] = [[0, -1], [1, 0], [0, 1], [-1, 0]];
         const EIGHT: [[i32; 2]; 8] = [
             [0, -1],
@@ -354,7 +461,8 @@ impl Grid {
         steps
             .into_iter()
             .map(|[dx, dy]| [x + dx, y + dy])
-            .filter(|[x, y]| (0..self.size[0]).contains(x) && (0..self.size[1]).contains(y))
+            .filter(|[x, y]| (0..self.size[0]).contains(x) && (0..h).contains(y))
+            .map(|[x, y]| [x, layer * h + y])
             .collect()
     }
 }
@@ -398,6 +506,8 @@ pub struct Bot {
     floor: Option<f64>,
     /// The grid as it last read it, so a key the piece takes up as the unit steps on it counts.
     before: Vec<i32>,
+    /// #1048's planted walker: its search leaves the grid's links out.
+    pub ignores_links: bool,
 }
 
 impl Bot {
@@ -473,6 +583,7 @@ impl Bot {
             keys: BTreeSet::new(),
             floor: None,
             before: Vec::new(),
+            ignores_links: false,
         }))
     }
 
@@ -535,7 +646,12 @@ impl Bot {
                         rows.iter().find(|r| r[0] as usize == action).copied()
                     }
                     _ => {
-                        let next = self.path(grid, &cells, here);
+                        let links = if self.ignores_links {
+                            Vec::new()
+                        } else {
+                            grid.links(world)
+                        };
+                        let next = self.path(grid, &cells, &links, here);
                         next.and_then(|[x, y]| {
                             rows.iter()
                                 .find(|r| {
@@ -550,6 +666,25 @@ impl Bot {
                         })
                     }
                 };
+                // The planted walker that ignores links plays no listed row whose target isn't next
+                // to its cell on its layer, its fallback included.
+                let rows: Vec<[i32; 3]> = if self.ignores_links {
+                    let near = grid.neighbors(here);
+                    rows.into_iter()
+                        .filter(|r| {
+                            iface
+                                .actions
+                                .get(r[0] as usize)
+                                .is_none_or(|a| a.args != "cell")
+                                || near.contains(&[r[1], r[2]])
+                        })
+                        .collect()
+                } else {
+                    rows
+                };
+                if rows.is_empty() {
+                    return None;
+                }
                 found.unwrap_or_else(|| self.seeded(k, &rows))
             }
         };
@@ -572,7 +707,7 @@ impl Bot {
                 self.before.clear();
             }
         }
-        if !(0..grid.size[0]).contains(&here[0]) || !(0..grid.size[1]).contains(&here[1]) {
+        if !grid.holds(here) {
             return None;
         }
         let i = (here[1] * grid.size[0] + here[0]) as usize;
@@ -589,7 +724,13 @@ impl Bot {
     /// The first cell of its path from `here` by its own breadth-first search: toward the nearest
     /// cell it hasn't stood on (the explorer) or the nearest exit (the descender), through open,
     /// door, key and exit cells and the locked cells whose key it has stood on.
-    fn path(&self, grid: &Grid, cells: &[i32], here: [i32; 2]) -> Option<[i32; 2]> {
+    fn path(
+        &self,
+        grid: &Grid,
+        cells: &[i32],
+        links: &[([i32; 2], [i32; 2], bool)],
+        here: [i32; 2],
+    ) -> Option<[i32; 2]> {
         let w = grid.size[0];
         let at = |[x, y]: [i32; 2]| (y * w + x) as usize;
         let passes = |c: [i32; 2]| {
@@ -623,7 +764,18 @@ impl Bot {
                 }
                 return None;
             }
-            for n in grid.neighbors(c) {
+            // A link is one move from its from cell (and back, when two-way), after the steps.
+            let across = links.iter().filter_map(|&(f, t, two)| {
+                if f == c {
+                    Some(t)
+                } else if two && t == c {
+                    Some(f)
+                } else {
+                    None
+                }
+            });
+            let next: Vec<[i32; 2]> = grid.neighbors(c).into_iter().chain(across).collect();
+            for n in next {
                 if !seen[at(n)] && passes(n) {
                     seen[at(n)] = true;
                     from[at(n)] = Some(c);

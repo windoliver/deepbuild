@@ -28,7 +28,11 @@ pub(crate) fn times(input: &Value) -> Vec<i64> {
         .as_array()
         .into_iter()
         .flatten()
-        .filter_map(|t| t.as_str().and_then(crate::hub::flicks).or_else(|| t.as_i64()))
+        .filter_map(|t| {
+            t.as_str()
+                .and_then(crate::hub::flicks)
+                .or_else(|| t.as_i64())
+        })
         .collect();
     if named.is_empty() {
         vec![0]
@@ -42,8 +46,17 @@ fn linear(rgba: &[u8]) -> Vec<f32> {
     let lut: Vec<f32> = (0..256)
         .map(|c| deep_canvas::color::srgb_decode(f64::from(c) / 255.0) as f32)
         .collect();
-    rgba.chunks_exact(4)
-        .flat_map(|p| [lut[p[0] as usize], lut[p[1] as usize], lut[p[2] as usize], 1.0])
+    rgba.as_chunks::<4>()
+        .0
+        .iter()
+        .flat_map(|p| {
+            [
+                lut[p[0] as usize],
+                lut[p[1] as usize],
+                lut[p[2] as usize],
+                1.0,
+            ]
+        })
         .collect()
 }
 
@@ -123,8 +136,7 @@ impl Hub<'_> {
 
     fn frames_3d(&mut self, document: &Value, at: &[i64]) -> Drawn {
         let (_, fingerprint) = crate::kit::goldens::environment(self, "gpu");
-        let size =
-            crate::snapshot::px([0, 1].map(|i| document["size"][i].as_f64().unwrap_or(1.0)));
+        let size = crate::snapshot::px([0, 1].map(|i| document["size"][i].as_f64().unwrap_or(1.0)));
         let short = self.planted(Planted::ReductionLeavesOutLastRows);
         let Some(gpu) = self.gpu3() else {
             return Drawn::Blocked(json!({"code": "gpu_unavailable",
@@ -263,10 +275,18 @@ impl Hub<'_> {
                 let mut hidden = shown.clone();
                 hidden["items"][text]["visible"] = json!(false);
                 let Some((without, ..)) = draw(self, &hidden) else {
-                    return Drawn::Blocked(json!({"code": "not_presented", "t": t, "path": format!("items/{text}")}));
+                    return Drawn::Blocked(
+                        json!({"code": "not_presented", "t": t, "path": format!("items/{text}")}),
+                    );
                 };
                 let mut drew = false;
-                for (i, (a, b)) in rgba.chunks_exact(4).zip(without.chunks_exact(4)).enumerate() {
+                for (i, (a, b)) in rgba
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                    .zip(without.as_chunks::<4>().0)
+                    .enumerate()
+                {
                     if a != b {
                         ids[i] = pick;
                         drew = true;
@@ -316,7 +336,8 @@ impl Hub<'_> {
             if drew == own || anywhere {
                 continue;
             }
-            row["against"] = json!({"fingerprint": drew, "result": was.map(|r| r["result"].clone())});
+            row["against"] =
+                json!({"fingerprint": drew, "result": was.map(|r| r["result"].clone())});
             let elsewhere = json!({"code": "environment_changed", "drew": drew, "run": own});
             match row.get_mut("inconclusive").and_then(Value::as_array_mut) {
                 Some(list) => list.push(elsewhere),

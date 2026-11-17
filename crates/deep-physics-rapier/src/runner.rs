@@ -31,6 +31,7 @@ use deep_canvas_physics::track::{self, Entry};
 use serde_json::{json, Map, Value};
 
 mod audit;
+pub mod contact;
 mod held;
 pub mod kit;
 #[cfg(not(target_arch = "wasm32"))]
@@ -38,6 +39,7 @@ mod live;
 mod replay;
 mod timeline;
 pub mod vehicle;
+pub mod walk;
 
 pub use crate::planted::PLANTED;
 
@@ -248,29 +250,6 @@ fn rate(call: &Value) -> Result<(String, i64), Value> {
     bake::frame_rate(call.get("frame_rate").unwrap_or(&json!("60/1"))).map_err(
         |what| json!({"ok": false, "code": "bad_rate", "path": "frame_rate", "what": what}),
     )
-}
-
-/// This machine: its OS, its CPU architecture as Rust names it, its CPU as the OS names it, and the
-/// target triple this build is for (Golden: a golden "records the triple in its machine").
-fn machine(target: &str) -> Value {
-    let named = if cfg!(target_os = "macos") {
-        std::process::Command::new("sysctl")
-            .args(["-n", "machdep.cpu.brand_string"])
-            .output()
-            .ok()
-            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-    } else {
-        std::fs::read_to_string("/proc/cpuinfo").ok().and_then(|c| {
-            c.lines()
-                .find(|l| l.starts_with("model name"))
-                .and_then(|l| l.split(':').nth(1))
-                .map(|s| s.trim().to_string())
-        })
-    };
-    let cpu = named
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| std::env::consts::ARCH.to_string());
-    json!({"os": std::env::consts::OS, "arch": std::env::consts::ARCH, "cpu": cpu, "target": target})
 }
 
 /// A bake kept in `dir` under `key` (Bake: `store: evidence`), or none.
@@ -508,7 +487,12 @@ impl Run {
             Some("solve_cap_reports_success") => run.twin = Twin::SolveCapSuccess,
             Some("mass_ratio_declared_only") => run.declared_masses_only = true,
             Some("volume_without_constraint") => run.no_volume = true,
-            Some(name) if !kit::planted(name, &mut run) && !vehicle::planted(name, &mut run) => {
+            Some(name)
+                if !kit::planted(name, &mut run)
+                    && !vehicle::planted(name, &mut run)
+                    && !walk::planted(name, &mut run)
+                    && !contact::planted(name, &mut run) =>
+            {
                 return None
             }
             Some(_) => {}
@@ -590,7 +574,7 @@ impl Run {
     /// The world `v` holds, built, or the issues that refuse it.
     fn build(&self, v: &Value) -> Result<(World, Rapier), Value> {
         let refused = |e: Vec<Refusal>| refused(&e);
-        let w = vehicle::check(v, self).map_err(refused)?;
+        let w = contact::check(v, self).map_err(refused)?;
         let mut b = Rapier {
             restore_any_version: self.restore_any_version,
             reverse_pairs: cfg!(feature = "test-reverse-pairs"),
@@ -634,12 +618,14 @@ impl Run {
             t.fast
                 .at(k, &x.id, [0, 1, 2].map(|i| f64::from(x.values[i])));
         }
-        for (id, o) in w.outputs.iter().filter(|(_, o)| o.read == Read::Position) {
-            if let Some(body) = c.iter().find(|x| x.id == o.from) {
-                let p = [body.values[0], body.values[1], body.values[2]];
-                t.positions.entry(id.clone()).or_default().push(p);
-            }
+        for (id, o) in &w.outputs {
+            let (Some(at), Some(x)) = (o.read.vec3_at(), c.iter().find(|x| x.id == o.from)) else {
+                continue;
+            };
+            let p = [x.values[at], x.values[at + 1], x.values[at + 2]];
+            t.positions.entry(id.clone()).or_default().push(p);
         }
+        let walkers = walk::readings(b, w, &mut t.readings);
         for (id, o) in w.outputs.iter().filter(|(_, o)| o.read.of_joint()) {
             if let Some(j) = joints.iter().find(|j| j.id == o.from) {
                 let (pair, v) = match o.read {
@@ -655,7 +641,7 @@ impl Run {
             let read = b.read();
             for s in read.bodies {
                 if let Some(Value::Array(v)) = t.bodies.get_mut(&s.id) {
-                    v.push(state(&s));
+                    v.push(walk::with_character(state(&s), &s.id, &walkers, w));
                 }
             }
             for s in read.soft {
@@ -1019,7 +1005,7 @@ impl Run {
                         .collect();
                     json!({"ok": true, "golden": {
                         "bake_key": self.key(world, &reads, &track.json(), &rate, plan.steps, None),
-                        "runtime_digest": self.build.runtime_digest(), "machine": machine(&self.build.target),
+                        "runtime_digest": self.build.runtime_digest(), "machine": replay::machine(&self.build.target),
                         "step_hashes": t.step_hashes, "checkpoint_hashes": hashes,
                         "occurrences_hash": record["occurrences_hash"],
                         "record_on": self.build.target, "verify_on": verify_on}})
@@ -1060,11 +1046,16 @@ impl Run {
                     Ok(x) => x,
                     Err(e) => return Some(e),
                 };
+                let track = match Track::read(&w, call) {
+                    Ok(t) => t,
+                    Err(e) => return Some(e),
+                };
                 let mut ms = Vec::new();
                 let mut top = Vec::new();
-                for _ in 0..steps()? {
+                for k in 0..steps()? {
+                    let inputs = track.by_step.get(&k).map_or(&[][..], Vec::as_slice);
                     let at = std::time::Instant::now();
-                    let stepped = b.step(&[], &Targets::default());
+                    let stepped = b.step(inputs, &Targets::default());
                     ms.push(at.elapsed().as_secs_f64() * 1e3);
                     if let Err(r) = stepped {
                         return Some(json!({"ok": false, "issues": [issue(&r)]}));

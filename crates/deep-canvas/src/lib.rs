@@ -26,6 +26,7 @@ pub mod geometry_audit;
 pub mod geometry_shape;
 pub mod grammar;
 pub mod heights;
+pub mod horizon;
 pub mod interval;
 pub mod kinds;
 pub mod lengths;

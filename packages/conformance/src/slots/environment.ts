@@ -54,10 +54,17 @@ const sleep = (ms: number): void => { Atomics.wait(new Int32Array(new SharedArra
 let lastFailure = '';
 /** A tool that started and then hangs is ended after this and read as unreadable; a healthy ps or lsof answers in tens of ms. */
 const TOOL_LIMIT_MS = 3000;
+/**
+ * Room for what a tool prints. Node's default of 1 MiB is less than `ps -Aww` prints on a busy machine, whose every
+ * command line it shows; output past this still ends the tool with ENOBUFS, read as unreadable.
+ */
+const TOOL_OUTPUT_BYTES = 64 * 1024 * 1024;
 function tool(command: string, args: string[]): SpawnSyncReturns<string> {
-  const options = { encoding: 'utf8' as const, env: { ...process.env, LC_ALL: 'C' }, timeout: TOOL_LIMIT_MS, killSignal: 'SIGKILL' as const };
+  const options = { encoding: 'utf8' as const, env: { ...process.env, LC_ALL: 'C' }, timeout: TOOL_LIMIT_MS, killSignal: 'SIGKILL' as const, maxBuffer: TOOL_OUTPUT_BYTES };
   let result = spawnSync(command, args, options);
-  if (result.error && (result.error as NodeJS.ErrnoException).code !== 'ETIMEDOUT') { sleep(20); result = spawnSync(command, args, options); }
+  // A tool that started is not run again: one that hung, or one whose output overflowed and would overflow again.
+  const started = (code: string | undefined): boolean => code === 'ETIMEDOUT' || code === 'ENOBUFS';
+  if (result.error && !started((result.error as NodeJS.ErrnoException).code)) { sleep(20); result = spawnSync(command, args, options); }
   // What a failed tool said, for the finding that reads the table as unknown.
   if (result.error || result.status !== 0) lastFailure = `${command} ${args[0]}: ${result.error ? (result.error as NodeJS.ErrnoException).code ?? result.error.message : `status ${result.status}${result.signal ? ` on ${result.signal}` : ''}`}${result.stderr?.trim() ? ` ${result.stderr.trim()}` : ''}`;
   return result;
@@ -108,10 +115,11 @@ const shown = (l: Listener): string => `${l.address}:${l.port}`;
 /**
  * The TCP addresses the given processes listen on, read from the open files table (lsof); null when it can't be read.
  * lsof ends with 1 both when it found nothing and on a failure it reports on stderr; only the silent 1 is an answer.
+ * -w keeps its warnings of mounts it can't stat (docker's, a remote desktop's) off stderr: they are no failure.
  * An address is as lsof names it: `127.0.0.1`, `*` for every interface, `[::1]`.
  */
 function listeners(pids: number[]): Listener[] | null {
-  const read = tool('lsof', ['-nP', '-a', '-iTCP', '-sTCP:LISTEN', '-p', pids.join(','), '-Fn']);
+  const read = tool('lsof', ['-w', '-nP', '-a', '-iTCP', '-sTCP:LISTEN', '-p', pids.join(','), '-Fn']);
   if (read.error || read.status === null || (read.status !== 0 && (read.status !== 1 || read.stderr.trim() !== ''))) return null;
   const seen = new Map<string, Listener>();
   for (const line of read.stdout.split('\n')) {
@@ -124,7 +132,7 @@ function listeners(pids: number[]): Listener[] | null {
 }
 /** The working folder of each given process, from the open files table (lsof); null when it can't be read. */
 function folders(pids: number[]): Map<number, string> | null {
-  const read = tool('lsof', ['-a', '-p', pids.join(','), '-d', 'cwd', '-Fpn']);
+  const read = tool('lsof', ['-w', '-a', '-p', pids.join(','), '-d', 'cwd', '-Fpn']);
   if (read.error || read.status === null || (read.status !== 0 && (read.status !== 1 || read.stderr.trim() !== ''))) return null;
   const found = new Map<number, string>();
   let pid = -1;

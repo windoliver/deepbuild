@@ -287,7 +287,8 @@ export class AnswerDelivery {
       p.asked = true;
       const question = `The agent's promised check is BLOCKED (${blockedCause(p) === 'set_again' ? `promised ${p.set} times` : 'promised past its end'}; owner: ${owner}): "${p.quote}" Do the check yourself, or drop it?`;
       const options = [{ id: 'take', label: 'I will do the check', decision: 'none' }, { id: 'drop', label: 'Drop it', decision: 'none' }];
-      const raised = { kind: 'choice', question, options, recommended: 'drop', fallback: 'you', provisional: false, owner: 'you', key: sha256Hex(canonicalize({ kind: 'promise', session, quote: p.quote } as JsonValue)), pinned_to: await this.options.mcp().pinOf(cwd, question) };
+      // It carries its own deadline and default, as the hub's other asks do, so no settings it lacks refuse it (#1829).
+      const raised = { kind: 'choice', question, options, recommended: 'drop', deadline: this.options.services.now() + 2 * 86_400_000, default: 'drop', fallback: 'you', provisional: false, owner: 'you', key: sha256Hex(canonicalize({ kind: 'promise', session, quote: p.quote } as JsonValue)), pinned_to: await this.options.mcp().pinOf(cwd, question) };
       ask = await this.options.services.asks.raise(this.options.events.connection('core', { session, agent }), 'promise.blocked', raised).catch(() => null);
     }
     await this.options.events.appendSession(session, agent, 'promise.blocked', { promise: p.id, status: 'BLOCKED', quote: p.quote, cause: blockedCause(p), owner, ask });

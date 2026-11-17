@@ -1,0 +1,12 @@
+Captured targeted result; not a full-preflight pass.
+
+✔ #1624.alone the unit lane runs each reference-Mac budget file alone, after the parallel block (16821.319333ms)
+✔ #1624 AC1 the proposed folders-only preflight test (maintainer approval needed to adopt) passes its named test on the lanes lists (14341.616083ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 39281.745291

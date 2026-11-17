@@ -215,9 +215,7 @@ fn fault_of(hub: &mut Hub<'_>, ctx: &Ctx<'_>) -> Option<Fault> {
                 .map(|c| Value::Object(c.clone()))
         };
         let Some((issue, check)) = issues.iter().find_map(|i| {
-            if i.get("fix_ops").is_none() {
-                return None;
-            }
+            i.get("fix_ops")?;
             if i["check"] == deep_canvas::document::CHECK {
                 return Some((i, None));
             }

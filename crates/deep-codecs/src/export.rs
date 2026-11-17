@@ -492,6 +492,8 @@ struct Pngs {
     feed: Feed,
     planted: Planted,
     keys: Vec<u64>,
+    /// #518, planted: every frame handed over, kept until the last is in.
+    kept: Vec<(u64, Vec<u8>)>,
     done: bool,
 }
 
@@ -507,19 +509,28 @@ impl Pngs {
             feed: Feed::default(),
             planted: planted.clone(),
             keys: Vec::new(),
+            kept: Vec::new(),
             done: false,
         })
     }
 
     fn push(&mut self, k: u64, frame: &[u8]) -> Result<(), Value> {
         if let Some(frame) = self.feed.frame(k, frame, &self.planted) {
-            png_frame(&self.tmp, k, frame, self.size, &self.planted)?;
+            // Planted: the job reads every frame into memory before it codes the first.
+            if self.planted.is("encode_reads_all_frames_first") {
+                self.kept.push((k, frame.to_vec()));
+            } else {
+                png_frame(&self.tmp, k, frame, self.size, &self.planted)?;
+            }
             self.keys.push(k);
         }
         Ok(())
     }
 
     fn finish(mut self) -> Result<Value, Value> {
+        for (k, frame) in std::mem::take(&mut self.kept) {
+            png_frame(&self.tmp, k, &frame, self.size, &self.planted)?;
+        }
         std::fs::rename(&self.tmp, &self.out).map_err(error)?;
         self.done = true;
         Ok(
@@ -571,6 +582,12 @@ fn streamed<R: BufRead, W: Write>(
 ) -> Result<Value, Option<Value>> {
     let n = job.v.get("frames").and_then(Value::as_u64).unwrap_or(0);
     let first = job.v.get("first").and_then(Value::as_u64).unwrap_or(0);
+    // #518: the open is timed here, where it happens, since the export hears of it only once its
+    // own preparing is over. A test tool's stub open (`stub_open_ms`) answers that much later.
+    let asked = std::time::Instant::now();
+    if let Some(ms) = job.v.get("stub_open_ms").and_then(Value::as_u64) {
+        std::thread::sleep(std::time::Duration::from_millis(ms));
+    }
     let mut sink = match op {
         #[cfg(target_os = "macos")]
         "export.part" => Sink::Part(Box::new(Part::open(job, planted, first).map_err(Some)?)),
@@ -585,7 +602,11 @@ fn streamed<R: BufRead, W: Write>(
     if job.s("format") != Some(format) {
         return Err(Some(error(format!("this export takes {format} frames"))));
     }
-    pipe.reply(&json!({"ready": {"format": format, "bytes": bytes}}), None);
+    let open = asked.elapsed().as_secs_f64();
+    pipe.reply(
+        &json!({"ready": {"format": format, "bytes": bytes, "open_seconds": open}}),
+        None,
+    );
     let mut buf = Vec::new();
     for k in first..first + n {
         let head = pipe.next(&mut buf).ok_or(None)?;

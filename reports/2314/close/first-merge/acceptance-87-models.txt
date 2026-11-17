@@ -1,0 +1,28 @@
+$ node node_modules/vitest/vitest.mjs run --reporter=verbose --root tests/acceptance/87/models --testTimeout=600000
+Mon Nov 16 08:14:18 UTC 2026
+ 0:14  up 2 days, 10:23, 18 users, load averages: 75.31 84.48 97.85
+
+ RUN  v5.0.5 <change>/tests/acceptance/87/models
+
+ ✓ budgets.test.ts > #87 a review check stays within its priced budget > the review check declares a time and a cost budget, and a review, job and run record, keeps to both 10790ms
+ ✓ model-unknown.test.ts > #87 a review whose output names no model is uncounted, "model unknown" > a review job whose output names no model is an uncounted run naming "model unknown", and the claim is never PASS on it 10789ms
+ ✓ answering-model.test.ts > #87 a review job's answering model is the one with the most output tokens in its usage > a Claude Code review job whose usage lists claude-haiku-4-5 with 40 output tokens first and claude-sonnet-4-5 with 3,000 records claude-sonnet-4-5 10813ms
+ ✓ canonical.test.ts > #87 models are compared, and their family looked up, by canonical ID > a change made on claude-opus-4-1-20250805[1m], reviewed by a job whose output names us.anthropic.claude-opus-4-1-20250805-v1:0, is uncounted, "review not independent: same model"; a review answered by claude-sonnet-4-5-20250929 counts with "same-family review", never "model unknown" 11016ms
+ ✓ same-model.test.ts > #87 a review by the model that made the change is uncounted; another model of its family counts, noted > a change made on claude-opus-4-1, reviewed by a job launched for gpt-5-codex whose output names claude-opus-4-1, records claude-opus-4-1 and is uncounted, "review not independent: same model", the claim INCONCLUSIVE; answered by claude-sonnet-4-5 it counts with "same-family review"; by gpt-5-codex it counts with no note 11097ms
+ ✓ proxied-route.test.ts > #87 behind a proxied route the change's model is unknown and a review of it is uncounted > a change made in a Claude Code session started with ANTHROPIC_BASE_URL at a local listener, whose transcript names claude-opus-4-1, records its model as unknown, and a review answered by gpt-5-codex is uncounted, "model unknown: proxied route"; the record holds that the variable was set, never its value; with the variable unset the review counts 11146ms
+ ✓ plan-window.test.ts > #87 at your reserve the review waits, and the claim shows BLOCKED: plan window > with the window at your reserve, the review waits and the claim shows BLOCKED with the cause plan window 12204ms
+ ✓ answering-model.test.ts > #87 a review job's answering model is the one with the most output tokens in its usage > (wrong program) a runner that takes the first model listed records the other, and fails 12011ms
+ ✓ canonical.test.ts > #87 models are compared, and their family looked up, by canonical ID > (wrong program) a check that compares the raw names counts the first review, and fails 11811ms
+ ✓ same-model.test.ts > #87 a review by the model that made the change is uncounted; another model of its family counts, noted > (wrong program) a check that records the model it asked for counts the first review, and fails 11853ms
+ ✓ proxied-route.test.ts > #87 behind a proxied route the change's model is unknown and a review of it is uncounted > (wrong program) a check that trusts the proxied transcript's model name counts the first review, and fails 11834ms
+ ✓ canonical.test.ts > #87 models are compared, and their family looked up, by canonical ID > (wrong program) a check that looks up the raw name's family reads the second as unknown, and fails 10650ms
+ ✓ same-model.test.ts > #87 a review by the model that made the change is uncounted; another model of its family counts, noted > (wrong program) a check that drops same-family reviews leaves the second claim INCONCLUSIVE, and fails 10712ms
+
+ Test Files  7 passed (7)
+      Tests  13 passed (13)
+   Start at  00:14:18
+   Duration  34.89s (tests 98%, transform 2%)
+
+exit=0
+Mon Nov 16 08:14:53 UTC 2026
+ 0:14  up 2 days, 10:23, 18 users, load averages: 62.41 80.04 95.68

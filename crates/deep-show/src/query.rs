@@ -170,7 +170,11 @@ impl Hub<'_> {
                 if let Some(id) = items.iter().find(|id| hidden.contains_key(id.as_str())) {
                     return json!({"rev": rev, "code": "ref_unresolved", "item": id});
                 }
-                let track = if q.track.is_empty() { self.track_read(&q.doc) } else { q.track.clone() };
+                let track = if q.track.is_empty() {
+                    self.track_read(&q.doc)
+                } else {
+                    q.track.clone()
+                };
                 let mut out = self.logic_read(&revision.drawn, &items, &q.steps, &track);
                 out["rev"] = json!(rev);
                 out
@@ -223,8 +227,10 @@ impl Hub<'_> {
     pub(crate) fn drawing_form(&self, document: &Value) -> (Value, Vec<Expansion>) {
         let result = check_packed(document, &self.startup.sealed, &self.packs);
         let skipped = crate::verdict::unknown_items(&result.notices);
-        let form =
+        let mut form =
             crate::verdict::without(&crate::packs::drawn(document, &result.expansions), &skipped);
+        // #192: each provider's output by its hash, never the provider.
+        self.sandbox.fill(&self.startup.sealed, &mut form);
         (form, result.expansions)
     }
 

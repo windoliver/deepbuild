@@ -70,12 +70,7 @@ impl Hdr {
         }
         // Showing the surface asks for EDR, so the current headroom is read then; afterwards
         // only a change the display posted before this frame is read again.
-        let posted = d
-            .posts
-            .iter()
-            .filter(|(at, _)| *at <= n)
-            .last()
-            .map(|p| p.1);
+        let posted = d.posts.iter().rfind(|(at, _)| *at <= n).map(|p| p.1);
         let current = match (self.read, posted) {
             (None, _) => posted.unwrap_or(d.headroom),
             (Some(_), Some(h)) if planted != Some(Planted::ReadsHeadroomOnce) => h,
@@ -120,7 +115,12 @@ pub fn export_headroom(planted: Option<Planted>) -> Option<f32> {
 
 /// The planted export's frame: the HDR surface's values, clipped and encoded to 8-bit BGRA.
 pub fn to_sdr(f16: &[u8], bgra: &mut [u8]) {
-    for (px, t) in bgra.chunks_exact_mut(4).zip(f16.chunks_exact(8)) {
+    for (px, t) in bgra
+        .as_chunks_mut::<4>()
+        .0
+        .iter_mut()
+        .zip(f16.as_chunks::<8>().0)
+    {
         for (i, c) in [2, 1, 0].into_iter().enumerate() {
             let v = half(u16::from_le_bytes([t[c * 2], t[c * 2 + 1]]));
             px[i] = (deep_canvas_marks::finish::srgb_encode(f64::from(v)) * 255.0).round() as u8;

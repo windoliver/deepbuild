@@ -157,7 +157,8 @@ impl Store {
             if !runs.is_empty() {
                 self.rows.insert(h.key.clone(), runs);
             }
-            *self.upload_ms.entry(t.plate.clone()).or_default() += started.elapsed().as_secs_f64() * 1000.0;
+            *self.upload_ms.entry(t.plate.clone()).or_default() +=
+                started.elapsed().as_secs_f64() * 1000.0;
         }
         !same
     }

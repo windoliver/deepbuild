@@ -1,0 +1,12 @@
+(module
+  (import "env" "__linear_memory" (memory 1 1))
+  (import "lib:fsm@1" "start" (func $start (param i32 i32 i32 i64)))
+  (import "lib:fsm@1" "step" (func $step (param i32 i32 i64 i32) (result i32)))
+  (global (export "reads_at") i32 (i32.const 0))
+  (global (export "writes_at") i32 (i32.const 4096))
+  (func (export "init") (param $seed i64)
+    (call $start (i32.const 16384) (i32.const 8192) (i32.const 0) (i64.const 0)))
+  (func (export "step") (param $k i64)
+    (i32.store (i32.const 4096) (call $step (i32.const 16384) (i32.const 8192) (local.get $k)
+      (select (i32.const 0) (i32.const -1) (i64.eq (local.get $k) (i64.const 10))))))
+  (data (i32.const 8192) "\03\00\00\00\01\00\00\00\01\00\00\00\ff\ff\ff\ff\ff\ff\ff\ff\00\00\00\00\00\00\00\00\1e\00\00\00\02\00\00\00\00\00\00\00\00\00\00\00"))

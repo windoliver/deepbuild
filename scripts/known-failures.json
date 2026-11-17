@@ -31,6 +31,10 @@
     "canvas-lint: crates/deep-canvas-marks/src/implicit.rs use of a disallowed type `std::collections::HashMap` (clippy::disallowed_types)": 5,
     "canvas-lint: crates/deep-canvas-marks/src/scene.rs a static item, state a check could carry between runs": 3,
     "canvas-lint: crates/deep-canvas-marks/src/story.rs a static item, state a check could carry between runs": 2,
+    "canvas-lint: crates/deep-canvas-marks/src/vector_field.rs a static item, state a check could carry between runs": 3,
+    "canvas-lint: crates/deep-canvas-marks/src/warp.rs a static item, state a check could carry between runs": 3,
+    "canvas-lint: crates/deep-canvas-media/src/heard/mod.rs a static item, state a check could carry between runs": 1,
+    "canvas-lint: crates/deep-canvas-media/src/heard/normalizer.rs a static item, state a check could carry between runs": 1,
     "canvas-lint: crates/deep-canvas-media/src/lib.rs a static item, state a check could carry between runs": 1,
     "canvas-lint: crates/deep-canvas-motion/src/arrange.rs use of a disallowed method `f64::sqrt` (clippy::disallowed_methods)": 1,
     "canvas-lint: crates/deep-canvas-motion/src/held.rs use of a disallowed method `f64::powi` (clippy::disallowed_methods)": 1,
@@ -99,15 +103,7 @@
     "canvas-lint: crates/deep-text/src/fonts.rs a raw pointer (ptr::), an address that differs per process and target": 1,
     "canvas-lint: crates/deep-text/src/fonts.rs a static item, state a check could carry between runs": 1,
     "canvas-lint: crates/deep-text/src/lib.rs a build predicate (feature), code that computes differently per build": 1,
-    "canvas-lint: embedded-io is resolved at 0.4.0 for postcard and 0.6.1 for postcard, but the listing audits one version": 1,
-    "clippy: tests/acceptance/1141/app/bulk.rs manual implementation of `.is_multiple_of()`": 3,
-    "clippy: tests/acceptance/1141/app/environment.rs manual implementation of `.is_multiple_of()`": 1,
-    "clippy: tests/acceptance/327/ac3_redraft.rs needlessly taken reference of both operands": 1,
-    "clippy: tests/acceptance/327/card.rs this `map_or` can be simplified": 4,
-    "clippy: tests/acceptance/327/card.rs unused import: `Phase`": 1,
-    "clippy: tests/acceptance/327/card.rs unused variable: `card`": 1,
-    "clippy: tests/acceptance/327/common.rs this `map_or` can be simplified": 1,
-    "clippy: tests/acceptance/327/planted.rs this `map_or` can be simplified": 1
+    "canvas-lint: embedded-io is resolved at 0.4.0 for postcard and 0.6.1 for postcard, but the listing audits one version": 1
   },
   "lintIssues": {
     "canvas-lint: crates/deep-canvas-cells/src/recording.rs the env! macro, the building machine's environment compiled into the check": "#1967's unit test reading the crate's oracle recordings (#2381, added 2026-11-12)",
@@ -136,6 +132,10 @@
     "canvas-lint: crates/deep-canvas-marks/src/implicit.rs use of a disallowed type `std::collections::HashMap` (clippy::disallowed_types)": "a std float method, HashMap or clock call the lint is right about, to route through the crate (#2382, added 2026-11-12)",
     "canvas-lint: crates/deep-canvas-marks/src/scene.rs a static item, state a check could carry between runs": "a content-keyed cache or a read-only table in a static (#2381, added 2026-11-12)",
     "canvas-lint: crates/deep-canvas-marks/src/story.rs a static item, state a check could carry between runs": "a content-keyed cache or a read-only table in a static (#2381, added 2026-11-12)",
+    "canvas-lint: crates/deep-canvas-marks/src/vector_field.rs a static item, state a check could carry between runs": "a content-keyed cache, or the clock that times it, in a static (#2381, added 2026-11-16)",
+    "canvas-lint: crates/deep-canvas-marks/src/warp.rs a static item, state a check could carry between runs": "a content-keyed cache, or the clock that times it, in a static (#2381, added 2026-11-16)",
+    "canvas-lint: crates/deep-canvas-media/src/heard/mod.rs a static item, state a check could carry between runs": "a read-only table in a static (#2381, added 2026-11-16)",
+    "canvas-lint: crates/deep-canvas-media/src/heard/normalizer.rs a static item, state a check could carry between runs": "a read-only table in a static (#2381, added 2026-11-16)",
     "canvas-lint: crates/deep-canvas-media/src/lib.rs a static item, state a check could carry between runs": "PLANTED_NOW, the planted-program switch deep-show's scenario sets (#2381, added 2026-11-12)",
     "canvas-lint: crates/deep-canvas-motion/src/arrange.rs use of a disallowed method `f64::sqrt` (clippy::disallowed_methods)": "a std float method, HashMap or clock call the lint is right about, to route through the crate (#2382, added 2026-11-12)",
     "canvas-lint: crates/deep-canvas-motion/src/held.rs use of a disallowed method `f64::powi` (clippy::disallowed_methods)": "a std float method, HashMap or clock call the lint is right about, to route through the crate (#2382, added 2026-11-12)",
@@ -453,6 +453,24 @@
       "note": "",
       "reason": "retired by #2560: vitest's default 5 s judges it, and one run of the whole conformance lint takes longer (6.6 s on the Linux dev machine): 313-redraft-2560/packaging.test.ts is its test, with suite 313's 600 s",
       "approval": "#2560, its first choice (the owner's touch-key tag on this commit)"
+    },
+    {
+      "id": "cargo -p deep-replica --test acceptance_326_panels_planted › clip_only_host_fails_on_the_dialog",
+      "note": "retired:",
+      "reason": "retired by #1620: the app's loader refuses the fixtures this first draft mounts; redraft-ac7/planted_redraft.rs is AC7's planted host",
+      "approval": "#2444, the owner's call in its session (this commit lands only with the owner's touch-key tag)"
+    },
+    {
+      "id": "cargo -p deep-replica --test acceptance_326_panels_planted › unclipped_layouts_paint_outside_their_slot",
+      "note": "retired:",
+      "reason": "retired by #1620: the app's loader refuses the fixtures this first draft mounts; redraft-ac7/planted_redraft.rs is AC7's planted host",
+      "approval": "#2444, the owner's call in its session (this commit lands only with the owner's touch-key tag)"
+    },
+    {
+      "id": "cargo -p deep-replica --test acceptance_326_panels_planted › base_loader_reaches_the_network",
+      "note": "retired:",
+      "reason": "retired by #1620: the loader refuses a Git dependency before it fetches, so this wrong program reaches no host; tests/acceptance/1620/planted_loader_proposal.rs is its blind replacement",
+      "approval": "#2444, the owner's call in its session (this commit lands only with the owner's touch-key tag)"
     }
   ]
 }

@@ -77,6 +77,7 @@ fn core_boxes(
 
 /// Each cell grid's marks (#402): a cell whose background isn't the grid's own as a box, then
 /// each row as one line of the mono face, its runs in their cells' colors.
+#[cfg(feature = "cells")]
 fn cell_grids(
     sched: &deep_canvas::schedule::Scheduler<'_>,
     session: &Session,
@@ -512,6 +513,7 @@ pub fn diff_report(
 /// (#220), and while it writes on, to each path as the lowering writes it at the item's evaluated
 /// progress (outline first, then fill); from the SVG the evidence store's holder inlined, in the
 /// look's roles. `None` when the frame draws no vector.
+#[cfg(feature = "vector")]
 fn written_vectors(
     sched: &deep_canvas::schedule::Scheduler<'_>,
     session: &Session,
@@ -673,7 +675,10 @@ pub fn drawing_of(
         .value(sched, "marks2d.frame", None)
         .and_then(|v| v.as_typed::<Drawing>());
     // #402: each cell grid's rows, drawn through the one shaper over the frame's marks.
+    #[cfg(feature = "cells")]
     let grids = cell_grids(sched, session, doc);
+    #[cfg(not(feature = "cells"))]
+    let grids: Vec<deep_canvas_marks::scene::Drawn> = Vec::new();
     if let (Some(d), false) = (&mut drawing, grids.is_empty()) {
         let mut frame = d.frame.clone();
         frame.layers.push(deep_canvas_marks::scene::Layer {
@@ -701,6 +706,7 @@ pub fn drawing_of(
                 basis: None,
             });
         }
+        #[cfg(feature = "vector")]
         if let Some(frame) = written_vectors(sched, session, doc, &d.frame) {
             *d = Arc::new(Drawing {
                 frame,
