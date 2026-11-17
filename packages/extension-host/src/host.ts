@@ -548,21 +548,29 @@ const RUN_AS_YOU = 'run_as_you';
 const granted = (m: Manifest, needs: string): boolean => (needs === 'notices' ? (m.notices ?? []).length > 0 : (m.access?.words ?? []).includes(needs));
 /** The interpreters a `main` may name, each only as the program of that name on the hub's own PATH. */
 const INTERPRETERS = ['python3', 'python', 'node', 'ruby', 'perl'];
+/** Where Apple's `/usr/bin/python3` finds the real Python: the stub runs the one in the developer folder it is told. */
+const COMMAND_LINE_TOOLS = '/Library/Developer/CommandLineTools';
 /**
- * The install of the interpreter a `main` names on its first line (the folder above its program's own), so it can
- * run in the sandbox: only an interpreter the hub itself would run by name, and only an install of its own, never
- * one holding your home or the package. A system program (`#!/bin/sh`) needs no grant, and any other adds none.
+ * What lets the interpreter a `main` names on its first line run in the sandbox: its install to read (the folder
+ * above its program's own; on macOS a framework's `Versions/<v>`), and for Apple's `/usr/bin/python3` the command
+ * line tools, named as its developer folder too, since the selected one may be an Xcode outside the grant. Only an
+ * interpreter the hub itself would run by name, and only an install of its own, never one holding your home or the
+ * package. A system program (`#!/bin/sh`) needs no grant, and any other adds none.
  */
-function interpreter(folder: string): string[] {
+function interpreter(folder: string): { read: string[]; env: Record<string, string> } {
+  const none = { read: [], env: {} };
   const first = readFileSync(join(folder, 'main'), 'utf8').split('\n', 1)[0] ?? '';
   const program = first.startsWith('#!') ? first.slice(2).trim().split(/\s+/)[0] ?? '' : '';
-  if (!program.startsWith('/') || !existsSync(program)) return [];
+  if (!program.startsWith('/') || !existsSync(program)) return none;
   const real = realpathSync(program);
   const known = (process.env.PATH ?? '').split(':').filter((dir) => dir.startsWith('/'))
     .some((dir) => INTERPRETERS.some((name) => existsSync(join(dir, name)) && realpathSync(join(dir, name)) === real));
-  const install = dirname(dirname(real));
+  if (!known) return none;
+  const mac = process.platform === 'darwin';
+  if (mac && real === '/usr/bin/python3') return existsSync(COMMAND_LINE_TOOLS) ? { read: [COMMAND_LINE_TOOLS], env: { DEVELOPER_DIR: COMMAND_LINE_TOOLS } } : none;
+  const install = (mac ? /^(.+\.framework\/Versions\/[^/]+)\//.exec(real)?.[1] : undefined) ?? dirname(dirname(real));
   const holds = (path: string): boolean => path === install || path.startsWith(`${install}/`);
-  return known && install.split('/').filter(Boolean).length >= 3 && !holds(realpathSync(homedir())) && !holds(folder) ? [install] : [];
+  return install.split('/').filter(Boolean).length >= 3 && !holds(realpathSync(homedir())) && !holds(folder) ? { read: [install], env: {} } : none;
 }
 
 class Host implements ExtensionHost {
@@ -1780,9 +1788,10 @@ class Host implements ExtensionHost {
     try {
       await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(path, resolve); });
       const connected = new Promise<Socket>((resolve) => server.once('connection', resolve));
+      const runs = entry === 'main' ? interpreter(folder) : { read: [], env: {} };
       const started = await supervisor.start({
-        run, argv: [process.execPath, RUNNER, path, folder, entry], cwd: folder, inherit: false, env: { PATH: '/usr/bin:/bin', HOME: folder, ...(NODE_LIBS.length ? { OPENSSL_CONF: '/dev/null' } : {}) },
-        grant: { read: [NODE_HOME, ...NODE_LIBS, RUNTIME, ...(entry === 'main' ? interpreter(folder) : [])], sockets: [path] },
+        run, argv: [process.execPath, RUNNER, path, folder, entry], cwd: folder, inherit: false, env: { PATH: '/usr/bin:/bin', HOME: folder, ...(NODE_LIBS.length ? { OPENSSL_CONF: '/dev/null' } : {}), ...runs.env },
+        grant: { read: [NODE_HOME, ...NODE_LIBS, RUNTIME, ...runs.read], sockets: [path] },
       });
       if (started.status !== 'started') throw Error(`the sandbox held it: BLOCKED on ${started.kind}`);
       // Stoppable from here on: an unload while it connects, at close or a revoke, ends its process.
