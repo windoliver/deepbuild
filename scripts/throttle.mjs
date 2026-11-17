@@ -89,8 +89,8 @@ function folder() {
 }
 
 // The table is one file, rewritten whole under a lock file only one process can create, held for a read and a write;
-// ps runs before it is taken. The lock names its holder by number and start, and only a lock whose holder is gone is
-// taken over: aside, by a rename only one process can make, and removed only if it is the lock judged gone. Two runs
+// a request's ps runs before it is taken; a timed-out drain's and a past-bound holder's, inside it. The lock names
+// its holder by number and start, and only a lock whose holder is gone is taken over: aside, by a rename only one process can make, and removed only if it is the lock judged gone. Two runs
 // that judge the same one gone can, in the microseconds between, both go on, which needs that holder's death first.
 function locked(act) {
   mkdirSync(folder(), { recursive: true, mode: 0o700 });
@@ -387,15 +387,31 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
         return;
       }
       if (!waited) return;
-      log({ event: 'expired', class: cls, id: grant.id, pid: process.pid, hold });
-      tree = mine();
+      // Nothing here may throw: this process would die holding nothing, its command running on uncounted. Without a
+      // listing the next look tries again; a log that can't be written is no reason to keep the grant; and when ps
+      // fails after the SIGTERM, the command itself is still this process's child to SIGKILL.
+      try {
+        tree = mine();
+      } catch {
+        return;
+      }
+      try {
+        log({ event: 'expired', class: cls, id: grant.id, pid: process.pid, hold });
+      } catch {}
       child.kill('SIGTERM');
-      setTimeout(() => (tree.push(...mine()), stop()), 10_000).unref();
+      setTimeout(() => {
+        try {
+          tree.push(...mine());
+          stop();
+        } catch {
+          child.kill('SIGKILL');
+        }
+      }, 10_000).unref();
     }, 1_000);
     watch.unref();
   }
   child.on('exit', (status, signal) => {
-    if (tree) stop();
+    if (tree) try { stop(); } catch {}
     giveBack();
     if (tree) {
       console.log(`INCONCLUSIVE throttle: the ${cls} grant ${grant.id} was held past its ${hold} min bound while another request waited; its command was stopped\n  Fix: Find why the command didn't end (a leaked child, a hung test), then run again.`);

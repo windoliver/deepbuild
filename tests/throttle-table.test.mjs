@@ -2,11 +2,12 @@
 // test run the machine's, whatever HOME says and whatever words its command carries; inside one, its sandbox HOME's,
 // whatever DEEP_THROTTLE names. The requests outside a test run are real ones on the machine's table, each a
 // `test --wait` of seconds: they are started through a shell that exits, so no test runner is among their ancestors.
+// And a hung grant's end (the same section, "A hung holder's bound") when the log can't be written or ps fails.
 import assert from 'node:assert/strict';
-import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir, userInfo } from 'node:os';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 import test from 'node:test';
 import { setTimeout as pause } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
@@ -45,7 +46,13 @@ for (const [title, command] of [
     const dir = sandbox(t);
     const from = existsSync(machineLog) ? statSync(machineLog).size : 0;
     const run = outside(dir, 'request', ['test', '--wait', '0.05', '--', ...command]);
-    assert.ok(await until(() => run.status() !== null, 60_000), 'the request never ended');
+    if (!await until(() => run.status() !== null, 60_000)) {
+      // A budget window stops every wait from running down (section 12a), so the request is taken back, by its PID.
+      const windowed = JSON.stringify(JSON.parse(readFileSync(join(machineLog, '..', 'table.json'), 'utf8'))).includes('"window":true');
+      try { process.kill(run.pid(), 'SIGKILL'); } catch {}
+      if (windowed) return t.skip('INCONCLUSIVE: a budget window is open on the machine\'s table, so the request\'s wait never ran down');
+      assert.fail('the request never ended');
+    }
     // Granted, or no grant within its 3 s: either way it was the machine's table that answered.
     assert.ok([0, 3].includes(run.status()), `exit ${run.status()}:\n${run.out()}`);
     assert.ok(!existsSync(join(dir, 'home', '.deepbuild')), `a table was made under the request's own HOME:\n${run.out()}`);
@@ -54,27 +61,66 @@ for (const [title, command] of [
   });
 }
 
-test('inside a test run, a request with a sandbox HOME keeps that HOME\'s table, though DEEP_THROTTLE names a grant of the machine\'s', async (t) => {
+test('inside a test run, a request with a sandbox HOME keeps that HOME\'s table, whatever DEEP_THROTTLE names: this run\'s own grant, when it has one', (t) => {
   const dir = sandbox(t);
-  const stop = join(dir, 'stop'), held = join(dir, 'held');
-  const stub = `require('fs').writeFileSync(${JSON.stringify(held)}, process.env.DEEP_THROTTLE); setInterval(() => require('fs').existsSync(${JSON.stringify(stop)}) && process.exit(0), 100)`;
-  const holder = outside(dir, 'holder', ['test', '--wait', '0.5', '--', process.execPath, '-e', stub]);
-  try {
-    await until(() => existsSync(held) || holder.status() !== null, 60_000);
-    if (!existsSync(held)) return t.skip(`INCONCLUSIVE: no test grant came from the machine's table within 30 s:\n${holder.out()}`);
-    const named = readFileSync(held, 'utf8');
-    const home = join(dir, 'test-home');
-    mkdirSync(home);
-    const request = spawnSync(process.execPath, [throttle, 'test', '--wait', '0.05', '--', process.execPath, '-e', 'console.log(process.env.DEEP_THROTTLE)'], { encoding: 'utf8', env: { ...clean(home), DEEP_THROTTLE: named } });
-    assert.equal(request.status, 0, request.stdout + request.stderr);
-    assert.match(request.stdout, /^test:[0-9a-f]+$/m);
-    assert.notEqual(request.stdout.trim(), named, 'the request passed through on a grant its chain does not hold');
-    const log = join(home, '.deepbuild', 'throttle', 'log');
-    assert.ok(existsSync(log), 'the sandbox HOME got no table: the request went to the machine\'s');
-    const id = request.stdout.trim().split(':')[1];
-    assert.ok(readFileSync(log, 'utf8').split('\n').some((line) => line.includes('"event":"granted"') && line.includes(id)), 'the sandbox table\'s log has no grant for the request');
-  } finally {
-    writeFileSync(stop, '');
-    await until(() => holder.status() !== null, 30_000);
-  }
+  // Under affected.mjs or a preflight this names the run's grant in the machine's table; started by hand, no grant.
+  const named = process.env.DEEP_THROTTLE ?? 'test:0000000000000000';
+  const home = join(dir, 'home');
+  const request = spawnSync(process.execPath, [throttle, 'test', '--wait', '0.05', '--', process.execPath, '-e', 'console.log(process.env.DEEP_THROTTLE)'], { encoding: 'utf8', env: { ...clean(home), DEEP_THROTTLE: named } });
+  assert.equal(request.status, 0, request.stdout + request.stderr);
+  assert.match(request.stdout, /^test:[0-9a-f]+$/m);
+  assert.notEqual(request.stdout.trim(), named, 'the request passed through on the grant DEEP_THROTTLE names, in the machine\'s table');
+  const log = join(home, '.deepbuild', 'throttle', 'log');
+  assert.ok(existsSync(log), 'the sandbox HOME got no table: the request went to the machine\'s');
+  const id = request.stdout.trim().split(':')[1];
+  assert.ok(readFileSync(log, 'utf8').split('\n').some((line) => line.includes('"event":"granted"') && line.includes(id)), 'the sandbox table\'s log has no grant for the request');
 });
+
+// A hung holder on a table of the test's own: a command that ignores SIGTERM, held past a bound of seconds while a
+// timed request waits. `broken` breaks something once the holder has its grant (or has logged `expired`).
+for (const [title, breakAt, broken] of [
+  ['the table\'s log can\'t be written', 'granted', ({ table }) => chmodSync(join(table, 'log'), 0o444)],
+  ['ps fails after the SIGTERM', 'expired', ({ dir }) => writeFileSync(join(dir, 'ps-fails'), '')],
+]) {
+  test(`a hung grant past its bound is still ended, released and INCONCLUSIVE when ${title}`, async (t) => {
+    const dir = sandbox(t);
+    const table = join(dir, 'table'), bin = join(dir, 'bin'), held = join(dir, 'held');
+    mkdirSync(table);
+    mkdirSync(bin);
+    // A ps that fails once the file is there, and is the machine's own until then.
+    const ps = execFileSync('/bin/sh', ['-c', 'command -v ps'], { encoding: 'utf8' }).trim();
+    writeFileSync(join(bin, 'ps'), `#!/bin/sh\n[ -e ${JSON.stringify(join(dir, 'ps-fails'))} ] && exit 2\nexec ${ps} "$@"\n`, { mode: 0o755 });
+    const env = { ...clean(join(dir, 'home')), DEEP_THROTTLE_TABLE: table, PATH: `${bin}${delimiter}${process.env.PATH}` };
+    const stub = `process.on('SIGTERM', () => {}); require('fs').writeFileSync(${JSON.stringify(held)}, String(process.pid)); setInterval(() => {}, 1000)`;
+    const started = [];
+    const start = (args) => {
+      const child = spawn(process.execPath, [throttle, ...args], { env, stdio: ['ignore', 'pipe', 'pipe'] });
+      started.push(child);
+      const run = { out: '', status: null };
+      child.stdout.on('data', (chunk) => { run.out += chunk; });
+      child.stderr.on('data', (chunk) => { run.out += chunk; });
+      child.on('exit', (status) => { run.status = status; });
+      return run;
+    };
+    const alive = (pid) => { try { return process.kill(pid, 0); } catch { return false; } };
+    let command = null;
+    t.after(() => {
+      for (const child of started) child.kill('SIGKILL');
+      if (command) try { process.kill(command, 'SIGKILL'); } catch {}
+    });
+    const holder = start(['test', '--wait', '0.2', '--hold', '0.02', '--', process.execPath, '-e', stub]);
+    assert.ok(await until(() => existsSync(held) && readFileSync(held, 'utf8'), 30_000), `the holder got no grant:\n${holder.out}`);
+    command = Number(readFileSync(held, 'utf8'));
+    const logged = (event) => readFileSync(join(table, 'log'), 'utf8').includes(`"event":"${event}"`);
+    if (breakAt === 'granted') broken({ dir, table });
+    start(['timed', '--wait', '2', '--', '/bin/echo', 'timed']);
+    if (breakAt === 'expired') {
+      assert.ok(await until(() => logged('expired'), 30_000), `the grant never expired:\n${holder.out}`);
+      broken({ dir, table });
+    }
+    assert.ok(await until(() => holder.status !== null, 45_000), `the holder's throttle.mjs never ended:\n${holder.out}`);
+    assert.equal(holder.status, 3, holder.out);
+    assert.match(holder.out, /^INCONCLUSIVE throttle: the test grant [0-9a-f]+ was held past its 0\.02 min bound/m);
+    assert.ok(await until(() => !alive(command), 5_000), 'the hung command runs on');
+  });
+}
