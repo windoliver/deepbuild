@@ -44,7 +44,7 @@ const STEP: i64 = 11_760_000;
 /// `fires`, each with the form its reader takes (#1973); `wasm` is the program's bytes, which
 /// whoever holds the evidence store inlines by the program's hash before a frame, as a vector's
 /// outline is.
-const PARAMS: [(&str, &str); 17] = [
+const PARAMS: [(&str, &str); 18] = [
     ("program", "asset ID"),
     ("debug", "asset ID"),
     ("step_rate", "Hz"),
@@ -62,7 +62,9 @@ const PARAMS: [(&str, &str); 17] = [
         "{fuel?: integer, memory?: number, stack?: number}",
     ),
     ("checkpoint", "{every?: integer, budget?: bytes}"),
-    ("assets", "[asset ID]"),
+    // A data asset, or a provider's output by `{gen, params}` (#192).
+    ("assets", "[asset ID | {gen: <pack>.<provider>, params}]"),
+    ("links", "[{name, asset: asset ID}]"),
     (
         "saves",
         "{slots?: integer, request?: name, ends?: name, migrate?}",
@@ -360,10 +362,23 @@ fn piece_of(doc: &Value) -> Result<Rc<Piece>, OpError> {
         assets.insert(program, wasm.unwrap_or_default());
         items.insert(id.clone(), json!({"kind": INTERFACE, "params": params}));
     }
+    // #192: its data assets and linked libraries, inlined by the hub, and the pinned packs'
+    // libraries.
+    if let Some(more) = doc.get("inlined").and_then(Value::as_object) {
+        assets.extend(more.clone());
+    }
     let seed = doc.get("seed").and_then(Value::as_i64).unwrap_or(0);
     // The document's controls, so an item that reads one reads its input entries (#544's Fire).
     let controls = doc.get("controls").cloned().unwrap_or(json!({}));
-    let piece = json!({"seed": seed, "controls": controls, "items": items, "assets": assets});
+    let mut piece = json!({"seed": seed, "controls": controls, "items": items, "assets": assets});
+    if let Some(libraries) = doc.get("libraries") {
+        piece["packs"] = libraries.clone();
+    }
+    // #182: the worlds' character readings an item may read.
+    let reads = crate::play::world_reads(doc);
+    if !reads.is_empty() {
+        piece["world_reads"] = json!(reads);
+    }
     // A service answers on the document's worlds, so a piece that asks one is the document's.
     let key = match asks {
         true => sha256_hex(&canonical(&json!([piece, doc]))),

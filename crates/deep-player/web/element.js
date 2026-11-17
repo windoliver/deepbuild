@@ -13,6 +13,12 @@
 // browser refuses keeps the slot's last good save and says so. The piece's first save asks the browser to keep the
 // origin's storage persistent, and the player says once when it isn't. The player's own controls open a slot's save,
 // export it to a file and import one, which opens only as any save does.
+//
+// Beside its canvas it keeps the document's accessibility tree as DOM (issue #1045): the tree the app gives its
+// accessibility seam, read through the core (`tree()`), never written by the piece or a host page. The document's node
+// carries the title and the description; each part, label and readout is one element marked data-deep-id with its
+// name and role, in reading order, and each control is a Tab stop. A readout whose text changes in a frame is
+// announced once through a polite live region, as the app's `see` announces it.
 
 const bundle = JSON.parse(document.getElementById('deep-bundle').textContent);
 const hex = (buf) => Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, '0')).join('');
@@ -71,6 +77,8 @@ class DeepPlayer extends HTMLElement {
   #seq = new Map();
   #writes = Promise.resolve();
   #asked = false;
+  #live = null;
+  #said = new Map();
 
   connectedCallback() {
     if (this.#started) return;
@@ -280,6 +288,41 @@ class DeepPlayer extends HTMLElement {
     this.#queue({ slot, step: at.step, ended, deep_hash: at.deep_hash }, () => bytes);
   }
 
+  /** The document's accessibility tree, kept as DOM beside the canvas, out of sight but read by assistive clients: the
+   * document's node holding one element per node in reading order, and the live region. Text is set as text. */
+  #keepTree() {
+    const el = (tag, attrs) => {
+      const e = document.createElement(tag);
+      for (const [k, v] of Object.entries(attrs)) if (v !== null && v !== undefined && v !== '') e.setAttribute(k, String(v));
+      return e;
+    };
+    const unseen = 'position:absolute;width:1px;height:1px;margin:-1px;padding:0;border:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap';
+    const [root, ...nodes] = JSON.parse(this.#player.tree());
+    if (!root) return;
+    const doc = el('section', { 'data-deep-id': root.id, role: 'document', 'aria-label': root.name, 'aria-description': root.description, style: unseen });
+    for (const n of nodes) {
+      // A control is a Tab stop by its own role; a target a button after it; a part, label or readout an image of its role.
+      if (n.control) doc.append(el('div', { 'data-deep-id': n.id, role: n.role || 'group', 'aria-label': n.name, tabindex: 0 }));
+      else if (n.item !== undefined) doc.append(el('button', { 'data-deep-id': n.id, type: 'button', 'aria-label': n.name }));
+      else doc.append(el('div', { 'data-deep-id': n.id, role: 'img', 'aria-roledescription': n.role, 'aria-label': n.name }));
+    }
+    this.#live = el('div', { 'aria-live': 'polite', role: 'status', style: unseen });
+    this.append(doc, this.#live);
+  }
+
+  /** The readouts of the frame drawn: each whose text differs from what was last said for it is said once, through the
+   * live region; a readout first shown is read with the tree. */
+  #announce() {
+    if (!this.#live) return;
+    const said = [];
+    for (const [id, text] of Object.entries(JSON.parse(this.#player.readouts()))) {
+      const was = this.#said.get(id);
+      if (was !== undefined && was !== text) said.push(text);
+      this.#said.set(id, text);
+    }
+    if (said.length) this.#live.textContent = said.join('. ');
+  }
+
   async #fetch(path, sha256) {
     const r = await fetch(path, { credentials: 'omit', cache: 'no-store', referrerPolicy: 'no-referrer' });
     if (!r.ok) throw Error(`the file ${path} (${sha256}) didn't arrive (${r.status}); the player doesn't start`);
@@ -304,6 +347,7 @@ class DeepPlayer extends HTMLElement {
     this.#adapter = gpu.adapter;
     player.attach(gpu);
     this.#player = player;
+    this.#keepTree();
     this.#duration = player.duration();
     this.#stages = JSON.parse(player.stages());
     this.#markers = JSON.parse(player.markers());
@@ -347,6 +391,7 @@ class DeepPlayer extends HTMLElement {
       this.#frames += 1;
       if (this.#firstFrameMs === null) this.#firstFrameMs = performance.now();
     }
+    this.#announce();
     const now = this.#stages.filter((s) => s.t <= this.#t).pop()?.id ?? null;
     if (now !== this.#stage) {
       this.#stage = now;

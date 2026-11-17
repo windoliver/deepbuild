@@ -1,0 +1,30 @@
+{
+  "name": "slide",
+  "item": {
+    "kind": "logic@1",
+    "params": {
+      "program": "228eaf659d906d488ecdc57bc158d5257ca80cee73f98d46ff82a0879f965ba4",
+      "step_rate": 120,
+      "writes": {
+        "distance": {
+          "type": "f64"
+        }
+      }
+    }
+  },
+  "track": [],
+  "steps": 240,
+  "expect": {
+    "arrays": {
+      "239": {
+        "distance": [
+          3.1855249745158
+        ]
+      }
+    },
+    "tolerance": {
+      "rel": 0.03
+    }
+  },
+  "answer": "The physics behavior kit's slide: v² ÷ 2μg with v = 5 m/s, g = 9.81 m/s² and μ = √(0.2 × 0.8) = 0.4, the geometric mean, is 3.186 m within 3%; the box has stopped by 2 s (v ÷ μg = 1.27 s), the distance at step 239 of 120 Hz."
+}

@@ -2,7 +2,7 @@
 
 ## What it is for
 
-The web player (issue #172; canvas primitives: Export: web player): the canvas core built for wasm32 on one thread. It seals the canvas modules it carries, loads a bundle's document and the files it names by hash, plays it on its recorded input track as the app does (physics in process on the pinned backend, logic on the browser's own WebAssembly engine running the programs the app rewrote, the GPU layer on WebGPU, 2D writer layers by Vello CPU), and answers `probe()`.
+The web player (issue #172; canvas primitives: Export: web player): the canvas core built for wasm32 on one thread. It seals the canvas modules it carries, loads a bundle's document and the files it names by hash, plays it on its recorded input track as the app does (physics in process on the pinned backend, logic on the browser's own WebAssembly engine running the programs the app rewrote, the GPU layer on WebGPU, 2D writer layers by Vello CPU), and answers `probe()`. Its page keeps the document's accessibility tree as DOM beside the canvas, the tree the app gives its accessibility seam, read through `tree()` and `readouts()` (issue #1045).
 
 `node scripts/player-wasm.mjs` builds it and writes `web/dist/` (the module, its page glue and `player.json`). That folder is committed and the export embeds its bytes, so nothing compiles per export and every machine writes the same bundle.
 

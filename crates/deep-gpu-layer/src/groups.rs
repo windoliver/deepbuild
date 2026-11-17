@@ -142,6 +142,26 @@ const MAX_ISOLATED: usize = 32;
 /// 10-bit code, and operators run on [`LINEAR`], so a pass's input is copied there.
 const ACC: wgpu::TextureFormat = wgpu::TextureFormat::Rgba32Float;
 
+/// #2031: how far past their own marks the groups inside `marks` draw: a paint part's margin or
+/// a pass's grow, the largest.
+fn past_marks(marks: &[Drawn]) -> f64 {
+    let past = |s: &Scope| match s {
+        Scope::Opacity {
+            effect: Some(e), ..
+        } => {
+            let paint = e.paint.as_ref().map_or(0.0, |p| f64::from(p.margin()));
+            let passes = e.passes.iter().map(|p| p.grow.unwrap_or(0.0));
+            passes.fold(paint, f64::max)
+        }
+        _ => 0.0,
+    };
+    marks
+        .iter()
+        .flat_map(|d| &d.scopes)
+        .map(past)
+        .fold(0.0, f64::max)
+}
+
 /// The px `r` (u, `[x, y, w, h]`) grown by `grow` covers of a `size` target, `[x, y, w, h]`.
 fn px(r: [f64; 4], grow: f64, size: [u32; 2]) -> [u32; 4] {
     let (w, h) = (f64::from(size[0]), f64::from(size[1]));
@@ -207,6 +227,7 @@ pub struct Groups {
     stage: Option<Stage>,
     drawn: Option<drawn::Drawn>,
     paintfx: Option<crate::paintfx::PaintFx>,
+    lightfx: Option<crate::lightfx::LightFx>,
     mips: Option<deep_effects_render::mips::Mips>,
 }
 
@@ -451,6 +472,7 @@ impl Groups {
             stage: None,
             drawn: None,
             paintfx: None,
+            lightfx: None,
             mips: None,
         }
     }
@@ -546,6 +568,8 @@ impl Groups {
             chain.record(&mut encoder);
             device.queue.submit([encoder.finish()]);
         }
+        let view = texture.create_view(&Default::default());
+        deep_gpu::spans::done_with(&view);
         let texels: u64 = (0..levels)
             .map(|l| u64::from((size[0] >> l).max(1)) * u64::from((size[1] >> l).max(1)))
             .sum();
@@ -557,7 +581,7 @@ impl Groups {
         }));
         self.give(&full);
         self.give(&source);
-        Ok(texture.create_view(&Default::default()))
+        Ok(view)
     }
 
     /// One item's marks, already drawn into `children`, laid through their medium into `into`.
@@ -620,6 +644,7 @@ impl Groups {
             rect,
         );
         let view = out.create_view(&Default::default());
+        deep_gpu::spans::done_with(&view);
         let mix = Mix {
             rect,
             ..Mix::over(&view, x.size)
@@ -659,6 +684,7 @@ impl Groups {
                     ..Default::default()
                 });
                 device.queue.submit([encoder.finish()]);
+                deep_gpu::spans::done_alone(&view);
                 t
             }
             None => target(&device.device, size, format),
@@ -724,6 +750,7 @@ impl Groups {
             pass.draw(0..3, 0..1);
         }
         device.queue.submit([encoder.finish()]);
+        deep_gpu::spans::done_with(&view);
         self.give(&copy);
     }
 
@@ -792,6 +819,7 @@ impl Groups {
             x.options,
         )?;
         x.device.queue.submit([encoder.finish()]);
+        deep_gpu::spans::done_with(&view);
         let mix = Mix {
             decode: x.space == Space::Linear,
             ..Mix::over(&view, x.size)
@@ -873,11 +901,40 @@ impl Groups {
                         opposite,
                         &out,
                     );
+                deep_gpu::spans::done_with(&out.create_view(&Default::default()));
                 Some((out, rect))
             }
             None => None,
         };
+        // #2031: a lit group's run of lit children, lit at each pixel over their bounds grown by
+        // what a paint part or a pass inside draws past them.
+        let lit = match effect.as_deref().and_then(|e| e.light.clone()) {
+            Some(light) => {
+                let zoom = x.options.zoom;
+                let grow = past_marks(&inside);
+                let rect = px(bounds.map(|v| v * zoom), (grow + 1.0) * zoom, x.size);
+                let out = self.take(x.device, x.size, ACC);
+                let device = x.device;
+                self.lightfx
+                    .get_or_insert_with(|| crate::lightfx::LightFx::new(device, ACC))
+                    .run(
+                        device,
+                        &light,
+                        zoom,
+                        x.space == Space::Linear,
+                        &view,
+                        rect,
+                        &out,
+                    );
+                Some((out, grow))
+            }
+            None => None,
+        };
         let (shown, cover, rect) = match effect.as_deref() {
+            Some(e) if e.light.is_some() => {
+                let (out, grow) = lit.as_ref().expect("lit above");
+                (out.create_view(&Default::default()), false, *grow)
+            }
             Some(e) if e.paint.is_some() => {
                 let (out, _) = painted.as_ref().expect("painted above");
                 let grow = e.paint.as_ref().map_or(0.0, |p| f64::from(p.margin()));
@@ -945,6 +1002,9 @@ impl Groups {
         self.composite(x.device, into, m, x.size);
         self.give(&children);
         if let Some((out, _)) = &painted {
+            self.give(out);
+        }
+        if let Some((out, _)) = &lit {
             self.give(out);
         }
         Ok(())
@@ -1136,7 +1196,9 @@ impl Groups {
             r.record(&mut encoder, &mut times);
         }
         device.queue.submit([encoder.finish()]);
-        Ok((shown.unwrap_or_else(|| color.clone()), grow))
+        let shown = shown.unwrap_or_else(|| color.clone());
+        deep_gpu::spans::done_with(&shown);
+        Ok((shown, grow))
     }
 
     /// `--planted`: [`Groups::passes`] in the other space, each way by the compositor's own

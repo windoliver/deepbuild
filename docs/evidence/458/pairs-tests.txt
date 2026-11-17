@@ -1,0 +1,39 @@
+== tests/acceptance/458/pairs/instances.test.ts
+deep lease: DeepBuild isn't set up here (no hub token), so `npx vitest run --root tests/acceptance/458/pairs instances.test.ts --no-file-parallelism --testTimeout=900000` runs unleased
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/458/pairs
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  10:24:54
+   Duration  36.41s (tests 99%)
+
+exit 0
+
+== tests/acceptance/458/pairs/pairs.test.ts
+deep lease: DeepBuild isn't set up here (no hub token), so `npx vitest run --root tests/acceptance/458/pairs pairs.test.ts --no-file-parallelism --testTimeout=900000` runs unleased
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/458/pairs
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  10:28:48
+   Duration  14.79s (tests 99%, transform 1%)
+
+exit 0
+
+== tests/acceptance/458/pairs/generated.test.ts
+deep lease: DeepBuild isn't set up here (no hub token), so `npx vitest run --root tests/acceptance/458/pairs generated.test.ts --no-file-parallelism --testTimeout=900000` runs unleased
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/458/pairs
+
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  10:25:33
+   Duration  192.43s (tests 100%)
+
+exit 0
+

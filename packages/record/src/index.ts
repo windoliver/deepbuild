@@ -102,8 +102,12 @@ export interface RecordStore {
   append(connection: Connection, event: EventInput, receipt?: Receipt): Promise<Appended>;
   /** A write's outcome on its receipt, the receipt kept alone when no event carried it (#1577). */
   keepReceipt(receipt: Receipt, outcome: JsonValue): Promise<void>;
-  /** Events after a log position, in log order; `kinds`: only those kinds, the rest never decoded. */
-  read(query: { after: number; limit?: number; kinds?: readonly string[] }): Promise<Event[]>;
+  /**
+   * Events after a log position, in log order; `kinds`: only those kinds, the rest never decoded. Each kind is sought
+   * through the kind index, which suits a few rare kinds; `most` says the kinds are most of the log, so it is walked in
+   * order and each event's kind tested, where seeking them would sort every later event of theirs for each page (#2646).
+   */
+  read(query: { after: number; limit?: number; kinds?: readonly string[]; most?: boolean }): Promise<Event[]>;
   table(name: string): Promise<Table>;
   session(id: string): Promise<SessionView | undefined>;
   rebuild(): Promise<void>;
@@ -234,6 +238,7 @@ CREATE TABLE IF NOT EXISTS events (
   unverified  INTEGER NOT NULL DEFAULT 0
 ) STRICT;
 CREATE INDEX IF NOT EXISTS events_session ON events (session_id, log_pos);
+CREATE INDEX IF NOT EXISTS events_session_bounds ON events (session_id, log_pos) WHERE kind IN ('session.start', 'session.end');
 CREATE INDEX IF NOT EXISTS events_kind ON events (kind, log_pos);
 CREATE TRIGGER IF NOT EXISTS events_no_update BEFORE UPDATE ON events BEGIN SELECT RAISE(ABORT, 'events is append-only: no UPDATE'); END;
 CREATE TRIGGER IF NOT EXISTS events_no_delete BEFORE DELETE ON events BEGIN SELECT RAISE(ABORT, 'events is append-only: no DELETE'); END;
@@ -761,8 +766,8 @@ class SqliteRecord implements RecordStore {
 
   // ---- Reads.
 
-  async read({ after, limit = 1000, kinds }: { after: number; limit?: number; kinds?: readonly string[] }): Promise<Event[]> {
-    const only = kinds ? ` AND kind IN (SELECT value FROM json_each(?))` : '';
+  async read({ after, limit = 1000, kinds, most }: { after: number; limit?: number; kinds?: readonly string[]; most?: boolean }): Promise<Event[]> {
+    const only = kinds ? ` AND ${most ? '+' : ''}kind IN (SELECT value FROM json_each(?))` : '';
     const rows = this.stmt(`SELECT * FROM events WHERE log_pos > ?${only} ORDER BY log_pos LIMIT ?`).safeIntegers(true)
       .all(after, ...(kinds ? [JSON.stringify(kinds)] : []), limit) as StoredRow[];
     return rows.map(toEvent);

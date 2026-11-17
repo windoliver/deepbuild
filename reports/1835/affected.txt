@@ -1,0 +1,59 @@
+Mon Nov 16 00:10:28 PST 2026
+ 0:10  up 2 days, 10:19, 18 users, load averages: 78.57 84.55 101.69
+parallel vitest: packages/hub/test/acceptance-slots.test.ts tests/acceptance/2123/dispute-restart.test.ts
+parallel node: tests/acceptance/1113/guard.test.mjs tests/acceptance/1115/affected.test.mjs tests/acceptance/1115/decisions.test.mjs tests/acceptance/1115/evidence.test.mjs tests/acceptance/1115/failing-states.test.mjs tests/acceptance/1115/failures.test.mjs tests/acceptance/1115/guard.test.mjs tests/acceptance/1115/no-grant.test.mjs tests/acceptance/1115/notes.test.mjs tests/acceptance/1115/skips.test.mjs tests/acceptance/1116-redraft-1874/traps.test.mjs tests/acceptance/1116-redraft-1874/window.test.mjs tests/acceptance/1116/guard.test.mjs tests/acceptance/1116/traps.test.mjs tests/acceptance/1116/window.test.mjs tests/acceptance/1118/lock.test.mjs tests/acceptance/1118/run.test.mjs tests/acceptance/1118/rust.test.mjs tests/acceptance/1123/binaries.test.mjs tests/acceptance/1123/capture-redraft/origin.test.mjs tests/acceptance/1326/calls.test.mjs tests/acceptance/1326/guard.test.mjs tests/acceptance/1406/guard.test.mjs tests/acceptance/1426/guard.test.mjs tests/acceptance/1835/window.test.mjs tests/acceptance/1874/window.test.mjs tests/acceptance/1981/window.test.mjs tests/acceptance/2574/grant.test.mjs tests/acceptance/569/before.test.mjs tests/acceptance/569/decisions.test.mjs tests/acceptance/569/guard.test.mjs tests/acceptance/569/mutation.test.mjs tests/acceptance/569/preflight.test.mjs tests/acceptance/569/replay.test.mjs tests/acceptance/569/suites.test.mjs tests/acceptance/569/tolerance.test.mjs tests/acceptance/569/trace.test.mjs tests/budget-window.test.mjs tests/proof.test.mjs
+alone vitest: tests/acceptance/1328/dispute.test.ts tests/acceptance/1328/job.test.ts tests/acceptance/87/gate/model-pass.test.ts tests/acceptance/87/gate/post-close.test.ts tests/acceptance/87/gate/replay-lane.test.ts tests/acceptance/87/gate/review-notes.test.ts
+slow node: tests/acceptance/1113/before.test.mjs tests/acceptance/1114/lanes.test.mjs (--slow runs them)
+INCONCLUSIVE no grant: no test grant came within 30 min
+  Fix: Wait for the other sessions' builds and proofs on this machine, then run again.
+INCONCLUSIVE packages/hub/test/acceptance-slots.test.ts: not run, for want of a test grant
+INCONCLUSIVE tests/acceptance/2123/dispute-restart.test.ts: not run, for want of a test grant
+INCONCLUSIVE tests/acceptance/1113/guard.test.mjs: not run, for want of a test grant
+INCONCLUSIVE tests/acceptance/1115/affected.test.mjs: not run, for want of a test grant
+INCONCLUSIVE tests/acceptance/1115/decisions.test.mjs: not run, for want of a test grant
+INCONCLUSIVE tests/acceptance/1115/evidence.test.mjs: not run, for want of a test grant
+INCONCLUSIVE tests/acceptance/1115/failing-states.test.mjs: not run, for want of a test grant
+INCONCLUSIVE tests/acceptance/1115/failures.test.mjs: not run, for want of a test grant
+INCONCLUSIVE tests/acceptance/1115/guard.test.mjs: not run, for want of a test grant
+INCONCLUSIVE tests/acceptance/1115/no-grant.test.mjs: not run, for want of a test grant
+INCONCLUSIVE tests/acceptance/1115/notes.test.mjs: not run, for want of a test grant
+INCONCLUSIVE tests/acceptance/1115/skips.test.mjs: not run, for want of a test grant
+INCONCLUSIVE tests/acceptance/1116-redraft-1874/traps.test.mjs: not run, for want of a test grant
+INCONCLUSIVE tests/acceptance/1116-redraft-1874/window.test.mjs: not run, for want of a test grant
+INCONCLUSIVE tests/acceptance/1116/guard.test.mjs: not run, for want of a test grant
+INCONCLUSIVE tests/acceptance/1116/traps.test.mjs: not run, for want of a test grant
+INCONCLUSIVE tests/acceptance/1116/window.test.mjs: not run, for want of a test grant
+INCONCLUSIVE tests/acceptance/1118/lock.test.mjs: not run, for want of a test grant
+INCONCLUSIVE tests/acceptance/1118/run.test.mjs: not run, for want of a test grant
+INCONCLUSIVE tests/acceptance/1118/rust.test.mjs: not run, for want of a test grant
+INCONCLUSIVE tests/acceptance/1123/binaries.test.mjs: not run, for want of a test grant
+INCONCLUSIVE tests/acceptance/1123/capture-redraft/origin.test.mjs: not run, for want of a test grant
+INCONCLUSIVE tests/acceptance/1326/calls.test.mjs: not run, for want of a test grant
+INCONCLUSIVE tests/acceptance/1326/guard.test.mjs: not run, for want of a test grant
+INCONCLUSIVE tests/acceptance/1406/guard.test.mjs: not run, for want of a test grant
+INCONCLUSIVE tests/acceptance/1426/guard.test.mjs: not run, for want of a test grant
+INCONCLUSIVE tests/acceptance/1835/window.test.mjs: not run, for want of a test grant
+INCONCLUSIVE tests/acceptance/1874/window.test.mjs: not run, for want of a test grant
+INCONCLUSIVE tests/acceptance/1981/window.test.mjs: not run, for want of a test grant
+INCONCLUSIVE tests/acceptance/2574/grant.test.mjs: not run, for want of a test grant
+INCONCLUSIVE tests/acceptance/569/before.test.mjs: not run, for want of a test grant
+INCONCLUSIVE tests/acceptance/569/decisions.test.mjs: not run, for want of a test grant
+INCONCLUSIVE tests/acceptance/569/guard.test.mjs: not run, for want of a test grant
+INCONCLUSIVE tests/acceptance/569/mutation.test.mjs: not run, for want of a test grant
+INCONCLUSIVE tests/acceptance/569/preflight.test.mjs: not run, for want of a test grant
+INCONCLUSIVE tests/acceptance/569/replay.test.mjs: not run, for want of a test grant
+INCONCLUSIVE tests/acceptance/569/suites.test.mjs: not run, for want of a test grant
+INCONCLUSIVE tests/acceptance/569/tolerance.test.mjs: not run, for want of a test grant
+INCONCLUSIVE tests/acceptance/569/trace.test.mjs: not run, for want of a test grant
+INCONCLUSIVE tests/budget-window.test.mjs: not run, for want of a test grant
+INCONCLUSIVE tests/proof.test.mjs: not run, for want of a test grant
+INCONCLUSIVE tests/acceptance/1328/dispute.test.ts: not run, for want of a test grant
+INCONCLUSIVE tests/acceptance/1328/job.test.ts: not run, for want of a test grant
+INCONCLUSIVE tests/acceptance/87/gate/model-pass.test.ts: not run, for want of a test grant
+INCONCLUSIVE tests/acceptance/87/gate/post-close.test.ts: not run, for want of a test grant
+INCONCLUSIVE tests/acceptance/87/gate/replay-lane.test.ts: not run, for want of a test grant
+INCONCLUSIVE tests/acceptance/87/gate/review-notes.test.ts: not run, for want of a test grant
+INCONCLUSIVE affected: 0 new, 0 already failing on main, 47 inconclusive or blocked, 0 listed skips, 0 passed, in 1809 s at load 33; no job started
+exit 2
+Mon Nov 16 00:40:37 PST 2026
+ 0:40  up 2 days, 10:49, 18 users, load averages: 32.59 44.49 59.13

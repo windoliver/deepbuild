@@ -751,6 +751,7 @@ impl View {
         self.renderer.core.want = deep_scene3d_render::targets::Want {
             velocity: all || deep_canvas_effects::module::reads_core(doc, "velocity"),
             emission: all || deep_canvas_effects::module::reads_core(doc, "emission"),
+            normal: false,
         };
     }
 

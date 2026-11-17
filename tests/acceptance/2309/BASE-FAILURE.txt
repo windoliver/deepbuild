@@ -1,0 +1,84 @@
+The #2309 suite run once at base commit 6f1dd3a7e ("Merge pull request #2734 …"; no implementation of #2309), on
+macOS 27.2 arm64 (shared, 1-minute load about 350 while it ran), Node 24.22.2, vitest 5.0.5, with
+
+  PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    npx vitest run --root tests/acceptance/2309 --testTimeout=600000 --no-file-parallelism --reporter=verbose
+
+after the three builds it reads were made, each as
+`nice -n 10 sh scripts/lease cargo build --locked -j 6 …` (scripts/lease ran them unleased: "no deep on PATH and no
+built CLI at packages/cli/dist"): this checkout's release deep-physics (6 min 08 s), the merge base's release
+deep-physics in target/acceptance-191-base/6f1dd3a7ee7e (21 min 53 s) and the crate's wasm32 library (19 min 44 s). At
+the base the merge base is 6f1dd3a7e itself.
+
+Result: Test Files 4 failed (4); Tests 8 failed | 4 passed (12); 113 s with the builds made. ac1's third test was then
+reordered to start its planted program first and ac1 was run once more alone (3 failed of 3); its lines below are that
+run's.
+
+Passing at the base, as they should:
+- ac2 "5 cubes at contact_hz 80 … each move slower than 1 mm/s": the base takes 80 Hz and the stack rests.
+    cube1 0.002 mm/s, cube2 0.022 mm/s, cube3 0.022 mm/s, cube4 0.062 mm/s, cube5 0.063 mm/s
+- ac2 "10 cubes at contact_hz 80 …":
+    cube1 0.002, cube2 0.007, cube3 0.011, cube4 0.018, cube5 0.016, cube6 0.022, cube7 0.026, cube8 0.048,
+    cube9 0.052, cube10 0.089 mm/s
+- ac2 "at the default 30 Hz the top of five ends 5.87 mm below 4.5 m within 0.3 mm": the base's wrapper already holds
+  a static contact at twice the frequency.
+    cube5 ends 5.845 mm below 4.5 m; worked answer 5.867 mm
+  The program this test fails on is the planted `static_contact_same_hz`, which the base lacks (below).
+- ac3 "at 4 substeps with no contact_hz the step hashes are byte-identical to the merge base's": the merge base is the
+  base.
+    721 hashes here, 721 on the merge base 6f1dd3a7ee7e; last b218e4b9505ce45b and b218e4b9505ce45b
+
+Every other test fails at an assertion, for the reason the README gives; none fails in the harness and none is BLOCKED
+or INCONCLUSIVE.
+
+ac1-refused-at-check.test.ts
+ × at 120 Hz and 4 substeps, 81 is refused naming solver/contact_hz, 81 and the bound 80, and 80 is accepted
+   AssertionError: the refusal of 81 Hz at 4 substeps:
+     solver/contact_hz: 81 Hz at 120 Hz and 4 substeps is refused with 0 out_of_range issues at the field, one
+     expected (81 Hz is above the bound 80 Hz); its issues: []
+ × at 120 Hz and 1 substep, a written 30 is refused naming solver/contact_hz, 30 and the bound 20
+   AssertionError: the refusal of 30 Hz at 1 substep:
+     solver/contact_hz: 30 Hz at 120 Hz and 1 substep is refused with 0 out_of_range issues at the field, one
+     expected (30 Hz is above the bound 20 Hz); its issues: []
+ × 110 Hz at 4 substeps is refused naming the bound 80; a planted check holding contacts to a quarter accepts it and
+   fails, naming solver/contact_hz
+   AssertionError: deep-physics --planted contact_hz_quarter exits 0; stdout: {"ok":false,"code":"bad_input"}
+   (the base lacks the planted name; in the first run, before the reorder, the same test failed on the base's own
+   answer: "110 Hz at 120 Hz and 4 substeps is refused with 0 out_of_range issues at the field, one expected", which
+   is what the planted check answers too)
+
+ac2-stacks-at-rest.test.ts
+ × a planted wrapper holding a static contact at the same frequency ends the top 6.90 mm low and fails, naming cube5;
+   the kit's resting_stack fails naming its top body
+   AssertionError: deep-physics --planted static_contact_same_hz exits 0; stdout: {"ok":false,"code":"bad_input"}
+
+ac3-default-at-one-substep.test.ts
+ × at 1 substep with no contact_hz the five cubes each move slower than 5 mm/s throughout the sixth second, and end
+   where a written 20 Hz ends them
+   AssertionError: the stack of five at 1 substep, contact_hz unwritten:
+     cube2: … moves it 0.023852260269495013 m/s at step 711, in the sixth second, not slower than 0.005 m/s
+     cube3: … moves it 0.05459106544548357 m/s at step 711, in the sixth second, not slower than 0.005 m/s
+     cube4: … moves it 0.0908209572490251 m/s at step 711, in the sixth second, not slower than 0.005 m/s
+     cube5: … moves it 0.12739307572209305 m/s at step 711, in the sixth second, not slower than 0.005 m/s
+   (cube1 2.957 mm/s. The base's default at 1 substep is 30 Hz, the program `contact_default_30` names: the judge
+   fails on it, naming bodies, and its cubes pass 0.05 m/s.)
+ × a planted default that keeps 30 Hz at 1 substep moves the cubes faster than 0.05 m/s and fails, naming a body
+   AssertionError: deep-physics --planted contact_default_30 exits 0; stdout: {"ok":false,"code":"bad_input"}
+
+ac4-behavior-kit.test.ts
+ × macOS arm64: resting_stack is held once, with the issue's stack, 5.87 mm and 0.3 mm, and rapier3d passes it
+   AssertionError: behavior_fixtures on aarch64-apple-darwin: the kit's data holds resting_stack once; it holds
+   free_fall, projectile_range, pendulum_period, … : expected 0 to be 1
+ × wasm32: the physics crate built for wasm32-unknown-unknown holds resting_stack once and passes it
+   AssertionError: behavior_fixtures on wasm32-unknown-unknown: the kit's data holds resting_stack once; it holds
+   free_fall, projectile_range, pendulum_period, … : expected 0 to be 1
+
+Probed apart from the suite on the base's release binary (README: The worlds), each cube's largest speed in the sixth
+second and how far the top ends low:
+  sleep on (the world's default), every case: 0.000 mm/s; five at the default end 5.062 mm low
+  sleep: false, five at 80 Hz, 4 substeps:    at most 0.063 mm/s
+  sleep: false, ten at 80 Hz, 4 substeps:     at most 0.089 mm/s
+  sleep: false, five at the default, 4 substeps: at most 0.085 mm/s; top 5.845 mm low
+  sleep: false, five at 20 Hz, 1 substep:     0.005 0.045 0.102 0.169 0.237 mm/s
+  sleep: false, five at 30 Hz, 1 substep:     2.957 23.852 54.591 90.821 127.393 mm/s
+  sleep: false, five at 110 Hz, 4 substeps:   0.463 3.780 8.650 14.389 20.192 mm/s
