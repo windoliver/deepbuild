@@ -70,6 +70,7 @@ impl World {
                 late: false,
                 filled: None,
                 mirror_ns: 0,
+                read_ns: 0,
                 asked: None,
                 dirty: BTreeSet::new(),
                 kdirty: BTreeSet::new(),
@@ -467,15 +468,16 @@ impl World {
         let item = &piece.items[i];
         let k = self.lives[i].next;
         let t = k * item.step;
+        let read_started = web_time::Instant::now();
         // Each read control's entries stamped by now, at most PER_STEP a step, the step's own by
         // time, player and seq, never by arrival (Input track); each reading's values as recorded.
         let mut taken: BTreeMap<&str, Vec<Entry>> = BTreeMap::new();
         {
             let l = &mut self.lives[i];
             for r in &item.layout.entries {
-                let (most, each) = match r.read {
-                    Read::Control => (PER_STEP, true),
-                    Read::Reading { each, max } => (max as usize, each),
+                let (most, each, reading) = match r.read {
+                    Read::Control => (PER_STEP, true, false),
+                    Read::Reading { each, max, .. } => (max as usize, each, true),
                     _ => continue,
                 };
                 let list = self.track.get(&r.name).map_or(&[][..], Vec::as_slice);
@@ -503,6 +505,22 @@ impl World {
                     continue;
                 }
                 q.extend(fresh);
+                // Past four steps' worth of an `each` reading, the oldest are dropped and counted,
+                // never silently (Logic: readings).
+                let room = 4 * most;
+                if reading && q.len() > room && !self.planted.read_region_keeps_last {
+                    let dropped = q.len() - room;
+                    q.drain(..dropped);
+                    rec.issues
+                        .push(json!({"code": "reading.overflow", "reading": r.name,
+                        "item": item.id, "step": k, "dropped": dropped}));
+                }
+                // The planted read region keeps only the last value a step received.
+                if reading && self.planted.read_region_keeps_last && q.len() > 1 {
+                    let last = q.pop_back();
+                    q.clear();
+                    q.extend(last);
+                }
                 // A text control's one commit a step; a second waits for the next (#542).
                 let n = q.len().min(if r.ty == "text" { 1 } else { most });
                 taken.insert(&r.name, q.drain(..n).collect());
@@ -515,6 +533,7 @@ impl World {
         l.last = k;
         l.filled = None;
         l.mirror_ns = 0;
+        l.read_ns = 0;
         // What a linear write blends from: the arrays as they stood before this step ran.
         if !l.prev.is_empty() {
             l.prev.clone_from(&l.arrays);
@@ -605,14 +624,19 @@ impl World {
                         }
                     }
                 }
-                // Each value as an f64, then its as-of time as an i64 of microseconds.
-                Read::Reading { .. } => {
+                // Each value as its shape lays it out (an f64 each for scalar and vec, a layout's
+                // bytes padded to 8), then its as-of time as an i64 of microseconds.
+                Read::Reading { shape, .. } => {
                     let list = &taken[e.name.as_str()];
+                    let size = shape.size() as usize;
                     region[at..at + 4].copy_from_slice(&(list.len() as u32).to_le_bytes());
                     for (j, x) in list.iter().enumerate() {
-                        let o = at + 8 + 16 * j;
-                        region[o..o + 8].copy_from_slice(&x.value.bytes());
-                        region[o + 8..o + 16].copy_from_slice(&x.as_of.unwrap_or(0).to_le_bytes());
+                        let o = at + 8 + (size + 8) * j;
+                        let v = x.value.bytes();
+                        let n = v.len().min(size);
+                        region[o..o + n].copy_from_slice(&v[..n]);
+                        region[o + size..o + size + 8]
+                            .copy_from_slice(&x.as_of.unwrap_or(0).to_le_bytes());
                     }
                 }
                 Read::Array { item: from, offset } => {
@@ -633,6 +657,8 @@ impl World {
                 Read::Mirror(_) | Read::None => {}
             }
         }
+        // The time its reads took to take and lay out: each control's entries and each reading's values.
+        l.read_ns = (read_started.elapsed().as_nanos() as u64).max(1);
         let from = item.reads_at as usize;
         let fits = l
             .runner
@@ -989,10 +1015,23 @@ impl World {
     pub fn append(&mut self, mut e: Entry) -> Result<Entry, Failed> {
         let steps = self.piece.items.iter().zip(&self.lives);
         if e.as_of.is_some() {
-            if !self.piece.sources.contains_key(&e.control) {
+            let Some(read) = self.piece.reading(&e.control) else {
                 return Err(
                     json!({"ok": false, "code": "bad_input", "what": format!("the piece declares no source {}", e.control)}),
                 );
+            };
+            // A value whose shape doesn't match its source's is refused before it's recorded,
+            // naming the source (Logic: readings).
+            if let Read::Reading { shape, .. } = &read {
+                if !crate::piece::fits(shape, &e.value) {
+                    let source = e.control.trim_start_matches("reading:");
+                    let source = source.split_once('#').map_or(source, |(s, _)| s);
+                    return Err(
+                        json!({"ok": false, "code": "reading_refused", "why": "shape", "source": source,
+                        "what": format!("a value of {source} that isn't its declared shape, {shape:?}"),
+                        "value": e.value.to_json()}),
+                    );
+                }
             }
             // The first step not yet run of its readers, or of every item when none reads it:
             // the first any of them runs after the time the furthest of them has read to.
@@ -1328,6 +1367,7 @@ impl World {
             late: false,
             filled: None,
             mirror_ns: 0,
+            read_ns: 0,
             asked: None,
             // The restore wrote every page.
             dirty: (0..pages).collect(),
