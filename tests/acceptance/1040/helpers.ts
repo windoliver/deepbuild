@@ -485,7 +485,7 @@ export function mapsDoc(evidence: string, size: 2048 | 1024): JsonObject {
 // `throw` on each entry of the choice `pick` sends it up at 1 + 10 × pick m/s (Control: a choice reads as its option's
 // index: soft 1 m/s, hard 11 m/s). Stage `aim` (0.1 s) waits for pick, `look` (0.45 s) for the choice `go`, `after`
 // (1.0 s) ends it. At `look` the soft ball has landed and rests, the hard one still rises inside the chimney: the same
-// picture at the same step (the ball itself draws only from `after` on); at `after` the hard ball shows above the chimney.
+// picture at the same step (the ball itself draws only past `look`, from 0.5 s); at `after` the hard ball shows above the chimney.
 
 /** Every surface is unlit (Material: `unlit`), each its own flat color: at the base a hidden ball that moves still changed
  * the lit frame around it (572 pixels at `look`, by up to 11 code values), and an unlit surface takes no light. */
@@ -524,8 +524,9 @@ export function dropDoc(): JsonObject {
       after: { kind: 'stage', name: 'After', t: '1s' },
     },
     worlds: { [DROP.world]: world },
-    // The ball draws only from `after` on, so nothing drawn at `look` can depend on where it is.
-    channels: { show_ball: shownOver('ball', 1, null) },
+    // The ball draws only past `look` (from 0.5 s of the document's time, between the two stages: the still at `after`
+    // lands a little before the document's 1 s), so nothing drawn at `look` can depend on where it is.
+    channels: { show_ball: shownOver('ball', 0.5, null) },
   });
 }
 
