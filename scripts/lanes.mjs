@@ -314,6 +314,9 @@ alone.push('tests/acceptance/1732/');
 // #190's files build deep-logic here, at the merge base and for Linux x86_64 in Docker, start headless Chrome, and read
 // CPU and wall times.
 alone.push('tests/acceptance/190/');
+// #416's interface files build deep-logic here, at the merge base and for Linux x86_64 in Docker, start headless
+// Chrome, and time checks and frames against the merge base's.
+alone.push('tests/acceptance/416/interfaces/');
 
 // #1477's suite opens real windows and times them against the lane's rule: one file at a time, both files timed.
 alone.push('tests/acceptance/1477/');
