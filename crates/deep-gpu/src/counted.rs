@@ -103,6 +103,24 @@ impl Deref for Wgpu {
     }
 }
 
+/// A validation scope around a creation. In the web player (#172) a scope resolves only once the
+/// page's one thread yields, so none is pushed there: the device's uncaptured-error handler reports
+/// what it would have caught.
+#[cfg(not(target_arch = "wasm32"))]
+fn scoped(d: &wgpu::Device) -> Option<wgpu::ErrorScopeGuard> {
+    Some(d.push_error_scope(wgpu::ErrorFilter::Validation))
+}
+
+#[cfg(target_arch = "wasm32")]
+fn scoped(_: &wgpu::Device) -> Option<wgpu::ErrorScopeGuard> {
+    None
+}
+
+/// Whether the scope around a creation caught an error, the first creation then made again.
+fn popped(scope: Option<wgpu::ErrorScopeGuard>) -> bool {
+    scope.is_some_and(|s| pollster::block_on(s.pop()).is_some())
+}
+
 impl Wgpu {
     pub fn new(raw: wgpu::Device, counts: Arc<Counts>) -> Wgpu {
         Wgpu {
@@ -139,10 +157,10 @@ impl Wgpu {
                 std::thread::sleep(std::time::Duration::from_millis(ms));
             }
         }
-        let scope = self.raw.push_error_scope(wgpu::ErrorFilter::Validation);
+        let scope = scoped(&self.raw);
         let object = make();
         made.inspect(|n| add(n, 1));
-        if pollster::block_on(scope.pop()).is_some() {
+        if popped(scope) {
             made.inspect(|n| add(n, 1));
             return make();
         }

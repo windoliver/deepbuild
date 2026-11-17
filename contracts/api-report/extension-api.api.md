@@ -62,6 +62,13 @@ export interface Deep {
         };
         deadline: number;
     }): Promise<unknown>;
+    "source.ask"(params: {
+        name: string;
+        request: {
+            provider: string;
+            prompt: string;
+        };
+    }): Promise<unknown>;
     "store.get"(params: {
         kind: string;
         key: string;

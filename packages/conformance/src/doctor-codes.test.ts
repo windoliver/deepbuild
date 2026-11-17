@@ -2,7 +2,7 @@
 import { expect, it } from 'vitest';
 import { codesPage, judge } from '@deepbuild/conformance';
 
-for (const code of ['job_failing', 'notifications_off', 'service_unpromoted', 'pack_refused']) {
+for (const code of ['job_failing', 'notifications_off', 'pack_refused', 'service_unpromoted']) {
   it(`recognizes ${code} as a reported failure, not an unknown code or a success`, () => {
     expect(judge('doctor', code)).toMatchObject({ family: 'doctor', code, listed: true, verdict: 'FAIL' });
   });

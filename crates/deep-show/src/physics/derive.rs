@@ -7,28 +7,13 @@
 //! stored: they follow from the track and the document, so a replay applies the same ones, and
 //! the bake keeps each with where it came from and the place it took as the modules wrote it.
 
-use std::collections::BTreeMap;
-
-use deep_canvas::document::Issue;
-use deep_canvas::schedule::canonical;
-use deep_canvas_physics::doc::{resolved, On, Refusal, World};
-use deep_canvas_physics::occurrence::step_flicks;
-use deep_canvas_physics::track;
-use serde_json::{json, Map, Value};
-
-/// An entry a canvas module other than the input module writes on the core's input track: the
-/// item that fires it, the step it's for, its kind and its fields.
-struct Fired {
-    module: String,
-    item: String,
-    step: u64,
-    kind: String,
-    data: Value,
-}
+use deep_canvas_physics::doc::{Refusal, World};
+use deep_play::derive::Fired;
+use serde_json::{Map, Value};
 
 /// The entries the build's canvas modules fire in `form`, each module's in the order it writes
 /// them (#1834 adds logic's).
-fn fired(form: &Value) -> Vec<Fired> {
+pub(crate) fn fired(form: &Value) -> Vec<Fired> {
     #[allow(unused_mut)]
     let mut out = Vec::new();
     #[cfg(any(feature = "test-launch-module", feature = "test-launch-module-first"))]
@@ -47,101 +32,15 @@ fn fired(form: &Value) -> Vec<Fired> {
 
 /// `test-launch-module-first`: the other modules write a step's entries before the input
 /// module's, not after.
-const MODULES_FIRST: bool = cfg!(feature = "test-launch-module-first");
+pub(crate) const MODULES_FIRST: bool = cfg!(feature = "test-launch-module-first");
 
-/// World `w`'s entries from the core's input track `track` (the input module's control entries,
-/// `{t, seq, control, value, …}`) and from what `form`'s canvas modules fire, each as the bake
-/// keeps it, in the order they apply: `{step, kind, target, data, input, from, written}`.
+/// World `w`'s entries from the core's input track `track` and from what `form`'s canvas modules
+/// fire, each as the bake keeps it, in the order they apply (the shared rule, #172).
 pub(crate) fn kept(form: &Value, w: &World, track: &[Value]) -> Result<Vec<Value>, Box<Refusal>> {
-    let h = step_flicks(w);
-    let fired = fired(form);
-    // The core input track as the modules wrote it: each step's input-module entries and the
-    // other modules' in the order the build writes them; each entry's place in it, by its source.
-    let (control_rank, module_rank) = if MODULES_FIRST { (1, 0) } else { (0, 1) };
-    let mut written: Vec<(u64, u8, (u8, usize))> = Vec::new();
-    for (i, e) in track
-        .iter()
-        .enumerate()
-        .filter(|(_, e)| e["control"].is_string())
-    {
-        let at = ((e["t"].as_i64().unwrap_or(0).max(0) + h - 1) / h) as u64;
-        written.push((at, control_rank, (0, i)));
-    }
-    for (i, f) in fired.iter().enumerate() {
-        written.push((f.step, module_rank, (1, i)));
-    }
-    let when = |(kind, i): (u8, usize)| match kind {
-        0 => (track[i]["t"].as_i64(), track[i]["seq"].as_i64()),
-        _ => (None, None),
-    };
-    written.sort_by_key(|(step, rank, src)| (*step, *rank, when(*src), src.1));
-    let place: BTreeMap<(u8, usize), usize> =
-        written.iter().enumerate().map(|(n, w)| (w.2, n)).collect();
-    let row = |e: &track::Entry, from: String, n: usize| {
-        json!({"step": e.step, "kind": e.kind, "target": e.target, "data": e.data, "input": e.input,
-               "from": from, "written": n})
-    };
-    let mut out: Vec<Value> = Vec::new();
-    for (i, e) in track::from_controls(w, h, track) {
-        let control = track[i]["control"].as_str().unwrap_or_default();
-        out.push(row(&e, format!("control:{control}"), place[&(0, i)]));
-    }
-    for (i, f) in fired.iter().enumerate() {
-        for (id, input) in &w.inputs {
-            let Some(On::Module { module, item }) = &input.on else {
-                continue;
-            };
-            if *module != f.module || *item != f.item || input.kind != f.kind {
-                continue;
-            }
-            let data = resolved(input, &f.data, &format!("inputs/{id}/data"))?;
-            for target in &input.targets {
-                let e = track::Entry {
-                    step: f.step,
-                    kind: input.kind.clone(),
-                    target: target.clone(),
-                    input: id.clone(),
-                    data: data.clone(),
-                };
-                out.push(row(&e, format!("{module}:{item}"), place[&(1, i)]));
-            }
-        }
-    }
-    // The order they apply in: by step, then (kind, target ID), then input and data.
-    let key = |v: &Value| {
-        let s = |k: &str| v[k].as_str().unwrap_or_default().to_string();
-        (
-            v["step"].as_u64(),
-            s("kind"),
-            s("target"),
-            s("input"),
-            canonical(&v["data"]),
-        )
-    };
-    out.sort_by_key(key);
-    Ok(out)
+    deep_play::derive::kept(w, track, &fired(form), MODULES_FIRST)
 }
 
-/// The kept entries as the runner's track: each by its input, with its fields.
-pub(crate) fn track_of(kept: &[Value]) -> Value {
-    let entry = |k: &Value| json!({"step": k["step"], "kind": k["kind"], "target": k["target"], "input": k["input"], "data": k["data"]});
-    Value::Array(kept.iter().map(entry).collect())
-}
-
-/// World `id`'s first input whose `on` names a canvas module the build doesn't hold, refused
-/// `module_missing`, naming the module.
-pub(crate) fn missing(id: &str, w: &World, held: impl Fn(&str) -> bool) -> Option<Issue> {
-    w.inputs.iter().find_map(|(input, i)| match &i.on {
-        Some(On::Module { module, item }) if !held(module) => Some(Issue::error(
-            "module_missing",
-            id,
-            format!("worlds/{id}/inputs/{input}/on"),
-            json!({"module": module, "item": item}),
-            &format!("this world input takes the entries the {module} module's item {item} fires, and this build lacks the {module} module"),
-        )),
-        _ => None,
-    })
-}
+pub(crate) use deep_play::derive::{missing, track_of};
 
 /// `physics_bake`: the world a presented document lists, in its scene.
 pub struct Bake {
