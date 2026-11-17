@@ -16,7 +16,7 @@ export const dataText = (b: Uint8Array): string =>
 
 /** Where the provider form keeps its params and writes its output (its own immutable globals). */
 export const DUNGEON = { params_at: 1024, assets_at: 2048, out_at: 4096 } as const;
-/** The rounds of mixing one room costs: about 33 fuel each (each block its instruction count), so a room is about 330,000 fuel and a floor of 6 to 12 rooms 2 to 4 million, past one logic step's default 1,000,000. */
+/** The rounds of mixing one room costs: about 34 fuel each (each block its instruction count: 340,164 a room at the base), so a floor of 6 to 12 rooms is 2 to 4 million fuel, past one logic step's default 1,000,000. */
 export const ROOM_WORK = 10_000;
 
 /**

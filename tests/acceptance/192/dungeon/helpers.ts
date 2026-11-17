@@ -287,7 +287,7 @@ export const showDoc = (doc: string, document: JsonObject): JsonObject => ({ cal
 export const provided = (doc: string): JsonObject => ({ call: 'provided', doc });
 export const SANDBOX_COUNTS: JsonObject = { call: 'sandbox' };
 /** deep_query's logic read (#548): each item's bake as the hub plays the document, its arrays at each step asked. */
-export const queryLogic = (doc: string, items: string[], steps: number[]): JsonObject => ({ call: 'deep_query', session: SESSION, doc, what: 'logic', items, steps, at: 0 });
+export const queryLogic = (doc: string, items: string[], steps: number[]): JsonObject => ({ call: 'deep_query', session: SESSION, doc, what: 'logic', items, steps });
 
 export interface Issue { code: string; severity: string; path: string; ids: string[]; raw: JsonObject }
 export function issuesOf(reply: JsonObject, what: string): Issue[] {

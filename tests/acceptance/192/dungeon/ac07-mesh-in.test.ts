@@ -62,7 +62,7 @@ describe(`${ID} mesh_in: another item's built mesh by its content key, and what 
     const swarmScene = scene('Voxelized swarm', SEED, [vox], {
       brain: logicItem(program.brain(), { pos: { type: 'vec3', count: 4 }, live: { type: 'bool', count: 4 }, gen: { type: 'i32', count: 4 } }),
       probe: { kind: 'ball@1', params: { radius: 0.1 }, visible: false },
-      swarm: { kind: 'instance@1', params: { of: ['probe'], pos: { array: 'brain.pos', as: 'vec3' }, live: { array: 'brain.live', as: 'bool' }, gen: { array: 'brain.gen', as: 'u32' } } },
+      swarm: { kind: 'instance@1', params: { of: ['probe'], pos: { array: 'brain.pos' }, live: { array: 'brain.live', as: 'bool' }, gen: { array: 'brain.gen', as: 'u32' } } },
       vox: voxUse('swarm'),
     }, ['scene3d', 'logic', 'test.mesh']);
     const linkScene = scene('Linked voxelizer', SEED, [link], { vox: { kind: 'test.mesh@1', params: { mesh: { gen: 'voxlink.voxelize', params: { cell: 0.25 } } } } }, ['test.mesh']);

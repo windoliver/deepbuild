@@ -33,8 +33,9 @@ What the base already does, which these tests don't credit: a pinned pack's prov
 `out: data` is validated by its pack layout's validator, and a pack layout is admitted only when its validator refuses
 its twins (#415); `deep_query` reads a logic item's arrays at steps (#548); `deep-logic` links libraries (#190). It
 fills no params at `params_at`, copies no assets or meshes in, takes no `{gen}` in a logic item's `assets` (refused:
-"assets is a list of asset IDs"), carries no pack libraries into a document's logic items, reads no `mesh_in`,
-`library` or provider `links`, and has no `provide` call.
+"assets is a list of asset IDs"), carries neither data assets nor pack libraries into a document's logic items (its
+`logic.step` operator's piece holds only each item's program, so an item naming a data asset by its ID is refused there
+too), reads no `mesh_in`, `library` or provider `links`, and has no `provide` call.
 
 ## Run them
 
@@ -67,7 +68,7 @@ minutes. Every test passes its own timeout (90 minutes, `ac05` three hours). Tem
 stores, binaries, assembler output) are deleted. Node built-ins and vitest only. `scripts/lanes.mjs` lists
 `'tests/acceptance/192/dungeon/'` in `alone` (the files build deep-show and deep-sandbox and start Docker).
 
-`BASE-FAILURE.txt` is one run of each file at the base: each fails at its first check of the missing surface,
+`BASE-FAILURE.txt` is one run of the suite at the base: 3 of 3 fail, each at its first check of a missing surface,
 before any Linux leg.
 
 ## The surface
@@ -186,7 +187,7 @@ A test finds a name by its key and value anywhere in an issue's JSON (`actual` o
   with logic items (`{kind: "logic@1", params: {program, step_rate: 60, writes, assets?, links?}}`, programs in the
   evidence store); scenes with `ball@1 {radius}`, `test.mesh@1 {mesh: <provider use>}`, and the swarm: `brain` (a logic
   item writing `pos` vec3 × 4, `live` bool × 4, `gen` i32 × 4), `probe` (a hidden ball@1) and `swarm` (`instance@1 {of:
-  [probe], pos: {array: brain.pos, as: vec3}, live: {array: brain.live, as: bool}, gen: {array: brain.gen, as: u32}}`).
+  [probe], pos: {array: brain.pos}, live: {array: brain.live, as: bool}, gen: {array: brain.gen, as: u32}}`).
 
 ## Programs
 
@@ -195,7 +196,7 @@ A test finds a name by its key and value anywhere in an issue's JSON (`actual` o
 - **The dungeon generator**, one source built three ways: the provider (`gen(seed)` runs every share), its library
   form and the planted library form (each share seeded from its step, the share's number, instead of the given seed).
   A floor: n = 6 + hash(seed, floor) mod 7 rooms, room i from hash(seed, floor, i) after 10,000 rounds of mixing
-  (about 330,000 fuel a room, so a whole floor passes a logic step's default 1,000,000), each room 3 to 8 tiles a side
+  (340,164 fuel a room at the base, so a whole floor passes a logic step's default 1,000,000), each room 3 to 8 tiles a side
   inside the floor's border, and links i → i + 1 mod n. Share 0 writes the header, shares 1 to n the rooms, share
   n + 1 the links.
 - **The tile graph's validator** and its twin; **the reader** (writes `head`: the first asset's length, width, height
@@ -214,7 +215,15 @@ first differing at byte 8; the validator passes all of these and every corner of
 twin at 32; the reader writes [84, 40, 40, 6]; the maker linked to the library form by hand (two modules sharing a
 memory) shows 7, 6, … 1 shares left at steps 0 to 6 and floor 40 whole and equal at step 7; the voxelizer gives the
 boxes ±0.5 and ±0.75 for point sets of radius 0.4 and 0.6, with and without the length word, every triangle wound
-outward; every object assembles and validates.
+outward, and an empty mesh given none; every object assembles and validates.
+
+And against the base's own deep-show (`full,test-mesh-item`, a throwaway script, deleted): test/vox@1.0.0 installs; the
+ball scene with `vox` (without `mesh_in`) is presented with no issue and runs the provider once; the swarm scene's
+`brain`, `probe` and `swarm` are presented with no issue (with `pos: {array: brain.pos}`: an `as: vec3` there is
+refused by the base's column view); the board with `reader` (no asset) is presented and deep_query reads `reader.head`
+at steps 0 and 1; and a logic item running the generator one share a step, its own params floor 40, height 40, width
+40, used 80 fuel at step 0, 340,164 at each room's step (1 to 6) and 184 at the links' step 7, each under a step's
+default 1,000,000, the whole floor about 2,041,000.
 
 ## Criteria to tests
 
