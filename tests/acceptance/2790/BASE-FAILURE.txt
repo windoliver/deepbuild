@@ -1,0 +1,144 @@
+# node --test --test-reporter=spec tests/acceptance/2790/guide.test.mjs at base 3cf41958f (origin/main, no fix), run
+# 2026-11-17T22:38:04Z on macOS (arm64), Node v24.22.0, load average 336. It exited 1: the four criterion tests fail,
+# each on the missing deep.registerPort description or guide entry; the fifth test is the judges' own proof and passes
+# at any commit. The worktree's path reads <repo>. Stack frames inside node: are cut.
+✖ AC1 #2790.56435eb8 scripts/guide.mjs says what deep.registerPort is for, as the design's Extension API and the host give it: a plug-in's side of a piece's port; the entries and the occurrence rows it takes and the sources it gives for readings in; whether its gear makes sound, which makes the plug-in a device gate owner whatever the document says; registering opens nothing: a port opens only after a person clicks Connect, and sends only while the piece plays live (196.004583ms)
+✖ AC2 #2790.92d7996b node scripts/guide.mjs --check prints no line that names deep.registerPort (91.0755ms)
+✖ AC2 #2790.92d7996b docs/extension-guide.md is regenerated: it has an entry for deep.registerPort under the digest the contract publishes, and the file is what node scripts/guide.mjs writes (1.021125ms)
+✖ AC3 #2790.d87e08da the drift case of tests/acceptance/351/guide.test.ts fails on no line that names deep.registerPort: it passes, or fails only on deep.source.ask (3322.248916ms)
+✔ the judges: the issue's own sentence says it all, and an empty, an unrelated and a contrary description, and the sentence less any one clause, each leave something unsaid; a #351 failure is allowed only on deep.source.ask's lines (2.937333ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 1
+ℹ fail 4
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3766.688125
+
+✖ failing tests:
+
+test at tests/acceptance/2790/guide.test.mjs:11:1
+✖ AC1 #2790.56435eb8 scripts/guide.mjs says what deep.registerPort is for, as the design's Extension API and the host give it: a plug-in's side of a piece's port; the entries and the occurrence rows it takes and the sources it gives for readings in; whether its gear makes sound, which makes the plug-in a device gate owner whatever the document says; registering opens nothing: a port opens only after a person clicks Connect, and sends only while the piece plays live (196.004583ms)
+  AssertionError [ERR_ASSERTION]: node scripts/guide.mjs has no complaint of deep.registerPort; it gave:
+  exit 1
+  FAIL guide: deep.registerPort, deep.source.ask: scripts/guide.mjs says nothing of what each is for
+
+  + actual - expected
+
+  + [
+  +   'FAIL guide: deep.registerPort, deep.source.ask: scripts/guide.mjs says nothing of what each is for'
+  + ]
+  - []
+
+      at scriptSays (<repo>/tests/acceptance/2790/helpers.mjs:142:10)
+      at TestContext.<anonymous> (<repo>/tests/acceptance/2790/guide.test.mjs:12:3)
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'FAIL guide: deep.registerPort, deep.source.ask: scripts/guide.mjs says nothing of what each is for' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2790/guide.test.mjs:15:1
+✖ AC2 #2790.92d7996b node scripts/guide.mjs --check prints no line that names deep.registerPort (91.0755ms)
+  AssertionError [ERR_ASSERTION]: node scripts/guide.mjs --check prints no line that names deep.registerPort; it gave:
+  exit 1
+  FAIL guide: deep.registerPort: the contract publishes it, and the guide has no entry for it
+    Fix: run node scripts/guide.mjs and commit docs/extension-guide.md
+  FAIL guide: deep.source.ask: the contract publishes it, and the guide has no entry for it
+    Fix: run node scripts/guide.mjs and commit docs/extension-guide.md
+  FAIL guide: deep.registerPort: scripts/guide.mjs says nothing of what it is for
+    Fix: run node scripts/guide.mjs and commit docs/extension-guide.md
+  FAIL guide: deep.source.ask: scripts/guide.mjs says nothing of what it is for
+    Fix: run node scripts/guide.mjs and commit docs/extension-guide.md
+
+  + actual - expected
+
+  + [
+  +   'FAIL guide: deep.registerPort: the contract publishes it, and the guide has no entry for it',
+  +   'FAIL guide: deep.registerPort: scripts/guide.mjs says nothing of what it is for'
+  + ]
+  - []
+
+      at checkIsQuiet (<repo>/tests/acceptance/2790/helpers.mjs:154:10)
+      at TestContext.<anonymous> (<repo>/tests/acceptance/2790/guide.test.mjs:16:3)
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'FAIL guide: deep.registerPort: the contract publishes it, and the guide has no entry for it', 'FAIL guide: deep.registerPort: scripts/guide.mjs says nothing of what it is for' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2790/guide.test.mjs:19:1
+✖ AC2 #2790.92d7996b docs/extension-guide.md is regenerated: it has an entry for deep.registerPort under the digest the contract publishes, and the file is what node scripts/guide.mjs writes (1.021125ms)
+  AssertionError [ERR_ASSERTION]: docs/extension-guide.md has an entry for deep.registerPort, which the contract publishes
+      at regenerated (<repo>/tests/acceptance/2790/helpers.mjs:165:10)
+      at TestContext.<anonymous> (<repo>/tests/acceptance/2790/guide.test.mjs:20:3)
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: null,
+    expected: null,
+    operator: 'notStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2790/guide.test.mjs:23:1
+✖ AC3 #2790.d87e08da the drift case of tests/acceptance/351/guide.test.ts fails on no line that names deep.registerPort: it passes, or fails only on deep.source.ask (3322.248916ms)
+  AssertionError [ERR_ASSERTION]: each case passes, or fails only on lines of deep.source.ask (#2745):
+  AC1 the guide is generated from the published contract and names both examples; its drift test passes on the contract, and the preflight runs it: it fails on a line that names deep.registerPort:
+  AssertionError: FAIL guide: deep.registerPort: the contract publishes it, and the guide has no entry for it
+  FAIL guide: deep.registerPort: scripts/guide.mjs says nothing of what it is for
+  + actual - expected
+
+  + [
+  +   'AC1 the guide is generated from the published contract and names both examples; its drift test passes on the contract, and the preflight runs it: it fails on a line that names deep.registerPort:\n' +
+  +     'AssertionError: FAIL guide: deep.registerPort: the contract publishes it, and the guide has no entry for it\n' +
+  +     'FAIL guide: deep.registerPort: scripts/guide.mjs says nothing of what it is for'
+  + ]
+  - []
+
+      at TestContext.<anonymous> (<repo>/tests/acceptance/2790/guide.test.mjs:29:10)
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'AC1 the guide is generated from the published contract and names both examples; its drift test passes on the contract, and the preflight runs it: it fails on a line that names deep.registerPort:\nAssertionError: FAIL guide: deep.registerPort: the contract publishes it, and the guide has no entry for it\nFAIL guide: deep.registerPort: scripts/guide.mjs says nothing of what it is for' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+# Planted twins, run by hand at the same base through helpers.mjs's scriptSays, checkIsQuiet and regenerated on scratch
+# trees (a copy of scripts/guide.mjs with a line for deep.registerPort, and where said one for deep.source.ask, added
+# to its descriptions; README, Twins). Each message is cut at its first line or two:
+#
+# == reference, #2745 not landed (the issue's sentence as the description, no deep.source.ask description, guide regenerated)
+# PASS AC1 scripts/guide.mjs says what it is for (guide written and compared less deep.source.ask)
+# PASS AC2 --check prints no deep.registerPort line (it exits 1 on 2 lines, each of deep.source.ask)
+# PASS AC2 the guide is regenerated (guide written and compared less deep.source.ask)
+# == reference, #2745 landed (the issue's sentence, PR #2766's deep.source.ask description, guide regenerated)
+# PASS AC1 scripts/guide.mjs says what it is for
+# PASS AC2 --check prints no deep.registerPort line
+# PASS AC2 the guide is regenerated
+# (the script wrote no guide to regenerate from: FAIL guide: deep.registerPort, deep.source.ask: scripts/guide.mjs says nothing of what each is for )
+# == twin: empty description
+# FAIL AC1 scripts/guide.mjs says what it is for: node scripts/guide.mjs has no complaint of deep.registerPort; it gave: exit 1 FAIL guide: deep.registerPort, deep.source.ask: scripts/guide.mjs says nothing of what each is for
+# FAIL AC2 --check prints no deep.registerPort line: node scripts/guide.mjs --check prints no line that names deep.registerPort; it gave: exit 1 FAIL guide: deep.registerPort: the contract publishes it, and the guide has no entry for it
+# FAIL AC2 the guide is regenerated: docs/extension-guide.md has an entry for deep.registerPort, which the contract publishes
+# == twin: unrelated description (deep.registerRoute's), guide regenerated
+# FAIL AC1 scripts/guide.mjs says what it is for: what scripts/guide.mjs says deep.registerPort is for leaves out part of what the issue says it must say; it says: "An HTTP route served on 127.0.0.1, which reaches the package only once you turn it on."
+# PASS AC2 --check prints no deep.registerPort line (it exits 1 on 2 lines, each of deep.source.ask)
+# PASS AC2 the guide is regenerated (guide written and compared less deep.source.ask)
+# == twin: right description, guide not regenerated (the base's guide)
+# PASS AC1 scripts/guide.mjs says what it is for (guide written and compared less deep.source.ask)
+# FAIL AC2 --check prints no deep.registerPort line: node scripts/guide.mjs --check prints no line that names deep.registerPort; it gave: exit 1 FAIL guide: deep.registerPort: the contract publishes it, and the guide has no entry for it
+# FAIL AC2 the guide is regenerated: docs/extension-guide.md has an entry for deep.registerPort, which the contract publishes
+# == twin: right description, guide regenerated and then its deep.registerPort entry edited by hand
+# PASS AC1 scripts/guide.mjs says what it is for (guide written and compared less deep.source.ask)
+# FAIL AC2 --check prints no deep.registerPort line: node scripts/guide.mjs --check prints no line that names deep.registerPort; it gave: exit 1 FAIL guide: deep.registerPort: its guide entry differs from what the contract publishes
+# FAIL AC2 the guide is regenerated: docs/extension-guide.md is what node scripts/guide.mjs writes now, byte for byte (both less deep.source.ask's entry)
+# == twin: right description, #2745 landed, guide regenerated and then another entry (deep.lease's) edited by hand
+# PASS AC1 scripts/guide.mjs says what it is for
+# PASS AC2 --check prints no deep.registerPort line (it exits 1 on deep.lease's line)
+# FAIL AC2 the guide is regenerated: docs/extension-guide.md is what node scripts/guide.mjs writes now, byte for byte
