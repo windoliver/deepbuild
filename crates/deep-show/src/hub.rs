@@ -211,6 +211,8 @@ pub enum Planted {
     Physics(crate::physics::Planted),
     /// #525's live worlds' wrong programs.
     Ahead(crate::stepped::Planted),
+    /// #549's wrong copies of a match.
+    Net(deep_net::Planted),
     /// #202: a kind_rules requirement counts the working agent's own pack rule as its cover.
     OwnRuleCountsAsCover,
     /// #202: the kind_rules check evaluates a pack kind's recipe rules a second time.
@@ -784,6 +786,8 @@ pub struct Hub<'a> {
     pub first_frames: BTreeMap<String, i64>,
     /// #538's planted lookup: each copy table's key order in its document's first revision.
     pub first_orders: BTreeMap<String, Vec<String>>,
+    /// #549: each document's Join and every connection a match opened.
+    pub net: crate::net::Net,
     /// The displays, the windows on them and the card's placement (#400).
     pub placement: Placement,
     /// Terminals, streams and session pages (#402).
@@ -973,6 +977,7 @@ impl<'a> Hub<'a> {
             expansion_cache: BTreeMap::new(),
             first_frames: BTreeMap::new(),
             first_orders: BTreeMap::new(),
+            net: Default::default(),
             placement: Placement::open(
                 scenario.displays.clone(),
                 scenario.window,
@@ -1605,7 +1610,10 @@ impl<'a> Hub<'a> {
                 event,
                 t,
                 gesture,
-            } => match self.ring_input(panel, event) {
+            } => match self
+                .join_input(panel, event, gesture)
+                .or_else(|| self.ring_input(panel, event))
+            {
                 Some(reply) => reply,
                 None => self
                     .live_press(panel, event, *t)
@@ -1613,7 +1621,9 @@ impl<'a> Hub<'a> {
                     .unwrap_or_else(|| self.input(panel, event, gesture)),
             },
             Call::World { doc, world } => self.world_call(doc, world),
-            Call::Match { doc, steps } => self.match_call(doc, *steps),
+            Call::Match(m) => self.match_call(m),
+            Call::PlayMatch(p) => self.play_match(p),
+            Call::Sockets => self.net.sockets(),
             Call::Scope(panel) => self.scope_reply(panel),
             Call::Presented(panel) => self.presented(panel),
             Call::PopOut {

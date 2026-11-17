@@ -1263,6 +1263,10 @@
           "spec": "* path=../deep-relay",
           "why": "Issue #309: the network seam's macOS backend, which the seam_suite and relay_client calls run, and relay@1's wire."
         },
+        "deep-net": {
+          "spec": "* path=../deep-net",
+          "why": "Issue #549: the net module: net@1 and its check, a match's copies, the Join prompt's words, the start card and the net check kinds."
+        },
         "deep-canvas-vector": {
           "spec": "* path=../deep-canvas-vector",
           "why": "Issue #398: the vector canvas module, in the r2 build set and up."
@@ -2031,21 +2035,43 @@
           "spec": "* path=../deep-canvas-seams",
           "why": "Issue #309: the network seam's interface (Transport, Wire) the macOS backend implements and its suite."
         },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #309: relay@1's control messages, the committed digest and the relay suite's report."
+        }
+      },
+      "target.'cfg(not(target_arch = \"wasm32\"))'.dependencies": {
         "rustls": {
           "spec": "^0.23",
-          "why": "Issue #309: TLS for relay@1's https connection, client and shipped relay, with ring as its one provider; already in the lockfile."
+          "why": "Issue #309: TLS for relay@1's https connection, client and shipped relay, with ring as its one provider; already in the lockfile. Issue #549: off wasm32 only, since the web player links relay@1's wire alone and the page's WebSocket carries it."
+        },
+        "rustls-native-certs": {
+          "spec": "^0.8",
+          "why": "Issue #549: the platform's own authorities, which a Join's connection to the declared relay trusts; already in the lockfile."
         },
         "rustls-pki-types": {
           "spec": "^1",
           "why": "Issue #309: reading the relay's certificate and key and a copy's trusted authorities from PEM; already in the lockfile."
         },
-        "serde_json": {
-          "spec": "^1",
-          "why": "Issue #309: relay@1's control messages, the committed digest and the relay suite's report."
-        },
         "tungstenite": {
           "spec": "^0.29",
           "why": "Issue #309: the WebSocket relay@1 rides on over https, so a browser's web player can speak it too; already in the lockfile."
+        }
+      }
+    },
+    "crates/deep-net/Cargo.toml": {
+      "dependencies": {
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #549: the registry the net module registers net@1 and its check through, the seal a copy's start card reads, and the canonical form its digest hashes."
+        },
+        "deep-relay": {
+          "spec": "* path=../deep-relay",
+          "why": "Issue #549: relay@1's frame, which a copy's messages travel in, in the app and in the web player."
+        },
+        "serde_json": {
+          "spec": "^1",
+          "why": "Issue #549: a match's entries, messages, records and reports; already in the tree."
         }
       }
     },
@@ -2817,6 +2843,14 @@
           "spec": "* path=../deep-play",
           "why": "Issue #172: the played form, made as the app makes it."
         },
+        "deep-net": {
+          "spec": "* path=../deep-net",
+          "why": "Issue #549: the net module the web player seals, and the copy of a lockstep match it plays after a person clicks Join."
+        },
+        "deep-relay": {
+          "spec": "* path=../deep-relay",
+          "why": "Issue #549: relay@1's wire and hello check, which the web player's network backend speaks over the page's WebSocket."
+        },
         "deep-marks-raster": {
           "spec": "* path=../deep-marks-raster",
           "why": "Issue #172: the 2D writer layers' painter, the same code the app's headless renders draw with."
@@ -2942,6 +2976,10 @@
         "deep-marks-raster": {
           "spec": "* path=../deep-marks-raster",
           "why": "Issue #172: the painter the played form draws with."
+        },
+        "deep-net": {
+          "spec": "* path=../deep-net",
+          "why": "Issue #549: the net module, whose copies step a document's logic items in the app and in the web player."
         },
         "deep-physics-rapier": {
           "spec": "* path=../deep-physics-rapier",

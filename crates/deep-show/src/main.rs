@@ -648,7 +648,9 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "terrain_rays" => return terrain::parse(c).map(|r| Call::TerrainRays(Box::new(r))),
         "physics_bake" => return physics::parse(c).map(|b| Call::PhysicsBake(Box::new(b))),
         "world" => return points::parse_world(c).map(|(doc, world)| Call::World { doc, world }),
-        "match" => return points::parse_match(c).map(|(doc, steps)| Call::Match { doc, steps }),
+        "match" => return net::parse_match(c),
+        "play_match" => return net::parse_play(c),
+        "sockets" => return Some(Call::Sockets),
         "packs" => return Some(Call::Packs),
         "install_pack" => {
             return Some(Call::InstallPack {
@@ -1113,6 +1115,14 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
     let docs = entries(input, "docs", |d| {
         Some(d.get("panel")?.as_str()?.to_string())
     })?;
+    // #549: the link a copy opened a piece through, which carries its match in its fragment.
+    let links = entries(input, "docs", |d| match d.get("link") {
+        None => Some(None),
+        Some(l) => Some(Some(l.as_str()?.to_string())),
+    })?
+    .into_iter()
+    .filter_map(|(d, l)| Some((d, l?)))
+    .collect();
     let docs_for = entries(input, "docs", |d| match d.get("for") {
         None => Some(None),
         Some(f) => Some(Some(f.as_str()?.to_string())),
@@ -1374,6 +1384,10 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             None if geometry_audit::planted(p).is_some() => geometry_audit::planted(p),
             None if physics::planted(p).is_some() => physics::planted(p),
             None if stepped::planted(p).is_some() => stepped::planted(p),
+            // #549's wrong copies live in the net module.
+            None if deep_net::Planted::named(p).is_some() => {
+                deep_net::Planted::named(p).map(Planted::Net)
+            }
             None => Some(match p {
                 "presents_unnamed_removal" => Planted::PresentsUnnamedRemoval,
                 "diffs_items_only" => Planted::DiffsItemsOnly,
@@ -1737,6 +1751,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         panels,
         docs,
         docs_for,
+        links,
+        relay_ca: optional(input.get("relay_ca"), |c| Some(PathBuf::from(c.as_str()?)))?,
         record,
         runs,
         claims,
@@ -2142,8 +2158,9 @@ fn modules(set: BuildSet) -> Vec<Module> {
             deep_canvas_export::module::module(),
         ]);
         out.extend(physics::module());
-        // #540: the net module's `net@1`, as far as a lockstep match's point entries need it.
-        out.push(net::module());
+        // #549: the net module, on logic, so a build that leaves logic out leaves it out too.
+        #[cfg(not(feature = "test-leave-out-logic"))]
+        out.push(deep_net::kind::module());
     }
     // Issue #238: the sandbox module, on core alone; `test-sandbox-alt` seals the test
     // implementation `sandbox.alt` in its place, and `test-sandbox-needs-logic` plants a manifest

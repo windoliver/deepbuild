@@ -255,26 +255,6 @@ fn seek_to(world: &World, to: i64, steps: i64, regions: bool) -> Result<Value, V
     )
 }
 
-/// `piece` stepped from 0 to `count` − 1 on `entries`: each step's hash and arrays per item, as
-/// `logic` reports them (#540's `match` reports each copy's the same way), up to the first step
-/// that trapped and no further (#548), with that trap.
-pub(crate) fn stepped(
-    piece: &Rc<Piece>,
-    entries: &[Entry],
-    count: i64,
-) -> Result<(Vec<Value>, Option<Value>), Value> {
-    let mut rec = Record::default();
-    let mut world = World::new(
-        piece.clone(),
-        track_of(entries),
-        false,
-        Default::default(),
-        &mut rec,
-        None,
-    )?;
-    Ok(step_rows(&mut world, &mut rec, piece, count, false))
-}
-
 /// Each step 0 … `count` − 1 of `world`: its hash and arrays per item and, with `full` (#213's
 /// `logic` call), its fuel, its services' and mirrors' times and, where `rec` keeps them, the
 /// services regions each step read.

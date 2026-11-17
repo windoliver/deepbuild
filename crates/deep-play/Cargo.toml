@@ -20,6 +20,8 @@ deep-canvas-scene3d = { path = "../deep-canvas-scene3d" }
 deep-canvas-vector = { path = "../deep-canvas-vector" }
 deep-logic = { path = "../deep-logic" }
 deep-marks-raster = { path = "../deep-marks-raster" }
+# Issue #549: the net module, whose copies step a document's logic items in the app and the web player.
+deep-net = { path = "../deep-net" }
 deep-physics-rapier = { path = "../deep-physics-rapier" }
 deep-text = { path = "../deep-text" }
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }

@@ -7,6 +7,7 @@ pub mod derive;
 pub mod drawing;
 pub mod form;
 pub mod logic;
+pub mod net;
 pub mod read;
 pub mod scene;
 pub mod worlds;

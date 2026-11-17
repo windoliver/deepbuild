@@ -749,6 +749,9 @@ alone.push('tests/acceptance/225-redraft-ac5/');
 byHand.push('tests/acceptance/225/ac5-lorenz-two-machines.test.ts');
 // #172's files each build deep-show (full; the refusals also full,test-web-lacks) and drive headless Chrome with WebGPU on.
 alone.push('tests/acceptance/172/', 'tests/acceptance/172-oracle/');
+// #549's files each build deep-show (one, three feature sets) and the shipped relay, start relays and headless Chrome,
+// and play live matches in real time.
+alone.push('tests/acceptance/549/', 'tests/acceptance/549-oracle/');
 timed.push('tests/acceptance/172/budgets.test.ts', 'tests/acceptance/172/images.test.ts');
 // #172's first-draft refusal test shows a device control without the role the document check requires, so that piece is
 // never presented and its export can't refuse it by name (tests/acceptance/172/DISPUTE.md); its blind redraft runs in its

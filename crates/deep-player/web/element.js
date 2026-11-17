@@ -28,6 +28,9 @@ class DeepPlayer extends HTMLElement {
   #canvas = null;
   #backend = 'none';
   #adapter = null;
+  #join = null;
+  #socket = null;
+  #waiting = null;
 
   connectedCallback() {
     if (this.#started) return;
@@ -77,6 +80,8 @@ class DeepPlayer extends HTMLElement {
     p.frames = this.#frames;
     p.first_frame_ms = this.#firstFrameMs;
     p.decoded = { ...this.#decoded };
+    // The first player's link carries the match in its fragment, which the host serving the piece never sees.
+    if (p.match && p.match.fragment) p.match.link = `${location.href.split('#')[0]}#${p.match.fragment}`;
     return p;
   }
 
@@ -120,12 +125,14 @@ class DeepPlayer extends HTMLElement {
     this.#ready = true;
     this.dispatchEvent(new Event('ready'));
     this.#link();
+    this.#prompt();
   }
 
   /** The place the page's link names, once ready: a time, a marker or a stage; anything else opens at the start. */
   #link() {
     const fragment = decodeURIComponent(location.hash.replace(/^#/, ''));
-    if (!fragment) return;
+    // A match's link names no place in the piece: its fragment is the Join's.
+    if (!fragment || fragment.startsWith('match=')) return;
     const [key, value] = [fragment.slice(0, fragment.indexOf('=')), fragment.slice(fragment.indexOf('=') + 1)];
     const t = key === 't' && /^\d+(\.\d+)?$/.test(value) ? Number(value) : null;
     const at = t !== null && t <= this.#duration ? t
@@ -137,6 +144,77 @@ class DeepPlayer extends HTMLElement {
       return;
     }
     this.#seek(at);
+  }
+
+  /** The player's own Join prompt, for a piece whose net item declares a relay: drawn by the player, never the piece.
+   * It names the relay host and says who sees the copy's network address; a refused Join says why on it. */
+  #prompt() {
+    const p = JSON.parse(this.#player.join_prompt());
+    if (!p) return;
+    if (!this.#join) {
+      this.#join = document.createElement('div');
+      this.#join.setAttribute('role', 'group');
+      this.#join.setAttribute('style', 'position:fixed;left:12px;bottom:12px;max-width:560px;padding:10px 12px;background:#1b1b20;color:#e8e8ec;border:1px solid #55555f;border-radius:6px');
+      const text = document.createElement('p');
+      text.setAttribute('style', 'margin:0 0 8px');
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = 'Join';
+      // Only a person's click joins: an event a script dispatched carries no user activation and is left alone.
+      button.addEventListener('click', (e) => { if (e.isTrusted && navigator.userActivation?.isActive !== false) this.#joinMatch(); });
+      this.#join.append(text, button);
+      this.appendChild(this.#join);
+    }
+    this.#join.setAttribute('data-deep-join', p.state);
+    this.#join.firstChild.textContent = p.text;
+    this.#join.lastChild.hidden = p.state !== 'open';
+  }
+
+  /** A person clicked Join: the one connection the piece declares, the viewer's browser's own, with no credential. */
+  #joinMatch() {
+    if (this.#socket) return;
+    const opened = JSON.parse(this.#player.join(location.href, crypto.getRandomValues(new Uint8Array(16))));
+    this.#prompt();
+    if (!opened.url) return;
+    const ws = new WebSocket(opened.url);
+    ws.binaryType = 'arraybuffer';
+    this.#socket = ws;
+    let timer = 0;
+    const tick = () => {
+      const now = performance.now();
+      const frame = this.#player.net_tick(now);
+      if (frame.length && ws.readyState === WebSocket.OPEN) ws.send(frame);
+      this.#notify(this.#player.net_waiting(now));
+      if (this.#player.net_ended()) { clearInterval(timer); ws.close(); this.#notify(0); this.#prompt(); }
+    };
+    ws.addEventListener('message', (e) => {
+      const now = performance.now();
+      if (typeof e.data === 'string') {
+        const answer = JSON.parse(this.#player.net_control(e.data, now));
+        if (answer.send) ws.send(answer.send);
+        if (answer.close) ws.close();
+        this.#prompt();
+      } else {
+        // What arrived may let steps run: their messages go out at once, one frame a match step at most.
+        this.#player.net_receive(new Uint8Array(e.data), now);
+        tick();
+      }
+    });
+    ws.addEventListener('open', () => { timer = setInterval(tick, 8); });
+    ws.addEventListener('close', () => { clearInterval(timer); this.#player.net_disconnected(); this.#notify(0); this.#prompt(); });
+  }
+
+  /** The waiting notice, the player's own: shown once this copy has waited 0.25 s for a player's message. */
+  #notify(player) {
+    if (!player) { this.#waiting?.remove(); this.#waiting = null; return; }
+    if (!this.#waiting) {
+      this.#waiting = document.createElement('p');
+      this.#waiting.setAttribute('data-deep-waiting', '');
+      this.#waiting.setAttribute('role', 'status');
+      this.#waiting.setAttribute('style', 'position:fixed;right:12px;bottom:12px;margin:0;padding:6px 10px;background:#1b1b20;color:#e8e8ec;border:1px solid #55555f;border-radius:6px');
+      this.appendChild(this.#waiting);
+    }
+    this.#waiting.textContent = `Waiting for player ${player}.`;
   }
 
   #seek(seconds) {

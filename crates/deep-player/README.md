@@ -10,11 +10,12 @@ The web player (issue #172; canvas primitives: Export: web player): the canvas c
 
 - `src/seal.rs`: the module set the player carries.
 - `src/page.rs`: the player's surface to its index page (members, events, `probe()`).
+- `src/net.rs`: a piece's match (#549): the Join prompt's state, the relay's hello checked before anything is sent, the join, and the copy of the lockstep match. `web/element.js` draws the prompt, takes only a person's click and owns the one WebSocket, to the declared relay.
 - `src/cxx.rs`: C++'s allocation operators for the 3D module's mesh simplifier on wasm32.
 
 ## What it may import
 
-The canvas crates and their shipped modules, `deep-logic`, `deep-physics-rapier`, `deep-text`, and the page bindings (`wasm-bindgen`, `js-sys`). Never `deep-show`, the hub, the record or anything that reaches the machine.
+The canvas crates and their shipped modules, `deep-logic`, `deep-net`, `deep-relay`'s wire, `deep-physics-rapier`, `deep-text`, and the page bindings (`wasm-bindgen`, `js-sys`). Never `deep-show`, the hub, the record or anything that reaches the machine.
 
 ## Deviations
 

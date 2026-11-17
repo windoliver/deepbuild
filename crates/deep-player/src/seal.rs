@@ -5,7 +5,7 @@
 use deep_canvas::registry::{BuildSet, Module, Registry, Sealed};
 
 /// The canvas modules the player carries: the full build set's shipped modules, less those whose
-/// work runs only in the app (the net module's relay and Join, which #1042 brings to the player).
+/// work runs only in the app (export).
 pub fn modules() -> Vec<Module> {
     let mut out = vec![
         deep_canvas_marks::modules::text(),
@@ -31,6 +31,8 @@ pub fn modules() -> Vec<Module> {
     // the app's full set does.
     deep_logic::module::bind_services(deep_play::cast::bound);
     out.push(deep_logic::module::module());
+    // #549: the net module, on logic: a piece's match plays in the player too.
+    out.push(deep_net::kind::module());
     out
 }
 

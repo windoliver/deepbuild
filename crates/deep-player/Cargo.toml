@@ -33,6 +33,9 @@ deep-physics-rapier = { path = "../deep-physics-rapier" }
 deep-canvas-sandbox = { path = "../deep-canvas-sandbox" }
 deep-logic = { path = "../deep-logic" }
 deep-play = { path = "../deep-play" }
+# Issue #549: the net module the player seals and the copy of a match it plays, in relay@1's frames.
+deep-net = { path = "../deep-net" }
+deep-relay = { path = "../deep-relay" }
 deep-marks-raster = { path = "../deep-marks-raster" }
 deep-images = { path = "../deep-images" }
 deep-gpu = { path = "../deep-gpu" }

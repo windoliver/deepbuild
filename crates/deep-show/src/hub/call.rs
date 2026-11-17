@@ -203,11 +203,12 @@ pub enum Call {
         doc: String,
         world: String,
     },
-    /// #540: every copy of a document's lockstep match.
-    Match {
-        doc: String,
-        steps: i64,
-    },
+    /// #540, #549: every copy of a document's lockstep match, in this process over the test relay.
+    Match(Box<crate::net::MatchCall>),
+    /// #549: this copy's live match through the declared relay, once a person clicked Join.
+    PlayMatch(Box<crate::net::PlayCall>),
+    /// #549: every connection a match opened in this run.
+    Sockets,
     /// A panel's interaction scope, with no input (#383).
     Scope(String),
     /// The frames a panel presented up to now (#383).
@@ -407,6 +408,10 @@ pub struct Scenario {
     pub docs: BTreeMap<String, String>,
     /// #504: the claim or ask each document was minted for (`docs.<id>.for`), where named.
     pub docs_for: BTreeMap<String, String>,
+    /// #549: the link each document was opened through (`docs.<id>.link`), where given, and the
+    /// PEM authority the app's network backend trusts for this run beside the platform's own.
+    pub links: BTreeMap<String, String>,
+    pub relay_ca: Option<PathBuf>,
     pub record: BTreeMap<String, RecordObject>,
     /// #629: a replay's run record entries, each as a `run` call's reply gave it (`record` as a
     /// list).
