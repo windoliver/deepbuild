@@ -61,3 +61,21 @@ AssertionError: INCONCLUSIVE: the check run's screenshots and recording are not 
 AssertionError: BLOCKED: this criterion compares with the merge base, and deep-show at the merge base d8c46f0d58162ff0a4a483544149316aec960637 did not build (cargo build --locked --offline --bin deep-show --no-default-features --features full …, exit 101):
  Test Files  1 failed (1)
       Tests  1 failed | 2 passed (3)
+
+# Reruns after the first pass
+# base.test.ts: the first pass was BLOCKED because the suite's own offline build of the pinned base (d8c46f0d5) stopped resolving
+# once main's vendor/llrt_crypto came in with the merge. The base binary was then built from a clean checkout of that commit with
+# the helper's cargo arguments, into the folder the helper reuses (target/base-518/d8c46f0d5816/deep-show).
+
+== base.test.ts (rerun)
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+
+# taste.test.ts: rerun once tests/acceptance/518/TASTE.json held the delegated call.
+
+== taste.test.ts (rerun)
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+
+# Not run: the budgets.test.ts rerun and tests/acceptance/518-redraft-ac10/open.test.ts. Both waited hours for a grant at a
+# one-minute load above 800 on 18 cores; the machine's hourly disk cleanup then removed target/, and the base build with it.
