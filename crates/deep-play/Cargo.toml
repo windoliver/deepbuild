@@ -11,15 +11,26 @@ publish = false
 # column view over it. Both hosts call these, so the player evaluates what the app does.
 [dependencies]
 deep-canvas = { path = "../deep-canvas" }
-deep-canvas-cells = { path = "../deep-canvas-cells" }
+deep-canvas-cells = { path = "../deep-canvas-cells", optional = true }
 deep-canvas-marks = { path = "../deep-canvas-marks" }
 deep-canvas-media = { path = "../deep-canvas-media" }
 deep-canvas-motion = { path = "../deep-canvas-motion" }
-deep-canvas-physics = { path = "../deep-canvas-physics" }
-deep-canvas-scene3d = { path = "../deep-canvas-scene3d" }
-deep-canvas-vector = { path = "../deep-canvas-vector" }
-deep-logic = { path = "../deep-logic" }
+deep-canvas-physics = { path = "../deep-canvas-physics", optional = true }
+deep-canvas-scene3d = { path = "../deep-canvas-scene3d", optional = true }
+deep-canvas-vector = { path = "../deep-canvas-vector", optional = true }
+deep-logic = { path = "../deep-logic", optional = true }
 deep-marks-raster = { path = "../deep-marks-raster" }
-deep-physics-rapier = { path = "../deep-physics-rapier" }
+deep-physics-rapier = { path = "../deep-physics-rapier", optional = true }
 deep-text = { path = "../deep-text" }
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
+
+# Issue #1490: the web player's module sets each build this crate with only the canvas modules
+# their set carries, so a set's player links none of the others; the app builds it whole. Logic
+# binds physics.cast@1 between steps (#213), so it builds with physics, as every set holding it does.
+[features]
+default = ["physics", "logic", "scene3d", "cells", "vector"]
+physics = ["dep:deep-canvas-physics", "dep:deep-physics-rapier"]
+logic = ["dep:deep-logic", "physics"]
+scene3d = ["dep:deep-canvas-scene3d"]
+cells = ["dep:deep-canvas-cells"]
+vector = ["dep:deep-canvas-vector"]

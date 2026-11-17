@@ -8,25 +8,151 @@
 //! export's settings alone. It holds nothing that reaches this machine: no hub address, secret or
 //! record. Pieces it can't carry are refused before anything is written, naming each; the
 //! written folder is read back whole, or the export fails naming the first file that differs.
+//!
+//! #1490: the player ships as a few fixed module sets, each built once per release (figure,
+//! game2d, full), and the export takes the smallest that holds every canvas module the document
+//! uses, read from the check's registry; a set that lacks one is refused, naming the module.
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use deep_canvas::canon::sha256_hex;
+use deep_canvas::registry::Sealed;
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 
 use super::{temp_of, Guard, Job};
 use crate::hub::{Hub, Planted};
 
-const PLAYER_WASM: &[u8] = include_bytes!("../../../deep-player/web/dist/player_bg.wasm");
-const PLAYER_GLUE: &[u8] = include_bytes!("../../../deep-player/web/dist/player.js");
-const PLAYER_ABOUT: &str = include_str!("../../../deep-player/web/dist/player.json");
 const ELEMENT: &str = include_str!("../../../deep-player/web/element.js");
 
-/// The player as it was built: its core version, module set digest, runtime digest and modules.
-fn about() -> Value {
-    serde_json::from_str(PLAYER_ABOUT).unwrap_or(Value::Null)
+/// One of the player's prebuilt module sets: its name, its player's bytes and page glue, and what
+/// its build recorded of it (`player.json`: core version, module set digest, runtime digest and
+/// the canvas modules it carries).
+struct Set {
+    name: &'static str,
+    wasm: &'static [u8],
+    glue: &'static [u8],
+    about: &'static str,
+}
+
+macro_rules! set {
+    ($name:literal) => {
+        Set {
+            name: $name,
+            wasm: include_bytes!(concat!(
+                "../../../deep-player/web/dist/",
+                $name,
+                "/player_bg.wasm"
+            )),
+            glue: include_bytes!(concat!(
+                "../../../deep-player/web/dist/",
+                $name,
+                "/player.js"
+            )),
+            about: include_str!(concat!(
+                "../../../deep-player/web/dist/",
+                $name,
+                "/player.json"
+            )),
+        }
+    };
+}
+
+/// The player's module sets, smallest first (crates/deep-player/web/dist/sets.json), each holding
+/// the one before it.
+static SETS: [Set; 3] = [set!("figure"), set!("game2d"), set!("full")];
+
+impl Set {
+    /// The set as its build recorded it.
+    fn about(&self) -> Value {
+        serde_json::from_str(self.about).unwrap_or(Value::Null)
+    }
+
+    /// The canvas modules its player carries.
+    fn modules(&self) -> Vec<String> {
+        self.about()["modules"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .map(str::to_string)
+            .collect()
+    }
+}
+
+/// The canvas modules `doc` uses, each with the first place that uses it, read from the check's
+/// registry `sealed`: each item's kind by the module that registered it, and each param of it a
+/// module evaluates; each control's kind (the input module's); each world (the physics
+/// module's); and each module the document requires.
+fn modules_used(doc: &Value, sealed: &Sealed) -> BTreeMap<String, String> {
+    let mut used: BTreeMap<String, String> = BTreeMap::new();
+    let mut add = |module: &str, at: String| {
+        used.entry(module.to_string()).or_insert(at);
+    };
+    let kinds = sealed.kinds();
+    let section = |name: &str| {
+        doc.get(name)
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten()
+    };
+    for (id, item) in section("items") {
+        let Some((full, major)) = item
+            .get("kind")
+            .and_then(Value::as_str)
+            .and_then(deep_canvas::kinds::parse_kind)
+        else {
+            continue;
+        };
+        if let Some(module) = sealed.module_of_kind(&full) {
+            add(module, format!("items/{id}/kind"));
+        }
+        let Some(version) = kinds.entry(&full).and_then(|e| e.version(major)) else {
+            continue;
+        };
+        for (name, value) in item
+            .get("params")
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten()
+        {
+            if let Some(p) = version.param(name).filter(|p| !p.module.is_empty()) {
+                if !value.is_null() {
+                    add(p.module, format!("items/{id}/params/{name}"));
+                }
+            }
+        }
+    }
+    for (id, c) in section("controls") {
+        if c.get("kind").is_some() {
+            add("input", format!("controls/{id}/kind"));
+        }
+    }
+    for (id, _) in section("worlds") {
+        add("physics", format!("worlds/{id}"));
+    }
+    for (module, _) in doc
+        .pointer("/requires/modules")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+    {
+        add(module, format!("requires/modules/{module}"));
+    }
+    used
+}
+
+/// The ID a place in the document names: an item's, a control's or a world's, or the module a
+/// document requires.
+fn id_at(at: &str) -> &str {
+    at.split('/').nth(1).map_or(at, |id| {
+        if at.starts_with("requires/") {
+            at.rsplit('/').next().unwrap_or(id)
+        } else {
+            id
+        }
+    })
 }
 
 /// A file's name in the bundle: its SHA-256 and an extension for what it holds.
@@ -68,13 +194,9 @@ impl Files {
     }
 }
 
-/// The pieces of `doc` the bundle can't carry, each `{item, why}`, given the canvas modules the
-/// player carries (`module_of` names the module of an item's kind in this build).
-pub(crate) fn refusals(
-    doc: &Value,
-    held: &[String],
-    module_of: &dyn Fn(&str) -> Option<String>,
-) -> Vec<Value> {
+/// The pieces of `doc` the bundle can't carry, each `{item, why}`, given the canvas modules it
+/// uses that the player's set `set` lacks (`missing`: each with the first place that uses it).
+fn refusals(doc: &Value, missing: &BTreeMap<String, String>, set: &str) -> Vec<Value> {
     let mut out = Vec::new();
     let mut refuse = |item: &str, code: &str, why: String| {
         out.push(json!({"item": item, "code": code, "why": why}))
@@ -163,11 +285,11 @@ pub(crate) fn refusals(
                 format!("the item {id} draws a video's frames the bundle can't carry decoded"),
             );
         }
-        if let Some(module) = module_of(kind.split('@').next().unwrap_or(kind))
-            .filter(|m| !held.iter().any(|h| h == m))
-        {
-            refuse(id, "module_missing", format!("the item {id} is a {kind}, of the canvas module {module}, which the web player lacks"));
-        }
+    }
+    for (module, at) in missing {
+        let id = id_at(at);
+        out.push(json!({"item": id, "code": "module_missing", "module": module,
+            "why": format!("{at} uses the canvas module {module}, which the web player's {set} set lacks")}));
     }
     out
 }
@@ -245,9 +367,9 @@ fn element(guard: Option<Guard>) -> String {
     }
 }
 
-/// The player's bytes as a planted export writes them, or as they ship.
-fn player(guard: Option<Guard>) -> Vec<u8> {
-    let mut wasm = PLAYER_WASM.to_vec();
+/// The player of `set`, its bytes as a planted export writes them, or as they ship.
+fn player(set: &Set, guard: Option<Guard>) -> Vec<u8> {
+    let mut wasm = set.wasm.to_vec();
     if guard == Some(Guard::WebProbeTestVariant) {
         // Planted (#172 AC7): a test variant of the player, which alone would have probe().
         let name = b"deep.test-variant";
@@ -312,17 +434,29 @@ impl Hub<'_> {
 
     /// `video.codec: web`: the web player's bundle of `doc`, written as a folder at `job.out`.
     pub(super) fn export_web(&mut self, job: &Job, doc: &Value) -> Result<Value, Value> {
-        let about = about();
-        let held: Vec<String> = about["modules"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(Value::as_str)
-            .map(str::to_string)
-            .collect();
-        let sealed = &self.startup.sealed;
-        let module_of = |kind: &str| sealed.module_of_kind(kind).map(str::to_string);
-        let refused = refusals(doc, &held, &module_of);
+        // #1490: the smallest set that holds every canvas module the document uses, read from the
+        // check's registry; the largest when none does, which the refusal below then names.
+        let used = modules_used(doc, &self.startup.sealed);
+        let lacks = |set: &Set| -> BTreeMap<String, String> {
+            let held = set.modules();
+            used.iter()
+                .filter(|(m, _)| !held.contains(m))
+                .map(|(m, at)| (m.clone(), at.clone()))
+                .collect()
+        };
+        let set = if self.planted(Planted::Export(Guard::WebPicksSmallestSet)) {
+            // Planted (#1490 AC3): the picker takes the smallest set whatever the document uses.
+            &SETS[0]
+        } else if self.planted(Planted::Export(Guard::WebPicksFullSet)) {
+            // Planted (#1490 AC2): the picker takes the full set whatever the document uses.
+            &SETS[SETS.len() - 1]
+        } else {
+            SETS.iter()
+                .find(|s| lacks(s).is_empty())
+                .unwrap_or(&SETS[SETS.len() - 1])
+        };
+        let about = set.about();
+        let refused = refusals(doc, &lacks(set), set.name);
         if !refused.is_empty() {
             let names: Vec<&str> = refused.iter().filter_map(|r| r["item"].as_str()).collect();
             return Err(
@@ -334,8 +468,8 @@ impl Hub<'_> {
         let root = self.scenario.evidence.clone();
         let mut files = Files::default();
         // The player and its page glue.
-        let (_, wasm_sha) = files.put(player(guard), Some("wasm"), Map::new());
-        let (glue_path, _) = files.put(PLAYER_GLUE.to_vec(), Some("js"), Map::new());
+        let (_, wasm_sha) = files.put(player(set, guard), Some("wasm"), Map::new());
+        let (glue_path, _) = files.put(set.glue.to_vec(), Some("js"), Map::new());
         let element = element(guard);
         let (element_path, _) = files.put(element.clone().into_bytes(), Some("js"), Map::new());
         // The document as the app's frames draw it, and the recorded input track.
@@ -476,7 +610,8 @@ impl Hub<'_> {
             .collect();
         Ok(json!({
             "target": "web",
-            "player": {"core_version": about["core_version"], "module_set_digest": about["set_digest"], "hash": wasm_sha},
+            "player": {"core_version": about["core_version"], "module_set_digest": about["set_digest"], "hash": wasm_sha,
+                       "module_set": set.name},
             "fallback": "page",
             "sources": [],
             "bytes": all.values().map(Vec::len).sum::<usize>(),

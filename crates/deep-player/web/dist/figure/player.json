@@ -1,0 +1,19 @@
+{
+  "wasm_bindgen": "0.2.129",
+  "set": "figure",
+  "files": {
+    "player.js": "a56a67211ddcb503a12b432e093c7a4932605cfbd886a3e3dc164b8fcd055039",
+    "player_bg.wasm": "788e1721d8511ec3e7fa8162e99e2ff98f857543cdd06a0b30bf4d3902536ffa"
+  },
+  "core_version": "0.0.0",
+  "set_digest": "f6ed154aa62c7bd4b617e74ec2d80924c52b6dfb083733479b75ddf346c445f5",
+  "runtime_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "modules": [
+    "data",
+    "input",
+    "look",
+    "marks2d",
+    "motion",
+    "text"
+  ]
+}
