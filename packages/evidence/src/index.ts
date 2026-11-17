@@ -9,8 +9,8 @@ import { createZstdDecompress, zstdCompress, zstdDecompress } from 'node:zlib';
 import { detect, missingEnd, type MediaType } from './intake.js';
 import { scrub, scrubList, type Run } from './scrub.js';
 export { scrubText, patternMatches, scrubValues, scrubPrefix } from './scrubbing.js';
-import { continueDigest } from './continuation.js';
-import { Digest, type DigestState } from './digest.js';
+// The digest and its worker load with the first joined copy that needs a resumable hash, not with every store.
+import type { DigestState } from './digest.js';
 
 export type { MediaType };
 export type Origin = 'deepbuild' | 'you' | 'agent';
@@ -240,7 +240,8 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
     } finally { await handle.close(); }
   }
   const exists = (path: string) => access(path).then(() => true, () => false);
-  const onDisk = async (sha: string) => (await exists(fileOf(sha))) || (await exists(packedOf(sha))) || exists(partsOf(sha));
+  // A manifest is looked for only where one can be: for a joined copy, put now or held by the index.
+  const onDisk = async (sha: string, joined = false) => (await exists(fileOf(sha))) || (await exists(packedOf(sha))) || ((joined || index.get(sha)?.parts !== undefined) && exists(partsOf(sha)));
 
   const refuse = (reason: string): PutResult => ({ status: 'refused', reason, slot: { state: 'missing', reason } });
   const unlabelled = (request: Common) =>
@@ -261,7 +262,7 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
     await options.hooks?.afterExistsCheck?.(sha);
     return serial(sha, async () => {
       // A file already there, whoever wrote it, may be one a FULL commit synced: what replaces it lasts first (#1410).
-      const there = await onDisk(sha);
+      const there = await onDisk(sha, joined !== undefined);
       if (file || !existed || !there) {
         if (joined) {
           await writeAtomic(partsOf(sha), JSON.stringify(joined.parts), there);
@@ -348,7 +349,7 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
             for (const sha of prefixes.get(request.parts[n]!) ?? []) {
               const found = index.get(sha);
               if (found?.parts?.length === n + 1 && found.parts.every((p, k) => p === request.parts[k]) && (found.continuation || hashes.has(sha))) {
-                if (found.continuation && new Digest(found.continuation).hex() !== sha) throw new EvidenceError('corrupt', `evidence ${sha} has a corrupt hash continuation`, sha);
+                if (found.continuation && new (await import('./digest.js')).Digest(found.continuation).hex() !== sha) throw new EvidenceError('corrupt', `evidence ${sha} has a corrupt hash continuation`, sha);
                 prefix = found; break;
               }
             }
@@ -361,7 +362,7 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
             for await (const bytes of from(prefix?.parts?.length ?? 0)) hash.update(bytes);
             sha256 = hash.copy().digest('hex');
             hashes.set(sha256, hash);
-          } else ({ sha256, state: continuation } = await continueDigest(prefix?.continuation, from(prefix?.continuation ? prefix.parts!.length : 0)));
+          } else ({ sha256, state: continuation } = await (await import('./continuation.js')).continueDigest(prefix?.continuation, from(prefix?.continuation ? prefix.parts!.length : 0)));
           if (prefix && prefix.sha256 !== sha256) hashes.delete(prefix.sha256);
           const redaction = request.parts.some((p) => index.get(p)!.redaction !== 'complete') ? 'incomplete' : request.redaction;
           return save(peer, request, { parts: request.parts, sha256, size, ...(continuation ? { continuation } : {}) }, 'text', redaction);
@@ -467,7 +468,7 @@ export async function openEvidenceStore(options: EvidenceStoreOptions = {}): Pro
           prefixes.get(last)?.delete(sha);
           if (!prefixes.get(last)?.size) prefixes.delete(last);
         }
-        await Promise.all([rm(fileOf(sha), { force: true }), rm(packedOf(sha), { force: true }), rm(partsOf(sha), { force: true })]);
+        await Promise.all([fileOf(sha), packedOf(sha), ...(parts ? [partsOf(sha)] : [])].map((path) => rm(path, { force: true })));
         await note({ removed: sha });
         removed.push(sha);
       })));
