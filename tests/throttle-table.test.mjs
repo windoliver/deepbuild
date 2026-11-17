@@ -30,6 +30,12 @@ const sandbox = (t, stop = () => {}) => {
   mkdirSync(join(dir, 'home'));
   return dir;
 };
+// Stops a process this test started, by the PID a file holds: an empty or half-written file names no process, and
+// 0 would be this test's whole group.
+const kill = (file) => {
+  const pid = existsSync(file) ? Number(readFileSync(file, 'utf8')) : 0;
+  if (Number.isInteger(pid) && pid > 1) try { process.kill(pid, 'SIGKILL'); } catch {}
+};
 const until = async (found, ms) => {
   for (const end = Date.now() + ms; Date.now() < end; await pause(100)) if (found()) return true;
   return found();
@@ -53,7 +59,7 @@ for (const [title, command] of [
     const run = outside(dir, 'request', ['test', '--wait', '0.05', '--', ...command]);
     if (!await until(() => run.status() !== null, 60_000)) {
       // A budget window stops every wait from running down (section 12a), so the request is taken back, by its PID.
-      try { process.kill(run.pid(), 'SIGKILL'); } catch {}
+      kill(join(dir, 'request.pid'));
       if (readFileSync(join(machineLog, '..', 'table.json'), 'utf8').includes('"window":true')) return t.skip('INCONCLUSIVE: a budget window is open or pending on the machine\'s table, so the request\'s wait never ran down');
       assert.fail('the request never ended');
     }
@@ -90,7 +96,7 @@ for (const [title, breakAt, broken] of [
     const started = [];
     const dir = sandbox(t, () => {
       for (const child of started) child.kill('SIGKILL');
-      if (existsSync(join(dir, 'held'))) try { process.kill(Number(readFileSync(join(dir, 'held'), 'utf8')), 'SIGKILL'); } catch {}
+      kill(join(dir, 'held'));
     });
     const table = join(dir, 'table'), bin = join(dir, 'bin'), held = join(dir, 'held');
     mkdirSync(table);
@@ -99,8 +105,9 @@ for (const [title, breakAt, broken] of [
     const ps = execFileSync('/bin/sh', ['-c', 'command -v ps'], { encoding: 'utf8' }).trim();
     writeFileSync(join(bin, 'ps'), `#!/bin/sh\n[ -e ${JSON.stringify(join(dir, 'ps-fails'))} ] && exit 2\nexec ${ps} "$@"\n`, { mode: 0o755 });
     const env = { ...clean(join(dir, 'home')), DEEP_THROTTLE_TABLE: table, PATH: `${bin}${delimiter}${process.env.PATH}` };
-    // The hung command; it ends by itself only once its throttle.mjs is gone, so a stopped test leaves nothing.
-    const stub = `process.on('SIGTERM', () => {}); const parent = process.ppid; require('fs').writeFileSync(${JSON.stringify(held)}, String(process.pid)); setInterval(() => process.ppid !== parent && process.exit(), 1000)`;
+    // The hung command; it ends by itself only 20 s after its throttle.mjs is gone, so a stopped test leaves nothing
+    // for good, and a throttle.mjs that exits without ending it is still caught.
+    const stub = `process.on('SIGTERM', () => {}); const parent = process.ppid; require('fs').writeFileSync(${JSON.stringify(held)}, String(process.pid)); setInterval(() => process.ppid !== parent && setTimeout(() => process.exit(), 20_000), 1000)`;
     const start = (args) => {
       const child = spawn(process.execPath, [throttle, ...args], { env, stdio: ['ignore', 'pipe', 'pipe'] });
       started.push(child);

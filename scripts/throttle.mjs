@@ -389,7 +389,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       if (!waited) return;
       // Nothing here may throw: this process would die holding nothing, its command running on uncounted. Without a
       // listing the next look tries again; a log that can't be written is no reason to let the command run on; and
-      // whatever ps says after the SIGTERM, the command itself is this process's child to SIGKILL.
+      // when ps fails after the SIGTERM, the command itself is still this process's child to SIGKILL.
       try {
         tree = mine();
       } catch {
@@ -403,8 +403,9 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
         try {
           tree.push(...mine());
           stop();
-        } catch {}
-        child.kill('SIGKILL');
+        } catch {
+          child.kill('SIGKILL');
+        }
       }, 10_000).unref();
     }, 1_000);
     watch.unref();
