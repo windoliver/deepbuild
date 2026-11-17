@@ -58,3 +58,8 @@ hook 0
       Tests  1 failed (1)
 ## lints at main f7d661d67, FAIL lines: color-literal-guard 6, record-reader-guard 1, size-ratchet 62, repo-rules 58, canvas-lint 53, vendor-rebase 40
 ## the same lints in the affected run at 13a35ce37: color-literal-guard 18 (12 more, all in ignored crates/deep-app/panels/*/@deepbuild/ build outputs), record-reader-guard 1, size-ratchet 62, repo-rules 58, canvas-lint 54, vendor-rebase 19
+
+## conformance-lint, slots-check and canvas-closures drift, the 38 lint lines the first comparison left out
+conformance-lint FAIL lines, both run 2026-11-16: main f7d661d67 30, 13a35ce37 30, the same 30 lines (sorted diff empty)
+slots-check FAIL lines: main 6, affected run 6 (ps ENOBUFS in the environment kit)
+canvas-closures drift FAIL lines: main 1, affected run 1

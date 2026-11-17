@@ -1,0 +1,11 @@
+# packages/hub/test/verdict-chat.test.ts and packages/verdicts at 13a35ce37 on Linux, 2026-11-16 22:12, load average 110-113
+# The two verdicts.test.ts timing budgets (rerun selection) ran over in an earlier run at load 100+ (291 ms of 200 and 116 ms of 100) and pass here; under this load either reading is INCONCLUSIVE.
+ ✓ packages/verdicts/test/line.test.ts (6 tests) 221ms
+ ✓ packages/hub/test/verdict-chat.test.ts (7 tests) 259ms
+ ✓ packages/verdicts/test/verdicts.test.ts (73 tests) 2524ms
+   ✓ recording a verdict (1)
+     ✓ holds a clean count past 65535 within verdict.made's u16 field 564ms
+   ✓ the perf lane's verdict task (1)
+     ✓ verdict-1000-runs, as budgets.json declares it, runs and exits 0 1124ms
+ Test Files  3 passed (3)
+      Tests  86 passed (86)
