@@ -568,6 +568,8 @@ impl Groups {
             chain.record(&mut encoder);
             device.queue.submit([encoder.finish()]);
         }
+        let view = texture.create_view(&Default::default());
+        deep_gpu::spans::done_with(&view);
         let texels: u64 = (0..levels)
             .map(|l| u64::from((size[0] >> l).max(1)) * u64::from((size[1] >> l).max(1)))
             .sum();
@@ -579,7 +581,7 @@ impl Groups {
         }));
         self.give(&full);
         self.give(&source);
-        Ok(texture.create_view(&Default::default()))
+        Ok(view)
     }
 
     /// One item's marks, already drawn into `children`, laid through their medium into `into`.
@@ -642,6 +644,7 @@ impl Groups {
             rect,
         );
         let view = out.create_view(&Default::default());
+        deep_gpu::spans::done_with(&view);
         let mix = Mix {
             rect,
             ..Mix::over(&view, x.size)
@@ -681,6 +684,7 @@ impl Groups {
                     ..Default::default()
                 });
                 device.queue.submit([encoder.finish()]);
+                deep_gpu::spans::done_alone(&view);
                 t
             }
             None => target(&device.device, size, format),
@@ -746,6 +750,7 @@ impl Groups {
             pass.draw(0..3, 0..1);
         }
         device.queue.submit([encoder.finish()]);
+        deep_gpu::spans::done_with(&view);
         self.give(&copy);
     }
 
@@ -814,6 +819,7 @@ impl Groups {
             x.options,
         )?;
         x.device.queue.submit([encoder.finish()]);
+        deep_gpu::spans::done_with(&view);
         let mix = Mix {
             decode: x.space == Space::Linear,
             ..Mix::over(&view, x.size)
@@ -895,6 +901,7 @@ impl Groups {
                         opposite,
                         &out,
                     );
+                deep_gpu::spans::done_with(&out.create_view(&Default::default()));
                 Some((out, rect))
             }
             None => None,
@@ -1189,7 +1196,9 @@ impl Groups {
             r.record(&mut encoder, &mut times);
         }
         device.queue.submit([encoder.finish()]);
-        Ok((shown.unwrap_or_else(|| color.clone()), grow))
+        let shown = shown.unwrap_or_else(|| color.clone());
+        deep_gpu::spans::done_with(&shown);
+        Ok((shown, grow))
     }
 
     /// `--planted`: [`Groups::passes`] in the other space, each way by the compositor's own

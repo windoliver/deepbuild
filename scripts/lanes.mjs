@@ -857,6 +857,9 @@ alone.push('tests/acceptance/182/', 'tests/acceptance/182-oracle/controllers-py-
 timed.push('tests/acceptance/182/ac11-budgets.test.ts');
 byHand.push('tests/acceptance/182-oracle/character-controller-rapier.test.ts');
 
+// #2742's files build deep-gpu; ac1 compares two films' GPU time on any Mac, and ac2 runs #417's suite.
+alone.push('tests/acceptance/2742/');
+
 // #1624: this live session spends plan usage and is explicitly run by hand, not as a skipped unit test.
 byHand.push('tests/acceptance/1330/start.live.test.ts');
 

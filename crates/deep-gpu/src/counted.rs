@@ -313,6 +313,18 @@ impl Queue {
         Queue { raw, counts }
     }
 
+    /// Submits `buffers`; while a frame's spans are armed on this thread and none is open, after
+    /// the start of one (#2742).
+    pub fn submit<I: IntoIterator<Item = wgpu::CommandBuffer>>(
+        &self,
+        buffers: I,
+    ) -> wgpu::SubmissionIndex {
+        match crate::spans::armed() {
+            Some(spans) => spans.submit(&self.raw, buffers),
+            None => self.raw.submit(buffers),
+        }
+    }
+
     pub fn write_buffer(&self, buffer: &wgpu::Buffer, offset: wgpu::BufferAddress, data: &[u8]) {
         add(&self.counts.uploaded, data.len() as u64);
         add(&self.counts.writes, 1);
