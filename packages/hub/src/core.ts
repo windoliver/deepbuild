@@ -260,6 +260,8 @@ export class Core {
   private chain: Promise<unknown> = Promise.resolve();
   /** Whether the start has finished: from then on, work waiting for it joins the queue at once. */
   private opened = false;
+  /** Whether the start failed: nothing is replayed then, and the spool waits for the next start (#2783). */
+  private unstarted = false;
   private blocked: string | undefined;
   /** The hub's lock file was removed or replaced under it (#909): appends stop for good, so `blocked` never clears. */
   private lost = false;
@@ -590,7 +592,7 @@ export class Core {
       evidence: (sha) => this.store.read(sha).catch(() => null),
     });
     this.ready = this.init();
-    this.ready.then(() => { this.opened = true; }, () => undefined);
+    this.ready.then(() => { this.opened = true; }, () => { this.unstarted = true; });
     // A start that fails stops nothing else; each call then reports why.
     this.ready.catch(() => undefined);
   }
@@ -1266,7 +1268,8 @@ export class Core {
    * replayed then, beside the hooks that follow, rather than at the next start.
    */
   private replayLate(kept = false): void {
-    if (this.stopping) return;
+    // A start that failed leaves the spool where it is: asking again would find it again, without end (#2783).
+    if (this.stopping || this.unstarted) return;
     if (this.replaying) {
       this.retake ||= kept;
       return;
