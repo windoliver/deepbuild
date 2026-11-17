@@ -894,6 +894,10 @@ pub fn check_in(
         .flatten()
         .filter_map(|(id, c)| Some((id.clone(), Limit::of(c)?)))
         .collect();
+    let rewind = match piece.get("rewind") {
+        None | Some(Value::Null) => None,
+        Some(r) => Some(rewind_of(r, &items)?),
+    };
     Ok(Piece {
         seed,
         class,
@@ -904,5 +908,49 @@ pub fn check_in(
         items,
         machine,
         document: hash(piece.to_string().as_bytes()),
+        rewind,
+    })
+}
+
+/// #860: a piece's rewind, checked: `stops` names an `i32` or `bool` array of
+/// count 1 a logic item writes, `depth` is 1 to 512 stops, `seen` names an array a logic item
+/// writes, and every logic item steps at one rate, since a rewind returns them all to one step.
+fn rewind_of(r: &Value, items: &[Item]) -> Result<Rewind, Refused> {
+    let bad = |what: String| {
+        Refused(json!({"ok": false, "code": "bad_input", "what": format!("rewind: {what}")}))
+    };
+    let array = |field: &str| -> Result<(usize, &Write, u32, u32), Refused> {
+        let path = r.get(field).and_then(Value::as_str).unwrap_or_default();
+        let found = path.split_once('.').and_then(|(id, name)| {
+            let i = items.iter().position(|x| x.id == id)?;
+            let w = items[i].writes.iter().find(|w| w.name == name)?;
+            let e = items[i].write(name)?;
+            Some((i, w, e.offset, e.size))
+        });
+        found.ok_or_else(|| bad(format!("{field} names no array a logic item writes")))
+    };
+    let (item, w, at, size) = array("stops")?;
+    if w.count != 1 || !matches!(w.ty, Ty::I32 | Ty::Bool) {
+        return Err(bad("stops names an i32 or bool array of count 1".into()));
+    }
+    let depth = r
+        .get("depth")
+        .and_then(Value::as_u64)
+        .filter(|d| (1..=512).contains(d))
+        .ok_or_else(|| bad("depth is 1 to 512 stops".into()))?;
+    let seen = match r.get("seen") {
+        None | Some(Value::Null) => None,
+        Some(_) => array("seen").map(|(i, _, at, size)| Some((i, at, size)))?,
+    };
+    if !items.windows(2).all(|w| w[0].step == w[1].step) {
+        return Err(bad(
+            "a piece with rewind has every logic item at one step rate".into(),
+        ));
+    }
+    Ok(Rewind {
+        item,
+        stops: (at, size),
+        depth: depth as u16,
+        seen,
     })
 }

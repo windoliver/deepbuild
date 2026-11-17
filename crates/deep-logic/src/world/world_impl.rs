@@ -16,6 +16,9 @@ impl World {
         rec: &mut Record,
         counted: Option<(usize, &[u8])>,
     ) -> Result<World, Failed> {
+        for e in track.get(REWIND).into_iter().flatten() {
+            rewind::fits(&piece, e)?;
+        }
         let mut lives = Vec::new();
         for (i, item) in piece.items.iter().enumerate() {
             let bytes = counted
@@ -84,17 +87,19 @@ impl World {
         }
         let published = lives.iter().map(|l| l.arrays.clone()).collect();
         Ok(World {
+            // #860: a rewind restores from the ring, so a piece with rewind keeps one.
+            store: store || piece.rewind.is_some(),
             piece,
             track,
             lives,
             published,
-            store,
             planted,
             saves_dir: None,
             saved: Vec::new(),
             seen: 0,
             adapter: String::new(),
             cache: None,
+            branches: Branches::default(),
         })
     }
 
@@ -303,6 +308,13 @@ impl World {
                 if self.saves_dir.is_some() {
                     crate::saves::due(self, k, ended_at);
                 }
+                // #860: a rewind stamped by now comes before any step at this time, and the seen
+                // values the current branch carries go back before the step after their stop.
+                if t.is_some_and(|t| self.rewind_due(t)) {
+                    self.rewind(rec);
+                    continue;
+                }
+                self.carry_in(k);
                 before(self, k);
             }
             let Some(t) = t else { break };
@@ -325,6 +337,11 @@ impl World {
             let snapshot = self.published.clone();
             let mut held = Vec::new();
             self.seen += 1;
+            let stops = self
+                .piece
+                .rewind
+                .as_ref()
+                .is_some_and(|r| group.contains(&r.item));
             for i in group {
                 let started = rec.ns.is_some().then(std::time::Instant::now);
                 self.step(i, &snapshot, rec, &mut held);
@@ -341,6 +358,9 @@ impl World {
                 }
             }
             mirrors::pend(held, &mut self.lives);
+            if stops {
+                self.mark(rec);
+            }
         }
     }
 
@@ -902,9 +922,14 @@ impl World {
         )
     }
 
-    /// The input track's entries, in its order.
+    /// The input track's entries, in its order: closed branches' and rewinds too (#860).
     pub fn track_entries(&self) -> Vec<Value> {
-        let mut all: Vec<&Entry> = self.track.values().flatten().collect();
+        let mut all: Vec<&Entry> = self
+            .track
+            .values()
+            .flatten()
+            .chain(&self.branches.off)
+            .collect();
         all.sort_by_key(|e| (e.t, e.player, e.seq));
         all.into_iter().map(Entry::to_json).collect()
     }
@@ -946,6 +971,16 @@ impl World {
         Ok(())
     }
 
+    /// #860: the stops the current branch made before step `c`, which a world at `c` has made.
+    fn stops_before(&self, c: i64) -> Vec<i64> {
+        self.branches
+            .stops
+            .iter()
+            .copied()
+            .filter(|k| *k < c)
+            .collect()
+    }
+
     /// Seeks this world to its cache's keyframe at step `c`, in place, keeping its ring.
     pub fn seek_keyframe(&mut self, c: i64) -> Result<(), Failed> {
         let cache = self
@@ -974,11 +1009,13 @@ impl World {
         }
         self.published = back.published;
         self.seen = back.seen;
+        self.branches.stops = back.branches.stops;
     }
 
-    /// The input track, in the track's order.
+    /// The input track, in the track's order: closed branches' and rewinds too (#860).
     pub fn entries(&self) -> Vec<Entry> {
-        let mut out: Vec<Entry> = self.track.values().flatten().cloned().collect();
+        let all = self.track.values().flatten().chain(&self.branches.off);
+        let mut out: Vec<Entry> = all.cloned().collect();
         out.sort_by_key(|e| (e.t, e.player, e.seq, e.arrived));
         out
     }
@@ -987,6 +1024,8 @@ impl World {
     /// the first step not yet run of the items that read it (Logic: readings). An entry a step
     /// already read would rewrite the past, which only a fork or the net module's rollback does.
     pub fn append(&mut self, mut e: Entry) -> Result<Entry, Failed> {
+        // #860: a rewind of more stops than the piece's depth is refused, naming the depth.
+        rewind::fits(&self.piece, &e)?;
         let steps = self.piece.items.iter().zip(&self.lives);
         if e.as_of.is_some() {
             if !self.piece.sources.contains_key(&e.control) {
@@ -1138,6 +1177,7 @@ impl World {
             saved: Vec::new(),
             seen: 0,
             adapter: String::new(),
+            branches: Branches::default(),
         })
     }
 
@@ -1170,6 +1210,14 @@ impl World {
                 l.checked = None;
             }
         }
+        // #860: the rewinds and closed entries after it go with the rest.
+        let b = &mut self.branches;
+        b.off.retain(|e| e.t <= (k - 1) * len);
+        b.closed.retain(|c| c.rewind < k);
+        let closed = &b.closed;
+        b.carry
+            .retain(|(p, _)| *p <= k || closed.iter().any(|c| c.stop + 1 == *p));
+        b.taken = b.taken.min(self.track.get(REWIND).map_or(0, Vec::len));
     }
 
     /// A fresh instance per item, loaded from the checkpoint at step `c`: the last whole memory at
@@ -1260,15 +1308,20 @@ impl World {
     }
 
     /// A world of restored items at step `c` on this one's track, keeping no checkpoints. A run
-    /// from step 0 has seen c steps at step c.
+    /// from step 0 has seen c steps at step c. #860: the rewinds that came stay taken.
     pub(super) fn restored(&self, lives: Vec<Live>, c: i64) -> World {
-        World::of(
+        let mut w = World::of(
             self.piece.clone(),
             self.track.clone(),
             lives,
             self.planted,
             c as u64,
-        )
+        );
+        w.branches = Branches {
+            stops: self.stops_before(c),
+            ..self.branches.clone()
+        };
+        w
     }
 
     /// A world of the piece's items in these states, as a seek or an opened save starts.
@@ -1281,17 +1334,18 @@ impl World {
     ) -> World {
         let published = lives.iter().map(|l| l.arrays.clone()).collect();
         World {
+            store: piece.rewind.is_some(),
             piece,
             track,
             lives,
             published,
-            store: false,
             planted,
             saves_dir: None,
             saved: Vec::new(),
             seen,
             adapter: String::new(),
             cache: None,
+            branches: Branches::default(),
         }
     }
 
@@ -1376,18 +1430,28 @@ impl World {
             .cloned()
             .collect();
         kept.extend(entries.iter().cloned());
+        let track = track_of(&kept);
+        let branches = Branches {
+            stops: self.stops_before(k),
+            taken: self
+                .branches
+                .taken
+                .min(track.get(REWIND).map_or(0, Vec::len)),
+            ..self.branches.clone()
+        };
         Ok(World {
             piece: self.piece.clone(),
-            track: track_of(&kept),
+            track,
             lives,
             published: self.published.clone(),
-            store: false,
+            store: self.piece.rewind.is_some(),
             planted: self.planted,
             saves_dir: None,
             saved: Vec::new(),
             seen: self.seen,
             adapter: self.adapter.clone(),
             cache: None,
+            branches,
         })
     }
 

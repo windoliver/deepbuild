@@ -129,6 +129,23 @@ pub fn inline_logic(
     )
     .map_err(refused)?;
     world.run(steps, &mut rec, &mut |_, _| {});
+    // #860: what draws reads the current branch: no rewind, and none of the entries one closed.
+    if let Some(list) = form.get_mut("track").and_then(Value::as_array_mut) {
+        let off: Vec<(i64, &str, u32)> = world
+            .branches
+            .off
+            .iter()
+            .map(|e| (e.t, e.control.as_str(), e.seq))
+            .collect();
+        list.retain(|e| {
+            let at = (
+                e["t"].as_i64().unwrap_or(0),
+                e["control"].as_str().unwrap_or(""),
+            );
+            let seq = e["seq"].as_u64().unwrap_or(0) as u32;
+            e.get("rewind").is_none() && !off.contains(&(at.0, at.1, seq))
+        });
+    }
     let Some(doc) = form.as_object_mut() else {
         return Ok(());
     };

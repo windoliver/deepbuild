@@ -15,7 +15,7 @@ use sha2::Digest as _;
 
 use crate::grid_bot::{Action, Bot as GridBot, Iface};
 use crate::piece::{check_in, h64, History};
-use crate::world::{track_of, Entry, Given, Record, World};
+use crate::world::{track_of, Entry, Given, Record, To, World, REWIND};
 use crate::Planted;
 
 const F: i64 = 705_600_000;
@@ -65,6 +65,10 @@ pub fn piece_of(form: &Value) -> Option<Value> {
     }
     if let Some(class) = form.pointer("/budget/class") {
         piece["class"] = class.clone();
+    }
+    // #860: the document's rewind, which the logic module checks against its items.
+    if let Some(r) = form.get("rewind") {
+        piece["rewind"] = r.clone();
     }
     Some(piece)
 }
@@ -247,6 +251,48 @@ fn policy(
         *s += 1;
     }
     Ok(out)
+}
+
+/// #860: a policy's `rewind: {every, from: [min, max]}`: at each multiple of `every` seconds
+/// after 0 within the span, the stops it goes back, drawn from min to max by hash(the run's seed,
+/// rewind, the step) as a pick draws; by step, with the piece's depth.
+fn rewinds_of(
+    r: &Value,
+    piece: &crate::piece::Piece,
+    seed: u64,
+    step: i64,
+    steps: i64,
+) -> Result<(BTreeMap<i64, u64>, u64), Value> {
+    let bad = |what: &str| refused("bad_input", json!(format!("bot.policy.rewind: {what}")));
+    let depth = piece
+        .rewind
+        .as_ref()
+        .ok_or_else(|| bad("the piece declares no rewind"))?
+        .depth;
+    let every = r
+        .get("every")
+        .and_then(Value::as_f64)
+        .filter(|e| *e > 0.0)
+        .ok_or_else(|| bad("every is seconds"))?;
+    let (min, max) = match r.get("from").and_then(Value::as_array).map(Vec::as_slice) {
+        Some([a, b]) => a.as_u64().zip(b.as_u64()).filter(|(a, b)| a <= b),
+        _ => None,
+    }
+    .ok_or_else(|| bad("from is [min, max] stops"))?;
+    let every = ((every * F as f64).round() as i64).max(1);
+    let mut out = BTreeMap::new();
+    let mut m = 1;
+    loop {
+        let t = stamp(m * every, step);
+        if t >= steps * step {
+            break;
+        }
+        let k = t / step;
+        out.insert(k, min + pick_hash(seed, "rewind", k) % (max - min + 1));
+        // The next multiple stamped past this step.
+        m = k * step / every + 1;
+    }
+    Ok((out, u64::from(depth)))
 }
 
 /// The values a player's gesture on a listed row's action writes (Play interface `game.play@1`):
@@ -524,6 +570,10 @@ pub fn play(
         };
         entries.extend(policy(p, seed, step, steps, &values)?);
     }
+    let rewinds = bot
+        .and_then(|b| b.pointer("/policy/rewind"))
+        .map(|r| rewinds_of(r, &piece, seed, step, steps))
+        .transpose()?;
     let mut rec = Record {
         ns: Some(Vec::new()),
         ..Default::default()
@@ -618,6 +668,26 @@ pub fn play(
                         })?;
                     }
                 }
+            }
+        }
+        // #860: the policy's rewind drawn at this step, when that many stops lie behind the
+        // current one within the depth, stamped at the next step.
+        if let Some((draws, depth)) = rewinds.as_ref().filter(|_| k + 1 < steps) {
+            let behind = world.branches.stops.len().saturating_sub(1) as u64;
+            if let Some(&n) = draws
+                .get(&k)
+                .filter(|n| (1..=behind.min(*depth)).contains(*n))
+            {
+                world.append(Entry {
+                    t: (k + 1) * step,
+                    seq: world.track.get(REWIND).map_or(0, Vec::len) as u32,
+                    control: REWIND.into(),
+                    value: Given::Rewind(To::Stop(n as u32)),
+                    writer: "bot".into(),
+                    player: 1,
+                    as_of: None,
+                    arrived: 0,
+                })?;
             }
         }
         let ns: u64 = rec

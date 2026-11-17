@@ -23,8 +23,10 @@ use crate::budget::cpu_ns;
 use crate::mirrors::{self, Pending};
 use crate::piece::{h64, step_seed, Item, Piece, Read, Ty, PAGE, PER_STEP};
 use crate::services;
-pub use crate::track::{track_of, Entry, Given, Track};
+pub use crate::track::{track_of, Entry, Given, To, Track, REWIND};
 use crate::Planted;
+pub(crate) use rewind::{branch_opened, fits};
+pub use rewind::{Branch, Branches};
 
 /// The exports the rewrite gave a logic item's program: its mutable globals (with their types) and
 /// the page bitmap's words.
@@ -84,6 +86,10 @@ pub fn names(bytes: &[u8]) -> Names {
 /// One step's items and arrays: each write's 64-bit hash and each emitting item's rows.
 pub type StepRow = (Map<String, Value>, Map<String, Value>);
 
+/// #860: a stop a run made: how many branches rewinds had closed by then, its step, and each
+/// item's full-state hash after it.
+pub type Stop = (usize, i64, Map<String, Value>);
+
 /// What each step and checkpoint left, as a bake reports it.
 #[derive(Default)]
 pub struct Record {
@@ -105,6 +111,13 @@ pub struct Record {
     /// When asked for (#184's play): each step's time by item, as `(item, ns)`, so a bot's steps
     /// are timed apart from the piece's. A reading, never part of a run.
     pub ns: Option<Vec<(usize, u64)>>,
+    /// #860, when asked for: each stop the run made (logic.determinism's branches).
+    pub stops: Option<Vec<Stop>>,
+    /// #860: each item's arrays as each rewind put them back, by the step after its stop, which
+    /// the arrays from there on rebuild from (crate::bake).
+    pub(crate) restarts: BTreeMap<String, BTreeMap<i64, Vec<u8>>>,
+    /// #860: the steps that ran on a branch a rewind closed, whose rows hold the arrays they left.
+    pub(crate) frozen: BTreeSet<i64>,
 }
 
 impl Record {
@@ -424,10 +437,13 @@ pub struct World {
     pub adapter: String,
     /// A session's keyframes every 10 s of play, spilled to the cache (crate::keyframes).
     pub cache: Option<crate::keyframes::Cache>,
+    /// #860: what the track's rewinds left: the current branch's stops and the closed branches.
+    pub branches: Branches,
 }
 
 pub type Failed = Value;
 
+mod rewind;
 mod world_impl;
 
 /// The planted replay's change: the first value of the item's first array, an i32 plus one, an
@@ -506,6 +522,10 @@ fn report(
     pages: Vec<u32>,
     rows: &Rows,
 ) {
+    // #860: a step a closed branch ran, run again on the current one, takes its row anew.
+    if rec.frozen.remove(&k) {
+        rec.steps.remove(&k);
+    }
     let (items, arrays) = rec.steps.entry(k).or_default();
     let mut row = json!({"hash": hash.map(|h| format!("{h:016x}")), "fuel": fuel, "failed": l.failed, "pages": pages,
                          "mirror_ns": l.mirror_ns, "service_ns": 0});
