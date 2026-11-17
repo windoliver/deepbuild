@@ -8,7 +8,7 @@ import { loadavg, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { performance } from 'node:perf_hooks';
-import { fingerprint, judgeLimit } from '../scripts/benchmark.mjs';
+import { fingerprint, judgeLimit, references } from '../scripts/benchmark.mjs';
 
 const root = join(fileURLToPath(new URL('.', import.meta.url)), '..');
 const DOC = '01JB96D0000000000000000001';
@@ -278,7 +278,7 @@ workloads.costs = () => {
   }
   const report = { fingerprint: machine, build: measured.build, terms, declared: declared.terms, declaredFingerprint: declared.fingerprint };
   if (write) {
-    if (!['Mac15,7', 'Mac15,12'].includes(machine.model)) throw Error(`coefficients come from a reference Mac; this is ${machine.model}`);
+    if (!references.some((reference) => reference.model === machine.model)) throw Error(`coefficients come from a reference Mac; this is ${machine.model}`);
     const { model, chip, memoryBytes, macosBuild } = machine;
     writeFileSync(COSTS, `${JSON.stringify({ fingerprint: { model, chip, memoryBytes, macosBuild }, build: measured.build, terms }, null, 2)}\n`);
   }
