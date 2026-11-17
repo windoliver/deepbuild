@@ -37,7 +37,8 @@ test('a reopened store extends the verified concatenation without reading any pr
     } finally { fs.createReadStream = original; syncBuiltinESMExports(); }
     const old = paths.filter((path) => parts.some((p) => path.includes(p.slice(2))));
     expect(old, 'the added part is read back; the old parts are not decompressed or hashed again after reopen').toEqual([]);
-    expect(Buffer.from(await reopened.read(sha(Buffer.concat([first, second, third]))))).toEqual(Buffer.concat([first, second, third]));
+    // Compared as bytes: toEqual walks ten megabytes one element at a time, for minutes on a loaded machine.
+    expect(Buffer.from(await reopened.read(sha(Buffer.concat([first, second, third])))).equals(Buffer.concat([first, second, third])), 'the copy reads back as its three parts joined').toBe(true);
   } finally { await fsp.rm(root, { recursive: true, force: true }); }
 }, 120_000);
 
