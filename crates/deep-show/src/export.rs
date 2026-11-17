@@ -95,6 +95,10 @@ pub enum Guard {
     WebRequestsAdapterLimits,
     /// #172: the web player writes a fragment `control.<ID>=<value>` as an input entry.
     WebFragmentWritesEntry,
+    /// #1045: the web player keeps no accessibility tree beside its canvas, and no live region.
+    WebNoTree,
+    /// #1045: the web player announces each readout on every frame it draws, changed or not.
+    WebAnnouncesEveryFrame,
     /// A wrong encoder, muxer or reader in the helper processes, by its name there.
     Codec(&'static str),
 }
@@ -169,6 +173,8 @@ pub(crate) fn planted(name: &str) -> Option<Planted> {
         "web_probe_test_variant" => Planted::Export(G::WebProbeTestVariant),
         "web_requests_adapter_limits" => Planted::Export(G::WebRequestsAdapterLimits),
         "web_fragment_writes_entry" => Planted::Export(G::WebFragmentWritesEntry),
+        "web_no_tree" => Planted::Export(G::WebNoTree),
+        "web_announces_every_frame" => Planted::Export(G::WebAnnouncesEveryFrame),
         other => Planted::Export(G::Codec(CODEC_PLANTS.iter().find(|p| **p == other)?)),
     })
 }

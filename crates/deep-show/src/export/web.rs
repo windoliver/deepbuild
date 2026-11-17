@@ -241,6 +241,13 @@ fn element(guard: Option<Guard>) -> String {
             "    const gpu = await glue.open_gpu(this.#canvas, JSON.stringify(bundle.gpu_needs));",
             "    const a = await navigator.gpu.requestAdapter(); const limits = {}; for (const k in a.limits) limits[k] = a.limits[k];\n    const gpu = await glue.open_gpu(this.#canvas, JSON.stringify({ ...bundle.gpu_needs, limits }));",
         ),
+        // Planted (#1045 AC1): no accessibility tree beside the canvas, and no live region.
+        Some(Guard::WebNoTree) => ELEMENT.replace("    this.#keepTree();\n", ""),
+        // Planted (#1045 AC1): each readout announced on every frame drawn, changed or not.
+        Some(Guard::WebAnnouncesEveryFrame) => ELEMENT.replace(
+            "      if (was !== undefined && was !== text) said.push(text);",
+            "      said.push(text);",
+        ),
         _ => ELEMENT.to_string(),
     }
 }
@@ -305,6 +312,8 @@ impl Hub<'_> {
             Guard::WebProbeTestVariant,
             Guard::WebRequestsAdapterLimits,
             Guard::WebFragmentWritesEntry,
+            Guard::WebNoTree,
+            Guard::WebAnnouncesEveryFrame,
         ]
         .into_iter()
         .find(|g| self.planted(Planted::Export(*g)))
