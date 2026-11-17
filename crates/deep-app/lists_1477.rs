@@ -127,9 +127,11 @@ fn end_with_parent() {
 
 /// An arm whose window gets no frame for this long reads INCONCLUSIVE and ends (#2569).
 const STALL_S: u64 = 10;
-/// The arm's frames so far, when the last one started or ended (ms on `now_ms`), and whether its line is printed.
+/// The arm's frames so far.
 static FRAMES: AtomicU64 = AtomicU64::new(0);
+/// When its window opened, or its last frame started or ended, in ms on `now_ms`.
 static LAST_FRAME_MS: AtomicU64 = AtomicU64::new(0);
+/// Whether its one line is printed, or about to be.
 static SAID: AtomicBool = AtomicBool::new(false);
 
 fn now_ms() -> u64 {
@@ -157,8 +159,8 @@ fn end_when_stalled(name: String, load_start: f64) {
     });
 }
 
-/// The real window `arm`, `access` and the driven calls open: 1,200 × 700 in the display's middle, on whole points. A visible frame of odd height
-/// centers it on a half point, and macOS then makes the window 701 pt tall.
+/// The real window `arm`, `access` and the driven calls open: 1,200 × 700 in the display's middle, on whole points.
+/// A visible frame of odd height centers it on a half point, and macOS then makes the window 701 pt tall.
 fn window_bounds(cx: &App) -> Option<WindowBounds> {
     let mut bounds = Bounds::centered(None, size(px(WINDOW.0), px(WINDOW.1)), cx);
     bounds.origin = bounds.origin.map(|at| at.floor());
@@ -705,8 +707,10 @@ fn say_and_exit(mut json: Json, load_start: f64) -> ! {
         json["fingerprint"] = fingerprint();
     }
     json["load"] = json!({ "start": load_start, "end": load() });
-    println!("{json}");
-    let _ = std::io::stdout().flush();
+    // A reader that closed the pipe gets no line, and the arm still ends.
+    let mut out = std::io::stdout().lock();
+    let _ = writeln!(out, "{json}");
+    let _ = out.flush();
     unsafe { _exit(0) }
 }
 
