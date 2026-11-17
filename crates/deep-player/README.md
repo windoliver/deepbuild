@@ -6,9 +6,11 @@ The web player (issue #172; canvas primitives: Export: web player): the canvas c
 
 `node scripts/player-wasm.mjs` builds it and writes `web/dist/` (the module, its page glue and `player.json`). That folder is committed and the export embeds its bytes, so nothing compiles per export and every machine writes the same bundle.
 
+It ships as a few fixed module sets (#1490), each a Cargo feature of its name and built into `web/dist/<set>/`: `figure` (text, look, marks2d, data, motion and input), `game2d` (adds physics, and logic on sandbox) and `full` (every module it carries, with the GPU layer and the 3D renderer). `web/dist/sets.json` records each set's compressed size, smallest first; the export takes the smallest set that holds every module a document uses.
+
 ## Where new code goes
 
-- `src/seal.rs`: the module set the player carries.
+- `src/seal.rs`: the module set the player carries, by its set's feature.
 - `src/page.rs`: the player's surface to its index page (members, events, `probe()`).
 - `src/cxx.rs`: C++'s allocation operators for the 3D module's mesh simplifier on wasm32.
 

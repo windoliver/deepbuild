@@ -1,0 +1,346 @@
+# #1836: r8's newly failing test files, at the head against main f7d661d67 (the branch's merge base)
+
+r8 = `node scripts/affected.mjs <the change's paths>` at 37514122a (affected-r8-summary.txt): FAIL, 515 new failures.
+15 of its sources are lint lanes (lint-vs-main.txt). The other 172 are test files; this file sorts them.
+
+## 1. The same 172 files through affected.mjs on main
+
+A clean detached checkout of f7d661d67 (npm ci, npm run build --workspaces), `node scripts/affected.mjs <the 172 files>`,
+r8's flags (none), caps and isolated-HOME layout. Its last lines:
+
+INCONCLUSIVE 5 timed files were not run; --timed runs them under a timed grant: tests/acceptance/1156/fast.test.ts tests/acceptance/1425-redraft-1830/budgets.test.ts tests/acceptance/1461/budget.test.ts tests/acceptance/880/redraft/touch-id.test.ts tests/accep
+INCONCLUSIVE 9 selected files were not run, left to a person or to a lane of its own; run each by hand or in its lane: tests/acceptance/1100/shown.test.ts (by hand) tests/acceptance/1156/linux/session.live.test.ts (by hand) tests/acceptance/1156/session.live.t
+INCONCLUSIVE 2 slow files were not run; --slow runs them: tests/acceptance/1114/lanes.test.mjs tests/acceptance/992/agree.test.ts
+FAIL affected: 468 new, 45 already failing on main, 258 inconclusive or blocked, 1 listed skips, 344 passed, in 26718 s at load 55; logs in <logs>
+exit=1
+
+No ENOSPC in its output. Test by test (a test is its file and name; "fails" is NEW FAIL or KNOWN):
+
+TOTAL {fails at the head (r8): 306, fails on main: 254, the same test fails on both: 191, fails at the head, BLOCKED or INCONCLUSIVE on main: 27, fails at the head only: 88, fails on main only: 63}
+
+So two runs hours apart disagree in both directions: 88 tests in 60 files fail only at the head, 63 only on main,
+and 27 more in 14 other files had no verdict on main. Most read "the hub wasn't ready within 10 s",
+"Test timed out in 5000ms" or `ps` ENOBUFS. Per file:
+
+file | head fails | main fails | same test fails on both | head fail, main BLOCKED/INCONCLUSIVE | head fail only | main fail only
+packages/hub/test/actions-server.test.ts | 3 | 0 | 0 | 3 | 0 | 0
+packages/hub/test/actions.test.ts | 1 | 0 | 0 | 0 | 1 | 0
+packages/hub/test/answer-after-restart.test.ts | 2 | 2 | 2 | 0 | 0 | 0
+packages/hub/test/archive.test.ts | 2 | 2 | 2 | 0 | 0 | 0
+packages/hub/test/ask-tasks.test.ts | 4 | 4 | 4 | 0 | 0 | 0
+packages/hub/test/asleep.test.ts | 1 | 1 | 1 | 0 | 0 | 0
+packages/hub/test/background-group.test.ts | 1 | 1 | 1 | 0 | 0 | 0
+packages/hub/test/background.test.ts | 1 | 1 | 1 | 0 | 0 | 0
+packages/hub/test/callers.test.ts | 1 | 0 | 0 | 0 | 1 | 0
+packages/hub/test/cant-run.test.ts | 1 | 0 | 0 | 0 | 1 | 0
+packages/hub/test/canvas-hub-failure.test.ts | 1 | 0 | 0 | 0 | 1 | 0
+packages/hub/test/claim-replay.test.ts | 1 | 1 | 1 | 0 | 0 | 0
+packages/hub/test/codes.test.ts | 1 | 1 | 1 | 0 | 0 | 0
+packages/hub/test/codex-files.test.ts | 1 | 1 | 1 | 0 | 0 | 0
+packages/hub/test/codex-hub.test.ts | 9 | 16 | 6 | 0 | 3 | 10
+packages/hub/test/codex-loop-verdict.test.ts | 1 | 1 | 1 | 0 | 0 | 0
+packages/hub/test/confirm-order.test.ts | 1 | 0 | 0 | 0 | 1 | 0
+packages/hub/test/continues.test.ts | 5 | 14 | 5 | 0 | 0 | 9
+packages/hub/test/detached.test.ts | 1 | 0 | 0 | 0 | 1 | 0
+packages/hub/test/done-reader-fold.test.ts | 1 | 0 | 0 | 0 | 1 | 0
+packages/hub/test/duration-fold.test.ts | 1 | 1 | 1 | 0 | 0 | 0
+packages/hub/test/env-resources.test.ts | 1 | 0 | 0 | 1 | 0 | 0
+packages/hub/test/eval-report.test.ts | 1 | 0 | 0 | 0 | 1 | 0
+packages/hub/test/extensions.test.ts | 2 | 2 | 2 | 0 | 0 | 0
+packages/hub/test/gate-answer-origin.test.ts | 2 | 2 | 1 | 0 | 1 | 1
+packages/hub/test/gate-recovery.test.ts | 1 | 0 | 0 | 0 | 1 | 0
+packages/hub/test/gate-stop.test.ts | 6 | 0 | 0 | 6 | 0 | 0
+packages/hub/test/gone-watch.test.ts | 2 | 0 | 0 | 0 | 2 | 0
+packages/hub/test/guards.test.ts | 1 | 0 | 0 | 0 | 1 | 0
+packages/hub/test/hook-parent.test.ts | 2 | 2 | 2 | 0 | 0 | 0
+packages/hub/test/hosts.test.ts | 1 | 0 | 0 | 0 | 1 | 0
+packages/hub/test/install.test.ts | 5 | 5 | 5 | 0 | 0 | 0
+packages/hub/test/job-rule-command.test.ts | 1 | 0 | 0 | 0 | 1 | 0
+packages/hub/test/jobs.test.ts | 1 | 0 | 0 | 0 | 1 | 0
+packages/hub/test/landing-gate.test.ts | 2 | 1 | 1 | 0 | 1 | 0
+packages/hub/test/library-command.test.ts | 1 | 1 | 1 | 0 | 0 | 0
+packages/hub/test/login-plan.test.ts | 1 | 0 | 0 | 0 | 1 | 0
+packages/hub/test/mcp-rebind.test.ts | 5 | 5 | 5 | 0 | 0 | 0
+packages/hub/test/memory.test.ts | 1 | 2 | 1 | 0 | 0 | 1
+packages/hub/test/mods-start.test.ts | 1 | 0 | 0 | 0 | 1 | 0
+packages/hub/test/monitor-ends.test.ts | 4 | 0 | 0 | 4 | 0 | 0
+packages/hub/test/notification-idle.test.ts | 1 | 1 | 0 | 0 | 1 | 1
+packages/hub/test/numbers.test.ts | 3 | 5 | 2 | 0 | 1 | 3
+packages/hub/test/onboarding.test.ts | 3 | 3 | 3 | 0 | 0 | 0
+packages/hub/test/overridden.test.ts | 2 | 1 | 1 | 0 | 1 | 0
+packages/hub/test/pack-cache.test.ts | 1 | 0 | 0 | 1 | 0 | 0
+packages/hub/test/pack-license-authority.test.ts | 1 | 0 | 0 | 1 | 0 | 0
+packages/hub/test/pack-restart.test.ts | 1 | 0 | 0 | 1 | 0 | 0
+packages/hub/test/pack-rule-command.test.ts | 1 | 0 | 0 | 0 | 1 | 0
+packages/hub/test/parsers.test.ts | 1 | 1 | 1 | 0 | 0 | 0
+packages/hub/test/people.test.ts | 1 | 0 | 0 | 0 | 1 | 0
+packages/hub/test/pi-takeover.test.ts | 1 | 0 | 0 | 0 | 1 | 0
+packages/hub/test/process-read-reuse.test.ts | 2 | 2 | 2 | 0 | 0 | 0
+packages/hub/test/products-keep-orphan-2122.test.ts | 1 | 1 | 1 | 0 | 0 | 0
+packages/hub/test/products-restart-reclaim-2122.test.ts | 1 | 1 | 1 | 0 | 0 | 0
+packages/hub/test/products-start.test.ts | 1 | 0 | 0 | 0 | 1 | 0
+packages/hub/test/promises-hub.test.ts | 4 | 5 | 4 | 0 | 0 | 1
+packages/hub/test/prompt-items.test.ts | 4 | 0 | 0 | 1 | 3 | 0
+packages/hub/test/prompt-workspace-stop.test.ts | 1 | 0 | 0 | 0 | 1 | 0
+packages/hub/test/queued.test.ts | 1 | 2 | 1 | 0 | 0 | 1
+packages/hub/test/reach.test.ts | 6 | 5 | 1 | 0 | 5 | 4
+packages/hub/test/reading.test.ts | 10 | 10 | 9 | 0 | 1 | 1
+packages/hub/test/removal-drift.test.ts | 1 | 0 | 0 | 0 | 1 | 0
+packages/hub/test/removal-safety.test.ts | 1 | 0 | 0 | 0 | 1 | 0
+packages/hub/test/replay.test.ts | 2 | 4 | 1 | 0 | 1 | 3
+packages/hub/test/row-actions.test.ts | 1 | 1 | 1 | 0 | 0 | 0
+packages/hub/test/rules-hot-path.test.ts | 1 | 0 | 0 | 0 | 1 | 0
+packages/hub/test/session-name.test.ts | 1 | 1 | 1 | 0 | 0 | 0
+packages/hub/test/setup-failure-safety.test.ts | 3 | 3 | 3 | 0 | 0 | 0
+packages/hub/test/shared-runs-hub.test.ts | 1 | 1 | 0 | 1 | 0 | 1
+packages/hub/test/size-scope.test.ts | 1 | 1 | 1 | 0 | 0 | 0
+packages/hub/test/staging.test.ts | 1 | 1 | 1 | 0 | 0 | 0
+packages/hub/test/stall-receipt.test.ts | 1 | 0 | 0 | 0 | 1 | 0
+packages/hub/test/stall-recovery.test.ts | 1 | 0 | 0 | 0 | 1 | 0
+packages/hub/test/start-ps.test.ts | 1 | 0 | 0 | 0 | 1 | 0
+packages/hub/test/startup-memory.test.ts | 1 | 1 | 1 | 0 | 0 | 0
+packages/hub/test/state-table.test.ts | 1 | 0 | 0 | 0 | 1 | 0
+packages/hub/test/status-question.test.ts | 1 | 2 | 1 | 0 | 0 | 1
+packages/hub/test/stream-scope.test.ts | 1 | 0 | 0 | 0 | 1 | 0
+packages/hub/test/switch-asks.test.ts | 1 | 1 | 1 | 0 | 0 | 0
+packages/hub/test/teardowns.test.ts | 1 | 2 | 0 | 0 | 1 | 2
+packages/hub/test/verdict-stop.test.ts | 2 | 2 | 2 | 0 | 0 | 0
+packages/hub/test/waiting-quiet.test.ts | 2 | 1 | 1 | 0 | 1 | 0
+packages/hub/test/waits-hub.test.ts | 1 | 2 | 1 | 0 | 0 | 1
+packages/hub/test/wiki.test.ts | 1 | 6 | 0 | 0 | 1 | 6
+packages/hub/test/workspace-landing.test.ts | 1 | 1 | 1 | 0 | 0 | 0
+tests/acceptance/1002/first-screen-redraft/first-screen.test.ts | 1 | 1 | 1 | 0 | 0 | 0
+tests/acceptance/1002/first-screen-redraft/shown.test.ts | 1 | 1 | 1 | 0 | 0 | 0
+tests/acceptance/1002/first-screen-redraft/twins.test.ts | 4 | 4 | 4 | 0 | 0 | 0
+tests/acceptance/1100/first-command.test.ts | 1 | 0 | 0 | 0 | 1 | 0
+tests/acceptance/1113/measured.test.mjs | 1 | 2 | 0 | 0 | 1 | 2
+tests/acceptance/1113/waits.test.mjs | 1 | 2 | 1 | 0 | 0 | 1
+tests/acceptance/1114/affected.test.mjs | 1 | 1 | 1 | 0 | 0 | 0
+tests/acceptance/1114/timed-list.test.mjs | 2 | 2 | 2 | 0 | 0 | 0
+tests/acceptance/1202/entries.test.ts | 1 | 0 | 0 | 0 | 1 | 0
+tests/acceptance/1202/programs.test.ts | 1 | 1 | 1 | 0 | 0 | 0
+tests/acceptance/1329/ac1-design-source.test.mjs | 1 | 1 | 1 | 0 | 0 | 0
+tests/acceptance/1329/ac2-drift-lane.test.mjs | 1 | 1 | 1 | 0 | 0 | 0
+tests/acceptance/1333/conflict.test.mjs | 1 | 1 | 1 | 0 | 0 | 0
+tests/acceptance/1333/flaky.test.mjs | 1 | 1 | 1 | 0 | 0 | 0
+tests/acceptance/1333/known-failures.test.mjs | 2 | 2 | 2 | 0 | 0 | 0
+tests/acceptance/1333/schedule.test.mjs | 1 | 1 | 1 | 0 | 0 | 0
+tests/acceptance/1333/watch.test.mjs | 3 | 3 | 3 | 0 | 0 | 0
+tests/acceptance/1348/plants.test.ts | 2 | 0 | 0 | 2 | 0 | 0
+tests/acceptance/139/corpus.test.ts | 2 | 2 | 2 | 0 | 0 | 0
+tests/acceptance/140/platform/wasm.test.ts | 1 | 1 | 1 | 0 | 0 | 0
+tests/acceptance/1425/app.test.ts | 1 | 1 | 1 | 0 | 0 | 0
+tests/acceptance/1425/lint.test.ts | 4 | 3 | 3 | 0 | 1 | 0
+tests/acceptance/1432/ratchet.test.mjs | 1 | 1 | 1 | 0 | 0 | 0
+tests/acceptance/1454/lint.test.ts | 1 | 1 | 1 | 0 | 0 | 0
+tests/acceptance/1457/frame.test.ts | 1 | 0 | 0 | 0 | 1 | 0
+tests/acceptance/1461/redraft/tree.test.ts | 1 | 1 | 1 | 0 | 0 | 0
+tests/acceptance/1556/lint.test.ts | 2 | 1 | 1 | 0 | 1 | 0
+tests/acceptance/1556/twins.test.ts | 1 | 4 | 1 | 0 | 0 | 3
+tests/acceptance/1687/ac3-redraft/ac3.test.mjs | 1 | 1 | 1 | 0 | 0 | 0
+tests/acceptance/1802/ac4-removed-entry-migration.test.ts | 1 | 1 | 0 | 0 | 1 | 1
+tests/acceptance/1830/ac1-lint.test.ts | 3 | 1 | 1 | 0 | 2 | 0
+tests/acceptance/1830/ac2-redrafts.test.ts | 18 | 0 | 0 | 0 | 18 | 0
+tests/acceptance/1830/ac3-judge.test.ts | 2 | 1 | 1 | 0 | 1 | 0
+tests/acceptance/1906/exit/sync-children-at-exit.test.ts | 1 | 0 | 0 | 0 | 1 | 0
+tests/acceptance/200/closures.test.ts | 1 | 1 | 1 | 0 | 0 | 0
+tests/acceptance/2119/merge-at-write.test.ts | 1 | 1 | 1 | 0 | 0 | 0
+tests/acceptance/2122/product-session.test.ts | 1 | 1 | 1 | 0 | 0 | 0
+tests/acceptance/2123/dispute-restart.test.ts | 1 | 0 | 0 | 1 | 0 | 0
+tests/acceptance/2144/lint-on-main.test.mjs | 1 | 1 | 0 | 0 | 1 | 1
+tests/acceptance/2178/lint-lanes.test.mjs | 1 | 1 | 1 | 0 | 0 | 0
+tests/acceptance/246/redraft/deps.test.mjs | 3 | 3 | 3 | 0 | 0 | 0
+tests/acceptance/246/repo-rules.test.mjs | 9 | 9 | 9 | 0 | 0 | 0
+tests/acceptance/246/secrets-property.test.mjs | 1 | 1 | 1 | 0 | 0 | 0
+tests/acceptance/2574/grant.test.mjs | 1 | 1 | 1 | 0 | 0 | 0
+tests/acceptance/309/chosen-relay.test.ts | 1 | 1 | 1 | 0 | 0 | 0
+tests/acceptance/309/frames.test.ts | 1 | 1 | 1 | 0 | 0 | 0
+tests/acceptance/309/hello.test.ts | 1 | 0 | 0 | 0 | 1 | 0
+tests/acceptance/309/network-suite.test.ts | 1 | 1 | 1 | 0 | 0 | 0
+tests/acceptance/309/relay-suite.test.ts | 1 | 1 | 0 | 1 | 0 | 1
+tests/acceptance/313/packaging.test.ts | 1 | 1 | 0 | 1 | 0 | 1
+tests/acceptance/317/floor.test.ts | 1 | 1 | 0 | 1 | 0 | 1
+tests/acceptance/326/panels/guard.test.mjs | 2 | 2 | 2 | 0 | 0 | 0
+tests/acceptance/337/spike.test.mjs | 1 | 1 | 1 | 0 | 0 | 0
+tests/acceptance/338/spike.test.mjs | 3 | 3 | 3 | 0 | 0 | 0
+tests/acceptance/33/bootstrap.test.ts | 1 | 1 | 1 | 0 | 0 | 0
+tests/acceptance/33/spine.test.ts | 1 | 1 | 1 | 0 | 0 | 0
+tests/acceptance/349/slot-table.test.ts | 1 | 1 | 1 | 0 | 0 | 0
+tests/acceptance/377/noop.test.ts | 2 | 1 | 0 | 0 | 2 | 1
+tests/acceptance/41/rollback/rollback.test.ts | 2 | 2 | 2 | 0 | 0 | 0
+tests/acceptance/47/explain.test.mjs | 1 | 1 | 1 | 0 | 0 | 0
+tests/acceptance/56/decision.test.mjs | 2 | 2 | 2 | 0 | 0 | 0
+tests/acceptance/594/build-dirs.test.mjs | 1 | 1 | 1 | 0 | 0 | 0
+tests/acceptance/594/margin.test.mjs | 1 | 1 | 1 | 0 | 0 | 0
+tests/acceptance/594/warm.test.mjs | 1 | 1 | 1 | 0 | 0 | 0
+tests/acceptance/605/catalogue-311.test.mjs | 1 | 1 | 1 | 0 | 0 | 0
+tests/acceptance/605/drift.test.mjs | 1 | 2 | 1 | 0 | 0 | 1
+tests/acceptance/684/lanes.test.ts | 5 | 4 | 4 | 0 | 1 | 0
+tests/acceptance/689/preflight-env.test.mjs | 2 | 2 | 2 | 0 | 0 | 0
+tests/acceptance/79/mark.test.mjs | 1 | 1 | 1 | 0 | 0 | 0
+tests/acceptance/824/sessions/readings.test.ts | 1 | 1 | 0 | 0 | 1 | 1
+tests/acceptance/879/cards.test.mjs | 4 | 4 | 4 | 0 | 0 | 0
+tests/acceptance/879/checkout.test.mjs | 1 | 1 | 1 | 0 | 0 | 0
+tests/acceptance/879/lane.test.mjs | 1 | 1 | 1 | 0 | 0 | 0
+tests/acceptance/87/gate/replay-lane.test.ts | 1 | 1 | 0 | 0 | 1 | 1
+tests/acceptance/880/plants.test.ts | 1 | 1 | 1 | 0 | 0 | 0
+tests/acceptance/882/inventory.test.mjs | 2 | 2 | 2 | 0 | 0 | 0
+tests/acceptance/882/lint.test.mjs | 3 | 3 | 3 | 0 | 0 | 0
+tests/acceptance/910/anchors.test.mjs | 1 | 2 | 1 | 0 | 0 | 1
+tests/acceptance/910/clean.test.mjs | 2 | 2 | 2 | 0 | 0 | 0
+tests/acceptance/992/gone.test.ts | 1 | 2 | 1 | 0 | 0 | 1
+tests/acceptance/992/notification.test.ts | 2 | 0 | 0 | 2 | 0 | 0
+tests/acceptance/993/doctor.test.ts | 1 | 1 | 1 | 0 | 0 | 0
+tests/acceptance/993/hub-check.test.ts | 1 | 1 | 1 | 0 | 0 | 0
+tests/acceptance/993/nested-caller.test.ts | 1 | 0 | 0 | 0 | 1 | 0
+tests/agent-name-branches.test.mjs | 2 | 2 | 2 | 0 | 0 | 0
+tests/shards.test.mjs | 1 | 1 | 1 | 0 | 0 | 0
+
+## 2. Those 60 + 14 files again, each alone, on both trees at the same time
+
+One file at a time (vitest, or node --test for .mjs), the head tree (40ad93a48) and the main tree started together, so
+each file meets the same load on both sides (25 to 90). Exit, passed/failed/skipped and load per side:
+
+file | head: exit pass/fail/skip load | main: exit pass/fail/skip load
+packages/hub/test/actions.test.ts | 0 1/0/0 25.23 | 0 1/0/0 25.23
+packages/hub/test/callers.test.ts | 0 1/0/0 26.25 | 0 1/0/0 26.25
+packages/hub/test/cant-run.test.ts | 0 1/0/0 26.25 | 0 1/0/0 26.25
+packages/hub/test/canvas-hub-failure.test.ts | 0 1/0/0 25.27 | 0 1/0/0 25.27
+packages/hub/test/codex-hub.test.ts | 1 28/2/0 25.27 | 1 29/1/0 25.27
+packages/hub/test/confirm-order.test.ts | 0 1/0/0 40.28 | 0 1/0/0 40.65
+packages/hub/test/detached.test.ts | 0 5/0/0 40.28 | 0 5/0/0 40.28
+packages/hub/test/done-reader-fold.test.ts | 0 1/0/0 41.38 | 0 1/0/0 41.38
+packages/hub/test/eval-report.test.ts | 0 2/0/0 40.55 | 0 2/0/0 40.55
+packages/hub/test/gate-answer-origin.test.ts | 1 0/2/0 40.55 | 1 0/2/0 40.55
+packages/hub/test/gate-recovery.test.ts | 0 1/0/0 39.78 | 0 1/0/0 40.55
+packages/hub/test/gone-watch.test.ts | 0 2/0/0 39.78 | 0 2/0/0 39.78
+packages/hub/test/guards.test.ts | 0 1/0/0 36.43 | 0 1/0/0 36.43
+packages/hub/test/hosts.test.ts | 0 3/0/0 38.16 | 0 3/0/0 36.43
+packages/hub/test/job-rule-command.test.ts | 0 2/0/0 38.16 | 0 2/0/0 38.16
+packages/hub/test/jobs.test.ts | 0 1/0/0 59.47 | 0 1/0/0 59.47
+packages/hub/test/landing-gate.test.ts | 0 1/0/0 67.41 | 0 1/0/0 62.40
+packages/hub/test/login-plan.test.ts | 0 1/0/0 79.29 | 0 1/0/0 79.29
+packages/hub/test/mods-start.test.ts | 0 1/0/0 81.51 | 0 1/0/0 81.51
+packages/hub/test/notification-idle.test.ts | 0 1/0/0 81.31 | 0 1/0/0 80.33
+packages/hub/test/numbers.test.ts | 0 10/0/0 80.86 | 0 10/0/0 80.86
+packages/hub/test/overridden.test.ts | 0 3/0/0 81.02 | 0 3/0/0 81.02
+packages/hub/test/pack-rule-command.test.ts | 0 2/0/0 83.95 | 1 1/1/0 83.51
+packages/hub/test/people.test.ts | 0 3/0/0 85.57 | 0 3/0/0 84.92
+packages/hub/test/pi-takeover.test.ts | 0 1/0/0 84.71 | 0 1/0/0 85.12
+packages/hub/test/products-start.test.ts | 0 1/0/0 84.09 | 0 1/0/0 84.71
+packages/hub/test/prompt-items.test.ts | 0 7/0/0 85.13 | 0 7/0/0 84.09
+packages/hub/test/prompt-workspace-stop.test.ts | 0 1/0/0 87.61 | 0 1/0/0 87.23
+packages/hub/test/reach.test.ts | 0 9/0/0 87.72 | 0 9/0/0 87.61
+packages/hub/test/reading.test.ts | 0 10/0/0 90.33 | 0 10/0/0 90.27
+packages/hub/test/removal-drift.test.ts | 0 1/0/0 80.38 | 0 1/0/0 80.24
+packages/hub/test/removal-safety.test.ts | 0 2/0/0 78.50 | 0 2/0/0 78.50
+packages/hub/test/replay.test.ts | 0 4/0/0 73.60 | 0 4/0/0 73.60
+packages/hub/test/rules-hot-path.test.ts | 0 1/0/0 72.86 | 0 1/0/0 72.85
+packages/hub/test/stall-receipt.test.ts | 0 1/0/0 72.86 | 0 1/0/0 72.86
+packages/hub/test/stall-recovery.test.ts | 0 1/0/0 72.55 | 0 1/0/0 72.86
+packages/hub/test/start-ps.test.ts | 0 1/0/0 72.55 | 0 1/0/0 72.55
+packages/hub/test/state-table.test.ts | 0 6/0/0 71.79 | 0 6/0/0 71.79
+packages/hub/test/stream-scope.test.ts | 0 1/0/0 70.76 | 0 1/0/0 71.79
+packages/hub/test/teardowns.test.ts | 0 5/0/0 73.20 | 0 5/0/0 70.76
+packages/hub/test/waiting-quiet.test.ts | 0 2/0/0 75.08 | 0 2/0/0 70.78
+packages/hub/test/wiki.test.ts | 1 5/1/0 69.51 | 1 5/1/0 75.08
+tests/acceptance/1100/first-command.test.ts | 0 7/0/0 67.79 | 0 7/0/0 69.51
+tests/acceptance/1113/measured.test.mjs | 124 0/0/0 48.19 | 124 0/0/0 50.72
+tests/acceptance/1202/entries.test.ts | 0 2/0/0 33.47 | 0 2/0/0 32.73
+tests/acceptance/1425/lint.test.ts | 0 6/0/0 34.75 | 0 6/0/0 33.59
+tests/acceptance/1457/frame.test.ts | 1 4/1/0 33.96 | 1 4/1/0 34.75
+tests/acceptance/1556/lint.test.ts | 0 1/0/0 33.96 | 0 1/0/0 35.17
+tests/acceptance/1802/ac4-removed-entry-migration.test.ts | 0 2/0/0 54.59 | 0 2/0/0 38.50
+tests/acceptance/1830/ac1-lint.test.ts | 0 4/0/0 38.91 | 0 4/0/0 41.38
+tests/acceptance/1830/ac2-redrafts.test.ts | 0 18/0/0 38.52 | 0 18/0/0 41.93
+tests/acceptance/1830/ac3-judge.test.ts | 0 2/0/0 38.60 | 0 2/0/0 42.90
+tests/acceptance/1906/exit/sync-children-at-exit.test.ts | 0 4/0/0 38.60 | 0 4/0/0 42.18
+tests/acceptance/2144/lint-on-main.test.mjs | 1 0/1/0 44.72 | 1 0/1/0 36.72
+tests/acceptance/309/hello.test.ts | 0 3/0/0 42.60 | 0 3/0/0 37.88
+tests/acceptance/377/noop.test.ts | 1 2/1/0 50.93 | 1 2/1/0 59.35
+tests/acceptance/684/lanes.test.ts | 0 5/0/0 38.03 | 0 5/0/0 31.71
+tests/acceptance/824/sessions/readings.test.ts | 0 4/0/0 37.87 | 1 2/2/0 31.97
+tests/acceptance/87/gate/replay-lane.test.ts | 0 1/0/0 35.73 | 0 1/0/0 35.04
+tests/acceptance/993/nested-caller.test.ts | 0 1/0/0 35.67 | 0 1/0/0 39.44
+
+packages/hub/test/actions-server.test.ts | 0 14/0/0 62.90 | 0 14/0/0 62.90
+packages/hub/test/env-resources.test.ts | 1 16/1/0 64.59 | 1 16/1/0 64.59
+packages/hub/test/gate-stop.test.ts | 0 7/0/0 60.11 | 0 7/0/0 60.11
+packages/hub/test/monitor-ends.test.ts | 0 7/0/0 62.75 | 0 7/0/0 64.12
+packages/hub/test/pack-cache.test.ts | 0 1/0/0 55.96 | 0 1/0/0 55.96
+packages/hub/test/pack-license-authority.test.ts | 0 1/0/0 57.39 | 0 1/0/0 57.39
+packages/hub/test/pack-restart.test.ts | 0 1/0/0 53.39 | 0 1/0/0 53.39
+packages/hub/test/shared-runs-hub.test.ts | 0 2/0/0 54.16 | 0 2/0/0 54.16
+tests/acceptance/1348/plants.test.ts | 1 0/3/0 47.32 | 1 0/3/0 47.32
+tests/acceptance/2123/dispute-restart.test.ts | 0 1/0/0 68.74 | 0 1/0/0 66.52
+tests/acceptance/309/relay-suite.test.ts | 0 4/0/0 66.52 | 0 4/0/0 65.23
+tests/acceptance/313/packaging.test.ts | 1 9/1/0 57.97 | 1 9/1/0 58.77
+tests/acceptance/317/floor.test.ts | 0 5/0/0 41.61 | 0 5/0/0 40.84
+tests/acceptance/992/notification.test.ts | 1 1/2/0 40.84 | 1 1/2/0 41.41
+
+Every failing test of that rerun:
+
+## packages/hub/test/codex-hub.test.ts
+  head FAIL (HEAD ONLY) a stop not held, on the row stops being the row's reason once the session goes on :: AssertionError: expected 'undefined' to match /This stop isn't held/     at ~/deepbuild/.claude/worktrees/fix-1836-subagent-stop-ho
+  head FAIL (HEAD ONLY) a subagent's stop a child's rollout never binds the root across a restart, and only SubagentStart may name one :: TypeError: Cannot read properties of undefined (reading 'verified')     at ~/deepbuild/.claude/worktrees/fix-1836-subagent-stop-hol
+  main FAIL (main only) a subagent's stop is no boundary of the root's turn across a hub restart :: AssertionError: expected false to be true // Object.is equality     at ~/deepbuild/.claude/worktrees/base-1836-f7d661d67/packages/h
+## packages/hub/test/gate-answer-origin.test.ts
+  head FAIL (also main) typing accept without choosing an option does not settle a stalled task after restart :: TypeError: The "paths[0]" argument must be of type string. Received undefined     at resolve (node:path:1257:7)     at gatePrBodies (~
+  head FAIL (also main) typing split without choosing an option does not settle a stalled task after restart :: TypeError: The "paths[0]" argument must be of type string. Received undefined     at resolve (node:path:1257:7)     at gatePrBodies (~
+## packages/hub/test/pack-rule-command.test.ts
+  main FAIL (main only) deep pack rule lets a pack's asset fetch under the rule's license with no ask :: Error: BLOCKED: deep install of a pack folder with url-listed assets did not install it: exit 3, Source: /tmp/dh1731-HdOOkv/pack-a   acme/so
+## packages/hub/test/wiki.test.ts
+  head FAIL (also main) the one-time choices runs the wiki's reading on the agent the choices name :: AssertionError: expected [] to deeply equal [ 'codex' ]     at ~/deepbuild/.claude/worktrees/fix-1836-subagent-stop-hold-a7b2c2/pac
+## tests/acceptance/1113/measured.test.mjs
+  head FAIL (also main) (file) timed out after 1800 s
+## tests/acceptance/1457/frame.test.ts
+  head FAIL (also main) #1457 AC3 a frame does no file-system call the preflight counted 0 file-system calls in a frame of the shell on the reference Mac (FS_CALLS_PER_FRAME) :: AssertionError: INCONCLUSIVE: FS_CALLS_PER_FRAME is not supplied by the local preflight; this is not a pass     at inconcl
+## tests/acceptance/2144/lint-on-main.test.mjs
+  head FAIL (also main) \#2144.35365960 node scripts/canvas-lint.mjs exits 0 on main, or every line it prints is one scripts/known-failures.json records with its issue
+## tests/acceptance/377/noop.test.ts
+  head FAIL (also main) #377.8131b7ba the noop lane runs the render-logic tests without a GPU #377.8131b7ba render logic on the noop backend is the default backend's (declare :: AssertionError: the default backend draws the scene: expected [ …(3) ] to deeply equal [ …(3) ]     at ~/deep
+## tests/acceptance/824/sessions/readings.test.ts
+  main FAIL (main only) AC4 #824.85ef3d40 On the reference Mac, compared with the merge base, each session added past the first raises the summed memory of DeepBuild's own pr :: AssertionError: the benchmark prints its readings as one JSON line with "bench": "hub-sessions": exit 1; stdout: BLOCKED h
+  main FAIL (main only) AC4 #824.85ef3d40 On the reference Mac, compared with the merge base, each session added past the first raises the summed memory of DeepBuild's own pr :: AssertionError: the benchmark prints its readings as one JSON line with "bench": "hub-sessions": exit 1; stdout: BLOCKED h
+## packages/hub/test/env-resources.test.ts
+  head FAIL (also main) a session whose agent is killed, with no SessionEnd, takes the stack it leased keys for down, so another worktree's session gets them :: Error: timed out after 30000 ms waiting for B's up to get gpu-0 once A's agent is gone     at waitFor (~/deepbuild/.claude/worktre
+## tests/acceptance/1348/plants.test.ts
+  head FAIL (also main) the lane that fails a listed word AC1 #1348.d4f7c3ae: a planted card line holding "PR" fails the lane, naming the string and its plain word :: Error: the lane wrote no dump at $DEEP_PLAIN_WORDS_DUMP (/tmp/dp1348-uThWgP/dump.json)     at readDump (~/deepbuild/.claude/
+  head FAIL (also main) the lane that fails a listed word AC1 #1348.d4f7c3ae: the same word on a session's page passes :: Error: the lane wrote no dump at $DEEP_PLAIN_WORDS_DUMP (/tmp/dp1348-KiRfI9/dump.json)     at readDump (~/deepbuild/.claude/worktre
+  head FAIL (also main) the lane that fails a listed word AC3 #1348.97af66a9: a view that shows the trace fails, naming it :: Error: the lane wrote no dump at $DEEP_PLAIN_WORDS_DUMP (/tmp/dp1348-AE5vnR/dump.json)     at readDump (~/deepbuild/.claude/worktre
+## tests/acceptance/313/packaging.test.ts
+  head FAIL (also main) the local preflight runs the conformance lint: enum closures, code mappings, rule fakes and planted codes the conformance lint passes on the checkout, :: AssertionError: PASS enum closures: every enum carries its closure FAIL code mappings: doctor service_unpromoted maps to n
+## tests/acceptance/992/notification.test.ts
+  head FAIL (also main) AC4 #992.f70129f6 AC4 #992.f70129f6: an idle-prompt notification after a waiting session clears its waiting, opening no ask and writing no evidence :: AssertionError: tests/acceptance/992/fixtures/sessions/permission-terminal-closed: session 0992c105-0000-4000-8000-00000000c1
+  head FAIL (also main) AC4 #992.f70129f6 AC4 #992.f70129f6: a permission-prompt notification with no PermissionRequest sets waiting, opening no ask and writing no evidence :: AssertionError: tests/acceptance/992/fixtures/sessions/permission-answered: session 0992a115-0000-4000-8000-00000000a115, in
+
+73 of the 74 files: no test fails at the head that doesn't fail on main too. 61 pass on both; 10 fail the same way
+on both (among them tests/acceptance/1113/measured.test.mjs, timed out at 1800 s on both); main alone fails
+pack-rule-command and 824/sessions/readings.
+
+## 3. The one file left: packages/hub/test/codex-hub.test.ts
+
+Its failing tests differ from run to run on both trees. To tell the change from the tree, the two changed source files
+were swapped between the trees (hub rebuilt each time) and the file run again:
+
+packages/hub/test/codex-hub.test.ts, whole file (30 tests), 7 runs per cell, head and main trees side by side:
+cell | runs | runs with any failure | 'child's rollout never binds the root across a restart' | 'no boundary of the root's turn across a hub restart' | other tests that failed at least once
+head tree, with the fix | 7 | 7 | 7 fail | 5 fail | 2
+main tree, without the fix | 7 | 6 | 1 fail | 4 fail | 3
+head tree, main's holds.ts and plant.ts | 7 | 6 | 3 fail | 6 fail | 5
+main tree, the fix's holds.ts and plant.ts | 7 | 7 | 2 fail | 7 fail | 9
+
+That one test alone (-t), 10 runs per cell, at load 64 to 81:
+head tree, main's holds.ts and plant.ts | 8 of 10 fail
+main tree, the fix's holds.ts and plant.ts | 5 of 10 fail
+head tree, with the fix | 6 of 10 fail
+main tree, without the fix | 6 of 10 fail
+
+Alone and at one load, the test fails 11 of 20 runs with the fix and 14 of 20 without it; on plain main, 6 of 10.
+It is flaky on main, and the fix doesn't move it. By reading, the changed query (`proceeding()` in holds.ts) runs
+only for a call that pushes, merges, dispatches, sends or deletes; this test's calls are `ls` and `pwd`.
+
+## Verdict
+
+No test of r8's 172 newly failing files fails because of this change: each either fails on main the same way, or
+passes at the head when run alone beside main, or (codex-hub) fails as often on main without the fix.

@@ -49,6 +49,7 @@ pub fn evaluate(
     if let Some(d) = doc.as_object_mut() {
         d.insert("size".into(), json!(size));
     }
+    #[cfg(feature = "physics")]
     deep_canvas_physics::skin::write(&mut doc, t);
     let look = look_of(&doc, palette);
     let scene = evaluate_any(&doc, t, &look, labels, Some(assets), fills)?;
