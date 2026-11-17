@@ -38,7 +38,8 @@ pub fn shown() -> Vec<String> {
 /// The box was drawn at `bounds`: from the next frame the notices sit above it.
 pub fn box_drawn(bounds: Bounds<Pixels>, window: &mut Window) {
     let above = window.viewport_size().height - bounds.origin.y;
-    if ABOVE_BOX.with(|a| a.replace(Some(above))) != Some(above) {
+    // Only a notice on screen sits above the box, so a box that moved with none up redraws nothing (#1482).
+    if ABOVE_BOX.with(|a| a.replace(Some(above))) != Some(above) && !shown().is_empty() {
         window.on_next_frame(|window, _| window.refresh());
     }
 }

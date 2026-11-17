@@ -306,6 +306,8 @@ impl TestWindow {
 }
 
 impl PlatformWindow for TestWindow {
+    fn a11y_init(&self, c: crate::A11yCallbacks) { crate::platform::a11y_tap::init(c) } // DeepBuild patch (windoliver/deepbuild#1482)
+    fn a11y_tree_update(&self, u: accesskit::TreeUpdate) { crate::platform::a11y_tap::update(u) } // DeepBuild patch (windoliver/deepbuild#1482)
     fn visual_viewport_bounds(&self) -> Bounds<Pixels> {
         let state = self.0.lock();
         state

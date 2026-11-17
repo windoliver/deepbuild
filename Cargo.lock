@@ -4263,6 +4263,7 @@ dependencies = [
  "gpui-pre-shared-string",
  "gpui-pre-sum-tree",
  "gpui-pre-util",
+ "hdrhistogram",
  "heapless 0.9.3",
  "image",
  "inventory",

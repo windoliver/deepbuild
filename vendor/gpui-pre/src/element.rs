@@ -359,6 +359,8 @@ impl<E: Element> Drawable<E> {
     fn request_layout(&mut self, window: &mut Window, cx: &mut App) -> LayoutId {
         match mem::take(&mut self.phase) {
             ElementDrawPhase::Start => {
+                #[cfg(feature = "test-support")]
+                crate::window::frame_counts::note_laid_out(); // DeepBuild patch (windoliver/deepbuild#1482)
                 let global_id = self
                     .element
                     .id()
