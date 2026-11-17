@@ -853,6 +853,8 @@ timed.push('tests/acceptance/1636/ac8-budget.test.ts');
 alone.push('tests/acceptance/182/', 'tests/acceptance/182-oracle/controllers-py-rapier.test.ts', 'tests/acceptance/182-oracle-redraft-climb/');
 timed.push('tests/acceptance/182/ac11-budgets.test.ts');
 byHand.push('tests/acceptance/182-oracle/character-controller-rapier.test.ts');
+// #2309's files build deep-physics (shipped and release), its wasm32 library and the merge base's release build.
+alone.push('tests/acceptance/2309/');
 
 // #1624: this live session spends plan usage and is explicitly run by hand, not as a skipped unit test.
 byHand.push('tests/acceptance/1330/start.live.test.ts');

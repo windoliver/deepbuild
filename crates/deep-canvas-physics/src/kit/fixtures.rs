@@ -401,7 +401,7 @@ fn resting_stack() -> Fixture {
         "resting_stack",
         w,
         720,
-        Measure::Travel {
+        Measure::Sink {
             body: "cube5",
             step: 720,
         },

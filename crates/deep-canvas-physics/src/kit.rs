@@ -139,6 +139,8 @@ pub enum Measure {
         ground: &'static str,
         step: usize,
     },
+    /// #2309: how far below where it started `body` is after step `step`, along y, m.
+    Sink { body: &'static str, step: usize },
 }
 
 /// One fixture of the behavior part.
@@ -656,6 +658,11 @@ fn read(m: &Measure, t: &Trace, b: &dyn Backend, w: &World, f: &Fixture) -> Read
             });
             reading(off, json!({"body": body, "ground": ground}))
         }
+        Measure::Sink { body, step } => {
+            let p = path(t, body);
+            let sink = p.get(*step).zip(p.first()).map(|(a, z)| z[1] - a[1]);
+            reading(sink, json!({"body": body}))
+        }
     }
 }
 
@@ -725,6 +732,9 @@ fn named_measure(m: &Measure) -> String {
         }
         Measure::Carried { body, ground, step } => {
             format!("distance along the ground of {body} from its place on {ground} after step {step}, m")
+        }
+        Measure::Sink { body, step } => {
+            format!("how far {body} is below where it started after step {step}, m")
         }
     }
 }
