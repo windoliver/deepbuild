@@ -226,6 +226,42 @@ impl Player {
         Ok(())
     }
 
+    /// The piece's saves as the page keeps them (Logic: saves): `{piece, slots}` as JSON, the
+    /// document's stable ID and the most slots its logic declares, 0 for a piece with no saves.
+    pub fn saves(&self) -> String {
+        let p = self.played.as_ref();
+        json!({"piece": p.map_or("", Played::id), "slots": p.map_or(0, Played::slots)}).to_string()
+    }
+
+    /// The saves asked for by the steps the shown time has reached since the last call, as JSON
+    /// in step order: each `{at, item, slot, step, ended, deep_hash}`.
+    pub fn saves_due(&mut self) -> String {
+        Value::Array(self.played.as_mut().map(Played::due).unwrap_or_default()).to_string()
+    }
+
+    /// The save at `at` of [`Self::saves_due`] as its slot's save number `seq`: the bytes the
+    /// page stores whole under their SHA-256.
+    pub fn save_bytes(&self, at: usize, seq: u32) -> Result<Vec<u8>, JsValue> {
+        self.played
+            .as_ref()
+            .and_then(|p| p.save(at, seq.into()))
+            .ok_or_else(|| fail("the piece asked for no such save"))
+    }
+
+    /// The viewer opens the save `name`, its bytes' SHA-256: `{hash, step, deep_hash}` as JSON
+    /// once every logic item plays on from it, or its refusal as JSON, naming what differs.
+    pub fn open_save(&mut self, name: &str, bytes: Vec<u8>) -> Result<String, JsValue> {
+        let files = &self.files;
+        let read = |sha: &str| files.get(sha).cloned();
+        let p = self
+            .played
+            .as_mut()
+            .ok_or_else(|| fail("no piece is loaded"))?;
+        p.open(name, &bytes, &read)
+            .map(|v| v.to_string())
+            .map_err(fail)
+    }
+
     /// What the player holds at its shown time, as JSON; it writes nothing and changes no state.
     pub fn probe(&self) -> String {
         let mut out = self.played.as_ref().map(Played::probe).unwrap_or_default();

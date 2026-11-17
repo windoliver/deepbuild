@@ -77,6 +77,10 @@ pub enum Guard {
     WebRequestsAdapterLimits,
     /// #172: the web player writes a fragment `control.<ID>=<value>` as an input entry.
     WebFragmentWritesEntry,
+    /// #1041: the web player keys its saves by the page's origin alone.
+    WebSavesKeyedByOrigin,
+    /// #1041: the web player never asks the browser to keep the origin's storage persistent.
+    WebSavesNeverAskPersistence,
     /// A wrong encoder, muxer or reader in the helper processes, by its name there.
     Codec(&'static str),
 }
@@ -140,6 +144,8 @@ pub(crate) fn planted(name: &str) -> Option<Planted> {
         "web_probe_test_variant" => Planted::Export(G::WebProbeTestVariant),
         "web_requests_adapter_limits" => Planted::Export(G::WebRequestsAdapterLimits),
         "web_fragment_writes_entry" => Planted::Export(G::WebFragmentWritesEntry),
+        "web_saves_keyed_by_origin" => Planted::Export(G::WebSavesKeyedByOrigin),
+        "web_saves_never_ask_persistence" => Planted::Export(G::WebSavesNeverAskPersistence),
         other => Planted::Export(G::Codec(CODEC_PLANTS.iter().find(|p| **p == other)?)),
     })
 }

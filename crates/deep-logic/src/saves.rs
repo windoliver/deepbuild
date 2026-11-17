@@ -298,11 +298,39 @@ fn headless(dir: &Path) -> Vec<Value> {
         .collect()
 }
 
-/// Writes the world's state now, at step `k`, as a save of `slot`: under a temporary name, renamed
-/// once it reads back whole; then the slot keeps it and its last good save before it (only it,
-/// once ended).
-fn write(w: &mut World, k: i64, slot: i32, ended: bool) -> Result<(String, PathBuf, bool), String> {
-    let dir = w.saves_dir.clone().ok_or("no saves folder")?;
+/// A save a step asked for where no folder keeps the piece's saves, as in the web player (Export:
+/// web player): its host numbers it in its slot and stores its bytes whole.
+pub struct Held {
+    pub item: String,
+    pub slot: i32,
+    pub step: i64,
+    pub ended: bool,
+    /// Each item's full-state hash when it was written.
+    pub deep_hash: serde_json::Map<String, Value>,
+    header: Value,
+    state: Vec<u8>,
+}
+
+impl Held {
+    /// Its bytes as its slot's save number `seq`, which their sha256 names.
+    pub fn bytes(&self, seq: u64) -> Vec<u8> {
+        file_bytes(&self.header, seq, &self.state)
+    }
+}
+
+/// A save's bytes: its header with its number in its slot, a line end, then its state.
+fn file_bytes(header: &Value, seq: u64, state: &[u8]) -> Vec<u8> {
+    let mut header = header.clone();
+    header["seq"] = json!(seq);
+    let mut bytes = header.to_string().into_bytes();
+    bytes.push(b'\n');
+    bytes.extend(state);
+    bytes
+}
+
+/// The world's state now, at step `k`, as a save of `slot`: its header, which its store numbers,
+/// and its state.
+fn made(w: &mut World, k: i64, slot: i32, ended: bool) -> (Value, Vec<u8>) {
     let piece = w.piece.clone();
     let len = piece.items.first().map_or(0, |i| i.step);
     let mut read: Vec<&Entry> = w
@@ -342,21 +370,28 @@ fn write(w: &mut World, k: i64, slot: i32, ended: bool) -> Result<(String, PathB
             }
         }
     }
-    let ours = listed(&dir, slot.into());
-    let seq = ours
-        .first()
-        .and_then(|s| s.header["seq"].as_u64())
-        .map_or(1, |n| n + 1);
     let [layout, content, modules] = binding(&piece);
     let header = json!({
         "slot": slot, "layout": layout, "content": content, "modules": modules,
         "runtime": hash(format!("{VERSION}\nwasmtime {}\n", deep_sandbox_wasmtime::WASMTIME).as_bytes()),
         "document": piece.document, "program": program(&piece), "step": k, "input_at": input_at, "track": track,
-        "ended": ended, "fingerprint": fingerprint(w), "segments": changed, "seq": seq,
+        "ended": ended, "fingerprint": fingerprint(w), "segments": changed,
     });
-    let mut bytes = header.to_string().into_bytes();
-    bytes.push(b'\n');
-    bytes.extend(encode(w));
+    (header, encode(w))
+}
+
+/// Writes the world's state now, at step `k`, as a save of `slot`: under a temporary name, renamed
+/// once it reads back whole; then the slot keeps it and its last good save before it (only it,
+/// once ended).
+fn write(w: &mut World, k: i64, slot: i32, ended: bool) -> Result<(String, PathBuf, bool), String> {
+    let dir = w.saves_dir.clone().ok_or("no saves folder")?;
+    let (header, state) = made(w, k, slot, ended);
+    let ours = listed(&dir, slot.into());
+    let seq = ours
+        .first()
+        .and_then(|s| s.header["seq"].as_u64())
+        .map_or(1, |n| n + 1);
+    let bytes = file_bytes(&header, seq, &state);
     let io = |e: std::io::Error| format!("{}: {e}", dir.display());
     // Hashed, written, synced, read back and renamed on a writer thread, never the caller's.
     let (sha, path, on_main) = std::thread::scope(|s| {
@@ -399,8 +434,9 @@ fn fingerprint(w: &World) -> Value {
     }
 }
 
-/// The saves the steps before step `k` asked for, written now that every item is at step k. A
-/// slot whose newest save is ended opens only at that end, so it takes no later save.
+/// The saves the steps before step `k` asked for, written now that every item is at step k, or
+/// held for the host where no folder keeps them. A slot whose newest save is ended opens only at
+/// that end, so it takes no later save.
 pub(crate) fn due(w: &mut World, k: i64, ended_at: Instant) {
     let asked: Vec<(usize, i32, bool)> = w
         .lives
@@ -409,6 +445,20 @@ pub(crate) fn due(w: &mut World, k: i64, ended_at: Instant) {
         .filter_map(|(i, l)| l.asked.take().map(|(s, e)| (i, s, e)))
         .collect();
     for (i, slot, ended) in asked {
+        if w.held.is_some() {
+            let (header, state) = made(w, k, slot, ended);
+            let save = Held {
+                item: w.piece.items[i].id.clone(),
+                slot,
+                step: k,
+                ended,
+                deep_hash: w.deep_hashes(),
+                header,
+                state,
+            };
+            w.held.get_or_insert_with(Vec::new).push(save);
+            continue;
+        }
         let dir = w.saves_dir.clone().unwrap_or_default();
         if listed(&dir, slot.into())
             .first()
@@ -536,10 +586,91 @@ pub fn open(
     let Some((save, bytes)) = chosen else {
         return Err(json!({"ok": false, "code": "no_save", "slot": slot, "damaged": damaged}));
     };
-    let h = &save.header;
+    let mut rec = Record::default();
+    let (mut w, via) = whole(
+        &piece,
+        Some((dir, save.path.as_path())),
+        &save.hash,
+        &save.header,
+        &bytes,
+        &damaged,
+        track,
+        planted,
+        adapter,
+        &mut rec,
+    )?;
+    let k = via["step"].as_i64().unwrap_or(0);
+    let deep = w.deep_hashes();
+    let at_open: serde_json::Map<String, Value> = piece
+        .items
+        .iter()
+        .zip(&w.published)
+        .flat_map(|(i, a)| arrays_json(i, a))
+        .collect();
+    w.run(steps, &mut rec, &mut |_, _| {});
+    let saves = written(&mut w)?;
+    let frames = crate::frames(&piece, frames, &rec, Some((k, &at_open)))?;
+    Ok(json!({
+        "ok": true, "opened": via, "damaged": damaged, "deep_hash": deep, "steps": rec.steps_json(&piece, None),
+        "checkpoints": rec.checkpoints, "traps": crate::libraries_in(&piece, rec.traps), "saves": saves, "frames": frames,
+    }))
+}
+
+/// A save's bytes, named by `hash`, opened by the viewer where no folder keeps the piece's saves,
+/// as in the web player (Export: web player): the world at the save's step, its opened state
+/// `rec`'s first checkpoint, and how it opened. A save that doesn't hash to its name is refused
+/// as damaged, and one whose layout, content or module set differs is refused, naming what
+/// differs.
+pub fn open_held(
+    piece: &Rc<Piece>,
+    hash: &str,
+    bytes: &[u8],
+    track: &[Entry],
+    adapter: &str,
+    rec: &mut Record,
+) -> Result<(World, Value), Value> {
+    let header = bytes
+        .split(|b| *b == b'\n')
+        .next()
+        .and_then(|line| serde_json::from_slice::<Value>(line).ok())
+        .filter(|_| file_hash(bytes) == hash);
+    let Some(header) = header else {
+        return Err(json!({"ok": false, "code": "save_damaged", "damaged": [{"hash": hash}]}));
+    };
+    whole(
+        piece,
+        None,
+        hash,
+        &header,
+        bytes,
+        &[],
+        track,
+        Planted::default(),
+        adapter,
+        rec,
+    )
+}
+
+/// The whole save `hash` with header `h` opened at its step into fresh instances, straight or,
+/// with a folder, through a declared migration, on `adapter`: the world, with the opened state as
+/// `rec`'s first checkpoint, and how it opened. Its later saves go to its folder `dir` (the
+/// save's own file beside it), or are held for the host without one.
+#[allow(clippy::too_many_arguments)]
+fn whole(
+    piece: &Rc<Piece>,
+    dir: Option<(&Path, &Path)>,
+    hash: &str,
+    h: &Value,
+    bytes: &[u8],
+    damaged: &[Value],
+    track: &[Entry],
+    planted: Planted,
+    adapter: &str,
+    rec: &mut Record,
+) -> Result<(World, Value), Value> {
     let k = h["step"].as_i64().unwrap_or(0);
     let ended = h["ended"] == json!(true);
-    let ours = binding(&piece);
+    let ours = binding(piece);
     let differs: Vec<Value> = ["layout", "content", "modules"]
         .iter()
         .zip(&ours)
@@ -549,7 +680,7 @@ pub fn open(
     // Same-machine state opens only on the adapter that wrote it; no migration moves it.
     let other = h["fingerprint"].as_str().filter(|f| *f != adapter);
     let refused = |code: &str, mut extra: Value| {
-        let mut out = json!({"ok": false, "code": code, "save": save.hash, "damaged": damaged});
+        let mut out = json!({"ok": false, "code": code, "save": hash, "damaged": damaged});
         if let (Some(o), Some(e)) = (out.as_object_mut(), extra.as_object_mut()) {
             o.append(e);
         }
@@ -566,7 +697,10 @@ pub fn open(
         .iter()
         .position(|b| *b == b'\n')
         .and_then(|n| decode(&bytes[n + 1..], piece.items.len()));
-    let mut via = json!({"hash": save.hash, "file": save.path, "step": k, "via": "straight"});
+    let mut via = match dir {
+        Some((_, file)) => json!({"hash": hash, "file": file, "step": k, "via": "straight"}),
+        None => json!({"hash": hash, "step": k, "via": "straight"}),
+    };
     if let Some(f) = other {
         let mut differs = differs;
         differs.push(json!({"what": "fingerprint", "save": f, "piece": adapter}));
@@ -588,7 +722,7 @@ pub fn open(
             ));
         };
         opened(
-            &piece,
+            piece,
             track,
             planted,
             k,
@@ -603,7 +737,8 @@ pub fn open(
             .iter()
             .flat_map(|i| i.saves.iter().flat_map(|s| &s.migrate))
             .find(|m| m.from.iter().zip(from).all(|(a, b)| b.as_str() == Some(a)));
-        let Some(m) = migration else {
+        // A migration leaves its new save in the piece's folder, so it runs only where one keeps them.
+        let (Some(m), Some((dir, _))) = (migration, dir) else {
             // Under a changed program, bytes the game left inside a data segment are refused too.
             let mut differs = differs;
             if differs.iter().any(|d| d["what"] == "layout") {
@@ -625,18 +760,20 @@ pub fn open(
             ));
         };
         let new = migrate(m, old, item).map_err(|(what, trap)| failed(&what, trap))?;
-        let mut w = opened(&piece, track, planted, k, vec![new], seen(&machine)).map_err(fits)?;
+        let mut w = opened(piece, track, planted, k, vec![new], seen(&machine)).map_err(fits)?;
         w.saves_dir = Some(dir.to_path_buf());
         w.adapter = adapter.to_string();
-        let (hash, file, _) = write(&mut w, k, slot as i32, ended)
+        let slot = h["slot"].as_i64().unwrap_or(0) as i32;
+        let (new, file, _) = write(&mut w, k, slot, ended)
             .map_err(|e| refused("save_failed", json!({"what": e})))?;
-        via = json!({"hash": hash, "file": file, "step": k, "via": "migration", "from": save.hash});
+        via = json!({"hash": new, "file": file, "step": k, "via": "migration", "from": hash});
         w
     };
-    w.saves_dir = Some(dir.to_path_buf());
+    match dir {
+        Some((dir, _)) => w.saves_dir = Some(dir.to_path_buf()),
+        None => w.held = Some(Vec::new()),
+    }
     w.adapter = adapter.to_string();
-    let deep = w.deep_hashes();
-    let mut rec = Record::default();
     for (item, l) in piece.items.iter().zip(w.lives.iter_mut()) {
         let deep = l.deep_hash();
         rec.checkpoint(&item.id, k, deep, &l.arrays);
@@ -645,19 +782,7 @@ pub fn open(
     for m in &piece.machine {
         rec.checkpoint(m, k, w.seen_hash(), &[]);
     }
-    let at_open: serde_json::Map<String, Value> = piece
-        .items
-        .iter()
-        .zip(&w.published)
-        .flat_map(|(i, a)| arrays_json(i, a))
-        .collect();
-    w.run(steps, &mut rec, &mut |_, _| {});
-    let saves = written(&mut w)?;
-    let frames = crate::frames(&piece, frames, &rec, Some((k, &at_open)))?;
-    Ok(json!({
-        "ok": true, "opened": via, "damaged": damaged, "deep_hash": deep, "steps": rec.steps_json(&piece, None),
-        "checkpoints": rec.checkpoints, "traps": crate::libraries_in(&piece, rec.traps), "saves": saves, "frames": frames,
-    }))
+    Ok((w, via))
 }
 
 /// Runs a migration once under its budget: the old state block at `old_at`, the remap table at

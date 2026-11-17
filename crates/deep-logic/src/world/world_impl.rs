@@ -91,6 +91,7 @@ impl World {
             store,
             planted,
             saves_dir: None,
+            held: None,
             saved: Vec::new(),
             seen: 0,
             adapter: String::new(),
@@ -300,7 +301,7 @@ impl World {
                 }
             }
             if let Some(k) = self.at() {
-                if self.saves_dir.is_some() {
+                if self.saves_dir.is_some() || self.held.is_some() {
                     crate::saves::due(self, k, ended_at);
                 }
                 before(self, k);
@@ -1126,6 +1127,7 @@ impl World {
             cache: None,
             planted,
             saves_dir: None,
+            held: None,
             saved: Vec::new(),
             seen: 0,
             adapter: String::new(),
@@ -1279,6 +1281,7 @@ impl World {
             store: false,
             planted,
             saves_dir: None,
+            held: None,
             saved: Vec::new(),
             seen,
             adapter: String::new(),
@@ -1375,6 +1378,7 @@ impl World {
             store: false,
             planted: self.planted,
             saves_dir: None,
+            held: None,
             saved: Vec::new(),
             seen: self.seen,
             adapter: self.adapter.clone(),

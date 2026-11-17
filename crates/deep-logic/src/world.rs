@@ -418,6 +418,8 @@ pub struct World {
     pub(crate) planted: Planted,
     /// The folder the piece's saves are kept in, and what each save written leaves (Logic: saves).
     pub saves_dir: Option<std::path::PathBuf>,
+    /// With no folder, the saves its steps asked for, held for the host's store (Export: web player).
+    pub held: Option<Vec<crate::saves::Held>>,
     pub saved: Vec<Value>,
     /// The steps the piece's same-machine counters have seen, and the adapter this run is on.
     pub(crate) seen: u64,
