@@ -1,19 +1,13 @@
-repo-rules.mjs: base exit 1 with 37 findings, change exit 1 with 37; 0 only in the change, 0 only in the base
-size-ratchet.mjs: base exit 1 with 62 findings, change exit 1 with 62; 3 only in the change, 3 only in the base
-  + FAIL size: crates/deep-canvas-marks/src/modules.rs: 2309 lines, over its ceiling of 2053
-  + FAIL size: crates/deep-canvas/src/registry/mod.rs: 5038 lines, over its ceiling of 4794
-  + FAIL size: crates/deep-show/src/main.rs: 3502 lines, over its ceiling of 3104
-  - FAIL size: crates/deep-canvas-marks/src/modules.rs: 2279 lines, over its ceiling of 2053
-  - FAIL size: crates/deep-canvas/src/registry/mod.rs: 5036 lines, over its ceiling of 4794
-  - FAIL size: crates/deep-show/src/main.rs: 3496 lines, over its ceiling of 3104
+repo-rules.mjs: base exit 1 with 4 findings, change exit 1 with 4; 0 only in the change, 0 only in the base
+size-ratchet.mjs: base exit 1 with 13 findings, change exit 1 with 13; 0 only in the change, 0 only in the base
 canvas-closures.mjs closures: base exit 0 with 0 findings, change exit 0 with 0; 0 only in the change, 0 only in the base
-canvas-closures.mjs drift: base exit 1 with 1 findings, change exit 1 with 1; 0 only in the change, 0 only in the base
-record-reader-guard.mjs: base exit 1 with 1 findings, change exit 1 with 1; 0 only in the change, 0 only in the base
+canvas-closures.mjs drift: base exit 0 with 0 findings, change exit 0 with 0; 0 only in the change, 0 only in the base
+record-reader-guard.mjs: base exit 0 with 0 findings, change exit 0 with 0; 0 only in the change, 0 only in the base
 render-lint.mjs: base exit 0 with 0 findings, change exit 0 with 0; 0 only in the change, 0 only in the base
 plant-lint.mjs: base exit 0 with 0 findings, change exit 0 with 0; 0 only in the change, 0 only in the base
 loads-lint.mjs: base exit 0 with 0 findings, change exit 0 with 0; 0 only in the change, 0 only in the base
 blocking-call-guard.mjs: base exit 0 with 0 findings, change exit 0 with 0; 0 only in the change, 0 only in the base
 keymap-guard.mjs: base exit 0 with 0 findings, change exit 0 with 0; 0 only in the change, 0 only in the base
-color-literal-guard.mjs: base exit 1 with 6 findings, change exit 1 with 6; 0 only in the change, 0 only in the base
+color-literal-guard.mjs: base exit 0 with 0 findings, change exit 0 with 0; 0 only in the change, 0 only in the base
 known-failures-check.mjs: base exit 0 with 0 findings, change exit 0 with 0; 0 only in the change, 0 only in the base
-exit 1
+exit 0
