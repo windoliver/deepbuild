@@ -1,23 +1,23 @@
-// Transcript IO and scrubbing run off the hub's event loop. One bounded part is in flight at a time.
-import type { BigIntStats } from 'node:fs';
+// A transcript of a part or more is read and scrubbed off the hub's event loop; a smaller one here, a quarter part
+// at a time. One bounded part is in flight at a time.
 import { MessageChannel, Worker } from 'node:worker_threads';
+import { copyFile, PART, type CopyResult, type Part, type Prefix } from './copy-file.ts';
 
-export interface Prefix { size: number; sha256: string; ended?: boolean; continuable?: boolean }
-export interface Part { bytes: Uint8Array; complete: boolean; cwd?: string; keys: { key: string; uuid?: string }[] }
-/** A part's target size. A megabyte: each cut scans its 64 KiB of lookahead again, a quarter of a 256 KiB part. */
-export const PART = 1024 * 1024;
-export const sourceStamp = (s: BigIntStats): string => `${s.dev}:${s.ino}:${s.size}:${s.mtimeNs}:${s.ctimeNs}`;
-export interface CopyResult extends Prefix { grew: boolean; ended: boolean; continuable: boolean }
+export { PART, sourceStamp, type CopyResult, type Part, type Prefix } from './copy-file.ts';
 let queue = Promise.resolve();
-// One worker serves the small copies that follow each other and ends a second after the last, so a pass loads the
-// scrub's rules once, not once a transcript. After a large transcript it ends at once: the evidence store hashes that
+// One worker serves the copies that follow each other and ends a second after the last, so a pass loads the scrub's
+// rules in it once, not once a transcript. After a large transcript it ends at once: the evidence store hashes that
 // copy in a worker of its own, and the two resident together added about 12 MB to a pass.
 const REUSE = 8 * 1024 * 1024;
 let worker: Worker | undefined;
 let idle: NodeJS.Timeout | undefined;
 
 export function copyTranscript(path: string, size: number, stamp: string, before: Prefix | undefined, stable: boolean, held: readonly string[], session: string, keep: (part: Part) => Promise<void>): Promise<CopyResult> {
+  const job = { path, size, stamp, ...(before && { before }), stable, held, session };
   const run = queue.then(async () => {
+    // Under a part there is less to scrub than a worker costs to start (about 0.26G instructions, which a pass over
+    // small sessions paid for nothing). A quarter part of the issue's densest text scrubs in about 16 ms.
+    if (size < PART) return copyFile(job, PART / 4, keep);
     clearTimeout(idle);
     const thread = worker ??= new Worker(new URL(import.meta.url.endsWith('.ts') ? './copy-worker.ts' : './copy-worker.js', import.meta.url), { execArgv: [], resourceLimits: { maxYoungGenerationSizeMb: 2 } });
     thread.ref();
@@ -37,7 +37,7 @@ export function copyTranscript(path: string, size: number, stamp: string, before
             port1.postMessage({ error: error instanceof Error ? error.message : String(error) });
           });
         });
-        thread.postMessage({ path, size, stamp, before, stable, held, session, port: port2 }, [port2]);
+        thread.postMessage({ ...job, port: port2 }, [port2]);
       });
     } finally {
       port1.close();

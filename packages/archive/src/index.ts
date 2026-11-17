@@ -241,16 +241,21 @@ export async function openArchive(options: ArchiveOptions): Promise<Archive> {
     // Record only a verified, complete generation. Parts written before a failure are not linked.
     if (result.sha256 !== before?.sha256 || result.size !== before?.size) {
       const parts = [...(result.grew ? before!.parts : []), ...added];
-      const put = await writer.put({ parts, kind: 'transcript-copy', source: `archive:${source.agent}`, redaction: 'complete', license: LICENSE });
-      if (put.status !== 'stored') throw Error(`the evidence store refused session ${session}: ${put.reason}`);
-      const linked = await options.evidence.get(put.evidence.sha256);
-      if (!linked || (linked.parts && (linked.parts.length !== parts.length || linked.parts.some((p, n) => p !== parts[n])))) throw Error(`the parts of ${session} didn't read back as written`);
+      // One part is the copy itself, stored and read back already: nothing is joined, so nothing more is put.
+      let evidence = parts.length === 1 ? parts[0] : undefined;
+      if (evidence === undefined) {
+        const put = await writer.put({ parts, kind: 'transcript-copy', source: `archive:${source.agent}`, redaction: 'complete', license: LICENSE });
+        if (put.status !== 'stored') throw Error(`the evidence store refused session ${session}: ${put.reason}`);
+        evidence = put.evidence.sha256;
+        const linked = await options.evidence.get(evidence);
+        if (!linked || (linked.parts && (linked.parts.length !== parts.length || linked.parts.some((p, n) => p !== parts[n])))) throw Error(`the parts of ${session} didn't read back as written`);
+      }
       const named = source.folderNames === undefined ? undefined : source.path.split('/').at(source.folderNames);
       cwd ??= named ? folderNamed(named) : undefined;
       const project = cwd ? options.projectOf?.(cwd, source.agent) : undefined;
       const after = await stat(source.path, { bigint: true }).catch(() => undefined);
       if (!after || sourceStamp(after) !== mark) throw Error('the transcript changed or was replaced before its archive link');
-      await append(source.agent, 'transcript.archived', 4, { session, evidence: put.evidence.sha256, parts,
+      await append(source.agent, 'transcript.archived', 4, { session, evidence, parts,
         source: { size: result.size, sha256: result.sha256, stamp: mark, ended: result.ended, continuable: result.continuable } }, parts, undefined, project);
     }
     seen.set(source.path, mark);
