@@ -1,0 +1,298 @@
+Base commit: 06e231702bb4bf5c2ede8a4c76f40e4255e0e7a3 ("Merge pull request #2735 …")
+Command, once, from the checkout's root (exit status 1):
+  NO_COLOR=1 npx vitest run --root tests/acceptance/458/suite --testTimeout=600000
+Run in this job's worktree at the base, holding only these test files (untracked), with node_modules installed and no
+cargo build, which the suite doesn't need. The checkout's path is written <checkout>; nothing else in the output is changed.
+All 12 tests fail, each on an assertion its file or helpers.ts names (AssertionError), none on a crash in the test's own code:
+- twins (AC1, both tests; AC5): scripts/parity-suite.mjs is missing. helpers.ts's `script` asserts the script is there
+  before it starts it, so each test stops at its first `run quick` or `list`.
+- blocked (AC2): scripts/parity-suite.mjs is missing, at the first `run quick`.
+- bar (AC3, three tests): scripts/parity-suite.mjs is missing, at the `run quick` that precedes the promotion.
+- hygiene (AC8, three tests): scripts/parity-suite.mjs is missing, at the first `run` on the suite as it is; no
+  `--planted` run is reached.
+- scan (AC6): scripts/fixture-scan.mjs is missing.
+- preflight (AC4): scripts/lanes.mjs loads, and no lane in its `checks` has a command holding scripts/parity-suite.mjs,
+  `run` and `quick` (expected 0 to be greater than 0).
+Date: 2026-11-17 (UTC)  Node v24.22.0  vitest 5.0.5  darwin-arm64
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/458/suite
+
+ ❯ twins.test.ts (3 tests | 3 failed) 266ms
+   ❯ AC1 #458.ad2c506c every fixture has a planted-fault twin, and a twin that passes makes its parent INVALID (2)
+     × AC1 #458.ad2c506c a fixture whose twins fail reads PASS; one of whose twins passes reads INVALID, twin_passed, naming the twin; one with no twin reads INVALID, no_twin; and a fixture that fails reads FAIL 17ms
+     × AC1 #458.ad2c506c every fixture the shipped suite lists has at least one planted-fault twin 2ms
+   ❯ AC5 #458.ae77277a every comparison of two outputs has a planted-mismatch twin, and a twin that passes makes the comparison INVALID (1)
+     × AC5 #458.ae77277a a same-result-two-ways fixture and an oracle-lane fixture whose comparisons' mismatch twins fail read PASS; a comparison whose mismatch twin passes, or that has none, reads INVALID, naming the comparison and the twin, and so does its fixture 246ms
+ ❯ blocked.test.ts (1 test | 1 failed) 23ms
+   ❯ AC2 #458.fa585b23 what can't run is BLOCKED with a reason, an owner and an age; nothing is retried; two different results are INCONCLUSIVE (1)
+     × AC2 #458.fa585b23 a fixture that can't run, a lane with no tool, a missing golden and a waiver each read BLOCKED with their reason, owner and age, which grows from the first blocked run; each fixture is asked for once a run; and a FAIL then a PASS of one commit on this machine read INCONCLUSIVE with both results 17ms
+ ❯ hygiene.test.ts (3 tests | 3 failed) 124ms
+   ❯ AC8 #458.33b0fb5c waivers and expected failures end themselves, a GPU expected failure is keyed by backend, adapter and driver, and must-pass needs clean runs on every backend (3)
+     × AC8 #458.33b0fb5c a waiver and an expected failure read BLOCKED with their reason while the fixture fails, end themselves and are reported, naming the fixture, when it passes, and a later failure is a FAIL; a planted expected failure kept after its fixture passes fails this check, naming the fixture 65ms
+     × AC8 #458.33b0fb5c a GPU expected failure covers its backend, adapter and driver, and the same fixture failing on a second driver is a FAIL; a planted expected failure keyed by backend alone hides that failure and fails this check, naming the fixture 45ms
+     × AC8 #458.33b0fb5c a fixture that names two backends is refused must-pass after a clean run on one, naming the other, and promoted after clean runs on both; a planted suite that promotes it after one fails this check, naming the fixture 13ms
+ ❯ scan.test.ts (1 test | 1 failed) 375ms
+   ❯ AC6 #458.78a02001 the fixture scan fails each planted value, naming the file and line, and passes the clean twins (1)
+     × AC6 #458.78a02001 a planted API key, a planted /Users/ path and a planted character name from the scan's list, and a /private/tmp/ and a /Volumes/ path, each fail the scan naming the file and line; the same tree with the values changed passes; a folder that isn't there doesn't pass 326ms
+ ❯ bar.test.ts (3 tests | 3 failed) 300ms
+   ❯ AC3 #458.d1e38bf0 the release report applies the bar to the release commit (3)
+     × AC3 #458.d1e38bf0 the bar holds when the must-pass fixture passes and the others are PASS or BLOCKED with an owner and a reason; it fails, naming the fixture, on a commit no lane ran, on a must-pass fixture that is BLOCKED, on a BLOCKED fixture with no owner, and on a FAIL, an INVALID and an INCONCLUSIVE 31ms
+     × AC3 #458.d1e38bf0 a cross-lane pixel comparison within the loose ceiling and the IoU floor is a reading that counts neither way; one past the ceiling or under the floor fails, and a cross-lane INCONCLUSIVE with no pixel numbers is no reading 52ms
+     × AC3 #458.d1e38bf0 a fixture whose oracle lane failed on the release commit still fails the bar after that lane's tool is removed and the lane is run there again; on the next commit, with the tool still gone, it is BLOCKED and the bar holds 216ms
+ ❯ preflight.test.ts (1 test | 1 failed) 137ms
+   ❯ AC4 #458.d13e155c the suite runs in the local preflight, never on push or pull request (1)
+     × AC4 #458.d13e155c a check of the local preflight runs the quick lane, a release lane runs the full lane and the release report, and no workflow that starts on a push or a pull request runs the suite or the preflight 136ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 12 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  bar.test.ts > AC3 #458.d1e38bf0 the release report applies the bar to the release commit > AC3 #458.d1e38bf0 the bar holds when the must-pass fixture passes and the others are PASS or BLOCKED with an owner and a reason; it fails, naming the fixture, on a commit no lane ran, on a must-pass fixture that is BLOCKED, on a BLOCKED fixture with no owner, and on a FAIL, an INVALID and an INCONCLUSIVE
+AssertionError: scripts/parity-suite.mjs is missing: the checkout has no parity suite runner, release report or bar: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ script helpers.ts:182:174
+    180| function script(path: string, args: readonly string[]): SpawnSyncRetur…
+    181|   const name = path.slice(REPO.length + 1);
+    182|   expect(existsSync(path), `${name} is missing: the checkout has no ${…
+       |                                                                                                                                                                              ^
+    183|   return spawnSync(process.execPath, [path, ...args], { cwd: REPO, enc…
+    184| }
+ ❯ runLane helpers.ts:199:27
+ ❯ release bar.test.ts:38:3
+ ❯ bar.test.ts:53:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/12]⎯
+
+ FAIL  bar.test.ts > AC3 #458.d1e38bf0 the release report applies the bar to the release commit > AC3 #458.d1e38bf0 a cross-lane pixel comparison within the loose ceiling and the IoU floor is a reading that counts neither way; one past the ceiling or under the floor fails, and a cross-lane INCONCLUSIVE with no pixel numbers is no reading
+AssertionError: scripts/parity-suite.mjs is missing: the checkout has no parity suite runner, release report or bar: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ script helpers.ts:182:174
+    180| function script(path: string, args: readonly string[]): SpawnSyncRetur…
+    181|   const name = path.slice(REPO.length + 1);
+    182|   expect(existsSync(path), `${name} is missing: the checkout has no ${…
+       |                                                                                                                                                                              ^
+    183|   return spawnSync(process.execPath, [path, ...args], { cwd: REPO, enc…
+    184| }
+ ❯ runLane helpers.ts:199:27
+ ❯ release bar.test.ts:38:3
+ ❯ bar.test.ts:110:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/12]⎯
+
+ FAIL  bar.test.ts > AC3 #458.d1e38bf0 the release report applies the bar to the release commit > AC3 #458.d1e38bf0 a fixture whose oracle lane failed on the release commit still fails the bar after that lane's tool is removed and the lane is run there again; on the next commit, with the tool still gone, it is BLOCKED and the bar holds
+AssertionError: scripts/parity-suite.mjs is missing: the checkout has no parity suite runner, release report or bar: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ script helpers.ts:182:174
+    180| function script(path: string, args: readonly string[]): SpawnSyncRetur…
+    181|   const name = path.slice(REPO.length + 1);
+    182|   expect(existsSync(path), `${name} is missing: the checkout has no ${…
+       |                                                                                                                                                                              ^
+    183|   return spawnSync(process.execPath, [path, ...args], { cwd: REPO, enc…
+    184| }
+ ❯ runLane helpers.ts:199:27
+ ❯ release bar.test.ts:38:3
+ ❯ bar.test.ts:142:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/12]⎯
+
+ FAIL  blocked.test.ts > AC2 #458.fa585b23 what can't run is BLOCKED with a reason, an owner and an age; nothing is retried; two different results are INCONCLUSIVE > AC2 #458.fa585b23 a fixture that can't run, a lane with no tool, a missing golden and a waiver each read BLOCKED with their reason, owner and age, which grows from the first blocked run; each fixture is asked for once a run; and a FAIL then a PASS of one commit on this machine read INCONCLUSIVE with both results
+AssertionError: scripts/parity-suite.mjs is missing: the checkout has no parity suite runner, release report or bar: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ script helpers.ts:182:174
+    180| function script(path: string, args: readonly string[]): SpawnSyncRetur…
+    181|   const name = path.slice(REPO.length + 1);
+    182|   expect(existsSync(path), `${name} is missing: the checkout has no ${…
+       |                                                                                                                                                                              ^
+    183|   return spawnSync(process.execPath, [path, ...args], { cwd: REPO, enc…
+    184| }
+ ❯ runLane helpers.ts:199:27
+ ❯ blocked.test.ts:43:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/12]⎯
+
+ FAIL  hygiene.test.ts > AC8 #458.33b0fb5c waivers and expected failures end themselves, a GPU expected failure is keyed by backend, adapter and driver, and must-pass needs clean runs on every backend > AC8 #458.33b0fb5c a waiver and an expected failure read BLOCKED with their reason while the fixture fails, end themselves and are reported, naming the fixture, when it passes, and a later failure is a FAIL; a planted expected failure kept after its fixture passes fails this check, naming the fixture
+AssertionError: scripts/parity-suite.mjs is missing: the checkout has no parity suite runner, release report or bar: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ script helpers.ts:182:174
+    180| function script(path: string, args: readonly string[]): SpawnSyncRetur…
+    181|   const name = path.slice(REPO.length + 1);
+    182|   expect(existsSync(path), `${name} is missing: the checkout has no ${…
+       |                                                                                                                                                                              ^
+    183|   return spawnSync(process.execPath, [path, ...args], { cwd: REPO, enc…
+    184| }
+ ❯ runLane helpers.ts:199:27
+ ❯ endsItself hygiene.test.ts:41:18
+ ❯ hygiene.test.ts:96:10
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/12]⎯
+
+ FAIL  hygiene.test.ts > AC8 #458.33b0fb5c waivers and expected failures end themselves, a GPU expected failure is keyed by backend, adapter and driver, and must-pass needs clean runs on every backend > AC8 #458.33b0fb5c a GPU expected failure covers its backend, adapter and driver, and the same fixture failing on a second driver is a FAIL; a planted expected failure keyed by backend alone hides that failure and fails this check, naming the fixture
+AssertionError: scripts/parity-suite.mjs is missing: the checkout has no parity suite runner, release report or bar: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ script helpers.ts:182:174
+    180| function script(path: string, args: readonly string[]): SpawnSyncRetur…
+    181|   const name = path.slice(REPO.length + 1);
+    182|   expect(existsSync(path), `${name} is missing: the checkout has no ${…
+       |                                                                                                                                                                              ^
+    183|   return spawnSync(process.execPath, [path, ...args], { cwd: REPO, enc…
+    184| }
+ ❯ runLane helpers.ts:199:27
+ ❯ keyedByDriver hygiene.test.ts:65:34
+ ❯ hygiene.test.ts:101:10
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/12]⎯
+
+ FAIL  hygiene.test.ts > AC8 #458.33b0fb5c waivers and expected failures end themselves, a GPU expected failure is keyed by backend, adapter and driver, and must-pass needs clean runs on every backend > AC8 #458.33b0fb5c a fixture that names two backends is refused must-pass after a clean run on one, naming the other, and promoted after clean runs on both; a planted suite that promotes it after one fails this check, naming the fixture
+AssertionError: scripts/parity-suite.mjs is missing: the checkout has no parity suite runner, release report or bar: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ script helpers.ts:182:174
+    180| function script(path: string, args: readonly string[]): SpawnSyncRetur…
+    181|   const name = path.slice(REPO.length + 1);
+    182|   expect(existsSync(path), `${name} is missing: the checkout has no ${…
+       |                                                                                                                                                                              ^
+    183|   return spawnSync(process.execPath, [path, ...args], { cwd: REPO, enc…
+    184| }
+ ❯ runLane helpers.ts:199:27
+ ❯ promotedAfterBoth hygiene.test.ts:81:34
+ ❯ hygiene.test.ts:106:10
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/12]⎯
+
+ FAIL  preflight.test.ts > AC4 #458.d13e155c the suite runs in the local preflight, never on push or pull request > AC4 #458.d13e155c a check of the local preflight runs the quick lane, a release lane runs the full lane and the release report, and no workflow that starts on a push or a pull request runs the suite or the preflight
+AssertionError: a check in scripts/lanes.mjs runs `scripts/parity-suite.mjs run quick`, so the quick lane runs in the local preflight: expected 0 to be greater than 0
+ ❯ preflight.test.ts:24:176
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/12]⎯
+
+ FAIL  scan.test.ts > AC6 #458.78a02001 the fixture scan fails each planted value, naming the file and line, and passes the clean twins > AC6 #458.78a02001 a planted API key, a planted /Users/ path and a planted character name from the scan's list, and a /private/tmp/ and a /Volumes/ path, each fail the scan naming the file and line; the same tree with the values changed passes; a folder that isn't there doesn't pass
+AssertionError: scripts/fixture-scan.mjs is missing: the checkout has no fixture scan: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ script helpers.ts:182:174
+    180| function script(path: string, args: readonly string[]): SpawnSyncRetur…
+    181|   const name = path.slice(REPO.length + 1);
+    182|   expect(existsSync(path), `${name} is missing: the checkout has no ${…
+       |                                                                                                                                                                              ^
+    183|   return spawnSync(process.execPath, [path, ...args], { cwd: REPO, enc…
+    184| }
+ ❯ scan helpers.ts:218:13
+ ❯ scan.test.ts:79:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/12]⎯
+
+ FAIL  twins.test.ts > AC1 #458.ad2c506c every fixture has a planted-fault twin, and a twin that passes makes its parent INVALID > AC1 #458.ad2c506c a fixture whose twins fail reads PASS; one of whose twins passes reads INVALID, twin_passed, naming the twin; one with no twin reads INVALID, no_twin; and a fixture that fails reads FAIL
+AssertionError: scripts/parity-suite.mjs is missing: the checkout has no parity suite runner, release report or bar: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ script helpers.ts:182:174
+    180| function script(path: string, args: readonly string[]): SpawnSyncRetur…
+    181|   const name = path.slice(REPO.length + 1);
+    182|   expect(existsSync(path), `${name} is missing: the checkout has no ${…
+       |                                                                                                                                                                              ^
+    183|   return spawnSync(process.execPath, [path, ...args], { cwd: REPO, enc…
+    184| }
+ ❯ runLane helpers.ts:199:27
+ ❯ twins.test.ts:30:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/12]⎯
+
+ FAIL  twins.test.ts > AC1 #458.ad2c506c every fixture has a planted-fault twin, and a twin that passes makes its parent INVALID > AC1 #458.ad2c506c every fixture the shipped suite lists has at least one planted-fault twin
+AssertionError: scripts/parity-suite.mjs is missing: the checkout has no parity suite runner, release report or bar: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ script helpers.ts:182:174
+    180| function script(path: string, args: readonly string[]): SpawnSyncRetur…
+    181|   const name = path.slice(REPO.length + 1);
+    182|   expect(existsSync(path), `${name} is missing: the checkout has no ${…
+       |                                                                                                                                                                              ^
+    183|   return spawnSync(process.execPath, [path, ...args], { cwd: REPO, enc…
+    184| }
+ ❯ list helpers.ts:214:19
+ ❯ twins.test.ts:56:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/12]⎯
+
+ FAIL  twins.test.ts > AC5 #458.ae77277a every comparison of two outputs has a planted-mismatch twin, and a twin that passes makes the comparison INVALID > AC5 #458.ae77277a a same-result-two-ways fixture and an oracle-lane fixture whose comparisons' mismatch twins fail read PASS; a comparison whose mismatch twin passes, or that has none, reads INVALID, naming the comparison and the twin, and so does its fixture
+AssertionError: scripts/parity-suite.mjs is missing: the checkout has no parity suite runner, release report or bar: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ script helpers.ts:182:174
+    180| function script(path: string, args: readonly string[]): SpawnSyncRetur…
+    181|   const name = path.slice(REPO.length + 1);
+    182|   expect(existsSync(path), `${name} is missing: the checkout has no ${…
+       |                                                                                                                                                                              ^
+    183|   return spawnSync(process.execPath, [path, ...args], { cwd: REPO, enc…
+    184| }
+ ❯ runLane helpers.ts:199:27
+ ❯ twins.test.ts:101:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/12]⎯
+
+
+ Test Files  6 failed (6)
+      Tests  12 failed (12)
+   Start at  22:43:52
+   Duration  2.09s (tests 49%, import 40%, transform 7%, worker 3%)
+
