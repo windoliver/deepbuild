@@ -17,6 +17,7 @@ pub mod pixel_hash;
 pub mod render;
 pub mod ring;
 pub mod seam;
+pub mod spans;
 pub mod structural;
 pub mod surface;
 pub mod upload;

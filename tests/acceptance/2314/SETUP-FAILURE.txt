@@ -1,0 +1,46 @@
+▶ issue #2314: check probes use the real host@1
+  ✖ AC1: checks-numbers records tracked and ended for its real probe
+  ✖ AC1: checks-work records tracked and ended for its real probe
+  ✖ AC2: a detached probe descendant is gone when the overran run resolves
+✖ issue #2314: check probes use the real host@1 (563.492792ms)
+ℹ tests 3
+ℹ suites 1
+ℹ pass 0
+ℹ fail 0
+ℹ cancelled 3
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 11604.944291
+
+✖ failing tests:
+
+test at tests/acceptance/2314/probes.test.mjs:141:5
+✖ AC1: checks-numbers records tracked and ended for its real probe
+  'test did not finish before its parent and was cancelled'
+
+test at tests/acceptance/2314/probes.test.mjs:141:5
+✖ AC1: checks-work records tracked and ended for its real probe
+  'test did not finish before its parent and was cancelled'
+
+test at tests/acceptance/2314/probes.test.mjs:152:3
+✖ AC2: a detached probe descendant is gone when the overran run resolves
+  'test did not finish before its parent and was cancelled'
+
+test at tests/acceptance/2314/probes.test.mjs:71:1
+✖ issue #2314: check probes use the real host@1 (563.492792ms)
+  AssertionError [ERR_ASSERTION]: BLOCKED: extension conformance: its manifest fails extension.manifest@1 at /checks/0: pattern numbers; its manifest fails extension.manifest@1 at /checks/1: pattern data; its manifest fails extension.manifest@1 at /checks/2: pattern probe-cleanup
+  
+  false !== true
+  
+      at SuiteContext.<anonymous> (file:///private/tmp/deepbuild-2314-blind.7KMP1F/tests/acceptance/2314/probes.test.mjs:114:12)
+      at async TestHook.run (node:internal/test_runner/test:1409:7)
+      at async Suite.runHook (node:internal/test_runner/test:1289:9)
+      at async Suite.run (node:internal/test_runner/test:1899:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

@@ -38,7 +38,9 @@ impl Default for Host<'_> {
     }
 }
 
-fn refused(id: &str, what: Value) -> Issue {
+/// World `id` of a scene the physics module refuses, as the revision's issue (#182: also the
+/// app's logic readings, deep-show physics.rs).
+pub fn refused(id: &str, what: Value) -> Issue {
     let msg = "the physics module refuses this world in its scene";
     Issue::error("physics_refused", id, format!("worlds/{id}"), what, msg)
 }

@@ -207,6 +207,7 @@ impl Reducer {
         let total = bytes + if stamps.is_some() { 16 } else { 0 };
         let out = read_back(device, EXPOSURE_PASS, total, |encoder, staging| {
             {
+                deep_gpu::counted::compute_pass();
                 let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                     label: Some(EXPOSURE_PASS),
                     timestamp_writes: stamps.as_ref().map(|(set, _)| {

@@ -33,7 +33,7 @@ export const alone = ['tests/acceptance/149/', 'tests/acceptance/1523/', 'tests/
   'tests/acceptance/453/',
   'tests/acceptance/1633/', 'packages/hub/test/reopened-items.test.ts',
   'tests/acceptance/46/', 'packages/github/test/',
-  'tests/acceptance/1172/', 'tests/acceptance/2078/',
+  'tests/acceptance/1172/', 'tests/acceptance/2078/', 'tests/acceptance/2218/',
   'tests/acceptance/1454/',
   'tests/acceptance/1459/',
   'tests/acceptance/1463/',
@@ -835,6 +835,8 @@ alone.push('tests/acceptance/555/');
 alone.push('tests/acceptance/1048/');
 // #458's pairs, relations and views files each build deep-show or deep-gpu and hold the GPU; its suite files run scripts only.
 alone.push('tests/acceptance/458/pairs/', 'tests/acceptance/458/relations/', 'tests/acceptance/458/views/');
+// #192's dungeon files build deep-show and deep-sandbox, and ac05 also deep-sandbox for Linux x86_64 in Docker.
+alone.push('tests/acceptance/192/dungeon/');
 
 // #2516: each file builds deep-gpu and reads linear targets; castle costs require a timed grant.
 alone.push('tests/acceptance/2516/');
@@ -848,6 +850,31 @@ timed.push('tests/acceptance/457/ac9-budgets.test.ts');
 // in a linux/amd64 container; ac8-budget judges the build budget on the reference Mac.
 alone.push('tests/acceptance/1636/');
 timed.push('tests/acceptance/1636/ac8-budget.test.ts');
+// #210's files build deep-show (full) or deep-logic, and the web export's runs a headless browser; ac8-budgets judges
+// the delivery and read budgets on the reference Mac, and ac9-taste waits on your taste call in tests/acceptance/210/TASTE.json.
+alone.push('tests/acceptance/210/');
+timed.push('tests/acceptance/210/ac8-budgets.test.ts');
+// #2031's files build deep-gpu (ac7 also the merge base's binaries) and draw on Metal; ac8 judges the lights' GPU budget.
+alone.push('tests/acceptance/2031/');
+timed.push('tests/acceptance/2031/ac8-budget.test.ts');
+// #182's files build deep-physics (shipped, test-backends and release) and deep-show; ac5-course also builds deep-physics
+// for Linux x86_64 in a linux/amd64 container, and ac11-budgets judges its timings on the reference Mac. The oracle's
+// climb port went to a blind redraft (182-oracle/DISPUTE.md): on the owner's word, the redraft runs and the first
+// draft's file, with its other two tests, runs by hand.
+alone.push('tests/acceptance/182/', 'tests/acceptance/182-oracle/controllers-py-rapier.test.ts', 'tests/acceptance/182-oracle-redraft-climb/');
+timed.push('tests/acceptance/182/ac11-budgets.test.ts');
+byHand.push('tests/acceptance/182-oracle/character-controller-rapier.test.ts');
+
+// #2742's files build deep-gpu; ac1 compares two films' GPU time on any Mac, and ac2 runs #417's suite.
+alone.push('tests/acceptance/2742/');
+
+// #192's voxel files each build deep-show per feature set (and the merge base's); ac10-budgets times the voxel mesher's
+// run at check on the reference Mac.
+alone.push('tests/acceptance/192/voxel/');
+timed.push('tests/acceptance/192/voxel/ac10-budgets.test.ts');
+// #192's pack files (blind) each build deep-show; budget-ceilings and budget-fields also build the merge base's in
+// its own target folder and run 256 MiB providers.
+alone.push('tests/acceptance/192/packs/', 'tests/acceptance/192/packs-redraft-ac12/');
 
 // #1624: this live session spends plan usage and is explicitly run by hand, not as a skipped unit test.
 byHand.push('tests/acceptance/1330/start.live.test.ts');
@@ -886,6 +913,11 @@ timed.push(...['103', '365', '262', '761', '1098', '148', '417', '1425', '149', 
 byHand.push('tests/acceptance/124-redraft-1830/ac5-budgets.live.test.ts', 'tests/acceptance/1427-redraft-1830/ac8-budget.live.test.ts');
 // #2444: these two landed calling the reference-Mac timing helpers with no entry here, so #1114's grep failed on main.
 timed.push('tests/acceptance/568-redraft-1830/judge.test.mjs', 'tests/acceptance/903/ac6-export.test.ts', 'tests/acceptance/508/ac6-effects.test.ts');
+
+// #1381's files each build deep-gpu and draw 4,097 × 4,097-sample plates on the Metal GPU; ac6-budget judges the
+// horizon's 0.1 ms at 1080p on the reference Mac.
+alone.push('tests/acceptance/1381/');
+timed.push('tests/acceptance/1381/ac6-budget.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },

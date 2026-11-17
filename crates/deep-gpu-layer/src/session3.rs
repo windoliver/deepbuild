@@ -86,6 +86,8 @@ pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
         add_without_depth_test: p == Some(Planted::AddWithoutDepthTest),
         ids_by_draw_position: p == Some(Planted::IdsByDrawPosition),
         overlay_keeps_grid_on_seek: p == Some(Planted::OverlayKeepsGridOnSeek),
+        horizon_unbaked: p == Some(Planted::TerrainNoHorizonBake),
+        occlusion_from_slope: p == Some(Planted::TerrainOcclusionFromSlope),
         ids_ignore_mask: p == Some(Planted::IdsIgnoreMask),
         cuts_color_only: p == Some(Planted::CutsColorOnly),
         local: deep_scene3d_render::local::Planted {
@@ -136,14 +138,19 @@ pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
             Planted::LoopCallsCutLights,
             Planted::LoopWorldNormal,
             Planted::LoopViewAway,
-            // #458's.
-            Planted::LightSumClamped,
-            Planted::ShadesByLocalTangent,
-            Planted::ShadowBrightens,
         ]
         .iter()
         .position(|q| p == Some(*q))
-        .map_or(0, |i| 16 << i),
+        .map_or(0, |i| 16 << i)
+            // #458's, above #1381's bit: scene3d.wgsl's `P_SUM_CLAMPED` and the two after it.
+            | [
+                Planted::LightSumClamped,
+                Planted::ShadesByLocalTangent,
+                Planted::ShadowBrightens,
+            ]
+            .iter()
+            .position(|q| p == Some(*q))
+            .map_or(0, |i| (1 << 26) << i),
         ..msaa_planted(p)
     }
 }

@@ -1,0 +1,11 @@
+The service kind's standalone run (no host), the merge base's and the change's, in turn against one fast endpoint
+(tests/acceptance/68/fixtures/server.mjs fast) with #68's floor (p95 100 ms, 5 requests). Diagnostic scripts, not in the tree.
+
+$ node probe-ab.mjs 120        # packages/checks-work/runtime/probe.mjs of each side, 1-minute load 44 at the start
+base: 120 runs, 13 not passed; run time median 230 ms, p95 765 ms, max 1245 ms
+change: 120 runs, 10 not passed; run time median 231 ms, p95 923 ms, max 1274 ms
+every run not passed: "latency: the answers' p95 from 127.0.0.1 is <103..260> ms, over the 100 ms floor"
+
+$ vitest run fill-ab           # workFill('service').run of each side, 1-minute load 554 at the start, 247 at the end
+FILL base: 100 runs, 52 not passed; run time median 2357 ms, p95 5712 ms
+FILL change: 100 runs, 50 not passed; run time median 2218 ms, p95 5915 ms

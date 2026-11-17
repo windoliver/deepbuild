@@ -46,6 +46,7 @@ mod insets;
 mod interp_suite;
 mod levels;
 mod live;
+mod lightfx;
 mod liveview;
 mod lod;
 mod look_ops;
@@ -169,6 +170,10 @@ pub enum Planted {
     OverlayKeepsGridOnSeek,
     LineReadsPreviousStep,
     PartPoseInWorldSpace,
+    /// #1381's wrong programs (tests/acceptance/1381/README.md: Assumed surfaces 5): a terrain
+    /// plate whose horizon table is never read, and its sky occlusion from its slope alone.
+    TerrainNoHorizonBake,
+    TerrainOcclusionFromSlope,
     /// #378's wrong programs (tests/acceptance/378/README.md: Planted programs).
     ForwardZ,
     EncodesTwice,
@@ -504,6 +509,12 @@ pub enum Planted {
     AxesModAppliesTransform,
     Axes3dOwnTickRule,
     AxesModMapsEveryFrame,
+    /// #2031's wrong programs (tests/acceptance/2031/README.md: Planted programs).
+    LightLinearFalloff,
+    LightEncodedSum,
+    LightDefaultAmbientZero,
+    LightEveryChild,
+    LightStaleList,
 }
 
 impl Planted {
@@ -538,6 +549,11 @@ impl Planted {
             "backdrop_past_coverage" => Planted::BackdropPastCoverage,
             "backdrop_reads_status" => Planted::BackdropReadsStatus,
             "bevel_lit_opposite" => Planted::BevelLitOpposite,
+            "light_linear_falloff" => Planted::LightLinearFalloff,
+            "light_encoded_sum" => Planted::LightEncodedSum,
+            "light_default_ambient_zero" => Planted::LightDefaultAmbientZero,
+            "light_every_child" => Planted::LightEveryChild,
+            "light_stale_list" => Planted::LightStaleList,
             "vivid_light_as_linear_light" => Planted::VividLightAsLinearLight,
             "dissolve_reads_playback" => Planted::DissolveReadsPlayback,
             "pass_linear_in_2d" => Planted::PassLinearIn2d,
@@ -803,6 +819,8 @@ impl Planted {
             "overlay_keeps_grid_on_seek" => Planted::OverlayKeepsGridOnSeek,
             "line_reads_previous_step" => Planted::LineReadsPreviousStep,
             "part_pose_in_world_space" => Planted::PartPoseInWorldSpace,
+            "terrain_no_horizon_bake" => Planted::TerrainNoHorizonBake,
+            "terrain_occlusion_from_slope" => Planted::TerrainOcclusionFromSlope,
             _ => return None,
         })
     }

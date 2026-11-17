@@ -1,0 +1,32 @@
+$ node node_modules/vitest/vitest.mjs run --reporter=verbose --no-file-parallelism --testTimeout=600000 packages/hub/test/probe-lifecycle.test.ts
+Mon Nov 16 20:32:14 UTC 2026
+12:32  up 2 days, 22:41, 20 users, load averages: 219.84 200.36 180.49
+
+ RUN  v5.0.5 <change>
+
+ × packages/hub/test/probe-lifecycle.test.ts > a built-in document run records its probe and end before its verdict 3254ms
+   → the built-in probe is owned, not just a command check or a job: expected 0 to be greater than 0
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/hub/test/probe-lifecycle.test.ts > a built-in document run records its probe and end before its verdict
+AssertionError: the built-in probe is owned, not just a command check or a job: expected 0 to be greater than 0
+ ❯ packages/hub/test/probe-lifecycle.test.ts:27:91
+     25|   expect(JSON.stringify(verdict?.data)).toContain("doesn't match");
+     26|   const probes = events.filter(e => e.kind === 'process.tracked' && e.…
+     27|   expect(probes.length, 'the built-in probe is owned, not just a comma…
+       |                                                                                           ^
+     28|   for (const probe of probes) {
+     29|     const ended = events.find(e => e.kind === 'process.ended' && e.dat…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  12:32:15
+   Duration  3.56s (tests 99%, transform 1%)
+
+exit=1
+Mon Nov 16 20:32:18 UTC 2026
+12:32  up 2 days, 22:41, 20 users, load averages: 219.84 200.36 180.49

@@ -1,0 +1,146 @@
+===== base 9ae04c6cd (scripts as on main) | 11:27:23 | load { 10.19 8.72 9.83 }
+✖ #1835.fb2cf14f a fixture issue with three criteria and a Part of change whose trace lane proved the first two: after it lands, those two lines are ticked, each naming the lane's record, and the third is not (173421.268792ms)
+✖ #1835.5f2ccf69 with the third criterion a budget, a passing window closes the fixture issue, naming its commit (1.604792ms)
+✖ #1835.5f2ccf69 with the third criterion unproven and not a budget, the fixture issue stays open, naming it (1.613208ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 0
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 175553.499958
+
+✖ failing tests:
+
+test at tests/acceptance/1835/window.test.mjs:51:1
+✖ #1835.fb2cf14f a fixture issue with three criteria and a Part of change whose trace lane proved the first two: after it lands, those two lines are ticked, each naming the lane's record, and the third is not (173421.268792ms)
+  AssertionError [ERR_ASSERTION]: the trace lane left no evidence record 65afad809d0d86cd8d678a530f18dc41f0460eeb-trace.json under ~/.deepbuild/lanes/ for #9601's change
+  records:
+  {"lane":"budget-window b5d96926cdebdf8d3d13132cef30a8210e43fcd2","state":"PASS","host":"<host>","platform":"darwin-arm64","tree":"65afad809d0d86cd8d678a530f18dc41f0460eeb","tests":[{"id":"fixture-bench","state":"PASS"}],"commit":"b5d96926cdebdf8d3d13132cef30a8210e43fcd2","base":"0d7759ad385906056b8e9922185c8a27e793ef5f","unmeasured":["#9601.c8ae54e8","#9601.78d9ff43"],"notReached":[]}
+  {"lane":"budget-window 2d82c4587284b3d5dff42075951e399ab5160d3e","state":"PASS","host":"<host>","platform":"darwin-arm64","tree":"bcd505742b9678f0de4a92e14e17a5b356b56143","tests":[{"id":"fixture-bench","state":"PASS"}],"commit":"2d82c4587284b3d5dff42075951e399ab5160d3e","base":"0d7759ad385906056b8e9922185c8a27e793ef5f","unmeasured":["#9602.c8ae54e8","#9602.78d9ff43","#9602.db36b607"],"notReached":[]}
+  gh calls:
+  ["issue","view","9601","--json","body","-q",".body"]
+  ["issue","view","9602","--json","body","-q",".body"]
+  ["issue","view","9601","--json","state,body"]
+  ["issue","view","9602","--json","state,body"]
+  throttle log:
+  {"at":"2026-11-16T19:27:50.583Z","event":"granted","class":"timed","grant":"top-level","id":"d1e2526b74aebb0a","pid":24365,"index":1,"load":2,"cores":18,"wait":5}
+  {"at":"2026-11-16T19:27:50.584Z","event":"window-open","id":"d1e2526b74aebb0a","pid":24365}
+  {"at":"2026-11-16T19:27:51.789Z","event":"window-close","id":"d1e2526b74aebb0a","pid":24365}
+  {"at":"2026-11-16T19:27:51.790Z","event":"released","class":"timed","id":"d1e2526b74aebb0a","pid":24365}
+  {"at":"2026-11-16T19:28:26.256Z","event":"granted","class":"timed","grant":"top-level","id":"aaad8a17ec48a0bb","pid":29529,"index":1,"load":2,"cores":18,"wait":5}
+  {"at":"2026-11-16T19:28:26.258Z","event":"window-open","id":"aaad8a17ec48a0bb","pid":29529}
+  {"at":"2026-11-16T19:30:37.518Z","event":"window-close","id":"aaad8a17ec48a0bb","pid":29529}
+  {"at":"2026-11-16T19:30:37.557Z","event":"released","class":"timed","id":"aaad8a17ec48a0bb","pid":29529}
+  samples: 96
+  exit 0
+  stdout:
+  PASS before: tests/acceptance/9601/add.test.mjs › #9601.c8ae54e8 adds two numbers: failed on the merge base at its assertion
+  PASS before: tests/acceptance/9601/half.test.mjs › #9601.78d9ff43 halves a number: failed on the merge base at its assertion
+  PASS trace: Part of #9601; open: #9601.aaa6fd01
+  proof: wall time 16.6 s
+  
+  stderr:
+  
+      at TestContext.<anonymous> (file://<base checkout>/tests/acceptance/1835/window.test.mjs:59:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: null,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1835/window.test.mjs:71:1
+✖ #1835.5f2ccf69 with the third criterion a budget, a passing window closes the fixture issue, naming its commit (1.604792ms)
+  AssertionError [ERR_ASSERTION]: a passing window left #9601 open, though the trace lane proved its first two criteria and the task names its third, a budget
+  A fixture issue for #1835.
+  
+  ### Acceptance criteria
+  - [ ] The sum of two numbers is their total
+  - [ ] Half a number is it divided by two
+  - [ ] `fixture-bench` stays within its p50 budget on a reference Mac
+  
+  ### Proof
+  The issue's body before and after the landing.
+  
+  records:
+  {"lane":"budget-window b5d96926cdebdf8d3d13132cef30a8210e43fcd2","state":"PASS","host":"<host>","platform":"darwin-arm64","tree":"65afad809d0d86cd8d678a530f18dc41f0460eeb","tests":[{"id":"fixture-bench","state":"PASS"}],"commit":"b5d96926cdebdf8d3d13132cef30a8210e43fcd2","base":"0d7759ad385906056b8e9922185c8a27e793ef5f","unmeasured":["#9601.c8ae54e8","#9601.78d9ff43"],"notReached":[]}
+  {"lane":"budget-window 2d82c4587284b3d5dff42075951e399ab5160d3e","state":"PASS","host":"<host>","platform":"darwin-arm64","tree":"bcd505742b9678f0de4a92e14e17a5b356b56143","tests":[{"id":"fixture-bench","state":"PASS"}],"commit":"2d82c4587284b3d5dff42075951e399ab5160d3e","base":"0d7759ad385906056b8e9922185c8a27e793ef5f","unmeasured":["#9602.c8ae54e8","#9602.78d9ff43","#9602.db36b607"],"notReached":[]}
+  gh calls:
+  ["issue","view","9601","--json","body","-q",".body"]
+  ["issue","view","9602","--json","body","-q",".body"]
+  ["issue","view","9601","--json","state,body"]
+  ["issue","view","9602","--json","state,body"]
+  throttle log:
+  {"at":"2026-11-16T19:27:50.583Z","event":"granted","class":"timed","grant":"top-level","id":"d1e2526b74aebb0a","pid":24365,"index":1,"load":2,"cores":18,"wait":5}
+  {"at":"2026-11-16T19:27:50.584Z","event":"window-open","id":"d1e2526b74aebb0a","pid":24365}
+  {"at":"2026-11-16T19:27:51.789Z","event":"window-close","id":"d1e2526b74aebb0a","pid":24365}
+  {"at":"2026-11-16T19:27:51.790Z","event":"released","class":"timed","id":"d1e2526b74aebb0a","pid":24365}
+  {"at":"2026-11-16T19:28:26.256Z","event":"granted","class":"timed","grant":"top-level","id":"aaad8a17ec48a0bb","pid":29529,"index":1,"load":2,"cores":18,"wait":5}
+  {"at":"2026-11-16T19:28:26.258Z","event":"window-open","id":"aaad8a17ec48a0bb","pid":29529}
+  {"at":"2026-11-16T19:30:37.518Z","event":"window-close","id":"aaad8a17ec48a0bb","pid":29529}
+  {"at":"2026-11-16T19:30:37.557Z","event":"released","class":"timed","id":"aaad8a17ec48a0bb","pid":29529}
+  samples: 96
+  exit 0
+  stdout:
+  NOTE budget-window: no task of 5c6eef1a4113f7a64e763cb20e6a479581230a5c could be placed, so each runs: Cannot find package 'typescript' imported from <tmp>/deep-1116-pktbnx/mac/scripts/affected.mjs
+  PASS budget-window: b5d96926cdebdf8d3d13132cef30a8210e43fcd2 against 0d7759ad385906056b8e9922185c8a27e793ef5f, 1 tasks run, 0 not reached
+  NOTE budget-window: no task of d85393b10eb5131e33bde35b688da1cd33b2274e could be placed, so each runs: Cannot find package 'typescript' imported from <tmp>/deep-1116-pktbnx/mac/scripts/affected.mjs
+  PASS budget-window: 2d82c4587284b3d5dff42075951e399ab5160d3e against 0d7759ad385906056b8e9922185c8a27e793ef5f, 1 tasks run, 0 not reached
+  PASS budget-window: 2 commits measured up to 2d82c4587284b3d5dff42075951e399ab5160d3e
+  
+  stderr:
+  
+  
+  'OPEN' !== 'CLOSED'
+  
+      at TestContext.<anonymous> (file://<base checkout>/tests/acceptance/1835/window.test.mjs:75:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'OPEN',
+    expected: 'CLOSED',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1835/window.test.mjs:79:1
+✖ #1835.5f2ccf69 with the third criterion unproven and not a budget, the fixture issue stays open, naming it (1.613208ms)
+  AssertionError [ERR_ASSERTION]: the record of #9602's commit doesn't name #9602.db36b607, and only it, as what keeps the issue open: {"lane":"budget-window 2d82c4587284b3d5dff42075951e399ab5160d3e","state":"PASS","host":"<host>","platform":"darwin-arm64","tree":"bcd505742b9678f0de4a92e14e17a5b356b56143","tests":[{"id":"fixture-bench","state":"PASS"}],"commit":"2d82c4587284b3d5dff42075951e399ab5160d3e","base":"0d7759ad385906056b8e9922185c8a27e793ef5f","unmeasured":["#9602.c8ae54e8","#9602.78d9ff43","#9602.db36b607"],"notReached":[]}
+  A fixture issue for #1835.
+  
+  ### Acceptance criteria
+  - [ ] The sum of two numbers is their total
+  - [ ] Half a number is it divided by two
+  - [ ] Doubling a number multiplies it by two
+  
+  ### Proof
+  The issue's body before and after the landing.
+  
+  + actual - expected
+  
+    [
+  +   '#9602.c8ae54e8',
+  +   '#9602.78d9ff43',
+      '#9602.db36b607'
+    ]
+  
+      at TestContext.<anonymous> (file://<base checkout>/tests/acceptance/1835/window.test.mjs:83:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ '#9602.c8ae54e8', '#9602.78d9ff43', '#9602.db36b607' ],
+    expected: [ '#9602.db36b607' ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+exit 1 | 11:30:37 | load { 19.87 12.36 11.00 }

@@ -325,11 +325,29 @@ pub(super) fn region_map(
     for r in &reads {
         let (size, ty, read) = if let Some((size, ty)) = controls.get(r) {
             (*size, ty.to_string(), Read::Control)
+        } else if let Some(read) = series_read(r, sources) {
+            // One series of a series source, read as a scalar (Logic: readings).
+            (8 + 16 * reading_max(&read), "reading".to_string(), read)
         } else if let Some(read) = sources.get(r) {
-            let Read::Reading { max, .. } = read else {
-                unreachable!()
-            };
-            (8 + max * 16, "reading".to_string(), read.clone())
+            match read {
+                Read::Reading {
+                    shape: Shape::Series(_),
+                    ..
+                } => {
+                    refused.push(refusal(
+                        "read",
+                        format!("{r} is a whole series: a piece reads one series as {r}#<series>, never the whole"),
+                        json!({"read": r, "source": r.trim_start_matches("reading:")}),
+                    ));
+                    continue;
+                }
+                Read::Reading { max, shape, .. } => (
+                    8 + max * (shape.size() + 8),
+                    "reading".to_string(),
+                    read.clone(),
+                ),
+                _ => (4, "i32".to_string(), Read::World),
+            }
         } else if let Some((other, "hover")) =
             r.split_once('.').filter(|(c, _)| controls.contains_key(*c))
         {
@@ -537,12 +555,47 @@ pub fn region_maps(
     Ok(out)
 }
 
+/// A read of one series of a series source, `reading:<source>#<series>`: a scalar reading
+/// delivered as its source's are.
+pub(crate) fn series_read(r: &str, sources: &Sources) -> Option<Read> {
+    let (src, series) = r.split_once('#')?;
+    match sources.get(src)? {
+        Read::Reading {
+            each,
+            max,
+            shape: Shape::Series(_),
+        } if !series.is_empty() => Some(Read::Reading {
+            each: *each,
+            max: *max,
+            shape: Shape::Scalar,
+        }),
+        _ => None,
+    }
+}
+
+fn reading_max(r: &Read) -> u32 {
+    match r {
+        Read::Reading { max, .. } => *max,
+        _ => 0,
+    }
+}
+
 pub(super) type Controls = BTreeMap<String, (u32, &'static str)>;
-/// A piece's sources by the reading each delivers, `reading:<source>` (#533).
+/// A piece's sources by the reading each delivers, `reading:<source>` (#533), and (#182) the
+/// readings its worlds declare that a logic item may read, `world_reads`.
 pub(super) type Sources = BTreeMap<String, Read>;
 
 pub(super) fn sources_of(piece: &Value) -> Result<Sources, Refused> {
     let mut sources = BTreeMap::new();
+    for name in piece
+        .get("world_reads")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+    {
+        sources.insert(name.to_string(), Read::World);
+    }
     for (name, src) in piece
         .get("sources")
         .and_then(Value::as_object)
