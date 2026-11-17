@@ -71,3 +71,17 @@ test result: ok. 1 passed; 0 failed
 exit 0
  00:25:48 up  9:33,  5 users,  load average: 275.99, 248.49, 171.82
 ```
+
+## `node scripts/affected.mjs` at 18d3714a0, 2026-11-16: runs without a result
+
+Both runs named the seven changed paths, under `MemoryMax=24G`, `CARGO_BUILD_JOBS=2`, `VITEST_MAX_WORKERS=4` and
+`DEEP_SHARDS=2`. Neither read a result, so neither counts: the full run is still to do.
+
+- Run 10 queued for a test slot behind four other issues' runs, each in its alone block for 5–8 h. It was stopped
+  while it waited.
+- Run 11 ran under an isolated HOME: a fresh folder of its own, so its own throttle table, with `RUSTUP_HOME`,
+  `CARGO_HOME`, `npm_config_cache`, `GH_CONFIG_DIR` and `GIT_CONFIG_GLOBAL` pointed at the real ones. That way it
+  didn't wait on those four runs' slots. Another issue's session stopped it, with three other units, at 21:46:27,
+  after 5 h 09 min. Its last line was `BLOCKED affected: stopped by SIGTERM; its jobs were stopped and none of their
+  results is read`. It hit no ENOSPC and the journal has no OOM entry. No `hub run` or pty process from this worktree
+  was left over.
