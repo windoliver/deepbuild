@@ -137,21 +137,35 @@ describe('deep <command> --help', () => {
   }, 70_000);
 
   // #2200: setup waits for the command to read its arguments, and then still runs, whichever command comes first.
-  it.each([[[]], [['inbox']], [['secret', 'list']], [['off']], [['on']], [['env', 'up']], [['memory']], [['guard', 'add', 'guards.json']], [['install', 'package']], [['install', 'a-pack']]] as string[][][])('deep %j, the first command in a fresh home, sets it up', (args) => {
+  const first = [[[]], [['inbox']], [['secret', 'list']], [['off']], [['on']], [['env', 'up']], [['memory']], [['guard', 'add', 'guards.json']], [['install', 'package']], [['install', 'a-pack']]] as string[][][];
+  /** A fresh home holding what the `first` commands name, and the command's result there. */
+  const firstIn = (args: string[], prepare: (home: string) => void = () => {}) => {
     const { home, env } = fresh();
     try {
+      prepare(home);
       writeFileSync(join(home, 'guards.json'), '[]\n');
       mkdirSync(join(home, 'package'));
       writeFileSync(join(home, 'package', 'deepbuild.json'), '{}\n');
       mkdirSync(join(home, 'a-pack'));
       writeFileSync(join(home, 'a-pack', 'pack.json'), '{"id":"someone/a-pack","version":"1.0.0"}\n');
       const result = spawnSync(process.execPath, [cli, ...args], { encoding: 'utf8', env, cwd: home, timeout: 60_000 });
-      expect(existsSync(join(home, '.deepbuild', 'setup-finished.json')) || existsSync(join(home, '.deepbuild', 'setup-stopped.json')), `deep ${args.join(' ')} set nothing up (exit ${result.status}: ${result.stderr.trim().slice(0, 300)})`).toBe(true);
-      // The launcher stand-in refuses, so no hub starts: setup's own exit 3 is the command's, by no signal or timeout.
-      expect(result.status, result.stderr.trim().slice(0, 300)).toBe(3);
+      return { result, setUp: existsSync(join(home, '.deepbuild', 'setup-finished.json')) || existsSync(join(home, '.deepbuild', 'setup-stopped.json')) };
     } finally {
       rmSync(home, { recursive: true, force: true });
     }
+  };
+  it.each(first)('deep %j, the first command in a fresh home, sets it up', (args) => {
+    const { result, setUp } = firstIn(args);
+    expect(setUp, `deep ${args.join(' ')} set nothing up (exit ${result.status}: ${result.stderr.trim().slice(0, 300)})`).toBe(true);
+    // The launcher stand-in refuses, so no hub starts and the command ends with 3, by no signal or timeout.
+    expect(result.status, result.stderr.trim().slice(0, 300)).toBe(3);
+  }, 70_000);
+
+  // #2200: a setup that stops before it changes anything ends the command with setup's exit 1, not the 3 the command
+  // itself would give with no hub.
+  it.each(first)('deep %j, the first command where setup can\'t read the agent\'s settings, ends with setup\'s exit 1', (args) => {
+    const { result } = firstIn(args, (home) => { mkdirSync(join(home, '.claude')); writeFileSync(join(home, '.claude', 'settings.json'), 'not JSON\n'); });
+    expect(result.status, result.stderr.trim().slice(0, 300)).toBe(1);
   }, 70_000);
 
   // The usage a command prints for arguments it can't read is the one that is right; its help names every flag in it.
