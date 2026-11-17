@@ -994,7 +994,7 @@ impl<'a> Hub<'a> {
             card_down: None,
             card_answer: None,
             present: None,
-            sandbox: crate::sandbox::Host::planted(startup.layouts),
+            sandbox: crate::sandbox::Host::new(startup, scenario),
             vias: BTreeMap::new(),
             shapings: HashMap::new(),
         };
@@ -1256,10 +1256,10 @@ impl<'a> Hub<'a> {
         }
     }
 
-    /// Each `logic@1` item's program, inlined from the evidence store by its hash as
-    /// `params.wasm` (base64), which the logic module's steps run (#533), as the web player inlines
-    /// the bundle's (#172).
+    /// Each provider's output by its hash (#192), then each `logic@1` item's program inlined from
+    /// the evidence store as `params.wasm` (base64) for the logic module's steps (#533, #172).
     pub(crate) fn inline_programs(&self, form: &mut Value) {
+        self.sandbox.fill(&self.startup.sealed, form);
         let root = &self.scenario.evidence;
         deep_play::logic::inline_programs(form, &|sha| {
             std::fs::read(root.join(&sha[..2]).join(&sha[2..])).ok()
