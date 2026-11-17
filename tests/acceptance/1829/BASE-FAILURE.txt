@@ -1,0 +1,151 @@
+tests/acceptance/1829 at the base commit (nothing of #1829 implemented)
+=======================================================================
+
+Base commit : c740dede7193 (main, "Merge pull request #2559 from windoliver/worktree-github-issue-542-dcd5c9");
+              the merge base with origin/main is the same commit
+Date        : 2026-11-15, 00:15 local time
+Node        : v24.22.0
+tsc         : node node_modules/typescript/bin/tsc -p tests/acceptance/1829/tsconfig.json -> exit 0 (clean)
+Command     : node node_modules/vitest/vitest.mjs run --root tests/acceptance/1829 --no-file-parallelism --reporter=verbose
+              (inside systemd-run --user --wait --pipe -p MemoryMax=24G, NO_COLOR=1)
+Machine     : Linux, 1-minute load 136 to 241 from other sessions during the run
+Result      : 5 failed | 0 passed (5), in 80 s
+Paths       : the checkout's absolute path is shown as <checkout>
+
+Why each test fails here (its criterion's assertion, never a load or import error)
+----------------------------------------------------------------------------------
+ask.test.ts
+  AC1 (fixture)       : "set a fourth time, the promise raises exactly one ask from source promise.blocked, and it
+                        shows in the inbox" -> the #120 fixture reaches the fourth set and the record's BLOCKED
+                        (cause set_again, owner service) says "ask": null; the inbox is [] and no ask.created exists:
+                        expected 0 to be 1. The asks core refuses promise.blocked (no row) and the hub drops it.
+  AC1 (planted file)  : "the ask-source check ... runs on the planted tree and exits 1" -> scripts/ask-sources-guard.mjs
+                        doesn't exist (exit null).
+check.test.ts
+  AC2 (this checkout) : "the check ... runs on this checkout and exits 0" -> no check (exit null).
+  AC2 (merge base)    : "on the merge base ... the check exits 1" -> no check (exit null). The step before it, that
+                        the base raises 'promise.blocked' under packages/ (answer-delivery.ts:291), passes.
+  AC2 (plants)        : "the check exits 1 on the planted tree" -> no check (exit null).
+
+Test-the-tests (not part of the proof): in a scratch worktree of the base with its own built packages, a throwaway
+regex prototype of the check at scripts/ask-sources-guard.mjs and a choice-kind promise.blocked row in
+packages/asks/sources.json, all 5 tests passed; with the row of kind exception (the raise is a choice), AC1's fixture
+test still failed with an empty inbox. The worktree and prototype were removed.
+
+Under heavy load one earlier run stalled before the fourth set (a Stop never reached the record within 20 s); the
+fixture's waits are now 60 s and a stall reports BLOCKED, never the criterion's assertion.
+
+The run's output
+----------------
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/1829
+
+ × ask.test.ts > AC1 #1829.4f01565f A promise set a fourth time raises exactly one ask naming its owner, and it shows in the inbox. A planted sources file without the row fails, naming `promise.blocked` > AC1 #1829.4f01565f the #120 wake-up fixture: set a fourth time, the promise is BLOCKED and the inbox holds exactly one ask about it, naming the owner the record names 41376ms
+   → AC1 #1829.4f01565f set a fourth time, the promise raises exactly one ask from source promise.blocked, and it shows in the inbox (inbox.read); the inbox: []; ask.created in the record: []; the BLOCKED record: promise.blocked@53 ts=1794734305372 {"promise":"01M7F4CTZVT6J7FSZ2KXSNJKRP","status":"BLOCKED","quote":"I'll check the deploy again in 20 minutes.","cause":"set_again","owner":"service","ask":null}: expected +0 to be 1 // Object.is equality
+ × ask.test.ts > AC1 #1829.4f01565f A promise set a fourth time raises exactly one ask naming its owner, and it shows in the inbox. A planted sources file without the row fails, naming `promise.blocked` > AC1 #1829.4f01565f a planted packages/asks/sources.json without the promise.blocked row fails the ask-source check, naming promise.blocked at its raise 13729ms
+   → AC1 #1829.4f01565f the ask-source check (<checkout>/scripts/ask-sources-guard.mjs) runs on the planted tree and exits 1 on its finding: exit null, stdout "", stderr "<checkout>/scripts/ask-sources-guard.mjs does not exist": expected null to be 1 // Object.is equality
+ × check.test.ts > AC2 #1829.a7d207ff A check fails any source string passed to `raise` in `packages/` that has no row in `packages/asks/sources.json`, naming the source and the call site; on the merge base it names `promise.blocked` > AC2 #1829.a7d207ff on this checkout every source passed to raise has its row: the check prints its PASS line and exits 0 12ms
+   → AC2 #1829.a7d207ff the check (node scripts/ask-sources-guard.mjs) runs on this checkout and exits 0: exit null, stdout "", stderr "<checkout>/scripts/ask-sources-guard.mjs does not exist": expected null to be +0 // Object.is equality
+ × check.test.ts > AC2 #1829.a7d207ff A check fails any source string passed to `raise` in `packages/` that has no row in `packages/asks/sources.json`, naming the source and the call site; on the merge base it names `promise.blocked` > AC2 #1829.a7d207ff on the merge base the check fails, naming promise.blocked and its call site 4552ms
+   → AC2 #1829.a7d207ff on the merge base c740dede7193 (--root /tmp/dh1829-2YrDyQ) the check exits 1: exit null, stdout "", stderr "<checkout>/scripts/ask-sources-guard.mjs does not exist": expected null to be 1 // Object.is equality
+ × check.test.ts > AC2 #1829.a7d207ff A check fails any source string passed to `raise` in `packages/` that has no row in `packages/asks/sources.json`, naming the source and the call site; on the merge base it names `promise.blocked` > AC2 #1829.a7d207ff planted raises with no row fail, each naming its source and its call site, by literal, named constant, a hub wrapper's raise, a chained raise and a template; raises whose sources have rows are not named 8964ms
+   → AC2 #1829.a7d207ff the check exits 1 on the planted tree: exit null, stdout "", stderr "<checkout>/scripts/ask-sources-guard.mjs does not exist": expected null to be 1 // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ask.test.ts > AC1 #1829.4f01565f A promise set a fourth time raises exactly one ask naming its owner, and it shows in the inbox. A planted sources file without the row fails, naming `promise.blocked` > AC1 #1829.4f01565f the #120 wake-up fixture: set a fourth time, the promise is BLOCKED and the inbox holds exactly one ask about it, naming the owner the record names
+AssertionError: AC1 #1829.4f01565f set a fourth time, the promise raises exactly one ask from source promise.blocked, and it shows in the inbox (inbox.read); the inbox: []; ask.created in the record: []; the BLOCKED record: promise.blocked@53 ts=1794734305372 {"promise":"01M7F4CTZVT6J7FSZ2KXSNJKRP","status":"BLOCKED","quote":"I'll check the deploy again in 20 minutes.","cause":"set_again","owner":"service","ask":null}: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ ask.test.ts:73:314
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  ask.test.ts > AC1 #1829.4f01565f A promise set a fourth time raises exactly one ask naming its owner, and it shows in the inbox. A planted sources file without the row fails, naming `promise.blocked` > AC1 #1829.4f01565f a planted packages/asks/sources.json without the promise.blocked row fails the ask-source check, naming promise.blocked at its raise
+AssertionError: AC1 #1829.4f01565f the ask-source check (<checkout>/scripts/ask-sources-guard.mjs) runs on the planted tree and exits 1 on its finding: exit null, stdout "", stderr "<checkout>/scripts/ask-sources-guard.mjs does not exist": expected null to be 1 // Object.is equality
+
+- Expected:
+1
+
++ Received:
+null
+
+ ❯ ask.test.ts:84:132
+     82|     writeFileSync(join(root, SOURCES_FILE), `${JSON.stringify(kept, nu…
+     83|     const c = runGuard(root);
+     84|     expect(c.code, `${AC1} the ask-source check (${GUARD}) runs on the…
+       |                                                                                                                                    ^
+     85|     expect(c.fails.length, `${AC1} the planted sources file fails, wit…
+     86|     for (const line of c.fails) {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  check.test.ts > AC2 #1829.a7d207ff A check fails any source string passed to `raise` in `packages/` that has no row in `packages/asks/sources.json`, naming the source and the call site; on the merge base it names `promise.blocked` > AC2 #1829.a7d207ff on this checkout every source passed to raise has its row: the check prints its PASS line and exits 0
+AssertionError: AC2 #1829.a7d207ff the check (node scripts/ask-sources-guard.mjs) runs on this checkout and exits 0: exit null, stdout "", stderr "<checkout>/scripts/ask-sources-guard.mjs does not exist": expected null to be +0 // Object.is equality
+
+- Expected:
+0
+
++ Received:
+null
+
+ ❯ check.test.ts:98:129
+     96|   it(`${AC2} on this checkout every source passed to raise has its row…
+     97|     const c = runGuard();
+     98|     expect(c.code, `${AC2} the check (node scripts/ask-sources-guard.m…
+       |                                                                                                                                 ^
+     99|     expect(c.fails, `${AC2} no FAIL line on this checkout: ${guardShow…
+    100|     expect(c.passes.length, `${AC2} one PASS ask source line: ${guardS…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  check.test.ts > AC2 #1829.a7d207ff A check fails any source string passed to `raise` in `packages/` that has no row in `packages/asks/sources.json`, naming the source and the call site; on the merge base it names `promise.blocked` > AC2 #1829.a7d207ff on the merge base the check fails, naming promise.blocked and its call site
+AssertionError: AC2 #1829.a7d207ff on the merge base c740dede7193 (--root /tmp/dh1829-2YrDyQ) the check exits 1: exit null, stdout "", stderr "<checkout>/scripts/ask-sources-guard.mjs does not exist": expected null to be 1 // Object.is equality
+
+- Expected:
+1
+
++ Received:
+null
+
+ ❯ check.test.ts:112:121
+    110|     expect(sites.length, `the merge base ${sha.slice(0, 12)} raises ${…
+    111|     const c = runGuard(root);
+    112|     expect(c.code, `${AC2} on the merge base ${sha.slice(0, 12)} (--ro…
+       |                                                                                                                         ^
+    113|     const named = c.fails.filter((l) => namesSource(l, SOURCE));
+    114|     expect(named.length, `${AC2} on the merge base a FAIL line names $…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  check.test.ts > AC2 #1829.a7d207ff A check fails any source string passed to `raise` in `packages/` that has no row in `packages/asks/sources.json`, naming the source and the call site; on the merge base it names `promise.blocked` > AC2 #1829.a7d207ff planted raises with no row fail, each naming its source and its call site, by literal, named constant, a hub wrapper's raise, a chained raise and a template; raises whose sources have rows are not named
+AssertionError: AC2 #1829.a7d207ff the check exits 1 on the planted tree: exit null, stdout "", stderr "<checkout>/scripts/ask-sources-guard.mjs does not exist": expected null to be 1 // Object.is equality
+
+- Expected:
+1
+
++ Received:
+null
+
+ ❯ check.test.ts:127:86
+    125|     }
+    126|     const c = runGuard(root);
+    127|     expect(c.code, `${AC2} the check exits 1 on the planted tree: ${gu…
+       |                                                                                      ^
+    128|     for (const p of PLANTS) {
+    129|       const line = lineOf(p.path === HUB ? HUB_TEXT : HOST_TEXT, p.mar…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  5 failed (5)
+   Start at  00:15:08
+   Duration  80.19s (tests 100%)
+

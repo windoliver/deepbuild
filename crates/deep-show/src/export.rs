@@ -99,6 +99,10 @@ pub enum Guard {
     WebSavesKeyedByOrigin,
     /// #1041: the web player never asks the browser to keep the origin's storage persistent.
     WebSavesNeverAskPersistence,
+    /// #1490: the web export takes the smallest player set whatever modules the document uses.
+    WebPicksSmallestSet,
+    /// #1490: the web export takes the full player set whatever modules the document uses.
+    WebPicksFullSet,
     /// #1045: the web player keeps no accessibility tree beside its canvas, and no live region.
     WebNoTree,
     /// #1045: the web player announces each readout on every frame it draws, changed or not.
@@ -179,6 +183,8 @@ pub(crate) fn planted(name: &str) -> Option<Planted> {
         "web_fragment_writes_entry" => Planted::Export(G::WebFragmentWritesEntry),
         "web_saves_keyed_by_origin" => Planted::Export(G::WebSavesKeyedByOrigin),
         "web_saves_never_ask_persistence" => Planted::Export(G::WebSavesNeverAskPersistence),
+        "web_picks_smallest_set" => Planted::Export(G::WebPicksSmallestSet),
+        "web_picks_full_set" => Planted::Export(G::WebPicksFullSet),
         "web_no_tree" => Planted::Export(G::WebNoTree),
         "web_announces_every_frame" => Planted::Export(G::WebAnnouncesEveryFrame),
         other => Planted::Export(G::Codec(CODEC_PLANTS.iter().find(|p| **p == other)?)),

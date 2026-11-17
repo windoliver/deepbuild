@@ -210,6 +210,7 @@ impl Player {
         };
         match draw.frame(p, size) {
             crate::draw::Frame::Pixels(rgba) => gpu.show(&rgba, size),
+            #[cfg(feature = "full")]
             crate::draw::Frame::Scene(scene, look, over) => gpu.show3d(&scene, &look, &over, size),
         }
     }
