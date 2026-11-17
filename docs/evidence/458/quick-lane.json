@@ -1,6 +1,6 @@
 {
  "lane": "quick",
- "commit": "67542064c4810b4ea96334b95eb79d2d34889cce",
+ "commit": "d53661684afc563ebee34d5936130ea44eb13ef0",
  "rows": [
   {
    "fixture": "parity/kernel/board.board",

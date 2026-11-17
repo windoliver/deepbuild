@@ -1,0 +1,1264 @@
+{
+ "commit": "d53661684afc563ebee34d5936130ea44eb13ef0",
+ "bar": "PASS",
+ "fixtures": [
+  {
+   "fixture": "parity/kernel/board.board",
+   "category": "kernel",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/building/house.figure",
+   "category": "building",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/cells/grid.board",
+   "category": "cells",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/data/points.board",
+   "category": "data",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/data/race.board",
+   "category": "data",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/data/decimated.board",
+   "category": "data",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/effects/same-machine-check.figure",
+   "category": "effects",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/effects/composed-in-core-view.figure",
+   "category": "effects",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/effects/live-only-material.figure",
+   "category": "effects",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/effects/scattered-write.figure",
+   "category": "effects",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/effects/tint-operator-status-color.figure",
+   "category": "effects",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/effects/tint-cost-understated.figure",
+   "category": "effects",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/effects/tint-operator-cycle.figure",
+   "category": "effects",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/effects/tint-operator-limit.figure",
+   "category": "effects",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/effects/tint-operator-source.figure",
+   "category": "effects",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/effects/tint-operator-type.figure",
+   "category": "effects",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/effects/tint-operator-unbounded.figure",
+   "category": "effects",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/effects/tint-operator-unknown-op.figure",
+   "category": "effects",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/effects/shadowed-box.figure",
+   "category": "effects",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/effects/audit-unread.figure",
+   "category": "effects",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/export/export-glow.film",
+   "category": "export",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/export/export-spring.film",
+   "category": "export",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/export/export-status.film",
+   "category": "export",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/graph/layered.board",
+   "category": "graph",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/graph/tie.board",
+   "category": "graph",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/graph/over_budget.board",
+   "category": "graph",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/logic/counter.board",
+   "category": "logic",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/logic/logic-determinism.figure",
+   "category": "logic",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/logic/logic-budget.figure",
+   "category": "logic",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/look/roles.board",
+   "category": "look",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/look/finish.board",
+   "category": "look",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/scene3d/loop-scale-door.figure",
+   "category": "scene3d",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/scene3d/loop-scale-door-clean.figure",
+   "category": "scene3d",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/scene3d/loop-framing-horizon.figure",
+   "category": "scene3d",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/scene3d/loop-framing-clean.figure",
+   "category": "scene3d",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/scene3d/loop-exposure-clipped.figure",
+   "category": "scene3d",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/scene3d/loop-exposure-clean.figure",
+   "category": "scene3d",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/scene3d/loop-contrast-muted.figure",
+   "category": "scene3d",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/scene3d/loop-contrast-clean.figure",
+   "category": "scene3d",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/scene3d/loop-noise-reseeds.figure",
+   "category": "scene3d",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/scene3d/loop-noise-clean.figure",
+   "category": "scene3d",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/scene3d/shading-unreadable.figure",
+   "category": "scene3d",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/scene3d/shading-degenerate.figure",
+   "category": "scene3d",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/scene3d/shading-flipped.figure",
+   "category": "scene3d",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/scene3d/shading-inconsistent.figure",
+   "category": "scene3d",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/scene3d/shading-inward.figure",
+   "category": "scene3d",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/scene3d/shading-quad-ratio.figure",
+   "category": "scene3d",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/scene3d/shading-uv.figure",
+   "category": "scene3d",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/marks2d/board.board",
+   "category": "marks2d",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/media/bell.scene",
+   "category": "media",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/media/reverb.board",
+   "category": "media",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/motion/score-pad-too-low.film",
+   "category": "motion",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/motion/score-note-too-long.film",
+   "category": "motion",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/motion/score-unknown-source.film",
+   "category": "motion",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/motion/score-unknown-preset.film",
+   "category": "motion",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/motion/score-unknown-instrument.film",
+   "category": "motion",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/motion/score-bad-pitch.film",
+   "category": "motion",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/motion/score-time-unresolved.film",
+   "category": "motion",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/motion/score-bad-duration.film",
+   "category": "motion",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/motion/score-bad-loop.film",
+   "category": "motion",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/motion/sound-lock-off-palette.film",
+   "category": "motion",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/motion/score-check-unread.film",
+   "category": "motion",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/motion/slide.board",
+   "category": "motion",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/physics/late-joint.board",
+   "category": "physics",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/physics/vehicle-lap.board",
+   "category": "physics",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/record/level.board",
+   "category": "record",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/scene3d/figure.figure",
+   "category": "scene3d",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/scene3d/lights.figure",
+   "category": "scene3d",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/scene3d/stack.figure",
+   "category": "scene3d",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/scene3d/garden.figure",
+   "category": "scene3d",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/scene3d/rest-no-support.figure",
+   "category": "scene3d",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/sheet/variants.board",
+   "category": "sheet",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/text/counter.board",
+   "category": "text",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/text/status.board",
+   "category": "text",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/vector/formula.figure",
+   "category": "vector",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/vector/paint.figure",
+   "category": "vector",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/kernel/clean-rebuild-fuzz.scene",
+   "category": "kernel",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/kernel/patch-fuzz.scene",
+   "category": "kernel",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/repair-loop.scene",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/agent-decision.scene",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/code-unknown-field.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/code-unknown-kind.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/code-kind-too-new.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/code-module-missing.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/code-out-of-range.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/code-ref-unresolved.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/code-cycle.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/code-bad-unit.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/code-bad-path.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/code-bad-handle.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/code-bad-id.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/code-bad-time.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/code-status-color-unbound.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/code-number-unsourced.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/code-bound-typed-over.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/code-not-your-layer.scene",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/code-stale-base.scene",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/code-undo-conflict.scene",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/code-over-quota.scene",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/code-too-large.scene",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/code-record-view.scene",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/code-over-budget.scene",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/text-bad-format.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/text-format-notation.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/marks2d-bad-paint.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/marks2d-role-unresolved.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/marks2d-gradient-kind.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/marks2d-gradient-stops.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/marks2d-bad-path-data.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/text-status-slot-kind.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/text-status-too-small.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/marks2d-mask-r2.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/marks2d-mask-depth.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/marks2d-mask-writer.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/marks2d-bad-asset.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/marks2d-alt-missing.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/marks2d-bad-column.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/marks2d-asset-missing.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/marks2d-bad-transform.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/marks2d-log-domain.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/marks2d-scale-type.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/marks2d-bad-scale.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/marks2d-bad-encode.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/marks2d-key-not-unique.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/marks2d-bad-axis.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/marks2d-bad-doc.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/marks2d-relation-cycle.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/motion-bad-interp.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/motion-bad-space.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/motion-bad-type.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/code-bad-rate.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/motion-bad-marker-kind.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/motion-marker-order.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/motion-waits-for-class.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/motion-too-many-paths.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/motion-time-unresolved.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/motion-placement-cycle.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/motion-transition-kind.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/motion-transition-gap.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/motion-occurrence-undeclared.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/motion-arrange-unsatisfied.figure",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/motion-cue-overlap.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/graph-layout-relayout-needed.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/record-salience-duplicate-id.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/sheet-sheet-does-not-fit.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/sheet-sheet-highlight-outside.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/code-migrated.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/code-pack-missing.board",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/framework/code-derived-item.scene",
+   "category": "framework",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/relation/exposure-doubles.scene",
+   "category": "relation",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/relation/lights-add.scene",
+   "category": "relation",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/relation/ortho-shift.scene",
+   "category": "relation",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/relation/sphere-turn.scene",
+   "category": "relation",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/relation/occluder-never-brightens.scene",
+   "category": "relation",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/relation/instances-keep-hash.scene",
+   "category": "relation",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/relation/translation.scene",
+   "category": "relation",
+   "must_pass": false,
+   "verdict": "PASS",
+   "reason": null,
+   "owner": "you"
+  },
+  {
+   "fixture": "parity/relation/light-level.scene",
+   "category": "relation",
+   "must_pass": false,
+   "verdict": "BLOCKED",
+   "reason": "the renderer's 16-bit float linear target holds a pixel to about 1e-3 relative and the relation asks 1e-4; the planted cut is caught, the rule itself waits for a wider linear chain",
+   "owner": "you"
+  }
+ ],
+ "failures": [],
+ "readings": []
+}
