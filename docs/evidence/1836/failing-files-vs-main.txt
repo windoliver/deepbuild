@@ -285,8 +285,8 @@ Every failing test of that rerun:
   head FAIL (HEAD ONLY) a subagent's stop a child's rollout never binds the root across a restart, and only SubagentStart may name one :: TypeError: Cannot read properties of undefined (reading 'verified')     at ~/deepbuild/.claude/worktrees/fix-1836-subagent-stop-hol
   main FAIL (main only) a subagent's stop is no boundary of the root's turn across a hub restart :: AssertionError: expected false to be true // Object.is equality     at ~/deepbuild/.claude/worktrees/base-1836-f7d661d67/packages/h
 ## packages/hub/test/gate-answer-origin.test.ts
-  head FAIL (also main) typing accept without choosing an option does not settle a stalled task after restart :: TypeError: The "paths[0]" argument must be of type string. Received undefined     at resolve (node:path:1257:7)     at gatePrBodies (/home/j
-  head FAIL (also main) typing split without choosing an option does not settle a stalled task after restart :: TypeError: The "paths[0]" argument must be of type string. Received undefined     at resolve (node:path:1257:7)     at gatePrBodies (/home/j
+  head FAIL (also main) typing accept without choosing an option does not settle a stalled task after restart :: TypeError: The "paths[0]" argument must be of type string. Received undefined     at resolve (node:path:1257:7)     at gatePrBodies (~
+  head FAIL (also main) typing split without choosing an option does not settle a stalled task after restart :: TypeError: The "paths[0]" argument must be of type string. Received undefined     at resolve (node:path:1257:7)     at gatePrBodies (~
 ## packages/hub/test/pack-rule-command.test.ts
   main FAIL (main only) deep pack rule lets a pack's asset fetch under the rule's license with no ask :: Error: BLOCKED: deep install of a pack folder with url-listed assets did not install it: exit 3, Source: /tmp/dh1731-HdOOkv/pack-a   acme/so
 ## packages/hub/test/wiki.test.ts
