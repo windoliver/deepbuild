@@ -24,7 +24,7 @@ const run = (lines, others = {}) => {
       writeFileSync(join(root, path), text);
     }
     const ran = spawnSync(process.execPath, [guard, '--root', root], { encoding: 'utf8' });
-    return { code: ran.status, fails: ran.stdout.split('\n').filter((l) => l.startsWith('FAIL')) };
+    return { code: ran.status, out: ran.stdout, fails: ran.stdout.split('\n').filter((l) => l.startsWith('FAIL')) };
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -159,4 +159,22 @@ test('a subclass\'s construction, defaults and properties in a pattern, a loop a
     'FAIL ask source: packages/hub/src/x.ts:8: can\'t read the source req.source, set by a destructuring assignment',
     'FAIL ask source: packages/hub/src/x.ts:9: can\'t read the source o, set by a destructuring assignment',
   ]);
+});
+
+test('a raise taken by key as a value and a file that does not parse fail; no raise at all and a table that is no list of rows are BLOCKED', () => {
+  const keyed = run(['const f = asks[\'raise\']; void f({}, \'ea.no\', {});']);
+  assert.deepEqual(keyed.fails, ['FAIL ask source: packages/hub/src/x.ts:4: can\'t read the sources asks[\'raise\'] is given: it\'s passed on as a value here']);
+  assert.equal(keyed.code, 1);
+  const broken = run(['void asks.raise({}, \'a.yes\', {});', 'const = ;']);
+  assert.equal(broken.fails.length, 1);
+  assert.match(broken.fails[0], /^FAIL ask source: packages\/hub\/src\/x\.ts:5: can't parse this file: /);
+  assert.equal(broken.code, 1);
+  const none = run([]);
+  assert.match(none.out, /^BLOCKED ask source: no raise found under packages\/\n/);
+  assert.equal(none.code, 2);
+  for (const table of ['{"rows":[]}', '[{"source":']) {
+    const bad = run(['void asks.raise({}, \'a.yes\', {});'], { 'packages/asks/sources.json': table });
+    assert.match(bad.out, /^BLOCKED ask source: packages\/asks\/sources\.json isn't a list of rows\n/);
+    assert.equal(bad.code, 2);
+  }
 });

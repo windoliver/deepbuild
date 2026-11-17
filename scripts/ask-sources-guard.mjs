@@ -30,7 +30,13 @@ if (!existsSync(table)) {
   console.log(`BLOCKED ask source: ${relative(root, table)} isn't there`);
   process.exit(2);
 }
-const rows = new Set(JSON.parse(readFileSync(table, 'utf8')).map((r) => r.source));
+let rows;
+try {
+  rows = new Set(JSON.parse(readFileSync(table, 'utf8')).map((r) => r.source));
+} catch {
+  console.log(`BLOCKED ask source: ${relative(root, table)} isn't a list of rows`);
+  process.exit(2);
+}
 
 // Every script under packages/ but its tests and what's built or installed.
 const SKIP = new Set(['test', 'fixtures', 'dist', 'node_modules', 'target']);
@@ -105,6 +111,7 @@ const names = new Map();
 const fields = new Map();
 const renamed = new Map();
 const patterns = new Map();
+const keyed = [];
 /** The variables and properties a destructuring pattern or a loop sets, each with why its value can't be read. */
 const leaves = (n, why) => ts.isArrayLiteralExpression(n) ? n.elements.flatMap((e) => leaves(e, why))
   : ts.isObjectLiteralExpression(n) ? n.properties.flatMap((p) => ts.isShorthandPropertyAssignment(p) ? [{ target: p, why }] : ts.isPropertyAssignment(p) ? leaves(p.initializer, why) : ts.isSpreadAssignment(p) ? leaves(p.expression, why) : [])
@@ -137,6 +144,7 @@ const index = (node) => {
     push(renamed, node.expression.text, 'default');
   }
   if (ts.isIdentifier(node)) push(names, node.text, node);
+  if (ts.isElementAccessExpression(node) && nameOf(node) === 'raise') keyed.push(node);
   ts.forEachChild(node, index);
 };
 for (const file of sources) index(file);
@@ -268,7 +276,8 @@ function fromObjects(symbol, decl, seen) {
 
 /** The raises: each call of a `raise`, and each `raise.call(...)` or `raise.apply(...)`, with the arguments it gets. */
 const raises = [];
-const loose = [];
+// A file that doesn't parse may hide a raise.
+const loose = sources.flatMap((f) => program.getSyntacticDiagnostics(f).map((d) => `FAIL ask source: ${relative(root, f.fileName)}:${f.getLineAndCharacterOfPosition(d.start).line + 1}: can't parse this file: ${ts.flattenDiagnosticMessageText(d.messageText, ' ')}`));
 for (const call of calls.get('raise') ?? []) raises.push({ call, args: call.arguments, signature: checker.getResolvedSignature(call) });
 for (const via of ['call', 'apply']) {
   for (const call of calls.get(via) ?? []) {
@@ -280,15 +289,15 @@ for (const via of ['call', 'apply']) {
     else loose.push(`FAIL ask source: ${site(call)}: can't read the arguments ${call.getText()} passes`);
   }
 }
-// A raise taken as a value must land where it's called as `raise`: a property or variable of that name.
-for (const id of [...(names.get('raise') ?? [])]) {
-  const access = id.parent;
+// A raise taken as a value, by name or by key, must land where it's called as `raise`: a property or variable of that name.
+for (const id of [...(names.get('raise') ?? []), ...keyed]) {
+  const access = ts.isElementAccessExpression(id) ? id : id.parent;
   // A destructure that renames raise hides its calls.
   if (ts.isBindingElement(access) && access.propertyName === id && nameOf(access.name) !== 'raise') {
     loose.push(`FAIL ask source: ${site(access)}: can't read the sources ${access.getText()} is given: raise is renamed here`);
     continue;
   }
-  if (!(ts.isPropertyAccessExpression(access) && access.name === id)) continue;
+  if (access !== id && !(ts.isPropertyAccessExpression(access) && access.name === id)) continue;
   const p = access.parent;
   if ((ts.isCallExpression(p) && p.expression === access) || (ts.isBinaryExpression(p) && p.left === access)) continue;
   if (ts.isPropertyAccessExpression(p) && ['call', 'apply'].includes(p.name.text) && ts.isCallExpression(p.parent)) continue;
@@ -326,5 +335,10 @@ for (const { call, args, signature } of raises) {
   }
 }
 const failed = [...new Set([...loose, ...findings.values()])].filter(Boolean).sort();
+// A tree it finds no raise in isn't one it has checked.
+if (!failed.length && !count) {
+  console.log('BLOCKED ask source: no raise found under packages/');
+  process.exit(2);
+}
 console.log(failed.length ? failed.join('\n') : `PASS ask source: ${count} sources passed to raise, each with its row`);
 process.exitCode = failed.length ? 1 : 0;
