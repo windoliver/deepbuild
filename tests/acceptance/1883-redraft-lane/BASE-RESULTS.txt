@@ -1,0 +1,141 @@
+Two runs of tests/acceptance/1883-redraft-lane at 6e143b48f (the base c740dede7 plus the frozen suite
+tests/acceptance/1883/ only; nothing of #1883's fix), 2026-11-16, Node 24.22.0, Linux arm64, after `npm ci`,
+`npm run build --workspaces` and `cargo build --locked -p deep-hook` (debug). The checkout's path is shown as <repo>.
+
+deep-hook note: inside this worktree, cargo also reads the enclosing main checkout's .cargo/config.toml (a newer
+[patch] for llrt_crypto) and fails to resolve the base's Cargo.lock. So deep-hook was built from `git archive
+c740dede7` extracted outside that checkout, with `--target-dir <repo>/target`: the base's own sources and lock file,
+the binary at <repo>/target/debug/deep-hook, where the hub looks for it.
+
+Both runs, as each test reads at the base: AC1 FAIL for the issue's reason (the path became a regular file, its target
+unchanged, the message naming the path); AC2 PASS; AC3 BLOCKED (the base lists no plant trust-renames-over-link, so
+its hub refuses to start). No test timed out: AC1 alone took 9.2 s and 10.8 s, past the 5 s default the frozen file
+runs under in the lane. Every hub and stand-in was stopped by PID and every /tmp/dh1883-* home removed (none left
+after the runs, no process left running).
+
+
+=== 1. The lane's config: the root vitest.config.ts (its include, setup file, no --testTimeout), from the repo root
+
+  NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/1883-redraft-lane
+
+
+ RUN  v5.0.5 <repo>
+
+ ❯ tests/acceptance/1883-redraft-lane/trust.test.ts (3 tests | 2 failed) 22610ms
+   × AC1 #1883.cba928bb with ~/.claude.json a symlink to a file elsewhere, a start that records trust leaves it a symlink and writes the trust key into its target 9224ms
+   × AC3 #1883.dd68075b a planted Starts.trust that renames over the link (trust-renames-over-link) fails the first criterion, naming the path 518ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1883-redraft-lane/trust.test.ts > AC1 #1883.cba928bb with ~/.claude.json a symlink to a file elsewhere, a start that records trust leaves it a symlink and writes the trust key into its target
+AssertionError: AC1 #1883.cba928bb: after the start the config path /tmp/dh1883-7pNTeD/.claude.json is still a symlink (/tmp/dh1883-7pNTeD/.claude.json is a regular file; its target /tmp/dh1883-7pNTeD/dotfiles/claude.json is unchanged): expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ linkedTrust tests/acceptance/1883-redraft-lane/trust.test.ts:41:115
+
+ ❯ tests/acceptance/1883-redraft-lane/trust.test.ts:52:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/acceptance/1883-redraft-lane/trust.test.ts > AC3 #1883.dd68075b a planted Starts.trust that renames over the link (trust-renames-over-link) fails the first criterion, naming the path
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=trust-renames-over-link did not start (a hub that doesn't list a plant refuses to start): file://<repo>/packages/hub/dist/plant.js:120
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=trust-renames-over-link names no planted program
+    at plantOf (file://<repo>/packages/hub/dist/plant.js:120:15)
+    at Module.runHub (file://<repo>/packages/hub/dist/server.js:1621:19)
+    at hubCommand (file://<repo>/packages/hub/dist/hub-command.js:29:58)
+    at async file://<repo>/packages/cli/dist/main.js:345:24
+
+Node.js v24.22.0
+
+ ❯ runHub tests/acceptance/1883/helpers.ts:113:11
+    111|   if (ready?.ready !== true) {
+    112|     if (child.pid && alive(child.pid)) try { process.kill(child.pid, '…
+    113|     throw Error(`BLOCKED: the hub${plant ? ` with the plant DEEP_HUB_P…
+       |           ^
+    114|   }
+    115|   return { pid: child.pid!, socket: String(ready.socket), child, exit,…
+ ❯ openWorld tests/acceptance/1883/helpers.ts:151:15
+ ❯ tests/acceptance/1883-redraft-lane/trust.test.ts:91:13
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 1 passed (3)
+   Start at  19:49:25
+   Duration  23.84s (tests 97%, transform 3%)
+
+
+=== 2. As the frozen README runs its folder, with --root and no --testTimeout
+
+  NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1883-redraft-lane
+
+
+ RUN  v5.0.5 <repo>/tests/acceptance/1883-redraft-lane
+
+ ❯ trust.test.ts (3 tests | 2 failed) 29033ms
+   × AC1 #1883.cba928bb with ~/.claude.json a symlink to a file elsewhere, a start that records trust leaves it a symlink and writes the trust key into its target 10777ms
+   × AC3 #1883.dd68075b a planted Starts.trust that renames over the link (trust-renames-over-link) fails the first criterion, naming the path 2086ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  trust.test.ts > AC1 #1883.cba928bb with ~/.claude.json a symlink to a file elsewhere, a start that records trust leaves it a symlink and writes the trust key into its target
+AssertionError: AC1 #1883.cba928bb: after the start the config path /tmp/dh1883-9Q8tuI/.claude.json is still a symlink (/tmp/dh1883-9Q8tuI/.claude.json is a regular file; its target /tmp/dh1883-9Q8tuI/dotfiles/claude.json is unchanged): expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ linkedTrust trust.test.ts:41:115
+
+ ❯ trust.test.ts:52:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  trust.test.ts > AC3 #1883.dd68075b a planted Starts.trust that renames over the link (trust-renames-over-link) fails the first criterion, naming the path
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=trust-renames-over-link did not start (a hub that doesn't list a plant refuses to start): file://<repo>/packages/hub/dist/plant.js:120
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=trust-renames-over-link names no planted program
+    at plantOf (file://<repo>/packages/hub/dist/plant.js:120:15)
+    at Module.runHub (file://<repo>/packages/hub/dist/server.js:1621:19)
+    at hubCommand (file://<repo>/packages/hub/dist/hub-command.js:29:58)
+    at async file://<repo>/packages/cli/dist/main.js:345:24
+
+Node.js v24.22.0
+
+ ❯ runHub ../1883/helpers.ts:113:11
+    111|   if (ready?.ready !== true) {
+    112|     if (child.pid && alive(child.pid)) try { process.kill(child.pid, '…
+    113|     throw Error(`BLOCKED: the hub${plant ? ` with the plant DEEP_HUB_P…
+       |           ^
+    114|   }
+    115|   return { pid: child.pid!, socket: String(ready.socket), child, exit,…
+ ❯ openWorld ../1883/helpers.ts:151:15
+ ❯ trust.test.ts:91:13
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 1 passed (3)
+   Start at  19:49:50
+   Duration  29.89s (tests 99%, transform 1%)
+
+
+=== Typecheck
+
+  node node_modules/typescript/bin/tsc -p tests/acceptance/1883-redraft-lane/tsconfig.json
+
+exit 0, no output.
