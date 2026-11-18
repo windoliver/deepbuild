@@ -1,0 +1,32 @@
+{
+  "title": "port@1",
+  "description": "A piece's port to one plug-in: the entries and occurrence rows the piece lists go out as it plays live, and readings come back in. Nothing flows until a person clicks Connect; a seek, a replay or an export sends nothing.",
+  "x-since": "R6",
+  "x-stability": "preview",
+  "x-tracking": "#210",
+  "x-preview_since": "R6",
+  "x-decide_by": "R9",
+  "type": "object",
+  "properties": {
+    "slot": {
+      "const": "port@1",
+      "description": "The hub slot the fill declares itself for."
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "The kit revision the fill was built against."
+    },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_.-]*$"
+    }
+  },
+  "required": [
+    "slot",
+    "revision",
+    "name"
+  ],
+  "additionalProperties": false
+}
