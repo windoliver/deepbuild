@@ -7,6 +7,7 @@ import net from 'node:net';
 import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { hubAddress, installedPrograms, installedRoot, lastingNode, onPath, rootOf, underTemp } from './paths.js';
+import { notAnswered, Unanswered } from './client.js';
 import { line } from './wire.js';
 
 const LABEL = 'com.deepbuild.hub';
@@ -264,9 +265,14 @@ export function startService(program: string[], logs: string): string | undefine
 export const serviceFile = (): string => definition([], '').file;
 
 /** `deep hub start [--root <folder>]`: exits 0 once a hub answers on the root's socket, started now or already running. */
-export async function startHub(options: { root?: string; cli: string }): Promise<number> {
+export async function startHub(options: { root?: string; cli: string; quiet?: boolean }): Promise<number> {
   const root = rootOf(options.root ?? installedRoot());
-  if (await answers(root.socket)) return 0;
+  // One line once the hub is up (#1812); setup, which starts it too, says what it set up instead.
+  const up = (already: boolean): number => {
+    if (!options.quiet) process.stdout.write(`The hub is up${already ? '; it was already running' : ''}.\n`);
+    return 0;
+  };
+  if (await answers(root.socket)) return up(true);
   mkdirSync(root.logs, { recursive: true, mode: 0o700 });
   // An installed version's login service runs the versions folder's current link, which every update keeps, never a
   // version's own folder (#41); a checkout's runs its own CLI through Node.
@@ -283,7 +289,7 @@ export async function startHub(options: { root?: string; cli: string }): Promise
       return 3;
     }
   }
-  if (await waitForHub(root.socket)) return 0;
+  if (await waitForHub(root.socket)) return up(false);
   process.stderr.write(`deep hub start: no hub answered at unix:${root.socket} within ${WAIT_MS / 1000} s; see ${join(root.logs, 'hub.log')}\n`);
   return 3;
 }
@@ -302,8 +308,9 @@ export async function hubStatus(options: { root?: string }): Promise<number> {
     process.stdout.write(`${JSON.stringify(await control(path, tokenFile, 'hub.health'))}\n`);
     return 0;
   } catch (error) {
-    process.stderr.write(`deep hub status: no hub could be read at unix:${path}: ${error instanceof Error ? error.message : String(error)}\n`);
-    return 3;
+    // No socket, nothing listening, or a home whose hub never wrote its token: the one sentence (#1812).
+    const code = (error as NodeJS.ErrnoException).code;
+    return notAnswered(code === 'ENOENT' || code === 'ECONNREFUSED' || code === 'EOF' ? new Unanswered(String(error)) : error, path);
   }
 }
 

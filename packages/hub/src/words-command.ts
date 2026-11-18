@@ -4,7 +4,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { call } from './client.js';
+import { call, notAnswered } from './client.js';
 import { hubAddress, installedRoot, rootOf } from './paths.js';
 
 const USAGE = 'Usage: deep "<what you want done>" [--file <path>]... [--json]';
@@ -44,8 +44,9 @@ export async function wordsCommand(args: readonly string[]): Promise<number> {
     else process.stdout.write(`Still working on ${String(r.heading)}; deep shows it in your list.\n`);
     return typeof r.unread === 'string' || r.state === 'refused' ? 2 : r.state === 'working' ? 3 : 0;
   } catch (error) {
-    process.stderr.write(error instanceof Refusal ? `${error.message}\n` : `BLOCKED: ${error instanceof Error ? error.message : String(error)}\n`);
-    return error instanceof Refusal ? 1 : 3;
+    if (!(error instanceof Refusal)) return notAnswered(error);
+    process.stderr.write(`${error.message}\n`);
+    return 1;
   }
 }
 class Refusal extends Error {}

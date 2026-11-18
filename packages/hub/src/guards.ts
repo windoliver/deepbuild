@@ -179,7 +179,7 @@ export async function guardCommand(args: readonly string[]): Promise<number> {
     process.stderr.write(`deep guard add: ${from} isn't readable JSON (${error instanceof Error ? error.message : String(error)})\n`);
     return 2;
   }
-  const result = await callAsYou('guard.add', { guards }, 'nothing was added');
+  const result = await callAsYou('guard.add', { guards });
   if (typeof result === 'number') return result;
   process.stdout.write(`Added ${(result.names as string[]).join(', ')} to your rules\n`);
   return 0;
