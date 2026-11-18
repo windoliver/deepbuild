@@ -7,7 +7,8 @@ The issue's Proof line asks for the load lists, the heap and the copy count on t
 - [base/](base/): each file's run on the base, before any change. `waits-unit.txt` is the one new case of `packages/hub/test/waits.test.ts`, failing there.
 - [change/](change/): the same runs on the change. `history-rerun.txt` and `start-60-rounds.txt` are second runs of two files, taken after the lane run read them otherwise under load.
 - [affected.txt](affected.txt): `node scripts/affected.mjs` on the change: its summary lines, its lines for this suite, and a count of the rest.
-- [recheck.txt](recheck.txt): the 35 files of that run whose failures named no timeout, start or build, run once on each tree.
+- [compare.txt](compare.txt): the files that run failed, run on both trees at the merge with main: four passes, with the cases that failed on one tree alone.
+- [final/](final/): the five acceptance files on the merge with main at `f84bba036`, against that main. These decide the criteria.
 
 | File | Criterion | On the base | On the change |
 |---|---|---|---|

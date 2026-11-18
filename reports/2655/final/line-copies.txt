@@ -1,0 +1,15 @@
+✔ AC4 #2655 a 512 KiB hook line reaches the parser with one copy made on the event loop (592.986209ms)
+ℹ 524288 bytes copied on the event loop for the 524288-byte line, 1 whole copy of it (Buffer.concat 524288)
+✔ AC4 #2655 the 512 KiB line's event is the merge base's (790.501416ms)
+✔ AC4 #2655 every line reaches the parser as it was sent: the 512 KiB line, and three lines that share a chunk of the socket (919.761792ms)
+✔ AC4 #2655 (wrong program) a server that hands over a view of the socket's chunk (DEEP_HUB_PLANT=hands-over-socket-chunk) fails, naming the line that changed under the parser (16836.3555ms)
+ℹ line 2 of 3 written at once on one connection (id p2, events.read with limit 2) changed under the parser: the hub gave it no answer in 15 s
+ℹ line 3 of 3 written at once on one connection (id p3, events.read with limit 3) changed under the parser: the hub gave it no answer in 15 s
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 19188.221792
