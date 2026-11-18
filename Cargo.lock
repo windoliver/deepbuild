@@ -2222,6 +2222,8 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "unicode-bidi",
+ "unicode-segmentation",
  "wgpu 30.0.1",
  "wgpu-profiler",
 ]

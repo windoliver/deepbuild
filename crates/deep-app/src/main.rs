@@ -259,18 +259,27 @@ fn main() {
         menu_bar::show_title(&deep_app::menu_bar_title(&deep_app::sessions()));
 
         let runtime = deep_app::new_runtime().expect("panel runtime");
+        let opens = mode == Mode::Window && panel_dir.is_none();
+        // The app's window comes back as you left it (#1808): its frame, the list's width and which region a narrow
+        // window shows. A panel's window opens at the opening size and keeps nothing.
+        let kept = if opens {
+            deep_app::frame::read()
+        } else {
+            Default::default()
+        };
+        // #1808's planted app opens at the opening size, centred, whatever it kept.
+        let (bounds, display_id) = if deep_app::plain::planted("opens-at-opening-size") {
+            deep_app::frame::opening(&Default::default(), cx)
+        } else {
+            deep_app::frame::opening(&kept, cx)
+        };
         // The window draws its own title bar, with the mark, so it owns the bar's drag.
         let options = WindowOptions {
-            window_bounds: Some(WindowBounds::centered(
-                size(
-                    deep_app::chrome::sizes().window.0,
-                    deep_app::chrome::sizes().window.1,
-                ),
-                cx,
-            )),
+            window_bounds: Some(bounds),
+            display_id,
+            window_min_size: Some(deep_app::frame::smallest()),
             ..gpui_kit::component::TitleBar::window_options()
         };
-        let opens = mode == Mode::Window && panel_dir.is_none();
         let opener = deep_app::installed::opener(runtime.clone());
         let mounts = runtime.clone();
         let palette: std::rc::Rc<std::cell::RefCell<Option<Entity<Palette>>>> = Default::default();
@@ -330,6 +339,9 @@ fn main() {
                 deep_app::show::follow(canvas, cx);
                 cx.new(|cx| {
                     let mut shell = views::Shell::new(&layout, window, cx).with_title_bar();
+                    if opens {
+                        shell.keep(kept, window, cx);
+                    }
                     let palette = cx.new(|cx| {
                         let mut palette = Palette::new(&[], Vec::new(), opener, window, cx);
                         palette.set_entries(deep_app::installed::shipped_pages(), cx);
