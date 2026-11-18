@@ -1,0 +1,44 @@
+At base 16dc5eab0e5c2687b4ae7a973b350c32bbfb9342 (origin/main), the suite was not run. The machine's one-minute load was 160 to 490 on 18 cores and its disk 96% to 98% full, so no Rust was built and deep-show was not started. What each test meets first at the base is read from the base's code below, not observed.
+
+The commands the implementing session runs, at the base and after (from <worktree>), one file at a time:
+
+  npm ci
+  NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1781 --no-file-parallelism <file>
+  node node_modules/typescript/bin/tsc -p tests/acceptance/1781/tsconfig.json
+  rm -rf tests/acceptance/1781/node_modules
+
+What the base has (read): crates/deep-show/Cargo.toml lists no feature `test-attrs`, and no crate knows a kind `test.attrs@1`. crates/deep-canvas/src/registry/mod.rs's CORE_CHECK_KINDS lists twelve kinds without `geometry.attributes`, and no module registers it, so crates/deep-show/src/verdict.rs's `judge` answers such a requirement BLOCKED with `{code: "module_missing", kind: "geometry.attributes", ids: []}`, with no `results`. crates/deep-canvas-scene3d/src/stack.rs's `mod.store@1` arm takes `domain` point or face (any other is refused at `params/domain`) and `field` as one of height, x, y, z, distance or a geometry measure's name (any other text is refused at `params/field`, through `field_of` and measures.rs's `point`); it reads no `type` and no `fallback`; and since stack.rs's KINDS lists the store as `generate`, an `on` other than all is refused at `on`. A refusal in the stack is a build operator's error (build.rs's `fault`: `out_of_range` at `items/<id>/modifiers/<k>/…`), which hub.rs's `show` turns into an error issue of the revision, so the `deep_show` is `refused`.
+
+The four tests that build `full`, which exists. Each scenario parses at the base: `docs` with a panel, #403's `claims` (main.rs takes any check whose `kind` is a string), a `deep_show` and a `verdict` call, no `planted`. Each fails at its first assertion on the `deep_show` reply, `admitted` in helpers.ts ("…: no error issue", expected the list of error issues to equal []), reached from the test's own line:
+
+- AC3 #1781.c26a7b7d, corners.test.ts: "the flat box: no error issue". The box's first modifier stores on `domain: corner`, which the base refuses at items/box/modifiers/0/params/domain.
+- AC4 #1781.90e5e7d8, points.test.ts: "the flat box: no error issue". The base knows no field `2 * position.x + 2 * position.z + 2` and refuses it at items/box/modifiers/0/params/field.
+- AC7 #1781.9a742846, parts.test.ts: "the slab box: no error issue". The base knows no field `-99` and refuses it at items/box/modifiers/0/params/field.
+- AC8 #1781.2282e9be, fields.test.ts: "the box with a field of 256 nodes: no error issue". The base knows no field `-index + 1 + …` and refuses it at items/box/modifiers/0/params/field. The assertion before it, that the two fields hold 256 and 257 nodes, reads only the test's own strings and holds anywhere.
+
+Were one of them past `admitted`, its next assertion is on the requirement's row (`decided` in helpers.ts, "… is INCONCLUSIVE" or "… is PASS"), where the base's row is BLOCKED with `module_missing`.
+
+The four tests that build `full,test-attrs`. At the base cargo refuses the build, since deep-show has no such feature, so `useShow`'s `beforeAll` keeps cargo's error and each test fails at its first line that asks for the binary, on the assertion "the binary builds: cargo build --locked --bin deep-show --no-default-features --features full,test-attrs" in helpers.ts (expected cargo's error text to be ''):
+
+- AC1 #1781.7a007913, attributes.test.ts. The assertion before it, that the fixture lists 36 attributes and 450 values, reads only reference.ts and holds anywhere.
+- AC2 #1781.e091f892, refusals.test.ts.
+- AC5 #1781.d8b78c9f, whole-numbers.test.ts.
+- AC6 #1781.11d8dbb9, edges.test.ts.
+
+That is the test framework's own assertion failure in the suite's files, but it shows only that the test build isn't there yet. Criteria 1, 5 and 6 each name a planted wrong program the test also fails on (README: The planted programs). Criterion 2 names none: its wrong program is the base. Were the base built without the fixture builder, a `test.attrs@1` item is skipped as an unknown kind and the revision presented, so each of its six fixture-builder legs fails ("the revision is presented, not refused by an error issue attribute.length …"), and a store whose type is bool, i32, u32 or quat is presented too, since the base reads no `type`; only the three stores on edge, curve and instance are refused at params/domain already.
+
+No planted run is reached at the base. If one were, the base has none of this suite's seven planted names (main.rs's planted match ends with an unknown name refused), so `deep-show run` answers `{"ok": false, "code": "bad_input"}` and the test fails at "deep-show run (planted <name>) refused the scenario".
+
+Run here, and passing:
+
+  node node_modules/typescript/bin/tsc -p tests/acceptance/1781/tsconfig.json     (exit 0, TypeScript 5.9.3, all ten files)
+  node node_modules/vitest/vitest.mjs list --root tests/acceptance/1781           (exit 0, eight tests, one per file)
+
+The eight criterion IDs, computed as scripts/proof-change.mjs's `criterionId` does from the live issue's texts, are 7a007913, e091f892, c26a7b7d, 90e5e7d8, d8b78c9f, 11d8dbb9, 9a742846 and 2282e9be. `spans` from scripts/proof-change.mjs reads each file's one test, unskipped, with its ID.
+
+A scratch script outside the repo (not kept) ran reference.ts alone, with no binary, on arrays it made itself from a model box (8 corners at x and z = ±0.5 m, y = 0 and 1; six quads) and that box's simple subdivision (26 points, 96 corners), each with its points, faces and corners shuffled 40 ways:
+- The 36 attributes hold 450 values; every number but 16,777,217 is exact in f32, and f32 holds that one as 16,777,216; no value is −0; every quaternion has length 1; each array differs from itself shifted by one element.
+- Criterion 3: the true arrays raise no problem before or after the subdivide. With one value per welded point, all 20 points on more than one face fail and the first problem names the first of them.
+- Criterion 4: the true array (rounded to f32) raises no problem and sums to 52. With an edge point holding one end's value, exactly the 8 ring edges' points fail; with face points then averaged from those edge points, ring edges' points still fail and no source point or upright edge's point does.
+- Criterion 5, on a box standing elsewhere: the true array raises no problem. With averages, at least the 12 edge points hold a value outside the eight; with the highest-indexed source point's value, all 18 new points fail though every value is among the eight.
+- Criteria 7 and 8: the true arrays raise no problem; with the second store over the whole domain exactly the 4 lower points fail, and with 0 kept at the non-finite elements exactly the 4 points with x = −0.5 m fail, the first named in each.

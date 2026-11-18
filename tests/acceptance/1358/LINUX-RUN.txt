@@ -1,0 +1,156 @@
+Issue: #1358
+What this is: the implementing session's run of this suite on Linux, after the drafting job finished. The drafting
+  job ran on macOS only (README.md, BASE-RUN.txt), where systemd.test.ts is skipped; this file is not the job's.
+Base: 212f16d096d0b2efd65497933abb4afb16742178, a fresh clone from GitHub, with this folder copied in unchanged.
+Built first: npm ci; npm run build --workspaces. After laying a twin's service.ts over: npm run build -w packages/hub.
+Command: NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/1358 --reporter=verbose
+Date: 2026-11-17  Linux 7.0.0-1025-nvidia aarch64 (Ubuntu 24.04)  Node v24.22.0  vitest 5.0.5  load 86 to 97
+Paths: /home/<user> stands for the account's home. /tmp/dh1358-* are the run's own folders, removed at its end.
+
+Result, systemd.test.ts, #1358.e5fdc397 (the systemd user unit carries HOME):
+  base:                   pass. Tests 1 passed | 3 skipped (4), exit 0.
+  twin as-reported:       fail at systemd.test.ts:25, AssertionError: the unit sets PATH alone. 1 failed | 3 skipped, exit 1.
+  twin every-loaded-job:  pass (it plants nothing in the unit). 1 passed | 3 skipped, exit 0.
+  base restored:          pass. git status showed no tracked file changed; untracked were this folder and
+                          tests/acceptance/._1358, a stray file the copy from the Mac left.
+The three launchd.test.ts tests are skipped on Linux with their INCONCLUSIVE (platform) note in every run.
+No real systemctl was reached: the child's PATH puts the suite's stand-in first.
+
+The full output follows.
+
+== machine
+Linux 7.0.0-1025-nvidia aarch64
+v24.22.0
+212f16d096d0b2efd65497933abb4afb16742178
+ 14:17:41 up 2 days, 23:25,  3 users,  load average: 85.58, 88.93, 97.16
+2026-11-17T22:17:41Z
+== base
+
+ RUN  v5.0.5 /home/<user>/dh1358-linux-run/repo
+
+ ✓ tests/acceptance/1358/systemd.test.ts > #1358.e5fdc397 the systemd user unit deep hub start writes carries HOME, the home that set it up 128ms
+ ↓ tests/acceptance/1358/launchd.test.ts > #1358.a5dca18a with com.deepbuild.hub already loaded from another home's plist, deep hub start starts nothing, exits 3, and names that plist and the launchctl bootout that frees the label 1ms [INCONCLUSIVE: this criterion is read on macOS, where the login service is launchd's and its command launchctl; this is linux, where deep hub start never writes or hands over that definition, so nothing was read here, and this is not a pass]
+ ↓ tests/acceptance/1358/launchd.test.ts > #1358.1077c231 with com.deepbuild.hub loaded from this home's own plist, deep hub start kickstarts it as before 0ms [INCONCLUSIVE: this criterion is read on macOS, where the login service is launchd's and its command launchctl; this is linux, where deep hub start never writes or hands over that definition, so nothing was read here, and this is not a pass]
+ ↓ tests/acceptance/1358/launchd.test.ts > #1358.e5fdc397 the plist deep hub start hands launchd carries HOME, the home that set it up 0ms [INCONCLUSIVE: this criterion is read on macOS, where the login service is launchd's and its command launchctl; this is linux, where deep hub start never writes or hands over that definition, so nothing was read here, and this is not a pass]
+
+ Test Files  2 passed (2)
+      Tests  1 passed | 3 skipped (4)
+   Start at  14:17:42
+   Duration  458ms (tests 69%, transform 15%, setup 9%, import 4%, worker 3%)
+
+exit 0
+== twin as-reported
+> tsc -p tsconfig.json && node native/build.mjs
+
+build exit 0
+
+ RUN  v5.0.5 /home/<user>/dh1358-linux-run/repo
+
+ ↓ tests/acceptance/1358/launchd.test.ts > #1358.a5dca18a with com.deepbuild.hub already loaded from another home's plist, deep hub start starts nothing, exits 3, and names that plist and the launchctl bootout that frees the label 2ms [INCONCLUSIVE: this criterion is read on macOS, where the login service is launchd's and its command launchctl; this is linux, where deep hub start never writes or hands over that definition, so nothing was read here, and this is not a pass]
+ ↓ tests/acceptance/1358/launchd.test.ts > #1358.1077c231 with com.deepbuild.hub loaded from this home's own plist, deep hub start kickstarts it as before 0ms [INCONCLUSIVE: this criterion is read on macOS, where the login service is launchd's and its command launchctl; this is linux, where deep hub start never writes or hands over that definition, so nothing was read here, and this is not a pass]
+ ↓ tests/acceptance/1358/launchd.test.ts > #1358.e5fdc397 the plist deep hub start hands launchd carries HOME, the home that set it up 0ms [INCONCLUSIVE: this criterion is read on macOS, where the login service is launchd's and its command launchctl; this is linux, where deep hub start never writes or hands over that definition, so nothing was read here, and this is not a pass]
+ × tests/acceptance/1358/systemd.test.ts > #1358.e5fdc397 the systemd user unit deep hub start writes carries HOME, the home that set it up 145ms
+   → the systemd unit deep hub start wrote, /tmp/dh1358-mKwkby/h/.config/systemd/user/deepbuild-hub.service, sets HOME with Environment= in [Service] to the home that set it up, /tmp/dh1358-mKwkby/h; it sets {"PATH":"/tmp/dh1358-mKwkby/bin:/usr/bin:/bin"}
+  | [Unit]
+  | Description=DeepBuild hub
+  |
+  | [Service]
+  | ExecStart="/home/<user>/.nvm/versions/node/v24.22.0/bin/node" "/home/<user>/dh1358-linux-run/repo/packages/cli/dist/main.js" "hub" "run"
+  | Environment="PATH=/tmp/dh1358-mKwkby/bin:/usr/bin:/bin"
+  | Restart=on-failure
+  | LimitNOFILE=8192
+  |
+  | [Install]
+  | WantedBy=default.target
+$ HOME=/tmp/dh1358-mKwkby/h PATH=/tmp/dh1358-mKwkby/bin:/usr/bin:/bin deep hub start
+exit 3
+stdout: nothing
+stderr:
+  | deep hub start: systemctl --user daemon-reload: the systemctl stand-in loads and starts nothing
+the launchctl stand-in logged: nothing
+the systemctl stand-in logged:
+  | systemctl --user daemon-reload
+(end of the run): expected undefined to be '/tmp/dh1358-mKwkby/h' // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1358/systemd.test.ts > #1358.e5fdc397 the systemd user unit deep hub start writes carries HOME, the home that set it up
+AssertionError: the systemd unit deep hub start wrote, /tmp/dh1358-mKwkby/h/.config/systemd/user/deepbuild-hub.service, sets HOME with Environment= in [Service] to the home that set it up, /tmp/dh1358-mKwkby/h; it sets {"PATH":"/tmp/dh1358-mKwkby/bin:/usr/bin:/bin"}
+  | [Unit]
+  | Description=DeepBuild hub
+  |
+  | [Service]
+  | ExecStart="/home/<user>/.nvm/versions/node/v24.22.0/bin/node" "/home/<user>/dh1358-linux-run/repo/packages/cli/dist/main.js" "hub" "run"
+  | Environment="PATH=/tmp/dh1358-mKwkby/bin:/usr/bin:/bin"
+  | Restart=on-failure
+  | LimitNOFILE=8192
+  |
+  | [Install]
+  | WantedBy=default.target
+$ HOME=/tmp/dh1358-mKwkby/h PATH=/tmp/dh1358-mKwkby/bin:/usr/bin:/bin deep hub start
+exit 3
+stdout: nothing
+stderr:
+  | deep hub start: systemctl --user daemon-reload: the systemctl stand-in loads and starts nothing
+the launchctl stand-in logged: nothing
+the systemctl stand-in logged:
+  | systemctl --user daemon-reload
+(end of the run): expected undefined to be '/tmp/dh1358-mKwkby/h' // Object.is equality
+
+- Expected:
+"/tmp/dh1358-mKwkby/h"
+
++ Received:
+undefined
+
+ ❯ tests/acceptance/1358/systemd.test.ts:25:291
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  1 failed | 3 skipped (4)
+   Start at  14:18:02
+   Duration  563ms (tests 80%, setup 8%, transform 6%, import 4%, worker 3%)
+
+exit 1
+== twin every-loaded-job
+> tsc -p tsconfig.json && node native/build.mjs
+
+build exit 0
+
+ RUN  v5.0.5 /home/<user>/dh1358-linux-run/repo
+
+ ✓ tests/acceptance/1358/systemd.test.ts > #1358.e5fdc397 the systemd user unit deep hub start writes carries HOME, the home that set it up 165ms
+ ↓ tests/acceptance/1358/launchd.test.ts > #1358.a5dca18a with com.deepbuild.hub already loaded from another home's plist, deep hub start starts nothing, exits 3, and names that plist and the launchctl bootout that frees the label 1ms [INCONCLUSIVE: this criterion is read on macOS, where the login service is launchd's and its command launchctl; this is linux, where deep hub start never writes or hands over that definition, so nothing was read here, and this is not a pass]
+ ↓ tests/acceptance/1358/launchd.test.ts > #1358.1077c231 with com.deepbuild.hub loaded from this home's own plist, deep hub start kickstarts it as before 0ms [INCONCLUSIVE: this criterion is read on macOS, where the login service is launchd's and its command launchctl; this is linux, where deep hub start never writes or hands over that definition, so nothing was read here, and this is not a pass]
+ ↓ tests/acceptance/1358/launchd.test.ts > #1358.e5fdc397 the plist deep hub start hands launchd carries HOME, the home that set it up 0ms [INCONCLUSIVE: this criterion is read on macOS, where the login service is launchd's and its command launchctl; this is linux, where deep hub start never writes or hands over that definition, so nothing was read here, and this is not a pass]
+
+ Test Files  2 passed (2)
+      Tests  1 passed | 3 skipped (4)
+   Start at  14:18:26
+   Duration  487ms (tests 88%, setup 4%, import 4%, transform 3%, worker 1%)
+
+exit 0
+== restored
+> tsc -p tsconfig.json && node native/build.mjs
+
+build exit 0
+?? tests/acceptance/._1358
+?? tests/acceptance/1358/
+
+ RUN  v5.0.5 /home/<user>/dh1358-linux-run/repo
+
+ ✓ tests/acceptance/1358/systemd.test.ts > #1358.e5fdc397 the systemd user unit deep hub start writes carries HOME, the home that set it up 113ms
+ ↓ tests/acceptance/1358/launchd.test.ts > #1358.a5dca18a with com.deepbuild.hub already loaded from another home's plist, deep hub start starts nothing, exits 3, and names that plist and the launchctl bootout that frees the label 2ms [INCONCLUSIVE: this criterion is read on macOS, where the login service is launchd's and its command launchctl; this is linux, where deep hub start never writes or hands over that definition, so nothing was read here, and this is not a pass]
+ ↓ tests/acceptance/1358/launchd.test.ts > #1358.1077c231 with com.deepbuild.hub loaded from this home's own plist, deep hub start kickstarts it as before 0ms [INCONCLUSIVE: this criterion is read on macOS, where the login service is launchd's and its command launchctl; this is linux, where deep hub start never writes or hands over that definition, so nothing was read here, and this is not a pass]
+ ↓ tests/acceptance/1358/launchd.test.ts > #1358.e5fdc397 the plist deep hub start hands launchd carries HOME, the home that set it up 0ms [INCONCLUSIVE: this criterion is read on macOS, where the login service is launchd's and its command launchctl; this is linux, where deep hub start never writes or hands over that definition, so nothing was read here, and this is not a pass]
+
+ Test Files  2 passed (2)
+      Tests  1 passed | 3 skipped (4)
+   Start at  14:18:46
+   Duration  364ms (tests 87%, setup 5%, import 4%, transform 2%, worker 2%)
+
+exit 0
+RUN-DONE

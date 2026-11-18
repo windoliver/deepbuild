@@ -143,6 +143,7 @@ pub fn line(
     color: [u8; 3],
     world: bool,
     cap: crate::points::Cap,
+    fog: bool,
 ) -> Line {
     let mut segments = Vec::new();
     let mut alpha = Vec::new();
@@ -173,5 +174,6 @@ pub fn line(
         cap,
         trail: Some(Arc::new(drawn)),
         points: Vec::new(),
+        fog,
     }
 }

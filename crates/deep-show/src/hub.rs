@@ -832,7 +832,7 @@ pub enum PressPhase {
 }
 
 /// The planted check's coefficients for `machine` (the hub's, or this one's): the reference
-/// Mac's on a reference Mac, and scaled by its own speed anywhere else.
+/// Mac's on a Mac of `reference-macs.json`, `scripts/benchmark.mjs`'s list, and scaled anywhere else.
 fn machine_factor(machine: Option<&Map<String, Value>>) -> f64 {
     let model = match machine.and_then(|m| m.get("model")).and_then(Value::as_str) {
         Some(m) => m.to_string(),
@@ -842,11 +842,9 @@ fn machine_factor(machine: Option<&Map<String, Value>>) -> f64 {
             .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
             .unwrap_or_default(),
     };
-    if ["Mac15,7", "Mac15,12"].contains(&model.as_str()) {
-        1.0
-    } else {
-        1.6
-    }
+    let macs = include_str!("../reference-macs.json");
+    let macs: Vec<String> = serde_json::from_str(macs).expect("the reference Macs' list parses");
+    [1.6, 1.0][usize::from(macs.contains(&model))]
 }
 
 /// The look render-back draws in: the shipped clean look, light.
@@ -1615,7 +1613,7 @@ impl<'a> Hub<'a> {
                 event,
                 t,
                 gesture,
-            } => match self.piece_press(panel, event) {
+            } => match self.join_or_press(panel, event, gesture) {
                 Some(reply) => reply,
                 None => match self.ring_input(panel, event) {
                     Some(reply) => reply,
@@ -1626,7 +1624,7 @@ impl<'a> Hub<'a> {
                 },
             },
             Call::World { doc, world } => self.world_call(doc, world),
-            Call::Match { doc, steps } => self.match_call(doc, *steps),
+            Call::Net(c) => self.net_call(c),
             Call::Scope(panel) => self.scope_reply(panel),
             Call::Presented(panel) => self.presented(panel),
             Call::PopOut {

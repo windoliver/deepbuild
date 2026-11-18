@@ -134,6 +134,8 @@ pub fn check(doc: &Value, entries: &[SealedEntry]) -> Vec<Issue> {
     }
     // #224: what each surface's build at the start drops or stops short of.
     issues.extend(crate::surface::raised_at(doc, 0));
+    // #1781: the elements each store gave its fallback.
+    issues.extend(crate::field::raised(doc));
     issues
 }
 

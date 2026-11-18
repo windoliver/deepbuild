@@ -1,0 +1,146 @@
+#1808's acceptance tests on the base, 16dc5eab0 (origin/main), on an Apple M5 Max with 18 cores under a 1-minute load
+average of 135 to 220, Node 24.22, after `npm ci --ignore-scripts`, `npm run build --workspaces` and the builds the helpers
+make (deep-drive plain and with env-plants, deep-app plain and with env-plants, deep-hook). The screen was locked for the
+whole run and this process has Accessibility but no Screen Recording.
+
+One run of the whole suite, Nov 17 16:34-16:37:
+
+    caffeinate -di npx vitest run --root tests/acceptance/1808 --no-file-parallelism --testTimeout=600000
+    Test Files  5 failed (5)
+         Tests  12 failed | 5 passed (17)
+
+Then AC6's and AC7's title checks were corrected (a run its clip cuts spells its whole line, so a clipped title read as
+whole; a glyph cut by its slot's edge keeps its whole sprite in the run's bounds, so it read as drawn under the state word)
+and only those four tests were run again on the base, with `-t 'AC6|AC7' window.test.ts`; their output below is that run's.
+No other test changed after the run. An accidental run of every file at once, without --no-file-parallelism, was thrown
+away: its files copied binaries over each other.
+
+## list.test.ts, AC1 #1808.ba86d5b6
+
+    × AC1: at 960×640 with 700 rows, the last row is reached by the wheel and by Down, and the focused row is always in view
+    + "by the wheel, the first row that can't be reached is session:f6621015-… (\"Task 018\"): the wheel over the list moves
+       nothing further, with session:072a2f4c-… (\"Task 017\") the last row shown",
+
+FAILS for the expected reason: the base's list draws only the rows that fit, and a wheel moves nothing (views.rs, the
+`Kind::Sidebar` branch). Down reached the last row with the focused row shown after every press (#2021's drawn rows follow
+the keyboard), so only the wheel half fails.
+
+    ✓ AC1 wrong program: a planted list that clips fails, naming the first row that can't be reached
+
+PASSES at the base: the base is that wrong program (`list-clips` doesn't exist, and the base list clips).
+
+## window.test.ts, AC2 #1808.86c051bf
+
+    × AC2: a session page whose failure runs 400 lines shows its last line after scrolling
+    + "the session page session/2a0c95de-… doesn't show its last line \"line 400 of 400\" after scrolling: the wheel over it
+       moves nothing further, with \"line 024 of 400\" the last line shown",
+
+FAILS for the expected reason: `views::in_lane` clips what's past the lane's foot. The wrong program passes at the base,
+which clips the same way.
+
+## window.test.ts, AC4 #1808.ad9b29cb
+
+    × AC4: at 700 wide with two open asks, the count shows on the page and one key reaches the ask rows
+    + "the window at 700×640 shows no count on the page: it has no node page-count (README, Surface choices)",
+    + "the window at 700×640: after Escape the ask row ask:01M7P0SB… (\"Which header colour on the login page?\") isn't shown",
+    + "the window at 700×640: after Escape the ask row ask:01M7P0V6… (\"Keep the cart on SQLite or plain files?\") isn't shown",
+    + "the window at 700×640: after Escape the keyboard is on \"card-option:blue\", not an ask row",
+
+FAILS for the expected reason: under 848 the base hides the list (`chrome::list_width`) and the page draws no count. The
+wrong program passes at the base, which has no count either.
+
+## window.test.ts, AC6 #1808.445ec374 (the corrected run)
+
+    × AC6: a 200-character title, a Han title and an Arabic title each draw on one line inside their slot, with the full
+      text as the accessible name
+    + "row session:948841f6-… (\"Rework how the checkout …\") draws \"Rework how the checkout works \" past its title slot:
+       at [81,325,214,23], the slot at [80,304,210,64]",
+    + "row session:948841f6-… (\"Rework how the checkout …\") is clipped at the edge of its slot, not cut at a whole
+       character with an ellipsis: it starts \"Rework how the checkout works out the ca\"",
+    + "row session:937f1d8d-… (\"修复购物车在叠加多个折扣后总价四舍五入出错的问题…\") draws \"修复购物车在叠加多个折扣后总价四舍五入出错的问题并补充覆盖所\"
+       past its title slot: at [80,388,232,26], the slot at [80,368,210,64]",
+    + "row session:937f1d8d-… (\"修复购物车在叠加多个折扣后总价四舍五入出错的问题…\") is clipped at the edge of its slot, not cut
+       at a whole character with an ellipsis: it starts \"修复购物车在叠加多个折扣后总价四舍五入出错的问题并补充覆盖所有边界情况的单元测试\"",
+    + "row session:4b3de964-… (\"إصلاح خطأ التقريب في مجم…\") draws nothing in its title slot",
+
+FAILS for the expected reason: the base's title slot uses `truncate()`, and the replica reads the 200-character and Han
+titles clipped at the slot's edge (their last painted glyph reaching past it), with no ellipsis drawn. The Arabic title
+reads as nothing: a
+diagnostic outside the suite (a fixture record in the plain replica) found the replica spells no Arabic string at all, a
+short Arabic title that fits its slot included, while a Latin title beside it reads. `glyphs.rs` matches a shaped line's
+glyphs left to right; README, Surface choices 1, pins that the replica reads right-to-left strings.
+
+    × AC6 wrong program: a planted row whose title runs under its state word fails, naming the row
+    Expected: "row session:948841f6-… (\"Rework how the checkout …\") draws its title under its state word slot
+               (session:948841f6-…:word)"
+
+FAILS at the base, where `title-under-word` doesn't exist: the base's title is clipped at its slot, not drawn under the word.
+
+## window.test.ts, AC7 #1808.98ed0a32 (the corrected run)
+
+    × AC7: at 260 wide, a row reading INCONCLUSIVE shows at least 12 characters of its title
+    + "row session:8da5d531-… (\"Reconciliation of ledger exports across regions\") reading INCONCLUSIVE draws its title
+       clipped, not cut at an ellipsis, so the characters it shows can't be read",
+
+FAILS on this suite's reading of a clipped title (README, Ambiguities 8): with the list 260 wide and INCONCLUSIVE drawn in
+its word slot, the base clips the title at its slot's edge with no ellipsis, so how many characters show can't be read from
+the run, whose text is the whole title. The base may show 12 or more; the Scope's ellipsis rule fails it either way.
+
+    × AC7 wrong program: a planted row that shows fewer fails, naming the row
+    Expected: "… reading INCONCLUSIVE shows 8 characters of its title"
+    Received: "… reading INCONCLUSIVE draws its title clipped, not cut at an ellipsis, so the characters it shows can't be read"
+
+FAILS at the base, where `title-shows-8` doesn't exist.
+
+## card.test.ts, AC5 #1808.952d3557
+
+    × AC5: at 960×640, a fixture approval card with 30 rows arms and takes an answer, and a press 2 s after a card is
+      shown never reads "Hold still"
+    + "the card for ask:01M7P116W3ANT13AT0YCNY5A5C (\"Push the 30 release commits to origin/main?\") never shows its last
+       row (card-step:29) to the wheel over its rows",
+    + "the card for ask:01M7P116… (…) never armed: 3 s after its last row was shown it reads \"presented\"",
+    + "the card for ask:01M7P116… (…) took 0 answers, not one: the app sent []",
+
+FAILS for the expected reason: the base's card grows with its rows past its slot and never arms (`question::Controller`
+`measured`, `arming::Slot::arms`). Its "Hold still" line goes at the card's end, below the window's foot, where the
+snapshot (visible elements only) and a person can't read it, so the run fails on never arming rather than on that line
+(README, Ambiguities 7).
+
+    ✓ AC5 wrong program: a planted card that grows past its slot and stays unarmed fails, naming the ask
+
+PASSES at the base: the base is that wrong program.
+
+## card.test.ts, AC8 #1808.d7b1f43e
+
+    × AC8: a 12-option card with three options folded arms only after the fold was opened
+    + "the card for ask:01M7P131F335QKYN72KJBY2QMC (\"Which accent does the new theme use?\") shows 12 of its 12 options
+       before its fold is opened, not 9 with three folded",
+    + "the card for ask:01M7P131… (…) folds no options behind a count: it shows no fold (card-fold, README, Surface choices)",
+
+    × AC8 wrong program: a planted card that arms with options never shown fails, naming them
+    AssertionError: the planted card (README, Surface choices: card-arms-folded) arms with its fold closed: … folds no
+    options behind a count …: expected null not to be null
+
+Both FAIL for the expected reason: the base folds no options (every option is a row) and has no `card-fold`.
+
+## kept.test.ts, AC3 #1808.f340f4c7: BLOCKED
+
+    × AC3: after a resize to 1200×800 and the list dragged to 300, a quit and a launch show that frame and width with the
+      first open ask selected
+    Error: BLOCKED: the screen is locked, so the real window draws nothing a person could see and takes no key; run with
+    the screen awake and unlocked (caffeinate -di)
+    × AC3 wrong program: … (the same BLOCKED)
+
+Not seen failing at the base. Expected there: the drag reaches the list's edge (the base's `list-edge` takes a drag), and
+after the relaunch "the window's frame is [x, y, 960, 640], not [x, y, 1200, 800]": the base opens centred at 960×640 every
+time (main.rs `WindowBounds::centered`) and keeps nothing. Unverified: whether a pointer drag posted to the app's PID
+reaches the window on this Mac; if it doesn't, the run is BLOCKED (README, Ambiguities 5).
+
+## shown.test.ts, AC9 #1808.d5e52086: BLOCKED
+
+    × AC9: … from the real app, and reads INCONCLUSIVE unless a recorded taste call on exactly these files says they
+      look right
+    Error: BLOCKED: the screen is locked, …
+
+Without the lock it would still be BLOCKED here, with no Screen Recording; with both it reads INCONCLUSIVE until a call is
+recorded in TASTE.json, never PASS.

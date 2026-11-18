@@ -27,6 +27,15 @@ describe('expected times', () => {
     expect(h.expected(historyKey('shell', 'npm test', 'Bash'), 'shell')).toBe(KIND_EXPECTED_MS.shell);
     expect(h.expected(historyKey('shell', 'cmd 1999', 'Bash'), 'shell')).toBe(5000);
   });
+  it('key a command by the 8,192 characters the record keeps of it (#2655)', () => {
+    // A heredoc of 100 KB keys as its record's cut does, so a hub started on the record finds its time; one character more of the cut keys apart.
+    const heredoc = `cat > out.txt <<'EOF'\n${'a row of the file\n'.repeat(6000)}EOF`;
+    expect(historyKey('shell', heredoc, 'Bash')).toBe(historyKey('shell', heredoc.slice(0, 8192), 'Bash'));
+    expect(historyKey('shell', heredoc, 'Bash')).not.toBe(historyKey('shell', heredoc.slice(0, 8191), 'Bash'));
+    // The record's cut keeps no half of a surrogate pair, and neither does the key.
+    const pair = `${'x'.repeat(8191)}\u{1F600} tail`;
+    expect(historyKey('shell', pair, 'Bash')).toBe(historyKey('shell', pair.slice(0, 8191), 'Bash'));
+  });
   it('know a command that never ends on its own', () => {
     for (const c of ['tail -f /var/log/x', 'kubectl logs -f pod', 'npm run dev', 'cd app && tail -F log | grep x', 'ping example.com', 'vitest --watch', 'sleep infinity']) expect(neverEnds(c), c).toBe(true);
     for (const c of ['ls -la', 'tail -n 5 file', 'vitest run', 'ping -c 3 example.com', 'npm test', 'git log -5', 'find . -name x']) expect(neverEnds(c), c).toBe(false);
