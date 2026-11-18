@@ -13,6 +13,8 @@ pub mod derive;
 pub mod drawing;
 pub mod form;
 pub mod logic;
+#[cfg(feature = "net")]
+pub mod net;
 pub mod read;
 #[cfg(feature = "scene3d")]
 pub mod scene;
