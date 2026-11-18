@@ -1,0 +1,136 @@
+Acceptance tests for #2653 on the base 3cf41958f ("Merge pull request #2770", origin/main, which is its own merge base:
+the asks core keeps every stop of a session until the session ends; no implementation of #2653), run on 2026-11-17 on
+an Apple silicon Mac (18 cores, 64 GiB, 1-minute load 190 to 265 from other work throughout), macOS 27.2, Node
+24.22.2, Vitest 5.0.5, TypeScript 5.9.3. Trimmed to each result's reason; ask IDs vary by run. No local path is kept.
+
+What ran, and what is reasoned from the base's code. The brief asked for the type check, the listing and the cheapest
+legs that prove the harness, at a reduced stop count where needed. AC1 and AC5 also ran once in full, to show the
+base's failures naming their readings, and AC3 in full, as it is short. judged.test.ts, restart.test.ts and
+plants.test.ts did not run at 50,000 stops: a scratch file, removed before the commit, called this folder's own
+helpers and scenarios at reduced counts (1,500 stops for AC1's session, 150 stops between AC3's deciding stops), and
+other scratch files measured the hub's heap (below). Their 50,000-stop results are reasoned from the base's code.
+
+  node node_modules/typescript/bin/tsc -p tests/acceptance/2653/tsconfig.json         exit 0, no error
+  node node_modules/vitest/vitest.mjs list tests/acceptance/2653                       8 tests in 6 files
+  node node_modules/vitest/vitest.mjs run tests/acceptance/2653/held.test.ts --testTimeout=600000          (in full)
+  node node_modules/vitest/vitest.mjs run tests/acceptance/2653/readings.test.ts --testTimeout=600000      (in full)
+  node node_modules/vitest/vitest.mjs run tests/acceptance/2653/heap.test.ts --testTimeout=600000 --hookTimeout=180000
+                                                                                     (in full; deep-hook built first)
+
+
+== held.test.ts, AC1 #2653.8086bb1d (run in full: 50,000 stops, the merge base's core beside this checkout's)
+
+ × AC1 #2653.8086bb1d one session that makes 50,000 stops and never ends, … at each step 517116ms
+   → this checkout's core holds 50000 of the 50000 stops S1 made (the merge base's holds 50000): expected 50000 to
+     be less than 1000
+
+AssertionError: this checkout's core holds 50000 of the 50000 stops S1 made (the merge base's holds 50000): expected
+50000 to be less than 1000
+ ❯ tests/acceptance/2653/held.test.ts:24:129
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Duration  518.56s        (under `nice -n 10`, load about 250: 203 s of CPU)
+
+It fails at the count, naming it. Before it, all 50,000 steps compared equal with the merge base's (the base is its
+own merge base), and the guard found S1's newest stop and stop 10 among the stops the core holds. The base's core
+keeps each stop in `stops` and `stopIds` until S1's session.end, which never comes. At 1,500 stops (the scratch file)
+the same leg read 1500 of 1500 on both sides, 4.7 s for the steps and 0.9 s for the snapshot and the walk.
+
+
+== judged.test.ts, AC2 #2653.7105a3cb (run at 1,500 stops; reasoned at 50,000)
+
+PASS at 1,500 stops (2.1 s). The base keeps every stop of S1 in `stops` and `stopIds` until S1 ends, which it never
+does, so at the reset `stopsSettled` reads stop 10's plan_resets from `stopIds` and the task closes as
+{because: window_reset, at: 2026-11-17T16:00:00.000Z}. At 50,000 stops the base does the same: nothing it holds is
+let go. AC2's new behavior is that a bounded core still does this; on the base the leg that must fail is the plant's.
+
+
+== plants.test.ts (run at reduced counts; reasoned at full size)
+
+AC2's plant, the newest-100 twin, at 1,500 stops: judged() rejects, naming the task:
+
+  task ask:01M7KCVKRG0MVFXTJRE8K2ZRE4, which covers stop 10 of S1 (a spent plan window resetting at
+  2026-11-17T16:00:00.000Z), is judged 1490 stops later: it closes at the reset that stop carries: expected
+  { outcome: 'unanswered', moot: [] } to deeply equal { outcome: 'moot', moot: [ { …(2) } ] }
+
+  The twin let stop 10 go when stop 110 landed, so no reset is left to read and the task stays open past it. At 50,000 stops
+  the same message reads "49990 stops later", which the test's pattern requires. The test passes when the twin fails.
+
+AC3's plant at 150 stops between: readings() rejects at the first step that differs, naming it:
+
+  at step 160 (A's stop 153 (timed_out, failed) at 2026-11-17T00:02:40.000Z), a core that keeps only the newest 100
+  stops of a session reads what the merge base's doesn't: expected { wrote: [ { …(6) }, { …(6) } ], …(2) } to
+  deeply equal { wrote: [ { …(6) } ], asks: [], …(1) }
+
+  The twin wrote the stop and a second session.continued; the merge base wrote the stop alone. The twin had let go of
+  A's stop 2, the one A's first continue came from, so it counted no continue since A's last finished stop. At 1,200
+  stops between, the same drop (A's stop 1203) fails, at a later step.
+
+
+== readings.test.ts, AC3 #2653.d3fb687c
+
+First leg (run): PASS on the base in 163 ms. #340's and #84's suites match the merge base, `alone` lists
+tests/acceptance/340/ and tests/acceptance/84/, and `byHand` names neither. With one blank line appended to
+tests/acceptance/84/sort/README.md it fails (`#340's and #84's suites as on the merge base 3cf41958f224: expected
+[ Array(1) ] to deeply equal []`); the line was removed again.
+
+Second leg (run in full, 1,200 stops between): PASS in 37.2 s.
+
+ ✓ AC3 #2653.d3fb687c #340's and #84's suites are unchanged from the merge base, and the preflight runs each 388ms
+ ✓ AC3 #2653.d3fb687c the time of a session's last finished stop and the plan resets a block reads from its stops
+   decide as on the merge base at every step, 1,200 stops on from the stops they come from 37166ms
+
+On the base the two sides are one program, so the second leg passes by design; it fails on a wrong program at the
+first step that differs (the plant above). Its guard held on the merge base, so the run is one where the readings
+decide: A's continues from its stops 2, 2405 and 3607 (dropped connections), 3609 (a context overflow) and 3611 (a
+dropped connection after a message typed mid-turn), none from 1203 (a drop 1,200 crashed turns after the continue from
+stop 2) or 3608 (an overflow right after the continue from 3607); D's resume from its revoked sign-in when the check
+passed, and one continue after it; and B's and C's shared task closing once, as window_reset at the later of the two
+resets (a core that lost C's stop would close it at B's, two hours early).
+
+
+== restart.test.ts, AC4 #2653.3f98736d (run at 1,500 stops; reasoned at 50,000)
+
+PASS at 1,500 stops: the restarted core's inbox and Needs you equal the running core's, and both hold 1,500 of S1's
+stops, the same set. At 50,000 the base holds all 50,000 on both sides, its fold applying every stop as the live core
+did. AC4 is a criterion of no change, so it passes on the base. It fails on a wrong program that lets stops go as
+they land but not at a start's fold (the restarted core holds more: `held` larger, `gained` naming stop numbers), or
+whose fold lets go of the stop the open task covers (`lost: [10]`, and its inbox differs once the task is judged).
+
+
+== heap.test.ts, AC5 #2653.b467ea15 (run in full: four hubs on #16's 30-day record)
+
+ × AC5 #2653.b467ea15 on #16's 30-day record the core thread's heap after two full collections is at least 1.5 MB
+   under the merge base's 147267ms
+   → the core thread holds 27.70 and 27.45 MB of heap after two full collections, and on the merge base 3cf41958f224
+     27.69 and 27.46 MB: under it by -0.24 to 0.24 MB; at least 1.5 MB under is needed: expected 0.24211883544921875
+     to be greater than or equal to 1.5
+
+ each hub, 15 s apart: this checkout: 27.61, 27.70; the merge base: 27.61, 27.69; the merge base: 27.38, 27.46;
+ this checkout: 27.37, 27.45
+
+On the base the two launch trees hold one program, so the readings agree up to noise and the test fails, naming
+them. On a change that keeps the newest stop of each of the record's 600 sessions and lets the other 5,400 go, the
+report's 2.2 MB for 6,000 stops (about 370 bytes a stop) puts the saving near 2 MB.
+
+How the measurement was settled, each run on the base (scratch files, not kept):
+
+- A first harness, with a module hook in the core thread resolving @deepbuild/asks to the merge base's core, two
+  days of history, one hub a side: 20.96 MB here, 22.37 MB on the merge base, for one program.
+- Three readings a hub (15, 30, 45 s), two days, hook on both sides: 22.38, 22.47, 22.48 on every hub of both sides,
+  within 0.004 MB.
+- The full test with the hook, 30 days: settled readings 27.67 and 28.98 here, 29.17 and 27.55 on the merge base
+  (under it by -1.43 to 1.50 MB: one pair of a single program read 1.4985 MB apart, a near false PASS); one hub fell
+  from 29.07 to 27.65 MB between readings.
+- No hook, 30 days, three hubs, eight collections a reading: 27.59 to 27.70, 27.59 to 27.70 and 27.40 to 27.50 MB;
+  old space 18.70, code 1.59 to 1.67, trusted 1.65 to 1.68, large objects 5.48 to 5.67 MB; no collection after the
+  first two moved a reading by more than 0.01 MB.
+- A pass-through resolve hook only, 30 days, three hubs: 29.08 to 29.19, 29.11 to 29.19 and 27.46 to 27.57 MB; the
+  two high hubs held 2.75 MB of trusted space where the low one held 1.67, and 19.08 MB of old space where it held
+  18.73. So the hook itself made the swing, and the launch trees replaced it.
+- Launch trees, one seeded record copied for all four hubs: 27.67, 27.47, 27.46, 27.26 MB in start order, falling
+  with the record's age; seeding each hub's record just before its start, and the ABBA order, gave the run above.
+
+
+== tsc on the base: no error. The suite adds nothing to the asks' surface, so nothing is missing at the base.
