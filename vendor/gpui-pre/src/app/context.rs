@@ -219,6 +219,8 @@ impl<'a, T: 'static> Context<'a, T> {
 
     /// Tell GPUI that this entity has changed and observers of it should be notified.
     pub fn notify(&mut self) {
+        #[cfg(feature = "test-support")]
+        crate::window::frame_counts::name_entity(self.entity_state.entity_id, std::any::type_name::<T>()); // DeepBuild patch (windoliver/deepbuild#1482)
         self.app.notify(self.entity_state.entity_id);
     }
 
