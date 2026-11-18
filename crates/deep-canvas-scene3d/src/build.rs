@@ -243,29 +243,38 @@ fn fault_of(id: &str, item: &Value, path: String) -> OpError {
     }
 }
 
-fn fault(id: &str, path: String) -> OpError {
+pub(crate) fn fault(id: &str, path: String) -> OpError {
     if path == crate::hull::FLAT {
         return OpError::new(crate::hull::FLAT, format!("items/{id}"));
     }
     // A refusal with its own code (#443): a missing module is named as itself.
     if let Some((code, at)) = path.split_once(builders::CODED) {
         let code = code_of(code);
+        // What the refusal found follows its path (#1928), and names the item.
+        let (at, found) = at.split_once(builders::CODED).unwrap_or((at, ""));
         let at = if code == "module_missing" || at.starts_with("items/") {
             at.to_string()
         } else {
             format!("items/{id}/{at}")
         };
-        return OpError::new(code, at);
+        return match serde_json::from_str::<Map<String, Value>>(found) {
+            Ok(found) => {
+                let named = std::iter::once(("item".to_string(), json!(id)));
+                OpError::new(code, at).with(named.chain(found).collect())
+            }
+            Err(_) => OpError::new(code, at),
+        };
     }
     OpError::new("out_of_range", format!("items/{id}/{path}"))
 }
 
-/// A coded fault's code: one an outline source or a module's deform refuses with, else
-/// `out_of_range`.
+/// A coded fault's code: one an outline source, a module's deform or an offset refuses with,
+/// else `out_of_range`.
 pub(crate) fn code_of(code: &str) -> &'static str {
     builders::OUTLINE_CODES
         .into_iter()
         .chain(crate::contributed::CODES)
+        .chain([crate::faces::TOO_WIDE])
         .find(|c| *c == code)
         .unwrap_or("out_of_range")
 }

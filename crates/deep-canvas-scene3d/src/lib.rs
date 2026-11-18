@@ -14,6 +14,7 @@ pub mod deviation;
 pub mod distribute;
 pub mod dof;
 pub mod emitters;
+pub mod faces;
 pub mod fixtures;
 pub mod flare;
 pub mod flow;
@@ -69,7 +70,7 @@ pub mod water;
 
 /// The wrong programs #420's, #441's and #440's criteria plant in scene3d's and the building
 /// module's operators, each reachable only through a proof surface's `planted`.
-pub const PLANTED: [&str; 30] = [
+pub const PLANTED: [&str; 39] = [
     "torus_genus_0",
     "vertex_count_off_by_one",
     "cap_left_open",
@@ -109,4 +110,14 @@ pub const PLANTED: [&str; 30] = [
     // #1636: a tree whose children keep their parent's radius, and one framed by curvature.
     "tree_child_keeps_parent_radius",
     "tree_curvature_frames",
+    // #1928: the offsets and dissolves its criteria plant.
+    faces::PLANTED[0],
+    faces::PLANTED[1],
+    faces::PLANTED[2],
+    faces::PLANTED[3],
+    faces::PLANTED[4],
+    faces::PLANTED[5],
+    faces::PLANTED[6],
+    faces::PLANTED[7],
+    faces::PLANTED[8],
 ];

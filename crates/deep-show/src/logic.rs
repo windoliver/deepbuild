@@ -66,6 +66,18 @@ impl Hub<'_> {
     ) -> Vec<Issue> {
         self.keep_first_positions(doc, form);
         let mut issues = self.column_view(form, t);
+        // #1928: an offset as wide as its face, and the sets a dissolve left for a hole, where
+        // the build holds scene3d.
+        let (sealed, planted) = (
+            &self.startup.sealed,
+            self.scenario.module_planted.as_deref(),
+        );
+        if sealed.modules.iter().any(|m| m.name == "scene3d") {
+            let (outlines, fills) = (&sealed.outlines, &sealed.fills);
+            issues.extend(deep_canvas_scene3d::faces::raised(
+                form, outlines, fills, planted,
+            ));
+        }
         let (unfit, ms) = copy_fit(form);
         issues.extend(unfit);
         if let Some(timing) = timing {
