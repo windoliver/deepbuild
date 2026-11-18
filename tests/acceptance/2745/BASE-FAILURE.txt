@@ -1,0 +1,124 @@
+# node --test --test-reporter=spec tests/acceptance/2745/guide.test.mjs at base 3c124dee5 (origin/main, no fix), run
+# 2026-11-17T09:43:07Z on Linux (aarch64), Node v24.22.0. It exited 1: the four criterion tests fail, each on
+# the missing deep.source.ask description or guide entry; the fifth test is the judge's own proof and passes at any
+# commit. The worktree's path reads <repo>/. Stack frames inside node: are cut.
+✖ AC1 #2745.733b48e4 scripts/guide.mjs says what deep.source.ask is for, as the host serves it: a plug-in asks a model source its manifest lists; the hub makes the call, from a recording when replaying; the plug-in gets the answer's status and body, or no answer, never the network (690.428032ms)
+✖ AC2 #2745.92c22554 node scripts/guide.mjs --check passes (92.861109ms)
+✖ AC2 #2745.92c22554 docs/extension-guide.md is regenerated: it has the entry for deep.source.ask and is what scripts/guide.mjs writes (0.497041ms)
+✖ AC3 #2745.0609af76 tests/acceptance/351/guide.test.ts passes: its drift cases, the one that failed on main among them (2905.783941ms)
+✔ the judge of AC1: the issue's own sentence says it all, and an empty, an unrelated and a contrary description, and the sentence less any one clause, each leave something unsaid (2.248486ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 1
+ℹ fail 4
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3913.958207
+
+✖ failing tests:
+
+test at tests/acceptance/2745/guide.test.mjs:10:1
+✖ AC1 #2745.733b48e4 scripts/guide.mjs says what deep.source.ask is for, as the host serves it: a plug-in asks a model source its manifest lists; the hub makes the call, from a recording when replaying; the plug-in gets the answer's status and body, or no answer, never the network (690.428032ms)
+  AssertionError [ERR_ASSERTION]: node scripts/guide.mjs writes the guide; it gave:
+  exit 1
+  FAIL guide: deep.source.ask: scripts/guide.mjs says nothing of what each is for
+  
+  
+  1 !== 0
+  
+      at scriptSays (<repo>/tests/acceptance/2745/helpers.mjs:105:10)
+      at TestContext.<anonymous> (<repo>/tests/acceptance/2745/guide.test.mjs:11:3)
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2745/guide.test.mjs:14:1
+✖ AC2 #2745.92c22554 node scripts/guide.mjs --check passes (92.861109ms)
+  AssertionError [ERR_ASSERTION]: node scripts/guide.mjs --check has no finding; it gave:
+  exit 1
+  FAIL guide: deep.source.ask: the contract publishes it, and the guide has no entry for it
+    Fix: run node scripts/guide.mjs and commit docs/extension-guide.md
+  FAIL guide: deep.source.ask: scripts/guide.mjs says nothing of what it is for
+    Fix: run node scripts/guide.mjs and commit docs/extension-guide.md
+  
+  + actual - expected
+  
+  + [
+  +   'FAIL guide: deep.source.ask: the contract publishes it, and the guide has no entry for it',
+  +   'FAIL guide: deep.source.ask: scripts/guide.mjs says nothing of what it is for'
+  + ]
+  - []
+  
+      at checkPasses (<repo>/tests/acceptance/2745/helpers.mjs:117:10)
+      at TestContext.<anonymous> (<repo>/tests/acceptance/2745/guide.test.mjs:15:3)
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'FAIL guide: deep.source.ask: the contract publishes it, and the guide has no entry for it', 'FAIL guide: deep.source.ask: scripts/guide.mjs says nothing of what it is for' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2745/guide.test.mjs:18:1
+✖ AC2 #2745.92c22554 docs/extension-guide.md is regenerated: it has the entry for deep.source.ask and is what scripts/guide.mjs writes (0.497041ms)
+  AssertionError [ERR_ASSERTION]: docs/extension-guide.md has an entry for deep.source.ask, which the contract publishes
+      at regenerated (<repo>/tests/acceptance/2745/helpers.mjs:126:10)
+      at TestContext.<anonymous> (<repo>/tests/acceptance/2745/guide.test.mjs:19:3)
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: null,
+    expected: null,
+    operator: 'notStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2745/guide.test.mjs:22:1
+✖ AC3 #2745.0609af76 tests/acceptance/351/guide.test.ts passes: its drift cases, the one that failed on main among them (2905.783941ms)
+  AssertionError [ERR_ASSERTION]: each passes; failing:
+  AC1 the guide is generated from the published contract and names both examples; its drift test passes on the contract, and the preflight runs it
+  AssertionError: FAIL guide: deep.source.ask: the contract publishes it, and the guide has no entry for it
+    Fix: run node scripts/guide.mjs and commit docs/extension-guide.md
+  FAIL guide: deep.source.ask: scripts/guide.mjs says nothing of what it is for
+    Fix: run node scripts/guide.mjs and commit docs/extension-guide.md
+  
+  : expected [ …(2) ] to deeply equal []
+  + actual - expected
+  
+  + [
+  +   'AC1 the guide is generated from the published contract and names both examples; its drift test passes on the contract, and the preflight runs it'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (<repo>/tests/acceptance/2745/guide.test.mjs:28:10)
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'AC1 the guide is generated from the published contract and names both examples; its drift test passes on the contract, and the preflight runs it' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+# Planted twins, run by hand at the same base through helpers.mjs's scriptSays, checkPasses and regenerated on scratch
+# trees (a copy of scripts/guide.mjs with a line for deep.source.ask added to its descriptions; README, Twins):
+#
+# == reference (the issue's sentence as the description, guide regenerated)
+# PASS AC1 scripts/guide.mjs says what it is for
+# PASS AC2 --check passes
+# PASS AC2 the guide is regenerated
+# == twin: empty description
+# FAIL AC1: node scripts/guide.mjs writes the guide; it gave: exit 1, FAIL guide: deep.source.ask: scripts/guide.mjs says nothing of what each is for
+# FAIL AC2 --check: FAIL guide: deep.source.ask: the contract publishes it, and the guide has no entry for it
+# FAIL AC2 regenerated: docs/extension-guide.md has an entry for deep.source.ask, which the contract publishes
+# == twin: unrelated description (deep.fetch's), guide regenerated
+# FAIL AC1: what scripts/guide.mjs says deep.source.ask is for leaves out part of what the issue says it must say; it says: "An outside call the hub makes for the package, only to a host its grant names and within that host's quota."
+# PASS AC2 --check passes
+# PASS AC2 the guide is regenerated
+# == twin: right description, guide not regenerated (the base's guide)
+# PASS AC1 scripts/guide.mjs says what it is for
+# FAIL AC2 --check: FAIL guide: deep.source.ask: the contract publishes it, and the guide has no entry for it
+# FAIL AC2 regenerated: docs/extension-guide.md has an entry for deep.source.ask, which the contract publishes

@@ -1,0 +1,21 @@
+# Diagnostic, not a test: eight hubs started one after another as benchmarks/hub.mjs idle starts them, each read once a second
+# for 32 s after its socket answered (readSinceStart), under a test grant, Nov 17 2026 11:26 to 11:31. Millions of instructions the
+# hub's own process retired in each second, from second 2 on.
+run 1: load 18, socket answered 136 ms and core ready 581 ms after its start; seconds 16-20 mean 8.14, seconds 13-32 mean 8.59
+  65.4 25 17.6 22.9 27.1 17.2 16.4 295.5 185.8 16 5.4 6.2 7.5 5.6 6 9.3 5.2 11.4 8.8 8.9 7.5 9.5 8.3 9.1 9.2 8.2 9.6 10.1 13 10.1 8.2
+run 2: load 17, socket answered 161 ms and core ready 805 ms after its start; seconds 16-20 mean 9.90, seconds 13-32 mean 8.86
+  66.6 25 16.3 22.4 19.3 18.8 20.4 359.1 183.6 22.3 8.2 8.5 10.7 8.4 10.1 11.8 8.3 11.4 7.9 8.5 8.2 12.3 10 6.9 7.9 6.9 6.7 7.9 6.5 7.1 11.1
+run 3: load 82, socket answered 305 ms and core ready 1141 ms after its start; seconds 16-20 mean 8.56, seconds 13-32 mean 7.64
+  71.5 20.6 22.4 17.4 24.5 16.6 22.2 308 191.3 20.3 7 6.3 9 6.9 7.7 10.6 6.4 9.6 8.5 7.7 7.1 7.9 7.5 7.2 7.3 6.8 7.5 7.1 6.6 7.2 8
+run 4: load 82, socket answered 303 ms and core ready 1404 ms after its start; seconds 16-20 mean 9.12, seconds 13-32 mean 7.72
+  517.7 29.1 24.5 17.3 21.9 20.4 23.2 149.1 340.6 15.8 16.5 7 8.2 9.2 8.1 9.6 8.7 10.7 8.5 7.8 8.5 6.7 6.9 7.4 6.2 7 6.9 6.7 6 7.2 7.1
+run 5: load 132, socket answered 197 ms and core ready 951 ms after its start; seconds 16-20 mean 8.32, seconds 13-32 mean 7.44
+  64.2 24.8 17.9 22.4 19 18.8 20.5 311.6 184.5 21.4 7.4 6.7 9.8 6.7 7.4 10.1 6 10.5 7.6 8.1 7 7.9 7.2 6.8 6.9 6.6 6.5 7.1 6.2 6.8 6.9
+run 6: load 160, socket answered 179 ms and core ready 991 ms after its start; seconds 16-20 mean 8.26, seconds 13-32 mean 7.49
+  64.4 24.8 18.1 16.6 23.3 16.9 21.3 317.1 178.4 20.1 7.6 6.6 8.5 6.3 6.9 9.9 7 9.3 8.2 7.2 6.6 7.3 7.2 6.6 7.7 7.6 7.1 7.8 6.8 7.7 7.4
+run 7: load 131, socket answered 126 ms and core ready 919 ms after its start; seconds 16-20 mean 8.60, seconds 13-32 mean 7.65
+  65.2 24.7 17.6 17.8 23.4 16.7 22.9 319 180.4 18.8 7.7 6.9 8.1 7.5 8 9.3 7.7 9.9 8.1 8.1 6.6 6.7 8.4 7 7 7.7 7 7.1 7.3 7.3 7.3
+run 8: load 163, socket answered 128 ms and core ready 931 ms after its start; seconds 16-20 mean 9.22, seconds 13-32 mean 8.34
+  65.3 24.6 17.8 22.1 19.1 16.5 22.3 311.9 191.7 18 7.1 7.1 7.9 9 7.7 10.3 8.4 11.2 8.5 9.5 7.3 8.1 7.9 8.2 7 12 7.6 7.5 6.9 7.7 6.9
+5 s windows (seconds 16-20): 10 of 28 pairs of runs more than 10% apart, the worst 21.6%
+20 s windows (seconds 13-32): 12 of 28 pairs more than 10% apart, the worst 19.0%; runs 3 to 7, at loads of 82 to 160, 3.8% apart
