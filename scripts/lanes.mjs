@@ -993,6 +993,7 @@ timed.push('tests/acceptance/2650/budgets.long.test.ts');
 alone.push('tests/acceptance/1812/');
 // #67's blind redraft after #1812 starts hubs as #67's suite does.
 alone.push('tests/acceptance/67-redraft-1812/');
+alone.push('tests/acceptance/66-redraft-1812/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
