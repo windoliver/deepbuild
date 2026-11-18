@@ -1,7 +1,7 @@
 {
   "core": {
     "version": "0.0.0",
-    "digest": "1e1baacd16d220846b4f12de6b16b49834a5de84b8c6dee5524096f41e3f35bb",
+    "digest": "af7ffa088581acc8888245cc7666df5a26dfb72b102b558ba6a7d2a1d6f3ddbb",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -277,18 +277,19 @@
   },
   "sandbox": {
     "version": "1.0.0",
-    "digest": "bd698eefad2d6419fdbbc919a75ae9369d1266261a54f3572d1f6356ed5c2d3f",
+    "digest": "bd32c3498c4bda12b5727f5a64281cba439f562396351f71cbd29e6d23ee805d",
     "verdict": "PASS",
     "parts": {
       "clean_rebuild": "PASS",
       "patch_fuzz": "PASS",
       "schedule": "PASS",
+      "registries": "PASS",
       "sandbox": "PASS"
     }
   },
   "scene3d": {
     "version": "1.0.0",
-    "digest": "6c960bf0ee6cefaaee99fb43b9a2598880065746f4950a2d56de32f4a86f06e8",
+    "digest": "86f5aec0602fb2fa750b3573ae9afad1e4bf63215aaac8bedb17f26970c8332e",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
