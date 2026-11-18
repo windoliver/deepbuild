@@ -2501,6 +2501,9 @@ fn row_element(drawn: &RowDrawn, chrome: &chrome::Chrome) -> ObservedElement<Sta
         .aria_value(drawn.value.clone())
         .when(drawn.focused, |row| row.aria_active_descendant())
         .typed(s.body)
+        // As wide as the list: a row its cached view lays out as a root shrinks to its words otherwise, and its state
+        // word and time leave the right edge (#1808).
+        .w_full()
         .h(drawn.tall)
         .flex_none()
         .flex()
