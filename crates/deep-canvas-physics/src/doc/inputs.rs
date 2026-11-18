@@ -12,8 +12,10 @@ use super::{data, join, Body, Reader, Refusal};
 pub const INPUTS_LATER: &str = "#2371";
 
 /// The input kinds this backend interface runs, each with its fields and their defaults; #191
-/// runs `deactivate`, which the behavior kit's sensor fixture needs; #251 a vehicle body's.
-const KINDS: [(&str, &[(&str, Field)]); 10] = [
+/// runs `deactivate`, which the behavior kit's sensor fixture needs; #182 a character body's
+/// `move {velocity}`, `jump {height}`, `launch {vertical}`, `place {pose}` and `crouch {on}`;
+/// #251 a vehicle body's, `place` too.
+const KINDS: [(&str, &[(&str, Field)]); 12] = [
     (
         "grab",
         &[
@@ -31,9 +33,19 @@ const KINDS: [(&str, &[(&str, Field)]); 10] = [
             ("linear", Field::Vec3([0.0; 3])),
             ("angular", Field::Vec3([0.0; 3])),
             ("from", Field::From),
+            ("vertical", Field::Num(0.0, f64::MIN)),
         ],
     ),
-    ("move", &[("to", Field::Vec3([0.0; 3]))]),
+    (
+        "move",
+        &[
+            ("to", Field::Vec3([0.0; 3])),
+            ("velocity", Field::Vec3([0.0; 3])),
+        ],
+    ),
+    ("jump", &[("height", Field::Num(1.0, 0.0))]),
+    ("place", &[("pose", Field::Pose)]),
+    ("crouch", &[("on", Field::Bool(true))]),
     (
         "poke",
         &[
@@ -47,18 +59,16 @@ const KINDS: [(&str, &[(&str, Field)]); 10] = [
     ("drive", &[("force", Field::Num(0.0, f64::MIN))]),
     ("steer", &[("angle", Field::Num(0.0, f64::MIN))]),
     ("brake", &[("force", Field::Num(0.0, 0.0))]),
-    ("place", &[("pose", Field::Pose)]),
 ];
 
-/// #251: the kinds only a vehicle body takes.
+/// #251: the kinds only a vehicle body takes; a character body takes `place` too (#182).
 pub const VEHICLE_INPUTS: [&str; 4] = ["drive", "steer", "brake", "place"];
 
 /// The kinds and fields the design gives that wait on `INPUTS_LATER` or the issue named.
-const LATER: [(&str, &str); 7] = [
+const LATER: [(&str, &str); 6] = [
     ("set", INPUTS_LATER),
     ("activate", INPUTS_LATER),
     ("blast", INPUTS_LATER),
-    ("jump", "#182"),
     ("poke.address", INPUTS_LATER),
     ("poke.radius", INPUTS_LATER),
     ("poke.falloff", INPUTS_LATER),
@@ -75,7 +85,7 @@ enum Field {
     /// Where a launch places its body first (#540): a position `[x, y, z]`, a pose `{pos, rot}`,
     /// or `pose`, the pose its `from.pos` and `from.rot` data fields give; none by default.
     From,
-    /// #251: where a place puts its body, a pose `{pos, rot}`.
+    /// #182, #251: where a place puts its body, a pose `{pos, rot}`.
     Pose,
 }
 
@@ -247,7 +257,9 @@ fn own(kind: &str) -> Map<String, Value> {
     fields
         .iter()
         .filter(|(n, _)| !matches!(*n, "point" | "impulse" | "push") || kind == "grab")
-        .filter(|(n, _)| *n != "from" && *n != "pose")
+        // #182: a launch's vertical, a jump's height and a place's pose have no default (a jump
+        // without a height takes its body's own), nor a move's velocity beside a grab's `to`.
+        .filter(|(n, _)| !matches!(*n, "from" | "vertical" | "height" | "pose" | "velocity"))
         .map(|(n, f)| {
             let v = match f {
                 Field::Num(d, _) => json!(d),
@@ -386,8 +398,17 @@ impl Reader {
                 .enumerate()
             {
                 match t.as_str().filter(|n| bodies.contains_key(*n)) {
-                    Some(n) if VEHICLE_INPUTS.contains(&kind) && bodies[n].vehicle.is_none() => {
-                        let what = format!("{kind} moves a vehicle body, and {n} isn't one");
+                    Some(n)
+                        if VEHICLE_INPUTS.contains(&kind)
+                            && bodies[n].vehicle.is_none()
+                            && !(kind == "place" && bodies[n].character.is_some()) =>
+                    {
+                        let what = match kind {
+                            "place" => format!(
+                                "place moves a vehicle or character body, and {n} is neither"
+                            ),
+                            _ => format!("{kind} moves a vehicle body, and {n} isn't one"),
+                        };
                         self.refuse("out_of_range", format!("{p}/targets/{i}"), t, what);
                     }
                     Some(n) => targets.push(n.to_string()),

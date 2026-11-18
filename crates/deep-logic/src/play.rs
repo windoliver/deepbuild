@@ -3,9 +3,10 @@
 //! (`deep-drive`'s `play`) is this: the piece's own logic items step on the track, and a bot, a
 //! policy given as data or a logic item added to this copy of the piece, writes entries with the
 //! writer `bot`. It answers the recorded track by hash, the values at the paths asked for at each
-//! step, the piece's first trap, the bot's, each step's time, the first step whose fuel passed
-//! its class's ceiling, and the piece's full-state hash at every checkpoint and at the end. A
-//! replay is the same call with the recorded track and no bot. It judges nothing: the check does.
+//! step (or, #556, at only the steps they change), the piece's first trap, the bot's, each step's
+//! time, the first step whose fuel passed its class's ceiling, and the piece's full-state hash at
+//! every checkpoint and at the end. A replay is the same call with the recorded track and no bot.
+//! It judges nothing: the check does.
 
 use std::collections::BTreeMap;
 use std::rc::Rc;
@@ -15,7 +16,7 @@ use sha2::Digest as _;
 
 use crate::grid_bot::{Action, Bot as GridBot, Iface};
 use crate::piece::{check_in, h64, History};
-use crate::world::{track_of, Entry, Given, Record, World};
+use crate::world::{track_of, Entry, Given, Record, To, World, REWIND};
 use crate::Planted;
 
 const F: i64 = 705_600_000;
@@ -25,12 +26,14 @@ const BOT: &str = "bot";
 
 /// The replica's planted faults (#184's twins): its recorded track drops the run's first bot
 /// entry; a logic bot's entry made only when its value changes, not its serial; (#1048) the
-/// explorer and the descender walk as if the grid had no links.
+/// explorer and the descender walk as if the grid had no links; (#556) the piece keeps the
+/// document's seed under `piece_seed: run`.
 #[derive(Clone, Copy, Default)]
 pub struct Plants {
     pub drops_first_bot_entry: bool,
     pub entry_on_change: bool,
     pub ignores_links: bool,
+    pub keeps_document_seed: bool,
 }
 
 /// A document's logic items as one piece, as the logic module checks one: its seed, its budget
@@ -59,10 +62,46 @@ pub fn piece_of(form: &Value) -> Option<Value> {
         "controls": form.get("controls").cloned().unwrap_or(json!({})),
         "items": items,
     });
+    let reads = world_reads(form);
+    if !reads.is_empty() {
+        piece["world_reads"] = json!(reads);
+    }
     if let Some(class) = form.pointer("/budget/class") {
         piece["class"] = class.clone();
     }
+    // #192: the libraries the document's pinned packs carry, a provider's library form among
+    // them, which its items' `links` reach (#190).
+    if let Some(libraries) = form.get("libraries") {
+        piece["packs"] = libraries.clone();
+    }
+    // #860: the document's rewind, which the logic module checks against its items.
+    if let Some(r) = form.get("rewind") {
+        piece["rewind"] = r.clone();
+    }
     Some(piece)
+}
+
+/// #182: each character reading a document's worlds declare as outputs, `<world ID>.<body
+/// ID>.<read>` (grounded, sliding or crouched), which a logic item may read; the host steps the
+/// worlds and records each one's values on the track.
+pub fn world_reads(form: &Value) -> Vec<String> {
+    form.get("worlds")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+        .flat_map(|(w, doc)| {
+            doc.get("outputs")
+                .and_then(Value::as_object)
+                .into_iter()
+                .flatten()
+                .filter_map(move |(_, o)| {
+                    let read = o.get("read")?.as_str()?;
+                    let from = o.get("from")?.as_str()?;
+                    matches!(read, "grounded" | "sliding" | "crouched")
+                        .then(|| format!("{w}.{from}.{read}"))
+                })
+        })
+        .collect()
 }
 
 /// A refusal before any step, naming what.
@@ -222,6 +261,48 @@ fn policy(
     Ok(out)
 }
 
+/// #860: a policy's `rewind: {every, from: [min, max]}`: at each multiple of `every` seconds
+/// after 0 within the span, the stops it goes back, drawn from min to max by hash(the run's seed,
+/// rewind, the step) as a pick draws; by step, with the piece's depth.
+fn rewinds_of(
+    r: &Value,
+    piece: &crate::piece::Piece,
+    seed: u64,
+    step: i64,
+    steps: i64,
+) -> Result<(BTreeMap<i64, u64>, u64), Value> {
+    let bad = |what: &str| refused("bad_input", json!(format!("bot.policy.rewind: {what}")));
+    let depth = piece
+        .rewind
+        .as_ref()
+        .ok_or_else(|| bad("the piece declares no rewind"))?
+        .depth;
+    let every = r
+        .get("every")
+        .and_then(Value::as_f64)
+        .filter(|e| *e > 0.0)
+        .ok_or_else(|| bad("every is seconds"))?;
+    let (min, max) = match r.get("from").and_then(Value::as_array).map(Vec::as_slice) {
+        Some([a, b]) => a.as_u64().zip(b.as_u64()).filter(|(a, b)| a <= b),
+        _ => None,
+    }
+    .ok_or_else(|| bad("from is [min, max] stops"))?;
+    let every = ((every * F as f64).round() as i64).max(1);
+    let mut out = BTreeMap::new();
+    let mut m = 1;
+    loop {
+        let t = stamp(m * every, step);
+        if t >= steps * step {
+            break;
+        }
+        let k = t / step;
+        out.insert(k, min + pick_hash(seed, "rewind", k) % (max - min + 1));
+        // The next multiple stamped past this step.
+        m = k * step / every + 1;
+    }
+    Ok((out, u64::from(depth)))
+}
+
 /// The values a player's gesture on a listed row's action writes (Play interface `game.play@1`):
 /// on an actions control, its named action's index there with repeat 0; a cell on a point
 /// control, a press and a release of its first button there; on a pick on rows, the key in its
@@ -320,17 +401,20 @@ fn undeclared(bot: &Value, declared: &dyn Fn(&str) -> bool) -> Option<String> {
 
 /// Plays `piece` (the logic module's piece: seed, class, controls, items) on `call`: `{seed,
 /// piece_seed: own | run, span: seconds | {steps}, bot?: {policy} | {logic}, track?: [entry],
-/// values?: [path]}`; `stored` reads an asset's bytes by hash. `frame` sees the world after each
-/// of the piece's steps and answers the frame it keeps there, if any. It judges nothing and stops
-/// at no failure: the check reads what it recorded.
+/// values?: [path], changes?: [path]}`; `stored` reads an asset's bytes by hash. `frame` sees the
+/// world after each of the piece's steps and answers the frame it keeps there, if any. It judges
+/// nothing and stops at no failure: the check reads what it recorded.
 pub fn play(
-    piece: &Value,
+    document: &Value,
     stored: &dyn Fn(&str) -> Option<Vec<u8>>,
     call: &Value,
     plants: Plants,
     frame: &mut dyn FnMut(i64, &World) -> Option<Value>,
 ) -> Result<Value, Value> {
-    let (mut piece, seed) = seeded(piece, call)?;
+    let (mut piece, seed) = seeded(document, call)?;
+    if plants.keeps_document_seed {
+        piece["seed"] = document["seed"].clone();
+    }
     let controls = piece.get("controls").cloned().unwrap_or(json!({}));
     let bot = call.get("bot").filter(|b| !b.is_null());
     if let Some(c) = bot.and_then(|b| undeclared(b, &|c| controls.get(c).is_some())) {
@@ -440,30 +524,37 @@ pub fn play(
             .and_then(Value::as_i64)
             .ok_or_else(|| refused("bad_input", json!("span: seconds or {steps}")))?,
     };
-    // The paths asked for: `<item>.<array>` of the piece's own items.
-    let mut paths = Vec::new();
-    for p in call
-        .get("values")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-    {
-        let p = p
-            .as_str()
-            .ok_or_else(|| refused("bad_input", json!("values: array paths")))?;
-        let (id, name) = p
-            .split_once('.')
-            .ok_or_else(|| refused("ref_unresolved", json!(p)))?;
-        let i = own
-            .iter()
-            .copied()
-            .find(|i| piece.items[*i].id == id)
-            .ok_or_else(|| refused("ref_unresolved", json!(p)))?;
-        if !piece.items[i].writes.iter().any(|w| w.name == name) {
-            return Err(refused("ref_unresolved", json!(p)));
+    // The paths asked for: `<item>.<array>` of the piece's own items, each step's (`values`) or
+    // (#556) only the steps it changes at (`changes`), so a grid a check reads per floor isn't
+    // copied at every step.
+    let paths_of = |field: &str| -> Result<Vec<(String, usize, String)>, Value> {
+        let mut paths = Vec::new();
+        for p in call
+            .get(field)
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
+            let p = p
+                .as_str()
+                .ok_or_else(|| refused("bad_input", json!(format!("{field}: array paths"))))?;
+            let (id, name) = p
+                .split_once('.')
+                .ok_or_else(|| refused("ref_unresolved", json!(p)))?;
+            let i = own
+                .iter()
+                .copied()
+                .find(|i| piece.items[*i].id == id)
+                .ok_or_else(|| refused("ref_unresolved", json!(p)))?;
+            if !piece.items[i].writes.iter().any(|w| w.name == name) {
+                return Err(refused("ref_unresolved", json!(p)));
+            }
+            paths.push((p.to_string(), i, name.to_string()));
         }
-        paths.push((p.to_string(), i, name.to_string()));
-    }
+        Ok(paths)
+    };
+    let paths = paths_of("values")?;
+    let watched = paths_of("changes")?;
     let mut entries: Vec<Entry> = match call.get("track") {
         None | Some(Value::Null) => Vec::new(),
         Some(t) => t
@@ -497,6 +588,10 @@ pub fn play(
         };
         entries.extend(policy(p, seed, step, steps, &values)?);
     }
+    let rewinds = bot
+        .and_then(|b| b.pointer("/policy/rewind"))
+        .map(|r| rewinds_of(r, &piece, seed, step, steps))
+        .transpose()?;
     let mut rec = Record {
         ns: Some(Vec::new()),
         ..Default::default()
@@ -510,6 +605,8 @@ pub fn play(
         None,
     )?;
     let mut values: Vec<Vec<Value>> = vec![Vec::new(); paths.len()];
+    // Each watched array's `{step, value}` at step 0 and at each step it differs from the last.
+    let mut changes: Vec<(Vec<Value>, Option<Value>)> = vec![(Vec::new(), None); watched.len()];
     let mut fuel: Vec<Vec<i64>> = vec![Vec::new(); own.len()];
     let mut step_times = Vec::new();
     let mut frames = Vec::new();
@@ -593,6 +690,26 @@ pub fn play(
                 }
             }
         }
+        // #860: the policy's rewind drawn at this step, when that many stops lie behind the
+        // current one within the depth, stamped at the next step.
+        if let Some((draws, depth)) = rewinds.as_ref().filter(|_| k + 1 < steps) {
+            let behind = world.branches.stops.len().saturating_sub(1) as u64;
+            if let Some(&n) = draws
+                .get(&k)
+                .filter(|n| (1..=behind.min(*depth)).contains(*n))
+            {
+                world.append(Entry {
+                    t: (k + 1) * step,
+                    seq: world.track.get(REWIND).map_or(0, Vec::len) as u32,
+                    control: REWIND.into(),
+                    value: Given::Rewind(To::Stop(n as u32)),
+                    writer: "bot".into(),
+                    player: 1,
+                    as_of: None,
+                    arrived: 0,
+                })?;
+            }
+        }
         let ns: u64 = rec
             .ns
             .as_mut()
@@ -618,6 +735,13 @@ pub fn play(
         rec.fuel.clear();
         for ((_, i, name), v) in paths.iter().zip(&mut values) {
             v.push(world.array(*i, name).map_or(Value::Null, Value::Array));
+        }
+        for ((_, i, name), (at, last)) in watched.iter().zip(&mut changes) {
+            let now = world.array(*i, name).map_or(Value::Null, Value::Array);
+            if last.as_ref() != Some(&now) {
+                at.push(json!({"step": k, "value": now}));
+                *last = Some(now);
+            }
         }
         if let Some(f) = frame(k, &world) {
             frames.push(f);
@@ -675,6 +799,11 @@ pub fn play(
         .zip(values)
         .map(|((p, _, _), v)| (p, Value::Array(v)))
         .collect();
+    let changes: Map<String, Value> = watched
+        .into_iter()
+        .zip(changes)
+        .map(|((p, _, _), (at, _))| (p, Value::Array(at)))
+        .collect();
     let fuel: Map<String, Value> = own_ids
         .iter()
         .cloned()
@@ -696,6 +825,7 @@ pub fn play(
         "track": track_hash(&track),
         "entries": track,
         "values": values,
+        "changes": changes,
         "trap": trap,
         "bot_trap": bot_trap,
         "step_times": step_times,

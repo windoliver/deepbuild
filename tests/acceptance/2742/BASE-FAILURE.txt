@@ -1,0 +1,43 @@
+#2742's acceptance suite at its base, run 2026-11-16 on this worktree's HEAD 80561d40c (the merge of #2726), on a
+Mac17,10 (M5 Max, macOS, Metal) on mains, with the one-minute load between about 900 and 950 on its 18 cores (other
+sessions' builds and tests). Binary built from the base: `cargo build --locked --bin deep-gpu` with the pinned
+1.99.1 toolchain first on PATH and CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 (most of the 576 s below is that
+build's wait for cargo's package-cache lock; the test itself took 35 s). Run once, alone:
+
+  node node_modules/vitest/vitest.mjs run --root tests/acceptance/2742 --no-file-parallelism ac1-composited-gpu-time.test.ts
+
+Type-check: `npx tsc --noEmit -p tests/acceptance/2742/tsconfig.json` exits 0.
+
+AC1 fails at its own assertion, with every frame's reading: the composited side's median gpu_ms is 4.748 ms against
+the twin's 13.855 ms (a ratio of 0.343, the bound 0.9). At the base the compositor's submissions (the 64 washes, the
+blur and the composites) run before the frame's own encode ends, and the CPU's encode of the 4,000 specks after them
+outlasts their GPU work, so they are done before the timer starts and the frame's gpu_ms leaves them out.
+
+AC2 (ac2-417-unchanged.test.ts) wasn't run by this job: it runs #417's suite, a neighbouring suite this job doesn't
+run. At the base it should pass, as a criterion that keeps what works must.
+
+---- ac1-composited-gpu-time.test.ts ----
+
+ RUN  v5.0.5 /Users/taofeng/dev/claude-worktrees/funny-mccarthy-302f89/agent-afc4cc9331a23a79e/tests/acceptance/2742
+
+ ❯ ac1-composited-gpu-time.test.ts (1 test | 1 failed) 574947ms
+   ❯ the composited side and its twin (1)
+     × AC1 #2742.f2fad73c film2d at 1920 × 1080, 60 frames at 60 fps: the composited side's median gpu_ms is at least 0.9 times its twin's, where nothing is composited 35320ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac1-composited-gpu-time.test.ts > the composited side and its twin > AC1 #2742.f2fad73c film2d at 1920 × 1080, 60 frames at 60 fps: the composited side's median gpu_ms is at least 0.9 times its twin's, where nothing is composited
+AssertionError: the composited side's median gpu_ms is at least 0.9 × the twin's (12.469 ms), since the compositor does all of the twin's GPU work and more; the composited side (the group with passes, 64 washes then 4000 specks): median 4.748, min 0.836, max 170.759; every frame: 170.759 8.241 7.305 5.133 1.574 11.890 7.533 2.319 6.305 2.475 12.753 10.561 5.647 11.219 3.476 1.545 7.172 4.743 1.895 7.379 6.486 8.273 2.855 4.009 3.332 4.748 3.457 6.058 12.240 7.942 3.500 5.093 5.318 8.198 6.045 3.499 1.209 1.394 2.278 1.078 3.949 9.407 1.916 1.011 3.650 2.816 7.164 0.836 14.707 2.945 4.303 2.000 1.402 4.747 7.149 10.646 4.876 5.352 1.316 4.299
+the twin (the group's passes removed): median 13.855, min 7.624, max 227.458; every frame: 227.458 42.400 15.102 14.376 17.663 21.261 16.644 12.301 25.812 16.187 16.191 12.143 9.669 14.641 12.023 10.193 18.497 9.250 21.218 10.572 11.471 10.374 13.072 15.095 13.799 13.910 14.814 31.278 11.557 14.395 14.924 14.645 15.301 11.360 12.005 9.986 8.234 7.637 10.417 15.254 22.783 10.592 7.624 14.381 17.181 13.603 11.671 9.281 9.610 15.566 10.617 8.785 11.332 31.026 11.042 10.554 12.579 14.210 14.735 24.188
+ratio of medians 0.343: expected 4.747562 to be greater than or equal to 12.4691625
+ ❯ ac1-composited-gpu-time.test.ts:34:8
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  16:26:03
+   Duration  576.31s (tests 100%)
+

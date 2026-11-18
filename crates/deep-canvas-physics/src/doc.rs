@@ -50,6 +50,11 @@ pub struct Solver {
     pub ccd: bool,
 }
 
+/// #2309: the stiffest contact a step settles, Hz: (step rate × substeps) ÷ 6.
+pub fn most_contact_hz(step_rate: f64, substeps: f64) -> f64 {
+    step_rate * substeps / 6.0
+}
+
 mod shape;
 pub use shape::*;
 
@@ -72,6 +77,8 @@ pub enum BodyKind {
     /// Moved only to its `follow` channel's pose at each step's time (#1918).
     Kinematic,
     Dynamic,
+    /// #182: one capsule the backend's character controller moves (Body `body@1`: character).
+    Character,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -95,6 +102,8 @@ pub struct Body {
     pub lock_angular: [bool; 3],
     pub active: bool,
     pub anchors: BTreeMap<String, [f64; 3]>,
+    /// #182: a character body's own fields.
+    pub character: Option<Character>,
     /// #251: a vehicle body's wheels; its kind is then dynamic.
     pub vehicle: Option<Vehicle>,
 }
@@ -227,12 +236,14 @@ pub struct World {
     pub solve: Option<Solve>,
 }
 
+mod character;
 pub mod data;
 mod heightfield;
 mod inputs;
 mod reads;
 mod soft;
 mod vehicle;
+pub use character::{Character, FIELDS as CHARACTER_FIELDS};
 pub use heightfield::HEIGHTFIELD_SAMPLES;
 pub use inputs::{resolved, Input, On, INPUTS_LATER};
 pub use reads::{probe_pose, probe_shape, Output, Read, Skin, Solve, READS};
@@ -520,7 +531,8 @@ impl Reader {
             _ => Mode::Dynamic,
         };
         let capacity = self.capacity(m);
-        let solver = self.solver(m.get("solver").unwrap_or(&Value::Null));
+        let most = most_contact_hz(step_rate, substeps);
+        let solver = self.solver(m.get("solver").unwrap_or(&Value::Null), most);
         let combine = &self.obj(
             m.get("combine").unwrap_or(&Value::Null),
             "combine",
@@ -678,7 +690,8 @@ impl Reader {
         }
     }
 
-    fn solver(&mut self, v: &Value) -> Solver {
+    /// The solver; unwritten, `contact_hz` is the lower of 30 Hz and `most` (#2309).
+    fn solver(&mut self, v: &Value, most: f64) -> Solver {
         let p = "solver";
         let s = &self.obj(
             v,
@@ -698,8 +711,9 @@ impl Reader {
             "solver/sleep",
             &["on", "speed", "time"],
         );
+        let hz = most.min(30.0);
         Solver {
-            contact_hz: self.num(s, "contact_hz", p, 30.0, f64::MIN_POSITIVE, f64::MAX),
+            contact_hz: self.num(s, "contact_hz", p, hz, f64::MIN_POSITIVE, f64::MAX),
             contact_damping: self.num(s, "contact_damping", p, 10.0, 0.0, f64::MAX),
             max_speed: self.num(s, "max_speed", p, 400.0, f64::MIN_POSITIVE, f64::MAX),
             restitution_threshold: self.num(s, "restitution_threshold", p, 0.0, 0.0, f64::MAX),
@@ -1018,6 +1032,7 @@ impl Reader {
                 "active",
                 "anchors",
                 "priority",
+                "character",
                 "vehicle",
             ],
         );
@@ -1129,6 +1144,7 @@ impl Reader {
                 self.vec3(&one, name, &join(p, "anchors"), [0.0; 3]),
             );
         }
+        let character = self.character(b, p, kind, &uses, shapes);
         Body {
             kind,
             follow,
@@ -1154,6 +1170,7 @@ impl Reader {
             lock_angular: self.bools3(locks, "angular", &join(p, "locks")),
             active: self.flag(b, "active", p, true),
             anchors,
+            character,
             vehicle,
         }
     }

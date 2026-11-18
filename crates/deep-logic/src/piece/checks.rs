@@ -325,11 +325,29 @@ pub(super) fn region_map(
     for r in &reads {
         let (size, ty, read) = if let Some((size, ty)) = controls.get(r) {
             (*size, ty.to_string(), Read::Control)
+        } else if let Some(read) = series_read(r, sources) {
+            // One series of a series source, read as a scalar (Logic: readings).
+            (8 + 16 * reading_max(&read), "reading".to_string(), read)
         } else if let Some(read) = sources.get(r) {
-            let Read::Reading { max, .. } = read else {
-                unreachable!()
-            };
-            (8 + max * 16, "reading".to_string(), read.clone())
+            match read {
+                Read::Reading {
+                    shape: Shape::Series(_),
+                    ..
+                } => {
+                    refused.push(refusal(
+                        "read",
+                        format!("{r} is a whole series: a piece reads one series as {r}#<series>, never the whole"),
+                        json!({"read": r, "source": r.trim_start_matches("reading:")}),
+                    ));
+                    continue;
+                }
+                Read::Reading { max, shape, .. } => (
+                    8 + max * (shape.size() + 8),
+                    "reading".to_string(),
+                    read.clone(),
+                ),
+                _ => (4, "i32".to_string(), Read::World),
+            }
         } else if let Some((other, "hover")) =
             r.split_once('.').filter(|(c, _)| controls.contains_key(*c))
         {
@@ -537,12 +555,47 @@ pub fn region_maps(
     Ok(out)
 }
 
+/// A read of one series of a series source, `reading:<source>#<series>`: a scalar reading
+/// delivered as its source's are.
+pub(crate) fn series_read(r: &str, sources: &Sources) -> Option<Read> {
+    let (src, series) = r.split_once('#')?;
+    match sources.get(src)? {
+        Read::Reading {
+            each,
+            max,
+            shape: Shape::Series(_),
+        } if !series.is_empty() => Some(Read::Reading {
+            each: *each,
+            max: *max,
+            shape: Shape::Scalar,
+        }),
+        _ => None,
+    }
+}
+
+fn reading_max(r: &Read) -> u32 {
+    match r {
+        Read::Reading { max, .. } => *max,
+        _ => 0,
+    }
+}
+
 pub(super) type Controls = BTreeMap<String, (u32, &'static str)>;
-/// A piece's sources by the reading each delivers, `reading:<source>` (#533).
+/// A piece's sources by the reading each delivers, `reading:<source>` (#533), and (#182) the
+/// readings its worlds declare that a logic item may read, `world_reads`.
 pub(super) type Sources = BTreeMap<String, Read>;
 
 pub(super) fn sources_of(piece: &Value) -> Result<Sources, Refused> {
     let mut sources = BTreeMap::new();
+    for name in piece
+        .get("world_reads")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+    {
+        sources.insert(name.to_string(), Read::World);
+    }
     for (name, src) in piece
         .get("sources")
         .and_then(Value::as_object)
@@ -571,11 +624,16 @@ pub fn check_bound(
         .and_then(Value::as_object)
         .cloned()
         .unwrap_or_default();
+    // The build's first-party packs' assets come with them (#416).
+    let first_party = crate::first_party::assets();
     check_in(
         piece,
         planted,
         history,
-        &|sha| B64.decode(assets.get(sha)?.as_str()?).ok(),
+        &|sha| {
+            B64.decode(assets.get(sha).or(first_party.get(sha))?.as_str()?)
+                .ok()
+        },
         services,
     )
 }
@@ -852,6 +910,7 @@ pub fn check_in(
             linked,
             link_ns,
             fixtures: BTreeMap::new(),
+            interfaces: BTreeMap::new(),
             saves,
             emits: d.emits.clone(),
             emits_at: emits_at.unwrap_or(0),
@@ -884,6 +943,10 @@ pub fn check_in(
         .flatten()
         .filter_map(|(id, c)| Some((id.clone(), Limit::of(c)?)))
         .collect();
+    let rewind = match piece.get("rewind") {
+        None | Some(Value::Null) => None,
+        Some(r) => Some(rewind_of(r, &items)?),
+    };
     Ok(Piece {
         seed,
         class,
@@ -894,5 +957,49 @@ pub fn check_in(
         items,
         machine,
         document: hash(piece.to_string().as_bytes()),
+        rewind,
+    })
+}
+
+/// #860: a piece's rewind, checked: `stops` names an `i32` or `bool` array of
+/// count 1 a logic item writes, `depth` is 1 to 512 stops, `seen` names an array a logic item
+/// writes, and every logic item steps at one rate, since a rewind returns them all to one step.
+fn rewind_of(r: &Value, items: &[Item]) -> Result<Rewind, Refused> {
+    let bad = |what: String| {
+        Refused(json!({"ok": false, "code": "bad_input", "what": format!("rewind: {what}")}))
+    };
+    let array = |field: &str| -> Result<(usize, &Write, u32, u32), Refused> {
+        let path = r.get(field).and_then(Value::as_str).unwrap_or_default();
+        let found = path.split_once('.').and_then(|(id, name)| {
+            let i = items.iter().position(|x| x.id == id)?;
+            let w = items[i].writes.iter().find(|w| w.name == name)?;
+            let e = items[i].write(name)?;
+            Some((i, w, e.offset, e.size))
+        });
+        found.ok_or_else(|| bad(format!("{field} names no array a logic item writes")))
+    };
+    let (item, w, at, size) = array("stops")?;
+    if w.count != 1 || !matches!(w.ty, Ty::I32 | Ty::Bool) {
+        return Err(bad("stops names an i32 or bool array of count 1".into()));
+    }
+    let depth = r
+        .get("depth")
+        .and_then(Value::as_u64)
+        .filter(|d| (1..=512).contains(d))
+        .ok_or_else(|| bad("depth is 1 to 512 stops".into()))?;
+    let seen = match r.get("seen") {
+        None | Some(Value::Null) => None,
+        Some(_) => array("seen").map(|(i, _, at, size)| Some((i, at, size)))?,
+    };
+    if !items.windows(2).all(|w| w[0].step == w[1].step) {
+        return Err(bad(
+            "a piece with rewind has every logic item at one step rate".into(),
+        ));
+    }
+    Ok(Rewind {
+        item,
+        stops: (at, size),
+        depth: depth as u16,
+        seen,
     })
 }

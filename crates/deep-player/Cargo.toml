@@ -17,29 +17,40 @@ crate-type = ["cdylib", "rlib"]
 deep-canvas = { path = "../deep-canvas" }
 deep-canvas-seams = { path = "../deep-canvas-seams" }
 deep-canvas-marks = { path = "../deep-canvas-marks" }
-deep-canvas-graph = { path = "../deep-canvas-graph" }
-deep-canvas-record = { path = "../deep-canvas-record" }
-deep-canvas-sheet = { path = "../deep-canvas-sheet" }
-deep-canvas-cells = { path = "../deep-canvas-cells" }
-deep-canvas-vector = { path = "../deep-canvas-vector" }
+deep-canvas-graph = { path = "../deep-canvas-graph", optional = true }
+deep-canvas-record = { path = "../deep-canvas-record", optional = true }
+deep-canvas-sheet = { path = "../deep-canvas-sheet", optional = true }
+deep-canvas-cells = { path = "../deep-canvas-cells", optional = true }
+deep-canvas-vector = { path = "../deep-canvas-vector", optional = true }
 deep-canvas-motion = { path = "../deep-canvas-motion" }
 deep-canvas-input = { path = "../deep-canvas-input" }
-deep-canvas-scene3d = { path = "../deep-canvas-scene3d" }
+deep-canvas-scene3d = { path = "../deep-canvas-scene3d", optional = true }
 deep-canvas-media = { path = "../deep-canvas-media" }
-deep-canvas-effects = { path = "../deep-canvas-effects" }
-deep-canvas-loop = { path = "../deep-canvas-loop" }
-deep-canvas-physics = { path = "../deep-canvas-physics" }
-deep-physics-rapier = { path = "../deep-physics-rapier" }
-deep-canvas-sandbox = { path = "../deep-canvas-sandbox" }
-deep-logic = { path = "../deep-logic" }
-deep-play = { path = "../deep-play" }
+deep-canvas-effects = { path = "../deep-canvas-effects", optional = true }
+deep-canvas-loop = { path = "../deep-canvas-loop", optional = true }
+deep-canvas-physics = { path = "../deep-canvas-physics", optional = true }
+deep-physics-rapier = { path = "../deep-physics-rapier", optional = true }
+deep-canvas-sandbox = { path = "../deep-canvas-sandbox", optional = true }
+deep-logic = { path = "../deep-logic", optional = true }
+deep-play = { path = "../deep-play", default-features = false }
 deep-marks-raster = { path = "../deep-marks-raster" }
 deep-images = { path = "../deep-images" }
-deep-gpu = { path = "../deep-gpu" }
-deep-scene3d-render = { path = "../deep-scene3d-render" }
+deep-gpu = { path = "../deep-gpu", optional = true }
+deep-scene3d-render = { path = "../deep-scene3d-render", optional = true }
 deep-text = { path = "../deep-text" }
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
 sha2 = "0.10"
+
+# Issue #1490: the player's fixed module sets, each a feature naming the canvas modules it carries
+# and linking only those; scripts/player-wasm.mjs builds every set and the export takes the
+# smallest that holds a document's modules. figure: text, look, marks2d, data, motion and input
+# (a control is the input module's); game2d adds physics and logic on sandbox; full, every module
+# the player carries.
+[features]
+default = ["full"]
+figure = []
+game2d = ["figure", "dep:deep-canvas-physics", "dep:deep-physics-rapier", "dep:deep-canvas-sandbox", "dep:deep-logic", "deep-play/logic"]
+full = ["game2d", "dep:deep-gpu", "dep:deep-canvas-graph", "dep:deep-canvas-record", "dep:deep-canvas-sheet", "dep:deep-canvas-cells", "dep:deep-canvas-vector", "dep:deep-canvas-scene3d", "dep:deep-canvas-effects", "dep:deep-canvas-loop", "dep:deep-scene3d-render", "deep-play/scene3d", "deep-play/cells", "deep-play/vector"]
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 js-sys = "=0.3.106"

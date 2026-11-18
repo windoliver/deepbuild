@@ -172,7 +172,10 @@
       ],
       "margin": 0.5,
       "limits": {},
-      "initialReason": "Issue #319 first measurement: the merge base has the asks core (#318) but no task for it. One process appends 10,000 open asks over 2,000 sessions and loads the inbox projection once, so p50 includes the appends and Node's start and the load's own limit (under 100 ms) stays in tests/acceptance/319/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task."
+      "initialReason": "Issue #319 first measurement: the merge base has the asks core (#318) but no task for it. One process appends 10,000 open asks over 2,000 sessions and loads the inbox projection once, so p50 includes the appends and Node's start and the load's own limit (under 100 ms) stays in tests/acceptance/319/budgets.test.ts; p50 and peak memory get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#2646.0e7e5ac3"
+      ]
     },
     {
       "id": "plan-preview",
@@ -266,7 +269,10 @@
       ],
       "margin": 0.5,
       "limits": {},
-      "initialReason": "Issue #16 first measurement: the merge base has no hub. One process starts the hub on a temp home and leaves it idle for seven seconds, reading its CPU and resident memory; the issue's 0.5% idle CPU and 150 MB with 30 days of history stay in tests/acceptance/16/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+      "initialReason": "Issue #16 first measurement: the merge base has no hub. One process starts the hub on a temp home and leaves it idle for seven seconds, reading its CPU and resident memory; the issue's 0.5% idle CPU and 150 MB with 30 days of history stay in tests/acceptance/16/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#2646.0e7e5ac3"
+      ]
     },
     {
       "id": "hub-stream",
@@ -288,7 +294,10 @@
       ],
       "margin": 0.5,
       "limits": {},
-      "initialReason": "Issue #34 first measurement: the merge base's events.read carries no start ID. One process seeds 30 days of history, about 3,000 events a day, through the record, starts the hub on it and pages the whole log as the app through events.read, so p50 includes the seeding and Node's start; the issue's 300 ms stays in tests/acceptance/34/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+      "initialReason": "Issue #34 first measurement: the merge base's events.read carries no start ID. One process seeds 30 days of history, about 3,000 events a day, through the record, starts the hub on it and pages the whole log as the app through events.read, so p50 includes the seeding and Node's start; the issue's 300 ms stays in tests/acceptance/34/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#2646.0e7e5ac3"
+      ]
     },
     {
       "id": "hub-prompt",
@@ -704,7 +713,10 @@
       ],
       "margin": 0.5,
       "limits": {},
-      "initialReason": "Issue #19 first measurement: the merge base has no deep status. One process seeds a heavy month (20 sessions a day, each with a prompt, a tool call and a finished stop) and 30 live sessions (three with an open ask, three stuck), starts the hub on it and times five deep status runs after a warm-up, failing unless each shows every session that needs you or is stuck within its first 20 lines; p50 includes the seeding and the hub's start. The issue's 200 ms and 100 MB stay in tests/acceptance/19/status/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+      "initialReason": "Issue #19 first measurement: the merge base has no deep status. One process seeds a heavy month (20 sessions a day, each with a prompt, a tool call and a finished stop) and 30 live sessions (three with an open ask, three stuck), starts the hub on it and times five deep status runs after a warm-up, failing unless each shows every session that needs you or is stuck within its first 20 lines; p50 includes the seeding and the hub's start. The issue's 200 ms and 100 MB stay in tests/acceptance/19/status/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#2646.0e7e5ac3"
+      ]
     },
     {
       "id": "deep-doctor",
@@ -1506,7 +1518,8 @@
       "limits": {},
       "initialReason": "Issue #157 first measurement (#157.d2250c69): the merge base reads no delivery back. One `deep-show run` exports a 10 s 1920 × 1080 film at 60 fps (600 frames, a bar moving a pixel a frame) as H.264 with AAC, which now checks the delivery from its own bytes in a fresh decode worker and encodes the colour probe; it prints the receipt's fidelity.decode_seconds (at most 1.25 s, 8x real time) and color_probe.seconds (under 1 s), which tests/acceptance/157/budgets.test.ts judges on a reference Mac. p50 and peak memory get a 50% margin against the merge base once main has this task.",
       "criteria": [
-        "#157.d2250c69"
+        "#157.d2250c69",
+        "#518.b0585e2f"
       ]
     },
     {
@@ -1772,6 +1785,26 @@
       ]
     },
     {
+      "id": "playtest-crawler",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "playtest-crawler"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "crawler_80_runs_s": 300,
+        "legal_added_s": 60,
+        "reach_200_floors_s": 1,
+        "idle_work": 0
+      },
+      "initialReason": "Issue #556 first measurement: the merge base has no grid.reach. On release builds, on two deep-drive replicas, #555's playtest of its crawler (the playtest plug-in's grid.reach kit fixture), 4 bots × 20 runs of 4,000 steps, each run then replayed: crawler_80_runs_s, held to 300 s; rules.legal over those 80 runs: legal_added_s, held to 60 s; grid.reach's own searches over 200 recorded floors (200 descender runs of 2 steps): reach_200_floors_s, held to 1 s; five runs after a warm-up, judged on a reference Mac. idle_work counts the steps at which the crawler played with no play interface and no bot spends other fuel than deep-logic's own bake of it, judged anywhere: a piece with no play interface gains no work.",
+      "criteria": [
+        "#556.eb50d272"
+      ]
+    },
+    {
       "id": "canvas-art-frames",
       "command": [
         "node",
@@ -1903,6 +1936,24 @@
       "margin": 0.5,
       "limits": {},
       "initialReason": "Issue #155 first measurement (#155.3c3c0a49): the merge base has no foley renderer. Every foley@1 preset (90) renders its twelve variants at once, each in its own foley-render@1.0.0 process given the params foley_plan gives on stdin as the hub gives them; p50 is the wall time from the first start to the last exit, Node's starts included. The issue's 30 s limit on the reference Mac and the 32 spawned voices' 10-minute soak stay in tests/acceptance/155/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
+    },
+    {
+      "id": "port-delivery",
+      "command": [
+        "node",
+        "benchmarks/ports.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "port_out_p99_ms": 2,
+        "each16_step_ms": 0.05,
+        "idle_work": 0
+      },
+      "initialReason": "Issue #210 first measurement (#210.91594eec): the merge base has no ports and no each reading. The drum pad with its port open is played for 10 s of virtual time, a note every 50 ms, and each Out carries its delay_ns, from the end of its step's run to its handoff to the plug-in; the sensor piece is baked over 600 steps with 16 values a step and with none, and each step reports its read_ns. The issue's numbers on the reference Mac (a step's entries delivered within 2 ms at p99, 16 values adding under 0.05 ms a step, and no port work in any frame of a piece with no port) are judged in tests/acceptance/210/ac8-budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#210.91594eec"
+      ]
     }
   ]
 }
