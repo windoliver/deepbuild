@@ -561,6 +561,8 @@ byHand.push('tests/acceptance/155/pack.test.ts');
 // reading against the lane's rule.
 alone.push('tests/acceptance/1700/');
 timed.push('tests/acceptance/1700/budgets.test.ts');
+// #1781's files each build deep-show (the full set, or the full set with the test-attrs fixture builder).
+alone.push('tests/acceptance/1781/');
 // #409's files each build deep-show and export films through the GPU; 409-oracle also runs the outside film gate.
 alone.push('tests/acceptance/409/', 'tests/acceptance/409-oracle/');
 // #1163's files each build deep-show; exports.test.ts exports the 600-frame 1080p film six times.
