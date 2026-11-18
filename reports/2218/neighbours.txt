@@ -1,0 +1,133 @@
+The nearest tests of the change's selection, on the merged tree and on main 78307b1c4, 2026-11-17.
+
+The main side is main 78307b1c4 in a worktree of its own: node_modules and the dist of the 33 packages this change
+leaves alone cloned from the merged tree, verdicts, gate and hub built there from main's source, and deep-hook copied
+from the merged tree, since no crate differs. Loads are the machine's 1-minute load on 18 cores.
+
+== The 16 in-process files, each alone, 00:33 to 00:38, load 400 to 530
+Run directly: both of the machine's test grants had been held for over an hour, and the request waited 29 minutes.
+  node node_modules/vitest/vitest.mjs run packages/verdicts/test/verdicts.test.ts packages/gate/test/{claim,checkouts,slot,snapshot-reuse}.test.ts
+    packages/hub/test/{claim-replay,done-reader-fold,gate-runner,spec-checks}.test.ts tests/acceptance/28/{carry,contract,record,reference,rules,runs}.test.ts
+    tests/acceptance/684/engine.test.ts --no-file-parallelism
+
+On the merged tree: 12 files passed, 4 failed; 198 tests passed, 9 failed, each on time:
+  FAIL packages/verdicts/test/verdicts.test.ts › predictions first › ten thousand predictions, each at its own time, on a thousand runs are judged in well under a verdict budget
+       expected 808.746333 to be less than 100
+  FAIL packages/verdicts/test/verdicts.test.ts › a verdict on a workspace › is recorded, and marked stale on drift, through the record
+       Test timed out in 5000ms.
+  FAIL packages/verdicts/test/verdicts.test.ts › recording a verdict › holds a clean count past 65535 within verdict.made's u16 field
+       Test timed out in 5000ms.
+  FAIL packages/verdicts/test/verdicts.test.ts › a check with many missing causes › judges twenty thousand of them in well under a second
+       expected 2439.2778749999998 to be less than 1000
+  FAIL packages/verdicts/test/verdicts.test.ts › runs carried from many earlier commits › four thousand, each on its own commit, are selected in well under a verdict budget
+       expected 181.9546249999985 to be less than 100
+  FAIL packages/verdicts/test/verdicts.test.ts › the perf lane's verdict task › verdict-1000-runs, as budgets.json declares it, runs and exits 0
+       Test timed out in 5000ms.
+  FAIL packages/hub/test/claim-replay.test.ts › a deep_claim right after a late-spooled PostToolUse › is recorded after the replayed call, so the stop keeps the claim: one claim.made, the call before it
+       the hub wasn't ready within 10 s
+  FAIL tests/acceptance/28/reference.test.ts › AC27 the reference agrees with the engine › AC27 on 10,000 seeded generated claims (seed 673644545)
+       Test timed out in 5000ms.
+  FAIL packages/hub/test/done-reader-fold.test.ts › reads the same done spec through the hub for present, missing and malformed files
+       the hub wasn't ready within 10 s
+  198 passed, 9 failed, 0 skipped; report ends whole
+
+The four failed files on main 78307b1c4, the same command, 00:40, load 460:
+  FAIL packages/verdicts/test/verdicts.test.ts › a check with many missing causes › judges twenty thousand of them in well under a second
+       expected 1053.497166000001 to be less than 1000
+  FAIL packages/verdicts/test/verdicts.test.ts › selecting reruns on a wide change › ten checks and a thousand changed paths take well under a verdict budget
+       expected 429.56033399999797 to be less than 200
+  FAIL packages/verdicts/test/verdicts.test.ts › the perf lane's verdict task › verdict-1000-runs, as budgets.json declares it, runs and exits 0
+       Test timed out in 5000ms.
+  FAIL packages/hub/test/claim-replay.test.ts › a deep_claim right after a late-spooled PostToolUse › is recorded after the replayed call, so the stop keeps the claim: one claim.made, the call before it
+       {"code":"unavailable","retryable":true,"remediation":"The DeepBuild hub is unreachable (no answer on its socket); nothing was recorded. Call again once it is back.","path":"","actual":"","evidence":[]}: expected true to be false // Object.is equality
+  FAIL tests/acceptance/28/reference.test.ts › AC27 the reference agrees with the engine › AC27 on 10,000 seeded generated claims (seed 673644545)
+       Test timed out in 5000ms.
+  FAIL packages/hub/test/done-reader-fold.test.ts › reads the same done spec through the hub for present, missing and malformed files
+       expected 'unavailable' to be 'enum' // Object.is equality
+  82 passed, 6 failed, 0 skipped; report ends whole
+
+The four failed files on the merged tree again with --testTimeout=180000 in place of vitest's 5 s, 00:42, load 400.
+This shows what the tests say apart from their time; it is not a pass of the files as they stand. #28's reference
+agrees with the engine on its 10,000 generated claims, and the three other 5 s timeouts pass:
+  FAIL packages/verdicts/test/verdicts.test.ts › predictions first › ten thousand predictions, each at its own time, on a thousand runs are judged in well under a verdict budget
+       expected 429.82554200000004 to be less than 100
+  FAIL packages/verdicts/test/verdicts.test.ts › a check with many missing causes › judges twenty thousand of them in well under a second
+       expected 1330.425292 to be less than 1000
+  FAIL packages/verdicts/test/verdicts.test.ts › selecting reruns on a wide change › ten checks and a thousand changed paths take well under a verdict budget
+       expected 1329.7894159999996 to be less than 200
+  FAIL packages/verdicts/test/verdicts.test.ts › runs carried from many earlier commits › four thousand, each on its own commit, are selected in well under a verdict budget
+       expected 751.5211670000008 to be less than 100
+  FAIL packages/hub/test/claim-replay.test.ts › a deep_claim right after a late-spooled PostToolUse › is recorded after the replayed call, so the stop keeps the claim: one claim.made, the call before it
+       {"code":"unavailable","retryable":true,"remediation":"The DeepBuild hub is unreachable (no answer on its socket); nothing was recorded. Call again once it is back.","path":"","actual":"","evidence":[]}: expected true to be false // Object.is equality
+  FAIL packages/hub/test/done-reader-fold.test.ts › reads the same done spec through the hub for present, missing and malformed files
+       expected 'unavailable' to be 'enum' // Object.is equality
+  82 passed, 6 failed, 0 skipped; report ends whole
+   ✓ tests/acceptance/28/reference.test.ts > AC27 the reference agrees with the engine > AC27 on 10,000 seeded generated claims (seed 673644545) 26042ms
+   ✓ packages/verdicts/test/verdicts.test.ts > a verdict on a workspace > is recorded, and marked stale on drift, through the record 903ms
+   ✓ packages/verdicts/test/verdicts.test.ts > recording a verdict > holds a clean count past 65535 within verdict.made's u16 field 6145ms
+   ✓ packages/verdicts/test/verdicts.test.ts > the perf lane's verdict task > verdict-1000-runs, as budgets.json declares it, runs and exits 0 15102ms
+
+== The files that start hubs, each alone, under one test grant, 00:58 to 01:53, load 240 to 610
+
+The hub's two unit files that found no hub above, once more turn about, 01:39, load 265 to 275:
+  main:        claim-replay.test.ts and done-reader-fold.test.ts, 2 passed
+  merged tree: the same, 2 passed
+Each has a fail and a pass on both sides.
+
+#2065's two stalled-claim tests, main and the merged tree turn about, 6 repetitions a side, 01:10 to 01:28:
+  node node_modules/vitest/vitest.mjs run tests/acceptance/2065/restart.test.ts -t 'AC1 #2065|AC2 #2065' --no-file-parallelism
+  === main, repetition 1 at 01:10:20, load 517.32 521.91 482.31
+        Tests  2 passed | 5 skipped (7)
+  === merged tree, repetition 1 at 01:13:53, load 432.31 482.72 474.83
+   × tests/acceptance/2065/restart.test.ts > AC2 #2065.5b02fc15 accept after restart permits gh pr create saying Closes and still permits it after a second restart 66375ms
+  ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+  AssertionError: AC2 #2065.5b02fc15 setup: both real checks failed for task:item206502: [{"v":1,"id":"01M7MCNQSBNDW6J15T943HHQNX","kind":"verdict.made","writer":"core","actor":"you","scope":"you","ts":1794906971947,"log_pos":123,"data":{"outcome":"FAIL","verdic
+        Tests  1 failed | 1 passed | 5 skipped (7)
+  === main, repetition 2 at 01:16:35, load 426.44 454.07 464.23
+   × tests/acceptance/2065/restart.test.ts > AC1 #2065.d984fab2 stalled claim's ask answered split after a hub restart records one issue.drafted listing the open items 65240ms
+  ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+  AssertionError: AC1 #2065.d984fab2 setup: one real stalled-claim ask for task:item206501: expected +0 to be 1 // Object.is equality
+        Tests  1 failed | 1 passed | 5 skipped (7)
+  === merged tree, repetition 2 at 01:18:56, load 528.64 479.81 472.76
+        Tests  2 passed | 5 skipped (7)
+  === main, repetition 3 at 01:20:21, load 497.74 480.95 473.86
+        Tests  2 passed | 5 skipped (7)
+  === merged tree, repetition 3 at 01:21:37, load 449.51 472.56 471.47
+        Tests  2 passed | 5 skipped (7)
+  === main, repetition 4 at 01:22:30, load 418.08 460.68 467.16
+        Tests  2 passed | 5 skipped (7)
+  === merged tree, repetition 4 at 01:23:30, load 394.60 445.43 460.96
+        Tests  2 passed | 5 skipped (7)
+  === main, repetition 5 at 01:24:39, load 379.91 432.43 454.94
+        Tests  2 passed | 5 skipped (7)
+  === merged tree, repetition 5 at 01:25:35, load 368.97 418.83 448.37
+        Tests  2 passed | 5 skipped (7)
+  === main, repetition 6 at 01:26:29, load 368.85 409.79 443.12
+        Tests  2 passed | 5 skipped (7)
+  === merged tree, repetition 6 at 01:27:26, load 369.32 401.78 437.97
+        Tests  2 passed | 5 skipped (7)
+  main: 11 passed, 1 failed in its setup. Merged tree: 11 passed, 1 failed in its setup.
+  "one real stalled-claim ask: expected +0 to be 1" is what the change's runs gave twice in 18 before the merge.
+  Main gives it here without the change.
+
+#1018's hub file, 01:28 on the merged tree and 01:40 on main, load 240 to 370:
+  node node_modules/vitest/vitest.mjs run tests/acceptance/1018/hub.test.ts --no-file-parallelism
+  merged tree: 9 passed, 1 failed. main: 9 passed, 1 failed, the same test for the same reasons.
+   × tests/acceptance/1018/hub.test.ts > AC1 #1018.a7bf0857 one base run serves five sessions: five worktrees from one commit claim a fix whose base run takes 60 s, one base run runs and four read it as carried, all five verdicts within 70 s of the las
+   ✓ tests/acceptance/1018/hub.test.ts > AC1 #1018.a7bf0857 one base run serves five sessions: five worktrees from one commit claim a fix whose base run takes 60 s, one base run runs and four read it as carried, all five verdicts within 70 s of the las
+   ✓ tests/acceptance/1018/hub.test.ts > AC2 #1018.ce3898ef carry follows read files: two claims differing only in src/cart.ts share every check whose inputs leave it out, and each runs its own journey:checkout, which reads it > AC2 the second claim re
+   ✓ tests/acceptance/1018/hub.test.ts > AC2 #1018.ce3898ef carry follows read files: two claims differing only in src/cart.ts share every check whose inputs leave it out, and each runs its own journey:checkout, which reads it > AC2 (wrong program key-
+   ✓ tests/acceptance/1018/hub.test.ts > AC3 #1018.13494a7e runs are counted once: a check that needs 3 clean runs reaches PASS in a second session only once 3 distinct runs exist on its key > AC3 three sessions claim one after another: each later clai
+   ✓ tests/acceptance/1018/hub.test.ts > AC3 #1018.13494a7e runs are counted once: a check that needs 3 clean runs reaches PASS in a second session only once 3 distinct runs exist on its key > AC3 (wrong program counts-shared-run-per-claim) a counter t
+   ✓ tests/acceptance/1018/hub.test.ts > AC4 #1018.9f44c904 flakes are seen across sessions: a key with a PASS from session A and a FAIL from session B reads INCONCLUSIVE in both claims, naming both runs > AC4 a run passes before the flip and one fails
+   ✓ tests/acceptance/1018/hub.test.ts > AC4 #1018.9f44c904 flakes are seen across sessions: a key with a PASS from session A and a FAIL from session B reads INCONCLUSIVE in both claims, naming both runs > AC4 (wrong program keeps-latest-result-per-key
+   ✓ tests/acceptance/1018/hub.test.ts > AC5 #1018.681b96a8 held-out variants stay hidden: a variant run for session A's claim carries its verdict to session B's claim on the same key, and neither session's tool output, evidence or verdict line holds t
+   ✓ tests/acceptance/1018/hub.test.ts > AC5 #1018.681b96a8 held-out variants stay hidden: a variant run for session A's claim carries its verdict to session B's claim on the same key, and neither session's tool output, evidence or verdict line holds t
+  The one failure, on the merged tree and then on main:
+  FAIL tests/acceptance/1018/hub.test.ts › AC1 #1018.a7bf0857 one base run serves five sessions: five worktrees from one commit claim a fix whose base run takes 60 s, one base run runs and four read it as carried, all five verdicts within 70 s of the last claim › AC1 five sessions each claim the fix: one base run runs, four claims read it as carried naming it, all PASS within 70 s of the last claim
+       claim:01M7MDCJPPS3SE4C1TQM8N23GX's verdict must land as PASS, its base run proving the fix: claims [{"tree":"w1","claim":"claim:01M7MDCJPPS3SE4C1TQM8N23GX","outcome":"INCONCLUSIVE","verdicts":[{"outcome":"INCONCLUSIVE","reasons":["req:sessione256fdf464cd47699d76d6a99130cd1c0#R1 is covered at depth unit only by the agent's own checks: approve .deepbuild/checks/cart-discount.sh",".deepbuild/checks/cart-discount.sh: runs still to come",".deepbuild/checks/cart-discount.sh counts as the agent's own: the claim changed test/cart.test.ts, which it loads"],"ts":1794907780413},{"outcome":"INCONCLUSIVE",
+       claim:01M7ME3A2WAM5RQ1JRKPKSTWBE's verdict must land as PASS, its base run proving the fix: claims [{"tree":"w1","claim":"claim:01M7ME3A2WAM5RQ1JRKPKSTWBE","outcome":"INCONCLUSIVE","verdicts":[{"outcome":"INCONCLUSIVE","reasons":["req:sessionc575a2ba6a5f4ab68d74506a1cd8e08e0#R1 is covered at depth unit only by the agent's own checks: approve .deepbuild/checks/cart-discount.sh",".deepbuild/checks/cart-discount.sh: runs still to come",".deepbuild/checks/cart-discount.sh counts as the agent's own: the claim changed test/cart.test.ts, which it loads"],"ts":1794908525283},{"outcome":"INCONCLUSIVE",
+
+#684's lane file, 01:39 on the merged tree and 01:52 on main, load 260 to 290:
+  merged tree: 4 passed, 1 failed, "Test timed out in 5000ms" (AC8 without the pinned toolchain). main: the same.
+  merged tree with --testTimeout=180000: 5 passed.

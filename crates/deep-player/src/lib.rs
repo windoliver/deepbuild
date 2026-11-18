@@ -5,7 +5,7 @@
 pub mod play;
 pub mod seal;
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_arch = "wasm32", feature = "full"))]
 mod cxx;
 #[cfg(target_arch = "wasm32")]
 mod draw;

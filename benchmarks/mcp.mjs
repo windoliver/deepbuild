@@ -4,7 +4,9 @@
 // process, and starts `deep mcp` as this process's child, so the hub binds it to that session. It times 40 deep_status
 // and 40 deep_open_item calls and 20 deep_search calls over the month after a warm-up, failing on any error, and prints
 // the p95s and deep mcp's resident memory as one JSON line. The issue's limits stay in
-// tests/acceptance/26/budgets.test.ts. It stops only the processes it started, by PID.
+// tests/acceptance/26/budgets.test.ts. Beside them go deep mcp's own instructions over the timed round, its peak
+// footprint, an empty Node program's instructions from that round, and the modules deep mcp loads (#2698, by
+// process-reader.mjs). It stops only the processes it started, by PID.
 import { execFileSync, spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
@@ -13,6 +15,7 @@ import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import { openRecord } from '../packages/record/dist/index.js';
+import { loadedModules, readCommand, startReading, unread } from './process-reader.mjs';
 
 const CLI = fileURLToPath(new URL('../packages/cli/dist/main.js', import.meta.url));
 const DAY = 86_400_000;
@@ -77,22 +80,27 @@ try {
   hook('UserPromptSubmit', { prompt: 'fix the ledger' });
   hook('PreToolUse', { tool_name: 'Bash', tool_input: { command: 'ls' }, tool_use_id: `toolu_${randomUUID()}` });
 
-  const mcp = spawn(process.execPath, [CLI, 'mcp'], { cwd: worktree, env, stdio: ['pipe', 'pipe', 'inherit'] });
-  started.push(mcp);
-  const waiting = new Map();
-  createInterface({ input: mcp.stdout }).on('line', (raw) => { const m = JSON.parse(raw); waiting.get(m.id)?.(m); waiting.delete(m.id); });
-  let ids = 0;
-  const request = (method, params) => new Promise((resolve) => { const id = ++ids; waiting.set(id, resolve); mcp.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`); });
-  const call = async (name, args) => {
-    const t0 = performance.now();
-    const reply = await request('tools/call', { name, arguments: args });
-    const ms = performance.now() - t0;
-    if (!reply.result || reply.result.isError) throw Error(`${name} failed: ${JSON.stringify(reply).slice(0, 500)}`);
-    return { ms, value: reply.result.structuredContent };
+  // A `deep mcp` of this process's own, initialized and bound to the session: `node` goes before its entry.
+  const open = async (node = [], added = {}) => {
+    const mcp = spawn(process.execPath, [...node, CLI, 'mcp'], { cwd: worktree, env: { ...env, ...added }, stdio: ['pipe', 'pipe', 'inherit'] });
+    started.push(mcp);
+    const waiting = new Map();
+    createInterface({ input: mcp.stdout }).on('line', (raw) => { const m = JSON.parse(raw); waiting.get(m.id)?.(m); waiting.delete(m.id); });
+    let ids = 0;
+    const request = (method, params) => new Promise((resolve) => { const id = ++ids; waiting.set(id, resolve); mcp.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`); });
+    const call = async (name, args) => {
+      const t0 = performance.now();
+      const reply = await request('tools/call', { name, arguments: args });
+      const ms = performance.now() - t0;
+      if (!reply.result || reply.result.isError) throw Error(`${name} failed: ${JSON.stringify(reply).slice(0, 500)}`);
+      return { ms, value: reply.result.structuredContent };
+    };
+    await request('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'bench', version: '0' } });
+    const bound = (await call('deep_status', {})).value.session;
+    if (bound !== session) throw Error(`deep mcp bound to ${bound}, not the session ${session}`);
+    return { mcp, call };
   };
-  await request('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'bench', version: '0' } });
-  const bound = (await call('deep_status', {})).value.session;
-  if (bound !== session) throw Error(`deep mcp bound to ${bound}, not the session ${session}`);
+  const { mcp, call } = await open();
   const round = async () => {
     const status = [];
     const items = [];
@@ -109,9 +117,21 @@ try {
     return { status: p95(status), item: p95(items), search: p95(searches) };
   };
   await round();
+  const reading = startReading(mcp.pid);
   const r = await round();
+  // deep mcp's own process over the timed round, and an empty Node program run to its end in the same round (#2698).
+  const own = reading.stop().processes[0];
+  writeFileSync(join(dir, 'empty.mjs'), '');
+  const empty = await readCommand(process.execPath, [join(dir, 'empty.mjs')], { env });
   const rssMb = Number(execFileSync('ps', ['-o', 'rss=', '-p', String(mcp.pid)], { encoding: 'utf8' }).trim()) / 1024;
-  console.log(JSON.stringify({ statusP95Ms: r.status, openItemP95Ms: r.item, searchP95Ms: r.search, mcpRssMb: rssMb }));
+  // What it loads, from a second deep mcp that answers one call of each kind under the load hook.
+  const modules = await loadedModules(async (node, added) => {
+    const listed = await open(node, added);
+    await listed.call('deep_open_item', { text: 'bench item' });
+    await listed.call('deep_search', { query: 'ledger' });
+  });
+  console.log(JSON.stringify({ statusP95Ms: r.status, openItemP95Ms: r.item, searchP95Ms: r.search, mcpRssMb: rssMb, instructions: [own.instructions], emptyInstructions: [empty.instructions], peakFootprintBytes: own.peakFootprintBytes, modules,
+    ...unread({ "deep mcp's instructions": own.instructions, "an empty Node program's instructions": empty.instructions, "deep mcp's peak footprint": own.peakFootprintBytes }) }));
 } finally {
   for (const child of started.reverse()) {
     child.kill('SIGTERM');

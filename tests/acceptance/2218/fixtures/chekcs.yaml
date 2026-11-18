@@ -1,0 +1,18 @@
+# The shop's definition of done (fixture for #2218 AC4).
+# One block at the top of this file is misspelled, so no reader takes it.
+# The tests read that block's line from this file: nothing below may
+# move without them, and nothing above the block names it.
+claims:
+  done:
+    checks: [suite]
+checks:
+  suite:
+    type: command
+    run: "node --test tests/suite.js"
+    deadline: 30m
+# A second set of checks, under a name the hub has no reader for.
+# Its check would pass if it ran.
+chekcs:
+  lint:
+    type: command
+    run: "node --test tests/suite.js"

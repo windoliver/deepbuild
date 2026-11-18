@@ -43,6 +43,9 @@ pub enum Plant {
     EntryOnChange,
     /// The explorer and the descender walk as if the grid had no links (#1048 criterion 4).
     IgnoresLinks,
+    /// A play under `piece_seed: run` keeps the document's seed, so every run generates the same floors (#556
+    /// criterion 3).
+    KeepsDocumentSeed,
 }
 
 impl Plant {
@@ -63,6 +66,7 @@ impl Plant {
             "drops-first-bot-entry" => Some(Plant::DropsFirstBotEntry),
             "entry-on-change" => Some(Plant::EntryOnChange),
             "explorer-ignores-links" => Some(Plant::IgnoresLinks),
+            "keeps-document-seed" => Some(Plant::KeepsDocumentSeed),
             _ => None,
         }
     }

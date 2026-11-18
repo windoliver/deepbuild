@@ -227,8 +227,10 @@ impl Hub<'_> {
     pub(crate) fn drawing_form(&self, document: &Value) -> (Value, Vec<Expansion>) {
         let result = check_packed(document, &self.startup.sealed, &self.packs);
         let skipped = crate::verdict::unknown_items(&result.notices);
-        let form =
+        let mut form =
             crate::verdict::without(&crate::packs::drawn(document, &result.expansions), &skipped);
+        // #192: each provider's output by its hash, never the provider.
+        self.sandbox.fill(&self.startup.sealed, &mut form);
         (form, result.expansions)
     }
 
