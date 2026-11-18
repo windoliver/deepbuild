@@ -21,4 +21,4 @@ At the later heads, after merging main:
 - `main-comparison-444c638cd.txt`: the affected run at 444c638cd and each of its new failures checked at main 0f34aacbe.
 - `linux-8f2e51904.txt`, `unit-tests-8f2e51904.txt`, `final-8f2e51904/` (Mac): 8f2e51904, main 79bf7e203 merged. Mac 11/13: the #2690 line, and count.test.ts's replica read at log_pos 39 where `deep status --json` said 35.
 - `mac-log-pos-probe-8f2e51904.txt`: why 39 and 35 can differ. About 10 s after the status question, the hub writes 4 events (two `delivery.outcome` stalled, two `session.reading`) because the fixture's answers never reach an agent. When they land between the test's `deep status --json` read and the replica's copy of the record, the two log positions differ by 4. That code is main's (since 953b1dc40, 2026-11-10); this PR doesn't touch it.
-
+- `linux-8a2a8a745.txt`: after the owner dropped the #2690 entry from `scripts/known-failures.json` (2026-11-18): the guard passes, and #1115's failures test passes 3/3.
