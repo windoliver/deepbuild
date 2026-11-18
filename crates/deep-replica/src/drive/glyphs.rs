@@ -36,6 +36,9 @@ struct Seen {
     weights: HashMap<FontId, f32>,
     /// Every line shaped so far, by its glyphs but its whitespace's, with the text it spells.
     lines: HashMap<Vec<GlyphKey>, String>,
+    /// The same lines by their glyphs in no order (#1808): a mark painted where the glyph it sits on starts may sort
+    /// either side of it, which a right-to-left line's marks do.
+    bags: HashMap<Vec<GlyphKey>, String>,
     /// The glyphs shaped for whitespace, which some fonts paint as a speck and others not at all.
     blank: HashSet<GlyphKey>,
     /// The last frame's glyph sprites: the tile, the bounds and the clip, in device pixels.
@@ -100,18 +103,54 @@ impl Glyphs {
                 .or_default()
                 .push((pen[0], *key, *sprite));
         }
+        // A mark shaped off its line's baseline, as Arabic's are, paints up to about half an em from it (#1808): under one
+        // clip, a row within half an em of a larger row is that row's. Lines under one clip are a line's height apart.
+        let scale = seen.scale.unwrap_or(2.);
+        let mut clips: BTreeMap<[i32; 4], Vec<(i32, Vec<(f32, GlyphKey, Sprite)>)>> =
+            BTreeMap::new();
+        for ((clip, y), glyphs) in rows {
+            clips.entry(clip).or_default().push((y, glyphs));
+        }
+        let mut lines: Vec<Vec<(f32, GlyphKey, Sprite)>> = Vec::new();
+        for (_, mut rows) in clips {
+            rows.sort_by_key(|(y, glyphs)| (std::cmp::Reverse(glyphs.len()), *y));
+            let mut anchors: Vec<(i32, f32, Vec<(f32, GlyphKey, Sprite)>)> = Vec::new();
+            for (y, glyphs) in rows {
+                let em = glyphs
+                    .iter()
+                    .filter_map(|(_, _, sprite)| sizes.get(&sprite.tile))
+                    .fold(0f32, |em, size| em.max(size * scale));
+                let near = anchors
+                    .iter_mut()
+                    .filter(|(at, em_at, _)| ((at - y).abs() as f32) <= em.max(*em_at) / 2.)
+                    .min_by_key(|(at, ..)| (at - y).abs());
+                match near {
+                    Some((.., on)) => on.extend(glyphs),
+                    None => anchors.push((y, em, glyphs)),
+                }
+            }
+            lines.extend(anchors.into_iter().map(|(.., glyphs)| glyphs));
+        }
         let mut runs = Vec::new();
-        for row in rows.values_mut() {
+        for row in &mut lines {
             row.sort_by(|a, b| a.0.total_cmp(&b.0));
             let glyphs: Vec<(GlyphKey, Sprite)> =
                 row.iter().map(|(_, key, sprite)| (*key, *sprite)).collect();
             let mut at = 0;
             while at < glyphs.len() {
-                // The longest shaped line that spells the glyphs from here on.
-                let found = (at + 1..=glyphs.len()).rev().find_map(|end| {
-                    let key: Vec<GlyphKey> = glyphs[at..end].iter().map(|(k, _)| *k).collect();
-                    seen.lines.get(&key).map(|text| (end, text.clone()))
-                });
+                // The longest shaped line that spells the glyphs from here on, in their order, else in any.
+                let found = (at + 1..=glyphs.len())
+                    .rev()
+                    .find_map(|end| {
+                        let key: Vec<GlyphKey> = glyphs[at..end].iter().map(|(k, _)| *k).collect();
+                        seen.lines.get(&key).map(|text| (end, text.clone()))
+                    })
+                    .or_else(|| {
+                        (at + 1..=glyphs.len()).rev().find_map(|end| {
+                            let bag = bag(glyphs[at..end].iter().map(|(k, _)| *k).collect());
+                            seen.bags.get(&bag).map(|text| (end, text.clone()))
+                        })
+                    });
                 // GPUI paints no glyph wholly past a clip, so a line that runs past one spells only its start.
                 let cut = found
                     .is_none()
@@ -173,6 +212,12 @@ impl Glyphs {
             seen: self.clone(),
         })
     }
+}
+
+/// Glyphs in no order: sorted by font and glyph.
+fn bag(mut keys: Vec<GlyphKey>) -> Vec<GlyphKey> {
+    keys.sort_by_key(|(font, glyph)| (font.0, glyph.0));
+    keys
 }
 
 fn run(text: String, glyphs: &[(GlyphKey, Sprite)]) -> Run {
@@ -297,11 +342,16 @@ impl PlatformTextSystem for TextSystem {
                 if text[glyph.index..].starts_with(char::is_whitespace) {
                     seen.blank.insert((run.font_id, glyph.id));
                 } else {
-                    painted.push((run.font_id, glyph.id));
+                    painted.push((f32::from(glyph.position.x), (run.font_id, glyph.id)));
                 }
             }
         }
+        // A line is matched by its glyphs as they're painted, left to right, which a right-to-left line's runs and glyphs
+        // aren't stored in; its text stays as it's stored (#1808).
+        painted.sort_by(|a, b| a.0.total_cmp(&b.0));
+        let painted: Vec<GlyphKey> = painted.into_iter().map(|(_, key)| key).collect();
         if !painted.is_empty() {
+            seen.bags.insert(bag(painted.clone()), text.to_owned());
             seen.lines.insert(painted, text.to_owned());
         }
         drop(seen);

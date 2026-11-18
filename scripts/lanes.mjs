@@ -51,7 +51,7 @@ export const alone = ['tests/acceptance/149/', 'tests/acceptance/1523/', 'tests/
   ...['wake', 'repeat', 'waits', 'budgets'].map((f) => `tests/acceptance/27/${f}.test.ts`), 'tests/acceptance/27/outcomes-redraft/', 'tests/acceptance/27/desktop-redraft-2/', 'tests/acceptance/124/', 'tests/acceptance/906/', 'packages/hub/test/drive.test.ts',
   'tests/acceptance/990/',
   'tests/acceptance/140/gpu/', 'tests/acceptance/140/view/', 'tests/acceptance/140/platform/', 'tests/acceptance/309/', 'tests/acceptance/385/', 'tests/acceptance/874/redraft/',
-  ...['cycles', 'planted', 'leftovers', 'sessions/readings', 'sessions/planted'].map((f) => `tests/acceptance/824/${f}.test.ts`), 'tests/acceptance/1285/', 'tests/acceptance/1294/', 'tests/acceptance/1507/', 'tests/acceptance/1998/', 'tests/acceptance/1999/', 'tests/acceptance/1848/'];
+  ...['cycles', 'planted', 'leftovers', 'sessions/readings', 'sessions/planted'].map((f) => `tests/acceptance/824/${f}.test.ts`), 'tests/acceptance/1285/', 'tests/acceptance/1294/', 'tests/acceptance/1507/', 'tests/acceptance/1998/', 'tests/acceptance/1999/', 'tests/acceptance/1848/', 'tests/acceptance/2653/'];
 /**
  * Files whose recorded run takes over two minutes on this machine, by the fastest run each that vitest's results caches
  * in the worktrees and affected.mjs's node --test reports held on 2026-11-07. affected.mjs runs them with --slow and for
@@ -96,7 +96,8 @@ export const slow = [
   'tests/acceptance/910/ac1-issue-link.test.mjs', 'tests/acceptance/910/ac2-renamed-heading.test.mjs',
   'tests/acceptance/910/ac3-offline.test.mjs', 'tests/acceptance/965/background.test.ts',
   'tests/acceptance/965/grace.test.ts', 'tests/acceptance/965/starts.test.ts', 'tests/acceptance/992/agree.test.ts',
-  'tests/live-instancers.test.ts', 'tests/scene3d-interface.test.ts'
+  'tests/live-instancers.test.ts', 'tests/scene3d-interface.test.ts',
+  ...['held', 'judged', 'restart', 'plants', 'heap'].map((f) => `tests/acceptance/2653/${f}.test.ts`),
 ];
 /**
  * Folders and files the alone block runs with nothing beside them, not even another shard: #16's and #315's files start
@@ -235,6 +236,10 @@ alone.push('tests/acceptance/533/');
 alone.push('tests/acceptance/1434/');
 byHand.push('tests/acceptance/1434/ac6-idle.live.test.ts', 'tests/acceptance/1434/ac7-budgets.live.test.ts', 'tests/acceptance/1434/ac8-snapshots.live.test.ts');
 timed.push('tests/acceptance/1434/ac7-budgets.live.test.ts');
+// #1482's files build deep-drive and start replicas (the debug build with the planted programs, the release one with
+// the frame clocks); its bench file times them.
+alone.push('tests/acceptance/1482/');
+timed.push('tests/acceptance/1482/bench.test.ts');
 // #177: deep-gpu with test-meter and the hdr-fixture app build; the live legs open the app on the XDR display.
 alone.push('tests/acceptance/177/');
 alone.push('tests/acceptance/177-redraft-ac3/');
@@ -321,6 +326,11 @@ alone.push('tests/acceptance/416/interfaces/');
 // #1477's suite opens real windows and times them against the lane's rule: one file at a time, both files timed.
 alone.push('tests/acceptance/1477/');
 timed.push('tests/acceptance/1477/record.test.ts', 'tests/acceptance/1477/built.test.ts', 'tests/acceptance/1477/redraft/record.test.ts');
+// #2569's files run #1477's bench in real windows, cover one and hold it to wall-clock deadlines; main.test.ts runs
+// #1477's three timed files through affected.mjs, well over two minutes.
+alone.push('tests/acceptance/2569/');
+timed.push('tests/acceptance/2569/deadline.test.ts', 'tests/acceptance/2569/outlives.test.ts', 'tests/acceptance/2569/main.test.ts');
+slow.push('tests/acceptance/2569/main.test.ts');
 // #1718's files build deep-show and deep-hook, start hubs and lay out an installed tree.
 alone.push('tests/acceptance/1718/');
 // #1637's files build deep-gpu and draw a city of 120,000 solids on Metal; its budget runs as a timed file.
@@ -762,6 +772,14 @@ alone.push('tests/acceptance/225-redraft-ac5/');
 byHand.push('tests/acceptance/225/ac5-lorenz-two-machines.test.ts');
 // #172's files each build deep-show (full; the refusals also full,test-web-lacks) and drive headless Chrome with WebGPU on.
 alone.push('tests/acceptance/172/', 'tests/acceptance/172-oracle/');
+// #549's files each build deep-show (one, three feature sets) and the shipped relay, start relays and headless Chrome,
+// and play live matches in real time.
+alone.push('tests/acceptance/549/', 'tests/acceptance/549-oracle/');
+// #549's first-draft third-connection test gives two of its third connections one ID, so the shipped relay seats them
+// as a match of their own and sends each its start (tests/acceptance/549/DISPUTE.md); on the owner's ruling its blind
+// redraft runs in its place, and the first draft's file, with its other three tests, runs by hand.
+alone.push('tests/acceptance/549-redraft-ac2/');
+byHand.push('tests/acceptance/549/ac2-join-only.test.ts');
 timed.push('tests/acceptance/172/budgets.test.ts', 'tests/acceptance/172/images.test.ts');
 // #172's first-draft refusal test shows a device control without the role the document check requires, so that piece is
 // never presented and its export can't refuse it by name (tests/acceptance/172/DISPUTE.md); its blind redraft runs in its
@@ -856,6 +874,10 @@ timed.push('tests/acceptance/556/ac05-budgets.test.ts');
 // #556's criterion 5, redrafted blind: it starts replicas and hubs and times release replicas against judgeLimit.
 alone.push('tests/acceptance/556-redraft-ac5/');
 timed.push('tests/acceptance/556-redraft-ac5/ac5-budgets.test.ts');
+// #1808's files build deep-drive plain and with env-plants, start real hubs and replicas over 700 rows; its kept file
+// opens the real app's window with Accessibility, and its shown file takes pictures and waits on your taste call, by hand.
+alone.push('tests/acceptance/1808/');
+byHand.push('tests/acceptance/1808/shown.test.ts');
 // #458's pairs, relations and views files each build deep-show or deep-gpu and hold the GPU; its suite files run scripts only.
 alone.push('tests/acceptance/458/pairs/', 'tests/acceptance/458/relations/', 'tests/acceptance/458/views/');
 // #192's dungeon files build deep-show and deep-sandbox, and ac05 also deep-sandbox for Linux x86_64 in Docker.
@@ -949,6 +971,20 @@ timed.push('tests/acceptance/568-redraft-1830/judge.test.mjs', 'tests/acceptance
 // horizon's 0.1 ms at 1080p on the reference Mac.
 alone.push('tests/acceptance/1381/');
 timed.push('tests/acceptance/1381/ac6-budget.test.ts');
+
+// #1831's deep-show and canvas files build deep-show and deep-gpu (canvas.test.mjs the release deep-show too, and it
+// runs the cost bench on the GPU twice), and its harness file starts the agent harness's sessions.
+alone.push('tests/acceptance/1831/');
+
+// #2652's files each start real hubs and read their heaps through the inspector; AC4 runs #1018's hub suite whole.
+alone.push('tests/acceptance/2652/');
+
+// #2650's files read a hub's memory through the churn benchmark, or start sandboxed plug-ins and 10,000 agent jobs, so
+// they run one at a time, by name: budgets.long runs the benchmark's 5,000 cycles beside the merge base's on a
+// reference Mac, by hand, gated by environmentProblem().
+alone.push(...['cycles', 'planted-answers', 'planted-results', 'planted-jobs', 'planted-names', 'retries', 'jobs', 'replay'].map((f) => `tests/acceptance/2650/${f}.test.ts`));
+byHand.push('tests/acceptance/2650/budgets.long.test.ts');
+timed.push('tests/acceptance/2650/budgets.long.test.ts');
 
 // #1812's files (blind) start hubs in throwaway homes, through setup and the login service stand-in or deep hub run.
 alone.push('tests/acceptance/1812/');

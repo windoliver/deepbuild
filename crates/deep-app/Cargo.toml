@@ -141,6 +141,10 @@ sha2 = "0.10"
 ed25519-dalek = "3"
 # Issue #883: a notification gives the default's time as a clock time in your time zone (the version gpui already uses).
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
+# Issue #1808: a row's title reads in the direction of its first strong character, and one cut short ends at a whole
+# character (the versions already in the tree).
+unicode-bidi = "0.3"
+unicode-segmentation = "1"
 
 # The menu-bar count: gpui-kit has no status item. Versions already in gpui's tree.
 # Issue #339 adds the screen-capture access calls and the HID table reads (objc2-core-graphics); its cursor window

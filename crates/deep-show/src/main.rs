@@ -655,7 +655,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "terrain_rays" => return terrain::parse(c).map(|r| Call::TerrainRays(Box::new(r))),
         "physics_bake" => return physics::parse(c).map(|b| Call::PhysicsBake(Box::new(b))),
         "world" => return points::parse_world(c).map(|(doc, world)| Call::World { doc, world }),
-        "match" => return points::parse_match(c).map(|(doc, steps)| Call::Match { doc, steps }),
+        "match" | "play_match" | "sockets" => return net::parse(name, c),
         "packs" => return Some(Call::Packs),
         "install_pack" => {
             return Some(Call::InstallPack {
@@ -1350,6 +1350,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 || *p == deep_canvas_motion::held::FLIP_HOLDS_LAST
                 // #223's in the marks2d module's warp.
                 || deep_canvas_marks::warp::PLANTED.contains(p)
+                || deep_net::Planted::named(p).is_some()
                 // #225's in the data module's integrator.
                 || *p == deep_canvas_marks::vector_field::PLANTED_EULER
                 // #548's deep_query region map that lays the reads out by name.
@@ -1763,6 +1764,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         panels,
         docs,
         docs_for,
+        net: net::given(input)?,
         record,
         runs,
         claims,
@@ -2167,9 +2169,7 @@ fn modules(set: BuildSet) -> Vec<Module> {
             deep_canvas_input::module::module(),
             deep_canvas_export::module::module(),
         ]);
-        out.extend(physics::module());
-        // #540: the net module's `net@1`, as far as a lockstep match's point entries need it.
-        out.push(net::module());
+        out.extend(physics::module().into_iter().chain(net::module()));
     }
     // Issue #238: the sandbox module, on core alone; `test-sandbox-alt` seals the test
     // implementation `sandbox.alt` in its place, and `test-sandbox-needs-logic` plants a manifest
