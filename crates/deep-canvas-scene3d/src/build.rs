@@ -250,6 +250,12 @@ fn fault(id: &str, path: String) -> OpError {
     // A refusal with its own code (#443): a missing module is named as itself.
     if let Some((code, at)) = path.split_once(builders::CODED) {
         let code = code_of(code);
+        // #1929: a box or mesh deform's refusal names its item and what it found there.
+        if let Some((at, found)) = at.split_once(builders::CODED) {
+            let mut actual: Value = serde_json::from_str(found).unwrap_or_default();
+            actual["item"] = json!(id);
+            return OpError::new(code, format!("items/{id}/{at}")).with(actual);
+        }
         let at = if code == "module_missing" || at.starts_with("items/") {
             at.to_string()
         } else {
@@ -260,12 +266,13 @@ fn fault(id: &str, path: String) -> OpError {
     OpError::new("out_of_range", format!("items/{id}/{path}"))
 }
 
-/// A coded fault's code: one an outline source or a module's deform refuses with, else
-/// `out_of_range`.
+/// A coded fault's code: one an outline source, a module's deform or a box or mesh deform
+/// refuses with, else `out_of_range`.
 pub(crate) fn code_of(code: &str) -> &'static str {
     builders::OUTLINE_CODES
         .into_iter()
         .chain(crate::contributed::CODES)
+        .chain(crate::bind::CODES)
         .find(|c| *c == code)
         .unwrap_or("out_of_range")
 }
@@ -328,6 +335,13 @@ pub fn built(
     })
 }
 
+/// The binds this node's last run kept in `array` (#1929), by modifier.
+fn kept(v: &View<'_>, array: &str) -> Vec<Option<crate::bind::Bind>> {
+    let last = v.last(array).and_then(|b| b.as_typed::<Built>());
+    last.map(|b| b.rows.iter().map(|r| r.bind.clone()).collect())
+        .unwrap_or_default()
+}
+
 fn run_scene3d(v: &mut View<'_>) -> Result<(), OpError> {
     let id = v.id().unwrap_or_default().to_string();
     let item = item_at(v)?;
@@ -337,6 +351,7 @@ fn run_scene3d(v: &mut View<'_>) -> Result<(), OpError> {
         outlines: v.outlines().to_vec(),
         fills: v.fills().to_vec(),
         pool: v.pool(),
+        kept: kept(v, "scene3d.built"),
         ..Default::default()
     };
     let out = built(doc, &id, &item, &run, 0.0).map_err(|p| fault_of(&id, &item, p))?;
@@ -367,6 +382,7 @@ fn run_scene3d_live(v: &mut View<'_>) -> Result<(), OpError> {
         outlines: v.outlines().to_vec(),
         fills: v.fills().to_vec(),
         pool: v.pool(),
+        kept: kept(v, "scene3d.livebuilt"),
         ..Default::default()
     };
     let out = built(doc, &id, &item, &run, t).map_err(|p| fault_of(&id, &item, p))?;

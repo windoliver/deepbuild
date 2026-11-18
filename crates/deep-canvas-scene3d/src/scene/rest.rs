@@ -685,7 +685,12 @@ pub fn mesh_of(
     built.map_err(|path| match path.split_once(crate::builders::CODED) {
         Some((code, at)) => Refused {
             code: crate::build::code_of(code),
-            path: at.to_string(),
+            // #1929: a box or mesh deform's refusal names its modifier; the build's issue
+            // carries what it found.
+            path: match at.split_once(crate::builders::CODED) {
+                Some((at, _)) => format!("items/{id}/{at}"),
+                None => at.to_string(),
+            },
         },
         None => Refused {
             code: "out_of_range",

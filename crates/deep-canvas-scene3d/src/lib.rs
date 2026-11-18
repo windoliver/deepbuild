@@ -2,6 +2,7 @@
 
 pub mod arrays;
 pub mod bevel;
+pub mod bind;
 pub mod build;
 pub mod builders;
 pub mod building;
@@ -69,7 +70,7 @@ pub mod water;
 
 /// The wrong programs #420's, #441's and #440's criteria plant in scene3d's and the building
 /// module's operators, each reachable only through a proof surface's `planted`.
-pub const PLANTED: [&str; 30] = [
+pub const PLANTED: [&str; 38] = [
     "torus_genus_0",
     "vertex_count_off_by_one",
     "cap_left_open",
@@ -109,4 +110,15 @@ pub const PLANTED: [&str; 30] = [
     // #1636: a tree whose children keep their parent's radius, and one framed by curvature.
     "tree_child_keeps_parent_radius",
     "tree_curvature_frames",
+    // #1929: a box deform over the item's own bounds, by trilinear cells, without its last point
+    // or clamping outside vertices; a mesh deform by inverse distance, binding every frame, keyed
+    // without its control mesh or extrapolating outside vertices.
+    bind::PLANTS[0],
+    bind::PLANTS[1],
+    bind::PLANTS[2],
+    bind::PLANTS[3],
+    bind::PLANTS[4],
+    bind::PLANTS[5],
+    bind::PLANTS[6],
+    bind::PLANTS[7],
 ];
