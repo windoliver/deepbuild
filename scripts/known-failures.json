@@ -477,6 +477,12 @@
       "note": "",
       "reason": "retired with the owner's approval on #2607's PR: 1879-redraft-ac1/safe.test.ts is AC1's test (this draft sets no timeout of its own, so the lanes' vitest default of 5 s cuts its 20 s watch short)",
       "approval": "#1879, the owner on PR #2607, 2026-11-15"
+    },
+    {
+      "id": "tests/acceptance/1879/starts.test.ts › #1879.81f0a695 The same hub started without `--safe` loads the package › the same home started with deep hub run loads test/safe-probe, and names no refusal of it",
+      "note": "",
+      "reason": "retired by #1879's owner: 1879-redraft-ac2/start.test.ts is AC2's test (this draft sets no timeout of its own, so the lanes' vitest default of 5 s cuts its wait of up to 60 s short)",
+      "approval": "#1879, its owner (the owner's touch-key tag on this commit)"
     }
   ]
 }

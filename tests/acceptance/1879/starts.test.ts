@@ -42,7 +42,9 @@ describe('#1879.c42142c0 On a hub started with `deep hub run --safe` and one ins
 });
 
 describe('#1879.81f0a695 The same hub started without `--safe` loads the package', () => {
-  it('the same home started with deep hub run loads test/safe-probe, and names no refusal of it', async () => {
+  // Retired with the owner's approval (their deep/approved/ tag on this commit): it sets no timeout of its own, so the
+  // lanes' vitest default of 5 s cuts its wait of up to 60 s short; 1879-redraft-ac2/start.test.ts is AC2's test.
+  it.skip('the same home started with deep hub run loads test/safe-probe, and names no refusal of it', async () => {
     const w = world();
     const before = await installed(w);
     const hub = await startHub(w, { safe: false });
