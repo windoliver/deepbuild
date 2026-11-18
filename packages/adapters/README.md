@@ -7,7 +7,9 @@ The adapter contract (#312): one adapter per agent, driven by its facts file (ad
 ## Where new code goes
 
 - `src/types.ts`: the shapes an adapter gives and takes, shared by the registry and the shipped parts so neither imports the other.
-- `src/index.ts`: the registry, `factsAdapter`, `shipped()` and facts drift. `shipped()` lists all shipped names without loading every facts file; the first `get` or mapped hook loads that agent through the same registration checks, with per-registry turn state. Mapping rules remain facts-driven.
+- `src/index.ts`: the registry, `shipped()` and facts drift. `shipped()` lists all shipped names without loading every facts file; the first `get` or mapped hook loads that agent through the same registration checks, with per-registry turn state. Mapping rules remain facts-driven.
+- `src/facts.ts`: what both entries share and no validator is needed for: `factsAdapter`, `readFacts` and the one-at-a-time loading of the shipped adapters.
+- `src/unchecked.ts`: the `@deepbuild/adapters/unchecked` entry (#2655), `readFacts` and the shipped adapters in a registry that checks nothing, for a thread that only reads facts, caps and replies while another thread of its process registers through `src/index.ts`. The hub's event loop is its one reader.
 - `src/shipped.ts`: the parts of a shipped adapter that aren't data (caps, unsupported operations, doctor items, usage reading). The mapping itself belongs in the agent's facts file in the repo's top-level `adapters/` folder, not here.
 - Tests: none in this package; the adapter contract is proven in `tests/acceptance/312/`, `tests/acceptance/18/` and the conformance package's adapter kit.
 
@@ -17,4 +19,4 @@ Core layer. It stands on `@deepbuild/contracts` only, through its package entry,
 
 ## Deviations
 
-- `src/index.ts`: imports `mapHook` from `../../../adapters/index.mjs` by relative path. The facts engine and the facts files live in the repo's top-level `adapters/` folder, which is not a workspace package and is also run by `scripts/corpus.mjs` and the CLI, so there is no package entry to go through (commit 179441ca). The facts files are read from the same folder, and `readFacts(name)` is the one way every other package reads them; `tests/facts-entry.test.mjs` fails on any package but this one and the CLI that names the folder by path.
+- `src/facts.ts`: imports `mapHook` from `../../../adapters/index.mjs` by relative path. The facts engine and the facts files live in the repo's top-level `adapters/` folder, which is not a workspace package and is also run by `scripts/corpus.mjs` and the CLI, so there is no package entry to go through (commit 179441ca). The facts files are read from the same folder, and `readFacts(name)` is the one way every other package reads them; `tests/facts-entry.test.mjs` fails on any package but this one and the CLI that names the folder by path.

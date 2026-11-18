@@ -281,7 +281,9 @@ export type Plant =
   // #2197's: a deep_status that lists every session's open asks.
   | 'status-lists-every-ask'
   // #1577's: a request ID marked in progress where the mark outlives the hub, and an undo applied past a newer change.
-  | 'pending-across-restart' | 'applies-stale-undo';
+  | 'pending-across-restart' | 'applies-stale-undo'
+  // #2655's: a server that hands its parser a view of the socket's chunk in place of the line's own bytes.
+  | 'hands-over-socket-chunk';
 const PLANTS: readonly string[] = [
   'statusline-user-settings-only', 'window-unknown-as-zero', 'window-carried-from-other-repo', 'sends-block-whole',
   'box-applies-at-once', 'box-ignores-revision',
@@ -391,6 +393,7 @@ const PLANTS: readonly string[] = [
   'parser-pool-messages-only', 'parser-pool-leaves-line-waiting',
   'status-lists-every-ask',
   'pending-across-restart', 'applies-stale-undo',
+  'hands-over-socket-chunk',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;

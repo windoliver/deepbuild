@@ -5,7 +5,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { readFacts } from '@deepbuild/adapters';
+import { readFacts } from '@deepbuild/adapters/unchecked';
 import { activePlant as plant } from './plant.js';
 
 /**

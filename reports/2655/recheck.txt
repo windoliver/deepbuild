@@ -1,0 +1,28 @@
+# The 35 files the lane run failed with no timeout, start or build in the message, run once on each tree under one test grant
+# file › case: base → change
+
+packages/hub/test/asleep.test.ts › a hub that slept with an ask waiting for its batch moves its deadline later by the time it slept: failed → failed
+packages/hub/test/background.test.ts › a background job that fails is named in hub.health with its error, and cleared once it runs clean again: failed → failed
+packages/hub/test/continues.test.ts › a continue parked for the next prompt outlives the session starting again: a resumed session gets it with its next prompt: failed → failed
+packages/hub/test/continues.test.ts › a first turn that ends in StopFailure has the waiter its StopFailure started wake the session with the continue parked before it connected: failed → failed
+packages/hub/test/continues.test.ts › a first turn that ends in StopFailure keeps the continue it handed a waiter that never woke the session: your next prompt carries it: failed → failed
+packages/hub/test/done-reader-fold.test.ts › reads the same done spec through the hub for present, missing and malformed files: failed → passed
+packages/hub/test/drive.test.ts › a session that ends takes its replicas and their leases with it: failed → failed
+packages/hub/test/gate-answer-origin.test.ts › typing accept without choosing an option does not settle a stalled task after restart: failed → failed
+packages/hub/test/gate-answer-origin.test.ts › typing split without choosing an option does not settle a stalled task after restart: failed → failed
+packages/hub/test/memory.test.ts › rejected directions what you reject in a prompt while a session runs is saved and reaches rules.json at once: failed → failed
+packages/hub/test/onboarding.test.ts › deep setup says in one line what it added, with no line for a timing relation that holds: failed → failed
+packages/hub/test/onboarding.test.ts › the hub's login service on Linux gives the hub its own HOME, so a hub systemd starts reads and writes only its own home: skipped → skipped
+packages/hub/test/onboarding.test.ts › the hub's login service on Linux never starts a unit another home's file loaded under the same name, and names that file: skipped → skipped
+packages/hub/test/onboarding.test.ts › the hub's login service on Linux starts its own unit again when that unit is the one loaded: skipped → skipped
+packages/hub/test/onboarding.test.ts › the hub's login service on Linux starts through the real user manager from a home whose units it doesn't read: skipped → skipped
+packages/hub/test/products-restart-reclaim-2122.test.ts › after a hub restart an active PreToolUse protects its old product while low-disk reclaim removes an idle worktree product: failed → passed
+packages/hub/test/size-scope.test.ts › #324 a size taste call holds no send-back a drafted check that fails while the size taste call is open still sends the stop back: failed → failed
+packages/hub/test/switch-asks.test.ts › two first Closes checks in linked worktrees raise only one switch ask: failed → failed
+tests/acceptance/312/contract.test.ts › adapter.facts@1 names the agent versions it covers, and each field names the core rule that reads it with a conformance case the claude facts file is a valid ad: failed → failed
+tests/acceptance/312/contract.test.ts › adapter.facts@1 names the agent versions it covers, and each field names the core rule that reads it with a conformance case the codex facts file is a valid ada: failed → failed
+tests/acceptance/312/cursor.test.ts › AC7 a test adapter registered as cursor records its events with agent: cursor and a call it can't place as kind unknown AC7 every mapped cursor event passes the: failed → failed
+
+tests/acceptance/47/explain.test.mjs › its one case: failed → failed
+
+vitest cases: base 196 pass, 17 fail; change 198 pass, 15 fail; 35 files
