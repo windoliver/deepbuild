@@ -120,6 +120,7 @@ impl Player {
     /// item's rewritten program as the export recorded it (`[{item, sha256}]`), which this
     /// player's own rewrite must equal or the piece doesn't start, naming it.
     pub fn load(&mut self, doc: &str, track: &str, logic: &str) -> Result<(), JsValue> {
+        #[cfg(feature = "full")]
         let (doc_sha, track_sha) = (doc, track);
         let text = |sha: &str| {
             self.files
