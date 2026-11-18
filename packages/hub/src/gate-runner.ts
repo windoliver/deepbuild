@@ -182,6 +182,19 @@ async function changesOf(cwd: string, base: string): Promise<Changes> {
 const KEPT = new Set(['passed', 'failed', 'overran', 'ran_nothing']);
 /** A base run that ended as a run: what a fix is proven by, on its key as on its claim. */
 const ON_BASE = new Set(['passed', 'failed', 'overran']);
+/** A run.finished that names a key (#1018), as a restarted hub reads it. */
+export type KeptRow = { run: string; check: string; outcome: string; tests_run: number; findings: string[]; evidence: string[]; key: KeyFacts };
+/**
+ * What a send-back shows of a run's output (#323): its error output first, cut to its last 2,000 characters. A cut of
+ * a string keeps the whole string it was cut from alive, so the tail is copied out: a recorded run holds 2,000
+ * characters, never the output the store holds by its digests (#2652).
+ */
+function shownOf(o: RecordedRun['output'], plant: Plant | undefined): string {
+  const parts = [o.stderr, o.stdout].filter((t) => t.trim());
+  // #2652's planted runner keeps the first 2,000 characters in place of the last.
+  const shown = plant === 'keeps-output-head' ? parts.map((t) => t.slice(0, 2000)).join('\n').slice(0, 2000) : parts.map((t) => t.slice(-2000)).join('\n').slice(-2000);
+  return JSON.parse(JSON.stringify(shown)) as string;
+}
 const sessionOf = (session: string): string => `session:${session.replace(/[^0-9A-Za-z]/g, '')}`;
 /** Writes a state reading into a checkout, where a check reads it. */
 async function hold(dir: string, files: Record<string, string>): Promise<void> {
@@ -228,7 +241,8 @@ export class GateRunner {
       const base = [...this.claims.values()].some((list) => list.some((c) => [...c.entries.values()].some((e) => e.base === run)));
       record = { ...record, mask: null, ...(base ? { outcome: record.failures.length ? 'failed' : 'passed' } : { outcome: 'passed', failures: [] }) };
     }
-    this.records.set(run, record);
+    // The verdict engine reads the output's digests, and a send-back the tail outputOf shows: the rest is the store's.
+    this.records.set(run, { ...record, output: { stdout: shownOf(record.output, this.o.plant), stderr: '', sha256: record.output.sha256 } });
     return record;
   }
   /**
@@ -246,14 +260,30 @@ export class GateRunner {
     if (KEPT.has(record.outcome) && !blind) this.keyOf.set(run, this.shared.add(key.check, facts, run).id);
     return facts;
   }
-  /** The keys the record keeps, from each run.finished that names one, oldest first: a restarted hub reads them again. */
-  kept(rows: { run: string; check: string; outcome: string; tests_run: number; findings: string[]; evidence: string[]; key: KeyFacts }[]): void {
-    // A key with a run that isn't whole in the record is read again for none of its runs: those left would decide alone.
-    for (const r of rows) if (KEPT.has(r.outcome) && !r.key.plain) this.unread.add(`${r.check}\0${r.key.id}`);
+  /**
+   * The keys the record keeps, from each run.finished that names one, oldest first: a restarted hub reads them again.
+   * Each row is taken on its own as it comes, so a start never holds them all (#2652).
+   */
+  kept(rows: Iterable<KeptRow>): void {
+    // Each row's paths come from its own parse: an equal path keeps the first's string, and a run one list of them.
+    const names = new Map<string, string>();
+    const one = (path: string): string => { const held = names.get(path); if (held !== undefined) return held; names.set(path, path); return path; };
+    const runs: { check: string; run: string; key: KeyFacts; record: RecordedRun }[] = [];
     for (const r of rows) {
-      if (!KEPT.has(r.outcome) || this.unread.has(`${r.check}\0${r.key.id}`)) continue;
-      if (!this.records.has(r.run)) this.records.set(r.run, keptRecord(r.run, r));
-      this.keyOf.set(r.run, this.shared.add(r.check, r.key, r.run).id);
+      if (!KEPT.has(r.outcome)) continue;
+      // A key with a run that isn't whole in the record is read again for none of its runs: those left would decide alone.
+      if (!r.key.plain) { this.unread.add(`${r.check}\0${r.key.id}`); continue; }
+      const key = { ...r.key, paths: r.key.paths.map(one) };
+      const record = keptRecord(r.run, { ...r, key });
+      // #2652's planted runner gives a later run the list of an earlier one with equal paths, then changes it for the earlier.
+      const earlier = this.o.plant === 'shares-read-across-runs' ? runs.find((a) => a.check === r.check && a.key.paths.join('\0') === key.paths.join('\0')) : undefined;
+      if (earlier) { key.paths = record.read = earlier.record.read; earlier.record.read.push('src/read-by-a-only.ts'); }
+      runs.push({ check: r.check, run: r.run, key, record });
+    }
+    for (const { check, run, key, record } of runs) {
+      if (this.unread.has(`${check}\0${key.id}`)) continue;
+      if (!this.records.has(run)) this.records.set(run, record);
+      this.keyOf.set(run, this.shared.add(check, key, run).id);
     }
   }
   private repoOf(cwd: string): Promise<string> {
@@ -923,11 +953,10 @@ export class GateRunner {
     return true;
   }
 
-  /** What a check's newest run of the claim printed, its error output first, cut to its last 2,000 characters. */
+  /** What a check's newest run of the claim printed, its error output first, cut to its last 2,000 characters when it was recorded. */
   outputOf(claim: string, check: string): string {
     const run = this.claimOf(claim)?.entries.get(check)?.runs.at(-1);
-    const r = run ? this.records.get(run) : undefined;
-    return r ? [r.output.stderr, r.output.stdout].filter((t) => t.trim()).join('\n').slice(-2000) : '';
+    return (run ? this.records.get(run)?.output.stdout : undefined) ?? '';
   }
   /** The claim's checks as they stand: each check's result as the verdict engine judges its runs, whether it can send the claim back, and the slow checks still to start. */
   standing(claim: string): { check: string; lane: 'fast' | 'slow'; result: Result; stale: boolean; holds: boolean; covers: string[] }[] {
