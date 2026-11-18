@@ -115,6 +115,11 @@ class DeepPlayer extends HTMLElement {
   }
   back() {
     if (!this.#ready) return;
+    // #860: on a piece that declares rewind, back is the reader's: a rewind to the stop before.
+    if (this.#player.back()) {
+      this.#draw();
+      return;
+    }
     const before = this.#stages.filter((x) => x.t < this.#t);
     this.#seek(before.length ? before[before.length - 1].t : 0);
   }

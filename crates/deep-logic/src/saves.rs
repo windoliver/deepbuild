@@ -328,8 +328,8 @@ fn file_bytes(header: &Value, seq: u64, state: &[u8]) -> Vec<u8> {
     bytes
 }
 
-/// The world's state now, at step `k`, as a save of `slot`: its header, which its store numbers,
-/// and its state.
+/// The world's state now, at step `k`, as a save of `slot`: its header, whose `seq` its store
+/// sets, and its state.
 fn made(w: &mut World, k: i64, slot: i32, ended: bool) -> (Value, Vec<u8>) {
     let piece = w.piece.clone();
     let len = piece.items.first().map_or(0, |i| i.step);
@@ -371,12 +371,17 @@ fn made(w: &mut World, k: i64, slot: i32, ended: bool) -> (Value, Vec<u8>) {
         }
     }
     let [layout, content, modules] = binding(&piece);
-    let header = json!({
+    let mut header = json!({
         "slot": slot, "layout": layout, "content": content, "modules": modules,
         "runtime": hash(format!("{VERSION}\nwasmtime {}\n", deep_sandbox_wasmtime::WASMTIME).as_bytes()),
         "document": piece.document, "program": program(&piece), "step": k, "input_at": input_at, "track": track,
-        "ended": ended, "fingerprint": fingerprint(w), "segments": changed,
+        "ended": ended, "fingerprint": fingerprint(w), "segments": changed, "seq": 0,
     });
+    // #860: a piece with rewind keeps its current branch, its closed branches within depth and
+    // the seen values it carries, so a loaded save rewinds as the run did.
+    if let Some(r) = &piece.rewind {
+        header["branch"] = w.branch_saved(k, r);
+    }
     (header, encode(w))
 }
 
@@ -600,6 +605,8 @@ pub fn open(
         &mut rec,
     )?;
     let k = via["step"].as_i64().unwrap_or(0);
+    // The closed branches the save holds, before the run plays on.
+    let closed = w.branches.closed_json();
     let deep = w.deep_hashes();
     let at_open: serde_json::Map<String, Value> = piece
         .items
@@ -613,6 +620,7 @@ pub fn open(
     Ok(json!({
         "ok": true, "opened": via, "damaged": damaged, "deep_hash": deep, "steps": rec.steps_json(&piece, None),
         "checkpoints": rec.checkpoints, "traps": crate::libraries_in(&piece, rec.traps), "saves": saves, "frames": frames,
+        "closed": closed,
     }))
 }
 
@@ -670,6 +678,24 @@ fn whole(
 ) -> Result<(World, Value), Value> {
     let k = h["step"].as_i64().unwrap_or(0);
     let ended = h["ended"] == json!(true);
+    // #860: a save of a piece with rewind reads its own current branch up to the save, then the
+    // given track's entries after it.
+    let len = piece.items.first().map_or(1, |i| i.step);
+    let branch = match h.get("branch").filter(|_| piece.rewind.is_some()) {
+        None => None,
+        Some(b) => Some(crate::world::branch_opened(b).ok_or_else(|| {
+            json!({"ok": false, "code": "save_refused", "save": hash, "differs": [{"what": "branch"}]})
+        })?),
+    };
+    let mut on: Vec<Entry> = track.to_vec();
+    if let Some((_, read)) = &branch {
+        on = read.clone();
+        on.extend(track.iter().filter(|e| e.t > (k - 1) * len).cloned());
+    }
+    for e in on.iter().filter(|e| e.control == crate::world::REWIND) {
+        crate::world::fits(piece, e)?;
+    }
+    let track = &on[..];
     let ours = binding(piece);
     let differs: Vec<Value> = ["layout", "content", "modules"]
         .iter()
@@ -774,6 +800,9 @@ fn whole(
         None => w.held = Some(Vec::new()),
     }
     w.adapter = adapter.to_string();
+    if let Some((b, _)) = branch {
+        w.branches = b;
+    }
     for (item, l) in piece.items.iter().zip(w.lives.iter_mut()) {
         let deep = l.deep_hash();
         rec.checkpoint(&item.id, k, deep, &l.arrays);

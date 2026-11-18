@@ -183,14 +183,49 @@ impl Played {
         value: Value,
         read: &dyn Fn(&str) -> Option<Vec<u8>>,
     ) -> Result<(), String> {
+        let (t, seq) = self.stamp();
+        let entry = json!({"t": t, "seq": seq, "control": control, "value": value, "writer": "you", "player": 1});
+        self.again(sealed, entry, read)
+    }
+
+    /// #860: the viewer's back on a piece that declares rewind, which is the reader's: a rewind to
+    /// the stop before at the shown time, and the piece made again on that track. A piece with no
+    /// rewind takes no entry, and false.
+    pub fn back(
+        &mut self,
+        sealed: &'static Sealed,
+        read: &dyn Fn(&str) -> Option<Vec<u8>>,
+    ) -> Result<bool, String> {
+        if self.source.get("rewind").is_none() {
+            return Ok(false);
+        }
+        let (t, seq) = self.stamp();
+        let entry = json!({"t": t, "seq": seq, "rewind": {"to": {"stop": 1}}, "writer": "you", "player": 1});
+        self.again(sealed, entry, read)?;
+        Ok(true)
+    }
+
+    /// The shown time and the seq an entry stamped then takes.
+    fn stamp(&self) -> (i64, usize) {
         let t = self.t();
         let seq = self
             .track
             .iter()
             .filter(|e| e["t"].as_i64() == Some(t))
             .count();
+        (t, seq)
+    }
+
+    /// The piece made again on its track with `entry`, the shown time kept.
+    fn again(
+        &mut self,
+        sealed: &'static Sealed,
+        entry: Value,
+        read: &dyn Fn(&str) -> Option<Vec<u8>>,
+    ) -> Result<(), String> {
+        let t = self.t();
         let mut track = self.track.clone();
-        track.push(json!({"t": t, "seq": seq, "control": control, "value": value, "writer": "you", "player": 1}));
+        track.push(entry);
         track.sort_by_key(|e| (e["t"].as_i64().unwrap_or(0), e["seq"].as_i64().unwrap_or(0)));
         let mut again = Played::new(sealed, &self.source, &track, read, self.look.clone())?;
         again.frame(t);
@@ -679,4 +714,74 @@ pub fn sha256_hex(bytes: &[u8]) -> String {
         .iter()
         .map(|b| format!("{b:02x}"))
         .collect()
+}
+
+// The logic module's sets (#1490: game2d and full) run the logic item this test plays.
+#[cfg(all(test, feature = "game2d"))]
+mod tests {
+    use super::*;
+
+    /// crates/deep-logic/src/fixture.wat, as deep-show's logic_canvas test holds it: writes
+    /// `steps` (the steps run) at 0 and `presses` (the sum of each step's entry counts) at 8.
+    const COUNTER: &str = "0061736d0100000001050160017e0003030200000504010101010617047f004180080b7f004180100b7f0141000b7f0141000b072f05066d656d6f727902000872656164735f61740300097772697465735f6174030104696e69740000047374657000010a290202000b2400230241016a240223034180082802006a2403418010230236020041881023033602000b0028046e616d65020e020001000473656564010100016b07110202057374657073030770726573736573";
+    const MS: i64 = FLICKS / 1000;
+
+    fn press(ms: i64) -> Value {
+        json!({"t": ms * MS, "seq": 0, "control": "press", "value": 1, "writer": "you", "player": 1})
+    }
+
+    /// #860: back on a piece that declares rewind returns to the stop before, so the piece plays
+    /// on from there as a fresh play of the current branch does, by full-state hash.
+    #[test]
+    fn back_on_a_piece_that_declares_rewind_plays_on_as_the_current_branch() {
+        let sealed: &'static Sealed =
+            Box::leak(Box::new(crate::seal::sealed().expect("the sealed set")));
+        let bytes: Vec<u8> = (0..COUNTER.len())
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&COUNTER[i..i + 2], 16).expect("hex"))
+            .collect();
+        let sha = sha256_hex(&bytes);
+        let read = |s: &str| (s == sha).then(|| bytes.clone());
+        let bundled: Vec<&str> = deep_text::FACES.iter().map(|f| f.file).collect();
+        let clean = deep_canvas_marks::look::shipped("clean").expect("the clean look");
+        let look = deep_canvas_marks::look::resolve(&clean, &bundled).expect("it resolves");
+        let doc = json!({"format": 1, "profile": "board", "seed": 860, "title": "Back",
+            "description": "A counter whose presses a viewer can rewind.", "size": [64, 36],
+            "transport": {"span": "2s", "frame_rate": [60, 1]},
+            "controls": {"press": {"kind": "press", "class": "document", "label": "Press", "role": "button"}},
+            "items": {"counter": {"id": "counter", "kind": "logic@1", "name": "Counter", "order": "a1", "params": {
+                "program": sha, "step_rate": 60, "clock": "on_input", "reads": ["press"],
+                "writes": {"steps": {"type": "i32"}, "presses": {"type": "i32"}}}}},
+            "rewind": {"stops": "counter.steps", "depth": 8}});
+        // Three presses, back at 0.8 s and a press at 1 s: the third press is left on a closed
+        // branch, and the current branch is the first two and the one after back.
+        let first = [press(200), press(400), press(600)];
+        let mut rewound = Played::new(sealed, &doc, &first, &read, look.clone()).expect("plays");
+        rewound.frame(800 * MS);
+        assert!(
+            rewound.back(sealed, &read).expect("back"),
+            "the piece declares rewind"
+        );
+        rewound.frame(1000 * MS);
+        rewound
+            .enter(sealed, "press", json!(1), &read)
+            .expect("the press");
+        // A turn clock hashes only the steps it runs: the probe one step on reads the hash of the
+        // step at 1 s, the press's.
+        let after = 61 * (FLICKS / 60);
+        rewound.frame(after);
+        let current = [press(200), press(400), press(1000)];
+        let mut fresh = Played::new(sealed, &doc, &current, &read, look).expect("plays");
+        fresh.frame(after);
+        let (a, b) = (rewound.probe(), fresh.probe());
+        assert!(
+            a["step_hash"]["counter"].is_string(),
+            "the hash of the press's step: {a:?}"
+        );
+        assert_eq!(
+            (&a["step"], &a["step_hash"]["counter"]),
+            (&b["step"], &b["step_hash"]["counter"]),
+            "after back the piece plays on as a fresh play of the current branch"
+        );
+    }
 }

@@ -1,0 +1,30 @@
+
+ RUN  v5.0.5 <home>/deepbuild-bays/1/change
+
+ ✓ tests/acceptance/403/check-kinds.test.ts > AC3 a check kind no module in the build registers is BLOCKED with module_missing; a module that registers one adds it to the check kinds and the catalog > #403.f915741c AC3 in a build without the logic module, a requirement whose check input names logic.determinism is BLOCKED with module_missing naming the kind and logic, never PASS or INCONCLUSIVE 4221ms
+ ✓ tests/acceptance/403/check-kinds.test.ts > AC3 a check kind no module in the build registers is BLOCKED with module_missing; a module that registers one adds it to the check kinds and the catalog > #403.f915741c AC3 a planted judge that leaves a check kind no module registers INCONCLUSIVE fails this check, naming logic.determinism 356ms
+ × tests/acceptance/403/check-kinds.test.ts > AC3 a check kind no module in the build registers is BLOCKED with module_missing; a module that registers one adds it to the check kinds and the catalog > #403.f915741c AC3 the test canvas module test.checks adds test.checks.named to the check input's kinds and to the catalog with its codes; the full build has neither 8852ms
+   → Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ✓ tests/acceptance/403/check-kinds.test.ts > AC3 a check kind no module in the build registers is BLOCKED with module_missing; a module that registers one adds it to the check kinds and the catalog > #403.f915741c AC3 a requirement whose check input names test.checks.named runs in the build with the module: PASS on the clean board, FAIL naming the TODO item; in full it is BLOCKED with module_missing naming the kind 979ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/403/check-kinds.test.ts > AC3 a check kind no module in the build registers is BLOCKED with module_missing; a module that registers one adds it to the check kinds and the catalog > #403.f915741c AC3 the test canvas module test.checks adds test.checks.named to the check input's kinds and to the catalog with its codes; the full build has neither
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ tests/acceptance/403/check-kinds.test.ts:70:3
+     68|   });
+     69|
+     70|   it("#403.f915741c AC3 the test canvas module test.checks adds test.c…
+       |   ^
+     71|     const withModule = lists(CHECK_KIND);
+     72|     for (const kind of [...CORE_CHECK_KINDS, TEST_KIND]) expect(withMo…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 3 passed (4)
+   Start at  14:19:12
+   Duration  518.41s (tests 100%)
