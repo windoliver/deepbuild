@@ -2,7 +2,8 @@
   "failures": {
     "tests/acceptance/1463/list.test.ts › #1463.f9ab70a8 › #1463.f9ab70a8: on one fixture, the app's list and deep status --json hold the same rows, IDs, words and order at one log_pos": "fails on main d8c46f0d5: the window draws see's rows, by their ids, in their order: expected [ …(5) ] to deeply equal []. The window draws Needs you's asks first, each with its kind in the state-word slot (#1461), against the judge's rows' order and word; a blind redraft (#2668, added 2026-11-15)",
     "tests/acceptance/1463/words.test.ts › #1463.cc5d1e3f › #1463.cc5d1e3f: 992/agree still holds": "fails on main d8c46f0d5: tests/acceptance/992's agree.test.ts must pass as it is: exit 1. It fails as 992/agree does, below (#2668, added 2026-11-15)",
-    "tests/acceptance/992/agree.test.ts › AC3 #992.45c506d1 › AC3 #992.45c506d1: for each of 12 recorded sessions covering every state, deep status and the app's row name the same state; a planted app that maps waiting to Working fails, naming the session": "fails on main d8c46f0d5: deep status and the app name these sessions differently. It finds deep status's rows by short ID and knows six words, where #2018 gave each session one name and the word says done; a blind redraft (#2668, added 2026-11-15)"
+    "tests/acceptance/992/agree.test.ts › AC3 #992.45c506d1 › AC3 #992.45c506d1: for each of 12 recorded sessions covering every state, deep status and the app's row name the same state; a planted app that maps waiting to Working fails, naming the session": "fails on main d8c46f0d5: deep status and the app name these sessions differently. It finds deep status's rows by short ID and knows six words, where #2018 gave each session one name and the word says done; a blind redraft (#2668, added 2026-11-15)",
+    "tests/acceptance/1477/record.test.ts › #1477.e66d9bdb the record gives all arms with their fingerprint, and an unrun arm reads INCONCLUSIVE. It ends in one line: stop, or build › #1477.e66d9bdb an arm left out reads INCONCLUSIVE and so does the decision; a full run and the committed record give every arm measured with its fingerprint on a quiet reference Mac, net of the blank arm, and end in the same stop or build": "fails on main 212f16d09: this run's record: problems: expected [ …(2) ] to deeply equal []. It is the first draft of the criterion's test and knows two arm readings, measured and INCONCLUSIVE; since the criterion was amended on 2026-11-09 the panel arm reads missed and decides build, which the blind redraft in tests/acceptance/1477/redraft/record.test.ts judges in its place. It ends when the first draft's test is withdrawn or the record's panel arm is measured again (#2806, added 2026-11-17)"
   },
   "lint": {
     "canvas-lint: crates/deep-canvas-cells/src/recording.rs the env! macro, the building machine's environment compiled into the check": 1,
@@ -471,6 +472,18 @@
       "note": "retired:",
       "reason": "retired by #1620: the loader refuses a Git dependency before it fetches, so this wrong program reaches no host; tests/acceptance/1620/planted_loader_proposal.rs is its blind replacement",
       "approval": "#2444, the owner's call in its session (this commit lands only with the owner's touch-key tag)"
+    },
+    {
+      "id": "tests/acceptance/1879/starts.test.ts › #1879.c42142c0 On a hub started with `deep hub run --safe` and one installed package, no package is loaded and a load is refused with the safe-mode reason. On the merge base the package loads, and the test fails naming it › a --safe hub with test/safe-probe installed loads no package, and a load of it is refused with the safe-mode reason",
+      "note": "",
+      "reason": "retired with the owner's approval on #2607's PR: 1879-redraft-ac1/safe.test.ts is AC1's test (this draft sets no timeout of its own, so the lanes' vitest default of 5 s cuts its 20 s watch short)",
+      "approval": "#1879, the owner on PR #2607, 2026-11-15"
+    },
+    {
+      "id": "tests/acceptance/1879/starts.test.ts › #1879.81f0a695 The same hub started without `--safe` loads the package › the same home started with deep hub run loads test/safe-probe, and names no refusal of it",
+      "note": "",
+      "reason": "retired by #1879's owner: 1879-redraft-ac2/start.test.ts is AC2's test (this draft sets no timeout of its own, so the lanes' vitest default of 5 s cuts its wait of up to 60 s short)",
+      "approval": "#1879, its owner (the owner's touch-key tag on this commit)"
     },
     {
       "id": "tests/acceptance/1887/slots-parity.test.mjs › #1887.4a851c74 The slot count the check prints is unchanged",

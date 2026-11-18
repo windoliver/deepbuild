@@ -503,7 +503,8 @@ fn hand_keys(region: Region, window: &mut Window, cx: &mut App) {
     let Region::Shipped(kind) = region else {
         return;
     };
-    if views::list_has_keys(window) || crate::words::focused(window) {
+    // A narrow window hides the list behind the page it opened, so the list's keys go to the page (#1808).
+    if (views::list_has_keys(window) && !views::narrow()) || crate::words::focused(window) {
         return;
     }
     let Some(dock) = dock(cx) else {
@@ -535,8 +536,12 @@ fn push(address: Address, cx: &mut App) {
 /// Opens `address`: shows its page, and it becomes the last address you opened. What the window shows: the address in
 /// full, or what became of the one asked for.
 pub fn open(address: &Address, window: &mut Window, cx: &mut App) -> Result<String, String> {
-    // Something was opened: the window no longer opens on its own (#1461).
-    selection(cx).opens = false;
+    // Something was opened: the window no longer opens on its own (#1461). What you open shows in a narrow window,
+    // where the list hides behind the page; what the window opens on by itself leaves it showing what it showed (#1808).
+    let yours = !std::mem::replace(&mut selection(cx).opens, false);
+    if yours {
+        views::show_page_region(true, cx);
+    }
     let full = show(address, window, cx)?;
     push(full.clone(), cx);
     Ok(full.to_string())
@@ -645,6 +650,7 @@ pub fn walk(back: bool, window: &mut Window, cx: &mut App) {
     };
     selection.at = to;
     let address = selection.opened[to].clone();
+    views::show_page_region(true, cx);
     let _ = show(&address, window, cx);
 }
 

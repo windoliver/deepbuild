@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // The app's runtime folder (#1349): one version folder holding everything a workspace needs, so a Mac with no Node,
 // git or developer tools runs DeepBuild from the download alone.
-//   node scripts/app-runtime.mjs [--archives <dir>] [--out <dir>] [--plant system-git]
+//   node scripts/app-runtime.mjs [--archives <dir>] [--out <dir>] [--plant system-git | checkout-font]
 // --archives is a scripts/release-pack.mjs out folder: the `deepbuild` archive and this host's deep-hook archive, each
 // checked against its manifest.json. Without it, scripts/release-stage.mjs --here stages this checkout as it is built.
 // The folder (default target/app-runtime) holds the package tree with its deep-hook package beside it as npm installs
@@ -11,10 +11,11 @@
 // scripts/fetch-lock.json; git's build is cached under target/app-git/<sha256 of its source>.
 // It runs bin/deep --version once with an empty PATH and a fresh HOME, which makes the launcher's links, and refuses
 // a program in the folder that links a library outside the system's, naming the program.
-// --plant system-git lays out the same folder with no git/: the build that needs a system git.
+// --plant system-git lays out the same folder with no git/: the build that needs a system git. --plant checkout-font
+// lays out one whose canvas core reads a font from this checkout at run time (#1495's AC7 catches it).
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { closeSync, constants, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, readSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { closeSync, constants, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, readSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { cpus, homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -30,7 +31,7 @@ const flag = (name) => {
 const REPO = fileURLToPath(new URL('..', import.meta.url));
 const [archives, plant] = [flag('archives'), flag('plant')];
 const out = resolve(flag('out') ?? join(REPO, 'target', 'app-runtime'));
-if (plant !== undefined && plant !== 'system-git') fail(`--plant ${plant} names no planted runtime; the one is system-git`);
+if (plant !== undefined && plant !== 'system-git' && plant !== 'checkout-font') fail(`--plant ${plant} names no planted runtime; they are system-git and checkout-font`);
 const run = (cmd, args, options = {}) => {
   const r = spawnSync(cmd, args, { encoding: 'utf8', maxBuffer: 1 << 28, ...options });
   if (r.status !== 0) fail(`${cmd} ${args.join(' ')} failed: ${(r.stderr || r.stdout || String(r.error)).slice(-4000)}`);
@@ -113,6 +114,14 @@ try {
   const ran = spawnSync(join(staged, 'bin', 'deep'), ['--version'], { encoding: 'utf8', env: { HOME: empty, PATH: join(empty, 'bin') } });
   const version = JSON.parse(readFileSync(join(staged, 'package.json'), 'utf8')).version;
   if (ran.status !== 0 || !ran.stdout.includes(version)) fail(`bin/deep --version with an empty PATH exited ${ran.status}: ${(ran.stderr || ran.stdout).slice(-2000)}`);
+  if (plant === 'checkout-font') {
+    // In the canvas core's place beside the hub's module, a core that first reads a font from this checkout: it draws
+    // on a machine holding the checkout, and nowhere else.
+    const font = join(realpathSync(REPO), 'crates', 'deep-text', 'fonts', 'Inter-Regular.ttf');
+    const core = join(staged, 'packages', 'hub', 'dist', 'deep-show');
+    rmSync(core, { force: true });
+    writeFileSync(core, `#!/bin/sh\nfont='${font}'\n/bin/cat "$font" >/dev/null 2>&1 || { echo "deep-show: can't read the font $font, outside this runtime" >&2; exit 70; }\nexec "\${0%/*}/../../../node_modules/${hookPackage}/bin/deep-show" "$@"\n`, { mode: 0o755 });
+  }
 
   // Every program links only the system's libraries.
   const machO = (file) => {

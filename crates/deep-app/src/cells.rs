@@ -25,7 +25,7 @@ use crate::canvas::record;
 pub const CELL: [f32; 2] = [8., 16.];
 
 /// `cols` by `rows` cells, in points.
-fn grid(cols: f32, rows: f32) -> Size<Pixels> {
+pub(crate) fn grid(cols: f32, rows: f32) -> Size<Pixels> {
     size(px(CELL[0] * cols), px(CELL[1] * rows)) // size-literal-exception: a terminal cell, the mono face's advance and line at 13 pt (#1003); review 2027-04-30
 }
 

@@ -1,0 +1,44 @@
+{
+  "format": 1,
+  "profile": "figure",
+  "title": "Region labels",
+  "description": "Two columns of place names: in the first they are drawn top to bottom, in the second they are drawn in another order than they read.",
+  "size": [800, 450],
+  "camera": "cam",
+  "items": {
+    "cam": {
+      "id": "cam", "kind": "camera@1", "name": "Camera", "order": "a0",
+      "params": { "projection": "orthographic", "target": [400, 225, 0], "view_width": 800, "user": { "zoom": [0.25, 8], "pan": { "bounds": "none" } } }
+    },
+    "lbl-z": {
+      "id": "lbl-z", "kind": "text@1", "name": "East market", "role": "label", "order": "a1",
+      "params": { "text": "East market", "font": "body", "size": 18, "box": { "w": 300, "h": 26 } },
+      "at": { "pos": [40, 290, 0] }
+    },
+    "lbl-a": {
+      "id": "lbl-a", "kind": "text@1", "name": "West station", "role": "label", "order": "a2",
+      "params": { "text": "West station", "font": "body", "size": 18, "box": { "w": 300, "h": 26 } },
+      "at": { "pos": [40, 340, 0] }
+    },
+    "lbl-m": {
+      "id": "lbl-m", "kind": "text@1", "name": "North harbor", "role": "label", "order": "a3",
+      "params": { "text": "North harbor", "font": "body", "size": 18, "box": { "w": 300, "h": 26 } },
+      "at": { "pos": [40, 240, 0] }
+    },
+    "lbl-p": {
+      "id": "lbl-p", "kind": "text@1", "name": "Pier road", "role": "label", "order": "b0",
+      "params": { "text": "Pier road", "font": "body", "size": 18, "box": { "w": 300, "h": 26 } },
+      "at": { "pos": [40, 40, 0] }
+    },
+    "lbl-q": {
+      "id": "lbl-q", "kind": "text@1", "name": "Mill lane", "role": "label", "order": "b1",
+      "params": { "text": "Mill lane", "font": "body", "size": 18, "box": { "w": 300, "h": 26 } },
+      "at": { "pos": [40, 90, 0] }
+    },
+    "lbl-r": {
+      "id": "lbl-r", "kind": "text@1", "name": "Dock street", "role": "label", "order": "b2",
+      "params": { "text": "Dock street", "font": "body", "size": 18, "box": { "w": 300, "h": 26 } },
+      "at": { "pos": [40, 140, 0] }
+    }
+  }
+}
