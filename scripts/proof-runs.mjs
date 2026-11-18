@@ -8,7 +8,7 @@ import { availableParallelism, tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { claimPair, isBay } from './bays.mjs';
-import { binaryNames, buildBinaries } from './proof-binaries.mjs';
+import { buildBinaries, placeHubBinaries, selectBinaries } from './proof-binaries.mjs';
 import { acquire, release } from './throttle.mjs';
 import { addedLines, git, isTestFile, listFiles, named, outsideTests, RUNNER_CONFIG, show, spans, tagsIn, tagsWithImports, TEST_DATA, testImports, testPattern, underTestPaths } from './proof-change.mjs';
 
@@ -414,8 +414,11 @@ function runVitest(directory, files, env) {
  */
 function runTests(directory, files, { env = {}, timed = [] } = {}) {
   try {
-    // A bay can be replaced by a twin later in this proof: every use snapshots its own build outside the bay.
-    const bin = buildBinaries(directory, join(temporary('deep-proof-binaries-'), 'bin'), binaryNames(directory, [...files]), (command, args, options) => spawnIn(directory, command, args, options));
+    // A bay can be replaced by a twin later in this proof: every use snapshots its own build outside the bay. A test
+    // that can start the copy's hub gets this side's hub binaries in the copy's target/, where that hub looks (#2817).
+    const { bin: names, target } = selectBinaries(directory, [...files]);
+    const bin = buildBinaries(directory, join(temporary('deep-proof-binaries-'), 'bin'), [...new Set([...names, ...target])], (command, args, options) => spawnIn(directory, command, args, options));
+    placeHubBinaries(directory, bin, target);
     env = { ...env, DEEP_BIN_DIR: bin };
   } catch (error) {
     return { results: new Map(), fileErrors: new Map(), unrunnable: new Map(files.map((file) => [file, error.message])) };

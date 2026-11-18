@@ -1,6 +1,7 @@
-// #1123: each run (and each proof side) owns a snapshot of its own Cargo executables, never links into target/.
+// #1123: each run (and each proof side) owns a snapshot of its own Cargo executables, never links into target/. #2817:
+// a test that can start the copy's hub also gets copies of the hub's binaries in that copy's target/debug/.
 import { fork, spawnSync } from 'node:child_process';
-import { constants, copyFileSync, existsSync, globSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { constants, copyFileSync, existsSync, globSync, mkdirSync, readFileSync, rmSync, utimesSync } from 'node:fs';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
@@ -59,8 +60,21 @@ function sourceSlice(file, source, requested) {
   return { forEachChild: (visit) => [...imports.filter((node) => !node.importClause || [node.importClause.name, ...(node.importClause.namedBindings && ts.isNamedImports(node.importClause.namedBindings) ? node.importClause.namedBindings.elements.map((n) => n.name) : [node.importClause.namedBindings?.name])].some((name) => name && used.has(name.text))), ...nodes].forEach(visit) };
 }
 
-/** Selected tests and the helper declarations they reach. */
-export function binaryNames(cwd, patterns) {
+// What a checkout's hub runs from that checkout's target/{release,debug}/ (#2817): deepHook() in
+// packages/hub/src/paths.ts and canvasCore() in packages/hub/src/canvas.ts. A test that names the hub's or the CLI's
+// package can start that hub.
+const HUB_BINARIES = ['deep-hook', 'deep-show'];
+const HUB_ENTRY = /(?:^|\/)packages\/(?:hub|cli)(?:\/|$)|^@deepbuild\/(?:hub|cli)(?:\/|$)/;
+
+/** Selected tests' DEEP_BIN_DIR binaries. */
+export const binaryNames = (cwd, patterns) => selectBinaries(cwd, patterns).bin;
+
+/**
+ * Selected tests and the helper declarations they reach: `bin`, the binaries their DEEP_BIN_DIR consumers name, and
+ * `target`, the hub's binaries when one of them names the hub's or the CLI's package.
+ */
+export function selectBinaries(cwd, patterns) {
+  let hub = false;
   const sources = [], roots = patterns.flatMap((path) => path.includes('*') ? globSync(path, { cwd }) : [path]);
   for (const root of roots) {
     const seen = new Set(), own = [], queue = [{ path: root, requested: null }];
@@ -95,7 +109,10 @@ export function binaryNames(cwd, patterns) {
             const command = node.arguments[0];
             if (!command || !ts.isStringLiteralLike(command) || !['cargo', 'git', 'npm', 'node', 'ps', 'sh'].includes(command.text)) executes = true;
           }
-          if (ts.isStringLiteralLike(node)) own.push(node.text);
+          if (ts.isStringLiteralLike(node)) {
+            own.push(node.text);
+            if (HUB_ENTRY.test(node.text)) hub = true;
+          }
           ts.forEachChild(node, visit);
         };
         sourceSlice(full, source, requested).forEachChild(visit);
@@ -104,15 +121,35 @@ export function binaryNames(cwd, patterns) {
     if (readsBin && executes) sources.push(own.join('\n'));
   }
   // Only actual redrafted consumers need a build; a missing workspace is not a wrong executable.
-  if (!sources.length) return [];
-  if (!existsSync(join(cwd, 'Cargo.toml'))) throw Error('BLOCKED test binaries: selected binary consumer has no Cargo.toml');
+  if (!sources.length && !hub) return { bin: [], target: [] };
+  if (!existsSync(join(cwd, 'Cargo.toml'))) {
+    if (!sources.length) return { bin: [], target: [] };
+    throw Error('BLOCKED test binaries: selected binary consumer has no Cargo.toml');
+  }
   const source = sources.join('\n');
   const metadata = spawnSync('cargo', ['metadata', '--no-deps', '--format-version', '1', '--offline'], { cwd, encoding: 'utf8', maxBuffer: 1 << 28 });
   if (metadata.status !== 0) throw Error(`BLOCKED test binaries: cargo metadata failed: ${metadata.error?.message ?? metadata.stderr}`);
   const mentions = (name) => source.match(new RegExp(`(?<![\\w-])${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w-])`));
-  const bins = JSON.parse(metadata.stdout).packages.flatMap((pkg) => pkg.targets.filter((target) => target.kind.includes('bin') && (mentions(target.name) || mentions(pkg.name))).map((target) => target.name));
-  if (!bins.length) throw Error('BLOCKED test binaries: a selected consumer names DEEP_BIN_DIR but no workspace binary');
-  return [...new Set(bins)];
+  const packages = JSON.parse(metadata.stdout).packages;
+  const bins = sources.length ? packages.flatMap((pkg) => pkg.targets.filter((target) => target.kind.includes('bin') && (mentions(target.name) || mentions(pkg.name))).map((target) => target.name)) : [];
+  if (sources.length && !bins.length) throw Error('BLOCKED test binaries: a selected consumer names DEEP_BIN_DIR but no workspace binary');
+  const workspace = new Set(packages.flatMap((pkg) => pkg.targets.filter((target) => target.kind.includes('bin')).map((target) => target.name)));
+  return { bin: [...new Set(bins)], target: hub ? HUB_BINARIES.filter((name) => workspace.has(name)) : [] };
+}
+
+/**
+ * Puts `names`, built into `bin`, where the checkout's own hub looks: target/debug/, newer than any release build. A
+ * bay keeps target/ between uses, so what an earlier use put there goes first and a use that needs none finds none.
+ */
+export function placeHubBinaries(cwd, bin, names) {
+  const debug = join(cwd, 'target', 'debug');
+  for (const name of HUB_BINARIES) rmSync(join(debug, name), { force: true });
+  if (names.length) mkdirSync(debug, { recursive: true });
+  const now = new Date();
+  for (const name of names) {
+    copyFileSync(join(bin, name), join(debug, name), constants.COPYFILE_FICLONE);
+    utimesSync(join(debug, name), now, now);
+  }
 }
 
 /** Build once before any consumer starts; copy only executables Cargo reports from this successful build. */
