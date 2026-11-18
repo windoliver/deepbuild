@@ -1,0 +1,40 @@
+#1498's suite at the base, d4cef00fb (origin/main)
+
+NOT RUN at the base. A cold `cargo build -p deep-replica --bin deep-drive --features env-plants` was started and stopped
+by this job: the Mac's disk reached 100% (169 MiB free) while other sessions built, and the load average was 30 to 75,
+so a 20 to 60 minute build would have taken space and cores other sessions needed. Its partial target folder (756 MB)
+was deleted. What follows is read from the base's code, not from a run. The suite typechecks
+(`tsc -p tests/acceptance/1498/tsconfig.json`, no errors).
+
+Why each test fails at the base, by the first call the base refuses:
+
+- ac1-two-lines, ac2-reading-order, ac3-gestures, ac6-whole-text, ac8-serial, ac9-hashes: the first call after launch is
+  `show`, which the base's dispatcher refuses (crates/deep-replica/src/drive/mod.rs, Replica::call):
+    {"ok": false, "error": {"code": "refused", "message": "\"show\" is no call; the calls are launch, act, open,
+     notification, wait_for, see, probe, screenshot, record, motion, expect, feed, resize, menus, close, ui_check and
+     motion_check"}}
+  so `Replica.show` throws "showing ... (README, show): the replica answered {...is no call...}".
+- ac4-mouse-mode, ac7-soft-wrap: the first call after launch is `terminal`, refused the same way ("\"terminal\" is no
+  call").
+- ac5-kit-text: launch, the session page and its failure line, and the row title all exist at the base (the page draws
+  run.finished's `actual`; the list draws the row); the first refused call is `clipboard` ("\"clipboard\" is no call"),
+  the marker before the first ⌘C.
+- The planted tests (AC1 `copies-drawn-order`, AC2 `copies-draw-order`): the base's `Plant::parse`
+  (crates/deep-replica/src/drive/plant.rs) knows neither name, so deep-drive prints
+    {"ready": false, "error": "no planted replica copies-drawn-order"}
+  and exits 2, and `Replica.launch` throws "deep-drive didn't start as the planted replica ...".
+- `drag` and `double_click` with `point` and no locator, `act.mods`, `act.source` and the `{item, offset}` locator don't
+  exist at the base either: `act` refuses a drag without a locator ("act drag needs a locator") and ignores fields it
+  doesn't read.
+
+Why the positive paths can't pass trivially once those calls exist: the base app holds no text selection.
+- crates/deep-canvas/src/scope.rs: the scope's selection is a list of item IDs; a drag pans, a click selects one item,
+  and its key handling (Tab, Enter, Escape, ⌘K) has no ⌘C, so nothing turns a selection into clipboard text.
+- crates/deep-app/src/cells.rs: "the grid holds no selection"; the terminal tab forwards no input to its program.
+- No code in crates/deep-app, crates/deep-canvas, crates/deep-show or crates/deep-replica turns on the kit's text
+  selection (`grep -rln 'TextSelection\|selectable(\|text_selection'` finds only cells.rs, where it is AccessKit's caret
+  for VoiceOver).
+- The app's only clipboard writes are the Session menu's "Copy title" and "Copy link" (crates/deep-app/src/actions.rs)
+  and a data table's ⌘C of its rows (crates/deep-app/src/table/view.rs), none reached by these tests' drags.
+So at the base every ⌘C in these tests would leave the marker, and each positive check would fail with "the clipboard
+holds <marker>; expected <text>".

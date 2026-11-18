@@ -2,12 +2,15 @@
 //! place of a socket, in order, so `see` can say what the app sent; nothing reaches your hub. It records `ask.later`
 //! as the core does, so the list folds it, an answer and a row read as the core does (#1461), and refuses what the hub
 //! refuses with no view installed. It never confirms you: only `test-confirm`'s file stands in for the OS.
+//! Issue #1498: the app's `canvas.user` calls reach its copy of the canvas core ([`Core`]).
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use deep_app::hub::HubError;
 use serde_json::{json, Value};
+
+use super::core::Core;
 
 /// How long before its default a later ask comes back: the drafted hour (#1462).
 const LATER_BEFORE_MS: u64 = 60 * 60 * 1000;
@@ -20,15 +23,25 @@ pub struct HubCopy {
     pending: Mutex<Vec<Value>>,
     /// Each ask the record holds: its session and when its default applies.
     asks: Mutex<HashMap<String, (String, u64)>>,
+    /// #1498: the hub's canvas core, as a session's page reads it.
+    core: Mutex<Option<Core>>,
 }
 
 impl HubCopy {
-    pub fn new(events: &[Value]) -> Arc<HubCopy> {
-        let copy = HubCopy::default();
+    pub fn new(events: &[Value], core: Core) -> Arc<HubCopy> {
+        let copy = HubCopy {
+            core: Mutex::new(Some(core)),
+            ..HubCopy::default()
+        };
         for event in events {
             copy.saw(event);
         }
         Arc::new(copy)
+    }
+
+    /// #1498: the canvas core, for the replica's own calls.
+    pub fn core<R>(&self, f: impl FnOnce(&mut Core) -> R) -> R {
+        f(lock(&self.core).as_mut().expect("the copy holds its core"))
     }
 
     /// An event of the record, as the replica holds it.
@@ -140,6 +153,10 @@ impl HubCopy {
                 Ok(json!({"session": session, "name": name}))
             }
             "box.say" => Ok(json!({"unread": "A replica drafts nothing."})),
+            // #1498: a session's page, its tabs and your input, which the canvas core plays.
+            "canvas.user" => self
+                .core(|core| core.user(&params["call"]))
+                .map_err(HubError::Refused),
             // An answer closes its ask and its row leaves the list, as the core records them (#1461).
             "ask.answer" => {
                 let ask = params["ask"].as_str().unwrap_or_default().to_owned();
