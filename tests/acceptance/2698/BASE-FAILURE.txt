@@ -1,0 +1,190 @@
+# Base run of tests/acceptance/2698 at 9ae04c6cd980f3c37fc64bcf5938b5169e1e7c52 (no reader), Mon Nov 16 2026.
+# The checkout was not built: no node_modules and no dist, so AC5 and AC6 read BLOCKED here and did not reach the tasks.
+# macOS 27.2 (26B8119), Mac17,10 (M5 Max, 18 cores), Node v24.22.2; load average 18.5 before the run and 58.5 after it.
+# Command, from the worktree, with TMPDIR set to a scratch folder: node --test --test-concurrency=1 'tests/acceptance/2698/*.test.mjs'
+# Exit status 1. 13 tests: the 4 reader-level planted tests pass; 6 fail with "no reader"; 3 fail BLOCKED, unbuilt.
+# The worktree's path is written <worktree>; nothing else is changed or cut.
+
+✖ #2698 AC1 the reader gives the fixture's 100 wakeups within 10%, its CPU time within 10%, and instructions equal within 2% over five runs at a load above the core count (1.426083ms)
+✔ #2698 AC1 a planted reader backed by ps fails, naming the wakeups (58039.81075ms)
+ℹ run 1: load 17.5 on 18 cores; the fixture woke 100 times in 10.5 s, used 101.569 ms of CPU (100.683 ms spinning) and the kernel counted {"instructions":1725569643,"interruptWakeups":100,"idleWakeups":0}; read {"the planted reader backed by ps":{"pid":14660,"instructions":null,"cpuMs":100,"wakeups":null,"footprintBytes":1900544}}
+ℹ run 2: load 16.1 on 18 cores; the fixture woke 100 times in 10.4 s, used 83.96 ms of CPU (82.997 ms spinning) and the kernel counted {"instructions":1720568570,"interruptWakeups":100,"idleWakeups":0}; read {"the planted reader backed by ps":{"pid":15392,"instructions":null,"cpuMs":90,"wakeups":null,"footprintBytes":1900544}}
+ℹ run 3: load 15.8 on 18 cores; the fixture woke 100 times in 10.4 s, used 84.656 ms of CPU (83.674 ms spinning) and the kernel counted {"instructions":1717612265,"interruptWakeups":100,"idleWakeups":0}; read {"the planted reader backed by ps":{"pid":16581,"instructions":null,"cpuMs":90,"wakeups":null,"footprintBytes":1900544}}
+ℹ run 4: load 15.2 on 18 cores; the fixture woke 100 times in 10.5 s, used 105.68 ms of CPU (104.747 ms spinning) and the kernel counted {"instructions":1717859147,"interruptWakeups":100,"idleWakeups":0}; read {"the planted reader backed by ps":{"pid":17872,"instructions":null,"cpuMs":110,"wakeups":null,"footprintBytes":1900544}}
+ℹ run 5: load 20.3 on 18 cores; the fixture woke 100 times in 10.9 s, used 105.317 ms of CPU (104.332 ms spinning) and the kernel counted {"instructions":1724906923,"interruptWakeups":100,"idleWakeups":0}; read {"the planted reader backed by ps":{"pid":18760,"instructions":null,"cpuMs":110,"wakeups":null,"footprintBytes":1900544}}
+ℹ AC1 run 1 of 5: wakeups: the planted reader backed by ps gives none (missing) where the fixture woke from 100 timed sleeps; expected 100 within 10.0% (90 to 110)
+✖ #2698 AC2 the reader gives a footprint within 5% of 200 MB above its start, with half of it compressed by the machine (1.59875ms)
+✔ #2698 AC2 a planted reader that gives resident memory fails, naming the bytes (52664.265292ms)
+ℹ after 15 s the machine has compressed 0.0 MB of the fixture's 200.0 MB
+ℹ after 30 s the machine has compressed 0.0 MB of the fixture's 200.0 MB
+ℹ after 45 s the machine has compressed 0.0 MB of the fixture's 200.0 MB
+ℹ the fixture holds 200015872 bytes; the machine had compressed 100.0 MB (50.0%) before the readings and 100.0 MB (50.0%) after them, 51 s after it wrote them; by the kernel the fixture's footprint is 201523752 and its resident memory 101744640
+ℹ AC2: footprint: the planted reader that gives resident memory gives 99876864 bytes above its start (101744640 bytes holding, 1867776 at its start), with 99991552 of the fixture's bytes compressed by the machine; expected within 5.0% of the 200015872 bytes the fixture holds (190015078 to 210016666 bytes)
+✖ #2698 AC3 a child the fixture starts and keeps is read beside it and summed, and one that has ended is not counted twice (0.801875ms)
+✔ #2698 AC3 a planted reader that reads only the parent fails, naming the child (9179.313375ms)
+ℹ the fixture: {"done":true,"parent":{"pid":24676,"heldBytes":64012288,"wakes":10,"cpuMs":54.841,"instructions":825929197,"kernelWakeups":10},"kept":{"pid":24681,"heldBytes":128008192,"wakes":30,"cpuMs":110.931,"instructions":1653173983,"kernelWakeups":30},"ended":{"pid":24682,"heldBytes":96010240,"wakes":60,"cpuMs":316.132,"instructions":4813695237,"kernelWakeups":60}}; read {"the planted reader that reads only the parent":{"spanMs":3691.3529169999993,"processes":[{"pid":24676,"instructions":826133734,"cpuMs":54.922042,"wakeups":10,"footprintBytes":65503712}],"total":{"instructions":826133734,"cpuMs":54.922042,"wakeups":10,"footprintBytes":65503712}}}
+ℹ AC3: the kept child 24681 is not read beside its parent 24676: the planted reader that reads only the parent read 24676
+✖ #2698 AC4 with the reader's call failing, the reading is missing (3.502917ms)
+✔ #2698 AC4 a planted reader that returns 0 fails, naming the field (1205.59325ms)
+ℹ the kernel refuses PID 1 to the suite's own probe: proc_pid_rusage(1): Operation not permitted; read {"the planted reader that returns 0":{"total":{"instructions":0,"cpuMs":0,"wakeups":0,"footprintBytes":0},"own":{"pid":1,"instructions":0,"cpuMs":0,"wakeups":0,"footprintBytes":0}}}
+ℹ AC4: total.instructions, total.cpuMs, total.wakeups, total.footprintBytes, the process's instructions, the process's cpuMs, the process's wakeups, the process's footprintBytes: the planted reader that returns 0 gives 0 where the kernel refused the reading of PID 1 (proc_pid_rusage(1): Operation not permitted): a reading that can't be taken is missing, never 0
+✖ #2698 AC4 with the reader's call failing, hub-idle reads INCONCLUSIVE, naming the reading (0.323166ms)
+✖ #2698 AC4 hub-idle on a planted reader that returns 0 fails, naming the field (0.165292ms)
+✖ #2698 AC5 hub-idle reports wakeups, instructions a second, CPU a second and footprint for the hub and for each child, and two runs on one build agree within 10% on instructions a second after 15 s to settle (2.009084ms)
+✖ #2698 AC6 deep-status-30 reports its own instructions, its peak, the modules it loaded, and an empty Node program's instructions from the same rounds (0.682542ms)
+✖ #2698 AC6 deep-mcp-30d reports its own instructions, its peak, the modules it loaded, and an empty Node program's instructions from the same rounds (0.1335ms)
+ℹ tests 13
+ℹ suites 0
+ℹ pass 4
+ℹ fail 9
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 121730.836166
+
+✖ failing tests:
+
+test at tests/acceptance/2698/ac1-wakeups-cpu-instructions.test.mjs:17:1
+✖ #2698 AC1 the reader gives the fixture's 100 wakeups within 10%, its CPU time within 10%, and instructions equal within 2% over five runs at a load above the core count (1.426083ms)
+  AssertionError [ERR_ASSERTION]: no reader: benchmarks/process-reader.mjs does not exist, so nothing gives a live process's instructions, CPU time, wakeups and footprint (#2698 scope: "One reader, used by the benchmarks"; README: Assumptions)
+      at realReader (file://<worktree>/tests/acceptance/2698/surface.mjs:61:41)
+      at TestContext.<anonymous> (file://<worktree>/tests/acceptance/2698/ac1-wakeups-cpu-instructions.test.mjs:18:22)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: undefined,
+    operator: 'fail',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2698/ac2-footprint.test.mjs:18:1
+✖ #2698 AC2 the reader gives a footprint within 5% of 200 MB above its start, with half of it compressed by the machine (1.59875ms)
+  AssertionError [ERR_ASSERTION]: no reader: benchmarks/process-reader.mjs does not exist, so nothing gives a live process's instructions, CPU time, wakeups and footprint (#2698 scope: "One reader, used by the benchmarks"; README: Assumptions)
+      at realReader (file://<worktree>/tests/acceptance/2698/surface.mjs:61:41)
+      at TestContext.<anonymous> (file://<worktree>/tests/acceptance/2698/ac2-footprint.test.mjs:19:22)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: undefined,
+    operator: 'fail',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2698/ac3-children.test.mjs:16:1
+✖ #2698 AC3 a child the fixture starts and keeps is read beside it and summed, and one that has ended is not counted twice (0.801875ms)
+  AssertionError [ERR_ASSERTION]: no reader: benchmarks/process-reader.mjs does not exist, so nothing gives a live process's instructions, CPU time, wakeups and footprint (#2698 scope: "One reader, used by the benchmarks"; README: Assumptions)
+      at realReader (file://<worktree>/tests/acceptance/2698/surface.mjs:61:41)
+      at TestContext.<anonymous> (file://<worktree>/tests/acceptance/2698/ac3-children.test.mjs:17:22)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: undefined,
+    operator: 'fail',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2698/ac4-missing.test.mjs:20:1
+✖ #2698 AC4 with the reader's call failing, the reading is missing (3.502917ms)
+  AssertionError [ERR_ASSERTION]: no reader: benchmarks/process-reader.mjs does not exist, so nothing gives a live process's instructions, CPU time, wakeups and footprint (#2698 scope: "One reader, used by the benchmarks"; README: Assumptions)
+      at realReader (file://<worktree>/tests/acceptance/2698/surface.mjs:61:41)
+      at TestContext.<anonymous> (file://<worktree>/tests/acceptance/2698/ac4-missing.test.mjs:21:22)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: undefined,
+    operator: 'fail',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2698/ac4-missing.test.mjs:65:1
+✖ #2698 AC4 with the reader's call failing, hub-idle reads INCONCLUSIVE, naming the reading (0.323166ms)
+  AssertionError [ERR_ASSERTION]: no reader: benchmarks/process-reader.mjs does not exist, so nothing gives a live process's instructions, CPU time, wakeups and footprint (#2698 scope: "One reader, used by the benchmarks"; README: Assumptions)
+      at realReader (file://<worktree>/tests/acceptance/2698/surface.mjs:61:41)
+      at refusedIdle (file://<worktree>/tests/acceptance/2698/ac4-missing.test.mjs:32:9)
+      at TestContext.<anonymous> (file://<worktree>/tests/acceptance/2698/ac4-missing.test.mjs:66:26)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: undefined,
+    operator: 'fail',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2698/ac4-missing.test.mjs:69:1
+✖ #2698 AC4 hub-idle on a planted reader that returns 0 fails, naming the field (0.165292ms)
+  AssertionError [ERR_ASSERTION]: no reader: benchmarks/process-reader.mjs does not exist, so nothing gives a live process's instructions, CPU time, wakeups and footprint (#2698 scope: "One reader, used by the benchmarks"; README: Assumptions)
+      at realReader (file://<worktree>/tests/acceptance/2698/surface.mjs:61:41)
+      at refusedIdle (file://<worktree>/tests/acceptance/2698/ac4-missing.test.mjs:32:9)
+      at TestContext.<anonymous> (file://<worktree>/tests/acceptance/2698/ac4-missing.test.mjs:70:21)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: undefined,
+    operator: 'fail',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2698/ac5-hub-idle.test.mjs:57:1
+✖ #2698 AC5 hub-idle reports wakeups, instructions a second, CPU a second and footprint for the hub and for each child, and two runs on one build agree within 10% on instructions a second after 15 s to settle (2.009084ms)
+  Error: BLOCKED: an unbuilt checkout: packages/cli/dist/main.js is missing, so no budget task can start `deep` (npm ci, then npm run build)
+      at blocked (file://<worktree>/tests/acceptance/2698/support.mjs:25:33)
+      at needsBuild (file://<worktree>/tests/acceptance/2698/support.mjs:167:31)
+      at TestContext.<anonymous> (file://<worktree>/tests/acceptance/2698/ac5-hub-idle.test.mjs:59:3)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17)
+
+test at tests/acceptance/2698/ac6-commands.test.mjs:64:1
+✖ #2698 AC6 deep-status-30 reports its own instructions, its peak, the modules it loaded, and an empty Node program's instructions from the same rounds (0.682542ms)
+  Error: BLOCKED: an unbuilt checkout: packages/cli/dist/main.js is missing, so no budget task can start `deep` (npm ci, then npm run build)
+      at blocked (file://<worktree>/tests/acceptance/2698/support.mjs:25:33)
+      at needsBuild (file://<worktree>/tests/acceptance/2698/support.mjs:167:31)
+      at judgeCommand (file://<worktree>/tests/acceptance/2698/ac6-commands.test.mjs:35:3)
+      at TestContext.<anonymous> (file://<worktree>/tests/acceptance/2698/ac6-commands.test.mjs:64:191)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17)
+
+test at tests/acceptance/2698/ac6-commands.test.mjs:66:1
+✖ #2698 AC6 deep-mcp-30d reports its own instructions, its peak, the modules it loaded, and an empty Node program's instructions from the same rounds (0.1335ms)
+  Error: BLOCKED: an unbuilt checkout: packages/cli/dist/main.js is missing, so no budget task can start `deep` (npm ci, then npm run build)
+      at blocked (file://<worktree>/tests/acceptance/2698/support.mjs:25:33)
+      at needsBuild (file://<worktree>/tests/acceptance/2698/support.mjs:167:31)
+      at judgeCommand (file://<worktree>/tests/acceptance/2698/ac6-commands.test.mjs:35:3)
+      at TestContext.<anonymous> (file://<worktree>/tests/acceptance/2698/ac6-commands.test.mjs:66:189)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)

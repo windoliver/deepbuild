@@ -2,11 +2,11 @@
   "wasm_bindgen": "0.2.129",
   "set": "full",
   "files": {
-    "player.js": "c3336d437ab16e8515f81669970b5dbbd3b23c91f252f0508b3ea48f139ac3be",
-    "player_bg.wasm": "3fca3b5438d5d17e73d4f4f6525985ad4760152c73987305482e4af70014dfbf"
+    "player.js": "f133222968de7426da2d7fc661df6e92c84f43b7bb238e09ef4fd04c6d9707cb",
+    "player_bg.wasm": "65a2bfba1d39c1a365f735b01cee261b8ddc45b3551003d3b3bb712c38e37464"
   },
   "core_version": "0.0.0",
-  "set_digest": "029e4be47cacdb06ae9bd7ffec45d98cacc212c9dc59e721da8dd077f2edf10e",
+  "set_digest": "f9cd3e92c74a63cdade6f1cb5330bb37929de34f06121c1e98dc16ff3fe31da0",
   "runtime_digest": "b0d9637fcffe5b58be4a3025853302613578659fa143fc9ca6bd110364894ab8",
   "modules": [
     "building",
@@ -21,6 +21,7 @@
     "marks2d",
     "media",
     "motion",
+    "net",
     "physics",
     "record",
     "sandbox",

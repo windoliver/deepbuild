@@ -8,8 +8,10 @@
 
 @group(2) @binding(0) var label_atlas: texture_2d_array<f32>;
 
-// A record's flags: its size is in m (those draw in the geometry pass).
+// A record's flags: its size is in m, or the sky's fog applies to it (#1992); those draw in the
+// geometry pass.
 const LABEL_WORLD: u32 = 1u;
+const LABEL_FOG: u32 = 512u;
 
 struct LabelOut {
     @builtin(position) pos: vec4<f32>,
@@ -36,7 +38,7 @@ fn label_vs(
     out.color = color;
     out.page = (flags >> 3u) & 31u;
     let c = line_frame.clip * vec4<f32>(p.xyz, 1.0);
-    if c.w <= 0.0 || (flags & LABEL_WORLD) != 0u {
+    if c.w <= 0.0 || (flags & (LABEL_WORLD | LABEL_FOG)) != 0u {
         out.pos = AWAY;
         return out;
     }

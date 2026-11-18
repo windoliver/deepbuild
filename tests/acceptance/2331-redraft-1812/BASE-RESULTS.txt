@@ -1,0 +1,47 @@
+Base commit c0a9de979eae03d05db91248467e488c89f537b8 (main at 16dc5eab0 plus #1812's blind suite, its design line and
+the lint lane's entry; no implementation of #1812), on branch redraft-2331-1812 with nothing changed but this folder.
+#2331 itself has landed at this base: packages/hub/src/list.ts writes `clock` from the date's own hours and minutes.
+November 18, 2026, PST. Node 24.22.0, macOS (Darwin 27.2.0), Apple M5 Max, 18 cores, on a Mac shared with other
+sessions (1-minute load 500.55 when the run started, 503.39 after it ended). <checkout> below is this worktree.
+
+Built first: npm ci; npm run build --workspaces; CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 cargo build --locked -p
+deep-hook, run again right before the test (target/debug/deep-hook was there).
+
+Commands, from <checkout>:
+
+  NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/2331-redraft-1812 --no-file-parallelism --testTimeout=600000
+  node node_modules/typescript/bin/tsc -p tests/acceptance/2331-redraft-1812/tsconfig.json
+
+The test run once, at 10:47:40, 7.9 s. Exit 1. Test Files 1 failed (1); Tests 1 failed (1).
+
+  FAIL  inbox.test.ts > #2331.04651a1b > #2331.04651a1b: deep inbox, the hub down, says since when and the one fix,
+        deep hub start, writes each ask's default and its time, and constructs no date or number formatter
+        (redraft 1812)                                                                                         6.6 s
+        Passed before it: the world was made, deep inbox --json held the three asks, the hub was stopped by PID, and
+        (a) deep inbox exited 3.
+        First failing assertion, check (c), inbox.test.ts:140, "deep inbox says in one sentence that the hub isn't
+        answering, since when as today, and the one fix":
+          - []
+          + [ "the line that says the hub isn't answering, \"The hub isn't answering, since 12:20; this is the list its
+               database holds.\": it doesn't name the one fix in a home that is set up, deep hub start" ]
+        Its since when, 12:20, is one of the minutes the hub could have stopped, so the line failed on the fix alone.
+        What deep inbox printed, on stdout (stderr was empty):
+          The hub isn't answering, since 12:20; this is the list its database holds.
+          Ship the cart page today?  a choice  shop  13b9f2ea-6bac-434c-83e7-1148fc27b32d  0s  If you don't answer: No, at 16:40  ask:01M7S8H5G01M6AJHW8Y6MF46FY
+              answer with yes, no
+          Which header colour on the login page?  a taste call  shop  13b9f2ea-6bac-434c-83e7-1148fc27b32d  0s  If you don't answer: Blue header, on Sun 22 Nov at 09:05  ask:01M7S8H5G0H5Z3085D2MQ2WRJG
+              answer with blue (Blue header), green (Green header)
+          Merge the tax fix in the morning?  a choice  shop  13b9f2ea-6bac-434c-83e7-1148fc27b32d  0s  If you don't answer: Wait a day, tomorrow at 07:05  ask:01M7S8H5G0NPF72ZKKD54T2JZZ
+              answer with yes, wait (Wait a day)
+          3 asks need you
+
+It ended neither BLOCKED nor INCONCLUSIVE, and not at an import, a type or the fixture. The world's folders under
+/tmp/dh16-* and /tmp/dh26-* were gone after the run, and no process from this checkout was left.
+
+Type check: clean (exit 0, no output).
+
+A scratch reading, taken once and not kept: a copy of the test in this folder with checks (b), (d) and (e) moved before
+(c) and the preload's records printed, run alone at 10:49:07 with the same command and the filter scratch-order, 11.6 s,
+then deleted. The preload left one record, from deep inbox's own process (argv <checkout>/packages/cli/dist/main.js
+inbox), with 0 formatters made; (b), (d) and (e) passed; (c) then failed with the same line and message as above. So on
+this base the redrafted test fails at #1812's change and at no other check.

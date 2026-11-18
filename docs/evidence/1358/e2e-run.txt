@@ -1,0 +1,100 @@
+
+== machine
+ProductName:		macOS ProductVersion:		27.2.1 BuildVersion:		26B131 
+v24.22.0
+checkout: 44b879d49dbc8face7f33658392d483689ffb8b2, PR #2803's head (the #2801 fix), a fresh GitHub clone
+load average { 17.65 25.42 78.39 }  (other sessions' builds keep this Mac busy; each step waits for the hub, none times out)
+2026-11-18T06:39:13Z
+
+== precondition: nothing holds the label
+$ launchctl print gui/501/com.deepbuild.hub
+not loaded
+homes: /Users/Shared/dh1358-e2e-I4vXg5/a  /Users/Shared/dh1358-e2e-I4vXg5/b
+
+== 1. home A, label free: bootstrap, and the hub launchd starts has A's HOME (criterion 3)
+$ HOME=/Users/Shared/dh1358-e2e-I4vXg5/a deep hub start
+exit 0
+$ launchctl print gui/501/com.deepbuild.hub   (the job's own lines)
+	path = /Users/Shared/dh1358-e2e-I4vXg5/a/Library/LaunchAgents/com.deepbuild.hub.plist
+	state = running
+	program = /Users/<user>/.nvm/versions/node/v24.22.0/bin/node
+	runs = 1
+	pid = 59144
+	last exit code = (never exited)
+$ plutil: EnvironmentVariables in the plist launchd loaded
+{
+  "HOME" => "/Users/Shared/dh1358-e2e-I4vXg5/a"
+  "PATH" => "/Users/<user>/.nvm/versions/node/v24.22.0/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+}
+$ ps eww -p 59144: HOME of the running hub
+HOME=/Users/Shared/dh1358-e2e-I4vXg5/a
+$ HOME=/Users/Shared/dh1358-e2e-I4vXg5/a deep hub status   (until the hub's core answers a control call)
+exit 0 at try 1: {"pid":59144,"start":"01M7PP3YZSTBX9GYSVV6W32VP8","off":false,"parsers":1,"gates":{"watch_only":false,"reason"...
+$ ls A/.deepbuild
+agents			evidence		hub.key			ledger.db		packs
+checkouts		extensions		hub.key.cert		ledger.db-shm		products
+compose			github.json		hub.sock		ledger.db-wal		rules.json
+control.token		hub-lock.sqlite		hub.state		logs			tickers
+downloads		hub-lock.sqlite-journal	jobserver		objects
+$ lsof: files the hub holds open under a .deepbuild
+   8 /Users/Shared/dh1358-e2e-I4vXg5/a/.deepbuild
+   2 /Users/Shared/dh1358-e2e-I4vXg5/a/.deepbuild/logs
+
+== 2. home B, label held by A's plist: starts nothing, exits 3, names A's plist and the bootout (criterion 1)
+$ HOME=/Users/Shared/dh1358-e2e-I4vXg5/b deep hub start
+deep hub start: com.deepbuild.hub is already loaded from /Users/Shared/dh1358-e2e-I4vXg5/a/Library/LaunchAgents/com.deepbuild.hub.plist, another home's hub; unload it with launchctl bootout gui/501/com.deepbuild.hub if it is yours to stop, then start this one again
+exit 3
+A's hub pid now: 59144 (was 59144); runs = 1
+$ ls -A B/.deepbuild (no socket, no ledger)
+logs
+$ ls -A B/.deepbuild/logs
+(empty)
+$ ls -A B/Library/LaunchAgents
+com.deepbuild.hub.plist
+
+== 3. home A, its own job loaded but its hub stopped: kickstarts it as before (criterion 2)
+$ kill -TERM 59144   (the hub of this run's own job, by PID; it exits 0, so KeepAlive leaves the job loaded and stopped)
+$ launchctl print gui/501/com.deepbuild.hub   (the job's own lines)
+	path = /Users/Shared/dh1358-e2e-I4vXg5/a/Library/LaunchAgents/com.deepbuild.hub.plist
+	state = not running
+	program = /Users/<user>/.nvm/versions/node/v24.22.0/bin/node
+	runs = 1
+	last exit code = 0
+$ test -e A/.deepbuild/hub.sock
+socket absent: no hub is running for A
+$ HOME=/Users/Shared/dh1358-e2e-I4vXg5/a deep hub start
+exit 0
+$ launchctl print gui/501/com.deepbuild.hub   (the job's own lines)
+	path = /Users/Shared/dh1358-e2e-I4vXg5/a/Library/LaunchAgents/com.deepbuild.hub.plist
+	state = running
+	program = /Users/<user>/.nvm/versions/node/v24.22.0/bin/node
+	runs = 2
+	pid = 64443
+	last exit code = 0
+hub pid 64443 (was 59144)
+$ HOME=/Users/Shared/dh1358-e2e-I4vXg5/a deep hub status   (until the hub's core answers a control call)
+exit 0 at try 1: {"pid":64443,"start":"01M7PP6Z7XFNEJ7DZW9K6V99AH","off":false,"parsers":1,"gates":{"watch_only":false,"reason"...
+$ ps eww -p 64443: HOME of the running hub
+HOME=/Users/Shared/dh1358-e2e-I4vXg5/a
+$ hub log (A): the ready lines
+"ready":true,"pid":59144
+"ready":true,"pid":64443
+
+== cleanup: boot out only the job this run loaded
+$ launchctl bootout gui/501/com.deepbuild.hub
+exit 0
+$ launchctl print gui/501/com.deepbuild.hub
+no service: the label is free again
+$ ps -p 59144,64443   (this run's hubs, by PID)
+none is running
+
+== the real home: what its hub would write, before and after
+~/.deepbuild/hub.sock absent
+~/.deepbuild/ledger.db 3694592 bytes, modified Nov  2 18:31:06 2026
+~/.deepbuild/control.token 44 bytes, modified Oct 28 21:48:00 2026
+~/.deepbuild/hub.state 8 bytes, modified Oct 28 21:48:00 2026
+~/Library/LaunchAgents/com.deepbuild.hub.plist absent
+~/.deepbuild/evidence: 248 entries
+unchanged
+$ test -e /Users/Shared/dh1358-e2e-I4vXg5
+gone: the run's folder is removed

@@ -2,6 +2,8 @@
 //! wasm32 on one thread. It seals the canvas modules it carries, loads a bundle's document, plays
 //! it on its recorded input track as the app does, and answers `probe()`.
 
+#[cfg(feature = "full")]
+pub mod net;
 pub mod play;
 pub mod seal;
 

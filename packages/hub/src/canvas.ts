@@ -86,7 +86,7 @@ export async function exportCommand(args: readonly string[]): Promise<number> {
   }
   if (isObj(document) && Array.isArray(document.packs) && document.packs.length) {
     try {
-      const result = await callAsYou('canvas.export', { document, still }, 'no export was written');
+      const result = await callAsYou('canvas.export', { document, still });
       if (typeof result === 'number') return result;
       if (result.status !== 'exported' || typeof result.png !== 'string') {
         process.stderr.write(`BLOCKED: deep export: ${JSON.stringify(result)}\n`);

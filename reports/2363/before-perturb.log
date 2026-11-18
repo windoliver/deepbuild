@@ -1,0 +1,120 @@
+
+ RUN  v5.0.5 <home>/deepbuild-bays/1/base
+
+ × tests/acceptance/387/perturb.test.ts > #387.f46de50b for every shipped operator a change outside its read set leaves its key and result byte-identical; equal keys always give byte-identical results; a planted static accent reader fails naming the operator and the role; an undeclared read fails a test build > #387.f46de50b every fixture of the full build is presented and evaluated, and every operator the registry lists has a node in some fixture 48716ms
+   → the document is presented: {"rev":1,"expansions":[],"issues":[{"check":"document.validate","code":"logic_refused","severity":"error","ids":["counter"],"path":"items/counter/params","actual":{"ok":false,"code":"logic_refused","item":"counter","refusals":[{"rule":"asset","what":"the piece carries no program asset 8aca2acde98f5159992544c9343a9f6968224e3f9fe88bc6fc77c47f8b3424ec","asset":"8aca2acde98f5159992544c9343a9f6968224e3f9fe88bc6fc77c47f8b3424ec"}]},"what":"the logic module refuses this logic item","fix":"See the issue."}],"issues_evidence":"df37ae4540721ffaf240a0d262a9adad4e183ef10e7e5518908dc821ac0d185a","snapshots":[],"outcome":"refused","backends":{"fonts":{"name":"fonts.bundled","version":"1.0.0"},"cpu":{"name":"aarch64","version":"1.0.0"}},"core":"core@0.0.0","set_digest":"ccbcd2914cc304475dd44c1b27270f9c0b393ad8ae0c51f62ce5af99b98844d8"}: expected 'refused' to be 'presented' // Object.is equality
+ × tests/acceptance/387/perturb.test.ts > #387.f46de50b for every shipped operator a change outside its read set leaves its key and result byte-identical; equal keys always give byte-identical results; a planted static accent reader fails naming the operator and the role; an undeclared read fails a test build > #387.f46de50b each fixture session lists its perturbation targets: the six view inputs, the seed, its look tokens with accent among them, and every array its nodes write 60106ms
+   → the document is presented: {"rev":1,"expansions":[],"issues":[{"check":"document.validate","code":"logic_refused","severity":"error","ids":["counter"],"path":"items/counter/params","actual":{"ok":false,"code":"logic_refused","item":"counter","refusals":[{"rule":"asset","what":"the piece carries no program asset 8aca2acde98f5159992544c9343a9f6968224e3f9fe88bc6fc77c47f8b3424ec","asset":"8aca2acde98f5159992544c9343a9f6968224e3f9fe88bc6fc77c47f8b3424ec"}]},"what":"the logic module refuses this logic item","fix":"See the issue."}],"issues_evidence":"df37ae4540721ffaf240a0d262a9adad4e183ef10e7e5518908dc821ac0d185a","snapshots":[],"outcome":"refused","backends":{"fonts":{"name":"fonts.bundled","version":"1.0.0"},"cpu":{"name":"aarch64","version":"1.0.0"}},"core":"core@0.0.0","set_digest":"ccbcd2914cc304475dd44c1b27270f9c0b393ad8ae0c51f62ce5af99b98844d8"}: expected 'refused' to be 'presented' // Object.is equality
+ × tests/acceptance/387/perturb.test.ts > #387.f46de50b for every shipped operator a change outside its read set leaves its key and result byte-identical; equal keys always give byte-identical results; a planted static accent reader fails naming the operator and the role; an undeclared read fails a test build > #387.f46de50b a change to any one array, table, view input, look token, seed or asset outside an operator's read set leaves its key and result byte-identical, for every node of every fixture 32146ms
+   → the document is presented: {"rev":1,"expansions":[],"issues":[{"check":"document.validate","code":"logic_refused","severity":"error","ids":["counter"],"path":"items/counter/params","actual":{"ok":false,"code":"logic_refused","item":"counter","refusals":[{"rule":"asset","what":"the piece carries no program asset 8aca2acde98f5159992544c9343a9f6968224e3f9fe88bc6fc77c47f8b3424ec","asset":"8aca2acde98f5159992544c9343a9f6968224e3f9fe88bc6fc77c47f8b3424ec"}]},"what":"the logic module refuses this logic item","fix":"See the issue."}],"issues_evidence":"df37ae4540721ffaf240a0d262a9adad4e183ef10e7e5518908dc821ac0d185a","snapshots":[],"outcome":"refused","backends":{"fonts":{"name":"fonts.bundled","version":"1.0.0"},"cpu":{"name":"aarch64","version":"1.0.0"}},"core":"core@0.0.0","set_digest":"ccbcd2914cc304475dd44c1b27270f9c0b393ad8ae0c51f62ce5af99b98844d8"}: expected 'refused' to be 'presented' // Object.is equality
+ × tests/acceptance/387/perturb.test.ts > #387.f46de50b for every shipped operator a change outside its read set leaves its key and result byte-identical; equal keys always give byte-identical results; a planted static accent reader fails naming the operator and the role; an undeclared read fails a test build > #387.f46de50b equal keys always give byte-identical results over fuzzed sequences of edits, views and times on the fixtures (fast-check seed 3870001, 40 sequences of up to 25 clean evaluations) 26602ms
+   → the document is presented: {"rev":1,"expansions":[],"issues":[{"check":"document.validate","code":"logic_refused","severity":"error","ids":["counter"],"path":"items/counter/params","actual":{"ok":false,"code":"logic_refused","item":"counter","refusals":[{"rule":"asset","what":"the piece carries no program asset 8aca2acde98f5159992544c9343a9f6968224e3f9fe88bc6fc77c47f8b3424ec","asset":"8aca2acde98f5159992544c9343a9f6968224e3f9fe88bc6fc77c47f8b3424ec"}]},"what":"the logic module refuses this logic item","fix":"See the issue."}],"issues_evidence":"df37ae4540721ffaf240a0d262a9adad4e183ef10e7e5518908dc821ac0d185a","snapshots":[],"outcome":"refused","backends":{"fonts":{"name":"fonts.bundled","version":"1.0.0"},"cpu":{"name":"aarch64","version":"1.0.0"}},"core":"core@0.0.0","set_digest":"ccbcd2914cc304475dd44c1b27270f9c0b393ad8ae0c51f62ce5af99b98844d8"}: expected 'refused' to be 'presented' // Object.is equality
+ ✓ tests/acceptance/387/perturb.test.ts > #387.f46de50b for every shipped operator a change outside its read set leaves its key and result byte-identical; equal keys always give byte-identical results; a planted static accent reader fails naming the operator and the role; an undeclared read fails a test build > #387.f46de50b a planted operator that reads the look's accent role from a static passes perturbation of its declared reads and fails this, naming test.accent.tint and accent 6439ms
+ ✓ tests/acceptance/387/perturb.test.ts > #387.f46de50b for every shipped operator a change outside its read set leaves its key and result byte-identical; equal keys always give byte-identical results; a planted static accent reader fails naming the operator and the role; an undeclared read fails a test build > #387.f46de50b a read outside the declared set fails a test build: test.peek.out asks for the view's locale it didn't declare, and the frame fails naming the module, the operator and the read, which the access log shows 5212ms
+ × tests/acceptance/387/perturb.test.ts > #387.f46de50b for every shipped operator a change outside its read set leaves its key and result byte-identical; equal keys always give byte-identical results; a planted static accent reader fails naming the operator and the role; an undeclared read fails a test build > #387.f46de50b in a test build every access every shipped operator makes on every fixture is one of its declared reads (or a contribution to one) 6176ms
+   → logic/counter evaluated: {"outcome":"refused","code":"no_revision","issues":[],"core":"core@0.0.0","set_digest":"7fb27083dcf5a9182376a27c83f0064fb6f8847d16151ff8372807060d59316b"}: expected 'refused' to be 'evaluated' // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/387/perturb.test.ts > #387.f46de50b for every shipped operator a change outside its read set leaves its key and result byte-identical; equal keys always give byte-identical results; a planted static accent reader fails naming the operator and the role; an undeclared read fails a test build > #387.f46de50b every fixture of the full build is presented and evaluated, and every operator the registry lists has a node in some fixture
+AssertionError: the document is presented: {"rev":1,"expansions":[],"issues":[{"check":"document.validate","code":"logic_refused","severity":"error","ids":["counter"],"path":"items/counter/params","actual":{"ok":false,"code":"logic_refused","item":"counter","refusals":[{"rule":"asset","what":"the piece carries no program asset 8aca2acde98f5159992544c9343a9f6968224e3f9fe88bc6fc77c47f8b3424ec","asset":"8aca2acde98f5159992544c9343a9f6968224e3f9fe88bc6fc77c47f8b3424ec"}]},"what":"the logic module refuses this logic item","fix":"See the issue."}],"issues_evidence":"df37ae4540721ffaf240a0d262a9adad4e183ef10e7e5518908dc821ac0d185a","snapshots":[],"outcome":"refused","backends":{"fonts":{"name":"fonts.bundled","version":"1.0.0"},"cpu":{"name":"aarch64","version":"1.0.0"}},"core":"core@0.0.0","set_digest":"ccbcd2914cc304475dd44c1b27270f9c0b393ad8ae0c51f62ce5af99b98844d8"}: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented tests/acceptance/387/helpers.ts:269:91
+    267| /** A deep_show reply that presented its revision. */
+    268| export function presented(reply: JsonObject, what: string): void {
+    269|   expect(outcome(reply), `${what} is presented: ${JSON.stringify(reply…
+       |                                                                                           ^
+    270| }
+    271|
+ ❯ perturbed tests/acceptance/387/perturb.test.ts:42:3
+ ❯ tests/acceptance/387/perturb.test.ts:57:86
+ ❯ shipped tests/acceptance/387/perturb.test.ts:57:54
+ ❯ tests/acceptance/387/perturb.test.ts:62:36
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  tests/acceptance/387/perturb.test.ts > #387.f46de50b for every shipped operator a change outside its read set leaves its key and result byte-identical; equal keys always give byte-identical results; a planted static accent reader fails naming the operator and the role; an undeclared read fails a test build > #387.f46de50b each fixture session lists its perturbation targets: the six view inputs, the seed, its look tokens with accent among them, and every array its nodes write
+AssertionError: the document is presented: {"rev":1,"expansions":[],"issues":[{"check":"document.validate","code":"logic_refused","severity":"error","ids":["counter"],"path":"items/counter/params","actual":{"ok":false,"code":"logic_refused","item":"counter","refusals":[{"rule":"asset","what":"the piece carries no program asset 8aca2acde98f5159992544c9343a9f6968224e3f9fe88bc6fc77c47f8b3424ec","asset":"8aca2acde98f5159992544c9343a9f6968224e3f9fe88bc6fc77c47f8b3424ec"}]},"what":"the logic module refuses this logic item","fix":"See the issue."}],"issues_evidence":"df37ae4540721ffaf240a0d262a9adad4e183ef10e7e5518908dc821ac0d185a","snapshots":[],"outcome":"refused","backends":{"fonts":{"name":"fonts.bundled","version":"1.0.0"},"cpu":{"name":"aarch64","version":"1.0.0"}},"core":"core@0.0.0","set_digest":"ccbcd2914cc304475dd44c1b27270f9c0b393ad8ae0c51f62ce5af99b98844d8"}: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented tests/acceptance/387/helpers.ts:269:91
+    267| /** A deep_show reply that presented its revision. */
+    268| export function presented(reply: JsonObject, what: string): void {
+    269|   expect(outcome(reply), `${what} is presented: ${JSON.stringify(reply…
+       |                                                                                           ^
+    270| }
+    271|
+ ❯ perturbed tests/acceptance/387/perturb.test.ts:42:3
+ ❯ tests/acceptance/387/perturb.test.ts:57:86
+ ❯ shipped tests/acceptance/387/perturb.test.ts:57:54
+ ❯ tests/acceptance/387/perturb.test.ts:73:36
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  tests/acceptance/387/perturb.test.ts > #387.f46de50b for every shipped operator a change outside its read set leaves its key and result byte-identical; equal keys always give byte-identical results; a planted static accent reader fails naming the operator and the role; an undeclared read fails a test build > #387.f46de50b a change to any one array, table, view input, look token, seed or asset outside an operator's read set leaves its key and result byte-identical, for every node of every fixture
+AssertionError: the document is presented: {"rev":1,"expansions":[],"issues":[{"check":"document.validate","code":"logic_refused","severity":"error","ids":["counter"],"path":"items/counter/params","actual":{"ok":false,"code":"logic_refused","item":"counter","refusals":[{"rule":"asset","what":"the piece carries no program asset 8aca2acde98f5159992544c9343a9f6968224e3f9fe88bc6fc77c47f8b3424ec","asset":"8aca2acde98f5159992544c9343a9f6968224e3f9fe88bc6fc77c47f8b3424ec"}]},"what":"the logic module refuses this logic item","fix":"See the issue."}],"issues_evidence":"df37ae4540721ffaf240a0d262a9adad4e183ef10e7e5518908dc821ac0d185a","snapshots":[],"outcome":"refused","backends":{"fonts":{"name":"fonts.bundled","version":"1.0.0"},"cpu":{"name":"aarch64","version":"1.0.0"}},"core":"core@0.0.0","set_digest":"ccbcd2914cc304475dd44c1b27270f9c0b393ad8ae0c51f62ce5af99b98844d8"}: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented tests/acceptance/387/helpers.ts:269:91
+    267| /** A deep_show reply that presented its revision. */
+    268| export function presented(reply: JsonObject, what: string): void {
+    269|   expect(outcome(reply), `${what} is presented: ${JSON.stringify(reply…
+       |                                                                                           ^
+    270| }
+    271|
+ ❯ perturbed tests/acceptance/387/perturb.test.ts:42:3
+ ❯ tests/acceptance/387/perturb.test.ts:57:86
+ ❯ shipped tests/acceptance/387/perturb.test.ts:57:54
+ ❯ tests/acceptance/387/perturb.test.ts:93:36
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  tests/acceptance/387/perturb.test.ts > #387.f46de50b for every shipped operator a change outside its read set leaves its key and result byte-identical; equal keys always give byte-identical results; a planted static accent reader fails naming the operator and the role; an undeclared read fails a test build > #387.f46de50b equal keys always give byte-identical results over fuzzed sequences of edits, views and times on the fixtures (fast-check seed 3870001, 40 sequences of up to 25 clean evaluations)
+AssertionError: the document is presented: {"rev":1,"expansions":[],"issues":[{"check":"document.validate","code":"logic_refused","severity":"error","ids":["counter"],"path":"items/counter/params","actual":{"ok":false,"code":"logic_refused","item":"counter","refusals":[{"rule":"asset","what":"the piece carries no program asset 8aca2acde98f5159992544c9343a9f6968224e3f9fe88bc6fc77c47f8b3424ec","asset":"8aca2acde98f5159992544c9343a9f6968224e3f9fe88bc6fc77c47f8b3424ec"}]},"what":"the logic module refuses this logic item","fix":"See the issue."}],"issues_evidence":"df37ae4540721ffaf240a0d262a9adad4e183ef10e7e5518908dc821ac0d185a","snapshots":[],"outcome":"refused","backends":{"fonts":{"name":"fonts.bundled","version":"1.0.0"},"cpu":{"name":"aarch64","version":"1.0.0"}},"core":"core@0.0.0","set_digest":"ccbcd2914cc304475dd44c1b27270f9c0b393ad8ae0c51f62ce5af99b98844d8"}: expected 'refused' to be 'presented' // Object.is equality
+
+Expected: "presented"
+Received: "refused"
+
+ ❯ presented tests/acceptance/387/helpers.ts:269:91
+    267| /** A deep_show reply that presented its revision. */
+    268| export function presented(reply: JsonObject, what: string): void {
+    269|   expect(outcome(reply), `${what} is presented: ${JSON.stringify(reply…
+       |                                                                                           ^
+    270| }
+    271|
+ ❯ perturbed tests/acceptance/387/perturb.test.ts:42:3
+ ❯ tests/acceptance/387/perturb.test.ts:57:86
+ ❯ shipped tests/acceptance/387/perturb.test.ts:57:54
+ ❯ tests/acceptance/387/perturb.test.ts:110:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  tests/acceptance/387/perturb.test.ts > #387.f46de50b for every shipped operator a change outside its read set leaves its key and result byte-identical; equal keys always give byte-identical results; a planted static accent reader fails naming the operator and the role; an undeclared read fails a test build > #387.f46de50b in a test build every access every shipped operator makes on every fixture is one of its declared reads (or a contribution to one)
+AssertionError: logic/counter evaluated: {"outcome":"refused","code":"no_revision","issues":[],"core":"core@0.0.0","set_digest":"7fb27083dcf5a9182376a27c83f0064fb6f8847d16151ff8372807060d59316b"}: expected 'refused' to be 'evaluated' // Object.is equality
+
+Expected: "evaluated"
+Received: "refused"
+
+ ❯ evaluated tests/acceptance/387/helpers.ts:344:88
+    342| /** An `eval` reply that evaluated, its fields checked for form. */
+    343| export function evaluated(reply: JsonObject, what = 'the eval'): Evalu…
+    344|   expect(outcome(reply), `${what} evaluated: ${JSON.stringify(reply).s…
+       |                                                                                        ^
+    345|   const nodes = arr(reply['nodes'], `${what}: nodes`).map((v, i): Node…
+    346|     const n = obj(v, `${what}: nodes[${i}]`);
+ ❯ tests/acceptance/387/perturb.test.ts:203:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  5 failed | 2 passed (7)
+   Start at  15:39:49
+   Duration  460.81s (tests 100%)
