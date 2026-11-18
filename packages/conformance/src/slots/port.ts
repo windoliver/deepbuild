@@ -2,7 +2,7 @@
 // `entries` and `rows` are what the piece lists, and `send` is asked at each moment of the piece what goes out to
 // the plug-in. The kit holds the slot's rule about what a port sends and when: what the piece lists, and nothing
 // else, goes out as it plays live, and a seek, a replay or an export sends nothing. Its cases name no entry: each
-// offers the fill's own first listed entry or row, or a name it doesn't list, so a port with other lists passes.
+// offers every name the fill lists and one it doesn't, so a port with other lists is held to the same rule.
 import type { JsonValue } from '@deepbuild/contracts';
 import type { Random } from '../generator.js';
 import { fail } from '../slot-types.js';
@@ -15,8 +15,8 @@ const PORT = 'port@1';
 type Play = 'live' | 'seek' | 'replay' | 'export';
 /** One moment of the piece: how it was reached, and the entry or occurrence row it holds. */
 interface Moment { play: Play; name: string; value: JsonValue }
-/** A case: how the moment is reached, which of the fill's names it holds (a listed entry, a listed row, or one it doesn't list) and the value. */
-interface Input { play: Play; holds: 'entry' | 'row' | 'unlisted'; value: JsonValue }
+/** A case: how the moment is reached and the value it holds; the judge offers it once for each name the fill lists and once for a name it doesn't. */
+interface Input { play: Play; value: JsonValue }
 export interface PortFill extends SlotFill {
   slot: 'port@1';
   name: string;
@@ -45,30 +45,27 @@ const plantedFills = (): PlantedFill<PortFill>[] => [
 
 const toCase = (id: string, part: 'fixed' | 'seeded', input: Input): SlotCase => ({ id, part, input: input as unknown as JsonValue, expected: null });
 const cases: SlotCase[] = [
-  toCase('live-entry', 'fixed', { play: 'live', holds: 'entry', value: 120 }),
-  toCase('live-row', 'fixed', { play: 'live', holds: 'row', value: { t: 2, key: 'kick' } }),
-  toCase('live-unlisted', 'fixed', { play: 'live', holds: 'unlisted', value: 7 }),
-  toCase('seek', 'fixed', { play: 'seek', holds: 'entry', value: 90 }),
-  toCase('replay', 'fixed', { play: 'replay', holds: 'entry', value: 90 }),
-  toCase('export', 'fixed', { play: 'export', holds: 'row', value: { t: 4, key: 'snare' } }),
+  toCase('live', 'fixed', { play: 'live', value: { t: 2, key: 'kick' } }),
+  toCase('seek', 'fixed', { play: 'seek', value: 90 }),
+  toCase('replay', 'fixed', { play: 'replay', value: 90 }),
+  toCase('export', 'fixed', { play: 'export', value: 90 }),
 ];
 const fixtures: Fixture[] = cases.map(({ id, input, expected }) => ({ id, input, expected }));
 
 /** One value from the draw, live and then passed over by a seek. */
 const generate = (random: Random): SlotCase[] => {
   const value = `${word(random, 5)}${random.int(0, 99)}`;
-  return [toCase('seeded-live', 'seeded', { play: 'live', holds: 'entry', value }), toCase('seeded-seek', 'seeded', { play: 'seek', holds: 'entry', value })];
+  return [toCase('seeded-live', 'seeded', { play: 'live', value }), toCase('seeded-seek', 'seeded', { play: 'seek', value })];
 };
 
 function* judge(fill: PortFill, c: SlotCase): Generator<() => unknown, void, unknown> {
-  const { play, holds, value } = c.input as unknown as Input;
+  const { play, value } = c.input as unknown as Input;
   const listed = [...fill.entries, ...fill.rows];
-  const name = holds === 'unlisted' ? `unlisted.${listed.join('.')}` : (holds === 'entry' ? fill.entries : fill.rows)[0];
-  // A port that lists no entry, or no row, has no such moment to send.
-  if (name === undefined) return;
-  const expected = play === 'live' && holds !== 'unlisted' ? [{ name, value }] : [];
-  const sent = list('what the port sent', yield () => fill.send({ play, name, value }));
-  if (!same(sent, expected)) throw fail(RULE.message, ['sent_not_listed_live'], `${fill.name} sent ${JSON.stringify(sent)} for ${c.id} (${play}), which expects ${JSON.stringify(expected)}`);
+  for (const name of [...listed, `unlisted.${listed.join('.')}`]) {
+    const expected = play === 'live' && listed.includes(name) ? [{ name, value }] : [];
+    const sent = list('what the port sent', yield () => fill.send({ play, name, value }));
+    if (!same(sent, expected)) throw fail(RULE.message, ['sent_not_listed_live'], `${fill.name} sent ${JSON.stringify(sent)} for ${name} in ${c.id}, which expects ${JSON.stringify(expected)}`);
+  }
 }
 
 export const portKit = (): SlotKitImpl<PortFill> => ({
