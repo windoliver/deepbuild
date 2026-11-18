@@ -101,6 +101,8 @@ export type Plant =
   | 'ended-answer-to-worktree' | 'ended-answer-at-next-prompt'
   // #321's: a proceed that covers its turn's calls, holds for synced servers only, and holds filed as approving choices.
   | 'proceed-covers-turn' | 'holds-synced-only' | 'hold-as-choice'
+  // #1836's: a proceed's turn that a subagent's stop ends.
+  | 'proceed-ends-at-child-stop'
   // #23's: the agent's "always allow" picked, typed words saved as a decision, a
   // decision over the permission mode or before the guards, a rule's answer without its reason, and no rule copied.
   | 'permission-always-allow' | 'typed-saves-decision' | 'decision-over-mode' | 'decision-before-guard'
@@ -283,7 +285,10 @@ export type Plant =
   // #2197's: a deep_status that lists every session's open asks.
   | 'status-lists-every-ask'
   // #1577's: a request ID marked in progress where the mark outlives the hub, and an undo applied past a newer change.
-  | 'pending-across-restart' | 'applies-stale-undo';
+  | 'pending-across-restart' | 'applies-stale-undo'
+  // #2646's: a state pass that leaves out each session whose promise fell due, and an asks core whose reads of the log
+  // leave tool.before out of their kinds.
+  | 'pass-skips-due-promise' | 'state-pass-skips-due-promise' | 'asks-without-tool-before';
 const PLANTS: readonly string[] = [
   'statusline-user-settings-only', 'window-unknown-as-zero', 'window-carried-from-other-repo', 'sends-block-whole',
   'box-applies-at-once', 'box-ignores-revision',
@@ -310,7 +315,7 @@ const PLANTS: readonly string[] = [
   'waiter-never-wakes', 'waiter-outlives-session', 'waiter-gives-up-at-600s', 'waiter-per-stop', 'waiter-under-stop-only', 'waiter-polls', 'waiter-checks-every-5s',
   'delivered-on-waiter-exit', 'wake-assumed', 'delivered-to-dead-waiter', 'routes-from-settings', 'routes-kept-across-sessions',
   'ended-answer-to-worktree', 'ended-answer-at-next-prompt',
-  'proceed-covers-turn', 'holds-synced-only', 'hold-as-choice',
+  'proceed-covers-turn', 'holds-synced-only', 'hold-as-choice', 'proceed-ends-at-child-stop',
   'permission-always-allow', 'typed-saves-decision', 'decision-over-mode', 'decision-before-guard',
   'rule-without-reason', 'copies-no-standing-rules',
   'status-omits-commit', 'doctor-misses-hooks', 'on-stays-off',
@@ -393,6 +398,7 @@ const PLANTS: readonly string[] = [
   'parser-pool-messages-only', 'parser-pool-leaves-line-waiting',
   'status-lists-every-ask',
   'pending-across-restart', 'applies-stale-undo',
+  'pass-skips-due-promise', 'state-pass-skips-due-promise', 'asks-without-tool-before',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;

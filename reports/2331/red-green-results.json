@@ -1,0 +1,116 @@
+{
+  "baseCommit": "ccbdefd1f1a6a475732d2e00cc047b3cc39e02bd",
+  "productionDiff": "none",
+  "testsFrozen": true,
+  "before": {
+    "total": 2,
+    "passed": 0,
+    "failed": 2,
+    "skipped": 0,
+    "tests": [
+      {
+        "file": "tests/acceptance/2331/inbox.test.ts",
+        "name": "#2331.04651a1b #2331.04651a1b: deep inbox, the hub up, writes each ask's default and its time and constructs no date or number formatter",
+        "status": "failed",
+        "durationMs": 9588.048917,
+        "error": "AssertionError: the date and number formatters deep inbox constructed: expected [ Array(1) ] to deeply equal []"
+      },
+      {
+        "file": "tests/acceptance/2331/inbox.test.ts",
+        "name": "#2331.04651a1b #2331.04651a1b: deep inbox, the hub down, says since when, writes each ask's default and its time, and constructs no date or number formatter",
+        "status": "failed",
+        "durationMs": 358.39999999999964,
+        "error": "AssertionError: the date and number formatters deep inbox constructed: expected [ Array(1) ] to deeply equal []"
+      }
+    ],
+    "variant": "Only clock/when block restored to original base 1c4d1f0e; every other file remains current main.",
+    "formatterCalls": {
+      "hubUp": 5,
+      "hubDown": 6
+    },
+    "assertionsReached": [
+      "correct exit status",
+      "default text preserved",
+      "preload record present",
+      "no formatter calls (fails)"
+    ]
+  },
+  "after": {
+    "total": 10,
+    "passed": 10,
+    "failed": 0,
+    "skipped": 0,
+    "tests": [
+      {
+        "file": "tests/acceptance/2331/inbox.test.ts",
+        "name": "#2331.04651a1b #2331.04651a1b: deep inbox, the hub up, writes each ask's default and its time and constructs no date or number formatter",
+        "status": "passed",
+        "durationMs": 7504.871166
+      },
+      {
+        "file": "tests/acceptance/2331/inbox.test.ts",
+        "name": "#2331.04651a1b #2331.04651a1b: deep inbox, the hub down, says since when, writes each ask's default and its time, and constructs no date or number formatter",
+        "status": "passed",
+        "durationMs": 274.4534999999987
+      },
+      {
+        "file": "tests/acceptance/2331/judges.test.ts",
+        "name": "the week comparison in America/New_York, it fails each wrong when, the daylight-saving ones first at the change",
+        "status": "passed",
+        "durationMs": 9063.0575
+      },
+      {
+        "file": "tests/acceptance/2331/judges.test.ts",
+        "name": "the week comparison in Australia/Lord_Howe, it fails each wrong when, the daylight-saving ones first at the change",
+        "status": "passed",
+        "durationMs": 9773.161208
+      },
+      {
+        "file": "tests/acceptance/2331/judges.test.ts",
+        "name": "the week comparison in America/Havana, it fails each wrong when, the daylight-saving ones first at the change",
+        "status": "passed",
+        "durationMs": 10526.132083
+      },
+      {
+        "file": "tests/acceptance/2331/judges.test.ts",
+        "name": "the preload counts each formatter it wraps, and changes no result",
+        "status": "passed",
+        "durationMs": 161.56079200000022
+      },
+      {
+        "file": "tests/acceptance/2331/judges.test.ts",
+        "name": "the preload counts the base's clock, and nothing in a process that formats nothing",
+        "status": "passed",
+        "durationMs": 117.59250000000247
+      },
+      {
+        "file": "tests/acceptance/2331/week.test.ts",
+        "name": "#2331.aee6e8f0 #2331.aee6e8f0: in America/New_York, whose clocks go back an hour at 02:00 on Sun 1 Nov 2026, so 01:00-01:59 comes twice, when and so clock return today's text for every minute of the week",
+        "status": "passed",
+        "durationMs": 10518.599375
+      },
+      {
+        "file": "tests/acceptance/2331/week.test.ts",
+        "name": "#2331.aee6e8f0 #2331.aee6e8f0: in Australia/Lord_Howe, whose clocks go forward half an hour at 02:00 on Sun 4 Oct 2026, from UTC+10:30 to UTC+11, when and so clock return today's text for every minute of the week",
+        "status": "passed",
+        "durationMs": 9522.626334
+      },
+      {
+        "file": "tests/acceptance/2331/week.test.ts",
+        "name": "#2331.aee6e8f0 #2331.aee6e8f0: in America/Havana, whose clocks go forward an hour at midnight on Sun 8 Mar 2026, so that day starts at 01:00, when and so clock return today's text for every minute of the week",
+        "status": "passed",
+        "durationMs": 9109.534124999998
+      }
+    ],
+    "formatterCalls": {
+      "hubUp": 0,
+      "hubDown": 0
+    },
+    "textComparisons": 272160,
+    "zones": [
+      "America/New_York",
+      "Australia/Lord_Howe",
+      "America/Havana"
+    ]
+  }
+}

@@ -1,0 +1,202 @@
+{
+  "name": "interfaces",
+  "version": "1.0.0",
+  "license": "Apache-2.0",
+  "description": "First-party library interfaces (#416): physics2d.lib@1, fsm@1 and nn.mlp@1, each with fixtures whose expected values come from the interface (the physics behavior kit's formulas, a timer rule, a binary32 table worked by hand) and a planted library that must fail one of them. Written by scripts/interfaces-pack.mjs; each program's text is in src/.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "logic": ">=0.0.0",
+      "sandbox": ">=0.0.0"
+    }
+  },
+  "interfaces": {
+    "physics2d.lib@1": {
+      "exports": [
+        {
+          "name": "world",
+          "params": [
+            "i32",
+            "f64",
+            "i32",
+            "f64"
+          ],
+          "results": []
+        },
+        {
+          "name": "body",
+          "params": [
+            "i32",
+            "f64",
+            "f64",
+            "f64",
+            "f64",
+            "f64",
+            "f64",
+            "f64"
+          ],
+          "results": [
+            "i32"
+          ]
+        },
+        {
+          "name": "step",
+          "params": [
+            "i32",
+            "f64"
+          ],
+          "results": []
+        },
+        {
+          "name": "x",
+          "params": [
+            "i32",
+            "i32"
+          ],
+          "results": [
+            "f64"
+          ]
+        },
+        {
+          "name": "y",
+          "params": [
+            "i32",
+            "i32"
+          ],
+          "results": [
+            "f64"
+          ]
+        }
+      ],
+      "fixtures": [
+        "a6f6e7af9478067f1d0b5996649cc4ccd25a5335b64d462b8ebb99578ee062c0",
+        "2debaa37a4b66b88257cef2907829e2e8039217c5c4844d03b91713b877b0a9f"
+      ],
+      "planted": [
+        "ada0ca199c8a177c6da253465d7959b4ed74e1ae52720957008c2e8dffe03a59"
+      ],
+      "digest": "51f6d8d9b1eb44371566c5e3fd0a65de1698243dcad43451e6132fcdf9d6d0f7"
+    },
+    "fsm@1": {
+      "exports": [
+        {
+          "name": "start",
+          "params": [
+            "i32",
+            "i32",
+            "i32",
+            "i64"
+          ],
+          "results": []
+        },
+        {
+          "name": "step",
+          "params": [
+            "i32",
+            "i32",
+            "i64",
+            "i32"
+          ],
+          "results": [
+            "i32"
+          ]
+        }
+      ],
+      "fixtures": [
+        "d22a1c04dda562d0b90fda10e57c793ba80488812069893a8d9b2df96302cb1f"
+      ],
+      "planted": [
+        "48cbd7aa9e21a8efbaa3bf8d3ace32c5cc83baf67effbaaeaa9964678d035d68"
+      ],
+      "digest": "b6b9a4c7e1849e64811189b8ef4eebe38f69ea72b32209cbc109fcd605948fa1"
+    },
+    "nn.mlp@1": {
+      "exports": [
+        {
+          "name": "forward",
+          "params": [
+            "i32",
+            "i32",
+            "i32",
+            "i32"
+          ],
+          "results": []
+        }
+      ],
+      "fixtures": [
+        "4b652aafd9afbf8e64179cd4e694c50490484327ac26271f9643f767dadc7c03"
+      ],
+      "planted": [
+        "8c161537340dc326bfead35b179933d0d60dc7d89a60896f02802db36497b41b"
+      ],
+      "digest": "26cd73554857c58532fbe5249405592cbbdca078771d6385ebba169544ba5b72"
+    }
+  },
+  "assets": [
+    {
+      "path": "objects/slide.wasm",
+      "sha256": "228eaf659d906d488ecdc57bc158d5257ca80cee73f98d46ff82a0879f965ba4",
+      "size": 519
+    },
+    {
+      "path": "fixtures/slide.json",
+      "sha256": "a6f6e7af9478067f1d0b5996649cc4ccd25a5335b64d462b8ebb99578ee062c0",
+      "size": 722
+    },
+    {
+      "path": "objects/fall.wasm",
+      "sha256": "5949efe1b2f650769c610606585eb41b9211719fb407bb9555c453c04e34b5fd",
+      "size": 529
+    },
+    {
+      "path": "fixtures/fall.json",
+      "sha256": "2debaa37a4b66b88257cef2907829e2e8039217c5c4844d03b91713b877b0a9f",
+      "size": 644
+    },
+    {
+      "path": "objects/physics2d_average.wasm",
+      "sha256": "ada0ca199c8a177c6da253465d7959b4ed74e1ae52720957008c2e8dffe03a59",
+      "size": 588
+    },
+    {
+      "path": "objects/door.wasm",
+      "sha256": "62adaf9884955dfc21a35baa81fe3dc11035b2c966de2f509fbc6cd11c44ed64",
+      "size": 332
+    },
+    {
+      "path": "fixtures/door.json",
+      "sha256": "d22a1c04dda562d0b90fda10e57c793ba80488812069893a8d9b2df96302cb1f",
+      "size": 4401
+    },
+    {
+      "path": "objects/fsm_lazy.wasm",
+      "sha256": "48cbd7aa9e21a8efbaa3bf8d3ace32c5cc83baf67effbaaeaa9964678d035d68",
+      "size": 295
+    },
+    {
+      "path": "data/net-4-8-2.bin",
+      "sha256": "7843fc844787ff3e7ce3d2384987daa46b660405709f10981e98665e7bd7e53f",
+      "size": 248
+    },
+    {
+      "path": "data/input-4.bin",
+      "sha256": "78a9686f03da4c840d6fa7e21047af12c3bc99bc977e4486a76e1a3ea190e294",
+      "size": 16
+    },
+    {
+      "path": "objects/net.wasm",
+      "sha256": "48b0d157ffe30a2adfe7f9409ee27b4b0f0dd2f0ce4df134e247367ca536b823",
+      "size": 291
+    },
+    {
+      "path": "fixtures/4-8-2.json",
+      "sha256": "4b652aafd9afbf8e64179cd4e694c50490484327ac26271f9643f767dadc7c03",
+      "size": 1011
+    },
+    {
+      "path": "objects/mlp_fused.wasm",
+      "sha256": "8c161537340dc326bfead35b179933d0d60dc7d89a60896f02802db36497b41b",
+      "size": 522
+    }
+  ]
+}

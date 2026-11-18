@@ -1,0 +1,47 @@
+# node --test --test-reporter=spec tests/acceptance/2741/cores.test.mjs at base 80561d40c (no fix), started 2026-11-17T00:23:20Z,
+# macOS (Darwin 27.2.0), 18 cores (os.availableParallelism()), one-minute load 850 at the start and 942 at the end. It exited 1
+# after 211 s, failing at its last assertion (cores.test.mjs:216, the count above the cores). Home paths read ~/, and the
+# sandbox's temporary folder $TMPDIR/.
+✖ #2741 AC: an affected.mjs run whose alone block builds with cargo in three shards, each on a target/ that must recompile, never has more rustc processes under its grant than the machine has cores, sampled once a second (209907.05125ms)
+ℹ peak: 54 rustc processes under the run's grant at +76 s (shard 3: 18, shard 2: 18, shard 1: 18), on 18 cores
+ℹ rustc processes under the run's grant, read once a second (time from the run's start: count; 182 readings, 0 failed, the other 90 counted 0): +73 s: 1, +75 s: 15, +76 s: 54, +77 s: 54, +78 s: 54, +79 s: 54, +80 s: 54, +81 s: 54, +82 s: 52, +83 s: 54, +84 s: 54, +85 s: 54, +86 s: 54, +87 s: 54, +88 s: 54, +89 s: 54, +90 s: 54, +91 s: 54, +92 s: 54, +93 s: 54, +94 s: 54, +95 s: 54, +96 s: 54, +97 s: 54, +98 s: 54, +99 s: 54, +100 s: 54, +101 s: 54, +102 s: 54, +103 s: 54, +104 s: 54, +105 s: 54, +106 s: 54, +107 s: 54, +108 s: 54, +109 s: 54, +110 s: 54, +111 s: 54, +112 s: 54, +113 s: 54, +114 s: 54, +115 s: 54, +116 s: 54, +117 s: 54, +118 s: 54, +119 s: 54, +120 s: 54, +121 s: 54, +122 s: 54, +123 s: 53, +124 s: 54, +125 s: 54, +126 s: 54, +127 s: 54, +128 s: 54, +129 s: 54, +130 s: 54, +131 s: 48, +132 s: 54, +133 s: 54, +134 s: 54, +135 s: 54, +136 s: 54, +137 s: 54, +138 s: 53, +139 s: 48, +140 s: 48, +141 s: 48, +142 s: 48, +143 s: 31, +144 s: 31, +145 s: 31, +146 s: 31, +147 s: 1, +148 s: 1, +149 s: 1, +150 s: 1, +151 s: 1, +152 s: 1, +153 s: 25, +154 s: 1, +155 s: 1, +156 s: 1, +157 s: 2, +158 s: 2, +159 s: 1, +160 s: 1, +164 s: 2, +165 s: 2, +166 s: 1, +167 s: 2, +168 s: 2
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 211102.649084
+
+✖ failing tests:
+
+test at tests/acceptance/2741/cores.test.mjs:161:1
+✖ #2741 AC: an affected.mjs run whose alone block builds with cargo in three shards, each on a target/ that must recompile, never has more rustc processes under its grant than the machine has cores, sampled once a second (209907.05125ms)
+  AssertionError [ERR_ASSERTION]: 54 rustc processes ran under the run's grant at once at +76 s (shard 3: 18, shard 2: 18, shard 1: 18), more than the machine's 18 cores; 72 of 182 readings were above 18
+  rustc processes under the run's grant, read once a second (time from the run's start: count; 182 readings, 0 failed, the other 90 counted 0): +73 s: 1, +75 s: 15, +76 s: 54, +77 s: 54, +78 s: 54, +79 s: 54, +80 s: 54, +81 s: 54, +82 s: 52, +83 s: 54, +84 s: 54, +85 s: 54, +86 s: 54, +87 s: 54, +88 s: 54, +89 s: 54, +90 s: 54, +91 s: 54, +92 s: 54, +93 s: 54, +94 s: 54, +95 s: 54, +96 s: 54, +97 s: 54, +98 s: 54, +99 s: 54, +100 s: 54, +101 s: 54, +102 s: 54, +103 s: 54, +104 s: 54, +105 s: 54, +106 s: 54, +107 s: 54, +108 s: 54, +109 s: 54, +110 s: 54, +111 s: 54, +112 s: 54, +113 s: 54, +114 s: 54, +115 s: 54, +116 s: 54, +117 s: 54, +118 s: 54, +119 s: 54, +120 s: 54, +121 s: 54, +122 s: 54, +123 s: 53, +124 s: 54, +125 s: 54, +126 s: 54, +127 s: 54, +128 s: 54, +129 s: 54, +130 s: 54, +131 s: 48, +132 s: 54, +133 s: 54, +134 s: 54, +135 s: 54, +136 s: 54, +137 s: 54, +138 s: 53, +139 s: 48, +140 s: 48, +141 s: 48, +142 s: 48, +143 s: 31, +144 s: 31, +145 s: 31, +146 s: 31, +147 s: 1, +148 s: 1, +149 s: 1, +150 s: 1, +151 s: 1, +152 s: 1, +153 s: 25, +154 s: 1, +155 s: 1, +156 s: 1, +157 s: 2, +158 s: 2, +159 s: 1, +160 s: 1, +164 s: 2, +165 s: 2, +166 s: 1, +167 s: 2, +168 s: 2
+  the machine's cores: 18
+  builds:
+  {"file":"tests/acceptance/1523/fixture-2741.test.mjs","root":"$TMPDIR/deep-1115-04wiJP/home/deepbuild-shards/3","pid":32649,"at":1794875076792,"event":"start"}
+  {"file":"tests/acceptance/149/fixture-2741.test.ts","root":"$TMPDIR/deep-1115-04wiJP/home/deepbuild-shards/2","pid":33822,"at":1794875087389,"event":"start"}
+  {"file":"tests/acceptance/149-redraft-ac5/fixture-2741.test.ts","root":"$TMPDIR/deep-1115-04wiJP/home/deepbuild-shards/1","pid":34124,"at":1794875088662,"event":"start"}
+  {"file":"tests/acceptance/1523/fixture-2741.test.mjs","root":"$TMPDIR/deep-1115-04wiJP/home/deepbuild-shards/3","pid":32649,"at":1794875169811,"event":"end","status":0,"compiled":19,"error":null,"tail":"   Compiling planted-leaf-12 v0.1.0 ($TMPDIR/deep-1115-04wiJP/home/deepbuild-shards/3/crates/planted-leaf-12)\n   Compiling planted-bin v0.1.0 ($TMPDIR/deep-1115-04wiJP/home/deepbuild-shards/3/crates/planted-bin)\n    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 31s"}
+  {"file":"tests/acceptance/149/fixture-2741.test.ts","root":"$TMPDIR/deep-1115-04wiJP/home/deepbuild-shards/2","pid":33822,"at":1794875180107,"event":"end","status":0,"compiled":19,"error":null,"tail":"   Compiling planted-leaf-08 v0.1.0 ($TMPDIR/deep-1115-04wiJP/home/deepbuild-shards/2/crates/planted-leaf-08)\n   Compiling planted-bin v0.1.0 ($TMPDIR/deep-1115-04wiJP/home/deepbuild-shards/2/crates/planted-bin)\n    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 31s"}
+  {"file":"tests/acceptance/149-redraft-ac5/fixture-2741.test.ts","root":"$TMPDIR/deep-1115-04wiJP/home/deepbuild-shards/1","pid":34124,"at":1794875180585,"event":"end","status":0,"compiled":19,"error":null,"tail":"   Compiling planted-leaf-15 v0.1.0 ($TMPDIR/deep-1115-04wiJP/home/deepbuild-shards/1/crates/planted-leaf-15)\n   Compiling planted-bin v0.1.0 ($TMPDIR/deep-1115-04wiJP/home/deepbuild-shards/1/crates/planted-bin)\n    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 30s"}
+  exit 0
+  stdout:
+  …-budgets.test.ts tests/acceptance/823-redraft-2073/run.test.ts tests/acceptance/468/ac5-budgets.test.ts tests/acceptance/508/ac4-budgets.test.ts tests/acceptance/213/ac8-budgets.test.ts tests/acceptance/463/ac2-budgets.test.ts tests/acceptance/233/ac11-budgets.test.ts tests/acceptance/184/budgets.test.ts tests/acceptance/2516/timing.test.ts tests/acceptance/457/ac9-budgets.test.ts tests/acceptance/1636/ac8-budget.test.ts tests/acceptance/182/ac11-budgets.test.ts tests/acceptance/1015/budgets.test.ts tests/acceptance/1017/budgets.test.ts tests/acceptance/1425/budgets.test.ts tests/acceptance/148/budgets.test.ts tests/acceptance/149/budgets.test.ts tests/acceptance/1515/budgets.test.ts tests/acceptance/160/budgets.test.ts tests/acceptance/167/budgets.test.ts tests/acceptance/222/budgets.test.ts tests/acceptance/308/budgets.test.ts tests/acceptance/405/budgets.test.ts tests/acceptance/45/budgets.test.ts tests/acceptance/67/budgets.test.ts tests/acceptance/1555/budget-load.test.mjs tests/acceptance/408/machines.test.ts tests/acceptance/501/exports.test.ts tests/acceptance/824/sessions/budgets.long.test.ts tests/acceptance/990/access.test.ts tests/acceptance/990/queries.test.ts tests/acceptance/990/taste.test.ts tests/acceptance/103-redraft-1830/budgets.test.ts tests/acceptance/365-redraft-1830/budgets.test.ts tests/acceptance/262-redraft-1830/budgets.test.ts tests/acceptance/761-redraft-1830/budgets.test.ts tests/acceptance/1098-redraft-1830/budgets.test.ts tests/acceptance/148-redraft-1830/budgets.test.ts tests/acceptance/417-redraft-1830/budgets.test.ts tests/acceptance/1425-redraft-1830/budgets.test.ts tests/acceptance/149-redraft-1830/budgets.test.ts tests/acceptance/311-redraft-1830/budgets.test.ts tests/acceptance/1018-redraft-1830/budgets.test.ts tests/acceptance/166-redraft-1830/budgets.test.ts tests/acceptance/268-redraft-1830/budgets.test.ts tests/acceptance/465-redraft-1830/budgets.test.ts tests/acceptance/968-redraft-1830/budgets.test.ts tests/acceptance/124-redraft-1830/ac5-budgets.live.test.ts tests/acceptance/1427-redraft-1830/ac8-budget.live.test.ts tests/acceptance/1830/ac2-timing.test.ts tests/acceptance/568-redraft-1830/judge.test.mjs tests/acceptance/903/ac6-export.test.ts tests/acceptance/508/ac6-effects.test.ts
+  PASS affected: 0 new, 0 already failing on main, 0 inconclusive or blocked, 0 listed skips, 3 passed, in 150 s at load 939; logs in $TMPDIR/deep-1115-04wiJP/tmp/deep-affected-WYcpJy
+  
+  stderr:
+  
+      at TestContext.<anonymous> (file://~/dev/claude-worktrees/eager-tinkering-kettle/agent-a83cd791ba1e4fafb/tests/acceptance/2741/cores.test.mjs:216:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }

@@ -22,6 +22,8 @@ deep-canvas = { path = "../deep-canvas" }
 deep-canvas-seams = { path = "../deep-canvas-seams" }
 wgpu = { version = "30", default-features = false, features = ["std", "wgsl", "noop", "parking_lot"] }
 pollster = "0.4"
+# #172: a time read on the page's clock in the web player, the system's elsewhere.
+web-time = "=1.1.0"
 # Issue #140: the GPU seam's quirk table is JSON, reviewed data beside its code.
 serde_json = "1"
 

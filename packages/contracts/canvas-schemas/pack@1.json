@@ -287,7 +287,7 @@
       "properties": {
         "type": {
           "type": "string",
-          "enum": ["number", "integer", "bool", "choice", "vec3", "range", "text", "asset", "ID", "records", "record"],
+          "enum": ["number", "integer", "bool", "choice", "vec3", "range", "text", "asset", "ID", "records", "record", "word"],
           "x-closure": {
             "closed": "record",
             "reopens_if": "a recipe input needs a value type the document envelope adds",
@@ -306,7 +306,7 @@
       "properties": {
         "op": {
           "type": "string",
-          "enum": ["mark", "item", "builder", "recipe", "cue", "shot", "marker", "strip", "transition", "driver"],
+          "enum": ["mark", "item", "builder", "recipe", "cue", "shot", "marker", "strip", "transition", "driver", "place", "value"],
           "x-closure": {
             "closed": "record",
             "reopens_if": "a core release that adds a map the document holds",

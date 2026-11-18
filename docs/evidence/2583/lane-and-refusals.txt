@@ -1,0 +1,21 @@
+# #2583's Proof: the catalogue drift lane before and after on the live tracker, and the refused event's message,
+# 2026-11-16, macOS arm64. Lanes by hand from the repo root (node <lane script>), the open issues fetched once a run.
+== before: main's lane (no list of names that are not event kinds) on main's docs, 1213 open issues
+FAIL 21 event kinds named in backticks are not in the catalogue: brief.uncited (docs/technical-design.md:539), runner.login_path (docs/technical-design.md:2567,2568), brief.uncited (#2583), hub.polkit (#2538), layer.puffs (#2142), job.status (#2136), lease.gpu (#2133), user.pan (#2056), archive.scene (#2036), plan.overlay (#1261), plan.sheet (#1260), plan.overlay (#1260), brief.uncited (#1193), process.conserve (#983), process.busy (#983), process.little (#983), process.conserve (#980), process.busy (#980), process.little (#980), stack.slot (#335), move.feel (#274)
+exit=1
+== after: the same lane with brief.uncited@1 in the catalogue, on this branch's docs, 1212 open issues
+FAIL 17 event kinds named in backticks are not in the catalogue: hub.polkit (#2538), layer.puffs (#2142), job.status (#2136), lease.gpu (#2133), user.pan (#2056), archive.scene (#2036), plan.overlay (#1261), plan.sheet (#1260), plan.overlay (#1260), process.conserve (#983), process.busy (#983), process.little (#983), process.conserve (#980), process.busy (#980), process.little (#980), stack.slot (#335), move.feel (#274)
+exit=1
+brief.uncited is named nowhere. The 17 left are names #2572's list holds; runner.login_path is restated in the design
+(commit 975a20d55). With #2572's lane and list, as stacked here (node scripts/catalogue-drift.mjs):
+catalogue drift: 2 docs and 1212 open issues name only catalogued event kinds, or names scripts/not-event-kinds.txt holds (13 listed)
+exit=0
+== the refused event's message: the record's own words, from the blind record test (tests/acceptance/2583/record.test.ts)
+brief.uncited without job: required at /data/job: Add the field the schema requires. (brief.uncited 01M7FH87G07H4E90PXW1SD0VXP)
+brief.uncited without sentence: required at /data/sentence: Add the field the schema requires. (brief.uncited 01M7FH87G0D9AP7GH9KNZHX304)
+== the blind live lane test (node --test tests/acceptance/2583/lane.test.mjs): the lane through runLanes, the throttle and the lease
+1. 2026-11-16, 07:43 to 08:13 UTC, the machine's one build slot held by another session's build all along: no verdict
+﹣ #2583.8f145f1b AC1 the catalogue drift lane, on main's docs and the open issues, names `brief.uncited` nowhere (1803512.26525ms) # INCONCLUSIVE: the catalogue drift lane couldn't read all it checks, so whether it names brief.uncited is unknown: INCONCLUSIVE catalogue drift: no grant: no build grant came within 30 min
+2. 08:20 UTC, once the slot was free
+✔ #2583.8f145f1b AC1 the catalogue drift lane, on main's docs and the open issues, names `brief.uncited` nowhere (15654.3545ms)
+ℹ PASS catalogue drift (14.62 s)

@@ -36,7 +36,7 @@ struct Bin {
 impl Bin {
     /// `data` as a buffer view of `target`, read by `accessor`; the accessor's index.
     fn push(&mut self, data: &[u8], target: u32, mut accessor: Value) -> usize {
-        while self.bytes.len() % 4 != 0 {
+        while !self.bytes.len().is_multiple_of(4) {
             self.bytes.push(0);
         }
         self.views.push(json!({"buffer": 0, "byteOffset": self.bytes.len(), "byteLength": data.len(), "target": target}));
@@ -184,7 +184,7 @@ fn glb(gltf: &Value, bin: &[u8]) -> Result<Vec<u8>, String> {
         text.push(b' ');
     }
     let mut data = bin.to_vec();
-    while data.len() % 4 != 0 {
+    while !data.len().is_multiple_of(4) {
         data.push(0);
     }
     let total = 12 + 8 + text.len() + if data.is_empty() { 0 } else { 8 + data.len() };

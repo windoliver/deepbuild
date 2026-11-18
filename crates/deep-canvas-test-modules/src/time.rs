@@ -105,6 +105,19 @@ pub fn held() -> Module {
     }
 }
 
+fn register_native(r: &mut Registrar) {
+    r.kind(kind("test", "native", vec![box_param()]), &[], "rect@1");
+}
+
+/// `test.native` 1.0.0 (#172's acceptance README): a kind `test.native@1 {box}` drawn as a rect,
+/// in no web player module set, so the web export refuses a document holding one.
+pub fn native() -> Module {
+    Module {
+        manifest: manifest("test.native", &[]),
+        register: register_native,
+    }
+}
+
 fn register_cache(r: &mut Registrar) {
     r.kind(kind("test", "cache", vec![box_param()]), &[], "rect@1");
     r.contribution(

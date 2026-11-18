@@ -192,6 +192,7 @@ impl Mirrorer {
 
     /// The mirrored view's passes up to its output, then the pass laying its picture over the
     /// parts in `linear`, by `ids`.
+    #[allow(clippy::too_many_arguments)]
     pub fn jobs(
         &mut self,
         device: &Device,

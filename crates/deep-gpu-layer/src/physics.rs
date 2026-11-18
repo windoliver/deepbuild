@@ -5,6 +5,7 @@
 //! one instanced draw per prototype and material and a frame uploads only the rows that moved.
 //! #524: an output to an item path writes the channels deep_show writes for it (deep-physics-
 //! rapier: channels.rs), and a skin's array draws its soft body (deep-canvas-physics: skin.rs).
+//! #251: the call's `tracks` give each world, by ID, the input track its bake applies.
 
 use deep_canvas_physics::caps::RAPIER3D;
 use deep_canvas_physics::check::check;
@@ -14,9 +15,10 @@ use deep_canvas_physics::written;
 use deep_physics_rapier::runner::Run;
 use serde_json::{json, Map, Value};
 
-/// Bakes each world `doc` lists into the arrays its `<body>#*` outputs and skins write and the
-/// channels its outputs to item paths write; a world the physics module refuses refuses the call.
-pub(crate) fn bake(doc: &mut Value) -> Result<(), Value> {
+/// Bakes each world `doc` lists, with its track from `tracks` (#251), into the arrays its
+/// `<body>#*` outputs and skins write and the channels its outputs to item paths write; a world
+/// the physics module refuses refuses the call.
+pub(crate) fn bake(doc: &mut Value, tracks: &Value) -> Result<(), Value> {
     let Some(worlds) = doc.get("worlds").and_then(Value::as_object).cloned() else {
         return Ok(());
     };
@@ -40,7 +42,10 @@ pub(crate) fn bake(doc: &mut Value) -> Result<(), Value> {
                 json!({"code": "physics_refused", "reason": format!("worlds/{id}"), "issues": issues})
             })?;
         let step = step_flicks(&w);
-        let call = json!({"call": "bake", "scene": doc, "world": id, "steps": (span + step - 1) / step, "frame_rate": rate});
+        let mut call = json!({"call": "bake", "scene": doc, "world": id, "steps": (span + step - 1) / step, "frame_rate": rate});
+        if let Some(track) = tracks.get(id) {
+            call["track"] = track.clone();
+        }
         let reply = run.answer(&call).unwrap_or(Value::Null);
         if reply["ok"] != json!(true) {
             return Err(
@@ -57,7 +62,7 @@ pub(crate) fn bake(doc: &mut Value) -> Result<(), Value> {
         deep_physics_rapier::channels::output_channels(
             id,
             &w,
-            &reply["bodies"],
+            &deep_physics_rapier::channels::states(&reply),
             &frames,
             false,
             &mut channels,

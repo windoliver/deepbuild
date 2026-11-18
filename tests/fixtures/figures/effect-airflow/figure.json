@@ -1,0 +1,23 @@
+{
+  "format": 1,
+  "id": "effect-airflow",
+  "profile": "scene",
+  "title": "Airflow about a hub",
+  "description": "Streaks along one line, turned three times about the hub's axis.",
+  "size": [1920,1080],
+  "camera": "cam",
+  "seed": 508,
+  "requires": {
+    "modules": {"scene3d":"^1","effects":"^1"}
+  },
+  "transport": {
+    "span": "4s",
+    "frame_rate": [30,1]
+  },
+  "items": {
+    "cam": {"id":"cam","kind":"camera@1","name":"Camera","order":"a000","params":{"projection":"perspective","position":[0,2,6],"target":[0,0.6,0],"fov":40}},
+    "hub": {"id":"hub","kind":"mark.box@1","name":"Hub","order":"a001","params":{"size":[0.6,0.6,0.6],"paint":{"fill":{"role":"ink"}}},"at":{"pos":[0,0.6,0]}},
+    "flow-path": {"id":"flow-path","kind":"curve@1","name":"Flow line","order":"a002","params":{"points":[[1,0.6,-2],[1,0.6,0],[1,0.6,2]]}},
+    "airflow": {"id":"airflow","kind":"effect@1","name":"Airflow","order":"a003","params":{"kind":"airflow","anchor":"hub","axis":[0,0,1],"airflow":{"paths":["flow-path"],"around":{"axis":[0,0,1],"copies":3,"span":[0,360]},"count":128,"speed":1,"length":2,"fade":{"in":0.2,"out":0.3}}},"at":{"pos":[0,0,0]}}
+  }
+}

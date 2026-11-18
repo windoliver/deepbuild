@@ -26,6 +26,12 @@
           },
           "version": {
             "type": "string"
+          },
+          "lists": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
           }
         },
         "required": [

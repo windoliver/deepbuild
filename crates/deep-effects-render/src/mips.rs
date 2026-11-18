@@ -84,6 +84,7 @@ impl Mips {
 impl Chain {
     /// Records each level from the one above, in order.
     pub fn record(&self, encoder: &mut wgpu::CommandEncoder) {
+        deep_gpu::counted::compute_pass();
         let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some("mips"),
             timestamp_writes: None,
@@ -192,6 +193,7 @@ impl Fills {
 
 impl Fill {
     pub fn record(&self, encoder: &mut wgpu::CommandEncoder) {
+        deep_gpu::counted::compute_pass();
         let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some("fill"),
             timestamp_writes: None,

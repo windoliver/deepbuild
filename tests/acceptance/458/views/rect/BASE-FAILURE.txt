@@ -1,0 +1,188 @@
+Base failure for tests/acceptance/458/views/rect (criteria 15 and 16 of #458), at base commit 06e231702.
+
+What was run, once, on the reference Mac (Metal), from <checkout> at the base commit with no source change:
+
+  CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/458/views/rect rectangle.test.ts --no-file-parallelism --testTimeout=600000
+
+The file's own build ran (cargo build --locked --bin deep-gpu, this checkout, the shared target folder) and the tests
+drove the binary it built. All five tests fail, each on the base's own answer to what it lacks, none in the tests'
+code:
+
+- The two clean tests (AC15, AC16) fail on the reply to the `view_rectangle` call:
+  {"code":"bad_input","reason":"unknown call"}.
+- The three planted tests fail on `deep-gpu run --planted <name>` for bloom_clamps_to_target, ao_scales_by_target and
+  clears_whole_target: exit 2 with {"ok":false,"code":"bad_input"}, the base's answer to a planted name it lacks.
+
+So at the base no comparison of the rectangle is reached; the planted twins can't be shown failing their checks until
+the surface exists (README: The surface under test).
+
+---------------------------------------------------------------------------------------------------------------------
+The run
+---------------------------------------------------------------------------------------------------------------------
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/458/views/rect
+
+ ❯ rectangle.test.ts (5 tests | 5 failed) 3611ms
+   ❯ #458 view-rectangle invariance (5)
+     × AC15 #458.fd784061 the fixture drawn at 960 × 540 alone and into the rectangle at (317, 211) of a 2560 × 1440 target has equal ID targets bit for bit and its color, normal, depth and velocity within one code value on every pixel of the rectangle 1932ms
+     × AC15 #458.fd784061 a planted bloom that clamps its taps to the target's edge instead of the view's brightens pixels within 32 px of the rectangle's edge and fails, naming the target and the first pixel 15ms
+     × AC15 #458.fd784061 a planted ambient-occlusion pass that scales its coordinates by the target's size fails the same way, naming the target and the first pixel 14ms
+     × AC16 #458.c54b3af2 in the same run every pixel outside the rectangle keeps its noise bit for bit in every target 108ms
+     × AC16 #458.c54b3af2 a planted pass that clears the whole target fails, naming the target and the first pixel outside 14ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  rectangle.test.ts > #458 view-rectangle invariance > AC15 #458.fd784061 the fixture drawn at 960 × 540 alone and into the rectangle at (317, 211) of a 2560 × 1440 target has equal ID targets bit for bit and its color, normal, depth and velocity within one code value on every pixel of the rectangle
+AssertionError: the fixture alone and in its rectangle, seed 458 is answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ answered helpers.ts:131:77
+    129| export function answered(reply: JsonObject, what: string): JsonObject {
+    130|   if (reply['code'] === 'unsupported_platform' || (typeof reply['code'…
+    131|   expect(reply['code'], `${what} is answered, not refused: ${show(repl…
+       |                                                                             ^
+    132|   return reply;
+    133| }
+ ❯ rectangleOf helpers.ts:231:3
+ ❯ draw rectangle.test.ts:30:10
+ ❯ theRun rectangle.test.ts:34:45
+ ❯ rectangle.test.ts:39:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  rectangle.test.ts > #458 view-rectangle invariance > AC15 #458.fd784061 a planted bloom that clamps its taps to the target's edge instead of the view's brightens pixels within 32 px of the rectangle's edge and fails, naming the target and the first pixel
+AssertionError: deep-gpu run --planted bloom_clamps_to_target exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ run helpers.ts:119:144
+    117|   expect(timedOut, `${name} finished within its timeout`).toBe(false);
+    118|   const stdout = r.stdout ?? '';
+    119|   expect(r.status, `${name} exits 0 (${r.signal ?? 'no signal'}); stdo…
+       |                                                                                                                                                ^
+    120|   const lines = stdout.split('\n').filter((l) => l !== '');
+    121|   expect(lines.length, `${name}: one answer line`).toBe(1);
+ ❯ draw rectangle.test.ts:30:33
+ ❯ rectangle.test.ts:80:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  rectangle.test.ts > #458 view-rectangle invariance > AC15 #458.fd784061 a planted ambient-occlusion pass that scales its coordinates by the target's size fails the same way, naming the target and the first pixel
+AssertionError: deep-gpu run --planted ao_scales_by_target exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ run helpers.ts:119:144
+    117|   expect(timedOut, `${name} finished within its timeout`).toBe(false);
+    118|   const stdout = r.stdout ?? '';
+    119|   expect(r.status, `${name} exits 0 (${r.signal ?? 'no signal'}); stdo…
+       |                                                                                                                                                ^
+    120|   const lines = stdout.split('\n').filter((l) => l !== '');
+    121|   expect(lines.length, `${name}: one answer line`).toBe(1);
+ ❯ draw rectangle.test.ts:30:33
+ ❯ rectangle.test.ts:89:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  rectangle.test.ts > #458 view-rectangle invariance > AC16 #458.c54b3af2 in the same run every pixel outside the rectangle keeps its noise bit for bit in every target
+AssertionError: the fixture alone and in its rectangle, seed 458 is answered, not refused: {"code":"bad_input","reason":"unknown call"}: expected 'bad_input' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_input"
+
+ ❯ answered helpers.ts:131:77
+    129| export function answered(reply: JsonObject, what: string): JsonObject {
+    130|   if (reply['code'] === 'unsupported_platform' || (typeof reply['code'…
+    131|   expect(reply['code'], `${what} is answered, not refused: ${show(repl…
+       |                                                                             ^
+    132|   return reply;
+    133| }
+ ❯ rectangleOf helpers.ts:231:3
+ ❯ draw rectangle.test.ts:30:10
+ ❯ theRun rectangle.test.ts:34:45
+ ❯ rectangle.test.ts:96:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  rectangle.test.ts > #458 view-rectangle invariance > AC16 #458.c54b3af2 a planted pass that clears the whole target fails, naming the target and the first pixel outside
+AssertionError: deep-gpu run --planted clears_whole_target exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ run helpers.ts:119:144
+    117|   expect(timedOut, `${name} finished within its timeout`).toBe(false);
+    118|   const stdout = r.stdout ?? '';
+    119|   expect(r.status, `${name} exits 0 (${r.signal ?? 'no signal'}); stdo…
+       |                                                                                                                                                ^
+    120|   const lines = stdout.split('\n').filter((l) => l !== '');
+    121|   expect(lines.length, `${name}: one answer line`).toBe(1);
+ ❯ draw rectangle.test.ts:30:33
+ ❯ rectangle.test.ts:111:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  5 failed (5)
+   Start at  09:49:04
+   Duration  3.71s (tests 99%, transform 1%)
+
+vitest exit 1
+
+---------------------------------------------------------------------------------------------------------------------
+The fixture at the base
+---------------------------------------------------------------------------------------------------------------------
+
+The fixture (fixture.ts) was drawn by the base's `deep-gpu run` through `view3d`, as the first test's premise calls
+write it (size [960, 540], fps 60, from 30, frames 1, capture [30]): its seven draws and the full fixture once more,
+eight in one scenario. Every call was
+answered with a frame (the document passes the base's check), through the passes scene3d.shadow, scene3d.geometry,
+effects.glow and scene3d.output. The first 12 hex digits of each file's SHA-256:
+
+  every effect on              final 391c2b3cf19c  linear f519c0e7711b  ids ecdd4b3b477b
+  bloom off                    final 45ed28b17da4  linear f519c0e7711b  ids ecdd4b3b477b
+  ambient occlusion off        final 6ebc600e72a0  linear 23488d2b0858  ids ecdd4b3b477b
+  depth of field off           final e0eddeb6e5b4  linear 7b58bc9a618d  ids ecdd4b3b477b
+  velocity blur off            final 8adfc3988e9d  linear dcee02d5b6ec  ids ecdd4b3b477b
+  the sun casting no shadow    final 47cd112ef180  linear 30b02b56d254  ids ecdd4b3b477b
+  no sun                       final bd08b9016ae0  linear 43d9b6a1cbb1  ids ecdd4b3b477b
+  every effect on, again       final 391c2b3cf19c  linear f519c0e7711b  ids ecdd4b3b477b
+
+- Two draws of the full fixture give the same files: the fixture is deterministic on this machine.
+- `final` changes with each of bloom, ambient occlusion, depth of field, velocity blur, the shadow and the sun off,
+  so each is on and shows in this frame. `linear` is unchanged by bloom alone: at the base bloom shows in `final`.
+- `ids` is the same in all eight: the effects move no geometry.
+
+The comparisons themselves (helpers.ts: insideFailures, outsideFailures, distinctPixels, brighterNearEdge) were run
+once, in a scratch test that isn't committed, on replies assembled by hand from the base's `view3d` files: the view's
+targets pasted at (317, 211) into 2560 × 1440 targets of seeded noise. They passed that stand-in for a right program
+(also with one pixel moved by one code value in each target), and failed its three wrong twins, naming the target and
+the first pixel: `final` brightened by 6 codes within 20 px of the edge ("the final target: 28388 of 518400 pixels
+… the first pixel is (0, 0) of the view, (317, 211) of the target"), one ID bit flipped, and `final` cleared outside
+the rectangle ("the final target: 3168000 of 3168000 pixels outside the rectangle lost their noise; the first pixel
+outside is (0, 0) of the target"). A stand-in proves the tests' own code, not the renderer.
+
+Not run at the base: nothing else. The type-check (npx tsc -p tests/acceptance/458/views/rect/tsconfig.json) passes.

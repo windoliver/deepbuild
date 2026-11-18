@@ -1,0 +1,17 @@
+Command: node --test --test-concurrency=1 --test-name-pattern="Vitest|vitest|runners.*reports|Rust change" tests/listed-failures.test.mjs tests/lane-reading.test.mjs tests/affected.test.mjs
+Exit: 0; Linux-only prlimit test skipped, not PASS.
+
+✔ a Rust change reaches its crate and the crates depending on it, their [[test]] files outside them, and the tests that run it (166.918375ms)
+✔ results come from the runners' reports and cargo's lines, each by an ID that reruns it (462.949167ms)
+﹣ the vitest reporter finishes a record a full disk cut short once space is back, and a record that never lands leaves its report unfinished, never a pass (0.458583ms) # prlimit is Linux's
+✔ a test vitest's -t filter leaves out is no skip, and a skip it runs still is (18338.147459ms)
+✔ Vitest lists only the exact failing test ID, not its passing or newly failing sibling (15246.049417ms)
+✔ an unfinished Vitest report cannot turn a listed failure and missing results into PASS (6.352875ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 5
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 1
+ℹ todo 0
+ℹ duration_ms 37670.627333

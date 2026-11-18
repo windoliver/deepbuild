@@ -91,7 +91,11 @@ fn read_subject(f: &Frame, subject: &[String]) -> Option<f64> {
 /// The look's role a text set to it reads at least `min` against `ground` in: `ink` when it
 /// does, else the role that reads highest.
 fn role_for(f: &Frame, ground: f64, min: f64) -> Option<(String, f64)> {
-    let of = |role: &str| f.roles.get(role).map(|c| ratio(encoded_luminance(*c), ground));
+    let of = |role: &str| {
+        f.roles
+            .get(role)
+            .map(|c| ratio(encoded_luminance(*c), ground))
+    };
     if let Some(r) = of("ink").filter(|r| *r >= min) {
         return Some(("ink".into(), r));
     }
@@ -148,13 +152,16 @@ pub fn report(lowered: &Value, input: &Value, frames: &[Frame]) -> Report {
             .collect();
         let subject_read = subject.as_ref().and_then(|s| read_subject(f, s));
         if read.is_empty() && subject_read.is_none() {
-            out.blocked.push(blocked("no_subject", KIND, &texts, "text"));
+            out.blocked
+                .push(blocked("no_subject", KIND, &texts, "text"));
             return out;
         }
         for (id, t) in &read {
             let ok = t.ratio >= min;
-            out.results.push(json!({"t": f.t, "item": id, "ratio": t.ratio, "ground": t.ground,
-                                    "min": min, "pass": ok}));
+            out.results.push(
+                json!({"t": f.t, "item": id, "ratio": t.ratio, "ground": t.ground,
+                                    "min": min, "pass": ok}),
+            );
             if ok || done.contains(id) {
                 continue;
             }
@@ -176,9 +183,9 @@ pub fn report(lowered: &Value, input: &Value, frames: &[Frame]) -> Report {
                 severity: "error",
                 path: path.clone(),
                 what,
-                fix_ops: role.as_ref().map(|(r, _)| {
-                    vec![json!({"op": "set", "id": id, "path": path, "value": r})]
-                }),
+                fix_ops: role
+                    .as_ref()
+                    .map(|(r, _)| vec![json!({"op": "set", "id": id, "path": path, "value": r})]),
             };
             let actual = json!({"t": f.t, "ratio": t.ratio, "ground": t.ground, "min": min,
                                 "role": role.map(|(r, _)| r)});
@@ -186,7 +193,8 @@ pub fn report(lowered: &Value, input: &Value, frames: &[Frame]) -> Report {
         }
         if let (Some(r), Some(s)) = (subject_read, subject.as_ref()) {
             let ok = r >= subject_min;
-            out.results.push(json!({"t": f.t, "subject": s, "ratio": r, "min": subject_min, "pass": ok}));
+            out.results
+                .push(json!({"t": f.t, "subject": s, "ratio": r, "min": subject_min, "pass": ok}));
             if !ok && !done.contains(&s[0]) {
                 done.push(s[0].clone());
                 let raised = Raised {
@@ -198,7 +206,11 @@ pub fn report(lowered: &Value, input: &Value, frames: &[Frame]) -> Report {
                     ),
                     fix_ops: None,
                 };
-                out.raised.push((s[0].clone(), raised, json!({"t": f.t, "ratio": r, "min": subject_min})));
+                out.raised.push((
+                    s[0].clone(),
+                    raised,
+                    json!({"t": f.t, "ratio": r, "min": subject_min}),
+                ));
             }
         }
     }

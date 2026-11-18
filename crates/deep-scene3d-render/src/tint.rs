@@ -133,7 +133,7 @@ impl Store {
             self.buffer = buffer(&device.device, at);
         }
         for (t, h) in tints.iter().zip(&mut self.held) {
-            let started = std::time::Instant::now();
+            let started = web_time::Instant::now();
             let seek = t.step != h.step && t.step != h.step + 1;
             h.step = t.step;
             if keeps_grid_on_seek && seek && !h.cells.is_empty() {
@@ -157,7 +157,8 @@ impl Store {
             if !runs.is_empty() {
                 self.rows.insert(h.key.clone(), runs);
             }
-            *self.upload_ms.entry(t.plate.clone()).or_default() += started.elapsed().as_secs_f64() * 1000.0;
+            *self.upload_ms.entry(t.plate.clone()).or_default() +=
+                started.elapsed().as_secs_f64() * 1000.0;
         }
         !same
     }

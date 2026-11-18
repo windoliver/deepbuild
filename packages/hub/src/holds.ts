@@ -143,9 +143,13 @@ export class Holds {
     await this.raise(meta.session, meta.agent, meta.cwd, source, k, `The agent offers: "${question}" It needs your authority.`, yes, offerPlan(source, `Let the agent do what it offered: ${question}`));
   }
 
-  /** The proceed whose turn the session is in, or undefined: the newest of its proceeds, stops and prompts is a proceed. */
+  /**
+   * The proceed whose turn the session is in, or undefined: the newest of its proceeds, stops and prompts is a proceed.
+   * A subagent's stop, which names its child, ends no turn of the session's (#1836), as in the record's projections.
+   */
   private async proceeding(session: string): Promise<{ id: string; question: string; rule: string } | undefined> {
-    const [last] = (await this.o.raw(`SELECT id, kind, data FROM events WHERE session_id = ? AND kind IN ('question.proceeded', 'agent.stop', 'user.ask') ORDER BY log_pos DESC LIMIT 1`, [session])) as { id: string; kind: string; data: string }[];
+    const child = this.o.plant === 'proceed-ends-at-child-stop' ? '' : ` AND NOT (kind = 'agent.stop' AND json_extract(data, '$.child') IS NOT NULL)`;
+    const [last] = (await this.o.raw(`SELECT id, kind, data FROM events WHERE session_id = ? AND kind IN ('question.proceeded', 'agent.stop', 'user.ask')${child} ORDER BY log_pos DESC LIMIT 1`, [session])) as { id: string; kind: string; data: string }[];
     if (last?.kind !== 'question.proceeded') return undefined;
     const d = JSON.parse(last.data) as { question: string; rule: string };
     return { id: last.id, question: d.question, rule: d.rule };

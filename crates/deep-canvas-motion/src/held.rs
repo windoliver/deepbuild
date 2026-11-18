@@ -47,24 +47,37 @@ pub(crate) fn check(doc: &Map<String, Value>) -> Result<(), Refused> {
         .into_iter()
         .flatten()
     {
-        let Some(flip) = item.pointer("/params/flip").filter(|f| f.get("array").is_some()) else {
+        let Some(flip) = item
+            .pointer("/params/flip")
+            .filter(|f| f.get("array").is_some())
+        else {
             continue;
         };
         let at = format!("items/{id}/params/flip");
-        let path = flip["array"].as_str().and_then(deep_canvas::columns::element_path);
+        let path = flip["array"]
+            .as_str()
+            .and_then(deep_canvas::columns::element_path);
         if path.is_none() {
-            return Err(Refused { code: "ref_unresolved", path: format!("{at}/array"), detail: None });
+            return Err(Refused {
+                code: "ref_unresolved",
+                path: format!("{at}/array"),
+                detail: None,
+            });
         }
         let map = flip.get("map").and_then(Value::as_object);
         if map.is_none_or(|m| m.values().any(|c| !c.is_string())) {
-            return Err(Refused { code: "out_of_range", path: format!("{at}/map"), detail: None });
+            return Err(Refused {
+                code: "out_of_range",
+                path: format!("{at}/map"),
+                detail: None,
+            });
         }
     }
     Ok(())
 }
 
 /// #538: the child a value of a flip's array names in its `map`; `None` where the map lacks it.
-fn mapped_child<'a>(flip: &'a Value, value: f64) -> Option<&'a str> {
+fn mapped_child(flip: &Value, value: f64) -> Option<&str> {
     let key = (value.fract() == 0.0 && value.is_finite()).then(|| format!("{}", value as i64))?;
     flip.get("map")?.get(&key)?.as_str()
 }
@@ -75,13 +88,27 @@ fn mapped_child<'a>(flip: &'a Value, value: f64) -> Option<&'a str> {
 /// `arrays`, so a seek raises what a play does.
 pub fn unmapped(doc: &Value, at: Option<i64>) -> Vec<deep_canvas::document::Issue> {
     let mut out = Vec::new();
-    for (id, item) in doc.get("items").and_then(Value::as_object).into_iter().flatten() {
-        let Some(flip) = item.pointer("/params/flip").filter(|f| f.get("array").is_some()) else {
+    for (id, item) in doc
+        .get("items")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+    {
+        let Some(flip) = item
+            .pointer("/params/flip")
+            .filter(|f| f.get("array").is_some())
+        else {
             continue;
         };
-        let Some(path) = flip["array"].as_str() else { continue };
-        let Some((form, index)) = deep_canvas::columns::element_path(path) else { continue };
-        let Some(array) = doc.pointer("/arrays").and_then(|a| a.get(form)) else { continue };
+        let Some(path) = flip["array"].as_str() else {
+            continue;
+        };
+        let Some((form, index)) = deep_canvas::columns::element_path(path) else {
+            continue;
+        };
+        let Some(array) = doc.pointer("/arrays").and_then(|a| a.get(form)) else {
+            continue;
+        };
         let frame_step = at.map(|t| t.div_euclid(array["every"].as_i64().unwrap_or(1).max(1)));
         let mut was_mapped = true;
         for (step, value) in deep_canvas::columns::element_steps(array, index) {
@@ -153,7 +180,11 @@ fn shown(
             let array = doc.get("arrays")?.get(form)?;
             deep_canvas::columns::element_at(array, index, t).map(|(v, _)| v)
         });
-        return Some(value.and_then(|v| mapped_child(flip, v)).map(str::to_string));
+        return Some(
+            value
+                .and_then(|v| mapped_child(flip, v))
+                .map(str::to_string),
+        );
     }
     let list = flip
         .get("from")?
@@ -330,7 +361,14 @@ pub const FLIP_HOLDS_LAST: &str = "flip_holds_last_child";
 /// the map lacks hides them all. Pure in t, so a seek draws what a play does; only those children
 /// read t, so a document with no such flip gains no work per frame.
 pub(crate) fn register(r: &mut deep_canvas::registry::Registrar) {
-    r.contribution("motion.flip", "fields", "item", "geometry", "items", "core.fields");
+    r.contribution(
+        "motion.flip",
+        "fields",
+        "item",
+        "geometry",
+        "items",
+        "core.fields",
+    );
     r.operator("flip", "items", &["self", "refs", "t"], &["motion.flip"])
         .applies(|doc, _, item| array_flip_of(doc, item).is_some())
         .run(flip_op);
@@ -364,8 +402,15 @@ fn flip_op(v: &mut deep_canvas::schedule::View<'_>) -> Result<(), deep_canvas::s
         }
     }
     let hidden = child != Some(id);
-    let edits = hidden.then(|| Edit { add: false, path: vec!["visible".into()], value: Datum::Bool(false) });
-    v.write("motion.flip", Val::typed(Edits(edits.into_iter().collect())))
+    let edits = hidden.then(|| Edit {
+        add: false,
+        path: vec!["visible".into()],
+        value: Datum::Bool(false),
+    });
+    v.write(
+        "motion.flip",
+        Val::typed(Edits(edits.into_iter().collect())),
+    )
 }
 
 #[cfg(test)]
@@ -437,7 +482,10 @@ mod tests {
         assert_eq!(visible(4 * every), Vec::<String>::new());
         let raised = unmapped(&doc, None);
         assert_eq!(raised.len(), 1);
-        assert_eq!(raised[0].actual, json!({"value": 7.0, "array": "story.line[0]", "step": 3}));
+        assert_eq!(
+            raised[0].actual,
+            json!({"value": 7.0, "array": "story.line[0]", "step": 3})
+        );
         assert_eq!(unmapped(&doc, Some(3 * every)).len(), 1);
         assert!(unmapped(&doc, Some(4 * every)).is_empty());
     }

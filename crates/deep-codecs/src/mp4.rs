@@ -319,7 +319,7 @@ fn stsd(body: &[u8], audio: bool) -> Option<Entry> {
         ..Entry::default()
     };
     let rest = match &e.kind {
-        b"avc1" | b"avc3" | b"hvc1" | b"hev1" | b"mp4v" | b"jpeg" | b"apcn" | b"ap4h" => {
+        b"avc1" | b"avc3" | b"hvc1" | b"hev1" | b"av01" | b"mp4v" | b"jpeg" | b"apcn" | b"ap4h" => {
             let mut b = Bytes(e.body, 24);
             entry.width = b.u16()?;
             entry.height = b.u16()?;
@@ -357,7 +357,7 @@ fn stsd(body: &[u8], audio: bool) -> Option<Entry> {
     for a in atoms(rest) {
         match &a.kind {
             // #503: ALAC's cookie, Opus's dOps and FLAC's dfLa too.
-            b"avcC" | b"hvcC" | b"esds" | b"alac" | b"dOps" | b"dfLa" => {
+            b"avcC" | b"hvcC" | b"av1C" | b"esds" | b"alac" | b"dOps" | b"dfLa" => {
                 entry.config = Some((a.kind, a.body.to_vec()))
             }
             b"wave" => {

@@ -1,0 +1,30 @@
+{
+  "name": "fall",
+  "item": {
+    "kind": "logic@1",
+    "params": {
+      "program": "5949efe1b2f650769c610606585eb41b9211719fb407bb9555c453c04e34b5fd",
+      "step_rate": 120,
+      "writes": {
+        "drop": {
+          "type": "f64"
+        }
+      }
+    }
+  },
+  "track": [],
+  "steps": 120,
+  "expect": {
+    "arrays": {
+      "119": {
+        "drop": [
+          4.905
+        ]
+      }
+    },
+    "tolerance": {
+      "rel": 0.01
+    }
+  },
+  "answer": "The physics behavior kit's free fall: ½gt² with g = 9.81 m/s² and t = 1 s is 4.905 m within 1%, the drop at step 119 of 120 Hz from 10 m up, which never reaches the ground."
+}
