@@ -1,0 +1,75 @@
+// BLAKE3, hash mode, 32-byte output, for the #518 acceptance suite's encode tool (README: The suite's tools): the tool
+// hashes each frame it is handed, and the test holds those hashes to the receipt's.
+//
+// Ported from BLAKE3's reference implementation (reference_impl/reference_impl.rs at BLAKE3-team/BLAKE3 f3149ec5bb, by
+// Jack O'Connor and Samuel Neves; CC0-1.0 OR Apache-2.0, license notice kept here), by way of the port in
+// tests/acceptance/501/helpers.ts. `checked()` holds it to the published test vectors before the tool hashes a frame.
+
+const IV = [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19];
+const PERM = [2, 6, 3, 10, 7, 0, 4, 13, 1, 11, 12, 5, 9, 14, 15, 8];
+const CHUNK_START = 1; const CHUNK_END = 2; const PARENT = 4; const ROOT = 8;
+const rotr = (x, k) => ((x >>> k) | (x << (32 - k))) >>> 0;
+function g(s, a, b, c, d, x, y) {
+  s[a] = (s[a] + s[b] + x) >>> 0; s[d] = rotr(s[d] ^ s[a], 16);
+  s[c] = (s[c] + s[d]) >>> 0; s[b] = rotr(s[b] ^ s[c], 12);
+  s[a] = (s[a] + s[b] + y) >>> 0; s[d] = rotr(s[d] ^ s[a], 8);
+  s[c] = (s[c] + s[d]) >>> 0; s[b] = rotr(s[b] ^ s[c], 7);
+}
+function compress(cv, m, counter, len, flags) {
+  const s = [...cv, IV[0], IV[1], IV[2], IV[3], counter >>> 0, Math.floor(counter / 2 ** 32) >>> 0, len, flags];
+  let w = [...m];
+  for (let r = 0; r < 7; r++) {
+    g(s, 0, 4, 8, 12, w[0], w[1]); g(s, 1, 5, 9, 13, w[2], w[3]); g(s, 2, 6, 10, 14, w[4], w[5]); g(s, 3, 7, 11, 15, w[6], w[7]);
+    g(s, 0, 5, 10, 15, w[8], w[9]); g(s, 1, 6, 11, 12, w[10], w[11]); g(s, 2, 7, 8, 13, w[12], w[13]); g(s, 3, 4, 9, 14, w[14], w[15]);
+    if (r < 6) { const from = w; w = PERM.map((p) => from[p]); }
+  }
+  for (let i = 0; i < 8; i++) { s[i] = (s[i] ^ s[i + 8]) >>> 0; s[i + 8] = (s[i + 8] ^ cv[i]) >>> 0; }
+  return s;
+}
+const blockWords = (b) => Array.from({ length: 16 }, (_, i) => (b[4 * i] | (b[4 * i + 1] << 8) | (b[4 * i + 2] << 16) | (b[4 * i + 3] << 24)) >>> 0);
+const chaining = (o) => compress(o.cv, o.m, o.counter, o.len, o.flags).slice(0, 8);
+
+/** BLAKE3 of `input` (a Uint8Array or Buffer), as 64 lower-case hex digits. */
+export function blake3(input) {
+  const stack = [];
+  const chunks = Math.max(1, Math.ceil(input.length / 1024));
+  let last = null;
+  for (let c = 0; c < chunks; c++) {
+    const start = c * 1024; const end = Math.min(input.length, start + 1024);
+    const blocks = Math.max(1, Math.ceil((end - start) / 64));
+    let cv = IV; let out = null;
+    for (let b = 0; b < blocks; b++) {
+      const o = start + 64 * b; const len = Math.min(64, end - o);
+      const block = new Uint8Array(64); block.set(input.subarray(o, o + len));
+      const flags = (b === 0 ? CHUNK_START : 0) | (b === blocks - 1 ? CHUNK_END : 0);
+      if (b === blocks - 1) out = { cv, m: blockWords(block), counter: c, len, flags };
+      else cv = compress(cv, blockWords(block), c, 64, flags).slice(0, 8);
+    }
+    if (c === chunks - 1) { last = out; break; }
+    let chunkCv = chaining(out);
+    let total = c + 1;
+    while ((total & 1) === 0) { chunkCv = compress(IV, [...stack.pop(), ...chunkCv], 0, 64, PARENT).slice(0, 8); total >>= 1; }
+    stack.push(chunkCv);
+  }
+  let out = last;
+  for (let i = stack.length - 1; i >= 0; i--) out = { cv: IV, m: [...stack[i], ...chaining(out)], counter: 0, len: 64, flags: PARENT };
+  const s = compress(out.cv, out.m, 0, out.len, out.flags | ROOT);
+  const bytes = Buffer.alloc(32);
+  for (let i = 0; i < 8; i++) bytes.writeUInt32LE(s[i], 4 * i);
+  return bytes.toString('hex');
+}
+
+/** BLAKE3's published vectors (test_vectors/test_vectors.json at f3149ec5bb: the input is 0, 1, …, 250 repeating). */
+const VECTORS = [
+  [0, 'af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262'],
+  [1024, '42214739f095a406f3fc83deb889744ac00df831c10daa55189b5d121c855af7'],
+  [4096, '015094013f57a5277b59d8475c0501042c0b642e531b0a1c8f58d2163229e969'],
+  [102400, 'bc3e3d41a1146b069abffad3c0d44860cf664390afce4d9661f7902e7943e085'],
+];
+/** Throws unless this port gives each published vector its published digest. */
+export function checked() {
+  for (const [len, digest] of VECTORS) {
+    const got = blake3(Buffer.from(Array.from({ length: len }, (_, i) => i % 251)));
+    if (got !== digest) throw Error(`the tool's BLAKE3 port gives ${got} for the ${len}-byte vector, not ${digest}`);
+  }
+}

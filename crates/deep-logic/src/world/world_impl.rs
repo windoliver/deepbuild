@@ -16,6 +16,9 @@ impl World {
         rec: &mut Record,
         counted: Option<(usize, &[u8])>,
     ) -> Result<World, Failed> {
+        for e in track.get(REWIND).into_iter().flatten() {
+            rewind::fits(&piece, e)?;
+        }
         let mut lives = Vec::new();
         for (i, item) in piece.items.iter().enumerate() {
             let bytes = counted
@@ -70,6 +73,7 @@ impl World {
                 late: false,
                 filled: None,
                 mirror_ns: 0,
+                read_ns: 0,
                 asked: None,
                 dirty: BTreeSet::new(),
                 kdirty: BTreeSet::new(),
@@ -84,17 +88,19 @@ impl World {
         }
         let published = lives.iter().map(|l| l.arrays.clone()).collect();
         Ok(World {
+            // #860: a rewind restores from the ring, so a piece with rewind keeps one.
+            store: store || piece.rewind.is_some(),
             piece,
             track,
             lives,
             published,
-            store,
             planted,
             saves_dir: None,
             saved: Vec::new(),
             seen: 0,
             adapter: String::new(),
             cache: None,
+            branches: Branches::default(),
         })
     }
 
@@ -303,6 +309,13 @@ impl World {
                 if self.saves_dir.is_some() {
                     crate::saves::due(self, k, ended_at);
                 }
+                // #860: a rewind stamped by now comes before any step at this time, and the seen
+                // values the current branch carries go back before the step after their stop.
+                if t.is_some_and(|t| self.rewind_due(t)) {
+                    self.rewind(rec);
+                    continue;
+                }
+                self.carry_in(k);
                 before(self, k);
             }
             let Some(t) = t else { break };
@@ -325,6 +338,11 @@ impl World {
             let snapshot = self.published.clone();
             let mut held = Vec::new();
             self.seen += 1;
+            let stops = self
+                .piece
+                .rewind
+                .as_ref()
+                .is_some_and(|r| group.contains(&r.item));
             for i in group {
                 let started = rec.ns.is_some().then(std::time::Instant::now);
                 self.step(i, &snapshot, rec, &mut held);
@@ -341,6 +359,9 @@ impl World {
                 }
             }
             mirrors::pend(held, &mut self.lives);
+            if stops {
+                self.mark(rec);
+            }
         }
     }
 
@@ -467,15 +488,16 @@ impl World {
         let item = &piece.items[i];
         let k = self.lives[i].next;
         let t = k * item.step;
+        let read_started = web_time::Instant::now();
         // Each read control's entries stamped by now, at most PER_STEP a step, the step's own by
         // time, player and seq, never by arrival (Input track); each reading's values as recorded.
         let mut taken: BTreeMap<&str, Vec<Entry>> = BTreeMap::new();
         {
             let l = &mut self.lives[i];
             for r in &item.layout.entries {
-                let (most, each) = match r.read {
-                    Read::Control => (PER_STEP, true),
-                    Read::Reading { each, max } => (max as usize, each),
+                let (most, each, reading) = match r.read {
+                    Read::Control => (PER_STEP, true, false),
+                    Read::Reading { each, max, .. } => (max as usize, each, true),
                     _ => continue,
                 };
                 let list = self.track.get(&r.name).map_or(&[][..], Vec::as_slice);
@@ -503,6 +525,22 @@ impl World {
                     continue;
                 }
                 q.extend(fresh);
+                // Past four steps' worth of an `each` reading, the oldest are dropped and counted,
+                // never silently (Logic: readings).
+                let room = 4 * most;
+                if reading && q.len() > room && !self.planted.read_region_keeps_last {
+                    let dropped = q.len() - room;
+                    q.drain(..dropped);
+                    rec.issues
+                        .push(json!({"code": "reading.overflow", "reading": r.name,
+                        "item": item.id, "step": k, "dropped": dropped}));
+                }
+                // The planted read region keeps only the last value a step received.
+                if reading && self.planted.read_region_keeps_last && q.len() > 1 {
+                    let last = q.pop_back();
+                    q.clear();
+                    q.extend(last);
+                }
                 // A text control's one commit a step; a second waits for the next (#542).
                 let n = q.len().min(if r.ty == "text" { 1 } else { most });
                 taken.insert(&r.name, q.drain(..n).collect());
@@ -515,6 +553,7 @@ impl World {
         l.last = k;
         l.filled = None;
         l.mirror_ns = 0;
+        l.read_ns = 0;
         // What a linear write blends from: the arrays as they stood before this step ran.
         if !l.prev.is_empty() {
             l.prev.clone_from(&l.arrays);
@@ -605,14 +644,19 @@ impl World {
                         }
                     }
                 }
-                // Each value as an f64, then its as-of time as an i64 of microseconds.
-                Read::Reading { .. } => {
+                // Each value as its shape lays it out (an f64 each for scalar and vec, a layout's
+                // bytes padded to 8), then its as-of time as an i64 of microseconds.
+                Read::Reading { shape, .. } => {
                     let list = &taken[e.name.as_str()];
+                    let size = shape.size() as usize;
                     region[at..at + 4].copy_from_slice(&(list.len() as u32).to_le_bytes());
                     for (j, x) in list.iter().enumerate() {
-                        let o = at + 8 + 16 * j;
-                        region[o..o + 8].copy_from_slice(&x.value.bytes());
-                        region[o + 8..o + 16].copy_from_slice(&x.as_of.unwrap_or(0).to_le_bytes());
+                        let o = at + 8 + (size + 8) * j;
+                        let v = x.value.bytes();
+                        let n = v.len().min(size);
+                        region[o..o + n].copy_from_slice(&v[..n]);
+                        region[o + size..o + size + 8]
+                            .copy_from_slice(&x.as_of.unwrap_or(0).to_le_bytes());
                     }
                 }
                 Read::Array { item: from, offset } => {
@@ -633,6 +677,8 @@ impl World {
                 Read::Mirror(_) | Read::None => {}
             }
         }
+        // The time its reads took to take and lay out: each control's entries and each reading's values.
+        l.read_ns = (read_started.elapsed().as_nanos() as u64).max(1);
         let from = item.reads_at as usize;
         let fits = l
             .runner
@@ -902,9 +948,14 @@ impl World {
         )
     }
 
-    /// The input track's entries, in its order.
+    /// The input track's entries, in its order: closed branches' and rewinds too (#860).
     pub fn track_entries(&self) -> Vec<Value> {
-        let mut all: Vec<&Entry> = self.track.values().flatten().collect();
+        let mut all: Vec<&Entry> = self
+            .track
+            .values()
+            .flatten()
+            .chain(&self.branches.off)
+            .collect();
         all.sort_by_key(|e| (e.t, e.player, e.seq));
         all.into_iter().map(Entry::to_json).collect()
     }
@@ -974,11 +1025,13 @@ impl World {
         }
         self.published = back.published;
         self.seen = back.seen;
+        self.branches.stops = back.branches.stops;
     }
 
-    /// The input track, in the track's order.
+    /// The input track, in the track's order: closed branches' and rewinds too (#860).
     pub fn entries(&self) -> Vec<Entry> {
-        let mut out: Vec<Entry> = self.track.values().flatten().cloned().collect();
+        let all = self.track.values().flatten().chain(&self.branches.off);
+        let mut out: Vec<Entry> = all.cloned().collect();
         out.sort_by_key(|e| (e.t, e.player, e.seq, e.arrived));
         out
     }
@@ -987,12 +1040,27 @@ impl World {
     /// the first step not yet run of the items that read it (Logic: readings). An entry a step
     /// already read would rewrite the past, which only a fork or the net module's rollback does.
     pub fn append(&mut self, mut e: Entry) -> Result<Entry, Failed> {
+        // #860: a rewind of more stops than the piece's depth is refused, naming the depth.
+        rewind::fits(&self.piece, &e)?;
         let steps = self.piece.items.iter().zip(&self.lives);
         if e.as_of.is_some() {
-            if !self.piece.sources.contains_key(&e.control) {
+            let Some(read) = self.piece.reading(&e.control) else {
                 return Err(
                     json!({"ok": false, "code": "bad_input", "what": format!("the piece declares no source {}", e.control)}),
                 );
+            };
+            // A value whose shape doesn't match its source's is refused before it's recorded,
+            // naming the source (Logic: readings).
+            if let Read::Reading { shape, .. } = &read {
+                if !crate::piece::fits(shape, &e.value) {
+                    let source = e.control.trim_start_matches("reading:");
+                    let source = source.split_once('#').map_or(source, |(s, _)| s);
+                    return Err(
+                        json!({"ok": false, "code": "reading_refused", "why": "shape", "source": source,
+                        "what": format!("a value of {source} that isn't its declared shape, {shape:?}"),
+                        "value": e.value.to_json()}),
+                    );
+                }
             }
             // The first step not yet run of its readers, or of every item when none reads it:
             // the first any of them runs after the time the furthest of them has read to.
@@ -1138,6 +1206,7 @@ impl World {
             saved: Vec::new(),
             seen: 0,
             adapter: String::new(),
+            branches: Branches::default(),
         })
     }
 
@@ -1170,6 +1239,8 @@ impl World {
                 l.checked = None;
             }
         }
+        // #860: the rewinds and closed entries after it go with the rest.
+        self.fork_branches(k, len);
     }
 
     /// A fresh instance per item, loaded from the checkpoint at step `c`: the last whole memory at
@@ -1260,15 +1331,20 @@ impl World {
     }
 
     /// A world of restored items at step `c` on this one's track, keeping no checkpoints. A run
-    /// from step 0 has seen c steps at step c.
+    /// from step 0 has seen c steps at step c. #860: the rewinds that came stay taken.
     pub(super) fn restored(&self, lives: Vec<Live>, c: i64) -> World {
-        World::of(
+        let mut w = World::of(
             self.piece.clone(),
             self.track.clone(),
             lives,
             self.planted,
             c as u64,
-        )
+        );
+        w.branches = Branches {
+            stops: self.stops_before(c),
+            ..self.branches.clone()
+        };
+        w
     }
 
     /// A world of the piece's items in these states, as a seek or an opened save starts.
@@ -1281,17 +1357,18 @@ impl World {
     ) -> World {
         let published = lives.iter().map(|l| l.arrays.clone()).collect();
         World {
+            store: piece.rewind.is_some(),
             piece,
             track,
             lives,
             published,
-            store: false,
             planted,
             saves_dir: None,
             saved: Vec::new(),
             seen,
             adapter: String::new(),
             cache: None,
+            branches: Branches::default(),
         }
     }
 
@@ -1328,6 +1405,7 @@ impl World {
             late: false,
             filled: None,
             mirror_ns: 0,
+            read_ns: 0,
             asked: None,
             // The restore wrote every page.
             dirty: (0..pages).collect(),
@@ -1376,18 +1454,28 @@ impl World {
             .cloned()
             .collect();
         kept.extend(entries.iter().cloned());
+        let track = track_of(&kept);
+        let branches = Branches {
+            stops: self.stops_before(k),
+            taken: self
+                .branches
+                .taken
+                .min(track.get(REWIND).map_or(0, Vec::len)),
+            ..self.branches.clone()
+        };
         Ok(World {
             piece: self.piece.clone(),
-            track: track_of(&kept),
+            track,
             lives,
             published: self.published.clone(),
-            store: false,
+            store: self.piece.rewind.is_some(),
             planted: self.planted,
             saves_dir: None,
             saved: Vec::new(),
             seen: self.seen,
             adapter: self.adapter.clone(),
             cache: None,
+            branches,
         })
     }
 

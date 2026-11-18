@@ -31,6 +31,7 @@ pub mod chrome_gallery;
 pub mod codes;
 pub mod commands;
 pub mod confirm;
+pub mod connect;
 pub mod device;
 pub mod empties;
 #[cfg(feature = "fixtures")]
