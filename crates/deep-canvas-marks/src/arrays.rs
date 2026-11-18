@@ -9,7 +9,7 @@ use deep_canvas::columns::{data_of, hidden_rows, map, Mapped};
 use deep_canvas::registry::Registrar;
 use deep_canvas::schedule::core_ops::{Datum, Edit, Edits};
 use deep_canvas::schedule::{OpError, Val, View};
-use serde_json::Value;
+use serde_json::{json, Value};
 
 /// The data module's `columns` operator, its contribution to the core's fields and its mapping.
 pub(crate) fn register(r: &mut Registrar) {
@@ -30,6 +30,30 @@ pub(crate) fn register(r: &mut Registrar) {
     )
     .applies(reads_array)
     .run(columns);
+}
+
+/// #2363: `points` with a column read from a baked array at frame zero, and a follower on a
+/// vector field's stream, so `columns`, `vector_field` and `follow_stream` have nodes.
+pub(crate) fn fixture(r: &mut Registrar, mut columns: Value) {
+    let values = &mut columns["items"]["dots"]["params"]["columns"]["v"];
+    values["type"] = json!("f64");
+    values["count"] = json!(2);
+    values["every"] = json!(705_600_000);
+    values["steps"] = json!([
+        {"step": 0, "changed": [[0, 2]], "values": [[0, [2.0, 5.0]]]},
+        {"step": 1, "changed": [[0, 1]], "values": [[0, [3.0]]]},
+    ]);
+    columns["transport"] = json!({"span": "1s"});
+    columns["items"]["swirl"] = json!({"id": "swirl", "kind": "vector_field@1", "name": "Swirl", "order": "a3",
+        "params": {"fn": {"x": "-y", "y": "x"},
+                   "streams": {"starts": [[1, 0]], "step": 0.1, "time": 1}}});
+    columns["items"]["follower"] = json!({"id": "follower", "kind": "circle@1", "name": "Follower", "order": "a4",
+        "params": {"center": [0, 0], "r": 4}});
+    columns["constraints"] = json!({"follow": {"owner": "follower", "kind": "follow_stream",
+        "vector_field": "swirl", "from": [1, 0]}});
+    r.fixture("columns", columns, None).sidecar(json!({
+        "checks": [{"kind": "document.validate"}], "oracles": ["analytic"], "codes": ["unknown_kind"],
+    }));
 }
 
 /// The data module's planted narrowing that wraps a value into its column's range.

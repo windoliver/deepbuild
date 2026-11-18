@@ -151,7 +151,7 @@ pub(crate) fn plant(scene: &mut Scene, planted: Option<Planted>, t: i64) {
                 points: kept.iter().map(|k| k.1).collect(),
             }];
             let tr = d.trail.clone();
-            *l = trail::line(&l.id, &tr, d, l.color, l.world, l.cap);
+            *l = trail::line(&l.id, &tr, d, l.color, l.world, l.cap, l.fog);
         }
     }
 }

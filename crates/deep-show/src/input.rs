@@ -9,8 +9,9 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use deep_canvas::scope::{self, Event, Phase, Scope};
+use deep_canvas::scope::{self, Event, Phase, Scope, Texts};
 use deep_canvas::show::{Writer, WriterKind};
+use deep_canvas_marks::select::{self, TextBox};
 use deep_canvas_motion::clock;
 use deep_canvas_motion::eval::Validity;
 use deep_canvas_motion::program::Program;
@@ -49,6 +50,24 @@ pub struct PanelScope {
     pub(crate) preview: Option<crate::preview::Previewer>,
     /// #542: its text fields and the scroll gesture under way.
     pub(crate) fields: crate::fields::Viewer,
+    /// #549: its Join prompt and the connections its match opened.
+    pub(crate) join: crate::net::Join,
+    /// #1498: the text its document draws, shaped as drawn, for its text selection: by the document and revision
+    /// it was shaped from.
+    pub(crate) texts: Option<((String, u64), Vec<TextBox>)>,
+}
+
+/// #1498: a panel's text, as its scope reads it.
+pub(crate) struct PanelTexts<'a>(pub(crate) &'a [TextBox]);
+
+impl Texts for PanelTexts<'_> {
+    fn at(&self, c: [f64; 2], within: Option<f64>) -> Option<(String, usize)> {
+        select::at(self.0, c, within)
+    }
+
+    fn len(&self, item: &str) -> Option<usize> {
+        self.0.iter().find(|t| t.item == item).map(TextBox::len)
+    }
 }
 
 pub fn point(v: &Value) -> Option<[f64; 2]> {
@@ -75,6 +94,7 @@ pub fn event(v: &Value) -> Option<Event> {
         "down" => Event::Down {
             pos: pos()?,
             toggle: mods()?.contains(&"shift"),
+            alt: mods()?.contains(&"alt"),
         },
         "up" => {
             mods()?;
@@ -214,6 +234,8 @@ impl Hub<'_> {
                     points: Default::default(),
                     preview: None,
                     fields: Default::default(),
+                    join: Default::default(),
+                    texts: None,
                 },
             );
             let first = self.seen(panel).ok_or_else(|| refused("not_presented"))?;
@@ -541,15 +563,27 @@ impl Hub<'_> {
                 }
             }
         }
+        self.shape_texts(panel);
         let done = match self.scopes.get_mut(panel) {
             Some(s) => {
                 if matches!(event, Event::Down { .. }) {
                     s.pressed = now;
                 }
-                s.scope.input(&doc, now, serial, event)
+                let texts = s.texts.as_ref().map(|(_, t)| PanelTexts(t));
+                s.scope.input_with(
+                    &doc,
+                    now,
+                    serial,
+                    event,
+                    texts.as_ref().map(|t| t as &dyn Texts),
+                )
             }
             None => return refused("unknown_panel"),
         };
+        // #1498: ⌘C writes the text selection, as your gesture's clipboard write.
+        if let Some(text) = done.copy.then(|| self.selection_quote(panel)).flatten() {
+            self.ring.clipboard = Some(json!({"text": text, "panel": panel}));
+        }
         // #539: a key moves or picks on a pick control's rows once the scope has moved its stop.
         match event {
             Event::Key {
@@ -586,6 +620,61 @@ impl Hub<'_> {
             // #504: the entries this input appended to the document's input track.
             "appended": appended,
         })
+    }
+
+    /// #1498: the text the panel's document draws, shaped once a revision as render-back draws it.
+    fn shape_texts(&mut self, panel: &str) {
+        let (Some(doc), Some((shown, _))) = (self.panel_doc(panel), self.panel_document(panel))
+        else {
+            return;
+        };
+        let t = self
+            .scopes
+            .get(panel)
+            .and_then(|s| s.scope.time())
+            .unwrap_or(self.now);
+        let key = (doc.clone(), self.rev_at(&doc, t).unwrap_or(0));
+        if self
+            .scopes
+            .get(panel)
+            .and_then(|s| s.texts.as_ref())
+            .is_some_and(|(k, _)| *k == key)
+        {
+            return;
+        }
+        // A renderer of its own, so the frames' renderer keeps only what they decoded.
+        let record = self.record();
+        let texts = match shown.as_object() {
+            Some(d) => crate::snapshot::Renderer::new()
+                .prepare(
+                    d,
+                    0,
+                    &self.look.light,
+                    self.look.status.as_ref(),
+                    &record,
+                    &self.scenario.evidence,
+                )
+                .map(|drawn| select::texts(&drawn.frame, &mut deep_text::Shaper::new()))
+                .unwrap_or_default(),
+            None => Vec::new(),
+        };
+        if let Some(s) = self.scopes.get_mut(panel) {
+            s.texts = Some((key, texts));
+        }
+    }
+
+    /// #1498: the text of the panel's live text selection, in logical order and items in reading order.
+    pub(crate) fn selection_quote(&self, panel: &str) -> Option<String> {
+        let s = self.scopes.get(panel)?;
+        let range = s.scope.text_selection()?;
+        let (_, texts) = s.texts.as_ref()?;
+        let (a, f) = (&range.anchor, &range.focus);
+        Some(select::copy(
+            texts,
+            (&a.0, a.1),
+            (&f.0, f.1),
+            select::Planted::default(),
+        ))
     }
 
     /// The panel's scope over the revisions it shows and compares against.
@@ -690,7 +779,12 @@ impl Hub<'_> {
         match self.panel_scope(panel) {
             Ok(_) => {
                 self.settle_focus(panel);
-                json!({"state": self.state(panel)})
+                let mut state = self.state(panel);
+                // #549: the app's own Join prompt, null where the piece declares no relay.
+                if let Some(s) = state.as_object_mut() {
+                    s.insert("join".into(), self.join_prompt(panel));
+                }
+                json!({"state": state})
             }
             Err(e) => e,
         }
