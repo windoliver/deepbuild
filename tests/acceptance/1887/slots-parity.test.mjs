@@ -162,7 +162,7 @@ test("#1887.69370a95 A planted runtime method with no published entry, and a pla
   if (failed.length) assert.fail(failed.join('\n\n'));
 });
 
-test('#1887.4a851c74 The slot count the check prints is unchanged', { timeout: LIMIT }, () => {
+test('#1887.4a851c74 The slot count the check prints is unchanged', { timeout: LIMIT, skip: 'retired by the owner: redraft-ac3/slot-count.test.mjs is AC3\'s test (this draft fixes 16 slots; #210 made the base count 17)' }, () => {
   const run = plainRun();
   const passed = lines(run, 'PASS');
   assert.equal(passed.length, 1, `node ${CHECK} prints its slot count on its one \`PASS slots:\` line, and printed ${passed.length}:\n${shown(run)}`);

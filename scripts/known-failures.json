@@ -471,6 +471,12 @@
       "note": "retired:",
       "reason": "retired by #1620: the loader refuses a Git dependency before it fetches, so this wrong program reaches no host; tests/acceptance/1620/planted_loader_proposal.rs is its blind replacement",
       "approval": "#2444, the owner's call in its session (this commit lands only with the owner's touch-key tag)"
+    },
+    {
+      "id": "tests/acceptance/1887/slots-parity.test.mjs › #1887.4a851c74 The slot count the check prints is unchanged",
+      "note": "",
+      "reason": "retired by #1887's owner: tests/acceptance/1887/redraft-ac3/slot-count.test.mjs is AC3's test (this draft fixes the count at 16; #210's deep.registerPort made the base's own count 17)",
+      "approval": "#1887, the owner on PR #2537, 2026-11-18 (this commit lands only with the owner's touch-key tag)"
     }
   ]
 }
