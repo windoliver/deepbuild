@@ -1934,6 +1934,40 @@
       "criteria": [
         "#210.91594eec"
       ]
+    },
+    {
+      "id": "canvas-cells-long-record",
+      "command": [
+        "node",
+        "benchmarks/canvas-world.mjs",
+        "cells"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "ratio": 1.2
+      },
+      "initialReason": "Issue #1868 first measurement (#1868.f34f3f9c): the merge base has no such task. A canvas.user cells call, the call the app's open Terminal tab sends every 250 ms, on a record of 200,000 reading.recorded events and 5,000 asks, against the same call on an empty record; the issue's limit is 1.20 times the empty record's time. node --test runs the blind acceptance test itself, which seeds both records, starts a hub of this checkout on each, times five runs of each side after a warm-up, sides alternating, and judges them by scripts/benchmark.mjs's judgeLimit (PASS only on a reference Mac on mains power, thermal state nominal, load within the cores); the benchmark prints that verdict and exits 0, and its judge gives it as the target. p50 and peak memory get a 50% merge-base margin once main has this task. The blind job read the merge base at 3.06 times, all five runs over (tests/acceptance/1868/BASE-FAILURE.txt).",
+      "criteria": [
+        "#1868.f34f3f9c"
+      ]
+    },
+    {
+      "id": "deep-status-run-events",
+      "command": [
+        "node",
+        "benchmarks/canvas-world.mjs",
+        "status"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "ratio": 1.2
+      },
+      "initialReason": "Issue #1868 first measurement (#1868.bf84aa8b): the merge base has no such task (deep-status-30 seeds no runs). One deep_status call for a session with 10 claims on a record of 200,000 run events, against the same call on 1,000; the issue's limit is 1.20 times the shorter record's time. node --test runs the blind acceptance test itself, which seeds both records, starts a hub of this checkout on each, times five runs of each side after a warm-up, sides alternating, and judges them by scripts/benchmark.mjs's judgeLimit (PASS only on a reference Mac on mains power, thermal state nominal, load within the cores); the benchmark prints that verdict and exits 0, and its judge gives it as the target. p50 and peak memory get a 50% merge-base margin once main has this task. The blind job read the merge base at 282.67 times, all five runs over (tests/acceptance/1868/BASE-FAILURE.txt).",
+      "criteria": [
+        "#1868.bf84aa8b"
+      ]
     }
   ]
 }
