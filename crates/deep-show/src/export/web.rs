@@ -324,12 +324,17 @@ fn index_html(
     glue: (&str, &[u8]),
     element: (&str, &[u8]),
     stamp: Option<String>,
+    relay: Option<&str>,
 ) -> String {
     let map = json!({"imports": {"deep-player-glue": format!("./{}", glue.0)},
                      "integrity": {format!("./{}", glue.0): integrity(glue.1)}})
     .to_string();
+    // #549: a piece whose net item declares a relay may reach that one host, and no other.
+    let relay = relay
+        .map(|host| format!(" wss://{host}"))
+        .unwrap_or_default();
     let policy = format!(
-        "default-src 'none'; script-src 'self' 'wasm-unsafe-eval' '{}'; connect-src 'self'; img-src 'self'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'",
+        "default-src 'none'; script-src 'self' 'wasm-unsafe-eval' '{}'; connect-src 'self'{relay}; img-src 'self'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'",
         integrity(map.as_bytes())
     );
     let data = manifest.to_string().replace("</", "<\\/");
@@ -588,6 +593,10 @@ impl Hub<'_> {
             (&glue_path, &glue),
             (&element_path, element.as_bytes()),
             stamp,
+            deep_net::Config::of(doc)
+                .as_ref()
+                .map(|c| c.host.as_str())
+                .filter(|h| !h.is_empty()),
         );
         // Written whole or not at all: to the temporary name, read back, then renamed.
         let out = PathBuf::from(&job.out);

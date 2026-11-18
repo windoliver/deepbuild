@@ -268,6 +268,123 @@ pub struct Shipped {
     list_first: usize,
     /// The session whose name is being typed in its page's title (#2018), and the field.
     renaming: Option<Renaming>,
+    /// The list in view as last built, and each row in it as its own cached view (#1482).
+    list_model: Option<ListModel>,
+    row_views: HashMap<String, Entity<RowView>>,
+    /// What the view last read from the record, what it was read at, and until when it reads the same (#1482).
+    drawn_record: Option<(RecordAt, Option<u64>, std::rc::Rc<Record>)>,
+}
+
+#[cfg(feature = "fixtures")]
+thread_local! {
+    /// How many of the list's rows the sidebar built since a replica last took the count (#1482).
+    static ROWS_BUILT: Cell<u64> = const { Cell::new(0) };
+    /// Each shipped view's name, by its entity, for a replica's frame report.
+    static VIEW_NAMES: RefCell<HashMap<EntityId, &'static str>> = RefCell::new(HashMap::new());
+}
+
+/// The list's rows built since the last call, which a replica reads once a frame (#1482).
+#[cfg(feature = "fixtures")]
+pub fn take_rows_built() -> u64 {
+    ROWS_BUILT.with(|built| built.replace(0))
+}
+
+/// The name a shipped view registered under, once it has rendered.
+#[cfg(feature = "fixtures")]
+pub fn view_name(entity: EntityId) -> Option<&'static str> {
+    VIEW_NAMES.with(|names| names.borrow().get(&entity).copied())
+}
+
+/// The record's start ID and `log_pos`, whether the reader has folded it, and the session open (#1482).
+type RecordAt = ((String, u64), bool, Option<String>);
+
+/// The list in view as the sidebar last built it (#1482), with what it was built from.
+struct ListModel {
+    key: ListKey,
+    /// When the list as kept next changes with no new record: a row that left may go, a moved one takes a press.
+    next_change: Option<u64>,
+    items: std::rc::Rc<Vec<crate::list::Item>>,
+    /// The record's reading the list was built from, held so its address names it alone while the key does.
+    _read: Option<std::rc::Rc<(Vec<crate::list::Ask>, Vec<crate::list::Session>)>>,
+}
+
+/// What the list in view is built from, but the clock (#1482). `fresh` is the address of the record's reading.
+#[derive(Clone, Debug, PartialEq)]
+struct ListKey {
+    fresh: usize,
+    attended: bool,
+    keys: bool,
+    rows: SidebarRows,
+    typed: String,
+    popped: bool,
+    replaced: bool,
+    room: Pixels,
+    first: usize,
+    start: bool,
+}
+
+/// One row of the list as a view of its own (#1482). It keeps what it draws and draws again only when the list
+/// hands it something different, or the pointer comes or goes, so a hover draws the rows it touched and no other.
+pub(crate) struct RowView {
+    drawn: RowDrawn,
+    row: String,
+    address: Address,
+    sidebar: WeakEntity<Shipped>,
+}
+
+impl Render for RowView {
+    fn render(&mut self, window: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        let chrome = chrome::of(window);
+        let id = self.row.clone();
+        let address = self.address.clone();
+        let actions = id.starts_with("session:") || id.starts_with("ask:");
+        let sidebar = self.sidebar.clone();
+        let pressed = sidebar.clone();
+        row_element(&self.drawn, chrome)
+            // #1482's planted row notifies the window's root as the pointer enters or leaves it.
+            .when(crate::plain::planted("hover-notifies-root"), |row| {
+                row.on_hover(|_, window, cx| {
+                    if let Some(root) = window.root_entity_id() {
+                        cx.notify(root);
+                    }
+                })
+            })
+            // #1462's planted row draws a control only while the pointer is over it.
+            .when(
+                cfg!(feature = "plant-hover-only-control") && id.starts_with("ask:"),
+                |row| {
+                    let over = HOVERED.with(|h| h.borrow().as_deref() == Some(id.as_str()));
+                    let control_id = ElementId::Name(format!("{id}:later").into());
+                    let hovered = id.clone();
+                    row.on_hover(move |on, window, _| {
+                        HOVERED.with(|h| *h.borrow_mut() = on.then(|| hovered.clone()));
+                        window.refresh();
+                    })
+                    .when(over, |row| {
+                        row.child(control(control_id, Control::Plain, "Later", chrome))
+                    })
+                },
+            )
+            // A secondary click opens the row's actions (#1462).
+            .when(actions, |row| {
+                let id = id.clone();
+                row.on_mouse_down(
+                    MouseButton::Right,
+                    move |event: &MouseDownEvent, window, cx| {
+                        open_context(id.clone(), event.position, window, cx)
+                    },
+                )
+            })
+            .on_mouse_down(MouseButton::Left, {
+                let id = id.clone();
+                move |_, _, cx| {
+                    let _ = pressed.update(cx, |this, _| this.pressed = Some((id.clone(), now_ms())));
+                }
+            })
+            .on_click(move |_, window, cx| {
+                let _ = sidebar.update(cx, |this, cx| this.click_row(&id, &address, window, cx));
+            })
+    }
 }
 
 /// A session's page's title while you rename it (#2018): the field holds the name, and Return saves it.
@@ -341,7 +458,7 @@ impl Shipped {
             })
         });
         // The record and the bound values reach the view through the entity it observes (#1546).
-        crate::record::observe(cx);
+        crate::record::on_move(cx, |this: &mut Shipped, cx| this.record_moved(cx));
         if kind == Kind::Session {
             SESSION_VIEW.with(|view| *view.borrow_mut() = Some(cx.entity().downgrade()));
         }
@@ -364,6 +481,9 @@ impl Shipped {
             typed: (String::new(), 0),
             list_first: 0,
             renaming: None,
+            list_model: None,
+            row_views: HashMap::new(),
+            drawn_record: None,
         }
     }
 
@@ -484,6 +604,315 @@ impl Shipped {
             let _ = this.update(cx, |_, cx| cx.notify());
         });
         self.age_tick = Some((due, timer));
+    }
+
+    /// The list's items in view (#1482), built from the record, the one rule for when rows move (#1461) and the
+    /// keyboard, but built again only when one of those moved or a row that left is due to go: a frame that changes
+    /// nothing the list is built from, a hover's, costs what it draws, whatever the list's length.
+    fn list_in_view(
+        &mut self,
+        unfinished: bool,
+        now: u64,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> std::rc::Rc<Vec<crate::list::Item>> {
+        let attended = self.hovered || self.focus_handle.contains_focused(window, cx);
+        let key = self.list_built_from(unfinished, attended, now, window, cx);
+        if let Some(model) = (self.list_model.as_ref())
+            .filter(|model| model.key == key && model.next_change.is_none_or(|at| now < at))
+        {
+            let items = model.items.clone();
+            if let Some(at) = model.next_change {
+                states::changes_after(at - now);
+            }
+            if attended {
+                self.kept.attended(now);
+            }
+            return items;
+        }
+        let s = sizes();
+        // First launch draws an empty list (#1461); so does a record with no ask and no session. Before the
+        // record is read the list holds Needs you's heading alone, saying so.
+        let fresh = if unfinished {
+            Vec::new()
+        } else if !crate::record::read_yet() {
+            vec![crate::list::Item::Heading {
+                id: crate::list::HEADING.to_owned(),
+                title: "Needs you".to_owned(),
+                count: None,
+            }]
+        } else {
+            // The list is built once per reading of the record, not once per frame.
+            let read = crate::list::read_now(now);
+            match &self.built {
+                Some((at, items)) if std::rc::Rc::ptr_eq(at, &read) => items.clone(),
+                _ => {
+                    let items = crate::list::build(&read.0, &read.1);
+                    self.built = Some((read, items.clone()));
+                    items
+                }
+            }
+        };
+        // The row the list's keyboard is on leaves at once when it leaves its state, and the keyboard goes to
+        // the row now in its place (#1462); every other row that left keeps its slot while you're here (#1461).
+        if self.focus_handle.is_focused(window) {
+            if let Some(on) = self.rows.focused.clone() {
+                if !fresh.iter().any(|item| item.id() == on) {
+                    self.kept.release(&on);
+                }
+            }
+        }
+        let mut items = self.kept.settle(fresh, attended, now).to_vec();
+        let next_change = self.kept.next_change(now);
+        if let Some(at) = next_change {
+            states::changes_after(at - now);
+        }
+        // #1461's planted list draws each agent waiting for a first session as a row.
+        if crate::plain::planted("agent-as-row") && items.is_empty() {
+            items.push(crate::list::Item::Row(Box::new(crate::list::Row {
+                id: "session:claude-code".to_owned(),
+                address: Address::session("claude-code"),
+                title: "Claude Code".to_owned(),
+                word: "queued".to_owned(),
+                value: "queued".to_owned(),
+                entry: "queued",
+                time: None,
+                loud: false,
+                left: false,
+                why: String::new(),
+                doing: None,
+                hooks: (0, None),
+                flag: None,
+            })));
+        }
+        let popped = crate::open::popped(cx) == Some(Kind::NeedsYou);
+        let replaced = NEEDS_YOU_VIEW.with(|view| view.borrow().clone());
+        let asks_row = |item: &crate::list::Item| item.id().starts_with("ask:");
+        let skip = |item: &crate::list::Item| {
+            (popped && (asks_row(item) || item.id() == crate::list::HEADING))
+                || (replaced.is_some() && asks_row(item))
+        };
+        // #1462's planted list hides the rows that don't match what you typed.
+        let typed = self.typed.0.clone();
+        let hidden = |item: &crate::list::Item| {
+            cfg!(feature = "plant-list-hides-row")
+                && !typed.is_empty()
+                && matches!(item, crate::list::Item::Row(row)
+                    if !row.title.to_lowercase().starts_with(&typed))
+        };
+        items.retain(|item| !skip(item) && !hidden(item));
+        // The rows the keyboard walks, in the list's order (#1462): each ask, then each project's heading and
+        // its rows, every one of them. #2021's planted list lets the keyboard onto the headings alone.
+        let rows: Vec<ListRow> = keyboard_rows(&items)
+            .into_iter()
+            .filter(|row| {
+                !crate::plain::planted("rows-take-no-focus")
+                    || row.id.starts_with("project:")
+            })
+            .collect();
+        // Only what fits in the window is drawn, so a frame over 700 rows costs what it shows, and what's
+        // drawn follows the keyboard: the row it's on is in view with the rows either side of it, so the next
+        // row an arrow goes to is in view too (#2021). The wheel's scrolling is #1808's.
+        let room = window.viewport_size().height;
+        let fits = |first: usize| {
+            let mut top = s.space(1);
+            items[first..]
+                .iter()
+                .take_while(|item| {
+                    top += match item {
+                        crate::list::Item::Heading { .. } => s.space(5) + s.space(1),
+                        crate::list::Item::Row(_) => s.space(5),
+                    };
+                    top <= room
+                })
+                .count()
+        };
+        let mut first = self.list_first.min(items.len());
+        if let Some(on) = self
+            .rows
+            .focused
+            .as_deref()
+            .and_then(|on| item_at(&items, on))
+        {
+            let shown = (on + 1).min(items.len() - 1);
+            first = first.min(on.saturating_sub(1));
+            while shown >= first + fits(first).max(1) && first < on {
+                first += 1;
+            }
+        }
+        self.list_first = first;
+        // #1482's planted list builds the row below the window's edge too.
+        let drawn_to = first + fits(first) + usize::from(crate::plain::planted("builds-row-out-of-view"));
+        items.truncate(drawn_to);
+        items.drain(..first);
+        if let Some((selected, focused)) = self.start.take() {
+            let id = |at: Option<usize>| {
+                at.and_then(|i| {
+                    rows.iter()
+                        .filter(|row| !row.id.starts_with("project:"))
+                        .nth(i)
+                        .map(|row| row.id.clone())
+                })
+            };
+            self.rows = SidebarRows {
+                selected: id(selected),
+                focused: id(focused),
+            };
+            if self.rows.focused.is_some() {
+                window.focus(&self.focus_handle, cx);
+            }
+        }
+        // Focus follows a row that leaves: to the row now in its place, else the last (#1462).
+        if let Some(on) = self.rows.focused.clone() {
+            if !rows.iter().any(|row| row.id == on) {
+                let at =
+                    LAST_ROWS.with(|last| last.borrow().iter().position(|id| *id == on));
+                self.rows.focused = at
+                    .and_then(|at| rows.get(at.min(rows.len().saturating_sub(1))))
+                    .or(rows.last())
+                    .map(|row| row.id.clone());
+            }
+        }
+        LAST_ROWS.with(|last| {
+            *last.borrow_mut() = rows.iter().map(|row| row.id.clone()).collect()
+        });
+        LIST_ROWS.with(|list| *list.borrow_mut() = rows);
+        // A row out of view keeps no view.
+        self.row_views
+            .retain(|id, _| items.iter().any(|item| item.id() == id));
+        let items = std::rc::Rc::new(items);
+        self.list_model = Some(ListModel {
+            key: self.list_built_from(unfinished, attended, now, window, cx),
+            next_change,
+            items: items.clone(),
+            _read: self.built.as_ref().map(|(read, _)| read.clone()),
+        });
+        items
+    }
+
+    /// What the view draws from the record (#1482), read again only when the record moved, another session opened,
+    /// or something it read from the clock reads differently, so a frame the record didn't move reads none of it.
+    fn record_now(&mut self, opened: Option<&str>, now: u64) -> std::rc::Rc<Record> {
+        let at = crate::record::with_view(|view| (view.start.clone(), view.log_pos));
+        let key = (
+            at.unwrap_or_default(),
+            crate::record::folded(),
+            opened.map(str::to_owned),
+        );
+        if let Some((read, until, record)) = &self.drawn_record {
+            if *read == key && until.is_none_or(|until| now < until) {
+                if let Some(until) = until {
+                    states::changes_after(until - now);
+                }
+                return record.clone();
+            }
+        }
+        let (record, changes) = states::written_in(|| record(self.kind, opened));
+        let record = std::rc::Rc::new(record);
+        self.drawn_record = Some((key, changes.map(|wait| now + wait), record.clone()));
+        record
+    }
+
+    /// What the list in view is built from, but the clock (#1482).
+    fn list_built_from(
+        &self,
+        unfinished: bool,
+        attended: bool,
+        now: u64,
+        window: &Window,
+        cx: &App,
+    ) -> ListKey {
+        let fresh = if unfinished {
+            0
+        } else if !crate::record::read_yet() {
+            1
+        } else {
+            std::rc::Rc::as_ptr(&crate::list::read_now(now)) as usize
+        };
+        ListKey {
+            fresh,
+            attended,
+            keys: self.focus_handle.is_focused(window),
+            rows: self.rows.clone(),
+            typed: self.typed.0.clone(),
+            popped: crate::open::popped(cx) == Some(Kind::NeedsYou),
+            replaced: NEEDS_YOU_VIEW.with(|view| view.borrow().is_some()),
+            room: window.viewport_size().height,
+            first: self.list_first,
+            start: self.start.is_some(),
+        }
+    }
+
+    /// The record moved: a view draws again, but a session's page for the events of its own session alone (#1482).
+    fn record_moved(&mut self, cx: &mut Context<Self>) {
+        if self.kind == Kind::Session && !crate::plain::planted("page-redraws-every-session") {
+            if let Some(session) = crate::open::opened_session(cx) {
+                if !crate::record::moved_for(&session, cx) {
+                    return;
+                }
+            }
+        }
+        cx.notify();
+    }
+
+    /// The list's row `row` as a cached view of its own (#1482), drawing `drawn`: a row that draws what it drew is
+    /// reused whole, and one that changed draws again in this frame, alone.
+    fn row_in_view(
+        &mut self,
+        row: &crate::list::Row,
+        drawn: RowDrawn,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let style = StyleRefinement::default().h(drawn.tall).flex_none();
+        #[cfg(feature = "fixtures")]
+        ROWS_BUILT.with(|built| built.set(built.get() + 1));
+        let view = match self.row_views.get(&row.id) {
+            Some(view) => {
+                if view.read(cx).drawn != drawn {
+                    view.update(cx, |view, _| view.drawn = drawn);
+                    window.redraw_in_frame(view.entity_id());
+                }
+                view.clone()
+            }
+            None => {
+                let sidebar = cx.entity().downgrade();
+                let view = cx.new(|_| RowView {
+                    drawn,
+                    row: row.id.clone(),
+                    address: row.address.clone(),
+                    sidebar,
+                });
+                self.row_views.insert(row.id.clone(), view.clone());
+                view
+            }
+        };
+        view.cached(style).into_any_element()
+    }
+
+    /// A click on the list's row `id` (#1461): a press that went down on a row that had just moved is dropped, never
+    /// passed to the row now under the pointer.
+    fn click_row(&mut self, id: &str, address: &Address, window: &mut Window, cx: &mut Context<Self>) {
+        let at = match self.pressed.take() {
+            Some((on, at)) if on == id => at,
+            _ => now_ms(),
+        };
+        if !self.kept.takes_press(id, at) {
+            return;
+        }
+        self.rows = SidebarRows {
+            selected: Some(id.to_owned()),
+            focused: Some(id.to_owned()),
+        };
+        window.focus(&self.focus_handle, cx);
+        #[cfg(feature = "plant-row-skips-open")]
+        if let Some(session) = id.strip_prefix("session:") {
+            crate::open::skip_open(session, window, cx);
+            cx.notify();
+            return;
+        }
+        crate::open::open(address, window, cx).ok();
+        cx.notify();
     }
 
     /// Reads the Agents page's model; a changed one draws.
@@ -723,7 +1152,26 @@ fn drew(name: &'static str, bounds: Bounds<Pixels>) {
 
 /// Forgets the views laid out in earlier frames; [`crate::canvas::clear_items`] calls it.
 pub(crate) fn forget_drawn() {
-    DRAWN.with(|drawn| drawn.borrow_mut().clear());
+    DRAWN.with(|drawn| LEFT.with(|left| *left.borrow_mut() = std::mem::take(&mut *drawn.borrow_mut())));
+}
+
+thread_local! {
+    /// What [`forget_drawn`] cleared: where the views laid out before it were (#1482).
+    static LEFT: RefCell<Vec<(&'static str, Bounds<Pixels>)>> = const { RefCell::new(Vec::new()) };
+}
+
+/// A cached view GPUI reused doesn't lay out again: the places it had stay, by name (#1482).
+pub fn keep_drawn(reused: &[&'static str]) {
+    LEFT.with(|left| {
+        DRAWN.with(|drawn| {
+            let mut drawn = drawn.borrow_mut();
+            for (name, bounds) in left.borrow().iter() {
+                if reused.contains(name) && !drawn.iter().any(|(n, _)| n == name) {
+                    drawn.push((name, *bounds));
+                }
+            }
+        });
+    });
 }
 
 /// Each shipped view laid out since the last frame began, by its panel name, with its bounds in window points (#1458).
@@ -767,6 +1215,14 @@ pub fn rename(session: &str, window: &mut Window, cx: &mut App) {
     };
     let session = session.to_owned();
     page.update(cx, |page, cx| page.start_rename(session, window, cx));
+}
+
+/// The session's page, notified: #1482's planted setter's notify, made without comparing.
+pub(crate) fn notify_session_page(cx: &mut App) {
+    let page = SESSION_VIEW.with(|view| view.borrow().as_ref().and_then(WeakEntity::upgrade));
+    if let Some(page) = page {
+        page.update(cx, |_, cx| cx.notify());
+    }
 }
 
 /// The page that is the box alone gives the box the keys when it next draws (#1461).
@@ -1595,11 +2051,7 @@ fn row_slot(row: &str, slot: &str, name: String) -> ObservedElement<Stateful<Div
 /// for each event its session's hooks send, and holds still while none comes (#2021).
 const MARK_STEPS: [usize; 4] = [0, 1, 2, 1];
 
-/// One row of the list (#1461): one line, 32 tall, with fixed slots: the mark in 16 and 8 after it, the title, then
-/// the state word and a time at least 32 wide at the right edge. An unread or asking row's title is medium; a settled
-/// row's is regular in the secondary ink. Its name holds what's drawn and what's cut, and a working session's what its
-/// turn is doing now (#2021). Under reduce motion, `still`, a working mark holds still and its time says when its
-/// session's last event came.
+/// One row of the list (#1461) at `now`; under reduce motion, `still`, a working mark holds still.
 fn list_row(
     row: &crate::list::Row,
     selected: bool,
@@ -1608,98 +2060,176 @@ fn list_row(
     now: u64,
     chrome: &chrome::Chrome,
 ) -> ObservedElement<Stateful<Div>> {
-    let s = sizes();
-    let ask = row.id.starts_with("ask:");
-    let working = row.entry == "running" && row.id.starts_with("session:");
-    let time = match row.hooks.1 {
-        Some(heard) if still && working => {
-            format!("{} ago", time_of(crate::list::Time::Since(heard), now))
-        }
-        _ => row.time.map(|t| time_of(t, now)).unwrap_or_default(),
-    };
-    // The working mark's step: one per event, or, in #2021's planted app, one each 300 ms whatever comes.
-    let step = if !working {
-        0
-    } else if crate::plain::planted("mark-on-timer") {
-        states::changes_after(300 - now % 300);
-        MARK_STEPS[(now / 300 % 4) as usize]
-    } else if still {
-        0
-    } else {
-        MARK_STEPS[(row.hooks.0 % 4) as usize]
-    };
-    let line = row.doing.as_ref().map(|doing| doing.line(now));
-    let reach = crate::notify::reach();
-    // An ask's row reads as its question, its handle nowhere drawn (#1172) and its id (#1459). The planted rows show
-    // the handle, or are keyed by their place.
-    let title = if ask && cfg!(feature = "plant-handle-rows") {
-        row.id.clone()
-    } else {
-        row.title.clone()
-    };
-    let name = if ask {
-        if reach.not_notified(&row.id) {
-            format!("{title} · not notified")
+    row_element(&RowDrawn::of(row, selected, focused, still, now), chrome)
+}
+
+/// Everything one row of the list draws, read at `now` (#1482): the row, its texts and its ages as words. A row's
+/// view keeps it and draws again only when it differs, so a frame that changes one row draws that row alone.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct RowDrawn {
+    /// The row's node id: the row's id unless a planted row keys its node by place.
+    id: String,
+    ask: bool,
+    name: String,
+    value: String,
+    focused: bool,
+    selected: bool,
+    loud: bool,
+    entry: &'static str,
+    step: usize,
+    title: String,
+    /// A session's name and the short ID that tells it from a twin (#2018), apart.
+    twin: Option<(String, String)>,
+    word: String,
+    drawn_word: String,
+    flag: Option<(String, String)>,
+    time: String,
+    second: Option<String>,
+    tall: Pixels,
+}
+
+impl RowDrawn {
+    pub(crate) fn of(
+        row: &crate::list::Row,
+        selected: bool,
+        focused: bool,
+        still: bool,
+        now: u64,
+    ) -> RowDrawn {
+        let s = sizes();
+        let ask = row.id.starts_with("ask:");
+        let working = row.entry == "running" && row.id.starts_with("session:");
+        let time = match row.hooks.1 {
+            Some(heard) if still && working => {
+                format!("{} ago", time_of(crate::list::Time::Since(heard), now))
+            }
+            _ => row.time.map(|t| time_of(t, now)).unwrap_or_default(),
+        };
+        // The working mark's step: one per event, or, in #2021's planted app, one each 300 ms whatever comes.
+        let step = if !working {
+            0
+        } else if crate::plain::planted("mark-on-timer") {
+            states::changes_after(300 - now % 300);
+            MARK_STEPS[(now / 300 % 4) as usize]
+        } else if still {
+            0
         } else {
+            MARK_STEPS[(row.hooks.0 % 4) as usize]
+        };
+        let line = row.doing.as_ref().map(|doing| doing.line(now));
+        let reach = crate::notify::reach();
+        // An ask's row reads as its question, its handle nowhere drawn (#1172) and its id (#1459). The planted rows
+        // show the handle, or are keyed by their place.
+        let title = if ask && cfg!(feature = "plant-handle-rows") {
+            row.id.clone()
+        } else {
+            row.title.clone()
+        };
+        let name = if ask {
+            if reach.not_notified(&row.id) {
+                format!("{title} · not notified")
+            } else {
+                title.clone()
+            }
+        } else if cfg!(feature = "plant-row-title-only") {
             title.clone()
+        } else if ["BLOCKED", "INVALID", "INCONCLUSIVE"].contains(&row.word.as_str())
+            && !row.why.is_empty()
+        {
+            // A verdict that isn't PASS or FAIL never reads as the bare word (#2018): the row is one line, so its name
+            // holds whom it waits for and the evidence it leaves open.
+            format!(
+                "{} {title} · {} · {}",
+                states::glyph(row.entry),
+                row.word,
+                row.why
+            )
+        } else if let Some(line) = &line {
+            format!(
+                "{} {title} · {} · {line}",
+                states::glyph(row.entry),
+                row.word
+            )
+        } else {
+            format!("{} {title} · {}", states::glyph(row.entry), row.word)
+        };
+        // Its one flag beside its word (#2019), with what it says: the row is one line, so its name holds the rest.
+        let name = match &row.flag {
+            Some(flag) => format!("{name} · {}: {}", flag.code, flag.text),
+            None => name,
+        };
+        let id = if ask && cfg!(feature = "plant-row-index-ids") {
+            format!("ask-{}", row.id.len())
+        } else {
+            row.id.clone()
+        };
+        // A session's name with the short ID the hub added to tell it from a twin (#2018), apart.
+        let twin = row
+            .id
+            .strip_prefix("session:")
+            .map(|session| format!(" · {}", &session[..session.len().min(8)]))
+            .and_then(|short| {
+                let name = title.strip_suffix(short.as_str())?.to_owned();
+                Some((name, short))
+            });
+        // A session waiting on you says so in its mark and its name: the heading Needs you carries the words (#1453
+        // rule 9).
+        let drawn_word = if !ask && row.entry == "needs_you" {
+            String::new()
+        } else {
+            row.word.clone()
+        };
+        // #1461's planted row is 24 tall; #2021's selected row takes a second line, its session's line.
+        let second = (selected && crate::plain::planted("selected-second-line") && !ask)
+            .then(|| line.clone().unwrap_or_default());
+        let tall = if crate::plain::planted("row-24") {
+            s.space(4)
+        } else if second.is_some() {
+            s.space(5) * 2.
+        } else {
+            s.space(5)
+        };
+        RowDrawn {
+            id,
+            ask,
+            name,
+            value: row.value.clone(),
+            focused,
+            selected,
+            loud: row.loud,
+            entry: row.entry,
+            step,
+            title,
+            twin,
+            word: row.word.clone(),
+            drawn_word,
+            flag: (row.flag.as_ref()).map(|flag| (flag.code.clone(), flag.text.clone())),
+            time,
+            second,
+            tall,
         }
-    } else if cfg!(feature = "plant-row-title-only") {
-        title.clone()
-    } else if ["BLOCKED", "INVALID", "INCONCLUSIVE"].contains(&row.word.as_str())
-        && !row.why.is_empty()
-    {
-        // A verdict that isn't PASS or FAIL never reads as the bare word (#2018): the row is one line, so its name
-        // holds whom it waits for and the evidence it leaves open.
-        format!(
-            "{} {title} · {} · {}",
-            states::glyph(row.entry),
-            row.word,
-            row.why
-        )
-    } else if let Some(line) = &line {
-        format!(
-            "{} {title} · {} · {line}",
-            states::glyph(row.entry),
-            row.word
-        )
-    } else {
-        format!("{} {title} · {}", states::glyph(row.entry), row.word)
-    };
-    // Its one flag beside its word (#2019), with what it says: the row is one line, so its name holds the rest.
-    let name = match &row.flag {
-        Some(flag) => format!("{name} · {}: {}", flag.code, flag.text),
-        None => name,
-    };
-    let id = if ask && cfg!(feature = "plant-row-index-ids") {
-        format!("ask-{}", row.id.len())
-    } else {
-        row.id.clone()
-    };
-    let whole: SharedString = name.clone().into();
-    // A session's name with the short ID the hub added to tell it from a twin (#2018), apart.
-    let twin = row
-        .id
-        .strip_prefix("session:")
-        .map(|session| format!(" · {}", &session[..session.len().min(8)]))
-        .and_then(|short| {
-            let name = title.strip_suffix(short.as_str())?.to_owned();
-            Some((name, short))
-        });
-    let ring = if focused {
+    }
+}
+
+/// One row of the list as `drawn` holds it (#1461): one line, 32 tall, with fixed slots: the mark in 16 and 8 after
+/// it, the title, then the state word and a time at least 32 wide at the right edge. An unread or asking row's title
+/// is medium; a settled row's is regular in the secondary ink. Its name holds what's drawn and what's cut, and a
+/// working session's what its turn is doing now (#2021). Under reduce motion a working mark holds still and its time
+/// says when its session's last event came.
+fn row_element(drawn: &RowDrawn, chrome: &chrome::Chrome) -> ObservedElement<Stateful<Div>> {
+    let s = sizes();
+    let id = drawn.id.as_str();
+    let (ask, title, time) = (drawn.ask, drawn.title.clone(), drawn.time.clone());
+    let whole: SharedString = drawn.name.clone().into();
+    let ring = if drawn.focused {
         chrome.focus
     } else {
         chrome.focus.opacity(0.)
     };
-    let ink = if row.loud {
+    let ink = if drawn.loud {
         chrome.ink_primary
     } else {
         chrome.ink_secondary
-    };
-    // A session waiting on you says so in its mark and its name: the heading Needs you carries the words (#1453 rule 9).
-    let drawn_word = if !ask && row.entry == "needs_you" {
-        String::new()
-    } else {
-        row.word.clone()
     };
     // An ask's time is when its default applies, the moment #1458 names `<ask>:applies` too.
     let time_name = if ask {
@@ -1708,32 +2238,22 @@ fn list_row(
         format!("{id}:time")
     };
     let time_slot = if ask {
-        row_slot(&id, "time", time.clone()).child(
+        row_slot(id, "time", time.clone()).child(
             observed(ElementId::Name(time_name.into()))
                 .role(Role::Label)
                 .aria_label(time.clone())
                 .child(time),
         )
     } else {
-        row_slot(&id, "time", time.clone()).child(time)
+        row_slot(id, "time", time.clone()).child(time)
     };
-    // #1461's planted row is 24 tall; #2021's selected row takes a second line, its session's line.
-    let second = (selected && crate::plain::planted("selected-second-line") && !ask)
-        .then(|| line.clone().unwrap_or_default());
-    let tall = if crate::plain::planted("row-24") {
-        s.space(4)
-    } else if second.is_some() {
-        s.space(5) * 2.
-    } else {
-        s.space(5)
-    };
-    observed(ElementId::Name(id.clone().into()))
+    observed(ElementId::Name(id.to_owned().into()))
         .role(Role::Button)
-        .aria_label(name)
-        .aria_value(row.value.clone())
-        .when(focused, |row| row.aria_active_descendant())
+        .aria_label(drawn.name.clone())
+        .aria_value(drawn.value.clone())
+        .when(drawn.focused, |row| row.aria_active_descendant())
         .typed(s.body)
-        .h(tall)
+        .h(drawn.tall)
         .flex_none()
         .flex()
         .items_center()
@@ -1741,7 +2261,7 @@ fn list_row(
         .rounded(s.radius)
         .relative()
         .hover(|style| style.bg(chrome.hover))
-        .when(selected, |r| r.bg(chrome.selected))
+        .when(drawn.selected, |r| r.bg(chrome.selected))
         // The focus ring over the row, taking no room of its own, so the slots sit where they sit focused or not.
         .child(
             div()
@@ -1755,8 +2275,8 @@ fn list_row(
         .tooltip_show_delay(ROW_TIP_DELAY)
         // The mark: its core in the status color, in a slot of 16 with 8 after it.
         .child(
-            row_slot(&id, "mark", states::glyph(row.entry).to_owned())
-                .aria_value(row.entry.to_owned())
+            row_slot(id, "mark", states::glyph(drawn.entry).to_owned())
+                .aria_value(drawn.entry.to_owned())
                 .flex_none()
                 .w(s.space(3))
                 .h_full()
@@ -1766,13 +2286,13 @@ fn list_row(
                 .child(
                     div()
                         .size(s.space(1))
-                        .ml(s.space(0) * step as f32)
-                        .bg(rgb(states::color(row.entry))),
+                        .ml(s.space(0) * drawn.step as f32)
+                        .bg(rgb(states::color(drawn.entry))),
                 ),
         )
         .child(
             // Each slot the row's full height, so the slots read in the row's order, left to right.
-            row_slot(&id, "title", title.clone())
+            row_slot(id, "title", title.clone())
                 .flex_1()
                 .min_w_0()
                 .h_full()
@@ -1781,12 +2301,12 @@ fn list_row(
                 .text_color(ink)
                 // Unread or asking stands out by weight alone: the chrome's face has no medium of its own, so it
                 // takes the next weight it has (#1461).
-                .font_weight(if row.loud {
+                .font_weight(if drawn.loud {
                     FontWeight::SEMIBOLD
                 } else {
                     FontWeight::NORMAL
                 })
-                .map(|slot| match twin {
+                .map(|slot| match drawn.twin.clone() {
                     // The short ID that tells a session from its twin stays in view (#2018): a name too long for
                     // the row is cut, its ID never.
                     Some((name, short)) => slot
@@ -1796,25 +2316,25 @@ fn list_row(
                 }),
         )
         .child(
-            row_slot(&id, "word", row.word.clone())
+            row_slot(id, "word", drawn.word.clone())
                 .flex_none()
                 .h_full()
                 .flex()
                 .items_center()
                 .pl(s.space(1))
                 .text_color(chrome.ink_secondary)
-                .child(drawn_word),
+                .child(drawn.drawn_word.clone()),
         )
         // The flag, at most one, in the right slot beside the word (#2019): never a state, so in the word's ink.
-        .children(row.flag.as_ref().map(|flag| {
-            row_slot(&id, "flag", format!("{}: {}", flag.code, flag.text))
+        .children(drawn.flag.as_ref().map(|(code, text)| {
+            row_slot(id, "flag", format!("{code}: {text}"))
                 .flex_none()
                 .h_full()
                 .flex()
                 .items_center()
                 .pl(s.space(1))
                 .text_color(chrome.ink_secondary)
-                .child(flag.code.clone())
+                .child(code.clone())
         }))
         .child(
             time_slot
@@ -1827,7 +2347,7 @@ fn list_row(
                 .justify_end()
                 .text_color(chrome.ink_secondary),
         )
-        .children(second.map(|line| {
+        .children(drawn.second.clone().map(|line| {
             div()
                 .absolute()
                 .bottom_0()
@@ -2057,10 +2577,12 @@ impl Render for Shipped {
         // While setup hasn't finished, the count says so, never a number of asks (#1002).
         let unfinished = crate::setup::count();
         let opened = crate::open::opened_session(cx);
-        let record = record(self.kind, opened.as_deref());
-        let reach = crate::notify::reach();
         let now = now();
+        let record = self.record_now(opened.as_deref(), now);
+        let reach = crate::notify::reach();
         let name = self.kind.name();
+        #[cfg(feature = "fixtures")]
+        VIEW_NAMES.with(|names| names.borrow_mut().insert(cx.entity_id(), name));
         // A page in the center takes the keys F6 gives it (#1462): Esc gives them back to the list, and a printable key
         // goes to the box.
         let is_page = !matches!(self.kind, Kind::Sidebar | Kind::Line) && !self.popped;
@@ -2118,155 +2640,23 @@ impl Render for Shipped {
             Kind::Sidebar => {
                 let s = sizes();
                 let empty = empty_now();
-                // First launch draws an empty list (#1461); so does a record with no ask and no session. Before the
-                // record is read the list holds Needs you's heading alone, saying so.
-                let fresh = if unfinished.is_some() {
-                    Vec::new()
-                } else if !crate::record::read_yet() {
-                    vec![crate::list::Item::Heading {
-                        id: crate::list::HEADING.to_owned(),
-                        title: "Needs you".to_owned(),
-                        count: None,
-                    }]
-                } else {
-                    // The list is built once per reading of the record, not once per frame.
-                    let read = crate::list::read_now(now);
-                    match &self.built {
-                        Some((at, items)) if std::rc::Rc::ptr_eq(at, &read) => items.clone(),
-                        _ => {
-                            let items = crate::list::build(&read.0, &read.1);
-                            self.built = Some((read, items.clone()));
-                            items
-                        }
-                    }
-                };
-                let attended = self.hovered || self.focus_handle.contains_focused(window, cx);
-                // The row the list's keyboard is on leaves at once when it leaves its state, and the keyboard goes to
-                // the row now in its place (#1462); every other row that left keeps its slot while you're here (#1461).
-                if self.focus_handle.is_focused(window) {
-                    if let Some(on) = self.rows.focused.clone() {
-                        if !fresh.iter().any(|item| item.id() == on) {
-                            self.kept.release(&on);
-                        }
+                let items = self.list_in_view(unfinished.is_some(), now, window, cx);
+                // #1482's planted list asks for a frame each time it draws and draws the same value; its planted page
+                // draws with it.
+                if crate::plain::planted("animates-unchanged") {
+                    window.request_animation_frame();
+                }
+                if crate::plain::planted("page-redraws-with-list") {
+                    let page = SESSION_VIEW.with(|view| view.borrow().as_ref().and_then(WeakEntity::upgrade));
+                    if let Some(page) = page {
+                        page.update(cx, |_, cx| cx.notify());
                     }
                 }
-                let mut items = self.kept.settle(fresh, attended, now).to_vec();
-                if let Some(at) = self.kept.next_change(now) {
-                    states::changes_after(at - now);
-                }
-                // #1461's planted list draws each agent waiting for a first session as a row.
-                if crate::plain::planted("agent-as-row") && items.is_empty() {
-                    items.push(crate::list::Item::Row(Box::new(crate::list::Row {
-                        id: "session:claude-code".to_owned(),
-                        address: Address::session("claude-code"),
-                        title: "Claude Code".to_owned(),
-                        word: "queued".to_owned(),
-                        value: "queued".to_owned(),
-                        entry: "queued",
-                        time: None,
-                        loud: false,
-                        left: false,
-                        why: String::new(),
-                        doing: None,
-                        hooks: (0, None),
-                        flag: None,
-                    })));
-                }
-                let popped = crate::open::popped(cx) == Some(Kind::NeedsYou);
                 let replaced = NEEDS_YOU_VIEW.with(|view| view.borrow().clone());
-                let asks_row = |item: &crate::list::Item| item.id().starts_with("ask:");
-                let skip = |item: &crate::list::Item| {
-                    (popped && (asks_row(item) || item.id() == crate::list::HEADING))
-                        || (replaced.is_some() && asks_row(item))
-                };
-                // #1462's planted list hides the rows that don't match what you typed.
-                let typed = self.typed.0.clone();
-                let hidden = |item: &crate::list::Item| {
-                    cfg!(feature = "plant-list-hides-row")
-                        && !typed.is_empty()
-                        && matches!(item, crate::list::Item::Row(row)
-                            if !row.title.to_lowercase().starts_with(&typed))
-                };
-                items.retain(|item| !skip(item) && !hidden(item));
-                // The rows the keyboard walks, in the list's order (#1462): each ask, then each project's heading and
-                // its rows, every one of them. #2021's planted list lets the keyboard onto the headings alone.
-                let rows: Vec<ListRow> = keyboard_rows(&items)
-                    .into_iter()
-                    .filter(|row| {
-                        !crate::plain::planted("rows-take-no-focus")
-                            || row.id.starts_with("project:")
-                    })
-                    .collect();
-                // Only what fits in the window is drawn, so a frame over 700 rows costs what it shows, and what's
-                // drawn follows the keyboard: the row it's on is in view with the rows either side of it, so the next
-                // row an arrow goes to is in view too (#2021). The wheel's scrolling is #1808's.
-                let room = window.viewport_size().height;
-                let fits = |first: usize| {
-                    let mut top = s.space(1);
-                    items[first..]
-                        .iter()
-                        .take_while(|item| {
-                            top += match item {
-                                crate::list::Item::Heading { .. } => s.space(5) + s.space(1),
-                                crate::list::Item::Row(_) => s.space(5),
-                            };
-                            top <= room
-                        })
-                        .count()
-                };
-                let mut first = self.list_first.min(items.len());
-                if let Some(on) = self
-                    .rows
-                    .focused
-                    .as_deref()
-                    .and_then(|on| item_at(&items, on))
-                {
-                    let shown = (on + 1).min(items.len() - 1);
-                    first = first.min(on.saturating_sub(1));
-                    while shown >= first + fits(first).max(1) && first < on {
-                        first += 1;
-                    }
-                }
-                self.list_first = first;
-                let drawn_to = first + fits(first);
-                items.truncate(drawn_to);
-                items.drain(..first);
-                if let Some((selected, focused)) = self.start.take() {
-                    let id = |at: Option<usize>| {
-                        at.and_then(|i| {
-                            rows.iter()
-                                .filter(|row| !row.id.starts_with("project:"))
-                                .nth(i)
-                                .map(|row| row.id.clone())
-                        })
-                    };
-                    self.rows = SidebarRows {
-                        selected: id(selected),
-                        focused: id(focused),
-                    };
-                    if self.rows.focused.is_some() {
-                        window.focus(&self.focus_handle, cx);
-                    }
-                }
                 // The sidebar holds the keys for the whole list (#1462).
                 LIST_KEYS.with(|keys| {
                     *keys.borrow_mut() = Some((self.focus_handle.clone(), cx.entity().downgrade()))
                 });
-                // Focus follows a row that leaves: to the row now in its place, else the last (#1462).
-                if let Some(on) = self.rows.focused.clone() {
-                    if !rows.iter().any(|row| row.id == on) {
-                        let at =
-                            LAST_ROWS.with(|last| last.borrow().iter().position(|id| *id == on));
-                        self.rows.focused = at
-                            .and_then(|at| rows.get(at.min(rows.len().saturating_sub(1))))
-                            .or(rows.last())
-                            .map(|row| row.id.clone());
-                    }
-                }
-                LAST_ROWS.with(|last| {
-                    *last.borrow_mut() = rows.iter().map(|row| row.id.clone()).collect()
-                });
-                LIST_ROWS.with(|list| *list.borrow_mut() = rows);
                 // The ring shows only while keys reach the list, so it never points where they don't go.
                 let focused = (self.focus_handle.is_focused(window))
                     .then(|| self.rows.focused.clone())
@@ -2276,7 +2666,7 @@ impl Render for Shipped {
                 let planted_nothing = crate::plain::planted("hub-down-nothing-needs-you")
                     && matches!(empty, crate::empties::Empty::Unreachable { .. });
                 let mut drawn: Vec<AnyElement> = Vec::new();
-                for item in &items {
+                for item in items.iter() {
                     match item {
                         crate::list::Item::Heading { id, title, count } => {
                             if id == crate::list::HEADING {
@@ -2353,86 +2743,8 @@ impl Render for Shipped {
                                 || (current.is_none()
                                     && self.rows.selected.as_ref() == Some(&row.id));
                             let ring = focused.as_ref() == Some(&row.id);
-                            let id = row.id.clone();
-                            let address = row.address.clone();
-                            let actions = id.starts_with("session:") || id.starts_with("ask:");
-                            drawn.push(
-                                list_row(row, selected, ring, cx.reduce_motion(), now, chrome)
-                                    // #1462's planted row draws a control only while the pointer is over it.
-                                    .when(
-                                        cfg!(feature = "plant-hover-only-control")
-                                            && id.starts_with("ask:"),
-                                        |row| {
-                                            let over = HOVERED.with(|h| {
-                                                h.borrow().as_deref() == Some(id.as_str())
-                                            });
-                                            let control_id =
-                                                ElementId::Name(format!("{id}:later").into());
-                                            let hovered = id.clone();
-                                            row.on_hover(move |on, window, _| {
-                                                HOVERED.with(|h| {
-                                                    *h.borrow_mut() = on.then(|| hovered.clone())
-                                                });
-                                                window.refresh();
-                                            })
-                                            .when(
-                                                over,
-                                                |row| {
-                                                    row.child(control(
-                                                        control_id,
-                                                        Control::Plain,
-                                                        "Later",
-                                                        chrome,
-                                                    ))
-                                                },
-                                            )
-                                        },
-                                    )
-                                    // A secondary click opens the row's actions (#1462).
-                                    .when(actions, |row| {
-                                        let id = id.clone();
-                                        row.on_mouse_down(
-                                            MouseButton::Right,
-                                            move |event: &MouseDownEvent, window, cx| {
-                                                open_context(id.clone(), event.position, window, cx)
-                                            },
-                                        )
-                                    })
-                                    .on_mouse_down(
-                                        MouseButton::Left,
-                                        cx.listener({
-                                            let id = id.clone();
-                                            move |this, _, _, _| {
-                                                this.pressed = Some((id.clone(), now_ms()))
-                                            }
-                                        }),
-                                    )
-                                    .on_click(cx.listener(move |this, _, window, cx| {
-                                        // A press that went down on a row that had just moved is dropped, never
-                                        // passed to the row now under the pointer (#1461).
-                                        let at = match this.pressed.take() {
-                                            Some((on, at)) if on == id => at,
-                                            _ => now_ms(),
-                                        };
-                                        if !this.kept.takes_press(&id, at) {
-                                            return;
-                                        }
-                                        this.rows = SidebarRows {
-                                            selected: Some(id.clone()),
-                                            focused: Some(id.clone()),
-                                        };
-                                        window.focus(&this.focus_handle, cx);
-                                        #[cfg(feature = "plant-row-skips-open")]
-                                        if let Some(session) = id.strip_prefix("session:") {
-                                            crate::open::skip_open(session, window, cx);
-                                            cx.notify();
-                                            return;
-                                        }
-                                        crate::open::open(&address, window, cx).ok();
-                                        cx.notify();
-                                    }))
-                                    .into_any_element(),
-                            );
+                            let drawn_row = RowDrawn::of(row, selected, ring, cx.reduce_motion(), now);
+                            drawn.push(self.row_in_view(row, drawn_row, window, cx));
                         }
                     }
                 }
@@ -3591,6 +3903,48 @@ pub(crate) fn words_box() -> Option<Entity<crate::words::WordsBox>> {
 }
 
 /// The window's root (#1461): the list and the page, ⌘K over them once views give it entries (#366).
+/// The dock draws each group's displayed panel as a cached view (#1482): a panel draws again only when it's notified or
+/// the window refreshes, so a pointer over the list draws nothing on the page beside it.
+struct CachedPanels;
+
+impl gpui_kit::base::dock::DockAreaRenderer for CachedPanels {
+    fn tab_group_renderer(&self) -> std::rc::Rc<dyn gpui_kit::base::dock::TabGroupRenderer> {
+        std::rc::Rc::new(CachedPanels)
+    }
+}
+
+impl gpui_kit::base::dock::TabGroupRenderer for CachedPanels {
+    fn render_tab_bar(
+        &self,
+        _: &gpui_kit::base::dock::TabGroupContext,
+        _: &mut Window,
+        _: &mut App,
+    ) -> AnyElement {
+        Empty.into_any_element()
+    }
+
+    fn render_active_panel(
+        &self,
+        panel: AnyView,
+        _: &gpui_kit::base::dock::TabGroupContext,
+        _: &mut Window,
+        cx: &mut App,
+    ) -> AnyElement {
+        // The list draws each of its rows as a cached view, and GPUI draws a cached view's own cached views again
+        // whenever it draws that view, so the list itself is not cached: it draws when a row does, and reuses the rest.
+        let list = panel
+            .clone()
+            .downcast::<Shipped>()
+            .is_ok_and(|panel| panel.read(cx).kind == Kind::Sidebar);
+        if list {
+            return div().size_full().child(panel).into_any_element();
+        }
+        panel
+            .cached(StyleRefinement::default().size_full())
+            .into_any_element()
+    }
+}
+
 pub struct Shell {
     pub dock: Entity<DockArea>,
     commands: Option<Entity<crate::commands::Palette>>,
@@ -3607,7 +3961,10 @@ pub struct Shell {
 impl Shell {
     pub fn new(layout: &Layout, window: &mut Window, cx: &mut Context<Self>) -> Self {
         chrome::follow(window, cx);
-        let dock = cx.new(|cx| DockArea::new("deepbuild", None, window, cx));
+        let dock = cx.new(|cx| {
+            DockArea::new("deepbuild", None, window, cx)
+                .with_renderer(std::rc::Rc::new(CachedPanels))
+        });
         dock.update(cx, |dock, cx| dock.load(layout.state(), window, cx))
             .expect("the layout loads");
         crate::open::set_shell(&dock, window.window_handle(), cx);

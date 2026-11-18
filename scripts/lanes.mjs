@@ -235,6 +235,10 @@ alone.push('tests/acceptance/533/');
 alone.push('tests/acceptance/1434/');
 byHand.push('tests/acceptance/1434/ac6-idle.live.test.ts', 'tests/acceptance/1434/ac7-budgets.live.test.ts', 'tests/acceptance/1434/ac8-snapshots.live.test.ts');
 timed.push('tests/acceptance/1434/ac7-budgets.live.test.ts');
+// #1482's files build deep-drive and start replicas (the debug build with the planted programs, the release one with
+// the frame clocks); its bench file times them.
+alone.push('tests/acceptance/1482/');
+timed.push('tests/acceptance/1482/bench.test.ts');
 // #177: deep-gpu with test-meter and the hdr-fixture app build; the live legs open the app on the XDR display.
 alone.push('tests/acceptance/177/');
 alone.push('tests/acceptance/177-redraft-ac3/');
@@ -762,6 +766,14 @@ alone.push('tests/acceptance/225-redraft-ac5/');
 byHand.push('tests/acceptance/225/ac5-lorenz-two-machines.test.ts');
 // #172's files each build deep-show (full; the refusals also full,test-web-lacks) and drive headless Chrome with WebGPU on.
 alone.push('tests/acceptance/172/', 'tests/acceptance/172-oracle/');
+// #549's files each build deep-show (one, three feature sets) and the shipped relay, start relays and headless Chrome,
+// and play live matches in real time.
+alone.push('tests/acceptance/549/', 'tests/acceptance/549-oracle/');
+// #549's first-draft third-connection test gives two of its third connections one ID, so the shipped relay seats them
+// as a match of their own and sends each its start (tests/acceptance/549/DISPUTE.md); on the owner's ruling its blind
+// redraft runs in its place, and the first draft's file, with its other three tests, runs by hand.
+alone.push('tests/acceptance/549-redraft-ac2/');
+byHand.push('tests/acceptance/549/ac2-join-only.test.ts');
 timed.push('tests/acceptance/172/budgets.test.ts', 'tests/acceptance/172/images.test.ts');
 // #172's first-draft refusal test shows a device control without the role the document check requires, so that piece is
 // never presented and its export can't refuse it by name (tests/acceptance/172/DISPUTE.md); its blind redraft runs in its
@@ -949,6 +961,9 @@ timed.push('tests/acceptance/568-redraft-1830/judge.test.mjs', 'tests/acceptance
 // horizon's 0.1 ms at 1080p on the reference Mac.
 alone.push('tests/acceptance/1381/');
 timed.push('tests/acceptance/1381/ac6-budget.test.ts');
+
+// #2652's files each start real hubs and read their heaps through the inspector; AC4 runs #1018's hub suite whole.
+alone.push('tests/acceptance/2652/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
