@@ -1,0 +1,251 @@
+--- .orig2/tests/acceptance/2365/probe/pass.mjs	2026-11-15 17:45:21
++++ tests/acceptance/2365/probe/pass.mjs	2026-11-17 17:25:27
+@@ -8,8 +8,13 @@
+ // stdout: {"at":"start",…} when the pass starts, {"at":"end"} when it ends, then one result line:
+ //   ms        the pass's wall time
+ //   maxGapMs  the longest stretch the 5 ms timer went unserved, from the pass's start to its end
+-//   rssStart  resident memory at the pass's start, after a full GC; peakRss the highest seen during the pass (the
+-//             timer's samples, and the process's max RSS when the pass raised it); rise = peakRss - rssStart
++//   rssStart  resident memory at the pass's start, after a full GC (process.memoryUsage.rss())
++//   rise      what the pass added to it: the larger of how far the timer's samples of that same reading rose above
++//             rssStart, and how far the pass raised the process's lifetime maximum (resourceUsage().maxRSS at the
++//             pass's end less at its start). Each is a difference within one counter. The two counters are never
++//             subtracted from each other: on some Node builds they stay a constant apart (Homebrew's 24.22.2 reads
++//             rss() about 38 MB under its own maxRSS and under `ps`), and that constant is not the pass's
++//   peakRss   rssStart + rise
+ //   evidenceBefore / evidenceAfter / added   bytes of files under the evidence store's folder
+ //   error     the pass's error, with its causes, or null
+ import { readdirSync, statSync } from 'node:fs';
+@@ -89,7 +94,7 @@
+ clearInterval(timer);
+ process.stdout.write(`${JSON.stringify({ at: 'end' })}\n`);
+ const maxAfter = process.resourceUsage().maxRSS * 1024;
+-if (maxAfter > maxBefore) peakRss = Math.max(peakRss, maxAfter);
++peakRss = Math.max(peakRss, rssStart + (maxAfter - maxBefore));
+ const evidenceAfter = bytesUnder(evidenceRoot);
+ await record.close();
+ process.stdout.write(`${JSON.stringify({ at: 'result', ms: t1 - t0, maxGapMs, ticks, rssStart, peakRss, rise: peakRss - rssStart, evidenceBefore, evidenceAfter, added: evidenceAfter - evidenceBefore, error })}\n`);
+--- .orig2/tests/acceptance/2365/heavy/run.ts	2026-11-15 17:45:21
++++ tests/acceptance/2365/heavy/run.ts	2026-11-17 17:25:47
+@@ -49,6 +49,7 @@
+   let out = '';
+   let err = '';
+   let sampling = false;
++  let outsideStart = 0;
+   let outsidePeak = 0;
+   let sampler: Promise<void> = Promise.resolve();
+   child.stderr.on('data', (d: Buffer) => { err += d.toString('utf8'); });
+@@ -58,7 +59,9 @@
+       sampling = true;
+       sampler = (async () => {
+         while (sampling) {
+-          outsidePeak = Math.max(outsidePeak, await ps(child.pid!));
++          const rss = await ps(child.pid!);
++          outsideStart ||= rss;
++          outsidePeak = Math.max(outsidePeak, rss);
+           await new Promise((r) => setTimeout(r, 10));
+         }
+       })();
+@@ -71,8 +74,10 @@
+   const line = out.trim().split('\n').reverse().find((l) => l.includes('"at":"result"'));
+   if (code !== 0 || !line) throw Error(`BLOCKED: the measured pass exited ${code}: ${err.slice(-2000)}`);
+   const r = JSON.parse(line) as Omit<PassResult, 'outsidePeak' | 'load'>;
+-  const peakRss = Math.max(r.peakRss, outsidePeak);
+-  return { ...r, peakRss, rise: peakRss - r.rssStart, outsidePeak, load: { start: loadStart, end: loadavg()[0]! } };
++  // `ps` reads a counter that some Node builds keep a constant apart from the child's own (pass.mjs), so what `ps`
++  // saw is taken above its own first reading, never above the child's rssStart; the rise is the larger of the two.
++  const rise = Math.max(r.rise, outsidePeak - outsideStart);
++  return { ...r, peakRss: r.rssStart + rise, rise, outsidePeak, load: { start: loadStart, end: loadavg()[0]! } };
+ }
+ 
+ /** A copy of a home for one run: an APFS clone on macOS, so each run starts from the same bytes at no cost. */
+--- .orig2/tests/acceptance/2365/README.md	2026-11-15 21:48:51
++++ tests/acceptance/2365/README.md	2026-11-17 17:40:24
+@@ -198,3 +198,35 @@
+   it was read. It asserted through `expect(list).toEqual([])`, whose message the runner cut to `expected [ …(3) ] to
+   deeply equal []`, so the re-reading twin's test never saw the names. It fails on the same condition as before: a
+   watched source with bytes read.
++
++## Repair (2026-11-17, owner-approved plumbing repair)
++
++One defect in how AC1's rise in resident memory is computed was repaired by a separate maintenance job that saw no
++implementation of #2365. No limit, fixture, twin or expected value changed, no test's name, and no assertion compares
++anything else: the rise is still judged against 64 MB, and every run of the twin must still reach it.
++
++- **The defect.** The rise was a peak read from one counter less a start read from another. `probe/pass.mjs` took
++  `rssStart` from `process.memoryUsage.rss()` and, when the pass raised the process's lifetime maximum, its peak from
++  `process.resourceUsage().maxRSS`; `heavy/run.ts` then took the higher of that and what `ps` read, less the same
++  `rssStart`. On the repo's Node 24.22.0 the three read the same and nothing showed. On Homebrew's Node 24.22.2
++  `rss()` reads about 38 MB under both `maxRSS` and `ps` at every point (28 MB against 67 MB where a pass starts,
++  129 MB against 167 MB with 100 MB held), so every pass read about 38 MB more than it added.
++- **`probe/pass.mjs`.** `rise` is the larger of two differences, each within one counter: how far the timer's samples
++  of `rss()` rose above `rssStart`, and how far the pass raised the lifetime maximum (`maxRSS` at its end less at its
++  start). `peakRss` is `rssStart + rise`. The result line keeps every field, and `rise = peakRss - rssStart` holds.
++- **`heavy/run.ts`, `measuredPass`.** What `ps` saw is taken above `ps`'s own first reading after the start line, not
++  above the child's `rssStart`. `rise` is the larger of the child's and that, and `peakRss` is `rssStart + rise`.
++  This replaces "less its RSS at the pass's start" in Readings (AC1's pass): the three readings are those listed
++  there, each now taken above its own start. On a build like Homebrew's the printed peak is on `rss()`'s scale.
++- **Measured** on both builds, before → after, three runs each (`repair-evidence/round2/`). A pass that waits 300 ms:
++  +0.3 MB before and after on 24.22.0; +38.7 to +38.8 MB → +0.2 to +0.3 MB on 24.22.2. A pass that holds a touched
++  100 MB buffer for 300 ms: +100.3 to +100.5 MB before and after on 24.22.0; +138.7 to +138.9 MB → +100.2 to
++  +100.6 MB on 24.22.2. A pass that holds 100 MB only inside one synchronous step, which no sample sees: +100.3 to
++  +100.5 MB before and after on 24.22.0; +138.8 to +138.9 MB → +100.3 to +100.6 MB on 24.22.2. The whole-file twin
++  at the base is rejected as before, naming its peak, its five judged runs at +1,338 to +1,370 MB → +1,344 to
++  +1,354 MB on 24.22.0 and +1,385 to +1,411 MB → +1,335 to +1,376 MB on 24.22.2.
++- **Still unseen.** A peak that no sample catches counts only by how far it passes the process's earlier lifetime
++  maximum. Where a pass starts here the process is at that maximum on both builds (`ps` and `maxRSS` read the same),
++  so nothing is lost; an archive that gave memory back to the system before its pass would hide that much of such
++  a peak. `ps`'s first reading comes a moment after the start line, so memory a pass gave back before that reading
++  and took again after it would read as added; none showed in these runs.
+--- .orig2/tests/acceptance/2365-redraft-ac5/base.ts	2026-11-15 17:45:21
++++ tests/acceptance/2365-redraft-ac5/base.ts	2026-11-17 17:20:57
+@@ -2,8 +2,8 @@
+ // find it) into a temp folder, and its own transcript archive run there, in a child process, on the transcripts a test
+ // leaves (base-copy.mjs). That gives "the one copy the merge base stores of the finished file" from the merge base's
+ // own code, its own scrub included, not from anything the change may have touched. It also gives the perf tasks'
+-// transcripts from the merge base's own benchmarks/archive.mjs. Anything missing (git, origin/main, the export, the
+-// child) fails the test as BLOCKED; nothing here ever passes for want of the merge base.
++// transcripts from the merge base's own benchmarks/archive.mjs. Anything missing (git, origin/main, the export, its
++// build data, the child) fails the test as BLOCKED; nothing here ever passes for want of the merge base.
+ 
+ import { spawnSync } from 'node:child_process';
+ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+@@ -12,8 +12,34 @@
+ import { NODE, REPO, T0, tempDir, type Env } from '../20/helpers.ts';
+ 
+ const CHILD = fileURLToPath(new URL('./base-copy.mjs', import.meta.url));
++/** How a child runs the merge base's `.ts` sources as they stand; base-resolve.mjs maps their `.js` imports. */
++const FROM_SOURCE = ['--experimental-transform-types', '--conditions=development', '--no-warnings'];
++const RESOLVE = new URL('./base-resolve.mjs', import.meta.url).href;
+ let tree: { dir: string; sha: string } | undefined;
+ 
++interface Package { folder: string; uses: string[]; build: string }
++/**
++ * The merge base's build data, made in its export by its own scripts from its own files. Its sources read files
++ * that its build writes before `tsc` (at ed03dc60: packages/evidence/dist/patterns.json from build-patterns.mjs,
++ * packages/record/dist/versions.json from build-versions.mjs), and the export is not built. So for the package
++ * `name` and the workspace packages it depends on, those first, each step its `build` script names before `tsc`
++ * runs in its exported folder. A build that starts with `tsc`, or a package with none, runs nothing. A step that
++ * is not `node <script>`, or that fails, is BLOCKED: its output is never taken from anywhere else.
++ */
++function buildData(packages: Map<string, Package>, name: string, sha: string, done = new Set<string>()): void {
++  const pkg = packages.get(name);
++  if (!pkg || done.has(name)) return;
++  done.add(name);
++  for (const used of pkg.uses) buildData(packages, used, sha, done);
++  const steps = pkg.build.split('&&').map((step) => step.trim());
++  for (const step of steps.slice(0, Math.max(0, steps.findIndex((s) => /^tsc\b/.test(s))))) {
++    const [cmd, ...args] = step.split(/\s+/);
++    if (cmd !== 'node') throw Error(`BLOCKED: the merge base's build step \`${step}\` (${name}, ${sha}) isn't a node script, so its build data can't be made in the export`);
++    const r = spawnSync(NODE, [...FROM_SOURCE, '--import', RESOLVE, ...args], { cwd: pkg.folder, encoding: 'utf8', timeout: 300_000 });
++    if (r.status !== 0) throw Error(`BLOCKED: the merge base's build step \`${step}\` (${name}, ${sha}) failed: exit ${r.status} ${r.error?.message ?? ''}\n${r.stderr}`);
++  }
++}
++
+ /** The merge base's sources, exported once per test file: packages/, adapters/ and benchmarks/archive.mjs. */
+ export function baseTree(): { dir: string; sha: string } {
+   if (tree) return tree;
+@@ -32,14 +58,18 @@
+     if (entry === '@deepbuild' || entry === '.bin' || entry.startsWith('.package-lock')) continue;
+     symlinkSync(join(REPO, 'node_modules', entry), join(modules, entry));
+   }
++  const packages = new Map<string, Package>();
+   for (const pkg of readdirSync(join(dir, 'packages'))) {
+     const manifest = join(dir, 'packages', pkg, 'package.json');
+     if (!existsSync(manifest)) continue;
+-    const name = String((JSON.parse(readFileSync(manifest, 'utf8')) as { name?: string }).name ?? '');
++    const read = JSON.parse(readFileSync(manifest, 'utf8')) as { name?: string; dependencies?: Record<string, string>; scripts?: { build?: string } };
++    const name = String(read.name ?? '');
++    packages.set(name, { folder: join(dir, 'packages', pkg), uses: Object.keys(read.dependencies ?? {}), build: String(read.scripts?.build ?? '') });
+     if (name.startsWith('@deepbuild/')) symlinkSync(join(dir, 'packages', pkg), join(modules, name));
+     const own = join(REPO, 'packages', pkg, 'node_modules');
+     if (existsSync(own) && !existsSync(join(dir, 'packages', pkg, 'node_modules'))) symlinkSync(own, join(dir, 'packages', pkg, 'node_modules'));
+   }
++  buildData(packages, '@deepbuild/archive', sha);
+   tree = { dir, sha };
+   return tree;
+ }
+@@ -53,7 +83,7 @@
+   const work = tempDir('basecopy');
+   const job = join(work, 'job.json');
+   writeFileSync(job, JSON.stringify({ base: dir, root: join(work, 'root'), out: join(work, 'out'), env, held, now: T0 }));
+-  const r = spawnSync(NODE, ['--experimental-transform-types', '--conditions=development', '--no-warnings', CHILD, job], { cwd: dir, encoding: 'utf8', timeout: 1_800_000, maxBuffer: 64 * 2 ** 20 });
++  const r = spawnSync(NODE, [...FROM_SOURCE, CHILD, job], { cwd: dir, encoding: 'utf8', timeout: 1_800_000, maxBuffer: 64 * 2 ** 20 });
+   const manifest = join(work, 'out', 'manifest.json');
+   if (r.status !== 0 || !existsSync(manifest)) throw Error(`BLOCKED: the merge base's archive (${sha}) didn't run: exit ${r.status} ${r.error?.message ?? ''}\n${r.stderr}`);
+   const m = JSON.parse(readFileSync(manifest, 'utf8')) as { error: string | null; copies: { session: string; file: string }[] };
+--- .orig2/tests/acceptance/2365-redraft-ac5/base-copy.mjs	2026-11-15 21:47:36
++++ tests/acceptance/2365-redraft-ac5/base-copy.mjs	2026-11-17 17:20:16
+@@ -5,21 +5,11 @@
+ // pass of its archive over the homes in `env`, and writes each copy every transcript.archived event links, read back
+ // from its store, to `out`, with out/manifest.json naming them in log order. It never writes to the test's world.
+ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+-import { registerHooks } from 'node:module';
+ import { join } from 'node:path';
+ import { pathToFileURL } from 'node:url';
++// The merge base's sources import their siblings as .js; base-resolve.mjs resolves each to the .ts beside it.
++import './base-resolve.mjs';
+ 
+-// The merge base's sources import their siblings as .js; the source beside each is .ts, which Node doesn't try
+-// (resolved as scripts/lifecycle-sim.mjs resolves them).
+-registerHooks({
+-  resolve(specifier, context, next) {
+-    if (specifier.startsWith('.') && specifier.endsWith('.js') && context.parentURL?.endsWith('.ts')) {
+-      try { return next(`${specifier.slice(0, -3)}.ts`, context); } catch { /* a real .js */ }
+-    }
+-    return next(specifier, context);
+-  },
+-});
+-
+ const job = JSON.parse(readFileSync(process.argv[2], 'utf8'));
+ const load = (path) => import(pathToFileURL(join(job.base, path)).href);
+ const { openArchive } = await load('packages/archive/src/index.ts');
+--- .orig2/tests/acceptance/2365-redraft-ac5/README.md	2026-11-15 21:49:17
++++ tests/acceptance/2365-redraft-ac5/README.md	2026-11-17 17:42:28
+@@ -145,3 +145,29 @@
+   that needs the merge base's copies was BLOCKED. The child still runs the merge base's exported sources on the same
+   files, the copies are compared byte for byte as before, and a child that doesn't run is still BLOCKED (`base.ts`,
+   unchanged).
++
++## Repair (2026-11-17, owner-approved plumbing repair)
++
++One more defect in how the merge base is run, found when the merge base moved to `ed03dc60`, was repaired by a
++separate maintenance job that saw no implementation of #2365. No oracle, fixture, twin or expected value changed, and
++no test's name or limit.
++
++- **The defect.** "The merge base runs from its own sources" stopped being enough. At `ed03dc60` its sources read
++  two files that its build writes before `tsc`: `packages/evidence/dist/patterns.json` (`build-patterns.mjs`) and
++  `packages/record/dist/versions.json` (`build-versions.mjs`). The export has no build, so the child ended with
++  `ENOENT … packages/evidence/dist/patterns.json` and all 12 tests of `suite.test.ts` and all 6 of `perf.test.ts`
++  were BLOCKED.
++- **`base.ts`, `baseTree`.** After the export is linked, the merge base's own build steps make that data in the
++  export, from the export's files: for `@deepbuild/archive` and the workspace packages it depends on, those first,
++  each step its `package.json` `build` script names before `tsc` runs in its exported folder, under the Node flags
++  the archive's child runs under. No script and no other package is named here, so a merge base whose builds start
++  with `tsc` runs nothing, as before. Nothing is taken from this checkout's `dist` or from the change. A step that
++  fails, or that is not `node <script>`, is BLOCKED with the step and its error; data that no step makes still ends
++  as the child's BLOCKED.
++- **`base-resolve.mjs`** (new) holds the `.js` to `.ts` resolution of the 2026-11-15 repair, unchanged, so that the
++  build steps get it too (`node --import`); `base-copy.mjs` imports it where it registered the same hook itself.
++- **Run at `ed03dc60`** (where the change is the merge base), with Node 24.22.0: `suite.test.ts` 12 BLOCKED → 12
++  passed; `perf.test.ts` 6 BLOCKED → 6 passed; `meter.test.ts` 1 passed before and after. Planted merge bases
++  (`repair-evidence/round2/planted-base/`): a step that exits 3, one that writes its data and then exits 4, a
++  missing script and a step that is not `node` each read BLOCKED naming the step; a build that no longer names the
++  step reads the child's BLOCKED as before the repair.
+--- /dev/null	2026-11-17 17:42:28
++++ tests/acceptance/2365-redraft-ac5/base-resolve.mjs	2026-11-17 17:20:16
+@@ -0,0 +1,14 @@
++// How a child process loads the merge base from its exported `.ts` sources. The merge base's sources import their
++// siblings as .js; the source beside each is .ts, which Node doesn't try (resolved as scripts/lifecycle-sim.mjs
++// resolves them). Importing this file registers that resolution: base-copy.mjs imports it before it loads the merge
++// base's archive, and base.ts preloads it (`node --import`) into each of the merge base's own build steps.
++import { registerHooks } from 'node:module';
++
++registerHooks({
++  resolve(specifier, context, next) {
++    if (specifier.startsWith('.') && specifier.endsWith('.js') && context.parentURL?.endsWith('.ts')) {
++      try { return next(`${specifier.slice(0, -3)}.ts`, context); } catch { /* a real .js */ }
++    }
++    return next(specifier, context);
++  },
++});

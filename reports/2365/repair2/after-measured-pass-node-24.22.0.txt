@@ -1,0 +1,47 @@
+$ PATH=<home>/.local/share/fnm/node-versions/v24.22.0/installation/bin:$PATH env NO_COLOR=1 node node_modules/vitest/vitest.mjs run --configLoader runner --config repair-evidence/round2/measured-pass.config.ts
+node: v24.22.0 (<home>/.local/share/fnm/node-versions/v24.22.0/installation/bin/node)
+started: 2026-11-18T01:35:59Z; load averages: 23.56 44.52 66.29
+-----
+
+ RUN  v5.0.5 <home>/doneright-2365-repair/repair-evidence/round2
+
+stdout | measured-pass.proof.ts > round 2, Defect 1: measuredPass (heavy/run.ts) under Node v24.22.0 > a pass that waits 300 ms and allocates almost nothing
+Node v24.22.0, a pass that waits 300 ms and allocates almost nothing, run 1: peak resident memory 72.3 MB from 71.9 MB (+0.3 MB); the highest `ps` reading 72.3 MB; error null
+
+stdout | measured-pass.proof.ts > round 2, Defect 1: measuredPass (heavy/run.ts) under Node v24.22.0 > a pass that waits 300 ms and allocates almost nothing
+Node v24.22.0, a pass that waits 300 ms and allocates almost nothing, run 2: peak resident memory 71.8 MB from 71.5 MB (+0.3 MB); the highest `ps` reading 71.8 MB; error null
+
+stdout | measured-pass.proof.ts > round 2, Defect 1: measuredPass (heavy/run.ts) under Node v24.22.0 > a pass that waits 300 ms and allocates almost nothing
+Node v24.22.0, a pass that waits 300 ms and allocates almost nothing, run 3: peak resident memory 71.8 MB from 71.5 MB (+0.3 MB); the highest `ps` reading 71.8 MB; error null
+
+stdout | measured-pass.proof.ts > round 2, Defect 1: measuredPass (heavy/run.ts) under Node v24.22.0 > a pass that holds a touched 100 MB buffer for 300 ms
+Node v24.22.0, a pass that holds a touched 100 MB buffer for 300 ms, run 1: peak resident memory 171.9 MB from 71.4 MB (+100.5 MB); the highest `ps` reading 171.7 MB; error null
+
+stdout | measured-pass.proof.ts > round 2, Defect 1: measuredPass (heavy/run.ts) under Node v24.22.0 > a pass that holds a touched 100 MB buffer for 300 ms
+Node v24.22.0, a pass that holds a touched 100 MB buffer for 300 ms, run 2: peak resident memory 172.2 MB from 71.8 MB (+100.3 MB); the highest `ps` reading 172.2 MB; error null
+
+stdout | measured-pass.proof.ts > round 2, Defect 1: measuredPass (heavy/run.ts) under Node v24.22.0 > a pass that holds a touched 100 MB buffer for 300 ms
+Node v24.22.0, a pass that holds a touched 100 MB buffer for 300 ms, run 3: peak resident memory 172.8 MB from 72.3 MB (+100.5 MB); the highest `ps` reading 172.8 MB; error null
+
+stdout | measured-pass.proof.ts > round 2, Defect 1: measuredPass (heavy/run.ts) under Node v24.22.0 > a pass that holds a touched 100 MB only inside one synchronous step
+Node v24.22.0, a pass that holds a touched 100 MB only inside one synchronous step, run 1: peak resident memory 171.8 MB from 71.4 MB (+100.4 MB); the highest `ps` reading 102.6 MB; error null
+
+stdout | measured-pass.proof.ts > round 2, Defect 1: measuredPass (heavy/run.ts) under Node v24.22.0 > a pass that holds a touched 100 MB only inside one synchronous step
+Node v24.22.0, a pass that holds a touched 100 MB only inside one synchronous step, run 2: peak resident memory 171.7 MB from 71.3 MB (+100.4 MB); the highest `ps` reading 131.2 MB; error null
+
+stdout | measured-pass.proof.ts > round 2, Defect 1: measuredPass (heavy/run.ts) under Node v24.22.0 > a pass that holds a touched 100 MB only inside one synchronous step
+Node v24.22.0, a pass that holds a touched 100 MB only inside one synchronous step, run 3: peak resident memory 172.1 MB from 71.7 MB (+100.4 MB); the highest `ps` reading 172.1 MB; error null
+
+ ✓ measured-pass.proof.ts (3 tests) 3483ms
+   ✓ round 2, Defect 1: measuredPass (heavy/run.ts) under Node v24.22.0 (3)
+     ✓ a pass that waits 300 ms and allocates almost nothing 1394ms
+     ✓ a pass that holds a touched 100 MB buffer for 300 ms 1358ms
+     ✓ a pass that holds a touched 100 MB only inside one synchronous step 729ms
+
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Start at  17:36:00
+   Duration  3.69s (tests 96%, transform 2%, import 2%)
+
+-----
+EXIT 0; ended: 2026-11-18T01:36:03Z; load averages: 24.23 44.32 66.09
