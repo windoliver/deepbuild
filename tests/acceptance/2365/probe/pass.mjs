@@ -8,8 +8,13 @@
 // stdout: {"at":"start",…} when the pass starts, {"at":"end"} when it ends, then one result line:
 //   ms        the pass's wall time
 //   maxGapMs  the longest stretch the 5 ms timer went unserved, from the pass's start to its end
-//   rssStart  resident memory at the pass's start, after a full GC; peakRss the highest seen during the pass (the
-//             timer's samples, and the process's max RSS when the pass raised it); rise = peakRss - rssStart
+//   rssStart  resident memory at the pass's start, after a full GC (process.memoryUsage.rss())
+//   rise      what the pass added to it: the larger of how far the timer's samples of that same reading rose above
+//             rssStart, and how far the pass raised the process's lifetime maximum (resourceUsage().maxRSS at the
+//             pass's end less at its start). Each is a difference within one counter. The two counters are never
+//             subtracted from each other: on some Node builds they stay a constant apart (Homebrew's 24.22.2 reads
+//             rss() about 38 MB under its own maxRSS and under `ps`), and that constant is not the pass's
+//   peakRss   rssStart + rise
 //   evidenceBefore / evidenceAfter / added   bytes of files under the evidence store's folder
 //   error     the pass's error, with its causes, or null
 import { readdirSync, statSync } from 'node:fs';
@@ -89,7 +94,7 @@ maxGapMs = Math.max(maxGapMs, t1 - last);
 clearInterval(timer);
 process.stdout.write(`${JSON.stringify({ at: 'end' })}\n`);
 const maxAfter = process.resourceUsage().maxRSS * 1024;
-if (maxAfter > maxBefore) peakRss = Math.max(peakRss, maxAfter);
+peakRss = Math.max(peakRss, rssStart + (maxAfter - maxBefore));
 const evidenceAfter = bytesUnder(evidenceRoot);
 await record.close();
 process.stdout.write(`${JSON.stringify({ at: 'result', ms: t1 - t0, maxGapMs, ticks, rssStart, peakRss, rise: peakRss - rssStart, evidenceBefore, evidenceAfter, added: evidenceAfter - evidenceBefore, error })}\n`);

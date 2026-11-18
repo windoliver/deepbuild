@@ -198,3 +198,35 @@ job that saw no implementation of #2365. No oracle, fixture, twin or expected va
   it was read. It asserted through `expect(list).toEqual([])`, whose message the runner cut to `expected [ …(3) ] to
   deeply equal []`, so the re-reading twin's test never saw the names. It fails on the same condition as before: a
   watched source with bytes read.
+
+## Repair (2026-11-17, owner-approved plumbing repair)
+
+One defect in how AC1's rise in resident memory is computed was repaired by a separate maintenance job that saw no
+implementation of #2365. No limit, fixture, twin or expected value changed, no test's name, and no assertion compares
+anything else: the rise is still judged against 64 MB, and every run of the twin must still reach it.
+
+- **The defect.** The rise was a peak read from one counter less a start read from another. `probe/pass.mjs` took
+  `rssStart` from `process.memoryUsage.rss()` and, when the pass raised the process's lifetime maximum, its peak from
+  `process.resourceUsage().maxRSS`; `heavy/run.ts` then took the higher of that and what `ps` read, less the same
+  `rssStart`. On the repo's Node 24.22.0 the three read the same and nothing showed. On Homebrew's Node 24.22.2
+  `rss()` reads about 38 MB under both `maxRSS` and `ps` at every point (28 MB against 67 MB where a pass starts,
+  129 MB against 167 MB with 100 MB held), so every pass read about 38 MB more than it added.
+- **`probe/pass.mjs`.** `rise` is the larger of two differences, each within one counter: how far the timer's samples
+  of `rss()` rose above `rssStart`, and how far the pass raised the lifetime maximum (`maxRSS` at its end less at its
+  start). `peakRss` is `rssStart + rise`. The result line keeps every field, and `rise = peakRss - rssStart` holds.
+- **`heavy/run.ts`, `measuredPass`.** What `ps` saw is taken above `ps`'s own first reading after the start line, not
+  above the child's `rssStart`. `rise` is the larger of the child's and that, and `peakRss` is `rssStart + rise`.
+  This replaces "less its RSS at the pass's start" in Readings (AC1's pass): the three readings are those listed
+  there, each now taken above its own start. On a build like Homebrew's the printed peak is on `rss()`'s scale.
+- **Measured** on both builds, before → after, three runs each (`repair-evidence/round2/`). A pass that waits 300 ms:
+  +0.3 MB before and after on 24.22.0; +38.7 to +38.8 MB → +0.2 to +0.3 MB on 24.22.2. A pass that holds a touched
+  100 MB buffer for 300 ms: +100.3 to +100.5 MB before and after on 24.22.0; +138.7 to +138.9 MB → +100.2 to
+  +100.6 MB on 24.22.2. A pass that holds 100 MB only inside one synchronous step, which no sample sees: +100.3 to
+  +100.5 MB before and after on 24.22.0; +138.8 to +138.9 MB → +100.3 to +100.6 MB on 24.22.2. The whole-file twin
+  at the base is rejected as before, naming its peak, its five judged runs at +1,338 to +1,370 MB → +1,344 to
+  +1,354 MB on 24.22.0 and +1,385 to +1,411 MB → +1,335 to +1,376 MB on 24.22.2.
+- **Still unseen.** A peak that no sample catches counts only by how far it passes the process's earlier lifetime
+  maximum. Where a pass starts here the process is at that maximum on both builds (`ps` and `maxRSS` read the same),
+  so nothing is lost; an archive that gave memory back to the system before its pass would hide that much of such
+  a peak. `ps`'s first reading comes a moment after the start line, so memory a pass gave back before that reading
+  and took again after it would read as added; none showed in these runs.

@@ -145,3 +145,29 @@ job that saw no implementation of #2365. No oracle, fixture, twin or expected va
   that needs the merge base's copies was BLOCKED. The child still runs the merge base's exported sources on the same
   files, the copies are compared byte for byte as before, and a child that doesn't run is still BLOCKED (`base.ts`,
   unchanged).
+
+## Repair (2026-11-17, owner-approved plumbing repair)
+
+One more defect in how the merge base is run, found when the merge base moved to `ed03dc60`, was repaired by a
+separate maintenance job that saw no implementation of #2365. No oracle, fixture, twin or expected value changed, and
+no test's name or limit.
+
+- **The defect.** "The merge base runs from its own sources" stopped being enough. At `ed03dc60` its sources read
+  two files that its build writes before `tsc`: `packages/evidence/dist/patterns.json` (`build-patterns.mjs`) and
+  `packages/record/dist/versions.json` (`build-versions.mjs`). The export has no build, so the child ended with
+  `ENOENT … packages/evidence/dist/patterns.json` and all 12 tests of `suite.test.ts` and all 6 of `perf.test.ts`
+  were BLOCKED.
+- **`base.ts`, `baseTree`.** After the export is linked, the merge base's own build steps make that data in the
+  export, from the export's files: for `@deepbuild/archive` and the workspace packages it depends on, those first,
+  each step its `package.json` `build` script names before `tsc` runs in its exported folder, under the Node flags
+  the archive's child runs under. No script and no other package is named here, so a merge base whose builds start
+  with `tsc` runs nothing, as before. Nothing is taken from this checkout's `dist` or from the change. A step that
+  fails, or that is not `node <script>`, is BLOCKED with the step and its error; data that no step makes still ends
+  as the child's BLOCKED.
+- **`base-resolve.mjs`** (new) holds the `.js` to `.ts` resolution of the 2026-11-15 repair, unchanged, so that the
+  build steps get it too (`node --import`); `base-copy.mjs` imports it where it registered the same hook itself.
+- **Run at `ed03dc60`** (where the change is the merge base), with Node 24.22.0: `suite.test.ts` 12 BLOCKED → 12
+  passed; `perf.test.ts` 6 BLOCKED → 6 passed; `meter.test.ts` 1 passed before and after. Planted merge bases
+  (`repair-evidence/round2/planted-base/`): a step that exits 3, one that writes its data and then exits 4, a
+  missing script and a step that is not `node` each read BLOCKED naming the step; a build that no longer names the
+  step reads the child's BLOCKED as before the repair.

@@ -49,6 +49,7 @@ export async function measuredPass(home: string, mode: 'pass' | 'session', now: 
   let out = '';
   let err = '';
   let sampling = false;
+  let outsideStart = 0;
   let outsidePeak = 0;
   let sampler: Promise<void> = Promise.resolve();
   child.stderr.on('data', (d: Buffer) => { err += d.toString('utf8'); });
@@ -58,7 +59,9 @@ export async function measuredPass(home: string, mode: 'pass' | 'session', now: 
       sampling = true;
       sampler = (async () => {
         while (sampling) {
-          outsidePeak = Math.max(outsidePeak, await ps(child.pid!));
+          const rss = await ps(child.pid!);
+          outsideStart ||= rss;
+          outsidePeak = Math.max(outsidePeak, rss);
           await new Promise((r) => setTimeout(r, 10));
         }
       })();
@@ -71,8 +74,10 @@ export async function measuredPass(home: string, mode: 'pass' | 'session', now: 
   const line = out.trim().split('\n').reverse().find((l) => l.includes('"at":"result"'));
   if (code !== 0 || !line) throw Error(`BLOCKED: the measured pass exited ${code}: ${err.slice(-2000)}`);
   const r = JSON.parse(line) as Omit<PassResult, 'outsidePeak' | 'load'>;
-  const peakRss = Math.max(r.peakRss, outsidePeak);
-  return { ...r, peakRss, rise: peakRss - r.rssStart, outsidePeak, load: { start: loadStart, end: loadavg()[0]! } };
+  // `ps` reads a counter that some Node builds keep a constant apart from the child's own (pass.mjs), so what `ps`
+  // saw is taken above its own first reading, never above the child's rssStart; the rise is the larger of the two.
+  const rise = Math.max(r.rise, outsidePeak - outsideStart);
+  return { ...r, peakRss: r.rssStart + rise, rise, outsidePeak, load: { start: loadStart, end: loadavg()[0]! } };
 }
 
 /** A copy of a home for one run: an APFS clone on macOS, so each run starts from the same bytes at no cost. */
