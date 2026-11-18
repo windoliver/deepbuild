@@ -347,12 +347,15 @@ impl Controller {
         }
     }
 
-    /// Time passed to `now`: the card arms once its interval ran, and stops saying to hold still.
-    pub fn tick(&mut self, now: u64) {
+    /// Time passed to `now`: the card arms once its interval ran, and stops saying to hold still. Whether that
+    /// changed what the card shows (#1482): a tick that arms nothing draws nothing.
+    pub fn tick(&mut self, now: u64) -> bool {
+        let (state, holding) = (self.machine.state(), self.holding);
         self.machine.tick(now);
         if matches!(self.machine.state(), State::Armed { .. }) {
             self.holding = None;
         }
+        (self.machine.state(), self.holding) != (state, holding)
     }
 
     /// How many options are folded behind their count: those past the ninth, until it's pressed (#1808).

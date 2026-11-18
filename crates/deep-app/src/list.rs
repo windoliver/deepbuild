@@ -351,12 +351,14 @@ pub fn opens_on(asks: &[Ask], sessions: &[Session]) -> Option<Address> {
         .map(|s| Address::new(Place::Project, &project_id(s.project.as_deref())))
 }
 
+/// A reading, the key it was read at, and when what it wrote from the clock next reads differently (#1482).
+type ReadAt = ((u64, u64, bool), std::rc::Rc<(Vec<Ask>, Vec<Session>)>, Option<u64>);
+
 thread_local! {
     /// The last reading of the record, by its `log_pos`, the second it was read at and whether the record before the
     /// reads was folded (#2026): a frame reads it once.
     #[allow(clippy::type_complexity)]
-    static READ: std::cell::RefCell<Option<((u64, u64, bool), std::rc::Rc<(Vec<Ask>, Vec<Session>)>)>> =
-        const { std::cell::RefCell::new(None) };
+    static READ: std::cell::RefCell<Option<ReadAt>> = const { std::cell::RefCell::new(None) };
 }
 
 /// The asks and sessions the list reads from the one record reader at `now` (#1461), read once per change of the
@@ -368,10 +370,17 @@ pub fn read_now(now: u64) -> std::rc::Rc<(Vec<Ask>, Vec<Session>)> {
         READ.with(|cell| {
             let mut cell = cell.borrow_mut();
             match cell.as_ref() {
-                Some((at, read)) if *at == key => read.clone(),
+                Some((at, read, until)) if *at == key => {
+                    // A reading kept past the frame that made it still says when its ages change.
+                    if let Some(until) = until {
+                        crate::states::changes_after(until.saturating_sub(now));
+                    }
+                    read.clone()
+                }
                 _ => {
-                    let fresh = std::rc::Rc::new(read(view, now));
-                    *cell = Some((key, fresh.clone()));
+                    let (fresh, changes) = crate::states::written_in(|| read(view, now));
+                    let fresh = std::rc::Rc::new(fresh);
+                    *cell = Some((key, fresh.clone(), changes.map(|wait| now + wait)));
                     fresh
                 }
             }
@@ -544,6 +553,11 @@ impl Kept {
     pub fn release(&mut self, id: &str) {
         self.drawn.retain(|item| item.id() != id);
         self.left_at.remove(id);
+    }
+
+    /// You're in the list at `now`, and the list as drawn stands (#1482): a row that left waits for you to leave.
+    pub fn attended(&mut self, now: u64) {
+        self.attended_until = Some(now);
     }
 
     /// The list as drawn after the record gave `fresh` at `now`, with `attended` saying whether you're in the list.

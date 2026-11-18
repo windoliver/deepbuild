@@ -439,6 +439,20 @@ fn show(address: &Address, window: &mut Window, cx: &mut App) -> Result<Address,
         }
     }
     let (target, full) = resolve(address, window, cx);
+    // An address the window already shows changes nothing: no page selected again, no refresh (#1482).
+    if let Target::Shipped(kind) = &target {
+        let shown = &selection(cx).shown;
+        if shown.address.as_ref() == Some(&full)
+            && shown.region == Some(Region::Shipped(*kind))
+            && shown.notice.is_none()
+        {
+            // #1482's planted setter notifies what the window shows without comparing it first.
+            if crate::plain::planted("setter-skips-compare") {
+                views::notify_session_page(cx);
+            }
+            return Ok(full);
+        }
+    }
     let (region, notice) = match target {
         Target::Shipped(kind) => {
             select(kind, window, cx);

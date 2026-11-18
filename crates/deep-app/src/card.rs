@@ -247,11 +247,18 @@ impl Render for AskPage {
                 ];
                 PAGE.with(|page| page.set(Some(rect)));
                 if let Some(card) = placed.as_ref() {
-                    card.update(cx, |card, _| {
+                    card.update(cx, |card, cx| {
                         if let Some(controller) = card.controller.as_mut() {
                             // The window as it is now: a window made larger keeps the card armable.
                             let slot = crate::arming::Slot { rect, visible };
+                            let was = controller.state_name();
                             controller.placed(slot, crate::views::now());
+                            // A card this presented again draws as it now is, in the frame after (#1482): a notify
+                            // made while a frame draws is dropped, so it is made when the frame is done.
+                            if controller.state_name() != was {
+                                let card = cx.entity_id();
+                                cx.defer(move |cx| cx.notify(card));
+                            }
                         }
                     })
                     .ok();
@@ -327,8 +334,13 @@ pub fn tick(now: u64, cx: &mut App) {
         return;
     }
     shown.update(cx, |card, cx| {
-        if let Some(controller) = card.controller_mut() {
-            controller.tick(now);
+        // The card draws again when its state differs from the one it drew: arming, or a move that presented it again
+        // after it drew (#1482). A tick that changes neither draws nothing.
+        let moved = card
+            .controller_mut()
+            .is_some_and(|controller| controller.tick(now));
+        let state = card.controller.as_ref().map(Controller::state_name);
+        if card.controller.is_some() && (moved || state != card.drawn) {
             cx.notify();
         }
     });
@@ -352,6 +364,8 @@ pub struct Card {
     /// view.
     rows: ScrollHandle,
     last: std::rc::Rc<std::cell::Cell<Option<Bounds<Pixels>>>>,
+    /// The state its controller was in when it last drew (#1482).
+    drawn: Option<&'static str>,
 }
 
 /// What a press edge says: its own time and whether the HID system made it.
@@ -395,6 +409,7 @@ impl Card {
             at: None,
             rows: ScrollHandle::new(),
             last: Default::default(),
+            drawn: None,
         };
         card.focus_on(at);
         card
@@ -810,6 +825,7 @@ impl Focusable for Card {
 
 impl Render for Card {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.drawn = self.controller.as_ref().map(Controller::state_name);
         // The card keeps the keyboard while it shows: focus anything else took, it takes back at its next frame, until
         // you move the keyboard off it yourself (#1462).
         if !self.focus.is_focused(window) && !LET_GO.with(std::cell::Cell::get) {

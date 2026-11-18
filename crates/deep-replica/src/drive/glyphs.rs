@@ -24,7 +24,6 @@ type Row = ([i32; 4], i32);
 /// The fewest glyphs that say which line a cut-off row starts: fewer could start anything.
 const MIN_CUT: usize = 4;
 
-
 #[derive(Default)]
 struct Seen {
     /// The platform's text system, which says where in its tile each glyph's raster starts.
@@ -107,7 +106,8 @@ impl Glyphs {
         // A mark shaped off its line's baseline, as Arabic's are, paints up to about half an em from it (#1808): under one
         // clip, a row within half an em of a larger row is that row's. Lines under one clip are a line's height apart.
         let scale = seen.scale.unwrap_or(2.);
-        let mut clips: BTreeMap<[i32; 4], Vec<(i32, Vec<(f32, GlyphKey, Sprite)>)>> = BTreeMap::new();
+        let mut clips: BTreeMap<[i32; 4], Vec<(i32, Vec<(f32, GlyphKey, Sprite)>)>> =
+            BTreeMap::new();
         for ((clip, y), glyphs) in rows {
             clips.entry(clip).or_default().push((y, glyphs));
         }
