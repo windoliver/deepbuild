@@ -1,18 +1,18 @@
-#2801 e2e: claude/fix-2801-hub-health-startup-4825fa be964f2ef   node v24.22.0   load:  28.54 28.37 80.82 
+#2801 e2e: claude/fix-2801-hub-health-startup-4825fa 44b879d49   node v24.22.0   load:  154.40 205.34 248.84 
 
 $ deep hub start --root <tmp>/a, then deep hub status every 2 s
 exit 0 after 2 s
-try 1  20:43:50  exit 0  {"pid":71617,"start":"01M7PFFPVQSZ2FV1BM0W9GZTAD","off":false,"parsers":1,"gates":{"watch_only":false,"reason":null},"notifications":null,"secrets":"r
-try 2  20:43:52  exit 0  {"pid":71617,"start":"01M7PFFPVQSZ2FV1BM0W9GZTAD","off":false,"parsers":1,"gates":{"watch_only":false,"reason":null},"notifications":null,"secrets":"r
-try 3  20:43:54  exit 0  {"pid":71617,"start":"01M7PFFPVQSZ2FV1BM0W9GZTAD","off":false,"parsers":1,"gates":{"watch_only":false,"reason":null},"notifications":null,"secrets":"r
-try 4  20:43:57  exit 0  {"pid":71617,"start":"01M7PFFPVQSZ2FV1BM0W9GZTAD","off":false,"parsers":1,"gates":{"watch_only":false,"reason":null},"notifications":null,"secrets":"r
-try 5  20:43:59  exit 0  {"pid":71617,"start":"01M7PFFPVQSZ2FV1BM0W9GZTAD","off":false,"parsers":1,"gates":{"watch_only":false,"reason":null},"notifications":null,"secrets":"r
-try 6  20:44:01  exit 0  {"pid":71617,"start":"01M7PFFPVQSZ2FV1BM0W9GZTAD","off":false,"parsers":1,"gates":{"watch_only":false,"reason":null},"notifications":null,"secrets":"r
-try 7  20:44:03  exit 0  {"pid":71617,"start":"01M7PFFPVQSZ2FV1BM0W9GZTAD","off":false,"parsers":1,"gates":{"watch_only":false,"reason":null},"notifications":null,"secrets":"r
-try 8  20:44:06  exit 0  {"pid":71617,"start":"01M7PFFPVQSZ2FV1BM0W9GZTAD","off":false,"parsers":1,"gates":{"watch_only":false,"reason":null},"notifications":null,"secrets":"r
+try 1  21:46:13  exit 0  {"pid":54636,"start":"01M7PK1Y7D76M68TYYFFKJSXW7","off":false,"parsers":1,"gates":{"watch_only":false,"reason":null},"notifications":null,"secrets":"r
+try 2  21:46:15  exit 0  {"pid":54636,"start":"01M7PK1Y7D76M68TYYFFKJSXW7","off":false,"parsers":1,"gates":{"watch_only":false,"reason":null},"notifications":null,"secrets":"r
+try 3  21:46:18  exit 0  {"pid":54636,"start":"01M7PK1Y7D76M68TYYFFKJSXW7","off":false,"parsers":1,"gates":{"watch_only":false,"reason":null},"notifications":null,"secrets":"r
+try 4  21:46:20  exit 0  {"pid":54636,"start":"01M7PK1Y7D76M68TYYFFKJSXW7","off":false,"parsers":1,"gates":{"watch_only":false,"reason":null},"notifications":null,"secrets":"r
+try 5  21:46:23  exit 0  {"pid":54636,"start":"01M7PK1Y7D76M68TYYFFKJSXW7","off":false,"parsers":1,"gates":{"watch_only":false,"reason":null},"notifications":null,"secrets":"r
+try 6  21:46:25  exit 0  {"pid":54636,"start":"01M7PK1Y7D76M68TYYFFKJSXW7","off":false,"parsers":1,"gates":{"watch_only":false,"reason":null},"notifications":null,"secrets":"r
+try 7  21:46:27  exit 0  {"pid":54636,"start":"01M7PK1Y7D76M68TYYFFKJSXW7","off":false,"parsers":1,"gates":{"watch_only":false,"reason":null},"notifications":null,"secrets":"r
+try 8  21:46:30  exit 0  {"pid":54636,"start":"01M7PK1Y7D76M68TYYFFKJSXW7","off":false,"parsers":1,"gates":{"watch_only":false,"reason":null},"notifications":null,"secrets":"r
 
 $ deep hub start --root <tmp>/b, hub.health every 100 ms from the moment the socket exists
 deep hub start exit 0
-  1 x from 1053 ms: health JSON (pid, start, gates ...)
+  1 x from 1221 ms: health JSON (pid, start, gates ...)
 
 E2E OK: no internal error, no drop to no answer
