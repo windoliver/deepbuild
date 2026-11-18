@@ -1,0 +1,5 @@
+node scripts/proof.mjs guard, on the merged branch at f47f84c63 (2026-11-16):
+
+FAIL guard: scripts/lanes.mjs: the proof lanes' own code changed (commit f47f84c63f3c)
+  Fix: Send the edit as its own commit that touches only the files it names, and have the maintainer approve that commit with an SSH-signed tag under deep/approved/ naming each test or file (Approves: <path> › <test> or Approves: <path>); a looser tolerance lands only as a new case beside the old.
+proof: wall time 532.9 s

@@ -122,6 +122,7 @@ impl<'a> Plan<'a> {
             ],
         });
         {
+            deep_gpu::counted::compute_pass();
             let mut pass = self.encoder.begin_compute_pass(&Default::default());
             pass.set_pipeline(&self.fx.pipelines[entry]);
             pass.set_bind_group(0, &group, &[]);

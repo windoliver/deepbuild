@@ -196,6 +196,14 @@ impl Hub<'_> {
                 json!({"doc": q.doc, "rows": rows, "next": next})
             }
         };
+        // #192: the provider and the content key behind each output the document takes.
+        let mut result = result;
+        if let Some(rows) = self.sandbox.provided.get(&q.doc).filter(|r| !r.is_empty()) {
+            result["provided"] = rows
+                .iter()
+                .map(|r| json!({"item": r["item"], "provider": r["provider"], "key": r["key"]}))
+                .collect();
+        }
         // What the agent is sent is the reply's text, made inside the time.
         std::hint::black_box(result.to_string());
         let ms = started.elapsed().as_secs_f64() * 1000.0;

@@ -67,6 +67,7 @@ mod placement;
 mod planted;
 mod played;
 mod points;
+mod ports;
 mod present;
 mod preview;
 mod print;
@@ -449,6 +450,9 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
     if let Some(p) = present::parse_call(name, c) {
         return Some(Call::Present(p));
     }
+    if let Some(p) = ports::parse_call(name, c) {
+        return Some(Call::Ports(Box::new(p)));
+    }
     let doc = || Some(c.get("doc")?.as_str()?.to_string());
     let time = |key: &str, default: i64| -> Option<i64> {
         match c.get(key) {
@@ -474,19 +478,22 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 set: c.get("set").cloned().filter(Value::is_object),
             })
         }
-        "frame_hash" => {
+        "encode_qualify" => return Some(Call::EncodeQualify(c.get("tool")?.as_str()?.to_string())),
+        "frame_hash" | "frame_planes" => {
             let frames = c.get("frames")?.as_array()?.iter().map(|f| {
                 let size = f.get("size")?.as_array().filter(|a| a.len() == 2)?;
                 let w = u32::try_from(size[0].as_u64()?).ok()?;
                 let h = u32::try_from(size[1].as_u64()?).ok()?;
                 Some(([w, h], f.get("bytes")?.as_str()?.to_string()))
             });
-            return Some(Call::FrameHash {
-                frames: frames.collect::<Option<_>>()?,
-                software: match c.get("adapter") {
-                    None => false,
-                    Some(a) => a.as_str()? == "software",
-                },
+            let frames = frames.collect::<Option<_>>()?;
+            let software = match c.get("adapter") {
+                None => false,
+                Some(a) => a.as_str()? == "software",
+            };
+            return Some(match name {
+                "frame_hash" => Call::FrameHash { frames, software },
+                _ => Call::FramePlanes { frames, software },
             });
         }
         "pixel_hash" => {
@@ -1348,7 +1355,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 // #548's deep_query region map that lays the reads out by name.
                 || *p == logic::MAP_READS_BY_NAME
                 // #466's boil and blur in deep-show's frames.
-                || films::PLANTED.contains(p)
+                || films::PLANTED.contains(p) || sandbox::PLANTED.contains(p)
                 || caption_design::PLANTED.contains(p)
         })
         .map(str::to_string);
@@ -1479,6 +1486,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "recipe_rules_twice" => Planted::RulesEvaluatedTwice,
                 "kit_tests_defaults_only" => Planted::KitDefaultsOnly,
                 "expander_hash_map_order" => Planted::ExpandsInHashOrder,
+                "expansion_drops_stroke" => Planted::ExpansionDropsStroke,
                 "migration_stops_at_first_fault" => Planted::MigrationFirstFault,
                 "migration_one_major_per_document" => Planted::MigrationOneMajor,
                 "migration_zero_as_left_out" => Planted::MigrationZeroAsLeftOut,
@@ -1546,6 +1554,11 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "assumes_bt601" => Planted::AssumesBt601,
                 "lookup_floors_frame_rate" => Planted::LookupFloorsFrameRate,
                 "seek_reads_proxy" => Planted::SeekReadsProxy,
+                // #210: a port's wrong programs.
+                "port_sends_on_seek" => Planted::PortSendsOnSeek,
+                "mute_leaves_port_sending" => Planted::MuteLeavesPortSending,
+                "gate_trusts_document_sound" => Planted::GateTrustsDocumentSound,
+                "web_export_keeps_port" => Planted::WebExportKeepsPort,
                 "shipped_panels_ungated" => Planted::ShippedPanelsUngated,
                 "comparer_matches_hash" => Planted::ComparerMatchesHash,
                 "keeps_voices_on_switch" => Planted::KeepsVoicesOnSwitch,
@@ -1721,9 +1734,20 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
             })
             .collect::<Option<_>>()?,
     };
+    // #210: the hours the shell holds quiet, each `{from, to}` in flicks.
+    let quiet_hours = match input.get("quiet_hours") {
+        None => Vec::new(),
+        Some(list) => list
+            .as_array()?
+            .iter()
+            .map(|h| Some((h.get("from")?.as_i64()?, h.get("to")?.as_i64()?)))
+            .collect::<Option<_>>()?,
+    };
     Some(Scenario {
+        quiet_hours,
         evidence: PathBuf::from(input.get("evidence")?.as_str()?),
         packs,
+        job_tools: export::tools::parse(input.get("job_tools"))?,
         notes,
         installed,
         plugin_entries,
@@ -2162,7 +2186,7 @@ fn modules(set: BuildSet) -> Vec<Module> {
             m.manifest.implementation.equivalence = deep_canvas::registry::Equivalence::Measured;
             m
         } else {
-            deep_canvas_sandbox::module::module()
+            sandbox::shipped(deep_canvas_sandbox::module::module())
         });
     }
     // Issue #533: the logic module, on sandbox, its arrays column sources (#535); `test-logic-patch` seals a patch release of the
@@ -2176,7 +2200,7 @@ fn modules(set: BuildSet) -> Vec<Module> {
         } else if cfg!(feature = "test-logic-needs-physics") {
             logic_needs_physics()
         } else {
-            deep_logic::module::module()
+            sandbox::shipped(deep_logic::module::module())
         };
         // A build without physics refuses the logic items that need it (#533); one with it binds
         // physics.cast@1 for the items that ask it between steps (#213).
@@ -2862,6 +2886,9 @@ fn main() {
         "encode-tool" => {
             std::process::exit(deep_codecs::serve(deep_codecs::ENCODE_TOOL, &args[1..]))
         }
+        // #518: this binary's copy as a native test encode tool.
+        #[cfg(feature = "test-encode-tools")]
+        "test-encode-tool" => std::process::exit(export::test_tools::run(&args[1..])),
         // #162: this binary's copy as the Lottie export's reference reader.
         "lottie-reader" => std::process::exit(deep_lottie_reader::serve(&args[1..])),
         _ => {}

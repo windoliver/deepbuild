@@ -1,0 +1,57 @@
+#192 voxel acceptance suite at its base, 06e231702 ("Merge pull request #2735 ..."). Home paths redacted.
+
+What ran, and what didn't
+-------------------------
+- No file ran through deep-show at the base. Every file needs deep-show `full,test-mesh-item` built, and while this
+  suite was drafted the shared Mac's one build slot was held (load average 105 to 224) with five to ten builds
+  queued ahead of this job's in scripts/throttle.mjs, about an hour each; the build was never granted. The base run
+  of each file is still owed: run the README's commands at 06e231702 and replace this file with the output.
+- Ran: the cargo feature check criterion 9's two test builds need (below), and the fixtures in Node's WebAssembly
+  (README: Fixtures; every value the README states, checked in a throwaway test, removed before commit).
+
+Ran at the base: criterion 9's test builds don't exist
+------------------------------------------------------
+$ cargo build --locked --bin deep-show --no-default-features --features full,test-mesh-item,test-logic-version-bump
+error: none of the selected packages contains this feature: test-logic-version-bump
+$ cargo build --locked --bin deep-show --no-default-features --features full,test-mesh-item,test-sandbox-version-bump
+error: none of the selected packages contains this feature: test-sandbox-version-bump
+
+Ran: the fixtures in Node's WebAssembly (the README's params and assets layout)
+-------------------------------------------------------------------------------
+mesher bytes 1039 tetra 1143 clock 161 grain 151
+first quad [[0.75,2.75,4.75],[0.75,2.75,5],[0.75,3,5],[0.75,3,4.75]] [[-1,0,0],[-1,0,0],[-1,0,0],[-1,0,0]] [[0,0],[1,0],[1,1],[0,1]] [0,1,2,0,2,3,4,5,6,4,6,7]
+w2 first [[1.125,4.125,7.125],[1.125,4.125,7.5]]
+holey open [{"edge":[[0.75,2.75,4.75],[0.75,2.75,5]],"faces":1},{"edge":[[0.75,2.75,4.75],[0.75,3,4.75]],"faces":1},{"edge":[[0.75,3,4.75],[0.75,3,5]],"faces":1},{"edge":[[0.75,2.75,5],[0.75,3,5]],"faces":1}]
+tetra counts [ 12, 13 ]
+params 000000000000d03f grid solid 1000
+welded 602 open 0
+volume 15.62500000000003 want 15.625
+ ✓ zz-fixtures.scratch.test.ts > fixtures write what the README says
+
+The first failure each file meets at the base (from the base's code, not run)
+-----------------------------------------------------------------------------
+At the base, crates/deep-show/src/sandbox.rs keys a provider with `"assets": []` (line 475), runs it with no input
+(`self.run(&rw, "provider", seed, &budget, &[])`, line 540; the runner writes input only for a validator), and keeps
+`{item, provider, key, trap, out}` per row (line 511): no params or assets copied in, no `shading`, no `ms`. No file
+under crates/ names `provider_param_bound`, `provider_key_omits_params`, `provider_key_names_logic`,
+`test-logic-version-bump` or `test-sandbox-version-bump` (grep: 0 files), and deep-show answers a scenario whose
+`planted` it doesn't know with bad_input.
+
+- ac01-mesher.test.ts: the Node fixture checks pass; then the voxel mesher, given no grid asset, traps `unreachable`
+  at its length check: "the voxel document is presented: expected 'refused' to be 'presented'" (an error
+  `provider_trap`, kind unreachable).
+- ac02-content-key.test.ts: every check is refused for the same trap, its mesh null, and the document has no
+  revision to play: "the provider runs once per content key ...: expected [ "the first check: the document isn't
+  presented ...", ..., "the first check's mesh isn't the block at size 0.25 ...", ..., "the straight 60 s play gave
+  0 frames, not 3600", ... ] to deeply equal []".
+- ac03-traps.test.ts: no params are copied in, so `fault` reads 0 and both fault documents write the tetrahedron:
+  "each fault fails the check as the criterion says: expected [ "faultpack.overcap (over_cap): the document passed
+  its check ...", ... ] to deeply equal []"; the import's refusal is a `provider_trap` of kind `refused` that names
+  it only in prose.
+- ac04-bound-params.test.ts: no `provider_param_bound` error: "each binding is refused at check, naming the param:
+  expected [ "size bound to t: no error provider_param_bound names the param size ...", ... ] to deeply equal []".
+- ac09-module-version.test.ts: the first build's voxel document is refused for the same `unreachable` trap: "full,
+  test-mesh-item: the voxel document is presented: expected 'refused' to be 'presented'"; the two test builds fail
+  as shown above.
+- ac10-budgets.test.ts: "run 0: the voxel document is presented: expected 'refused' to be 'presented'" (the same
+  trap), before the merge base is built.
