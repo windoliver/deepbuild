@@ -1008,6 +1008,10 @@ alone.push('tests/acceptance/66-redraft-1812/');
 // #1495's AC7 builds the real app download once per commit (release-pack's full build, the app's runtime folder) and
 // runs it under the platform sandbox.
 alone.push('tests/acceptance/1495/app-download.test.ts');
+// #1592's replica file builds deep-drive plain and with env-plants and starts a replica for each shipped page; its AC4
+// file builds the app with its contact sheet and opens that window, with Accessibility and Screen Recording, by hand.
+alone.push('tests/acceptance/1592/');
+byHand.push('tests/acceptance/1592/shown.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
