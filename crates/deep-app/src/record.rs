@@ -379,27 +379,30 @@ impl View {
             // The contract's close rule, and the first close to append decides, as in the core; the outcome is the
             // inbox's word for the kind, as the asks core names it.
             let outcome = kind.strip_prefix("ask.").unwrap_or("decided_for_you");
-            let mut released: Vec<(Value, String)> = Vec::new();
+            let mut released: Vec<(Value, String, bool)> = Vec::new();
             for row in self.inbox.iter_mut().filter(|row| {
                 row["status"] != "closed" && closes(&event, row["ask"].as_str().unwrap_or_default())
             }) {
                 row["status"] = json!("closed");
                 row["outcome"] = json!(outcome);
-                // Its exception closed any way but "leave them to their defaults": each ask it held gets its own row.
-                if holds(row) && event["data"]["answer"] != "defaults" {
+                // Its exception closed: each ask it held gets its own row, as in the core; left to their defaults, only
+                // those it hadn't shown, which weren't in what you closed.
+                if holds(row) {
                     let thread = thread_of(&self.threads, &row["session"]).to_owned();
-                    released.push((row["ask"].clone(), thread));
+                    let defaults = event["data"]["answer"] == "defaults";
+                    released.push((row["ask"].clone(), thread, defaults));
                 }
             }
             let threads = &self.threads;
             for row in self.inbox.iter_mut().filter(|row| {
                 row["status"] == "folded"
-                    && released
-                        .iter()
-                        .any(|(exception, thread)| match row["folded"].as_str() {
+                    && released.iter().any(|(exception, thread, defaults)| {
+                        let held = match row["folded"].as_str() {
                             Some(holder) => *exception == holder,
                             None => thread_of(threads, &row["session"]) == thread,
-                        })
+                        };
+                        held && !(*defaults && row["seen"] == true)
+                    })
             }) {
                 let status = if row["seen"] == true {
                     "shown"
@@ -1232,7 +1235,8 @@ mod tests {
     #[test]
     fn asks_an_answered_exception_held_get_their_own_rows() {
         // "Answer them together" closes the exception: an ask it held that the core had shown is in sight again, and
-        // one it hadn't waits for its batch. Left to their defaults, they stay inside it.
+        // one it hadn't waits for its batch. Left to their defaults, the shown ones stay inside it; one it hadn't shown
+        // wasn't in what you closed, so it waits for its batch on its own, as in the core (#22).
         let closed_by = |answer: &str| {
             let mut view = View::default();
             view.apply(fold("x1", "s1"));
@@ -1249,7 +1253,7 @@ mod tests {
         );
         assert_eq!(
             closed_by("defaults"),
-            ("folded".to_owned(), "folded".to_owned())
+            ("folded".to_owned(), "queued".to_owned())
         );
     }
 

@@ -62,3 +62,25 @@ Nothing blocking; two more places where the app's live fold differed from the co
 | mutant-no-owner.txt | without the owner check, someone else's block folds and the test fails |
 | mutant-count-always.txt | with the count on in any record, the listed hub's sixth ask folds and the test fails |
 | mutant-no-scope.txt | without the scope check, another scope's ask folds and the test fails |
+
+## The final review of 9f2f36c99
+
+A fresh agent's review of the whole final diff found nothing that blocks, one thing to fix, and two notes.
+
+The fix: when an exception closed with "leave them to their defaults", the app kept every ask it held folded. The core
+(`index.ts`, the close case: `a.folded === ask.handle && !a.shown`) gives an ask the exception hadn't shown its own card
+on any close, so a panel could name that ask before its batch. The app now releases, on any close, the asks the
+exception hadn't shown; under "defaults" the shown ones stay inside it. This PR's own unit test
+`asks_an_answered_exception_held_get_their_own_rows` asserted the old result for the unshown ask ("folded"); its
+assertion is corrected to the core's ("queued"), which is the failing-first run below.
+
+| File | What it shows |
+| --- | --- |
+| failing-first-defaults.txt | the corrected test fails before the fix: the unshown ask stays folded after "defaults" |
+| passing-defaults.txt | deep-app lib tests with the fix: 119/119; clippy warnings all outside deep-app's sources |
+| mutant-defaults-keep-all.txt | with "defaults" keeping every held ask folded, the test fails |
+| mutant-defaults-release-all.txt | with "defaults" releasing the shown asks too, the test fails |
+
+Notes, not fixed here: a brand-new hub whose first row list takes longer than the notifier's second can notify an
+ask once by count and again when it is listed; and answer()'s pre-check covers today's refusals of ask.answered, so a
+new schema limit on it would need the same check.
