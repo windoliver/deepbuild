@@ -1,0 +1,25 @@
+
+ ❯ test/holds.test.ts (39 tests | 1 failed | 38 skipped) 992ms
+   ❯ a held push (#1156) (37)
+     × holds a merge after a subagent's stop: a child's stop ends no turn a proceed started (#1836) 980ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/holds.test.ts > a held push (#1156) > holds a merge after a subagent's stop: a child's stop ends no turn a proceed started (#1836)
+AssertionError: the merge waits on an ask though a subagent stopped in the proceed's turn: the given combination of arguments (undefined and string) is invalid for this assertion. You can use an array, a map, an object, a set, a string, or a weakset instead of a string
+ ❯ test/holds.test.ts:198:95
+    196|     await stop('a84d9054868905e4c');
+    197|     const held = await merge();
+    198|     expect(held, "the merge waits on an ask though a subagent stopped …
+       |                                                                                               ^
+    199|     const raised = (await record.raw("SELECT question FROM asks WHERE …
+    200|     expect(raised.map((a) => a.question), 'one ask, naming the proceed…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 38 skipped (39)
+   Start at  23:22:44
+   Duration  2.73s (tests 46%, transform 29%, import 26%)
+

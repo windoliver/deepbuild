@@ -49,7 +49,10 @@ pub fn spec(params: &Value) -> Result<Option<Spec<'_>>, (String, String)> {
     };
     let bad = |f: &str, what: &str| Err((format!("grid/{f}"), what.to_string()));
     let Some(array) = g["array"].as_str().filter(|a| a.contains('.')) else {
-        return bad("array", "a logic grid reads a logic item's array, <logic>.<name>");
+        return bad(
+            "array",
+            "a logic grid reads a logic item's array, <logic>.<name>",
+        );
     };
     let side = |i: usize| {
         g["size"][i]
@@ -58,14 +61,22 @@ pub fn spec(params: &Value) -> Result<Option<Spec<'_>>, (String, String)> {
             .map(|n| n as usize)
     };
     let (Some(cols), Some(rows)) = (side(0), side(1)) else {
-        return bad("size", "a logic grid's size is [cols, rows], each from 1 to 65,535 (u16)");
+        return bad(
+            "size",
+            "a logic grid's size is [cols, rows], each from 1 to 65,535 (u16)",
+        );
     };
     let list = |k: &str, most: usize| -> Option<Vec<&str>> {
-        let l = g[k].as_array().filter(|l| !l.is_empty() && l.len() <= most)?;
+        let l = g[k]
+            .as_array()
+            .filter(|l| !l.is_empty() && l.len() <= most)?;
         l.iter().map(Value::as_str).collect()
     };
     let Some(glyphs) = list("glyphs", MAX_GLYPHS) else {
-        return bad("glyphs", "a logic grid lists 1 to 4,096 glyphs, each a grapheme");
+        return bad(
+            "glyphs",
+            "a logic grid lists 1 to 4,096 glyphs, each a grapheme",
+        );
     };
     let Some(roles) = list("roles", MAX_ROLES) else {
         return bad("roles", "a logic grid lists 1 to 16 roles");
@@ -74,16 +85,35 @@ pub fn spec(params: &Value) -> Result<Option<Spec<'_>>, (String, String)> {
         None => (0..ATTRS.len() as u16).collect(),
         Some(a) => {
             let names = a.as_array().filter(|l| l.len() <= 8);
-            let places: Option<Vec<u16>> = names.into_iter().flatten().map(|n| {
-                ATTRS.iter().position(|x| Some(*x) == n.as_str()).map(|p| p as u16)
-            }).collect();
+            let places: Option<Vec<u16>> = names
+                .into_iter()
+                .flatten()
+                .map(|n| {
+                    ATTRS
+                        .iter()
+                        .position(|x| Some(*x) == n.as_str())
+                        .map(|p| p as u16)
+                })
+                .collect();
             match places.filter(|_| names.is_some()) {
                 Some(p) => p,
-                None => return bad("attrs", "a logic grid's attrs name at most eight of the cell attributes"),
+                None => {
+                    return bad(
+                        "attrs",
+                        "a logic grid's attrs name at most eight of the cell attributes",
+                    )
+                }
             }
         }
     };
-    Ok(Some(Spec { array, cols, rows, glyphs, roles, attrs }))
+    Ok(Some(Spec {
+        array,
+        cols,
+        rows,
+        glyphs,
+        roles,
+        attrs,
+    }))
 }
 
 impl Spec<'_> {
@@ -107,13 +137,23 @@ impl Spec<'_> {
             .fold(0u16, |a, (_, place)| a | 1 << place);
         if wraps {
             let (g, r) = (self.glyphs.len(), self.roles.len());
-            return Some(Cell { glyph: glyph % g, fg: fg % r, bg: bg % r, attrs });
+            return Some(Cell {
+                glyph: glyph % g,
+                fg: fg % r,
+                bg: bg % r,
+                attrs,
+            });
         }
         let fits = bits >> 28 == 0
             && glyph < self.glyphs.len()
             && fg < self.roles.len()
             && bg < self.roles.len();
-        fits.then_some(Cell { glyph, fg, bg, attrs })
+        fits.then_some(Cell {
+            glyph,
+            fg,
+            bg,
+            attrs,
+        })
     }
 }
 
@@ -127,26 +167,45 @@ fn grids(form: &Value) -> impl Iterator<Item = (&String, &Value)> {
         .and_then(Value::as_object)
         .into_iter()
         .flatten()
-        .filter(|(_, i)| i["kind"] == "cells@1" && i.pointer("/params/grid").is_some_and(|g| !g.is_null()))
+        .filter(|(_, i)| {
+            i["kind"] == "cells@1" && i.pointer("/params/grid").is_some_and(|g| !g.is_null())
+        })
 }
 
 /// The baked array `s` reads, or the refusal: through the core's view (`module_missing` naming
 /// logic in a build without it, `ref_unresolved` where nothing writes it), an i32 array of
 /// exactly cols × rows values.
-fn array<'a>(form: &'a Value, entries: &[SealedEntry], id: &str, s: &Spec<'_>) -> Result<&'a Value, Box<Issue>> {
+fn array<'a>(
+    form: &'a Value,
+    entries: &[SealedEntry],
+    id: &str,
+    s: &Spec<'_>,
+) -> Result<&'a Value, Box<Issue>> {
     let at = path(id, "array");
     let worlds = form.get("worlds").unwrap_or(&Value::Null);
     let a = source((&form["arrays"], worlds), entries, id, &at, s.array)?;
     let ty = a["type"].as_str().unwrap_or_default();
     if ty != "i32" {
         let what = "a logic grid reads an i32 array";
-        return Err(Box::new(Issue::error("bad_column", id, at, json!({"array": s.array, "type": ty}), what)));
+        return Err(Box::new(Issue::error(
+            "bad_column",
+            id,
+            at,
+            json!({"array": s.array, "type": ty}),
+            what,
+        )));
     }
     let count = a["count"].as_u64().unwrap_or(0);
     if count != (s.cols * s.rows) as u64 {
         let what = "a logic grid's array holds cols × rows values, row-major";
         let actual = json!({"array": s.array, "count": count, "cells": s.cols * s.rows, "size": [s.cols, s.rows]});
-        return Err(Box::new(Issue::error("out_of_range", id, path(id, "size"), actual, what)));
+        return Err(Box::new(Issue::error(
+            "out_of_range",
+            id,
+            path(id, "size"),
+            actual,
+            what,
+        )));
     }
     Ok(a)
 }
@@ -163,10 +222,18 @@ fn excursions(s: &Spec<'_>, a: &Value) -> Vec<(i64, usize, f64)> {
     if steps.first().and_then(|s| s["step"].as_i64()) != Some(0) {
         checks.push((0, None));
     }
-    checks.extend(steps.iter().map(|s| (s["step"].as_i64().unwrap_or(0), Some(s))));
+    checks.extend(
+        steps
+            .iter()
+            .map(|s| (s["step"].as_i64().unwrap_or(0), Some(s))),
+    );
     for (step, st) in checks {
         let mut touched = Vec::new();
-        for run in st.and_then(|s| s["values"].as_array()).into_iter().flatten() {
+        for run in st
+            .and_then(|s| s["values"].as_array())
+            .into_iter()
+            .flatten()
+        {
             let start = run[0].as_u64().unwrap_or(0) as usize;
             for (j, v) in run[1].as_array().into_iter().flatten().enumerate() {
                 if start + j < n {
@@ -210,10 +277,16 @@ fn out_of_range(id: &str, s: &Spec<'_>, (step, c, value): (i64, usize, f64)) -> 
 pub fn check(form: &Value, entries: &[SealedEntry]) -> Vec<Issue> {
     let mut out = Vec::new();
     for (id, item) in grids(form) {
-        let Ok(Some(s)) = spec(&item["params"]) else { continue };
+        let Ok(Some(s)) = spec(&item["params"]) else {
+            continue;
+        };
         match array(form, entries, id, &s) {
             Err(issue) => out.push(*issue),
-            Ok(a) => out.extend(excursions(&s, a).into_iter().map(|e| out_of_range(id, &s, e))),
+            Ok(a) => out.extend(
+                excursions(&s, a)
+                    .into_iter()
+                    .map(|e| out_of_range(id, &s, e)),
+            ),
         }
     }
     out
@@ -224,8 +297,12 @@ pub fn check(form: &Value, entries: &[SealedEntry]) -> Vec<Issue> {
 pub fn raised_at(form: &Value, t: i64) -> Vec<Issue> {
     let mut out = Vec::new();
     for (id, item) in grids(form) {
-        let Ok(Some(s)) = spec(&item["params"]) else { continue };
-        let Some(a) = form["arrays"].get(s.array) else { continue };
+        let Ok(Some(s)) = spec(&item["params"]) else {
+            continue;
+        };
+        let Some(a) = form["arrays"].get(s.array) else {
+            continue;
+        };
         let k = t.div_euclid(a["every"].as_i64().unwrap_or(1).max(1));
         let begun = excursions(&s, a).into_iter().filter(|e| e.0 == k);
         out.extend(begun.map(|e| out_of_range(id, &s, e)));
@@ -238,7 +315,10 @@ pub fn raised_at(form: &Value, t: i64) -> Vec<Issue> {
 pub fn cells(s: &Spec<'_>, array: Option<&Value>, t: i64, wraps: bool) -> Vec<Option<Cell>> {
     let n = s.cols * s.rows;
     let read = Read::of(&Value::Null, "i32");
-    let m = array.zip(read).and_then(|(a, r)| mapped(&r, a, t, None)).filter(|m| m.values.len() == n);
+    let m = array
+        .zip(read)
+        .and_then(|(a, r)| mapped(&r, a, t, None))
+        .filter(|m| m.values.len() == n);
     match m {
         Some(m) => m.values.iter().map(|v| s.unpack(*v, wraps)).collect(),
         None => vec![None; n],
@@ -253,12 +333,28 @@ mod tests {
     fn a_value_unpacks_by_its_bits_and_one_past_its_lists_draws_blank() {
         let params = json!({"grid": {"array": "dungeon.cells", "size": [40, 12], "glyphs": [".", "#", "@", "é"], "roles": ["ink", "accent"]}});
         let s = spec(&params).unwrap().unwrap();
-        assert_eq!(s.unpack(f64::from(0x1002), false), Some(Cell { glyph: 2, fg: 1, bg: 0, attrs: 0 }));
+        assert_eq!(
+            s.unpack(f64::from(0x1002), false),
+            Some(Cell {
+                glyph: 2,
+                fg: 1,
+                bg: 0,
+                attrs: 0
+            })
+        );
         assert_eq!(s.unpack(7.0, false), None);
         assert_eq!(s.unpack(7.0, true).map(|c| c.glyph), Some(3));
         assert_eq!(s.unpack(f64::from(1 << 28), false), None);
         assert_eq!(s.unpack(-1.0, false), None);
-        assert_eq!(s.unpack(f64::from(1 << 20 | 1), false), Some(Cell { glyph: 1, fg: 0, bg: 0, attrs: 1 }));
+        assert_eq!(
+            s.unpack(f64::from(1 << 20 | 1), false),
+            Some(Cell {
+                glyph: 1,
+                fg: 0,
+                bg: 0,
+                attrs: 1
+            })
+        );
     }
 
     #[test]
@@ -274,14 +370,32 @@ mod tests {
             ]}},
         });
         let s = spec(&form["items"]["g"]["params"]).unwrap().unwrap();
-        assert_eq!(excursions(&s, &form["arrays"]["d.cells"]), [(0, 41, 7.0), (5, 2, 7.0)]);
+        assert_eq!(
+            excursions(&s, &form["arrays"]["d.cells"]),
+            [(0, 41, 7.0), (5, 2, 7.0)]
+        );
         let first = raised_at(&form, 0);
-        assert_eq!(first[0].actual, json!({"array": "d.cells", "cell": [1, 1], "value": 7, "step": 0}));
+        assert_eq!(
+            first[0].actual,
+            json!({"array": "d.cells", "cell": [1, 1], "value": 7, "step": 0})
+        );
         assert_eq!(raised_at(&form, 5 * every).len(), 1);
         assert!(raised_at(&form, 6 * every).is_empty());
         // In a build that fills no logic array, the grid is refused naming the logic module.
         assert_eq!(check(&form, &[])[0].code, "module_missing");
         let drawn = cells(&s, Some(&form["arrays"]["d.cells"]), 5 * every, false);
-        assert_eq!((drawn[0], drawn[2], drawn[41]), (Some(Cell { glyph: 0, fg: 0, bg: 0, attrs: 0 }), None, None));
+        assert_eq!(
+            (drawn[0], drawn[2], drawn[41]),
+            (
+                Some(Cell {
+                    glyph: 0,
+                    fg: 0,
+                    bg: 0,
+                    attrs: 0
+                }),
+                None,
+                None
+            )
+        );
     }
 }

@@ -112,7 +112,7 @@ pub(crate) fn times(input: &Value, kind: &str) -> Result<Vec<i64>, Value> {
 /// Each span, in flicks, sampled `rate` times a second, its start and end among them, in order
 /// (#506).
 pub(crate) fn sampled(spans: &[(i64, i64)], rate: i64) -> Vec<i64> {
-    let step = deep_canvas::grammar::FLICKS_PER_SECOND as i64 / rate.max(1);
+    let step = deep_canvas::grammar::FLICKS_PER_SECOND / rate.max(1);
     let mut out = Vec::new();
     for &(start, end) in spans {
         let mut t = start;

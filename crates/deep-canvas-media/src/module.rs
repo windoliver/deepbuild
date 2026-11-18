@@ -185,7 +185,10 @@ fn strip_kind() -> Entry {
         ("start", "flick | time"),
         ("in", "flick | time"),
         ("out", "flick | time"),
-        ("rate", "number | [p, q] | <p>/<q>"),
+        (
+            "rate",
+            "number | [p, q] | <p>/<q> | {ramp: {to, over, shape?: linear | exp}}",
+        ),
         ("offset", "flick | time"),
         ("span", "flick | time"),
         ("loop", "bool"),

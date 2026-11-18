@@ -1,5 +1,5 @@
-//! Issue #500: a Spawn's voices (canvas primitives: Spawn, Spawn: variants), planned once as a
-//! fold over a baked occurrence list in flick order. Cooldowns, voice steals and variant picks are
+//! Issue #500: a Spawn's voices (canvas primitives: Spawn, Spawn: variants; #155: Spawn: variant
+//! and span), planned once as a fold over a baked occurrence list in flick order. Cooldowns, voice steals and variant picks are
 //! decided here, before playback, so a seek reads the same voices as a play and nothing depends on
 //! CPU load or a live meter.
 
@@ -11,6 +11,9 @@ pub enum Pick {
     Weighted,
     /// Never the previous pick of the same spawn.
     NoRepeat,
+    /// #155: the occurrence's level picks its takes ([`Plan::levels`]), and the round robin a
+    /// take within them.
+    ByVariant,
 }
 
 /// Which live voice gives way past `max_voices`.
@@ -32,6 +35,11 @@ pub struct Plan {
     pub cooldown: i64,
     pub max_voices: usize,
     pub steal: Steal,
+    /// With `pick: by_variant`, each level's takes (template indexes), level 1 first.
+    pub levels: Vec<Vec<usize>>,
+    /// The round robin by hash moves past the level's previous take; `false` is `none`, and the
+    /// planted twin that picks by hash alone.
+    pub round_robin: bool,
 }
 
 /// One occurrence as the planner reads it, in list order sorted by flick.
@@ -46,6 +54,10 @@ pub struct Occ {
     pub gain: f64,
     /// Its distance to the listener, which `furthest` reads.
     pub distance: f64,
+    /// #155: its level from the spawn's `variant` (1 for none), clamped to the levels there are.
+    pub level: usize,
+    /// #155: its voice's length from the spawn's `span`, never past the template's.
+    pub span: Option<i64>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -53,7 +65,12 @@ pub struct Voice {
     /// The occurrence's index in the list.
     pub occurrence: usize,
     pub template: usize,
+    /// #155: with `pick: by_variant`, its level and its take's place among the level's takes.
+    pub level: usize,
+    pub take: usize,
     pub start: i64,
+    /// How long it plays unless stolen: its span, at most its template's length.
+    pub length: i64,
     /// The flick a later voice stole it at, if one did.
     pub stop: Option<i64>,
     /// The index of the voice that stole it.
@@ -102,6 +119,8 @@ pub fn plan(p: &Plan, occs: &[Occ], span: impl Fn(usize) -> i64) -> Vec<Voice> {
     let mut voices: Vec<Voice> = Vec::new();
     let mut last: Vec<(&(String, String), i64)> = Vec::new();
     let mut prev: Option<usize> = None;
+    // Each level's previous take.
+    let mut taken: Vec<Option<usize>> = vec![None; p.levels.len()];
     for (i, o) in occs.iter().enumerate() {
         if last
             .iter()
@@ -109,7 +128,19 @@ pub fn plan(p: &Plan, occs: &[Occ], span: impl Fn(usize) -> i64) -> Vec<Voice> {
         {
             continue;
         }
-        let template = if p.weights.is_empty() {
+        let (mut level, mut take) = (0, 0);
+        let template = if p.pick == Pick::ByVariant && !p.levels.is_empty() {
+            // The level's takes; the round robin starts from the hash mod n and moves to the next
+            // take when it would repeat the level's previous one.
+            level = o.level.clamp(1, p.levels.len());
+            let takes = &p.levels[level - 1];
+            let n = takes.len().max(1);
+            take = ((draw(&p.seed, &p.id, i, 0) * n as f64) as usize).min(n - 1);
+            if p.round_robin && n > 1 && taken[level - 1] == Some(take) {
+                take = (take + 1) % n;
+            }
+            takes.get(take).copied().unwrap_or(0)
+        } else if p.weights.is_empty() {
             0
         } else {
             let skip = (p.pick == Pick::NoRepeat && p.weights.len() > 1)
@@ -117,7 +148,10 @@ pub fn plan(p: &Plan, occs: &[Occ], span: impl Fn(usize) -> i64) -> Vec<Voice> {
                 .flatten();
             weighted(&p.weights, draw(&p.seed, &p.id, i, 0), skip)
         };
-        let ends = |v: &Voice| v.stop.unwrap_or(v.start + span(v.template));
+        let length = o
+            .span
+            .map_or(span(template), |s| s.clamp(0, span(template)));
+        let ends = |v: &Voice| v.stop.unwrap_or(v.start + v.length);
         let live: Vec<usize> = (0..voices.len())
             .filter(|&k| voices[k].start <= o.start && ends(&voices[k]) > o.start)
             .collect();
@@ -151,10 +185,16 @@ pub fn plan(p: &Plan, occs: &[Occ], span: impl Fn(usize) -> i64) -> Vec<Voice> {
             None => last.push((&o.pair, o.t)),
         }
         prev = Some(template);
+        if level > 0 {
+            taken[level - 1] = Some(take);
+        }
         voices.push(Voice {
             occurrence: i,
             template,
+            level,
+            take,
             start: o.start,
+            length,
             stop: None,
             stolen_by: None,
         });
@@ -175,6 +215,8 @@ mod tests {
             pair: (a.into(), "floor".into()),
             gain: 1.0,
             distance: 0.0,
+            level: 1,
+            span: None,
         }
     }
 
@@ -187,6 +229,8 @@ mod tests {
             cooldown: 30 * MS,
             max_voices: 8,
             steal: Steal::Oldest,
+            levels: Vec::new(),
+            round_robin: true,
         }
     }
 

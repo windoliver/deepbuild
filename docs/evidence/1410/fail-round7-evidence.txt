@@ -1,0 +1,40 @@
+== evidence journal tests at round 7, against 04a92ef9's packages/evidence/src/index.ts
+
+ RUN  v5.0.5 ~/deepbuild/.claude/worktrees/issue-1410-77182b/packages/evidence
+
+ ❯ test/sync-journal.test.ts (3 tests | 2 failed) 229ms
+   × a file whose journal sync failed is synced again by the next sync that names it (#1410) 78ms
+   × a journal compacted at open is synced before it replaces the old one, and its folder after (#1410) 15ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/sync-journal.test.ts > a file whose journal sync failed is synced again by the next sync that names it (#1410)
+AssertionError: the journal it failed on: expected [] to include '/tmp/deep-evidence-journal-hcAyVd/rec…'
+ ❯ test/sync-journal.test.ts:54:46
+     52|   synced.length = 0;
+     53|   await store.sync([sha]);
+     54|   expect(synced, 'the journal it failed on').toContain(journal);
+       |                                              ^
+     55| });
+     56|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  test/sync-journal.test.ts > a journal compacted at open is synced before it replaces the old one, and its folder after (#1410)
+AssertionError: the compacted journal, before its rename: expected -1 to be greater than or equal to 0
+ ❯ test/sync-journal.test.ts:64:60
+     62|   await openEvidenceStore({ root, now: () => 0 });
+     63|   const temp = synced.findIndex((path) => basename(path).startsWith('.…
+     64|   expect(temp, 'the compacted journal, before its rename').toBeGreater…
+       |                                                            ^
+     65|   expect(synced.indexOf(root, temp), 'the root that holds its new name…
+     66| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 1 passed (3)
+   Start at  00:06:28
+   Duration  488ms (tests 82%, import 12%, transform 5%, worker 1%)
+

@@ -5,7 +5,7 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFile
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { checks } from '../scripts/lanes.mjs';
+import { byHand, checks, listed, ownLane } from '../scripts/lanes.mjs';
 
 const runner = new URL('../scripts/lanes.mjs', import.meta.url).href;
 const scripts = new URL('../scripts/', import.meta.url);
@@ -183,18 +183,23 @@ test('the unit lane runs each reference-Mac budget file alone, after the paralle
   // A file gated by environmentProblem() times the issue's budget on the reference Mac; a sibling
   // file running beside it starves it, so it ran under its frozen budget inside the lane while
   // passing on its own.
-  const gated = readdirSync(new URL('tests/acceptance/', root))
-    .flatMap((issue) => readdirSync(new URL(`tests/acceptance/${issue}/`, root)).map((file) => `tests/acceptance/${issue}/${file}`))
-    .filter((file) => file.endsWith('.test.ts') && readFileSync(new URL(file, root), 'utf8').includes('environmentProblem()'));
+  const gated = readdirSync(new URL('tests/acceptance/', root), { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .flatMap(({ name: issue }) => readdirSync(new URL(`tests/acceptance/${issue}/`, root)).map((file) => `tests/acceptance/${issue}/${file}`))
+    .filter((file) => file.endsWith('.test.ts') && !listed([...byHand, ...ownLane], file)
+      && readFileSync(new URL(file, root), 'utf8').includes('environmentProblem()'));
   assert.ok(gated.includes('tests/acceptance/14/budgets.test.ts'), gated.join('\n'));
   const vitest = checks.find(({ name }) => name === 'unit').commands.filter((parts) => parts[1]?.endsWith('vitest.mjs'));
   const [parallel, alone] = vitest;
   assert.ok(!parallel.includes('--no-file-parallelism') && alone.includes('--no-file-parallelism'), 'the parallel block runs first');
   const covers = (pattern, file) => pattern === file || (pattern.endsWith('/**') ? file.startsWith(pattern.slice(0, -2)) : file.startsWith(pattern));
   const excluded = parallel.flatMap((part, i) => (parallel[i - 1] === '--exclude' ? [part] : []));
-  const named = alone.slice(alone.indexOf('--no-file-parallelism') + 1);
+  const serial = alone.slice(alone.indexOf('--no-file-parallelism') + 1);
+  const named = serial.filter((part, i) => !part.startsWith('--') && serial[i - 1] !== '--exclude');
+  const serialExcluded = serial.filter((_, i) => serial[i - 1] === '--exclude');
   for (const file of gated) {
     assert.ok(excluded.some((pattern) => covers(pattern, file)), `${file} runs in the parallel block`);
     assert.ok(named.some((pattern) => covers(pattern, file)), `${file} is not run alone`);
+    assert.ok(!serialExcluded.some((pattern) => covers(pattern, file)), `${file} is excluded from the serial block`);
   }
 });

@@ -180,6 +180,8 @@ extern "C" {
 
 #[link(name = "VideoToolbox", kind = "framework")]
 extern "C" {
+    fn VTRegisterSupplementalVideoDecoderIfAvailable(codec: u32);
+    fn VTIsHardwareDecodeSupported(codec: u32) -> u8;
     static kVTCompressionPropertyKey_AllowFrameReordering: CFTypeRef;
     static kVTCompressionPropertyKey_UsingHardwareAcceleratedVideoEncoder: CFTypeRef;
     static kVTCompressionPropertyKey_MaxKeyFrameInterval: CFTypeRef;
@@ -274,6 +276,15 @@ extern "C" {
         size: *mut u32,
         data: *mut c_void,
     ) -> OSStatus;
+}
+
+/// #518: whether VideoToolbox decodes AV1 on this machine, its supplemental decoder registered.
+pub fn decodes_av1() -> bool {
+    // SAFETY: both take a codec type by value and keep nothing.
+    unsafe {
+        VTRegisterSupplementalVideoDecoderIfAvailable(fourcc(b"av01"));
+        VTIsHardwareDecodeSupported(fourcc(b"av01")) != 0
+    }
 }
 
 const fn fourcc(s: &[u8; 4]) -> u32 {
@@ -431,6 +442,7 @@ pub fn decode_video(
     let codec = match &fourcc_ {
         b"avc1" | b"avc3" => fourcc(b"avc1"),
         b"hvc1" | b"hev1" => fourcc(b"hvc1"),
+        b"av01" if decodes_av1() => fourcc(b"av01"),
         b"mp4v" => fourcc(b"mp4v"),
         b"ap4h" => fourcc(b"ap4h"),
         other => return Err(format!("no decoder for {}", String::from_utf8_lossy(other))),
@@ -533,6 +545,7 @@ impl LiveDecoder {
         let codec = match &fourcc_ {
             b"avc1" | b"avc3" => fourcc(b"avc1"),
             b"hvc1" | b"hev1" => fourcc(b"hvc1"),
+            b"av01" if decodes_av1() => fourcc(b"av01"),
             other => return Err(format!("no decoder for {}", String::from_utf8_lossy(other))),
         };
         unsafe {

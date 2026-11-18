@@ -492,7 +492,16 @@ pub(crate) fn compile(
     })
 }
 
+/// An error scope's result, which resolves at once on a device whose work is polled. In the web
+/// player (#172) a scope resolves only once the page's one thread yields, so it isn't waited for:
+/// the device's uncaptured-error handler reports what it would have caught.
+#[cfg(target_arch = "wasm32")]
+fn block_on<T, F: std::future::Future<Output = Option<T>>>(_: F) -> Option<T> {
+    None
+}
+
 /// An error scope's result, which resolves at once on a device whose work is polled.
+#[cfg(not(target_arch = "wasm32"))]
 fn block_on<F: std::future::Future>(f: F) -> F::Output {
     let mut cx = std::task::Context::from_waker(std::task::Waker::noop());
     let mut f = std::pin::pin!(f);

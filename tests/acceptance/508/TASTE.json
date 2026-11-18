@@ -1,0 +1,16 @@
+{
+  "issue": 508,
+  "criterion": "#508.745c64c0",
+  "verdict": "looks_right",
+  "who": "Claude, on the owner's request of Nov 15 (\"validate screenshot for me and close whatever gaps\"); the owner can overrule it on the PR",
+  "when": "2026-11-16T03:30:00Z",
+  "screenshots": {
+    "plume-haze.png": "c09db5dca72a088b68f36b906a902b815fc8c8e309ff8502e5eec7ccd931438f",
+    "turbofan.png": "85dea567091df3bd51b86b52f9593c75d178a7a22f67d0544017618a00873daa",
+    "image-layers.png": "80aae1760b94e1a7ae7857a08b051e4e06c70266c9060879a137c391a494b43c"
+  },
+  "recordings": {
+    "plume-haze.apng": "be2e1e8be64ea7cb51a10d4014f0bef750b42ba16b0964f39bb7d9a9ea1bfdcb"
+  },
+  "note": "Each picture is a final frame deep-gpu's view3d drew, written by taste.test.ts. Plume haze: a translucent exhaust, brightest at the nozzle and fading to its tip, with the tiles behind it bending inside its footprint and straight outside it; the recording shows it grow from the nozzle and hold. Turbofan at 2 s: the engine on its test stand, fan and compressor on the shaft, the amber exhaust fading along its length, the intake streams entering the nacelle. Image layers at 2 s: six labelled panes spread on the bench, every label readable, the lazy tongs a linked lattice, the handwheel at the bench's end, the live readouts and the card top left. Validated over several takes: the first showed the panes collapsed, a plume clipped to a white slab, airflow specks at the nacelle's rear and a label hidden by the colour band; each was fixed in the product or the fixture. Also checked beyond these stills: the five stages through deep-show, each framed on its own pane; the throttle at 0.2 and 1; readouts at spread 0.3 and 0.99."
+}

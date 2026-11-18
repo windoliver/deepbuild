@@ -105,6 +105,8 @@ struct Gpu<'a> {
     per_draw: Option<Vec<vello_cpu::ImageId>>,
     /// #385 AC1's wrong program: every solid fill two codes redder.
     shifts_fill: bool,
+    /// #458's wrong program: a group whose blend is multiply composites as screen.
+    multiply_as_screen: bool,
 }
 
 /// A pixmap in Vello GPU's atlas: the pixmap it was made from, its ID there, and whether the frame
@@ -209,6 +211,12 @@ impl Canvas for Gpu<'_> {
         opacity: Option<f32>,
         _mask: Option<Mask>,
     ) {
+        let blend = blend.map(|mut b| {
+            if self.multiply_as_screen && b.mix == peniko::Mix::Multiply {
+                b.mix = peniko::Mix::Screen;
+            }
+            b
+        });
         // A mask never gets here: `refusal` turns its layer away first.
         self.scene.push_layer(clip, blend, opacity, None, None);
     }
@@ -273,6 +281,25 @@ pub fn refusal<'a>(marks: impl IntoIterator<Item = &'a Drawn>) -> Option<Value> 
     })
 }
 
+/// [`refusal`] for a live view drawn by Vello GPU alone, which lights nothing (#2031): a lit
+/// group is refused too, naming its light; the GPU layer draws it.
+pub fn live_refusal<'a>(marks: impl IntoIterator<Item = &'a Drawn> + Clone) -> Option<Value> {
+    let lit = marks
+        .clone()
+        .into_iter()
+        .flat_map(|d| &d.scopes)
+        .find_map(|s| match s {
+            Scope::Opacity {
+                item,
+                effect: Some(e),
+                ..
+            } if e.light.is_some() => item.strip_suffix("#light"),
+            _ => None,
+        });
+    let lit = lit.map(|g| refused("module_missing", &format!("items/{g}/params/light")));
+    refusal(marks).or(lit)
+}
+
 /// What a drawing asks beyond its marks.
 #[derive(Clone, Copy, Debug)]
 pub struct Options {
@@ -280,6 +307,8 @@ pub struct Options {
     pub zoom: f64,
     /// #385 AC1's wrong program: every solid fill two codes redder.
     pub shifts_fill: bool,
+    /// #458's wrong program: a group whose blend is multiply composites as screen.
+    pub multiply_as_screen: bool,
     /// #1485's wrong program on the drawing's images.
     pub plant: Plant,
 }
@@ -289,6 +318,7 @@ impl Default for Options {
         Options {
             zoom: 1.0,
             shifts_fill: false,
+            multiply_as_screen: false,
             plant: Plant::None,
         }
     }
@@ -410,6 +440,7 @@ impl Vello2d {
             fills: &mut self.fills,
             per_draw: (options.plant == Plant::UploadsPerFrame).then(Vec::new),
             shifts_fill: options.shifts_fill,
+            multiply_as_screen: options.multiply_as_screen,
         };
         let mut p = Painter::on(gpu);
         p.zoom = options.zoom;

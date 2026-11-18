@@ -52,14 +52,7 @@ pub(crate) fn reads(form: &Value, entry: &Value) -> bool {
             .any(|o| Some(o.as_str()) == entry["value"].as_str())
 }
 
-/// `form` with `entries` inlined as its `track`; `form` itself when there are none.
-pub(crate) fn with_track(form: &Value, entries: &[Value]) -> Value {
-    let mut out = form.clone();
-    if !entries.is_empty() {
-        out["track"] = Value::Array(entries.to_vec());
-    }
-    out
-}
+pub(crate) use deep_play::form::with_track;
 
 /// Each variant set's pick at `t`, by set: a document-class choice's last entry at or before
 /// `t`, else its default; a view-class choice's default, which [`Hub::played`] wrote from the
@@ -142,10 +135,19 @@ impl Hub<'_> {
     /// `form` played: its track inlined, and each view-class control's value from the
     /// document's session state written as that control's default.
     pub(crate) fn played(&self, doc: &str, form: &Value) -> Value {
+        // #860: an entry a rewind closed stays on the track and draws nothing, so a frame folds the
+        // current branch (the logic's run lists those under `branch.off`).
+        let off = form.pointer("/branch/off").and_then(Value::as_array);
+        let closed = |e: &Value| {
+            off.is_some_and(|off| {
+                off.iter()
+                    .any(|o| o[0] == e["t"] && o[1] == e["control"] && o[2] == e["seq"])
+            })
+        };
         let entries: Vec<Value> = self
             .track_json(doc)
             .into_iter()
-            .filter(|e| reads(form, e))
+            .filter(|e| reads(form, e) && !closed(e))
             .collect();
         let mut out = with_track(form, &entries);
         // #903: where no one gives input, the document's tour plays.

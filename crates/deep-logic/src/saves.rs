@@ -13,15 +13,15 @@ use std::fs;
 use std::io::{BufRead, BufReader, Write as _};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use std::time::Instant;
+use web_time::Instant;
 
 use sha2::Digest as _;
 
 use deep_canvas_sandbox::rewrite::{hash, START};
 use deep_sandbox_wasmtime::service::trap_json;
+use deep_sandbox_wasmtime::Val;
 use deep_sandbox_wasmtime::{Call, Faults, Runner};
 use serde_json::{json, Value};
-use wasmtime::Val;
 
 use crate::piece::{memory_bytes, migration_fuel, segments, Piece, MAX_MEMORY, PAGE};
 use crate::world::{arrays_json, names, track_of, Entry, Failed, Live, Record, World};
@@ -348,12 +348,17 @@ fn write(w: &mut World, k: i64, slot: i32, ended: bool) -> Result<(String, PathB
         .and_then(|s| s.header["seq"].as_u64())
         .map_or(1, |n| n + 1);
     let [layout, content, modules] = binding(&piece);
-    let header = json!({
+    let mut header = json!({
         "slot": slot, "layout": layout, "content": content, "modules": modules,
         "runtime": hash(format!("{VERSION}\nwasmtime {}\n", deep_sandbox_wasmtime::WASMTIME).as_bytes()),
         "document": piece.document, "program": program(&piece), "step": k, "input_at": input_at, "track": track,
         "ended": ended, "fingerprint": fingerprint(w), "segments": changed, "seq": seq,
     });
+    // #860: a piece with rewind keeps its current branch, its closed branches within depth and
+    // the seen values it carries, so a loaded save rewinds as the run did.
+    if let Some(r) = &piece.rewind {
+        header["branch"] = w.branch_saved(k, r);
+    }
     let mut bytes = header.to_string().into_bytes();
     bytes.push(b'\n');
     bytes.extend(encode(w));
@@ -539,6 +544,24 @@ pub fn open(
     let h = &save.header;
     let k = h["step"].as_i64().unwrap_or(0);
     let ended = h["ended"] == json!(true);
+    // #860: a save of a piece with rewind reads its own current branch up to the save, then the
+    // given track's entries after it.
+    let len = piece.items.first().map_or(1, |i| i.step);
+    let branch = match h.get("branch").filter(|_| piece.rewind.is_some()) {
+        None => None,
+        Some(b) => Some(crate::world::branch_opened(b).ok_or_else(|| {
+            json!({"ok": false, "code": "save_refused", "save": save.hash, "differs": [{"what": "branch"}]})
+        })?),
+    };
+    let mut on: Vec<Entry> = track.to_vec();
+    if let Some((_, read)) = &branch {
+        on = read.clone();
+        on.extend(track.iter().filter(|e| e.t > (k - 1) * len).cloned());
+    }
+    for e in on.iter().filter(|e| e.control == crate::world::REWIND) {
+        crate::world::fits(&piece, e)?;
+    }
+    let track = &on[..];
     let ours = binding(&piece);
     let differs: Vec<Value> = ["layout", "content", "modules"]
         .iter()
@@ -635,6 +658,11 @@ pub fn open(
     };
     w.saves_dir = Some(dir.to_path_buf());
     w.adapter = adapter.to_string();
+    if let Some((b, _)) = branch {
+        w.branches = b;
+    }
+    // The closed branches the save holds, before the run plays on.
+    let closed = w.branches.closed_json();
     let deep = w.deep_hashes();
     let mut rec = Record::default();
     for (item, l) in piece.items.iter().zip(w.lives.iter_mut()) {
@@ -657,6 +685,7 @@ pub fn open(
     Ok(json!({
         "ok": true, "opened": via, "damaged": damaged, "deep_hash": deep, "steps": rec.steps_json(&piece, None),
         "checkpoints": rec.checkpoints, "traps": crate::libraries_in(&piece, rec.traps), "saves": saves, "frames": frames,
+        "closed": closed,
     }))
 }
 

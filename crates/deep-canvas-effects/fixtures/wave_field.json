@@ -1,0 +1,135 @@
+{
+ "format": 1,
+ "id": "doc-508-wave-field",
+ "profile": "scene",
+ "title": "A wave field over a floor",
+ "description": "A wave field over a floor: a #508 effect fixture, drawn from its params.",
+ "size": [
+  480,
+  270
+ ],
+ "seed": 508,
+ "camera": "cam",
+ "transport": {
+  "span": "4s"
+ },
+ "requires": {
+  "modules": {
+   "scene3d": "^1",
+   "effects": "^1"
+  }
+ },
+ "layers": {
+  "main": {
+   "writer": "agent-a",
+   "title": "Main",
+   "order": "a0"
+  }
+ },
+ "items": {
+  "cam": {
+   "id": "cam",
+   "name": "cam",
+   "order": "a000",
+   "layer": "main",
+   "kind": "camera@1",
+   "params": {
+    "projection": "perspective",
+    "position": [
+     0,
+     3,
+     6
+    ],
+    "target": [
+     0,
+     0,
+     0
+    ],
+    "fov": 40
+   }
+  },
+  "floor": {
+   "id": "floor",
+   "name": "floor",
+   "order": "a001",
+   "layer": "main",
+   "kind": "mark.box@1",
+   "params": {
+    "size": [
+     8,
+     0.1,
+     8
+    ],
+    "paint": {
+     "fill": {
+      "role": "muted"
+     }
+    }
+   },
+   "at": {
+    "pos": [
+     0,
+     -0.05,
+     0
+    ]
+   }
+  },
+  "centre": {
+   "id": "centre",
+   "name": "centre",
+   "order": "a002",
+   "layer": "main",
+   "kind": "mark.box@1",
+   "params": {
+    "size": [
+     0.2,
+     0.2,
+     0.2
+    ],
+    "paint": {
+     "fill": {
+      "role": "ink"
+     }
+    }
+   },
+   "at": {
+    "pos": [
+     0,
+     0.1,
+     0
+    ]
+   }
+  },
+  "ripple": {
+   "id": "ripple",
+   "name": "ripple",
+   "order": "a003",
+   "layer": "main",
+   "kind": "effect@1",
+   "params": {
+    "kind": "wave_field",
+    "anchor": "centre",
+    "axis": [
+     0,
+     1,
+     0
+    ],
+    "resolution": "half",
+    "wave_field": {
+     "amplitude": 2,
+     "wavelength": 0.6,
+     "speed": 0.8,
+     "radius": 3,
+     "role": "accent"
+    }
+   },
+   "at": {
+    "pos": [
+     0,
+     0,
+     0
+    ]
+   }
+  }
+ }
+}

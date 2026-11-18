@@ -1,0 +1,12 @@
+Clean main ccbdefd1f1a6a475732d2e00cc047b3cc39e02bd; npm ci --prefix spikes/hub-core; Node 24.22.2; two listed Effect tests passed unchanged.
+
+✔ #56.31f12028 [effect] the bench holds 50 sessions' hooks and prints the variant's hold latency, memory and leaked handles (589.778583ms)
+✔ #56 scope import("effect/Effect") is timed on Node 22, and the command that times it measures this Node (2028.4605ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2728.519375
