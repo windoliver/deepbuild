@@ -153,6 +153,11 @@ export interface InboxRow {
    * other exceptions included. The app reads it to tell which exception holds a session's folded asks.
    */
   holder: boolean;
+  /**
+   * The exception that holds it, the one open in its thread when it was raised, which may be another session's of that
+   * thread; null on a row no exception holds. The app keeps a folded ask from a panel until this is in sight.
+   */
+  folded: string | null;
 }
 export interface Asks {
   raise(connection: Connection, source: string, ask: unknown, plan?: PlanInput): Promise<string>;
@@ -882,7 +887,7 @@ class AsksCore implements Asks {
         ask: a.handle, kind: a.data.kind as AskKind, session: a.session, status: this.status(a),
         outcome: a.closed?.outcome ?? 'unanswered', owner: String(a.data.owner), age: now - a.created,
         request: a.request ? { ...a.request } : null, decision: a.closed?.decision ?? null, missing: a.closed ? null : a.missing ?? null, words: [...a.words],
-        holder: a.fold,
+        holder: a.fold, folded: a.folded ?? null,
       }));
     });
   }

@@ -33,6 +33,12 @@ fn holds(row: &Value) -> bool {
     row["holder"] == true
 }
 
+/// The session's thread, as its start named it; the session itself when the view has no start for it.
+fn thread_of<'a>(threads: &'a HashMap<String, String>, session: &'a Value) -> &'a str {
+    let session = session.as_str().unwrap_or_default();
+    threads.get(session).map_or(session, String::as_str)
+}
+
 /// The hub methods this reader calls, which the app's hello check lists (`hub::NEEDS`); no other module names them.
 pub const CALLS: [&str; 3] = ["inbox.read", "stream.subscribe", "events.read"];
 
@@ -227,14 +233,20 @@ impl View {
     pub fn panel_asks(&self) -> Vec<&Value> {
         let shown = self.needs_you();
         let in_sight = |row: &Value| shown.iter().any(|ask| ask["ask"] == row["ask"]);
-        // A folded ask comes with its exception, so not before that is in sight, at its batch (#22). A fixture's record
-        // folds by count with no exception (#338), and those show as they did.
+        // A folded ask comes with its exception, so not before that is in sight, at its batch (#22): the exception its
+        // row names, which may be another session's of its thread. A fixture's record folds by count with no exception
+        // (#338), and those show as they did.
         let held_out = |row: &Value| {
             self.inbox.iter().any(|other| {
-                other["session"] == row["session"]
-                    && other["status"] != "closed"
-                    && holds(other)
-                    && !in_sight(other)
+                let holding = match row["folded"].as_str() {
+                    Some(exception) => other["ask"] == exception,
+                    None => {
+                        holds(other)
+                            && thread_of(&self.threads, &other["session"])
+                                == thread_of(&self.threads, &row["session"])
+                    }
+                };
+                holding && other["status"] != "closed" && !in_sight(other)
             })
         };
         self.inbox
@@ -273,18 +285,21 @@ impl View {
                 let exception = event["writer"] == "core" && event["data"]["kind"] == "exception";
                 let holder = exception && event["data"]["key"] == key.as_str();
                 // A record with no such exception, a fixture's (#338), folds by the count the core raises it at; an
-                // exception of the core's is never folded here.
-                let mine = self
-                    .inbox
-                    .iter()
-                    .filter(|row| row["session"] == event["session"] && row["status"] != "closed");
-                let held = !exception
-                    && (mine.clone().count() >= FOLD_AFTER || mine.clone().any(|row| holds(row)));
+                // exception of the core's is never folded here. The thread's asks count, as in the core.
+                let mine = self.inbox.iter().filter(|row| {
+                    thread_of(&self.threads, &row["session"]) == thread && row["status"] != "closed"
+                });
+                let into = mine
+                    .clone()
+                    .find(|row| holds(row))
+                    .map(|row| row["ask"].clone());
+                let held = !exception && (mine.count() >= FOLD_AFTER || into.is_some());
                 let status = if held { "folded" } else { "queued" };
+                let folded = if held { into } else { None };
                 self.inbox.push(json!({
                     "ask": ask, "kind": event["data"]["kind"], "session": event["session"],
                     "status": status, "outcome": "unanswered", "owner": event["data"]["owner"],
-                    "question": event["data"]["question"], "holder": holder,
+                    "question": event["data"]["question"], "holder": holder, "folded": folded,
                 }));
             }
         } else if kind == "ask.batched" && event["writer"] == "core" {
@@ -330,7 +345,7 @@ impl View {
             // The contract's close rule, and the first close to append decides, as in the core; the outcome is the
             // inbox's word for the kind, as the asks core names it.
             let outcome = kind.strip_prefix("ask.").unwrap_or("decided_for_you");
-            let mut released: Vec<Value> = Vec::new();
+            let mut released: Vec<(Value, String)> = Vec::new();
             for row in self.inbox.iter_mut().filter(|row| {
                 row["status"] != "closed" && closes(&event, row["ask"].as_str().unwrap_or_default())
             }) {
@@ -338,12 +353,19 @@ impl View {
                 row["outcome"] = json!(outcome);
                 // Its exception closed any way but "leave them to their defaults": each ask it held gets its own row.
                 if holds(row) && event["data"]["answer"] != "defaults" {
-                    released.push(row["session"].clone());
+                    let thread = thread_of(&self.threads, &row["session"]).to_owned();
+                    released.push((row["ask"].clone(), thread));
                 }
             }
+            let threads = &self.threads;
             for row in self.inbox.iter_mut().filter(|row| {
                 row["status"] == "folded"
-                    && released.iter().any(|session| *session == row["session"])
+                    && released
+                        .iter()
+                        .any(|(exception, thread)| match row["folded"].as_str() {
+                            Some(holder) => *exception == holder,
+                            None => thread_of(threads, &row["session"]) == thread,
+                        })
             }) {
                 let status = if row["seen"] == true {
                     "shown"
@@ -1228,6 +1250,32 @@ mod tests {
         assert_eq!(row(&view, "ask:a2").0, "queued");
         view.apply(json!({"kind": "ask.answered", "writer": "core", "subject": "ask:g1", "data": {"answer": "checked"}}));
         assert_eq!(row(&view, "ask:f1").0, "folded");
+    }
+
+    #[test]
+    fn a_panel_waits_for_the_exception_of_another_session_on_the_thread() {
+        // #22: the core folds by thread, so a session started in another's place folds into that one's "keeps
+        // asking". Each row the hub reads names the exception holding it; one this app takes for folded names it too.
+        let mut view = View::default();
+        let listed = |id: &str| json!({"kind": "row.set", "writer": "core", "data": {"id": id, "listed": true, "order": id}});
+        view.inbox.push(json!({"ask": "ask:x1", "kind": "exception", "session": "s1", "status": "queued", "outcome": "unanswered", "holder": true, "folded": null}));
+        view.inbox.push(json!({"ask": "ask:f1", "kind": "taste", "session": "s2", "status": "folded", "outcome": "unanswered", "holder": false, "folded": "ask:x1"}));
+        view.inbox.push(json!({"ask": "ask:b1", "kind": "taste", "session": "s3", "status": "queued", "outcome": "unanswered", "holder": false, "folded": null}));
+        view.apply(listed("ask:b1"));
+        view.apply(json!({"kind": "session.start", "session": "s4", "writer": "hook", "data": {"thread": "s1"}}));
+        view.apply(json!({"kind": "ask.created", "id": "f2", "session": "s4", "writer": "mcp:agent", "data": {"kind": "taste"}}));
+        assert_eq!(row(&view, "ask:f2").0, "folded");
+        assert_eq!(
+            handles(view.panel_asks()),
+            ["ask:b1"],
+            "nothing held by x1 before x1 is in sight"
+        );
+        view.apply(listed("ask:x1"));
+        assert_eq!(
+            handles(view.panel_asks()),
+            ["ask:x1", "ask:f1", "ask:b1", "ask:f2"],
+            "the folded asks with their exception"
+        );
     }
 
     #[test]

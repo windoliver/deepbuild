@@ -165,6 +165,17 @@ describe('the fold', () => {
     expect(rows.find((r) => r.ask === folded)?.status).toBe('folded');
   });
 
+  it('an inbox row names the exception holding it, another session\'s on the same thread included, and no other row names one (#22)', async () => {
+    settings({}); // no batches: every ask shows when it's raised
+    await start('S1', 'T');
+    await start('S2', 'T'); // started in S1's place: the same thread, so its asks fold into S1's exception
+    const { folded, exception } = await fold('S1', ask('taste', 'S1 footer'));
+    const later = await asks.raise(core('S2'), sourceOf('taste'), ask('taste', 'S2 header'));
+    const rows = await asks.inbox();
+    expect(rows.find((r) => r.ask === later)).toMatchObject({ session: 'S2', status: 'folded', folded: exception });
+    for (const r of rows) expect(r.folded, r.ask).toBe(r.ask === folded || r.ask === later ? exception : null);
+  });
+
   it('Later on the exception never passes the earliest deadline among the asks it holds', async () => {
     settings({}); // no batches: every ask shows when it's raised
     await start('S1');
