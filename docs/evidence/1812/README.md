@@ -30,7 +30,7 @@ The first-run commands in a home nobody set up (`wrote(1)` in the second table) 
 
 ## The exit table, read from the code
 
-`exit-table.txt` is `node scripts/exit-lint.mjs` on the same commit, the lint lane's command. It prints one `exit <n> <path>:<line>` line per place a command's exit is set, read through the checker. The table has 189 places, each 0, 1, 2 or 3. `deep lease` and `deep mcp-exec` are left out by name. At the merge base the same lint fails on `packages/hub/src/setup.ts:231` and `:237`, where a setup whose wiki wasn't read exited 4.
+`exit-table.txt` is `node scripts/exit-lint.mjs` on the pull request's head, the lint lane's command. It prints one `exit <n> <path>:<line>` row for each code a command can exit with at each place, read through the checker. The table has 215 rows, each 0, 1, 2 or 3. `deep lease` and `deep mcp-exec` are left out by name. At the merge base the same lint fails on `packages/hub/src/setup.ts:231` and `:237`, where a setup whose wiki wasn't read exited 4.
 
 ## Rerun
 
