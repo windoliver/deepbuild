@@ -515,6 +515,12 @@ pub enum Planted {
     LightDefaultAmbientZero,
     LightEveryChild,
     LightStaleList,
+    /// #2032's wrong programs (tests/acceptance/2032/README.md: Planted programs).
+    ShadowBoundingBoxes,
+    SunFarPointLight,
+    ShadowInsideOutline,
+    ShadowRemovesAmbient,
+    ShadowEdgeAliased,
 }
 
 impl Planted {
@@ -554,6 +560,11 @@ impl Planted {
             "light_default_ambient_zero" => Planted::LightDefaultAmbientZero,
             "light_every_child" => Planted::LightEveryChild,
             "light_stale_list" => Planted::LightStaleList,
+            "shadow_bounding_boxes" => Planted::ShadowBoundingBoxes,
+            "sun_far_point_light" => Planted::SunFarPointLight,
+            "shadow_inside_outline" => Planted::ShadowInsideOutline,
+            "shadow_removes_ambient" => Planted::ShadowRemovesAmbient,
+            "shadow_edge_aliased" => Planted::ShadowEdgeAliased,
             "vivid_light_as_linear_light" => Planted::VividLightAsLinearLight,
             "dissolve_reads_playback" => Planted::DissolveReadsPlayback,
             "pass_linear_in_2d" => Planted::PassLinearIn2d,

@@ -445,3 +445,65 @@ fn a_channel_that_carries_ambient_past_one_is_refused() {
         .any(|i| i["severity"] == "error" && i["path"] == "channels/amb/keys/k1/value");
     assert!(named, "an error names the key: {answer}");
 }
+
+/// #2032: on Vello CPU too, a closed path that occludes shadows the floor behind it from a point
+/// light and from a sun, down to the ambient level alone (white × 0.25: code 137), and stays lit
+/// itself; with `occlude` off nothing is shadowed.
+#[test]
+fn an_occluding_path_shadows_what_is_behind_it_and_stays_lit() {
+    let look = json!({"light": {"ground": [255, 255, 255], "ink": [0, 0, 0]}});
+    let doc = |light: Value, occlude: bool| {
+        let wall = json!({"d": "M 120 30 L 136 30 L 136 130 L 120 130 Z",
+            "paint": {"fill": {"role": "ground"}}, "occlude": occlude});
+        lit_doc(
+            [256, 160],
+            json!({
+                "g": item("g", "group@1", "a0", json!({"light": {"ambient": 0.25, "lights": [light]}}), None),
+                "floor": item("floor", "rect@1", "a1", json!({"box": [0, 0, 256, 160], "paint": {"fill": {"role": "ground"}}}), Some("g")),
+                "wall": item("wall", "path@1", "a2", wall, Some("g")),
+            }),
+            json!({}),
+        )
+    };
+    let lamp = json!({"at": [40, 80], "color": "ground", "energy": 0.75, "range": 400});
+    // Its shadows run toward +x, so the floor right of the wall is behind it.
+    let sun = json!({"kind": "sun", "angle": 0, "color": "ground", "energy": 0.25});
+    let draw = |name: &str, doc: &Value| {
+        let dir = scratch("deep-raster", name);
+        let out = dir.join(format!("{name}.png"));
+        let answer = run("raster", &json!({"out": out, "doc": doc, "look": look}));
+        assert_eq!(answer["ok"], json!(true), "{name} draws: {answer}");
+        let image = image::open(&out).unwrap().to_rgb8();
+        std::fs::remove_dir_all(&dir).ok();
+        image
+    };
+    for (name, light, lit) in [("lamp", lamp, None), ("sun", sun, Some([188; 3]))] {
+        let on = draw(&format!("shadow-{name}"), &doc(light.clone(), true));
+        let off = draw(&format!("shadow-{name}-off"), &doc(light, false));
+        let (behind, face, before) = ((200, 80), (128, 80), (60, 80));
+        let at = |image: &image::RgbImage, (x, y): (u32, u32)| image.get_pixel(x, y).0;
+        assert!(
+            near(at(&on, behind), [137; 3]),
+            "{name}: behind the wall: {:?}",
+            at(&on, behind)
+        );
+        assert!(
+            at(&off, behind)[0] > 153,
+            "{name}: lit with occlude off: {:?}",
+            at(&off, behind)
+        );
+        assert_eq!(
+            at(&on, face),
+            at(&off, face),
+            "{name}: the wall's face stays lit"
+        );
+        assert_eq!(at(&on, before), at(&off, before), "{name}: before the wall");
+        if let Some(lit) = lit {
+            assert!(
+                near(at(&on, before), lit),
+                "{name}: ambient plus the sun: {:?}",
+                at(&on, before)
+            );
+        }
+    }
+}

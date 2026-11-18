@@ -920,9 +920,11 @@ impl Groups {
                     .run(
                         device,
                         &light,
+                        x.planted,
                         zoom,
                         x.space == Space::Linear,
                         &view,
+                        bounds,
                         rect,
                         &out,
                     );
