@@ -1,0 +1,11 @@
+{
+  "id": "test/feeds",
+  "version": "1.0.0",
+  "digest": "d1:0000000000000000000000000000000000000000000000000000000000000000",
+  "access": { "words": ["hosts"] },
+  "sources": [
+    { "name": "ext.feeds.level", "variant": "polled" },
+    { "name": "ext.feeds.library", "variant": "library", "host": "files.feeds.example" }
+  ],
+  "requires": { "preview": ["deep.registerSource"] }
+}
