@@ -15,7 +15,7 @@ import { randomBytes } from 'node:crypto';
 import { closeSync, constants, lstatSync, openSync, readFileSync, readSync, rmSync, writeSync } from 'node:fs';
 import { availableParallelism, homedir, loadavg, totalmem } from 'node:os';
 import type { Caller, Lease, LeaseTable, Mode, Resource } from '@deepbuild/leases';
-import { call, type Reply } from './client.js';
+import { call, failure, type Reply } from './client.js';
 import { DISK_FLOOR, freeBytes } from './disk.js';
 import { deepHook, hubAddress, installedRoot, rootOf } from './paths.js';
 import { startOf } from './wire.js';
@@ -414,7 +414,7 @@ const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
 
 /** Runs the command as it is when no hub can lease it, saying so. */
 function unleased(argv: string[], why: string): Promise<number> {
-  process.stderr.write(`deep lease: ${why}, so \`${argv.join(' ')}\` runs unleased\n`);
+  process.stderr.write(`${why} \`${argv.join(' ')}\` runs with no lease.\n`);
   return runGroup(argv, {}, () => undefined, () => undefined);
 }
 /**
@@ -467,7 +467,7 @@ export async function leaseCommand(args: readonly string[]): Promise<number> {
   }
   if (process.env.DEEP_LEASED) return runGroup(argv, {}, () => undefined, () => undefined);
   let token: string;
-  try { token = readFileSync(rootOf(installedRoot()).token, 'utf8').trim(); } catch { return unleased(argv, 'DeepBuild isn\'t set up here (no hub token)'); }
+  try { token = readFileSync(rootOf(installedRoot()).token, 'utf8').trim(); } catch (error) { return unleased(argv, await failure(error)); }
   const socket = hubAddress().path;
   // Its own start is read while deep-hook heavy finds the command's entry: neither needs the other's result (#2328).
   const start = startOf(process.pid);
@@ -475,7 +475,7 @@ export async function leaseCommand(args: readonly string[]): Promise<number> {
   const peer = { pid: process.pid, start: (await start) ?? '' };
   const ask = async (method: string, params: Obj): Promise<Reply> => call(socket, token, method, params, peer);
   let reply: Reply;
-  try { reply = await ask('lease.wait', { kinds, command: argv.join(' '), cwd: process.cwd(), jobs }); } catch (error) { return unleased(argv, `the hub can't be reached (${error instanceof Error ? error.message : String(error)})`); }
+  try { reply = await ask('lease.wait', { kinds, command: argv.join(' '), cwd: process.cwd(), jobs }); } catch (error) { return unleased(argv, await failure(error, socket)); }
   let shown = -Infinity;
   for (;;) {
     if ('error' in reply) {
