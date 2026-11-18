@@ -7,7 +7,7 @@ import { hubStatus, startHub, stopHub, stopIfRunning } from './service.js';
 
 const USAGE = `Usage: deep hub run [--root <folder>] [--safe]
        deep hub start [--root <folder>]
-       deep hub status [--root <folder>]
+       deep hub status [--root <folder>]   the hub's health as one line of JSON, a developer's command
        deep hub stop [--root <folder>]
        deep hub use --root <folder>
        deep hub promote <build folder>`;

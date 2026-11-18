@@ -41,13 +41,14 @@ fn refused<T>(code: &'static str, path: impl Into<String>) -> Result<T, Refused>
 }
 
 /// The scene3d kinds this subset draws, `family.name@major`.
-pub const KINDS: [&str; 6] = [
+pub const KINDS: [&str; 7] = [
     "mark.box@1",
     "mark.cylinder@1",
     "mark.sphere@1",
     "mark.line@1",
     "mark.point@1",
     "mark.text@1",
+    "mark.image@1",
 ];
 
 /// The 2D overlay a 3D writer layer's anchor places, drawn by scene3d too.
@@ -331,6 +332,8 @@ pub struct Line {
     /// #468: a `mark.line@1`'s written points in the world at t, an `ID#anchor` point at its
     /// anchor; empty for a line drawn from anything else.
     pub points: Vec<Vec3>,
+    /// Whether the sky's fog applies to it (Marks in 3D; #1992).
+    pub fog: bool,
 }
 
 /// A mesh-edge line's mesh, its kind, the matrix that places the mesh, and the edges it draws.
@@ -387,6 +390,8 @@ pub struct Point {
     pub color: [u8; 3],
     /// Its set from a depth video (#503), whose points the GPU writes: the point is its item.
     pub cloud: Option<Arc<crate::cloud::Cloud>>,
+    /// Whether the sky's fog applies to it (Marks in 3D; #1992).
+    pub fog: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -415,6 +420,26 @@ pub struct Label {
     /// The item's own axes, for `facing: fixed`: its rotation applied to +X and +Y.
     pub axes: [Vec3; 2],
     pub color: [u8; 3],
+    /// Whether the sky's fog applies to it (Marks in 3D; #1992): a label's color is its own
+    /// unless it says so.
+    pub fog: bool,
+}
+
+/// A picture on one quad (#1992; Marks in 3D), placed and turned as a label is.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Image {
+    pub id: String,
+    /// Its picture's SHA-256: the host makes its texels ready, as a material's maps (the
+    /// scene's `texels`).
+    pub asset: String,
+    pub pos: Vec3,
+    /// Its width and height, in m with `world`, else in px.
+    pub size: [f64; 2],
+    pub world: bool,
+    pub facing: Facing,
+    /// The item's own axes, for `facing: fixed`.
+    pub axes: [Vec3; 2],
+    pub fog: bool,
 }
 
 /// A 3D writer layer's marks, each family in item order.
@@ -425,6 +450,7 @@ pub struct Layer3 {
     pub lines: Vec<Line>,
     pub points: Vec<Point>,
     pub labels: Vec<Label>,
+    pub images: Vec<Image>,
     /// The opacity of each line and label a module's kind draws below full, by its ID (#226): a
     /// tick entering or leaving its axis's domain.
     pub fades: BTreeMap<String, f64>,
@@ -465,6 +491,7 @@ impl Layer3 {
         out.extend(self.lines.iter().map(|s| s.id.clone()));
         out.extend(self.points.iter().map(|s| s.id.clone()));
         out.extend(self.labels.iter().map(|s| s.id.clone()));
+        out.extend(self.images.iter().map(|s| s.id.clone()));
         out.extend(self.puffs.iter().map(|s| s.id.clone()));
         out
     }
@@ -757,7 +784,8 @@ fn cascades(params: &Value, path: &str) -> Result<Cascades, Refused> {
         None => {}
         Some(Value::String(s)) if s == "auto" => {}
         Some(v) => {
-            c.far = Some(num(Some(v)).filter(|f| *f > 0.0).ok_or_else(|| Refused {
+            // #1381: 0 sets the cascades to zero range, so past them the horizon alone shades.
+            c.far = Some(num(Some(v)).filter(|f| *f >= 0.0).ok_or_else(|| Refused {
                 code: "out_of_range",
                 path: format!("{path}/shadow_far"),
             })?)
@@ -2261,6 +2289,7 @@ pub(crate) fn evaluate_compiled(
                                 paint(look, params, &path)?,
                                 world,
                                 cap,
+                                fog(params, true),
                             )
                         }
                         None => line(&items, id, params, look, (map, t))?,
@@ -2285,6 +2314,11 @@ pub(crate) fn evaluate_compiled(
                     let l = label(id, params, &path, &world(&items, id), look, labels)?;
                     bounds.push(l.pos);
                     layer.labels.push(l);
+                }
+                "mark.image@1" => {
+                    let image = image(id, params, &path, &world(&items, id))?;
+                    bounds.push(image.pos);
+                    layer.images.push(image);
                 }
                 OVERLAY => overlay_items.push((layer_id.to_string(), id.clone())),
                 // #506: read once every solid is placed, below.
@@ -2708,6 +2742,7 @@ pub(crate) fn evaluate_compiled(
                 .role("stone")
                 .or(look.role("ink"))
                 .unwrap_or([255, 255, 255]),
+            fog: false,
         });
         top += quad[1] + 4.0;
     }

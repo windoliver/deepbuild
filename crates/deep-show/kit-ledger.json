@@ -1,7 +1,7 @@
 {
   "core": {
     "version": "0.0.0",
-    "digest": "c6bed156756e586416e70a08ffbf41807c5edb9ec0d5a6a8ac70e19907357494",
+    "digest": "c866974c68986c4af416d66e56d533c9919cab89d2d810c7257df537bead6509",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -130,7 +130,7 @@
   },
   "logic": {
     "version": "1.0.0",
-    "digest": "6f34b6e8cf2e19f7a2bc6bfe04c0623e9ec1a516811cd0e76d48778f5757100e",
+    "digest": "1d115c4a4e4c1759d89afdad4757c100e6537a076aa4e0a651f5e0643339cff4",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -232,7 +232,7 @@
   },
   "net": {
     "version": "1.0.0",
-    "digest": "7b4fcb5e872422d3812fae697247c15110c61a23e8de64702c3e13f2e6275bd7",
+    "digest": "e6cd239f3af4f987176c9c47388c26b34886e1610f8126c2df071ec893e4de8e",
     "verdict": "PASS",
     "parts": {
       "clean_rebuild": "PASS",
@@ -261,7 +261,7 @@
   },
   "record": {
     "version": "1.0.0",
-    "digest": "65f77a1cb350e333bb96a1f36a254f4d489bbb36a3a919391654a723b30c1021",
+    "digest": "bb898cbc9fb55e00fbb24481f1a3970e63ed3c3dfe26e249fce8168444c9ef34",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -277,18 +277,19 @@
   },
   "sandbox": {
     "version": "1.0.0",
-    "digest": "bd698eefad2d6419fdbbc919a75ae9369d1266261a54f3572d1f6356ed5c2d3f",
+    "digest": "bd32c3498c4bda12b5727f5a64281cba439f562396351f71cbd29e6d23ee805d",
     "verdict": "PASS",
     "parts": {
       "clean_rebuild": "PASS",
       "patch_fuzz": "PASS",
       "schedule": "PASS",
+      "registries": "PASS",
       "sandbox": "PASS"
     }
   },
   "scene3d": {
     "version": "1.0.0",
-    "digest": "5a5d0f86438d912e2c10c3ef916357b614a38090725129dbb37ccf7f96501641",
+    "digest": "a81e51bd472e69cd02d91247138391d168c783b98c193fcfeacf0fae265b3a66",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -304,7 +305,7 @@
   },
   "sheet": {
     "version": "1.0.0",
-    "digest": "d24e60e7c85d9663922617ca0d3c22f8d53e23caf3564cbc6ea1480cb4b57f18",
+    "digest": "2e95dc90884799f26e95ce8ad59f06509d8e63e2daa07bc8f5a71ac4340aca0e",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",

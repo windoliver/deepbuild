@@ -24,14 +24,41 @@ fn u32_at(b: &[u8], at: usize) -> Option<u32> {
     Some(u32::from_le_bytes(b.get(at..at + 4)?.try_into().ok()?))
 }
 
+/// A `gen@1` provider's mesh output as the asset store holds it (#192): little-endian `u32
+/// vertex_count, u32 index_count, f32 positions[3n], f32 normals[3n], f32 uv0[2n], u32 indices`,
+/// exactly that long, read as a glTF of one node whose one primitive's accessors view those bytes.
+fn provided(bytes: &[u8]) -> Option<(Value, Vec<u8>)> {
+    let n = u32_at(bytes, 0)? as usize;
+    let ni = u32_at(bytes, 4)? as usize;
+    if bytes.len() != 8 + 32 * n + 4 * ni {
+        return None;
+    }
+    let view = |at: usize, len: usize| json!({"buffer": 0, "byteOffset": at, "byteLength": len});
+    let float = |view: usize, ty: &str| json!({"bufferView": view, "componentType": 5126, "count": n, "type": ty});
+    let doc = json!({
+        "asset": {"version": "2.0"},
+        "buffers": [{"byteLength": bytes.len()}],
+        "bufferViews": [view(8, 12 * n), view(8 + 12 * n, 12 * n), view(8 + 24 * n, 8 * n), view(8 + 32 * n, 4 * ni)],
+        "accessors": [float(0, "VEC3"), float(1, "VEC3"), float(2, "VEC2"),
+                      {"bufferView": 3, "componentType": 5125, "count": ni, "type": "SCALAR"}],
+        "meshes": [{"primitives": [{"attributes": {"POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2}, "indices": 3}]}],
+        "nodes": [{"mesh": 0}],
+        "scenes": [{"nodes": [0]}],
+        "scene": 0,
+    });
+    Some((doc, bytes.to_vec()))
+}
+
 /// The document's JSON and its binary chunk (empty for a JSON file).
 fn split(bytes: &[u8]) -> Result<(Value, Vec<u8>), Fault> {
     if bytes.len() > MAX_BYTES {
         return Err(bad("larger than 64 MB"));
     }
     if bytes.get(..4) != Some(b"glTF") {
-        let json = serde_json::from_slice(bytes).map_err(|_| bad("neither GLB nor glTF JSON"))?;
-        return Ok((json, Vec::new()));
+        return match serde_json::from_slice(bytes) {
+            Ok(json) => Ok((json, Vec::new())),
+            Err(_) => provided(bytes).ok_or_else(|| bad("neither GLB nor glTF JSON")),
+        };
     }
     if u32_at(bytes, 4) != Some(2) {
         return Err(bad("not glTF 2.0"));

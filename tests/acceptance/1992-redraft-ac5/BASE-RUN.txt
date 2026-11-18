@@ -1,0 +1,138 @@
+BASE-RUN: the blind redraft of #1992's criterion 5 (#1992.597ff532), run on the base.
+
+At base 16dc5eab0e5c2687b4ae7a973b350c32bbfb9342 (HEAD is the merge base with origin/main; no tracked change),
+on the shared Mac (Nov 17, 2026; 18 cores, load 20 to 28 from other sessions' builds), with this checkout's
+target/debug already built from this commit. The checkout path reads <repo>; ANSI colors are dropped.
+
+  export PATH=/opt/homebrew/opt/rustup/bin:$PATH CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0
+  node node_modules/vitest/vitest.mjs run --root tests/acceptance/1992-redraft-ac5 --no-file-parallelism --testTimeout=7200000 castle-guard.test.ts
+  -> 1 passed, 1 failed, in each of three runs: the first in 288 s, two later ones in 1,207 s and 427 s (1,196 s and
+     398 s of them waiting for a build grant)
+  node node_modules/typescript/bin/tsc -p tests/acceptance/1992-redraft-ac5/tsconfig.json
+  -> exit 0
+
+PASSES, as a guard must on the base:
+  AC5 #1992.597ff532 the castle as committed names no new field, and its frames at the four quarter-turns of its
+  orbit, alone and with labels that name none either, have the merge base renderer's pixel hash on this machine with
+  no pixel differing
+  -> The merge base's deep-gpu was built from its export, not taken from this checkout's target folder: 39
+     workspace and vendor crates compiled there, 930 third-party units reused. The two binaries drew the castle as
+     committed and the labelled castle at frames 0, 180, 360 and 540: 8 frames, each with the same pixel_hash and
+     no differing pixel.
+
+FAILS, at an assertion of its own, as the planted program must where no text mark reads `fog`:
+  AC5 #1992.597ff532 a planted default of fog: true on text, drawn as the labelled castle with fog: true written on
+  each label, fails the same judge at every sampled frame, naming its first differing pixel, and dims each label
+  against the sky behind it
+  -> "the planted fog: true on the castle's labels fails the guard's judge, but the judge found no differing pixel:
+     this renderer draws the labels as the merge base does: expected 0 to be greater than 0". The base accepts
+     `fog: true` in a label's params and ignores it, so the judge finds nothing wrong.
+
+----------------------------------------------------------------------------------------------------------------
+The first run, as vitest printed it (the merge base's renderer built in this run):
+ RUN  v5.0.5 <repo>/tests/acceptance/1992-redraft-ac5
+stdout | castle-guard.test.ts
+AC5 #1992.597ff532: the merge base 16dc5eab0e5c's deep-gpu built from its export in 166 s: 39 workspace and vendor crates compiled there (accesskit_macos, deep-app, deep-canvas, deep-canvas-cells, deep-canvas-drawn, deep-canvas-effects, deep-canvas-graph, deep-canvas-input, deep-canvas-marks, deep-canvas-media, deep-canvas-motion, deep-canvas-physics, deep-canvas-record, deep-canvas-sandbox, deep-canvas-scene3d, deep-canvas-seams, deep-canvas-sheet, deep-canvas-vector, deep-codecs, deep-effects-render, deep-gpu, deep-gpu-layer, deep-images, deep-logic, deep-marks-gpui, deep-marks-render, deep-marks-vello, deep-physics-rapier, deep-replica, deep-sandbox-wasmtime, deep-scene3d-render, deep-text, deep-text-gpui, gpui-pre, gpui-pre-apple, gpui-pre-macos, llrt_crypto, quickjs-jit-runtime, symphonia-codec-vorbis), 930 third-party units reused; kept in <repo>/target/acceptance/1992-redraft-ac5/base-16dc5eab0e5c2687b4ae7a973b350c32bbfb9342
+ ❯ castle-guard.test.ts (2 tests | 1 failed) 288040ms
+   ❯ AC5 #1992.597ff532 the castle keeps the merge base's pixels, and fogged labels don't (2)
+     ✓ AC5 #1992.597ff532 the castle as committed names no new field, and its frames at the four quarter-turns of its orbit, alone and with labels that name none either, have the merge base renderer's pixel hash on this machine with no pixel differing 13117ms
+     × AC5 #1992.597ff532 a planted default of fog: true on text, drawn as the labelled castle with fog: true written on each label, fails the same judge at every sampled frame, naming its first differing pixel, and dims each label against the sky behind it 996ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  castle-guard.test.ts > AC5 #1992.597ff532 the castle keeps the merge base's pixels, and fogged labels don't > AC5 #1992.597ff532 a planted default of fog: true on text, drawn as the labelled castle with fog: true written on each label, fails the same judge at every sampled frame, naming its first differing pixel, and dims each label against the sky behind it
+AssertionError: the planted fog: true on the castle's labels fails the guard's judge, but the judge found no differing pixel: this renderer draws the labels as the merge base does: expected 0 to be greater than 0
+ ❯ castle-guard.test.ts:69:198
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+   Start at  18:59:13
+   Duration  288.17s (tests 100%)
+
+----------------------------------------------------------------------------------------------------------------
+A later run, started once more to measure what it costs and to run the kept binary's path. It waited 1,196 s for a
+build grant behind other sessions' builds, then reused the kept merge base binary; the same verdicts:
+
+stdout | castle-guard.test.ts
+AC5 #1992.597ff532: the merge base 16dc5eab0e5c's deep-gpu is kept in <repo>/target/acceptance/1992-redraft-ac5/base-16dc5eab0e5c2687b4ae7a973b350c32bbfb9342, its marker holds
+ ❯ castle-guard.test.ts (2 tests | 1 failed) 1207073ms
+   ❯ AC5 #1992.597ff532 the castle keeps the merge base's pixels, and fogged labels don't (2)
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+   Duration  1207.17s (tests 100%)
+
+----------------------------------------------------------------------------------------------------------------
+A third run, on the files as delivered. After the second run, eight `export` keywords the test file doesn't use
+were dropped from helpers.ts (isObject, obj, arr, num, str, sha256, inconclusive, mergeBase); nothing else changed.
+It waited 398 s for a build grant, reused the kept binary, and gave the same verdicts:
+
+ ❯ castle-guard.test.ts (2 tests | 1 failed) 426754ms
+     ✓ AC5 #1992.597ff532 the castle as committed names no new field, and its frames at the four quarter-turns of its orbit, alone and with labels that name none either, have the merge base renderer's pixel hash on this machine with no pixel differing 20456ms
+     × AC5 #1992.597ff532 a planted default of fog: true on text, drawn as the labelled castle with fog: true written on each label, fails the same judge at every sampled frame, naming its first differing pixel, and dims each label against the sky behind it 4123ms
+AssertionError: the planted fog: true on the castle's labels fails the guard's judge, but the judge found no differing pixel: this renderer draws the labels as the merge base does: expected 0 to be greater than 0
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+   Duration  426.97s (tests 100%)
+
+----------------------------------------------------------------------------------------------------------------
+The unsound build, made once by hand to show the build check catches it (a temporary test in this folder that
+called helpers.ts's `ownBuild`; the test and its folder, <repo>/target/acceptance/1992-redraft-ac5/unsound-exp, are
+deleted). The merge base was exported by `git archive` (every file with the commit's time) beside a `cp -c -R` clone
+of this checkout's target/debug with nothing removed from it, and `cargo build --locked --bin deep-gpu
+--message-format=json-render-diagnostics` ran in the export with CARGO_TARGET_DIR set to the clone. cargo exited 0
+and wrote a deep-gpu, having compiled 12 crates and taken 33 units of the export's own crates fresh from the other
+tree's build. `ownBuild` reports each and fails, so no binary would be kept and no marker written:
+
+  export of 16dc5eab0e5c2687b4ae7a973b350c32bbfb9342 in 3545 ms (files keep the commit's time)
+  cp -c -R target/debug in 1447 ms (nothing removed from it)
+  cargo build exited 0 in 383 s, 337 s of it waiting for a build grant; cargo: "Finished `dev` profile [unoptimized] target(s) in 45.79s"
+  ownBuild: 33 failures; compiled in the export: 12; third-party units reused: 936; bin: <repo>/target/acceptance/1992-redraft-ac5/unsound-exp/target/debug/deep-gpu
+    deep-canvas (["lib"] deep_canvas) was taken fresh from an earlier build, not compiled in the export
+    deep-canvas-seams (["lib"] deep_canvas_seams) was taken fresh from an earlier build, not compiled in the export
+    deep-text (["lib"] deep_text) was taken fresh from an earlier build, not compiled in the export
+    deep-canvas-drawn (["lib"] deep_canvas_drawn) was taken fresh from an earlier build, not compiled in the export
+    deep-canvas-marks (["lib"] deep_canvas_marks) was taken fresh from an earlier build, not compiled in the export
+    gpui-pre (["custom-build"] build-script-build) was taken fresh from an earlier build, not compiled in the export
+    gpui-pre (["lib"] gpui) was taken fresh from an earlier build, not compiled in the export
+    gpui-pre-apple (["custom-build"] build-script-build) was taken fresh from an earlier build, not compiled in the export
+    deep-canvas-motion (["lib"] deep_canvas_motion) was taken fresh from an earlier build, not compiled in the export
+    accesskit_macos (["lib"] accesskit_macos) was taken fresh from an earlier build, not compiled in the export
+    deep-canvas-scene3d (["lib"] deep_canvas_scene3d) was taken fresh from an earlier build, not compiled in the export
+    deep-gpu (["custom-build"] build-script-build) was taken fresh from an earlier build, not compiled in the export
+    quickjs-jit-runtime (["custom-build"] build-script-build) was taken fresh from an earlier build, not compiled in the export
+    llrt_crypto (["lib"] llrt_crypto) was taken fresh from an earlier build, not compiled in the export
+    deep-canvas-effects (["lib"] deep_canvas_effects) was taken fresh from an earlier build, not compiled in the export
+    quickjs-jit-runtime (["lib"] rquickjs_jit) was taken fresh from an earlier build, not compiled in the export
+    deep-canvas-sandbox (["lib"] deep_canvas_sandbox) was taken fresh from an earlier build, not compiled in the export
+    deep-canvas-cells (["lib"] deep_canvas_cells) was taken fresh from an earlier build, not compiled in the export
+    symphonia-codec-vorbis (["lib"] symphonia_codec_vorbis) was taken fresh from an earlier build, not compiled in the export
+    deep-sandbox-wasmtime (["lib"] deep_sandbox_wasmtime) was taken fresh from an earlier build, not compiled in the export
+    deep-images (["lib"] deep_images) was taken fresh from an earlier build, not compiled in the export
+    deep-canvas-input (["lib"] deep_canvas_input) was taken fresh from an earlier build, not compiled in the export
+    deep-physics-rapier (["custom-build"] build-script-build) was taken fresh from an earlier build, not compiled in the export
+    deep-logic (["lib"] deep_logic) was taken fresh from an earlier build, not compiled in the export
+    deep-canvas-media (["lib"] deep_canvas_media) was taken fresh from an earlier build, not compiled in the export
+    deep-marks-vello (["lib"] deep_marks_vello) was taken fresh from an earlier build, not compiled in the export
+    deep-canvas-vector (["lib"] deep_canvas_vector) was taken fresh from an earlier build, not compiled in the export
+    deep-canvas-graph (["lib"] deep_canvas_graph) was taken fresh from an earlier build, not compiled in the export
+    deep-canvas-physics (["lib"] deep_canvas_physics) was taken fresh from an earlier build, not compiled in the export
+    deep-gpu-layer (["custom-build"] build-script-build) was taken fresh from an earlier build, not compiled in the export
+    deep-canvas-sheet (["lib"] deep_canvas_sheet) was taken fresh from an earlier build, not compiled in the export
+    deep-canvas-record (["lib"] deep_canvas_record) was taken fresh from an earlier build, not compiled in the export
+    deep-codecs (["lib"] deep_codecs) was taken fresh from an earlier build, not compiled in the export
+
+----------------------------------------------------------------------------------------------------------------
+The judge and the contrast measure, checked once by hand on real frames (a temporary test, deleted; the kept merge
+base binary drew every frame, so no build ran). The labelled castle drawn twice by separate processes gave no
+failure. A label fogged on the CPU (each pixel of the labelled frame moved 11.7% of the way to the same pixel of the
+castle without labels, the share of exp fog at 0.002 per m over 62 m) failed the judge at all four frames, and
+every label's contrast fell:
+
+  labels fogged on the CPU, frame 0 (t = 0s): the first differing pixel is (529, 43): the merge base draws rgba(193, 138, 105, 255), this draws rgba(196, 142, 110, 255); 5711 of 1024000 pixels differ
+  labels fogged on the CPU, frame 180 (t = 6s): the first differing pixel is (529, 43): the merge base draws rgba(193, 138, 105, 255), this draws rgba(196, 142, 110, 255); 5564 of 1024000 pixels differ
+  labels fogged on the CPU, frame 360 (t = 12s): the first differing pixel is (529, 43): the merge base draws rgba(193, 138, 105, 255), this draws rgba(196, 142, 110, 255); 6043 of 1024000 pixels differ
+  labels fogged on the CPU, frame 540 (t = 18s): the first differing pixel is (529, 43): the merge base draws rgba(193, 138, 105, 255), this draws rgba(196, 142, 110, 255); 6423 of 1024000 pixels differ
+  frame 0: label_keep 1175 px, on the sky, contrast 128.91 -> 113.91; label_gate 939 px, 128.79 -> 113.75; label_castle 2049 px, 128.89 -> 113.80
+  frame 180: label_keep 964 px, on the sky, contrast 121.96 -> 107.74; label_gate 948 px, 121.09 -> 106.96; label_castle 2049 px, 128.95 -> 113.86
+  frame 360: label_keep 1165 px, on the sky, contrast 128.97 -> 113.95; label_gate 1231 px, 130.73 -> 115.44; label_castle 2052 px, 128.86 -> 113.78
+  frame 540: label_keep 1412 px, on the sky, contrast 133.99 -> 118.40; label_gate 1254 px, 131.95 -> 116.53; label_castle 2049 px, 129.01 -> 113.91
+
+This shows the second test's checks can pass when label pixels change; it isn't the renderer's fog, which no
+program has yet.

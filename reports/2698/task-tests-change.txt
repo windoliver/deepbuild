@@ -1,0 +1,41 @@
+✔ #2698 AC4 with the reader's call failing, the reading is missing (11770.121542ms)
+ℹ the kernel refuses PID 1 to the suite's own probe: proc_pid_rusage(1): Operation not permitted; read {"the reader":{"total":{"instructions":null,"cpuMs":null,"wakeups":null,"footprintBytes":null},"own":{"pid":1,"instructions":null,"cpuMs":null,"wakeups":null,"footprintBytes":null}},"the planted reader that returns 0":{"total":{"instructions":0,"cpuMs":0,"wakeups":0,"footprintBytes":0},"own":{"pid":1,"instructions":0,"cpuMs":0,"wakeups":0,"footprintBytes":0}}}
+✔ #2698 AC4 a planted reader that returns 0 fails, naming the field (4.475292ms)
+ℹ AC4: total.instructions, total.cpuMs, total.wakeups, total.footprintBytes, the process's instructions, the process's cpuMs, the process's wakeups, the process's footprintBytes: the planted reader that returns 0 gives 0 where the kernel refused the reading of PID 1 (proc_pid_rusage(1): Operation not permitted): a reading that can't be taken is missing, never 0
+✔ #2698 AC4 with the reader's call failing, hub-idle reads INCONCLUSIVE, naming the reading (28324.772209ms)
+ℹ the kernel refuses PID 1 to the suite's own probe: proc_pid_rusage(1): Operation not permitted
+ℹ hub-idle exited 0 after 27.6 s
+last line: {"bench":"hub","mode":"idle","idleCpuPercent":1.4000000000000012,"rssBytes":74858496,"spanMs":5248.681333,"hub":{"pid":52134,"wakeups":null,"instructionsPerSecond":null,"cpuMsPerSecond":null,"footprintBytes":null},"children":[],"status":"INCONCLUSIVE","reason":"no reading of the hub 52134's instructions, the hub 52134's CPU time, the hub 52134's wakeups, the hub 52134's footprint"}
+stderr:
+
+✔ #2698 AC4 hub-idle on a planted reader that returns 0 fails, naming the field (22538.896708ms)
+ℹ the kernel refuses PID 1 to the suite's own probe: proc_pid_rusage(1): Operation not permitted
+ℹ hub-idle exited 0 after 22.3 s
+last line: {"bench":"hub","mode":"idle","idleCpuPercent":0.40000000000000036,"rssBytes":68403200,"spanMs":5320.335209000001,"hub":{"pid":53814,"wakeups":0,"instructionsPerSecond":0,"cpuMsPerSecond":0,"footprintBytes":0},"children":[]}
+stderr:
+
+ℹ AC4: hub.wakeups, hub.instructionsPerSecond, hub.cpuMsPerSecond, hub.footprintBytes: hub-idle reports 0 where the kernel refused the reader's call: a reading that can't be taken is missing, never 0
+hub-idle exited 0 after 22.3 s
+last line: {"bench":"hub","mode":"idle","idleCpuPercent":0.40000000000000036,"rssBytes":68403200,"spanMs":5320.335209000001,"hub":{"pid":53814,"wakeups":0,"instructionsPerSecond":0,"cpuMsPerSecond":0,"footprintBytes":0},"children":[]}
+stderr:
+
+✔ #2698 AC6 deep-status-30 reports its own instructions, its peak, the modules it loaded, and an empty Node program's instructions from the same rounds (53764.495167ms)
+ℹ deep-status-30 exited 0 after 51.8 s
+last line: {"statusMs":1317.7817089999953,"sessions":630,"instructions":[619113685,618192283,616085120,613975212,623593624],"emptyInstructions":[428054287,423633351,422081991,426757985,421542474],"peakFootprintBytes":[23006424,22940864,23219440,22924576,23284976],"modules":["packages/cli/dist/main.js","node:fs","node:os","node:path","node:url","packages/hub/dist/index.js","packages/hub/dist/plant.js","node:child_process","node:crypto","node:events","node:net","packages/hub/dist/contracts.js","node:timers/promises","packages/hub/dist/paths.js","node:module","packages/hub/dist/list.js","packages/hub/dist/client.js","packages/hub/dist/compat.js","packages/hub/dist/generations.js","packages/hub/dist/wire.js","packages/record/src/ids.js","packages/hub/dist/promises.js","packages/hub/dist/sections.js","packages/hub/dist/visible.js","packages/hub/dist/remote.js","packages/hub/dist/identity.js","packages/hub/dist/people.js"]}
+stderr:
+
+an empty Node program retires 424157483 instructions here by the test's own reading
+✔ #2698 AC6 deep-mcp-30d reports its own instructions, its peak, the modules it loaded, and an empty Node program's instructions from the same rounds (195175.334375ms)
+ℹ deep-mcp-30d exited 0 after 193.5 s
+last line: {"statusP95Ms":544.1542499999923,"openItemP95Ms":529.7286250000179,"searchP95Ms":305.76104199999827,"mcpRssMb":41.03125,"instructions":[55331140],"emptyInstructions":[422910114],"peakFootprintBytes":19991168,"modules":["packages/cli/dist/main.js","node:fs","node:os","node:path","node:url","packages/hub/dist/mcp.js","node:net","node:readline","packages/hub/dist/codes.js","packages/hub/dist/paths.js","node:crypto","node:module","packages/hub/dist/settle.js","node:v8","node:vm","packages/hub/dist/tools.js","packages/hub/dist/wire.js","node:child_process","packages/record/src/ids.js","packages/hub/dist/plant.js","node:events"]}
+stderr:
+
+an empty Node program retires 424422826 instructions here by the test's own reading
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 314901.05125

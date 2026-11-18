@@ -220,5 +220,17 @@
       "compare-sees-nothing"
     ],
     "since": "R2"
+  },
+  {
+    "method": "deep.registerPort",
+    "variant": null,
+    "interface": "port@1",
+    "digest": "d1:2ef8666f74cf0150d94247257417d84b931900faf26d4a8ce61d07ed0d34ec55",
+    "fills": "many, at most 8 on a document",
+    "kit": "port@1",
+    "planted": [
+      "sends-on-seek"
+    ],
+    "since": "R6"
   }
 ]

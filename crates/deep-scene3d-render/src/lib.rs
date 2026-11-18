@@ -30,6 +30,7 @@ mod module;
 mod motion;
 mod oit;
 mod op;
+mod origin;
 mod planted;
 pub mod print;
 mod readouts;
@@ -63,7 +64,7 @@ use deep_gpu::encode::Job;
 use deep_gpu::render::Pass;
 use deep_gpu::surface::FORMAT;
 
-pub use crate::diag::{draw_offscreen_diag, Diag, DiagCounts};
+pub use crate::diag::{draw_offscreen_diag, white, Diag, DiagCounts};
 use crate::mesh::Mesh;
 pub use crate::module::{
     draw_offscreen, timed, AfterFrame, Counts, HdrFrame, Module3, PostFrame, Profiler, Shared,
@@ -452,6 +453,9 @@ struct EnvUniform {
     /// disk's radiance.
     sun: [f32; 4],
     sun_color: [f32; 4],
+    /// The linear fog curve's near and far, in m, and what the background draws as a scale
+    /// (#1992).
+    range: [f32; 4],
 }
 
 /// Our DFG table (#421): for 32 cosines of the view angle across and 32 roughnesses down, the
@@ -552,7 +556,8 @@ fn sheen_table() -> Vec<[f32; 4]> {
     flat.chunks(4).map(|c| [c[0], c[1], c[2], c[3]]).collect()
 }
 
-/// A text record's flag: the label pass draws its color after the upscale (scene3d.wgsl).
+/// A text record's flag: the label pass draws its color after the upscale (scene3d.wgsl). A
+/// label the sky's fog applies to (bit 9; #1992) draws in the geometry pass, where the fog is.
 const LATER: u32 = 256;
 /// A segment record's flags in the outline pass (outline.wgsl).
 const EXACT: u32 = 2;
@@ -603,6 +608,8 @@ struct SolidRecord {
 
 /// #446's planted wrong program's bit in the shader's planted word (scene3d.wgsl).
 const FILTER_IN_TEXELS: u32 = 1 << 30;
+/// #1381's planted sky occlusion from a terrain plate's slope alone (scene3d.wgsl: `P_SKY_BY_SLOPE`).
+const OCCLUSION_FROM_SLOPE: u32 = 1 << 25;
 /// A solid the shadow pass leaves out (`cast_shadow: false`).
 const NO_CAST: u32 = 1;
 /// A solid no shadow falls on (`receive_shadow: false`), for the passes that shade one.
@@ -1280,6 +1287,11 @@ struct Batch {
     clouds: Vec<(wgpu::Buffer, u32)>,
     /// One record per inked glyph of its labels.
     labels: Set,
+    /// One record per image mark (#1992); each one's picture in the same order, with what it was
+    /// made from (its hash, and whether its texels were here); and how often they were made.
+    images: Set,
+    image_binds: Vec<(wgpu::BindGroup, String, bool)>,
+    image_made: u64,
     bundle: Option<wgpu::RenderBundle>,
     /// Each solid's set, its record's place in that set, its pick ID and its tie rank, in the
     /// layer's solid order.
@@ -2014,12 +2026,18 @@ pub(crate) fn op_blend_pipeline(
 struct Families {
     module: wgpu::ShaderModule,
     draw_layout: wgpu::PipelineLayout,
+    /// The lines' and points': the frame and the lights' group, whose sky fogs them (#1992).
+    mark_layout: wgpu::PipelineLayout,
     text_layout: wgpu::PipelineLayout,
+    /// The image marks' (#1992): the labels', with a picture and the labels' sampler in group 2.
+    image_layout: wgpu::PipelineLayout,
+    image_group: wgpu::BindGroupLayout,
     forward_z: bool,
     samples: u32,
     line: Option<wgpu::RenderPipeline>,
     point: Option<wgpu::RenderPipeline>,
     text: Option<wgpu::RenderPipeline>,
+    image: Option<wgpu::RenderPipeline>,
 }
 
 impl Families {
@@ -2032,10 +2050,11 @@ impl Families {
         names: &mut Vec<&'static str>,
     ) -> u32 {
         let mut made = 0;
-        let (module, draw, text, fz, samples) = (
+        let (module, draw, text, image, fz, samples) = (
             &self.module,
-            &self.draw_layout,
+            &self.mark_layout,
             &self.text_layout,
+            &self.image_layout,
             self.forward_z,
             self.samples,
         );
@@ -2065,6 +2084,15 @@ impl Families {
                 text,
                 "text_vs",
                 "text_fs",
+                instance(std::mem::size_of::<TextRecord>() as u64, &TEXT),
+            ),
+            (
+                "scene3d.image",
+                !layer.images.is_empty(),
+                &mut self.image,
+                image,
+                "text_vs",
+                "image_fs",
                 instance(std::mem::size_of::<TextRecord>() as u64, &TEXT),
             ),
         ] {
@@ -2388,7 +2416,38 @@ impl Renderer {
             ao.shade_layout.clone(),
             maps.layout.clone(),
         ];
-        let text_layout = layout(&[Some(&frame_layout), Some(&mask_layout)]);
+        let mark_layout = layout(&[Some(&frame_layout), Some(&lights_layout)]);
+        let text_layout = layout(&[
+            Some(&frame_layout),
+            Some(&lights_layout),
+            Some(&mask_layout),
+        ]);
+        let image_group = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("scene3d image"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+            ],
+        });
+        let image_layout = layout(&[
+            Some(&frame_layout),
+            Some(&lights_layout),
+            Some(&image_group),
+        ]);
         let output_pipeline_layout = layout(&[Some(&output_layout)]);
         let mesh_buffers = mesh_buffers();
         let mesh = |cull| {
@@ -2680,12 +2739,16 @@ impl Renderer {
             families: Families {
                 module,
                 draw_layout,
+                mark_layout,
                 text_layout,
+                image_layout,
+                image_group,
                 forward_z: planted.forward_z,
                 samples,
                 line: None,
                 point: None,
                 text: None,
+                image: None,
             },
             output_pipeline,
             output_f32,
@@ -2731,6 +2794,7 @@ impl Renderer {
             core: targets::Core::default(),
             velocity_frame: None,
             emission_frame: None,
+            normal_frame: None,
             batches: BTreeMap::new(),
             atlas: None,
             mask: (mask_layout, sampler),
@@ -2767,6 +2831,7 @@ impl Renderer {
             low_bytes: None,
             outlines,
             pre_tone: None,
+            origin: [0.0; 3],
             post_bind: None,
         }
     }
@@ -3412,15 +3477,22 @@ impl Renderer {
                 u.moon = v4(env::direction(az, el), radius.to_radians().cos());
             }
             let (h_top, h_density) = sky.fog_height.unwrap_or((0.0, 0.0));
-            let curve = match sky.fog_curve {
-                Curve::Exp => 0.0,
-                Curve::Exp2 => 1.0,
+            let (curve, near, far) = match sky.fog_curve {
+                Curve::Exp => (0.0, 0.0, 0.0),
+                Curve::Exp2 => (1.0, 0.0, 0.0),
+                Curve::Linear { near, far } => (2.0, near, far),
             };
             u.fog = [
                 sky.fog_density as f32,
                 curve,
                 h_top as f32,
                 h_density as f32,
+            ];
+            u.range = [
+                near as f32,
+                far as f32,
+                sky.background_intensity as f32,
+                0.0,
             ];
             u.fog_color = match sky.fog {
                 Fog::Color(c) => v4(c, 0.0),
@@ -3480,6 +3552,11 @@ impl Renderer {
                 0
             }
             | if self.planted.ids_ignore_mask { 8 } else { 0 }
+            | if self.planted.occlusion_from_slope {
+                OCCLUSION_FROM_SLOPE
+            } else {
+                0
+            }
             | if self.planted.local.filter_in_texels {
                 FILTER_IN_TEXELS
             } else {
@@ -3856,6 +3933,25 @@ impl Renderer {
     /// Takes the frame's scene: the uniforms, each batch's changed records, and the batches
     /// whose draw key changed encoded again. What it did is in [`Renderer::counts`].
     pub fn prepare(&mut self, device: &Device, scene: &Scene, look: &Look3) {
+        let placed = self.placed(scene);
+        self.prepare_placed(device, placed.as_ref().unwrap_or(scene), look);
+    }
+
+    /// #458: `scene` moved by its view's origin, which this keeps, so its positions reach the GPU
+    /// relative to that origin; `None` where it draws as it stands. The planted renderer uploads
+    /// every position as the world has it.
+    pub(crate) fn placed(&mut self, scene: &Scene) -> Option<Scene> {
+        let moved = if self.planted.absolute_positions {
+            None
+        } else {
+            origin::moved(scene)
+        };
+        self.origin = moved.as_ref().map_or([0.0; 3], |_| origin::of(scene));
+        moved
+    }
+
+    /// [`Renderer::prepare`] for a scene already placed about its origin.
+    fn prepare_placed(&mut self, device: &Device, scene: &Scene, look: &Look3) {
         self.crop = scene.crop;
         self.probe_ids = scene.probes.iter().map(|p| p.id.clone()).collect();
         // Level of detail at this view (#425): a scene whose solids still carry bands or mesh
@@ -3870,7 +3966,7 @@ impl Renderer {
                 shadow_texels(&chosen, side),
             );
             deep_canvas_scene3d::lod::resolve(&mut chosen, &choices);
-            return self.prepare(device, &chosen, look);
+            return self.prepare_placed(device, &chosen, look);
         }
         // #166: the water's parts draw in a pass of their own, after the mirror's view.
         if let Some(w) = scene.water.clone() {
@@ -3880,7 +3976,7 @@ impl Renderer {
                 for layer in &mut dry.layers {
                     layer.solids.retain(|s| !wet(s));
                 }
-                self.prepare(device, &dry, look);
+                self.prepare_placed(device, &dry, look);
                 self.prepare_water(device, scene, &w);
                 return;
             }
@@ -4281,9 +4377,10 @@ impl Renderer {
         };
         self.core.ensure(&device.device, size);
         let wanted = self.core.velocity.is_some();
-        self.velocity_frame = self
-            .motion
-            .target_frame(device, scene, wanted, &self.meshes, size);
+        let skip_elements = self.planted.instanced_skips_velocity;
+        self.velocity_frame =
+            self.motion
+                .target_frame(device, scene, wanted, &self.meshes, size, skip_elements);
         let draws: Vec<targets::EmissionDraw> = self
             .order
             .iter()
@@ -4307,6 +4404,52 @@ impl Renderer {
             self.lights_bind.clone(),
             self.ao.shade().clone(),
         ];
+        self.normal_frame = self.core.normal.is_some().then(|| {
+            // #458: each opaque solid's own record, so the target reads what the geometry drew;
+            // the planted path leaves out an instancer's elements, `<instancer>#<id>`.
+            let skip = self.planted.instances_skip_normal;
+            let winding = !self.planted.winding_ignores_determinant;
+            let (mut records, mut draws) = (Vec::new(), Vec::new());
+            for s in scene.layers.iter().flat_map(|l| &l.solids) {
+                let Some(mesh) = self.meshes.get(&s.shape) else {
+                    continue;
+                };
+                if s.cast_only || s.alpha < 1.0 || skip && s.id.contains('#') {
+                    continue;
+                }
+                let pick = self.picks.get(&s.id).copied().unwrap_or(0);
+                records.push(solid_record(s, pick, 0, winding, false, 0));
+                draws.push((mesh.vertices.clone(), mesh.indices.clone(), mesh.count));
+            }
+            if records.is_empty() {
+                records.push(SolidRecord::zeroed());
+            }
+            let instances = deep_gpu::alloc::outside(|| {
+                let buffer = device.device.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some("scene3d.normal instances"),
+                    size: std::mem::size_of_val(records.as_slice()) as u64,
+                    usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                    mapped_at_creation: false,
+                });
+                device
+                    .queue
+                    .write_buffer(&buffer, 0, bytemuck::cast_slice(&records));
+                buffer
+            });
+            targets::NormalFrame {
+                pipe: self
+                    .core
+                    .normal_pipe(device, &self.scene_module, &self.solid_layout),
+                binds: [
+                    self.frame_bind.clone(),
+                    self.lights_bind.clone(),
+                    self.ao.shade().clone(),
+                    self.maps.by_index(0).clone(),
+                ],
+                instances,
+                draws,
+            }
+        });
         let threshold = self.planted.emission_thresholds_color.then_some(&linear);
         self.emission_frame = self.core.emission_frame(
             device,
@@ -4331,9 +4474,15 @@ impl Renderer {
             .as_ref()
             .zip(self.core.emission.as_ref())
             .map(|(f, e)| (f.clone(), e.view.clone()));
-        (velocity.is_some() || emission.is_some()).then(|| CoreDraws {
+        let normal = self
+            .normal_frame
+            .as_ref()
+            .zip(self.core.normal.as_ref())
+            .map(|(f, n)| (f.clone(), n.view.clone()));
+        (velocity.is_some() || emission.is_some() || normal.is_some()).then(|| CoreDraws {
             velocity,
             emission,
+            normal,
             depth: t.depth_view.clone(),
         })
     }
@@ -4522,6 +4671,23 @@ impl Renderer {
         look: &Look3,
         moved: &[(usize, usize)],
     ) {
+        // #458: a view whose origin changed prepares whole, since every position did.
+        let was = self.origin;
+        let placed = self.placed(scene);
+        let scene = placed.as_ref().unwrap_or(scene);
+        if self.origin != was {
+            return self.prepare_placed(device, scene, look);
+        }
+        self.prepare_moved_placed(device, scene, look, moved);
+    }
+
+    fn prepare_moved_placed(
+        &mut self,
+        device: &Device,
+        scene: &Scene,
+        look: &Look3,
+        moved: &[(usize, usize)],
+    ) {
         self.crop = scene.crop;
         self.planted_per_item(device, scene);
         // See-through parts reorder as the camera moves, so a frame holding one prepares whole;
@@ -4536,7 +4702,7 @@ impl Renderer {
             || scene.mirror.is_some()
             || scene.water.is_some()
         {
-            return self.prepare(device, scene, look);
+            return self.prepare_placed(device, scene, look);
         }
         // A tie rank is a function of the frame, so a part whose rank the move changed rewrites
         // too, and a frame draws the same however it was reached (#149, #450).
@@ -4555,7 +4721,7 @@ impl Renderer {
             };
             match index {
                 Some(k) => lobes.push(k),
-                None => return self.prepare(device, scene, look),
+                None => return self.prepare_placed(device, scene, look),
             }
         }
         let generation = self.ao.generation;
@@ -5277,7 +5443,7 @@ impl Renderer {
             saturation: look.grade.saturation as f32,
             graded: u32::from(!look.grade.is_identity()),
             top: 1.0,
-            _pad: [0; 3],
+            _pad: [u32::from(self.planted.exposure_after_tone_map), 0, 0],
             wb: look
                 .grade
                 .white_balance()
@@ -5488,14 +5654,19 @@ impl Renderer {
                 s,
                 clear(s) && !matches!(kind_of(s), BLEND | FADE | GLASS),
             );
-            // A terrain tile's pixels read its plate's full-detail normals (#2017).
-            let terrain = s.mesh.as_ref().and_then(|m| m.terrain.as_deref());
+            // A terrain tile's pixels read its plate's full-detail normals (#2017) and a terrain
+            // plate's its horizon table (#1381).
+            let mut terrain = crate::maps::Ground::of(s.mesh.as_deref());
+            // #1381's planted plate: its table is never read.
+            if self.planted.horizon_unbaked {
+                terrain.horizon = None;
+            }
             let maps = match (&s.maps, &s.material) {
                 (Some(m), Some(_)) => {
                     self.maps
                         .group(&device.device, &device.queue, m, taps, terrain)
                 }
-                _ if terrain.is_some() => self.maps.group(
+                _ if !terrain.is_none() => self.maps.group(
                     &device.device,
                     &device.queue,
                     &light::Maps::default(),
@@ -5603,6 +5774,38 @@ impl Renderer {
         for l in &layer.labels {
             self.pick(&l.id);
         }
+        for i in &layer.images {
+            self.pick(&i.id);
+        }
+        // Each image mark's picture with the labels' sampler (#1992): its texels once the host
+        // made them ready, the white stand-in until then; made again only when one changes.
+        let held = &self.batches[&layer.id].image_binds;
+        let stale = held.len() != layer.images.len()
+            || held.iter().zip(&layer.images).any(|((_, sha, ready), i)| {
+                *sha != i.asset || *ready != self.maps.texels.contains_key(&i.asset)
+            });
+        let image_binds = stale.then(|| {
+            let made = |i: &deep_canvas_scene3d::scene::Image| {
+                let ready = self.maps.texels.contains_key(&i.asset);
+                let view = self.maps.view_of(&device.device, &device.queue, &i.asset);
+                let bind = device.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("scene3d image"),
+                    layout: &self.families.image_group,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: wgpu::BindingResource::Sampler(&self.mask.1),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 2,
+                            resource: wgpu::BindingResource::TextureView(&view),
+                        },
+                    ],
+                });
+                (bind, i.asset.clone(), ready)
+            };
+            layer.images.iter().map(made).collect::<Vec<_>>()
+        });
         let picks = &self.picks;
         let batch = self.batches.get_mut(&layer.id).expect("made above");
         for set in batch.solids.values_mut().chain(batch.casters.values_mut()) {
@@ -5828,7 +6031,8 @@ impl Renderer {
                         | (u32::from(l.joined) << 3)
                         | (u32::from(l.dash_world) << 4)
                         | (u32::from(seg.hidden) << 5)
-                        | (deep_canvas_scene3d::points::cap_bits(l, k) << 6),
+                        | (deep_canvas_scene3d::points::cap_bits(l, k) << 6)
+                        | (u32::from(l.fog) << 9),
                     dash: half_bits(l.dash[0]) | (half_bits(l.dash[1]) << 16),
                     fade: l
                         .trail
@@ -5864,7 +6068,7 @@ impl Renderer {
                 p: v4(p.pos, p.size),
                 color: pack(p.color),
                 pick: picks[&p.id],
-                flags: u32::from(p.world) | (shape << 1),
+                flags: u32::from(p.world) | (shape << 1) | (u32::from(p.fog) << 3),
                 pad: 0,
             };
             batch.points.push(&p.id, bytemuck::bytes_of(&record));
@@ -5892,7 +6096,8 @@ impl Renderer {
                     flags: u32::from(l.world)
                         | (facing << 1)
                         | (a.page << 3)
-                        | if l.world || self.planted.labels_before_upscale {
+                        | (u32::from(l.fog) << 9)
+                        | if l.world || l.fog || self.planted.labels_before_upscale {
                             0
                         } else {
                             LATER
@@ -5903,6 +6108,32 @@ impl Renderer {
             }
         }
         batch.labels.finish(device, &mut next, &mut written);
+        batch.images.begin();
+        for i in &layer.images {
+            let facing = match i.facing {
+                Facing::Camera => 0,
+                Facing::Upright => 1,
+                Facing::Fixed => 2,
+            };
+            let [w, h] = i.size.map(|s| s as f32);
+            let record = TextRecord {
+                p: v4(i.pos, 1.0),
+                rect: [-w / 2.0, -h / 2.0, w, h],
+                uv: [0.0, 0.0, 1.0, 1.0],
+                right: v4(i.axes[0], 0.0),
+                up: v4(i.axes[1], 0.0),
+                color: pack([255; 3]),
+                pick: picks[&i.id],
+                flags: u32::from(i.world) | (facing << 1) | (u32::from(i.fog) << 9),
+                pad: 0,
+            };
+            batch.images.push(&i.id, bytemuck::bytes_of(&record));
+        }
+        batch.images.finish(device, &mut next, &mut written);
+        if let Some(binds) = image_binds {
+            batch.image_binds = binds;
+            batch.image_made += 1;
+        }
         self.next_generation = next;
         self.counts.instances_written += written;
 
@@ -5930,6 +6161,15 @@ impl Renderer {
                     .next_key
                     .extend([family, set.generation, u64::from(set.len())]);
             }
+        }
+        // The image marks' draws bind their pictures, so a picture made again is a new resource.
+        if batch.images.len() > 0 {
+            batch.next_key.extend([
+                14,
+                batch.images.generation,
+                u64::from(batch.images.len()),
+                batch.image_made,
+            ]);
         }
         batch.next_key.extend(clouds::key(&batch.clouds));
         if !batch.clear_draws.is_empty() {
@@ -6289,8 +6529,16 @@ impl Renderer {
         ) {
             enc.set_pipeline(pipeline);
             enc.set_vertex_buffer(0, buffer.slice(..));
-            enc.set_bind_group(1, &atlas.bind, &[]);
+            enc.set_bind_group(2, &atlas.bind, &[]);
             enc.draw(0..6, 0..batch.labels.len());
+        }
+        if let (Some(buffer), Some(pipeline)) = (&batch.images.buffer, &self.families.image) {
+            enc.set_pipeline(pipeline);
+            enc.set_vertex_buffer(0, buffer.slice(..));
+            for (k, (bind, ..)) in (0..batch.images.len()).zip(&batch.image_binds) {
+                enc.set_bind_group(2, bind, &[]);
+                enc.draw(0..6, k..k + 1);
+            }
         }
         let bundle = enc.finish(&wgpu::RenderBundleDescriptor { label: Some(id) });
         (bundle, calls)
@@ -7965,6 +8213,34 @@ impl Renderer {
         )
     }
 
+    /// #458: the normal target, f32 RGBA a pixel (the world normal, 1 where a solid shows), rows
+    /// top-down; `None` in a frame that doesn't build it.
+    pub fn read_geometry_normal(&self, device: &Device) -> Option<Vec<u8>> {
+        let (t, n) = self.targets.as_ref().zip(self.core.normal.as_ref())?;
+        let half = read_texture(device, &n.texture, t.size, 8)?;
+        Some(
+            half.as_chunks::<2>()
+                .0
+                .iter()
+                .flat_map(|h| f16_to_f32(u16::from_le_bytes(*h)).to_le_bytes())
+                .collect(),
+        )
+    }
+
+    /// #458: view3d's `velocity` target, f32 x, y a pixel, rows top-down: the core's velocity
+    /// target as this frame built it; `None` in a frame that doesn't build it.
+    pub fn read_velocity(&self, device: &Device) -> Option<Vec<u8>> {
+        let (t, v) = self.targets.as_ref().zip(self.core.velocity.as_ref())?;
+        let half = read_texture(device, &v.texture, t.size, 4)?;
+        Some(
+            half.as_chunks::<2>()
+                .0
+                .iter()
+                .flat_map(|h| f16_to_f32(u16::from_le_bytes(*h)).to_le_bytes())
+                .collect(),
+        )
+    }
+
     /// #166: view3d's `depth` target, f32 a pixel, rows top-down: at each pixel's centre, the
     /// distance in m along the view axis from the eye to what the depth target holds there;
     /// infinite where nothing is drawn.
@@ -8451,6 +8727,7 @@ fn per_pixel_pass(
 struct CoreDraws {
     velocity: Option<(motion::TargetFrame, wgpu::TextureView)>,
     emission: Option<(targets::EmissionFrame, wgpu::TextureView)>,
+    normal: Option<(targets::NormalFrame, wgpu::TextureView)>,
     depth: wgpu::TextureView,
 }
 
@@ -8460,6 +8737,9 @@ impl CoreDraws {
             f.record(encoder, view, &self.depth);
         }
         if let Some((f, view)) = &self.emission {
+            f.record(encoder, view, &self.depth);
+        }
+        if let Some((f, view)) = &self.normal {
             f.record(encoder, view, &self.depth);
         }
     }

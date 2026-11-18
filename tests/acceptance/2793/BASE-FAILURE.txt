@@ -1,0 +1,139 @@
+Acceptance tests for #2793, run on the base commit 0f34aacbe0b9d607dc64bff279c771701bab68c6 (main; no fix for #2793).
+
+Command:  node node_modules/vitest/vitest.mjs run --root tests/acceptance/2793 --no-file-parallelism
+          (with CLAUDECODE and AI_AGENT unset and NO_COLOR=1)
+Node:     v24.22.0
+Vitest:   5.0.5 linux-arm64
+Date:     2026-11-17
+Machine:  the Spark, 1-minute load about 115, so the durations below say nothing about speed
+
+Result: 1 of 1 file fails; 4 of 5 tests fail and 1 passes; nothing is skipped.
+
+Why each fails, all for the expected reason (hub-slots.json has no row for deep.registerPort):
+- AC1 x2: "rows for deep.registerPort in hub-slots.json: expected +0 to be 1".
+- AC2 x1: scripts/slots-check.mjs exits 1 with "FAIL slots: deep.registerPort, -: deep.registerPort has 0 rows in
+  the hub-slot table; a slot the API publishes needs exactly one".
+- AC3 "vitest runs its four cases and each passes": #349's "AC5 the published contract passes the preflight's slot
+  check" fails with that same FAIL line; its other three cases pass.
+The one that passes is AC3's guard, "the file and what it imports are the base commit's, byte for byte": at the
+base they are. It fails only when a change edits them.
+
+Type check (tsc -p tests/acceptance/2793/tsconfig.json): not run.
+
+Output, with the checkout's path shortened to <repo>:
+
+
+ RUN  v5.0.5 <repo>/tests/acceptance/2793
+
+ ❯ slot-row.test.ts (5 tests | 4 failed) 145643ms
+   ❯ #2793 AC1 packages/contracts/hub-slots.json has exactly one row for deep.registerPort, as the design's slot table gives it (2)
+     × AC1 one row: interface port@1 at its frozen digest, fills "many, at most 8 on a document", a kit, and a planted wrong fill that sends on a seek 14ms
+     × AC1 the row's kit ships in the conformance package and refuses each planted fill; (wrong program) the same kit admitting the seek fill is refused, naming the fill 1035ms
+   ❯ #2793 AC2 node scripts/slots-check.mjs exits 0 and prints PASS slots, with no line naming deep.registerPort (1)
+     × AC2 the slot check on the shipped contract 39483ms
+   ❯ #2793 AC3 tests/acceptance/349/slot-table.test.ts passes, all four cases, unchanged (2)
+     ✓ AC3 the file and what it imports are the base commit's, byte for byte 6ms
+     × AC3 vitest runs its four cases and each passes 105092ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  slot-row.test.ts > #2793 AC1 packages/contracts/hub-slots.json has exactly one row for deep.registerPort, as the design's slot table gives it > AC1 one row: interface port@1 at its frozen digest, fills "many, at most 8 on a document", a kit, and a planted wrong fill that sends on a seek
+AssertionError: rows for deep.registerPort in hub-slots.json: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ slot-row.test.ts:36:63
+     34|   it('AC1 one row: interface port@1 at its frozen digest, fills "many,…
+     35|     const rows = portRows();
+     36|     expect(rows.length, `rows for ${PORT} in hub-slots.json`).toBe(1);
+       |                                                               ^
+     37|     const row = rows[0]!;
+     38|     expect(row.variant, 'the published API names no variant for it').t…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  slot-row.test.ts > #2793 AC1 packages/contracts/hub-slots.json has exactly one row for deep.registerPort, as the design's slot table gives it > AC1 the row's kit ships in the conformance package and refuses each planted fill; (wrong program) the same kit admitting the seek fill is refused, naming the fill
+AssertionError: rows for deep.registerPort in hub-slots.json: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ slot-row.test.ts:53:63
+     51|     const rows = portRows();
+     52|     expect(api.length, `${PORT} is in the published extension API`).to…
+     53|     expect(rows.length, `rows for ${PORT} in hub-slots.json`).toBe(1);
+       |                                                               ^
+     54|     const row = rows[0]!;
+     55|     expect(slotProblems(api, rows, [...slotKits(), ...kits()]), 'the s…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  slot-row.test.ts > #2793 AC2 node scripts/slots-check.mjs exits 0 and prints PASS slots, with no line naming deep.registerPort > AC2 the slot check on the shipped contract
+AssertionError: FAIL slots: deep.registerPort, -: deep.registerPort has 0 rows in the hub-slot table; a slot the API publishes needs exactly one
+
+: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ slot-row.test.ts:71:27
+     69|     const r = spawnSync(NODE, [SLOTS_CHECK], { cwd: REPO, encoding: 'u…
+     70|     const out = `${r.stdout ?? ''}\n${r.stderr ?? ''}`;
+     71|     expect(r.status, out).toBe(0);
+       |                           ^
+     72|     expect(r.stdout).toMatch(/^PASS slots/m);
+     73|     expect(out.split('\n').filter((line) => line.includes(PORT)), 'lin…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  slot-row.test.ts > #2793 AC3 tests/acceptance/349/slot-table.test.ts passes, all four cases, unchanged > AC3 vitest runs its four cases and each passes
+AssertionError: cases that did not pass: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "failed: AC5 the published contract passes the preflight's slot check, which the lint lane runs
++ AssertionError: FAIL slots: deep.registerPort, -: deep.registerPort has 0 rows in the hub-slot table; a slot the API publishes needs exactly one
++
++ : expected 1 to be +0 // Object.is equality
++     at <repo>/tests/acceptance/349/slot-table.test.ts:22:59
++     at file://<repo>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:1632:35
++     at file://<repo>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:2801:26
++     at file://<repo>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:3338:20
++     at new Promise (<anonymous>)
++     at runWithCancel (file://<repo>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:3333:10)
++     at file://<repo>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:3318:20
++     at new Promise (<anonymous>)
++     at runWithTimeout (file://<repo>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:3276:10)
++     at file://<repo>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:3904:64",
++ ]
+
+ ❯ slot-row.test.ts:106:154
+    104|     const cases = files[0]!.assertionResults;
+    105|     expect(cases.length, 'cases collected').toBe(4);
+    106|     expect(cases.filter((c) => c.status !== 'passed').map((c) => `${c.…
+       |                                                                                                                                                          ^
+    107|     expect(r.status, out).toBe(0);
+    108|   }, 920_000);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed | 1 passed (5)
+   Start at  16:33:54
+   Duration  149.05s (tests 98%, transform 1%)
+
+

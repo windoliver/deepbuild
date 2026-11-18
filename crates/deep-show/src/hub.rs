@@ -219,6 +219,8 @@ pub enum Planted {
     KitDefaultsOnly,
     /// #202: the expander walks an instance's inputs in a hash map's order.
     ExpandsInHashOrder,
+    /// #458: a recipe's expansion drops one derived item's stroke.
+    ExpansionDropsStroke,
     /// #1956: the pack check of a kind's migration stops at its first fault.
     MigrationFirstFault,
     /// #1959: the loader takes one saved major for the whole document.
@@ -404,6 +406,14 @@ pub enum Planted {
     DropFrameEveryTenthMinute,
     /// #499: a canonical seek decodes its frame from the asset's short-GOP proxy.
     SeekReadsProxy,
+    /// #210: a port sends the steps a seek plays again.
+    PortSendsOnSeek,
+    /// #210: a mute silences the plug-in's output and leaves a sound port's out side sending.
+    MuteLeavesPortSending,
+    /// #210: the gate trusts the document's sound flag over the plug-in's port.
+    GateTrustsDocumentSound,
+    /// #210: the web export writes a port into its bundle.
+    WebExportKeepsPort,
     /// #498: the gate trusts a shipped panel: its own request to play sounds.
     ShippedPanelsUngated,
     /// #498: the reserved-sound comparer refuses only an asset whose hash is a reserved sound's.
@@ -678,12 +688,6 @@ pub enum Body {
     Undo { patch: String, of: String },
 }
 
-pub struct PatchCall {
-    pub via: Via,
-    pub doc: String,
-    pub body: Body,
-}
-
 mod call;
 pub use call::*;
 
@@ -794,6 +798,8 @@ pub struct Hub<'a> {
     pub media: crate::media::Media,
     /// The device gate's owners and their voices (#498).
     pub gate: crate::gate::Gate,
+    /// #210: the plug-ins' ports, their state and the pieces playing under them.
+    pub ports: crate::ports::Ports,
     /// The card's `rearm_on` changes the scenario reported, each when (#327).
     pub card_rearms: Vec<i64>,
     /// A press down the card holds until its release: its platform stamp and its option (#327).
@@ -826,7 +832,7 @@ pub enum PressPhase {
 }
 
 /// The planted check's coefficients for `machine` (the hub's, or this one's): the reference
-/// Mac's on a reference Mac, and scaled by its own speed anywhere else.
+/// Mac's on a Mac of `reference-macs.json`, `scripts/benchmark.mjs`'s list, and scaled anywhere else.
 fn machine_factor(machine: Option<&Map<String, Value>>) -> f64 {
     let model = match machine.and_then(|m| m.get("model")).and_then(Value::as_str) {
         Some(m) => m.to_string(),
@@ -836,11 +842,9 @@ fn machine_factor(machine: Option<&Map<String, Value>>) -> f64 {
             .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
             .unwrap_or_default(),
     };
-    if ["Mac15,7", "Mac15,12"].contains(&model.as_str()) {
-        1.0
-    } else {
-        1.6
-    }
+    let macs = include_str!("../reference-macs.json");
+    let macs: Vec<String> = serde_json::from_str(macs).expect("the reference Macs' list parses");
+    [1.6, 1.0][usize::from(macs.contains(&model))]
 }
 
 /// The look render-back draws in: the shipped clean look, light.
@@ -896,6 +900,7 @@ impl<'a> Hub<'a> {
         }
         let pack_planted = PackPlanted {
             seed_by_order: scenario.planted == Some(Planted::SeedsByExpansionOrder),
+            drops_stroke: scenario.planted == Some(Planted::ExpansionDropsStroke),
             overwrite_broken_out: scenario.planted == Some(Planted::ReexpansionOverwritesBrokenOut),
             skip_requires_modules: scenario.planted == Some(Planted::PackCheckSkipsRequiresModules),
             key_by_name: matches!(
@@ -990,11 +995,12 @@ impl<'a> Hub<'a> {
             ),
             media: crate::media::Media::default(),
             gate: crate::gate::Gate::default(),
+            ports: crate::ports::Ports::default(),
             card_rearms: Vec::new(),
             card_down: None,
             card_answer: None,
             present: None,
-            sandbox: crate::sandbox::Host::planted(startup.layouts),
+            sandbox: crate::sandbox::Host::new(startup, scenario),
             vias: BTreeMap::new(),
             shapings: HashMap::new(),
         };
@@ -1256,10 +1262,10 @@ impl<'a> Hub<'a> {
         }
     }
 
-    /// Each `logic@1` item's program, inlined from the evidence store by its hash as
-    /// `params.wasm` (base64), which the logic module's steps run (#533), as the web player inlines
-    /// the bundle's (#172).
+    /// Each provider's output by its hash (#192), then each `logic@1` item's program inlined from
+    /// the evidence store as `params.wasm` (base64) for the logic module's steps (#533, #172).
     pub(crate) fn inline_programs(&self, form: &mut Value) {
+        self.sandbox.fill(&self.startup.sealed, form);
         let root = &self.scenario.evidence;
         deep_play::logic::inline_programs(form, &|sha| {
             std::fs::read(root.join(&sha[..2]).join(&sha[2..])).ok()
@@ -1550,6 +1556,8 @@ impl<'a> Hub<'a> {
             Call::ExportRun(job) => self.export_run(job),
             Call::Session { doc, set } => self.session_reply(doc, set.as_ref()),
             Call::FrameHash { frames, software } => self.frame_hash(frames, *software),
+            Call::FramePlanes { frames, software } => self.frame_planes(frames, *software),
+            Call::EncodeQualify(tool) => self.encode_qualify(tool),
             Call::CrossMachine(wavs) => self.cross_machine(wavs),
             Call::PixelHash(frames) => self.pixel_hash(frames),
             Call::Play {
@@ -1605,15 +1613,18 @@ impl<'a> Hub<'a> {
                 event,
                 t,
                 gesture,
-            } => match self.ring_input(panel, event) {
+            } => match self.join_or_press(panel, event, gesture) {
                 Some(reply) => reply,
-                None => self
-                    .live_press(panel, event, *t)
-                    .err()
-                    .unwrap_or_else(|| self.input(panel, event, gesture)),
+                None => match self.ring_input(panel, event) {
+                    Some(reply) => reply,
+                    None => self
+                        .live_press(panel, event, *t)
+                        .err()
+                        .unwrap_or_else(|| self.input(panel, event, gesture)),
+                },
             },
             Call::World { doc, world } => self.world_call(doc, world),
-            Call::Match { doc, steps } => self.match_call(doc, *steps),
+            Call::Net(c) => self.net_call(c),
             Call::Scope(panel) => self.scope_reply(panel),
             Call::Presented(panel) => self.presented(panel),
             Call::PopOut {
@@ -1705,7 +1716,11 @@ impl<'a> Hub<'a> {
             Call::Gate(g) => self.gate_call(g),
             Call::Present(p) => self.present_call(p),
             Call::Mix(m) => self.mix_call(m),
-            Call::Audio(a) => self.audio_call(a),
+            Call::Audio(a) => match self.piece_audio(a) {
+                Some(reply) => reply,
+                None => self.audio_call(a),
+            },
+            Call::Ports(p) => self.ports_call(p),
             Call::RuntimeGolden(g) => self.golden_call(g),
             Call::Term(t) => self.term_call(t),
         };

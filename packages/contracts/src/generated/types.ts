@@ -6477,6 +6477,46 @@ export interface JobEnded {
   evidence?: Array<string>;
 }
 
+/** job.ended@2 */
+export interface JobEndedV2 {
+  v: 2;
+  id: string;
+  kind: "job.ended";
+  subject?: string;
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    job: string;
+    state: string;
+    refused?: string;
+    cause?: string;
+    session?: string;
+    model?: string;
+    binary?: {
+      path: string;
+      version: string;
+    };
+    usage?: {
+      input: number;
+      cached: number;
+      output: number;
+    };
+    cost_usd?: number;
+    lingered?: Array<string>;
+    from?: number;
+    to?: number;
+    pid?: number;
+    pgid?: number;
+    start?: string;
+    result?: string;
+  };
+  evidence?: Array<string>;
+}
+
 /** job.event@1 */
 export interface JobEvent {
   v: 1;

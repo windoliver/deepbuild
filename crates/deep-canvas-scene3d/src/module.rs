@@ -120,6 +120,11 @@ fn str_param(name: &'static str, default: &str) -> Param {
     param(name, ParamType::Str, json!(default))
 }
 
+/// A mark's `fog` (Marks in 3D; #1992): whether the sky's fog applies to it.
+fn fog(default: bool) -> Param {
+    param("fog", ParamType::Json("bool"), json!(default))
+}
+
 fn kind(name: &'static str, params: Vec<Param>) -> Entry {
     Entry {
         family: "mark",
@@ -250,7 +255,7 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
                 // A line of a mesh's edges in place of points (Marks in 3D: mesh edges; #420).
                 json_param("edges", crate::spec::EDGES),
                 // Marks in 3D: whether the sky's fog applies to it (#537's live lines set false).
-                json_param("fog", "bool"),
+                fog(true),
             ]),
         ),
         &[],
@@ -267,6 +272,7 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
                     "from",
                     "video {asset, frames, depth: luma | r, near, far, fov: [deg, deg], step}",
                 ),
+                fog(true),
             ]),
         ),
         &[],
@@ -280,6 +286,22 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
                 str_param("font", "body"),
                 json_param("size", "px | m"),
                 str_param("facing", "camera"),
+                fog(false),
+            ]),
+        ),
+        &[],
+        "",
+    );
+    // A picture on one quad (Marks in 3D; #1992), by hash as Image `image@1` names one.
+    r.kind(
+        kind(
+            "image",
+            common(vec![
+                json_param("asset", "sha256"),
+                str_param("alt", ""),
+                json_param("size", "[w, h]"),
+                str_param("facing", "camera"),
+                fog(true),
             ]),
         ),
         &[],
@@ -485,6 +507,20 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
         "codes": [],
         "covers": {"kinds": ["instance@1"], "fields": ["instance@1/params/of", "instance@1/params/from"]},
     }));
+    // #2363: the same rest with a moving support, and a time-dependent builder.
+    let mut moving = garden();
+    moving["channels"] = json!({"lift": {"target": "items/table/at/pos/1", "type": "f32",
+        "keys": {"k0": {"t": "0s", "value": 0, "interp": "linear"},
+                 "k1": {"t": "1s", "value": 0.2, "interp": "linear"}}}});
+    moving["items"]["flower"]["modifiers"] = json!([
+        {"kind": "mod.bob@1", "params": {"amount": 0.1, "hz": 1}}
+    ]);
+    r.fixture("moving-garden", moving, None)
+        .sidecar(json!({"codes": []}));
+    // #2363: motion's arrangement operators get their nodes here, since the solids an
+    // arrangement places are this module's and the r1 set holds motion without them.
+    r.fixture("arrangement", arrangement(), None)
+        .sidecar(json!({"codes": []}));
     // #2013: a ball told to rest on a shelf it doesn't stand over, which raises `no_support`.
     r.fixture("rest-no-support", unsupported(), None)
         .planted()
@@ -547,6 +583,23 @@ pub fn garden() -> Value {
                        "params": {"of": ["bush", "flower"], "from": {"distribute": {
                            "on": "ground", "mode": "poisson", "min_distance": 0.5, "margin": 0.5,
                            "prune": "larger_first", "avoid": ["table"], "seed": 2013}}}}
+        }
+    })
+}
+
+/// A small box an `arrange@1` places near a larger one, without passing into it.
+fn arrangement() -> Value {
+    json!({
+        "format": 1, "profile": "figure", "title": "Two arranged boxes",
+        "description": "A small box placed near a larger one without passing into it.",
+        "size": [320, 200], "requires": {"modules": {"scene3d": "^1", "motion": "^1"}},
+        "items": {
+            "fixed": {"id": "fixed", "kind": "mark.box@1", "name": "Fixed", "order": "a0",
+                "params": {"size": [1, 1, 1]}},
+            "near": {"id": "near", "kind": "mark.box@1", "name": "Near", "order": "a1",
+                "params": {"size": [0.4, 0.4, 0.4]}, "at": {"pos": [3, 0, 0]}},
+            "set": {"id": "set", "kind": "arrange@1", "name": "Arrangement", "order": "a2",
+                "params": {"items": ["near"], "relations": [{"a": "near", "rel": "near", "b": "fixed", "d": 0.5}]}}
         }
     })
 }

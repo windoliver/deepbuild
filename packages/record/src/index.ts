@@ -102,8 +102,12 @@ export interface RecordStore {
   append(connection: Connection, event: EventInput, receipt?: Receipt): Promise<Appended>;
   /** A write's outcome on its receipt, the receipt kept alone when no event carried it (#1577). */
   keepReceipt(receipt: Receipt, outcome: JsonValue): Promise<void>;
-  /** Events after a log position, in log order; `kinds`: only those kinds, the rest never decoded. */
-  read(query: { after: number; limit?: number; kinds?: readonly string[] }): Promise<Event[]>;
+  /**
+   * Events after a log position, in log order; `kinds`: only those kinds, the rest never decoded. Each kind is sought
+   * through the kind index, which suits a few rare kinds; `most` says the kinds are most of the log, so it is walked in
+   * order and each event's kind tested, where seeking them would sort every later event of theirs for each page (#2646).
+   */
+  read(query: { after: number; limit?: number; kinds?: readonly string[]; most?: boolean }): Promise<Event[]>;
   table(name: string): Promise<Table>;
   session(id: string): Promise<SessionView | undefined>;
   rebuild(): Promise<void>;
@@ -111,6 +115,11 @@ export interface RecordStore {
   sync(): Promise<void>;
   /** One read-only SELECT; each `?` in it takes the next of `params`, bound, never written into the text. */
   raw(sql: string, params?: readonly (string | number | bigint | null)[]): Promise<unknown[]>;
+  /**
+   * raw's SELECT, a row at a time as the caller takes each, so no row it has passed is held (#2652). Nothing else reads
+   * or writes the record until the last is taken or the caller's loop ends.
+   */
+  rows(sql: string, params?: readonly (string | number | bigint | null)[]): Iterable<unknown>;
   /** What a session reads at its start, and, for the rules you typed, at its next prompt (#62). */
   startSlice(session: string): Promise<SliceEntry[]>;
   /**
@@ -234,6 +243,7 @@ CREATE TABLE IF NOT EXISTS events (
   unverified  INTEGER NOT NULL DEFAULT 0
 ) STRICT;
 CREATE INDEX IF NOT EXISTS events_session ON events (session_id, log_pos);
+CREATE INDEX IF NOT EXISTS events_session_bounds ON events (session_id, log_pos) WHERE kind IN ('session.start', 'session.end');
 CREATE INDEX IF NOT EXISTS events_kind ON events (kind, log_pos);
 CREATE TRIGGER IF NOT EXISTS events_no_update BEFORE UPDATE ON events BEGIN SELECT RAISE(ABORT, 'events is append-only: no UPDATE'); END;
 CREATE TRIGGER IF NOT EXISTS events_no_delete BEFORE DELETE ON events BEGIN SELECT RAISE(ABORT, 'events is append-only: no DELETE'); END;
@@ -293,7 +303,7 @@ class SqliteRecord implements RecordStore {
   private readonly db: Db;
   /** Statements on `events` and `meta`, which no rebuild drops, compiled once: appends run them per event. */
   private readonly statements = new Map<string, Statement<unknown[]>>();
-  /** raw()'s read statements, the READS_KEPT most recently used, compiled once: SQLite recompiles one whose tables a rebuild replaced. */
+  /** raw()'s and rows()' read statements, the READS_KEPT most recently used, compiled once: SQLite recompiles one whose tables a rebuild replaced. */
   private readonly reads = new Map<string, Statement<unknown[]>>();
   private readonly backend: Backend;
   private readonly projector: Projector;
@@ -764,8 +774,8 @@ class SqliteRecord implements RecordStore {
 
   // ---- Reads.
 
-  async read({ after, limit = 1000, kinds }: { after: number; limit?: number; kinds?: readonly string[] }): Promise<Event[]> {
-    const only = kinds ? ` AND kind IN (SELECT value FROM json_each(?))` : '';
+  async read({ after, limit = 1000, kinds, most }: { after: number; limit?: number; kinds?: readonly string[]; most?: boolean }): Promise<Event[]> {
+    const only = kinds ? ` AND ${most ? '+' : ''}kind IN (SELECT value FROM json_each(?))` : '';
     const rows = this.stmt(`SELECT * FROM events WHERE log_pos > ?${only} ORDER BY log_pos LIMIT ?`).safeIntegers(true)
       .all(after, ...(kinds ? [JSON.stringify(kinds)] : []), limit) as StoredRow[];
     return rows.map(toEvent);
@@ -844,6 +854,12 @@ class SqliteRecord implements RecordStore {
 
   /** Reads only: a statement that would write, the log's triggers and tables included, is refused. */
   async raw(sql: string, params: readonly (string | number | bigint | null)[] = []): Promise<unknown[]> {
+    return this.reading(sql).all(...params);
+  }
+  rows(sql: string, params: readonly (string | number | bigint | null)[] = []): Iterable<unknown> {
+    return this.reading(sql).iterate(...params);
+  }
+  private reading(sql: string): Statement<unknown[]> {
     // Refused before it is prepared: SQLite runs a PRAGMA while compiling it, so a check after prepare is too late.
     if (!/^\s*(SELECT|WITH)\b/i.test(sql) || /;\s*\S/.test(sql)) throw new RecordError('storage', 'raw SQL reads the record with one SELECT; it never writes it');
     let statement = this.reads.get(sql);
@@ -855,7 +871,7 @@ class SqliteRecord implements RecordStore {
     }
     // Most recently used last, so the oldest goes first.
     this.reads.set(sql, statement);
-    return statement.all(...params);
+    return statement;
   }
 
   async startSlice(session: string): Promise<SliceEntry[]> {

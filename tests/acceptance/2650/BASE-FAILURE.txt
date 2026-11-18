@@ -1,0 +1,136 @@
+# #2650 acceptance tests on the base commit 3cf41958f, 2026-11-17, Node v24.22.2, on the shared Mac this job ran on
+# (Mac17,10, Apple M5 Max, 64 GiB, thermal state "fair", one-minute load between about 40 and 600 over the runs).
+# Paths under the worktree read <repo>; temp folders read /tmp/dh2650-….
+#
+# Run here, as the brief allows: only the files that finish in a few minutes, each once on the final code. Not run:
+# cycles.test.ts (AC1's reading and AC6: 200 benchmark cycles, about 10 minutes here), jobs.test.ts's 10,000-job test
+# (about 15 to 20 minutes) and budgets.long.test.ts (by hand, on a reference Mac in a fit state). What the base gives
+# each of those instead is below, from the benchmark and the record read directly.
+#
+# Expected at the base: the benchmark makes none of the four calls and prints no `stores`; no hub knows the four
+# DEEP_HUB_PLANT names, so a planted hub stops at its start; the host and the runner ignore plant names they don't know;
+# the base never lets a request ID or an ended job go, so AC3's retry is answered from memory and, past 64 ended jobs,
+# the runner still answers a job's whole output where the issue drafts ''. AC5 holds today's behavior and names no
+# plant: it passes at the base, and fails on two mutants of it.
+
+## Setup
+npm ci --no-audit --no-fund; npm run build --workspaces
+CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 cargo build --locked -q -p deep-hook
+# Without deep-hook the hub's core stops ("no deep-hook is built under <repo>/target; run cargo build -p deep-hook
+# first") while its socket still answers hello, and the benchmark reads BLOCKED: "events.read: nothing within 60 s",
+# or, on an earlier try, "Runtime.evaluate: Cannot find context with specified id".
+
+## node node_modules/typescript/bin/tsc -p tests/acceptance/2650/tsconfig.json    (exit 2)
+tests/acceptance/2650/jobs.test.ts(49,39): error TS2345: Argument of type '"empty-output-inside-bound"' is not assignable to parameter of type 'Plant | undefined'.
+tests/acceptance/2650/retries.test.ts(44,29): error TS2345: Argument of type '"forgets-request-runs-again"' is not assignable to parameter of type 'Plant | undefined'.
+# The two plant names the base's runner and host don't have; nothing else.
+
+## AC5: npx vitest run replay.test.ts --root tests/acceptance/2650 --no-file-parallelism --testTimeout=600000
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Duration  22.23s
+# The base passes: 7 calls made live, the recording holds all 7 (two polled readings, the search, the thumbnail's
+# bytes, the asset's two ranges, the third reading), and each replays byte for byte with the network refusing all.
+
+## AC5 on two mutants of the base's packages/extension-host/src/sources.ts, each run once, then reverted with
+## `git checkout -- packages/extension-host/src/sources.ts`; never committed
+# Mutant A, a recording that keeps a binary call's file reference but gives it no bytes (in recording(),
+# `answer.body = ''` where the referenced bytes were read back):
+#2650 AC5: 7 calls made live; the recording holds 7: [...]
+Error: /files/asset.bin: invalid_range_response
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+# Mutant B, a recording that stops keeping calls after three (in call(), `else if (this.recorded.length < 3)`):
+#2650 AC5: 7 calls made live; the recording holds 5: [...]
+AssertionError: the recording holds every call the host made, in order: expected [ …(5) ] to deeply equal [ …(7) ]
+  [
+    "GET https://api.feeds.example/level",
+    "GET https://api.feeds.example/level",
+    "GET https://files.feeds.example/api/search?q=crate",
+-   "GET https://files.feeds.example/files/thumb.bin",
+    "GET https://files.feeds.example/files/asset.bin bytes=0-1048575",
+    "GET https://files.feeds.example/files/asset.bin bytes=1048576-1572863",
+-   "GET https://api.feeds.example/level",
+  ]
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+
+## AC2: npx vitest run --root tests/acceptance/2650 --no-file-parallelism --testTimeout=600000 planted-answers.test.ts planted-results.test.ts planted-jobs.test.ts planted-names.test.ts
+     × AC2 #2650.d1b5373c churn-keeps-every-result, a host that keeps one result per action call, fails it, naming results 4672ms
+     × AC2 #2650.d1b5373c churn-keeps-every-name-set, a series store that keeps every set of names, fails it, naming names 5188ms
+     × AC2 #2650.d1b5373c churn-keeps-every-answer, a host that keeps one answer per source call, fails it, naming answers 6676ms
+     × AC2 #2650.d1b5373c churn-keeps-every-output, a runner that keeps every ended job's output, fails it, naming jobs 4258ms
+ FAIL  planted-answers.test.ts > AC2 #2650.d1b5373c ... churn-keeps-every-answer, a host that keeps one answer per source call, fails it, naming answers
+AssertionError: the benchmark prints its readings as one JSON line with "bench": "hub-churn": exit 1; stdout: BLOCKED hub churn: the hub exited 1: Debugger listening on ws://127.0.0.1:…
+file://<repo>/packages/hub/dist/plant.js:124
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+Error: DEEP_HUB_PLANT=churn-keeps-every-answer names no planted program
+  Fix: Run it where Node's inspector can force a full collection and read resident memory, and the hub answers.
+; stderr: : expected undefined to be defined
+ ❯ lineFrom helpers.ts:130:111
+# planted-jobs, planted-names and planted-results fail the same way, each naming its own plant:
+Error: DEEP_HUB_PLANT=churn-keeps-every-output names no planted program
+Error: DEEP_HUB_PLANT=churn-keeps-every-name-set names no planted program
+Error: DEEP_HUB_PLANT=churn-keeps-every-result names no planted program
+ Test Files  4 failed (4)
+      Tests  4 failed (4)
+# 22 s in all: the base hub refuses each name at its start, so the benchmark is BLOCKED and prints no readings.
+
+## AC3: npx vitest run retries.test.ts --root tests/acceptance/2650 --no-file-parallelism --testTimeout=600000
+ ❯ retries.test.ts (2 tests | 1 failed) 104438ms
+     × AC3 #2650.59fe85c2 (wrong program) forgets-request-runs-again, a host that forgets the request and runs it again, fails, naming the request ID 56065ms
+ FAIL  retries.test.ts > AC3 #2650.59fe85c2 ... (wrong program) forgets-request-runs-again, a host that forgets the request and runs it again, fails, naming the request ID
+AssertionError: the planted host's retry ran again or got another result: {"request":"req-72bc026330d08ed6","later":10000,"first":{"status":"done","output":{"run":1,"token":"1de1f647-fb74-4b83-bd87-44cbe35a8f2d","n":0}},"retry":{"status":"done","output":{"run":1,"token":"1de1f647-fb74-4b83-bd87-44cbe35a8f2d","n":0}},"other":{"status":"refused","reason":"the request ID req-72bc026330d08ed6 was used for another call; nothing was run or written for this one"},"runs":10001,"entered":1}: expected 0 to be greater than 0
+ ❯ retries.test.ts:46:111
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+# The main test passes at the base: it never lets a request ID go, so the retry 10,000 calls later gets the first
+# call's output from memory, runs nothing (10,001 runs, one action.entered), and other input is refused. The base host
+# ignores the plant name it doesn't know, so the planted run is sound and the judge finds nothing: the planted test is
+# what fails here. The bound itself is AC1's to prove. (An earlier run, before the judges compared in JSON form, read
+# the same: 162 s, 1 passed, 1 failed at the same assertion.)
+
+## AC4, its planted test only: npx vitest run jobs.test.ts --root tests/acceptance/2650 --no-file-parallelism --testTimeout=600000 -t "wrong program"
+ ❯ jobs.test.ts (2 tests | 1 failed | 1 skipped) 18545ms
+     × AC4 #2650.4fd94bca (wrong program) empty-output-inside-bound, a runner that returns nothing for a job still inside the bound, fails, naming the job 18516ms
+ FAIL  jobs.test.ts > AC4 #2650.4fd94bca ... (wrong program) empty-output-inside-bound, a runner that returns nothing for a job still inside the bound, fails, naming the job
+AssertionError: a problem names a job still inside the bound: ["job run:01M7P3BJD64BKK6XS1Z8FDWNR4 ended past the bound, and output() answers 1266 characters, not '', the answer the issue drafts"]: expected 0 to be greater than 0
+ ❯ jobs.test.ts:52:118
+ Test Files  1 failed | 1 skipped (2)
+      Tests  1 failed | 2 skipped (3)
+# The world works at the base: the first job got past its account's wait for a first window reading (runner.window)
+# and finished with the stand-in's result, its output as it ended was its stream-json, and 100 more jobs ran and
+# finished, in 19 s. The base runner ignores the plant name it doesn't know, so every job inside the bound keeps its
+# output and no problem names one; the judge's one problem is the base's own answer past the bound: the first job's
+# whole output, 1,266 characters, where the issue drafts ''. That is also where the 10,000-job test fails at the base.
+
+## Not run here as files: what the base gives them
+
+# cycles.test.ts (AC1's reading, AC6). The base benchmark, run directly:
+#   node benchmarks/hub-churn.mjs --cycles 1 --home /tmp/dh2650b/h    (101 cycles, 226 s, exit 1)
+{"bench":"hub-churn","cycles":1,"warmup":100,"every":100,"readings":[{"cycle":0,"heapBytes":44649888,"rssBytes":119488688},{"cycle":1,"heapBytes":45690024,"rssBytes":121685224}],"heapGrowthBytes":1040136,"rssGrowthBytes":2196536,"heapGrowthPer1000Bytes":1040136000,"rssGrowthPer1000Bytes":2196536000,"open":{"afterWarmup":{"sockets":10,"children":3,"timers":28},"afterLast":{"sockets":10,"children":3,"timers":28}}}
+FAIL hub churn: the hub's retained heap grew 1.040 MB over 1 cycles, 1040.136 MB per 1,000; the limit is under 0.000 MB
+FAIL hub churn: the hub's resident memory grew 2.197 MB over 1 cycles, 2196.536 MB per 1,000; the limit is under 0.002 MB
+# No `stores`: AC1's test fails at its first look at the reading (storesOf: "the reading names each store's growth per
+# 1,000 cycles, keyed answers, results, jobs and names"). Its one cycle after warm-up moved the heap 1 MB: the noise a
+# short run's whole heap reads, which is why only the stores are judged on one.
+# The record those cycles left, read with this suite's recorded() (helpers.ts) through a hub on that home, for
+# session.end, source.called, reading.batch and job.ended:
+counts {"session.end":101}
+first {"v":1,"id":"01M7NXDSKD000000000000000S","kind":"session.end","writer":"hook","actor":"you","scope":"you","ts":1794958081220,"log_pos":65,"data":{"reason":"other"},"evidence":[],"seq":"1794958081220025000","session":"09459378-e0fe-4c4e-a0f3-1887fba39190","agent":"claude-code","verified":true}
+# One session a cycle and none of the new calls: AC6's test fails at its first count, 0 source calls answered with
+# 64 KB against one a cycle. (The record reader itself works: events carry kind, log_pos and data.)
+
+# jobs.test.ts's 10,000-job test (AC4). The planted test's run above meets the base's answer: every ended job stays
+# in memory, so the first job's row and result read the same, and past the bound its output() answers its whole
+# output (1,266 characters there), not ''. After 10,000 jobs it would answer the same: the judge's problem names it.
+
+# budgets.long.test.ts (AC1's budget): by hand only. On this Mac its gate reads INCONCLUSIVE (thermal state fair, not
+# nominal); the base has no `stores`, no four calls and no merge-base `stores`, so it would fail at its first look at
+# the reading.
+
+## A run stopped early
+# One probe of recorded() was started as `vitest run --root tests/acceptance/2650 --disable-console-intercept
+# <probe file>`: the flag took the file filter as its value, so Vitest started every file. It was stopped after about
+# five minutes, its process tree ended with it, its temp folders were removed, and its output was not read. The
+# probe was then run on its own (above), and its file deleted.

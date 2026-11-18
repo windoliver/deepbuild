@@ -150,8 +150,11 @@ export class SessionState {
   private stateWake: (() => void) | undefined;
   private stateTimer: ReturnType<typeof setTimeout> | undefined;
 
-  /** The sessions appended to since the last state pass, or all of them: at the start, each minute and after a failed pass. */
+  /** The sessions appended to since the last state pass, or all of them: at the start and after a failed pass. */
   touched: Set<string> | 'all' = 'all';
+
+  /** When the clock alone ends each session's state, for those whose last reading gave a time (#2646). */
+  private readonly until = new Map<string, number>();
 
   /** The list's rows as last appended (#1463), by ID; empty until the record's are read at start, which makes the first pass a backfill. */
   rows = new Map<string, Placed>();
@@ -478,6 +481,16 @@ export class SessionState {
     });
   }
 
+  /**
+   * Each minute's pass (#2646): the sessions whose state the clock has ended since their last reading, and no others.
+   * A state that changes with time alone has no append to say so; every other change is an append, which has its pass.
+   */
+  minutePassed(): void {
+    const now = this.options.services.now();
+    if (this.touched !== 'all') for (const [id, until] of this.until) if (until < now) this.touched.add(id);
+    this.stateSoon();
+  }
+
   /** Stop owns the debounce: wake it before draining so shutdown never waits on an abandoned delay. */
   async flushStates(): Promise<void> {
     this.stateWake?.();
@@ -509,7 +522,13 @@ export class SessionState {
     if (only !== 'all' && !only.size) return;
     try {
       // Appended together, so the record commits them in one batch, as it does a first start's state for every session.
-      const readings = await sessionStates(this.options.services.raw, this.options.services.now(), only === 'all' ? undefined : only);
+      const read = await sessionStates(this.options.services.raw, this.options.services.now(), only === 'all' ? undefined : only);
+      // The planted wrong program leaves out each session whose newest promise event says its promise fell due.
+      const due = !['pass-skips-due-promise', 'state-pass-skips-due-promise'].includes(this.options.settings.plant ?? '') ? [] : (await this.options.services.raw("SELECT session_id FROM events e WHERE kind = 'promise.due' AND NOT EXISTS (SELECT 1 FROM events l WHERE l.session_id = e.session_id AND l.log_pos > e.log_pos AND l.kind IN ('promise.set', 'promise.due', 'promise.woken', 'promise.blocked'))")) as { session_id: string }[];
+      const readings = read.filter((r) => !due.some((d) => d.session_id === r.id));
+      if (only === 'all') this.until.clear();
+      else for (const id of only) this.until.delete(id);
+      for (const r of readings) if (r.until !== undefined) this.until.set(r.id, r.until);
       // The list's rows (#1463): each that changed, and each ask's that left the list, in the same batch.
       // The open asks are the asks core's inbox projection, by its one close rule (#2026).
       const inbox = (await this.options.services.asks.inbox()).filter((a) => a.status !== 'closed').map((a) => a.ask);
@@ -718,10 +737,11 @@ export class SessionState {
   /**
    * Whose a hook is: a job's, when its session ID is the one the runner read from that job's own output and it was
    * sent inside the job's run; held, when it comes from a running job's folder before that ID is read; otherwise
-   * the session's own, with a reading when it only looks like a job's.
+   * the session's own, with a reading when it only looks like a job's. It reads the jobs the runner holds in memory,
+   * so a hook from an older ended job's folder or session is the session's own with no reading (#2650).
    */
   async whose(meta: HookMeta, seq: string | undefined): Promise<{ job?: string; wait?: string; reading?: { job: string; text: string } }> {
-    const jobs = await this.options.services.runner.list();
+    const jobs = await this.options.services.runner.recent();
     const at = seq ? Number(BigInt(seq) / 1_000_000n) : Date.now();
     const during = (j: JobRecord) => j.ran !== undefined && at >= j.ran.from && (j.ran.to === undefined || at <= j.ran.to);
     const own = jobs.find((j) => meta.session && j.session === meta.session && during(j));

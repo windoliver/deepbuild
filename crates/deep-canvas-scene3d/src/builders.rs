@@ -12,7 +12,7 @@ use crate::curve::{self, Sampled};
 use crate::geom::{add, area2, cross, dot, length, scale, sub, triangulate, unit, Mesh, V2, V3};
 
 /// The builder kinds, as documents name them.
-pub const KINDS: [&str; 11] = [
+pub const KINDS: [&str; 12] = [
     "hull@1",
     "slab@1",
     "lathe@1",
@@ -24,6 +24,8 @@ pub const KINDS: [&str; 11] = [
     "display@1",
     "surface@1",
     "tree@1",
+    // #1781: the fixture builder, whose kind only a test build registers.
+    crate::attrs::FIXTURE,
 ];
 
 /// The builders with known charts, which emit uv1 analytically (Builder: uv; #440).
@@ -267,6 +269,7 @@ pub fn build(kind: &str, params: &Value, ctx: &Ctx<'_>) -> Result<Mesh, Fault> {
             ctx.pool,
         )?,
         "tree@1" => crate::tree::build(params, ctx.plants.tree)?,
+        crate::attrs::FIXTURE => slab(&crate::attrs::fixture_box(), ctx)?,
         _ => return Err("kind".into()),
     };
     m.orient();
@@ -279,6 +282,9 @@ pub fn build(kind: &str, params: &Value, ctx: &Ctx<'_>) -> Result<Mesh, Fault> {
         _ => {}
     }
     annotate(&mut m, kind, params, ctx)?;
+    if kind == crate::attrs::FIXTURE {
+        crate::attrs::listed(&mut m, params)?;
+    }
     Ok(m)
 }
 
@@ -469,6 +475,10 @@ pub fn counts(kind: &str, params: &Value, ctx: &Ctx<'_>) -> Result<(u64, u64), F
         }
         "surface@1" => crate::surface::counts(params)?,
         "tree@1" => crate::tree::counts(params)?,
+        crate::attrs::FIXTURE => match slab_shape(&crate::attrs::fixture_box(), ctx)? {
+            SlabShape::Levels(levels, _) => layered_count(&levels),
+            SlabShape::Along(section, path) => sweep_count(&section, &path),
+        },
         _ => return Err("kind".into()),
     };
     let declared = if shade_flat(params)? && !ctx.plants.flat_as_smooth {
@@ -2178,7 +2188,11 @@ fn annotate(m: &mut Mesh, kind: &str, p: &Value, ctx: &Ctx<'_>) -> Result<(), Fa
     };
     m.uv0 = crate::uv::uv0(m, proj, uv_scale, natural.as_deref(), fallback);
     if CHARTED.contains(&kind) {
-        m.uv1 = crate::uv::uv1(m, natural.as_deref());
+        // A terrain plate's chart is its own grid, which its horizon table is read on (#1381).
+        m.uv1 = match crate::terrain::places(kind, p, m) {
+            Some(uv) => uv,
+            None => crate::uv::uv1(m, natural.as_deref()),
+        };
     }
     let span = (hi[1] - lo[1]).max(1e-12);
     let height = m.positions.iter().map(|q| (q[1] - lo[1]) / span).collect();

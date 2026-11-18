@@ -38,6 +38,7 @@ fn click(s: &mut Scope, doc: &Value, t: i64, p: [f64; 2]) {
         &Event::Down {
             pos: p,
             toggle: false,
+            alt: false,
         },
     );
     s.input(doc, t + 60 * MS, 2, &Event::Up(p));
@@ -71,6 +72,7 @@ fn a_click_on_a_target_picks_its_stage_and_never_selects_and_tab_then_enter_pick
         &Event::Down {
             pos: [400.0, 300.0],
             toggle: false,
+            alt: false,
         },
     );
     let done = s.input(&doc, 60 * MS, 2, &Event::Up([400.0, 300.0]));
@@ -154,6 +156,7 @@ fn a_drag_in_3d_turns_about_the_target() {
         &Event::Down {
             pos: [700.0, 300.0],
             toggle: false,
+            alt: false,
         },
     );
     s.input(&doc, 16 * MS, 2, &Event::Move([760.0, 300.0]));

@@ -251,7 +251,9 @@ impl<'a> Hub<'a> {
         let determinism = self.determinism_runs(c);
         let layout = self.film_layout_runs(c);
         let audits = self.geometry_audit_runs(claim, c);
-        let shapes = self.geometry_shape_runs(c);
+        let mut shapes = self.geometry_shape_runs(c);
+        // #1781: each attribute table read back.
+        shapes.extend(self.geometry_attributes_runs(c));
         // #456: render.review's readings, each from its model in a fresh context.
         let reviews = self.review_rows(claim, c);
         // #407: the film audit and the flicker check on every deliverable, the brief's own checks,

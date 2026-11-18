@@ -54,6 +54,9 @@ pub struct Mesh {
     pub lod_extent: f64,
     /// Named per-face values, one per triangle (a face's triangles share one).
     pub face_attributes: BTreeMap<String, Vec<f64>>,
+    /// The typed attributes kept by element (#1781): every one but a float attribute on points
+    /// or faces, which `attributes` and `face_attributes` keep.
+    pub typed: crate::attrs::Typed,
     /// The quads the mesh had before its stack's first `subdivide`, as a `cage` mesh-edge line
     /// draws them, each edge by its two ends.
     pub cage: Option<Vec<[V3; 2]>>,
@@ -62,6 +65,9 @@ pub struct Mesh {
     /// A terrain tile's plate's full-detail normals, which its pixels read at every level
     /// (#2017; uv1 is the place on the plate's grid), or none.
     pub terrain: Option<std::sync::Arc<crate::terrain::Normals>>,
+    /// A terrain plate's horizon table, baked with it (#1381; uv1 is the place on the plate's
+    /// grid), or none.
+    pub horizon: Option<std::sync::Arc<crate::horizon::Horizon>>,
 }
 
 /// What a mesh-edge line draws.
@@ -137,6 +143,10 @@ impl Canonical for Mesh {
         faces.encode(out);
         self.cage.encode(out);
         self.sway.encode(out);
+        // Only where a mesh holds one, so a mesh without any encodes as it always did.
+        for (name, a) in &self.typed {
+            (name, a.domain.name(), a.ty.name(), &a.values).encode(out);
+        }
     }
 }
 

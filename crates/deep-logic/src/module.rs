@@ -31,7 +31,7 @@ use serde_json::{json, Map, Value};
 use crate::bake::handed;
 use crate::piece::{self, History, Piece};
 use crate::services::Service;
-use crate::world::{track_of, Entry, Record, World};
+use crate::world::{carry_of, track_of, Entry, Record, World};
 use crate::Planted;
 
 /// The interface this module implements, apart from the logic item kind of that name.
@@ -44,7 +44,7 @@ const STEP: i64 = 11_760_000;
 /// `fires`, each with the form its reader takes (#1973); `wasm` is the program's bytes, which
 /// whoever holds the evidence store inlines by the program's hash before a frame, as a vector's
 /// outline is.
-const PARAMS: [(&str, &str); 17] = [
+const PARAMS: [(&str, &str); 18] = [
     ("program", "asset ID"),
     ("debug", "asset ID"),
     ("step_rate", "Hz"),
@@ -62,7 +62,9 @@ const PARAMS: [(&str, &str); 17] = [
         "{fuel?: integer, memory?: number, stack?: number}",
     ),
     ("checkpoint", "{every?: integer, budget?: bytes}"),
-    ("assets", "[asset ID]"),
+    // A data asset, or a provider's output by `{gen, params}` (#192).
+    ("assets", "[asset ID | {gen: <pack>.<provider>, params}]"),
+    ("links", "[{name, asset: asset ID}]"),
     (
         "saves",
         "{slots?: integer, request?: name, ends?: name, migrate?}",
@@ -186,7 +188,33 @@ fn register(r: &mut Registrar) {
         json!({"checks": [{"kind": "document.determinism"}], "oracles": ["seek_play"], "codes": [],
                "at_times": ["0s", "1s"], "inputs": [{"step": 20, "kind": "press", "value": 1}]}),
     )
-    .fixture_assets(vec![bytes]);
+    .fixture_assets(vec![bytes.clone()]);
+    // #2363: the module's program also supplies real array readers at frame zero.
+    // The copies, flip and mark set read the core's view, not a fabricated baked envelope.
+    // With no control read, the fixture program reads the seed at offset zero: keep it zero.
+    r.fixture("readers", json!({
+        "format": 1, "profile": "board", "title": "Array readers",
+        "description": "A counter selects a caption, a row label and a flip child.",
+        "size": [320, 200], "seed": 0, "transport": {"span": "1s"},
+        "data": {"copy": {"en": {"labels": {"0": "Ready", "missing": "Counting"}},
+                          "fr": {"labels": {"0": "Pret", "missing": "Compter"}}}},
+        "items": {
+            "counter": {"id": "counter", "kind": "logic@1", "name": "Counter", "order": "a0", "params": params},
+            "caption": {"id": "caption", "kind": "text@1", "name": "Caption", "order": "a1",
+                "params": {"text": {"copy": "labels[counter.presses]"}, "font": "body", "size": 13, "box": {"w": 200, "h": 20}}},
+            "choices": {"id": "choices", "kind": "group@1", "name": "Choices", "order": "a2",
+                "params": {"flip": {"array": "counter.presses", "map": {"0": "dot"}}}},
+            "dot": {"id": "dot", "kind": "circle@1", "name": "Dot", "order": "a3", "parent": "choices",
+                "params": {"center": [40, 60], "r": 8, "paint": {"fill": {"role": "accent"}}}},
+            "labels": {"id": "labels", "kind": "marks@1", "name": "Labels", "order": "a4",
+                "params": {"mark": "text", "n": 1, "key": "k",
+                    "columns": {"k": {"array": "counter.presses", "as": "i32", "dtype": "i32", "len": 1, "data": "AAAAAA=="},
+                                "text": {"copy": "labels", "key": "k"}},
+                    "encode": {"x": 20, "y": 100, "text": {"column": "text"}, "size": 13}}}
+        }
+    }), None).fixture_assets(vec![bytes]).sidecar(json!({
+        "checks": [{"kind": "document.validate"}], "oracles": ["analytic"], "codes": ["unknown_kind"],
+    }));
     // #548: deep_run's logic kinds (Check input: logic kinds), each on the lowered document's
     // logic items, their programs read from the assets the check names.
     r.check(
@@ -360,10 +388,22 @@ fn piece_of(doc: &Value) -> Result<Rc<Piece>, OpError> {
         assets.insert(program, wasm.unwrap_or_default());
         items.insert(id.clone(), json!({"kind": INTERFACE, "params": params}));
     }
+    // #192: its data assets and linked libraries, inlined by the hub, and the pinned packs'
+    // libraries.
+    if let Some(more) = doc.get("inlined").and_then(Value::as_object) {
+        assets.extend(more.clone());
+    }
     let seed = doc.get("seed").and_then(Value::as_i64).unwrap_or(0);
     // The document's controls, so an item that reads one reads its input entries (#544's Fire).
     let controls = doc.get("controls").cloned().unwrap_or(json!({}));
     let mut piece = json!({"seed": seed, "controls": controls, "items": items, "assets": assets});
+    if let Some(libraries) = doc.get("libraries") {
+        piece["packs"] = libraries.clone();
+    }
+    // #860: its rewind, whose seen array a step puts back where the current branch carries it.
+    if let Some(rewind) = doc.get("rewind") {
+        piece["rewind"] = rewind.clone();
+    }
     // #182: the worlds' character readings an item may read.
     let reads = crate::play::world_reads(doc);
     if !reads.is_empty() {
@@ -442,6 +482,11 @@ fn step(v: &mut View<'_>) -> Result<(), OpError> {
         Some(s) => World::from_saved(piece.clone(), track, &s.saved, Planted::default()),
     }
     .map_err(failed)?;
+    // #860: the track is the current branch; the seen values it carries in are the host's run's,
+    // which read the closed branches too.
+    if let Some(carry) = doc.pointer("/branch/carry").and_then(carry_of) {
+        world.branches.carry = carry;
+    }
     world.run_through(t, &mut rec);
     // A trapped item never draws its last arrays as if it ran on (Logic: `logic.trap`).
     let trapped = world.failed();

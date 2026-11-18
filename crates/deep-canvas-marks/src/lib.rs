@@ -35,6 +35,7 @@ mod grid_rules;
 pub mod implicit;
 pub mod key;
 pub mod layout;
+pub mod light;
 pub mod lines;
 pub mod look;
 pub mod modules;
@@ -50,6 +51,8 @@ pub mod print;
 pub mod relations;
 pub mod runs;
 pub mod scene;
+// Issue #1498: where a text's graphemes are drawn, for a text selection.
+pub mod select;
 pub mod story;
 pub mod terrain;
 pub mod ticks;

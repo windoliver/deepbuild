@@ -259,7 +259,8 @@ pub struct Ring {
     sends: BTreeMap<String, usize>,
     attempts: BTreeMap<String, Vec<Value>>,
     kb_focus: Option<String>,
-    clipboard: Option<Value>,
+    /// The last clipboard write a gesture let through; #1498's ⌘C of a text selection writes it too.
+    pub(crate) clipboard: Option<Value>,
     toasts: Vec<Toast>,
     pieces: BTreeMap<String, Piece>,
     turns: BTreeMap<String, Vec<Value>>,
@@ -878,6 +879,11 @@ impl Hub<'_> {
             timers.extend(script);
             defs.insert(id.clone(), def);
         }
+        // #210: the ports it registers (`deep.registerPort`), and the hosts its grant names.
+        let Some(registered) = crate::ports::manifest_ports(manifest) else {
+            return bad("ports");
+        };
+        self.ports.plugins.insert(plugin.to_string(), registered);
         self.ring.plugins.push(plugin.to_string());
         self.ring.sources.extend(new_sources);
         self.ring.bindings.extend(bindings);

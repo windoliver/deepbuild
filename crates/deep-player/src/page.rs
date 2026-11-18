@@ -37,6 +37,10 @@ pub struct Player {
     draw: Option<crate::draw::Draw>,
     /// Each picture's level file by its source's SHA-256.
     levels: HashMap<String, String>,
+    /// #549: the piece's match, when its net item declares a relay; the full set's player alone
+    /// holds the net module.
+    #[cfg(feature = "full")]
+    net: Option<crate::net::Match>,
 }
 
 #[wasm_bindgen]
@@ -60,6 +64,8 @@ impl Player {
             store: std::sync::Arc::new(deep_images::Store::memory()),
             draw: None,
             levels: HashMap::new(),
+            #[cfg(feature = "full")]
+            net: None,
         })
     }
 
@@ -114,6 +120,8 @@ impl Player {
     /// item's rewritten program as the export recorded it (`[{item, sha256}]`), which this
     /// player's own rewrite must equal or the piece doesn't start, naming it.
     pub fn load(&mut self, doc: &str, track: &str, logic: &str) -> Result<(), JsValue> {
+        #[cfg(feature = "full")]
+        let (doc_sha, track_sha) = (doc, track);
         let text = |sha: &str| {
             self.files
                 .get(sha)
@@ -140,6 +148,20 @@ impl Player {
                     "the logic item {item}'s program {recorded} isn't the program this player rewrote ({ours}); it doesn't start"
                 )));
             }
+        }
+        // #549: the match the piece declares, on the logic items this player checked.
+        #[cfg(feature = "full")]
+        {
+            let piece =
+                deep_play::logic::logic_piece(self.sealed, played.document(), &track, &read, false);
+            self.net = crate::net::Match::of(
+                self.sealed,
+                &doc,
+                piece.ok().flatten(),
+                &track,
+                doc_sha,
+                track_sha,
+            );
         }
         self.stages = markers(&doc, Some("stage"));
         self.markers = markers(&doc, None);
@@ -210,6 +232,7 @@ impl Player {
         };
         match draw.frame(p, size) {
             crate::draw::Frame::Pixels(rgba) => gpu.show(&rgba, size),
+            #[cfg(feature = "full")]
             crate::draw::Frame::Scene(scene, look, over) => gpu.show3d(&scene, &look, &over, size),
         }
     }
@@ -226,11 +249,101 @@ impl Player {
         Ok(())
     }
 
+    /// #860: the viewer's back. On a piece that declares rewind it is a rewind to the stop before,
+    /// at the shown time, which the piece plays on from as the app's does; whether it wrote one.
+    pub fn back(&mut self) -> Result<bool, JsValue> {
+        let files = &self.files;
+        let read = |sha: &str| files.get(sha).cloned();
+        match self.played.as_mut() {
+            Some(p) => p.back(self.sealed, &read).map_err(fail),
+            None => Ok(false),
+        }
+    }
+
+    /// The document's accessibility tree (#1045), as JSON `[{id, role, name, …}]` in reading
+    /// order: the one the app gives its accessibility seam, read through the core.
+    pub fn tree(&self) -> String {
+        Value::Array(self.played.as_ref().map(Played::tree).unwrap_or_default()).to_string()
+    }
+
+    /// Each readout heard and what it says in the frame shown (#1045), as JSON `{id: text}`.
+    pub fn readouts(&self) -> String {
+        let readouts = self.played.as_ref().map(Played::readouts);
+        json!(readouts.unwrap_or_default()).to_string()
+    }
+
     /// What the player holds at its shown time, as JSON; it writes nothing and changes no state.
     pub fn probe(&self) -> String {
         let mut out = self.played.as_ref().map(Played::probe).unwrap_or_default();
         out.insert("set_digest".into(), json!(self.sealed.set_digest));
+        // #549: the player's copy of the piece's match; the page writes null where there is none.
+        #[cfg(feature = "full")]
+        if let Some(net) = &self.net {
+            out.insert("match".into(), net.probe());
+        }
         Value::Object(out).to_string()
+    }
+}
+
+/// #549: the piece's match (Net: relay and Join). The page draws the prompt and owns the
+/// connection, the viewer's browser's own; what it says and reads comes from here.
+#[cfg(feature = "full")]
+#[wasm_bindgen]
+impl Player {
+    /// The Join prompt as the page draws it, `{state, relay, players, refused, text}`; `null`
+    /// for a piece that declares no relay.
+    pub fn join_prompt(&self) -> String {
+        self.net
+            .as_ref()
+            .map_or(Value::Null, crate::net::Match::prompt)
+            .to_string()
+    }
+
+    /// A person clicked Join: `link` is the page's link and `drawn` 16 bytes from the browser's
+    /// secure random source. `{url, step_ms}`, the connection to open, or `{}` when refused.
+    pub fn join(&mut self, link: &str, drawn: Vec<u8>) -> String {
+        let drawn: [u8; 16] = drawn.try_into().unwrap_or_default();
+        self.net
+            .as_mut()
+            .map_or(json!({}), |n| n.join(link, drawn))
+            .to_string()
+    }
+
+    /// A control message from the relay: `{send}`, `{close}` or `{}`.
+    pub fn net_control(&mut self, text: &str, now_ms: f64) -> String {
+        self.net
+            .as_mut()
+            .map_or(json!({}), |n| n.control(text, now_ms))
+            .to_string()
+    }
+
+    /// A frame another copy of the match sent.
+    pub fn net_receive(&mut self, frame: Vec<u8>, now_ms: f64) {
+        if let Some(n) = self.net.as_mut() {
+            n.receive(&frame, now_ms);
+        }
+    }
+
+    /// The page's tick: the frame to send, empty when there is none.
+    pub fn net_tick(&mut self, now_ms: f64) -> Vec<u8> {
+        self.net.as_mut().map_or(Vec::new(), |n| n.tick(now_ms))
+    }
+
+    /// The connection ended.
+    pub fn net_disconnected(&mut self) {
+        if let Some(n) = self.net.as_mut() {
+            n.disconnected();
+        }
+    }
+
+    /// The player this copy waits for, once it has waited 0.25 s; 0 when none.
+    pub fn net_waiting(&self, now_ms: f64) -> u8 {
+        self.net.as_ref().map_or(0, |n| n.waiting(now_ms))
+    }
+
+    /// Whether the match ended or its Join was refused, so the page closes its connection.
+    pub fn net_ended(&self) -> bool {
+        self.net.as_ref().is_some_and(crate::net::Match::ended)
     }
 }
 

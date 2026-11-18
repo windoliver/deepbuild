@@ -1105,25 +1105,11 @@ impl Serve {
                     return bad();
                 };
                 let [ox, oy, w, h] = t.drawn;
-                let x = ((p[0] - ox) / w).floor() as i64 + 1;
-                let y = ((p[1] - oy) / h).floor() as i64 + 1;
+                let cell = |v: f64| v.floor().clamp(0.0, f64::from(u16::MAX)) as u16;
+                let (x, y) = (cell((p[0] - ox) / w), cell((p[1] - oy) / h));
                 let down = e.get("phase").and_then(Value::as_str) == Some("down");
-                match (m["mouse"].as_str(), down) {
-                    (Some("sgr"), true) => format!("\x1b[<0;{x};{y}M").into_bytes(),
-                    (Some("sgr"), false) => format!("\x1b[<0;{x};{y}m").into_bytes(),
-                    (Some("x10"), _) => {
-                        let b = if down { 32u8 } else { 35 };
-                        vec![
-                            0x1b,
-                            b'[',
-                            b'M',
-                            b,
-                            (32 + x).min(255) as u8,
-                            (32 + y).min(255) as u8,
-                        ]
-                    }
-                    _ => Vec::new(),
-                }
+                let mouse = m["mouse"].as_str().unwrap_or("none");
+                deep_canvas_cells::emulator::mouse_report(mouse, (x, y), down)
             }
             _ => return bad(),
         };
