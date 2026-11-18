@@ -1,0 +1,133 @@
+# affected.mjs at 444c638cd (main 0f34aacbe merged; the branch's 20 paths) listed 209 NEW failure lines. Each one checked at main 0f34aacbe, 2026-11-18.
+# Test files: each run alone at main (vitest or node --test, 2 at a time). Lints: run in both trees, FAIL lines compared.
+# The 10 files whose failure didn't show at main were then run alone twice at 8f2e51904 (head-alone below).
+FAIL affected: 209 new, 55 already failing on main, 350 inconclusive or blocked, 1 listed skips, 1481 passed, in 8274 s at load 44; logs in /tmp/deep-affected-YzyEnk
+
+## lints, FAIL line counts at main 0f34aacbe and at the head (same build state)
+canvas-lint: main 68, head 68; head lines not at main: 0
+size-ratchet: main 23, head 23; head lines not at main: 1
+   + FAIL size: packages/hub/src/core.ts: 2672 lines, over its ceiling of 2638
+vendor-rebase: main 19, head 19; head lines not at main: 0
+repo-rules: main 10, head 10; head lines not at main: 0
+slots-check: main 1, head 1; head lines not at main: 0
+   (main's core.ts is already 2670 lines against its ceiling of 2638; this PR adds 2)
+
+## test files: 88; the same tests fail at main: 76; differ: 12
+same  packages/hub/test/asleep.test.ts (1 new lines; main exit 1)
+same  packages/hub/test/background.test.ts (1 new lines; main exit 1)
+same  packages/hub/test/continues.test.ts (3 new lines; main exit 1)
+same  packages/hub/test/drive.test.ts (1 new lines; main exit 1)
+same  packages/hub/test/env-resources.test.ts (1 new lines; main exit 1)
+same  packages/hub/test/memory.test.ts (1 new lines; main exit 1)
+same  packages/hub/test/onboarding.test.ts (2 new lines; main exit 1)
+same  packages/hub/test/parsers.test.ts (1 new lines; main exit 1)
+same  packages/hub/test/products-keep-orphan-2122.test.ts (1 new lines; main exit 1)
+same  packages/hub/test/products-restart-reclaim-2122.test.ts (1 new lines; main exit 1)
+same  packages/hub/test/size-scope.test.ts (1 new lines; main exit 1)
+same  packages/hub/test/staging.test.ts (1 new lines; main exit 1)
+same  packages/hub/test/wiki.test.ts (1 new lines; main exit 1)
+same  tests/acceptance/1002/first-screen-redraft/first-screen.test.ts (1 new lines; main exit 1)
+same  tests/acceptance/1113/waits.test.mjs (1 new lines; main exit 1)
+same  tests/acceptance/1114/timed-list.test.mjs (1 new lines; main exit 1)
+same  tests/acceptance/1202/programs.test.ts (1 new lines; main exit 1)
+same  tests/acceptance/1329/ac1-design-source.test.mjs (1 new lines; main exit 1)
+same  tests/acceptance/1329/ac2-drift-lane.test.mjs (1 new lines; main exit 1)
+same  tests/acceptance/1334/contract.test.mjs (2 new lines; main exit 1)
+same  tests/acceptance/1334/crash.test.mjs (2 new lines; main exit 1)
+same  tests/acceptance/1334/hold.test.mjs (2 new lines; main exit 1)
+same  tests/acceptance/1334/misjudge.test.mjs (1 new lines; main exit 1)
+same  tests/acceptance/1348/plants.test.ts (3 new lines; main exit 1)
+same  tests/acceptance/139/corpus.test.ts (6 new lines; main exit 1)
+same  tests/acceptance/140/platform/wasm.test.ts (4 new lines; main exit 1)
+same  tests/acceptance/140/platform/window.test.ts (4 new lines; main exit 1)
+same  tests/acceptance/1425/imports.test.ts (1 new lines; main exit 1)
+same  tests/acceptance/1432/ratchet.test.mjs (1 new lines; main exit 1)
+same  tests/acceptance/1454/lint.test.ts (1 new lines; main exit 1)
+same  tests/acceptance/1461/redraft/tree.test.ts (2 new lines; main exit 1)
+same  tests/acceptance/1556/lint.test.ts (1 new lines; main exit 1)
+same  tests/acceptance/1556/twins.test.ts (1 new lines; main exit 1)
+same  tests/acceptance/1624/lanes.test.mjs (1 new lines; main exit 1)
+same  tests/acceptance/1687/ac3-redraft/ac3.test.mjs (1 new lines; main exit 1)
+same  tests/acceptance/2119/merge-at-write.test.ts (1 new lines; main exit 1)
+same  tests/acceptance/2122/product-session.test.ts (1 new lines; main exit 1)
+same  tests/acceptance/2144/lint-on-main.test.mjs (1 new lines; main exit 1)
+same  tests/acceptance/2178/lint-lanes.test.mjs (1 new lines; main exit 1)
+same  tests/acceptance/2330/lifecycle.test.mjs (1 new lines; main exit 1)
+same  tests/acceptance/246/redraft/deps.test.mjs (3 new lines; main exit 1)
+same  tests/acceptance/246/repo-rules.test.mjs (9 new lines; main exit 1)
+same  tests/acceptance/246/secrets-property.test.mjs (1 new lines; main exit 1)
+same  tests/acceptance/2574/grant.test.mjs (1 new lines; main exit 1)
+same  tests/acceptance/2583/lane.test.mjs (1 new lines; main exit 1)
+same  tests/acceptance/313/packaging.test.ts (1 new lines; main exit 1)
+same  tests/acceptance/33/bootstrap.test.ts (3 new lines; main exit 1)
+same  tests/acceptance/33/spine.test.ts (1 new lines; main exit 1)
+same  tests/acceptance/337/spike.test.mjs (2 new lines; main exit 1)
+same  tests/acceptance/338/spike.test.mjs (3 new lines; main exit 1)
+same  tests/acceptance/349/slot-table.test.ts (1 new lines; main exit 1)
+same  tests/acceptance/377/noop.test.ts (1 new lines; main exit 1)
+same  tests/acceptance/47/explain.test.mjs (1 new lines; main exit 1)
+same  tests/acceptance/56/decision.test.mjs (2 new lines; main exit 1)
+same  tests/acceptance/594/build-dirs.test.mjs (1 new lines; main exit 1)
+same  tests/acceptance/594/margin.test.mjs (1 new lines; main exit 1)
+same  tests/acceptance/594/warm.test.mjs (1 new lines; main exit 1)
+same  tests/acceptance/605/catalogue-311.test.mjs (1 new lines; main exit 1)
+same  tests/acceptance/689/preflight-env.test.mjs (2 new lines; main exit 1)
+same  tests/acceptance/79/mark.test.mjs (1 new lines; main exit 1)
+same  tests/acceptance/879/cards.test.mjs (4 new lines; main exit 1)
+same  tests/acceptance/879/checkout.test.mjs (1 new lines; main exit 1)
+same  tests/acceptance/879/lane.test.mjs (1 new lines; main exit 1)
+same  tests/acceptance/880/plants.test.ts (1 new lines; main exit 1)
+same  tests/acceptance/882/inventory.test.mjs (2 new lines; main exit 1)
+same  tests/acceptance/882/lint.test.mjs (2 new lines; main exit 1)
+same  tests/acceptance/910/anchors.test.mjs (1 new lines; main exit 1)
+same  tests/acceptance/910/clean.test.mjs (2 new lines; main exit 1)
+same  tests/acceptance/992/gone.test.ts (2 new lines; main exit 1)
+same  tests/acceptance/992/notification.test.ts (3 new lines; main exit 1)
+same  tests/acceptance/993/doctor.test.ts (1 new lines; main exit 1)
+same  tests/acceptance/993/hub-check.test.ts (1 new lines; main exit 1)
+same  tests/acceptance/993/nested-caller.test.ts (1 new lines; main exit 1)
+same  tests/agent-name-branches.test.mjs (2 new lines; main exit 1)
+same  tests/shards.test.mjs (1 new lines; main exit 1)
+same  tests/takes-timed.test.mjs (1 new lines; main exit 1)
+DIFF  packages/hub/test/codex-hub.test.ts (main exit 0): a hold that ends with the check still going says why, and the verdict 
+DIFF  packages/hub/test/detached.test.ts (main exit 0): (file)
+DIFF  packages/hub/test/gate-stop.test.ts (main exit 0): a fix check that passes on the merge base makes the claim INVALID, rec
+DIFF  packages/hub/test/monitor-ends.test.ts (main exit 0): a TaskStop whose hook comes after the stop
+DIFF  packages/hub/test/pack-missing-open.test.ts (main exit 0): #1958 a document naming a pack version the hub lacks opens, its instan
+DIFF  packages/hub/test/shutdown-connection.test.ts (main exit 1): (file)
+DIFF  tests/acceptance/1113/drain.test.mjs (main exit 0): #1113.ca815dac a nested timed request under a build holder still drain
+DIFF  tests/acceptance/1115/failures.test.mjs (main exit 0): #1115.07ca71fc failures on main equal today's
+DIFF  tests/acceptance/1348/fixture.test.ts (main exit 1): (file)
+DIFF  tests/acceptance/317/floor.test.ts (main exit 1): (file)
+DIFF  tests/acceptance/684/lanes.test.ts (main exit 0): AC8 the lane reports BLOCKED, naming the toolchain and its version, ne
+DIFF  tests/acceptance/82/pending.test.ts (main exit 0): AC12 #82.be677619 item 95
+
+## head-alone: the DIFF files run alone twice at 8f2e51904 (fresh worktree: npm ci, build, deep-hook, deep-show)
+ci 0
+build 0
+hook 0
+show 0
+packages/hub/test/codex-hub.test.ts run 1 exit=0 secs=157 load=26.55 21:00:24Z
+packages/hub/test/detached.test.ts run 1 exit=0 secs=5 load=25.07 21:00:29Z
+packages/hub/test/gate-stop.test.ts run 1 exit=0 secs=14 load=22.89 21:00:43Z
+packages/hub/test/monitor-ends.test.ts run 1 exit=0 secs=68 load=22.51 21:01:51Z
+packages/hub/test/pack-missing-open.test.ts run 1 exit=0 secs=11 load=25.22 21:02:02Z
+tests/acceptance/1113/drain.test.mjs run 1 exit=0 secs=17 load=28.20 21:02:19Z
+tests/acceptance/1115/failures.test.mjs run 1 exit=1 secs=13 load=33.44 21:02:32Z
+tests/acceptance/1348/fixture.test.ts run 1 exit=1 secs=2402 load=77.59 21:42:34Z
+tests/acceptance/684/lanes.test.ts run 1 exit=0 secs=9 load=78.43 21:42:43Z
+tests/acceptance/82/pending.test.ts run 1 exit=1 secs=3 load=80.32 21:42:46Z
+packages/hub/test/codex-hub.test.ts run 2 exit=0 secs=151 load=57.81 21:45:17Z
+packages/hub/test/detached.test.ts run 2 exit=0 secs=5 load=56.70 21:45:22Z
+packages/hub/test/gate-stop.test.ts run 2 exit=0 secs=17 load=52.09 21:45:39Z
+packages/hub/test/monitor-ends.test.ts run 2 exit=0 secs=71 load=73.87 21:46:50Z
+packages/hub/test/pack-missing-open.test.ts run 2 exit=0 secs=13 load=83.48 21:47:03Z
+tests/acceptance/1113/drain.test.mjs run 2 exit=0 secs=17 load=79.91 21:47:20Z
+tests/acceptance/1115/failures.test.mjs run 2 exit=1 secs=19 load=76.96 21:47:39Z
+
+## reading
+- 76 of 88 files fail the same tests at main 0f34aacbe. shutdown-connection and 317/floor are listed DIFF only because their failure is file-level; both time out the same way at main.
+- Pass alone twice at 8f2e51904: codex-hub, detached, gate-stop, monitor-ends, pack-missing-open, 1113/drain, 684/lanes. Their failures in the affected run came from its load (detached: ps ENOBUFS).
+- 1348/fixture: BLOCKED at main (its cargo build timed out) and fails at the head on the same lane's missing dump; an environment reading on both sides, INCONCLUSIVE.
+- 82/pending: fails at the head on deep-hook's 50 ms SessionStart budget at load 78-80 ("couldn't hand SessionStart to the hub within its budget"); passed at main at load about 25. A load reading, INCONCLUSIVE until rerun at low load.
+- 1115/failures #1115.07ca71fc fails at the head both times, and it is this PR's: it asserts that a branch's scripts/known-failures.json equals the merge base's, and this PR adds the #2690 entry. See the PR for the owner's choice.

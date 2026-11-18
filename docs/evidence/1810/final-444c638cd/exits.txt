@@ -1,0 +1,6 @@
+start; cc --version exit 0; screen-lock flag 0; Now drawing from 'AC Power' 22:35:39 load { 13.22 37.71 97.15 } thermal 1 free KB 99788400
+head 444c638cd9f1517ca2c18b4068df685bd1ab4519; origin/main d4cef00fbd02632188a161c94c19a9660a3ee6ba; merge-base 0f34aacbe0b9d607dc64bff279c771701bab68c6 22:36:47 load { 9.62 31.51 90.11 } thermal 1 free KB 98612052
+setup (npm ci, workspace build, deep-hook, deep-drive) exit=0 22:46:48 load { 46.33 49.64 70.05 } thermal 1 free KB 94042872
+run: ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯  Test Files  1 failed | 5 passed (6)       Tests  1 failed | 12 passed (13)  exit=1 22:48:31 load { 15.86 37.94 63.11 } thermal 1 free KB 92872432
+git status --porcelain lines after: 0 22:48:32 load { 15.86 37.94 63.11 } thermal 1 free KB 92872224
+secret scan hits=0 22:48:33 load { 15.86 37.94 63.11 } thermal 1 free KB 92872832
