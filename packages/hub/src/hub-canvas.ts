@@ -131,6 +131,17 @@ export class HubCanvas {
   }
 
   /**
+   * A job kind's qualification of one tool by the canvas core (#518): the call, in a world that also holds the
+   * `job_tools` it names, the encode tools of the plug-in being installed, each as its host would run it.
+   */
+  async qualifyTool(call: Obj): Promise<Obj> {
+    const { job_tools: tools, ...rest } = call;
+    const world = await this.canvasWorld();
+    const file = Array.isArray(tools) && tools.length ? { ...world.file, job_tools: tools } : world.file;
+    return (await this.canvas().call({ ...world, file }, rest)).reply;
+  }
+
+  /**
    * deep_show for a session, or for none (the call binds to no session), or `deep show` from the CLI acting as the
    * session the peer check found, or as you: the writer is the binding's, never the payload's.
    */

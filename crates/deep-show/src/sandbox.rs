@@ -364,7 +364,7 @@ impl Host {
         // with the pack's own layouts in reach.
         if issues.is_empty() {
             self.packs.insert(pack.id.text(), manifest.clone());
-            issues.extend(self.vet_providers(manifest, sealed));
+            issues.extend(self.vet_providers(manifest, sealed, &mut entries));
         }
         if issues.is_empty() {
             self.layout_entries.extend(entries);
@@ -383,24 +383,34 @@ impl Host {
     /// check) at the defaults with each fixed seed, and at each numeric param's declared minimum
     /// and maximum.
     /// A refusal names the provider, and the field, or the param and the value.
-    fn vet_providers(&mut self, manifest: &Value, sealed: &Sealed) -> Vec<Issue> {
+    fn vet_providers(
+        &mut self,
+        manifest: &Value,
+        sealed: &Sealed,
+        entries: &mut Vec<SealedEntry>,
+    ) -> Vec<Issue> {
         let mut issues = Vec::new();
         // Checked once per pack version, as a recipe is.
         let version = hash(manifest.to_string().as_bytes());
         if self.vetted.contains(&version) {
             return issues;
         }
-        // The pack's libraries (#190), checked as the logic module checks a pack's: each under
-        // the one subset, then its fixtures; a library whose fixtures haven't run never links.
-        if manifest.get("libs").is_some() {
-            if let Err(refusals) = self.vet_libs(manifest) {
-                issues.push(Issue::envelope(
-                    "out_of_range",
-                    "libs".into(),
-                    json!({"refusals": refusals}),
-                    "the pack's libraries fail their check",
-                ));
-                return issues;
+        // The pack's libraries (#190) and interfaces (#416), checked as the logic module checks a
+        // pack's: each library under the one subset, then its fixtures and its interfaces'; each
+        // interface's planted library failing one of its fixtures. A library whose fixtures
+        // haven't run never links.
+        if manifest.get("libs").is_some() || manifest.get("interfaces").is_some() {
+            match self.vet_libs(manifest, sealed) {
+                Ok(made) => entries.extend(made),
+                Err(refusals) => {
+                    issues.push(Issue::envelope(
+                        "out_of_range",
+                        "libs".into(),
+                        json!({"refusals": refusals}),
+                        "the pack's libraries or interfaces fail their check",
+                    ));
+                    return issues;
+                }
             }
         }
         let pack_name = manifest["name"].as_str().unwrap_or_default().to_string();
@@ -489,35 +499,63 @@ impl Host {
         issues
     }
 
-    /// The pack's libraries through the logic module's own pack check (#190), each library's bytes
-    /// then kept in the evidence store, where a logic item's link reads them.
-    fn vet_libs(&mut self, manifest: &Value) -> Result<(), Value> {
+    /// The pack's libraries and interfaces through the logic module's own pack check (#190,
+    /// #416), every asset of the pack at hand to it and kept in the evidence store, where a logic
+    /// item's link reads it. Returns each interface as a `lib.interface@1` entry, its kit read from
+    /// what the pack check judged of its planted libraries.
+    fn vet_libs(&mut self, manifest: &Value, sealed: &Sealed) -> Result<Vec<SealedEntry>, Value> {
         let mut assets = Map::new();
-        for lib in manifest["libs"]
-            .as_object()
-            .into_iter()
-            .flatten()
-            .map(|(_, l)| l)
-        {
-            for sha in [&lib["asset"]]
-                .into_iter()
-                .chain(lib["fixtures"].as_array().into_iter().flatten())
-            {
-                let Some(bytes) = sha.as_str().and_then(|sha| asset(manifest, sha)) else {
-                    continue;
-                };
-                let b64 = crate::capture::base64(&bytes);
-                assets.insert(sha.as_str().unwrap_or_default().into(), json!(b64));
-                let _ = self.put(&bytes);
-            }
+        for a in manifest["assets"].as_array().into_iter().flatten() {
+            let Some(sha) = a["sha256"].as_str() else {
+                continue;
+            };
+            let Some(bytes) = asset(manifest, sha) else {
+                continue;
+            };
+            assets.insert(sha.into(), json!(crate::capture::base64(&bytes)));
+            let _ = self.put(&bytes);
         }
-        let pack = json!({"name": manifest["name"], "version": manifest["version"], "libs": manifest["libs"]});
+        let id = manifest["id"].as_str().unwrap_or_default();
+        let origin = if id.starts_with("deepbuild/") {
+            "first_party"
+        } else {
+            "installed"
+        };
+        let pack = json!({"name": manifest["name"], "version": manifest["version"], "origin": origin,
+                          "libs": manifest.get("libs").cloned().unwrap_or(json!({})),
+                          "interfaces": manifest.get("interfaces").cloned().unwrap_or(json!({}))});
         let reply = deep_logic::Logic::new(Default::default())
             .handle(&json!({"call": "pack_check", "pack": pack, "assets": assets}));
-        match reply["ok"].as_bool() {
-            Some(true) => Ok(()),
-            _ => Err(reply.get("refusals").cloned().unwrap_or(reply)),
+        if reply["ok"].as_bool() != Some(true) {
+            return Err(reply.get("refusals").cloned().unwrap_or(reply));
         }
+        let Some(reg) = sealed.registry(deep_canvas_sandbox::interfaces::REGISTRY) else {
+            return Ok(Vec::new());
+        };
+        let pack_id = format!("{id}@{}", manifest["version"].as_str().unwrap_or_default());
+        let since = "R6".to_string();
+        Ok(reply["interfaces"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|i| {
+                let name = i["name"].as_str()?.to_string();
+                let mut value = manifest["interfaces"].get(i["label"].as_str()?)?.clone();
+                value["judged"] = i["judged"].clone();
+                Some(SealedEntry {
+                    kit: reg.def.run_kit(&name, &value),
+                    registry: reg.def.name.clone(),
+                    origin: "pack",
+                    module: String::new(),
+                    pack: pack_id.clone(),
+                    digest: entry_digest(&reg.def.name, &name, &value, &since),
+                    value,
+                    name,
+                    since: since.clone(),
+                    twin: None,
+                })
+            })
+            .collect())
     }
 
     /// A provider's links and its library form at its pack's check (Provider `gen@1`: links, the
@@ -603,6 +641,7 @@ impl Host {
             label: &format!("{gen}@{version}"),
             bytes: &form,
             exports: &exports,
+            implements: &[],
         };
         let linked =
             match deep_canvas_sandbox::link::link(&providers::driver(gen, cap), &[object], false) {
@@ -668,7 +707,7 @@ impl Host {
         };
         let asset = hash(input);
         let mut out = json!({"layout": layout, "asset": asset, "size": input.len(), "max_bytes": max_bytes,
-                             "outcome": "refused", "code": null, "offset": null, "field": null, "trap": null});
+                             "outcome": "refused", "code": null, "offset": null, "field": null, "trap": null, "ms": null});
         if input.len() as u64 > max_bytes {
             out["code"] = json!("over_cap");
             return out;
@@ -683,13 +722,20 @@ impl Host {
                 out["code"] = json!("validator_refused");
                 out["what"] = json!(refusals_what(&r));
             }
-            Ok(rw) => match self.run(
-                &rw,
-                "validator",
-                0,
-                &Budget::of("validator", None, input.len()),
-                input,
-            ) {
+            Ok(rw) => match {
+                // #416: the run's own time, its instance made and sized, the bytes copied in and
+                // `validate` returned, past the program's once-per-program check and rewrite.
+                let started = Instant::now();
+                let ran = self.run(
+                    &rw,
+                    "validator",
+                    0,
+                    &Budget::of("validator", None, input.len()),
+                    input,
+                );
+                out["ms"] = json!(started.elapsed().as_secs_f64() * 1e3);
+                ran
+            } {
                 Ok(Ran { trap: Some(t), .. }) => {
                     out["code"] = json!("layout_trap");
                     out["trap"] = trap_json(&Some(t));
@@ -715,6 +761,57 @@ impl Host {
         }
         self.validated.insert(key, out.clone());
         out
+    }
+
+    /// A document's data assets in layouts, at its check (#416; Logic: data layouts): each asset a
+    /// logic item names by hash whose envelope entry names a layout is validated as `validate`
+    /// does, once per asset hash and validator hash. A refusal is an error at the asset's place,
+    /// naming the item, the asset, the layout and the offset, the field or the trap.
+    fn layouts_named(&mut self, sealed: &Sealed, doc: &Value) -> Vec<Issue> {
+        let named: BTreeMap<&str, &str> = doc["assets"]
+            .as_object()
+            .into_iter()
+            .flatten()
+            .filter_map(|(_, a)| Some((a.get("sha256")?.as_str()?, a.get("layout")?.as_str()?)))
+            .collect();
+        let mut issues = Vec::new();
+        if named.is_empty() {
+            return issues;
+        }
+        for (id, item) in doc["items"].as_object().into_iter().flatten() {
+            if item["kind"] != deep_logic::module::INTERFACE {
+                continue;
+            }
+            let assets = item.pointer("/params/assets").and_then(Value::as_array);
+            for (i, sha) in assets.into_iter().flatten().enumerate() {
+                let Some((sha, layout)) = sha.as_str().and_then(|s| named.get_key_value(s)) else {
+                    continue;
+                };
+                let Some(bytes) = crate::evidence::read(&self.evidence, sha) else {
+                    continue;
+                };
+                let v = self.validate_bytes(sealed, layout, &bytes);
+                if v["outcome"] == "admitted" {
+                    continue;
+                }
+                let code = match v["code"].as_str() {
+                    Some("over_cap") => "over_cap",
+                    Some("layout_trap") => "layout_trap",
+                    Some("unknown_layout") => "unknown_layout",
+                    _ => "layout_refused",
+                };
+                issues.push(Issue::envelope(
+                    code,
+                    format!("items/{id}/params/assets/{i}"),
+                    json!({"item": id, "layout": layout, "asset": sha, "offset": v["offset"],
+                           "field": v["field"], "trap": v["trap"]}),
+                    &format!(
+                        "item `{id}`'s data asset {sha} is refused by its layout {layout} ({code})"
+                    ),
+                ));
+            }
+        }
+        issues
     }
 
     /// An installed pack's layout by the name its `layouts` key gives: its validator's bytes and
@@ -864,6 +961,7 @@ impl Host {
             }
         }
         self.provided.insert(doc_id.to_string(), provided);
+        issues.extend(self.layouts_named(sealed, doc));
         issues
     }
 
@@ -1133,6 +1231,7 @@ impl Host {
                         label: l,
                         bytes: b,
                         exports: e,
+                        implements: &[],
                     })
                     .collect();
                 match deep_canvas_sandbox::link::link(&bytes, &objects, false) {

@@ -1,0 +1,99 @@
+✖ #2698 AC5 hub-idle reports wakeups, instructions a second, CPU a second and footprint for the hub and for each child, and two runs on one build agree within 10% on instructions a second after 15 s to settle (9026.191292ms)
+ℹ first run: hub-idle exited 0 after 8.6 s
+last line: {"bench":"hub","mode":"idle","idleCpuPercent":3.600000000000001,"rssBytes":71974912}
+stderr:
+
+✖ #2698 AC6 deep-status-30 reports its own instructions, its peak, the modules it loaded, and an empty Node program's instructions from the same rounds (22080.8845ms)
+✖ #2698 AC6 deep-mcp-30d reports its own instructions, its peak, the modules it loaded, and an empty Node program's instructions from the same rounds (138874.394709ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 0
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 171043.925792
+
+✖ failing tests:
+
+test at tests/acceptance/2698/ac5-hub-idle.test.mjs:57:1
+✖ #2698 AC5 hub-idle reports wakeups, instructions a second, CPU a second and footprint for the hub and for each child, and two runs on one build agree within 10% on instructions a second after 15 s to settle (9026.191292ms)
+  AssertionError [ERR_ASSERTION]: hub-idle's last line reports no reading for the hub (`hub`): {"bench":"hub","mode":"idle","idleCpuPercent":3.600000000000001,"rssBytes":71974912}
+      at idleLine (file://<base>/tests/acceptance/2698/surface.mjs:79:10)
+      at judgeIdle (file://<base>/tests/acceptance/2698/ac5-hub-idle.test.mjs:18:16)
+      at TestContext.<anonymous> (file://<base>/tests/acceptance/2698/ac5-hub-idle.test.mjs:64:16)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2698/ac6-commands.test.mjs:64:1
+✖ #2698 AC6 deep-status-30 reports its own instructions, its peak, the modules it loaded, and an empty Node program's instructions from the same rounds (22080.8845ms)
+  AssertionError [ERR_ASSERTION]: deep-status-30 printed no JSON object as its last line:
+  deep-status-30 exited 1 after 20.4 s
+  last line: 
+  stderr:
+  file://<worktree>/packages/record/dist/index.js:356
+              throw new RecordError('schema', `${issue.code} at ${issue.path || '/'}: ${issue.remediation} (${kind} ${String(input.id)}${input.subject ? ` on ${String(input.subject)}` : ''})`, { path: issue.path });
+                    ^
+  
+  RecordError: unlisted_field at /data/subject: Remove the field, or connect with the contract version that lists it. (ask.created 01M7MA9ZFC00000000000002B3)
+      at SqliteRecord.prepare (file://<worktree>/packages/record/dist/index.js:356:19)
+      at SqliteRecord.appendNow (file://<worktree>/packages/record/dist/index.js:405:31)
+      at file://<worktree>/packages/record/dist/index.js:385:102
+      at async SqliteRecord.append (file://<worktree>/packages/record/dist/index.js:388:34)
+      at async file://<base>/benchmarks/status.mjs:46:14 {
+    code: 'schema',
+    path: '/data/subject',
+    kind: undefined,
+    id: undefined
+  }
+  
+  Node.js v24.22.2
+  
+      at runTask (file://<base>/tests/acceptance/2698/support.mjs:226:10)
+      at async judgeCommand (file://<base>/tests/acceptance/2698/ac6-commands.test.mjs:38:15)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: null,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2698/ac6-commands.test.mjs:66:1
+✖ #2698 AC6 deep-mcp-30d reports its own instructions, its peak, the modules it loaded, and an empty Node program's instructions from the same rounds (138874.394709ms)
+  AssertionError [ERR_ASSERTION]: deep-mcp-30d printed no JSON object as its last line:
+  deep-mcp-30d exited 1 after 136.7 s
+  last line: 
+  stderr:
+  file://<base>/benchmarks/mcp.mjs:90
+      if (!reply.result || reply.result.isError) throw Error(`${name} failed: ${JSON.stringify(reply).slice(0, 500)}`);
+                                                       ^
+  
+  Error: deep_status failed: {"jsonrpc":"2.0","id":2,"result":{"content":[{"type":"text","text":"{\"code\":\"unavailable\",\"retryable\":true,\"remediation\":\"The DeepBuild hub is unreachable (no answer on its socket); nothing was recorded. Call again once it is back.\",\"path\":\"\",\"actual\":\"\",\"evidence\":[]}"}],"isError":true}}
+      at call (file://<base>/benchmarks/mcp.mjs:90:54)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async file://<base>/benchmarks/mcp.mjs:94:18
+  
+  Node.js v24.22.2
+  
+      at runTask (file://<base>/tests/acceptance/2698/support.mjs:226:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async judgeCommand (file://<base>/tests/acceptance/2698/ac6-commands.test.mjs:38:15)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: null,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }

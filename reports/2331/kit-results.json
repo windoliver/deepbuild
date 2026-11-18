@@ -1,0 +1,273 @@
+{
+  "head": "b1efbb3c9af81e940fae498a59c22dc282cd86c1",
+  "note": "The #2331 kit's steps of the 2026-11-16 bay run of b1efbb3c9, taken unchanged from that run's generated record. The kit's files are byte-identical on this branch. A step whose expect is not pass names the failure its wrong program must give.",
+  "steps": [
+    {
+      "name": "A-build",
+      "command": [
+        "sh",
+        "-c",
+        "npm run build --workspaces && cargo build --locked --offline -q -p deep-hook && cargo build --locked --offline -q -p deep-replica --bin deep-drive --features env-plants && cargo build --locked --offline -q -p deep-replica --bin deep-drive -p deep-hook --bin deep-hook"
+      ],
+      "expect": "pass",
+      "exit": 0,
+      "signal": null,
+      "timedOut": false,
+      "seconds": 1074.9,
+      "loadStart": 10.7255859375,
+      "loadEnd": 67.451171875,
+      "cores": 18
+    },
+    {
+      "name": "C-2331-kit",
+      "command": [
+        "/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node",
+        "node_modules/vitest/vitest.mjs",
+        "run",
+        "--root",
+        "tests/acceptance/2331",
+        "--no-file-parallelism",
+        "--reporter=default",
+        "--reporter=json",
+        "--outputFile.json=<evidence>/C-2331-kit.json"
+      ],
+      "expect": "pass",
+      "exit": 0,
+      "signal": null,
+      "timedOut": false,
+      "seconds": 26.3,
+      "loadStart": 24.60498046875,
+      "loadEnd": 33.21875,
+      "cores": 18,
+      "counts": {
+        "files": 3,
+        "run": 10,
+        "passed": 10,
+        "failed": 0,
+        "inconclusive": 0,
+        "blocked": 0,
+        "skipped": 0
+      },
+      "success": true,
+      "tests": [
+        {
+          "file": "tests/acceptance/2331/inbox.test.ts",
+          "name": "#2331.04651a1b #2331.04651a1b: deep inbox, the hub up, writes each ask's default and its time and constructs no date or number formatter",
+          "status": "passed",
+          "durationMs": 7728.289583000001
+        },
+        {
+          "file": "tests/acceptance/2331/inbox.test.ts",
+          "name": "#2331.04651a1b #2331.04651a1b: deep inbox, the hub down, says since when, writes each ask's default and its time, and constructs no date or number formatter",
+          "status": "passed",
+          "durationMs": 455.79041699999834
+        },
+        {
+          "file": "tests/acceptance/2331/judges.test.ts",
+          "name": "the week comparison in America/New_York, it fails each wrong when, the daylight-saving ones first at the change",
+          "status": "passed",
+          "durationMs": 2720.687667
+        },
+        {
+          "file": "tests/acceptance/2331/judges.test.ts",
+          "name": "the week comparison in Australia/Lord_Howe, it fails each wrong when, the daylight-saving ones first at the change",
+          "status": "passed",
+          "durationMs": 2788.305583
+        },
+        {
+          "file": "tests/acceptance/2331/judges.test.ts",
+          "name": "the week comparison in America/Havana, it fails each wrong when, the daylight-saving ones first at the change",
+          "status": "passed",
+          "durationMs": 2161.624917
+        },
+        {
+          "file": "tests/acceptance/2331/judges.test.ts",
+          "name": "the preload counts each formatter it wraps, and changes no result",
+          "status": "passed",
+          "durationMs": 377.1357080000007
+        },
+        {
+          "file": "tests/acceptance/2331/judges.test.ts",
+          "name": "the preload counts the base's clock, and nothing in a process that formats nothing",
+          "status": "passed",
+          "durationMs": 511.19679199999973
+        },
+        {
+          "file": "tests/acceptance/2331/week.test.ts",
+          "name": "#2331.aee6e8f0 #2331.aee6e8f0: in America/New_York, whose clocks go back an hour at 02:00 on Sun 1 Nov 2026, so 01:00-01:59 comes twice, when and so clock return today's text for every minute of the week",
+          "status": "passed",
+          "durationMs": 2252.151667
+        },
+        {
+          "file": "tests/acceptance/2331/week.test.ts",
+          "name": "#2331.aee6e8f0 #2331.aee6e8f0: in Australia/Lord_Howe, whose clocks go forward half an hour at 02:00 on Sun 4 Oct 2026, from UTC+10:30 to UTC+11, when and so clock return today's text for every minute of the week",
+          "status": "passed",
+          "durationMs": 2282.179125
+        },
+        {
+          "file": "tests/acceptance/2331/week.test.ts",
+          "name": "#2331.aee6e8f0 #2331.aee6e8f0: in America/Havana, whose clocks go forward an hour at midnight on Sun 8 Mar 2026, so that day starts at 01:00, when and so clock return today's text for every minute of the week",
+          "status": "passed",
+          "durationMs": 2224.1527079999996
+        }
+      ]
+    },
+    {
+      "name": "F-overlay",
+      "overlay": [
+        {
+          "to": "packages/hub/src/list.ts",
+          "from": "tests/acceptance/2331/twins/locale-clock/packages/hub/src/list.ts",
+          "sha256": "d326455cac8e6a9ea00a8cedb8eeb9e7d1cc82be97eebdd65daee208b5be3314"
+        }
+      ]
+    },
+    {
+      "name": "F-twin-locale-build",
+      "command": [
+        "sh",
+        "-c",
+        "npm run build --workspaces"
+      ],
+      "expect": "pass",
+      "exit": 0,
+      "signal": null,
+      "timedOut": false,
+      "seconds": 128.6,
+      "loadStart": 29.16845703125,
+      "loadEnd": 83.6484375,
+      "cores": 18
+    },
+    {
+      "name": "F-twin-locale-2331-inbox",
+      "command": [
+        "/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node",
+        "node_modules/vitest/vitest.mjs",
+        "run",
+        "--root",
+        "tests/acceptance/2331",
+        "--no-file-parallelism",
+        "--reporter=default",
+        "--reporter=json",
+        "--outputFile.json=<evidence>/F-twin-locale-2331-inbox.json",
+        "inbox"
+      ],
+      "expect": "fail at the formatter count",
+      "exit": 1,
+      "signal": null,
+      "timedOut": false,
+      "seconds": 11.7,
+      "loadStart": 83.6484375,
+      "loadEnd": 120.60595703125,
+      "cores": 18,
+      "counts": {
+        "files": 1,
+        "run": 2,
+        "passed": 0,
+        "failed": 2,
+        "inconclusive": 0,
+        "blocked": 0,
+        "skipped": 0
+      },
+      "success": false,
+      "tests": [
+        {
+          "file": "tests/acceptance/2331/inbox.test.ts",
+          "name": "#2331.04651a1b #2331.04651a1b: deep inbox, the hub up, writes each ask's default and its time and constructs no date or number formatter",
+          "status": "failed",
+          "durationMs": 10196.551167000001,
+          "error": "AssertionError: the date and number formatters deep inbox constructed: expected [ Array(1) ] to deeply equal [] / at <bay>/tests/acceptance/2331/inbox.test.ts:106:101 / at process.processTicksAndRejections (node:internal/process/task_queues:104:5)"
+        },
+        {
+          "file": "tests/acceptance/2331/inbox.test.ts",
+          "name": "#2331.04651a1b #2331.04651a1b: deep inbox, the hub down, says since when, writes each ask's default and its time, and constructs no date or number formatter",
+          "status": "failed",
+          "durationMs": 482.4655409999996,
+          "error": "AssertionError: the date and number formatters deep inbox constructed: expected [ Array(1) ] to deeply equal [] / at <bay>/tests/acceptance/2331/inbox.test.ts:126:101 / at async file://<bay>/node_modules/vitest/dist/chunks/run.BPv-BBRv.js:2801:20"
+        }
+      ]
+    },
+    {
+      "name": "G-overlay",
+      "overlay": [
+        {
+          "to": "packages/hub/src/list.ts",
+          "from": "tests/acceptance/2331-regression/twins/utc-clock/packages/hub/src/list.ts",
+          "sha256": "78e09b33fca94dd573de804f5e93667d8a78075e137a96b30c41968178ebecfd"
+        }
+      ]
+    },
+    {
+      "name": "G-twin-utc-build",
+      "command": [
+        "sh",
+        "-c",
+        "npm run build --workspaces"
+      ],
+      "expect": "pass",
+      "exit": 0,
+      "signal": null,
+      "timedOut": false,
+      "seconds": 109.2,
+      "loadStart": 98.38232421875,
+      "loadEnd": 33.73046875,
+      "cores": 18
+    },
+    {
+      "name": "G-twin-utc-2331-week",
+      "command": [
+        "/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node",
+        "node_modules/vitest/vitest.mjs",
+        "run",
+        "--root",
+        "tests/acceptance/2331",
+        "--no-file-parallelism",
+        "--reporter=default",
+        "--reporter=json",
+        "--outputFile.json=<evidence>/G-twin-utc-2331-week.json",
+        "week"
+      ],
+      "expect": "fail in every zone",
+      "exit": 1,
+      "signal": null,
+      "timedOut": false,
+      "seconds": 9.5,
+      "loadStart": 33.73046875,
+      "loadEnd": 33.08935546875,
+      "cores": 18,
+      "counts": {
+        "files": 1,
+        "run": 3,
+        "passed": 0,
+        "failed": 3,
+        "inconclusive": 0,
+        "blocked": 0,
+        "skipped": 0
+      },
+      "success": false,
+      "tests": [
+        {
+          "file": "tests/acceptance/2331/week.test.ts",
+          "name": "#2331.aee6e8f0 #2331.aee6e8f0: in America/New_York, whose clocks go back an hour at 02:00 on Sun 1 Nov 2026, so 01:00-01:59 comes twice, when and so clock return today's text for every minute of the week",
+          "status": "failed",
+          "durationMs": 2462.68125,
+          "error": "AssertionError: 90720 of 90720 texts differ from today's in America/New_York; the first of them: expected [ { …(5) }, { …(5) }, { …(5) }, …(9) ] to deeply equal [] / at <bay>/tests/acceptance/2331/week.test.ts:17:121 / at process.processTicksAndRejections (node:internal/process/task_queues:104:5)"
+        },
+        {
+          "file": "tests/acceptance/2331/week.test.ts",
+          "name": "#2331.aee6e8f0 #2331.aee6e8f0: in Australia/Lord_Howe, whose clocks go forward half an hour at 02:00 on Sun 4 Oct 2026, from UTC+10:30 to UTC+11, when and so clock return today's text for every minute of the week",
+          "status": "failed",
+          "durationMs": 2281.755459,
+          "error": "AssertionError: 90720 of 90720 texts differ from today's in Australia/Lord_Howe; the first of them: expected [ { …(5) }, { …(5) }, { …(5) }, …(9) ] to deeply equal [] / at <bay>/tests/acceptance/2331/week.test.ts:17:121 / at process.processTicksAndRejections (node:internal/process/task_queues:104:5)"
+        },
+        {
+          "file": "tests/acceptance/2331/week.test.ts",
+          "name": "#2331.aee6e8f0 #2331.aee6e8f0: in America/Havana, whose clocks go forward an hour at midnight on Sun 8 Mar 2026, so that day starts at 01:00, when and so clock return today's text for every minute of the week",
+          "status": "failed",
+          "durationMs": 2337.763,
+          "error": "AssertionError: 90720 of 90720 texts differ from today's in America/Havana; the first of them: expected [ { …(5) }, { …(5) }, { …(5) }, …(9) ] to deeply equal [] / at <bay>/tests/acceptance/2331/week.test.ts:17:121 / at process.processTicksAndRejections (node:internal/process/task_queues:104:5)"
+        }
+      ]
+    }
+  ]
+}

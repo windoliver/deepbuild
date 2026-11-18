@@ -1,0 +1,12 @@
+== node benchmarks/hub.mjs cold-start
+{"bench":"hub","mode":"cold-start","coldMs":5544.8495,"spanMs":5574.6845,"hub":{"pid":83935,"instructions":1240084166,"cpuMs":208.897125,"wakeups":2,"footprintBytes":49306440,"peakFootprintBytes":49306440},"children":[]}
+exit=0
+== node benchmarks/hub.mjs idle
+{"bench":"hub","mode":"idle","idleCpuPercent":1.8000000000000016,"rssBytes":77512704,"spanMs":5307.865041000001,"hub":{"pid":84959,"wakeups":216,"instructionsPerSecond":84383604.05554251,"cpuMsPerSecond":17.120309446089397,"footprintBytes":69363960},"children":[{"pid":86123,"wakeups":1,"instructionsPerSecond":20339972.3176948,"cpuMsPerSecond":4.660630933325193,"footprintBytes":3277160}]}
+exit=0
+== node benchmarks/status.mjs
+{"statusMs":2327.488250000002,"sessions":630,"instructions":[617436020,620583280,615857214,611546239,627132446],"emptyInstructions":[426991983,429319168,428395134,428977408,433739456],"peakFootprintBytes":[22858920,22842608,22875352,22842560,23006448],"modules":["packages/cli/dist/main.js","node:fs","node:os","node:path","node:url","packages/hub/dist/index.js","packages/hub/dist/plant.js","node:child_process","node:crypto","node:events","node:net","packages/hub/dist/contracts.js","node:timers/promises","packages/hub/dist/paths.js","node:module","packages/hub/dist/list.js","packages/hub/dist/client.js","packages/hub/dist/compat.js","packages/hub/dist/generations.js","packages/hub/dist/wire.js","packages/record/src/ids.js","packages/hub/dist/promises.js","packages/hub/dist/sections.js","packages/hub/dist/visible.js","packages/hub/dist/remote.js","packages/hub/dist/identity.js","packages/hub/dist/people.js"]}
+exit=0
+== node benchmarks/mcp.mjs
+{"statusP95Ms":1456.3125,"openItemP95Ms":787.8750839999993,"searchP95Ms":674.8456669999869,"mcpRssMb":39.40625,"instructions":[73992322],"emptyInstructions":[421015956],"peakFootprintBytes":19630696,"modules":["packages/cli/dist/main.js","node:fs","node:os","node:path","node:url","packages/hub/dist/mcp.js","node:net","node:readline","packages/hub/dist/codes.js","packages/hub/dist/paths.js","node:crypto","node:module","packages/hub/dist/settle.js","node:v8","node:vm","packages/hub/dist/tools.js","packages/hub/dist/wire.js","node:child_process","packages/record/src/ids.js","packages/hub/dist/plant.js","node:events"]}
+exit=0

@@ -8,6 +8,10 @@ use std::collections::BTreeMap;
 use deep_canvas::canon::sha256_hex;
 use serde_json::{json, Map, Value};
 
+/// #860: the control a rewind entry is kept under (its value is where it returns), which no
+/// control's ID can be.
+pub const REWIND: &str = ":rewind";
+
 /// Who wrote an entry.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Writer {
@@ -71,6 +75,8 @@ impl Entry {
         // #507: a present-mode entry (advance, back, blank or a stage) names no control.
         if self.control.is_empty() {
             o.insert("present".into(), self.value.clone());
+        } else if self.control == REWIND {
+            o.insert("rewind".into(), self.value.clone());
         } else {
             o.insert("control".into(), json!(self.control));
             o.insert("value".into(), self.value.clone());

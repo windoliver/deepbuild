@@ -49,10 +49,12 @@ export interface Refusal { ask: string; resolver: string; decision: string | nul
  * The planted wrong cores the criteria name; tests only. decision-exists-only applies any answer naming a decision
  * that exists. #1098's: a target's origin from the agent's messages, every target of a step at its first one's
  * origin, a decision covering whatever its targets' origins, every remote read as the repo's, and a card with a
- * target only the agent read saving your answer as wide as any other.
+ * target only the agent read saving your answer as wide as any other. #2646's: a core whose reads of the log leave
+ * tool.before out of their kinds.
  */
 export type AsksPlant = 'decision-exists-only'
-  | 'origin-from-agent-message' | 'first-recipient-origin' | 'rule-by-recipient-kind' | 'push-target-as-repo' | 'wider-scope-offered';
+  | 'origin-from-agent-message' | 'first-recipient-origin' | 'rule-by-recipient-kind' | 'push-target-as-repo' | 'wider-scope-offered'
+  | 'asks-without-tool-before';
 
 /** What the question card shows for one ask. */
 export interface Card {

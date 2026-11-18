@@ -112,6 +112,9 @@ pub struct KitCall {
     pub ledger: Option<PathBuf>,
     /// #501: the registries whose own kit runs instead of the modules' (`export.target@1`).
     pub registries: Option<Vec<String>>,
+    /// #458: planted-fault twins, by fixture name, each `{path, value}`: the run judges only these
+    /// fixtures, each with its twin's value set at the path in its document.
+    pub twins: Map<String, Value>,
 }
 
 impl KitCall {
@@ -130,6 +133,7 @@ impl KitCall {
             "corpus",
             "ledger",
             "registries",
+            "twins",
         ];
         if c.keys().any(|k| !known.contains(&k.as_str())) {
             return None;
@@ -191,6 +195,10 @@ impl KitCall {
             }),
             ledger: path("ledger")?,
             registries: list("registries")?,
+            twins: match c.get("twins") {
+                None => Map::new(),
+                Some(t) => t.as_object()?.clone(),
+            },
         })
     }
 
@@ -390,7 +398,16 @@ impl<'a> Hub<'a> {
         }
         let gpu = call.backends.iter().any(|b| b == "gpu");
         let lease = gpu.then(goldens::GpuLease::take);
-        let manifest = manifest::Manifest::of(self);
+        let mut manifest = manifest::Manifest::of(self);
+        if !call.twins.is_empty() {
+            manifest.fixtures.retain_mut(|f| {
+                let twin = call.twins.get(&f.name);
+                if let Some(doc) = twin.and_then(|t| fixtures::twinned(&f.document, t)) {
+                    f.document = doc;
+                }
+                twin.is_some()
+            });
+        }
         let mut modules = Vec::new();
         let mut corpus_files: Vec<String> = Vec::new();
         let mut criteria: BTreeMap<String, &'static str> = BTreeMap::new();
@@ -470,7 +487,7 @@ impl<'a> Hub<'a> {
             overall = Verdict::Invalid;
         }
         // Nor does a run over some parts only: its PASS would seal a module the others never ran on.
-        let whole = !modules.is_empty() && call.parts.is_none();
+        let whole = !modules.is_empty() && call.parts.is_none() && call.twins.is_empty();
         if let Some(path) = call.ledger.as_ref().filter(|_| whole) {
             if let Some(dir) = path.parent() {
                 let _ = std::fs::create_dir_all(dir);
