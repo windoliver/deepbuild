@@ -7,6 +7,7 @@ The canvas side behind deep_show (#393). `deep-show run` plays a scenario of dee
 ## Where new code goes
 
 - `src/main.rs`: subcommands, scenario parsing and the build set's module list (`modules`); each call family in its own module (`hub.rs`, `shared.rs`, `frames.rs`, `snapshot.rs`, `scene3d.rs`, `input.rs`, `ring.rs`, `terminal.rs`, `packs.rs`, `verdict.rs`, `capture.rs` and the rest).
+- `src/export/`: the export's parts beside `src/export.rs`; #518's are `tools.rs` (the encode job kind's tools: the build's own, the hub's `job_tools`, a test build's), `program.rs` (a plug-in's encode tool run as its own process, its window of `frame_delay` + 2 frames and its 10 s deadline), `planes.rs` (`frame_planes`, the GPU conversion pass on given frames) `qualify.rs` (`encode_qualify`, the kind's qualification of one tool) and, in a `test-encode-tools` build on macOS, `test_tools.rs` (the native test tools that take GPU surfaces, this binary run as `test-encode-tool`).
 - `src/kit/`: the conformance kit's parts; its test canvas modules go in `src/kit/modules.rs`, each under its own `test-kit-*` feature.
 - Test canvas modules and planted twins that need statics or threads live here behind a `test-*` feature (`src/planted.rs`, `src/test_threads.rs`, `src/twins.rs`); others go in crates/deep-canvas-test-modules.
 - `src/physics.rs` builds the physics module on the Rapier backend this binary links, and `src/test_sim.rs` lists the modules of the `test-sim-*` builds, so neither grows `src/main.rs`.

@@ -1,0 +1,51 @@
+# node node_modules/vitest/vitest.mjs run packages/hub/test/holds.test.ts at 40ad93a48, 2026-11-17T09:38:11Z, load 149.91
+
+ RUN  v5.0.5 ~/deepbuild/.claude/worktrees/fix-1836-subagent-stop-hold-a7b2c2
+
+ ✓ packages/hub/test/holds.test.ts > a saved approval of an MCP tool > covers the tool at the schema you approved, and lapses once its schema changes 2443ms
+ ✓ packages/hub/test/holds.test.ts > a call that needs your authority in the turn a proceed starts > is held with an authority ask even when a warn entry also matches it; a block entry denies it with no ask 4702ms
+ ✓ packages/hub/test/holds.test.ts > a held push (#1156) > `git push origin main` goes to origin 6ms
+ ✓ packages/hub/test/holds.test.ts > a held push (#1156) > `git push` goes to origin 0ms
+ ✓ packages/hub/test/holds.test.ts > a held push (#1156) > `git push -u --force origin main` goes to origin 0ms
+ ✓ packages/hub/test/holds.test.ts > a held push (#1156) > `git -C ../shop push upstream main` goes to upstream 0ms
+ ✓ packages/hub/test/holds.test.ts > a held push (#1156) > `git push -o ci.skip upstream main` goes to upstream 0ms
+ ✓ packages/hub/test/holds.test.ts > a held push (#1156) > `git push --repo=https://example.com/a/b.git` goes to https://example.com/a/b.git 0ms
+ ✓ packages/hub/test/holds.test.ts > a held push (#1156) > `git push --repo mirror` goes to mirror 0ms
+ ✓ packages/hub/test/holds.test.ts > a held push (#1156) > `cd web && git push "$REMOTE" main; echo ok` goes to $REMOTE 4ms
+ ✓ packages/hub/test/holds.test.ts > a held push (#1156) > `sh -c 'git push'` goes to origin 0ms
+ ✓ packages/hub/test/holds.test.ts > a held push (#1156) > `jj git push --bookmark main` goes to origin 0ms
+ ✓ packages/hub/test/holds.test.ts > a held push (#1156) > `jj git push --remote fork` goes to fork 0ms
+ ✓ packages/hub/test/holds.test.ts > a held push (#1156) > `jj -R ../shop git push --remote=fork -b b` goes to fork 0ms
+ ✓ packages/hub/test/holds.test.ts > a held push (#1156) > `sl push --to main` goes to default 0ms
+ ✓ packages/hub/test/holds.test.ts > a held push (#1156) > `sl push upstream --to main` goes to upstream 0ms
+ ✓ packages/hub/test/holds.test.ts > a held push (#1156) > `sl -R ../shop push --to main` goes to default 0ms
+ ✓ packages/hub/test/holds.test.ts > a held push (#1156) > `gt submit --stack` goes to origin 0ms
+ ✓ packages/hub/test/holds.test.ts > a held push (#1156) > `git town ship` goes to origin 0ms
+ ✓ packages/hub/test/holds.test.ts > a held push (#1156) > `git push 2>&1 | tail -5` goes to origin 0ms
+ ✓ packages/hub/test/holds.test.ts > a held push (#1156) > `git push > /tmp/out.log` goes to origin 0ms
+ ✓ packages/hub/test/holds.test.ts > a held push (#1156) > `git push 2>/dev/null` goes to origin 4ms
+ ✓ packages/hub/test/holds.test.ts > a held push (#1156) > `git push #comment` goes to origin 0ms
+ ✓ packages/hub/test/holds.test.ts > a held push (#1156) > `git push \
+  upstream main` goes to upstream 0ms
+ ✓ packages/hub/test/holds.test.ts > a held push (#1156) > names each remote of a line once, and a line that pushes nothing names none 0ms
+ ✓ packages/hub/test/holds.test.ts > a held push (#1156) > `git push origin HEAD:b` pushes ["b"] 0ms
+ ✓ packages/hub/test/holds.test.ts > a held push (#1156) > `jj git push --bookmark b` pushes ["b"] 1ms
+ ✓ packages/hub/test/holds.test.ts > a held push (#1156) > `jj git push -b a --bookmark=b` pushes ["a","b"] 0ms
+ ✓ packages/hub/test/holds.test.ts > a held push (#1156) > `jj git push` pushes ["cur"] 0ms
+ ✓ packages/hub/test/holds.test.ts > a held push (#1156) > `sl push --to b` pushes ["b"] 0ms
+ ✓ packages/hub/test/holds.test.ts > a held push (#1156) > `gt submit --stack` pushes ["cur"] 0ms
+ ✓ packages/hub/test/holds.test.ts > a held push (#1156) > `jj git push --all` pushes ["*"] 0ms
+ ✓ packages/hub/test/holds.test.ts > a held push (#1156) > `jj git push -r main` pushes ["*"] 0ms
+ ✓ packages/hub/test/holds.test.ts > a held push (#1156) > `jj git push -c @` pushes ["*"] 0ms
+ ✓ packages/hub/test/holds.test.ts > a held push (#1156) > `jj git push --named x=@` pushes ["*"] 0ms
+ ✓ packages/hub/test/holds.test.ts > a held push (#1156) > `sl -R ../shop push --to main` pushes ["main"] 0ms
+ ✓ packages/hub/test/holds.test.ts > a held push (#1156) > copies the session's transcript before it raises the ask, so what the session read is placed as read 386ms
+ ✓ packages/hub/test/holds.test.ts > a held push (#1156) > holds a merge after a subagent's stop: a child's stop ends no turn a proceed started (#1836) 99ms
+ ✓ packages/hub/test/holds.test.ts > a held push (#1156) > still raises its ask when the copy never ends, inside the gate's hold 2360ms
+
+ Test Files  1 passed (1)
+      Tests  39 passed (39)
+   Start at  01:38:13
+   Duration  14.09s (tests 89%, transform 8%, import 3%)
+
+exit=0

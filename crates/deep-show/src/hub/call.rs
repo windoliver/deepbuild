@@ -1,5 +1,11 @@
 use super::*;
 
+pub struct PatchCall {
+    pub via: Via,
+    pub doc: String,
+    pub body: Body,
+}
+
 pub enum Call {
     /// #411: deep_query, and deep.canvas.read for a check plug-in.
     SceneQuery(Box<crate::query::Query>),
@@ -142,6 +148,13 @@ pub enum Call {
         frames: Vec<([u32; 2], String)>,
         software: bool,
     },
+    /// #518: the export's GPU conversion pass on given BGRA8 frames.
+    FramePlanes {
+        frames: Vec<([u32; 2], String)>,
+        software: bool,
+    },
+    /// #518: the encode job kind's qualification run on one tool, by name@version.
+    EncodeQualify(String),
     /// #501: the cross-machine audio check on two float WAVs.
     CrossMachine([String; 2]),
     /// #1897: the GPU pixel hash on frames from the evidence store, beside its CPU twin.
@@ -203,12 +216,10 @@ pub enum Call {
         doc: String,
         world: String,
     },
-    /// #540, #549: every copy of a document's lockstep match, in this process over the test relay.
-    Match(Box<crate::net::MatchCall>),
-    /// #549: this copy's live match through the declared relay, once a person clicked Join.
-    PlayMatch(Box<crate::net::PlayCall>),
-    /// #549: every connection a match opened in this run.
-    Sockets,
+    /// #540, #549: the net module's calls: every copy of a document's lockstep match over the
+    /// test relay, this copy's live match through the declared relay, and every connection one
+    /// opened.
+    Net(Box<crate::net::NetCall>),
     /// A panel's interaction scope, with no input (#383).
     Scope(String),
     /// The frames a panel presented up to now (#383).
@@ -353,6 +364,8 @@ pub enum Call {
     Media(Box<crate::media::MediaCall>),
     /// The device gate: documents of strips, Play, the gate's fields, the device's output (#498).
     Gate(Box<crate::gate::GateCall>),
+    /// #210: a port's Connect, its state, the shell's mute and a play's seek.
+    Ports(Box<crate::ports::PortCall>),
     /// #507: present mode's state, the presenter view and the menu bar's count.
     Present(crate::present::PresentCall),
     /// #499: the media module's mix.
@@ -402,16 +415,16 @@ pub struct Eval {
 
 pub struct Scenario {
     pub evidence: PathBuf,
+    /// #210: the hours the shell holds quiet, `(from, to)` in flicks.
+    pub quiet_hours: Vec<(i64, i64)>,
     pub sessions: BTreeMap<String, Session>,
     pub processes: Vec<Process>,
     pub panels: BTreeMap<String, Panel>,
     pub docs: BTreeMap<String, String>,
     /// #504: the claim or ask each document was minted for (`docs.<id>.for`), where named.
     pub docs_for: BTreeMap<String, String>,
-    /// #549: the link each document was opened through (`docs.<id>.link`), where given, and the
-    /// PEM authority the app's network backend trusts for this run beside the platform's own.
-    pub links: BTreeMap<String, String>,
-    pub relay_ca: Option<PathBuf>,
+    /// #549: what the scenario gives a match: each document's link and the relay's authority.
+    pub net: crate::net::Given,
     pub record: BTreeMap<String, RecordObject>,
     /// #629: a replay's run record entries, each as a `run` call's reply gave it (`record` as a
     /// list).
@@ -478,6 +491,8 @@ pub struct Scenario {
     pub delays: Vec<crate::stepped::Delay>,
     /// The packs installed in the store before the first call (#306), each `(owner/name, dir)`.
     pub packs: Vec<(String, PathBuf)>,
+    /// #518: the encode tools the hub holds from installed plug-ins, in registration order.
+    pub job_tools: Vec<crate::export::tools::Tool>,
     /// #1961: your notes the hub holds when the run starts, each `{note, doc, item, …}`.
     pub notes: Vec<Value>,
     /// #200: the hub's installed slot fills, each `{slot, fill, kit}` with the kit result the hub

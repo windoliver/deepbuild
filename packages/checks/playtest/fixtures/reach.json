@@ -1,0 +1,811 @@
+{
+ "pieces": {
+  "crawler": {
+   "seed": 555,
+   "class": "figure",
+   "controls": {
+    "aim": {
+     "kind": "point"
+    },
+    "wait_key": {
+     "kind": "actions",
+     "actions": {
+      "wait": {
+       "keys": [
+        "period"
+       ]
+      }
+     }
+    },
+    "stairs": {
+     "kind": "actions",
+     "actions": {
+      "descend": {
+       "keys": [
+        "shift+period"
+       ]
+      }
+     }
+    }
+   },
+   "items": {
+    "crawler": {
+     "kind": "logic@1",
+     "params": {
+      "program": "crawler.wasm",
+      "step_rate": 60,
+      "reads": [
+       "aim",
+       "wait_key",
+       "stairs"
+      ],
+      "writes": {
+       "grid": {
+        "type": "i32",
+        "count": 1024
+       },
+       "cell": {
+        "type": "i32",
+        "count": 4
+       },
+       "hp": {
+        "type": "i32",
+        "count": 2
+       },
+       "side": {
+        "type": "i32",
+        "count": 2
+       },
+       "alive": {
+        "type": "i32",
+        "count": 2
+       },
+       "turn": {
+        "type": "i32"
+       },
+       "depth": {
+        "type": "i32"
+       },
+       "won": {
+        "type": "i32"
+       },
+       "dead": {
+        "type": "i32"
+       },
+       "legal": {
+        "type": "i32",
+        "count": 18
+       },
+       "nlegal": {
+        "type": "i32"
+       },
+       "accepted": {
+        "type": "i32"
+       },
+       "refused": {
+        "type": "i32"
+       },
+       "rooms": {
+        "type": "i32",
+        "count": 3
+       }
+      }
+     }
+    }
+   }
+  },
+  "crawler-vault": {
+   "seed": 555,
+   "class": "figure",
+   "controls": {
+    "aim": {
+     "kind": "point"
+    },
+    "wait_key": {
+     "kind": "actions",
+     "actions": {
+      "wait": {
+       "keys": [
+        "period"
+       ]
+      }
+     }
+    },
+    "stairs": {
+     "kind": "actions",
+     "actions": {
+      "descend": {
+       "keys": [
+        "shift+period"
+       ]
+      }
+     }
+    }
+   },
+   "items": {
+    "crawler": {
+     "kind": "logic@1",
+     "params": {
+      "program": "crawler-vault.wasm",
+      "step_rate": 60,
+      "reads": [
+       "aim",
+       "wait_key",
+       "stairs"
+      ],
+      "writes": {
+       "grid": {
+        "type": "i32",
+        "count": 1024
+       },
+       "cell": {
+        "type": "i32",
+        "count": 4
+       },
+       "hp": {
+        "type": "i32",
+        "count": 2
+       },
+       "side": {
+        "type": "i32",
+        "count": 2
+       },
+       "alive": {
+        "type": "i32",
+        "count": 2
+       },
+       "turn": {
+        "type": "i32"
+       },
+       "depth": {
+        "type": "i32"
+       },
+       "won": {
+        "type": "i32"
+       },
+       "dead": {
+        "type": "i32"
+       },
+       "legal": {
+        "type": "i32",
+        "count": 18
+       },
+       "nlegal": {
+        "type": "i32"
+       },
+       "accepted": {
+        "type": "i32"
+       },
+       "refused": {
+        "type": "i32"
+       },
+       "rooms": {
+        "type": "i32",
+        "count": 3
+       }
+      }
+     }
+    }
+   }
+  },
+  "crawler-noturn": {
+   "seed": 555,
+   "class": "figure",
+   "controls": {
+    "aim": {
+     "kind": "point"
+    },
+    "wait_key": {
+     "kind": "actions",
+     "actions": {
+      "wait": {
+       "keys": [
+        "period"
+       ]
+      }
+     }
+    },
+    "stairs": {
+     "kind": "actions",
+     "actions": {
+      "descend": {
+       "keys": [
+        "shift+period"
+       ]
+      }
+     }
+    }
+   },
+   "items": {
+    "crawler": {
+     "kind": "logic@1",
+     "params": {
+      "program": "crawler-noturn.wasm",
+      "step_rate": 60,
+      "reads": [
+       "aim",
+       "wait_key",
+       "stairs"
+      ],
+      "writes": {
+       "grid": {
+        "type": "i32",
+        "count": 1024
+       },
+       "cell": {
+        "type": "i32",
+        "count": 4
+       },
+       "hp": {
+        "type": "i32",
+        "count": 2
+       },
+       "side": {
+        "type": "i32",
+        "count": 2
+       },
+       "alive": {
+        "type": "i32",
+        "count": 2
+       },
+       "depth": {
+        "type": "i32"
+       },
+       "won": {
+        "type": "i32"
+       },
+       "dead": {
+        "type": "i32"
+       },
+       "legal": {
+        "type": "i32",
+        "count": 18
+       },
+       "nlegal": {
+        "type": "i32"
+       },
+       "accepted": {
+        "type": "i32"
+       },
+       "refused": {
+        "type": "i32"
+       },
+       "rooms": {
+        "type": "i32",
+        "count": 3
+       }
+      }
+     }
+    }
+   }
+  },
+  "map": {
+   "seed": 1048,
+   "class": "figure",
+   "controls": {
+    "aim": {
+     "kind": "point"
+    }
+   },
+   "items": {
+    "map": {
+     "kind": "logic@1",
+     "params": {
+      "program": "map.wasm",
+      "step_rate": 60,
+      "reads": [
+       "aim"
+      ],
+      "writes": {
+       "cells": {
+        "type": "i32",
+        "count": 512
+       },
+       "cell": {
+        "type": "i32",
+        "count": 2
+       },
+       "turn": {
+        "type": "i32"
+       },
+       "accepted": {
+        "type": "i32"
+       },
+       "refused": {
+        "type": "i32"
+       },
+       "won": {
+        "type": "i32"
+       },
+       "legal": {
+        "type": "i32",
+        "count": 18
+       },
+       "nlegal": {
+        "type": "i32"
+       },
+       "links": {
+        "type": "i32",
+        "count": 6
+       },
+       "nlinks": {
+        "type": "i32"
+       }
+      }
+     }
+    }
+   }
+  },
+  "map-gate": {
+   "seed": 1048,
+   "class": "figure",
+   "controls": {
+    "aim": {
+     "kind": "point"
+    }
+   },
+   "items": {
+    "map": {
+     "kind": "logic@1",
+     "params": {
+      "program": "map-gate.wasm",
+      "step_rate": 60,
+      "reads": [
+       "aim"
+      ],
+      "writes": {
+       "cells": {
+        "type": "i32",
+        "count": 512
+       },
+       "cell": {
+        "type": "i32",
+        "count": 2
+       },
+       "turn": {
+        "type": "i32"
+       },
+       "accepted": {
+        "type": "i32"
+       },
+       "refused": {
+        "type": "i32"
+       },
+       "won": {
+        "type": "i32"
+       },
+       "legal": {
+        "type": "i32",
+        "count": 18
+       },
+       "nlegal": {
+        "type": "i32"
+       },
+       "links": {
+        "type": "i32",
+        "count": 6
+       },
+       "nlinks": {
+        "type": "i32"
+       }
+      }
+     }
+    }
+   }
+  },
+  "hex": {
+   "seed": 556,
+   "class": "figure",
+   "controls": {},
+   "items": {
+    "hex": {
+     "kind": "logic@1",
+     "params": {
+      "program": "hex.wasm",
+      "step_rate": 60,
+      "reads": [],
+      "writes": {
+       "cells": {
+        "type": "i32",
+        "count": 36
+       },
+       "cell": {
+        "type": "i32",
+        "count": 2
+       }
+      }
+     }
+    }
+   }
+  },
+  "flow": {
+   "seed": 556,
+   "class": "figure",
+   "controls": {
+    "wall": {
+     "kind": "slider",
+     "range": [
+      0,
+      1
+     ],
+     "increment": 1,
+     "default": 0
+    }
+   },
+   "items": {
+    "flow": {
+     "kind": "logic@1",
+     "params": {
+      "program": "flow.wasm",
+      "step_rate": 60,
+      "reads": [
+       "wall"
+      ],
+      "writes": {
+       "cells": {
+        "type": "i32",
+        "count": 4096
+       },
+       "next": {
+        "type": "i32",
+        "count": 4096
+       },
+       "cost": {
+        "type": "i32",
+        "count": 4096
+       },
+       "walls": {
+        "type": "i32"
+       }
+      },
+      "budget": {
+       "fuel": 8000000
+      }
+     }
+    }
+   }
+  },
+  "flow-rising": {
+   "seed": 556,
+   "class": "figure",
+   "controls": {
+    "wall": {
+     "kind": "slider",
+     "range": [
+      0,
+      1
+     ],
+     "increment": 1,
+     "default": 0
+    }
+   },
+   "items": {
+    "flow": {
+     "kind": "logic@1",
+     "params": {
+      "program": "flow-rising.wasm",
+      "step_rate": 60,
+      "reads": [
+       "wall"
+      ],
+      "writes": {
+       "cells": {
+        "type": "i32",
+        "count": 4096
+       },
+       "next": {
+        "type": "i32",
+        "count": 4096
+       },
+       "cost": {
+        "type": "i32",
+        "count": 4096
+       },
+       "walls": {
+        "type": "i32"
+       }
+      },
+      "budget": {
+       "fuel": 8000000
+      }
+     }
+    }
+   }
+  }
+ },
+ "plays": {
+  "crawler": {
+   "grid": {
+    "cells": "crawler.grid",
+    "size": [
+     32,
+     32
+    ],
+    "shape": "square",
+    "moves": 4,
+    "classes": {
+     "open": [
+      0
+     ],
+     "blocked": [
+      1
+     ],
+     "door": [
+      2
+     ],
+     "locked": [
+      3
+     ],
+     "key": [
+      4
+     ],
+     "exit": [
+      5
+     ]
+    },
+    "locks": {
+     "3": 4
+    },
+    "floor": "crawler.depth"
+   },
+   "units": {
+    "cell": "crawler.cell",
+    "hp": "crawler.hp",
+    "side": "crawler.side",
+    "alive": "crawler.alive",
+    "self": 0
+   },
+   "turn": "crawler.turn",
+   "rewards": {},
+   "values": {
+    "depth": "crawler.depth",
+    "won": "crawler.won",
+    "dead": "crawler.dead"
+   },
+   "actions": {
+    "move": {
+     "control": "aim",
+     "args": "cell"
+    },
+    "wait": {
+     "control": "wait_key",
+     "action": "wait",
+     "args": "none"
+    },
+    "descend": {
+     "control": "stairs",
+     "action": "descend",
+     "args": "none"
+    }
+   },
+   "legal": {
+    "rows": "crawler.legal",
+    "count": "crawler.nlegal"
+   },
+   "accepted": "crawler.accepted",
+   "refused": "crawler.refused"
+  },
+  "map": {
+   "grid": {
+    "cells": "map.cells",
+    "size": [
+     16,
+     16
+    ],
+    "layers": 2,
+    "links": {
+     "rows": "map.links",
+     "count": "map.nlinks"
+    },
+    "shape": "square",
+    "moves": 4,
+    "classes": {
+     "open": [
+      0
+     ],
+     "blocked": [
+      1
+     ],
+     "exit": [
+      5
+     ]
+    }
+   },
+   "units": {
+    "cell": "map.cell",
+    "self": 0
+   },
+   "turn": "map.turn",
+   "values": {
+    "won": "map.won"
+   },
+   "actions": {
+    "move": {
+     "control": "aim",
+     "args": "cell"
+    }
+   },
+   "legal": {
+    "rows": "map.legal",
+    "count": "map.nlegal"
+   },
+   "accepted": "map.accepted",
+   "refused": "map.refused"
+  },
+  "hex": {
+   "grid": {
+    "cells": "hex.cells",
+    "size": [
+     6,
+     6
+    ],
+    "shape": "hex",
+    "hex": {
+     "orient": "pointy",
+     "offset": "odd"
+    },
+    "classes": {
+     "open": [
+      0
+     ],
+     "blocked": [
+      1
+     ],
+     "exit": [
+      5
+     ]
+    }
+   },
+   "units": {
+    "cell": "hex.cell",
+    "self": 0
+   }
+  },
+  "flow": {
+   "grid": {
+    "cells": "flow.cells",
+    "size": [
+     64,
+     64
+    ],
+    "shape": "square",
+    "moves": 4,
+    "classes": {
+     "open": [
+      0
+     ],
+     "blocked": [
+      1
+     ],
+     "exit": [
+      5
+     ]
+    }
+   }
+  }
+ },
+ "bots": {
+  "descender": {
+   "descender": {
+    "action": "descend",
+    "every": 1
+   }
+  },
+  "explorer": {
+   "explorer": {
+    "every": 1
+   }
+  },
+  "idle": {
+   "policy": {}
+  }
+ },
+ "flow": {
+  "next": "flow.next",
+  "cost": "flow.cost",
+  "solid": [
+   "blocked"
+  ],
+  "targets": [
+   "exit"
+  ],
+  "spawns": [
+   [
+    0,
+    0
+   ],
+   [
+    32,
+    0
+   ],
+   [
+    63,
+    0
+   ],
+   [
+    0,
+    32
+   ],
+   [
+    63,
+    32
+   ],
+   [
+    0,
+    63
+   ],
+   [
+    32,
+    63
+   ],
+   [
+    63,
+    63
+   ]
+  ],
+  "lag": 8
+ },
+ "playtest": {
+  "bots": [
+   {
+    "descender": {
+     "action": "descend",
+     "every": 1
+    },
+    "share": {
+     "deep": [
+      0.9,
+      1
+     ]
+    }
+   },
+   {
+    "explorer": {
+     "every": 1
+    }
+   },
+   {
+    "legal": {
+     "pick": "seeded",
+     "every": 1
+    }
+   },
+   {
+    "policy": {
+     "pick": {
+      "wait_key": {
+       "from": [
+        "wait"
+       ],
+       "every": 0.25
+      }
+     }
+    },
+    "expect": {
+     "deep": "miss"
+    },
+    "share": {
+     "dead": [
+      1,
+      1
+     ]
+    }
+   }
+  ],
+  "goals": [
+   {
+    "name": "deep",
+    "when": "depth >= 3"
+   },
+   {
+    "name": "dead",
+    "when": "dead >= 1"
+   }
+  ],
+  "runs": 20,
+  "seed": 555,
+  "span": {
+   "steps": 4000
+  }
+ }
+}

@@ -211,8 +211,6 @@ pub enum Planted {
     Physics(crate::physics::Planted),
     /// #525's live worlds' wrong programs.
     Ahead(crate::stepped::Planted),
-    /// #549's wrong copies of a match.
-    Net(deep_net::Planted),
     /// #202: a kind_rules requirement counts the working agent's own pack rule as its cover.
     OwnRuleCountsAsCover,
     /// #202: the kind_rules check evaluates a pack kind's recipe rules a second time.
@@ -221,6 +219,8 @@ pub enum Planted {
     KitDefaultsOnly,
     /// #202: the expander walks an instance's inputs in a hash map's order.
     ExpandsInHashOrder,
+    /// #458: a recipe's expansion drops one derived item's stroke.
+    ExpansionDropsStroke,
     /// #1956: the pack check of a kind's migration stops at its first fault.
     MigrationFirstFault,
     /// #1959: the loader takes one saved major for the whole document.
@@ -406,6 +406,14 @@ pub enum Planted {
     DropFrameEveryTenthMinute,
     /// #499: a canonical seek decodes its frame from the asset's short-GOP proxy.
     SeekReadsProxy,
+    /// #210: a port sends the steps a seek plays again.
+    PortSendsOnSeek,
+    /// #210: a mute silences the plug-in's output and leaves a sound port's out side sending.
+    MuteLeavesPortSending,
+    /// #210: the gate trusts the document's sound flag over the plug-in's port.
+    GateTrustsDocumentSound,
+    /// #210: the web export writes a port into its bundle.
+    WebExportKeepsPort,
     /// #498: the gate trusts a shipped panel: its own request to play sounds.
     ShippedPanelsUngated,
     /// #498: the reserved-sound comparer refuses only an asset whose hash is a reserved sound's.
@@ -680,12 +688,6 @@ pub enum Body {
     Undo { patch: String, of: String },
 }
 
-pub struct PatchCall {
-    pub via: Via,
-    pub doc: String,
-    pub body: Body,
-}
-
 mod call;
 pub use call::*;
 
@@ -786,8 +788,6 @@ pub struct Hub<'a> {
     pub first_frames: BTreeMap<String, i64>,
     /// #538's planted lookup: each copy table's key order in its document's first revision.
     pub first_orders: BTreeMap<String, Vec<String>>,
-    /// #549: each document's Join and every connection a match opened.
-    pub net: crate::net::Net,
     /// The displays, the windows on them and the card's placement (#400).
     pub placement: Placement,
     /// Terminals, streams and session pages (#402).
@@ -798,6 +798,8 @@ pub struct Hub<'a> {
     pub media: crate::media::Media,
     /// The device gate's owners and their voices (#498).
     pub gate: crate::gate::Gate,
+    /// #210: the plug-ins' ports, their state and the pieces playing under them.
+    pub ports: crate::ports::Ports,
     /// The card's `rearm_on` changes the scenario reported, each when (#327).
     pub card_rearms: Vec<i64>,
     /// A press down the card holds until its release: its platform stamp and its option (#327).
@@ -900,6 +902,7 @@ impl<'a> Hub<'a> {
         }
         let pack_planted = PackPlanted {
             seed_by_order: scenario.planted == Some(Planted::SeedsByExpansionOrder),
+            drops_stroke: scenario.planted == Some(Planted::ExpansionDropsStroke),
             overwrite_broken_out: scenario.planted == Some(Planted::ReexpansionOverwritesBrokenOut),
             skip_requires_modules: scenario.planted == Some(Planted::PackCheckSkipsRequiresModules),
             key_by_name: matches!(
@@ -977,7 +980,6 @@ impl<'a> Hub<'a> {
             expansion_cache: BTreeMap::new(),
             first_frames: BTreeMap::new(),
             first_orders: BTreeMap::new(),
-            net: Default::default(),
             placement: Placement::open(
                 scenario.displays.clone(),
                 scenario.window,
@@ -995,6 +997,7 @@ impl<'a> Hub<'a> {
             ),
             media: crate::media::Media::default(),
             gate: crate::gate::Gate::default(),
+            ports: crate::ports::Ports::default(),
             card_rearms: Vec::new(),
             card_down: None,
             card_answer: None,
@@ -1555,6 +1558,8 @@ impl<'a> Hub<'a> {
             Call::ExportRun(job) => self.export_run(job),
             Call::Session { doc, set } => self.session_reply(doc, set.as_ref()),
             Call::FrameHash { frames, software } => self.frame_hash(frames, *software),
+            Call::FramePlanes { frames, software } => self.frame_planes(frames, *software),
+            Call::EncodeQualify(tool) => self.encode_qualify(tool),
             Call::CrossMachine(wavs) => self.cross_machine(wavs),
             Call::PixelHash(frames) => self.pixel_hash(frames),
             Call::Play {
@@ -1610,20 +1615,18 @@ impl<'a> Hub<'a> {
                 event,
                 t,
                 gesture,
-            } => match self
-                .join_input(panel, event, gesture)
-                .or_else(|| self.ring_input(panel, event))
-            {
+            } => match self.join_or_press(panel, event, gesture) {
                 Some(reply) => reply,
-                None => self
-                    .live_press(panel, event, *t)
-                    .err()
-                    .unwrap_or_else(|| self.input(panel, event, gesture)),
+                None => match self.ring_input(panel, event) {
+                    Some(reply) => reply,
+                    None => self
+                        .live_press(panel, event, *t)
+                        .err()
+                        .unwrap_or_else(|| self.input(panel, event, gesture)),
+                },
             },
             Call::World { doc, world } => self.world_call(doc, world),
-            Call::Match(m) => self.match_call(m),
-            Call::PlayMatch(p) => self.play_match(p),
-            Call::Sockets => self.net.sockets(),
+            Call::Net(c) => self.net_call(c),
             Call::Scope(panel) => self.scope_reply(panel),
             Call::Presented(panel) => self.presented(panel),
             Call::PopOut {
@@ -1715,7 +1718,11 @@ impl<'a> Hub<'a> {
             Call::Gate(g) => self.gate_call(g),
             Call::Present(p) => self.present_call(p),
             Call::Mix(m) => self.mix_call(m),
-            Call::Audio(a) => self.audio_call(a),
+            Call::Audio(a) => match self.piece_audio(a) {
+                Some(reply) => reply,
+                None => self.audio_call(a),
+            },
+            Call::Ports(p) => self.ports_call(p),
             Call::RuntimeGolden(g) => self.golden_call(g),
             Call::Term(t) => self.term_call(t),
         };

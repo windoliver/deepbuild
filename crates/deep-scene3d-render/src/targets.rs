@@ -42,6 +42,9 @@ pub struct Target {
 pub struct Want {
     pub velocity: bool,
     pub emission: bool,
+    /// #458: the opaque solids' world normals where they show, which the parity suite's
+    /// instances relation reads.
+    pub normal: bool,
 }
 
 /// The core targets the renderer holds, with the pipelines that draw them.
@@ -51,7 +54,9 @@ pub struct Core {
     size: [u32; 2],
     pub velocity: Option<Target>,
     pub emission: Option<Target>,
+    pub normal: Option<Target>,
     emission_pipe: Option<wgpu::RenderPipeline>,
+    normal_pipe: Option<wgpu::RenderPipeline>,
     threshold_pipe: Option<wgpu::RenderPipeline>,
 }
 
@@ -108,7 +113,15 @@ impl Core {
         if size != self.size {
             self.velocity = None;
             self.emission = None;
+            self.normal = None;
             self.size = size;
+        }
+        if !self.want.normal {
+            self.normal = None;
+        } else if self.normal.is_none() {
+            self.normal = Some(deep_gpu::alloc::outside(|| {
+                made(d, "scene3d.normal", size, EMISSION)
+            }));
         }
         if !self.want.velocity {
             self.velocity = None;
@@ -209,6 +222,94 @@ impl Core {
             })
             .clone();
         Some(EmissionFrame::Draws { pipe, binds, draws })
+    }
+}
+
+/// #458: the normal target's frame: each opaque solid's world normal where its depth shows, an
+/// instance a solid, in the scene's order.
+#[derive(Clone)]
+pub struct NormalFrame {
+    pub pipe: wgpu::RenderPipeline,
+    pub binds: [wgpu::BindGroup; 4],
+    pub instances: wgpu::Buffer,
+    /// Each solid's vertices, indices and index count, at its instance.
+    pub draws: Vec<(wgpu::Buffer, wgpu::Buffer, u32)>,
+}
+
+impl Core {
+    /// The normal target's pipeline: the solids' vertex stage and the ao prepass's normal, against
+    /// the frame's resolved depth as the emission target reads it.
+    pub fn normal_pipe(
+        &mut self,
+        device: &Device,
+        module: &wgpu::ShaderModule,
+        layout: &wgpu::PipelineLayout,
+    ) -> wgpu::RenderPipeline {
+        self.normal_pipe
+            .get_or_insert_with(|| {
+                pipeline(
+                    &device.device,
+                    "scene3d.normal",
+                    Some(layout),
+                    module,
+                    ("mesh_vs", &crate::mesh_buffers()),
+                    Some(("ao_normal_fs", &[target(EMISSION, None)])),
+                    Some(wgpu::DepthStencilState {
+                        format: DEPTH,
+                        depth_write_enabled: Some(false),
+                        depth_compare: Some(wgpu::CompareFunction::GreaterEqual),
+                        stencil: Default::default(),
+                        bias: wgpu::DepthBiasState {
+                            constant: 64,
+                            slope_scale: 1.0,
+                            clamp: 0.0,
+                        },
+                    }),
+                )
+            })
+            .clone()
+    }
+}
+
+impl NormalFrame {
+    /// Records the normal target `view`, cleared first, against `depth`.
+    pub fn record(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        view: &wgpu::TextureView,
+        depth: &wgpu::TextureView,
+    ) {
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("scene3d.normal"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view,
+                resolve_target: None,
+                depth_slice: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                view: depth,
+                depth_ops: Some(wgpu::Operations {
+                    load: wgpu::LoadOp::Load,
+                    store: wgpu::StoreOp::Store,
+                }),
+                stencil_ops: None,
+            }),
+            ..Default::default()
+        });
+        pass.set_pipeline(&self.pipe);
+        for (i, b) in self.binds.iter().enumerate() {
+            pass.set_bind_group(i as u32, b, &[]);
+        }
+        pass.set_vertex_buffer(1, self.instances.slice(..));
+        for (k, (vertices, indices, count)) in self.draws.iter().enumerate() {
+            pass.set_vertex_buffer(0, vertices.slice(..));
+            pass.set_index_buffer(indices.slice(..), wgpu::IndexFormat::Uint32);
+            pass.draw_indexed(0..*count, 0, k as u32..k as u32 + 1);
+        }
     }
 }
 

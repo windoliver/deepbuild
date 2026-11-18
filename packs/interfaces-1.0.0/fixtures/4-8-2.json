@@ -1,0 +1,33 @@
+{
+  "name": "4-8-2",
+  "item": {
+    "kind": "logic@1",
+    "params": {
+      "program": "48b0d157ffe30a2adfe7f9409ee27b4b0f0dd2f0ce4df134e247367ca536b823",
+      "writes": {
+        "out": {
+          "type": "f64",
+          "count": 2
+        }
+      },
+      "assets": [
+        "7843fc844787ff3e7ce3d2384987daa46b660405709f10981e98665e7bd7e53f",
+        "78a9686f03da4c840d6fa7e21047af12c3bc99bc977e4486a76e1a3ea190e294"
+      ]
+    }
+  },
+  "track": [],
+  "steps": 1,
+  "expect": {
+    "arrays": {
+      "0": {
+        "out": [
+          -0.10192935168743134,
+          0.3919026851654053
+        ]
+      }
+    },
+    "tolerance": "exact"
+  },
+  "answer": "nn.mlp@1's rule worked by hand in binary32 (each product and each sum rounded once, to nearest, ties to even; max(sum, 0) after the hidden layer) on the table's 4-8-2 network (seeded values in (−1, 1), seed 417) and input; each output widened to f64. A multiply and add fused into one rounding gives -0.10192935168743134, 0.39190271496772766."
+}

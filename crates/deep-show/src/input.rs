@@ -49,6 +49,8 @@ pub struct PanelScope {
     pub(crate) preview: Option<crate::preview::Previewer>,
     /// #542: its text fields and the scroll gesture under way.
     pub(crate) fields: crate::fields::Viewer,
+    /// #549: its Join prompt and the connections its match opened.
+    pub(crate) join: crate::net::Join,
 }
 
 pub fn point(v: &Value) -> Option<[f64; 2]> {
@@ -214,6 +216,7 @@ impl Hub<'_> {
                     points: Default::default(),
                     preview: None,
                     fields: Default::default(),
+                    join: Default::default(),
                 },
             );
             let first = self.seen(panel).ok_or_else(|| refused("not_presented"))?;

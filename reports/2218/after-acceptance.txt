@@ -1,0 +1,15 @@
+
+ RUN  v5.0.5 <job>/work
+
+ ✓ tests/acceptance/2218/accept.test.ts > AC2 #2218.fbc757ce a spec check's accept reaches the claim's check > AC2 #2218.fbc757ce with accept: 10%, a check whose every run is clean is given 29 runs on the claim, and the claim passes on no fewer 29481ms
+ ✓ tests/acceptance/2218/min-tests.test.ts > AC3 #2218.a145523d a spec check's min_tests is read > AC3 #2218.a145523d a suite that runs 3 tests passes with min_tests: 3, and with min_tests: 5 is INVALID, naming the check, 3 and 5 26349ms
+ ✓ tests/acceptance/2218/unread.test.ts > AC4 #2218.1a2df3f9 a key the hub doesn't read makes the claim BLOCKED > AC4 #2218.1a2df3f9 a spec whose check has dedline: 30m makes the claim BLOCKED, naming dedline and its line, with you as owner 13177ms
+ ✓ tests/acceptance/2218/unread.test.ts > AC4 #2218.1a2df3f9 a key the hub doesn't read makes the claim BLOCKED > AC4 #2218.1a2df3f9 a spec with a top-level chekcs: block makes the claim BLOCKED, naming chekcs and its line, with you as owner 12056ms
+ ✓ tests/acceptance/2218/runs.test.ts > AC1 #2218.21b6bc5c a spec check's runs reach the claim's check > AC1 #2218.21b6bc5c with runs: 3, a check that passes on its first run and fails on its second gives the claim INCONCLUSIVE, naming the check as passed and failed on real runs of the commit 13577ms
+ ✓ tests/acceptance/2218/twin.test.ts > AC5 #2218.cb279bf8 the twin: this repo's own done.yaml > AC5 #2218.cb279bf8 a claim in a trusted repo whose spec is this repo's own done.yaml runs every check it names and passes: no key is refused 12874ms
+
+ Test Files  5 passed (5)
+      Tests  6 passed (6)
+   Start at  16:04:47
+   Duration  109.61s (tests 100%)
+

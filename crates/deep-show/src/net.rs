@@ -22,34 +22,60 @@ use deep_relay::macos::{check_hello, Connection, Event as Arrived};
 use deep_relay::wire;
 use serde_json::{json, Map, Value};
 
-use crate::hub::{Call, Hub, Planted};
+use crate::hub::{Call, Hub};
 
-/// A document's Join: where its prompt stands, and the press of a person's click on its button.
+/// A panel's Join, held with its scope: where its prompt stands, the press of a person's click
+/// on its button, and every connection and request its match opened, each a capability call
+/// whose grant is the one host it names.
 #[derive(Default)]
-struct Join {
+pub struct Join {
     state: Option<State>,
     pressed: bool,
-}
-
-/// What the app holds of its matches: each document's Join, and every connection one opened.
-#[derive(Default)]
-pub struct Net {
-    joins: BTreeMap<String, Join>,
     log: Vec<Value>,
 }
 
-impl Net {
-    /// `sockets`: every connection and request a match opened in this run, each a capability
-    /// call whose grant is the one host it names.
-    pub fn sockets(&self) -> Value {
-        json!({"log": self.log})
-    }
+/// What a scenario gives a match: the link each document was opened through (`docs.<id>.link`),
+/// and the PEM authority the app's network backend trusts for this run beside the platform's
+/// own (`relay_ca`).
+pub struct Given {
+    links: BTreeMap<String, String>,
+    relay_ca: Option<PathBuf>,
+}
 
-    fn opened(&mut self, kind: &str, host: &str, game: &wire::MatchId) {
-        self.log.push(
-            json!({"kind": kind, "host": host, "grant": host, "match": wire::hex(game), "opened_by": "join"}),
-        );
+pub fn given(input: &Map<String, Value>) -> Option<Given> {
+    let mut links = BTreeMap::new();
+    let docs = input.get("docs").and_then(Value::as_object);
+    for (doc, d) in docs.into_iter().flatten() {
+        if let Some(link) = d.get("link") {
+            links.insert(doc.clone(), link.as_str()?.to_string());
+        }
     }
+    let relay_ca = match input.get("relay_ca") {
+        None => None,
+        Some(c) => Some(PathBuf::from(c.as_str()?)),
+    };
+    Some(Given { links, relay_ca })
+}
+
+/// The net module, on logic: a build that leaves logic out leaves it out too.
+pub fn module() -> Option<deep_canvas::registry::Module> {
+    cfg!(not(feature = "test-leave-out-logic")).then(deep_net::kind::module)
+}
+
+/// The net module's calls: `match`, `play_match` and `sockets`.
+pub enum NetCall {
+    Match(MatchCall),
+    Play(PlayCall),
+    Sockets,
+}
+
+pub fn parse(name: &str, c: &Map<String, Value>) -> Option<Call> {
+    let call = match name {
+        "match" => NetCall::Match(parse_match(c)?),
+        "play_match" => NetCall::Play(parse_play(c)?),
+        _ => NetCall::Sockets,
+    };
+    Some(Call::Net(Box::new(call)))
 }
 
 /// `{"call": "match", "doc", "steps", "plays"?, "relay"?, "check"?, "render_back"?}`.
@@ -81,7 +107,7 @@ fn flicks(seconds: f64) -> i64 {
     (seconds * FLICKS as f64).round() as i64
 }
 
-pub fn parse_match(c: &Map<String, Value>) -> Option<Call> {
+fn parse_match(c: &Map<String, Value>) -> Option<MatchCall> {
     let player = |v: &Value| v.as_u64().filter(|p| (1..=8).contains(p)).map(|p| p as u8);
     let plays = match c.get("plays") {
         None => BTreeMap::new(),
@@ -124,7 +150,7 @@ pub fn parse_match(c: &Map<String, Value>) -> Option<Call> {
             })
             .collect::<Option<_>>()?,
     };
-    Some(Call::Match(Box::new(MatchCall {
+    Some(MatchCall {
         doc: c.get("doc")?.as_str()?.to_string(),
         steps: c
             .get("steps")?
@@ -147,7 +173,7 @@ pub fn parse_match(c: &Map<String, Value>) -> Option<Call> {
             Some(k) => Some(k.as_str()?.to_string()),
         },
         renders,
-    })))
+    })
 }
 
 /// `{"call": "play_match", "panel", "steps", "plays"?, "link_to"?}`.
@@ -158,8 +184,8 @@ pub struct PlayCall {
     link_to: Option<PathBuf>,
 }
 
-pub fn parse_play(c: &Map<String, Value>) -> Option<Call> {
-    Some(Call::PlayMatch(Box::new(PlayCall {
+fn parse_play(c: &Map<String, Value>) -> Option<PlayCall> {
+    Some(PlayCall {
         panel: c.get("panel")?.as_str()?.to_string(),
         steps: c
             .get("steps")?
@@ -173,7 +199,7 @@ pub fn parse_play(c: &Map<String, Value>) -> Option<Call> {
             None => None,
             Some(p) => Some(PathBuf::from(p.as_str()?)),
         },
-    })))
+    })
 }
 
 /// A document's match as this copy would play it.
@@ -206,6 +232,11 @@ impl Hub<'_> {
             return Err(json!({"code": "no_match", "what": "the document has no net@1 item"}));
         };
         let track = self.track_read(doc);
+        // #860: a rewind would desync the other players, so a match refuses one, naming it.
+        if track.iter().any(|e| e.get("rewind").is_some()) {
+            let net = deep_net::kind::item(&rev).map(|(_, item)| item);
+            return Err(json!({"code": "rewind.in_match", "match": net.and_then(|n| n.get("id"))}));
+        }
         let piece = match self.logic_piece(&form, &track) {
             Ok(Some(p)) => Rc::new(p),
             Ok(None) => return Err(json!({"code": "no_logic"})),
@@ -232,10 +263,45 @@ impl Hub<'_> {
         })
     }
 
+    /// The net module's wrong copy, when the scenario's `planted` names one.
     fn net_planted(&self) -> deep_net::Planted {
-        match self.scenario.planted {
-            Some(Planted::Net(p)) => p,
-            _ => deep_net::Planted::None,
+        let name = self.scenario.module_planted.as_deref().unwrap_or_default();
+        deep_net::Planted::named(name).unwrap_or_default()
+    }
+
+    /// The net module's calls.
+    pub(crate) fn net_call(&mut self, call: &NetCall) -> Value {
+        match call {
+            NetCall::Match(m) => self.match_call(m),
+            NetCall::Play(p) => self.play_match(p),
+            // `sockets`: every connection and request a match opened in this run.
+            NetCall::Sockets => {
+                let log = self.scopes.values().flat_map(|s| s.join.log.iter().cloned());
+                json!({"log": log.collect::<Vec<_>>()})
+            }
+        }
+    }
+
+    /// Your input on a panel: the Join prompt's when it lands on its open button, else the
+    /// piece's own (#210).
+    pub(crate) fn join_or_press(
+        &mut self,
+        panel: &str,
+        event: &Event,
+        gesture: &crate::points::Gesture,
+    ) -> Option<Value> {
+        self.join_input(panel, event, gesture)
+            .or_else(|| self.piece_press(panel, event))
+    }
+
+    fn join_mut(&mut self, panel: &str) -> Option<&mut Join> {
+        self.panel_scope(panel).ok().map(|s| &mut s.join)
+    }
+
+    fn opened(&mut self, panel: &str, kind: &str, host: &str, game: &wire::MatchId) {
+        let entry = json!({"kind": kind, "host": host, "grant": host, "match": wire::hex(game), "opened_by": "join"});
+        if let Some(join) = self.join_mut(panel) {
+            join.log.push(entry);
         }
     }
 
@@ -243,7 +309,7 @@ impl Hub<'_> {
     /// process over the test relay on the relay's own clock, with no network: each copy's
     /// report and its logic items' steps, the relay's report, a net check's, and what each
     /// asked copy showed at each asked time.
-    pub(crate) fn match_call(&mut self, m: &MatchCall) -> Value {
+    fn match_call(&mut self, m: &MatchCall) -> Value {
         let s = match self.match_setup(&m.doc) {
             Ok(s) => s,
             Err(e) => return e,
@@ -350,10 +416,10 @@ impl Hub<'_> {
     /// The app's own Join prompt for the panel's piece (Net: relay and Join), drawn by the app
     /// and never the piece: null where the piece declares no relay.
     pub(crate) fn join_prompt(&self, panel: &str) -> Value {
-        let Some((doc, cfg)) = self.join_of(panel) else {
+        let Some((_, cfg)) = self.join_of(panel) else {
             return Value::Null;
         };
-        let state = self.net.joins.get(&doc).and_then(|j| j.state.clone());
+        let state = self.scopes.get(panel).and_then(|s| s.join.state.clone());
         let mut p = prompt::prompt(&cfg.host, cfg.players, &state.unwrap_or(State::Open));
         p["button"] = json!(self.join_button(panel));
         p
@@ -362,7 +428,7 @@ impl Hub<'_> {
     /// An input over the open prompt's button is the prompt's, never the piece's. Only a
     /// person's click joins: a press and a release from hardware, which the input router gives
     /// a gesture serial. One a process posts holds none and leaves the prompt as it was.
-    pub(crate) fn join_input(
+    fn join_input(
         &mut self,
         panel: &str,
         event: &Event,
@@ -373,13 +439,13 @@ impl Hub<'_> {
             Event::Up(pos) => (*pos, false),
             _ => return None,
         };
-        let (doc, _) = self.join_of(panel)?;
-        let open = self.net.joins.get(&doc).is_none_or(|j| j.state.is_none());
+        self.join_of(panel)?;
+        let open = self.join_mut(panel)?.state.is_none();
         let [x, y, w, h] = self.join_button(panel);
         let over = (x..=x + w).contains(&pos[0]) && (y..=y + h).contains(&pos[1]);
         if !open || !over {
             if !down {
-                self.net.joins.entry(doc).or_default().pressed = false;
+                self.join_mut(panel)?.pressed = false;
             }
             return None;
         }
@@ -389,7 +455,7 @@ impl Hub<'_> {
             );
         }
         let (serial, _) = self.route(panel, event);
-        let join = self.net.joins.entry(doc).or_default();
+        let join = self.join_mut(panel)?;
         if down {
             join.pressed = true;
         } else if std::mem::take(&mut join.pressed) {
@@ -398,10 +464,11 @@ impl Hub<'_> {
         Some(json!({"serial": serial, "reached": ["join"], "join": self.join_prompt(panel)}))
     }
 
-    fn refuse(&mut self, doc: &str, refused: Value, why: String) -> Value {
+    fn refuse(&mut self, panel: &str, refused: Value, why: String) -> Value {
         let reply = json!({"code": "refused", "refused": refused, "why": why});
-        self.net.joins.entry(doc.to_string()).or_default().state =
-            Some(State::Refused(refused, why));
+        if let Some(join) = self.join_mut(panel) {
+            join.state = Some(State::Refused(refused, why));
+        }
         reply
     }
 
@@ -409,11 +476,11 @@ impl Hub<'_> {
     /// relay's hello checked before anything is sent, the seat, the first player's link, a
     /// direct path where the network allows one, then `steps` match steps, after which this
     /// copy leaves. Its reply is the copy's report with the match's ID and link.
-    pub(crate) fn play_match(&mut self, p: &PlayCall) -> Value {
+    fn play_match(&mut self, p: &PlayCall) -> Value {
         let Some((doc, _)) = self.join_of(&p.panel) else {
             return json!({"code": "no_match", "what": "the panel's piece declares no relay"});
         };
-        match self.net.joins.get(&doc).and_then(|j| j.state.as_ref()) {
+        match self.scopes.get(&p.panel).and_then(|s| s.join.state.as_ref()) {
             Some(State::Joined) => {}
             Some(State::Refused(refused, why)) => {
                 return json!({"code": "refused", "refused": refused, "why": why})
@@ -430,19 +497,19 @@ impl Hub<'_> {
         let cfg = s.cfg.clone();
         // A copy that joins through the first player's link holds that copy's card: one that
         // differs is refused here, before anything is opened.
-        let through = self.scenario.links.get(&doc).and_then(|l| card::parse(l));
+        let through = self.scenario.net.links.get(&doc).and_then(|l| card::parse(l));
         if let Some(m) = through
             .as_ref()
             .and_then(|(_, theirs)| s.card.differs(theirs))
         {
-            return self.refuse(&doc, m.to_json(), m.text());
+            return self.refuse(&p.panel, m.to_json(), m.text());
         }
         let (game, open) = match (&through, random16()) {
             (Some((game, _)), _) => (*game, false),
             (None, Ok(game)) => (game, true),
             (None, Err(why)) => return json!({"code": "no_random", "why": why}),
         };
-        let ca = match &self.scenario.relay_ca {
+        let ca = match &self.scenario.net.relay_ca {
             None => Vec::new(),
             Some(path) => match std::fs::read(path) {
                 Ok(pem) => pem,
@@ -452,16 +519,16 @@ impl Hub<'_> {
             },
         };
         // The Join opens the one connection its grant names: the declared relay.
-        self.net.opened("relay", &cfg.host, &game);
+        self.opened(&p.panel, "relay", &cfg.host, &game);
         let (mut conn, hello) = match Connection::open_for_join(&cfg.relay, &ca) {
             Ok(c) => c,
-            Err(why) => return self.refuse(&doc, json!("unreachable"), why),
+            Err(why) => return self.refuse(&p.panel, json!("unreachable"), why),
         };
         let limits = match check_hello(&cfg.host, &hello) {
             Ok(l) => l,
             Err(why) => {
                 conn.close();
-                return self.refuse(&doc, json!("relay"), why);
+                return self.refuse(&p.panel, json!("relay"), why);
             }
         };
         if (limits.frames_per_s as i64) < cfg.step_rate {
@@ -470,12 +537,12 @@ impl Hub<'_> {
                 "refused the relay {}: its hello allows {} frames a second, and this match needs {}, one a match step",
                 cfg.host, limits.frames_per_s, cfg.step_rate
             );
-            return self.refuse(&doc, json!("relay"), why);
+            return self.refuse(&p.panel, json!("relay"), why);
         }
         let hex = wire::hex(&game);
         let join = json!({"join": {"match": hex, "players": cfg.players, "open": open}});
         if let Err(why) = conn.send_control(&join) {
-            return self.refuse(&doc, json!("unreachable"), why);
+            return self.refuse(&p.panel, json!("unreachable"), why);
         }
         let link = format!("deep://piece/{doc}#{}", card::fragment(&game, &s.card));
         // Seated, then every seat taken.
@@ -492,7 +559,7 @@ impl Hub<'_> {
                         format!("the relay {} started no match within an hour", cfg.host),
                     )
                 }
-                Err(why) => return self.refuse(&doc, json!("unreachable"), why),
+                Err(why) => return self.refuse(&p.panel, json!("unreachable"), why),
             };
             match arrived {
                 Arrived::Frame(f) => early.push(f),
@@ -509,11 +576,12 @@ impl Hub<'_> {
                         else {
                             return json!({"code": "refused"});
                         };
-                        return self.refuse(&doc, refused, why);
+                        return self.refuse(&p.panel, refused, why);
                     } else if m.get("closed").is_some() {
                         conn.close();
-                        let ended = self.net.joins.entry(doc.clone()).or_default();
-                        ended.state = Some(State::Ended("left".into()));
+                        if let Some(join) = self.join_mut(&p.panel) {
+                            join.state = Some(State::Ended("left".into()));
+                        }
                         return json!({"code": "ended", "end": "left", "match": hex, "link": link});
                     } else if let (Some(_), Some(me)) = (m.get("start"), me) {
                         break me;
@@ -538,7 +606,7 @@ impl Hub<'_> {
         let mut ended = None;
         while direct.len() < wanted && Instant::now() < patience && ended.is_none() {
             if let Some((player, peer)) = listener.as_mut().and_then(|l| l.accept(&game)) {
-                self.net.opened("direct", &peer.host, &game);
+                self.opened(&p.panel, "direct", &peer.host, &game);
                 direct.insert(player, peer);
                 continue;
             }
@@ -556,7 +624,7 @@ impl Hub<'_> {
                     {
                         if from < me {
                             if let Ok(peer) = Peer::connect(address, &game, offer, me) {
-                                self.net.opened("direct", &peer.host, &game);
+                                self.opened(&p.panel, "direct", &peer.host, &game);
                                 direct.insert(from, peer);
                             }
                         }
@@ -664,7 +732,9 @@ impl Hub<'_> {
         drop(direct);
         conn.close();
         let how = copy.end().map_or("left", End::name);
-        self.net.joins.entry(doc).or_default().state = Some(State::Ended(how.to_string()));
+        if let Some(join) = self.join_mut(&p.panel) {
+            join.state = Some(State::Ended(how.to_string()));
+        }
         let mut report = copy.report();
         report.insert("match".into(), json!(hex));
         report.insert("link".into(), json!(link));

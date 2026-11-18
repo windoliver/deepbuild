@@ -1,0 +1,12 @@
+# The shop's definition of done (fixture for #2218 AC4).
+# One key of the suite check is misspelled, so no reader takes it.
+# The tests read that key's line from this file: nothing below may
+# move without them, and nothing above the key names it.
+claims:
+  done:
+    checks: [suite]
+checks:
+  suite:
+    type: command
+    run: "node --test tests/suite.js"
+    dedline: 30m

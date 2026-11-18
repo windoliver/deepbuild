@@ -1,6 +1,7 @@
 // The playtest's codes in the check catalog, under the plug-in (Check input: playtest), each with its meaning and fix.
 // playtest.not_live's subject and planted twin are #1046's; it is catalogued here so the kind's codes are whole.
-// The bands, expectations and the play interface's codes are #555's; the soak's, rules.legal's and logic.edges' #1048's.
+// The bands, expectations and the play interface's codes are #555's; the soak's, rules.legal's and logic.edges' #1048's;
+// grid.reach's #556's.
 
 export const CODES = {
   'playtest.not_live': {
@@ -62,6 +63,14 @@ export const CODES = {
   'logic.non_finite': {
     meaning: 'A control put at one of its kind\'s edge values wrote a NaN or an infinity to a declared array.',
     fix: 'Play the track named and keep the array named finite for that value.',
+  },
+  'grid.unreached': {
+    meaning: 'On a floor a run generated, a goal or a cell of a class the brief lists can\'t be reached from the start, through doors and through locks whose keys are reached first.',
+    fix: 'Open the floor of the run, seed and depth named, and join the cell named to the reached cell nearest it, or move a lock\'s key in front of it.',
+  },
+  'grid.flow': {
+    meaning: 'A flow field, once its lag after the grid changed was over, led a cell up in cost, into a solid cell or round a loop, or left a spawn short of every target.',
+    fix: 'Refresh the field within the lag after the grid changes, so each cell steps to an open neighbour of lower cost, at the run, step and cell named.',
   },
 } as const;
 export type Code = keyof typeof CODES;

@@ -37,7 +37,9 @@ pub struct Player {
     draw: Option<crate::draw::Draw>,
     /// Each picture's level file by its source's SHA-256.
     levels: HashMap<String, String>,
-    /// #549: the piece's match, when its net item declares a relay.
+    /// #549: the piece's match, when its net item declares a relay; the full set's player alone
+    /// holds the net module.
+    #[cfg(feature = "full")]
     net: Option<crate::net::Match>,
 }
 
@@ -62,6 +64,7 @@ impl Player {
             store: std::sync::Arc::new(deep_images::Store::memory()),
             draw: None,
             levels: HashMap::new(),
+            #[cfg(feature = "full")]
             net: None,
         })
     }
@@ -146,16 +149,19 @@ impl Player {
             }
         }
         // #549: the match the piece declares, on the logic items this player checked.
-        let piece =
-            deep_play::logic::logic_piece(self.sealed, played.document(), &track, &read, false);
-        self.net = crate::net::Match::of(
-            self.sealed,
-            &doc,
-            piece.ok().flatten(),
-            &track,
-            doc_sha,
-            track_sha,
-        );
+        #[cfg(feature = "full")]
+        {
+            let piece =
+                deep_play::logic::logic_piece(self.sealed, played.document(), &track, &read, false);
+            self.net = crate::net::Match::of(
+                self.sealed,
+                &doc,
+                piece.ok().flatten(),
+                &track,
+                doc_sha,
+                track_sha,
+            );
+        }
         self.stages = markers(&doc, Some("stage"));
         self.markers = markers(&doc, None);
         self.played = Some(played);
@@ -225,6 +231,7 @@ impl Player {
         };
         match draw.frame(p, size) {
             crate::draw::Frame::Pixels(rgba) => gpu.show(&rgba, size),
+            #[cfg(feature = "full")]
             crate::draw::Frame::Scene(scene, look, over) => gpu.show3d(&scene, &look, &over, size),
         }
     }
@@ -241,22 +248,45 @@ impl Player {
         Ok(())
     }
 
+    /// #860: the viewer's back. On a piece that declares rewind it is a rewind to the stop before,
+    /// at the shown time, which the piece plays on from as the app's does; whether it wrote one.
+    pub fn back(&mut self) -> Result<bool, JsValue> {
+        let files = &self.files;
+        let read = |sha: &str| files.get(sha).cloned();
+        match self.played.as_mut() {
+            Some(p) => p.back(self.sealed, &read).map_err(fail),
+            None => Ok(false),
+        }
+    }
+
+    /// The document's accessibility tree (#1045), as JSON `[{id, role, name, …}]` in reading
+    /// order: the one the app gives its accessibility seam, read through the core.
+    pub fn tree(&self) -> String {
+        Value::Array(self.played.as_ref().map(Played::tree).unwrap_or_default()).to_string()
+    }
+
+    /// Each readout heard and what it says in the frame shown (#1045), as JSON `{id: text}`.
+    pub fn readouts(&self) -> String {
+        let readouts = self.played.as_ref().map(Played::readouts);
+        json!(readouts.unwrap_or_default()).to_string()
+    }
+
     /// What the player holds at its shown time, as JSON; it writes nothing and changes no state.
     pub fn probe(&self) -> String {
         let mut out = self.played.as_ref().map(Played::probe).unwrap_or_default();
         out.insert("set_digest".into(), json!(self.sealed.set_digest));
-        // #549: the player's copy of the piece's match; null for a piece that declares none.
-        let net = self
-            .net
-            .as_ref()
-            .map_or(Value::Null, crate::net::Match::probe);
-        out.insert("match".into(), net);
+        // #549: the player's copy of the piece's match; the page writes null where there is none.
+        #[cfg(feature = "full")]
+        if let Some(net) = &self.net {
+            out.insert("match".into(), net.probe());
+        }
         Value::Object(out).to_string()
     }
 }
 
 /// #549: the piece's match (Net: relay and Join). The page draws the prompt and owns the
 /// connection, the viewer's browser's own; what it says and reads comes from here.
+#[cfg(feature = "full")]
 #[wasm_bindgen]
 impl Player {
     /// The Join prompt as the page draws it, `{state, relay, players, refused, text}`; `null`
