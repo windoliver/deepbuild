@@ -28,7 +28,7 @@ pub const MOST_EDGES: usize = 256;
 const SETTLE: i64 = 60 * FLICKS_PER_SECOND;
 
 /// The control kinds a page lists as states; any other is a warning.
-const LISTED: [&str; 3] = ["toggle", "choice", "stages"];
+const LISTED: [&str; 4] = ["toggle", "choice", "stages", "press"];
 
 /// A control the page lists: its options' names, in order, and how a change reaches the frames.
 #[derive(Clone, Debug, PartialEq)]
@@ -41,6 +41,9 @@ pub struct Axis {
     /// A marker waits for it: it changes only while the timeline holds there.
     pub waited: bool,
     pub default: Option<usize>,
+    /// A press's value while it is down (its first key's, else 1): a momentary button, up (0)
+    /// until a press and again after its release (#1040).
+    pub pressed: Value,
 }
 
 impl Axis {
@@ -48,11 +51,17 @@ impl Axis {
     pub fn value(&self, o: usize) -> Value {
         match self.kind.as_str() {
             "toggle" => Value::Bool(o == 1),
+            "press" if o == 1 => self.pressed.clone(),
+            "press" => json!(0),
             _ => Value::String(self.names[o].clone()),
         }
     }
 
     fn option(&self, v: &Value) -> Option<usize> {
+        if self.kind == "press" {
+            let up = v.is_null() || *v == json!(0) || *v == json!(false);
+            return Some(usize::from(!up));
+        }
         let name = match v {
             Value::Bool(b) => b.to_string(),
             Value::String(s) => s.clone(),
@@ -148,8 +157,13 @@ pub fn axes(doc: &Value) -> (Vec<Axis>, Vec<Value>) {
         }
         let names = match kind {
             "toggle" => vec!["false".to_string(), "true".to_string()],
+            "press" => vec!["up".to_string(), "down".to_string()],
             _ => variants::option_names(doc, c),
         };
+        let pressed = (c["keys"].as_object().into_iter().flatten())
+            .map(|(_, v)| v.clone())
+            .next()
+            .unwrap_or(json!(1));
         let mut axis = Axis {
             id: id.clone(),
             kind: kind.into(),
@@ -157,11 +171,13 @@ pub fn axes(doc: &Value) -> (Vec<Axis>, Vec<Value>) {
             view: crate::page::class_of(c) == "view",
             waited: waited.contains(id.as_str()),
             default: None,
+            pressed,
         };
-        // Before any pick: its default, a toggle's off, or a variant choice's set's default.
+        // Before any pick: its default, a toggle's off, a press up, or a variant choice's set's
+        // default.
         axis.default = match c.get("default") {
             Some(v) => axis.option(v),
-            None if kind == "toggle" => Some(0),
+            None if kind == "toggle" || kind == "press" => Some(0),
             None => (c["variant"].as_str())
                 .and_then(|set| doc["variants"][set]["default"].as_str())
                 .and_then(|d| axis.names.iter().position(|n| n == d)),
@@ -304,11 +320,28 @@ fn moves(axes: &[Axis], state: &State, present: bool) -> Vec<Option<(usize, usiz
 /// The core's carried state of a played form at a clock, as the host reads it.
 pub type Probe<'a> = dyn FnMut(&Value, i64) -> Result<Vec<CarriedState>, Value> + 'a;
 
+/// A played form as its frames move, for [`rest`]: the host's, with the piece's worlds baked on
+/// the form's track (#1040), so a body an entry sets moving keeps its play from resting.
+pub type Settle<'a> = dyn FnMut(&Value) -> Value + 'a;
+
 /// The piece's states and edges, breadth first from its first rest. `probe` gives the core's
 /// carried state of a played form at a clock. More than [`MOST_STATES`] states or
 /// [`MOST_EDGES`] edges is refused, naming the controls that multiply, or the carried state
 /// that does.
 pub fn list(doc: &Value, frame: i64, probe: &mut Probe<'_>) -> Result<Listing, Value> {
+    list_keyed(doc, frame, probe, &mut |f: &Value| f.clone(), true)
+}
+
+/// [`list`], each play resting as `settle` moves it, and each state told apart by its controls'
+/// values too only with `by_controls`, which only #1040's planted page
+/// (`page_keys_by_picture_and_logic`) clears.
+pub fn list_keyed(
+    doc: &Value,
+    frame: i64,
+    probe: &mut Probe<'_>,
+    settle: &mut Settle<'_>,
+    by_controls: bool,
+) -> Result<Listing, Value> {
     let (axes, warnings) = axes(doc);
     let present = has_stages(doc);
     if let Some(a) = axes.iter().find(|a| a.waited && a.names.is_empty()) {
@@ -334,14 +367,22 @@ pub fn list(doc: &Value, frame: i64, probe: &mut Probe<'_>) -> Result<Listing, V
                      queue: &mut VecDeque<usize>|
      -> Result<(usize, i64), Value> {
         let form = played(doc, &axes, &node, present);
-        let r = rest(&form, from, frame)?;
+        let r = rest(&settle(&form), from, frame)?;
         let node = Node { t: r.t, ..node };
         let key = Key {
             stop: r.stop.clone(),
             values: values(&axes, &node),
             carried: probe(&form, r.t)?,
         };
-        if let Some(&i) = index.get(&key) {
+        let found = Key {
+            values: if by_controls {
+                key.values.clone()
+            } else {
+                Vec::new()
+            },
+            ..key.clone()
+        };
+        if let Some(&i) = index.get(&found) {
             return Ok((i, r.t));
         }
         if states.len() == MOST_STATES {
@@ -350,7 +391,7 @@ pub fn list(doc: &Value, frame: i64, probe: &mut Probe<'_>) -> Result<Listing, V
             return Err(too_many_states(&axes, &all));
         }
         let t = r.t;
-        index.insert(key.clone(), states.len());
+        index.insert(found, states.len());
         queue.push_back(states.len());
         states.push(State { key, node, rest: r });
         Ok((states.len() - 1, t))
@@ -423,6 +464,81 @@ pub fn list(doc: &Value, frame: i64, probe: &mut Probe<'_>) -> Result<Listing, V
         warnings,
         present,
     })
+}
+
+/// A tour page's states and edges (#1040; Export: web player): the states one pass of the piece's
+/// tour reaches and the edges between them, in its order; only the first state for a piece with
+/// no tour. Each of the pass's `entries` (a control and its value, and a linear key's polyline) is
+/// stamped on the frame grid where the play before it rests, as the listing stamps its moves. A
+/// state the pass reaches again is listed again, in its place.
+pub fn tour(
+    doc: &Value,
+    frame: i64,
+    entries: &[Value],
+    probe: &mut Probe<'_>,
+    settle: &mut Settle<'_>,
+) -> Result<Listing, Value> {
+    let (axes, warnings) = axes(doc);
+    let present = has_stages(doc);
+    let mut land = |node: Node, from: i64, probe: &mut Probe<'_>| -> Result<State, Value> {
+        let form = played(doc, &axes, &node, present);
+        let r = rest(&settle(&form), from, frame)?;
+        let node = Node { t: r.t, ..node };
+        let key = Key {
+            stop: r.stop.clone(),
+            values: values(&axes, &node),
+            carried: probe(&form, r.t)?,
+        };
+        Ok(State { key, node, rest: r })
+    };
+    let start = doc["transport"]["start"].as_i64().unwrap_or(0);
+    let first = Node {
+        track: Vec::new(),
+        view: BTreeMap::new(),
+        t: start,
+    };
+    let mut states = vec![land(first, start, probe)?];
+    let mut edges = Vec::new();
+    for entry in entries {
+        let from = states.len() - 1;
+        let at = states[from].node.t;
+        let mut next = states[from].node.clone();
+        next.track.push(stamped(entry, at));
+        let s = land(next, at + frame, probe)?;
+        edges.push(Edge {
+            from,
+            to: from + 1,
+            control: entry["control"].as_str().map(str::to_string),
+            value: entry["value"].clone(),
+            node: s.node.clone(),
+            at,
+        });
+        states.push(s);
+    }
+    Ok(Listing {
+        axes,
+        states,
+        edges,
+        warnings,
+        present,
+    })
+}
+
+/// `entry` as a listing's move at clock `at`: its control and value, and its polyline's samples
+/// moved with it.
+fn stamped(entry: &Value, at: i64) -> Value {
+    let mut out = json!({"t": at, "control": entry["control"], "value": entry["value"]});
+    let by = at - entry["t"].as_i64().unwrap_or(0);
+    if let Some(samples) = entry.get("samples").filter(|s| s.is_array()) {
+        let mut samples = samples.clone();
+        for s in samples.as_array_mut().into_iter().flatten() {
+            if let Some(t) = s["t"].as_i64() {
+                s["t"] = json!(t + by);
+            }
+        }
+        out["samples"] = samples;
+    }
+    out
 }
 
 /// The listed controls whose values differ among `keys`, with "stages" when the stop does.
