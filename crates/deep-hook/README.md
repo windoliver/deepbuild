@@ -6,7 +6,8 @@ The binary every agent hook runs as `deep-hook <agent> <event>`: it stamps the c
 
 ## Where new code goes
 
-- `src/main.rs`: the hook, spool, status line and waiter paths.
+- `src/main.rs`: the hook, spool and status line paths, and what the waiter reads of its agent.
+- `src/waiter.rs`: the waiter's wait for its session's answers, bound to the session by its agent (#1851).
 - `src/matcher.rs`: each `match` predicate of a guard@1 entry. `src/shell.rs`: the shell reader those predicates read a command through.
 - `default-rules.json`: the shipped guard entries, which packages/hub/src/setup.ts installs into `rules.json`.
 - Tests: unit tests in each file's `#[cfg(test)]` module; the binary's behavior in `tests/cli.rs`, and the waiter's against a stand-in hub in `tests/waiter.rs`; acceptance suites under tests/acceptance drive the built binary.
