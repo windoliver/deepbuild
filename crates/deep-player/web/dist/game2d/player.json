@@ -1,0 +1,22 @@
+{
+  "wasm_bindgen": "0.2.129",
+  "set": "game2d",
+  "files": {
+    "player.js": "2aa403e4fd7a211585ec27465f1f456deaabd9ed291bae222009cc1fe7877e71",
+    "player_bg.wasm": "92e926b1a2cde71daf584b1ec8f25850635da87531e6387b224c6bdcca0aa793"
+  },
+  "core_version": "0.0.0",
+  "set_digest": "0ed99b2d753eb47c5893c7618639948849a26222c79ef1ea54330c6d99f63286",
+  "runtime_digest": "b0d9637fcffe5b58be4a3025853302613578659fa143fc9ca6bd110364894ab8",
+  "modules": [
+    "data",
+    "input",
+    "logic",
+    "look",
+    "marks2d",
+    "motion",
+    "physics",
+    "sandbox",
+    "text"
+  ]
+}

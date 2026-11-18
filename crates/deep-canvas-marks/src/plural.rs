@@ -68,7 +68,13 @@ impl Operands {
 
     fn get(&self, op: u8) -> Option<(u128, bool)> {
         let trimmed = self.fraction.trim_end_matches('0');
-        let num = |s: &str| if s.is_empty() { Some(0) } else { s.parse().ok() };
+        let num = |s: &str| {
+            if s.is_empty() {
+                Some(0)
+            } else {
+                s.parse().ok()
+            }
+        };
         Some(match op {
             // n: an integer only when every fraction digit is zero.
             b'n' => (self.i, !trimmed.is_empty()),
@@ -190,7 +196,8 @@ fn blocks(xml: &'static str) -> Vec<(&'static str, Rules)> {
         for rule in body.split("<pluralRule ").skip(1) {
             let (Some(count), Some(text)) = (
                 attr(rule, "count"),
-                rule.split_once('>').and_then(|(_, r)| r.split("</pluralRule>").next()),
+                rule.split_once('>')
+                    .and_then(|(_, r)| r.split("</pluralRule>").next()),
             ) else {
                 continue;
             };
@@ -264,8 +271,14 @@ mod tests {
     fn samples(text: &str) -> Vec<String> {
         let mut out = Vec::new();
         for list in text.split('@').skip(1) {
-            let list = list.trim_start_matches("integer").trim_start_matches("decimal");
-            for s in list.split(',').map(str::trim).filter(|s| !s.is_empty() && *s != "…") {
+            let list = list
+                .trim_start_matches("integer")
+                .trim_start_matches("decimal");
+            for s in list
+                .split(',')
+                .map(str::trim)
+                .filter(|s| !s.is_empty() && *s != "…")
+            {
                 let Some((a, b)) = s.split_once('~') else {
                     out.push(s.to_string());
                     continue;
@@ -275,7 +288,11 @@ mod tests {
                 for u in units(a)..=units(b) {
                     let digits = format!("{u:0>width$}", width = places + 1);
                     let (int, frac) = digits.split_at(digits.len() - places);
-                    out.push(if places == 0 { int.into() } else { format!("{int}.{frac}") });
+                    out.push(if places == 0 {
+                        int.into()
+                    } else {
+                        format!("{int}.{frac}")
+                    });
                 }
             }
         }
@@ -291,7 +308,13 @@ mod tests {
             let body = block.split("</pluralRules>").next().unwrap();
             for rule in body.split("<pluralRule ").skip(1) {
                 let count = attr(rule, "count").unwrap();
-                let text = rule.split_once('>').unwrap().1.split("</pluralRule>").next().unwrap();
+                let text = rule
+                    .split_once('>')
+                    .unwrap()
+                    .1
+                    .split("</pluralRule>")
+                    .next()
+                    .unwrap();
                 for l in locales.split_whitespace() {
                     for s in samples(text) {
                         let n = Operands::parse(&s).unwrap_or_else(|| panic!("{s}"));

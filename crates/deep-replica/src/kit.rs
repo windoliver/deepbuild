@@ -563,6 +563,34 @@ impl gpui_kit::Render for TerminalColors {
     }
 }
 
+/// The app's Connect prompt (#210) over the drum pad's port, before you click Connect or after it opens.
+pub struct ConnectPrompt {
+    pub open: bool,
+}
+
+impl gpui_kit::Render for ConnectPrompt {
+    fn render(
+        &mut self,
+        window: &mut gpui_kit::Window,
+        _: &mut gpui_kit::Context<Self>,
+    ) -> impl gpui_kit::IntoElement {
+        use gpui_kit::{div, InteractiveElement as _, ParentElement as _, Styled as _};
+        let chrome = deep_app::chrome::of(window);
+        div()
+            .id("connect-prompt")
+            .size_full()
+            .flex()
+            .items_center()
+            .justify_center()
+            .bg(chrome.ground)
+            .child(deep_app::connect::prompt_card(
+                &deep_app::connect::fixture(),
+                self.open,
+                window,
+            ))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

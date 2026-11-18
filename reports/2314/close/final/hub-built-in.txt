@@ -1,0 +1,18 @@
+$ node node_modules/vitest/vitest.mjs run --reporter=verbose --no-file-parallelism --testTimeout=600000 packages/hub/test/probe-lifecycle.test.ts tests/acceptance/1537/document.test.ts tests/acceptance/1537/numbers.test.ts
+Mon Nov 16 20:30:51 UTC 2026
+12:30  up 2 days, 22:39, 20 users, load averages: 351.33 201.10 178.23
+
+ RUN  v5.0.5 <change>
+
+ ✓ packages/hub/test/probe-lifecycle.test.ts > a built-in document run records its probe and end before its verdict 12383ms
+ ✓ tests/acceptance/1537/numbers.test.ts > AC2 #1537.cc546fc7 a stated number its source doesn't hold is not PASS, and the verdict names it > AC2 #1537.cc546fc7 "the suite has 412 tests" over data/suite.db, whose query counts 398, is not PASS and its verdict names 412 13597ms
+ ✓ tests/acceptance/1537/document.test.ts > AC3 #1537.59bd30dc a definition naming a document check, with a document that breaks it, is not PASS > AC3 #1537.59bd30dc R1's document check over report.md, which says 1,250 where sources/q3.json says 1240, keeps the claim from PASS and names 1,250 12283ms
+
+ Test Files  3 passed (3)
+      Tests  3 passed (3)
+   Start at  12:30:51
+   Duration  39.25s (tests 100%)
+
+exit=0
+Mon Nov 16 20:31:31 UTC 2026
+12:31  up 2 days, 22:40, 20 users, load averages: 286.61 206.28 181.36

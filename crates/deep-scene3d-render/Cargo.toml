@@ -24,6 +24,8 @@ deep-canvas = { path = "../deep-canvas" }
 bytemuck = { version = "1", features = ["derive"] }
 wgpu = { version = "30", default-features = false, features = ["std", "wgsl"] }
 wgpu-profiler = "0.28"
+# #172: a time read on the page's clock in the web player, the system's elsewhere.
+web-time = "=1.1.0"
 
 [dev-dependencies]
 serde_json = "1"

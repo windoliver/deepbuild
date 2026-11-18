@@ -1,0 +1,18 @@
+[package]
+name = "deep-marks-raster"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+# Issue #172: the 2D writer layers' painter on Vello CPU, shared by the app's headless renders and
+# the web player, so both draw a frame's marks with the same code. Its pictures come from the image
+# service, out of the app's evidence folder or the web player's bundle held in memory.
+[dependencies]
+deep-canvas-marks = { path = "../deep-canvas-marks" }
+deep-canvas-motion = { path = "../deep-canvas-motion" }
+deep-images = { path = "../deep-images" }
+deep-marks-vello = { path = "../deep-marks-vello" }
+deep-text = { path = "../deep-text" }
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
+vello_cpu = { version = "0.3", default-features = false, features = ["std", "text", "f32_pipeline", "u8_pipeline"] }

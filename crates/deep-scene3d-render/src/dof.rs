@@ -381,6 +381,7 @@ impl Dofer {
                     .as_ref()
                     .map(|p| crate::status::lock(p).begin_pass_query(DOF_PASS, encoder));
                 {
+                    deep_gpu::counted::compute_pass();
                     let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                         label: Some(DOF_PASS),
                         timestamp_writes: query

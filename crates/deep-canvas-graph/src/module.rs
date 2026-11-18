@@ -54,7 +54,7 @@ fn layout_cost(item: &Value) -> f64 {
             .map_or(0.0, |a| a.len() as f64)
     };
     let rows = count("nodes") + count("edges");
-    NS_PER_ROW_DOUBLING * rows * rows.max(2.0).log2() / 1e6
+    NS_PER_ROW_DOUBLING * rows * deep_canvas::ops::log2(rows.max(2.0)) / 1e6
 }
 
 fn manifest(implementation: &str) -> Manifest {

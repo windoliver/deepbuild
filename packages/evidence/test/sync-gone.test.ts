@@ -12,7 +12,7 @@ vi.mock('node:fs/promises', async (original) => {
 const { openEvidenceStore } = await import('../src/index.js');
 
 const roots: string[] = [];
-afterEach(() => { before.open = undefined; for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
+afterEach(() => { delete before.open; for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
 
 it('a file removed after the sync looked at it and before it opened it has nothing to sync (#1410)', async () => {
   const root = mkdtempSync(join(tmpdir(), 'deep-evidence-gone-'));

@@ -200,7 +200,11 @@ impl Grid {
                 Some([(u + v) / 2.0, (v - u) / 2.0])
             }
             Shape::Hex { flat, .. } => {
-                let shifted = |line: f64| f64::from(u8::from((line.rem_euclid(2.0) == 1.0) == odd_of(self.shape)));
+                let shifted = |line: f64| {
+                    f64::from(u8::from(
+                        (line.rem_euclid(2.0) == 1.0) == odd_of(self.shape),
+                    ))
+                };
                 let guess = if flat {
                     let cx = (p[0] / (0.75 * w)).round();
                     [cx, (p[1] / h - shifted(cx) / 2.0).round()]
@@ -224,8 +228,12 @@ impl Grid {
         let Some(area) = self.hit_area(c) else {
             return false;
         };
-        let v = area.outline().map(|[u, t]| [x - w / 2.0 + u * w, y - h / 2.0 + t * h]);
-        let side = |a: [f64; 2], b: [f64; 2]| (b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0]);
+        let v = area
+            .outline()
+            .map(|[u, t]| [x - w / 2.0 + u * w, y - h / 2.0 + t * h]);
+        let side = |a: [f64; 2], b: [f64; 2]| {
+            (b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0])
+        };
         let sides: Vec<f64> = (0..6).map(|i| side(v[i], v[(i + 1) % 6])).collect();
         sides.iter().all(|s| *s >= 0.0) || sides.iter().all(|s| *s <= 0.0)
     }

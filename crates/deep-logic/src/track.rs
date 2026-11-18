@@ -11,14 +11,34 @@ use crate::point::Point;
 /// its set's index in `rows` and its key, an integer key column's value and 0, a grid's
 /// `(cx, cy)` or a fed instancer's `(slot, gen)`, or a point control's press, move or release
 /// (Control: point), or a text control's committed bytes (Control: text). A scroll control's
-/// position is a number (Control: scroll).
+/// position is a number (Control: scroll). #860: a rewind's is where it returns.
 #[derive(Clone, Debug, PartialEq)]
 #[allow(clippy::large_enum_variant)]
 pub enum Given {
     Number(f64),
-    Pick { set: u32, key: [i64; 2] },
+    Pick {
+        set: u32,
+        key: [i64; 2],
+    },
     Point(Point),
     Text(String),
+    /// A vector-shaped reading's numbers (Logic: readings).
+    Vector(Vec<f64>),
+    /// A layout-shaped reading's record: its bytes, at most 256.
+    Record(Vec<u8>),
+    Rewind(To),
+}
+
+/// #860: the key a track keeps its rewinds under, which no control's ID can be (each of an ID's
+/// segments starts with a letter or a digit).
+pub const REWIND: &str = ":rewind";
+
+/// #860: where a rewind returns on the current branch: back n stops (n ≥ 1) from the current
+/// one, or to the stop at step k.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum To {
+    Stop(u32),
+    Step(i64),
 }
 
 impl From<f64> for Given {
@@ -28,6 +48,25 @@ impl From<f64> for Given {
 }
 
 impl Given {
+    /// A reading's value as its source delivers it: a number, a vector's numbers, or a layout
+    /// record's bytes in base64 (Logic: readings). Whether it fits the source's shape is the
+    /// module's to judge.
+    pub fn reading(v: &Value) -> Option<Given> {
+        use base64::Engine as _;
+        match v {
+            Value::Number(n) => n.as_f64().map(Given::Number),
+            Value::Array(a) => a
+                .iter()
+                .map(Value::as_f64)
+                .collect::<Option<_>>()
+                .map(Given::Vector),
+            Value::String(s) => base64::engine::general_purpose::STANDARD
+                .decode(s)
+                .ok()
+                .map(Given::Record),
+            _ => None,
+        }
+    }
     fn parse(v: &Value) -> Option<Given> {
         if let Some(n) = v.as_f64() {
             return Some(Given::Number(n));
@@ -53,6 +92,13 @@ impl Given {
             Given::Pick { set, key } => json!({"set": set, "key": key}),
             Given::Point(p) => p.to_json(),
             Given::Text(t) => json!(t),
+            Given::Vector(v) => json!(v),
+            Given::Record(b) => {
+                use base64::Engine as _;
+                json!(base64::engine::general_purpose::STANDARD.encode(b))
+            }
+            Given::Rewind(To::Stop(n)) => json!({"to": {"stop": n}}),
+            Given::Rewind(To::Step(k)) => json!({"to": {"step": k}}),
         }
     }
     /// The value as its control's read region lays it out: an f64 (8 B), a pick's `u32 set,
@@ -74,6 +120,10 @@ impl Given {
                 b.extend(t.as_bytes());
                 b
             }
+            Given::Vector(v) => v.iter().flat_map(|x| x.to_le_bytes()).collect(),
+            Given::Record(b) => b.clone(),
+            // No read region holds a rewind.
+            Given::Rewind(_) => Vec::new(),
         }
     }
 }
@@ -96,17 +146,35 @@ pub struct Entry {
 
 impl Entry {
     pub fn parse(v: &Value) -> Option<Entry> {
-        let reading = v.get("reading").and_then(Value::as_str);
+        // #860: a rewind names no control: `{rewind: {to: {stop: n} | {step: k}}}`.
+        let rewind = match v.get("rewind") {
+            None => None,
+            Some(r) => {
+                let to = r.get("to")?;
+                Some(match (to.get("stop"), to.get("step")) {
+                    (Some(n), None) => To::Stop(n.as_u64().filter(|n| *n >= 1)?.try_into().ok()?),
+                    (None, Some(k)) => To::Step(k.as_i64()?),
+                    _ => return None,
+                })
+            }
+        };
+        let reading = v
+            .get("reading")
+            .and_then(Value::as_str)
+            .filter(|_| rewind.is_none());
         Some(Entry {
             t: v.get("t")?.as_i64()?,
             seq: v.get("seq").map_or(Some(0), Value::as_u64)? as u32,
-            control: reading
-                .or(v.get("control").and_then(Value::as_str))?
-                .to_string(),
-            // A reading's value is a number.
-            value: match reading {
-                Some(_) => v.get("value")?.as_f64()?.into(),
-                None => Given::parse(v.get("value")?)?,
+            control: match rewind {
+                Some(_) => REWIND,
+                None => reading.or(v.get("control").and_then(Value::as_str))?,
+            }
+            .to_string(),
+            // A reading's value is a number, a vector's numbers or a layout record's bytes.
+            value: match (rewind, reading) {
+                (Some(to), _) => Given::Rewind(to),
+                (None, Some(_)) => Given::reading(v.get("value")?)?,
+                (None, None) => Given::parse(v.get("value")?)?,
             },
             writer: v
                 .get("writer")
@@ -122,6 +190,9 @@ impl Entry {
     }
     pub fn to_json(&self) -> Value {
         let value = self.value.to_json();
+        if let Given::Rewind(_) = self.value {
+            return json!({"t": self.t, "seq": self.seq, "rewind": value, "writer": self.writer, "player": self.player});
+        }
         match self.as_of {
             None => {
                 json!({"t": self.t, "seq": self.seq, "control": self.control, "value": value, "writer": self.writer, "player": self.player})

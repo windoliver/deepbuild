@@ -1,0 +1,133 @@
+Captured partial affected-run output, not a completed verification. Paths redacted.
+
+scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node scripts/repo-rules.mjs` runs unleased
+FAIL secrets: packages/contracts/fixtures/host.undone@1/01.json:16:70: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: packages/contracts/fixtures/host.undone@1/01.json:23:24: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: packages/contracts/fixtures/host.undone@1/01.json:29:18: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: packages/contracts/fixtures/host.undone@1/01.json:30:18: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: packages/contracts/fixtures/staged.undone@1/01.json:12:8: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/1946/BASE-FAILURE.txt:115:64: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/1946/BASE-FAILURE.txt:116:64: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL secrets: tests/acceptance/1946/BASE-FAILURE.txt:117:64: home path
+  Fix: Remove or redact it (use ~/ or <name>); for a deliberate fixture, add an allowedFindings entry to scripts/repo-rules.json.
+FAIL deps: tests/acceptance/12/twins/build-without-cargo/package.json devDependencies @microsoft/api-extractor 7.60.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/12/twins/build-without-cargo/package.json devDependencies @stryker-mutator/core 10.0.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/12/twins/build-without-cargo/package.json devDependencies @types/better-sqlite3 7.6.13 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/12/twins/build-without-cargo/package.json devDependencies @types/node 24.19.2 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/12/twins/build-without-cargo/package.json devDependencies fast-check 4.10.2 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/12/twins/build-without-cargo/package.json devDependencies gpt-tokenizer 4.0.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/12/twins/build-without-cargo/package.json devDependencies jest 30.5.2 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/12/twins/build-without-cargo/package.json devDependencies typescript 5.9.3 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/12/twins/build-without-cargo/package.json devDependencies vitest 5.0.5 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/12/twins/no-deep-bin/package.json devDependencies @microsoft/api-extractor 7.60.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/12/twins/no-deep-bin/package.json devDependencies @stryker-mutator/core 10.0.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/12/twins/no-deep-bin/package.json devDependencies @types/better-sqlite3 7.6.13 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/12/twins/no-deep-bin/package.json devDependencies @types/node 24.19.2 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/12/twins/no-deep-bin/package.json devDependencies fast-check 4.10.2 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/12/twins/no-deep-bin/package.json devDependencies gpt-tokenizer 4.0.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/12/twins/no-deep-bin/package.json devDependencies jest 30.5.2 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/12/twins/no-deep-bin/package.json devDependencies typescript 5.9.3 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/12/twins/no-deep-bin/package.json devDependencies vitest 5.0.5 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/12/twins/release-check-local/package.json devDependencies @microsoft/api-extractor 7.60.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/12/twins/release-check-local/package.json devDependencies @stryker-mutator/core 10.0.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/12/twins/release-check-local/package.json devDependencies @types/better-sqlite3 7.6.13 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/12/twins/release-check-local/package.json devDependencies @types/node 24.19.2 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/12/twins/release-check-local/package.json devDependencies fast-check 4.10.2 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/12/twins/release-check-local/package.json devDependencies gpt-tokenizer 4.0.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/12/twins/release-check-local/package.json devDependencies jest 30.5.2 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/12/twins/release-check-local/package.json devDependencies typescript 5.9.3 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/12/twins/release-check-local/package.json devDependencies vitest 5.0.5 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: crates/deep-canvas-export/Cargo.toml dependencies deep-canvas * path=../deep-canvas is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: crates/deep-canvas-export/Cargo.toml dependencies deep-canvas-marks * path=../deep-canvas-marks is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: crates/deep-canvas-export/Cargo.toml dependencies deep-canvas-motion * path=../deep-canvas-motion is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: crates/deep-canvas-export/Cargo.toml dependencies deep-text * path=../deep-text is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: crates/deep-canvas-export/Cargo.toml dependencies serde_json ^1 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: crates/deep-lottie-reader/Cargo.toml dependencies thorvg =0.6.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: crates/deep-canvas-loop/Cargo.toml dependencies deep-canvas-motion * path=../deep-canvas-motion is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: crates/deep-show/Cargo.toml dependencies deep-canvas-export * path=../deep-canvas-export is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: crates/deep-show/Cargo.toml dependencies deep-lottie-reader * path=../deep-lottie-reader is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: crates/deep-show/Cargo.toml dependencies unicode-normalization ^0.1 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: crates/deep-lottie/Cargo.toml dependencies deep-canvas * path=../deep-canvas is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: crates/deep-lottie/Cargo.toml dependencies deep-canvas-marks * path=../deep-canvas-marks is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: crates/deep-lottie/Cargo.toml dependencies deep-canvas-motion * path=../deep-canvas-motion is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: crates/deep-lottie/Cargo.toml dependencies deep-text * path=../deep-text is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: crates/deep-lottie/Cargo.toml dependencies serde_json ^1 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: spikes/2435/Cargo.toml dependencies blake3 ^1 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: spikes/2435/Cargo.toml dependencies bytemuck ^1 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: spikes/2435/Cargo.toml dependencies log ^0.4 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: spikes/2435/Cargo.toml dependencies pollster ^0.4 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: spikes/2435/Cargo.toml dependencies serde_json ^1 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: spikes/2435/Cargo.toml dependencies wgpu =30.0.1 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/533/wat/Cargo.toml dependencies wasmparser =0.263.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+FAIL deps: tests/acceptance/533/wat/Cargo.toml dependencies wat =1.263.0 is not in scripts/repo-rules.json
+  Fix: Remove it, or add it to scripts/repo-rules.json with why the task needs it.
+PASS workflows: .github/workflows/ has no entries
+PASS agent-hooks: no hooks, plugins or hook switch-off in .claude settings, no .codex/ folder
+PASS cards: 40 packages and 47 crates have cards with the four headings; 127 deviations, each naming a file that exists
+PASS physics-build: rapier3d 0.36.1 [alloc, dim3, enhanced-determinism, f32, serde-serialize, std], parry3d 0.31.1, none of simd8, parallel, block-solver, fem, unsync-callbacks, fast-math, and no rustflags with target-cpu=native or +fma
+NOTE deps: vendor/accesskit_macos/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+NOTE deps: vendor/gpui-pre-apple/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+NOTE deps: vendor/gpui-pre-macos/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+NOTE deps: vendor/gpui-pre/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+NOTE deps: vendor/llrt_crypto/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+NOTE deps: vendor/mitex-spec-gen/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+NOTE deps: vendor/mitex-spec/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+NOTE deps: vendor/quickjs-jit-runtime/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+NOTE deps: vendor/symphonia-codec-vorbis/Cargo.toml is a vendored upstream crate; its dependencies are upstream's
+NOTE size: +1237 -48 handwritten lines against merge base f98921218, lockfiles and binary files excluded; over the guideline of about 400, so the PR says why it can't be split
