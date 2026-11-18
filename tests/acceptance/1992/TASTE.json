@@ -1,0 +1,14 @@
+{
+  "issue": 1992,
+  "criterion": "#1992.b0119deb",
+  "verdict": "looks_right",
+  "who": "the session's coding agent, validating at the owner's request in the session (\"validate for me\"); the owner can overrule it by changing this verdict",
+  "when": "2026-11-18T17:27:57Z",
+  "screenshots": {
+    "panels-8-10-30-60m.png": "e16fba071d96571592ba633ea83d116fd4e233530068e02eddb6985ead39f38a",
+    "off-axis-pair.png": "c1958fbbf49c4056f4c220cdaaa37677d7ee479ef44d3d78a08559194d1a6b65",
+    "marks-fogged.png": "4a079f14798dc7acf82e90ce9c6a8d7cbcebf6b03b3cce652caef1f4d09634ad",
+    "marks-unfogged.png": "19e51e1c078a9765d468c16b3fbe8bc566b181843a1bde224b6a1b395c4c7780"
+  },
+  "note": "Each picture draws what its fixture asks, read from the final target's own pixels. Panels: four squares left to right at 8, 10, 30 and 60 m read codes 255, 255, 225 and 188, the sRGB codes of linear 1.0, 1.0, 0.75 and 0.5, so the fade is clear to 10 m and full by 50 m. Off-axis pair: the panel on the axis and the one 40 degrees off it both read 225, the same fog at the same distance from the eye. Marks fogged: the line, the point and the image read 225 and the label TEXT stays 255. Marks unfogged: all four read 255. Edges are clean and nothing else draws on the black sky. These are test patterns: the call is that the renderer does what each criterion says, not a judgement on art."
+}
