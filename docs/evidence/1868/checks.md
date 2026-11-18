@@ -81,7 +81,8 @@ field read back to a real writer.
 
 - Criteria 1 and 3 have no counted `PASS`: this Mac was loaded and warm in every run. The budget tasks
   `canvas-cells-long-record` and `deep-status-run-events` now name them; neither has run in a budget window. Each
-  runs its acceptance test 22 times a window, so 35 to 50 minutes a task at the base's speeds, and a run over
+  runs its acceptance test 22 times a window while main lacks the task (about 35 minutes for `canvas-cells` and 13
+  for `status-runs` at the change's speeds here), and about 43 once the merge base runs it too; a run over
   `measureOnce`'s 300 s under load reads BLOCKED, never PASS. Their `targets.ratio` of 1.2 records the issue's
   limit; the test itself holds the number the verdict uses, as other benches' judges do.
 - `scripts/lanes.mjs` lists `tests/acceptance/1868/` (`alone`) and the two timed files (`timed`) in a commit of its

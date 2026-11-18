@@ -35,7 +35,9 @@ if (mode === 'judge' && process.argv.length === 3) {
   try { console.log(JSON.stringify(judge(JSON.parse(readFileSync(0, 'utf8'))?.current))); }
   catch (error) { console.log(JSON.stringify({ status: 'BLOCKED', targets: {}, reason: `invalid judge input: ${error.message}` })); }
 } else if (TESTS[mode] && process.argv.length === 3) {
-  const ran = spawnSync(process.execPath, ['--test', mode], { cwd: CHECKOUT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  // Uncoloured, so the reporter's summary lines read as verdictOf matches them.
+  const { FORCE_COLOR, ...env } = process.env;
+  const ran = spawnSync(process.execPath, ['--test', mode], { cwd: CHECKOUT, env: { ...env, NO_COLOR: '1' }, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
   console.log(JSON.stringify({ criterion: TESTS[mode], ...verdictOf(ran.status, `${ran.stdout}\n${ran.stderr}`) }));
 } else {
   console.error(`use ${Object.keys(TESTS).join(' or ')}, or judge (JSON on stdin)`);
