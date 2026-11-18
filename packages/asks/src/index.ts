@@ -399,8 +399,10 @@ const git = promisify(execFile);
 
 /** One stop of a session's own turn, as agent.stop@4 and @5 record it (#85): the structure the core raises a task or a continue from. */
 interface Stop { id: string; session: string; ts: number; pos: number; cause: string; owner: string; signature: string; resets: number | null; finished: boolean; who: Ask['who'] }
-/** An automatic continue the core recorded: the stop it continued from, why, and when. */
-interface Continued { stop: string; because: string; ts: number }
+/** Whether a stop is newer than another: by deep-hook's stamp, then by log order. */
+const newer = (a: Stop, b: Stop): boolean => a.ts > b.ts || (a.ts === b.ts && a.pos > b.pos);
+/** An automatic continue the core recorded: the stop it continued from, why, and when; and that stop's stamp, read as the continue was (#2653). */
+interface Continued { stop: string; because: string; ts: number; at?: number }
 
 const CLOSING: Readonly<Record<string, string>> = {
   'ask.answered': 'answered', 'ask.defaulted': 'defaulted', 'ask.escalated': 'escalated', 'ask.cancelled': 'cancelled',
@@ -415,9 +417,20 @@ class AsksCore implements Asks {
   private readonly sessions = new Map<string, { thread: string; worktree: string; project: string | null; agent: string }>();
   /** The sessions whose verified end the core read, oldest first: past the newest ENDED_KEPT they leave memory (#824). */
   private readonly endOrder = new Set<string>();
-  /** Each session's stops in log order, and every stop by ID (#85). */
+  /**
+   * Each session's stops a rule can still read, in log order, and each of them by ID (#85): its newest, and each one a
+   * task covers while the task is open or its default can still be undone, which its check and its reset read. The rest
+   * go as they are applied, at a start's fold as well as live (#2653); the record keeps them all.
+   */
   private readonly stops = new Map<string, Stop[]>();
   private readonly stopIds = new Map<string, Stop>();
+  /** How many tasks, open or with a default that can be undone, cover each stop. */
+  private readonly pins = new Map<string, number>();
+  /**
+   * What each session's stops still tell once they've gone: the stamp of its newest finished stop among those stamped
+   * before its newest, and among them all (`continuedSince`); and where its stops start in the log since it last left memory.
+   */
+  private readonly stopTimes = new Map<string, { before: number; last: number; from: number }>();
   /** The stamp of the last prompt you typed in each session, and the continues the core recorded for it. */
   private readonly typedAt = new Map<string, number>();
   private readonly continued = new Map<string, Continued[]>();
@@ -1375,8 +1388,9 @@ class AsksCore implements Asks {
       for (const stop of this.stops.get(session) ?? []) {
         this.stopIds.delete(stop.id);
         this.covered.delete(stop.id);
+        this.pins.delete(stop.id);
       }
-      for (const kept of [this.stops, this.typedAt, this.continued, this.ended, this.replaced, this.done]) kept.delete(session);
+      for (const kept of [this.stops, this.stopTimes, this.typedAt, this.continued, this.ended, this.replaced, this.done]) kept.delete(session);
       this.attempts.delete(session);
       this.unread.delete(session);
       this.running.delete(session);
@@ -1474,15 +1488,32 @@ class AsksCore implements Asks {
           // A turn that ended normally is a Stop (outcome finished); one that ended on an API error is a StopFailure (failed).
           finished: d.outcome !== 'failed', who: { actor: e.actor, scope: e.scope },
         };
-        this.stops.set(e.session, [...(this.stops.get(e.session) ?? []), stop]);
-        this.stopIds.set(stop.id, stop);
+        const top = this.newest(e.session);
+        const times = this.stopTimes.get(e.session) ?? this.stopTimes.set(e.session, { before: -Infinity, last: -Infinity, from: e.log_pos }).get(e.session)!;
+        // Stamped after the newest, every stop so far was stamped before it; stamped before the newest, it is one of those.
+        if (top && stop.ts > top.ts) times.before = times.last;
+        else if (top && stop.ts < top.ts && stop.finished) times.before = Math.max(times.before, stop.ts);
+        if (stop.finished) times.last = Math.max(times.last, stop.ts);
+        // Only the session's newest is held from here; a stop stamped before it is never the newest, so nothing reads it.
+        if (!top || newer(stop, top)) {
+          this.stops.set(e.session, [...(this.stops.get(e.session) ?? []), stop]);
+          this.stopIds.set(stop.id, stop);
+          if (top) this.release(top);
+        }
         this.signatures.set(blockKey(stop.signature), stop.signature);
         this.fresh.add(e.session);
         return;
       }
-      case 'session.continued':
-        if (e.writer === 'core' && e.session) this.continued.set(e.session, [...(this.continued.get(e.session) ?? []), { stop: String(d.stop), because: String(d.because), ts: e.ts }]);
+      case 'session.continued': {
+        if (e.writer !== 'core' || !e.session) return;
+        const stop = String(d.stop);
+        const because = String(d.because);
+        // The stamp of the stop it continued from, which `continuedSince` reads: a newer stop of its session applied
+        // first has let that stop go, so it is read back from the record (#2653).
+        const at = because === 'task_closed' ? undefined : this.stopIds.get(stop)?.ts ?? await this.stampOf(stop, e.log_pos);
+        this.continued.set(e.session, [...(this.continued.get(e.session) ?? []), { stop, because, ts: e.ts, ...(at === undefined ? {} : { at }) }]);
         return;
+      }
       case 'session.end':
         // A session you stopped (its SessionEnd, or the core's end for a Codex process that exited without one, #1023)
         // isn't resumed by a task closing: a continue would wake nobody.
@@ -1524,7 +1555,10 @@ class AsksCore implements Asks {
         };
         if (request) this.requested.set(request.block, ask.handle);
         if (ask.block) {
-          for (const id of ask.block.stops.values()) this.covered.add(id);
+          for (const id of ask.block.stops.values()) {
+            this.covered.add(id);
+            this.pin(id);
+          }
           if (joins) ask.pending.superseded = joins.handle;
           else this.blockTasks.set(ask.block.signature, ask);
         }
@@ -1599,7 +1633,17 @@ class AsksCore implements Asks {
           if (this.blockTasks.get(ask.block.signature) === ask) this.blockTasks.delete(ask.block.signature);
           // A session's task folded into the shared one: the shared task covers its stop from then on.
           const into = e.kind === 'ask.superseded' ? this.asks.get(bare(String(d.by))) : undefined;
-          if (into?.block) for (const [session, id] of ask.block.stops) into.block.stops.set(session, id);
+          if (into?.block) {
+            for (const [session, id] of ask.block.stops) {
+              const was = into.block.stops.get(session);
+              into.block.stops.set(session, id);
+              if (into.closed && into.closed.outcome !== 'defaulted') continue;
+              this.pin(id);
+              if (was !== undefined) this.unpin(was);
+            }
+          }
+          // Closed for good, it reads its stops no more; one closed by its default opens again on an undo, so it keeps them.
+          if (ask.closed.outcome !== 'defaulted') for (const id of ask.block.stops.values()) this.unpin(id);
           // Closed on its check, or by your "I did it" (its done option; until the done gate re-runs the check on that
           // answer, #323, the next turn is the check: a block that holds stops the session again): its sessions
           // resume. "Leave it blocked" and a default leave them stopped, as the option says.
@@ -1844,8 +1888,40 @@ class AsksCore implements Asks {
   /** A session's newest stop, by deep-hook's stamp (then by log order), or none. */
   private newest(session: string): Stop | undefined {
     let top: Stop | undefined;
-    for (const stop of this.stops.get(session) ?? []) if (!top || stop.ts > top.ts || (stop.ts === top.ts && stop.pos > top.pos)) top = stop;
+    for (const stop of this.stops.get(session) ?? []) if (!top || newer(stop, top)) top = stop;
     return top;
+  }
+  /** A task open, or closed by a default that can be undone, covers the stop: it stays while one does. */
+  private pin(id: string): void {
+    this.pins.set(id, (this.pins.get(id) ?? 0) + 1);
+  }
+  private unpin(id: string): void {
+    const left = (this.pins.get(id) ?? 0) - 1;
+    if (left > 0) {
+      this.pins.set(id, left);
+      return;
+    }
+    this.pins.delete(id);
+    const stop = this.stopIds.get(id);
+    if (stop) this.release(stop);
+  }
+  /** Lets a stop go once no rule reads it: no longer its session's newest, and no task open or undoable covers it. */
+  private release(stop: Stop): void {
+    if (this.pins.has(stop.id) || this.newest(stop.session) === stop) return;
+    this.stops.set(stop.session, (this.stops.get(stop.session) ?? []).filter((s) => s !== stop));
+    this.stopIds.delete(stop.id);
+    // Whether a task covered it is read of a session's newest only, which this stop can never be again.
+    this.covered.delete(stop.id);
+  }
+  /**
+   * The stamp of a stop a continue names, read back from the record: memory let it go when a newer stop of its session
+   * was applied before the continue (#2653). Only a stop memory would otherwise still hold counts: the hook's own, not a
+   * child's, applied before the continue and since its session last left memory.
+   */
+  private async stampOf(id: string, before: number): Promise<number | undefined> {
+    const [row] = (await this.options.record.raw(`SELECT ts, session_id AS session, log_pos AS pos FROM events WHERE id = ? AND kind = 'agent.stop' AND writer = 'hook' AND log_pos < ? AND json_type(data, '$.child') IS NOT 'text'`, [id, before])) as { ts: number; session: string | null; pos: number }[];
+    const from = row?.session ? this.stopTimes.get(row.session)?.from : undefined;
+    return from !== undefined && Number(row!.pos) >= from ? Number(row!.ts) : undefined;
   }
   /** The stop a task covers in each session it unblocks: that session's newest when the task was raised. */
   private coveringStops(data: Obj): Map<string, string> {
@@ -1868,15 +1944,15 @@ class AsksCore implements Asks {
    * Whether the session already had its one automatic continue since its last turn that ended normally: a continue
    * from an earlier stop stamped after the session's newest finished stop before this one (a Stop, not a StopFailure),
    * after your last prompt, or after the last resume of a task that closed, whichever is latest; each starts the
-   * count again. Counted per session, never per stop: a second transient stop right after a continue gets none.
+   * count again. Counted per session, never per stop: a second transient stop right after a continue gets none. Read
+   * of the session's newest stop, whose earlier finished stops' latest stamp the session keeps once they've gone.
    */
   private continuedSince(stop: Stop): boolean {
     const resumed = (this.continued.get(stop.session) ?? []).filter((c) => c.because === 'task_closed').map((c) => c.ts);
-    const finished = (this.stops.get(stop.session) ?? []).filter((s) => s.finished && s.ts < stop.ts).map((s) => s.ts);
-    const since = Math.max(this.typedAt.get(stop.session) ?? -Infinity, ...resumed, ...finished);
+    const since = Math.max(this.typedAt.get(stop.session) ?? -Infinity, ...resumed, this.stopTimes.get(stop.session)?.before ?? -Infinity);
     return (this.continued.get(stop.session) ?? []).some((c) => {
-      const earlier = c.because !== 'task_closed' ? this.stopIds.get(c.stop) : undefined;
-      return earlier !== undefined && earlier.ts > since && earlier.ts < stop.ts;
+      const earlier = c.because !== 'task_closed' ? c.at ?? this.stopIds.get(c.stop)?.ts : undefined;
+      return earlier !== undefined && earlier > since && earlier < stop.ts;
     });
   }
 

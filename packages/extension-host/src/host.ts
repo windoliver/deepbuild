@@ -41,7 +41,7 @@ import type { EvidenceStore } from '@deepbuild/evidence';
 import type { StateSource, StateSourceFill } from '@deepbuild/conformance';
 import type { ChannelCtx, ChannelDelivered, ChannelFill, ChannelItem, ChannelReceived, CheckResult, CheckRunnerFill, CheckSpec, EnvironmentFill, EnvironmentHandle, EnvironmentLease, EnvironmentSpec, SlotFill, SlotKit } from '@deepbuild/conformance';
 import { canonicalize, checkManifest, extensionApi, frozenDigests, hubSlots, registry, sha256Hex, validate, type ApiEntry, type HookContribution, type JoinedHookReply, type JsonValue, type Schema } from '@deepbuild/contracts';
-import { contentFree, toJson, ulid, type Connection, type Event, type EventInput, type RecordStore } from '@deepbuild/record';
+import { contentFree, toJson, ulid, type Connection, type Event, type EventInput, type Receipt, type RecordStore } from '@deepbuild/record';
 import type { LeaseKind, LeaseResult, LeaseTable } from '@deepbuild/leases';
 import type { Runner } from '@deepbuild/runner';
 import { badDeadline, checkHost, type Host as RunHost, type Supervisor } from '@deepbuild/supervisor';
@@ -94,7 +94,10 @@ export type Plant = 'hub-unless-agent-built' | 'grants-only-in-record-query' | '
   // read as ended a host of another protocol version.
   | TerminalPlant
   // #184's: a host that plays any seed a check runner passes to deep.canvas.play.
-  | 'plays-any-seed';
+  | 'plays-any-seed'
+  // #2650's: a host that keeps every source call's answer, one that keeps every action call's result, a series store
+  // that keeps every set of names, and a host that forgets a request ID and runs its call again.
+  | 'churn-keeps-every-answer' | 'churn-keeps-every-result' | 'churn-keeps-every-name-set' | 'forgets-request-runs-again';
 
 /** One hook request to every loaded handler of its kind (#350). */
 export interface HookRequest {
@@ -173,6 +176,8 @@ export interface ExtensionHostOptions {
   http?: HttpClient;
   /** Replay: each source call is answered from this recording, never through the client, and no secret is read. */
   replay?: Recording;
+  /** False: this host keeps no source call's answer, so `recording()` stays empty, as the hub opens it (#2650). */
+  recording?: boolean;
   /** The evidence store a series' batch and rollup files go to and are read back from, through their hash (#262). Without one, a series call makes no reading. */
   evidence?: EvidenceStore;
   /** The runner R1 built (#366): every plug-in's model job goes through it, on your own agent. Without one, deep.runner.run refuses. */
@@ -356,7 +361,10 @@ export interface ExtensionHost {
   assetOnline(pack: string, url: string): Promise<boolean>;
   /** A pack's license file, read through the Source block after the job is authorized. */
   assetTerms(pack: string, url: string): Promise<string>;
-  /** Every source call this host made, with its secrets stripped. */
+  /**
+   * Every source call this host made while it records, with its secrets stripped: its first 10,000 calls and 64 MiB of
+   * answers, and nothing when it was opened with `recording: false` (#2650).
+   */
   recording(): Recording;
   /** The readings the record holds of a source with an as-of time in the window, both ends in, in as-of order. */
   readings(source: string, window: { from: number; to: number }): Promise<Reading[]>;
@@ -460,6 +468,14 @@ const BODY = 1024 * 1024;
 /** The largest answer an outside call the host makes for a package takes. */
 const ANSWER = 1024 * 1024;
 const PAGE = 1000;
+/**
+ * The settled request IDs an action's retry is answered from in memory (#2650): the newest, up to this many and this
+ * many bytes of results. Past them a change or send is answered from its receipt in the record, and a read runs again.
+ */
+const REQUESTS_KEPT = 64;
+const REQUESTS_BYTES = 1024 * 1024;
+/** The receipt method an action call's request ID is kept under (#2650), beside the hub's own writes (#1577). */
+const ACTION_RECEIPT = 'action.call';
 /** How many readings through its edges a piece keeps by handle, for its model jobs (#103). */
 const EDGE_READS = 256;
 /** Folder-safe, as extension.manifest@1 writes them. */
@@ -649,11 +665,12 @@ class Host implements ExtensionHost {
       ...(options.point ? { point: options.point } : {}), now: options.now,
     });
     const series = this.series = options.evidence ? new SeriesStore({
-      record: options.record, evidence: options.evidence, now: options.now, connection: CORE,
+      record: options.record, evidence: options.evidence, now: options.now, connection: CORE, ...(plant === 'churn-keeps-every-name-set' ? { keepsEvery: true } : {}),
       timeoutOf: (name) => [...this.exts.values()].map((e) => e.live ? e.sources.get(name) : undefined).find((s): s is Polled => s?.variant === 'polled')?.timeout,
     }) : undefined;
     this.sources = new Sources({
       now: options.now, http: options.http ?? nodeHttp, secrets: options.secrets ?? osSecrets(), ...(options.replay ? { replay: options.replay } : {}),
+      ...(plant === 'churn-keeps-every-answer' ? { recording: 'every' as const } : options.recording === false ? { recording: false } : {}),
       ...(series ? { land: (source: Polled, asOf: number, values: Map<string, number>) => series.land(source, asOf, values) } : {}),
       // Each call's cost and each new reading, as the core: the hub makes every source call.
       append: async (kind, data) => { await options.record.append(CORE, { v: 1, id: ulid(options.now()), kind, ts: options.now(), data } as EventInput); },
@@ -2884,43 +2901,71 @@ class Host implements ExtensionHost {
     return { ...joinReplies(contributions, request.bound, plant), failed: failed.sort((a, b) => (a.extension < b.extension ? -1 : a.extension > b.extension ? 1 : 0)) };
   }
 
-  /** Each request ID's call (#363), by its caller: the digest of what it asked, and its result, which a retry gets. */
-  private readonly requests = new Map<string, { digest: string; result: Promise<ActionResult> }>();
+  /**
+   * Each request ID's call (#363), by its caller: the digest of what it asked, and its result, which a retry gets. A
+   * call stays while it runs; once settled, only the newest REQUESTS_KEPT stay, within REQUESTS_BYTES (#2650).
+   */
+  private readonly requests = new Map<string, { digest: string; result: Promise<ActionResult>; bytes?: number }>();
+  /** The bytes of the settled results `requests` holds. */
+  private requestBytes = 0;
   /** The notices each change or send call sent while its handler ran, by its call ID (#363). */
   private readonly notices = new Map<string, string[]>();
   async callAction(call: ActionCall): Promise<ActionResult> {
     const { request } = call;
-    if (request === undefined) return this.callNow(call);
+    if (request === undefined || this.options.plant === 'forgets-request-runs-again') return this.callNow(call);
     if (typeof request !== 'string' || !request) return { status: 'refused', reason: 'a call\'s request ID is a non-empty string' };
     // An identical retry runs nothing again; the same ID with other input is refused before anything is written or run.
     const key = `${call.caller.writer}\u0000${request}`;
     const digest = sha256Hex(canonicalize(JSON.parse(JSON.stringify({ action: call.action, target: call.target ?? null, input: call.input ?? null })) as JsonValue));
     const seen = this.requests.get(key);
     if (seen) return seen.digest === digest ? seen.result : { status: 'refused', reason: `the request ID ${request} was used for another call; nothing was run or written for this one` };
-    const result = this.entered(call, request).then((before) => before ?? this.callNow(call));
-    this.requests.set(key, { digest, result });
+    const receipt: Receipt = { device: call.caller.writer, request, method: ACTION_RECEIPT, params: digest };
+    const result = this.entered(call, receipt).then((before) => before ?? this.callNow(call, receipt));
+    const kept: { digest: string; result: Promise<ActionResult>; bytes?: number } = { digest, result };
+    this.requests.set(key, kept);
+    void result.then((settled) => this.settled(kept, settled), () => this.requests.delete(key));
     return result;
   }
+  /** A settled call kept for its retries, and the oldest let go past the bound: the record answers for them (#2650). */
+  private settled(kept: { bytes?: number }, result: ActionResult): void {
+    kept.bytes = JSON.stringify(result).length;
+    this.requestBytes += kept.bytes;
+    if (this.options.plant === 'churn-keeps-every-result') return;
+    let settled = 0;
+    for (const entry of this.requests.values()) if (entry.bytes !== undefined) settled++;
+    for (const [old, entry] of this.requests) {
+      if (settled <= REQUESTS_KEPT && this.requestBytes <= REQUESTS_BYTES) break;
+      if (entry.bytes === undefined) continue;
+      this.requests.delete(old);
+      this.requestBytes -= entry.bytes;
+      settled--;
+    }
+  }
   /**
-   * A request ID's call entered before this host started (#363), as its action.entered holds it, or undefined: an
-   * identical retry runs nothing again and gets no output, which isn't kept, and one whose call never reported or
-   * failed gets the call refused; the same ID with other input is refused.
+   * A request ID's call entered before (#363, #2650): from its receipt, which its action.entered carried, the first
+   * call's result; else, for a call entered before receipts or whose result the hub never kept, from its
+   * action.entered and action.reported: an identical retry runs nothing again and gets no output, and one whose call
+   * never reported or failed gets the call refused. The same ID with other input is refused; undefined when no call
+   * of it was entered.
    */
-  private async entered(call: ActionCall, request: string): Promise<ActionResult | undefined> {
+  private async entered(call: ActionCall, receipt: Receipt): Promise<ActionResult | undefined> {
+    const other: ActionResult = { status: 'refused', reason: `the request ID ${receipt.request} was used for another call; nothing was run or written for this one` };
+    const [kept] = (await this.options.record.raw('SELECT method, params, outcome FROM receipts WHERE device = ? AND request = ?', [receipt.device, receipt.request])) as { method: string; params: string; outcome: string | null }[];
+    if (kept && (kept.method !== receipt.method || kept.params !== receipt.params)) return other;
+    if (kept?.outcome) return (JSON.parse(kept.outcome) as { result: ActionResult }).result;
     const { session, actor } = call.caller;
     const [row] = (await this.options.record.raw(`SELECT data FROM events WHERE kind = 'action.entered' AND writer = 'core' AND actor = ?
-      AND session_id IS ? AND json_extract(data, '$.request') = ? ORDER BY log_pos LIMIT 1`, [actor, session ?? null, request])) as { data: string }[];
+      AND session_id IS ? AND json_extract(data, '$.request') = ? ORDER BY log_pos LIMIT 1`, [actor, session ?? null, receipt.request])) as { data: string }[];
     if (!row) return undefined;
     const before = JSON.parse(row.data) as { call: string; plugin: string; action: string; input: JsonValue };
     const same = (v: unknown): string => sha256Hex(canonicalize((JSON.parse(JSON.stringify(v ?? null)) ?? null) as JsonValue));
-    if (`ext:${before.plugin}` !== call.target?.handle || before.action !== call.action || same(before.input) !== same(call.input)) {
-      return { status: 'refused', reason: `the request ID ${request} was used for another call; nothing was run or written for this one` };
-    }
+    if (`ext:${before.plugin}` !== call.target?.handle || before.action !== call.action || same(before.input) !== same(call.input)) return other;
     const [ended] = (await this.options.record.raw("SELECT data FROM events WHERE kind = 'action.reported' AND json_extract(data, '$.call') = ? LIMIT 1", [before.call])) as { data: string }[];
     const error = ended ? (JSON.parse(ended.data) as { error: string | null }).error : `${call.action}'s call ${before.call} never reported, so what it did is unknown`;
     return error === null ? { status: 'done', output: null } : { status: 'refused', reason: error, started: true, call: before.call };
   }
-  private async callNow(call: ActionCall): Promise<ActionResult> {
+  /** `receipt`: the request ID's, which its action.entered carries and its result joins (#2650). */
+  private async callNow(call: ActionCall, receipt?: Receipt): Promise<ActionResult> {
     const refuse = (reason: string): ActionResult => ({ status: 'refused', reason });
     const { action, target, caller, request } = call;
     const id = /^ext:(.+)$/.exec(target?.handle ?? '')?.[1];
@@ -2954,7 +2999,7 @@ class Host implements ExtensionHost {
         const { log_pos } = await this.options.record.append(core, {
           // A call that came with no request ID, such as a panel's, is entered under its own call ID: nothing retries it.
           v: 1, id: ulid(now), kind: 'action.entered', ts: now, data: { call: callId, plugin: id!, action, request: request ?? callId, input: call.input as JsonValue },
-        });
+        }, receipt);
         entered = { call: callId, at: log_pos };
         ext.callOf.set(scope, callId);
         this.notices.set(callId, []);
@@ -2973,11 +3018,14 @@ class Host implements ExtensionHost {
     }
     if (entered) await this.reported(ext, entered, core, returned, failure);
     const ran = { started: true as const, ...(entered ? { call: entered.call } : {}) };
-    if (failure !== undefined) return { ...refuse(failure), ...ran };
-    // Removed while it ran: what it returns reaches no one, and nothing it does later goes through its replacement.
-    if (this.exts.get(ext.entry.id) !== ext || !ext.live) return { ...refuse(`${id}@${target.version} was removed while ${action} ran`), ...ran };
-    // A change or send returns { output, report }: its caller gets the output, and the report is on record.
-    return { status: 'done', output: entered && isPlain(returned) && Object.hasOwn(returned, 'output') ? returned.output : returned };
+    const result: ActionResult = failure !== undefined ? { ...refuse(failure), ...ran }
+      // Removed while it ran: what it returns reaches no one, and nothing it does later goes through its replacement.
+      : this.exts.get(ext.entry.id) !== ext || !ext.live ? { ...refuse(`${id}@${target.version} was removed while ${action} ran`), ...ran }
+      // A change or send returns { output, report }: its caller gets the output, and the report is on record.
+      : { status: 'done', output: entered && isPlain(returned) && Object.hasOwn(returned, 'output') ? returned.output : returned };
+    // The first result joins the receipt its action.entered carried, so a retry the memory let go still gets it (#2650).
+    if (entered && receipt) await this.options.record.keepReceipt(receipt, { result: result as JsonValue }).catch(() => undefined);
+    return result;
   }
   /**
    * action.reported for a change or send call, when its handler ends (#363): the report's `verified` and `checked`,
