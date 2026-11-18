@@ -24,8 +24,8 @@ import { temporary } from './proof-runs.mjs';
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const SLUG = 'windoliver/deepbuild';
 /** The 25 spine tasks (the `spine` label) and their merged commits, read from GitHub on Nov 7, 2026; #12's is the commit that
- * landed its acceptance tests and fixes after that re-judge reopened it, and #13's is PR #1675's merge, which
- * added the third reference Mac (#1831). */
+ * landed its acceptance tests and fixes after that re-judge reopened it, and #13's is PR #1675's merge, read
+ * on Nov 17, which added the third reference Mac (#1831). */
 const SPINE = [
   [12, 'c215f37a64ab79109c495269b687fa23b087bb6c'], [13, '96ee0fc4d7b8882145961ca215ad50c3e3d4a1ee'],
   [14, '554bebb6cc8e5693a887bdeac45771e046fcac5e'], [15, 'af779af3c8aed3ecf58690e214c186ff742ae91b'],
