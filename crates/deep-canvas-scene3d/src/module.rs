@@ -120,6 +120,11 @@ fn str_param(name: &'static str, default: &str) -> Param {
     param(name, ParamType::Str, json!(default))
 }
 
+/// A mark's `fog` (Marks in 3D; #1992): whether the sky's fog applies to it.
+fn fog(default: bool) -> Param {
+    param("fog", ParamType::Json("bool"), json!(default))
+}
+
 fn kind(name: &'static str, params: Vec<Param>) -> Entry {
     Entry {
         family: "mark",
@@ -250,7 +255,7 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
                 // A line of a mesh's edges in place of points (Marks in 3D: mesh edges; #420).
                 json_param("edges", crate::spec::EDGES),
                 // Marks in 3D: whether the sky's fog applies to it (#537's live lines set false).
-                json_param("fog", "bool"),
+                fog(true),
             ]),
         ),
         &[],
@@ -267,6 +272,7 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
                     "from",
                     "video {asset, frames, depth: luma | r, near, far, fov: [deg, deg], step}",
                 ),
+                fog(true),
             ]),
         ),
         &[],
@@ -280,6 +286,22 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
                 str_param("font", "body"),
                 json_param("size", "px | m"),
                 str_param("facing", "camera"),
+                fog(false),
+            ]),
+        ),
+        &[],
+        "",
+    );
+    // A picture on one quad (Marks in 3D; #1992), by hash as Image `image@1` names one.
+    r.kind(
+        kind(
+            "image",
+            common(vec![
+                json_param("asset", "sha256"),
+                str_param("alt", ""),
+                json_param("size", "[w, h]"),
+                str_param("facing", "camera"),
+                fog(true),
             ]),
         ),
         &[],
