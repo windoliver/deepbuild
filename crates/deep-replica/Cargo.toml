@@ -22,6 +22,14 @@ deep-logic = { path = "../deep-logic" }
 # #1048: logic.edges puts each control kind's edge values, as its control@1 entry declares them.
 deep-canvas-input = { path = "../deep-canvas-input" }
 base64 = "0.22"
+# Issue #1498: the replica's copy of the hub's canvas core: the interaction scope, the marks module's text and its
+# selection, render-back's raster, the cells module's emulator and the shaper, as the hub's canvas core runs them.
+deep-canvas = { path = "../deep-canvas" }
+deep-canvas-marks = { path = "../deep-canvas-marks" }
+deep-canvas-cells = { path = "../deep-canvas-cells" }
+deep-marks-raster = { path = "../deep-marks-raster" }
+deep-text = { path = "../deep-text" }
+vello_cpu = { version = "0.3", default-features = false, features = ["std", "text", "f32_pipeline", "u8_pipeline"] }
 
 # Issue #1408: the wrong programs a test selects with DEEP_DRIVE_PLANT and, through the app, DEEP_HUB_PLANT, read only in
 # a build with this feature. A release build refuses it. Issue #1662: #124's planted session rows come through it too,

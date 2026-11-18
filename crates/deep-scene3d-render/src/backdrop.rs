@@ -272,7 +272,7 @@ impl Backdrop {
             k: [
                 size[0] as f32,
                 size[1] as f32,
-                env.map_or(1.0, |e| e.intensity) as f32,
+                (env.map_or(1.0, |e| e.intensity) * sky.background_intensity) as f32,
                 env.map_or(0.0, |e| e.rotation.to_radians()) as f32,
             ],
         };

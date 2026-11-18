@@ -15,6 +15,11 @@
 //! playhead; the caller hands it the revision the view shows and the one compared against. A
 //! shift-click toggles an item in the selection, and a point and ask reads what the pointer is
 //! on (issue #384). All of it is session state: the document is never written.
+//!
+//! Issue #1498: text selects too. A view where a drag pans keeps its drag and double-click: a click on a text item
+//! selects its whole text, and ⌥-drag selects part of it, its two carets anywhere on the text items the host shapes
+//! ([`Texts`]), crossing items in reading order. ⌘C asks the host for the selection's text, which only a press with a
+//! gesture serial may write to the clipboard. Text a control picks never selects.
 
 use serde_json::{json, Map, Value};
 
@@ -32,6 +37,8 @@ const DOUBLE_FLICKS: i64 = 352_800_000;
 const DOUBLE_PX: f64 = 4.0;
 /// A press turns into a drag once the pointer has moved this many px from where it went down.
 const DRAG_PX: f64 = 3.0;
+/// #1498: how far from text a press may land and still select it, px (Selection: `hit.margin`).
+const TEXT_MARGIN: f64 = 3.0;
 /// A flown-to item spans this share of the view's limiting side.
 const FILL: f64 = 1.0 / 1.2;
 /// The full-screen button's size and its inset from the canvas's top right, px.
@@ -70,6 +77,8 @@ pub enum Event {
     Down {
         pos: [f64; 2],
         toggle: bool,
+        /// #1498: ⌥ held: on text the drag selects it and never pans.
+        alt: bool,
     },
     Up([f64; 2]),
     Move([f64; 2]),
@@ -214,6 +223,25 @@ pub struct Done {
     pub commits: Vec<u64>,
     /// #504: the option or stage a click, or Enter on a focused target, picked.
     pub pick: Option<PickTarget>,
+    /// #1498: ⌘C with a text selection: the host copies its text, when the press has a gesture serial.
+    pub copy: bool,
+}
+
+/// #1498: the text a host draws, which the scope can't shape (Selection: "Text selects too").
+pub trait Texts {
+    /// The text item nearest page point `c`, the topmost of those under it, and the caret there: with `within`, only
+    /// an item that far from `c` or nearer, in page units.
+    fn at(&self, c: [f64; 2], within: Option<f64>) -> Option<(String, usize)>;
+    /// The graphemes of a text item's source: the caret after its last.
+    fn len(&self, item: &str) -> Option<usize>;
+}
+
+/// #1498: a text selection, from its anchor's caret to its focus's, each a text item and a grapheme offset of its
+/// source. Session state, like the rest of the selection.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TextRange {
+    pub anchor: (String, usize),
+    pub focus: (String, usize),
 }
 
 /// One item a control picks in the scene (Control: `targets`): the control, the option or stage
@@ -392,6 +420,8 @@ struct Press {
     double: bool,
     /// Shift held: the click toggles what it hits in the selection.
     toggle: bool,
+    /// #1498: ⌥ held on text: the drag moves the text selection's focus and never pans.
+    text: bool,
 }
 
 /// A level flown into: its item, and the offsets Esc gives back.
@@ -420,6 +450,8 @@ pub struct Scope {
     planted: Planted,
     /// #504: the Tab stop with focus: a control's own UI, or one of its targets by option.
     pub focus: Option<(String, Option<String>)>,
+    /// #1498: the text selection.
+    text: Option<TextRange>,
 }
 
 fn distance(a: [f64; 2], b: [f64; 2]) -> f64 {
@@ -606,7 +638,13 @@ impl Scope {
             view: View::default(),
             planted,
             focus: None,
+            text: None,
         })
+    }
+
+    /// #1498: the text selection, which the host copies on ⌘C and outlines.
+    pub fn text_selection(&self) -> Option<&TextRange> {
+        self.text.as_ref()
     }
 
     /// The record's time the view shows, flicks, or `None` while it's live: which revision the
@@ -1131,7 +1169,15 @@ impl Scope {
     /// A click on what the press hit: the button toggles full screen; an item is selected and
     /// its panel opens; empty space clears both. With `toggle` an item joins the selection, or
     /// leaves it, and empty space keeps it. The camera never moves.
-    fn click(&mut self, hit: &Hit, toggle: bool) {
+    fn click(&mut self, hit: &Hit, toggle: bool, texts: Option<&dyn Texts>) {
+        // #1498: a click on a text item selects its whole text; on anything else, nothing of any text.
+        self.text = match hit {
+            Hit::Item(id) => texts.and_then(|t| t.len(id)).map(|n| TextRange {
+                anchor: (id.clone(), 0),
+                focus: (id.clone(), n),
+            }),
+            _ => None,
+        };
         match hit {
             Hit::Button => self.full_screen = !self.full_screen,
             Hit::Item(id) if toggle => {
@@ -1170,14 +1216,53 @@ impl Scope {
         self.offsets.elevation = elevation.clamp(user.pitch[0], user.pitch[1]) - self.rig.elevation;
     }
 
+    /// #1498: a text drag's focus moved to the caret nearest `p`, on whichever text item it is nearest.
+    fn select_to(&mut self, p: [f64; 2], texts: Option<&dyn Texts>) {
+        let c = self.content(p, &self.offsets);
+        if let (Some(range), Some(focus)) = (self.text.as_mut(), texts.and_then(|t| t.at(c, None)))
+        {
+            range.focus = focus;
+        }
+    }
+
     /// One input at `t` (flicks) with the router's `serial`, against the current revision `doc`.
     pub fn input(&mut self, doc: &Value, t: i64, serial: u64, event: &Event) -> Done {
+        self.input_with(doc, t, serial, event, None)
+    }
+
+    /// #1498: [`Self::input`] with the text the host draws, which a text selection reads.
+    pub fn input_with(
+        &mut self,
+        doc: &Value,
+        t: i64,
+        serial: u64,
+        event: &Event,
+        texts: Option<&dyn Texts>,
+    ) -> Done {
         let mut done = Done::default();
         let commit = |done: &mut Done| done.commits.push(serial);
         match event {
-            Event::Down { pos: p, toggle } => {
+            Event::Down {
+                pos: p,
+                toggle,
+                alt,
+            } => {
                 let hit = self.hit(doc, *p);
                 done.picks = 1;
+                // ⌥ on text a control doesn't pick: a text selection starts at the caret under the press, within the
+                // hit margin.
+                let margin = TEXT_MARGIN * self.u_per_px(&self.offsets);
+                let caret = texts
+                    .filter(|_| *alt && self.rig.flat)
+                    .and_then(|t| t.at(self.content(*p, &self.offsets), Some(margin)))
+                    .filter(|(item, _)| self.target_hit(doc, &Hit::Item(item.clone())).is_none());
+                let text = caret.is_some();
+                if let Some(caret) = caret {
+                    self.text = Some(TextRange {
+                        anchor: caret.clone(),
+                        focus: caret,
+                    });
+                }
                 self.hover = match &hit {
                     Hit::Item(id) => Some(id.clone()),
                     _ => None,
@@ -1196,8 +1281,9 @@ impl Scope {
                     from: self.offsets,
                     hit,
                     dragging: false,
-                    double,
+                    double: double && !text,
                     toggle: *toggle,
+                    text,
                 });
             }
             Event::Move(p) => match self.press.as_mut() {
@@ -1205,7 +1291,9 @@ impl Scope {
                     if distance(press.at, *p) >= DRAG_PX {
                         press.dragging = true;
                     }
-                    if press.dragging {
+                    if press.text {
+                        self.select_to(*p, texts);
+                    } else if press.dragging {
                         self.drag(*p);
                     }
                     if self.planted.pick_mid_gesture {
@@ -1229,17 +1317,19 @@ impl Scope {
                 }
             },
             Event::Up(p) => {
-                if self.press.as_ref().is_some_and(|press| press.dragging) {
+                if self.press.as_ref().is_some_and(|press| press.text) {
+                    self.select_to(*p, texts);
+                } else if self.press.as_ref().is_some_and(|press| press.dragging) {
                     self.drag(*p);
                 }
                 if let Some(press) = self.press.take() {
-                    if press.dragging {
+                    if press.dragging || press.text {
                         self.last_click = None;
                     } else if let Some(pick) = self.target_hit(doc, &press.hit) {
                         // A click on a target picks its option or stage and never selects the
                         // item or opens its panel (Control: targets).
                         if self.planted.pick_selects {
-                            self.click(&press.hit, press.toggle);
+                            self.click(&press.hit, press.toggle, texts);
                         }
                         self.focus = Some((pick.control.clone(), Some(pick.option.clone())));
                         done.pick = Some(pick);
@@ -1250,7 +1340,7 @@ impl Scope {
                         }
                         self.last_click = None;
                     } else {
-                        self.click(&press.hit, press.toggle);
+                        self.click(&press.hit, press.toggle, texts);
                         self.last_click = Some((t, *p, press.hit));
                     }
                 }
@@ -1286,6 +1376,7 @@ impl Scope {
                     }
                     ("Escape", _) => self.back(),
                     ("k", true) => self.palette = Some(String::new()),
+                    ("c", true) => done.copy = self.text.is_some(),
                     ("Return", _) => {
                         if let Some(query) = self.palette.take() {
                             let all = self.shown_targets(doc);

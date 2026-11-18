@@ -157,6 +157,22 @@ impl Modes {
     }
 }
 
+/// What a press (`down`) or release of the primary button on cell `(x, y)` (from 0) reports to a program whose mouse
+/// encoding is `mouse` (`none | x10 | sgr`, as [`Modes::mouse_name`] names it): SGR's `ESC[<0;x;yM` or `…m`, X10's
+/// `ESC[M` with the button and each coordinate plus 32, cells counted from 1; nothing for `none`.
+pub fn mouse_report(mouse: &str, (x, y): (u16, u16), down: bool) -> Vec<u8> {
+    let (x, y) = (u32::from(x) + 1, u32::from(y) + 1);
+    match mouse {
+        "sgr" => format!("\x1b[<0;{x};{y}{}", if down { 'M' } else { 'm' }).into_bytes(),
+        "x10" => {
+            let b = if down { 32u8 } else { 35 };
+            let at = |v: u32| (32 + v).min(255) as u8;
+            vec![0x1b, b'[', b'M', b, at(x), at(y)]
+        }
+        _ => Vec::new(),
+    }
+}
+
 /// A history row: its text alone when plain, else its cells.
 #[derive(Clone, Debug)]
 enum Kept {
@@ -168,6 +184,9 @@ enum Kept {
 #[derive(Clone, Debug)]
 struct Screen {
     rows: Vec<Vec<Cell>>,
+    /// #1498: whether each row ran on into the next by a wrap, not a line end: a selection copies
+    /// such a row and the next as one line.
+    wrapped: Vec<bool>,
     x: u16,
     y: u16,
     /// A write at the last column wraps before the next character (DECAWM's pending wrap).
@@ -180,6 +199,7 @@ impl Screen {
             rows: (0..rows)
                 .map(|_| vec![Cell::blank(pen); usize::from(cols)])
                 .collect(),
+            wrapped: vec![false; usize::from(rows)],
             x: 0,
             y: 0,
             pending_wrap: false,
@@ -375,6 +395,11 @@ impl Terminal {
         &self.screen().rows[usize::from(y)]
     }
 
+    /// #1498: whether the screen's row `y` ran on into the next by a wrap.
+    pub fn wrapped(&self, y: u16) -> bool {
+        self.screen().wrapped[usize::from(y)]
+    }
+
     /// History row `i`'s text, oldest first, right-trimmed.
     pub fn history_text(&self, i: usize) -> String {
         match &self.history[i] {
@@ -394,6 +419,72 @@ impl Terminal {
         }
         s.truncate(s.trim_end_matches(' ').len());
         s
+    }
+
+    /// #1498: what a selection of the screen's cells copies, from cell `from` to cell `to`, each `(x, y)`, in either
+    /// order, both included (Cell grid: selection by cell). Each cell gives its grapheme, a blank one a space; a row that
+    /// ran on into the next by a wrap joins it as one line, any other ends its line, and a line's trailing blanks are
+    /// dropped.
+    pub fn copy(&self, from: (u16, u16), to: (u16, u16)) -> String {
+        let key = |(x, y): (u16, u16)| (y.min(self.rows - 1), x.min(self.cols - 1));
+        let (start, end) = (key(from).min(key(to)), key(from).max(key(to)));
+        let mut out = String::new();
+        let mut line = String::new();
+        for y in start.0..=end.0 {
+            let row = self.row(y);
+            let first = if y == start.0 { start.1 } else { 0 };
+            let last = if y == end.0 { end.1 } else { self.cols - 1 };
+            for c in &row[usize::from(first)..=usize::from(last)] {
+                match &c.g {
+                    G::Empty => line.push(' '),
+                    g => g.push_to(&mut line),
+                }
+            }
+            if y < end.0 && self.wrapped(y) {
+                continue;
+            }
+            out.push_str(line.trim_end_matches(' '));
+            line.clear();
+            if y < end.0 {
+                out.push('\n');
+            }
+        }
+        out
+    }
+
+    /// #1498: the cells a double press on cell `(x, y)` selects: the run of cells around it on its row that are all
+    /// blank or all not, as `(from, to)`, both included.
+    pub fn word(&self, (x, y): (u16, u16)) -> ((u16, u16), (u16, u16)) {
+        let (x, y) = (x.min(self.cols - 1), y.min(self.rows - 1));
+        let row = self.row(y);
+        let blank =
+            |i: u16| row[usize::from(i)].g.is_empty() || row[usize::from(i)].g == G::One(' ');
+        let kind = blank(x);
+        let from = (0..=x)
+            .rev()
+            .take_while(|i| blank(*i) == kind)
+            .last()
+            .unwrap_or(x);
+        let to = (x..self.cols)
+            .take_while(|i| blank(*i) == kind)
+            .last()
+            .unwrap_or(x);
+        ((from, y), (to, y))
+    }
+
+    /// #1498: the cells a triple press on row `y` selects: its whole line, from the first row a wrap ran on into it
+    /// through the last row it runs on into.
+    pub fn line(&self, y: u16) -> ((u16, u16), (u16, u16)) {
+        let y = y.min(self.rows - 1);
+        let mut first = y;
+        while first > 0 && self.wrapped(first - 1) {
+            first -= 1;
+        }
+        let mut last = y;
+        while last + 1 < self.rows && self.wrapped(last) {
+            last += 1;
+        }
+        ((0, first), (self.cols - 1, last))
     }
 
     /// The rows the feeds since the last take changed (all of them when the screen scrolled),
@@ -417,6 +508,7 @@ impl Terminal {
             s.rows.resize_with(usize::from(rows), || {
                 vec![Cell::blank(&pen); usize::from(cols)]
             });
+            s.wrapped.resize(usize::from(rows), false);
             for r in &mut s.rows {
                 r.resize(usize::from(cols), Cell::blank(&pen));
             }
@@ -682,6 +774,8 @@ impl Terminal {
             let s = self.screen_mut();
             s.x = 0;
             s.pending_wrap = false;
+            let y = usize::from(s.y);
+            s.wrapped[y] = true;
             self.linefeed();
         }
         let pen = self.pen;
@@ -719,6 +813,8 @@ impl Terminal {
         let on_alt = self.alt.is_some();
         let s = self.screen_mut();
         s.rows.rotate_left(1);
+        s.wrapped.rotate_left(1);
+        *s.wrapped.last_mut().expect("a row") = false;
         let top = std::mem::replace(
             s.rows.last_mut().expect("a row"),
             vec![Cell::blank(&pen); usize::from(cols)],
@@ -751,6 +847,9 @@ impl Terminal {
             s.rows.pop();
             s.rows.insert(0, vec![Cell::blank(&pen); usize::from(cols)]);
             s.rows.truncate(rows);
+            s.wrapped.pop();
+            s.wrapped.insert(0, false);
+            s.wrapped.truncate(rows);
             self.scrolled = true;
         }
     }
@@ -759,8 +858,13 @@ impl Terminal {
         let pen = self.pen;
         let s = self.screen_mut();
         let row = &mut s.rows[usize::from(y)];
+        let to_end = usize::from(to) >= row.len();
         for c in &mut row[usize::from(from)..usize::from(to)] {
             *c = Cell::blank(&pen);
+        }
+        // A row erased to its end no longer runs on into the next.
+        if to_end {
+            s.wrapped[usize::from(y)] = false;
         }
         self.dirty[usize::from(y)] = true;
     }

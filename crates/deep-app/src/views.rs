@@ -44,7 +44,7 @@ pub const SHIPPED_VIEWS: [&str; 3] = ["needs-you", "sidebar", "session"];
 #[cfg(feature = "plant-row")]
 const CUT_TO: usize = 24;
 /// The panel the hub's canvas core knows a session's page by.
-const SESSION_PAGE: &str = "session-page";
+pub(crate) const SESSION_PAGE: &str = "session-page";
 /// How often an open terminal tab reads its grid again.
 const TERMINAL_TICK: Duration = Duration::from_millis(250);
 /// How often the Agents page reads the hub's model again.
@@ -232,6 +232,9 @@ struct TerminalTab {
     screen: Option<cells::Screen>,
     /// What the tab says when the hub hosts no terminal for the session.
     words: String,
+    /// #1498: the cells the core's selection holds, each row's `[from, row, to]`, and whether your press is down.
+    outline: Vec<[u16; 3]>,
+    pressing: bool,
     _poll: Task<()>,
 }
 
@@ -1037,9 +1040,34 @@ impl Shipped {
             focus,
             screen: None,
             words,
+            outline: Vec::new(),
+            pressing: false,
             _poll: poll,
         });
         self.read_terminal(cx);
+    }
+
+    /// #1498: your pointer on the terminal tab's grid, to the core ([`crate::select::grid`]).
+    fn grid_pointer(
+        &mut self,
+        kind: &str,
+        at: Point<Pixels>,
+        count: usize,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(tab) = self.terminal.as_mut() else {
+            return;
+        };
+        let Some(screen) = &tab.screen else {
+            return;
+        };
+        let size = (screen.cols, screen.rows.len());
+        if let Some(outline) =
+            crate::select::grid((kind, at, count), &tab.session, size, &mut tab.pressing)
+        {
+            tab.outline = outline;
+        }
+        cx.notify();
     }
 
     /// Reads the open tab's grid; a new revision draws.
@@ -1658,6 +1686,24 @@ pub(crate) fn label(
         .flex()
         .items_center()
         .child(text)
+}
+
+/// #1498: a line of content, drawn as a label draws it, that the kit's selection selects, its selection outlined in
+/// `color`: a check's failure line. A label, a row or a button never selects.
+pub(crate) fn content(
+    id: impl Into<ElementId>,
+    text: impl Into<SharedString>,
+    color: Hsla,
+) -> ObservedElement<Stateful<Div>> {
+    let text = text.into();
+    observed(id)
+        .role(Role::Label)
+        .aria_label(text.clone())
+        .typed(sizes().body)
+        .h(sizes().body.line)
+        .flex()
+        .items_center()
+        .child(crate::select::Outlined::new("text", text, color))
 }
 
 /// A page's title: the title role, so a page has one voice (#1458). A title longer than its row wraps, whole, and the
@@ -2938,6 +2984,8 @@ impl Render for Shipped {
         }
         let page = div()
             .id(ElementId::Name(format!("view:{name}").into()))
+            // #1498: a press here, before a core surface takes it, leaves no core selection for ⌘C.
+            .capture_any_mouse_down(|_, _, _| crate::select::pressed_elsewhere())
             .when(is_page, |page| {
                 let keys = self.focus_handle.clone();
                 page.track_focus(&self.focus_handle).on_key_down(
@@ -3431,7 +3479,24 @@ impl Render for Shipped {
                         .id("session-terminal-keys")
                         .key_context("Terminal")
                         .track_focus(&tab.focus)
+                        .relative()
+                        .on_mouse_down(
+                            MouseButton::Left,
+                            cx.listener(|this, e: &MouseDownEvent, _, cx| {
+                                this.grid_pointer("down", e.position, e.click_count, cx)
+                            }),
+                        )
+                        .on_mouse_move(cx.listener(|this, e: &MouseMoveEvent, _, cx| {
+                            this.grid_pointer("move", e.position, 0, cx)
+                        }))
+                        .on_mouse_up(
+                            MouseButton::Left,
+                            cx.listener(|this, e: &MouseUpEvent, _, cx| {
+                                this.grid_pointer("up", e.position, 0, cx)
+                            }),
+                        )
                         .child(terminal_view(tab, chrome))
+                        .children(crate::select::grid_outline(&tab.outline, chrome.focus))
                 });
                 // The session's canvas, in the place of its deadlines' line (#1454).
                 let figure = CANVAS
@@ -3441,12 +3506,11 @@ impl Render for Shipped {
                     panel.update(cx, |panel, _| panel.show_session(&session));
                 }
                 let chart = terminal.is_none() && figure.is_none() && !hours.is_empty();
-                // What the page shows by its real names, and the newest failure whole (#1348).
-                let details = record
-                    .details
-                    .iter()
-                    .enumerate()
-                    .map(|(n, line)| label(("session-detail", n), line.clone()).h_auto());
+                // What the page shows by its real names, and the newest failure whole (#1348): content, which the kit's
+                // selection selects (#1498).
+                let details = record.details.iter().enumerate().map(|(n, line)| {
+                    content(("session-detail", n), line.clone(), chrome.focus).h_auto()
+                });
                 // The page reads as its task's title, and to a screen reader as `Session <title>`. An untitled
                 // session's short name, `Session <ID>`, is only its accessible name: the title draws no ID (#1455).
                 let short = &session[..session.len().min(8)];
@@ -3519,9 +3583,12 @@ impl Render for Shipped {
                     .as_ref()
                     .filter(|[_, _, why]| !why.is_empty())
                     .map(|[word, _, why]| format!("{word}: {why}"));
+                // The page fills its lane, so its canvas takes the height left under what's above it (#1498).
                 let content = div()
                     .flex()
                     .flex_col()
+                    .flex_1()
+                    .min_h_0()
                     .when(session.is_empty(), |content| content.invisible());
                 // While you rename it (#2018), the title is a field holding the name, with the caret in it.
                 let field = self

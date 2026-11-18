@@ -1893,6 +1893,23 @@
       ]
     },
     {
+      "id": "canvas-fog-linear",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "fog-linear"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "linear_over_exp": 1.02
+      },
+      "initialReason": "Issue #1992 first measurement: the merge base reads no linear fog curve and has no such task. Release deep-gpu draws the castle's orbit, 300 frames at 30 fps at its own size with timings, with its exp fog as committed and with fog_curve linear {near: 0, far: 693}, the same halfway distance, each in a fresh process, five runs after a warm-up one; the reading is the ratio of their p50 GPU frame times. canvas.mjs judge holds the ratio on a reference Mac. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#1992.9d39bde2"
+      ]
+    },
+    {
       "id": "hub-lifecycle-start",
       "command": [
         "node",
