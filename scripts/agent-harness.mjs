@@ -8,7 +8,7 @@ import { accessSync, constants, copyFileSync, existsSync, mkdirSync, mkdtempSync
 import { homedir, tmpdir } from 'node:os';
 import { basename, delimiter, join, relative, resolve } from 'node:path';
 import { promisify } from 'node:util';
-import { references } from './benchmark.mjs';
+import { fingerprint, references } from './benchmark.mjs';
 
 const root = realpathSync(new URL('../', import.meta.url).pathname);
 const hook = join(root, 'scripts/agent-harness-hook.mjs');
@@ -632,7 +632,8 @@ function machine() {
     mac && sysctl('hw.ncpu') !== String(mac.cores) && `not ${mac.cores} cores`,
     mac && sysctl('machdep.cpu.brand_string') !== mac.chip && `not an ${mac.chip}`,
     !/'AC Power'/.test(spawnSync('pmset', ['-g', 'ps'], { encoding: 'utf8' }).stdout) && 'on battery',
-    /lowpowermode\s+1/.test(spawnSync('pmset', ['-g'], { encoding: 'utf8' }).stdout) && 'Low Power Mode is on',
+    // As benchmark.mjs reads it: a Mac17,10's pmset prints no lowpowermode line.
+    fingerprint().lowPowerMode !== false && 'Low Power Mode is on, or can\'t be read',
     /level\s*=\s*[1-9]|CPU_Speed_Limit\s*=\s*(?!100\b)\d+/.test(spawnSync('pmset', ['-g', 'therm'], { encoding: 'utf8' }).stdout) && 'the thermal state is not nominal',
   ].filter(Boolean);
   return { model, reference: !why.length, ...(why.length ? { why: why.join('; ') } : {}) };
