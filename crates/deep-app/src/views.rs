@@ -1932,7 +1932,18 @@ fn list_row(
                 .font_weight(weight)
                 .map(|slot| match (twin, eight, under) {
                     (_, Some(eight), _) => slot.overflow_hidden().whitespace_nowrap().child(eight),
-                    (_, None, true) => slot.whitespace_nowrap().child(title),
+                    (_, None, true) => slot.relative().child(
+                        div()
+                            .absolute()
+                            .left_0()
+                            .top_0()
+                            .bottom_0()
+                            .flex()
+                            .items_center()
+                            .whitespace_nowrap()
+                            .overflow_hidden()
+                            .child(title),
+                    ),
                     // The short ID that tells a session from its twin stays in view (#2018): a name too long for
                     // the row is cut, its ID never.
                     (Some((name, short)), ..) => {

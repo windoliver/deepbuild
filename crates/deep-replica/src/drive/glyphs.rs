@@ -24,8 +24,6 @@ type Row = ([i32; 4], i32);
 /// The fewest glyphs that say which line a cut-off row starts: fewer could start anything.
 const MIN_CUT: usize = 4;
 
-/// How far, in device pixels, a glyph's baseline may round from its line's.
-const NEAR: i32 = 2;
 
 #[derive(Default)]
 struct Seen {
@@ -39,6 +37,9 @@ struct Seen {
     weights: HashMap<FontId, f32>,
     /// Every line shaped so far, by its glyphs but its whitespace's, with the text it spells.
     lines: HashMap<Vec<GlyphKey>, String>,
+    /// The same lines by their glyphs in no order (#1808): a mark painted where the glyph it sits on starts may sort
+    /// either side of it, which a right-to-left line's marks do.
+    bags: HashMap<Vec<GlyphKey>, String>,
     /// The glyphs shaped for whitespace, which some fonts paint as a speck and others not at all.
     blank: HashSet<GlyphKey>,
     /// The last frame's glyph sprites: the tile, the bounds and the clip, in device pixels.
@@ -103,29 +104,53 @@ impl Glyphs {
                 .or_default()
                 .push((pen[0], *key, *sprite));
         }
-        // A glyph shaped a little off its line's baseline, as a mark is, rounds to a baseline a pixel or two away: it's on
-        // that line still (#1808). Lines under one clip are far further apart.
-        let mut lines: Vec<(Row, Vec<(f32, GlyphKey, Sprite)>)> = Vec::new();
-        for (row, glyphs) in rows {
-            match lines.last_mut() {
-                Some((line, on)) if line.0 == row.0 && (row.1 - line.1).abs() <= NEAR => {
-                    on.extend(glyphs)
+        // A mark shaped off its line's baseline, as Arabic's are, paints up to about half an em from it (#1808): under one
+        // clip, a row within half an em of a larger row is that row's. Lines under one clip are a line's height apart.
+        let scale = seen.scale.unwrap_or(2.);
+        let mut clips: BTreeMap<[i32; 4], Vec<(i32, Vec<(f32, GlyphKey, Sprite)>)>> = BTreeMap::new();
+        for ((clip, y), glyphs) in rows {
+            clips.entry(clip).or_default().push((y, glyphs));
+        }
+        let mut lines: Vec<Vec<(f32, GlyphKey, Sprite)>> = Vec::new();
+        for (_, mut rows) in clips {
+            rows.sort_by_key(|(y, glyphs)| (std::cmp::Reverse(glyphs.len()), *y));
+            let mut anchors: Vec<(i32, f32, Vec<(f32, GlyphKey, Sprite)>)> = Vec::new();
+            for (y, glyphs) in rows {
+                let em = glyphs
+                    .iter()
+                    .filter_map(|(_, _, sprite)| sizes.get(&sprite.tile))
+                    .fold(0f32, |em, size| em.max(size * scale));
+                let near = anchors
+                    .iter_mut()
+                    .filter(|(at, em_at, _)| ((at - y).abs() as f32) <= em.max(*em_at) / 2.)
+                    .min_by_key(|(at, ..)| (at - y).abs());
+                match near {
+                    Some((.., on)) => on.extend(glyphs),
+                    None => anchors.push((y, em, glyphs)),
                 }
-                _ => lines.push((row, glyphs)),
             }
+            lines.extend(anchors.into_iter().map(|(.., glyphs)| glyphs));
         }
         let mut runs = Vec::new();
-        for (_, row) in &mut lines {
+        for row in &mut lines {
             row.sort_by(|a, b| a.0.total_cmp(&b.0));
             let glyphs: Vec<(GlyphKey, Sprite)> =
                 row.iter().map(|(_, key, sprite)| (*key, *sprite)).collect();
             let mut at = 0;
             while at < glyphs.len() {
-                // The longest shaped line that spells the glyphs from here on.
-                let found = (at + 1..=glyphs.len()).rev().find_map(|end| {
-                    let key: Vec<GlyphKey> = glyphs[at..end].iter().map(|(k, _)| *k).collect();
-                    seen.lines.get(&key).map(|text| (end, text.clone()))
-                });
+                // The longest shaped line that spells the glyphs from here on, in their order, else in any.
+                let found = (at + 1..=glyphs.len())
+                    .rev()
+                    .find_map(|end| {
+                        let key: Vec<GlyphKey> = glyphs[at..end].iter().map(|(k, _)| *k).collect();
+                        seen.lines.get(&key).map(|text| (end, text.clone()))
+                    })
+                    .or_else(|| {
+                        (at + 1..=glyphs.len()).rev().find_map(|end| {
+                            let bag = bag(glyphs[at..end].iter().map(|(k, _)| *k).collect());
+                            seen.bags.get(&bag).map(|text| (end, text.clone()))
+                        })
+                    });
                 // GPUI paints no glyph wholly past a clip, so a line that runs past one spells only its start.
                 let cut = found
                     .is_none()
@@ -187,6 +212,12 @@ impl Glyphs {
             seen: self.clone(),
         })
     }
+}
+
+/// Glyphs in no order: sorted by font and glyph.
+fn bag(mut keys: Vec<GlyphKey>) -> Vec<GlyphKey> {
+    keys.sort_by_key(|(font, glyph)| (font.0, glyph.0));
+    keys
 }
 
 fn run(text: String, glyphs: &[(GlyphKey, Sprite)]) -> Run {
@@ -320,6 +351,7 @@ impl PlatformTextSystem for TextSystem {
         painted.sort_by(|a, b| a.0.total_cmp(&b.0));
         let painted: Vec<GlyphKey> = painted.into_iter().map(|(_, key)| key).collect();
         if !painted.is_empty() {
+            seen.bags.insert(bag(painted.clone()), text.to_owned());
             seen.lines.insert(painted, text.to_owned());
         }
         drop(seen);
