@@ -13,13 +13,13 @@
       "module_set_digest": "f6ed154aa62c7bd4b617e74ec2d80924c52b6dfb083733479b75ddf346c445f5",
       "wasm": {
         "path": "crates/deep-player/web/dist/figure/player_bg.wasm",
-        "sha256": "9530565366419239815d1b270e1e7780f971d78345dce5377af2747c2165e074"
+        "sha256": "06962af34836274c8b0c2726d34e3afbf045fb76437b7fe478e8c3c638e55f12"
       },
       "glue": {
         "path": "crates/deep-player/web/dist/figure/player.js",
-        "sha256": "8a2556597ea7392cabb948857e08f480d7526c7425955e45771f88b18b524489"
+        "sha256": "4c87f832af33e4eb834bf4f69006a925dab8f5de2eb64637d207cab4b5ac9d89"
       },
-      "compressed": 2378634
+      "compressed": 2354685
     },
     "game2d": {
       "modules": [
@@ -36,13 +36,13 @@
       "module_set_digest": "0ed99b2d753eb47c5893c7618639948849a26222c79ef1ea54330c6d99f63286",
       "wasm": {
         "path": "crates/deep-player/web/dist/game2d/player_bg.wasm",
-        "sha256": "92e926b1a2cde71daf584b1ec8f25850635da87531e6387b224c6bdcca0aa793"
+        "sha256": "c77b64398d2c883e47ed4696b48b6cde7d9e1ea6e4afadb8481a0bf0a984e2c6"
       },
       "glue": {
         "path": "crates/deep-player/web/dist/game2d/player.js",
-        "sha256": "2aa403e4fd7a211585ec27465f1f456deaabd9ed291bae222009cc1fe7877e71"
+        "sha256": "b14a8a1196128f6bfffc020ea334fc9ae3e05e40ef168331e95691e4510e9efd"
       },
-      "compressed": 4054303
+      "compressed": 4060729
     },
     "full": {
       "modules": [
@@ -66,16 +66,16 @@
         "text",
         "vector"
       ],
-      "module_set_digest": "029e4be47cacdb06ae9bd7ffec45d98cacc212c9dc59e721da8dd077f2edf10e",
+      "module_set_digest": "ff97029a5b6696c971b5ff197dc88f3bbccfed2c6960603da5927b41365a7fa0",
       "wasm": {
         "path": "crates/deep-player/web/dist/full/player_bg.wasm",
-        "sha256": "9b84d0428cc90cc8e650ceee5333e69d1a6ac88e79aa89b319fb7498dee33efb"
+        "sha256": "892ef6b04e09a984a7963c745e379e4b9d2833c0c9849e1cbfb82197ef76c004"
       },
       "glue": {
         "path": "crates/deep-player/web/dist/full/player.js",
-        "sha256": "986c56d41997c75c31cd5866653568e3530bfd2d59226d9ece6fed20f4f4cf98"
+        "sha256": "6b5f115f5a308ba70aaf848ef71e7de35bbee53e1c08d66a6d5612387df57b20"
       },
-      "compressed": 6113999
+      "compressed": 6125860
     }
   }
 }
