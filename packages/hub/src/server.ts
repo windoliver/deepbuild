@@ -27,6 +27,7 @@ import { dropTestSettings, installedRoot, repoOf, rootOf, type Root } from './pa
 import { shedStartup, YOUNG } from './settle.js';
 import { processHealth } from './process-health.js';
 import { Waits, type HookSeen, type OpenCall, type Restored } from './waits.js';
+import { waiterHello } from './waiter-hello.js';
 import { People } from './people.js';
 import { identityAt, idOf, type Identity } from './identity.js';
 import { plantedStart } from './plant.js';
@@ -1249,33 +1250,8 @@ class Hub {
       conn.name = conn.session ? `mcp:${conn.session}` : 'mcp';
       return conn.write({ role: conn.name });
     }
-    if (value.hello === 'waiter') {
-      // deep-hook's waiter (#1851): bound to its session by the agent process it runs under, with no token.
-      const session = typeof value.session === 'string' ? value.session : '';
-      // A session's ID as its hooks carry it, and short: nothing else costs the hub a look at processes.
-      if (!/^[\w.:-]{1,128}$/.test(session)) {
-        conn.write({ id: null, error: refusal('type', '/session', "Name the waiter's session by its ID, as its hooks carry it.") });
-        return conn.end();
-      }
-      const fd = (conn.sock as unknown as { _handle?: { fd?: number } })._handle?.fd;
-      const bound = (await this.core.request({ op: 'waiter-hello', fd, session, at: conn.at }).catch((error: unknown) => ({ refused: error instanceof Error ? error.message : String(error), retryable: true }))) as { session: string; parent?: { pid: number; start: string } } | { refused: string; retryable?: true };
-      if ('refused' in bound) {
-        // Said once in the hub's output too: the waiter asks again quietly, and its stderr becomes a wake's prompt.
-        if (!this.waiterRefusals.has(bound.refused)) {
-          if (this.waiterRefusals.size >= 1000) this.waiterRefusals.clear();
-          this.waiterRefusals.add(bound.refused);
-          process.stderr.write(`deep hub: refused a waiter: ${bound.refused}\n`);
-        }
-        // One the core couldn't look into, as when it is stopping, is asked again soon.
-        conn.write({ id: null, error: 'retryable' in bound ? refusal('unavailable', '/hello', bound.refused, session, true) : refusal('role', '/hello', bound.refused, session) });
-        return conn.end();
-      }
-      conn.role = 'waiter';
-      conn.session = bound.session;
-      conn.parent = bound.parent;
-      conn.name = `waiter:${bound.session}`;
-      return conn.write({ role: conn.name });
-    }
+    // deep-hook's waiter (#1851): bound to its session by the agent process it runs under, with no token.
+    if (value.hello === 'waiter') return waiterHello(conn, value, (request) => this.core.request(request), this.waiterRefusals);
     conn.write({ id: null, error: refusal('enum', '/hello', 'Say hello as app, cli, mcp or waiter.', value.hello) });
     conn.end();
   }

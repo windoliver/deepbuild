@@ -23,7 +23,7 @@
   "crates/deep-gpu-layer/src/interp_suite/bound.rs": 1907,
   "crates/deep-gpu-layer/src/live.rs": 3133,
   "crates/deep-gpu-layer/src/view3d.rs": 2152,
-  "crates/deep-hook/src/main.rs": 1978,
+  "crates/deep-hook/src/main.rs": 1864,
   "crates/deep-hook/src/matcher.rs": 2005,
   "crates/deep-hook/src/shell.rs": 2530,
   "crates/deep-marks-render/src/macos.rs": 2803,
