@@ -210,6 +210,7 @@ impl Player {
         };
         match draw.frame(p, size) {
             crate::draw::Frame::Pixels(rgba) => gpu.show(&rgba, size),
+            #[cfg(feature = "full")]
             crate::draw::Frame::Scene(scene, look, over) => gpu.show3d(&scene, &look, &over, size),
         }
     }
@@ -224,6 +225,17 @@ impl Player {
             p.enter(self.sealed, control, value, &read).map_err(fail)?;
         }
         Ok(())
+    }
+
+    /// #860: the viewer's back. On a piece that declares rewind it is a rewind to the stop before,
+    /// at the shown time, which the piece plays on from as the app's does; whether it wrote one.
+    pub fn back(&mut self) -> Result<bool, JsValue> {
+        let files = &self.files;
+        let read = |sha: &str| files.get(sha).cloned();
+        match self.played.as_mut() {
+            Some(p) => p.back(self.sealed, &read).map_err(fail),
+            None => Ok(false),
+        }
     }
 
     /// The document's accessibility tree (#1045), as JSON `[{id, role, name, …}]` in reading
