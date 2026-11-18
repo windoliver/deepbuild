@@ -1,7 +1,7 @@
 {
   "core": {
     "version": "0.0.0",
-    "digest": "ccbcd2914cc304475dd44c1b27270f9c0b393ad8ae0c51f62ce5af99b98844d8",
+    "digest": "b5fb8010d41a11770472436d8240bd8294cffa4149ea4fabf2131e5391b1a8f5",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -232,7 +232,7 @@
   },
   "net": {
     "version": "1.0.0",
-    "digest": "7b4fcb5e872422d3812fae697247c15110c61a23e8de64702c3e13f2e6275bd7",
+    "digest": "e6cd239f3af4f987176c9c47388c26b34886e1610f8126c2df071ec893e4de8e",
     "verdict": "PASS",
     "parts": {
       "clean_rebuild": "PASS",

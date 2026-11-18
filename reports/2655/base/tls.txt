@@ -1,0 +1,41 @@
+✖ AC2 #2655 a hub with no project member loads no node:tls on any thread (10788.933917ms)
+ℹ no member: 4 threads listed; loaded node:tls: [thread 0: load-hook node:tls; thread 0: built-ins node:tls]; listening: false
+ℹ a member invited: loaded node:tls: [thread 0: load-hook node:tls; thread 0: built-ins node:tls]; listening: true
+✔ AC2 #2655 a hub whose project gains a member opens its listener and serves a joined client as on the merge base (3947.578958ms)
+ℹ merge base: listening true; join {"code":0,"stdout":"Joined github.com/acme/shop as bob: every clone of it here reaches the project's hub <hub> at 127.0.0.1:<port>, with a credential bound to this machine's key.\n","stderr":""}; status {"code":0,"stdout":"Start a Claude Code or Codex session in a repo and it shows here; deep doctor checks the setup.\n0 asks need you\n","stderr":""}
+ℹ merge base, the same read with the hub stopped: {"code":3,"stdout":"","stderr":"deep status: can't reach the hub at 127.0.0.1:<port>: connect ECONNREFUSED 127.0.0.1:<port>\n"}
+ℹ change: listening true; join {"code":0,"stdout":"Joined github.com/acme/shop as bob: every clone of it here reaches the project's hub <hub> at 127.0.0.1:<port>, with a credential bound to this machine's key.\n","stderr":""}; status {"code":0,"stdout":"Start a Claude Code or Codex session in a repo and it shows here; deep doctor checks the setup.\n0 asks need you\n","stderr":""}
+ℹ tests 2
+ℹ suites 0
+ℹ pass 1
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 14825.334291
+
+✖ failing tests:
+
+test at tests/acceptance/2655/tls.test.mjs:134:1
+✖ AC2 #2655 a hub with no project member loads no node:tls on any thread (10788.933917ms)
+  AssertionError [ERR_ASSERTION]: a hub with no project member loaded node:tls: thread 0: load-hook node:tls; thread 0: built-ins node:tls
+  + actual - expected
+  
+  + [
+  +   'thread 0: load-hook node:tls',
+  +   'thread 0: built-ins node:tls'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://<scratch>/base/tests/acceptance/2655/tls.test.mjs:139:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'thread 0: load-hook node:tls', 'thread 0: built-ins node:tls' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+exit 1

@@ -336,6 +336,8 @@ rav1e = { version = "0.8.1", default-features = false, optional = true }
 blake3 = { version = "1", default-features = false, features = ["std"], optional = true }
 # Issue #309: the network seam's macOS backend and relay@1.
 deep-relay = { path = "../deep-relay" }
+# Issue #549: the net module: net@1, a match's copies, the Join prompt and the check kinds.
+deep-net = { path = "../deep-net" }
 deep-gpu = { path = "../deep-gpu" }
 deep-effects-render = { path = "../deep-effects-render", optional = true }
 deep-scene3d-render = { path = "../deep-scene3d-render" }
