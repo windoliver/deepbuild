@@ -1861,6 +1861,25 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
             reads: None,
             fixture: json!({"it": item("plate@1", json!({"grid": [4, 3], "size": [2, 1.5], "paint": {"fill": {"role": "accent"}}}))}),
         },
+        crate::attrs::FIXTURE => Spec {
+            kind: crate::attrs::FIXTURE,
+            module: "scene3d",
+            params: vec![
+                p(
+                    "attributes",
+                    "[{name, domain, type, values}]",
+                    "",
+                    json!([]),
+                    G,
+                    json!([]),
+                    json!([{"name": "tag", "domain": "face", "type": "u32", "values": [1, 2, 3, 4, 5, 6]}]),
+                ),
+                shade(),
+                paint(),
+            ],
+            reads: None,
+            fixture: json!({"it": item(crate::attrs::FIXTURE, json!({"paint": {"fill": {"role": "accent"}}}))}),
+        },
         "hull@1" => Spec {
             kind: "hull@1",
             module: "scene3d",
