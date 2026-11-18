@@ -1,28 +1,28 @@
 # cargo clippy --locked --no-deps -p deep-logic -p deep-player -p deep-play --all-targets -- -D warnings
-    Finished `dev` profile [unoptimized] target(s) in 14.11s
+    Finished `dev` profile [unoptimized] target(s) in 33.67s
 # cargo clippy --locked --no-deps -p deep-player --no-default-features --features <figure|game2d|full> -- -D warnings: each exit 0
 
 # cargo test --locked -p deep-logic -p deep-player -p deep-play
      Running unittests src/lib.rs (target/debug/deps/deep_logic-92e6060149654d83)
-test result: ok. 25 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.55s
+test result: ok. 25 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
      Running unittests src/main.rs (target/debug/deps/deep_logic-408f74e6bfa7d16f)
 test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
      Running tests/controls_542.rs (target/debug/deps/controls_542-02cebe8b35f54eb3)
 test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
      Running tests/fixture_once.rs (target/debug/deps/fixture_once-a20d30be46aea3bd)
-test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.77s
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
      Running tests/held_saves.rs (target/debug/deps/held_saves-e654657eb8cd0cbf)
 test held_bytes_that_fail_their_name_are_damaged_and_a_state_that_does_not_decode_is_refused ... ok
 test a_held_save_opens_from_its_bytes_and_plays_on_as_the_run_that_never_stopped ... ok
-test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
      Running tests/library_trap.rs (target/debug/deps/library_trap-15c8427b1455f43e)
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.54s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
      Running tests/play_184.rs (target/debug/deps/play_184-081a4d039a19d991)
-test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.20s
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.27s
      Running unittests src/lib.rs (target/debug/deps/deep_play-86129ba5872a5164)
 test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
      Running unittests src/lib.rs (target/debug/deps/deep_player-7ec5158a034e7e43)
-test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.41s
 test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s

@@ -5,6 +5,6 @@ deep lease: DeepBuild isn't set up here (no hub token), so `node node_modules/vi
 
  Test Files  3 passed (3)
       Tests  3 passed (3)
-   Start at  16:01:30
-   Duration  1100.99s (tests 100%)
+   Start at  00:10:21
+   Duration  140.48s (tests 100%)
 

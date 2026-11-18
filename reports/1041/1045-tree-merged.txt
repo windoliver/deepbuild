@@ -1,41 +1,10 @@
-# tests/acceptance/1045/tree.test.ts on the merged tree: first run, then the one test that timed out, alone
 deep lease: DeepBuild isn't set up here (no hub token), so `node node_modules/vitest/vitest.mjs run --root tests/acceptance/1045 tree.test.ts --no-file-parallelism --testTimeout=3600000 --hookTimeout=180000` runs unleased
-
- RUN  v5.0.5 <checkout>/tests/acceptance/1045
-
- ❯ tree.test.ts (3 tests | 1 failed) 133390ms
-   ❯ AC1 #1045.ccb3fe36 the accessibility fixture figure in the web player keeps the app's accessibility tree as DOM beside its canvas (3)
-     × AC1 #1045.ccb3fe36 wrong program: a player that announces every frame (web_announces_every_frame) fails this test, naming the readout count 76155ms
-
-⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
-
- FAIL  tree.test.ts > AC1 #1045.ccb3fe36 the accessibility fixture figure in the web player keeps the app's accessibility tree as DOM beside its canvas > AC1 #1045.ccb3fe36 wrong program: a player that announces every frame (web_announces_every_frame) fails this test, naming the readout count
-Error: Runtime.evaluate: no answer within 60000 ms
- ❯ Timeout._onTimeout ../172/helpers.ts:580:70
-    578|     const id = ++this.n;
-    579|     return new Promise((done, fail) => {
-    580|       const timer = setTimeout(() => { this.pending.delete(id); fail(E…
-       |                                                                      ^
-    581|       this.pending.set(id, { done: (r) => { clearTimeout(timer); done(…
-    582|       this.ws.send(JSON.stringify({ id, method, params, ...(session ? …
-
-⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
-
-
- Test Files  1 failed (1)
-      Tests  1 failed | 2 passed (3)
-   Start at  15:59:15
-   Duration  133.72s (tests 100%)
-
-
-# again, alone
-deep lease: DeepBuild isn't set up here (no hub token), so `node node_modules/vitest/vitest.mjs run --root tests/acceptance/1045 tree.test.ts -t web_announces_every_frame --no-file-parallelism --testTimeout=3600000 --hookTimeout=180000` runs unleased
 
  RUN  v5.0.5 <checkout>/tests/acceptance/1045
 
 
  Test Files  1 passed (1)
-      Tests  1 passed | 2 skipped (3)
-   Start at  17:04:35
-   Duration  26.78s (tests 99%, transform 1%, import 1%)
+      Tests  3 passed (3)
+   Start at  00:09:29
+   Duration  51.22s (tests 100%)
 
