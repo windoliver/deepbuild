@@ -974,6 +974,11 @@ timed.push('tests/acceptance/568-redraft-1830/judge.test.mjs', 'tests/acceptance
 alone.push('tests/acceptance/1381/');
 timed.push('tests/acceptance/1381/ac6-budget.test.ts');
 
+// #1992's files each build deep-gpu (kinds.test.ts builds deep-show) and draw on the Metal GPU; cost.test.ts judges the
+// linear curve's frame time against exp's on the reference Mac.
+alone.push('tests/acceptance/1992/', 'tests/acceptance/1992-redraft-ac5/');
+timed.push('tests/acceptance/1992/cost.test.ts');
+
 // #1831's deep-show and canvas files build deep-show and deep-gpu (canvas.test.mjs the release deep-show too, and it
 // runs the cost bench on the GPU twice), and its harness file starts the agent harness's sessions.
 alone.push('tests/acceptance/1831/');

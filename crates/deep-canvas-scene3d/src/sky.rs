@@ -58,6 +58,11 @@ pub enum Background {
 pub enum Curve {
     Exp,
     Exp2,
+    /// Clear up to `near` and full at `far`, in m from the eye (#1992).
+    Linear {
+        near: f64,
+        far: f64,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -82,6 +87,8 @@ pub struct Sky {
     pub sun: Option<String>,
     pub environment: Option<Environment>,
     pub background: Background,
+    /// What the background draws, as a scale; nothing it lights reads it (#1992).
+    pub background_intensity: f64,
     /// The roughness whose prefiltered mip the background shows.
     pub background_blur: f64,
     /// The ground an HDR background lies on: the photo camera's height and the floor's reach.
@@ -196,10 +203,19 @@ pub fn parse(
     if fog_density < 0.0 {
         return Err(bad("fog_density"));
     }
-    let fog_curve = match params.get("fog_curve").and_then(Value::as_str) {
-        None | Some("exp2") => Curve::Exp2,
-        Some("exp") => Curve::Exp,
-        Some(_) => return Err(bad("fog_curve")),
+    let fog_curve = match params.get("fog_curve") {
+        None | Some(Value::Null) => Curve::Exp2,
+        Some(Value::String(s)) if s == "exp2" => Curve::Exp2,
+        Some(Value::String(s)) if s == "exp" => Curve::Exp,
+        // `{"linear": {"near": m, "far": m}}`, as other variants with fields; near ≥ far is
+        // refused naming the sky's curve (#1992).
+        Some(v) => match (
+            num(v.pointer("/linear/near")),
+            num(v.pointer("/linear/far")),
+        ) {
+            (Some(near), Some(far)) if near < far => Curve::Linear { near, far },
+            _ => return Err(bad("fog_curve")),
+        },
     };
     let fog_height = match params.get("fog_height") {
         None | Some(Value::Null) => None,
@@ -308,6 +324,10 @@ pub fn parse(
             _ => return Err(bad("background")),
         },
     };
+    let background_intensity = f("background_intensity", 1.0)?;
+    if background_intensity < 0.0 {
+        return Err(bad("background_intensity"));
+    }
     let background_blur = f("background_blur", 0.0)?;
     if !(0.0..=1.0).contains(&background_blur) {
         return Err(bad("background_blur"));
@@ -337,6 +357,7 @@ pub fn parse(
         sun,
         environment,
         background,
+        background_intensity,
         background_blur,
         background_ground,
         painted: ["top", "low", "stars", "moon"]

@@ -146,6 +146,19 @@ fn flicker() -> P {
     )
 }
 
+/// A mark in 3D's `fog` (Marks in 3D; #1992): whether the sky's fog applies to it.
+pub(crate) fn fog(default: bool) -> P {
+    p(
+        "fog",
+        "bool",
+        "",
+        json!(default),
+        S,
+        Value::Null,
+        Value::Null,
+    )
+}
+
 fn shade() -> P {
     p(
         "shade",
@@ -599,9 +612,51 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                 json!("camera"),
                 json!("upright"),
             ),
+            fog(false),
         ]),
         reads: None,
         fixture: json!({"it": item("mark.text@1", json!({"text": "Block", "size": 13, "paint": {"fill": {"role": "ink"}}}))}),
+    };
+    // A picture on one quad (Marks in 3D; #1992), by hash as Image `image@1` names one.
+    let image = || {
+        let (a, b) = ("a".repeat(64), "b".repeat(64));
+        Spec {
+            kind: "mark.image@1",
+            module: "scene3d",
+            params: common(vec![
+                p("asset", "sha256", "", Value::Null, S, json!(a), json!(b)),
+                p(
+                    "alt",
+                    "text",
+                    "",
+                    json!(""),
+                    "text",
+                    json!("A picture"),
+                    json!("A plan"),
+                ),
+                p(
+                    "size",
+                    "[w, h]",
+                    "px",
+                    Value::Null,
+                    G,
+                    json!([64, 64]),
+                    json!([96, 64]),
+                ),
+                p(
+                    "facing",
+                    "camera | upright | fixed",
+                    "",
+                    json!("camera"),
+                    G,
+                    json!("camera"),
+                    json!("upright"),
+                ),
+                fog(true),
+            ]),
+            reads: None,
+            fixture: json!({"it": item("mark.image@1", json!({"asset": a, "alt": "A picture", "size": [64, 64]}))}),
+        }
     };
     let sun = || Spec {
         kind: "light.sun@1",
@@ -993,6 +1048,7 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
         "mark.line@1" => edged(),
         "mark.point@1" => crate::cloud::spec(),
         "mark.text@1" => text(),
+        "mark.image@1" => image(),
         "light.sun@1" => sun(),
         "light.point@1" => local("light.point@1", false),
         "light.spot@1" => local("light.spot@1", true),
@@ -1107,7 +1163,7 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                 ),
                 p(
                     "fog_curve",
-                    "exp | exp2",
+                    "exp | exp2 | linear {near: m, far: m}",
                     "",
                     json!("exp2"),
                     S,
@@ -1177,6 +1233,15 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                     json!("sky"),
                 )
                 .takes("auto | sky | environment | video {asset: sha256, frames}"),
+                p(
+                    "background_intensity",
+                    "f32",
+                    "",
+                    json!(1),
+                    S,
+                    json!(1),
+                    json!(0.25),
+                ),
                 ranged(
                     p(
                         "background_blur",
@@ -2134,13 +2199,14 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
 }
 
 /// scene3d's kinds, in the order the `kinds` call lists them.
-pub const SCENE3D: [&str; 28] = [
+pub const SCENE3D: [&str; 29] = [
     "mark.box@1",
     "mark.cylinder@1",
     "mark.sphere@1",
     "mark.line@1",
     "mark.point@1",
     "mark.text@1",
+    "mark.image@1",
     "light.sun@1",
     "light.point@1",
     "light.spot@1",
