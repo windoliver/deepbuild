@@ -235,6 +235,10 @@ alone.push('tests/acceptance/533/');
 alone.push('tests/acceptance/1434/');
 byHand.push('tests/acceptance/1434/ac6-idle.live.test.ts', 'tests/acceptance/1434/ac7-budgets.live.test.ts', 'tests/acceptance/1434/ac8-snapshots.live.test.ts');
 timed.push('tests/acceptance/1434/ac7-budgets.live.test.ts');
+// #1482's files build deep-drive and start replicas (the debug build with the planted programs, the release one with
+// the frame clocks); its bench file times them.
+alone.push('tests/acceptance/1482/');
+timed.push('tests/acceptance/1482/bench.test.ts');
 // #177: deep-gpu with test-meter and the hdr-fixture app build; the live legs open the app on the XDR display.
 alone.push('tests/acceptance/177/');
 alone.push('tests/acceptance/177-redraft-ac3/');
@@ -957,6 +961,9 @@ timed.push('tests/acceptance/568-redraft-1830/judge.test.mjs', 'tests/acceptance
 // horizon's 0.1 ms at 1080p on the reference Mac.
 alone.push('tests/acceptance/1381/');
 timed.push('tests/acceptance/1381/ac6-budget.test.ts');
+
+// #2652's files each start real hubs and read their heaps through the inspector; AC4 runs #1018's hub suite whole.
+alone.push('tests/acceptance/2652/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },

@@ -1,0 +1,1399 @@
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+   Compiling serde_core v1.0.229
+   Compiling litemap v0.8.3
+   Compiling jobserver v0.1.35
+   Compiling yoke v0.8.3
+   Compiling regex-automata v0.4.18
+   Compiling flate2 v1.1.10
+   Compiling either v1.19.0
+   Compiling bumpalo v3.20.3
+   Compiling ttf-parser v0.25.1
+   Compiling derive_more-impl v2.1.1
+   Compiling errno v0.3.14
+   Compiling rustc-hash v1.1.0
+   Compiling getrandom v0.4.3
+   Compiling num-traits v0.2.19
+   Compiling rustix v1.1.6
+   Compiling cc v1.9.0
+   Compiling dirs-sys v0.5.0
+   Compiling sha2 v0.11.1
+   Compiling clang-sys v1.9.1
+   Compiling hashbrown v0.14.5
+   Compiling zerovec v0.11.8
+   Compiling zerotrie v0.2.5
+   Compiling deep-show v0.0.0 (<home>/deepbuild-bays/1/base/crates/deep-show)
+   Compiling dirs v6.0.0
+   Compiling itertools v0.13.0
+   Compiling itertools v0.11.0
+   Compiling shellexpand v3.1.2
+   Compiling wast v263.0.0
+   Compiling tiff v0.11.3
+   Compiling png v0.17.16
+   Compiling serde-saphyr v1.3.0
+   Compiling tinystr v0.8.4
+   Compiling potential_utf v0.1.6
+   Compiling icu_collections v2.3.0
+   Compiling tempfile v3.27.0
+   Compiling derive_more v2.1.1
+   Compiling icu_locale_core v2.3.0
+   Compiling embed-resource v3.0.12
+   Compiling cbindgen v0.28.0
+   Compiling blake3 v1.5.5
+   Compiling quickjs-jit-sys v0.12.11 (https://github.com/longbridge/quickjs-jit?rev=96593cd7a54440ac060a391b8baea7e9a3cf1393#96593cd7)
+   Compiling gpui-pre v0.3.9 (<home>/deepbuild-bays/1/base/vendor/gpui-pre)
+   Compiling ring v0.17.14
+   Compiling meshopt v0.7.0
+   Compiling zstd-sys v2.1.2+zstd.1.5.7
+   Compiling wasmtime v49.0.5
+   Compiling regex v1.13.1
+   Compiling serde v1.0.229
+   Compiling bitflags v2.13.2
+   Compiling hashbrown v0.17.1
+   Compiling log v0.4.34
+   Compiling icu_provider v2.3.1
+   Compiling objc2-core-foundation v0.3.2
+   Compiling png v0.18.1
+   Compiling semver v1.0.28
+   Compiling globset v0.4.20
+   Compiling core-graphics-types v0.2.0
+   Compiling uuid v1.28.0
+   Compiling smallvec v1.16.3
+   Compiling arrayvec v0.7.8
+   Compiling icu_properties v2.3.0
+   Compiling icu_locale_fallback v2.3.0
+   Compiling polycool v0.4.0
+   Compiling num-complex v0.4.6
+   Compiling indexmap v2.14.2
+   Compiling icu_normalizer v2.3.0
+   Compiling kurbo v0.13.1
+   Compiling icu_segmenter v2.3.0
+   Compiling parking_lot_core v0.9.12
+   Compiling parking_lot v0.12.5
+   Compiling fontique v0.12.0
+   Compiling harfrust v0.12.0
+   Compiling pulp v0.22.3
+   Compiling taffy v0.14.0
+   Compiling lyon_geom v1.0.19
+   Compiling accesskit v0.24.1
+   Compiling objc2-foundation v0.3.2
+   Compiling objc2-io-surface v0.3.2
+   Compiling objc2-core-graphics v0.3.2
+   Compiling lyon_path v1.0.19
+   Compiling wasmtime-internal-core v49.0.5
+   Compiling rustybuzz v0.20.1
+   Compiling serde_urlencoded v0.7.1
+   Compiling peniko v0.6.1
+   Compiling serde_json v1.0.154
+   Compiling parley_data v0.12.0
+   Compiling idna_adapter v1.2.2
+   Compiling svgtypes v0.16.1
+   Compiling vello_common v0.3.0
+   Compiling idna v1.1.0
+   Compiling simplecss v0.2.2
+   Compiling fontdb v0.23.0
+   Compiling lyon_tessellation v1.0.22
+   Compiling lyon_algorithms v1.0.21
+   Compiling url v2.5.8
+   Compiling tiny-skia v0.11.4
+   Compiling chrono v0.4.45
+   Compiling gpui-pre-util v0.3.9
+   Compiling smol_str v0.3.6
+   Compiling gpui-pre-collections v0.3.9
+   Compiling cranelift-bitset v0.136.5
+   Compiling postage v0.5.0
+   Compiling taffy v0.13.0
+   Compiling futures-concurrency v7.7.1
+   Compiling core-graphics v0.24.0
+   Compiling postcard v1.1.3
+   Compiling lyon v1.0.19
+   Compiling naga-types v30.0.1
+   Compiling ignore v0.4.33
+   Compiling cranelift-entity v0.136.5
+   Compiling gimli v0.33.0
+   Compiling objc2-core-text v0.3.2
+   Compiling glifo v0.4.0
+   Compiling polling v3.11.0
+   Compiling deep-canvas v0.0.0 (<home>/deepbuild-bays/1/base/crates/deep-canvas)
+   Compiling rusty-fork v0.3.1
+   Compiling schemars v1.2.3
+   Compiling proptest v1.12.0
+   Compiling gpui-pre-scheduler v0.3.9
+   Compiling vello_cpu v0.3.0
+   Compiling usvg v0.46.0
+   Compiling gpui-pre-http-client v0.3.9
+   Compiling globwalk v0.8.1
+   Compiling parley_engine v0.12.0
+   Compiling async-io v2.6.0
+   Compiling gpui-pre-shared-string v0.3.9
+   Compiling string_cache v0.8.9
+   Compiling cranelift-bforest v0.136.5
+   Compiling markup5ever v0.12.1
+   Compiling core-text v21.0.0
+   Compiling parley v0.12.0
+   Compiling naga v30.0.1
+   Compiling wgpu-types v30.0.1
+   Compiling wasmparser v0.258.3
+   Compiling bincode v1.3.3
+   Compiling cranelift-bitset v0.116.1
+   Compiling cranelift-entity v0.116.1
+   Compiling async-signal v0.2.14
+   Compiling pulley-interpreter v49.0.5
+   Compiling gpui-pre-apple v0.3.9 (<home>/deepbuild-bays/1/base/vendor/gpui-pre-apple)
+   Compiling rust-embed-utils v8.13.0
+   Compiling regalloc2 v0.15.2
+   Compiling exr v1.74.2
+   Compiling pathfinder_geometry v0.5.1
+   Compiling resvg v0.46.0
+   Compiling dispatch2 v0.3.1
+   Compiling objc2-foundation v0.2.2
+   Compiling zed-font-kit v0.14.1-zed
+   Compiling rust-embed-impl v8.13.0
+   Compiling async-process v2.5.0
+   Compiling cranelift-bforest v0.116.1
+   Compiling xml5ever v0.18.1
+   Compiling html5ever v0.27.0
+   Compiling async-net v2.0.0
+   Compiling rust-i18n v4.2.4
+   Compiling rust-i18n-support v4.2.4
+   Compiling gimli v0.31.1
+   Compiling accesskit_consumer v0.38.0
+   Compiling objc2-security v0.3.2
+   Compiling rustls-webpki v0.103.16
+   Compiling regalloc2 v0.11.2
+   Compiling metal v0.33.0
+   Compiling cocoa-foundation v0.2.1
+   Compiling triomphe v0.1.17
+   Compiling rustls v0.23.46
+   Compiling rust-i18n-macro v4.2.4
+   Compiling markup5ever_rcdom v0.3.0
+   Compiling smol v2.0.2
+   Compiling rust-embed v8.13.0
+   Compiling cocoa v0.26.0
+   Compiling syntect v5.3.0
+   Compiling lsp-types v0.97.0
+   Compiling image v0.25.10
+   Compiling objc2-app-kit v0.2.2
+   Compiling object v0.40.0
+   Compiling zstd-safe v7.4.0
+   Compiling markdown v1.0.0
+   Compiling notify-types v2.1.0
+   Compiling notify v8.2.0
+   Compiling cranelift-codegen v0.116.1
+   Compiling two-face v0.4.5
+   Compiling accesskit_macos v0.26.3 (<home>/deepbuild-bays/1/base/vendor/accesskit_macos)
+   Compiling h2 v0.4.20
+   Compiling symphonia-core v0.6.1
+   Compiling zstd v0.13.4
+   Compiling simba v0.10.2
+   Compiling security-framework v3.7.0
+   Compiling cranelift-codegen v0.136.5
+   Compiling glam v0.33.12
+   Compiling llrt_compression v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling wasm-encoder v0.258.3
+   Compiling wasmprinter v0.258.3
+   Compiling wgpu-naga-bridge v30.0.1
+   Compiling rustls-native-certs v0.8.5
+   Compiling symphonia-metadata v0.6.1
+   Compiling tokio-rustls v0.26.6
+   Compiling addr2line v0.26.1
+   Compiling fs-set-times v0.20.3
+   Compiling wasmtime-internal-jit-icache-coherence v49.0.5
+   Compiling object v0.36.7
+   Compiling objc2-io-kit v0.3.2
+   Compiling bindgen v0.71.1
+   Compiling hyper v1.12.0
+   Compiling sysinfo v0.37.2
+   Compiling cap-primitives v4.0.3
+   Compiling symphonia-common v0.6.1
+   Compiling tungstenite v0.29.0
+   Compiling wat v1.263.0
+   Compiling serde_yaml v0.9.34+deprecated
+   Compiling rstar v0.13.1
+   Compiling hyper-util v0.1.21
+   Compiling serde_arrays v0.2.0
+   Compiling ena v0.14.4
+   Compiling system-configuration v0.6.1
+   Compiling bindgen v0.72.1
+   Compiling wasmtime-environ v49.0.5
+   Compiling nalgebra v0.35.0
+   Compiling cap-std v4.0.3
+   Compiling objc2-core-media v0.3.2
+   Compiling symphonia-codec-alac v0.6.1
+   Compiling symphonia-codec-vorbis v0.6.1 (<home>/deepbuild-bays/1/base/vendor/symphonia-codec-vorbis)
+   Compiling symphonia-bundle-mp3 v0.6.1
+   Compiling hyper-rustls v0.27.10
+   Compiling objc2-metal v0.3.2
+   Compiling objc2-core-data v0.3.2
+   Compiling objc2-core-image v0.3.2
+   Compiling objc2-cloud-kit v0.3.2
+   Compiling objc2-user-notifications v0.3.2
+   Compiling gpui-pre-reqwest v0.12.15
+   Compiling objc2-screen-capture-kit v0.3.2
+   Compiling symphonia v0.6.1
+   Compiling thorvg-sys v0.4.0+thorvg-1.1.2
+   Compiling deep-canvas-seams v0.0.0 (<home>/deepbuild-bays/1/base/crates/deep-canvas-seams)
+   Compiling deep-text v0.0.0 (<home>/deepbuild-bays/1/base/crates/deep-text)
+   Compiling deep-canvas-drawn v0.0.0 (<home>/deepbuild-bays/1/base/crates/deep-canvas-drawn)
+   Compiling deep-images v0.0.0 (<home>/deepbuild-bays/1/base/crates/deep-images)
+   Compiling deep-canvas-marks v0.0.0 (<home>/deepbuild-bays/1/base/crates/deep-canvas-marks)
+   Compiling objc2-quartz-core v0.3.2
+   Compiling objc2-core-video v0.3.2
+   Compiling deep-canvas-cells v0.0.0 (<home>/deepbuild-bays/1/base/crates/deep-canvas-cells)
+   Compiling deep-canvas-sandbox v0.0.0 (<home>/deepbuild-bays/1/base/crates/deep-canvas-sandbox)
+   Compiling objc2-app-kit v0.3.2
+   Compiling raw-window-metal v1.1.0
+   Compiling wgpu-hal v30.0.1
+   Compiling quickjs-jit-core v0.12.11 (https://github.com/longbridge/quickjs-jit?rev=96593cd7a54440ac060a391b8baea7e9a3cf1393#96593cd7)
+   Compiling cranelift-module v0.116.1
+   Compiling quickjs-jit-runtime v0.12.11 (<home>/deepbuild-bays/1/base/vendor/quickjs-jit-runtime)
+   Compiling cranelift-object v0.116.1
+   Compiling cranelift-native v0.116.1
+   Compiling cranelift-frontend v0.116.1
+   Compiling wgpu-core-deps-apple v30.0.1
+   Compiling wgpu-core v30.0.1
+   Compiling basisu_c_sys v0.9.1
+   Compiling glamx v0.3.1
+   Compiling parry3d v0.31.1
+   Compiling deep-canvas-physics v0.0.0 (<home>/deepbuild-bays/1/base/crates/deep-canvas-physics)
+   Compiling deep-relay v0.0.0 (<home>/deepbuild-bays/1/base/crates/deep-relay)
+   Compiling quickjs-jit-macro v0.12.11 (https://github.com/longbridge/quickjs-jit?rev=96593cd7a54440ac060a391b8baea7e9a3cf1393#96593cd7)
+   Compiling deep-canvas-record v0.0.0 (<home>/deepbuild-bays/1/base/crates/deep-canvas-record)
+   Compiling wasmtime-internal-unwinder v49.0.5
+   Compiling cranelift-frontend v0.136.5
+   Compiling cranelift-native v0.136.5
+   Compiling deep-canvas-graph v0.0.0 (<home>/deepbuild-bays/1/base/crates/deep-canvas-graph)
+   Compiling wasmtime-internal-cranelift v49.0.5
+warning: unused variable: `diagnostic_key`
+    --> vendor/quickjs-jit-runtime/src/compiler/optimized.rs:8795:5
+     |
+8795 |     diagnostic_key: Option<crate::runtime::FunctionKey>,
+     |     ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_diagnostic_key`
+     |
+     = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+   Compiling quickjs-jit v0.12.11 (https://github.com/longbridge/quickjs-jit?rev=96593cd7a54440ac060a391b8baea7e9a3cf1393#96593cd7)
+   Compiling deep-codecs v0.0.0 (<home>/deepbuild-bays/1/base/crates/deep-codecs)
+   Compiling rquickjs v0.12.9 (https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1#1676826d)
+   Compiling llrt_utils v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling llrt_hooking v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling llrt_context v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling llrt_timers v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+warning: function `apply_stress_gc_after_validation` is never used
+    --> vendor/quickjs-jit-runtime/src/lib.rs:1387:4
+     |
+1387 | fn apply_stress_gc_after_validation(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `machine_disassembly` is never read
+    --> vendor/quickjs-jit-runtime/src/compiler/baseline.rs:1985:5
+     |
+1974 | pub struct RelocatableCode {
+     |            --------------- field in this struct
+...
+1985 |     machine_disassembly: Option<String>,
+     |     ^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `RelocatableCode` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+
+   Compiling llrt_async_hooks v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling llrt_exceptions v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling llrt_events v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling llrt_abort v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling deep-canvas-motion v0.0.0 (<home>/deepbuild-bays/1/base/crates/deep-canvas-motion)
+   Compiling llrt_stream_web v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling wgpu v30.0.1
+   Compiling llrt_json v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling llrt_buffer v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling llrt_path v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling wgpu-profiler v0.28.0
+   Compiling llrt_crypto v0.9.0-beta (<home>/deepbuild-bays/1/base/vendor/llrt_crypto)
+   Compiling llrt_zlib v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+   Compiling deep-gpu v0.0.0 (<home>/deepbuild-bays/1/base/crates/deep-gpu)
+   Compiling llrt_url v0.9.0-beta (https://github.com/awslabs/llrt?rev=7b95c82a9b15e7ddfb2778eca4b5a63111e74f51#7b95c82a)
+warning: `quickjs-jit-runtime` (lib) generated 3 warnings (run `cargo fix --lib -p quickjs-jit-runtime` to apply 1 suggestion)
+   Compiling rapier3d v0.36.1
+   Compiling deep-marks-vello v0.0.0 (<home>/deepbuild-bays/1/base/crates/deep-marks-vello)
+   Compiling deep-canvas-vector v0.0.0 (<home>/deepbuild-bays/1/base/crates/deep-canvas-vector)
+   Compiling deep-canvas-sheet v0.0.0 (<home>/deepbuild-bays/1/base/crates/deep-canvas-sheet)
+   Compiling quickjs-jit-stdlib v0.12.7 (https://github.com/longbridge/quickjs-jit?rev=605da483611a3548edb8c33fdff602e3f5f42076#605da483)
+   Compiling deep-canvas-scene3d v0.0.0 (<home>/deepbuild-bays/1/base/crates/deep-canvas-scene3d)
+   Compiling gpui-pre-macos v0.3.9 (<home>/deepbuild-bays/1/base/vendor/gpui-pre-macos)
+   Compiling gpui-base v0.8.0 (https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1#1676826d)
+   Compiling gpui-kit-assets v0.8.0 (https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1#1676826d)
+   Compiling gpui-pre-platform v0.3.9
+   Compiling gpui-fps v0.8.0 (https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1#1676826d)
+   Compiling deep-sandbox-wasmtime v0.0.0 (<home>/deepbuild-bays/1/base/crates/deep-sandbox-wasmtime)
+   Compiling deep-canvas-input v0.0.0 (<home>/deepbuild-bays/1/base/crates/deep-canvas-input)
+   Compiling deep-marks-raster v0.0.0 (<home>/deepbuild-bays/1/base/crates/deep-marks-raster)
+   Compiling deep-canvas-export v0.0.0 (<home>/deepbuild-bays/1/base/crates/deep-canvas-export)
+   Compiling deep-logic v0.0.0 (<home>/deepbuild-bays/1/base/crates/deep-logic)
+   Compiling thorvg v0.6.0
+   Compiling deep-lottie-reader v0.0.0 (<home>/deepbuild-bays/1/base/crates/deep-lottie-reader)
+   Compiling deep-canvas-effects v0.0.0 (<home>/deepbuild-bays/1/base/crates/deep-canvas-effects)
+   Compiling gpui-component v0.8.0 (https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1#1676826d)
+   Compiling deep-scene3d-render v0.0.0 (<home>/deepbuild-bays/1/base/crates/deep-scene3d-render)
+   Compiling deep-physics-rapier v0.0.0 (<home>/deepbuild-bays/1/base/crates/deep-physics-rapier)
+   Compiling deep-effects-render v0.0.0 (<home>/deepbuild-bays/1/base/crates/deep-effects-render)
+   Compiling deep-canvas-media v0.0.0 (<home>/deepbuild-bays/1/base/crates/deep-canvas-media)
+   Compiling deep-canvas-loop v0.0.0 (<home>/deepbuild-bays/1/base/crates/deep-canvas-loop)
+   Compiling gpui-kit v0.8.0 (https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1#1676826d)
+   Compiling gpui-shell v0.8.0 (https://github.com/longbridge/gpui-kit?rev=1676826d9d49b90f4d7b6808b69924f58796f6f1#1676826d)
+   Compiling deep-marks-gpui v0.0.0 (<home>/deepbuild-bays/1/base/crates/deep-marks-gpui)
+   Compiling deep-text-gpui v0.0.0 (<home>/deepbuild-bays/1/base/crates/deep-text-gpui)
+   Compiling deep-play v0.0.0 (<home>/deepbuild-bays/1/base/crates/deep-play)
+   Compiling deep-app v0.0.0 (<home>/deepbuild-bays/1/base/crates/deep-app)
+   Compiling deep-replica v0.0.0 (<home>/deepbuild-bays/1/base/crates/deep-replica)
+warning: linker stderr: ld: __eh_frame section too large (max 16MB) to encode dwarf unwind offsets in compact unwind table, performance of exception handling might be affected
+  |
+  = note: `#[warn(linker_messages)]` on by default
+
+warning: `deep-show` (bin "deep-show" test) generated 1 warning
+    Finished `test` profile [unoptimized] target(s) in 11m 50s
+warning: the following packages contain code that will be rejected by a future version of Rust: block v0.1.6
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running unittests src/main.rs (target/debug/deps/deep_show-50bd801f5bf611d3)
+
+running 1 test
+test tests::the_published_schedule_matches_its_committed_snapshot ... FAILED
+
+failures:
+
+---- tests::the_published_schedule_matches_its_committed_snapshot stdout ----
+
+thread 'tests::the_published_schedule_matches_its_committed_snapshot' (95197445) panicked at crates/deep-show/src/tests.rs:223:9:
+assertion `left == right` failed: the r2 schedule drifted from crates/deep-show/schedule/r2.json:
+{
+  "uri": "deep://schedule/core@0.0.0",
+  "core": "core@0.0.0",
+  "build_set": "r2",
+  "set_digest": "94efb56280aac667bdf7bfdd3f10ff056785fb60d7c1911f9323815a7528b617",
+  "runtime_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "interfaces": {
+    "cells@1": {
+      "digest": "2b72c9757df0c5cc3a578bbc5ba4595714c8e291458c26958bd777c880549049",
+      "reference": "cells",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit"
+      ],
+      "behavior": "none",
+      "module": "cells",
+      "implementation": {
+        "name": "cells",
+        "version": "1.0.0",
+        "pins": {},
+        "equivalence": "bit",
+        "state": "canonical"
+      }
+    },
+    "data@1": {
+      "digest": "75d055f587754b84d7405262fad9f52dbb0b16a8560d1534e1875f49df412e97",
+      "reference": "data",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit"
+      ],
+      "behavior": "none",
+      "module": "data",
+      "implementation": {
+        "name": "data",
+        "version": "1.0.0",
+        "pins": {},
+        "equivalence": "bit",
+        "state": "canonical"
+      }
+    },
+    "effects@1": {
+      "digest": "47efff0e92f65196c99d6ba9bbe39a782aa62eb4e031e5cb60132976c8fd9a7b",
+      "reference": "effects",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit"
+      ],
+      "behavior": "none",
+      "module": "effects",
+      "implementation": {
+        "name": "effects",
+        "version": "1.0.0",
+        "pins": {},
+        "equivalence": "bit",
+        "state": "canonical"
+      }
+    },
+    "graph@1": {
+      "digest": "8245f5f5ac084732c688dcedafe59f7d7e3931a37df0533426b5a1388932cd24",
+      "reference": "graph",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit"
+      ],
+      "behavior": "none",
+      "module": "graph",
+      "implementation": {
+        "name": "graph",
+        "version": "1.0.0",
+        "pins": {},
+        "equivalence": "bit",
+        "state": "canonical"
+      }
+    },
+    "look@1": {
+      "digest": "6e85fd95006b91596f17c25bd0c3070dce4f3f1ac38a5f3c521422d4f9338001",
+      "reference": "look",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit"
+      ],
+      "behavior": "none",
+      "module": "look",
+      "implementation": {
+        "name": "look",
+        "version": "1.0.0",
+        "pins": {},
+        "equivalence": "bit",
+        "state": "canonical"
+      }
+    },
+    "marks2d@1": {
+      "digest": "bacf98ca04edf98558b5e2b1980eb586ba97ae3486a5738c779b8a80950bc4e9",
+      "reference": "marks2d",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit"
+      ],
+      "behavior": "none",
+      "module": "marks2d",
+      "implementation": {
+        "name": "marks2d",
+        "version": "1.0.0",
+        "pins": {},
+        "equivalence": "bit",
+        "state": "canonical"
+      }
+    },
+    "motion@1": {
+      "digest": "fa3b261d76b2aca520756953c1fc8418f32938f08a296c000cda6ca24d18c14e",
+      "reference": "motion",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit"
+      ],
+      "behavior": "none",
+      "module": "motion",
+      "implementation": {
+        "name": "motion",
+        "version": "1.0.0",
+        "pins": {},
+        "equivalence": "bit",
+        "state": "canonical"
+      }
+    },
+    "record@1": {
+      "digest": "65f77a1cb350e333bb96a1f36a254f4d489bbb36a3a919391654a723b30c1021",
+      "reference": "record",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit"
+      ],
+      "behavior": "none",
+      "module": "record",
+      "implementation": {
+        "name": "record",
+        "version": "1.0.0",
+        "pins": {},
+        "equivalence": "bit",
+        "state": "canonical"
+      }
+    },
+    "scene3d@1": {
+      "digest": "86f5aec0602fb2fa750b3573ae9afad1e4bf63215aaac8bedb17f26970c8332e",
+      "reference": "scene3d",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit"
+      ],
+      "behavior": "none",
+      "module": "scene3d",
+      "implementation": {
+        "name": "scene3d",
+        "version": "1.0.0",
+        "pins": {},
+        "equivalence": "bit",
+        "state": "canonical"
+      }
+    },
+    "sheet@1": {
+      "digest": "d24e60e7c85d9663922617ca0d3c22f8d53e23caf3564cbc6ea1480cb4b57f18",
+      "reference": "sheet",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit"
+      ],
+      "behavior": "none",
+      "module": "sheet",
+      "implementation": {
+        "name": "sheet",
+        "version": "1.0.0",
+        "pins": {},
+        "equivalence": "bit",
+        "state": "canonical"
+      }
+    },
+    "text@1": {
+      "digest": "adc297495eb1a9be4918d0a7e9620be4f459deb800ea168ecd3ca5a995d98350",
+      "reference": "text",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit"
+      ],
+      "behavior": "none",
+      "module": "text",
+      "implementation": {
+        "name": "text",
+        "version": "1.0.0",
+        "pins": {},
+        "equivalence": "bit",
+        "state": "canonical"
+      }
+    },
+    "vector@1": {
+      "digest": "0de50548636508ccbcf2ee8a4efd85632b4bd29f4da366e88350cdf4b0df4f62",
+      "reference": "vector",
+      "kit": [
+        "fixtures",
+        "clean_rebuild",
+        "patch_fuzz",
+        "read_set",
+        "order",
+        "schedule",
+        "repair_loop",
+        "carried_state",
+        "late_entry",
+        "time_order",
+        "contribution",
+        "catalog",
+        "migration",
+        "bit"
+      ],
+      "behavior": "none",
+      "module": "vector",
+      "implementation": {
+        "name": "vector",
+        "version": "1.0.0",
+        "pins": {},
+        "equivalence": "bit",
+        "state": "canonical"
+      }
+    }
+  },
+  "phases": {
+    "validate": [
+      {
+        "operator": "core.lower",
+        "module": "core",
+        "version": "0.0.0",
+        "reads": [
+          "self"
+        ],
+        "writes": [
+          "core.lowered"
+        ],
+        "per": "item"
+      }
+    ],
+    "plan": [
+      {
+        "operator": "motion.arrange",
+        "module": "motion",
+        "version": "1.0.0",
+        "reads": [
+          "refs"
+        ],
+        "writes": [
+          "motion.arranged"
+        ],
+        "per": "document"
+      },
+      {
+        "operator": "motion.compile",
+        "module": "motion",
+        "version": "1.0.0",
+        "reads": [
+          "refs"
+        ],
+        "writes": [
+          "motion.program"
+        ],
+        "per": "document"
+      },
+      {
+        "operator": "scene3d.rest",
+        "module": "scene3d",
+        "version": "1.0.0",
+        "reads": [
+          "refs"
+        ],
+        "writes": [
+          "scene3d.rests"
+        ],
+        "per": "document"
+      }
+    ],
+    "build": [
+      {
+        "operator": "scene3d.scatter",
+        "module": "scene3d",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "refs"
+        ],
+        "writes": [
+          "scene3d.scattered"
+        ],
+        "per": "item"
+      }
+    ],
+    "items": [
+      {
+        "operator": "cells.grid",
+        "module": "cells",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "look",
+          "t",
+          "reading",
+          "refs"
+        ],
+        "writes": [
+          "cells.grid"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "core.fields",
+        "module": "core",
+        "version": "0.0.0",
+        "reads": [
+          "core.lowered"
+        ],
+        "writes": [
+          "core.fields"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "core.status",
+        "module": "core",
+        "version": "0.0.0",
+        "reads": [
+          "look"
+        ],
+        "writes": [
+          "core.status"
+        ],
+        "per": "document"
+      },
+      {
+        "operator": "core.transform",
+        "module": "core",
+        "version": "0.0.0",
+        "reads": [
+          "core.lowered"
+        ],
+        "writes": [
+          "core.transform"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "data.columns",
+        "module": "data",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "t"
+        ],
+        "writes": [
+          "data.columns",
+          "data.mapped"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "data.follow_stream",
+        "module": "data",
+        "version": "1.0.0",
+        "reads": [
+          "refs",
+          "t"
+        ],
+        "writes": [
+          "data.follow"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "data.vector_field",
+        "module": "data",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "t"
+        ],
+        "writes": [
+          "data.vector_field"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "look.palette",
+        "module": "look",
+        "version": "1.0.0",
+        "reads": [
+          "look"
+        ],
+        "writes": [
+          "look.palette",
+          "look.status"
+        ],
+        "per": "document"
+      },
+      {
+        "operator": "look.finish",
+        "module": "look",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "look.palette"
+        ],
+        "writes": [
+          "look.finish"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "marks2d.warp",
+        "module": "marks2d",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "t"
+        ],
+        "writes": [
+          "marks2d.warp"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "motion.arrangelive",
+        "module": "motion",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "refs",
+          "t"
+        ],
+        "writes": [
+          "motion.arrangelive"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "motion.channels",
+        "module": "motion",
+        "version": "1.0.0",
+        "reads": [
+          "motion.program",
+          "t",
+          "view(reduced_motion)",
+          "self"
+        ],
+        "writes": [
+          "motion.at",
+          "motion.fields"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "motion.clock",
+        "module": "motion",
+        "version": "1.0.0",
+        "reads": [
+          "motion.program",
+          "t"
+        ],
+        "writes": [
+          "motion.next"
+        ],
+        "per": "document"
+      },
+      {
+        "operator": "motion.flip",
+        "module": "motion",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "refs",
+          "t"
+        ],
+        "writes": [
+          "motion.flip"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "motion.placed",
+        "module": "motion",
+        "version": "1.0.0",
+        "reads": [
+          "motion.arranged"
+        ],
+        "writes": [
+          "motion.placed"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "scene3d.build",
+        "module": "scene3d",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "refs",
+          "motion.fields"
+        ],
+        "writes": [
+          "scene3d.built"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "scene3d.lights",
+        "module": "scene3d",
+        "version": "1.0.0",
+        "reads": [
+          "refs",
+          "t",
+          "look"
+        ],
+        "writes": [
+          "scene3d.lights"
+        ],
+        "per": "document"
+      },
+      {
+        "operator": "scene3d.mark",
+        "module": "scene3d",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "motion.fields"
+        ],
+        "writes": [
+          "scene3d.marked"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "scene3d.rebuild",
+        "module": "scene3d",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "refs",
+          "motion.fields",
+          "t"
+        ],
+        "writes": [
+          "scene3d.livebuilt"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "scene3d.restlive",
+        "module": "scene3d",
+        "version": "1.0.0",
+        "reads": [
+          "refs",
+          "t",
+          "motion.program"
+        ],
+        "writes": [
+          "scene3d.restslive"
+        ],
+        "per": "document"
+      },
+      {
+        "operator": "scene3d.rested",
+        "module": "scene3d",
+        "version": "1.0.0",
+        "reads": [
+          "scene3d.rests",
+          "scene3d.restslive"
+        ],
+        "writes": [
+          "scene3d.rested"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "core.world",
+        "module": "core",
+        "version": "0.0.0",
+        "reads": [
+          "core.transform",
+          "parent"
+        ],
+        "writes": [
+          "core.world"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "scene3d.shade",
+        "module": "scene3d",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "motion.fields"
+        ],
+        "writes": [
+          "scene3d.shaded"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "scene3d.stack",
+        "module": "scene3d",
+        "version": "1.0.0",
+        "reads": [
+          "self"
+        ],
+        "writes": [
+          "scene3d.stack"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "text.copy_columns",
+        "module": "text",
+        "version": "1.0.0",
+        "reads": [
+          "self",
+          "refs",
+          "t",
+          "view(locale)",
+          "table:text.plurals"
+        ],
+        "writes": [
+          "text.columns"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "data.decimate",
+        "module": "data",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields"
+        ],
+        "writes": [
+          "data.decimated"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "data.scale",
+        "module": "data",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields"
+        ],
+        "writes": [
+          "data.scale"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "graph.layout",
+        "module": "graph",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields"
+        ],
+        "writes": [
+          "graph.layout"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "record.salience",
+        "module": "record",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields"
+        ],
+        "writes": [
+          "record.level"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "sheet.place",
+        "module": "sheet",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields"
+        ],
+        "writes": [
+          "sheet.placed"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "text.copy",
+        "module": "text",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields",
+          "refs",
+          "t",
+          "view(locale)",
+          "table:text.plurals"
+        ],
+        "writes": [
+          "text.copy"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "text.counter",
+        "module": "text",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields",
+          "refs",
+          "reading",
+          "view(locale)",
+          "text.copy"
+        ],
+        "writes": [
+          "text.counter"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "text.shape",
+        "module": "text",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields",
+          "text.counter",
+          "view(locale)",
+          "table:text.fonts",
+          "look"
+        ],
+        "writes": [
+          "text.run"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "marks2d.relations",
+        "module": "marks2d",
+        "version": "1.0.0",
+        "reads": [
+          "refs",
+          "core.world",
+          "core.transform",
+          "core.fields",
+          "text.run",
+          "text.counter",
+          "table:text.fonts"
+        ],
+        "writes": [
+          "marks2d.places"
+        ],
+        "per": "document"
+      },
+      {
+        "operator": "marks2d.place",
+        "module": "marks2d",
+        "version": "1.0.0",
+        "reads": [
+          "core.world",
+          "marks2d.places"
+        ],
+        "writes": [
+          "marks2d.at"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "text.animate",
+        "module": "text",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields",
+          "text.run",
+          "view(reduced_motion)"
+        ],
+        "writes": [
+          "text.animated"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "vector.glyphs",
+        "module": "vector",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields"
+        ],
+        "writes": [
+          "vector.glyphs"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "vector.paint",
+        "module": "vector",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields"
+        ],
+        "writes": [
+          "vector.paint"
+        ],
+        "per": "item"
+      }
+    ],
+    "extract": [
+      {
+        "operator": "marks2d.item",
+        "module": "marks2d",
+        "version": "1.0.0",
+        "reads": [
+          "core.fields",
+          "core.world",
+          "marks2d.at",
+          "text.counter",
+          "look.palette",
+          "view(locale)"
+        ],
+        "writes": [
+          "marks2d.item"
+        ],
+        "per": "item"
+      },
+      {
+        "operator": "marks2d.frame",
+        "module": "marks2d",
+        "version": "1.0.0",
+        "reads": [
+          "refs",
+          "reading",
+          "core.world",
+          "marks2d.at",
+          "core.fields",
+          "text.counter",
+          "text.run",
+          "text.animated",
+          "look.palette",
+          "marks2d.item"
+        ],
+        "writes": [
+          "marks2d.frame"
+        ],
+        "per": "document"
+      },
+      {
+        "operator": "text.status",
+        "module": "text",
+        "version": "1.0.0",
+        "reads": [
+          "refs",
+          "reading",
+          "core.world",
+          "core.fields",
+          "core.status",
+          "table:text.fonts"
+        ],
+        "writes": [
+          "text.status"
+        ],
+        "per": "document"
+      }
+    ]
+  },
+  "contributions": {
+    "core.fields": [
+      "data.columns",
+      "data.vector_field",
+      "marks2d.warp",
+      "motion.fields",
+      "motion.flip",
+      "text.columns"
+    ],
+    "core.glyphs": [
+      "vector.glyphs"
+    ],
+    "core.status": [
+      "look.status"
+    ],
+    "core.transform": [
+      "data.follow",
+      "motion.at",
+      "motion.placed",
+      "scene3d.rested"
+    ]
+  }
+}
+  left: Object {"uri": String("deep://schedule/core@0.0.0"), "core": String("core@0.0.0"), "build_set": String("r2"), "set_digest": String("94efb56280aac667bdf7bfdd3f10ff056785fb60d7c1911f9323815a7528b617"), "runtime_digest": String("4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"), "interfaces": Object {"cells@1": Object {"digest": String("2b72c9757df0c5cc3a578bbc5ba4595714c8e291458c26958bd777c880549049"), "reference": String("cells"), "kit": Array [String("fixtures"), String("clean_rebuild"), String("patch_fuzz"), String("read_set"), String("order"), String("schedule"), String("repair_loop"), String("carried_state"), String("late_entry"), String("time_order"), String("contribution"), String("catalog"), String("migration"), String("bit")], "behavior": String("none"), "module": String("cells"), "implementation": Object {"name": String("cells"), "version": String("1.0.0"), "pins": Object {}, "equivalence": String("bit"), "state": String("canonical")}}, "data@1": Object {"digest": String("75d055f587754b84d7405262fad9f52dbb0b16a8560d1534e1875f49df412e97"), "reference": String("data"), "kit": Array [String("fixtures"), String("clean_rebuild"), String("patch_fuzz"), String("read_set"), String("order"), String("schedule"), String("repair_loop"), String("carried_state"), String("late_entry"), String("time_order"), String("contribution"), String("catalog"), String("migration"), String("bit")], "behavior": String("none"), "module": String("data"), "implementation": Object {"name": String("data"), "version": String("1.0.0"), "pins": Object {}, "equivalence": String("bit"), "state": String("canonical")}}, "effects@1": Object {"digest": String("47efff0e92f65196c99d6ba9bbe39a782aa62eb4e031e5cb60132976c8fd9a7b"), "reference": String("effects"), "kit": Array [String("fixtures"), String("clean_rebuild"), String("patch_fuzz"), String("read_set"), String("order"), String("schedule"), String("repair_loop"), String("carried_state"), String("late_entry"), String("time_order"), String("contribution"), String("catalog"), String("migration"), String("bit")], "behavior": String("none"), "module": String("effects"), "implementation": Object {"name": String("effects"), "version": String("1.0.0"), "pins": Object {}, "equivalence": String("bit"), "state": String("canonical")}}, "graph@1": Object {"digest": String("8245f5f5ac084732c688dcedafe59f7d7e3931a37df0533426b5a1388932cd24"), "reference": String("graph"), "kit": Array [String("fixtures"), String("clean_rebuild"), String("patch_fuzz"), String("read_set"), String("order"), String("schedule"), String("repair_loop"), String("carried_state"), String("late_entry"), String("time_order"), String("contribution"), String("catalog"), String("migration"), String("bit")], "behavior": String("none"), "module": String("graph"), "implementation": Object {"name": String("graph"), "version": String("1.0.0"), "pins": Object {}, "equivalence": String("bit"), "state": String("canonical")}}, "look@1": Object {"digest": String("6e85fd95006b91596f17c25bd0c3070dce4f3f1ac38a5f3c521422d4f9338001"), "reference": String("look"), "kit": Array [String("fixtures"), String("clean_rebuild"), String("patch_fuzz"), String("read_set"), String("order"), String("schedule"), String("repair_loop"), String("carried_state"), String("late_entry"), String("time_order"), String("contribution"), String("catalog"), String("migration"), String("bit")], "behavior": String("none"), "module": String("look"), "implementation": Object {"name": String("look"), "version": String("1.0.0"), "pins": Object {}, "equivalence": String("bit"), "state": String("canonical")}}, "marks2d@1": Object {"digest": String("bacf98ca04edf98558b5e2b1980eb586ba97ae3486a5738c779b8a80950bc4e9"), "reference": String("marks2d"), "kit": Array [String("fixtures"), String("clean_rebuild"), String("patch_fuzz"), String("read_set"), String("order"), String("schedule"), String("repair_loop"), String("carried_state"), String("late_entry"), String("time_order"), String("contribution"), String("catalog"), String("migration"), String("bit")], "behavior": String("none"), "module": String("marks2d"), "implementation": Object {"name": String("marks2d"), "version": String("1.0.0"), "pins": Object {}, "equivalence": String("bit"), "state": String("canonical")}}, "motion@1": Object {"digest": String("fa3b261d76b2aca520756953c1fc8418f32938f08a296c000cda6ca24d18c14e"), "reference": String("motion"), "kit": Array [String("fixtures"), String("clean_rebuild"), String("patch_fuzz"), String("read_set"), String("order"), String("schedule"), String("repair_loop"), String("carried_state"), String("late_entry"), String("time_order"), String("contribution"), String("catalog"), String("migration"), String("bit")], "behavior": String("none"), "module": String("motion"), "implementation": Object {"name": String("motion"), "version": String("1.0.0"), "pins": Object {}, "equivalence": String("bit"), "state": String("canonical")}}, "record@1": Object {"digest": String("65f77a1cb350e333bb96a1f36a254f4d489bbb36a3a919391654a723b30c1021"), "reference": String("record"), "kit": Array [String("fixtures"), String("clean_rebuild"), String("patch_fuzz"), String("read_set"), String("order"), String("schedule"), String("repair_loop"), String("carried_state"), String("late_entry"), String("time_order"), String("contribution"), String("catalog"), String("migration"), String("bit")], "behavior": String("none"), "module": String("record"), "implementation": Object {"name": String("record"), "version": String("1.0.0"), "pins": Object {}, "equivalence": String("bit"), "state": String("canonical")}}, "scene3d@1": Object {"digest": String("86f5aec0602fb2fa750b3573ae9afad1e4bf63215aaac8bedb17f26970c8332e"), "reference": String("scene3d"), "kit": Array [String("fixtures"), String("clean_rebuild"), String("patch_fuzz"), String("read_set"), String("order"), String("schedule"), String("repair_loop"), String("carried_state"), String("late_entry"), String("time_order"), String("contribution"), String("catalog"), String("migration"), String("bit")], "behavior": String("none"), "module": String("scene3d"), "implementation": Object {"name": String("scene3d"), "version": String("1.0.0"), "pins": Object {}, "equivalence": String("bit"), "state": String("canonical")}}, "sheet@1": Object {"digest": String("d24e60e7c85d9663922617ca0d3c22f8d53e23caf3564cbc6ea1480cb4b57f18"), "reference": String("sheet"), "kit": Array [String("fixtures"), String("clean_rebuild"), String("patch_fuzz"), String("read_set"), String("order"), String("schedule"), String("repair_loop"), String("carried_state"), String("late_entry"), String("time_order"), String("contribution"), String("catalog"), String("migration"), String("bit")], "behavior": String("none"), "module": String("sheet"), "implementation": Object {"name": String("sheet"), "version": String("1.0.0"), "pins": Object {}, "equivalence": String("bit"), "state": String("canonical")}}, "text@1": Object {"digest": String("adc297495eb1a9be4918d0a7e9620be4f459deb800ea168ecd3ca5a995d98350"), "reference": String("text"), "kit": Array [String("fixtures"), String("clean_rebuild"), String("patch_fuzz"), String("read_set"), String("order"), String("schedule"), String("repair_loop"), String("carried_state"), String("late_entry"), String("time_order"), String("contribution"), String("catalog"), String("migration"), String("bit")], "behavior": String("none"), "module": String("text"), "implementation": Object {"name": String("text"), "version": String("1.0.0"), "pins": Object {}, "equivalence": String("bit"), "state": String("canonical")}}, "vector@1": Object {"digest": String("0de50548636508ccbcf2ee8a4efd85632b4bd29f4da366e88350cdf4b0df4f62"), "reference": String("vector"), "kit": Array [String("fixtures"), String("clean_rebuild"), String("patch_fuzz"), String("read_set"), String("order"), String("schedule"), String("repair_loop"), String("carried_state"), String("late_entry"), String("time_order"), String("contribution"), String("catalog"), String("migration"), String("bit")], "behavior": String("none"), "module": String("vector"), "implementation": Object {"name": String("vector"), "version": String("1.0.0"), "pins": Object {}, "equivalence": String("bit"), "state": String("canonical")}}}, "phases": Object {"validate": Array [Object {"operator": String("core.lower"), "module": String("core"), "version": String("0.0.0"), "reads": Array [String("self")], "writes": Array [String("core.lowered")], "per": String("item")}], "plan": Array [Object {"operator": String("motion.arrange"), "module": String("motion"), "version": String("1.0.0"), "reads": Array [String("refs")], "writes": Array [String("motion.arranged")], "per": String("document")}, Object {"operator": String("motion.compile"), "module": String("motion"), "version": String("1.0.0"), "reads": Array [String("refs")], "writes": Array [String("motion.program")], "per": String("document")}, Object {"operator": String("scene3d.rest"), "module": String("scene3d"), "version": String("1.0.0"), "reads": Array [String("refs")], "writes": Array [String("scene3d.rests")], "per": String("document")}], "build": Array [Object {"operator": String("scene3d.scatter"), "module": String("scene3d"), "version": String("1.0.0"), "reads": Array [String("self"), String("refs")], "writes": Array [String("scene3d.scattered")], "per": String("item")}], "items": Array [Object {"operator": String("cells.grid"), "module": String("cells"), "version": String("1.0.0"), "reads": Array [String("self"), String("look"), String("t"), String("reading"), String("refs")], "writes": Array [String("cells.grid")], "per": String("item")}, Object {"operator": String("core.fields"), "module": String("core"), "version": String("0.0.0"), "reads": Array [String("core.lowered")], "writes": Array [String("core.fields")], "per": String("item")}, Object {"operator": String("core.status"), "module": String("core"), "version": String("0.0.0"), "reads": Array [String("look")], "writes": Array [String("core.status")], "per": String("document")}, Object {"operator": String("core.transform"), "module": String("core"), "version": String("0.0.0"), "reads": Array [String("core.lowered")], "writes": Array [String("core.transform")], "per": String("item")}, Object {"operator": String("data.columns"), "module": String("data"), "version": String("1.0.0"), "reads": Array [String("self"), String("t")], "writes": Array [String("data.columns"), String("data.mapped")], "per": String("item")}, Object {"operator": String("data.follow_stream"), "module": String("data"), "version": String("1.0.0"), "reads": Array [String("refs"), String("t")], "writes": Array [String("data.follow")], "per": String("item")}, Object {"operator": String("data.vector_field"), "module": String("data"), "version": String("1.0.0"), "reads": Array [String("self"), String("t")], "writes": Array [String("data.vector_field")], "per": String("item")}, Object {"operator": String("look.palette"), "module": String("look"), "version": String("1.0.0"), "reads": Array [String("look")], "writes": Array [String("look.palette"), String("look.status")], "per": String("document")}, Object {"operator": String("look.finish"), "module": String("look"), "version": String("1.0.0"), "reads": Array [String("self"), String("look.palette")], "writes": Array [String("look.finish")], "per": String("item")}, Object {"operator": String("marks2d.warp"), "module": String("marks2d"), "version": String("1.0.0"), "reads": Array [String("self"), String("t")], "writes": Array [String("marks2d.warp")], "per": String("item")}, Object {"operator": String("motion.arrangelive"), "module": String("motion"), "version": String("1.0.0"), "reads": Array [String("self"), String("refs"), String("t")], "writes": Array [String("motion.arrangelive")], "per": String("item")}, Object {"operator": String("motion.channels"), "module": String("motion"), "version": String("1.0.0"), "reads": Array [String("motion.program"), String("t"), String("view(reduced_motion)"), String("self")], "writes": Array [String("motion.at"), String("motion.fields")], "per": String("item")}, Object {"operator": String("motion.clock"), "module": String("motion"), "version": String("1.0.0"), "reads": Array [String("motion.program"), String("t")], "writes": Array [String("motion.next")], "per": String("document")}, Object {"operator": String("motion.flip"), "module": String("motion"), "version": String("1.0.0"), "reads": Array [String("self"), String("refs"), String("t")], "writes": Array [String("motion.flip")], "per": String("item")}, Object {"operator": String("motion.placed"), "module": String("motion"), "version": String("1.0.0"), "reads": Array [String("motion.arranged")], "writes": Array [String("motion.placed")], "per": String("item")}, Object {"operator": String("scene3d.build"), "module": String("scene3d"), "version": String("1.0.0"), "reads": Array [String("self"), String("refs"), String("motion.fields")], "writes": Array [String("scene3d.built")], "per": String("item")}, Object {"operator": String("scene3d.lights"), "module": String("scene3d"), "version": String("1.0.0"), "reads": Array [String("refs"), String("t"), String("look")], "writes": Array [String("scene3d.lights")], "per": String("document")}, Object {"operator": String("scene3d.mark"), "module": String("scene3d"), "version": String("1.0.0"), "reads": Array [String("self"), String("motion.fields")], "writes": Array [String("scene3d.marked")], "per": String("item")}, Object {"operator": String("scene3d.rebuild"), "module": String("scene3d"), "version": String("1.0.0"), "reads": Array [String("self"), String("refs"), String("motion.fields"), String("t")], "writes": Array [String("scene3d.livebuilt")], "per": String("item")}, Object {"operator": String("scene3d.restlive"), "module": String("scene3d"), "version": String("1.0.0"), "reads": Array [String("refs"), String("t"), String("motion.program")], "writes": Array [String("scene3d.restslive")], "per": String("document")}, Object {"operator": String("scene3d.rested"), "module": String("scene3d"), "version": String("1.0.0"), "reads": Array [String("scene3d.rests"), String("scene3d.restslive")], "writes": Array [String("scene3d.rested")], "per": String("item")}, Object {"operator": String("core.world"), "module": String("core"), "version": String("0.0.0"), "reads": Array [String("core.transform"), String("parent")], "writes": Array [String("core.world")], "per": String("item")}, Object {"operator": String("scene3d.shade"), "module": String("scene3d"), "version": String("1.0.0"), "reads": Array [String("self"), String("motion.fields")], "writes": Array [String("scene3d.shaded")], "per": String("item")}, Object {"operator": String("scene3d.stack"), "module": String("scene3d"), "version": String("1.0.0"), "reads": Array [String("self")], "writes": Array [String("scene3d.stack")], "per": String("item")}, Object {"operator": String("text.copy_columns"), "module": String("text"), "version": String("1.0.0"), "reads": Array [String("self"), String("refs"), String("t"), String("view(locale)"), String("table:text.plurals")], "writes": Array [String("text.columns")], "per": String("item")}, Object {"operator": String("data.decimate"), "module": String("data"), "version": String("1.0.0"), "reads": Array [String("core.fields")], "writes": Array [String("data.decimated")], "per": String("item")}, Object {"operator": String("data.scale"), "module": String("data"), "version": String("1.0.0"), "reads": Array [String("core.fields")], "writes": Array [String("data.scale")], "per": String("item")}, Object {"operator": String("graph.layout"), "module": String("graph"), "version": String("1.0.0"), "reads": Array [String("core.fields")], "writes": Array [String("graph.layout")], "per": String("item")}, Object {"operator": String("record.salience"), "module": String("record"), "version": String("1.0.0"), "reads": Array [String("core.fields")], "writes": Array [String("record.level")], "per": String("item")}, Object {"operator": String("sheet.place"), "module": String("sheet"), "version": String("1.0.0"), "reads": Array [String("core.fields")], "writes": Array [String("sheet.placed")], "per": String("item")}, Object {"operator": String("text.copy"), "module": String("text"), "version": String("1.0.0"), "reads": Array [String("core.fields"), String("refs"), String("t"), String("view(locale)"), String("table:text.plurals")], "writes": Array [String("text.copy")], "per": String("item")}, Object {"operator": String("text.counter"), "module": String("text"), "version": String("1.0.0"), "reads": Array [String("core.fields"), String("refs"), String("reading"), String("view(locale)"), String("text.copy")], "writes": Array [String("text.counter")], "per": String("item")}, Object {"operator": String("text.shape"), "module": String("text"), "version": String("1.0.0"), "reads": Array [String("core.fields"), String("text.counter"), String("view(locale)"), String("table:text.fonts"), String("look")], "writes": Array [String("text.run")], "per": String("item")}, Object {"operator": String("marks2d.relations"), "module": String("marks2d"), "version": String("1.0.0"), "reads": Array [String("refs"), String("core.world"), String("core.transform"), String("core.fields"), String("text.run"), String("text.counter"), String("table:text.fonts")], "writes": Array [String("marks2d.places")], "per": String("document")}, Object {"operator": String("marks2d.place"), "module": String("marks2d"), "version": String("1.0.0"), "reads": Array [String("core.world"), String("marks2d.places")], "writes": Array [String("marks2d.at")], "per": String("item")}, Object {"operator": String("text.animate"), "module": String("text"), "version": String("1.0.0"), "reads": Array [String("core.fields"), String("text.run"), String("view(reduced_motion)")], "writes": Array [String("text.animated")], "per": String("item")}, Object {"operator": String("vector.glyphs"), "module": String("vector"), "version": String("1.0.0"), "reads": Array [String("core.fields")], "writes": Array [String("vector.glyphs")], "per": String("item")}, Object {"operator": String("vector.paint"), "module": String("vector"), "version": String("1.0.0"), "reads": Array [String("core.fields")], "writes": Array [String("vector.paint")], "per": String("item")}], "extract": Array [Object {"operator": String("marks2d.item"), "module": String("marks2d"), "version": String("1.0.0"), "reads": Array [String("core.fields"), String("core.world"), String("marks2d.at"), String("text.counter"), String("look.palette"), String("view(locale)")], "writes": Array [String("marks2d.item")], "per": String("item")}, Object {"operator": String("marks2d.frame"), "module": String("marks2d"), "version": String("1.0.0"), "reads": Array [String("refs"), String("reading"), String("core.world"), String("marks2d.at"), String("core.fields"), String("text.counter"), String("text.run"), String("text.animated"), String("look.palette"), String("marks2d.item")], "writes": Array [String("marks2d.frame")], "per": String("document")}, Object {"operator": String("text.status"), "module": String("text"), "version": String("1.0.0"), "reads": Array [String("refs"), String("reading"), String("core.world"), String("core.fields"), String("core.status"), String("table:text.fonts")], "writes": Array [String("text.status")], "per": String("document")}]}, "contributions": Object {"core.fields": Array [String("data.columns"), String("data.vector_field"), String("marks2d.warp"), String("motion.fields"), String("motion.flip"), String("text.columns")], "core.glyphs": Array [String("vector.glyphs")], "core.status": Array [String("look.status")], "core.transform": Array [String("data.follow"), String("motion.at"), String("motion.placed"), String("scene3d.rested")]}}
+ right: Object {"uri": String("deep://schedule/core@0.0.0"), "core": String("core@0.0.0"), "build_set": String("r2"), "set_digest": String("8cc42c5d48b3061283a4e7fa329e9d9a08f17314590b27bece7cff16508b567a"), "runtime_digest": String("4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"), "interfaces": Object {"cells@1": Object {"digest": String("2b72c9757df0c5cc3a578bbc5ba4595714c8e291458c26958bd777c880549049"), "reference": String("cells"), "kit": Array [String("fixtures"), String("clean_rebuild"), String("patch_fuzz"), String("read_set"), String("order"), String("schedule"), String("repair_loop"), String("carried_state"), String("late_entry"), String("time_order"), String("contribution"), String("catalog"), String("migration"), String("bit")], "behavior": String("none"), "module": String("cells"), "implementation": Object {"name": String("cells"), "version": String("1.0.0"), "pins": Object {}, "equivalence": String("bit"), "state": String("canonical")}}, "data@1": Object {"digest": String("75d055f587754b84d7405262fad9f52dbb0b16a8560d1534e1875f49df412e97"), "reference": String("data"), "kit": Array [String("fixtures"), String("clean_rebuild"), String("patch_fuzz"), String("read_set"), String("order"), String("schedule"), String("repair_loop"), String("carried_state"), String("late_entry"), String("time_order"), String("contribution"), String("catalog"), String("migration"), String("bit")], "behavior": String("none"), "module": String("data"), "implementation": Object {"name": String("data"), "version": String("1.0.0"), "pins": Object {}, "equivalence": String("bit"), "state": String("canonical")}}, "effects@1": Object {"digest": String("47efff0e92f65196c99d6ba9bbe39a782aa62eb4e031e5cb60132976c8fd9a7b"), "reference": String("effects"), "kit": Array [String("fixtures"), String("clean_rebuild"), String("patch_fuzz"), String("read_set"), String("order"), String("schedule"), String("repair_loop"), String("carried_state"), String("late_entry"), String("time_order"), String("contribution"), String("catalog"), String("migration"), String("bit")], "behavior": String("none"), "module": String("effects"), "implementation": Object {"name": String("effects"), "version": String("1.0.0"), "pins": Object {}, "equivalence": String("bit"), "state": String("canonical")}}, "graph@1": Object {"digest": String("8245f5f5ac084732c688dcedafe59f7d7e3931a37df0533426b5a1388932cd24"), "reference": String("graph"), "kit": Array [String("fixtures"), String("clean_rebuild"), String("patch_fuzz"), String("read_set"), String("order"), String("schedule"), String("repair_loop"), String("carried_state"), String("late_entry"), String("time_order"), String("contribution"), String("catalog"), String("migration"), String("bit")], "behavior": String("none"), "module": String("graph"), "implementation": Object {"name": String("graph"), "version": String("1.0.0"), "pins": Object {}, "equivalence": String("bit"), "state": String("canonical")}}, "look@1": Object {"digest": String("6e85fd95006b91596f17c25bd0c3070dce4f3f1ac38a5f3c521422d4f9338001"), "reference": String("look"), "kit": Array [String("fixtures"), String("clean_rebuild"), String("patch_fuzz"), String("read_set"), String("order"), String("schedule"), String("repair_loop"), String("carried_state"), String("late_entry"), String("time_order"), String("contribution"), String("catalog"), String("migration"), String("bit")], "behavior": String("none"), "module": String("look"), "implementation": Object {"name": String("look"), "version": String("1.0.0"), "pins": Object {}, "equivalence": String("bit"), "state": String("canonical")}}, "marks2d@1": Object {"digest": String("bacf98ca04edf98558b5e2b1980eb586ba97ae3486a5738c779b8a80950bc4e9"), "reference": String("marks2d"), "kit": Array [String("fixtures"), String("clean_rebuild"), String("patch_fuzz"), String("read_set"), String("order"), String("schedule"), String("repair_loop"), String("carried_state"), String("late_entry"), String("time_order"), String("contribution"), String("catalog"), String("migration"), String("bit")], "behavior": String("none"), "module": String("marks2d"), "implementation": Object {"name": String("marks2d"), "version": String("1.0.0"), "pins": Object {}, "equivalence": String("bit"), "state": String("canonical")}}, "motion@1": Object {"digest": String("fa3b261d76b2aca520756953c1fc8418f32938f08a296c000cda6ca24d18c14e"), "reference": String("motion"), "kit": Array [String("fixtures"), String("clean_rebuild"), String("patch_fuzz"), String("read_set"), String("order"), String("schedule"), String("repair_loop"), String("carried_state"), String("late_entry"), String("time_order"), String("contribution"), String("catalog"), String("migration"), String("bit")], "behavior": String("none"), "module": String("motion"), "implementation": Object {"name": String("motion"), "version": String("1.0.0"), "pins": Object {}, "equivalence": String("bit"), "state": String("canonical")}}, "record@1": Object {"digest": String("65f77a1cb350e333bb96a1f36a254f4d489bbb36a3a919391654a723b30c1021"), "reference": String("record"), "kit": Array [String("fixtures"), String("clean_rebuild"), String("patch_fuzz"), String("read_set"), String("order"), String("schedule"), String("repair_loop"), String("carried_state"), String("late_entry"), String("time_order"), String("contribution"), String("catalog"), String("migration"), String("bit")], "behavior": String("none"), "module": String("record"), "implementation": Object {"name": String("record"), "version": String("1.0.0"), "pins": Object {}, "equivalence": String("bit"), "state": String("canonical")}}, "scene3d@1": Object {"digest": String("947618fac9439cf3627c0a63d9ba3029751f4566a3477b3b33f3f4163a5c51e3"), "reference": String("scene3d"), "kit": Array [String("fixtures"), String("clean_rebuild"), String("patch_fuzz"), String("read_set"), String("order"), String("schedule"), String("repair_loop"), String("carried_state"), String("late_entry"), String("time_order"), String("contribution"), String("catalog"), String("migration"), String("bit")], "behavior": String("none"), "module": String("scene3d"), "implementation": Object {"name": String("scene3d"), "version": String("1.0.0"), "pins": Object {}, "equivalence": String("bit"), "state": String("canonical")}}, "sheet@1": Object {"digest": String("d24e60e7c85d9663922617ca0d3c22f8d53e23caf3564cbc6ea1480cb4b57f18"), "reference": String("sheet"), "kit": Array [String("fixtures"), String("clean_rebuild"), String("patch_fuzz"), String("read_set"), String("order"), String("schedule"), String("repair_loop"), String("carried_state"), String("late_entry"), String("time_order"), String("contribution"), String("catalog"), String("migration"), String("bit")], "behavior": String("none"), "module": String("sheet"), "implementation": Object {"name": String("sheet"), "version": String("1.0.0"), "pins": Object {}, "equivalence": String("bit"), "state": String("canonical")}}, "text@1": Object {"digest": String("adc297495eb1a9be4918d0a7e9620be4f459deb800ea168ecd3ca5a995d98350"), "reference": String("text"), "kit": Array [String("fixtures"), String("clean_rebuild"), String("patch_fuzz"), String("read_set"), String("order"), String("schedule"), String("repair_loop"), String("carried_state"), String("late_entry"), String("time_order"), String("contribution"), String("catalog"), String("migration"), String("bit")], "behavior": String("none"), "module": String("text"), "implementation": Object {"name": String("text"), "version": String("1.0.0"), "pins": Object {}, "equivalence": String("bit"), "state": String("canonical")}}, "vector@1": Object {"digest": String("0de50548636508ccbcf2ee8a4efd85632b4bd29f4da366e88350cdf4b0df4f62"), "reference": String("vector"), "kit": Array [String("fixtures"), String("clean_rebuild"), String("patch_fuzz"), String("read_set"), String("order"), String("schedule"), String("repair_loop"), String("carried_state"), String("late_entry"), String("time_order"), String("contribution"), String("catalog"), String("migration"), String("bit")], "behavior": String("none"), "module": String("vector"), "implementation": Object {"name": String("vector"), "version": String("1.0.0"), "pins": Object {}, "equivalence": String("bit"), "state": String("canonical")}}}, "phases": Object {"validate": Array [Object {"operator": String("core.lower"), "module": String("core"), "version": String("0.0.0"), "reads": Array [String("self")], "writes": Array [String("core.lowered")], "per": String("item")}], "plan": Array [Object {"operator": String("motion.arrange"), "module": String("motion"), "version": String("1.0.0"), "reads": Array [String("refs")], "writes": Array [String("motion.arranged")], "per": String("document")}, Object {"operator": String("motion.compile"), "module": String("motion"), "version": String("1.0.0"), "reads": Array [String("refs")], "writes": Array [String("motion.program")], "per": String("document")}, Object {"operator": String("scene3d.rest"), "module": String("scene3d"), "version": String("1.0.0"), "reads": Array [String("refs")], "writes": Array [String("scene3d.rests")], "per": String("document")}], "build": Array [Object {"operator": String("scene3d.scatter"), "module": String("scene3d"), "version": String("1.0.0"), "reads": Array [String("self"), String("refs")], "writes": Array [String("scene3d.scattered")], "per": String("item")}], "items": Array [Object {"operator": String("cells.grid"), "module": String("cells"), "version": String("1.0.0"), "reads": Array [String("self"), String("look"), String("t"), String("reading"), String("refs")], "writes": Array [String("cells.grid")], "per": String("item")}, Object {"operator": String("core.fields"), "module": String("core"), "version": String("0.0.0"), "reads": Array [String("core.lowered")], "writes": Array [String("core.fields")], "per": String("item")}, Object {"operator": String("core.status"), "module": String("core"), "version": String("0.0.0"), "reads": Array [String("look")], "writes": Array [String("core.status")], "per": String("document")}, Object {"operator": String("core.transform"), "module": String("core"), "version": String("0.0.0"), "reads": Array [String("core.lowered")], "writes": Array [String("core.transform")], "per": String("item")}, Object {"operator": String("data.columns"), "module": String("data"), "version": String("1.0.0"), "reads": Array [String("self"), String("t")], "writes": Array [String("data.columns"), String("data.mapped")], "per": String("item")}, Object {"operator": String("data.follow_stream"), "module": String("data"), "version": String("1.0.0"), "reads": Array [String("refs"), String("t")], "writes": Array [String("data.follow")], "per": String("item")}, Object {"operator": String("data.vector_field"), "module": String("data"), "version": String("1.0.0"), "reads": Array [String("self"), String("t")], "writes": Array [String("data.vector_field")], "per": String("item")}, Object {"operator": String("look.palette"), "module": String("look"), "version": String("1.0.0"), "reads": Array [String("look")], "writes": Array [String("look.palette"), String("look.status")], "per": String("document")}, Object {"operator": String("look.finish"), "module": String("look"), "version": String("1.0.0"), "reads": Array [String("self"), String("look.palette")], "writes": Array [String("look.finish")], "per": String("item")}, Object {"operator": String("marks2d.warp"), "module": String("marks2d"), "version": String("1.0.0"), "reads": Array [String("self"), String("t")], "writes": Array [String("marks2d.warp")], "per": String("item")}, Object {"operator": String("motion.arrangelive"), "module": String("motion"), "version": String("1.0.0"), "reads": Array [String("self"), String("refs"), String("t")], "writes": Array [String("motion.arrangelive")], "per": String("item")}, Object {"operator": String("motion.channels"), "module": String("motion"), "version": String("1.0.0"), "reads": Array [String("motion.program"), String("t"), String("view(reduced_motion)"), String("self")], "writes": Array [String("motion.at"), String("motion.fields")], "per": String("item")}, Object {"operator": String("motion.clock"), "module": String("motion"), "version": String("1.0.0"), "reads": Array [String("motion.program"), String("t")], "writes": Array [String("motion.next")], "per": String("document")}, Object {"operator": String("motion.flip"), "module": String("motion"), "version": String("1.0.0"), "reads": Array [String("self"), String("refs"), String("t")], "writes": Array [String("motion.flip")], "per": String("item")}, Object {"operator": String("motion.placed"), "module": String("motion"), "version": String("1.0.0"), "reads": Array [String("motion.arranged")], "writes": Array [String("motion.placed")], "per": String("item")}, Object {"operator": String("scene3d.build"), "module": String("scene3d"), "version": String("1.0.0"), "reads": Array [String("self"), String("refs"), String("motion.fields")], "writes": Array [String("scene3d.built")], "per": String("item")}, Object {"operator": String("scene3d.lights"), "module": String("scene3d"), "version": String("1.0.0"), "reads": Array [String("refs"), String("t"), String("look")], "writes": Array [String("scene3d.lights")], "per": String("document")}, Object {"operator": String("scene3d.mark"), "module": String("scene3d"), "version": String("1.0.0"), "reads": Array [String("self"), String("motion.fields")], "writes": Array [String("scene3d.marked")], "per": String("item")}, Object {"operator": String("scene3d.rebuild"), "module": String("scene3d"), "version": String("1.0.0"), "reads": Array [String("self"), String("refs"), String("motion.fields"), String("t")], "writes": Array [String("scene3d.livebuilt")], "per": String("item")}, Object {"operator": String("scene3d.restlive"), "module": String("scene3d"), "version": String("1.0.0"), "reads": Array [String("refs"), String("t"), String("motion.program")], "writes": Array [String("scene3d.restslive")], "per": String("document")}, Object {"operator": String("scene3d.rested"), "module": String("scene3d"), "version": String("1.0.0"), "reads": Array [String("scene3d.rests"), String("scene3d.restslive")], "writes": Array [String("scene3d.rested")], "per": String("item")}, Object {"operator": String("core.world"), "module": String("core"), "version": String("0.0.0"), "reads": Array [String("core.transform"), String("parent")], "writes": Array [String("core.world")], "per": String("item")}, Object {"operator": String("scene3d.shade"), "module": String("scene3d"), "version": String("1.0.0"), "reads": Array [String("self"), String("motion.fields")], "writes": Array [String("scene3d.shaded")], "per": String("item")}, Object {"operator": String("scene3d.stack"), "module": String("scene3d"), "version": String("1.0.0"), "reads": Array [String("self")], "writes": Array [String("scene3d.stack")], "per": String("item")}, Object {"operator": String("text.copy_columns"), "module": String("text"), "version": String("1.0.0"), "reads": Array [String("self"), String("refs"), String("t"), String("view(locale)"), String("table:text.plurals")], "writes": Array [String("text.columns")], "per": String("item")}, Object {"operator": String("data.decimate"), "module": String("data"), "version": String("1.0.0"), "reads": Array [String("core.fields")], "writes": Array [String("data.decimated")], "per": String("item")}, Object {"operator": String("data.scale"), "module": String("data"), "version": String("1.0.0"), "reads": Array [String("core.fields")], "writes": Array [String("data.scale")], "per": String("item")}, Object {"operator": String("graph.layout"), "module": String("graph"), "version": String("1.0.0"), "reads": Array [String("core.fields")], "writes": Array [String("graph.layout")], "per": String("item")}, Object {"operator": String("record.salience"), "module": String("record"), "version": String("1.0.0"), "reads": Array [String("core.fields")], "writes": Array [String("record.level")], "per": String("item")}, Object {"operator": String("sheet.place"), "module": String("sheet"), "version": String("1.0.0"), "reads": Array [String("core.fields")], "writes": Array [String("sheet.placed")], "per": String("item")}, Object {"operator": String("text.copy"), "module": String("text"), "version": String("1.0.0"), "reads": Array [String("core.fields"), String("refs"), String("t"), String("view(locale)"), String("table:text.plurals")], "writes": Array [String("text.copy")], "per": String("item")}, Object {"operator": String("text.counter"), "module": String("text"), "version": String("1.0.0"), "reads": Array [String("core.fields"), String("refs"), String("reading"), String("view(locale)"), String("text.copy")], "writes": Array [String("text.counter")], "per": String("item")}, Object {"operator": String("text.shape"), "module": String("text"), "version": String("1.0.0"), "reads": Array [String("core.fields"), String("text.counter"), String("view(locale)"), String("table:text.fonts"), String("look")], "writes": Array [String("text.run")], "per": String("item")}, Object {"operator": String("marks2d.relations"), "module": String("marks2d"), "version": String("1.0.0"), "reads": Array [String("refs"), String("core.world"), String("core.transform"), String("core.fields"), String("text.run"), String("text.counter"), String("table:text.fonts")], "writes": Array [String("marks2d.places")], "per": String("document")}, Object {"operator": String("marks2d.place"), "module": String("marks2d"), "version": String("1.0.0"), "reads": Array [String("core.world"), String("marks2d.places")], "writes": Array [String("marks2d.at")], "per": String("item")}, Object {"operator": String("text.animate"), "module": String("text"), "version": String("1.0.0"), "reads": Array [String("core.fields"), String("text.run"), String("view(reduced_motion)")], "writes": Array [String("text.animated")], "per": String("item")}, Object {"operator": String("vector.glyphs"), "module": String("vector"), "version": String("1.0.0"), "reads": Array [String("core.fields")], "writes": Array [String("vector.glyphs")], "per": String("item")}, Object {"operator": String("vector.paint"), "module": String("vector"), "version": String("1.0.0"), "reads": Array [String("core.fields")], "writes": Array [String("vector.paint")], "per": String("item")}], "extract": Array [Object {"operator": String("marks2d.item"), "module": String("marks2d"), "version": String("1.0.0"), "reads": Array [String("core.fields"), String("core.world"), String("marks2d.at"), String("text.counter"), String("look.palette"), String("view(locale)")], "writes": Array [String("marks2d.item")], "per": String("item")}, Object {"operator": String("marks2d.frame"), "module": String("marks2d"), "version": String("1.0.0"), "reads": Array [String("refs"), String("reading"), String("core.world"), String("marks2d.at"), String("core.fields"), String("text.counter"), String("text.run"), String("text.animated"), String("look.palette"), String("marks2d.item")], "writes": Array [String("marks2d.frame")], "per": String("document")}, Object {"operator": String("text.status"), "module": String("text"), "version": String("1.0.0"), "reads": Array [String("refs"), String("reading"), String("core.world"), String("core.fields"), String("core.status"), String("table:text.fonts")], "writes": Array [String("text.status")], "per": String("document")}]}, "contributions": Object {"core.fields": Array [String("data.columns"), String("data.vector_field"), String("marks2d.warp"), String("motion.fields"), String("motion.flip"), String("text.columns")], "core.glyphs": Array [String("vector.glyphs")], "core.status": Array [String("look.status")], "core.transform": Array [String("data.follow"), String("motion.at"), String("motion.placed"), String("scene3d.rested")]}}
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    tests::the_published_schedule_matches_its_committed_snapshot
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 48 filtered out; finished in 1.39s
+
+error: test failed, to rerun pass `-p deep-show --bin deep-show`
