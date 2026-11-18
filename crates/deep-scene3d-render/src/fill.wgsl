@@ -139,21 +139,28 @@ fn assign(@builtin(global_invocation_id) id: vec3<u32>) {
     }
     let cap = params.count.y;
     let base = cell * (2u + 2u * cap);
-    let b = bounds(cell);
     let at = place(cell);
-    var bits: array<u32, 64>;
-    var kept = 0u;
-    var total = 0u;
-    var cut = NONE;
     // Its bin's lights: the ones whose span holds its slice and its tile row, two to a word.
     let bin = BY_SLICE + at.z * TILES.y + at.y;
     let lights = BY_SLICE + SLICES * TILES.y + 1u;
-    for (var k = spans[bin]; k < spans[bin + 1u]; k++) {
+    let first = spans[bin];
+    let last = spans[bin + 1u];
+    // A cell no light's span comes near holds none, and needs no box.
+    if first == last {
+        lists[base] = 0u;
+        lists[base + 1u] = 0u;
+        report[cell] = 0u;
+        return;
+    }
+    let b = bounds(cell);
+    var kept = 0u;
+    var total = 0u;
+    var cut = NONE;
+    for (var k = first; k < last; k++) {
         let i = (spans[lights + (k >> 1u)] >> ((k & 1u) * 16u)) & 0xffffu;
         if !within(spans[i], at) || !reaches(b, reach[i].at) {
             continue;
         }
-        bits[i >> 5u] |= 1u << (i & 31u);
         if kept < cap {
             lists[base + 2u + kept] = i;
             kept++;
@@ -172,9 +179,17 @@ fn assign(@builtin(global_invocation_id) id: vec3<u32>) {
         lists[base + 2u + cap + k] = bitcast<u32>(w);
     }
     report[cell] = total;
+    // Past its cap, a bit for every light that reached it, walked once more.
     if total > cap {
+        let word = CELLS + cell * WORDS;
         for (var k = 0u; k < WORDS; k++) {
-            report[CELLS + cell * WORDS + k] = bits[k];
+            report[word + k] = 0u;
+        }
+        for (var k = first; k < last; k++) {
+            let i = (spans[lights + (k >> 1u)] >> ((k & 1u) * 16u)) & 0xffffu;
+            if within(spans[i], at) && reaches(b, reach[i].at) {
+                report[word + (i >> 5u)] |= 1u << (i & 31u);
+            }
         }
     }
 }
