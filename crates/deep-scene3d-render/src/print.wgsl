@@ -19,9 +19,9 @@ struct Params {
     size: vec4<f32>,
     // A frame pixel's place on the plate: plate = p × size.z + world.xy.
     world: vec4<f32>,
-    // x: what runs (FLAG_*), y: the document seed, z: separations, w: unused.
+    // x: what runs (FLAG_*), y: the document seed, z: separations, w: the tracking band's seed.
     flags: vec4<u32>,
-    // The grain's, the wear's and the screen's frame index at their rates.
+    // The grain's, the wear's, the screen's and the tracking band's frame index at their rates.
     steps: vec4<u32>,
     // Amount, cell size px, midtones (1) or flat (0), unused.
     grain: vec4<f32>,
@@ -39,10 +39,15 @@ struct Params {
     tone: vec4<f32>,
     // The tone curve's black (encoded); w: unused.
     black: vec4<f32>,
-    // Scanlines, mask (0 none, 1 aperture, 2 shadow, 3 slot), curvature, convergence px.
+    // Scanlines, mask (0 none, 1 aperture, 2 shadow, 3 slot), curvature, unused.
     screen: vec4<f32>,
     // Bleed, noise, unused, unused.
     screen2: vec4<f32>,
+    // The convergence's offset in px (x, y), red read that far along it and blue against it;
+    // the rows the picture has rolled; unused.
+    screen3: vec4<f32>,
+    // The tracking band: its top row, its height px, its shift px; unused.
+    tracking: vec4<f32>,
     // The ground (encoded), where a 3D surface printed as a separation leaves paper.
     ground: vec4<f32>,
     seps: array<Sep, 4>,
@@ -270,10 +275,23 @@ fn print(frag: vec2<f32>) -> Printed {
     if (P.flags.x & FLAG_WEAR) != 0u {
         s = s - P.wear.yz;
     }
+    // #1619: the roll, the picture slipped whole rows and wrapped at the frame's foot.
+    if screen_on && P.screen3.z != 0.0 {
+        let y = s.y + P.screen3.z;
+        s.y = y - size.y * floor(y / size.y);
+    }
+    // #1619: the tracking band, each of its rows read up to its shift to the side.
+    if screen_on && P.tracking.y > 0.0 {
+        let row = floor(s.y);
+        if row >= P.tracking.x && row < P.tracking.x + P.tracking.y {
+            s.x = s.x + P.tracking.z * (2.0 * unit(u32(row), P.steps.w, P.flags.w) - 1.0);
+        }
+    }
     var c = paper(s);
-    if screen_on && P.screen.w != 0.0 {
-        c.r = paper(s + vec2<f32>(P.screen.w, 0.0)).r;
-        c.b = paper(s - vec2<f32>(P.screen.w, 0.0)).b;
+    let parted = P.screen3.xy;
+    if screen_on && (parted.x != 0.0 || parted.y != 0.0) {
+        c.r = paper(s + parted).r;
+        c.b = paper(s - parted).b;
     }
     if screen_on && P.screen2.x > 0.0 {
         let spread = (paper(s - vec2<f32>(2.0, 0.0)) + paper(s - vec2<f32>(1.0, 0.0))
