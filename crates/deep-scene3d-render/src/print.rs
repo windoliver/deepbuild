@@ -41,6 +41,8 @@ pub struct Params {
     black: [f32; 4],
     screen: [f32; 4],
     screen2: [f32; 4],
+    screen3: [f32; 4],
+    tracking: [f32; 4],
     ground: [f32; 4],
     seps: [Sep; MAX_SEPARATIONS],
 }
@@ -80,6 +82,8 @@ impl Default for Placed {
 pub struct Planted {
     /// The vignette's radius in px from the centre over the short half-axis.
     pub vignette_pixels: bool,
+    /// #1619: the convergence's offsets along x, whatever its angle says.
+    pub convergence_angle_ignored: bool,
 }
 
 /// The pass's uniforms for one frame of `print` at `size`.
@@ -98,7 +102,13 @@ pub fn params(
     p.world = [placed.offset[0] as f32, placed.offset[1] as f32, 0.0, 0.0];
     let mut flags = 0;
     p.flags[1] = frame.seed;
-    p.steps = [frame.grain_step, frame.wear_step, frame.screen_step, 0];
+    p.flags[3] = frame.tracking_seed;
+    p.steps = [
+        frame.grain_step,
+        frame.wear_step,
+        frame.screen_step,
+        frame.tracking_step,
+    ];
     if !print.separations.is_empty() {
         flags |= FLAG_SEPS;
         p.flags[2] = print.separations.len() as u32;
@@ -199,13 +209,29 @@ pub fn params(
             Mask::Shadow => 2.0,
             Mask::Slot => 3.0,
         };
-        p.screen = [
-            s.scanlines as f32,
-            mask,
-            s.curvature as f32,
-            s.convergence as f32,
-        ];
+        p.screen = [s.scanlines as f32, mask, s.curvature as f32, 0.0];
         p.screen2 = [s.bleed as f32, s.noise as f32, 0.0, 0.0];
+        // #1619: red is read `convergence` px along the angle and blue as far against it; the
+        // picture rolls by whole rows.
+        let angle = match planted.convergence_angle_ignored {
+            true => 0.0,
+            false => s.convergence_angle,
+        };
+        let (sin, cos) = angle.to_radians().sin_cos();
+        p.screen3 = [
+            (s.convergence * cos) as f32,
+            (s.convergence * sin) as f32,
+            (frame.roll * f64::from(size[1])).floor() as f32,
+            0.0,
+        ];
+        if let Some(band) = s.tracking {
+            p.tracking = [
+                (frame.tracking * f64::from(size[1])).floor() as f32,
+                band.band as f32,
+                band.shift as f32,
+                0.0,
+            ];
+        }
     }
     p.flags[0] = flags;
     p
