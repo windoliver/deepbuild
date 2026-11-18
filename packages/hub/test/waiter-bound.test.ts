@@ -1,7 +1,8 @@
 // deep-hook's waiter holds no control token (#1851): the hub binds it to its session by the agent process it runs
 // under, checked by that process's start time, and on that connection it waits only on its own session's answers.
 import { spawn } from 'node:child_process';
-import { readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
@@ -27,15 +28,16 @@ async function firstAsk(root: string): Promise<string | undefined> {
 
 /**
  * A child of this process (the agent of the sessions whose hooks name it) that says hello as `session`'s waiter and,
- * once bound, waits on `on`: the lines the hub wrote back, the hub's own hello first.
+ * once bound, waits on `on`: the lines the hub wrote back, the hub's own hello first. `mark` goes into its arguments,
+ * where `reusedPs` looks for it.
  */
-function rawWaiter(sock: string, session: string, on: string, gate = ''): Promise<{ pid: number; lines: Record<string, unknown>[] }> {
+function rawWaiter(sock: string, session: string, on: string, gate = '', mark = ''): Promise<{ pid: number; lines: Record<string, unknown>[] }> {
   const script = `const s=require('net').connect(process.argv[1]);let got='',n=0;s.setEncoding('utf8');
 s.on('data',(d)=>{got+=d;const ls=got.split('\\n');while(ls.length-1>n){const l=JSON.parse(ls[n++]);console.log(JSON.stringify(l));
 if('hello' in l)s.write(JSON.stringify({v:1,hello:'waiter',session:process.argv[2]})+'\\n');
 else if(typeof l.role==='string'){const go=()=>{if(process.argv[4]&&!require('fs').existsSync(process.argv[4]))return setTimeout(go,50);s.write(JSON.stringify({v:1,id:'w1',method:'session.wait',params:{session:process.argv[3],cwd:'',since:Date.now()}})+'\\n');};go();}
 else process.exit(0);}});s.on('close',()=>process.exit(0));setTimeout(()=>process.exit(0),8000);`;
-  const child = spawn(process.execPath, ['-e', script, sock, session, on, gate], { stdio: ['ignore', 'pipe', 'inherit'] });
+  const child = spawn(process.execPath, ['-e', script, sock, session, on, gate, mark], { stdio: ['ignore', 'pipe', 'inherit'] });
   let out = '';
   child.stdout.on('data', (d: Buffer) => { out += d.toString(); });
   return new Promise((resolve) => child.on('exit', () => resolve({ pid: child.pid!, lines: out.trim().split('\n').filter(Boolean).map((l) => JSON.parse(l) as Record<string, unknown>) })));
@@ -166,4 +168,57 @@ it('binds the waiter of a session a /compact rotated in its process: its IDs are
     const bound = await rawWaiter(sock, h, h);
     expect(bound.lines[1], `bound to ${h}: ${JSON.stringify(bound.lines[1])}`).toMatchObject({ role: `waiter:${h}` });
   });
+}, 120_000);
+
+/**
+ * A directory holding a stand-in `ps`, the OS's own in every answer but one: the start time of a process whose arguments
+ * carry `reused-later` reads an hour from now, as a PID reused after the connection came in would; one whose arguments
+ * carry `reused-meanwhile` reads its own start once and a day later after that, as a PID reused while the hub looks.
+ */
+function reusedPs(): string {
+  const dir = mkdtempSync(join(tmpdir(), 'ps-1851-'));
+  const real = ['/bin/ps', '/usr/bin/ps'].find((path) => { try { readFileSync(path); return true; } catch { return false; } })!;
+  writeFileSync(join(dir, 'ps'), `#!${process.execPath}
+const { execFileSync } = require('node:child_process');
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+const ps = (a) => execFileSync(${JSON.stringify(real)}, a, { encoding: 'utf8' });
+const lstart = (d) => d.toDateString().slice(0, 10) + ' ' + d.toTimeString().slice(0, 8) + ' ' + d.getFullYear();
+let out;
+try { out = ps(args); } catch (error) { process.stdout.write(error.stdout ?? ''); process.exit(error.status ?? 1); }
+if (args.join(' ') === '-o lstart= -p ' + args[3]) {
+  let line = '';
+  try { line = ps(['-o', 'args=', '-p', args[3]]); } catch {}
+  const seen = ${JSON.stringify(dir)} + '/seen.' + args[3];
+  if (line.includes('reused-later')) out = lstart(new Date(Date.now() + 3600_000)) + '\\n';
+  else if (line.includes('reused-meanwhile')) {
+    if (fs.existsSync(seen)) out = lstart(new Date(Date.parse(out.trim()) + 86400_000)) + '\\n';
+    fs.writeFileSync(seen, '');
+  }
+}
+process.stdout.write(out);
+`);
+  chmodSync(join(dir, 'ps'), 0o755);
+  return dir;
+}
+
+it('binds no waiter whose PID names a process that started after its connection came in, or changed while the hub looked', async () => {
+  const r = '7c4d5e60-1851-4222-8333-444455553333';
+  const dir = reusedPs();
+  try {
+    await withHub(async (root, home) => {
+      const sock = join(root, 'hub.sock');
+      const sr = session(home, r);
+      await reply(sock, hookLine(ulid(Date.now()), 'SessionStart', sr.payload('SessionStart', { source: 'startup' }), { ppid: process.pid }));
+      // A child of the agent as the waiter is, so only its start time stands between it and the binding.
+      const own = await rawWaiter(sock, r, r);
+      expect(own.lines[1], `the agent's own child binds: ${JSON.stringify(own.lines[1])}`).toMatchObject({ role: `waiter:${r}` });
+      const later = await rawWaiter(sock, r, r, '', 'reused-later');
+      expect(JSON.stringify(later.lines[1]), 'a start past the connection').toContain(`Process ${later.pid} started after this connection was made`);
+      const meanwhile = await rawWaiter(sock, r, r, '', 'reused-meanwhile');
+      expect(JSON.stringify(meanwhile.lines[1]), 'a start that changed while the hub looked').toContain(`Process ${meanwhile.pid} changed while the hub looked at it`);
+    }, { PATH: `${dir}:${process.env.PATH}` });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 }, 120_000);
