@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { runKit } from '@deepbuild/conformance';
-import { pieces, playtestKit } from '../playtest/kit.ts';
+import { pieces, playtestKit, reachKit, reachPieces } from '../playtest/kit.ts';
 import { outcomeOf } from '../playtest/judge.ts';
 import type { Play, PlayAnswer } from '../playtest/types.ts';
 
@@ -81,6 +81,32 @@ describe('the playtest kit', () => {
       const report = await runKit(kit, p.fill, { parts: ['fixed'] });
       expect(report.verdict, `${p.name} is caught`).toBe('FAIL');
       expect(report.cases.some((c) => c.codes.some((code) => p.codes.includes(code))), `${p.name} is caught by its rule`).toBe(true);
+    }
+  }, 3_600_000);
+
+  // #556: grid.reach's kit, each planted runner caught by its fixture: opens-locks by the key inside its own vault.
+  it('passes grid.reach\'s clean fixtures and catches each planted runner', async () => {
+    const built = spawnSync('cargo', ['build', '--locked', '-p', 'deep-replica', '--bin', 'deep-drive', '--features', 'env-plants'], { cwd: REPO, stdio: 'inherit' });
+    expect(built.status, 'deep-drive builds').toBe(0);
+    const kitPieces = reachPieces();
+    const play = drive(null);
+    const seen = new Map<string, Promise<PlayAnswer>>();
+    const replica = (): Play => async (piece, run) => {
+      const key = JSON.stringify([piece, run]);
+      if (!seen.has(key)) {
+        seen.set(key, play({ call: 'play', ...kitPieces[piece.slice(0, piece.lastIndexOf('@'))], ...run }).then((r) => {
+          if (r['ok'] !== true) throw Error(JSON.stringify(r['error']));
+          return r as unknown as PlayAnswer;
+        }));
+      }
+      return seen.get(key)!;
+    };
+    const kit = reachKit(replica);
+    const clean = await runKit(kit, kit.clean()[0]!, { parts: ['fixed'] });
+    expect(clean.cases.filter((c) => c.outcome !== 'PASS'), 'the reference passes every case').toEqual([]);
+    for (const p of kit.planted) {
+      const report = await runKit(kit, p.fill, { parts: ['fixed'] });
+      expect(report.cases.filter((c) => c.outcome === 'FAIL' && c.codes.some((code) => p.codes.includes(code))).length, `${p.name} is caught by its rule`).toBeGreaterThan(0);
     }
   }, 3_600_000);
 });

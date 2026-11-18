@@ -227,6 +227,17 @@ impl Player {
         Ok(())
     }
 
+    /// #860: the viewer's back. On a piece that declares rewind it is a rewind to the stop before,
+    /// at the shown time, which the piece plays on from as the app's does; whether it wrote one.
+    pub fn back(&mut self) -> Result<bool, JsValue> {
+        let files = &self.files;
+        let read = |sha: &str| files.get(sha).cloned();
+        match self.played.as_mut() {
+            Some(p) => p.back(self.sealed, &read).map_err(fail),
+            None => Ok(false),
+        }
+    }
+
     /// The document's accessibility tree (#1045), as JSON `[{id, role, name, …}]` in reading
     /// order: the one the app gives its accessibility seam, read through the core.
     pub fn tree(&self) -> String {

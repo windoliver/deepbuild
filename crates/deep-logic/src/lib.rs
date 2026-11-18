@@ -107,6 +107,11 @@ pub struct Planted {
     pub outside_interface_binds_all: bool,
     /// #210: an `each` reading's read region that keeps only the last value a step received.
     pub read_region_keeps_last: bool,
+    /// #860: a rewind that puts back only each item's arrays as the stop left them, leaving the
+    /// rest of its memory and its globals as they stood when the rewind came.
+    pub rewind_restores_arrays_only: bool,
+    /// #860: a rewind that zeroes the carried seen array instead of keeping it.
+    pub rewind_clears_seen: bool,
 }
 
 impl Planted {
@@ -160,6 +165,8 @@ impl Planted {
             "restore_zeroes_move_count" => p.restore_zeroes_move_count = true,
             "outside_interface_binds_all" => p.outside_interface_binds_all = true,
             "read_region_keeps_last" => p.read_region_keeps_last = true,
+            "rewind_restores_arrays_only" => p.rewind_restores_arrays_only = true,
+            "rewind_clears_seen" => p.rewind_clears_seen = true,
             _ => return None,
         }
         Some(self)
@@ -737,7 +744,7 @@ impl Logic {
         Ok(json!({
             "ok": true, "items": items(&piece), "keys": keys, "steps": rec.steps_json(&piece, only), "occurrences": rec.occurrences(&piece), "checkpoints": rec.checkpoints, "ranges": rec.ranges_json(&piece, only), "ring": world.ring(),
             "traps": libraries_in(&piece, rec.traps), "issues": rec.issues, "budgets": budgets, "saves": saves, "frames": frames, "restores": restores_out, "probes": probes_out, "seeks": seeks_out, "peeks": peeks,
-            "track": entries.iter().map(Entry::to_json).collect::<Vec<_>>(),
+            "track": entries.iter().map(Entry::to_json).collect::<Vec<_>>(), "closed": world.branches.closed_json(),
         }))
     }
 
@@ -1052,7 +1059,9 @@ impl Logic {
         // The web runner steps every step and fills reads alone: a turn clock would bake wrong
         // hashes there, and it has no mirrors or services.
         let unbuilt = piece.items.iter().find_map(|i| {
-            let field = if i.turn {
+            let field = if piece.rewind.is_some() {
+                "rewind"
+            } else if i.turn {
                 "clock"
             } else if !i.mirrors.is_empty() {
                 "mirrors"

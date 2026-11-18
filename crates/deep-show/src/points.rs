@@ -710,6 +710,10 @@ impl Hub<'_> {
             .filter(|p| (1..=8).contains(p))
             .unwrap_or(2);
         let track = self.track_read(doc);
+        // #860: a rewind would desync the other players, so a match refuses one, naming it.
+        if track.iter().any(|e| e.get("rewind").is_some()) {
+            return json!({"code": "rewind.in_match", "match": net.get("id")});
+        }
         let piece = match self.logic_piece(&form, &track) {
             Ok(Some(p)) => Rc::new(p),
             Ok(None) => return json!({"code": "no_logic"}),
