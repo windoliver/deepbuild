@@ -2,14 +2,17 @@
 // It seeds a record in a temp HOME with a heavy month, 20 sessions a day each with a prompt, a tool call and a finished
 // stop, then 30 live ones (an open ask on three, a stuck stop on three), starts the hub on it, and times five
 // `deep status` runs after a warm-up, printing the median as one JSON line. The issue's 200 ms stays in
-// tests/acceptance/19/status/budgets.test.ts. It stops only the hub it started, by PID.
+// tests/acceptance/19/status/budgets.test.ts. Beside it go, for each timed round, the command's own instructions and
+// peak footprint and an empty Node program's instructions, and the modules the command loads (#2698, by
+// process-reader.mjs). It stops only the hub it started, by PID.
 import { execFileSync, spawn } from 'node:child_process';
-import { mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { askSources } from '../packages/asks/dist/index.js';
 import { openRecord } from '../packages/record/dist/index.js';
+import { loadedModules, readCommand, unread } from './process-reader.mjs';
 
 const CLI = fileURLToPath(new URL('../packages/cli/dist/main.js', import.meta.url));
 const DAY = 86_400_000;
@@ -51,7 +54,8 @@ await record.close();
 const hub = spawn(process.execPath, [CLI, 'hub', 'run'], { env, stdio: ['ignore', 'pipe', 'inherit'] });
 try {
   await new Promise((resolve, reject) => { hub.stdout.once('data', resolve); hub.once('exit', () => reject(Error('the hub did not start'))); });
-  const runs = [];
+  const runs = [], instructions = [], emptyInstructions = [], peakFootprintBytes = [];
+  writeFileSync(join(dir, 'empty.mjs'), '');
   for (let i = 0; i <= 5; i++) {
     const t0 = performance.now();
     const out = execFileSync(process.execPath, [CLI, 'status'], { env, encoding: 'utf8' });
@@ -59,9 +63,17 @@ try {
     const missing = attention.filter((id) => !out.split('\n').slice(0, 20).some((line) => line.includes(id)));
     if (missing.length) throw Error(`deep status left ${missing.join(', ')} out of its first 20 lines:\n${out}`);
     // The first run warms the hub and the file cache; it isn't counted.
-    if (i > 0) runs.push(ms);
+    if (i === 0) continue;
+    runs.push(ms);
+    // The round's command once more, untimed, for its own instructions and peak, then an empty Node program (#2698).
+    const counted = await readCommand(process.execPath, [CLI, 'status'], { env });
+    instructions.push(counted.instructions);
+    peakFootprintBytes.push(counted.peakFootprintBytes);
+    emptyInstructions.push((await readCommand(process.execPath, [join(dir, 'empty.mjs')], { env })).instructions);
   }
-  console.log(JSON.stringify({ statusMs: median(runs), sessions: 630 }));
+  const modules = await loadedModules((args, added) => execFileSync(process.execPath, [...args, CLI, 'status'], { env: { ...env, ...added }, stdio: 'ignore' }));
+  console.log(JSON.stringify({ statusMs: median(runs), sessions: 630, instructions, emptyInstructions, peakFootprintBytes, modules,
+    ...unread({ "deep status's instructions": instructions, "an empty Node program's instructions": emptyInstructions, "deep status's peak footprint": peakFootprintBytes }) }));
 } finally {
   hub.kill('SIGTERM');
   await new Promise((resolve) => (hub.exitCode !== null ? resolve() : hub.once('exit', resolve)));

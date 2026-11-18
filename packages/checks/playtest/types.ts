@@ -60,10 +60,14 @@ export interface PlayAnswer {
   frames: { step: number; sha256: string }[];
   /** #1048: a soak's logic memories, the bytes of their pages holding a nonzero byte, at each window's last step. */
   memory?: { step: number; bytes: number }[];
+  /** #556: each array the run asked `changes` for, at step 0 and at each step it differs from the step before. */
+  changes?: Record<string, { step: number; value: unknown }[]>;
 }
 /** `deep.canvas.play`'s run. */
 export interface PlayRun {
   seed: number; piece_seed?: 'own' | 'run'; span?: Span; bot?: Lowered; track?: Record<string, unknown>[]; values: string[]; frames: number[]; play?: PlayIface;
+  /** #556: array paths recorded only at step 0 and at the steps they change, so a grid isn't copied at every step. */
+  changes?: string[];
   /** #1048: the run's track played once and, at each step, each test's entries put in a throwaway copy (rules.legal, logic.edges). */
   probe?: { at: { step: number; tests: ({ row: number[] } | { entries: { control: string; value: unknown }[] })[] }[]; settle?: number; ranges?: Record<string, [number, number]> };
   /** #1048: a soak's readings every `every` steps. */
