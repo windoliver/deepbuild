@@ -16,6 +16,10 @@ pub enum Plant {
     AnswersYourRecord,
     /// A panel's clipboard write reaches the system pasteboard.
     WritesClipboard,
+    /// #1498: ⌘C writes a text's selected graphemes in the order they are drawn, not in logical order.
+    CopiesDrawnOrder,
+    /// #1498: ⌘C joins the selected text items in their draw order, not in reading order.
+    CopiesDrawOrder,
     /// The replica takes the front of your screen when it is acted on.
     MovesFocus,
     /// The app's notification sound plays through the OS.
@@ -53,6 +57,8 @@ impl Plant {
         match name {
             "answers-your-record" => Some(Plant::AnswersYourRecord),
             "writes-clipboard" => Some(Plant::WritesClipboard),
+            "copies-drawn-order" => Some(Plant::CopiesDrawnOrder),
+            "copies-draw-order" => Some(Plant::CopiesDrawOrder),
             "moves-focus" => Some(Plant::MovesFocus),
             "starts-sound" => Some(Plant::StartsSound),
             "page-drops-param" => Some(Plant::PageDropsParam),

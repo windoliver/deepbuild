@@ -63,6 +63,8 @@ pub mod plain;
 pub mod question;
 pub mod record;
 pub mod rules;
+// Issue #1498: select and copy the text the window draws.
+pub mod select;
 pub mod setup;
 pub mod show;
 pub mod shown;
@@ -362,6 +364,7 @@ pub fn init(cx: &mut App) {
     card::init(cx);
     commands::init(cx);
     actions::init(cx);
+    select::init(cx);
     // Chrome effects hold their still pose under macOS's Reduce Motion (#1436).
     #[cfg(target_os = "macos")]
     cx.set_reduce_motion(

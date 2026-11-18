@@ -2742,8 +2742,13 @@ dependencies = [
  "base64 0.22.1",
  "crc32fast",
  "deep-app",
+ "deep-canvas",
+ "deep-canvas-cells",
  "deep-canvas-input",
+ "deep-canvas-marks",
  "deep-logic",
+ "deep-marks-raster",
+ "deep-text",
  "gpui-kit",
  "gpui-shell",
  "image",
@@ -2752,6 +2757,7 @@ dependencies = [
  "objc2-foundation 0.3.2",
  "serde_json",
  "sha2 0.10.9",
+ "vello_cpu 0.3.0",
 ]
 
 [[package]]
