@@ -1,0 +1,18 @@
+#2801 e2e: claude/fix-2801-hub-health-startup-4825fa ab9ecab48   node v24.22.0   load:  45.76 126.44 201.63 
+
+$ deep hub start --root <tmp>/a, then deep hub status every 2 s
+exit 0 after 1 s
+try 1  20:28:24  exit 0  {"pid":9883,"start":"01M7PEKEV0G3CFTYS8MTBKF8YS","off":false,"parsers":1,"gates":{"watch_only":false,"reason":null},"notifications":null,"secrets":"re
+try 2  20:28:26  exit 0  {"pid":9883,"start":"01M7PEKEV0G3CFTYS8MTBKF8YS","off":false,"parsers":1,"gates":{"watch_only":false,"reason":null},"notifications":null,"secrets":"re
+try 3  20:28:28  exit 0  {"pid":9883,"start":"01M7PEKEV0G3CFTYS8MTBKF8YS","off":false,"parsers":1,"gates":{"watch_only":false,"reason":null},"notifications":null,"secrets":"re
+try 4  20:28:30  exit 0  {"pid":9883,"start":"01M7PEKEV0G3CFTYS8MTBKF8YS","off":false,"parsers":1,"gates":{"watch_only":false,"reason":null},"notifications":null,"secrets":"re
+try 5  20:28:32  exit 0  {"pid":9883,"start":"01M7PEKEV0G3CFTYS8MTBKF8YS","off":false,"parsers":1,"gates":{"watch_only":false,"reason":null},"notifications":null,"secrets":"re
+try 6  20:28:34  exit 0  {"pid":9883,"start":"01M7PEKEV0G3CFTYS8MTBKF8YS","off":false,"parsers":1,"gates":{"watch_only":false,"reason":null},"notifications":null,"secrets":"re
+try 7  20:28:37  exit 0  {"pid":9883,"start":"01M7PEKEV0G3CFTYS8MTBKF8YS","off":false,"parsers":1,"gates":{"watch_only":false,"reason":null},"notifications":null,"secrets":"re
+try 8  20:28:39  exit 0  {"pid":9883,"start":"01M7PEKEV0G3CFTYS8MTBKF8YS","off":false,"parsers":1,"gates":{"watch_only":false,"reason":null},"notifications":null,"secrets":"re
+
+$ deep hub start --root <tmp>/b, hub.health every 100 ms from the moment the socket exists
+deep hub start exit 0
+  1 x from 667 ms: health JSON (pid, start, gates ...)
+
+E2E OK: no internal error, no drop to no answer

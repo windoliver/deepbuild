@@ -6,12 +6,14 @@ import { mkdirSync, openSync, readFileSync, realpathSync, rmSync, watch, writeFi
 import net from 'node:net';
 import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
-import { hubAddress, installedPrograms, installedRoot, lastingNode, onPath, rootOf, underTemp } from './paths.js';
+import { hubAddress, installedPrograms, installedRoot, lastingNode, onPath, rootOf, underTemp, type Root } from './paths.js';
 import { line } from './wire.js';
 
 const LABEL = 'com.deepbuild.hub';
 const UNIT = 'deepbuild-hub.service';
 const WAIT_MS = 15_000;
+/** How long `deep hub start` waits, once the hub answers, for its core to start: a busy machine's start takes seconds (#2801). */
+const CORE_WAIT_MS = 120_000;
 const STEP_MS = 10;
 /** The file limit the login service raises the hub's to: a connection per hook in flight, the record, evidence and runs. */
 const FILES = 8192;
@@ -263,10 +265,44 @@ export function startService(program: string[], logs: string): string | undefine
 /** Where the login service's definition is: the launchd plist on macOS, the systemd user unit elsewhere. */
 export const serviceFile = (): string => definition([], '').file;
 
-/** `deep hub start [--root <folder>]`: exits 0 once a hub answers on the root's socket, started now or already running. */
+/**
+ * Waits for the hub that answers at the root's socket to answer `hub.health`, which it does once its core has started
+ * (#2801): 0 then, so `deep hub status` reads it from then on. One call, waited on: any answer ends the wait, a refusal
+ * too, as does a token this CLI can't read, since start never read the hub further. 3 when the hub closed the
+ * connection first or the wait ran out.
+ */
+async function coreAnswers(root: Root): Promise<number> {
+  let token: string;
+  try {
+    token = readFileSync(root.token, 'utf8').trim();
+  } catch {
+    return 0;
+  }
+  let c: Connection | undefined;
+  try {
+    c = await connect(root.socket, CORE_WAIT_MS);
+    c.send({ hello: 'cli', token });
+    if (!(await c.next()).error) {
+      c.send({ id: 'hub.health', method: 'hub.health', params: {} });
+      await c.next();
+    }
+    return 0;
+  } catch (error) {
+    const why = error instanceof Error ? error.message : String(error);
+    process.stderr.write(`deep hub start: the hub at unix:${root.socket} ${why.startsWith('no answer within') ? `answers, but its core didn't start within ${CORE_WAIT_MS / 1000} s` : `closed the connection before it answered hub.health (${why})`}; see ${join(root.logs, 'hub.log')}\n`);
+    return 3;
+  } finally {
+    c?.close();
+  }
+}
+
+/**
+ * `deep hub start [--root <folder>]`: exits 0 once a hub, started now or already running, answers `hub.health` on the
+ * root's socket: its core has started, and a `deep hub status` run right after reads it (#2801).
+ */
 export async function startHub(options: { root?: string; cli: string }): Promise<number> {
   const root = rootOf(options.root ?? installedRoot());
-  if (await answers(root.socket)) return 0;
+  if (await answers(root.socket)) return coreAnswers(root);
   mkdirSync(root.logs, { recursive: true, mode: 0o700 });
   // An installed version's login service runs the versions folder's current link, which every update keeps, never a
   // version's own folder (#41); a checkout's runs its own CLI through Node.
@@ -283,7 +319,7 @@ export async function startHub(options: { root?: string; cli: string }): Promise
       return 3;
     }
   }
-  if (await waitForHub(root.socket)) return 0;
+  if (await waitForHub(root.socket)) return coreAnswers(root);
   process.stderr.write(`deep hub start: no hub answered at unix:${root.socket} within ${WAIT_MS / 1000} s; see ${join(root.logs, 'hub.log')}\n`);
   return 3;
 }
