@@ -1,0 +1,38 @@
+#66's fix.test.ts, redrafted after #1812, on its base c0a9de979eae03d05db91248467e488c89f537b8: main at 16dc5eab0 plus
+#1812's blind suite, its design line and the lint lane's entry, with nothing of #1812 implemented. Nothing was changed
+but this folder. November 18, 2026, PST. Node 24.22.0, macOS, on a Mac shared with other sessions (1-minute load 10
+when the run started).
+
+Built first: npm ci; npm run build --workspaces; CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 cargo build --locked -p
+deep-hook (target/debug/deep-hook was there before the run).
+Command: NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/66-redraft-1812 --no-file-parallelism --testTimeout=600000
+Result: exit 1. Test Files 1 failed (1); Tests 2 failed (2). Duration 22.9 s. Run once.
+
+FAIL  AC1 #66.3e42b2ec Fix LIN-42 reads the Linear issue, made before the switch-on, and its three criteria are what
+      done means (redraft 1812)                                                                          11.5 s
+      AssertionError: deep fix LIN-42 --json exits 0: exit 2, stdout "", stderr "Usage: deep fix <id>   starts work
+      from a work item at a source you switched on, such as LIN-42\n": expected 2 to be +0
+        at fix (fix.test.ts:27), from fix.test.ts:45
+      Passed before it: the shipped Linear source's task for LIN-42 (its ID, its link to linear.app/acme/issue/LIN-42,
+      its three criteria in order, and its reading's criteria), and deep hub run started with those readings.
+
+FAIL  AC5 #66.3ddbb14e olu's "skip the second criterion" leaves R2 in; the definition waits for one ask and locks on
+      your answer with R2 (redraft 1812)                                                                  10.9 s
+      AssertionError: deep fix LIN-43 --json exits 0: exit 2, stdout "", stderr "Usage: deep fix <id>   starts work
+      from a work item at a source you switched on, such as LIN-42\n": expected 2 to be +0
+        at fix (fix.test.ts:27), from fix.test.ts:65
+      Passed before it: olu's comment read as outside, from the team's membership, and deep hub run started with the
+      readings and the drafted R1 to R3 with olu's waiver of R2.
+
+Both fail at the one expectation #1812 changes: the base's deep fix takes exactly one argument
+(packages/hub/src/fix-command.ts) and answers --json with its usage and exit 2. Neither ended BLOCKED or at an import,
+a fixture or a typo. No /tmp/dh66-* folder and no process the run started was left after it.
+
+Type check: node node_modules/typescript/bin/tsc -p tests/acceptance/66-redraft-1812/tsconfig.json exits 0 with no
+output. It reads this folder's fix.test.ts and ../66/{helpers,hub,providers,worlds}.ts (332 files in all).
+
+Scratch reading, taken once and not kept (10:47, 1-minute load 449): a copy of fix.test.ts in this folder whose helper
+ran deep fix <id> without the flag. On this base that prints the object #1812's AC7 has --json print byte for byte.
+Both tests passed, in 32.4 s: for LIN-42 the link, task.created and the lock with its three criteria; for LIN-43 one
+ask, no lock on outside text, deep inbox answer exit 0, the lock with R2, and never asked twice. So once
+deep fix <id> --json prints that object, the rest of each test holds on this base. The copy was deleted after its run.

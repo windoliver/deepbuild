@@ -1,0 +1,65 @@
+Base commit c0a9de979eae03d05db91248467e488c89f537b8 (main at 16dc5eab0 plus #1812's blind suite, its design line and
+its lint lane entry; no implementation of #1812), on branch redraft-1342-1812 with nothing changed but this folder and
+its line in scripts/lanes.mjs. November 18, 2026, PST. Node 24.22.0, macOS, 18 cores, on a Mac shared with other
+sessions (1-minute load 446 when the run started, 519 when it ended).
+
+Built first: npm ci; npm run build --workspaces (under scripts/throttle.mjs build); then CARGO_INCREMENTAL=0
+CARGO_PROFILE_DEV_DEBUG=0 cargo build --locked -p deep-hook, at nice 10 and outside the build throttle (its queue was
+four builds deep behind a 74-minute holder), which finished at 10:55, just before the run. target/debug/deep-hook was
+there when the run started.
+
+Command, from the checkout's root (written <repo> below), run once:
+
+  NO_COLOR=1 node scripts/throttle.mjs test --wait 120 -- node node_modules/vitest/vitest.mjs run --root tests/acceptance/1342-redraft-1812 --no-file-parallelism --testTimeout=600000
+
+Result: exit 1. Test Files 1 failed (1); Tests 2 failed (2). 44 s.
+
+Per test:
+
+  FAIL  AC2 #1342.23ee5c69 "plan a five-day trip for four people under $4,000" makes a workspace with no repo and no
+        forge call, and "a small site that tracks my reading list" makes a repo. A planted flow that asks which
+        fails, naming the ask (redraft 1812)                                                              40.1 s
+        At the call #1812 changes, tripScene (home.test.ts:111, awaited at home.test.ts:138): "BLOCKED: #67's deep
+        workspace new "Family trips" --json makes the fixture's project: exit 2, stdout "", stderr "Usage: deep
+        workspace new <topic> [--folder <path>] ...". The base's deep workspace takes no --json: three arguments
+        after `workspace` fit none of its forms, so it prints its usage and exits 2. The test's site half passed
+        first, every assertion of it (home.test.ts:132-135): the box took the words with no project shown, the site
+        reached its card, nothing but the card was asked, and the forge was asked for a repo after the approval.
+  FAIL  AC6 #1342.435612ed A fixture holding a project that fits shows it on the card, and answering with it adds
+        the work there (redraft 1812)                                                                     0 ms
+        The same BLOCKED. AC6 awaits the trip world AC2 started (the two share it, as in the frozen file), and that
+        call is the world's first step, so it failed before its first assertion, "the fixture holds the project".
+
+Neither test failed before that call: not at a typo, an import, a type or an earlier step. Neither passed. Nothing
+after that call ran: no trip was sent, so the trip half of AC2 and all of AC6 are unrun at the base.
+
+Type check: node node_modules/typescript/bin/tsc -p tests/acceptance/1342-redraft-1812/tsconfig.json exits 0 with no
+output; with a planted type error in a scratch file in the folder (removed after) it exits 2, naming the file and line.
+
+The run's worlds under /tmp/dh1342-* were removed at its end, and no process it started was left. Four /tmp/dh1342-*
+entries made between 01:44 and 08:09 by other sessions were there before and after the run, and were left alone.
+
+==== The run (the checkout written <repo>; vitest's code frame trimmed)
+
+ RUN  v5.0.5 <repo>/tests/acceptance/1342-redraft-1812
+
+ ❯ home.test.ts (2 tests | 2 failed) 40807ms
+   × AC2 #1342.23ee5c69 "plan a five-day trip for four people under $4,000" makes a workspace with no repo and no forge call, and "a small site that tracks my reading list" makes a repo. A planted flow that asks which fails, naming the ask (redraft 1812) 40082ms
+   × AC6 #1342.435612ed A fixture holding a project that fits shows it on the card, and answering with it adds the work there (redraft 1812) 0ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  home.test.ts > AC2 #1342.23ee5c69 "plan a five-day trip for four people under $4,000" makes a workspace with no repo and no forge call, and "a small site that tracks my reading list" makes a repo. A planted flow that asks which fails, naming the ask (redraft 1812)
+ FAIL  home.test.ts > AC6 #1342.435612ed A fixture holding a project that fits shows it on the card, and answering with it adds the work there (redraft 1812)
+AssertionError: BLOCKED: #67's deep workspace new "Family trips" --json makes the fixture's project: exit 2, stdout "", stderr "Usage: deep workspace new <topic> [--folder <path>]\n       deep workspace task <id> <title> --criterion <text> [--criterion <text>]... [--blocked-by <n>]...\n       deep workspace move <id> <folder | repo checkout>\n       deep workspace revert <id> [<commit>]\n       deep workspace diff <id>\n       deep workspace drift <id>\n"
+
+ ❯ must ../1332/helpers.ts:397:81
+ ❯ tripScene home.test.ts:111:3
+ ❯ home.test.ts:138:13
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  10:56:02
+   Duration  44.43s (tests 93%, transform 7%, import 1%)

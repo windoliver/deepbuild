@@ -1,0 +1,32 @@
+{
+  "format": 1,
+  "profile": "figure",
+  "title": "Sales figure",
+  "description": "A sales figure with a caption, a note too long for its box, cut with an ellipsis, and the sales page's latency as a number with its unit.",
+  "size": [800, 450],
+  "camera": "cam",
+  "data": {
+    "p95": { "value": 12.46, "source": "story" }
+  },
+  "items": {
+    "cam": {
+      "id": "cam", "kind": "camera@1", "name": "Camera", "order": "a0",
+      "params": { "projection": "orthographic", "target": [400, 225, 0], "view_width": 800, "user": { "zoom": [0.25, 8], "pan": { "bounds": "none" } } }
+    },
+    "dd-fig-title": {
+      "id": "dd-fig-title", "kind": "text@1", "name": "Caption", "role": "label", "order": "a1",
+      "params": { "text": "Northern sales grew this season", "font": "body", "size": 20, "box": { "w": 480, "h": 30 } },
+      "at": { "pos": [40, 30, 0] }
+    },
+    "dd-fig-long": {
+      "id": "dd-fig-long", "kind": "text@1", "name": "Long note", "role": "label", "order": "a2",
+      "params": { "text": "Every store in the northern region sold more coats than last winter, led by the harbor branch", "font": "body", "size": 14, "box": { "w": 160, "h": 22 }, "max_lines": 1, "overflow": "ellipsis" },
+      "at": { "pos": [40, 120, 0] }
+    },
+    "dd-fig-p95": {
+      "id": "dd-fig-p95", "kind": "text@1", "name": "Sales page latency", "role": "data", "order": "a3",
+      "params": { "text": { "counter": { "source": "data/p95", "format": { "unit": "ms", "precision": 1 } } }, "font": "body", "size": 16, "box": { "w": 160, "h": 24 } },
+      "at": { "pos": [40, 200, 0] }
+    }
+  }
+}

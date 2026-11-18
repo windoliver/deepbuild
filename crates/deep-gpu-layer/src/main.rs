@@ -461,6 +461,9 @@ pub enum Planted {
     PuffFullOpacity,
     LightAfterUpscale,
     FlickerWallTime,
+    // #1619: the screen's wrong programs (tests/acceptance/1619/README.md: Planted programs).
+    ConvergenceAngleIgnored,
+    TrackingWallTime,
     /// #1413's wrong programs (tests/acceptance/1413/README.md: Planted programs).
     KeepsLatestError,
     ReopensTightLoop,
@@ -808,6 +811,8 @@ impl Planted {
             "puff_full_opacity" => Planted::PuffFullOpacity,
             "light_after_upscale" => Planted::LightAfterUpscale,
             "flicker_wall_time" => Planted::FlickerWallTime,
+            "convergence_angle_ignored" => Planted::ConvergenceAngleIgnored,
+            "tracking_wall_time" => Planted::TrackingWallTime,
             "keeps_latest_error" => Planted::KeepsLatestError,
             "reopens_tight_loop" => Planted::ReopensTightLoop,
             "resize_leaves_rendering" => Planted::ResizeLeavesRendering,

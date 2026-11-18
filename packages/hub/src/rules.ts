@@ -10,6 +10,7 @@ import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import type { RecordStore } from '@deepbuild/record';
 import { callAsYou } from './client.js';
+import { visible } from './visible.js';
 import type { HookMeta, Scoped } from './wire.js';
 
 type Raw = RecordStore['raw'];
@@ -342,10 +343,22 @@ export async function rulesCommand(args: readonly string[]): Promise<number> {
   else if (rest[0] === 'credit' && rest.length === 2) [method, params] = ['rules.credit', { rule: rest[1] }];
   else if (rest[0] === 'session' && rest.length === 2) [method, params] = ['session.rules', { session: rest[1] }];
   else { process.stderr.write(`${USAGE}\n`); return 2; }
-  const result = await callAsYou(method, params, 'nothing was read');
+  const result = await callAsYou(method, params);
   if (typeof result === 'number') return result;
   if (json) process.stdout.write(`${JSON.stringify(result)}\n`);
-  else if (method === 'rules.sync') process.stdout.write(`The rules page lists ${String(result.rules)} rules from ${String(result.files)} files.\n`);
-  else process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+  else process.stdout.write(`${visible(said(method, params, result))}\n`);
   return 0;
+}
+/** What a rules call found, in words (#1812); `--json` prints the result itself. */
+function said(method: string, params: Record<string, unknown>, r: Record<string, unknown>): string {
+  if (method === 'rules.sync') return `The rules page lists ${String(r.rules)} rules from ${String(r.files)} files.`;
+  if (method === 'rules.reach') {
+    const sessions = r.sessions as { handle: string; tool_calls: number }[];
+    return `${sessions.length} session${sessions.length === 1 ? '' : 's'} made ${String(r.tool_calls)} tool calls under ${String(params.scope)} in the last 30 days${sessions.length ? `: ${sessions.map((s) => `${s.handle} ${s.tool_calls}`).join(', ')}` : ''}.`;
+  }
+  if (method === 'rules.credit') {
+    const sessions = r.sessions as string[];
+    return sessions.length ? `${String(params.rule)} was given to ${sessions.length} session${sessions.length === 1 ? '' : 's'}: ${sessions.join(', ')}.` : `${String(params.rule)} was given to no session.`;
+  }
+  return `${String(r.session)} runs the ${String(r.runs)} set of rules, given at log position ${String(r.set)}, and a regression in it is credited to the set at ${String(r.credited_to)}.`;
 }

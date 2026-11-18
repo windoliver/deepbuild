@@ -459,7 +459,8 @@ export async function doctorCommand(args: readonly string[], also: () => Promise
   const next = (i: Item) => (fixes(i) ? `\n  Fix: ${i.fix}` : i.code === 'not_checked' ? `\n  To check: ${i.fix}` : '');
   for (const i of items) {
     const state = i.code === 'not_checked' ? 'not checked' : i.level.toUpperCase();
-    console.log(json ? JSON.stringify(i) : `${agents[i.agent] ?? i.agent} ${i.item}: ${state} (${i.code})\n  ${i.evidence}${next(i)}`);
+    // Its state once, in words; its code name is the JSON's (#1812).
+    console.log(json ? JSON.stringify(i) : `${agents[i.agent] ?? i.agent} ${i.item}: ${state}\n  ${i.evidence}${next(i)}`);
   }
   const failed = items.some((i) => i.level === 'fail');
   // A shadowed status line leaves the plan windows unread, which no item can decide (#1296).
