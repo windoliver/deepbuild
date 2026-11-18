@@ -85,11 +85,11 @@ pub struct Over {
 
 /// The cost model's terms for a frame that shades fill lights (The cost model: a pass's time per
 /// pixel grows with the lights in the pixel's cluster), each fitted to the night city's orbit at
-/// 1920 × 1080 on an M5 Max (Mac17,10), release, medians: a frame's passes per pixel (0.51 ms for
-/// the city with no lamp), a fill light per pixel its range covers (0.79 ms more for its lamps'
-/// 3.2 M covered pixels), and the policy's scoring per light (0.27 ms for 2,048).
-const FRAME_NS_PER_PX: f64 = 0.25;
-const LIGHT_NS_PER_PX: f64 = 0.25;
+/// 1920 × 1080 on an M5 Max (Mac17,10) at rest, release, medians: a frame's passes per pixel
+/// (1.08 ms for the city with no lamp), a fill light per pixel its range covers (2.03 ms more for
+/// its lamps' 3.2 M covered pixels), and the policy's scoring per light (0.27 ms for 2,048).
+const FRAME_NS_PER_PX: f64 = 0.52;
+const LIGHT_NS_PER_PX: f64 = 0.64;
 const SCORING_NS_PER_LIGHT: f64 = 130.0;
 
 /// The cost model's estimate of a frame that shades `order`'s fill lights, drawn at `px` pixels:

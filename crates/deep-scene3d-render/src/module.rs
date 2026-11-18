@@ -22,9 +22,9 @@ pub const LIGHT: [f64; 3] = [0.35, 0.8, 0.5];
 /// walk, the median of four frames on an M5 Max (Mac17,10).
 pub const PYRAMID_NS_PER_PX: f32 = 0.186;
 
-/// The fill lights' pass's declared cost per light a cell walks (#1634): 0.195 ms for the 436,000
-/// the night city's cells walk, the median of its orbit's frames on an M5 Max (Mac17,10).
-pub const FILL_NS_PER_TEST: f64 = 0.45;
+/// The fill lights' pass's declared cost per light a cell walks (#1634): 0.34 ms for the 68,000
+/// the night city's cells walk, the median of its orbit's frames on an M5 Max (Mac17,10) at rest.
+pub const FILL_NS_PER_TEST: f64 = 5.0;
 
 /// The GPU's pass timer (issue #380: frame GPU time, measured with wgpu-profiler).
 pub type Profiler = Arc<Mutex<wgpu_profiler::GpuProfiler>>;
