@@ -153,8 +153,8 @@ export function keptRecord(run: string, d: { outcome: string; tests_run: number;
     return m ? [{ test: m[1]!, file: m[2]!, line: Number(m[3]), stack: null, assertion: true, message: m[4]! }] : [];
   }) : [];
   return {
-    // A head run's key holds what it read outside its installs, its own files among them.
-    run, outcome: d.outcome as RecordedRun['outcome'], testsRun: d.tests_run, failures, evidence: [], read: d.key.base ? [] : [...d.key.paths], mask: null, exit: null,
+    // A head run's key holds what it read outside its installs, its own files among them: the run reads the key's list, never changed.
+    run, outcome: d.outcome as RecordedRun['outcome'], testsRun: d.tests_run, failures, evidence: [], read: d.key.base ? [] : d.key.paths, mask: null, exit: null,
     output: { stdout: '', stderr: '', sha256: { stdout: d.evidence[0] ?? EMPTY, stderr: d.evidence[1] ?? EMPTY } }, attempts: [], seeded: [], contract: null,
   };
 }
