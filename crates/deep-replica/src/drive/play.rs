@@ -112,6 +112,7 @@ pub fn run(call: &Value, plant: Option<Plant>, out: &Path) -> Result<Value, Fail
         drops_first_bot_entry: plant == Some(Plant::DropsFirstBotEntry),
         entry_on_change: plant == Some(Plant::EntryOnChange),
         ignores_links: plant == Some(Plant::IgnoresLinks),
+        keeps_document_seed: plant == Some(Plant::KeepsDocumentSeed),
     };
     let asked: Vec<i64> = call
         .get("frames")

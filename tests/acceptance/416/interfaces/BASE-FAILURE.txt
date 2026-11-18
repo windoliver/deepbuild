@@ -1,0 +1,55 @@
+# #416 interface suite at the base: each test's first failure
+
+Base: 3c124dee5 (this worktree's HEAD; `git merge-base HEAD origin/main` is the same commit), before any implementation.
+Host: the reference Mac, macOS arm64. `deep-logic` built at the base with `CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0`
+(through scripts/lease, at low priority); the assembler built as wat.ts builds it.
+
+Command (from the checkout; vitest 5.0.5; one run):
+
+  NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/416/interfaces \
+    --testTimeout=600000 --no-file-parallelism
+
+Every test fails on what the base lacks, before any host gate, Docker, Chrome or timing: `first_party` answers
+{"ok":false,"code":"bad_input"} (an unknown call); a receipt's library record has no `interfaces`; and an import
+`lib:nn.mlp@1.forward` is refused at link ("which no listed library exports"), since nothing at the base reads
+`implements`. Paths are redacted (<checkout>, ~).
+
+== <checkout>/tests/acceptance/416/interfaces/ac01-physics2d.test.ts
+FAILED #416.8421965e the slide fixture expects 3.186 m within 3%, and a 2D physics library under the subset that implements physics2d.lib@1 and lands within it links
+    AssertionError: first_party lists the build's first-party packs: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+FAILED #416.8421965e a planted library that averages friction lands at 2.548 m and is refused at link, naming physics2d.lib@1, the slide fixture, the distance array, 3.186 and the tolerance
+    AssertionError: first_party lists the build's first-party packs: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+== <checkout>/tests/acceptance/416/interfaces/ac02-fsm.test.ts
+FAILED #416.cdd4134d the door fixture expects state open from step 40, and a library that implements fsm@1 links and opens the door at step 40
+    AssertionError: first_party lists the build's first-party packs: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+FAILED #416.cdd4134d the interface's own planted library, which takes the timer from the step it was read, reaches open at step 41 and must fail
+    AssertionError: first_party lists the build's first-party packs: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+FAILED #416.cdd4134d an outside pack whose fsm-like interface ships a planted library that passes every fixture is refused, naming the interface
+    AssertionError: first_party lists the build's first-party packs: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+== <checkout>/tests/acceptance/416/interfaces/ac03-nn-mlp.test.ts
+FAILED #416.6ca0cd2d the 4-8-2 fixture's outputs equal the interface's table bit for bit on macOS arm64, Linux x86_64 and in headless Chrome
+    AssertionError: first_party lists the build's first-party packs: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+FAILED #416.6ca0cd2d a planted library that fuses a multiply and an add into one rounding differs from the table in the last bit on every host and is refused, naming the output
+    AssertionError: first_party lists the build's first-party packs: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+== <checkout>/tests/acceptance/416/interfaces/ac04-claims-swap.test.ts
+FAILED #416.9dfa9973 a claim resting on an interface from a pack the working agent wrote stays INCONCLUSIVE with one ask, while the same interface from a first-party pack counts
+    AssertionError: first_party lists the build's first-party packs: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+FAILED #416.9dfa9973 a planted resolver that lets an outside pack's interface bind every claim (outside_interface_binds_all) passes the agent's claim and fails, naming the interface
+    AssertionError: first_party lists the build's first-party packs: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+FAILED #416.9dfa9973 swapping one fsm@1 library for another links the program again, reruns exactly fsm@1's fixtures and changes the bake key and deep_query's library hash, while a piece that links neither keeps its own
+    AssertionError: first_party lists the build's first-party packs: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+== <checkout>/tests/acceptance/416/interfaces/ac07-budgets.test.ts
+FAILED #416.0e66795c each interface's fixtures run once per library hash, in under 5 s
+    AssertionError: first_party lists the build's first-party packs: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+FAILED #416.0e66795c a piece that names no interface gains no work at check or per frame, compared with the merge base
+    AssertionError: items.door.libraries[fsm_table@1].interfaces is an array, got undefined: expected false to be true // Object.is equality
+
+== <checkout>/tests/acceptance/416/interfaces/oracle/no-fma.test.ts
+FAILED #416.6ca0cd2d every case gives upstream's bits through nn.mlp@1 and our sandbox, on macOS arm64, Linux x86_64 and in headless Chrome, and a library that fuses each multiply and add misses them
+    AssertionError: this host's bake baked the piece (ok: true): {"ok":false,"code":"link_refused","item":"oracle","refusals":[{"rule":"link","what":"the program imports lib:nn.mlp@1.forward, which no listed library exports","import":{"module":"lib:nn.mlp@1","name":"forward"}}]}: expected false to be true // Object.is equality
+
+13 tests, 13 failed, 0 not failed

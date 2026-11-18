@@ -1,0 +1,67 @@
+# merge base c740dede7 + the blind tests (87b20a7c0): node node_modules/vitest/vitest.mjs run --root tests/acceptance/1836 --no-file-parallelism --reporter verbose
+
+ RUN  v5.0.5 ~/deepbuild/.claude/worktrees/agent-ac0c275043f592a2d/tests/acceptance/1836
+
+ × proceed-subagent.test.ts > #1836.76416703 a subagent's stop ends no turn a proceed started: the merge after it is held with one authority ask > #1836.76416703 in the turn a proceed started, after a Claude Code subagent's stop, `gh pr merge 12` is held at PreToolUse with one authority ask naming the proceed 2423ms
+   → #1836.76416703 `gh pr merge 12` ran in the turn the proceed started, after the subagent's stop, with no authority ask: deep-hook allowed it at PreToolUse with nothing held (exit 0 after 13 ms, stdout "", stderr "")
+ × proceed-subagent.test.ts > #1836.76416703 a subagent's stop ends no turn a proceed started: the merge after it is held with one authority ask > #1836.76416703 (wrong program) a hub whose proceed-turn query counts a child's stop (DEEP_HUB_PLANT=proceed-ends-at-child-stop) lets the merge run and fails this test, naming the call 137ms
+   → BLOCKED: the hub with the plant DEEP_HUB_PLANT=proceed-ends-at-child-stop did not start: file://~/deepbuild/.claude/worktrees/agent-ac0c275043f592a2d/packages/hub/dist/plant.js:120
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=proceed-ends-at-child-stop names no planted program
+    at plantOf (file://~/deepbuild/.claude/worktrees/agent-ac0c275043f592a2d/packages/hub/dist/plant.js:120:15)
+    at Module.runHub (file://~/deepbuild/.claude/worktrees/agent-ac0c275043f592a2d/packages/hub/dist/server.js:1621:19)
+    at hubCommand (file://~/deepbuild/.claude/worktrees/agent-ac0c275043f592a2d/packages/hub/dist/hub-command.js:29:58)
+    at async file://~/deepbuild/.claude/worktrees/agent-ac0c275043f592a2d/packages/cli/dist/main.js:345:24
+
+Node.js v24.22.0
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  proceed-subagent.test.ts > #1836.76416703 a subagent's stop ends no turn a proceed started: the merge after it is held with one authority ask > #1836.76416703 in the turn a proceed started, after a Claude Code subagent's stop, `gh pr merge 12` is held at PreToolUse with one authority ask naming the proceed
+Error: #1836.76416703 `gh pr merge 12` ran in the turn the proceed started, after the subagent's stop, with no authority ask: deep-hook allowed it at PreToolUse with nothing held (exit 0 after 13 ms, stdout "", stderr "")
+ ❯ notRun helpers.ts:436:9
+
+ ❯ heldBy proceed-subagent.test.ts:25:5
+ ❯ scenario proceed-subagent.test.ts:51:17
+ ❯ verdict helpers.ts:52:5
+ ❯ proceed-subagent.test.ts:69:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  proceed-subagent.test.ts > #1836.76416703 a subagent's stop ends no turn a proceed started: the merge after it is held with one authority ask > #1836.76416703 (wrong program) a hub whose proceed-turn query counts a child's stop (DEEP_HUB_PLANT=proceed-ends-at-child-stop) lets the merge run and fails this test, naming the call
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=proceed-ends-at-child-stop did not start: file://~/deepbuild/.claude/worktrees/agent-ac0c275043f592a2d/packages/hub/dist/plant.js:120
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=proceed-ends-at-child-stop names no planted program
+    at plantOf (file://~/deepbuild/.claude/worktrees/agent-ac0c275043f592a2d/packages/hub/dist/plant.js:120:15)
+    at Module.runHub (file://~/deepbuild/.claude/worktrees/agent-ac0c275043f592a2d/packages/hub/dist/server.js:1621:19)
+    at hubCommand (file://~/deepbuild/.claude/worktrees/agent-ac0c275043f592a2d/packages/hub/dist/hub-command.js:29:58)
+    at async file://~/deepbuild/.claude/worktrees/agent-ac0c275043f592a2d/packages/cli/dist/main.js:345:24
+
+Node.js v24.22.0
+
+ ❯ startHub helpers.ts:198:45
+    196|     sleep(120_000).then(() => undefined),
+    197|   ]);
+    198|   if (!ready || ready.ready !== true) throw Error(`BLOCKED: the hub${o…
+       |                                             ^
+    199|   return { pid: Number(ready.pid), socket: String(ready.socket), root:…
+    200| }
+ ❯ scenario proceed-subagent.test.ts:40:15
+ ❯ failureOf helpers.ts:61:5
+ ❯ proceed-subagent.test.ts:74:19
+ ❯ verdict helpers.ts:52:5
+ ❯ proceed-subagent.test.ts:73:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  02:24:07
+   Duration  2.73s (tests 99%, import 1%)
+
