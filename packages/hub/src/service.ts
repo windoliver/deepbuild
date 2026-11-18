@@ -14,6 +14,11 @@ const UNIT = 'deepbuild-hub.service';
 const WAIT_MS = 15_000;
 /** How long `deep hub start` waits, once the hub answers, for its core to start: a busy machine's start takes seconds (#2801). */
 const CORE_WAIT_MS = 120_000;
+/**
+ * How long `deep hub status` waits for the health of a hub that said hello: its readings start children (`ps`, the secret
+ * store's) that a busy machine can hold past the 2 s a missing hub gets (#2801).
+ */
+const STATUS_REPLY_MS = 25_000;
 const STEP_MS = 10;
 /** The file limit the login service raises the hub's to: a connection per hook in flight, the record, evidence and runs. */
 const FILES = 8192;
@@ -22,7 +27,8 @@ type Obj = Record<string, unknown>;
 interface Connection {
   hello: Obj;
   closed: Promise<void>;
-  next(): Promise<Obj>;
+  /** The next line, within `ms` (the connection's wait by default). */
+  next(ms?: number): Promise<Obj>;
   send(o: object): void;
   close(): void;
 }
@@ -61,11 +67,11 @@ function connect(path: string, timeoutMs = 2000): Promise<Connection> {
         else lines.push(o);
       }
     });
-    const next = () => new Promise<Obj>((done, stop) => {
+    const next = (ms = timeoutMs) => new Promise<Obj>((done, stop) => {
       const ready = lines.shift();
       if (ready) return done(ready);
       if (failed) return stop(failed);
-      const t = setTimeout(() => fail(Error(`no answer within ${timeoutMs} ms`)), timeoutMs);
+      const t = setTimeout(() => fail(Error(`no answer within ${ms} ms`)), ms);
       waiting.push({ wake: (o) => { clearTimeout(t); done(o); }, stop: (e) => { clearTimeout(t); stop(e); } });
     });
     // Connected once the hub's hello arrives.
@@ -131,15 +137,18 @@ async function waitForStop(path: string, connection: Connection): Promise<void> 
   }
 }
 
-/** One control call on the hub at `path`, as the CLI, with the token `tokenFile` holds. */
-export async function control(path: string, tokenFile: string, method: string, params: Obj = {}, timeoutMs = 2000): Promise<Obj> {
+/**
+ * One control call on the hub at `path`, as the CLI, with the token `tokenFile` holds: the hub's hello within
+ * `timeoutMs`, and the call's reply within `replyMs`.
+ */
+export async function control(path: string, tokenFile: string, method: string, params: Obj = {}, timeoutMs = 2000, replyMs = timeoutMs): Promise<Obj> {
   const c = await connect(path, timeoutMs);
   try {
     c.send({ hello: 'cli', token: readFileSync(tokenFile, 'utf8').trim() });
     const hello = await c.next();
     if (hello.error) throw Error(`the hub refused the CLI's credential: ${JSON.stringify(hello.error)}`);
     c.send({ id: method, method, params });
-    const reply = await c.next();
+    const reply = await c.next(replyMs);
     if (reply.error) throw Error(`${method} was refused: ${JSON.stringify(reply.error)}`);
     if (method === 'hub.stop') await waitForStop(path, c);
     return reply.result as Obj;
@@ -335,7 +344,7 @@ export async function hubStatus(options: { root?: string }): Promise<number> {
   }
   const tokenFile = rootOf(options.root ?? installedRoot()).token;
   try {
-    process.stdout.write(`${JSON.stringify(await control(path, tokenFile, 'hub.health'))}\n`);
+    process.stdout.write(`${JSON.stringify(await control(path, tokenFile, 'hub.health', {}, 2000, STATUS_REPLY_MS))}\n`);
     return 0;
   } catch (error) {
     process.stderr.write(`deep hub status: no hub could be read at unix:${path}: ${error instanceof Error ? error.message : String(error)}\n`);
