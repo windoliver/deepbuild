@@ -36,6 +36,7 @@ pub mod device;
 pub mod empties;
 #[cfg(feature = "fixtures")]
 pub mod events;
+pub mod frame;
 pub mod gpu_view;
 #[cfg(all(feature = "hdr-fixture", target_os = "macos"))]
 pub mod hdr_fixture;
@@ -72,7 +73,6 @@ pub mod single;
 #[cfg(feature = "spike")]
 pub mod spike;
 pub mod states;
-pub mod table;
 pub mod text;
 pub mod views;
 pub mod welcome;

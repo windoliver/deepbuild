@@ -148,31 +148,30 @@ pub(crate) fn page(
     // #1100's planted screen prints setup's output, every line of it.
     let printed = output.clone().filter(|_| planted("set-up-prints-output"));
     let screen = setup::screen();
-    observed("welcome")
-        .size_full()
-        .flex()
-        .flex_col()
-        .items_center()
-        .justify_center()
-        .gap(s.space(4))
-        .bg(chrome.ground)
-        .typed(s.body)
-        .text_color(chrome.ink_primary)
-        .child(
-            svg()
-                .data(brand::WELCOME_LOCKUP)
-                .w(px(brand::WELCOME_LOCKUP_WIDTH_PX)) // size-literal-exception: the kit's artwork at brand/surfaces.json's size (#79); review 2027-04-30
-                .h(px(brand::WELCOME_LOCKUP_HEIGHT_PX)) // size-literal-exception: the kit's artwork at brand/surfaces.json's size (#79); review 2027-04-30
-                .text_color(chrome.ink_primary),
-        )
-        .when(offered, |page| {
-            // One column: the agents' names line up on the left and their step marks on the right.
-            page.child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap(s.space(1))
-                    .children(screen.agents.iter().map(|(agent, name, steps)| {
+    // The page scrolls when the window is shorter than what it says (#1808); otherwise it's centred in it.
+    let column =
+        div()
+            .min_h_full()
+            .w_full()
+            .flex()
+            .flex_col()
+            .items_center()
+            .justify_center()
+            .gap(s.space(4))
+            .bg(chrome.ground)
+            .typed(s.body)
+            .text_color(chrome.ink_primary)
+            .child(
+                svg()
+                    .data(brand::WELCOME_LOCKUP)
+                    .w(px(brand::WELCOME_LOCKUP_WIDTH_PX)) // size-literal-exception: the kit's artwork at brand/surfaces.json's size (#79); review 2027-04-30
+                    .h(px(brand::WELCOME_LOCKUP_HEIGHT_PX)) // size-literal-exception: the kit's artwork at brand/surfaces.json's size (#79); review 2027-04-30
+                    .text_color(chrome.ink_primary),
+            )
+            .when(offered, |page| {
+                // One column: the agents' names line up on the left and their step marks on the right.
+                page.child(div().flex().flex_col().gap(s.space(1)).children(
+                    screen.agents.iter().map(|(agent, name, steps)| {
                         let done = steps.iter().all(|(_, done)| *done);
                         // A ring per step, filled once it's done.
                         let marks = steps.iter().map(|(step, done)| {
@@ -213,92 +212,96 @@ pub(crate) fn page(
                                     }),
                             )
                             .child(div().flex().gap(s.space(1)).children(marks))
-                    })),
+                    }),
+                ))
+                .child(
+                    div()
+                        .w_full()
+                        .max_w(s.lane)
+                        .px(s.space(4))
+                        .flex()
+                        .flex_col()
+                        .gap(s.space(1))
+                        .children(screen.lines.iter().map(|(id, words)| {
+                            line(
+                                ElementId::Name(format!("setup-line:{id}").into()),
+                                words.clone(),
+                            )
+                        })),
+                )
+            })
+            .children(button)
+            .children(second)
+            .children(install)
+            .children(hidden.then(|| label("set-up-working", format!("{SETTING_UP}…"))))
+            // #1461's planted first-launch page draws the box beside Set up.
+            .children(
+                planted("box-on-first-launch")
+                    .then(crate::views::words_box)
+                    .flatten(),
             )
-            .child(
+            // A long path in the reason wraps inside the lane, so its fix stays in view.
+            .children(reason.map(|reason| {
                 div()
                     .w_full()
                     .max_w(s.lane)
                     .px(s.space(4))
-                    .flex()
-                    .flex_col()
-                    .gap(s.space(1))
-                    .children(screen.lines.iter().map(|(id, words)| {
+                    .child(line("set-up-reason", reason))
+            }))
+            .children(printed.map(|output| {
+                div().w_full().max_w(s.lane).px(s.space(4)).children(
+                    output.lines().enumerate().map(|(n, words)| {
                         line(
-                            ElementId::Name(format!("setup-line:{id}").into()),
-                            words.clone(),
+                            ElementId::Name(format!("set-up-printed:{n}").into()),
+                            words.to_owned(),
                         )
-                    })),
-            )
-        })
-        .children(button)
-        .children(second)
-        .children(install)
-        .children(hidden.then(|| label("set-up-working", format!("{SETTING_UP}…"))))
-        // #1461's planted first-launch page draws the box beside Set up.
-        .children(
-            planted("box-on-first-launch")
-                .then(crate::views::words_box)
-                .flatten(),
-        )
-        // A long path in the reason wraps inside the lane, so its fix stays in view.
-        .children(reason.map(|reason| {
-            div()
-                .w_full()
-                .max_w(s.lane)
-                .px(s.space(4))
-                .child(line("set-up-reason", reason))
-        }))
-        .children(printed.map(|output| {
-            div()
-                .w_full()
-                .max_w(s.lane)
-                .px(s.space(4))
-                .children(output.lines().enumerate().map(|(n, words)| {
-                    line(
-                        ElementId::Name(format!("set-up-printed:{n}").into()),
-                        words.to_owned(),
-                    )
-                }))
-        }))
-        .children(
-            output
-                .filter(|_| !planted("set-up-prints-output"))
-                .map(|output| {
-                    let open = welcome.output;
-                    div()
-                        .flex()
-                        .flex_col()
-                        .items_center()
-                        .child(
-                            control(
-                                "set-up-show-output",
-                                Control::Plain,
-                                if open { "Hide output" } else { "Show output" },
-                                chrome,
-                            )
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.welcome.output = !this.welcome.output;
-                                cx.notify();
-                            })),
-                        )
-                        .children(open.then(|| {
-                            div()
-                                .w_full()
-                                .max_w(s.lane)
-                                .px(s.space(4))
-                                .text_color(chrome.ink_secondary)
-                                // Setup's own output, as it printed it: left-aligned, in the code face.
-                                .child(
-                                    observed("set-up-output")
-                                        .role(Role::Label)
-                                        .aria_label(output.clone())
-                                        .w_full()
-                                        .typed(s.small)
-                                        .font_family(s.code.clone())
-                                        .child(output),
+                    }),
+                )
+            }))
+            .children(
+                output
+                    .filter(|_| !planted("set-up-prints-output"))
+                    .map(|output| {
+                        let open = welcome.output;
+                        div()
+                            .flex()
+                            .flex_col()
+                            .items_center()
+                            .child(
+                                control(
+                                    "set-up-show-output",
+                                    Control::Plain,
+                                    if open { "Hide output" } else { "Show output" },
+                                    chrome,
                                 )
-                        }))
-                }),
-        )
+                                .on_click(cx.listener(
+                                    |this, _, _, cx| {
+                                        this.welcome.output = !this.welcome.output;
+                                        cx.notify();
+                                    },
+                                )),
+                            )
+                            .children(open.then(|| {
+                                div()
+                                    .w_full()
+                                    .max_w(s.lane)
+                                    .px(s.space(4))
+                                    .text_color(chrome.ink_secondary)
+                                    // Setup's own output, as it printed it: left-aligned, in the code face.
+                                    .child(
+                                        observed("set-up-output")
+                                            .role(Role::Label)
+                                            .aria_label(output.clone())
+                                            .w_full()
+                                            .typed(s.small)
+                                            .font_family(s.code.clone())
+                                            .child(output),
+                                    )
+                            }))
+                    }),
+            );
+    observed("welcome")
+        .size_full()
+        .overflow_y_scroll()
+        .child(column)
 }

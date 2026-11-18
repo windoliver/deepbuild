@@ -705,6 +705,77 @@ fn offsets(items: &[Item]) -> HashMap<String, u32> {
         .collect()
 }
 
+/// Where the list's items sit as it scrolls (#1808): each item's top in the list's content, from the items' heights, in
+/// points. Only the items in view are drawn, so a frame over 700 rows costs what it shows.
+pub struct Scroll {
+    tops: Vec<f32>,
+    end: f32,
+}
+
+impl Scroll {
+    pub fn new(heights: impl IntoIterator<Item = f32>) -> Self {
+        let mut tops = Vec::new();
+        let mut end = 0.;
+        for height in heights {
+            tops.push(end);
+            end += height;
+        }
+        Scroll { tops, end }
+    }
+
+    /// Where the items end.
+    pub fn end(&self) -> f32 {
+        self.end
+    }
+
+    /// Where item `at` starts, or where the items end past the last.
+    pub fn top_of(&self, at: usize) -> f32 {
+        self.tops.get(at).copied().unwrap_or(self.end)
+    }
+
+    /// Item `at`'s top and bottom.
+    pub fn span(&self, at: usize) -> (f32, f32) {
+        (self.top_of(at), self.top_of(at + 1))
+    }
+
+    /// Whether item `at` shows whole in a view `room` tall scrolled to `top`.
+    pub fn shows(&self, at: usize, top: f32, room: f32) -> bool {
+        let (from, to) = self.span(at);
+        from >= top && to <= top + room
+    }
+
+    /// Where the view scrolls to show item `at` whole, with the items either side of it when the three fit, so the
+    /// next item an arrow goes to is in view too (#2021); where it is, when it shows them already.
+    pub fn reveal(&self, at: usize, top: f32, room: f32) -> f32 {
+        let (from, to) = self.span(at);
+        let before = at.checked_sub(1).map_or(from, |before| self.span(before).0);
+        let after = if at + 1 < self.tops.len() {
+            self.span(at + 1).1
+        } else {
+            to
+        };
+        let (from, to) = if after - before <= room {
+            (before, after)
+        } else {
+            (from, to)
+        };
+        if from < top {
+            from
+        } else if to > top + room {
+            to - room
+        } else {
+            top
+        }
+    }
+
+    /// The items any part of which shows in a view `room` tall scrolled to `top`.
+    pub fn drawn(&self, top: f32, room: f32) -> std::ops::Range<usize> {
+        let first = self.tops.partition_point(|at| *at <= top).saturating_sub(1);
+        let last = self.tops.partition_point(|at| *at < top + room);
+        first..last.max(first)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
