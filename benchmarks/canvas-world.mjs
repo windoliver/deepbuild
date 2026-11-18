@@ -16,7 +16,7 @@ const CHECKOUT = fileURLToPath(new URL('..', import.meta.url));
 
 /** The test's verdict: PASS only when its one test passed and none failed, else the state its failure opens with. */
 function verdictOf(code, output) {
-  if (code === 0 && /^ℹ pass 1$/m.test(output) && /^ℹ fail 0$/m.test(output)) return { status: 'PASS', reason: 'the test passed: all five runs within 1.20 times the short record\'s time on a reference Mac' };
+  if (code === 0 && /^ℹ pass 1$/m.test(output) && /^ℹ fail 0$/m.test(output)) return { status: 'PASS', reason: 'the test passed: all five runs within 1.20 times the reference record\'s time (empty for cells, 1,000 run events for deep_status) on a reference Mac' };
   const message = /AssertionError[^:]*: (.+)/.exec(output)?.[1] ?? /Error: (.+)/.exec(output)?.[1] ?? `the test exited ${code}`;
   // Never PASS here: the test did not pass. A failure with no state of its own (an assertion on the reply, say) is
   // the change failing the criterion.

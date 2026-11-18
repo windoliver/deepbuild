@@ -72,6 +72,10 @@ field read back to a real writer.
   by any later hub or deep-show change once merged; the benchmark now reads PASS only on a passing exit with
   `pass 1` and `fail 0`, and never takes PASS from a failure's message. Disclosed, not changed: the tasks' cost and
   the 300 s run limit, and `targets.ratio` being a record of the limit, not what the verdict reads.
+- Round 5: no bugs; fixed a `FORCE_COLOR` in the window's environment making every passing run read BLOCKED (the
+  test now runs uncoloured), disclosed the instructions-retired check in both tasks' reasons, and corrected the
+  window times above.
+- Round 6: no bugs; two wording fixes (this list, and the benchmark's PASS reason naming each test's reference record).
 - Declined, with reasons: the kept world's memory and the whole world resent when anything in it changed (the
   issue's scope is the reads; one resend per change replaces one per call); deep_status differs from the merge base
   only on records no writer produces (it follows the projection's rules on purpose); `Hub::record()` and
