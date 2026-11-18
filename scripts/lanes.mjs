@@ -696,6 +696,8 @@ alone.push('tests/acceptance/1347-redraft-1812/');
 alone.push('tests/acceptance/1335/');
 // #1342's files each start their own hubs, a played forge, a web source and played agents, and run a brief to its project.
 alone.push('tests/acceptance/1342/');
+// #1342's blind redraft after #1812 runs the same worlds: its own hubs, a played forge, a web source and played agents.
+alone.push('tests/acceptance/1342-redraft-1812/');
 // #1345's files each start their own hubs, a played forge and played agents, run a standing run to its calls, and draw
 // the app headless with deep-drive over a copy of the record.
 alone.push('tests/acceptance/1345/');
