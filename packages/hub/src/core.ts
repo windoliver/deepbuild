@@ -897,7 +897,7 @@ export class Core {
       // A check runner's reads and plays of a canvas piece (#411, #184): the hub's canvas core, and a replica playing the
       // revision's canonical document, its programs from the evidence store. A job kind's qualification by the core
       // (#518) goes the same way, with the tools it names in the world.
-      canvas: (call) => this.canvasSide.qualifyTool(call), replica: (call) => this.play(call), ...plant,
+      canvas: (call) => this.canvasSide.qualifyTool(call), replica: (call) => this.play(call), ...plant, ...(this.options.safe ? { safe: true } : {}),
       // Nothing in the hub records its source calls, so it keeps no answer (#2650).
       recording: false });
     this.jobKinds = new Jobs({
@@ -920,8 +920,9 @@ export class Core {
     for (const pkg of await extensions.installed()) {
       // One installed by a hub that ran no conformance at install has no kept result: it runs now, once, so the
       // package loads from its result at this start and each later one, as one installed since #785 does. A check
-      // that can't run (an untrusted project) is left to the load's refusal, which names it.
-      if (!extensions.checked(pkg)) await extensions.check(pkg).catch(() => undefined);
+      // that can't run (an untrusted project) is left to the load's refusal, which names it. In safe mode none runs:
+      // a check runs the package's code, and the load is refused anyway (#1879).
+      if (!this.options.safe && !extensions.checked(pkg)) await extensions.check(pkg).catch(() => undefined);
       const load = await extensions.load(pkg);
       if (load.status === 'refused') process.stderr.write(`deep hub: extension ${pkg.id}@${pkg.version} not loaded: ${load.reason}\n`);
       // One installed before panel@1 ran at install has no kept verdict for its views: they run now, once.
