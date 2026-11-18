@@ -84,6 +84,7 @@ fn fuel_of(item: &Item) -> i64 {
         items: vec![item.clone()],
         machine: Vec::new(),
         document: String::new(),
+        rewind: None,
     });
     World::new(
         p,
@@ -145,6 +146,7 @@ fn frame_ns(base: &Item, n: usize, frames: i64) -> f64 {
         items,
         machine: Vec::new(),
         document: String::new(),
+        rewind: None,
     });
     let mut rec = Record::default();
     let mut w = World::new(

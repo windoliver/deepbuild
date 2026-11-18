@@ -1,0 +1,30 @@
+# After hub-idle's reader span went from 5 s to 20 s: eight runs of the real task, one after another, under a test grant, Nov 17 2026.
+# A reading, no test. The rule written into the run script before it ran: Closes only if AC5's test then passes and at most one of the
+# seven neighbouring pairs here is more than 10% apart. Hub rates 6.23 to 6.85 M instructions a second; neighbours 3.9, 8.9, 8.1, 2.5,
+# 4.2, 2.8 and 2.8% apart; the widest of all 28 pairs 9.9%.
+run 1 15:09:16 load 56
+{"bench":"hub","mode":"idle","idleCpuPercent":0.20000000000000018,"rssBytes":108691456,"spanMs":20066.805791000003,"hub":{"pid":95633,"wakeups":729,"instructionsPerSecond":6533927.0417818725,"cpuMsPerSecond":2.985664516017341,"footprintBytes":70265440},"children":[{"pid":96264,"wakeups":0,"instructionsPerSecond":8033708.636992109,"cpuMsPerSecond":1.8530062226783026,"footprintBytes":3293544}]}
+exit=0 load 50
+run 2 15:09:52 load 50
+{"bench":"hub","mode":"idle","idleCpuPercent":0.3999999999999981,"rssBytes":108167168,"spanMs":20076.045415999997,"hub":{"pid":98029,"wakeups":716,"instructionsPerSecond":6288614.783635735,"cpuMsPerSecond":2.9616079147048695,"footprintBytes":70118344},"children":[{"pid":98877,"wakeups":0,"instructionsPerSecond":5797010.197399128,"cpuMsPerSecond":1.5149127913289835,"footprintBytes":3277160}]}
+exit=0 load 49
+run 3 15:10:27 load 49
+{"bench":"hub","mode":"idle","idleCpuPercent":0.40000000000000036,"rssBytes":110985216,"spanMs":20039.722374999998,"hub":{"pid":264,"wakeups":801,"instructionsPerSecond":6845974.831026073,"cpuMsPerSecond":3.2355779080497373,"footprintBytes":72625000},"children":[{"pid":1037,"wakeups":0,"instructionsPerSecond":7871378.5075577935,"cpuMsPerSecond":2.4809974444568623,"footprintBytes":3244368}]}
+exit=0 load 61
+run 4 15:11:03 load 61
+{"bench":"hub","mode":"idle","idleCpuPercent":0.20000000000000018,"rssBytes":110231552,"spanMs":20031.791042,"hub":{"pid":2769,"wakeups":587,"instructionsPerSecond":6330890.170235033,"cpuMsPerSecond":2.836204205648882,"footprintBytes":71805728},"children":[{"pid":3517,"wakeups":0,"instructionsPerSecond":5425963.947612547,"cpuMsPerSecond":1.6509174307310548,"footprintBytes":3277136}]}
+exit=0 load 75
+run 5 15:11:38 load 75
+{"bench":"hub","mode":"idle","idleCpuPercent":0.20000000000000018,"rssBytes":109412352,"spanMs":20026.162624999997,"hub":{"pid":4908,"wakeups":696,"instructionsPerSecond":6490737.713161861,"cpuMsPerSecond":2.959711658688281,"footprintBytes":70904344},"children":[{"pid":5510,"wakeups":0,"instructionsPerSecond":7824479.154303283,"cpuMsPerSecond":2.3695419780902736,"footprintBytes":3293544}]}
+exit=0 load 74
+run 6 15:12:13 load 74
+{"bench":"hub","mode":"idle","idleCpuPercent":0.20000000000000018,"rssBytes":108920832,"spanMs":20038.5485,"hub":{"pid":7015,"wakeups":724,"instructionsPerSecond":6227570.774400151,"cpuMsPerSecond":2.7527567677868485,"footprintBytes":70445664},"children":[{"pid":7829,"wakeups":0,"instructionsPerSecond":8253918.491152191,"cpuMsPerSecond":2.4754683204724137,"footprintBytes":3244368}]}
+exit=0 load 77
+run 7 15:12:48 load 77
+{"bench":"hub","mode":"idle","idleCpuPercent":0.20000000000000018,"rssBytes":108232704,"spanMs":20044.299708,"hub":{"pid":9303,"wakeups":731,"instructionsPerSecond":6404587.133007362,"cpuMsPerSecond":2.8743437705137316,"footprintBytes":69855888},"children":[{"pid":10011,"wakeups":0,"instructionsPerSecond":6733613.444531121,"cpuMsPerSecond":1.9983257875561202,"footprintBytes":3260728}]}
+exit=0 load 79
+run 8 15:13:24 load 79
+{"bench":"hub","mode":"idle","idleCpuPercent":0.20000000000000018,"rssBytes":108134400,"spanMs":20067.553834000002,"hub":{"pid":11458,"wakeups":634,"instructionsPerSecond":6229803.793434288,"cpuMsPerSecond":2.7790153927736556,"footprintBytes":69626824},"children":[{"pid":12086,"wakeups":0,"instructionsPerSecond":12113808.987926096,"cpuMsPerSecond":3.2431041440504047,"footprintBytes":3260728}]}
+exit=0 load 99
+15:13:59 load 99: affected.mjs for ac4 and ac5
+15:19:03 load 72: ended

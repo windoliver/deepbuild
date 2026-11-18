@@ -1,0 +1,42 @@
+#1490: why every test fails at the base 80561d40c ("Merge pull request #2726"). Mostly a note, not a run.
+
+What was run at the base: the type check (`node node_modules/typescript/bin/tsc -p tests/acceptance/1490/tsconfig.json`:
+exit 0), `vitest list --root tests/acceptance/1490` (5 tests in 5 files), record.test.ts (below, observed), and a
+scratch check (not committed) of this folder's judging helpers on hand-made inputs: an honest record over small
+committed files passes; a halved size, a wrong file hash, a missing `full`, a `figure` holding modules `full` lacks, a
+path outside the checkout and two sets sharing one player each fail, naming the set; `module_missing` entries are found
+at any depth and a module is named as a word; equal probes pass and a value or a step hash off fails, naming it; a
+bundle against its set passes, and one that names no set or `full` fails, naming `figure`.
+
+Not run: picks, smallest, parity and reproducible. Each needs a build of `deep-show` (and two of them `deep-logic`), and
+the machine was shared and loaded (one-minute load average about 900). Where they stop is read from the base's code,
+and said so below. No browser was started.
+
+What the base has, from its code:
+- crates/deep-player/web/dist/ holds one player: player_bg.wasm, player.js and player.json (its core version, set
+  digest, runtime digest and 19 modules). There is no sets.json and no set by name.
+- crates/deep-show/src/export/web.rs embeds those bytes for every piece (it picks nothing) and refuses an item whose
+  kind's module that one player lacks (`refused: [{item, code: "module_missing", why}]` under `code: "web.refused"`).
+  Its receipt's `player` is `{core_version, module_set_digest, hash}`: no `module_set`.
+- crates/deep-show/src/export.rs knows #172's planted names (`web_index_export_time` among them) and neither
+  `web_picks_smallest_set` nor `web_picks_full_set`; crates/deep-show/src/main.rs answers a scenario with an unknown
+  `planted` name `{"ok": false, "code": "bad_input"}`.
+- What the tests lean on and the base has: `deep show`, the web export with `track`, #172's lab and 2D piece, its
+  server, browser driver and probe().
+
+Per test:
+
+- record.test.ts (builds nothing; observed)
+  - AC1: fails in helpers.ts `readRecord` at "the size record crates/deep-player/web/dist/sets.json exists: expected
+    false to be true".
+- picks.test.ts (builds deep-show full, deep-logic; read from code)
+  - AC2: the slider fixture's export is exported; fails at "the 2D slider fixture's receipt names the module set it
+    bundles, figure" (undefined, not 'figure'). The record, the lab and the planted run aren't reached.
+- smallest.test.ts (builds deep-show full, deep-logic; read from code)
+  - AC3: fails in #169's `runShow` at "the physics lab (planted web_picks_smallest_set): deep-show run takes the
+    scenario (planted web_picks_smallest_set)": the answer is bad_input.
+- parity.test.ts (builds deep-show full; read from code)
+  - AC4: the plain export is exported; fails at "the 2D piece bundles figure" (undefined). No browser starts.
+- reproducible.test.ts (builds deep-show full; read from code)
+  - AC5: the first clean export is exported; fails in helpers.ts `cleanExport` at "the receipt names the module set
+    it bundles, figure" (undefined). The base's two bundles would be byte-identical, but carry no figure player.
