@@ -856,6 +856,10 @@ timed.push('tests/acceptance/556/ac05-budgets.test.ts');
 // #556's criterion 5, redrafted blind: it starts replicas and hubs and times release replicas against judgeLimit.
 alone.push('tests/acceptance/556-redraft-ac5/');
 timed.push('tests/acceptance/556-redraft-ac5/ac5-budgets.test.ts');
+// #1808's files build deep-drive plain and with env-plants, start real hubs and replicas over 700 rows; its kept file
+// opens the real app's window with Accessibility, and its shown file takes pictures and waits on your taste call, by hand.
+alone.push('tests/acceptance/1808/');
+byHand.push('tests/acceptance/1808/shown.test.ts');
 // #458's pairs, relations and views files each build deep-show or deep-gpu and hold the GPU; its suite files run scripts only.
 alone.push('tests/acceptance/458/pairs/', 'tests/acceptance/458/relations/', 'tests/acceptance/458/views/');
 // #192's dungeon files build deep-show and deep-sandbox, and ac05 also deep-sandbox for Linux x86_64 in Docker.
