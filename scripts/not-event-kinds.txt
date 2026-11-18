@@ -1,0 +1,18 @@
+# Names an open issue writes as `<family>.<name>` that are not event kinds, though the family is an event family,
+# one a line as `<name> #<issue>`: the name as the issue writes it, and the open issue that defines it as a check, a
+# kind rule, a fixture or another thing that is no event. The catalogue drift lane (#2063) passes a listed name, and
+# fails an entry whose issue is closed or no longer names it. A file or a method is not listed: the issue writes it
+# as a path or with its call marks.
+move.feel #274
+stack.slot #335
+process.conserve #980
+process.busy #980
+process.little #980
+plan.sheet #1260
+plan.overlay #1260
+archive.scene #2036
+user.pan #2056
+lease.gpu #2133
+job.status #2136
+layer.puffs #2142
+hub.polkit #2538

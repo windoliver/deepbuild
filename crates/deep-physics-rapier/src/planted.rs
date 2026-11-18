@@ -1,10 +1,40 @@
-//! Issue #522's planted restores: what a restore loads in place of the whole-world checkpoint, so
-//! the checks that hold a seek, a late input and the kit to a straight run are seen to fail.
+//! The runner's planted wrong programs by name, and issue #522's planted restores: what a restore
+//! loads in place of the whole-world checkpoint, so the checks that hold a seek, a late input and
+//! the kit to a straight run are seen to fail.
 
 use deep_canvas_physics::backend::Checkpoint;
 use rapier3d::prelude::*;
 
 use crate::Rapier;
+
+/// The planted wrong programs, by name.
+pub const PLANTED: [&str; 25] = [
+    "caps_allow_restitution_threshold",
+    "caps_allow_rolling_resistance",
+    "caps_allow_tangent_speed",
+    "caps_allow_dynamic_gear",
+    "restore_ignores_version",
+    "hash_rounds_1e6",
+    "key_omits_frame_rate",
+    "role_table_pickup_solid",
+    "occurrences_in_engine_order",
+    "query_bypasses_backend",
+    "query_machines_any",
+    "checkpoint_poses_only",
+    "fork_on_scrub",
+    "restore_keeps_replaced_occurrences",
+    "late_entry_forks",
+    "ring_drops_oldest",
+    "restore_without_warm_start",
+    "simulate_runs_all_steps",
+    "hinge_coordinate_wraps",
+    "checkpoint_drops_turns",
+    "speed_cap_silent",
+    "joint_force_per_step",
+    "solve_cap_reports_success",
+    "mass_ratio_declared_only",
+    "volume_without_constraint",
+];
 
 /// What a planted restore leaves out of the checkpoint it loads.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

@@ -1,0 +1,113 @@
+Base run of tests/acceptance/2218 on b9131dbd9857aefc4dcc39dd0d534d007b1ef671, unchanged, built with
+`npm run build --workspaces && cargo build --locked -p deep-hook`. The last run, after the harness corrections the
+README names. 5 failed, each at its criterion's judgement; 1 passed, the twin.
+
+Command, from the checkout:
+  NO_COLOR=1 node scripts/throttle.mjs test --wait 120 -- node node_modules/vitest/vitest.mjs run tests/acceptance/2218 --no-file-parallelism --reporter=verbose
+Exit status: 1
+
+ RUN  v5.0.5 <checkout>
+
+ × tests/acceptance/2218/unread.test.ts > AC4 #2218.1a2df3f9 a key the hub doesn't read makes the claim BLOCKED > AC4 #2218.1a2df3f9 a spec whose check has dedline: 30m makes the claim BLOCKED, naming dedline and its line, with you as owner 58644ms
+   → AC4 #2218.1a2df3f9 [dedline] one key of the spec's suite check is `dedline`, on line 12 of .deepbuild/done.yaml, a key the hub doesn't read, so the claim must be BLOCKED, naming dedline and its line; the hub ignored dedline and judged the claim PASS: claim:01M7EAK2D5EVF9SX72DZ545VHS: verdict PASS [".deepbuild/checks/valid-token.sh: PASS on 1 clean run","suite: PASS on 1 clean run"]; runs: run:01M7EAK2WEJD1BE4NHSN4RZ9KY of suite on a662ee1f: passed, 3 tests; run:01M7EAK2XYN86M2PCFYWGN0W3H of .deepbuild/checks/valid-token.sh on a662ee1f: passed, 1 tests: expected 'PASS' to be 'BLOCKED' // Object.is equality
+ × tests/acceptance/2218/unread.test.ts > AC4 #2218.1a2df3f9 a key the hub doesn't read makes the claim BLOCKED > AC4 #2218.1a2df3f9 a spec with a top-level chekcs: block makes the claim BLOCKED, naming chekcs and its line, with you as owner 57684ms
+   → AC4 #2218.1a2df3f9 [chekcs] one block at the top of the spec is `chekcs`, on line 15 of .deepbuild/done.yaml, a key the hub doesn't read, so the claim must be BLOCKED, naming chekcs and its line; the hub ignored chekcs and judged the claim PASS: claim:01M7EAMTZA4MAVX2DNMCT3VVVR: verdict PASS [".deepbuild/checks/valid-token.sh: PASS on 1 clean run","suite: PASS on 1 clean run"]; runs: run:01M7EAMVCTE9JEDVZW8GV86YXF of suite on f3c2490c: passed, 3 tests; run:01M7EAMVEE7TSM4K1KZYHPPZ8Z of .deepbuild/checks/valid-token.sh on f3c2490c: passed, 1 tests: expected 'PASS' to be 'BLOCKED' // Object.is equality
+ × tests/acceptance/2218/min-tests.test.ts > AC3 #2218.a145523d a spec check's min_tests is read > AC3 #2218.a145523d a suite that runs 3 tests passes with min_tests: 3, and with min_tests: 5 is INVALID, naming the check, 3 and 5 69095ms
+   → AC3 #2218.a145523d [min_tests: 5] the suite check counted 3 tests and its spec names min_tests: 5, so the claim must be INVALID, naming 3 and 5; the hub read no min_tests and judged it PASS, as it judged the same suite with min_tests: 3 (PASS): claim:01M7EAPYY9TSH3YFD2YEFWJEXV: verdict PASS [".deepbuild/checks/valid-token.sh: PASS on 1 clean run","suite: PASS on 1 clean run"]; runs: run:01M7EAPZ8HDN8YRGQXA1G14QJY of suite on d8926239: passed, 3 tests; run:01M7EAPZ9ZNKXZYWF4B6ZPZPK1 of .deepbuild/checks/valid-token.sh on d8926239: passed, 1 tests: expected 'PASS' to be 'INVALID' // Object.is equality
+ × tests/acceptance/2218/runs.test.ts > AC1 #2218.21b6bc5c a spec check's runs reach the claim's check > AC1 #2218.21b6bc5c with runs: 3, a check that passes on its first run and fails on its second gives the claim INCONCLUSIVE, naming the check as passed and failed on real runs of the commit 57046ms
+   → AC1 #2218.21b6bc5c the spec gives turnstile runs: 3, and its command passes on its first run and fails on its second, so the claim must be INCONCLUSIVE; the hub ran turnstile once (passed) and judged the claim PASS: claim:01M7EARQH31ZX0HJ4SM7T0BW9B: verdict PASS [".deepbuild/checks/valid-token.sh: PASS on 1 clean run","turnstile: PASS on 1 clean run"]; runs: run:01M7EARQWG4B33GAM7JR9CA1E2 of .deepbuild/checks/valid-token.sh on 9a171fb7: passed, 1 tests; run:01M7EARQXS25H3225AFA2GQ0GH of turnstile on 9a171fb7: passed, 1 tests: expected 'PASS' to be 'INCONCLUSIVE' // Object.is equality
+ × tests/acceptance/2218/accept.test.ts > AC2 #2218.fbc757ce a spec check's accept reaches the claim's check > AC2 #2218.fbc757ce with accept: 10%, a check whose every run is clean is given 29 runs on the claim, and the claim passes on no fewer 58275ms
+   → AC2 #2218.fbc757ce the spec gives suite accept: 10%, so it needs 29 clean runs, the least n with 0.9ⁿ ≤ 0.05; the hub gave it 1, not 29: claim:01M7EATF4CZB7J1AG2VG5QGMEW: verdict PASS [".deepbuild/checks/valid-token.sh: PASS on 1 clean run","suite: PASS on 1 clean run"]; runs: run:01M7EATFGGCYD4779VZBR9QPT3 of suite on fee72333: passed, 3 tests; run:01M7EATFJ4AXVWQH3ASXKTNJSV of .deepbuild/checks/valid-token.sh on fee72333: passed, 1 tests: expected 1 to be 29 // Object.is equality
+ ✓ tests/acceptance/2218/twin.test.ts > AC5 #2218.cb279bf8 the twin: this repo's own done.yaml > AC5 #2218.cb279bf8 a claim in a trusted repo whose spec is this repo's own done.yaml runs every check it names and passes: no key is refused 11894ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2218/accept.test.ts > AC2 #2218.fbc757ce a spec check's accept reaches the claim's check > AC2 #2218.fbc757ce with accept: 10%, a check whose every run is clean is given 29 runs on the claim, and the claim passes on no fewer
+AssertionError: AC2 #2218.fbc757ce the spec gives suite accept: 10%, so it needs 29 clean runs, the least n with 0.9ⁿ ≤ 0.05; the hub gave it 1, not 29: claim:01M7EATF4CZB7J1AG2VG5QGMEW: verdict PASS [".deepbuild/checks/valid-token.sh: PASS on 1 clean run","suite: PASS on 1 clean run"]; runs: run:01M7EATFGGCYD4779VZBR9QPT3 of suite on fee72333: passed, 3 tests; run:01M7EATFJ4AXVWQH3ASXKTNJSV of .deepbuild/checks/valid-token.sh on fee72333: passed, 1 tests: expected 1 to be 29 // Object.is equality
+
+- Expected
++ Received
+
+- 29
++ 1
+
+ ❯ tests/acceptance/2218/accept.test.ts:28:197
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  tests/acceptance/2218/min-tests.test.ts > AC3 #2218.a145523d a spec check's min_tests is read > AC3 #2218.a145523d a suite that runs 3 tests passes with min_tests: 3, and with min_tests: 5 is INVALID, naming the check, 3 and 5
+AssertionError: AC3 #2218.a145523d [min_tests: 5] the suite check counted 3 tests and its spec names min_tests: 5, so the claim must be INVALID, naming 3 and 5; the hub read no min_tests and judged it PASS, as it judged the same suite with min_tests: 3 (PASS): claim:01M7EAPYY9TSH3YFD2YEFWJEXV: verdict PASS [".deepbuild/checks/valid-token.sh: PASS on 1 clean run","suite: PASS on 1 clean run"]; runs: run:01M7EAPZ8HDN8YRGQXA1G14QJY of suite on d8926239: passed, 3 tests; run:01M7EAPZ9ZNKXZYWF4B6ZPZPK1 of .deepbuild/checks/valid-token.sh on d8926239: passed, 1 tests: expected 'PASS' to be 'INVALID' // Object.is equality
+
+Expected: "INVALID"
+Received: "PASS"
+
+ ❯ tests/acceptance/2218/min-tests.test.ts:36:300
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  tests/acceptance/2218/runs.test.ts > AC1 #2218.21b6bc5c a spec check's runs reach the claim's check > AC1 #2218.21b6bc5c with runs: 3, a check that passes on its first run and fails on its second gives the claim INCONCLUSIVE, naming the check as passed and failed on real runs of the commit
+AssertionError: AC1 #2218.21b6bc5c the spec gives turnstile runs: 3, and its command passes on its first run and fails on its second, so the claim must be INCONCLUSIVE; the hub ran turnstile once (passed) and judged the claim PASS: claim:01M7EARQH31ZX0HJ4SM7T0BW9B: verdict PASS [".deepbuild/checks/valid-token.sh: PASS on 1 clean run","turnstile: PASS on 1 clean run"]; runs: run:01M7EARQWG4B33GAM7JR9CA1E2 of .deepbuild/checks/valid-token.sh on 9a171fb7: passed, 1 tests; run:01M7EARQXS25H3225AFA2GQ0GH of turnstile on 9a171fb7: passed, 1 tests: expected 'PASS' to be 'INCONCLUSIVE' // Object.is equality
+
+Expected: "INCONCLUSIVE"
+Received: "PASS"
+
+ ❯ tests/acceptance/2218/runs.test.ts:27:377
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  tests/acceptance/2218/unread.test.ts > AC4 #2218.1a2df3f9 a key the hub doesn't read makes the claim BLOCKED > AC4 #2218.1a2df3f9 a spec whose check has dedline: 30m makes the claim BLOCKED, naming dedline and its line, with you as owner
+AssertionError: AC4 #2218.1a2df3f9 [dedline] one key of the spec's suite check is `dedline`, on line 12 of .deepbuild/done.yaml, a key the hub doesn't read, so the claim must be BLOCKED, naming dedline and its line; the hub ignored dedline and judged the claim PASS: claim:01M7EAK2D5EVF9SX72DZ545VHS: verdict PASS [".deepbuild/checks/valid-token.sh: PASS on 1 clean run","suite: PASS on 1 clean run"]; runs: run:01M7EAK2WEJD1BE4NHSN4RZ9KY of suite on a662ee1f: passed, 3 tests; run:01M7EAK2XYN86M2PCFYWGN0W3H of .deepbuild/checks/valid-token.sh on a662ee1f: passed, 1 tests: expected 'PASS' to be 'BLOCKED' // Object.is equality
+
+Expected: "BLOCKED"
+Received: "PASS"
+
+ ❯ refused tests/acceptance/2218/unread.test.ts:22:270
+
+ ❯ tests/acceptance/2218/unread.test.ts:34:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  tests/acceptance/2218/unread.test.ts > AC4 #2218.1a2df3f9 a key the hub doesn't read makes the claim BLOCKED > AC4 #2218.1a2df3f9 a spec with a top-level chekcs: block makes the claim BLOCKED, naming chekcs and its line, with you as owner
+AssertionError: AC4 #2218.1a2df3f9 [chekcs] one block at the top of the spec is `chekcs`, on line 15 of .deepbuild/done.yaml, a key the hub doesn't read, so the claim must be BLOCKED, naming chekcs and its line; the hub ignored chekcs and judged the claim PASS: claim:01M7EAMTZA4MAVX2DNMCT3VVVR: verdict PASS [".deepbuild/checks/valid-token.sh: PASS on 1 clean run","suite: PASS on 1 clean run"]; runs: run:01M7EAMVCTE9JEDVZW8GV86YXF of suite on f3c2490c: passed, 3 tests; run:01M7EAMVEE7TSM4K1KZYHPPZ8Z of .deepbuild/checks/valid-token.sh on f3c2490c: passed, 1 tests: expected 'PASS' to be 'BLOCKED' // Object.is equality
+
+Expected: "BLOCKED"
+Received: "PASS"
+
+ ❯ refused tests/acceptance/2218/unread.test.ts:22:270
+
+ ❯ tests/acceptance/2218/unread.test.ts:38:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+
+ Test Files  4 failed | 1 passed (5)
+      Tests  5 failed | 1 passed (6)
+   Start at  16:44:18
+   Duration  314.23s (tests 100%)
+
+==== node scripts/affected.mjs, same base, same files, run once before the last harness correction ====
+
+Command, from the checkout, with cargo on PATH:
+  node scripts/affected.mjs tests/acceptance/2218/accept.test.ts tests/acceptance/2218/min-tests.test.ts tests/acceptance/2218/runs.test.ts tests/acceptance/2218/twin.test.ts tests/acceptance/2218/unread.test.ts tests/acceptance/2218/helpers.ts
+Exit status: 1
+
+Its lines that name this folder, whole:
+
+parallel vitest: tests/acceptance/2218/accept.test.ts tests/acceptance/2218/min-tests.test.ts tests/acceptance/2218/runs.test.ts tests/acceptance/2218/twin.test.ts tests/acceptance/2218/unread.test.ts
+NEW FAIL tests/acceptance/2218/accept.test.ts › AC2 #2218.fbc757ce a spec check's accept reaches the claim's check › AC2 #2218.fbc757ce with accept: 10%, a check whose every run is clean is given 29 runs on the claim, and the claim passes on no fewer: AC2 #2218.fbc757ce the spec gives suite accept: 10%, so it needs 29 clean runs, the least n with 0.9ⁿ ≤ 0.05; the hub gave it 1, not 29: claim:01M7E9Z15GBNJ7PNWJE5ZMT4AW: verdict PASS [".deepbuild/checks/valid-token.sh: PASS on 1 clean run","suite: PASS on 1 clean run"]; runs: run:01M7E9Z5686NRD21TKE4JWF3F9 of suite on 29d93789: passed, 3 tests; run:01M7E9Z5GTT56ZXXX36JD4HVVT of .deepbuild/checks/valid-token.sh on 29d93789: passed, 1 tests: expected 1 to be 29 // Object.is equality
+NEW FAIL tests/acceptance/2218/runs.test.ts › AC1 #2218.21b6bc5c a spec check's runs reach the claim's check › AC1 #2218.21b6bc5c with runs: 3, a check that passes on its first run and fails on its second gives the claim INCONCLUSIVE, naming the check as passed and failed on real runs of the commit: AC1 #2218.21b6bc5c the spec gives turnstile runs: 3, and its command passes on its first run and fails on its second, so the claim must be INCONCLUSIVE; the hub ran turnstile once (passed) and judged the claim PASS: claim:01M7E9Z2SSJ8BBP2GQ8BP1KG9C: verdict PASS [".deepbuild/checks/valid-token.sh: PASS on 1 clean run","turnstile: PASS on 1 clean run"]; runs: run:01M7E9Z768KRVZ5BFQNTRAR9YW of turnstile on 8bad8b83: passed, 1 tests; run:01M7E9Z78KK379NJBVB1JVG46G of .deepbuild/checks/valid-token.sh on 8bad8b83: passed, 1 tests: expected 'PASS' to be 'INCONCLUSIVE' // Object.is equality
+NEW FAIL tests/acceptance/2218/unread.test.ts › AC4 #2218.1a2df3f9 a key the hub doesn't read makes the claim BLOCKED › AC4 #2218.1a2df3f9 a spec whose check has dedline: 30m makes the claim BLOCKED, naming dedline and its line, with you as owner: AC4 #2218.1a2df3f9 [dedline] one key of the spec's suite check is `dedline`, on line 12 of .deepbuild/done.yaml, a key the hub doesn't read, so the claim must be BLOCKED, naming dedline and its line; the hub ignored dedline and judged the claim PASS: claim:01M7E9YYX5X2ZW2EJATXEDEVGX: verdict PASS [".deepbuild/checks/valid-token.sh: PASS on 1 clean run","suite: PASS on 1 clean run"]; runs: run:01M7E9Z36F1355RJBNG2ASNDQR of suite on f2bbba3c: passed, 3 tests; run:01M7E9Z4B6ZHWTQ1CZ1TRT6W6M of .deepbuild/checks/valid-token.sh on f2bbba3c: passed, 1 tests: expected 'PASS' to be 'BLOCKED' // Object.is equality
+NEW FAIL tests/acceptance/2218/min-tests.test.ts › AC3 #2218.a145523d a spec check's min_tests is read › AC3 #2218.a145523d a suite that runs 3 tests passes with min_tests: 3, and with min_tests: 5 is INVALID, naming the check, 3 and 5: AC3 #2218.a145523d [min_tests: 5] the suite check counted 3 tests and its spec names min_tests: 5, so the claim must be INVALID, naming 3 and 5; the hub read no min_tests and judged it PASS, as it judged the same suite with min_tests: 3 (PASS): claim:01M7EA0CXCEVKFK1WW2BP56CVX: verdict PASS [".deepbuild/checks/valid-token.sh: PASS on 1 clean run","suite: PASS on 1 clean run"]; runs: run:01M7EA0H2HWRJ7J8YNA4FG90J6 of suite on 022c534f: passed, 3 tests; run:01M7EA0HVJJZN4SNKX9N4D9XMJ of .deepbuild/checks/valid-token.sh on 022c534f: passed, 1 tests: expected 'PASS' to be 'INVALID' // Object.is equality
+NEW FAIL tests/acceptance/2218/unread.test.ts › AC4 #2218.1a2df3f9 a key the hub doesn't read makes the claim BLOCKED › AC4 #2218.1a2df3f9 a spec with a top-level chekcs: block makes the claim BLOCKED, naming chekcs and its line, with you as owner: AC4 #2218.1a2df3f9 [chekcs] one block at the top of the spec is `chekcs`, on line 15 of .deepbuild/done.yaml, a key the hub doesn't read, so the claim must be BLOCKED, naming chekcs and its line; the hub ignored chekcs and judged the claim PASS: claim:01M7EA1G96W2QRXC4HGB8V1RS5: verdict PASS [".deepbuild/checks/valid-token.sh: PASS on 1 clean run","suite: PASS on 1 clean run"]; runs: run:01M7EA1SS6JRRRW66AN0YMDK5H of suite on d45fc34a: passed, 3 tests; run:01M7EA1V05FJDGFNCFZBZNTZ3D of .deepbuild/checks/valid-token.sh on d45fc34a: passed, 1 tests: expected 'PASS' to be 'BLOCKED' // Object.is equality
+
+Its summary line:
+
+FAIL affected: 159 new, 42 already failing on main, 0 inconclusive or blocked, 0 listed skips, 1 passed, in 650 s at load 206; logs in <tmp>/deep-affected-afKp7Y
+
+It printed no WIDE, INCONCLUSIVE, BLOCKED, SKIP, NOTE or LISTED line. The one test it counts passed is the twin.
+Its other 154 NEW FAIL lines come from the lint scripts it runs beside the tests, on files this job did not
+write, and none names this folder. By what each starts with: size (51), deps (46), code mappings (23), vendor/gpui-pre-apple/src/metal_renderer.rs (16), known-failures.json (7), canvas-lint (4), secrets (1), vendor/gpui-pre/src/arena.rs (1), vendor/gpui-pre-apple/src/metal_renderer/ycbcr_surface.rs (1), slot kit environment@1 (1), slots (1), scripts/canvas-closures.mjs (1), record reader (1).
+The 42 KNOWN lines are the failures scripts/known-failures.json already lists.

@@ -1,0 +1,15 @@
+Command: node --test --test-name-pattern="listed evidence|an unrun row sharing|an unfinished Vitest report|runner killed outright" tests/listed-failures.test.mjs tests/lane-reading.test.mjs
+Exit: 0
+
+✔ a runner killed outright isn't explained by a test that named its own state (0.855459ms)
+✔ listed evidence is never PASS; an unrun state or a crashed runner is never excused by that ID (12.470916ms)
+✔ an unrun row sharing a listed failure ID keeps its own state in the evidence (1.476667ms)
+✔ an unfinished Vitest report cannot turn a listed failure and missing results into PASS (30.235417ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1073.467917

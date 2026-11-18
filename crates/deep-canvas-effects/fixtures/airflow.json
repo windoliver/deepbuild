@@ -1,0 +1,146 @@
+{
+ "format": 1,
+ "id": "doc-508-airflow",
+ "profile": "scene",
+ "title": "Airflow about a hub",
+ "description": "Airflow about a hub: a #508 effect fixture, drawn from its params.",
+ "size": [
+  480,
+  270
+ ],
+ "seed": 508,
+ "camera": "cam",
+ "transport": {
+  "span": "4s"
+ },
+ "requires": {
+  "modules": {
+   "scene3d": "^1",
+   "effects": "^1"
+  }
+ },
+ "layers": {
+  "main": {
+   "writer": "agent-a",
+   "title": "Main",
+   "order": "a0"
+  }
+ },
+ "items": {
+  "cam": {
+   "id": "cam",
+   "name": "cam",
+   "order": "a000",
+   "layer": "main",
+   "kind": "camera@1",
+   "params": {
+    "projection": "perspective",
+    "position": [
+     0,
+     2,
+     6
+    ],
+    "target": [
+     0,
+     0,
+     0
+    ],
+    "fov": 40
+   }
+  },
+  "hub": {
+   "id": "hub",
+   "name": "hub",
+   "order": "a001",
+   "layer": "main",
+   "kind": "mark.box@1",
+   "params": {
+    "size": [
+     0.6,
+     0.6,
+     0.6
+    ],
+    "paint": {
+     "fill": {
+      "role": "ink"
+     }
+    }
+   },
+   "at": {
+    "pos": [
+     0,
+     0,
+     0
+    ]
+   }
+  },
+  "path": {
+   "id": "path",
+   "name": "path",
+   "order": "a002",
+   "layer": "main",
+   "kind": "curve@1",
+   "params": {
+    "points": [
+     [
+      1.0,
+      0,
+      -2
+     ],
+     [
+      1.0,
+      0,
+      0
+     ],
+     [
+      1.0,
+      0,
+      2
+     ]
+    ]
+   }
+  },
+  "flow": {
+   "id": "flow",
+   "name": "flow",
+   "order": "a003",
+   "layer": "main",
+   "kind": "effect@1",
+   "params": {
+    "kind": "airflow",
+    "resolution": "half",
+    "airflow": {
+     "paths": [
+      "path"
+     ],
+     "around": {
+      "axis": [
+       0,
+       0,
+       1
+      ],
+      "copies": 3,
+      "span": [
+       0,
+       360
+      ]
+     },
+     "count": 128,
+     "speed": 1,
+     "length": 2,
+     "fade": {
+      "in": 0.2,
+      "out": 0.3
+     }
+    }
+   },
+   "at": {
+    "pos": [
+     0,
+     0,
+     0
+    ]
+   }
+  }
+ }
+}

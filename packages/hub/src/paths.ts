@@ -84,6 +84,9 @@ export function repoOf(cwd: string): string | undefined {
   return id;
 }
 
+/** A program on PATH, without loading setup's agent facts into a lifecycle command. */
+export const onPath = (name: string): string | undefined => (process.env.PATH ?? '').split(':').map((dir) => join(dir, name)).find((file) => file.startsWith('/') && existsSync(file));
+
 /** The installed hub's root: ~/.deepbuild. A dev hub's is the folder given to --root. */
 export const installedRoot = (): string => join(homedir(), '.deepbuild');
 /**

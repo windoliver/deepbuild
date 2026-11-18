@@ -1,0 +1,60 @@
+Base: 1c4d1f0e2aaad8c6a6573848823566d04ff73d17
+Command: node --test tests/acceptance/2444/preflight-known-failures.test.mjs
+Exit: 1
+Temporary paths redacted.
+
+✔ AC1 #2444.3bfdfb07 control: the fixture runs for real, a lane with only passing tests PASSes and an unlisted failure fails it (19122.693916ms)
+✖ AC1 #2444.3bfdfb07 a unit lane failing only on a listed test prints it LISTED with the issue its entry names and PASSes, exit 0 (12594.596208ms)
+✖ AC1 #2444.3bfdfb07 beside a listed failure, an unlisted one still fails the lane and is not LISTED (9613.143291ms)
+✔ AC1 #2444.3bfdfb07 with no entry for a failing test, the lane fails and prints no LISTED line (13073.788875ms)
+✔ AC1 #2444.3bfdfb07 wrong runners fail these assertions (AssertionError, not an import or setup error) (4.296542ms)
+✔ evidence reader (fixture only; does not prove AC2): accepts a complete in-budget record and rejects each way a run can fall short (4.034375ms)
+﹣ AC2 #2444.1bff92b0 a full scripts/preflight on a clean checkout of main on a reference Mac exits 0, every lane PASS, checks within the preflight budget (4.171208ms) # INCONCLUSIVE: unmeasured: no dated full-run output; record one on a reference Mac (README) and set DEEP_2444_FULL_RUN to its file
+ℹ tests 7
+ℹ suites 0
+ℹ pass 4
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 1
+ℹ todo 0
+ℹ duration_ms 55507.056792
+
+✖ failing tests:
+
+test at tests/acceptance/2444/preflight-known-failures.test.mjs:82:1
+✖ AC1 #2444.3bfdfb07 a unit lane failing only on a listed test prints it LISTED with the issue its entry names and PASSes, exit 0 (12594.596208ms)
+  AssertionError [ERR_ASSERTION]: the listed failure is not printed as LISTED with the issue its entry names
+      at Object.listedOnly (file://<base-checkout>/tests/acceptance/2444/preflight-known-failures.test.mjs:52:12)
+      at TestContext.<anonymous> (file://<base-checkout>/tests/acceptance/2444/preflight-known-failures.test.mjs:83:9)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'RUN unit\nscripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node --test --test-reporter=file://<base-checkout>/scripts/proof-reporter.mjs --test-reporter-destination=<temporary>/deep-preflight-output-VMCgPG/report --test-reporter=spec --test-reporter-destination=stdout listed.test.mjs ok.test.mjs` runs unleased\n✖ listed on main (0.437875ms)\n✔ fine (4.105666ms)\nℹ tests 2\nℹ suites 0\nℹ pass 1\nℹ fail 1\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 936.256459\n\n✖ failing tests:\n\ntest at listed.test.mjs:2:1\n✖ listed on main (0.437875ms)\n  Error: planted failure\n      at TestContext.<anonymous> (file://<temporary>/deep-2444-0oVOhm/listed.test.mjs:2:38)\n      at Test.runInAsyncScope (node:async_hooks:227:14)\n      at Test.run (node:internal/test_runner/test:1402:25)\n      at Test.start (node:internal/test_runner/test:1262:17)\n      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17)\nFAIL unit: Error: planted failure\n  Fix: none\n  Elapsed: 11.48 s\n',
+    expected: /^LISTED listed\.test\.mjs › listed on main.*#90441/m,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2444/preflight-known-failures.test.mjs:86:1
+✖ AC1 #2444.3bfdfb07 beside a listed failure, an unlisted one still fails the lane and is not LISTED (9613.143291ms)
+  AssertionError [ERR_ASSERTION]: the listed failure is not printed as LISTED with its issue beside an unlisted one
+      at Object.both (file://<base-checkout>/tests/acceptance/2444/preflight-known-failures.test.mjs:58:12)
+      at TestContext.<anonymous> (file://<base-checkout>/tests/acceptance/2444/preflight-known-failures.test.mjs:87:9)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'RUN unit\nscripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node --test --test-reporter=file://<base-checkout>/scripts/proof-reporter.mjs --test-reporter-destination=<temporary>/deep-preflight-output-6i0nyp/report --test-reporter=spec --test-reporter-destination=stdout listed.test.mjs unlisted.test.mjs ok.test.mjs` runs unleased\n✖ listed on main (0.990125ms)\n✔ fine (4.261708ms)\n✖ fresh break (1.994917ms)\nℹ tests 3\nℹ suites 0\nℹ pass 1\nℹ fail 2\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 1537.282334\n\n✖ failing tests:\n\ntest at listed.test.mjs:2:1\n✖ listed on main (0.990125ms)\n  Error: planted failure\n      at TestContext.<anonymous> (file://<temporary>/deep-2444-ghqQNF/listed.test.mjs:2:38)\n      at Test.runInAsyncScope (node:async_hooks:227:14)\n      at Test.run (node:internal/test_runner/test:1402:25)\n      at Test.start (node:internal/test_runner/test:1262:17)\n      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17)\n\ntest at unlisted.test.mjs:2:1\n✖ fresh break (1.994917ms)\n  Error: planted failure\n      at TestContext.<anonymous> (file://<temporary>/deep-2444-ghqQNF/unlisted.test.mjs:2:35)\n      at Test.runInAsyncScope (node:async_hooks:227:14)\n      at Test.run (node:internal/test_runner/test:1402:25)\n      at Test.start (node:internal/test_runner/test:1262:17)\n      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17)\nFAIL unit: Error: planted failure\n  Fix: none\n  Elapsed: 9.28 s\n',
+    expected: /^LISTED listed\.test\.mjs › listed on main.*#90441/m,
+    operator: 'match',
+    diff: 'simple'
+  }

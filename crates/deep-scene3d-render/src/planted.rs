@@ -16,6 +16,14 @@ pub struct Planted {
     pub ao: ao::Planted,
     /// #431: the emission target is the color target's excess over 1, never the emitted radiance.
     pub emission_thresholds_color: bool,
+    /// #458: the core velocity target leaves out an instancer's elements.
+    pub instanced_skips_velocity: bool,
+    /// #458: the normal target leaves out an instancer's elements.
+    pub instances_skip_normal: bool,
+    /// #458: the output pass applies exposure after the tone map.
+    pub exposure_after_tone_map: bool,
+    /// #458: every position is uploaded as the world has it, never about the view's origin.
+    pub absolute_positions: bool,
     /// #431: a material operator's `sample_grad` takes implicit derivatives.
     pub sample_grad_implicit: bool,
     /// #431: the opaque scene's copy is taken after the see-through parts draw.
@@ -122,4 +130,9 @@ pub struct Planted {
     pub warms_per_item: bool,
     /// #537: a terrain overlay keeps the grid it holds when a frame seeks to another step.
     pub overlay_keeps_grid_on_seek: bool,
+    /// #1381: a terrain plate's horizon table is never read: nothing past the cascades shadows it
+    /// and nothing occludes its sky.
+    pub horizon_unbaked: bool,
+    /// #1381: a terrain plate's sky occlusion from its slope alone, (1 + n.y) ÷ 2.
+    pub occlusion_from_slope: bool,
 }

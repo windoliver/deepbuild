@@ -35,7 +35,9 @@ fn row_name(kind: &str) -> String {
         .filter(|p| !p.is_empty())
         .map(|p| {
             let mut c = p.chars();
-            c.next().map_or(String::new(), |f| f.to_ascii_uppercase().to_string() + c.as_str())
+            c.next().map_or(String::new(), |f| {
+                f.to_ascii_uppercase().to_string() + c.as_str()
+            })
         })
         .collect()
 }
@@ -48,7 +50,11 @@ fn field_ty(e: &Region, emits: &[Emit]) -> String {
     }
     if let Some(t) = rust_ty(&e.ty) {
         let n = Ty::named(&e.ty).map_or(1, |t| e.size / t.size());
-        return if n == 1 { t.to_string() } else { format!("[{t}; {n}]") };
+        return if n == 1 {
+            t.to_string()
+        } else {
+            format!("[{t}; {n}]")
+        };
     }
     match e.ty.as_str() {
         "control" => "Slot<f64>".into(),
@@ -64,7 +70,12 @@ fn field_ty(e: &Region, emits: &[Emit]) -> String {
 pub fn fields(layout: &Layout, by_name: bool) -> Vec<Region> {
     let mut out = Vec::new();
     for region in ["reads", "writes", "emits"] {
-        let mut list: Vec<Region> = layout.entries.iter().filter(|e| e.region == region).cloned().collect();
+        let mut list: Vec<Region> = layout
+            .entries
+            .iter()
+            .filter(|e| e.region == region)
+            .cloned()
+            .collect();
         if by_name {
             list.sort_by(|a, b| a.name.cmp(&b.name));
             let mut at = 0;
@@ -107,16 +118,28 @@ pub fn rust(item: &str, layout: &Layout, emits: &[Emit], by_name: bool) -> Value
             row_name(&e.kind)
         ));
         for (name, ty) in &e.fields {
-            src.push_str(&format!(", pub {}: {}", ident(name), rust_ty(ty.name()).unwrap_or("u32")));
+            src.push_str(&format!(
+                ", pub {}: {}",
+                ident(name),
+                rust_ty(ty.name()).unwrap_or("u32")
+            ));
         }
         src.push_str(" }\n");
     }
-    for (region, ty, at, packed) in [("reads", "Reads", "reads_at", false), ("writes", "Writes", "writes_at", false), ("emits", "Emits", "emits_at", true)] {
+    for (region, ty, at, packed) in [
+        ("reads", "Reads", "reads_at", false),
+        ("writes", "Writes", "writes_at", false),
+        ("emits", "Emits", "emits_at", true),
+    ] {
         let list: Vec<&Region> = fields.iter().filter(|e| e.region == region).collect();
         if list.is_empty() && region == "emits" {
             continue;
         }
-        let repr = if packed { "C, packed(4)" } else { "C, align(8)" };
+        let repr = if packed {
+            "C, packed(4)"
+        } else {
+            "C, align(8)"
+        };
         src.push_str(&format!("\n/// The {region} region, each field at its region map offset.\n#[repr({repr})]\npub struct {ty} {{\n"));
         let mut end = 0;
         for (n, e) in list.iter().enumerate() {
@@ -125,15 +148,29 @@ pub fn rust(item: &str, layout: &Layout, emits: &[Emit], by_name: bool) -> Value
             }
             src.push_str(&format!(
                 "    /// {}.{}: {}, {} B at {}\n    pub {}: {},\n",
-                e.region, e.name, e.ty, e.size, e.offset, ident(&e.name), field_ty(e, emits)
+                e.region,
+                e.name,
+                e.ty,
+                e.size,
+                e.offset,
+                ident(&e.name),
+                field_ty(e, emits)
             ));
             end = e.offset + e.size;
         }
         src.push_str("}\n");
         for e in &list {
-            src.push_str(&format!("const _: () = assert!(core::mem::offset_of!({ty}, {}) == {});\n", ident(&e.name), e.offset));
+            src.push_str(&format!(
+                "const _: () = assert!(core::mem::offset_of!({ty}, {}) == {});\n",
+                ident(&e.name),
+                e.offset
+            ));
         }
-        let (mutable, deref) = if region == "reads" { ("", "&*core::ptr::addr_of!") } else { ("mut ", "&mut *core::ptr::addr_of_mut!") };
+        let (mutable, deref) = if region == "reads" {
+            ("", "&*core::ptr::addr_of!")
+        } else {
+            ("mut ", "&mut *core::ptr::addr_of_mut!")
+        };
         src.push_str(&format!(
             "#[no_mangle]\npub static mut {at}: {ty} = unsafe {{ core::mem::zeroed() }};\n\
              /// The {region} region.\npub fn {region}() -> &'static {mutable}{ty} {{\n    unsafe {{ {deref}({at}) }}\n}}\n"
@@ -152,7 +189,11 @@ mod tests {
     /// so the source deep_kinds serves beside it is the program's.
     #[test]
     fn the_gallery_program_is_its_source_assembled() {
-        let built = wat::parse_str(include_str!("../../deep-show/gallery/logic-counter.wat")).expect("the source assembles");
-        assert_eq!(built.as_slice(), include_bytes!("../../deep-show/gallery/logic-counter.wasm"));
+        let built = wat::parse_str(include_str!("../../deep-show/gallery/logic-counter.wat"))
+            .expect("the source assembles");
+        assert_eq!(
+            built.as_slice(),
+            include_bytes!("../../deep-show/gallery/logic-counter.wasm")
+        );
     }
 }

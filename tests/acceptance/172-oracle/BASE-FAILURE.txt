@@ -1,0 +1,24 @@
+#172 Oracle lane: why both tests fail at the base f98921218 ("Merge pull request #2636"). A note, not a run.
+
+Run at the base: the type check (`node node_modules/typescript/bin/tsc -p tests/acceptance/172-oracle/tsconfig.json`:
+exit 0). The tests themselves were not run (no oracle checkout here, and past the export the surface plainly doesn't
+exist: `video.codec: "web"` answers `unknown_target`, see tests/acceptance/172/BASE-FAILURE.txt). A scratch check (not
+committed) ran `worldRecord` on both scenes at the base: the portability scene gives 61 step hashes, all distinct, and
+its checkpoint at step 60; the parity scene is presented and gives 625 step hashes, all distinct, and 31 checkpoints,
+deep-physics's bake of each scene repeating physics_bake's hashes step for step.
+
+The two pinned files were fetched from branch doneright of DeepBuildAI/deepbuild for this job and hash to the
+SHA-256s `pinned()` holds them to (snapshot_portability.rs 96ac7c887c03bc4199ff0d33c3e62ddd47b2637ee89343fc60100863d7637bd6,
+the same pin #2012's suite holds; parallel_path_parity.rs 2492334a405f627e71032e9dea8db722574b5cc469116a991a55a8d4f6604b97).
+
+- snapshot-portability.test.ts
+  - Without an oracle checkout (no DEEP_ORACLES and no ../deep-oracles beside this checkout, as here): BLOCKED at
+    `pinned` with the one unblock ask.
+  - With it: `worldRecord` (deep-show's physics_bake and deep-physics's bake of the scene's world, the calls #522's
+    and #1918's suites make of a scene; the world itself is #2012's Oracle scene, which the base records and replays
+    through deep-physics), then `exportOnce` presents the scene and the web export fails at `webReceiptOf`: "the
+    portability scene exported to the web is exported: expected 'refused' to be 'exported'" (the export read from
+    the base's code).
+- parallel-path-parity.test.ts
+  - The same: BLOCKED without the checkout; with it, `worldRecord`, then `webReceiptOf` fails ("the parity scene
+    exported to the web is exported").

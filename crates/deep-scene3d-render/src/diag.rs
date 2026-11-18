@@ -530,7 +530,7 @@ fn resolved(scene: &Scene) -> (Scene, BTreeMap<String, u32>) {
 
 /// The scene on a white albedo: every solid's paint and material base white, its maps, pattern,
 /// operator and emission gone, so the frame shows only the light.
-fn white(scene: &Scene) -> Scene {
+pub fn white(scene: &Scene) -> Scene {
     let mut s = scene.clone();
     for layer in &mut s.layers {
         for solid in &mut layer.solids {
@@ -645,6 +645,9 @@ fn draw(
         }
         _ => {}
     }
+    // #458: the views built here draw from the scene as the renderer places it.
+    let placed = renderer.placed(scene);
+    let scene = placed.as_ref().unwrap_or(scene);
     let (chosen, levels) = resolved(scene);
     counts.levels.clone_from(&levels);
     // The renderer's own cascades at this view; the shadow atlas draws them as it drew them.

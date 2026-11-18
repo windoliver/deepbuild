@@ -17,6 +17,42 @@ fn gcd(a: i64, b: i64) -> i64 {
     }
 }
 
+/// #155: a strip's `rate: {ramp: {to, over, shape: linear | exp = linear}}` (Strip and track:
+/// generator sources and rate ramps): from rate 1 at the strip's start to `to` (a rational, 0 or
+/// more; above 0 for exp) over `over` flicks. `None` when `rate` is no ramp; `Some(Err)` names
+/// what is wrong with one.
+pub fn ramp(d: &Value, v: Option<&Value>) -> Option<Result<crate::mix::Ramp, String>> {
+    let r = v?.get("ramp")?;
+    // A rate, or 0 written as a number, `[0, q]` or `"0/q"`.
+    let zero = match r.get("to") {
+        Some(Value::Number(n)) => n.as_f64() == Some(0.0),
+        Some(Value::Array(a)) => {
+            a.len() == 2 && a[0].as_f64() == Some(0.0) && a[1].as_i64().is_some_and(|q| q > 0)
+        }
+        Some(Value::String(s)) => s
+            .split_once('/')
+            .is_some_and(|(p, q)| p.trim() == "0" && q.trim().parse::<i64>().is_ok_and(|q| q > 0)),
+        _ => false,
+    };
+    let to = if zero {
+        Some((0, 1))
+    } else {
+        rate(r.get("to"))
+    };
+    let over = time(d, r.get("over")).filter(|o| *o > 0);
+    let exp = match r.get("shape").and_then(Value::as_str).unwrap_or("linear") {
+        "linear" => false,
+        "exp" => true,
+        s => return Some(Err(format!("rate.ramp.shape {s} isn't linear or exp"))),
+    };
+    Some(match (to, over) {
+        (None, _) => Err("rate.ramp.to is a rational, 0 or more".into()),
+        (_, None) => Err("rate.ramp.over is a time above 0".into()),
+        (Some((0, _)), _) if exp => Err("rate.ramp.to is above 0 for an exp ramp".into()),
+        (Some(to), Some(over)) => Ok(crate::mix::Ramp { to, over, exp }),
+    })
+}
+
 /// A rate as a reduced `[p, q]`: a number, `[p, q]` or `"p/q"`.
 pub fn rate(v: Option<&Value>) -> Option<(i64, i64)> {
     let (p, q) = match v {

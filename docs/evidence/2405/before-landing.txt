@@ -1,0 +1,28 @@
+# The Scope's reading before the hashes landed, 2026-11-15: the lane's word rule with the new names over the tree, the
+# open issues and the open pull requests. Counted without naming a word; every finding outside a blind suite was
+# restated in our own words first.
+== the names
+The study rounds' private scan lists, read into the forms the lane matches, give 541 forms: 287 are added as hashes,
+21 were already listed, 167 are also plain words and stay out, 60 name things DeepBuild runs, links, calls, reads or
+writes and are never added (one of them left the list on main in #2596, while this change was open), and 6 are no
+name.
+== the tree: 16675 tracked files at 94f02d1e5 (main merged), 36 findings in 15 files, every one in a blind acceptance suite (never edited)
+  tests/acceptance/1901: 1
+  tests/acceptance/2010-oracle: 1
+  tests/acceptance/377: 1
+  tests/acceptance/378: 1
+  tests/acceptance/380: 22
+  tests/acceptance/428: 3
+  tests/acceptance/430: 2
+  tests/acceptance/446: 1
+  tests/acceptance/481: 2
+  tests/acceptance/485: 2
+Before this change, reports/2122/affected.txt and affected-final.txt also named a private research folder, 79 paths
+each; commit 72496c100 writes them research_notes/<private study>/.
+== the open issues
+One finding, in #1916's preview line; restated live in the design's own words (docs/canvas-primitives.md, the preview
+call's engine field). Then the lane read 1213 open issues with no finding (planted-dependency.txt, run 1).
+== the open pull requests: 39 read, two add a newly listed name
+  #2711: 4, reports/2314/affected.txt lines 6 and 80-82, the same private research folder in a lane report
+  #2097: 8, docs/evidence/22, a desktop app recorded as the front app
+Each restates its lines before it lands, or its public text lane fails once this list is on main.

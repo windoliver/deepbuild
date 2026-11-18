@@ -35,7 +35,7 @@ fn main() {
 
 #[cfg(target_os = "macos")]
 mod suite {
-    use deep_replica::{Client, On, Phase, Replica, Slot, Source};
+    use deep_replica::{Client, On, Replica, Slot, Source};
     use serde_json::{json, Value};
 
     use super::common::*;
@@ -236,7 +236,7 @@ mod suite {
 
         // The fourth runs only after its own switch is turned on.
         let mut replica = Replica::open(&fixture(file));
-        let card = replica.present(0, &ask);
+        let _card = replica.present(0, &ask);
         replica.toggle_step(0, delete);
         let card = replica.card_seen(0).unwrap();
         let approve = card.approve.clone().expect("the approve button");
@@ -423,7 +423,7 @@ mod suite {
         let answers = answers_for(&replica, &first);
         assert_eq!(answers.len(), 1, "{first}: Send sent one answer: {answers:?}");
         assert_eq!(answers[0]["words"], "darker, and keep the total in view", "{first}: the words: {answers:?}");
-        assert!(answers[0].get("option").map_or(true, Value::is_null), "{first}: no option chosen: {answers:?}");
+        assert!(answers[0].get("option").is_none_or(Value::is_null), "{first}: no option chosen: {answers:?}");
         assert!(answers_for(&replica, &second).is_empty(), "{second}: the card answered a second open ask with the same key from the first one's words: {:?}", replica.answers());
         let other = replica.present(0, &second);
         assert_eq!(other.state, "presented", "{second}: stays open: {other:?}");
@@ -449,8 +449,8 @@ mod suite {
         let answers = answers_for(&replica, &ask);
         assert_eq!(answers.len(), 1, "{ask}: Send sent one answer: {answers:?}");
         assert_eq!(answers[0]["words"], "yes", "{ask}: the words: {answers:?}");
-        assert!(answers[0].get("option").map_or(true, Value::is_null), "{ask}: a typed \"yes\" was sent as an option: {answers:?}");
-        assert!(answers[0].get("plan_hash").map_or(true, Value::is_null), "{ask}: a typed \"yes\" was sent with the plan's hash: {answers:?}");
+        assert!(answers[0].get("option").is_none_or(Value::is_null), "{ask}: a typed \"yes\" was sent as an option: {answers:?}");
+        assert!(answers[0].get("plan_hash").is_none_or(Value::is_null), "{ask}: a typed \"yes\" was sent with the plan's hash: {answers:?}");
 
         // Only Allow, once the card arms, runs the plan: the option with the plan's hash and the click's token.
         let mut replica = Replica::open(&fixture("base.events.jsonl"));
@@ -462,7 +462,7 @@ mod suite {
         assert_eq!(answers.len(), 1, "{ask}: Allow sent one answer: {answers:?}");
         assert_eq!(answers[0]["option"], "approve", "{ask}: {answers:?}");
         assert_eq!(answers[0]["plan_hash"], json!(hash), "{ask}: Allow carries the plan's hash: {answers:?}");
-        assert!(answers[0]["token"].as_str().map_or(false, |t| !t.is_empty()), "{ask}: Allow carries the click's token: {answers:?}");
+        assert!(answers[0]["token"].as_str().is_some_and(|t| !t.is_empty()), "{ask}: Allow carries the click's token: {answers:?}");
     }
 
     pub fn run() -> i32 {
