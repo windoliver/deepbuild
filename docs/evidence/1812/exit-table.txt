@@ -1,0 +1,192 @@
+The exits a deep command can reach, read from the code; exit.code@1 holds 0, 1, 2, 3:
+exit 2 packages/cli/src/main.ts:19  not understood, nothing ran
+exit 2 packages/cli/src/main.ts:52  not understood, nothing ran
+exit 0 packages/cli/src/main.ts:68  done
+exit 2 packages/cli/src/main.ts:80  not understood, nothing ran
+exit 0 packages/cli/src/main.ts:159  done
+exit 0 packages/cli/src/main.ts:179  done
+exit 2 packages/cli/src/main.ts:297  not understood, nothing ran
+exit 1 packages/cli/src/main.ts:396  failed or refused
+exit 1 packages/cli/src/main.ts:400  failed or refused
+exit 2 packages/cli/src/main.ts:421  not understood, nothing ran
+exit 3 packages/conformance/src/bin.ts:54  not decided or not checked
+exit 1 packages/conformance/src/families.ts:93  failed or refused
+exit 3 packages/conformance/src/families.ts:94  not decided or not checked
+exit 3 packages/hub/src/authority.ts:41  not decided or not checked
+exit 0 packages/hub/src/authority.ts:46  done
+exit 3 packages/hub/src/authority.ts:56  not decided or not checked
+exit 0 packages/hub/src/authority.ts:65  done
+exit 2 packages/hub/src/backup.ts:25  not understood, nothing ran
+exit 1 packages/hub/src/backup.ts:33  failed or refused
+exit 0 packages/hub/src/backup.ts:39  done
+exit 2 packages/hub/src/backup.ts:46  not understood, nothing ran
+exit 2 packages/hub/src/backup.ts:53  not understood, nothing ran
+exit 1 packages/hub/src/backup.ts:60  failed or refused
+exit 3 packages/hub/src/backup.ts:71  not decided or not checked
+exit 0 packages/hub/src/backup.ts:97  done
+exit 1 packages/hub/src/backup.ts:100  failed or refused
+exit 3 packages/hub/src/canvas.ts:49  not decided or not checked
+exit 3 packages/hub/src/canvas.ts:53  not decided or not checked
+exit 3 packages/hub/src/canvas.ts:54  not decided or not checked
+exit 2 packages/hub/src/canvas.ts:85  not understood, nothing ran
+exit 3 packages/hub/src/canvas.ts:93  not decided or not checked
+exit 0 packages/hub/src/canvas.ts:96  done
+exit 1 packages/hub/src/canvas.ts:99  failed or refused
+exit 1 packages/hub/src/canvas.ts:108  failed or refused
+exit 0 packages/hub/src/canvas.ts:111  done
+exit 1 packages/hub/src/canvas.ts:114  failed or refused
+exit 2 packages/hub/src/canvas.ts:144  not understood, nothing ran
+exit 3 packages/hub/src/client.ts:66  not decided or not checked
+exit 2 packages/hub/src/client.ts:155  not understood, nothing ran
+exit 1 packages/hub/src/client.ts:159  failed or refused
+exit 2 packages/hub/src/confirmed-command.ts:38  not understood, nothing ran
+exit 0 packages/hub/src/confirmed-command.ts:43  done
+exit 2 packages/hub/src/doctor.ts:452  not understood, nothing ran
+exit 0 packages/hub/src/doctor.ts:472  done
+exit 2 packages/hub/src/env.ts:26  not understood, nothing ran
+exit 3 packages/hub/src/env.ts:39  not decided or not checked
+exit 3 packages/hub/src/env.ts:48  not decided or not checked
+exit 0 packages/hub/src/env.ts:53  done
+exit 2 packages/hub/src/fix-command.ts:14  not understood, nothing ran
+exit 1 packages/hub/src/fix-command.ts:20  failed or refused
+exit 0 packages/hub/src/fix-command.ts:24  done
+exit 2 packages/hub/src/gate-command.ts:13  not understood, nothing ran
+exit 1 packages/hub/src/gate-command.ts:21  failed or refused
+exit 0 packages/hub/src/gate-command.ts:25  done
+exit 2 packages/hub/src/guards.ts:174  not understood, nothing ran
+exit 2 packages/hub/src/guards.ts:182  not understood, nothing ran
+exit 0 packages/hub/src/guards.ts:187  done
+exit 1 packages/hub/src/hosts.ts:645  failed or refused
+exit 0 packages/hub/src/hosts.ts:650  done
+exit 1 packages/hub/src/hosts.ts:678  failed or refused
+exit 0 packages/hub/src/hosts.ts:686  done
+exit 0 packages/hub/src/hosts.ts:704  done
+exit 0 packages/hub/src/hosts.ts:710  done
+exit 0 packages/hub/src/hosts.ts:716  done
+exit 2 packages/hub/src/hosts.ts:720  not understood, nothing ran
+exit 1 packages/hub/src/hosts.ts:737  failed or refused
+exit 1 packages/hub/src/hosts.ts:743  failed or refused
+exit 2 packages/hub/src/hub-command.ts:26  not understood, nothing ran
+exit 2 packages/hub/src/hub-command.ts:41  not understood, nothing ran
+exit 3 packages/hub/src/hub-command.ts:49  not decided or not checked
+exit 0 packages/hub/src/hub-command.ts:54  done
+exit 2 packages/hub/src/inbox.ts:40  not understood, nothing ran
+exit 1 packages/hub/src/inbox.ts:64  failed or refused
+exit 0 packages/hub/src/inbox.ts:69  done
+exit 0 packages/hub/src/inbox.ts:73  done
+exit 0 packages/hub/src/inbox.ts:77  done
+exit 3 packages/hub/src/inbox.ts:84  not decided or not checked
+exit 3 packages/hub/src/inbox.ts:120  not decided or not checked
+exit 2 packages/hub/src/inbox.ts:133  not understood, nothing ran
+exit 1 packages/hub/src/inbox.ts:144  failed or refused
+exit 0 packages/hub/src/inbox.ts:147  done
+exit 2 packages/hub/src/install.ts:29  not understood, nothing ran
+exit 1 packages/hub/src/install.ts:38  failed or refused
+exit 0 packages/hub/src/install.ts:40  done
+exit 1 packages/hub/src/install.ts:41  failed or refused
+exit 2 packages/hub/src/install.ts:48  not understood, nothing ran
+exit 1 packages/hub/src/install.ts:74  failed or refused
+exit 0 packages/hub/src/install.ts:76  done
+exit 1 packages/hub/src/land-command.ts:27  failed or refused
+exit 0 packages/hub/src/land-command.ts:30  done
+exit 2 packages/hub/src/land-command.ts:42  not understood, nothing ran
+exit 2 packages/hub/src/land-command.ts:54  not understood, nothing ran
+exit 2 packages/hub/src/land-command.ts:66  not understood, nothing ran
+exit 2 packages/hub/src/list.ts:199  not understood, nothing ran
+exit 3 packages/hub/src/list.ts:205  not decided or not checked
+exit 0 packages/hub/src/list.ts:229  done
+exit 0 packages/hub/src/list.ts:252  done
+exit 2 packages/hub/src/list.ts:257  not understood, nothing ran
+exit 2 packages/hub/src/list.ts:276  not understood, nothing ran
+exit 0 packages/hub/src/mcp.ts:197  done
+exit 2 packages/hub/src/memory.ts:228  not understood, nothing ran
+exit 3 packages/hub/src/memory.ts:244  not decided or not checked
+exit 0 packages/hub/src/memory.ts:247  done
+exit 1 packages/hub/src/memory.ts:248  failed or refused
+exit 0 packages/hub/src/memory.ts:250  done
+exit 0 packages/hub/src/memory.ts:254  done
+exit 0 packages/hub/src/memory.ts:258  done
+exit 1 packages/hub/src/parser.ts:20  failed or refused
+exit 1 packages/hub/src/promote.ts:28  failed or refused
+exit 2 packages/hub/src/promote.ts:32  not understood, nothing ran
+exit 2 packages/hub/src/promote.ts:35  not understood, nothing ran
+exit 2 packages/hub/src/promote.ts:36  not understood, nothing ran
+exit 2 packages/hub/src/promote.ts:38  not understood, nothing ran
+exit 0 packages/hub/src/promote.ts:50  done
+exit 3 packages/hub/src/promote.ts:68  not decided or not checked
+exit 0 packages/hub/src/promote.ts:75  done
+exit 3 packages/hub/src/promote.ts:85  not decided or not checked
+exit 3 packages/hub/src/promote.ts:89  not decided or not checked
+exit 2 packages/hub/src/remote.ts:119  not understood, nothing ran
+exit 2 packages/hub/src/remote.ts:124  not understood, nothing ran
+exit 1 packages/hub/src/remote.ts:130  failed or refused
+exit 1 packages/hub/src/remote.ts:145  failed or refused
+exit 0 packages/hub/src/remote.ts:149  done
+exit 2 packages/hub/src/rules.ts:345  not understood, nothing ran
+exit 0 packages/hub/src/rules.ts:350  done
+exit 0 packages/hub/src/secret-command.ts:41  done
+exit 2 packages/hub/src/secret-command.ts:46  not understood, nothing ran
+exit 3 packages/hub/src/secret-command.ts:50  not decided or not checked
+exit 3 packages/hub/src/secret-command.ts:55  not decided or not checked
+exit 3 packages/hub/src/secret-command.ts:60  not decided or not checked
+exit 1 packages/hub/src/server.ts:427  failed or refused
+exit 0 packages/hub/src/server.ts:1378  done
+exit 1 packages/hub/src/server.ts:1456  failed or refused
+exit 1 packages/hub/src/server.ts:1462  failed or refused
+exit 1 packages/hub/src/server.ts:1468  failed or refused
+exit 0 packages/hub/src/service.ts:289  done
+exit 0 packages/hub/src/service.ts:299  done
+exit 3 packages/hub/src/service.ts:303  not decided or not checked
+exit 3 packages/hub/src/service.ts:335  not decided or not checked
+exit 3 packages/hub/src/service.ts:340  not decided or not checked
+exit 3 packages/hub/src/service.ts:350  not decided or not checked
+exit 0 packages/hub/src/service.ts:355  done
+exit 3 packages/hub/src/service.ts:365  not decided or not checked
+exit 0 packages/hub/src/service.ts:376  done
+exit 0 packages/hub/src/service.ts:395  done
+exit 2 packages/hub/src/setup.ts:53  not understood, nothing ran
+exit 0 packages/hub/src/setup.ts:65  done
+exit 0 packages/hub/src/setup.ts:70  done
+exit 0 packages/hub/src/setup.ts:91  done
+exit 1 packages/hub/src/setup.ts:103  failed or refused
+exit 0 packages/hub/src/setup.ts:167  done
+exit 1 packages/hub/src/setup.ts:173  failed or refused
+exit 3 packages/hub/src/setup.ts:181  not decided or not checked
+exit 0 packages/hub/src/setup.ts:185  done
+exit 3 packages/hub/src/setup.ts:231  not decided or not checked
+exit 0 packages/hub/src/setup.ts:234  done
+exit 3 packages/hub/src/setup.ts:237  not decided or not checked
+exit 3 packages/hub/src/setup.ts:386  not decided or not checked
+exit 0 packages/hub/src/setup.ts:436  done
+exit 0 packages/hub/src/setup.ts:604  done
+exit 0 packages/hub/src/setup.ts:607  done
+exit 2 packages/hub/src/setup.ts:613  not understood, nothing ran
+exit 2 packages/hub/src/show.ts:31  not understood, nothing ran
+exit 3 packages/hub/src/show.ts:56  not decided or not checked
+exit 3 packages/hub/src/show.ts:61  not decided or not checked
+exit 2 packages/hub/src/show.ts:66  not understood, nothing ran
+exit 2 packages/hub/src/start-command.ts:68  not understood, nothing ran
+exit 1 packages/hub/src/start-command.ts:79  failed or refused
+exit 0 packages/hub/src/start-command.ts:85  done
+exit 1 packages/hub/src/start-command.ts:90  failed or refused
+exit 0 packages/hub/src/start-command.ts:97  done
+exit 2 packages/hub/src/status.ts:644  not understood, nothing ran
+exit 3 packages/hub/src/status.ts:653  not decided or not checked
+exit 0 packages/hub/src/status.ts:665  done
+exit 2 packages/hub/src/undo.ts:14  not understood, nothing ran
+exit 1 packages/hub/src/undo.ts:26  failed or refused
+exit 0 packages/hub/src/undo.ts:31  done
+exit 0 packages/hub/src/undo.ts:35  done
+exit 2 packages/hub/src/words-command.ts:23  not understood, nothing ran
+exit 2 packages/hub/src/words-command.ts:25  not understood, nothing ran
+exit 0 packages/hub/src/words-command.ts:45  done
+exit 1 packages/hub/src/words-command.ts:49  failed or refused
+exit 2 packages/hub/src/workspace-command.ts:70  not understood, nothing ran
+exit 1 packages/hub/src/workspace-command.ts:76  failed or refused
+exit 0 packages/hub/src/workspace-command.ts:79  done
+exit 2 packages/reading/src/index.ts:402  not understood, nothing ran
+exit 1 packages/reading/src/index.ts:406  failed or refused
+exit 0 packages/reading/src/index.ts:410  done
+exit 1 packages/reading/src/index.ts:413  failed or refused
+Left out by name, ending with the code of the program they run: deep lease, deep mcp-exec
+PASS exits: 189 places, each 0, 1, 2, 3
