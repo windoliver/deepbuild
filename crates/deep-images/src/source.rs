@@ -2,9 +2,11 @@
 //! read from its header alone, and its pixels decoded inside the decode caps (Image `image@1`,
 //! Asset).
 
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufReader, Cursor, Write};
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 
 use image::{ImageError, ImageReader, RgbaImage};
 use sha2::{Digest, Sha256};
@@ -15,11 +17,48 @@ pub const DECODE_CAP: u64 = 64 << 20;
 /// The longest side a decode takes, px: Vello's pixmaps and GPUI's sprites take a 16-bit side.
 pub const SIDE: u32 = u16::MAX as u32;
 
-/// A content store: files named by their sha256, flat (`<sha>`) or split (`<aa>/<62 hex>`).
+/// A content store: files named by their sha256, flat (`<sha>`) or split (`<aa>/<62 hex>`), or
+/// held in memory (the web player's bundle, #172), where nothing reaches a file system.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Store {
     pub root: PathBuf,
     pub split: bool,
+    held: Option<Held>,
+}
+
+/// A store held in memory: its files by hash and its text files (a source's proxy rows) by path.
+#[derive(Default)]
+struct Memory {
+    files: Mutex<HashMap<[u8; 32], Arc<[u8]>>>,
+    text: Mutex<HashMap<String, String>>,
+}
+
+/// One memory store, the same store wherever it is cloned.
+#[derive(Clone)]
+struct Held(Arc<Memory>);
+
+impl PartialEq for Held {
+    fn eq(&self, other: &Held) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl Eq for Held {}
+
+impl std::hash::Hash for Held {
+    fn hash<H: std::hash::Hasher>(&self, h: &mut H) {
+        (Arc::as_ptr(&self.0) as usize).hash(h);
+    }
+}
+
+impl std::fmt::Debug for Held {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Held")
+    }
+}
+
+fn locked<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(|p| p.into_inner())
 }
 
 /// Why a picture can't be drawn: the code a refusal carries, and whether it names the crop rather
@@ -58,6 +97,7 @@ impl Store {
         Store {
             root: root.to_path_buf(),
             split: false,
+            held: None,
         }
     }
 
@@ -65,7 +105,59 @@ impl Store {
         Store {
             root: root.to_path_buf(),
             split: true,
+            held: None,
         }
+    }
+
+    /// An empty store held in memory (#172: the web player's, filled from its bundle).
+    pub fn memory() -> Store {
+        Store {
+            root: PathBuf::new(),
+            split: false,
+            held: Some(Held(Arc::default())),
+        }
+    }
+
+    /// Puts `bytes` in a memory store under the hash they have; its hash. A file store takes none.
+    pub fn hold(&self, bytes: Vec<u8>) -> [u8; 32] {
+        let hash = <[u8; 32]>::from(Sha256::digest(&bytes));
+        if let Some(h) = &self.held {
+            locked(&h.0.files).insert(hash, Arc::from(bytes));
+        }
+        hash
+    }
+
+    /// Puts the text file at `rel` (a source's proxy rows) in a memory store.
+    pub fn hold_text(&self, rel: &str, text: &str) {
+        if let Some(h) = &self.held {
+            locked(&h.0.text).insert(rel.to_string(), text.to_string());
+        }
+    }
+
+    /// The text file at `rel` (a source's proxy rows), if any.
+    pub fn text(&self, rel: &str) -> Option<String> {
+        match &self.held {
+            Some(h) => locked(&h.0.text).get(rel).cloned(),
+            None => std::fs::read_to_string(self.file(rel)).ok(),
+        }
+    }
+
+    /// Writes the text file at `rel` whole or not at all.
+    pub(crate) fn put_text(&self, rel: &str, text: &str) -> std::io::Result<()> {
+        match &self.held {
+            Some(h) => {
+                locked(&h.0.text).insert(rel.to_string(), text.to_string());
+                Ok(())
+            }
+            None => Self::put(&self.file(rel), text.as_bytes()),
+        }
+    }
+
+    /// The bytes held under `hash` in a memory store, unchecked; `None` for a file store.
+    fn held_bytes(&self, hash: &[u8; 32]) -> Option<Option<Arc<[u8]>>> {
+        self.held
+            .as_ref()
+            .map(|h| locked(&h.0.files).get(hash).cloned())
     }
 
     fn path(&self, hash: &[u8; 32]) -> PathBuf {
@@ -80,7 +172,10 @@ impl Store {
     /// The bytes named `hash`, checked against it: `asset_missing` when the store hasn't them,
     /// `asset_mismatch` when they don't hash to their name.
     pub fn read(&self, hash: &[u8; 32]) -> Result<Vec<u8>, Refused> {
-        let bytes = std::fs::read(self.path(hash)).map_err(|_| refused("asset_missing"))?;
+        let bytes = match self.held_bytes(hash) {
+            Some(held) => held.ok_or(refused("asset_missing"))?.to_vec(),
+            None => std::fs::read(self.path(hash)).map_err(|_| refused("asset_missing"))?,
+        };
         if <[u8; 32]>::from(Sha256::digest(&bytes)) != *hash {
             return Err(refused("asset_mismatch"));
         }
@@ -91,6 +186,13 @@ impl Store {
     /// as large as the file is allocated.
     fn verify(&self, hash: &[u8; 32]) -> Result<(), Refused> {
         use std::io::Read;
+        if let Some(held) = self.held_bytes(hash) {
+            let bytes = held.ok_or(refused("asset_missing"))?;
+            return match <[u8; 32]>::from(Sha256::digest(&bytes)) == *hash {
+                true => Ok(()),
+                false => Err(refused("asset_mismatch")),
+            };
+        }
         let mut file = File::open(self.path(hash)).map_err(|_| refused("asset_missing"))?;
         let mut digest = Sha256::new();
         let mut piece = [0u8; 16 << 10];
@@ -109,6 +211,12 @@ impl Store {
 
     /// Writes `bytes` under `hash` whole or not at all; a file already there is left alone.
     pub(crate) fn write(&self, hash: &[u8; 32], bytes: &[u8]) -> std::io::Result<()> {
+        if let Some(h) = &self.held {
+            locked(&h.0.files)
+                .entry(*hash)
+                .or_insert_with(|| Arc::from(bytes));
+            return Ok(());
+        }
         let path = self.path(hash);
         if path.exists() {
             return Ok(());
@@ -163,6 +271,19 @@ pub(crate) fn header(
             .map_err(undecodable)?
             .to_rgba8();
         [rgba.width(), rgba.height()]
+    } else if let Some(held) = store.held_bytes(hash) {
+        let bytes = held.ok_or(refused("asset_missing"))?;
+        let read = ImageReader::new(Cursor::new(&bytes[..]))
+            .with_guessed_format()
+            .map_err(|e| undecodable(ImageError::IoError(e)))
+            .and_then(|r| r.into_dimensions().map_err(undecodable));
+        match read {
+            Ok((w, h)) => [w, h],
+            Err(r) => {
+                store.verify(hash)?;
+                return Err(r);
+            }
+        }
     } else {
         let read = File::open(store.path(hash))
             .map_err(|_| refused("asset_missing"))

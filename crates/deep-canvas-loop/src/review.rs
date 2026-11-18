@@ -57,7 +57,8 @@ pub fn color(id: &str, salt: &str) -> [u8; 3] {
 fn inside(ids: &[u32], w: usize, h: usize) -> Vec<u32> {
     const FAR: u32 = u32::MAX / 2;
     let at = |x: isize, y: isize| -> Option<u32> {
-        (x >= 0 && y >= 0 && (x as usize) < w && (y as usize) < h).then(|| ids[y as usize * w + x as usize])
+        (x >= 0 && y >= 0 && (x as usize) < w && (y as usize) < h)
+            .then(|| ids[y as usize * w + x as usize])
     };
     let mut d: Vec<u32> = (0..w * h)
         .map(|i| {
@@ -116,7 +117,10 @@ const DIGITS: [[u8; 5]; 10] = [
 fn number(rgba: &mut [u8], [w, h]: [usize; 2], n: u16, at: [u32; 2], s: usize) {
     let text = n.to_string();
     let (tw, th) = (text.len() * 4 * s - s, 5 * s);
-    let (x0, y0) = (at[0] as isize - (tw as isize) / 2 - s as isize, at[1] as isize - (th as isize) / 2 - s as isize);
+    let (x0, y0) = (
+        at[0] as isize - (tw as isize) / 2 - s as isize,
+        at[1] as isize - (th as isize) / 2 - s as isize,
+    );
     let mut put = |x: isize, y: isize, v: u8| {
         if x >= 0 && y >= 0 && (x as usize) < w && (y as usize) < h {
             let i = (y as usize * w + x as usize) * 4;
@@ -155,7 +159,12 @@ pub fn id_view(frame: &Frame, table: &[String], salt: &str) -> IdView {
     let entry_of_pick: std::collections::BTreeMap<u32, usize> = frame
         .picks
         .iter()
-        .filter_map(|(p, id)| table.iter().position(|t| scene::is_of(id, t)).map(|k| (*p, k)))
+        .filter_map(|(p, id)| {
+            table
+                .iter()
+                .position(|t| scene::is_of(id, t))
+                .map(|k| (*p, k))
+        })
         .collect();
     let entries: Vec<Option<usize>> = (0..n)
         .map(|i| frame.ids.get(i).and_then(|p| entry_of_pick.get(p).copied()))
@@ -204,10 +213,13 @@ pub fn id_view(frame: &Frame, table: &[String], salt: &str) -> IdView {
 /// The observations a reading keeps, each `(category, number)` with its item's ID, and how many
 /// it dropped: one with no number, a number `view` doesn't list, or a category outside `observe`
 /// (the check input's list, else the closed list).
-pub fn sift(observations: &[Value], view: &[Numbered], observe: &[String]) -> (Vec<(String, u16, String)>, u16) {
-    let allowed = |c: &str| {
-        OBSERVE.contains(&c) && (observe.is_empty() || observe.iter().any(|o| o == c))
-    };
+pub fn sift(
+    observations: &[Value],
+    view: &[Numbered],
+    observe: &[String],
+) -> (Vec<(String, u16, String)>, u16) {
+    let allowed =
+        |c: &str| OBSERVE.contains(&c) && (observe.is_empty() || observe.iter().any(|o| o == c));
     let mut kept = Vec::new();
     let mut dropped = 0u16;
     for o in observations {
@@ -266,7 +278,11 @@ mod tests {
         assert_eq!(f.ids[(at(1)[1] * 40 + at(1)[0]) as usize], 2);
         assert_eq!(v.items[2].at, None);
         // The left half's centre, give or take the chamfer's ties.
-        assert!((8..=11).contains(&at(0)[0]) && (8..=11).contains(&at(0)[1]), "{:?}", at(0));
+        assert!(
+            (8..=11).contains(&at(0)[0]) && (8..=11).contains(&at(0)[1]),
+            "{:?}",
+            at(0)
+        );
     }
 
     #[test]

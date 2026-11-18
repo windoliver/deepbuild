@@ -21,7 +21,9 @@ const UNLIT: u32 = 1;
 const ALL: u32 = 2;
 const FROM_EYE: u32 = 4;
 
-pub use deep_canvas_scene3d::module::{INSET_UNLIT_PASS as UNLIT_PASS, INSET_VIEW_PASS as VIEW_PASS};
+pub use deep_canvas_scene3d::module::{
+    INSET_UNLIT_PASS as UNLIT_PASS, INSET_VIEW_PASS as VIEW_PASS,
+};
 
 const SHADER: &str = concat!(include_str!("inset_unlit.wgsl"), include_str!("inset.wgsl"));
 
@@ -56,7 +58,10 @@ pub const FORMAT: &str = "rgba8unorm-srgb";
 fn head(insets: &[(&Projected, &Texels)], picks: &BTreeMap<String, u32>) -> Vec<u32> {
     let mut out = vec![0u32; HEADER + MAX_PROJECTED * WORDS];
     out[0] = insets.len() as u32;
-    let onto: usize = insets.iter().map(|(p, _)| p.onto.as_ref().map_or(0, Vec::len)).sum();
+    let onto: usize = insets
+        .iter()
+        .map(|(p, _)| p.onto.as_ref().map_or(0, Vec::len))
+        .sum();
     let mut texels_at = out.len() + onto;
     for (k, (p, t)) in insets.iter().enumerate() {
         let e = HEADER + k * WORDS;
@@ -91,9 +96,17 @@ fn head(insets: &[(&Projected, &Texels)], picks: &BTreeMap<String, u32>) -> Vec<
         out[e + 21] = ids.len() as u32;
         out.extend(ids);
         let v = p.eye.unwrap_or(p.along);
-        for (i, x) in [v[0], v[1], v[2], p.edge[0], p.edge[1], p.cos_angle, p.opacity]
-            .into_iter()
-            .enumerate()
+        for (i, x) in [
+            v[0],
+            v[1],
+            v[2],
+            p.edge[0],
+            p.edge[1],
+            p.cos_angle,
+            p.opacity,
+        ]
+        .into_iter()
+        .enumerate()
         {
             out[e + 22 + i] = (x as f32).to_bits();
         }
@@ -197,7 +210,9 @@ impl Store {
                 let n = (t.size[0] * t.size[1]) as usize;
                 words.extend(
                     t.data[..n * 4]
-                        .chunks_exact(4)
+                        .as_chunks::<4>()
+                        .0
+                        .iter()
                         .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]])),
                 );
             }
@@ -399,9 +414,9 @@ mod tests {
             [0.1, 0.2, 1.0, 4.0],
         ];
         let inv = inverse_columns(m).unwrap();
-        for r in 0..4 {
+        for (r, row) in m.iter().enumerate() {
             for c in 0..4 {
-                let v: f64 = (0..4).map(|k| m[r][k] * f64::from(inv[c * 4 + k])).sum();
+                let v: f64 = (0..4).map(|k| row[k] * f64::from(inv[c * 4 + k])).sum();
                 let want = if r == c { 1.0 } else { 0.0 };
                 assert!((v - want).abs() < 1e-5, "{r} {c} {v}");
             }

@@ -1,0 +1,38 @@
+$ node node_modules/vitest/vitest.mjs run --reporter=verbose --root tests/acceptance/87/gate --testTimeout=600000
+Mon Nov 16 19:31:08 UTC 2026
+11:31  up 2 days, 21:40, 18 users, load averages: 16.10 12.26 11.02
+
+ RUN  v5.0.5 <base>/tests/acceptance/87/gate
+
+ ✓ model-pass.test.ts > AC3 #87.f9b06470 a PASS resting only on a model's judgment is refused > AC3 #87.f9b06470 the core's verdict engine passes R1 on a code check and refuses PASS on a review (oracle model) alone and on a requirement whose oracle is a model 3ms
+ ✓ model-pass.test.ts > AC3 #87.f9b06470 a PASS resting only on a model's judgment is refused > AC3 #87.f9b06470 (wrong program) a planted engine that reads no oracle passes the review alone and fails this test 0ms
+ ✓ post-close.test.ts > AC10 #87.52ef7a04 before Closes, each review pass that found bugs after a close runs, and its replay on those PRs is a reading > AC10 #87.52ef7a04 research and the audit each run on the claim's diff and on every PR they found bugs in (64, 71); research reads 1 of 2, the audit 2 of 2, never a pass or a fail 572ms
+ ✓ post-close.test.ts > AC10 #87.52ef7a04 before Closes, each review pass that found bugs after a close runs, and its replay on those PRs is a reading > AC10 #87.52ef7a04 (wrong program) a check that doesn't run the passes on PR 71's commit fails this test, naming PR 71 749ms
+ × review-notes.test.ts > AC8 #87.85a2cd4f review notes on the PR are open items, and the PR says Closes only once each is fixed or you accept it > AC8 #87.85a2cd4f maya's note and the Codex review agent's note on PR 21 become open items; gh pr edit to "Closes #7" is refused naming both, then naming only the agent's once maya's is fixed, and allowed once you accept the agent's 2920ms
+   → BLOCKED: AC8 #87.85a2cd4f gh pr create saying Part of #7 must be allowed: exit 2 after 20 ms, stdout "", stderr "DeepBuild blocked this: the pull request says Part of #7, so list under that line what's left of task:item7, as its open items: R1 (\"An expired token is rejected with 401\").\n"
+ ✓ replay-lane.test.ts > AC21 #87.7649e9da a change to the review check's prompt is replayed on the merge base and the change, and every finding that moves is listed > AC21 #87.7649e9da the planted prompt change that drops the planted bug's finding fails no test, is listed with both runs and fails the preflight until the maintainer's yes on that list 5587ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  review-notes.test.ts > AC8 #87.85a2cd4f review notes on the PR are open items, and the PR says Closes only once each is fixed or you accept it > AC8 #87.85a2cd4f maya's note and the Codex review agent's note on PR 21 become open items; gh pr edit to "Closes #7" is refused naming both, then naming only the agent's once maya's is fixed, and allowed once you accept the agent's
+Error: BLOCKED: AC8 #87.85a2cd4f gh pr create saying Part of #7 must be allowed: exit 2 after 20 ms, stdout "", stderr "DeepBuild blocked this: the pull request says Part of #7, so list under that line what's left of task:item7, as its open items: R1 (\"An expired token is rejected with 401\").\n"
+ ❯ must ../../322/helpers.ts:97:18
+     95| }
+     96| export function must(ok: boolean, message: string): asserts ok {
+     97|   if (!ok) throw Error(message);
+       |                  ^
+     98| }
+     99|
+ ❯ review-notes.test.ts:60:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 3 passed (4)
+      Tests  1 failed | 5 passed (6)
+   Start at  11:31:09
+   Duration  5.74s (tests 95%, transform 4%, import 1%)
+
+exit=1
+Mon Nov 16 19:31:14 UTC 2026
+11:31  up 2 days, 21:40, 18 users, load averages: 15.93 12.29 11.03

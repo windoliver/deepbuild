@@ -72,10 +72,10 @@ function checkEnvironments(environments: unknown, field = 'environments'): Contr
 /**
  * The secrets a package names and the sources it registers (#364): each secret its name and what it's for, each
  * source its ext.<plugin>.<name> and its variant, as `deep.registerSource` fills it, and for a stream the reading
- * type each of its events is held to.
+ * type each of its events is held to. A `model` source (#1048) is one the package asks through `deep.source.ask`.
  */
 const SECRET_NAME = /^[a-z][a-z0-9_]*$/;
-const VARIANTS = ['stream', 'polled', 'mcp', 'library'];
+const VARIANTS = ['stream', 'polled', 'mcp', 'library', 'model'];
 /** A library source's host (#1731), which the install shows and grants: a name or address, and a port. */
 const LIBRARY_HOST = /^[a-z0-9.-]+(:\d{1,5})?$/;
 const READINGS = ['work.item@1', 'work.item@2', 'push.record@1'];

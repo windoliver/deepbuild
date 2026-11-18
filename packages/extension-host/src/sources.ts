@@ -295,6 +295,27 @@ export class HostSources {
     return named.filter((_, i) => held[i]);
   }
 
+  /**
+   * #1048: a plug-in asks its model source, one its manifest lists as a `model` source, for a reply to `prompt`: the
+   * hub makes the call (from a recording when replaying), and the plug-in gets the answer's status and body, or no
+   * answer, never the network.
+   */
+  async ask(ext: Ext, name: unknown, request: unknown): Promise<{ status: number | null; body: string; why?: string }> {
+    const id = ext.entry.id;
+    if (!(ext.manifest.sources ?? []).some((s) => s.name === name && s.variant === 'model')) throw Error(`deep.source.ask: ${String(name)} isn't a model source ${id}'s manifest lists`);
+    const r = (typeof request === 'object' && request !== null ? request : {}) as { provider?: unknown; prompt?: unknown };
+    if (typeof r.provider !== 'string' || typeof r.prompt !== 'string') throw Error('deep.source.ask takes {provider, prompt}');
+    // The provider's host is its name's, name@version; the grant must name it for a live call.
+    const host = (ext.entry.grant.hosts ?? []).find((h) => h.host === (r.provider as string).split('@')[0]) ?? null;
+    try {
+      const answer = await this.sources.ask(id, name as string, host, r.prompt);
+      return { status: answer.status, body: answer.body };
+    } catch (e) {
+      if (e instanceof NoAnswer) return { status: null, body: '', why: e.message };
+      throw e;
+    }
+  }
+
   async workFetch(ext: Ext, call: unknown, request: unknown): Promise<unknown> {
     // Only a call of its own work source under way: the hub's call, to the source's host, with its secret and quota.
     const id = ext.entry.id;
@@ -817,6 +838,26 @@ export class Sources {
     const answer = await this.call(source, { url: `https://${work.host}${request.path}`, method: request.method, headers, ...(typeof request.body === 'string' ? { body: request.body } : {}), ...(library?.encoding ? { encoding: library.encoding } : {}), ...(library?.recording ? { recording: library.recording } : {}) });
     if ('error' in answer) throw new NoAnswer(`${work.host} gave no answer: ${answer.error}`);
     return answer;
+  }
+
+  /**
+   * #1048: one ask of a plug-in's model source. Replaying, it's the first recorded call of that source not yet
+   * answered, whatever its request: a prompt holds a run's state, so a recording is a model's answers in order. Live,
+   * it's a POST of the prompt to the provider's host, which the grant must name, under that host's quota, recorded.
+   */
+  async ask(owner: string, name: string, host: { host: string; quota: { calls: number; per_ms: number } } | null, body: string): Promise<HttpAnswer> {
+    const replay = this.options.replay;
+    if (replay) {
+      const at = replay.calls.findIndex((c, i) => !this.replayed.has(i) && c.source === name);
+      if (at < 0) throw new NoAnswer(`no recorded call of ${name} is left to answer`);
+      this.replayed.add(at);
+      const answer = replay.calls[at]!.answer;
+      if ('error' in answer) throw new NoAnswer(`${name} gave no answer: ${answer.error}`);
+      return this.scrubAnswer(answer);
+    }
+    if (!host) throw new NoAnswer(`${name}'s provider is at no host the grant names`);
+    const perDay = Math.max(1, Math.round((host.quota.calls * DAY) / Math.max(1, host.quota.per_ms)));
+    return this.workFetch(owner, name, { host: host.host, secret: null, auth: null, quota: { per_minute: host.quota.calls, per_day: perDay } }, { method: 'POST', path: '/', headers: { 'content-type': 'text/plain' }, body });
   }
 
   /** A networked asset job's file: quota on each bounded range, resumable on no answer, admitted only by its hash. */

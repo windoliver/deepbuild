@@ -68,16 +68,18 @@ pub fn ranges(item: &Item, k: i64, old: &[u8], new: &[u8]) -> Vec<Range> {
     out
 }
 
-/// Plays one item's arrays back from a record: the last whole arrays at or before a step and the
-/// ranges after them.
+/// Plays one item's arrays back from a record: the last whole arrays at or before a step, or the
+/// arrays a rewind put back after them (#860), and the ranges after them.
 pub struct Player<'a> {
     wholes: Option<&'a BTreeMap<i64, Vec<u8>>>,
+    restarts: Option<&'a BTreeMap<i64, Vec<u8>>>,
     ranges: &'a [Range],
     /// Each write's offset and element size.
     writes: Vec<(usize, usize)>,
     buf: Vec<u8>,
-    /// The whole arrays `buf` started from, and the last step whose ranges it holds.
-    from: Option<i64>,
+    /// The whole arrays `buf` started from (and whether a rewind put them back), and the last
+    /// step whose ranges it holds.
+    from: Option<(i64, bool)>,
     upto: i64,
     next: usize,
 }
@@ -86,6 +88,7 @@ impl<'a> Player<'a> {
     pub fn new(rec: &'a Record, item: &Item) -> Player<'a> {
         Player {
             wholes: rec.wholes.get(&item.id),
+            restarts: rec.restarts.get(&item.id),
             ranges: rec.ranges.get(&item.id).map_or(&[][..], Vec::as_slice),
             writes: item
                 .writes
@@ -105,10 +108,17 @@ impl<'a> Player<'a> {
     /// The write region as step k left it, rebuilt from the record alone; None before its first
     /// whole arrays.
     pub fn at(&mut self, k: i64) -> Option<&[u8]> {
-        let (&c, whole) = self.wholes?.range(..=k + 1).next_back()?;
-        if k < self.upto || self.from.is_none_or(|f| f < c) {
+        let whole = self.wholes.and_then(|w| w.range(..=k + 1).next_back());
+        // #860: a rewind put arrays back at the step after its stop, which a later whole replaces.
+        let back = self.restarts.and_then(|r| r.range(..=k).next_back());
+        let ((&c, whole), put) = match (whole, back) {
+            (Some((w, _)), Some(b)) if b.0 >= w => (b, true),
+            (Some(w), _) => (w, false),
+            (None, b) => (b?, true),
+        };
+        if k < self.upto || self.from.is_none_or(|f| f < (c, put)) {
             self.buf.clone_from(whole);
-            self.from = Some(c);
+            self.from = Some((c, put));
             self.upto = c - 1;
             self.next = self.ranges.partition_point(|r| r.step < c);
         }
@@ -162,6 +172,44 @@ pub fn first_difference(item: &Item, a: &[u8], b: &[u8]) -> Option<(String, usiz
 }
 
 impl Record {
+    /// #860: a rewind to the stop at step s, which put each item's `arrays` back. The steps after
+    /// s the record holds ran on a branch now closed: each keeps in its row the arrays it left,
+    /// the ranges and whole arrays after s leave the record, and the arrays rebuild from what the
+    /// rewind put back at step s + 1 on.
+    pub(crate) fn rewound(&mut self, piece: &Piece, s: i64, arrays: &[Vec<u8>]) {
+        let closed: Vec<i64> = self
+            .steps
+            .range(s + 1..)
+            .map(|(k, _)| *k)
+            .filter(|k| !self.frozen.contains(k))
+            .collect();
+        for item in &piece.items {
+            let mut p = Player::new(self, item);
+            let left: Vec<(i64, Vec<u8>)> = closed
+                .iter()
+                .filter_map(|k| Some((*k, p.at(*k)?.to_vec())))
+                .collect();
+            for (k, region) in left {
+                let row = self.steps.get_mut(&k);
+                if let Some((_, a)) = row.filter(|(items, _)| items.contains_key(&item.id)) {
+                    values(item, &region, a, None);
+                }
+            }
+        }
+        self.frozen.extend(closed);
+        for (item, a) in piece.items.iter().zip(arrays) {
+            if let Some(r) = self.ranges.get_mut(&item.id) {
+                r.retain(|x| x.step <= s);
+            }
+            if let Some(w) = self.wholes.get_mut(&item.id) {
+                w.retain(|k, _| *k <= s + 1);
+            }
+            let back = self.restarts.entry(item.id.clone()).or_default();
+            back.retain(|k, _| *k <= s);
+            back.insert(s + 1, a.clone());
+        }
+    }
+
     /// Item `id`'s arrays whole at step label `at` (the state before step `at`), once.
     pub(crate) fn whole(&mut self, id: &str, at: i64, arrays: &[u8]) {
         self.wholes
@@ -217,7 +265,10 @@ impl Record {
                         listed(only, id, name)
                     });
                     for (item, p) in piece.items.iter().zip(&mut players) {
-                        if !item.writes.iter().any(|w| listed(only, &item.id, &w.name)) {
+                        // #860: a step a closed branch ran keeps the arrays it left in its row.
+                        if self.frozen.contains(k)
+                            || !item.writes.iter().any(|w| listed(only, &item.id, &w.name))
+                        {
                             continue;
                         }
                         if let Some(region) = items.get(&item.id).and(p.at(*k)) {

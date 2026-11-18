@@ -10,8 +10,13 @@
 //! Each frame answers `{frame, gpu_ms, cpu_ms}`. Its GPU time is the GPU layer's part, from the end
 //! of encoding Vello GPU's passes to the device's report that they are done, read on the render
 //! side (an upper bound: it holds the submit and the wait for the report too, since the device
-//! writes no ordered timestamps around another renderer's passes), plus what GPUI's frame spent
-//! past the window's own on the GPU (as `spike2d` takes it). Its CPU time is evaluating the frame's marks, encoding them on the render
+//! writes no ordered timestamps around another renderer's passes); plus (#2742) what a composited
+//! group's compositor submitted before that encode, the time the timestamp spans around its
+//! submissions cover, each ended by a read of what it wrote (`deep_gpu::spans`: the CPU's time
+//! between two counts in none, and work still running when the encode ends counts twice, which
+//! keeps the bound), or, without timestamps or with a span left open, the wait timed from its
+//! first submission instead; plus what GPUI's frame spent past the window's
+//! own on the GPU (as `spike2d` takes it). Its CPU time is evaluating the frame's marks, encoding them on the render
 //! side, and GPUI's latch and paint on the UI thread. A look event swaps the look from its frame
 //! on: the motion program, compiled once, stays, and only the frame's marks and the page's ground
 //! are made again in the new look's palette and type. Each switch answers `{frame, ms, ground}`:
@@ -40,6 +45,7 @@ use deep_canvas_motion::eval;
 use deep_canvas_motion::motif::Motifs;
 use deep_canvas_motion::program::{Program, State};
 use deep_gpu::ring::Mark as RingMark;
+use deep_gpu::spans::Spans;
 use serde_json::{json, Map, Value};
 
 use crate::drawn::Page;
@@ -52,8 +58,13 @@ use crate::{frames, parity, refused, App, Planted};
 const FLICKS_PER_SECOND: i64 = 705_600_000;
 
 /// When the frame's Vello GPU passes finished encoding, and (#468) the fills and glyph runs its
-/// marks encoded into them, set by the surface's module.
-pub type Encoded = Arc<Mutex<Option<(Instant, u64)>>>;
+/// marks encoded into them, set by the surface's module; and (#2742) the spans the GPU-layer
+/// compositor's submissions are timed in while the module composes the frame's groups.
+#[derive(Clone)]
+pub struct Encoded {
+    pub at: Arc<Mutex<Option<(Instant, u64)>>>,
+    pub spans: Spans,
+}
 
 /// A look's light theme as the 2D marks read it: its roles and its type.
 fn look_of(app: &App, def: &Value, doc: &Map<String, Value>) -> Result<(Palette, Type), Value> {
@@ -200,13 +211,14 @@ fn marks_at(
         pinned: t,
         ..Record::default()
     };
+    crate::lightfx::stale(planted, &mut items);
     let frame = scene::frame_planted(
         doc,
         &items,
         (palette, ty),
         &record,
         1.0,
-        scene::Planted::None,
+        crate::lightfx::scene_plant(planted).unwrap_or(scene::Planted::None),
     )
     .map_err(|r| refused(r.code, r.path))?;
     let layers = frame
@@ -242,22 +254,28 @@ fn render(app: &App, n: u64, encoded: &Encoded, hash: bool, keep: bool) -> Resul
             };
             view.wait_done(drawn.slot);
             let (at, fills) = encoded
+                .at
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
                 .take()
                 .ok_or("the frame's passes weren't encoded")?;
             let done = view.times(drawn.slot).ok_or("the frame has no times")?;
-            let gpu = done.render_done.saturating_duration_since(at);
+            // #2742: the compositor submits before the encode ends; its spans add what they cover,
+            // and without timestamps the wait is timed from its first submission instead.
+            let since = |from: Instant| {
+                done.render_done
+                    .saturating_duration_since(from)
+                    .as_secs_f64()
+                    * 1e3
+            };
+            let gpu = match encoded.spans.covered_ms() {
+                Some(ms) => since(at) + ms,
+                None => since(encoded.spans.first().map_or(at, |f| f.min(at))),
+            };
             let bytes = (hash || keep).then(|| view.read(drawn.slot)).flatten();
             let pixels = bytes.as_ref().filter(|_| hash).map(|b| frames::hex(b));
             let kept = bytes.filter(|_| keep);
-            Ok((
-                encode.as_secs_f64() * 1e3,
-                gpu.as_secs_f64() * 1e3,
-                fills,
-                pixels,
-                kept,
-            ))
+            Ok((encode.as_secs_f64() * 1e3, gpu, fills, pixels, kept))
         })
         .map_err(|e| refused("render_failed", e))
 }
@@ -599,7 +617,10 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
         };
     let (first, ..) = build(from, own(&look, &def, &ix, &motifs, &page))?;
     let marks: Marks2 = Arc::new(Mutex::new(Arc::new(first)));
-    let encoded: Encoded = Arc::new(Mutex::new(None));
+    let encoded = Encoded {
+        at: Arc::new(Mutex::new(None)),
+        spans: app.worker.call(|state| Spans::new(&state.gpu.device())),
+    };
     let taps = crate::print2d::Taps::default();
     *taps.want_linear.lock().unwrap_or_else(|e| e.into_inner()) = wants_linear;
     let (ui, error) = open2(

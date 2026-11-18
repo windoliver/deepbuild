@@ -16,7 +16,7 @@ use serde_json::{json, Map, Value};
 use crate::bake::{self, Player};
 use crate::piece::{h64, Piece, Read};
 use crate::point::Point;
-use crate::world::{track_of, Entry, Given, Record, StepRow, World};
+use crate::world::{track_of, Entry, Given, Record, StepRow, World, REWIND};
 use crate::Planted;
 
 /// Steps a continuation probe runs on for.
@@ -227,7 +227,10 @@ pub fn determinism(
     let hashes_only = planted.check_step_hashes_only;
     let mut failures: Vec<Value> = Vec::new();
     // The straight run, with each control's probe from its state at each sampled step.
-    let mut a = Record::default();
+    let mut a = Record {
+        stops: Some(Vec::new()),
+        ..Record::default()
+    };
     let mut straight = World::new(
         piece.clone(),
         track_of(entries),
@@ -268,6 +271,14 @@ pub fn determinism(
         .map(|i| (!hashes_only).then(|| Player::new(&a, i)))
         .collect();
     let mut played: Vec<Value> = Vec::new();
+    // #860: a step a rewind went back over has the closed branch's state and the current one's;
+    // the bake rebuilds the current one's, so the closed branch's isn't played back.
+    let over: Vec<(i64, i64)> = straight
+        .branches
+        .closed
+        .iter()
+        .map(|c| (c.stop, c.rewind))
+        .collect();
     World::new(
         piece.clone(),
         track_of(entries),
@@ -277,6 +288,9 @@ pub fn determinism(
         None,
     )?
     .run(steps, &mut b, &mut |w, k| {
+        if over.iter().any(|(s, r)| (*s..*r).contains(&(k - 1))) {
+            return;
+        }
         for (i, item) in piece.items.iter().enumerate() {
             let differs = match players[i].as_mut().filter(|_| k > 0) {
                 Some(p) => p
@@ -354,6 +368,65 @@ pub fn determinism(
             }
         }
     }
+    failures.extend(branches(piece, entries, steps, planted, &straight, &a)?);
     let verdict = if failures.is_empty() { "PASS" } else { "FAIL" };
     Ok(json!({"ok": true, "kind": "logic.determinism", "verdict": verdict, "failures": failures}))
+}
+
+/// #860: each rewind's current branch played fresh: its entries, none a rewind closed by then,
+/// with the seen values the run carried put back where it put them. At every stop the run made
+/// on that branch, each item's full-state hash must be the fresh play's at the same step.
+fn branches(
+    piece: &Rc<Piece>,
+    entries: &[Entry],
+    steps: i64,
+    planted: Planted,
+    run: &World,
+    rec: &Record,
+) -> Result<Vec<Value>, Value> {
+    let len = piece.items.first().map_or(1, |i| i.step);
+    let closed = &run.branches.closed;
+    let mut carry: Vec<(i64, Vec<u8>)> = Vec::new();
+    let mut out = Vec::new();
+    for (n, b) in closed.iter().enumerate() {
+        carry.retain(|(p, _)| *p <= b.stop);
+        if piece.rewind.as_ref().is_some_and(|r| r.seen.is_some()) {
+            carry.push((b.stop + 1, b.seen.clone()));
+        }
+        let on = |e: &&Entry| {
+            e.control != REWIND && !closed[..=n].iter().any(|c| c.stop * len < e.t && e.t < c.t)
+        };
+        let kept: Vec<Entry> = entries.iter().filter(on).cloned().collect();
+        let mut fresh_rec = Record {
+            stops: Some(Vec::new()),
+            ..Record::default()
+        };
+        let mut fresh = World::new(
+            piece.clone(),
+            track_of(&kept),
+            false,
+            planted,
+            &mut fresh_rec,
+            None,
+        )?;
+        fresh.branches.carry = carry.clone();
+        fresh.run(steps, &mut fresh_rec, &mut |_, _| {});
+        let theirs: BTreeMap<i64, &Map<String, Value>> = fresh_rec
+            .stops
+            .iter()
+            .flatten()
+            .map(|(_, k, h)| (*k, h))
+            .collect();
+        let mine = rec.stops.iter().flatten().filter(|(m, _, _)| *m == n + 1);
+        for item in &piece.items {
+            let differs = mine
+                .clone()
+                .find(|(_, k, h)| theirs.get(k).and_then(|t| t.get(&item.id)) != h.get(&item.id));
+            if let Some((_, k, _)) = differs {
+                out.push(json!({"item": item.id, "run": "branch", "rewind": b.rewind, "stop": k, "from": null, "at": null,
+                    "checkpoint": null, "step": k, "field": "deep_hash", "array": null, "region": null, "element": null, "control": null}));
+            }
+        }
+    }
+    Ok(out)
 }

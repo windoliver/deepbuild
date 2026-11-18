@@ -20,7 +20,7 @@ fn is_sha(s: &str) -> bool {
 /// Every hash a document names, with the item that names it ("" for the envelope) and its path:
 /// each item's by hash, and each envelope asset record's, all of them or (`all` false) only those
 /// an item or the envelope's look names by the record's name, which the document draws from.
-fn hashes(doc: &Value, all: bool) -> Vec<(String, String, String)> {
+pub(crate) fn hashes(doc: &Value, all: bool) -> Vec<(String, String, String)> {
     fn walk(v: &Value, id: &str, path: String, out: &mut Vec<(String, String, String)>) {
         match v {
             Value::String(s) if is_sha(s) => out.push((id.to_string(), path, s.clone())),
@@ -63,7 +63,11 @@ fn hashes(doc: &Value, all: bool) -> Vec<(String, String, String)> {
             continue;
         }
         if let Some(sha) = a["sha256"].as_str().filter(|s| is_sha(s)) {
-            out.push((String::new(), format!("assets/{name}/sha256"), sha.to_string()));
+            out.push((
+                String::new(),
+                format!("assets/{name}/sha256"),
+                sha.to_string(),
+            ));
         }
     }
     out
@@ -119,7 +123,11 @@ impl Hub<'_> {
             if !(gone.len() > allowed || maps && slot.is_some()) {
                 continue;
             }
-            let ids = if id.is_empty() { vec![] } else { vec![id.clone()] };
+            let ids = if id.is_empty() {
+                vec![]
+            } else {
+                vec![id.clone()]
+            };
             let mut i = issue(
                 "asset_missing",
                 ids,
@@ -152,7 +160,11 @@ impl Hub<'_> {
                     continue;
                 }
                 let at = by_sha(sha).map_or(path.clone(), |(n, _)| format!("assets/{n}/license"));
-                let ids = if id.is_empty() { vec![] } else { vec![id.clone()] };
+                let ids = if id.is_empty() {
+                    vec![]
+                } else {
+                    vec![id.clone()]
+                };
                 let mut i = issue(
                     "license_missing",
                     ids,
@@ -188,7 +200,9 @@ impl Hub<'_> {
             .into_iter()
             .flat_map(|m| m.values_mut())
         {
-            let mark = item["kind"].as_str().is_some_and(|k| k.starts_with("mark."));
+            let mark = item["kind"]
+                .as_str()
+                .is_some_and(|k| k.starts_with("mark."));
             if mark && item.get("material").is_none() && item.pointer("/params/paint").is_none() {
                 item["params"]["paint"] = json!({"fill": {"role": "ink"}});
             }
@@ -209,7 +223,9 @@ impl Hub<'_> {
         for s in scene.layers.iter().flat_map(|l| &l.solids) {
             let id = s.id.split('#').next().unwrap_or(&s.id).to_string();
             for p in s.points() {
-                let Some([x, y, _]) = scene.camera.project(p) else { continue };
+                let Some([x, y, _]) = scene.camera.project(p) else {
+                    continue;
+                };
                 let b = boxes.entry(id.clone()).or_insert(json!([x, y, x, y]));
                 let v = |k: usize| b[k].as_f64().unwrap_or(0.0);
                 *b = json!([v(0).min(x), v(1).min(y), v(2).max(x), v(3).max(y)]);
@@ -234,6 +250,7 @@ impl Hub<'_> {
                 items.remove(id);
             }
         };
+        #[allow(clippy::type_complexity)]
         let fixes: [(&str, &dyn Fn(&mut Value, &str)); 2] = [("hide", &hide), ("remove", &remove)];
         for (how, apply) in fixes {
             let fixed = |k: usize| {

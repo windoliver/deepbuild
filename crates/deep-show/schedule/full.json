@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "full",
-  "set_digest": "d29853678ee979b83de6eda48acaed9f8bc6a3610cbb19afc2a976e9b68361d9",
+  "set_digest": "ccbcd2914cc304475dd44c1b27270f9c0b393ad8ae0c51f62ce5af99b98844d8",
   "runtime_digest": "b0d9637fcffe5b58be4a3025853302613578659fa143fc9ca6bd110364894ab8",
   "interfaces": {
     "building@1": {
@@ -180,7 +180,7 @@
       }
     },
     "input@1": {
-      "digest": "e65249671ed96cf758617d3f9e202cfd7401bf7c1ed804b4d410c90df61e325e",
+      "digest": "c5029a328914b5d10a5d4381cc3be730e0d0b35704f439eecf13d3506aed686b",
       "reference": "input",
       "kit": [
         "fixtures",
@@ -209,7 +209,7 @@
       }
     },
     "logic@1": {
-      "digest": "6f34b6e8cf2e19f7a2bc6bfe04c0623e9ec1a516811cd0e76d48778f5757100e",
+      "digest": "1d115c4a4e4c1759d89afdad4757c100e6537a076aa4e0a651f5e0643339cff4",
       "reference": "logic",
       "kit": [
         "fixtures",
@@ -335,7 +335,7 @@
       }
     },
     "media@1": {
-      "digest": "16ba0318533d04e814906d17e911f9c632fb8b1089227252dad47ec6b392c1a2",
+      "digest": "d7a4fcd91d4d26d7bec14c48e27a80d6679c2904cd79b4fdf36484037f7c4eb3",
       "reference": "media",
       "kit": [
         "fixtures",
@@ -422,7 +422,7 @@
       }
     },
     "physics@1": {
-      "digest": "23a666b0dca4f83717a1720a58c8998a98d6cd760d20918a5ee05d899bcb931a",
+      "digest": "f48e8b0d1eb431d5b799b0a2151e6b2e6ec8ab77f7e6454bf5ff479dc1cf5479",
       "reference": "deep-physics-rapier",
       "kit": [
         "fixtures",
@@ -565,7 +565,7 @@
       }
     },
     "sandbox@1": {
-      "digest": "bd698eefad2d6419fdbbc919a75ae9369d1266261a54f3572d1f6356ed5c2d3f",
+      "digest": "bd32c3498c4bda12b5727f5a64281cba439f562396351f71cbd29e6d23ee805d",
       "reference": "sandbox",
       "kit": [
         "fixtures",
@@ -605,7 +605,7 @@
       }
     },
     "scene3d@1": {
-      "digest": "734bbdf586002e6672af9efdac8e7dfd67a721aa68f8799fb3ab0154e94ea41b",
+      "digest": "86f5aec0602fb2fa750b3573ae9afad1e4bf63215aaac8bedb17f26970c8332e",
       "reference": "scene3d",
       "kit": [
         "fixtures",

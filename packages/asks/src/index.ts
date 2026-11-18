@@ -388,6 +388,8 @@ const isAgent = (writer: string): boolean => writer === 'hook' || writer.startsW
  * of garbage at each start.
  */
 const PAGE = 100;
+/** The kinds `apply` reads, which the core's reads of the log name: an event of any other kind is never decoded (#2646). */
+const APPLIED = ['session.start', 'agent.stop', 'session.continued', 'session.end', 'task.closed', 'ask.created', 'plan.proposed', 'decision.created', 'decision.revoked', 'decision.overruled', 'decision.judged', 'decision.applied', 'ask.answered', 'ask.defaulted', 'ask.escalated', 'ask.cancelled', 'ask.superseded', 'ask.moot', 'default.undone', 'deadline.moved', 'ask.batched', 'ask.later', 'tool.before', 'user.ask', 'verdict.made', 'claim.made', 'tool.after'];
 /** Time the hub didn't run, down or with the Mac asleep, moves deadlines once it is longer than this (#908). */
 const AWAY = 10_000;
 /** How many ended sessions' closed asks stay in memory; the record keeps them all. */
@@ -407,11 +409,6 @@ const CLOSING: Readonly<Record<string, string>> = {
 
 class AsksCore implements Asks {
   private cursor = 0;
-  /**
-   * When the hub last ran before this core opened (#908): the newest event the core appended in the log, a stop's
-   * hub.stopped included but not the one a start appends for a crash, which carries the start's time.
-   */
-  private logged: number | undefined;
   private opened = false;
   /** Since when the app has said macOS won't show its notifications (#994). */
   private notificationsOff: number | undefined;
@@ -1392,11 +1389,14 @@ class AsksCore implements Asks {
 
   /** Reads what the log gained since the last read. */
   private async sync(): Promise<void> {
-    for (;;) {
-      const page = await this.options.record.read({ after: this.cursor, limit: PAGE });
+    // The log's head first: with nothing past the cursor nothing is read, and the cursor ends at the head, past the other kinds' events, which are scanned once.
+    const head = Number(((await this.options.record.raw('SELECT max(log_pos) AS head FROM events')) as { head: number | null }[])[0]?.head ?? 0);
+    // The planted wrong program leaves tool.before out of its kinds.
+    const kinds = this.options.plant === 'asks-without-tool-before' ? APPLIED.filter((kind) => kind !== 'tool.before') : APPLIED;
+    while (this.cursor < head) {
+      const page = await this.options.record.read({ after: this.cursor, limit: PAGE, kinds, most: true });
       for (const event of page) await this.apply(event);
-      if (page.length) this.cursor = page[page.length - 1]!.log_pos;
-      if (page.length < PAGE) return;
+      this.cursor = page.length < PAGE ? Math.max(head, page.at(-1)?.log_pos ?? 0) : page[page.length - 1]!.log_pos;
     }
   }
 
@@ -1446,8 +1446,6 @@ class AsksCore implements Asks {
   private async apply(e: Event): Promise<void> {
     const d: Obj = isObj(e.data) ? e.data : {};
     const target = e.subject?.startsWith('ask:') ? this.asks.get(bare(e.subject)) : undefined;
-    // Only a running hub appends as the core; a crash's hub.stopped carries the time of the start that found it.
-    if (e.writer === 'core' && !(e.kind === 'hub.stopped' && d.reason === 'crashed')) this.logged = Math.max(this.logged ?? e.ts, e.ts);
     switch (e.kind) {
       case 'session.start':
         // A session started in another's place in the same process (the session tree's lineage) replaced its attempt.
@@ -1711,7 +1709,9 @@ class AsksCore implements Asks {
     // The core's first call: the hub was down from the last time it appended until now.
     if (!this.opened) {
       this.opened = true;
-      if (this.logged !== undefined) await this.moveAway(this.logged, this.options.now());
+      // When the hub last ran before this core opened (#908): the newest event the core appended among those read so far, of any kind, a stop's hub.stopped included but not the one a start appends for a crash, which carries the start's time.
+      const [last] = (await this.options.record.raw(`SELECT max(ts) AS ts FROM events WHERE log_pos <= ${this.cursor} AND writer = 'core' AND NOT (kind = 'hub.stopped' AND json_extract(data, '$.reason') IS 'crashed')`)) as { ts: number | null }[];
+      if (last && last.ts !== null) await this.moveAway(last.ts, this.options.now());
     }
     // Each open chat-app task's thread, read once a call through the connector.
     await this.readThreads();

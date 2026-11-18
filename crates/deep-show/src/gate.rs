@@ -631,6 +631,17 @@ impl Hub<'_> {
                         o.media = Some(mix);
                     }
                 }
+                // #210: a panel showing a piece with logic plays it live, its ports with it.
+                if !self
+                    .gate
+                    .owners
+                    .get(panel)
+                    .is_some_and(|o| o.strips.is_some())
+                {
+                    if let Some(r) = self.start_piece_play(panel, granted, serial.is_some()) {
+                        return r;
+                    }
+                }
                 let Some(o) = self
                     .gate
                     .owners

@@ -1,0 +1,39 @@
+Command: node --test --test-concurrency=1 tests/acceptance/2444/preflight-known-failures.test.mjs tests/listed-failures.test.mjs tests/lane-reading.test.mjs
+Exit: 0; AC2 unrun/INCONCLUSIVE, not PASS.
+
+✔ AC1 #2444.3bfdfb07 control: the fixture runs for real, a lane with only passing tests PASSes and an unlisted failure fails it (5346.268917ms)
+✔ AC1 #2444.3bfdfb07 a unit lane failing only on a listed test prints it LISTED with the issue its entry names and PASSes, exit 0 (2411.164042ms)
+✔ AC1 #2444.3bfdfb07 beside a listed failure, an unlisted one still fails the lane and is not LISTED (10828.216041ms)
+✔ AC1 #2444.3bfdfb07 with no entry for a failing test, the lane fails and prints no LISTED line (9402.58925ms)
+✔ AC1 #2444.3bfdfb07 wrong runners fail these assertions (AssertionError, not an import or setup error) (27.353041ms)
+✔ evidence reader (fixture only; does not prove AC2): accepts a complete in-budget record and rejects each way a run can fall short (18.592417ms)
+﹣ AC2 #2444.1bff92b0 a full scripts/preflight on a clean checkout of main on a reference Mac exits 0, every lane PASS, checks within the preflight budget (0.175292ms) # INCONCLUSIVE: unmeasured: no dated full-run output; record one on a reference Mac (README) and set DEEP_2444_FULL_RUN to its file
+✔ a suite failing on its hook beside a test failing INCONCLUSIVE stays FAIL: the hook is no test that named its state (10359.824167ms)
+✔ a platform note is never listed, whatever the list holds, and leaves the lane INCONCLUSIVE (platform) (3824.88ms)
+✔ a BLOCKED note naming a GPU is a block, not a platform skip: a list can hold it, and its lane reads BLOCKED unlabelled (4266.104333ms)
+✔ a lane that fails beside a platform skip reads FAIL, without the (platform) that belongs to an INCONCLUSIVE one (5753.749916ms)
+✔ outside git a lane writes no record: one with no tree could only be found by nothing (6122.326959ms)
+✔ a repository nothing was added to yet still has a tree: git init writes no index, and its lane gets a record, not a block (3678.207541ms)
+✔ a checkout git can't write a tree for gets no silent pass: its lane reads BLOCKED, naming the missing record (5275.03075ms)
+✔ a lane that already failed keeps its one verdict when no tree can be written: the missing record is a note, not a block (4835.824667ms)
+✔ a test vitest's -t filter leaves out is no skip, and a skip it runs still is (20820.899334ms)
+✔ cargo's ignored tests read as skips, with the reason cargo prints, and never as passes (2.350875ms)
+✔ the tree hash is what is on disk: HEAD's tree when clean, another for an edit or an untracked file, the index left as it was (1309.673459ms)
+✔ a same-size edit in the second the index was written still changes the tree: the copied index keeps its age (2178.062208ms)
+✔ a reading-only note with its reason inside the bracket stays under the reading-only rule: full note, no criterion, no timed file (0.921042ms)
+✔ the throttle's marker counts only as a report's one row: beside others, a test's own throttle left it (0.29225ms)
+✔ a runner killed outright isn't explained by a test that named its own state (0.285458ms)
+✔ a report cut off mid-line reads as no report, so the lane falls back on the exit status (347.910417ms)
+✔ a todo is unrun, so it is a skip in both runners' rows (0.230583ms)
+✔ Vitest lists only the exact failing test ID, not its passing or newly failing sibling (11876.178708ms)
+✔ Cargo results use the same rerunnable IDs as the known-failure list (9439.828875ms)
+✔ the real unit Cargo command runs a later unlisted target after a listed failure, and still fails (14725.802ms)
+✔ listed evidence is never PASS; an unrun state or a crashed runner is never excused by that ID (35.853625ms)
+ℹ tests 28
+ℹ suites 0
+ℹ pass 27
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 1
+ℹ todo 0
+ℹ duration_ms 134534.100042

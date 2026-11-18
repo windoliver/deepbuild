@@ -1,0 +1,100 @@
+The #2306 suite run once at base commit 52aa05fd3 ("Merge pull request #2729 …"; no implementation of #2306), on
+macOS 27.2 arm64 (Mac17,10, Apple M5 Max; shared, 1-minute load about 35 to 200 while it ran), rustc 1.99.1, Node
+24.22.2, vitest 5.0.5, with
+
+  PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    sh scripts/lease npx vitest run --root tests/acceptance/2306 --testTimeout=600000 --no-file-parallelism --reporter=verbose
+
+run without scripts/throttle.mjs: the machine's build queue held this job's request for over 35 minutes behind four
+other sessions' builds (one of them holding the build grant through a whole close-out), so the request was withdrawn by
+the PID this job started, and the four builds the suite asks for (#2009's debug build, #191's test-backends and release
+builds, and the merge base's release build where #191's mergeBasePhysics puts it) were run directly first, then the
+suite. scripts/lease ran everything unleased ("no deep on PATH and no built CLI at packages/cli/dist"). At the base the
+merge base is 52aa05fd3 itself.
+
+Result: Test Files 6 failed | 1 passed (7); Tests 13 failed | 3 passed (16); 12.6 s with the builds made.
+
+Passing at the base, as they should (README: The tests):
+- ac4 "with brake 0 and the platform moving along the car's heading, the car stays within 0.02 m of where it was in the
+  world": the base's free wheel already rolls; nothing moves the car along its heading.
+- ac6, both tests: the merge base is the base, so its step hashes and #251's four kit readings are its own.
+
+Every other test fails at an assertion, for the reason the README gives; none fails in the harness and none is BLOCKED
+or INCONCLUSIVE:
+- ac1, ac3, ac4 read the issue's wrong values from the base, which is the program `controller_as_is` names: the slab
+  carries 981 N, the slab stays at rest with 3,999.98 kg·m/s made, the braked car ends 5 m from its place on the
+  platform (5.80363 m when set down moving).
+- ac2 and ac5 fail at the runner: at the base, a world holding a vehicle body and any dynamic body on a joint panics in
+  Rapier's island manager before its first step, wherever the vehicle is. Probed apart from the suite: the beam world, with
+  sleep on or off, with or without the beam's limits, with the car on a static floor 30 m away, with a ball joint, or with
+  the beam hinged to a static body, all panic; the same world with the kart made a plain dynamic body, or with the beam
+  unjointed, bakes. So the base can't show the beam left at 0° or the car carried less than 10°; an implementation runs
+  both worlds.
+- Each planted twin fails at #1918's runner: "deep-physics --planted <name> (…) exits 0; stdout:
+  {"ok":false,"code":"bad_input"}": expected 2 to be +0. The base knows neither of this suite's planted names.
+- ac7 fails because the kit has none of the four fixtures.
+
+Each failing test, trimmed to its failing assertion:
+
+ac1-weight.test.ts
+- #2306.9d2f70ed over the fourth second the slab's contact_impulse reads 10,791 N times the step's length, within 1%:
+    AssertionError: the slab's contact_impulse over the fourth second:
+      slab: its contact_impulse reads 981 N times the step's length at step 365 (120 of the fourth second's 120 steps
+      off), not (1,000 + 100) × 9.81 = 10791 N within 1%
+- #2306.9d2f70ed (twin: controller_as_is):
+    AssertionError: deep-physics --planted controller_as_is (the car set down on the slab) exits 0; stdout:
+    {"ok":false,"code":"bad_input"}
+
+ac2-beam.test.ts
+- #2306.b6a098d0 the beam's hinge reads 15° toward the car within 0.1° by 0.5 s and at every step after:
+    AssertionError: deep-physics (the car parked on the beam) exits 0; stdout: ; stderr:
+    thread 'main' panicked at …/rapier3d-0.36.1/src/dynamics/island_manager/manager.rs:141:17:
+    assertion failed: rb.is_fixed() || !rb.is_enabled() || rb.ids.active_island_id != u32::MAX
+    : expected 101 to be +0
+- #2306.b6a098d0 (twin: controller_as_is):
+    AssertionError: deep-physics --planted controller_as_is (the car parked on the beam) exits 0; stdout:
+    {"ok":false,"code":"bad_input"}
+
+ac3-slab.test.ts
+- #2306.f80ef2cc after 2 s of a 2,000 N drive the car moves at 4.00 m/s and the slab at 4.00 m/s the other way …:
+    AssertionError: the car and the slab 2 s into the drive:
+      slab: moves 0 m/s against the car's heading 2 s into the drive, not 4.00 m/s within 2%
+      slab: the car's and the slab's momenta sum to 3999.98 kg·m/s along the drive, not 0 within 100 kg·m/s
+- #2306.f80ef2cc (twin: controller_as_is):
+    AssertionError: deep-physics --planted controller_as_is (the car driven along the free slab) exits 0; stdout:
+    {"ok":false,"code":"bad_input"}
+
+ac4-platform.test.ts
+- #2306.5f9f29ae braked at 4,000 N on a platform taken from rest to 2 m/s along the car's axle …:
+    AssertionError: the braked car on the platform:
+      kart: ends 5 m from its place on the platform after the platform's 5 m along its axle, not within 0.02 m
+- #2306.5f9f29ae set down already moving with a platform that holds 2 m/s along its axle …:
+    AssertionError: the car moving with the platform:
+      kart: is 5.80363 m from its place on the platform 3 s on, not within 0.02 m
+- #2306.5f9f29ae (twin: controller_as_is):
+    AssertionError: deep-physics --planted controller_as_is (the car on the platform, braked) exits 0; stdout:
+    {"ok":false,"code":"bad_input"}
+
+ac5-disc.test.ts
+- #2306.61717c4c after 4 s the braked car has gone around the axis within 3° of the disc's own turn …:
+    AssertionError: deep-physics (the car parked on the turning disc) exits 0; stdout: ; stderr:
+    thread 'main' panicked at …/rapier3d-0.36.1/src/dynamics/island_manager/manager.rs:141:17:
+    assertion failed: rb.is_fixed() || !rb.is_enabled() || rb.ids.active_island_id != u32::MAX
+    : expected 101 to be +0
+- #2306.61717c4c (twin: grip_reads_chassis_only):
+    AssertionError: deep-physics --planted grip_reads_chassis_only (the car parked on the turning disc) exits 0;
+    stdout: {"ok":false,"code":"bad_input"}
+
+ac7-behavior-kit.test.ts
+- #2306.174ffd09 the four join the kit's data once each, and Rapier 0.36.1 passes the four through the kit:
+    AssertionError: the four fixtures in the kit's data and on Rapier:
+      vehicle_weight: the kit's data holds it 0 times, not once
+      vehicle_beam: the kit's data holds it 0 times, not once
+      vehicle_slab: the kit's data holds it 0 times, not once
+      vehicle_platform: the kit's data holds it 0 times, not once
+      vehicle_weight: the kit's report holds it 0 times on Rapier
+      (… and the same for vehicle_beam, vehicle_slab, vehicle_platform)
+- #2306.174ffd09 a test backend whose caps() list no vehicle controller reads excluded_by_caps on the four:
+    AssertionError: the four fixtures on a backend without a vehicle controller:
+      vehicle_weight reads nothing on no_vehicle_controller, not excluded_by_caps
+      (… and the same for vehicle_beam, vehicle_slab, vehicle_platform)

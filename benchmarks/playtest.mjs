@@ -8,6 +8,10 @@
 //   playtest-throughput: 20 runs of the 2-minute maze by the policy, each with its replay, on four replicas:
 //     fixture_realtime_x, 20 × 120 s over the batch's seconds. With `--planted renders-unkept-frames`, the replicas are
 //     a release build with deep-replica's `test-renders-unkept-frames`, which renders a frame every step.
+//   playtest-crawler (#556): #555's crawler, the plug-in's grid.reach kit fixture. #555's playtest of it, 4 bots × 20
+//     runs of 4,000 steps, each with its replay, on two replicas: crawler_80_runs_s. rules.legal over those runs:
+//     legal_added_s. grid.reach over 200 descender runs of 2 steps, one floor a run: reach_200_floors_s, its own
+//     searches' time. idle_work: the crawler played with no play interface and no bot, against its bake.
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
@@ -86,16 +90,16 @@ async function mazeRuns(root, bin, fixture, out) {
   }
 }
 
-/** The steps at which the maze played with no bot spends other fuel than deep-logic's bake of it. */
-async function idleWork(root, bin, fixture, out) {
+/** The steps at which the piece's item played with no bot spends other fuel than deep-logic's bake of it. */
+async function idleWork(root, bin, fixture, out, item = 'maze', span = SPAN_S) {
   const pool = await replicas(bin, 1, out);
   try {
-    const bare = await pool.play({ call: 'play', piece: fixture.piece, assets: fixture.assets, seed: SEED, span: SPAN_S, values: [], frames: [] });
+    const bare = await pool.play({ call: 'play', piece: fixture.piece, assets: fixture.assets, seed: SEED, span, values: [], frames: [] });
     const line = { call: 'bake', piece: { ...fixture.piece, assets: fixture.assets }, track: [], steps: bare.steps };
     const baked = spawnSync(join(root, 'target', 'release', 'deep-logic'), [], { input: `${JSON.stringify(line)}\n`, encoding: 'utf8', maxBuffer: 1 << 30 });
     const bake = JSON.parse(baked.stdout.trim().split('\n').at(-1));
-    const own = bake.steps.map((s) => s.items.maze.fuel);
-    const fuel = bare.fuel.maze;
+    const own = bake.steps.map((s) => s.items[item].fuel);
+    const fuel = bare.fuel[item];
     return fuel.length === own.length ? fuel.filter((f, k) => f !== own[k]).length : Math.max(fuel.length, own.length);
   } finally {
     pool.close();
@@ -119,6 +123,49 @@ async function throughput(bin, fixture, out) {
   }
 }
 
+/** #555's crawler as the grid.reach kit's fixtures hold it: the piece, its interface, #555's playtest and a descender. */
+async function crawler(root) {
+  const { reachPieces } = await import(join(root, 'packages', 'checks', 'playtest', 'kit.ts'));
+  const data = JSON.parse(readFileSync(join(FIXTURES(root), 'reach.json'), 'utf8'));
+  return { ...reachPieces().crawler, play: data.plays.crawler, playtest: data.playtest, descender: data.bots.descender };
+}
+
+/** #555's playtest of the crawler and its replays on two replicas, then rules.legal over its runs: each one's seconds. */
+async function crawlerRuns(root, bin, c, out) {
+  const dir = join(root, 'packages', 'checks', 'playtest');
+  const [{ runPlaytest }, { runLegal }] = await Promise.all([import(join(dir, 'run.ts')), import(join(dir, 'legal.ts'))]);
+  const pool = await replicas(bin, 2, out);
+  try {
+    const play = (_piece, run) => pool.play({ call: 'play', piece: c.piece, assets: c.assets, ...run });
+    const input = { piece: 'crawler@1', play: c.play, ...c.playtest, piece_seed: 'run' };
+    let at = performance.now();
+    const ran = await runPlaytest(input, play);
+    const crawler_80_runs_s = (performance.now() - at) / 1000;
+    if (ran.testsRun !== 80) throw Error(`the playtest counted ${ran.testsRun} runs, not 80: ${JSON.stringify(ran.failures.slice(0, 3))}`);
+    at = performance.now();
+    const legal = await runLegal({ playtest: 'crawler', samples: 50, unlisted: 8, seed: 556 }, input, play);
+    const legal_added_s = (performance.now() - at) / 1000;
+    if (legal.testsRun !== 80) throw Error(`rules.legal read ${legal.testsRun} runs, not 80: ${JSON.stringify(legal.failures.slice(0, 3))}`);
+    return { crawler_80_runs_s, legal_added_s };
+  } finally {
+    pool.close();
+  }
+}
+
+/** grid.reach over 200 descender runs of 2 steps, one floor a run: its own searches' seconds, its plays left out. */
+async function reachFloors(root, bin, c, out) {
+  const { runReach } = await import(join(root, 'packages', 'checks', 'playtest', 'reach.ts'));
+  const pool = await replicas(bin, 2, out);
+  try {
+    const input = { piece: 'crawler@1', play: c.play, bots: [c.descender], runs: 200, seed: 556, span: { steps: 2 }, goals: [], piece_seed: 'run' };
+    const r = await runReach({ playtest: 'crawler', goals: ['exit'], every: ['open'], depths: [1] }, input, (_piece, run) => pool.play({ call: 'play', piece: c.piece, assets: c.assets, ...run }));
+    if (r.outcome !== 'passed' || r.reach.floors.length !== 200) throw Error(`grid.reach over 200 floors reported ${r.outcome} with ${r.reach.floors.length} floors: ${JSON.stringify(r.failures.slice(0, 3))}`);
+    return r.reach.search_ms / 1000;
+  } finally {
+    pool.close();
+  }
+}
+
 export async function playtest({ root, release, task, planted }) {
   const fingerprint = release('deep-replica', 'deep-drive');
   release('deep-logic', 'deep-logic');
@@ -129,11 +176,14 @@ export async function playtest({ root, release, task, planted }) {
     bin = join(root, 'target', 'unkept', 'release', 'deep-drive');
   }
   const fixture = maze(root);
+  const c = task === 'playtest-crawler' ? await crawler(root) : null;
   const out = mkdtempSync(join(tmpdir(), 'deep-playtest-bench-'));
   try {
     const once = task === 'playtest-maze'
       ? async () => ({ maze_40_runs_s: await mazeRuns(root, bin, fixture, out), idle_work: await idleWork(root, bin, fixture, out) })
-      : async () => ({ fixture_realtime_x: await throughput(bin, fixture, out) });
+      : c
+        ? async () => ({ ...(await crawlerRuns(root, bin, c, out)), reach_200_floors_s: await reachFloors(root, bin, c, out), idle_work: await idleWork(root, bin, c, out, 'crawler', { steps: 600 }) })
+        : async () => ({ fixture_realtime_x: await throughput(bin, fixture, out) });
     await once();
     const runs = [];
     for (let n = 0; n < 5; n++) runs.push(await once());

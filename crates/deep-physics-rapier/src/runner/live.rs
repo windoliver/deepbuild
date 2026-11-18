@@ -73,6 +73,7 @@ impl Run {
             late_forks: self.late_forks,
             all_steps: self.all_steps,
             no_volume: self.no_volume,
+            vehicle: self.vehicle,
             declared_masses_only: self.declared_masses_only,
             twin: self.twin,
             test: self.test,

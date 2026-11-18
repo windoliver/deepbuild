@@ -129,7 +129,7 @@ pub fn decode(bytes: &[u8]) -> Result<Table, usize> {
     let ny = field(20, r.u32()?, 1, MAX_TEXT)?;
     let nv = field(24, r.u32()?, 0, MAX_VARS)?;
     let ns = field(28, r.u32()?, 0, MAX_STREAMS)?;
-    debug_assert_eq!(r.at, BODY);
+    assert_eq!(r.at, BODY);
     let fn_x = r.text(nx)?;
     let fn_y = r.text(ny)?;
     let mut vars = Vec::new();

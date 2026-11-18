@@ -59,7 +59,14 @@ fn flats(a: &Frame, b: &Frame) -> BTreeMap<u32, Flat> {
             let mean = s / n as f64;
             // Var(a − b) is twice each draw's own.
             let variance = (s2 / n as f64 - mean * mean).max(0.0) / 2.0;
-            (p, Flat { px: n, variance, still: !moved.contains(&p) })
+            (
+                p,
+                Flat {
+                    px: n,
+                    variance,
+                    still: !moved.contains(&p),
+                },
+            )
         })
         .collect()
 }
@@ -67,7 +74,9 @@ fn flats(a: &Frame, b: &Frame) -> BTreeMap<u32, Flat> {
 /// The driver or channel that writes a seed of `item`'s, or of the material it names: the item
 /// it writes and its path.
 fn reseeded(doc: &Value, item: &str) -> Option<(String, String)> {
-    let material = doc.pointer(&format!("/items/{item}/material")).and_then(Value::as_str);
+    let material = doc
+        .pointer(&format!("/items/{item}/material"))
+        .and_then(Value::as_str);
     ["drivers", "channels"]
         .iter()
         .filter_map(|k| doc.get(*k).and_then(Value::as_object))
@@ -77,7 +86,8 @@ fn reseeded(doc: &Value, item: &str) -> Option<(String, String)> {
             let rest = target.strip_prefix("items/")?;
             let (id, path) = rest.split_once('/')?;
             let seed = path.rsplit('/').next().is_some_and(|f| f.contains("seed"));
-            (seed && (id == item || Some(id) == material)).then(|| (id.to_string(), path.to_string()))
+            (seed && (id == item || Some(id) == material))
+                .then(|| (id.to_string(), path.to_string()))
         })
 }
 
@@ -86,7 +96,12 @@ fn reseeded(doc: &Value, item: &str) -> Option<(String, String)> {
 fn copy_of(doc: &Value, of: &str) -> Option<(String, Map<String, Value>)> {
     let mut copy = doc.pointer(&format!("/items/{of}"))?.as_object()?.clone();
     let id = (1..)
-        .map(|k| format!("{of}-still{}", if k == 1 { String::new() } else { k.to_string() }))
+        .map(|k| {
+            format!(
+                "{of}-still{}",
+                if k == 1 { String::new() } else { k.to_string() }
+            )
+        })
         .find(|id| doc.pointer(&format!("/items/{id}")).is_none())?;
     copy.insert("id".into(), json!(id));
     copy.remove("layer");
@@ -129,10 +144,14 @@ pub fn report(lowered: &Value, input: &Value, frames: &[Frame]) -> Report {
     for pair in frames.chunks(2) {
         let [a, b] = pair else { continue };
         for (pick, flat) in flats(a, b) {
-            let Some(item) = a.picks.get(&pick) else { continue };
+            let Some(item) = a.picks.get(&pick) else {
+                continue;
+            };
             let base = item.split('#').next().unwrap_or(item).to_string();
-            out.results.push(json!({"t": a.t, "item": item, "flat_px": flat.px, "variance": flat.variance,
-                                    "max": max, "still": flat.still}));
+            out.results.push(
+                json!({"t": a.t, "item": item, "flat_px": flat.px, "variance": flat.variance,
+                                    "max": max, "still": flat.still}),
+            );
             if !flat.still || flat.px == 0 {
                 continue;
             }

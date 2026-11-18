@@ -1,0 +1,51 @@
+The suite at the base commit c5c5865ac ("Merge pull request #2769 …"), before any implementation, on macOS, with
+`deep-drive` (debug, env-plants), `deep-logic` and #533's assembler built:
+
+  PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    sh scripts/lease npx vitest run --root tests/acceptance/556 ac0 --testTimeout=600000 --no-file-parallelism \
+    --reporter=verbose
+
+Test Files  7 failed (7)
+     Tests  13 failed (13)        (53 s)
+
+Every test fails at the hub it opens (helpers.ts, openHub), on the playtest plug-in's manifest, which at the base lists
+neither the kind grid.reach nor the codes grid.unreached and grid.flow (behind it, by the host's code, runCheck of
+grid.reach answers `missing`: "no loaded extension registered the check kind grid.reach"). Checked apart at the base:
+`grep playtest-crawler benchmarks/budgets.json` and `grep reachKit packages/checks/playtest/kit.ts` find nothing, and
+`DEEP_DRIVE_PLANT=keeps-document-seed deep-drive --out <dir>` prints {"ready":false,"error":"no planted replica
+keeps-document-seed"} and exits 2. The first failure of each file:
+
+ac01-floors.test.ts > the clean crawler passes over 200 descender runs, counting the runs that generated each depth
+  AssertionError: the plug-in's manifest lists the kind grid.reach beside playtest: ["playtest","rules.legal",
+  "logic.edges"]: expected [ 'playtest', 'rules.legal', …(1) ] to deeply equal ArrayContaining{…}
+  (its walled-exit, key-in-vault and BLOCKED tests fail the same way)
+
+ac02-flow.test.ts > the clean program passes the flow form at every step
+  AssertionError: the plug-in's manifest lists the kind grid.reach beside playtest: … (likewise the stale and rising
+  twins' tests)
+
+ac03-seeds.test.ts > 200 descender runs generate 200 different first floors, which the report counts per depth, and
+each replays from its seed and track
+  AssertionError: the plug-in's manifest lists the kind grid.reach beside playtest: … (likewise the planted play
+  mode's test)
+
+ac04-hex.test.ts > grid.reach passes; a planted runner taking neighbours by offset even fails grid.unreached, naming
+the exit cell
+  AssertionError: the plug-in's manifest lists the kind grid.reach beside playtest: …
+  (after the fixture's own checks passed: the piece publishes the 6 × 6 cells, this suite's search reaches the exit by
+  offset odd only, and through (3, 2) and (2, 3) only)
+
+ac05-budgets.test.ts > no work per step for a piece played with no play interface; grid.reach's search time over 200
+floors; the record; on a reference Mac, five readings within each budget
+  AssertionError: the plug-in's manifest lists the kind grid.reach beside playtest: …
+  (after idle_work read 0: the crawler played 600 steps with no play interface spent the bake's fuel at every step)
+
+ac06-layers.test.ts > the map passes; without the teleporter's row it fails naming the exit; the stacked-layers
+runner passes that twin and the kit catches it, naming the cell
+  AssertionError: the plug-in's manifest lists the kind grid.reach beside playtest: …
+  (after the fixture's own checks passed: the copy with both links is #1048's map, the twin lists the gate alone, and
+  this suite's search misses the exit without the teleporter and reaches it through stacked cells)
+
+ac07-missing.test.ts > grid.reach fails play.missing, naming turn, counting no run and playing no step, as #555's
+playtest does
+  AssertionError: the plug-in's manifest lists the kind grid.reach beside playtest: …

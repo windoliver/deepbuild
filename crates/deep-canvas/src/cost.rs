@@ -308,7 +308,8 @@ fn facts<'e>(
         hidden: Vec::with_capacity(run.len()),
     };
     for &(i, id, item) in run {
-        f.hidden.push(item.get("visible") == Some(&Value::Bool(false)));
+        f.hidden
+            .push(item.get("visible") == Some(&Value::Bool(false)));
         f.fulls.push(
             item.get("kind")
                 .and_then(Value::as_str)
@@ -769,7 +770,10 @@ mod tests {
         doc["budget"] = json!({"class": "export"});
         doc["items"]["m"]["params"]["rows"] = json!(40);
         let issues = crate::document::check_in(&doc, &sealed).issues;
-        assert!(!issues.iter().any(|i| i.code == "over_budget"), "{issues:?}");
+        assert!(
+            !issues.iter().any(|i| i.code == "over_budget"),
+            "{issues:?}"
+        );
     }
 
     #[test]
