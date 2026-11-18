@@ -57,6 +57,8 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 const repo = fileURLToPath(new URL('../../../', import.meta.url));
+// As the real CLI does, \`lease -- <command>\` runs the command: scripts/lease reaches this CLI for the lane's builds.
+if (process.argv[2] === 'lease') { const r = spawnSync(process.argv[4], process.argv.slice(5), { stdio: 'inherit' }); process.exit(r.status ?? 1); }
 if (process.argv[2] !== 'hub' || process.argv[3] !== 'run') { console.error('stand-in: only hub run'); process.exit(2); }
 const replies = [];
 for (const name of ['deep-hook', 'deep-show']) {
