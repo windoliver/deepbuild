@@ -42,7 +42,8 @@ export async function wordsCommand(args: readonly string[]): Promise<number> {
     else if (r.state === 'running') process.stdout.write(`${String(r.heading)} is made and running, in ${String(r.folder)}.\n`);
     else if (r.state === 'refused') process.stdout.write(`No card: ${String(r.reason)}\n`);
     else process.stdout.write(`Still working on ${String(r.heading)}; deep shows it in your list.\n`);
-    return typeof r.unread === 'string' || r.state === 'refused' ? 2 : r.state === 'working' ? 3 : 0;
+    // Words the box can't read ran nothing: 2. A brief its job refused is the table's refused: 1 (#1812).
+    return typeof r.unread === 'string' ? 2 : r.state === 'refused' ? 1 : r.state === 'working' ? 3 : 0;
   } catch (error) {
     if (!(error instanceof Refusal)) return notAnswered(error);
     process.stderr.write(`${error.message}\n`);
