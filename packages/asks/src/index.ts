@@ -158,6 +158,9 @@ export interface InboxRow {
    * thread; null on a row no exception holds. The app keeps a folded ask from a panel until this is in sight.
    */
   folded: string | null;
+  /** Who raised it. A fold is one person's, so the app folds a live ask only into an exception of the same pair. */
+  actor: string;
+  scope: string;
 }
 export interface Asks {
   raise(connection: Connection, source: string, ask: unknown, plan?: PlanInput): Promise<string>;
@@ -887,7 +890,7 @@ class AsksCore implements Asks {
         ask: a.handle, kind: a.data.kind as AskKind, session: a.session, status: this.status(a),
         outcome: a.closed?.outcome ?? 'unanswered', owner: String(a.data.owner), age: now - a.created,
         request: a.request ? { ...a.request } : null, decision: a.closed?.decision ?? null, missing: a.closed ? null : a.missing ?? null, words: [...a.words],
-        holder: a.fold, folded: a.folded ?? null,
+        holder: a.fold, folded: a.folded ?? null, actor: a.who.actor, scope: a.who.scope,
       }));
     });
   }

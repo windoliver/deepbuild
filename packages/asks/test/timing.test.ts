@@ -174,6 +174,8 @@ describe('the fold', () => {
     const rows = await asks.inbox();
     expect(rows.find((r) => r.ask === later)).toMatchObject({ session: 'S2', status: 'folded', folded: exception });
     for (const r of rows) expect(r.folded, r.ask).toBe(r.ask === folded || r.ask === later ? exception : null);
+    // Who raised each: a fold is one person's, so the app folds a live ask only under the same actor and scope.
+    for (const r of rows) expect({ actor: r.actor, scope: r.scope }, r.ask).toEqual({ actor: core('S1').actor, scope: core('S1').scope });
   });
 
   it('Later on the exception never passes the earliest deadline among the asks it holds', async () => {

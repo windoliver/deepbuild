@@ -22,3 +22,25 @@ and names the exception it folds into, and releases asks by the exception that c
 
 The app test was renamed after its failing run, to `a_panel_waits_for_the_exception_of_another_session_on_the_thread`,
 so it formats under main's rustfmt; its body is unchanged.
+
+## The review of 902fe7224
+
+An independent review of the fix found nothing that blocks and three things to fix, all done here:
+
+1. The app took a session's thread only from starts after its read, so a session started in another's place before the
+   read wasn't folded live. The events folded in before the read now give their sessions' threads too (`View::before`,
+   pulled out of `fold_before` first with no change in behavior so a test can reach it).
+2. The live fold matched by thread alone; the core's fold is one person's (thread, actor and scope) and never takes an
+   agent's sign-in task. Inbox rows now say who raised them (`actor`, `scope`), the app records the same on rows it
+   adds, and folds a live ask only as the core would. A row from an older hub, with neither, matches as before.
+3. Nothing tested the release when the exception closes. The panel test now closes x1 and both asks it held come back.
+
+| File | What it shows |
+| --- | --- |
+| failing-first-who-asks.txt | the asks test extended to `actor`/`scope` fails before the change: rows carry neither |
+| failing-first-who-app.txt | the new app test fails before the change (refactor only): a session started before the read isn't folded live |
+| passing-who-asks.txt | all asks tests with the change: 84/84 |
+| passing-who-app.txt | deep-app lib tests with the change: 118/118; clippy warnings all outside deep-app's sources |
+| mutant-no-actor.txt | without the actor and scope check, another actor's ask is folded and the test fails |
+| mutant-no-sign-in.txt | with sign-in tasks allowed to fold, the test fails on the sign-in task |
+| mutant-release-by-session.txt | with release back to a session match, the asks held in s2 and s4 stay folded and the panel test fails |
