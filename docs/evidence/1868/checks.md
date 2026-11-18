@@ -90,7 +90,9 @@ field read back to a real writer.
   `measureOnce`'s 300 s under load reads BLOCKED, never PASS. Their `targets.ratio` of 1.2 records the issue's
   limit; the test itself holds the number the verdict uses, as other benches' judges do.
 - `scripts/lanes.mjs` lists `tests/acceptance/1868/` (`alone`) and the two timed files (`timed`) in a commit of its
-  own, which waits for an owner-signed tag. Until then the guard, before and trace lanes are unrun for this change.
+  own, 034ca75d5, which the owner approved with `deep/approved/034ca75d528d-sk`. `node scripts/proof.mjs guard`:
+  "PASS guard: 9 commits checked: no guarded edit lacks its own approved proposal" (load 335). The before and trace
+  lanes are unrun.
 - `node scripts/affected.mjs`: see the pull request for its result.
 - deep_claim's and the late hook's scope lines have no test of their own: their proof is the plans above and the
   existing suites that exercise them.
