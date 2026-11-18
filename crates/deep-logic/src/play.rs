@@ -3,9 +3,10 @@
 //! (`deep-drive`'s `play`) is this: the piece's own logic items step on the track, and a bot, a
 //! policy given as data or a logic item added to this copy of the piece, writes entries with the
 //! writer `bot`. It answers the recorded track by hash, the values at the paths asked for at each
-//! step, the piece's first trap, the bot's, each step's time, the first step whose fuel passed
-//! its class's ceiling, and the piece's full-state hash at every checkpoint and at the end. A
-//! replay is the same call with the recorded track and no bot. It judges nothing: the check does.
+//! step (or, #556, at only the steps they change), the piece's first trap, the bot's, each step's
+//! time, the first step whose fuel passed its class's ceiling, and the piece's full-state hash at
+//! every checkpoint and at the end. A replay is the same call with the recorded track and no bot.
+//! It judges nothing: the check does.
 
 use std::collections::BTreeMap;
 use std::rc::Rc;
@@ -25,12 +26,14 @@ const BOT: &str = "bot";
 
 /// The replica's planted faults (#184's twins): its recorded track drops the run's first bot
 /// entry; a logic bot's entry made only when its value changes, not its serial; (#1048) the
-/// explorer and the descender walk as if the grid had no links.
+/// explorer and the descender walk as if the grid had no links; (#556) the piece keeps the
+/// document's seed under `piece_seed: run`.
 #[derive(Clone, Copy, Default)]
 pub struct Plants {
     pub drops_first_bot_entry: bool,
     pub entry_on_change: bool,
     pub ignores_links: bool,
+    pub keeps_document_seed: bool,
 }
 
 /// A document's logic items as one piece, as the logic module checks one: its seed, its budget
@@ -398,17 +401,20 @@ fn undeclared(bot: &Value, declared: &dyn Fn(&str) -> bool) -> Option<String> {
 
 /// Plays `piece` (the logic module's piece: seed, class, controls, items) on `call`: `{seed,
 /// piece_seed: own | run, span: seconds | {steps}, bot?: {policy} | {logic}, track?: [entry],
-/// values?: [path]}`; `stored` reads an asset's bytes by hash. `frame` sees the world after each
-/// of the piece's steps and answers the frame it keeps there, if any. It judges nothing and stops
-/// at no failure: the check reads what it recorded.
+/// values?: [path], changes?: [path]}`; `stored` reads an asset's bytes by hash. `frame` sees the
+/// world after each of the piece's steps and answers the frame it keeps there, if any. It judges
+/// nothing and stops at no failure: the check reads what it recorded.
 pub fn play(
-    piece: &Value,
+    document: &Value,
     stored: &dyn Fn(&str) -> Option<Vec<u8>>,
     call: &Value,
     plants: Plants,
     frame: &mut dyn FnMut(i64, &World) -> Option<Value>,
 ) -> Result<Value, Value> {
-    let (mut piece, seed) = seeded(piece, call)?;
+    let (mut piece, seed) = seeded(document, call)?;
+    if plants.keeps_document_seed {
+        piece["seed"] = document["seed"].clone();
+    }
     let controls = piece.get("controls").cloned().unwrap_or(json!({}));
     let bot = call.get("bot").filter(|b| !b.is_null());
     if let Some(c) = bot.and_then(|b| undeclared(b, &|c| controls.get(c).is_some())) {
@@ -518,30 +524,37 @@ pub fn play(
             .and_then(Value::as_i64)
             .ok_or_else(|| refused("bad_input", json!("span: seconds or {steps}")))?,
     };
-    // The paths asked for: `<item>.<array>` of the piece's own items.
-    let mut paths = Vec::new();
-    for p in call
-        .get("values")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-    {
-        let p = p
-            .as_str()
-            .ok_or_else(|| refused("bad_input", json!("values: array paths")))?;
-        let (id, name) = p
-            .split_once('.')
-            .ok_or_else(|| refused("ref_unresolved", json!(p)))?;
-        let i = own
-            .iter()
-            .copied()
-            .find(|i| piece.items[*i].id == id)
-            .ok_or_else(|| refused("ref_unresolved", json!(p)))?;
-        if !piece.items[i].writes.iter().any(|w| w.name == name) {
-            return Err(refused("ref_unresolved", json!(p)));
+    // The paths asked for: `<item>.<array>` of the piece's own items, each step's (`values`) or
+    // (#556) only the steps it changes at (`changes`), so a grid a check reads per floor isn't
+    // copied at every step.
+    let paths_of = |field: &str| -> Result<Vec<(String, usize, String)>, Value> {
+        let mut paths = Vec::new();
+        for p in call
+            .get(field)
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
+            let p = p
+                .as_str()
+                .ok_or_else(|| refused("bad_input", json!(format!("{field}: array paths"))))?;
+            let (id, name) = p
+                .split_once('.')
+                .ok_or_else(|| refused("ref_unresolved", json!(p)))?;
+            let i = own
+                .iter()
+                .copied()
+                .find(|i| piece.items[*i].id == id)
+                .ok_or_else(|| refused("ref_unresolved", json!(p)))?;
+            if !piece.items[i].writes.iter().any(|w| w.name == name) {
+                return Err(refused("ref_unresolved", json!(p)));
+            }
+            paths.push((p.to_string(), i, name.to_string()));
         }
-        paths.push((p.to_string(), i, name.to_string()));
-    }
+        Ok(paths)
+    };
+    let paths = paths_of("values")?;
+    let watched = paths_of("changes")?;
     let mut entries: Vec<Entry> = match call.get("track") {
         None | Some(Value::Null) => Vec::new(),
         Some(t) => t
@@ -592,6 +605,8 @@ pub fn play(
         None,
     )?;
     let mut values: Vec<Vec<Value>> = vec![Vec::new(); paths.len()];
+    // Each watched array's `{step, value}` at step 0 and at each step it differs from the last.
+    let mut changes: Vec<(Vec<Value>, Option<Value>)> = vec![(Vec::new(), None); watched.len()];
     let mut fuel: Vec<Vec<i64>> = vec![Vec::new(); own.len()];
     let mut step_times = Vec::new();
     let mut frames = Vec::new();
@@ -721,6 +736,13 @@ pub fn play(
         for ((_, i, name), v) in paths.iter().zip(&mut values) {
             v.push(world.array(*i, name).map_or(Value::Null, Value::Array));
         }
+        for ((_, i, name), (at, last)) in watched.iter().zip(&mut changes) {
+            let now = world.array(*i, name).map_or(Value::Null, Value::Array);
+            if last.as_ref() != Some(&now) {
+                at.push(json!({"step": k, "value": now}));
+                *last = Some(now);
+            }
+        }
         if let Some(f) = frame(k, &world) {
             frames.push(f);
         }
@@ -777,6 +799,11 @@ pub fn play(
         .zip(values)
         .map(|((p, _, _), v)| (p, Value::Array(v)))
         .collect();
+    let changes: Map<String, Value> = watched
+        .into_iter()
+        .zip(changes)
+        .map(|((p, _, _), (at, _))| (p, Value::Array(at)))
+        .collect();
     let fuel: Map<String, Value> = own_ids
         .iter()
         .cloned()
@@ -798,6 +825,7 @@ pub fn play(
         "track": track_hash(&track),
         "entries": track,
         "values": values,
+        "changes": changes,
         "trap": trap,
         "bot_trap": bot_trap,
         "step_times": step_times,
