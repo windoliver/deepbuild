@@ -23,7 +23,7 @@ const EVERY = 100;
 const HEAP_PER_1000 = 200_000;
 const RSS_PER_1000 = 2_000_000;
 const STEP_MS = 60_000;
-/** Read now keeps a source's answer from the last 2 s, so the cycle's action waits this long after the last one. */
+/** Read now keeps a source's answer from the last 2 s, so a view is read again no sooner than this. */
 const KEPT_MS = 2_100;
 /** Each cycle's set of 100 names is new, drawn from these 113: so an hour's rollup holds at most 113 series. */
 const POOL = Array.from({ length: 113 }, (_, i) => `n${String(i).padStart(3, '0')}`);
@@ -384,9 +384,10 @@ async function answering(home) {
 }
 
 /**
- * The stores package (#2650): a polled source on the host answering 64 KB, a series source answering 100 names, a
- * view that binds both, and ext.stores.read_now, a read action that reads the view now. Its manifest's library source
- * names the host, which is what an install grants (#1731), so the merge base's hub installs it just as this one does.
+ * The stores package (#2650): two views, each binding a polled source on the host answering 64 KB and a series source
+ * answering 100 names, and ext.stores.read_now, a read action that reads a view now. The cycles take the views in turn,
+ * so each source is read every other cycle, past Read now's 2 s. Its manifest's library source names the host, which
+ * is what an install grants (#1731), so the merge base's hub installs it just as this one does.
  */
 async function storesPackage(cli, home, host) {
   const { packageDigest } = await import(new URL('../../extension-host/dist/index.js', `file://${cli}`).href);
@@ -396,16 +397,18 @@ async function storesPackage(cli, home, host) {
 const HOST = ${JSON.stringify(host)};
 const QUOTA = { per_minute: 600, per_day: 100_000 };
 export default async function (deep: any): Promise<void> {
-  await deep.registerSource('ext.stores.answer', { variant: 'polled', host: HOST, path: '/answer', quota: QUOTA, timeout: 30_000, freshFor: 1_000,
-    parse: (a: { status: number; body: string }) => { if (a.status !== 200) throw Error('no answer: ' + a.status); return { value: Number(JSON.parse(a.body).value), unit: 'n' }; } });
-  await deep.registerSource('ext.stores.names', { variant: 'polled', host: HOST, path: '/names', quota: QUOTA, timeout: 30_000, freshFor: 1_000, shape: 'series',
-    parse: (a: { status: number; body: string }) => { if (a.status !== 200) throw Error('no names: ' + a.status); return { values: JSON.parse(a.body), unit: 'n' }; } });
-  await deep.registerView('ext.stores.board', 'panel', 'home', { binds: ['reading:ext.stores.answer', 'reading:ext.stores.names'] });
+  for (const i of [0, 1]) {
+    await deep.registerSource('ext.stores.answer' + i, { variant: 'polled', host: HOST, path: '/answer', quota: QUOTA, timeout: 30_000, freshFor: 1_000,
+      parse: (a: { status: number; body: string }) => { if (a.status !== 200) throw Error('no answer: ' + a.status); return { value: Number(JSON.parse(a.body).value), unit: 'n' }; } });
+    await deep.registerSource('ext.stores.names' + i, { variant: 'polled', host: HOST, path: '/names', quota: QUOTA, timeout: 30_000, freshFor: 1_000, shape: 'series',
+      parse: (a: { status: number; body: string }) => { if (a.status !== 200) throw Error('no names: ' + a.status); return { values: JSON.parse(a.body), unit: 'n' }; } });
+    await deep.registerView('ext.stores.board' + i, 'panel', 'home', { binds: ['reading:ext.stores.answer' + i, 'reading:ext.stores.names' + i] });
+  }
   deep.registerAction('ext.stores.read_now', {
     declares: 'read', reads: [],
-    input: { type: 'object', properties: {}, required: [], additionalProperties: false },
+    input: { type: 'object', properties: { view: { type: 'string', enum: ['ext.stores.board0', 'ext.stores.board1'] } }, required: ['view'], additionalProperties: false },
     output: { type: 'object', properties: { result: { type: 'string' } }, required: ['result'], additionalProperties: false },
-  }, async () => ({ result: JSON.stringify(await deep.readNow('ext.stores.board')) }));
+  }, async (input: { view: string }) => ({ result: JSON.stringify(await deep.readNow(input.view)) }));
 }
 `);
   writeFileSync(join(dir, 'panel', 'main.js'), `// The stores view's panel: the values its view binds.
@@ -417,7 +420,7 @@ export default class Board extends View {
   const manifest = {
     id: 'bench/stores', version: '1.0.0', digest: `d1:${'0'.repeat(64)}`, access: { words: ['hosts'] }, checks: [], actions: ['ext.stores.read_now'],
     sources: [
-      { name: 'ext.stores.answer', variant: 'polled' }, { name: 'ext.stores.names', variant: 'polled' },
+      ...[0, 1].flatMap((i) => [{ name: `ext.stores.answer${i}`, variant: 'polled' }, { name: `ext.stores.names${i}`, variant: 'polled' }]),
       { name: 'ext.stores.files', variant: 'library', host },
     ],
     requires: { preview: ['deep.registerSource', 'deep.registerView', 'deep.readNow', 'deep.registerAction'] },
@@ -538,12 +541,13 @@ async function run({ cli, home, cycles }) {
     // The stores package (#2650), installed once. Its view's panel has no kit to pass where no replica is built; the
     // package still loads, and its action reads the view's sources now.
     const installed = await within(cliConn.call('extension.install', { from: await storesPackage(cli, home, source.host) }), 'the stores package\'s install');
-    if (installed.error || installed.result?.status !== 'installed' || (installed.result.not_loaded && !/^ext\.stores\.board reads \w+ on panel@1: /.test(installed.result.not_loaded))) {
+    if (installed.error || installed.result?.status !== 'installed' || (installed.result.not_loaded && !/^ext\.stores\.board0 reads \w+ on panel@1: .*; ext\.stores\.board1 reads \w+ on panel@1: /.test(installed.result.not_loaded))) {
       throw new Blocked(`the stores package didn't load: ${JSON.stringify(installed.error ?? installed.result)}`);
     }
     const reported = await within(cliConn.call('windows.report', roomy()), 'windows.report');
     if (reported.error) throw new Blocked(`the stand-in agent's window reading was refused: ${JSON.stringify(reported.error)}`);
-    let lastRead = -Infinity;
+    /** When each view was last read now, by its number. */
+    const lastRead = [-Infinity, -Infinity];
     let seq = BigInt(Date.now()) * 1_000_000n;
 
     const cycle = async (n) => {
@@ -560,6 +564,19 @@ async function run({ cli, home, cycles }) {
       const of = (kind) => (event) => event.kind === kind && (event.session_id ?? event.session) === session;
       seen.length = 0;
       await fire('SessionStart', { source: 'startup' });
+      // One job whose agent prints 256 KB and ends (#2650). It runs beside the session's hooks, and its end is awaited
+      // before the session's, so the cycle takes about as long as it did without it.
+      const jobDone = (async () => {
+        const job = await within(cliConn.call('job.submit', { spec: { kind: 'read', agent: 'claude-code', prompt: `Cycle ${n}: answer done.` } }), `cycle ${n}: job.submit`);
+        if (job.error) throw new Blocked(`cycle ${n}: job.submit: ${JSON.stringify(job.error)}`);
+        const ended = await frame(`cycle ${n}: job.ended`, (event) => event.kind === 'job.ended' && event.subject === job.result.job).catch(async (error) => {
+          // What it waits on, as the runner reads it.
+          const status = await within(cliConn.call('job.status', { job: job.result.job }), `cycle ${n}: job.status`).catch(() => undefined);
+          throw new Blocked(`${error.message}; the job reads ${JSON.stringify(status?.result ?? status?.error)}`);
+        });
+        if (ended.data?.state !== 'finished') throw new Blocked(`cycle ${n}: the job didn't finish: ${JSON.stringify(ended.data)}`);
+      })();
+      jobDone.catch(() => undefined);
       await fire('UserPromptSubmit', { prompt: 'what does the deploy say?' });
       for (let i = 0; i < 10; i++) {
         const call = { tool_name: 'Bash', tool_input: { command: `ls src/${i}` }, tool_use_id: `toolu_${n}_${i}` };
@@ -575,11 +592,12 @@ async function run({ cli, home, cycles }) {
       const answer = await within(cliConn.call('ask.answer', { ask: `ask:${created.id}`, option: 'a' }), `cycle ${n}: ask.answer`);
       if (answer.error) throw new Blocked(`cycle ${n}: ask.answer: ${JSON.stringify(answer.error)}`);
       await within(asked, `cycle ${n}: deep_ask`);
-      // One action call with a request ID (#2650): a read that reads both sources now, the 64 KB answer and a new set
-      // of 100 names. Read now keeps an answer from the last 2 s, so a cycle quicker than that waits out the rest.
-      await sleep(Math.max(0, KEPT_MS - (performance.now() - lastRead)));
-      const acted = await within(mcp.call('mcp.call', { tool: 'call_action', arguments: { action: 'ext.stores.read_now', request: `churn-${n}-${randomUUID()}`, input: '{}' } }), `cycle ${n}: call_action`);
-      lastRead = performance.now();
+      // One action call with a request ID (#2650): a read that reads one view's two sources now, the 64 KB answer and a
+      // new set of 100 names. Read now keeps an answer from the last 2 s, so a view read sooner waits out the rest.
+      const view = n % 2;
+      await sleep(Math.max(0, KEPT_MS - (performance.now() - lastRead[view])));
+      const acted = await within(mcp.call('mcp.call', { tool: 'call_action', arguments: { action: 'ext.stores.read_now', request: `churn-${n}-${randomUUID()}`, input: JSON.stringify({ view: `ext.stores.board${view}` }) } }), `cycle ${n}: call_action`);
+      lastRead[view] = performance.now();
       const read = acted.result?.status === 'done' ? JSON.parse(acted.result.output?.result ?? 'null') : null;
       if (!read?.sources?.length || read.sources.some((s) => s.status !== 'read')) throw new Blocked(`cycle ${n}: the stores' sources weren't read now: ${JSON.stringify(acted.error ?? acted.result)}`);
       mcp.close();
@@ -587,16 +605,6 @@ async function run({ cli, home, cycles }) {
       const started = await within(app.call('run.start', { check: 'churn', claim: `claim:${ulid()}`, commit: '0'.repeat(40), argv: ['/usr/bin/true'], cwd: work }), `cycle ${n}: run.start`);
       if (started.error) throw new Blocked(`cycle ${n}: run.start: ${JSON.stringify(started.error)}`);
       await frame(`cycle ${n}: run.finished`, (event) => event.kind === 'run.finished' && event.subject === started.result.run);
-
-      // One job whose agent prints 256 KB and ends (#2650).
-      const job = await within(cliConn.call('job.submit', { spec: { kind: 'read', agent: 'claude-code', prompt: `Cycle ${n}: answer done.` } }), `cycle ${n}: job.submit`);
-      if (job.error) throw new Blocked(`cycle ${n}: job.submit: ${JSON.stringify(job.error)}`);
-      const ended = await frame(`cycle ${n}: job.ended`, (event) => event.kind === 'job.ended' && event.subject === job.result.job).catch(async (error) => {
-        // What it waits on, as the runner reads it.
-        const status = await within(cliConn.call('job.status', { job: job.result.job }), `cycle ${n}: job.status`).catch(() => undefined);
-        throw new Blocked(`${error.message}; the job reads ${JSON.stringify(status?.result ?? status?.error)}`);
-      });
-      if (ended.data?.state !== 'finished') throw new Blocked(`cycle ${n}: the job didn't finish: ${JSON.stringify(ended.data)}`);
 
       await fire('Stop', { last_assistant_message: "I'll check the deploy again in half a second." });
       await frame(`cycle ${n}: promise.set`, of('promise.set'));
@@ -607,6 +615,7 @@ async function run({ cli, home, cycles }) {
       const installed = await within(cliConn.call('extension.install', { from: pkg }), `cycle ${n}: extension.install`);
       if (installed.error || installed.result?.status !== 'installed' || installed.result.not_loaded) throw new Blocked(`cycle ${n}: the extension didn't reload: ${JSON.stringify(installed.error ?? installed.result)}`);
 
+      await jobDone;
       await fire('SessionEnd', { reason: 'other' });
       await frame(`cycle ${n}: session.end`, of('session.end'));
       rmSync(transcript, { force: true });

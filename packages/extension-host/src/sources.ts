@@ -921,7 +921,11 @@ export class Sources {
       const answer = replay.calls[at]!.answer;
       return 'error' in answer ? { error: describe(answer.error, source) } : this.scrubAnswer(answer);
     }
-    const signal = AbortSignal.timeout(source.timeout);
+    // The call's own timer, cleared once it has an answer: a finished call leaves no timer behind for its whole
+    // timeout, as AbortSignal.timeout would (#2650).
+    const stop = new AbortController();
+    const timer = setTimeout(() => stop.abort(new DOMException(`timeout after ${source.timeout} ms`, 'TimeoutError')), source.timeout).unref();
+    const signal = stop.signal;
     const aborted = new Promise<never>((_, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true }));
     const started = performance.now();
     let answer: RecordedCall['answer'];
@@ -933,6 +937,8 @@ export class Sources {
       answer = this.scrubAnswer(got);
     } catch {
       answer = { error: signal.aborted ? 'timeout' : 'unreachable' };
+    } finally {
+      clearTimeout(timer);
     }
     this.keep(source, stripped, request, answer);
     await this.options.append('source.called', {
