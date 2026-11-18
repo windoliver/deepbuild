@@ -250,18 +250,18 @@ fn fault(id: &str, path: String) -> OpError {
     // A refusal with its own code (#443): a missing module is named as itself.
     if let Some((code, at)) = path.split_once(builders::CODED) {
         let code = code_of(code);
-        // #1929: a box or mesh deform's refusal names its item and what it found there.
-        if let Some((at, found)) = at.split_once(builders::CODED) {
-            let mut actual: Value = serde_json::from_str(found).unwrap_or_default();
-            actual["item"] = json!(id);
-            return OpError::new(code, format!("items/{id}/{at}")).with(actual);
-        }
+        // #1781: an attribute's refusal carries what it found after its path.
+        let (at, found) = at.split_once(builders::CODED).unwrap_or((at, ""));
         let at = if code == "module_missing" || at.starts_with("items/") {
             at.to_string()
         } else {
             format!("items/{id}/{at}")
         };
-        return OpError::new(code, at);
+        let e = OpError::new(code, at);
+        return match serde_json::from_str(found) {
+            Ok(found) => e.with(found),
+            Err(_) => e,
+        };
     }
     OpError::new("out_of_range", format!("items/{id}/{path}"))
 }
@@ -272,6 +272,7 @@ pub(crate) fn code_of(code: &str) -> &'static str {
     builders::OUTLINE_CODES
         .into_iter()
         .chain(crate::contributed::CODES)
+        .chain(crate::attrs::CODES)
         .chain(crate::bind::CODES)
         .find(|c| *c == code)
         .unwrap_or("out_of_range")
@@ -318,7 +319,10 @@ pub fn built(
     let counts = builders::counts(&kind, &params, &ctx)?;
     let mesh = builders::build(&kind, &params, &ctx)?;
     let (last, rows) = stack::apply(mesh.clone(), item, doc, id, t, run)?;
-    let last = crate::skin::applied(last, item)?;
+    let mut last = crate::skin::applied(last, item)?;
+    if planted == Some(crate::attrs::KEPT_AS_F32) {
+        crate::attrs::kept_as_f32(&mut last);
+    }
     let declared = stack::estimate(counts, item, &|k| {
         Ok(stack::apply(mesh.clone(), &stack::prefix(item, k), doc, id, t, run)?.0)
     })?;

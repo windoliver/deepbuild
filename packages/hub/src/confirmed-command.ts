@@ -37,7 +37,7 @@ export async function confirmedCommand(args: readonly string[]): Promise<number>
     process.stderr.write(`${USAGE[args[0]!]}\n`);
     return 2;
   }
-  const result = await callAsYou(asked.method, asked.params, 'nothing changed');
+  const result = await callAsYou(asked.method, asked.params);
   if (typeof result === 'number') return result;
   process.stdout.write(`${asked.done(result)}\n`);
   return 0;

@@ -14,6 +14,7 @@ use crate::frames::session_view;
 use crate::hub::EvalTime;
 use crate::hub::Hub;
 
+pub(crate) mod attributes;
 pub(crate) mod shape;
 
 /// `geometry`: which items, at what time, which stage, and whether to count only.

@@ -24,7 +24,7 @@ pub const KINDS: [(&str, &str, bool, bool); 20] = [
     ("mod.bevel@1", "generate", false, false),
     ("mod.solidify@1", "generate", false, false),
     ("mod.build@1", "generate", false, false),
-    ("mod.store@1", "generate", false, false),
+    ("mod.store@1", "deform", false, false),
     ("mod.normals@1", "deform", false, false),
     ("mod.curve_deform@1", "deform", false, false),
     ("mod.simple_deform@1", "deform", false, false),
@@ -451,9 +451,15 @@ pub fn apply(
         };
         let seed = seed_of(id, modifier);
         let phase = (unit_noise(seed, 1) + 1.0) * core::f64::consts::PI;
+        let carried: Vec<_> = m
+            .typed
+            .iter()
+            .map(|(name, a)| (name.clone(), a.domain, a.ty))
+            .collect();
         m = match kind.as_str() {
             "mod.array@1" => array(&m, modifier, &params, doc).ok_or_else(|| at("params"))?,
             "mod.mirror@1" => {
+                let src = (!m.typed.is_empty()).then(|| m.clone());
                 let mut out = m;
                 for axis in axes(modifier).ok_or_else(|| at("params/axes"))? {
                     let flip = |mut p: V3| {
@@ -463,6 +469,9 @@ pub fn apply(
                     let reflected = out.mapped(flip, |_, n| flip(n)).turned();
                     let suffix = format!(".m{}", ["x", "y", "z"][axis]);
                     out.append(&reflected, &suffix);
+                }
+                if let Some(src) = src {
+                    copies(&src, &mut out);
                 }
                 out
             }
@@ -484,32 +493,12 @@ pub fn apply(
                 build(&m, &keep)
             }
             "mod.store@1" => {
-                let name = params
-                    .get("name")
-                    .and_then(Value::as_str)
-                    .filter(|n| !n.is_empty())
-                    .ok_or_else(|| at("params/name"))?;
-                let field = params
-                    .get("field")
-                    .and_then(Value::as_str)
-                    .unwrap_or("height");
-                let mut out = m;
-                match params
-                    .get("domain")
-                    .and_then(Value::as_str)
-                    .unwrap_or("point")
-                {
-                    "point" => {
-                        let values = field_of(&out, field).ok_or_else(|| at("params/field"))?;
-                        out.attributes.insert(name.to_string(), values);
-                    }
-                    "face" => {
-                        let values = face_field(&out, field).ok_or_else(|| at("params/field"))?;
-                        out.face_attributes.insert(name.to_string(), values);
-                    }
-                    _ => return Err(at("params/domain")),
-                }
-                out
+                let plants = crate::field::Plants {
+                    whole_domain: run.planted("store_ignores_on"),
+                    keeps_nonfinite: run.planted("store_nonfinite_keeps_earlier"),
+                };
+                crate::field::store(m, &params, part, k, plants)
+                    .map_err(|stop| crate::field::fault(stop, k))?
             }
             "mod.curve_deform@1" => {
                 let curve = path(doc, params.get("path")).ok_or_else(|| at("params/path"))?;
@@ -540,11 +529,11 @@ pub fn apply(
             crate::bind::BOX | crate::bind::MESH => {
                 let kept = run.kept.get(k).and_then(Option::as_ref);
                 let planted = run.planted.as_deref();
-                // A refusal carries its code, the modifier and what its issue names.
+                // A refusal names the item beside what it found.
                 let (moved, bind) = crate::bind::deform(&m, &only, &kind, &params, kept, planted)
-                    .map_err(|(code, found)| {
-                    let at = crate::builders::coded(code, &format!("modifiers/{k}"));
-                    format!("{at}{}{found}", crate::builders::CODED)
+                    .map_err(|(code, mut found)| {
+                    found["item"] = json!(id);
+                    crate::attrs::coded(code, &format!("modifiers/{k}"), &found)
                 })?;
                 rows[k].bind = Some(bind);
                 mask(&m, faced(moved), &only)
@@ -655,6 +644,19 @@ pub fn apply(
             }
             _ => return Err(at("kind")),
         };
+        // #1781: a step that leaves out an attribute it took has no rule for it, and says so;
+        // the planted subdivide builds without it.
+        let drops = kind == "mod.subdivide@1" && run.planted("subdivide_drops_edge_attrs");
+        if let Some(i) = crate::attrs::dropped(&carried, &m).filter(|_| !drops) {
+            let (name, domain, ty) = carried[i].clone();
+            let refusal = crate::attrs::Refusal::NoRule {
+                modifier: kind.clone(),
+                name,
+                domain,
+                ty,
+            };
+            return Err(refusal.fault(&at("kind")));
+        }
         if let (Some(now), Some(started), Some(row)) = (run.clock, started, rows.last_mut()) {
             row.ms = Some(now() - started);
         }
@@ -748,7 +750,15 @@ fn array(m: &Mesh, modifier: &Value, params: &Value, doc: &Value) -> Option<Mesh
             out.append(&m.mapped(|p| add(p, shift), |_, n| n), &format!(".{c}"));
         }
     }
+    copies(m, &mut out);
     Some(out)
+}
+
+/// `out`, copies of `m` appended in turn (an array's, a mirror's): each element takes its typed
+/// attributes from the element of `m` it copies, an edge its edge's (#1781).
+fn copies(m: &Mesh, out: &mut Mesh) {
+    let (v, t) = (m.positions.len().max(1), m.triangles().max(1));
+    crate::attrs::carry(m, out, &|k| k % v, &|k| k % t, true);
 }
 
 /// The triangles `keep` names, every vertex kept (so the count stays the builder's); a closed
@@ -783,6 +793,7 @@ fn build(m: &Mesh, keep: &[u32]) -> Mesh {
         .filter(|(_, (v, _))| v.iter().all(|t| at[*t as usize] != u32::MAX))
         .map(|(k, (v, g))| (k.clone(), (remap(v), *g)))
         .collect();
+    crate::attrs::carry(m, &mut out, &|v| v, &|t| keep[t] as usize, false);
     out
 }
 
@@ -823,6 +834,10 @@ fn solidify(m: &Mesh, h: f64) -> Mesh {
         }
     }
     let first = out.next_face();
+    // What each vertex and triangle was made from: the copy's from its own, a rim's from its
+    // edge's ends and the triangle on it.
+    let mut vertex: Vec<usize> = (0..m.positions.len()).chain(0..m.positions.len()).collect();
+    let mut tri: Vec<usize> = (0..m.triangles()).chain(0..m.triangles()).collect();
     for (rim, list) in uses.values().filter(|l| l.len() == 1).enumerate() {
         let face = first + rim as u32;
         let (a, b, t) = list[0];
@@ -845,8 +860,24 @@ fn solidify(m: &Mesh, h: f64) -> Mesh {
         }
         facing(&mut out, base, base + 1, base + 2, outward, face);
         facing(&mut out, base, base + 2, base + 3, outward, face);
+        vertex.extend([a, b, b, a]);
+        tri.resize(out.triangles(), t);
+    }
+    // A rim's vertices and triangles take what their sources hold, never 0 (#1781).
+    for values in out.attributes.values_mut() {
+        values.resize(vertex.len(), 0.0);
+        for v in 2 * m.positions.len()..vertex.len() {
+            values[v] = values[vertex[v]];
+        }
+    }
+    for values in out.face_attributes.values_mut() {
+        values.resize(tri.len(), 0.0);
+        for t in 2 * m.triangles()..tri.len() {
+            values[t] = values[tri[t]];
+        }
     }
     out.close_components();
+    crate::attrs::carry(m, &mut out, &|v| vertex[v], &|t| tri[t], false);
     out
 }
 
@@ -950,7 +981,17 @@ fn rotated(m: &Mesh, r: usize) -> Mesh {
         }
         normals.push(p.vertex[f].iter().map(|&v| m.normals[v as usize]).collect());
     }
+    let vertices = p.vertex.concat();
+    let typed = std::mem::take(&mut p.typed);
     let mut out = p.mesh(m, Some(&normals));
+    if !typed.is_empty() {
+        let origin: Vec<u32> = out.faces.iter().map(|f| p.origin[*f as usize]).collect();
+        let (vertex, tri) = (
+            |v: usize| vertices[v] as usize,
+            |t: usize| origin[t] as usize,
+        );
+        crate::attrs::carry(m, &mut out, &vertex, &tri, true);
+    }
     keep_annotations(m, &mut out);
     out
 }
@@ -1081,6 +1122,9 @@ fn subdivide(m: Mesh, p: &Value, levels: u32, run: &Run) -> Result<Mesh, String>
     let cage = m.cage.clone().unwrap_or_else(|| m.edges(false, true));
     let plants = crate::poly::Plants {
         first_corner_order: run.planted("subdivide_first_corner"),
+        corner_per_point: run.planted("subdivide_corners_per_point"),
+        edge_copies_end: run.planted("subdivide_edge_copies_end"),
+        whole_averaged: run.planted("subdivide_averages_whole"),
     };
     let out = poly.subdivided(levels, scheme, boundary, uv, plants, run.blocks());
     let mut mesh = out.mesh(&m, None);
@@ -1252,45 +1296,6 @@ fn shaded_sharp(m: &Mesh, w: &[u32]) -> Vec<((u32, u32), bool)> {
         start = end;
     }
     out
-}
-
-/// A per-face field, one value per triangle, read at each face's centroid (the mean of its
-/// distinct welded points): `height`, `x`, `y`, `z` or `distance` from the item's origin.
-fn face_field(m: &Mesh, field: &str) -> Option<Vec<f64>> {
-    // The geometry measures, read like attributes (#2015).
-    if let Some(values) = crate::measures::face(m, field) {
-        return Some(values);
-    }
-    let w = m.welded();
-    let mut points: BTreeMap<u32, BTreeMap<u32, V3>> = BTreeMap::new();
-    for t in 0..m.triangles() {
-        for j in 0..3 {
-            let v = m.indices[3 * t + j] as usize;
-            points
-                .entry(m.faces[t])
-                .or_default()
-                .insert(w[v], m.positions[v]);
-        }
-    }
-    let [lo, hi] = m.bounds();
-    let centre: BTreeMap<u32, V3> = points
-        .into_iter()
-        .map(|(f, ps)| {
-            let n = ps.len() as f64;
-            (f, scale(ps.into_values().fold([0.0; 3], add), 1.0 / n))
-        })
-        .collect();
-    (0..m.triangles())
-        .map(|t| {
-            let c = centre[&m.faces[t]];
-            Some(match field {
-                "height" => ((c[1] - lo[1]) / (hi[1] - lo[1]).max(1e-12)).clamp(0.0, 1.0),
-                "x" | "y" | "z" => c[axis_of(field)?],
-                "distance" => crate::geom::length(c),
-                _ => return None,
-            })
-        })
-        .collect()
 }
 
 /// A mesh's welded points, edges and faces: its polygon view's.
