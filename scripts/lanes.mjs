@@ -988,6 +988,8 @@ timed.push('tests/acceptance/2650/budgets.long.test.ts');
 
 // #1812's files (blind) start hubs in throwaway homes, through setup and the login service stand-in or deep hub run.
 alone.push('tests/acceptance/1812/');
+// #67's blind redraft after #1812 starts hubs as #67's suite does.
+alone.push('tests/acceptance/67-redraft-1812/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
