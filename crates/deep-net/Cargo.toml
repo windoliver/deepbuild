@@ -1,0 +1,18 @@
+[package]
+name = "deep-net"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+# Issue #549: the net module (canvas primitives: Shared play over a relay), as the app and the web
+# player both run it: `net@1` and its check, a copy of a lockstep match (one message a match step,
+# relay@1's repeat rule, full-state hashes, the waiting notice, the merged record), the start card
+# and the first player's link, the Join prompt's words, and the test relay the check kinds run
+# copies over, on its own clock. It holds no socket, thread or clock: a host hands it the time and
+# the frames that arrived.
+
+[dependencies]
+deep-canvas = { path = "../deep-canvas" }
+deep-relay = { path = "../deep-relay" }
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }

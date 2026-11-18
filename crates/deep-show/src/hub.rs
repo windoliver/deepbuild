@@ -1615,7 +1615,7 @@ impl<'a> Hub<'a> {
                 event,
                 t,
                 gesture,
-            } => match self.piece_press(panel, event) {
+            } => match self.join_or_press(panel, event, gesture) {
                 Some(reply) => reply,
                 None => match self.ring_input(panel, event) {
                     Some(reply) => reply,
@@ -1626,7 +1626,7 @@ impl<'a> Hub<'a> {
                 },
             },
             Call::World { doc, world } => self.world_call(doc, world),
-            Call::Match { doc, steps } => self.match_call(doc, *steps),
+            Call::Net(c) => self.net_call(c),
             Call::Scope(panel) => self.scope_reply(panel),
             Call::Presented(panel) => self.presented(panel),
             Call::PopOut {

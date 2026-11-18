@@ -160,6 +160,8 @@ export type Plant =
   // a socket, timer or child left per cycle, and a hub that can't give a full collection or its resident memory.
   | 'churn-keeps-ended-session' | 'churn-keeps-reload-listener' | 'churn-leaves-socket' | 'churn-leaves-timer' | 'churn-leaves-child'
   | 'churn-no-full-collection' | 'churn-no-resident-read'
+  // #2650's: the four stores the churn benchmark must catch, each kept with nothing let go.
+  | 'churn-keeps-every-answer' | 'churn-keeps-every-result' | 'churn-keeps-every-output' | 'churn-keeps-every-name-set'
   // #824's per-session reading: deep mcp loading the whole hub package, a waiter keeping its session's transcript, and
   // a platform that reads no process's memory.
   | 'mcp-loads-hub' | 'waiter-keeps-transcript' | 'sessions-no-memory-read'
@@ -289,7 +291,9 @@ export type Plant =
   | 'pending-across-restart' | 'applies-stale-undo'
   // #2646's: a state pass that leaves out each session whose promise fell due, and an asks core whose reads of the log
   // leave tool.before out of their kinds.
-  | 'pass-skips-due-promise' | 'state-pass-skips-due-promise' | 'asks-without-tool-before';
+  | 'pass-skips-due-promise' | 'state-pass-skips-due-promise' | 'asks-without-tool-before'
+  // #2655's: a server that hands its parser a view of the socket's chunk in place of the line's own bytes.
+  | 'hands-over-socket-chunk';
 const PLANTS: readonly string[] = [
   'statusline-user-settings-only', 'window-unknown-as-zero', 'window-carried-from-other-repo', 'sends-block-whole',
   'box-applies-at-once', 'box-ignores-revision',
@@ -339,6 +343,7 @@ const PLANTS: readonly string[] = [
   'rewrites', 'resurrects', 'copies-values', 'merge-by-name', 'never-merge', 'rereads-all', 'deletes-contradicted',
   'churn-keeps-ended-session', 'churn-keeps-reload-listener', 'churn-leaves-socket', 'churn-leaves-timer', 'churn-leaves-child',
   'churn-no-full-collection', 'churn-no-resident-read',
+  'churn-keeps-every-answer', 'churn-keeps-every-result', 'churn-keeps-every-output', 'churn-keeps-every-name-set',
   'mcp-loads-hub', 'waiter-keeps-transcript', 'sessions-no-memory-read',
   'repeat-reaches-you',
   'deep-wait-polls', 'stop-answers-waiting',
@@ -401,6 +406,7 @@ const PLANTS: readonly string[] = [
   'status-lists-every-ask',
   'pending-across-restart', 'applies-stale-undo',
   'pass-skips-due-promise', 'state-pass-skips-due-promise', 'asks-without-tool-before',
+  'hands-over-socket-chunk',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;

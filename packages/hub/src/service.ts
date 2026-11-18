@@ -6,12 +6,19 @@ import { mkdirSync, openSync, readFileSync, realpathSync, rmSync, watch, writeFi
 import net from 'node:net';
 import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
-import { hubAddress, installedPrograms, installedRoot, lastingNode, onPath, rootOf, underTemp } from './paths.js';
+import { hubAddress, installedPrograms, installedRoot, lastingNode, onPath, rootOf, underTemp, type Root } from './paths.js';
 import { line } from './wire.js';
 
 const LABEL = 'com.deepbuild.hub';
 const UNIT = 'deepbuild-hub.service';
 const WAIT_MS = 15_000;
+/** How long `deep hub start` waits, once the hub answers, for its core to start: a busy machine's start takes seconds (#2801). */
+const CORE_WAIT_MS = 120_000;
+/**
+ * How long `deep hub status` waits for the health of a hub that said hello: its readings start children (`ps`, the secret
+ * store's) that a busy machine can hold past the 2 s a missing hub gets (#2801).
+ */
+const STATUS_REPLY_MS = 25_000;
 const STEP_MS = 10;
 /** The file limit the login service raises the hub's to: a connection per hook in flight, the record, evidence and runs. */
 const FILES = 8192;
@@ -20,7 +27,8 @@ type Obj = Record<string, unknown>;
 interface Connection {
   hello: Obj;
   closed: Promise<void>;
-  next(): Promise<Obj>;
+  /** The next line, within `ms` (the connection's wait by default). */
+  next(ms?: number): Promise<Obj>;
   send(o: object): void;
   close(): void;
 }
@@ -59,11 +67,11 @@ function connect(path: string, timeoutMs = 2000): Promise<Connection> {
         else lines.push(o);
       }
     });
-    const next = () => new Promise<Obj>((done, stop) => {
+    const next = (ms = timeoutMs) => new Promise<Obj>((done, stop) => {
       const ready = lines.shift();
       if (ready) return done(ready);
       if (failed) return stop(failed);
-      const t = setTimeout(() => fail(Error(`no answer within ${timeoutMs} ms`)), timeoutMs);
+      const t = setTimeout(() => fail(Error(`no answer within ${ms} ms`)), ms);
       waiting.push({ wake: (o) => { clearTimeout(t); done(o); }, stop: (e) => { clearTimeout(t); stop(e); } });
     });
     // Connected once the hub's hello arrives.
@@ -129,15 +137,18 @@ async function waitForStop(path: string, connection: Connection): Promise<void> 
   }
 }
 
-/** One control call on the hub at `path`, as the CLI, with the token `tokenFile` holds. */
-export async function control(path: string, tokenFile: string, method: string, params: Obj = {}, timeoutMs = 2000): Promise<Obj> {
+/**
+ * One control call on the hub at `path`, as the CLI, with the token `tokenFile` holds: the hub's hello within
+ * `timeoutMs`, and the call's reply within `replyMs`.
+ */
+export async function control(path: string, tokenFile: string, method: string, params: Obj = {}, timeoutMs = 2000, replyMs = timeoutMs): Promise<Obj> {
   const c = await connect(path, timeoutMs);
   try {
     c.send({ hello: 'cli', token: readFileSync(tokenFile, 'utf8').trim() });
     const hello = await c.next();
     if (hello.error) throw Error(`the hub refused the CLI's credential: ${JSON.stringify(hello.error)}`);
     c.send({ id: method, method, params });
-    const reply = await c.next();
+    const reply = await c.next(replyMs);
     if (reply.error) throw Error(`${method} was refused: ${JSON.stringify(reply.error)}`);
     if (method === 'hub.stop') await waitForStop(path, c);
     return reply.result as Obj;
@@ -263,10 +274,44 @@ export function startService(program: string[], logs: string): string | undefine
 /** Where the login service's definition is: the launchd plist on macOS, the systemd user unit elsewhere. */
 export const serviceFile = (): string => definition([], '').file;
 
-/** `deep hub start [--root <folder>]`: exits 0 once a hub answers on the root's socket, started now or already running. */
+/**
+ * Waits for the hub that answers at the root's socket to answer `hub.health`, which it does once its core has started
+ * (#2801): 0 then, so `deep hub status` reads it from then on. One call, waited on: any answer ends the wait, a refusal
+ * too, as does a token this CLI can't read, since start never read the hub further. 3 when the hub closed the
+ * connection first or the wait ran out.
+ */
+async function coreAnswers(root: Root): Promise<number> {
+  let token: string;
+  try {
+    token = readFileSync(root.token, 'utf8').trim();
+  } catch {
+    return 0;
+  }
+  let c: Connection | undefined;
+  try {
+    c = await connect(root.socket, CORE_WAIT_MS);
+    c.send({ hello: 'cli', token });
+    if (!(await c.next()).error) {
+      c.send({ id: 'hub.health', method: 'hub.health', params: {} });
+      await c.next();
+    }
+    return 0;
+  } catch (error) {
+    const why = error instanceof Error ? error.message : String(error);
+    process.stderr.write(`deep hub start: the hub at unix:${root.socket} ${why.startsWith('no answer within') ? `answers, but its core didn't start within ${CORE_WAIT_MS / 1000} s` : `closed the connection before it answered hub.health (${why})`}; see ${join(root.logs, 'hub.log')}\n`);
+    return 3;
+  } finally {
+    c?.close();
+  }
+}
+
+/**
+ * `deep hub start [--root <folder>]`: exits 0 once a hub, started now or already running, answers `hub.health` on the
+ * root's socket: its core has started, and a `deep hub status` run right after reads it (#2801).
+ */
 export async function startHub(options: { root?: string; cli: string }): Promise<number> {
   const root = rootOf(options.root ?? installedRoot());
-  if (await answers(root.socket)) return 0;
+  if (await answers(root.socket)) return coreAnswers(root);
   mkdirSync(root.logs, { recursive: true, mode: 0o700 });
   // An installed version's login service runs the versions folder's current link, which every update keeps, never a
   // version's own folder (#41); a checkout's runs its own CLI through Node.
@@ -283,7 +328,7 @@ export async function startHub(options: { root?: string; cli: string }): Promise
       return 3;
     }
   }
-  if (await waitForHub(root.socket)) return 0;
+  if (await waitForHub(root.socket)) return coreAnswers(root);
   process.stderr.write(`deep hub start: no hub answered at unix:${root.socket} within ${WAIT_MS / 1000} s; see ${join(root.logs, 'hub.log')}\n`);
   return 3;
 }
@@ -299,7 +344,7 @@ export async function hubStatus(options: { root?: string }): Promise<number> {
   }
   const tokenFile = rootOf(options.root ?? installedRoot()).token;
   try {
-    process.stdout.write(`${JSON.stringify(await control(path, tokenFile, 'hub.health'))}\n`);
+    process.stdout.write(`${JSON.stringify(await control(path, tokenFile, 'hub.health', {}, 2000, STATUS_REPLY_MS))}\n`);
     return 0;
   } catch (error) {
     process.stderr.write(`deep hub status: no hub could be read at unix:${path}: ${error instanceof Error ? error.message : String(error)}\n`);

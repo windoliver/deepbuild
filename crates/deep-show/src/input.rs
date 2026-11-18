@@ -49,6 +49,8 @@ pub struct PanelScope {
     pub(crate) preview: Option<crate::preview::Previewer>,
     /// #542: its text fields and the scroll gesture under way.
     pub(crate) fields: crate::fields::Viewer,
+    /// #549: its Join prompt and the connections its match opened.
+    pub(crate) join: crate::net::Join,
 }
 
 pub fn point(v: &Value) -> Option<[f64; 2]> {
@@ -214,6 +216,7 @@ impl Hub<'_> {
                     points: Default::default(),
                     preview: None,
                     fields: Default::default(),
+                    join: Default::default(),
                 },
             );
             let first = self.seen(panel).ok_or_else(|| refused("not_presented"))?;
@@ -690,7 +693,12 @@ impl Hub<'_> {
         match self.panel_scope(panel) {
             Ok(_) => {
                 self.settle_focus(panel);
-                json!({"state": self.state(panel)})
+                let mut state = self.state(panel);
+                // #549: the app's own Join prompt, null where the piece declares no relay.
+                if let Some(s) = state.as_object_mut() {
+                    s.insert("join".into(), self.join_prompt(panel));
+                }
+                json!({"state": state})
             }
             Err(e) => e,
         }
