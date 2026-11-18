@@ -1,0 +1,13 @@
+✔ AC5 #2655 with 2,000 commands of 100 KB each in the history, the main thread holds under 20 MB for them (30284.876ms)
+ℹ change: the main thread holds 15.78 MB for 2000 commands of 100000 characters (heap after two full collections 7.25 MB before them, 23.03 MB after)
+✔ AC5 #2655 the expected time the history gives for a repeated command is the merge base's (27097.797625ms)
+ℹ merge base: the main thread holds 190.87 MB for 2000 commands; expected time for the repeated command: 3 s
+ℹ change: expected time for the repeated command: 3 s
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 57450.6765
