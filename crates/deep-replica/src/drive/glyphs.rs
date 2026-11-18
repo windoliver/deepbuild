@@ -24,6 +24,9 @@ type Row = ([i32; 4], i32);
 /// The fewest glyphs that say which line a cut-off row starts: fewer could start anything.
 const MIN_CUT: usize = 4;
 
+/// How far, in device pixels, a glyph's baseline may round from its line's.
+const NEAR: i32 = 2;
+
 #[derive(Default)]
 struct Seen {
     /// The platform's text system, which says where in its tile each glyph's raster starts.
@@ -100,8 +103,19 @@ impl Glyphs {
                 .or_default()
                 .push((pen[0], *key, *sprite));
         }
+        // A glyph shaped a little off its line's baseline, as a mark is, rounds to a baseline a pixel or two away: it's on
+        // that line still (#1808). Lines under one clip are far further apart.
+        let mut lines: Vec<(Row, Vec<(f32, GlyphKey, Sprite)>)> = Vec::new();
+        for (row, glyphs) in rows {
+            match lines.last_mut() {
+                Some((line, on)) if line.0 == row.0 && (row.1 - line.1).abs() <= NEAR => {
+                    on.extend(glyphs)
+                }
+                _ => lines.push((row, glyphs)),
+            }
+        }
         let mut runs = Vec::new();
-        for row in rows.values_mut() {
+        for (_, row) in &mut lines {
             row.sort_by(|a, b| a.0.total_cmp(&b.0));
             let glyphs: Vec<(GlyphKey, Sprite)> =
                 row.iter().map(|(_, key, sprite)| (*key, *sprite)).collect();
@@ -297,10 +311,14 @@ impl PlatformTextSystem for TextSystem {
                 if text[glyph.index..].starts_with(char::is_whitespace) {
                     seen.blank.insert((run.font_id, glyph.id));
                 } else {
-                    painted.push((run.font_id, glyph.id));
+                    painted.push((f32::from(glyph.position.x), (run.font_id, glyph.id)));
                 }
             }
         }
+        // A line is matched by its glyphs as they're painted, left to right, which a right-to-left line's runs and glyphs
+        // aren't stored in; its text stays as it's stored (#1808).
+        painted.sort_by(|a, b| a.0.total_cmp(&b.0));
+        let painted: Vec<GlyphKey> = painted.into_iter().map(|(_, key)| key).collect();
         if !painted.is_empty() {
             seen.lines.insert(painted, text.to_owned());
         }
