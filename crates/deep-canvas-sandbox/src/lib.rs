@@ -6,6 +6,7 @@
 //! (Registries and closed lists).
 
 pub mod check;
+pub mod interfaces;
 pub mod kit;
 pub mod layouts;
 pub mod link;

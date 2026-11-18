@@ -48,6 +48,8 @@ export interface ClaimedCheck {
   contract?: NumericContract;
   /** The clean runs it needs, one when absent. */
   needed?: number;
+  /** The fewest tests a passing run of it may count (#2218). */
+  min_tests?: number;
   runs: RecordedRun[];
   /** How the check ran on the merge base (#31), for a fix check; absent while it hasn't, or couldn't. */
   base?: BaseResult;
@@ -178,7 +180,7 @@ export function claimVerdict(given: ClaimedRuns, options: { plant?: VerdictPlant
     const proof: Proof = c.proof ?? (c.runs.some((r) => r.tested === false) && !c.runs.some((r) => r.tested) ? 'static_check' : 'test_run');
     checks.push({
       check: c.check, digest, source: c.source, depth: c.depth ?? 'unit', proof, covers: [...c.covers],
-      ...(c.inputs ? { inputs: [...c.inputs] } : {}), ...(c.deadline !== undefined ? { deadline: c.deadline } : {}), ...(c.needed !== undefined ? { runs: c.needed } : {}),
+      ...(c.inputs ? { inputs: [...c.inputs] } : {}), ...(c.deadline !== undefined ? { deadline: c.deadline } : {}), ...(c.needed !== undefined ? { runs: c.needed } : {}), ...(c.min_tests !== undefined ? { min_tests: c.min_tests } : {}),
       ...(mask !== null ? { cant_fail: `exit status masked by \`${mask}\`` } : unrecorded ? { cant_fail: unrecorded } : {}),
       ...(c.contract ? { contract: c.contract } : {}),
       ...(c.base ? { base: c.base } : {}),

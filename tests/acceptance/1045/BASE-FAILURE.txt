@@ -1,0 +1,195 @@
+#1045: the suite at the base 7d5000134 ("Merge pull request #2739"), each file run once on November 17, 2026, on a
+shared Mac with 18 cores, after `npm ci` and `npm run build --workspaces`, the pinned toolchain first on PATH:
+
+    NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 scripts/lease node node_modules/vitest/vitest.mjs run \
+      --root tests/acceptance/1045 tree.test.ts --reporter=verbose --testTimeout=3600000 --hookTimeout=180000
+    (then the same with voiceover.test.ts)
+
+`scripts/lease` ran each unleased ("DeepBuild isn't set up here (no hub token)").
+
+- tree.test.ts: 17:19:20Z to 17:41:27Z, 22 min 7 s (vitest: 1,323.5 s); one-minute load 308 at the start and 292 at the
+  end (five-minute 204 and 286). Nearly all of it is the file's `cargo build` in `beforeAll`: this worktree's build
+  output had been removed while the session was paused, so deep-show built cold. The three tests took 30.8 s, 0.7 s and
+  0.6 s.
+- voiceover.test.ts: 17:41:47Z to 17:41:55Z, 7.6 s with the build cached; load 284 at the start, 274 at the end.
+
+Each test's first failing assertion at the base:
+
+- tree.test.ts
+  - AC1, the figure in headless Chrome: the app's side passes its fixture checks (the tree holds each part and control
+    with its name and role; one announcement, `count` "Rays: 4", at 2 s), the base exports the figure's web bundle, its
+    player is ready in headless Chrome with WebGPU, and the four seeks land. It fails at `none` ("the figure in the web
+    player, against the app") with 11 failures: every node of the app's tree is missing from the page
+    (01jb1045000000000000000001, beam, lens, screen, caption, count, c-rays, c-labels), Tab reaches neither control, and
+    the page has no polite live region for readout count. The base's player puts only its canvas in its element.
+  - AC1, wrong program `web_no_tree`: fails at `runShow` in #172's `exportOnce`, "deep-show run takes the scenario
+    (planted web_no_tree): {"ok":false,"code":"bad_input"}": the base knows no such planted name.
+  - AC1, wrong program `web_announces_every_frame`: the same, for `web_announces_every_frame`.
+- voiceover.test.ts
+  - AC2: the app's side and the export pass, then BLOCKED with the one unblock ask: no person's VoiceOver run over this
+    bundle (its index.html 66d7b33e…) is recorded. After the implementation it stays BLOCKED, on the new bundle's hash,
+    until a person's run is recorded.
+
+Before these runs the harness was tried once, by a throwaway test (deleted, never committed), on three players made
+from the base's own bundle of the figure, each a copy with only the element's script changed (and its integrity in the
+index page); no file outside this folder was changed. A stand-in that builds the tree from the bundled document (the
+document's node on <deep-player> with aria-description, each part, the caption and the readout as a named group with
+aria-roledescription, a range input and a switch button, and an aria-live="polite" element written when the readout's
+text changes) passed AC1's judgement with no failure. The base's element (no tree) failed it with the 11 failures above,
+naming every node, both controls and readout count. A stand-in that writes the live region on every draw failed it
+twice, naming readout count: "updated 2 time(s)" over the unchanged seeks and "2 time(s) from then to 3 s, not once".
+
+The runs' output follows.
+
+start 2026-11-17T17:19:19.981Z load 308 204 100 cores 18
+deep lease: DeepBuild isn't set up here (no hub token), so `node node_modules/vitest/vitest.mjs run --root tests/acceptance/1045 tree.test.ts --reporter=verbose --testTimeout=3600000 --hookTimeout=180000` runs unleased
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/1045
+
+ × tree.test.ts > AC1 #1045.ccb3fe36 the accessibility fixture figure in the web player keeps the app's accessibility tree as DOM beside its canvas > AC1 #1045.ccb3fe36 in headless Chrome the figure's tree equals the app's as data, Tab reaches every control in the app's order, and the changed readout updates the live region once 30835ms
+   → the figure in the web player, against the app:
+  the player's accessibility tree: the page's accessibility tree has no node 01jb1045000000000000000001 (document "Light through a lens")
+  the player's accessibility tree: the page's accessibility tree has no node beam (part "Light beam")
+  the player's accessibility tree: the page's accessibility tree has no node lens (part "Convex lens")
+  the player's accessibility tree: the page's accessibility tree has no node screen (part "Screen")
+  the player's accessibility tree: the page's accessibility tree has no node caption (label "Caption")
+  the player's accessibility tree: the page's accessibility tree has no node count (data "Rays counted")
+  the player's accessibility tree: the page's accessibility tree has no node c-rays (slider "Number of rays")
+  the player's accessibility tree: the page's accessibility tree has no node c-labels (switch "Show labels")
+  Tab never reaches control c-rays (slider "Number of rays"); it reaches []
+  Tab never reaches control c-labels (switch "Show labels"); it reaches []
+  the page has no polite live region (an element with aria-live="polite") to announce readout count: expected [ …(11) ] to deeply equal []
+ × tree.test.ts > AC1 #1045.ccb3fe36 the accessibility fixture figure in the web player keeps the app's accessibility tree as DOM beside its canvas > AC1 #1045.ccb3fe36 wrong program: a player with no tree (web_no_tree) fails this test, naming each part and control 715ms
+   → the figure's web export (planted web_no_tree): deep-show run takes the scenario (planted web_no_tree): {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ × tree.test.ts > AC1 #1045.ccb3fe36 the accessibility fixture figure in the web player keeps the app's accessibility tree as DOM beside its canvas > AC1 #1045.ccb3fe36 wrong program: a player that announces every frame (web_announces_every_frame) fails this test, naming the readout count 569ms
+   → the figure's web export (planted web_announces_every_frame): deep-show run takes the scenario (planted web_announces_every_frame): {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tree.test.ts > AC1 #1045.ccb3fe36 the accessibility fixture figure in the web player keeps the app's accessibility tree as DOM beside its canvas > AC1 #1045.ccb3fe36 in headless Chrome the figure's tree equals the app's as data, Tab reaches every control in the app's order, and the changed readout updates the live region once
+AssertionError: the figure in the web player, against the app:
+  the player's accessibility tree: the page's accessibility tree has no node 01jb1045000000000000000001 (document "Light through a lens")
+  the player's accessibility tree: the page's accessibility tree has no node beam (part "Light beam")
+  the player's accessibility tree: the page's accessibility tree has no node lens (part "Convex lens")
+  the player's accessibility tree: the page's accessibility tree has no node screen (part "Screen")
+  the player's accessibility tree: the page's accessibility tree has no node caption (label "Caption")
+  the player's accessibility tree: the page's accessibility tree has no node count (data "Rays counted")
+  the player's accessibility tree: the page's accessibility tree has no node c-rays (slider "Number of rays")
+  the player's accessibility tree: the page's accessibility tree has no node c-labels (switch "Show labels")
+  Tab never reaches control c-rays (slider "Number of rays"); it reaches []
+  Tab never reaches control c-labels (switch "Show labels"); it reaches []
+  the page has no polite live region (an element with aria-live="polite") to announce readout count: expected [ …(11) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the player's accessibility tree: the page's accessibility tree has no node 01jb1045000000000000000001 (document \"Light through a lens\")",
++   "the player's accessibility tree: the page's accessibility tree has no node beam (part \"Light beam\")",
++   "the player's accessibility tree: the page's accessibility tree has no node lens (part \"Convex lens\")",
++   "the player's accessibility tree: the page's accessibility tree has no node screen (part \"Screen\")",
++   "the player's accessibility tree: the page's accessibility tree has no node caption (label \"Caption\")",
++   "the player's accessibility tree: the page's accessibility tree has no node count (data \"Rays counted\")",
++   "the player's accessibility tree: the page's accessibility tree has no node c-rays (slider \"Number of rays\")",
++   "the player's accessibility tree: the page's accessibility tree has no node c-labels (switch \"Show labels\")",
++   "Tab never reaches control c-rays (slider \"Number of rays\"); it reaches []",
++   "Tab never reaches control c-labels (switch \"Show labels\"); it reaches []",
++   "the page has no polite live region (an element with aria-live=\"polite\") to announce readout count",
++ ]
+
+ ❯ none ../169/helpers.ts:78:73
+     76| /** No failures; the message lists them. */
+     77| export function none(failures: readonly string[], what: string): void {
+     78|   expect(failures, `${what}:\n  ${failures.slice(0, 30).join('\n  ')}`…
+       |                                                                         ^
+     79| }
+     80| /** A wrong program's run: this suite's own check fails on it, and som…
+ ❯ tree.test.ts:54:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  tree.test.ts > AC1 #1045.ccb3fe36 the accessibility fixture figure in the web player keeps the app's accessibility tree as DOM beside its canvas > AC1 #1045.ccb3fe36 wrong program: a player with no tree (web_no_tree) fails this test, naming each part and control
+AssertionError: the figure's web export (planted web_no_tree): deep-show run takes the scenario (planted web_no_tree): {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow ../169/helpers.ts:169:153
+    167|   try { out = JSON.parse(lines[0]!) as JsonValue; } catch { return exp…
+    168|   const answer = obj(out, `${what}: the answer`);
+    169|   expect(answer['ok'], `${what}: deep-show run takes the scenario${sc[…
+       |                                                                                                                                                         ^
+    170|   const replies = arr(answer['replies'], `${what}: replies`).map((v, i…
+    171|   expect(replies.length, `${what}: one reply per call`).toBe(arr(sc['c…
+ ❯ exportOnce ../172/helpers.ts:852:13
+ ❯ judged tree.test.ts:41:17
+ ❯ tree.test.ts:59:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  tree.test.ts > AC1 #1045.ccb3fe36 the accessibility fixture figure in the web player keeps the app's accessibility tree as DOM beside its canvas > AC1 #1045.ccb3fe36 wrong program: a player that announces every frame (web_announces_every_frame) fails this test, naming the readout count
+AssertionError: the figure's web export (planted web_announces_every_frame): deep-show run takes the scenario (planted web_announces_every_frame): {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow ../169/helpers.ts:169:153
+    167|   try { out = JSON.parse(lines[0]!) as JsonValue; } catch { return exp…
+    168|   const answer = obj(out, `${what}: the answer`);
+    169|   expect(answer['ok'], `${what}: deep-show run takes the scenario${sc[…
+       |                                                                                                                                                         ^
+    170|   const replies = arr(answer['replies'], `${what}: replies`).map((v, i…
+    171|   expect(replies.length, `${what}: one reply per call`).toBe(arr(sc['c…
+ ❯ exportOnce ../172/helpers.ts:852:13
+ ❯ judged tree.test.ts:41:17
+ ❯ tree.test.ts:63:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  09:19:23
+   Duration  1323.50s (tests 100%)
+
+vitest exit 1
+end 2026-11-17T17:41:26.900Z load 292 286 254
+
+start 2026-11-17T17:41:46.776Z load 284 285 255 cores 18
+deep lease: DeepBuild isn't set up here (no hub token), so `node node_modules/vitest/vitest.mjs run --root tests/acceptance/1045 voiceover.test.ts --reporter=verbose --testTimeout=3600000 --hookTimeout=180000` runs unleased
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/1045
+
+ × voiceover.test.ts > AC2 #1045.acc208bf VoiceOver on Safari over the figure in the web player, on the reference Mac > AC2 #1045.acc208bf a person's recorded VoiceOver run on this bundle names every part and control and hears the changed readout; without one the check is BLOCKED with one unblock ask, never PASS 4631ms
+   → BLOCKED: no person's VoiceOver run over this bundle (index.html 66d7b33e249f2b6997d43293fa88dac82cc1e79e1cdd19c3b9b85f541ecc511e) is recorded. Unblock: at a reference Mac (Mac15,7, Mac15,12, Mac17,10), serve target/acceptance/1045/voiceover/ (python3 -m http.server 8045 --bind 127.0.0.1 --directory target/acceptance/1045/voiceover), open http://127.0.0.1:8045/ in Safari, turn VoiceOver on (Command-F5) with its caption panel, move VoiceOver through the player and write down what it says for beam ("Light beam"), lens ("Convex lens"), screen ("Screen"), c-rays ("Number of rays"), c-labels ("Show labels"); then set the player past 2 s (Safari's console: document.querySelector('deep-player').currentTime = 2.5) and write down what VoiceOver announces; record the run in tests/acceptance/1045/VOICEOVER.json with bundle 66d7b33e249f2b6997d43293fa88dac82cc1e79e1cdd19c3b9b85f541ecc511e (README: The VoiceOver run); this is not a pass
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  voiceover.test.ts > AC2 #1045.acc208bf VoiceOver on Safari over the figure in the web player, on the reference Mac > AC2 #1045.acc208bf a person's recorded VoiceOver run on this bundle names every part and control and hears the changed readout; without one the check is BLOCKED with one unblock ask, never PASS
+AssertionError: BLOCKED: no person's VoiceOver run over this bundle (index.html 66d7b33e249f2b6997d43293fa88dac82cc1e79e1cdd19c3b9b85f541ecc511e) is recorded. Unblock: at a reference Mac (Mac15,7, Mac15,12, Mac17,10), serve target/acceptance/1045/voiceover/ (python3 -m http.server 8045 --bind 127.0.0.1 --directory target/acceptance/1045/voiceover), open http://127.0.0.1:8045/ in Safari, turn VoiceOver on (Command-F5) with its caption panel, move VoiceOver through the player and write down what it says for beam ("Light beam"), lens ("Convex lens"), screen ("Screen"), c-rays ("Number of rays"), c-labels ("Show labels"); then set the player past 2 s (Safari's console: document.querySelector('deep-player').currentTime = 2.5) and write down what VoiceOver announces; record the run in tests/acceptance/1045/VOICEOVER.json with bundle 66d7b33e249f2b6997d43293fa88dac82cc1e79e1cdd19c3b9b85f541ecc511e (README: The VoiceOver run); this is not a pass
+ ❯ blocked ../169/helpers.ts:91:17
+     89| /** A platform need is missing here: never a pass. */
+     90| export function blocked(reason: string): never {
+     91|   return expect.fail(`BLOCKED: ${reason}; this is not a pass`);
+       |                 ^
+     92| }
+     93| const clone = <T extends JsonValue>(v: T): T => JSON.parse(JSON.string…
+ ❯ voiceover.test.ts:42:30
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  09:41:47
+   Duration  7.58s (tests 98%, transform 1%)
+
+vitest exit 1
+end 2026-11-17T17:41:55.253Z load 274 283 254

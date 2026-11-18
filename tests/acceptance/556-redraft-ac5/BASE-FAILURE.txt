@@ -1,0 +1,53 @@
+The redraft of criterion 5 (#556.eb50d272) run once at 9521772d5 ("Acceptance tests for #556 (blind)": the base
+c5c5865ac plus the first suite; no implementation of #556), on macOS, with the debug builds already cached by an
+earlier run of the same test (cold builds of deep-drive, deep-logic and the assembler: 255 s, the same failure).
+Paths redacted as <repo>.
+
+Its first failure is part 1: benchmarks/budgets.json has no task playtest-crawler. The parts before it in the same
+list passed at the base: the clean crawler played with no play interface and no bot spends the bake's fuel at every
+one of its 4,000 steps (fuel spent, so not a vacuous match), the lane's validator accepts the file, and
+scripts/lanes.mjs runs this file as timed. Nothing after it ran: grid.reach, the gate and the timings.
+
+$ PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    sh scripts/lease npx vitest run --root tests/acceptance/556-redraft-ac5 --testTimeout=600000 --no-file-parallelism
+
+deep lease: DeepBuild isn't set up here (no hub token), so `npx vitest run --root tests/acceptance/556-redraft-ac5 --testTimeout=600000 --no-file-parallelism` runs unleased
+
+ RUN  v5.0.5 <repo>/tests/acceptance/556-redraft-ac5
+
+ ❯ ac5-budgets.test.ts (1 test | 1 failed) 6330ms
+   ❯ #556.eb50d272 the budgets: 80 runs and replays under 5 min, rules.legal under 1 min, grid.reach over 200 floors under 1 s, no work without an interface (1)
+     × #556.eb50d272 no work per frame, the record and grid.reach's 200 floors anywhere; on a reference Mac at rest, five readings of each within its limit 6323ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac5-budgets.test.ts > #556.eb50d272 the budgets: 80 runs and replays under 5 min, rules.legal under 1 min, grid.reach over 200 floors under 1 s, no work without an interface > #556.eb50d272 no work per frame, the record and grid.reach's 200 floors anywhere; on a reference Mac at rest, five readings of each within its limit
+AssertionError: no work per frame for a piece with no play interface, and the record:
+  benchmarks/budgets.json has no task playtest-crawler for the perf lane and the budget window to compare with the merge base: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "benchmarks/budgets.json has no task playtest-crawler for the perf lane and the budget window to compare with the merge base",
++ ]
+
+ ❯ none ../184/helpers.ts:68:73
+     66| /** No failures; the message lists them. */
+     67| export function none(failures: readonly string[], what: string): void {
+     68|   expect(failures, `${what}:\n  ${failures.slice(0, 40).join('\n  ')}`…
+       |                                                                         ^
+     69| }
+     70|
+ ❯ ac5-budgets.test.ts:163:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  14:30:24
+   Duration  6.80s (tests 95%, transform 4%, import 1%)
+
+vitest exit: 1
