@@ -44,3 +44,21 @@ An independent review of the fix found nothing that blocks and three things to f
 | mutant-no-actor.txt | without the actor and scope check, another actor's ask is folded and the test fails |
 | mutant-no-sign-in.txt | with sign-in tasks allowed to fold, the test fails on the sign-in task |
 | mutant-release-by-session.txt | with release back to a session match, the asks held in s2 and s4 stay folded and the panel test fails |
+
+## The review of 57c07567c
+
+Nothing blocking; two more places where the app's live fold differed from the core's, both older than these commits:
+
+1. The core never folds a block someone else owns (`isTheirs`: an unblock whose owner isn't its actor), nor counts it;
+   the app folded it. Now it neither counts nor folds.
+2. The core folds a live ask only into an exception it already raised; its count runs in `raise()`, before the ask,
+   at the settings' threshold. The app folded by its own count of five in any record. The count now applies only in
+   a record with no list and no showing of the core's, a fixture's (#338).
+
+| File | What it shows |
+| --- | --- |
+| failing-first-owner-count.txt | before the change: someone else's block folds into x1, and a hub with a list folds a sixth ask by count |
+| passing-owner-count.txt | deep-app lib tests with the change: 119/119; clippy warnings all outside deep-app's sources |
+| mutant-no-owner.txt | without the owner check, someone else's block folds and the test fails |
+| mutant-count-always.txt | with the count on in any record, the listed hub's sixth ask folds and the test fails |
+| mutant-no-scope.txt | without the scope check, another scope's ask folds and the test fails |

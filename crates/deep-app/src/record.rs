@@ -297,8 +297,13 @@ impl View {
                 let holder = exception && event["data"]["key"] == key.as_str();
                 // A record with no such exception, a fixture's (#338), folds by the count the core raises it at; an
                 // exception of the core's is never folded here. As in the core, a fold is one person's: the thread's asks
-                // raised under this actor and scope count (a row from an older hub names neither), and an agent's
-                // sign-in task, which shows at once, never folds.
+                // raised under this actor and scope count (a row from an older hub names neither); a block someone else
+                // owns neither counts nor folds, and an agent's sign-in task, which shows at once, never folds. The core
+                // folds a live ask only into an exception it already raised, so the count is a fixture's alone: a record
+                // with no list and no showing of the core's.
+                let theirs = |row: &Value, owner: &Value, actor: &Value| {
+                    row["kind"] == "unblock" && owner != actor
+                };
                 let same =
                     |row: &Value, key: &str| row.get(key).is_none() || row[key] == event[key];
                 let mine = self.inbox.iter().filter(|row| {
@@ -306,6 +311,7 @@ impl View {
                         && row["status"] != "closed"
                         && same(row, "actor")
                         && same(row, "scope")
+                        && !theirs(row, &row["owner"], &row["actor"])
                 });
                 let sign_in = event["writer"] == "core"
                     && event["data"]["kind"] == "unblock"
@@ -316,7 +322,11 @@ impl View {
                     .clone()
                     .find(|row| holds(row))
                     .map(|row| row["ask"].clone());
-                let held = !exception && !sign_in && (mine.count() >= FOLD_AFTER || into.is_some());
+                let counts = !self.batched && !self.table.listed();
+                let held = !exception
+                    && !sign_in
+                    && !theirs(&event["data"], &event["data"]["owner"], &event["actor"])
+                    && ((counts && mine.count() >= FOLD_AFTER) || into.is_some());
                 let status = if held { "folded" } else { "queued" };
                 let folded = if held { into } else { None };
                 self.inbox.push(json!({
@@ -1311,34 +1321,100 @@ mod tests {
     #[test]
     fn a_live_ask_folds_only_where_the_core_folds_it() {
         // #22: the core folds a live ask into its thread's "keeps asking" only when the same actor and scope raised it,
-        // never a sign-in task, and knows each session's thread from its start, one before the reads included.
+        // never one someone else owns or the core's sign-in task, and knows each session's thread from its start, one
+        // before the reads included.
         let mut view = View::default();
         view.inbox.push(json!({"ask": "ask:x1", "kind": "exception", "session": "s1", "status": "queued", "outcome": "unanswered", "holder": true, "folded": null, "actor": "you", "scope": "local"}));
         view.before(&json!({"kind": "session.start", "session": "s4", "writer": "hook", "data": {"thread": "s1"}}));
-        let created = |id: &str, writer: &str, actor: &str, data: Value| json!({"kind": "ask.created", "id": id, "session": "s4", "writer": writer, "actor": actor, "scope": "local", "data": data});
-        view.apply(created("f2", "mcp:agent", "you", json!({"kind": "taste"})));
-        view.apply(created("t1", "mcp:agent", "pat", json!({"kind": "taste"})));
-        view.apply(created(
-            "g1",
-            "core",
-            "you",
-            json!({"kind": "unblock", "proves": "codex sign-in probe"}),
-        ));
-        let folded = |id: &str| {
-            let row = view.inbox.iter().find(|row| row["ask"] == id).unwrap();
-            (row["status"].clone(), row["folded"].clone())
-        };
-        assert_eq!(folded("ask:f2"), (json!("folded"), json!("ask:x1")));
-        assert_eq!(
-            folded("ask:t1"),
-            (json!("queued"), Value::Null),
-            "another actor's ask"
-        );
-        assert_eq!(
-            folded("ask:g1"),
-            (json!("queued"), Value::Null),
-            "a sign-in task"
-        );
+        let probe = "codex sign-in probe";
+        let cases = [
+            (
+                "f2",
+                "mcp:agent",
+                "you",
+                "local",
+                json!({"kind": "taste"}),
+                true,
+                "yours",
+            ),
+            (
+                "t1",
+                "mcp:agent",
+                "pat",
+                "local",
+                json!({"kind": "taste"}),
+                false,
+                "another actor's",
+            ),
+            (
+                "s2",
+                "mcp:agent",
+                "you",
+                "team",
+                json!({"kind": "taste"}),
+                false,
+                "another scope's",
+            ),
+            (
+                "o1",
+                "mcp:agent",
+                "you",
+                "local",
+                json!({"kind": "unblock", "owner": "pat"}),
+                false,
+                "someone else's block",
+            ),
+            (
+                "g1",
+                "core",
+                "you",
+                "local",
+                json!({"kind": "unblock", "owner": "you", "proves": probe}),
+                false,
+                "the core's sign-in task",
+            ),
+            (
+                "p1",
+                "mcp:agent",
+                "you",
+                "local",
+                json!({"kind": "unblock", "owner": "you", "proves": probe}),
+                true,
+                "an agent's ask naming a probe",
+            ),
+        ];
+        for (id, writer, actor, scope, data, _, _) in &cases {
+            view.apply(json!({"kind": "ask.created", "id": id, "session": "s4", "writer": writer, "actor": actor, "scope": scope, "data": data}));
+        }
+        for (id, _, _, _, _, folds, what) in cases {
+            let row = view
+                .inbox
+                .iter()
+                .find(|row| row["ask"] == format!("ask:{id}").as_str())
+                .unwrap();
+            let want = if folds {
+                (json!("folded"), json!("ask:x1"))
+            } else {
+                (json!("queued"), Value::Null)
+            };
+            assert_eq!(
+                (row["status"].clone(), row["folded"].clone()),
+                want,
+                "{what}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_hub_that_lists_its_asks_folds_none_by_count() {
+        // #22: the core folds a live ask only into an exception it already raised, at the count the settings set; the
+        // count here is only for a record with no list and no showing of the core's, a fixture's (#338).
+        let mut view = View::default();
+        view.apply(json!({"kind": "row.set", "writer": "core", "data": {"id": "session:s1", "listed": true, "order": "1"}}));
+        for id in ["a1", "a2", "a3", "a4", "a5", "a6"] {
+            view.apply(json!({"kind": "ask.created", "id": id, "session": "s1", "writer": "mcp:agent", "data": {"kind": "taste"}}));
+        }
+        assert_eq!(row(&view, "ask:a6").0, "queued");
     }
 
     #[test]
