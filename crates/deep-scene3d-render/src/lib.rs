@@ -69,7 +69,7 @@ pub use crate::diag::{draw_offscreen_diag, white, Diag, DiagCounts};
 use crate::mesh::Mesh;
 pub use crate::module::{
     draw_offscreen, timed, AfterFrame, Counts, HdrFrame, Module3, PostFrame, Profiler, Shared,
-    FILL_NS_PER_TEST, LIGHT, PYRAMID_NS_PER_PX,
+    LIGHT, PYRAMID_NS_PER_PX,
 };
 pub use crate::planted::Planted;
 pub use crate::readouts::{lay_over, readouts_as_labels};
@@ -3695,7 +3695,8 @@ impl Renderer {
         self.counts.lists_bytes = self.fill.bytes(&self.cluster_buffer);
         let [w, h] = self.internal();
         let px = f64::from(w) * f64::from(h);
-        self.counts.light_estimate = fill::estimate(scene, &order, px, self.fill.walked);
+        self.counts.light_estimate =
+            fill::estimate(scene, px, self.fill.walked, self.fill.listed);
         if remade {
             self.clusters = None;
             self.rebind_lights(device);
@@ -6654,8 +6655,7 @@ impl Renderer {
         };
         // #1634: the fill lights' pass, in a frame that ran it, by the lights its cells walked.
         if self.counts.fill_walked > 0 {
-            let walked = self.counts.fill_walked as f64;
-            declared.push((fill::PASS, FILL_NS_PER_TEST * walked / 1e6));
+            declared.push((fill::PASS, fill::pass_ms(self.counts.fill_walked)));
         }
         declared
     }

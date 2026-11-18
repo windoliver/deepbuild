@@ -38,10 +38,10 @@ struct Reach {
 // Each light's span (fill.rs: `span`): the tiles and slices its range can reach, bounded on the
 // CPU, so a cell runs a light's own test only inside it. From the low bits: its first and last
 // tile column and row, four bits each, then its first and last slice, five bits each. Then, from
-// `BY_SLICE`, where each slice and tile row's lights start among the ones after them, and those
-// lights, two to a word: the ones whose span holds that slice and row, in the policy's order.
+// `BY_CELL`, where each cell's lights start among the ones after them, and those lights, two to
+// a word: the ones whose span holds the cell, in the policy's order.
 @group(0) @binding(4) var<storage, read> spans: array<u32>;
-const BY_SLICE: u32 = 2048u;
+const BY_CELL: u32 = 2048u;
 
 const TILES: vec2<u32> = vec2<u32>(16u, 9u);
 const SLICES: u32 = 24u;
@@ -139,13 +139,11 @@ fn assign(@builtin(global_invocation_id) id: vec3<u32>) {
     }
     let cap = params.count.y;
     let base = cell * (2u + 2u * cap);
-    let at = place(cell);
-    // Its bin's lights: the ones whose span holds its slice and its tile row, two to a word.
-    let bin = BY_SLICE + at.z * TILES.y + at.y;
-    let lights = BY_SLICE + SLICES * TILES.y + 1u;
-    let first = spans[bin];
-    let last = spans[bin + 1u];
-    // A cell no light's span comes near holds none, and needs no box.
+    // Its lights: the ones whose span holds it, two to a word.
+    let lights = BY_CELL + CELLS + 1u;
+    let first = spans[BY_CELL + cell];
+    let last = spans[BY_CELL + cell + 1u];
+    // A cell no light's span holds lists none, and needs no box.
     if first == last {
         lists[base] = 0u;
         lists[base + 1u] = 0u;
@@ -158,7 +156,7 @@ fn assign(@builtin(global_invocation_id) id: vec3<u32>) {
     var cut = NONE;
     for (var k = first; k < last; k++) {
         let i = (spans[lights + (k >> 1u)] >> ((k & 1u) * 16u)) & 0xffffu;
-        if !within(spans[i], at) || !reaches(b, reach[i].at) {
+        if !reaches(b, reach[i].at) {
             continue;
         }
         if kept < cap {
@@ -187,7 +185,7 @@ fn assign(@builtin(global_invocation_id) id: vec3<u32>) {
         }
         for (var k = first; k < last; k++) {
             let i = (spans[lights + (k >> 1u)] >> ((k & 1u) * 16u)) & 0xffffu;
-            if within(spans[i], at) && reaches(b, reach[i].at) {
+            if reaches(b, reach[i].at) {
                 report[word + (i >> 5u)] |= 1u << (i & 31u);
             }
         }

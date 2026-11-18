@@ -31,10 +31,15 @@ const WORDS: usize = MOST_FILL / 32;
 const LIGHTS_AT: u64 = (CELLS * 4) as u64;
 const LISTS_AT: u64 = LIGHTS_AT + (MOST_FILL * std::mem::size_of::<Record>()) as u64;
 
-/// The bins a cell's lights are found by (a slice and a tile row), and the bytes of the lights'
-/// spans, the bins' starts and their lists at two bytes a light.
-const BINS: usize = SLICES * TILES[1];
-const SPANS: usize = (MOST_FILL + BINS + 1) * 4 + MOST_FILL * BINS * 2;
+/// The lights the cells' own lists have room for at first, over all of them; a frame that lists
+/// more takes room for the next power of two.
+const LISTED: usize = CELLS * 64;
+
+/// The bytes of every light's span, each cell's start among the lights listed and room for
+/// `listed` of those, at two bytes each.
+fn spans_size(listed: usize) -> usize {
+    (MOST_FILL + CELLS + 1) * 4 + listed.max(LISTED).next_power_of_two() * 2
+}
 
 /// fill.wgsl's `Params`.
 #[repr(C)]
@@ -84,38 +89,39 @@ pub struct Over {
 }
 
 /// The cost model's terms for a frame that shades fill lights (The cost model: a pass's time per
-/// pixel grows with the lights in the pixel's cluster), each fitted to the night city's orbit at
-/// 1920 × 1080 on an M5 Max (Mac17,10) at rest, release, medians: a frame's passes per pixel
-/// (1.08 ms for the city with no lamp), a fill light per pixel its range covers (2.03 ms more for
-/// its lamps' 3.2 M covered pixels), and the policy's scoring per light (0.27 ms for 2,048).
+/// pixel is multiplied by the lights in the pixel's cluster), each fitted to the night city's
+/// orbit at 1920 × 1080 on an M5 Max (Mac17,10) at rest, release, medians: a frame's passes per
+/// pixel (1.08 ms for the city with no lamp), a pixel per light its cluster lists (2.1 ms more
+/// where a pixel's cluster lists 11 at the frame's mean), and the policy's scoring per light
+/// (0.27 ms for 2,048).
 const FRAME_NS_PER_PX: f64 = 0.52;
-const LIGHT_NS_PER_PX: f64 = 0.64;
+const LIGHT_NS_PER_PX: f64 = 0.09;
 const SCORING_NS_PER_LIGHT: f64 = 130.0;
 
-/// The cost model's estimate of a frame that shades `order`'s fill lights, drawn at `px` pixels:
-/// its GPU time in ms (its passes, each light over the pixels its range covers, and the lights'
-/// own pass), the policy's scoring in ms, and the bytes the lights and their lists hold.
-pub fn estimate(scene: &Scene, order: &[(usize, f64)], px: f64, walked: usize) -> [f64; 3] {
-    let cam = &scene.camera;
-    let frame = f64::from(scene.size[0]) * f64::from(scene.size[1]);
-    // A light's range seen from the eye is a disc, never more than the frame.
-    let covered: f64 = order
-        .iter()
-        .map(|&(i, _)| {
-            let l = &scene.lights[i];
-            let r = l.range * cam.px_per_m(cam.to_view(l.pos)[2].max(cam.near));
-            (std::f64::consts::PI * r * r).min(frame)
-        })
-        .sum();
-    let pass = crate::FILL_NS_PER_TEST * walked as f64;
+/// The lights' own pass's terms: a cell, and a light a cell lists. The night city's cells list
+/// 6,200 lights and its pass takes 0.073 ms; with its ranges 8 times as long they list 257,000
+/// and it takes 0.84 ms.
+const CELL_NS: f64 = 16.0;
+const LISTED_NS: f64 = 3.0;
+
+/// What the lights' pass's declared cost prices a run that lists `walked` lights at, ms.
+pub fn pass_ms(walked: usize) -> f64 {
+    (CELL_NS * CELLS as f64 + LISTED_NS * walked as f64) / 1e6
+}
+
+/// The cost model's estimate of a frame that shades fill lights, drawn at `px` pixels, whose
+/// cells list `walked` lights, `listed` of them in a pixel's cluster at the frame's mean: its
+/// GPU time in ms (its passes, each pixel over its cluster's lights, and the lights' own pass),
+/// the policy's scoring in ms, and the bytes the lights and their lists hold.
+pub fn estimate(scene: &Scene, px: f64, walked: usize, listed: f64) -> [f64; 3] {
     let held = scene.lights.iter().any(|l| l.fill);
     [
-        (FRAME_NS_PER_PX * px + LIGHT_NS_PER_PX * covered * px / frame.max(1.0) + pass) / 1e6,
+        (FRAME_NS_PER_PX * px + LIGHT_NS_PER_PX * px * listed) / 1e6 + pass_ms(walked),
         SCORING_NS_PER_LIGHT * scene.lights.len() as f64 / 1e6,
         if held {
             (LISTS_AT + lists_size(scene.shadowing.per_cluster)) as f64
                 + (MOST_FILL * std::mem::size_of::<Reach>() + CELLS * (1 + WORDS) * 4) as f64
-                + SPANS as f64
+                + spans_size(walked) as f64
         } else {
             0.0
         },
@@ -208,8 +214,10 @@ pub struct Fill {
     ids: Vec<String>,
     /// The clusters past their cap at this view.
     over: Vec<Over>,
-    /// The lights this view's pass walks, over all its cells.
+    /// The lights this view's cells list, over all of them, and in a pixel's cluster at the
+    /// frame's mean: each tile's, over its cells that list any, none past the cap.
     pub walked: usize,
+    pub listed: f64,
     /// The planted pass: this run's seed for the order it takes its lights in, and the lists
     /// it clears before it appends.
     start: u32,
@@ -266,7 +274,11 @@ impl Fill {
                 MOST_FILL * std::mem::size_of::<Reach>(),
                 wgpu::BufferUsages::STORAGE,
             ),
-            spans: buffer("scene3d fill spans", SPANS, wgpu::BufferUsages::STORAGE),
+            spans: buffer(
+                "scene3d fill spans",
+                spans_size(0),
+                wgpu::BufferUsages::STORAGE,
+            ),
             report: None,
             bind: None,
             cap: 0,
@@ -278,6 +290,7 @@ impl Fill {
             ids: Vec::new(),
             over: Vec::new(),
             walked: 0,
+            listed: 0.0,
             start: if planted.arrival_order {
                 std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
@@ -288,6 +301,36 @@ impl Fill {
             },
             lists: None,
         }
+    }
+
+    /// The pass's group: its own buffers, and `grid`'s lists at the cap they are sized for.
+    fn group(&self, device: &Device, grid: &wgpu::Buffer) -> Option<wgpu::BindGroup> {
+        let report = self.report.as_ref()?;
+        let lists = wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+            buffer: grid,
+            offset: LISTS_AT,
+            size: std::num::NonZeroU64::new(lists_size(self.cap)),
+        });
+        Some(
+            device.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some(PASS),
+                layout: &self.pipeline.get_bind_group_layout(0),
+                entries: &[
+                    self.params.as_entire_binding(),
+                    self.reach.as_entire_binding(),
+                    lists,
+                    report.as_entire_binding(),
+                    self.spans.as_entire_binding(),
+                ]
+                .into_iter()
+                .enumerate()
+                .map(|(binding, resource)| wgpu::BindGroupEntry {
+                    binding: binding as u32,
+                    resource,
+                })
+                .collect::<Vec<_>>(),
+            }),
+        )
     }
 
     /// This frame's fill lights: `order` is the policy's, each light's index and score, and
@@ -322,12 +365,7 @@ impl Fill {
                     | wgpu::BufferUsages::COPY_SRC,
                 mapped_at_creation: false,
             });
-            let lists = wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                buffer: grid,
-                offset: LISTS_AT,
-                size: std::num::NonZeroU64::new(lists_size(cap)),
-            });
-            let report = self.report.get_or_insert_with(|| {
+            self.report.get_or_insert_with(|| {
                 d.create_buffer(&wgpu::BufferDescriptor {
                     label: Some("scene3d fill report"),
                     size: (CELLS * (1 + WORDS) * 4) as u64,
@@ -337,32 +375,13 @@ impl Fill {
                     mapped_at_creation: false,
                 })
             });
-            self.bind = Some(
-                d.create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some(PASS),
-                    layout: &self.pipeline.get_bind_group_layout(0),
-                    entries: &[
-                        self.params.as_entire_binding(),
-                        self.reach.as_entire_binding(),
-                        lists,
-                        report.as_entire_binding(),
-                        self.spans.as_entire_binding(),
-                    ]
-                    .into_iter()
-                    .enumerate()
-                    .map(|(binding, resource)| wgpu::BindGroupEntry {
-                        binding: binding as u32,
-                        resource,
-                    })
-                    .collect::<Vec<_>>(),
-                }),
-            );
             self.cap = cap;
+            self.bind = self.group(device, grid);
             self.records.clear();
             self.read.clear();
             self.lists = Some((grid.clone(), lists_size(cap)));
         }
-        self.walked = 0;
+        (self.walked, self.listed) = (0, 0.0);
         if order.is_empty() || self.cap == 0 {
             self.over.clear();
             self.read.clear();
@@ -407,31 +426,62 @@ impl Fill {
             }
         }
         let (reach, mut spans): (Vec<Reach>, Vec<u32>) = lights.into_iter().unzip();
-        // Each slice's lights, in the policy's order, after every light's span (fill.wgsl's
-        // `BY_SLICE`): a cell walks its slice's, never the view's.
-        // Each slice and tile row's lights, in the policy's order, after every light's span
-        // (fill.wgsl's `BY_SLICE`), two to a word: a cell walks its own, never the view's.
-        let mut bins: Vec<Vec<u32>> = vec![Vec::new(); BINS];
-        for (i, span) in spans.iter().enumerate() {
-            for s in (span >> 16 & 31)..=(span >> 21 & 31) {
-                for y in (span >> 8 & 15)..=(span >> 12 & 15) {
-                    bins[s as usize * TILES[1] + y as usize].push(i as u32);
-                }
+        // Each cell's lights, in the policy's order, after every light's span (fill.wgsl's
+        // `BY_CELL`), two to a word: a cell walks the lights whose span holds it, never the view's.
+        let cells = |span: u32| {
+            let rows = (span >> 8 & 15)..=(span >> 12 & 15);
+            ((span >> 16 & 31)..=(span >> 21 & 31)).flat_map(move |s| {
+                rows.clone().flat_map(move |y| {
+                    ((span & 15)..=(span >> 4 & 15))
+                        .map(move |x| ((s * TILES[1] as u32 + y) * TILES[0] as u32 + x) as usize)
+                })
+            })
+        };
+        let mut starts = vec![0u32; CELLS + 1];
+        for &span in &spans {
+            for c in cells(span) {
+                starts[c + 1] += 1;
             }
         }
-        self.walked = bins.iter().map(Vec::len).sum::<usize>() * TILES[0];
-        spans.resize(MOST_FILL, 0);
-        let mut start = 0;
-        for list in &bins {
-            spans.push(start);
-            start += list.len() as u32;
+        for c in 0..CELLS {
+            starts[c + 1] += starts[c];
         }
-        spans.push(start);
-        let listed: Vec<u32> = bins.into_iter().flatten().collect();
+        let mut next = starts.clone();
+        let mut listed = vec![0u16; starts[CELLS] as usize];
+        for (i, &span) in spans.iter().enumerate() {
+            for c in cells(span) {
+                listed[next[c] as usize] = i as u16;
+                next[c] += 1;
+            }
+        }
+        self.walked = listed.len();
+        let tiles = TILES[0] * TILES[1];
+        self.listed = (0..tiles)
+            .map(|t| {
+                let held: Vec<u32> = (0..SLICES)
+                    .map(|s| starts[s * tiles + t + 1] - starts[s * tiles + t])
+                    .filter(|&n| n > 0)
+                    .collect();
+                let most = self.cap as u32;
+                held.iter().map(|&n| f64::from(n.min(most))).sum::<f64>() / held.len().max(1) as f64
+            })
+            .sum::<f64>()
+            / tiles as f64;
+        if spans_size(listed.len()) as u64 > self.spans.size() {
+            self.spans = device.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("scene3d fill spans"),
+                size: spans_size(listed.len()) as u64,
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+            self.bind = self.group(device, grid);
+        }
+        spans.resize(MOST_FILL, 0);
+        spans.extend(&starts);
         spans.extend(
             listed
                 .chunks(2)
-                .map(|c| c[0] | c.get(1).copied().unwrap_or(0) << 16),
+                .map(|c| u32::from(c[0]) | u32::from(c.get(1).copied().unwrap_or(0)) << 16),
         );
         let params = Params {
             lens: [
