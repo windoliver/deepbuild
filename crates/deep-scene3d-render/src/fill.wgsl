@@ -38,8 +38,8 @@ struct Reach {
 // Each light's span (fill.rs: `span`): the tiles and slices its range can reach, bounded on the
 // CPU, so a cell runs a light's own test only inside it. From the low bits: its first and last
 // tile column and row, four bits each, then its first and last slice, five bits each. Then, from
-// `BY_SLICE`, where each slice's lights start among the ones after them, and each slice's lights:
-// the ones whose span holds it, in the policy's order.
+// `BY_SLICE`, where each slice and tile row's lights start among the ones after them, and those
+// lights, two to a word: the ones whose span holds that slice and row, in the policy's order.
 @group(0) @binding(4) var<storage, read> spans: array<u32>;
 const BY_SLICE: u32 = 2048u;
 
@@ -145,9 +145,11 @@ fn assign(@builtin(global_invocation_id) id: vec3<u32>) {
     var kept = 0u;
     var total = 0u;
     var cut = NONE;
-    let lights = BY_SLICE + SLICES + 1u;
-    for (var k = spans[BY_SLICE + at.z]; k < spans[BY_SLICE + at.z + 1u]; k++) {
-        let i = spans[lights + k];
+    // Its bin's lights: the ones whose span holds its slice and its tile row, two to a word.
+    let bin = BY_SLICE + at.z * TILES.y + at.y;
+    let lights = BY_SLICE + SLICES * TILES.y + 1u;
+    for (var k = spans[bin]; k < spans[bin + 1u]; k++) {
+        let i = (spans[lights + (k >> 1u)] >> ((k & 1u) * 16u)) & 0xffffu;
         if !within(spans[i], at) || !reaches(b, reach[i].at) {
             continue;
         }

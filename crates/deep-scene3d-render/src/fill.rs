@@ -31,6 +31,11 @@ const WORDS: usize = MOST_FILL / 32;
 const LIGHTS_AT: u64 = (CELLS * 4) as u64;
 const LISTS_AT: u64 = LIGHTS_AT + (MOST_FILL * std::mem::size_of::<Record>()) as u64;
 
+/// The bins a cell's lights are found by (a slice and a tile row), and the bytes of the lights'
+/// spans, the bins' starts and their lists at two bytes a light.
+const BINS: usize = SLICES * TILES[1];
+const SPANS: usize = (MOST_FILL + BINS + 1) * 4 + MOST_FILL * BINS * 2;
+
 /// fill.wgsl's `Params`.
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
@@ -110,7 +115,7 @@ pub fn estimate(scene: &Scene, order: &[(usize, f64)], px: f64, walked: usize) -
         if held {
             (LISTS_AT + lists_size(scene.shadowing.per_cluster)) as f64
                 + (MOST_FILL * std::mem::size_of::<Reach>() + CELLS * (1 + WORDS) * 4) as f64
-                + ((MOST_FILL + SLICES + 1 + MOST_FILL * SLICES) * 4) as f64
+                + SPANS as f64
         } else {
             0.0
         },
@@ -261,11 +266,7 @@ impl Fill {
                 MOST_FILL * std::mem::size_of::<Reach>(),
                 wgpu::BufferUsages::STORAGE,
             ),
-            spans: buffer(
-                "scene3d fill spans",
-                (MOST_FILL + SLICES + 1 + MOST_FILL * SLICES) * 4,
-                wgpu::BufferUsages::STORAGE,
-            ),
+            spans: buffer("scene3d fill spans", SPANS, wgpu::BufferUsages::STORAGE),
             report: None,
             bind: None,
             cap: 0,
@@ -408,23 +409,30 @@ impl Fill {
         let (reach, mut spans): (Vec<Reach>, Vec<u32>) = lights.into_iter().unzip();
         // Each slice's lights, in the policy's order, after every light's span (fill.wgsl's
         // `BY_SLICE`): a cell walks its slice's, never the view's.
-        let holds = |span: u32, s: u32| s >= (span >> 16 & 31) && s <= (span >> 21 & 31);
-        let by_slice: Vec<Vec<u32>> = (0..SLICES as u32)
-            .map(|s| {
-                (0..spans.len() as u32)
-                    .filter(|&i| holds(spans[i as usize], s))
-                    .collect()
-            })
-            .collect();
-        self.walked = by_slice.iter().map(Vec::len).sum::<usize>() * TILES[0] * TILES[1];
+        // Each slice and tile row's lights, in the policy's order, after every light's span
+        // (fill.wgsl's `BY_SLICE`), two to a word: a cell walks its own, never the view's.
+        let mut bins: Vec<Vec<u32>> = vec![Vec::new(); BINS];
+        for (i, span) in spans.iter().enumerate() {
+            for s in (span >> 16 & 31)..=(span >> 21 & 31) {
+                for y in (span >> 8 & 15)..=(span >> 12 & 15) {
+                    bins[s as usize * TILES[1] + y as usize].push(i as u32);
+                }
+            }
+        }
+        self.walked = bins.iter().map(Vec::len).sum::<usize>() * TILES[0];
         spans.resize(MOST_FILL, 0);
         let mut start = 0;
-        for list in &by_slice {
+        for list in &bins {
             spans.push(start);
             start += list.len() as u32;
         }
         spans.push(start);
-        spans.extend(by_slice.into_iter().flatten());
+        let listed: Vec<u32> = bins.into_iter().flatten().collect();
+        spans.extend(
+            listed
+                .chunks(2)
+                .map(|c| c[0] | c.get(1).copied().unwrap_or(0) << 16),
+        );
         let params = Params {
             lens: [
                 cam.centre[0] as f32,
