@@ -1,7 +1,7 @@
 //! The GPU-layer adapter and its declared pass costs. Public entry remains the crate root.
 
 use crate::{
-    ao, clouds, cull, dof, hdr, history, inset, local, lock, read_texture, texture2d, After,
+    ao, clouds, cull, dof, fill, hdr, history, inset, local, lock, read_texture, texture2d, After,
     Planted, Post, Renderer, CASCADE_PASS, CULL_PASS, FLARE_PASS, GEOMETRY_PASS, LABEL_PASS,
     MIRROR_PASS, MSAA, OUTLINE_PASS, OUTPUT_PASS, SHADOW_PASS, SHARPEN_PASS, UPSCALE_PASS,
     WATER_PASS,
@@ -21,6 +21,10 @@ pub const LIGHT: [f64; 3] = [0.35, 0.8, 0.5];
 /// The depth pyramid's declared cost per pixel (#1637): 0.385 ms at 1920 × 1080 in the city
 /// walk, the median of four frames on an M5 Max (Mac17,10).
 pub const PYRAMID_NS_PER_PX: f32 = 0.186;
+
+/// The fill lights' pass's declared cost per light a cell walks (#1634): 0.195 ms for the 436,000
+/// the night city's cells walk, the median of its orbit's frames on an M5 Max (Mac17,10).
+pub const FILL_NS_PER_TEST: f64 = 0.45;
 
 /// The GPU's pass timer (issue #380: frame GPU time, measured with wgpu-profiler).
 pub type Profiler = Arc<Mutex<wgpu_profiler::GpuProfiler>>;
@@ -78,6 +82,19 @@ pub struct Counts {
     pub lights_left_out: Vec<String>,
     /// The lights asking for a shadow that the shadow budget left without one, by ID (#421).
     pub shadows_dropped: Vec<String>,
+    /// The clusters past their cap at this frame's view, each with the fill lights it dropped
+    /// (#1634: `cluster_over_budget`).
+    pub clusters_over: Vec<crate::fill::Over>,
+    /// #1634: the CPU time in ms this frame's light policy took to score its lights, order the
+    /// fill lights and write them for their pass; the bytes the fill lights and their lists hold
+    /// on the device; and the lights the fill lights' pass walked over its cells, in a frame
+    /// that ran it.
+    pub scoring_ms: f64,
+    pub lists_bytes: u64,
+    pub fill_walked: usize,
+    /// #1634: the cost model's estimate of this frame's GPU time in ms, of the scoring in ms and
+    /// of the bytes its fill lights hold.
+    pub light_estimate: [f64; 3],
     /// Each material operator this frame couldn't draw, `(operator, why)`: its solids draw with
     /// their material's own values, and a caller refuses the frame (#429).
     pub operators_refused: Vec<(String, String)>,
@@ -378,6 +395,18 @@ impl Module3 {
                 writes: vec!["rows"],
                 resolution: Resolution::Full,
                 ns_per_px: PYRAMID_NS_PER_PX,
+                determinism: Determinism::SameMachine,
+            },
+            // The fill lights listed cell by cell in the light policy's grid (#1634), when a light
+            // or the view changes: its cost is its cells' walk of the lights, never its pixels'.
+            Pass {
+                name: fill::PASS.into(),
+                place: "compute",
+                order: u32::MAX,
+                reads: Vec::new(),
+                writes: vec!["light_lists"],
+                resolution: Resolution::Full,
+                ns_per_px: 0.0,
                 determinism: Determinism::SameMachine,
             },
             // The key sun's cascades (#422), each drawn only when its key changed.

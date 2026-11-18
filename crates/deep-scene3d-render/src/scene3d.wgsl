@@ -163,6 +163,11 @@ struct Lights {
     // Each shaded light's x: the policy's weight near the cut (in its color too); y: a hash of
     // its ID (u32 bits), for a light response (#485).
     answers: array<vec4<f32>, 32>,
+    // The fill lights' clusters (#1634): x: 1 with any; y and z: their grid's far and near
+    // planes; w: a cluster's most.
+    fill: vec4<f32>,
+    // x: what a world point's distance along the forward axis is measured from.
+    fill_view: vec4<f32>,
 };
 
 @group(1) @binding(0) var<uniform> lights: Lights;
@@ -177,8 +182,14 @@ struct Lights {
 // The IES tables, one layer each, and their sampler, wrapping in azimuth (#446).
 @group(1) @binding(15) var ies_tables: texture_2d_array<f32>;
 @group(1) @binding(16) var ies_sampler: sampler;
-// The light grid's cells (#446; clusters.rs): each a bit per shaded light that reaches it.
+// The light grid's cells (#446; clusters.rs): each a bit per shaded light that reaches it. Then,
+// once a scene holds a fill light (#1634; fill.rs), the view's fill lights in the policy's order,
+// each a key light's six rows and a hash of its ID; and each cell's list of them (fill.wgsl): how
+// many it holds and how many reached it, then the lights by their place, then their weights.
 @group(1) @binding(17) var<storage, read> light_grid: array<u32>;
+const FILL_LIGHTS: u32 = 3456u;
+const FILL_LIGHT_WORDS: u32 = 28u;
+const FILL_LISTS: u32 = 60800u;
 
 // The environment (#422; Sky `sky@1`: environment): its prefiltered cubes, each mip a roughness,
 // and their irradiance ÷ π as nine SH coefficients.
@@ -1823,6 +1834,27 @@ fn cluster_at(px: vec2<f32>, world: vec3<f32>) -> u32 {
     return light_grid[(slice * 9u + y) * 16u + x];
 }
 
+// Where a fragment's cell's list starts in the light grid's buffer (#1634; fill.wgsl's cells).
+fn fill_at(px: vec2<f32>, world: vec3<f32>) -> u32 {
+    let near = lights.fill.z;
+    let far = lights.fill.y;
+    let z = clamp(dot(world, lights.forward.xyz) + lights.fill_view.x, near, far);
+    var t = (z - near) / (far - near);
+    if lights.view.w > 0.5 {
+        t = log(z / near) / log(far / near);
+    }
+    let slice = min(u32(t * 24.0), 23u);
+    let x = min(u32(px.x / frame.viewport.x * 16.0), 15u);
+    let y = min(u32(px.y / frame.viewport.y * 9.0), 8u);
+    return FILL_LISTS + ((slice * 9u + y) * 16u + x) * (2u + 2u * u32(lights.fill.w));
+}
+
+// Four of the light grid's words as one row of a fill light.
+fn fill_row(at: u32) -> vec4<f32> {
+    return vec4<f32>(bitcast<f32>(light_grid[at]), bitcast<f32>(light_grid[at + 1u]),
+        bitcast<f32>(light_grid[at + 2u]), bitcast<f32>(light_grid[at + 3u]));
+}
+
 // The illuminance an area light (a one-sided Lambertian rect or disk) gives at `p` on a surface
 // facing `n`, exactly: Lambert's polygon formula over its face (a disk as a 12-gon of the same
 // area) clipped to the surface's horizon.
@@ -2317,6 +2349,49 @@ fn direct(in: MeshOut, n: vec3<f32>, s: Surface, spread: f32, curved: bool) -> D
         }
         out += add;
     }
+    // The fill lights that reach the fragment's cluster (#1634), in the policy's order, each
+    // at its weight there: no shadow, and its receivers as a key light's.
+    if lights.fill.x > 0.5 {
+        let at = fill_at(in.pos.xy, in.world);
+        let most = u32(lights.fill.w);
+        let count = min(light_grid[at], most);
+        for (var k = 0u; k < count; k++) {
+            let f = FILL_LIGHTS + light_grid[at + 2u + k] * FILL_LIGHT_WORDS;
+            let w = bitcast<f32>(light_grid[at + 2u + most + k]);
+            let only = light_grid[f + 15u];
+            if w <= 0.0 || (only != 0u && (in.color & only) == 0u) {
+                continue;
+            }
+            // Most of a cell's lights end short of any one pixel of it.
+            let pos = fill_row(f);
+            let dir = fill_row(f + 4u);
+            let to = pos.xyz - in.world;
+            if dot(to, to) >= dir.w * dir.w {
+                continue;
+            }
+            let li = Light(pos, dir, fill_row(f + 8u), fill_row(f + 12u), fill_row(f + 16u), fill_row(f + 20u));
+            let arrived = arriving(li, in.world, u32(li.up.w));
+            if HAS_LIGHT && !catches {
+                let eye = select(v, -v, planted(P_VIEW_AWAY));
+                out += response_light(LightIn(to_view(n), to_view(eye), to_view(arrived.l), arrived.e, 1.0,
+                    light_grid[f + 24u], s.base, in.emission.w, s.metallic, s.rough, s.level)) * w;
+                continue;
+            }
+            var add = vec3<f32>(0.0);
+            let nl = dot(n, arrived.l);
+            if s.k != 0u {
+                add = extra_lobes(n, v, arrived.l, s, a2, dfg_v) * arrived.e;
+            } else if nl > 0.0 {
+                let b = lobes(n, v, arrived.l, s, a2, dfg_v);
+                add = (b.diffuse + b.spec) * arrived.e * nl;
+            }
+            if catches {
+                total += dot(add, vec3<f32>(0.2126, 0.7152, 0.0722)) * w;
+            } else {
+                out += add * w;
+            }
+        }
+    }
     // The planted loop that calls `light` for the lights the policy cut too, at weight 1.
     if HAS_LIGHT && !catches && planted(P_CALLS_CUT) {
         for (var k = 0u; k < u32(lights.answers[0].z); k++) {
@@ -2537,7 +2612,7 @@ fn shade(in0: MeshOut, front: bool, local_n: vec3<f32>, g: array<vec4<f32>, 2>, 
             return targets(vec4<f32>(0.0, 0.0, 0.0, d.removed * alpha * in.base.w), in.pick);
         }
         // A part with a light response takes no key light: its responses answer for its light.
-        if keyed && lights.count.x == 0u && frame.sky_top.w <= 0.0 && env.k.x <= 0.0 && !HAS_LIGHT && !HAS_AMBIENT {
+        if keyed && lights.count.x == 0u && lights.fill.x < 0.5 && frame.sky_top.w <= 0.0 && env.k.x <= 0.0 && !HAS_LIGHT && !HAS_AMBIENT {
             let key = 0.45 * occlusion(in.pos.xy, in.world, normalize(in.normal), s.base) + 0.55 * max(dot(facing, frame.light.xyz), 0.0);
             let unlit = fogged(adjusted(s.base * key + in.emission.rgb, in.op.w), in.world);
             return targets(see_through(unlit, alpha, mode), in.pick);

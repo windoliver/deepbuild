@@ -326,6 +326,9 @@ alone.push('tests/acceptance/1718/');
 // #1637's files build deep-gpu and draw a city of 120,000 solids on Metal; its budget runs as a timed file.
 alone.push('tests/acceptance/1637/');
 timed.push('tests/acceptance/1637/budgets.test.ts');
+// #1634's files build deep-gpu and draw streets and a city of fill lamps on Metal; its budget runs as a timed file.
+alone.push('tests/acceptance/1634/');
+timed.push('tests/acceptance/1634/budgets.test.ts');
 // #1458's replica file builds deep-drive plain and with env-plants and starts many replicas; its AC13 file opens the
 // real app's window on a real hub, with Accessibility and Screen Recording, by hand.
 alone.push('tests/acceptance/1458/');

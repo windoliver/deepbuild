@@ -427,8 +427,13 @@ pub(crate) fn estimate_by(
             k - 1
         });
         let mut op_ns = 0.0;
-        for (i, item) in items.values().enumerate() {
+        for (i, (id, item)) in items.iter().enumerate() {
             if row.is_some_and(|k| !f.applies[i * item_ops.len() + k]) {
+                continue;
+            }
+            // A document's operator that says which items it works over costs nothing on the
+            // rest (#1634: the 2D frame builds no mark from a light).
+            if document && op.op.applies.is_some_and(|a| !a(doc, id, item)) {
                 continue;
             }
             bytes += t.bytes_per_item;

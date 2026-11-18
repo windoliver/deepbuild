@@ -765,6 +765,18 @@ fn base_scene3d(kind: &str) -> Option<Spec> {
                 json!(90),
             ),
         ];
+        if kind != "light.area@1" {
+            // #1634: a fill light, which its clusters shade and which casts no shadow.
+            params.push(p(
+                "fill",
+                "bool",
+                "",
+                json!(false),
+                S,
+                json!(false),
+                json!(true),
+            ));
+        }
         if kind == "light.area@1" {
             params.push(p(
                 "shape",

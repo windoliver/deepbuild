@@ -619,6 +619,41 @@ fn lights_check(lowered: &Value, issues: &mut Vec<Issue>) {
     }
 }
 
+/// The class's `fill_shaded` (#1634; Light and the light policy): every `light.*` item with
+/// `fill: true` counts, and a document with more than its class holds is refused, naming the
+/// count and the class. Here and not in the module that reads the lights, since a module's rule
+/// names no count.
+fn fill_check(lowered: &Value, issues: &mut Vec<Issue>) {
+    let Some((class, _)) = crate::budget::of(lowered) else {
+        return;
+    };
+    let fill: Vec<String> = member(lowered, "items")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+        .filter(|(_, item)| {
+            kind_text(item).is_some_and(|k| k.starts_with("light."))
+                && item.pointer("/params/fill") == Some(&Value::Bool(true))
+        })
+        .map(|(id, _)| id.clone())
+        .collect();
+    let cap = class.fill_shaded();
+    if fill.len() > cap {
+        let mut issue = Issue::envelope(
+            "over_budget",
+            "budget/fill_shaded".into(),
+            json!({"fill_lights": fill.len(), "fill_shaded": cap, "class": class.name()}),
+            &format!(
+                "{} fill lights, past the {} class's fill_shaded of {cap}",
+                fill.len(),
+                class.name()
+            ),
+        );
+        issue.ids = fill;
+        issues.push(issue);
+    }
+}
+
 /// The budget estimate (issue #379; canvas primitives: The cost model, "Before it shows"): a
 /// document that names its budget class and whose estimated CPU time, GPU time or GPU memory
 /// per frame passes one of its caps is refused, naming its top three contributors, with the
@@ -630,6 +665,7 @@ fn budget_check(
     issues: &mut Vec<Issue>,
 ) {
     lights_check(lowered, issues);
+    fill_check(lowered, issues);
     let Some((class, limits)) = crate::budget::of(lowered) else {
         return;
     };
