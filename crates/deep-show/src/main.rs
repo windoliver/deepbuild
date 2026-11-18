@@ -2125,9 +2125,21 @@ fn modules(set: BuildSet) -> Vec<Module> {
         // items itself.
         #[cfg(feature = "test-scene3d-reads-vector")]
         out.push(twins::scene3d_reads_vector());
+        // Issue #1781: `test-attrs` holds scene3d with its fixture builder's kind registered.
+        #[cfg(feature = "test-attrs")]
+        out.push({
+            let mut m = deep_canvas_scene3d::module::module();
+            m.register = |r| {
+                let tie = deep_canvas_scene3d::light::Tie::Id;
+                deep_canvas_scene3d::module::register_with(r, tie);
+                deep_canvas_scene3d::attrs::register_fixture(r);
+            };
+            m
+        });
         #[cfg(not(any(
             feature = "test-scene3d-tie-by-order",
-            feature = "test-scene3d-reads-vector"
+            feature = "test-scene3d-reads-vector",
+            feature = "test-attrs"
         )))]
         out.push(deep_canvas_scene3d::module::module());
         // Issue #380: the shipped effects, whose passes go into scene3d's frame; #200's planted

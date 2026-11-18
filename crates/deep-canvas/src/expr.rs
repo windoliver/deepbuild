@@ -84,6 +84,9 @@ pub struct Refusal {
     pub why: String,
     /// The canvas module the build lacks that the call needs, when that is why.
     pub missing: Option<String>,
+    /// Where it takes more nodes than its cap: its nodes once its sums expand, or, where the
+    /// parse stopped first, the nodes written by then.
+    pub size: Option<usize>,
 }
 
 impl std::fmt::Display for Refusal {
@@ -552,6 +555,7 @@ impl Lexer<'_> {
                 call: s.clone(),
                 why: "is not a number".into(),
                 missing: None,
+                size: None,
             })?;
             return Ok(Some((Tok::Num(n), start)));
         }
@@ -602,6 +606,7 @@ impl Lexer<'_> {
                     call: self.text.into(),
                     why: format!("unexpected `{c}`"),
                     missing: None,
+                    size: None,
                 })
             }
         };
@@ -676,6 +681,7 @@ impl Parser<'_> {
             call: self.text.into(),
             why: why.into(),
             missing: None,
+            size: None,
         }
     }
 
@@ -706,10 +712,13 @@ impl Parser<'_> {
     fn count(&mut self) -> Result<(), Refusal> {
         self.nodes += 1;
         if self.nodes > self.max_nodes {
-            return Err(self.fail(format!(
-                "takes more than {} nodes as written, twice the cap of {}",
-                self.max_nodes, self.cap
-            )));
+            return Err(Refusal {
+                size: Some(self.nodes),
+                ..self.fail(format!(
+                    "takes more than {} nodes as written, twice the cap of {}",
+                    self.max_nodes, self.cap
+                ))
+            });
         }
         Ok(())
     }
@@ -930,6 +939,7 @@ fn refuse(call: &str, why: impl Into<String>) -> Refusal {
         call: call.into(),
         why: why.into(),
         missing: None,
+        size: None,
     }
 }
 
@@ -1250,10 +1260,13 @@ impl Expr {
             return Err(refuse(text, format!("nests sums past {MAX_DEPTH} deep")));
         }
         if size > cap {
-            return Err(refuse(
-                text,
-                format!("takes {size} nodes once its sums expand, past the cap of {cap}"),
-            ));
+            return Err(Refusal {
+                size: Some(size),
+                ..refuse(
+                    text,
+                    format!("takes {size} nodes once its sums expand, past the cap of {cap}"),
+                )
+            });
         }
         Ok(Expr {
             root,
@@ -1262,6 +1275,29 @@ impl Expr {
             text: text.into(),
             planted: resolve.planted(),
         })
+    }
+
+    /// Whether it divides or takes a log, a root or a power: where a field needs its fallback
+    /// (Attribute and field).
+    pub fn partial(&self) -> bool {
+        fn any(n: &Node) -> bool {
+            match n {
+                Node::Num(_) | Node::Var(_) | Node::Index(_) => false,
+                Node::Bin(op, a, b) => matches!(op, Op::Div | Op::Pow) || any(a) || any(b),
+                Node::Call(f, args) => {
+                    let partial = matches!(
+                        f,
+                        Fun::Sqrt | Fun::Pow | Fun::Log | Fun::Log2 | Fun::Log10 | Fun::Log1p
+                    );
+                    partial || args.iter().any(any)
+                }
+                Node::If(c, a, b) => any(c) || any(a) || any(b),
+                Node::Sum { a, b, term, .. } => any(a) || any(b) || any(term),
+                Node::Neg(a) | Node::Not(a) | Node::Swizzle(a, _) => any(a),
+                Node::Table(_, a) | Node::Ease(_, a) => any(a),
+            }
+        }
+        any(&self.root)
     }
 
     /// The value with `vars` (one per [`Expr::vars`]).

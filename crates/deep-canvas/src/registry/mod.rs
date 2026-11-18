@@ -728,7 +728,7 @@ pub struct Report {
 pub type ReportRun = fn(&Value, &Value) -> Report;
 
 /// The core's own document check kinds (canvas primitives: Check input), each reading only the core's arrays and naming no module's kind.
-pub const CORE_CHECK_KINDS: [&str; 12] = [
+pub const CORE_CHECK_KINDS: [&str; 13] = [
     "document.validate",
     "document.budget",
     "document.frame_time",
@@ -736,6 +736,7 @@ pub const CORE_CHECK_KINDS: [&str; 12] = [
     "document.determinism",
     "geometry.audit",
     "geometry.shape",
+    "geometry.attributes",
     "film.audit",
     "film.flicker",
     "film.layout",
