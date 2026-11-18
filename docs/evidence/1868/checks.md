@@ -12,7 +12,9 @@ result below is a reading, `INCONCLUSIVE` by the timing rule, and none is a `PAS
 | 2 `#1868.a903f1c6` a later reading and an answered ask show in the next deep_show's world | fails for the planted program only (below) | passes (23.5 s, load 13) |
 | 3 `#1868.bf84aa8b` deep_status, 10 claims, 200,000 run events against 1,000 | 2031.1 ms against 7.19 ms, 282.67 times; all five runs over | 1.76 ms against 1.59 ms, 1.10 times (limit 1.20); runs 1.92, 1.76, 1.84, 1.66, 1.55 ms against 2.10, 2.22, 1.59, 1.59, 1.34 ms, so neither all within nor all over; `INCONCLUSIVE` (load 42 to 49). An earlier run of the same code read 3.84 ms against 4.38 ms, 0.88 times |
 
-The merge base's numbers are the blind job's, in `tests/acceptance/1868/BASE-FAILURE.txt`.
+The merge base's numbers are the blind job's, in `tests/acceptance/1868/BASE-FAILURE.txt`. On the change the
+whole files took 96.6 s (`canvas-cells`) and 36.5 s (`status-runs`), so neither goes in the `slow` lane; an earlier
+`canvas-cells` run at load 78 took 331 s.
 
 **The planted stale world.** With `tests/acceptance/1868/twins/world-built-once/` laid over
 `packages/hub/src/plant.ts` and the hub rebuilt, `world-fresh.test.ts` fails at the reading (load 11):
@@ -66,6 +68,10 @@ field read back to a real writer.
   rewrite scanned whole sessions (now the claims table by task, indexed).
 - Round 2: no bugs; fixed the revision rising when a reread ask had not changed, and one comment.
 - Round 3: no findings.
+- Round 4, on the lanes and budget commits: fixed the tasks' commands naming no test file, which left them unreached
+  by any later hub or deep-show change once merged; the benchmark now reads PASS only on a passing exit with
+  `pass 1` and `fail 0`, and never takes PASS from a failure's message. Disclosed, not changed: the tasks' cost and
+  the 300 s run limit, and `targets.ratio` being a record of the limit, not what the verdict reads.
 - Declined, with reasons: the kept world's memory and the whole world resent when anything in it changed (the
   issue's scope is the reads; one resend per change replaces one per call); deep_status differs from the merge base
   only on records no writer produces (it follows the projection's rules on purpose); `Hub::record()` and
@@ -73,10 +79,13 @@ field read back to a real writer.
 
 ## Unrun or open
 
-- Criteria 1 and 3 have no counted `PASS`: this Mac was loaded and warm in every run, and no task in
-  `benchmarks/budgets.json` names them yet.
-- `scripts/lanes.mjs` does not list `tests/acceptance/1868/` (`alone`, `timed`): the file is guarded and the edit
-  needs an owner-signed tag. Until then the guard, before and trace lanes are unrun for this change.
+- Criteria 1 and 3 have no counted `PASS`: this Mac was loaded and warm in every run. The budget tasks
+  `canvas-cells-long-record` and `deep-status-run-events` now name them; neither has run in a budget window. Each
+  runs its acceptance test 22 times a window, so 35 to 50 minutes a task at the base's speeds, and a run over
+  `measureOnce`'s 300 s under load reads BLOCKED, never PASS. Their `targets.ratio` of 1.2 records the issue's
+  limit; the test itself holds the number the verdict uses, as other benches' judges do.
+- `scripts/lanes.mjs` lists `tests/acceptance/1868/` (`alone`) and the two timed files (`timed`) in a commit of its
+  own, which waits for an owner-signed tag. Until then the guard, before and trace lanes are unrun for this change.
 - `node scripts/affected.mjs`: see the pull request for its result.
 - deep_claim's and the late hook's scope lines have no test of their own: their proof is the plans above and the
   existing suites that exercise them.

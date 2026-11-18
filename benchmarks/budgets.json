@@ -1940,7 +1940,7 @@
       "command": [
         "node",
         "benchmarks/canvas-world.mjs",
-        "cells"
+        "tests/acceptance/1868/canvas-cells.test.mjs"
       ],
       "margin": 0.5,
       "limits": {},
@@ -1957,7 +1957,7 @@
       "command": [
         "node",
         "benchmarks/canvas-world.mjs",
-        "status"
+        "tests/acceptance/1868/status-runs.test.mjs"
       ],
       "margin": 0.5,
       "limits": {},
