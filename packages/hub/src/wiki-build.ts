@@ -507,7 +507,7 @@ export function openWikiBuild(o: WikiBuildOptions): { build(): Promise<WikiBuilt
         // A job's clean-up that can't read or write the wiki ends the reading there; the next build reads what is left.
         void chain.catch((error: unknown) => process.stderr.write(`deep hub: a wiki reading's changed pages weren't recorded: ${error instanceof Error ? error.message : String(error)}\n`)).finally(() => { settled = true; });
         while (!settled) {
-          if ((await o.runner.list()).some((j) => j.kind === 'read' && j.state === 'waiting' && j.blocked)) { built.reading.waiting = true; break; }
+          if ((await o.runner.recent()).some((j) => j.kind === 'read' && j.state === 'waiting' && j.blocked)) { built.reading.waiting = true; break; }
           await new Promise((r) => setTimeout(r, 100));
         }
       }

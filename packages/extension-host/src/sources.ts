@@ -603,6 +603,12 @@ export const openBrowser = (url: string): Promise<void> => new Promise((done, fa
 type Outcome = HttpAnswer | { error: string };
 /** What the record keeps of a source's calls and readings, appended as the core. */
 type Append = (kind: 'source.called' | 'reading.recorded', data: Record<string, unknown>) => Promise<void>;
+/**
+ * A recording's bound (#2650): this many calls, and this many bytes of their answers' bodies, a library file's bytes
+ * staying in the file its call names. Past either, the recording keeps what it holds and no later call.
+ */
+const RECORDED_CALLS = 10_000;
+const RECORDED_BYTES = 64 * 1024 * 1024;
 
 /** The hub's side of every source: its calls, cache, quotas, back-off, recording and the secret values it holds to scrub. */
 export class Sources {
@@ -611,6 +617,8 @@ export class Sources {
   private readonly spent = new Map<string, number[]>();
   private readonly backoff = new Map<string, { until: number; gap: number }>();
   private readonly recorded: RecordedCall[] = [];
+  /** The bytes of the answers `recorded` holds. */
+  private recordedBytes = 0;
   private readonly binary = new Map<number, { file: string; offset: number; size: number; sha256: string }>();
   private readonly replayed = new Set<number>();
   /** Every secret value the hub read or was given: each is scrubbed from what a package gets and from the recording. */
@@ -618,6 +626,8 @@ export class Sources {
 
   constructor(private readonly options: {
     now: () => number; http: HttpClient; secrets: SecretStore; append: Append; replay?: Recording;
+    /** False: no call's answer is kept, and the recording stays empty (#2650). `every`: #2650's planted host, past any bound. */
+    recording?: boolean | 'every';
     /** A series call's values, landed as one batch (#262). */
     land?: (source: Polled, asOf: number, values: Map<string, number>) => Promise<Batch>;
   }) {}
@@ -924,16 +934,29 @@ export class Sources {
     } catch {
       answer = { error: signal.aborted ? 'timeout' : 'unreachable' };
     }
-    if (request.recording && !('error' in answer)) {
-      const bytes = Buffer.from(answer.body, 'base64');
-      this.binary.set(this.recorded.length, { ...request.recording, size: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') });
-      this.recorded.push({ source: source.name, request: stripped, answer: { ...answer, body: '' } });
-    } else this.recorded.push({ source: source.name, request: stripped, answer: structuredClone(answer) });
+    this.keep(source, stripped, request, answer);
     await this.options.append('source.called', {
       source: source.name, host: new URL(request.url).host, outcome: 'error' in answer ? answer.error : answer.partial ? 'unreachable' : 'answered',
       ...('error' in answer || request.method === 'CONNECT' ? {} : { status: answer.status }), ms: Math.round(performance.now() - started), bytes,
     });
     return 'error' in answer ? { error: describe(answer.error, source) } : answer;
+  }
+
+  /**
+   * A call into the recording (#2650): only while this host records, and only within its bound. A library file's bytes
+   * stay in the file its call names, read back and checked when the recording is taken.
+   */
+  private keep(source: Polled, stripped: HttpRequest, request: HttpRequest, answer: RecordedCall['answer']): void {
+    if (this.options.recording === false) return;
+    const binary = request.recording && !('error' in answer);
+    const bytes = 'error' in answer || binary ? 0 : Buffer.byteLength(answer.body);
+    if (this.options.recording !== 'every' && (this.recorded.length >= RECORDED_CALLS || this.recordedBytes + bytes > RECORDED_BYTES)) return;
+    this.recordedBytes += bytes;
+    if (binary) {
+      const file = Buffer.from(answer.body, 'base64');
+      this.binary.set(this.recorded.length, { ...request.recording!, size: file.length, sha256: createHash('sha256').update(file).digest('hex') });
+      this.recorded.push({ source: source.name, request: stripped, answer: { ...answer, body: '' } });
+    } else this.recorded.push({ source: source.name, request: stripped, answer: structuredClone(answer) });
   }
 
   private scrub(text: string): string {
