@@ -23,9 +23,9 @@ pub struct Kept {
     /// The list's width as you left it.
     #[serde(default)]
     pub list: Option<f32>,
-    /// A narrow window shows the page, not the list.
+    /// A narrow window shows the page, not the list; nothing kept shows the page, where the window opens.
     #[serde(default)]
-    pub hidden: bool,
+    pub hidden: Option<bool>,
 }
 
 /// Where the window's state is kept, under the hub's root beside the app's other files.

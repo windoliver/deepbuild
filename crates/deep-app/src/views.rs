@@ -4492,7 +4492,9 @@ impl Shell {
         if let Some(width) = kept.list {
             self.list_width = px(width);
         }
-        self.hidden = kept.hidden;
+        if let Some(hidden) = kept.hidden {
+            self.hidden = hidden;
+        }
         crate::frame::start(kept);
         crate::frame::keep_window(window, cx);
         crate::frame::keep(|kept| kept.list = Some(f32::from(self.list_width)));
@@ -4505,7 +4507,7 @@ impl Shell {
     fn set_hidden(&mut self, hidden: bool, cx: &mut Context<Self>) {
         if self.hidden != hidden {
             self.hidden = hidden;
-            crate::frame::keep(|kept| kept.hidden = hidden);
+            crate::frame::keep(|kept| kept.hidden = Some(hidden));
             cx.notify();
         }
     }
@@ -4610,25 +4612,30 @@ impl Render for Shell {
             .track_focus(&self.focus_handle)
             .capture_any_mouse_down(|_, _, _| touched())
             .capture_key_down(|_, _, _| touched())
-            // Dragging the list's edge sets its width; letting go ends it.
-            .when(self.resizing, |root| {
-                root.on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, window, cx| {
-                    let wide = window.viewport_size().width;
-                    if let Some(width) = chrome::list_width(event.position.x, wide) {
-                        this.list_width = width;
-                        cx.notify();
+            // Dragging the list's edge sets its width; letting go ends it and keeps it (#1808). The listeners are always
+            // there, so a drag's first moves reach them before the frame its press asks for draws.
+            .on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, window, cx| {
+                if !this.resizing {
+                    return;
+                }
+                let wide = window.viewport_size().width;
+                if let Some(width) = chrome::list_width(event.position.x, wide) {
+                    this.list_width = width;
+                    cx.notify();
+                }
+            }))
+            .on_mouse_up(
+                MouseButton::Left,
+                cx.listener(|this, _, _, cx| {
+                    if !this.resizing {
+                        return;
                     }
-                }))
-                .on_mouse_up(
-                    MouseButton::Left,
-                    cx.listener(|this, _, _, cx| {
-                        this.resizing = false;
-                        let width = f32::from(this.list_width);
-                        crate::frame::keep(|kept| kept.list = Some(width));
-                        cx.notify();
-                    }),
-                )
-            })
+                    this.resizing = false;
+                    let width = f32::from(this.list_width);
+                    crate::frame::keep(|kept| kept.list = Some(width));
+                    cx.notify();
+                }),
+            )
             .flex()
             .flex_col()
             .bg(chrome.ground)
