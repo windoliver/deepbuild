@@ -184,11 +184,12 @@ for (const file of program.getSourceFiles().filter((f) => ours(f) && files.inclu
   ts.forEachChild(file, function visit(node) {
     const set = ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken && node.left.getText() === 'process.exitCode' ? node.right
       : ts.isCallExpression(node) && node.expression.getText() === 'process.exit' ? node.arguments[0] : undefined;
-    if (set && !planted(node)) for (const v of values(set)) if (v.code !== undefined) table.set(place(v.node), v.code);
+    // Keyed by place and code, so two codes written on one line are two rows.
+    if (set && !planted(node)) for (const v of values(set)) if (v.code !== undefined) table.set(`${place(v.node)} ${v.code}`, [place(v.node), v.code]);
     ts.forEachChild(node, visit);
   });
 }
-const rows = [...table].sort(([a], [b]) => a.localeCompare(b, 'en', { numeric: true }));
+const rows = [...table.values()].sort(([a, x], [b, y]) => a.localeCompare(b, 'en', { numeric: true }) || x - y);
 console.log(`The exits a deep command can reach, read from the code; exit.code@1 holds ${codes.join(', ')}:`);
 for (const [where, code] of rows) console.log(`exit ${code} ${where}  ${MEANING[code] ?? 'outside the table'}`);
 console.log(`Left out by name, ending with the code of the program they run: ${[...left].sort().join(', ') || 'none'}`);
@@ -196,4 +197,4 @@ const wrong = rows.filter(([, code]) => !codes.includes(code));
 for (const [where, code] of wrong) console.log(`FAIL exits: ${where}: a command can exit ${code}, which exit.code@1 doesn't hold\n  Fix: exit with 0 done, 1 failed or refused, 2 not understood, nothing ran, or 3 not decided or not checked`);
 if (!rows.length) console.log('FAIL exits: no exit was read from the code, so the table proves nothing');
 if (wrong.length || !rows.length) process.exit(1);
-console.log(`PASS exits: ${rows.length} places, each ${codes.join(', ')}`);
+console.log(`PASS exits: ${rows.length} rows, each ${codes.join(', ')}`);
