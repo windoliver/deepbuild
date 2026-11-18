@@ -50,9 +50,8 @@ import { continueLine, fit, type Part } from './context-fit.js';
 
 import { briefing, headOf, loadsOf } from './session-facts.js';
 
-import { GateRunner } from './gate-runner.js';
+import { GateRunner, type KeptRow } from './gate-runner.js';
 import { Siblings } from './siblings.js';
-import type { KeyFacts } from './shared-runs.js';
 import { groupUnder } from './children.js';
 import { deepHook, repoOf, rootOf, type Root } from './paths.js';
 import { OWNER, People, scopeOf } from './people.js';
@@ -672,9 +671,10 @@ export class Core {
     });
     await this.delivery.continues();
     this.askingSoon();
-    // The results every session's claims share (#1018): each kept run's key, from its finish, read once at start.
-    const kept = (await this.record.raw(`SELECT data FROM events WHERE kind = 'run.finished' AND json_extract(data, '$.key') IS NOT NULL ORDER BY log_pos`)) as { data: string }[];
-    this.gate.kept(kept.map((row) => JSON.parse(row.data) as { run: string; check: string; outcome: string; tests_run: number; findings: string[]; evidence: string[]; key: KeyFacts }));
+    // The results every session's claims share (#1018): each kept run's key, from its finish, read once at start, a row
+    // at a time and each parsed as the runner takes it, so the start never holds them all (#2652).
+    const kept = this.record.rows(`SELECT data FROM events WHERE kind = 'run.finished' AND json_extract(data, '$.key') IS NOT NULL ORDER BY log_pos`) as Iterable<{ data: string }>;
+    this.gate.kept((function* () { for (const row of kept) yield JSON.parse(row.data) as KeptRow; })());
     // Every second, once an open ask's deadline has passed, the asks core takes its default (showing it first if it
     // hadn't shown), so no ask waits on a read; once a stop or a verdict landed, or while a task waits on its check,
     // it reads them for the task, the continue or the resume they call for (#85). With nothing due it reads nothing,

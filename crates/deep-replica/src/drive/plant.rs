@@ -43,6 +43,16 @@ pub enum Plant {
     EntryOnChange,
     /// The explorer and the descender walk as if the grid had no links (#1048 criterion 4).
     IgnoresLinks,
+    /// Each pointer move the replica delivers also notifies the window's root view (#1482 criterion 5).
+    NotifiesRootPerMove,
+    /// Every read-back of a frame fails (#1482 criterion 4).
+    ReadBackFails,
+    /// The report names no notified entity: the record of `App::notify` dropped (#1482 criterion 6).
+    DropsNotifyRecord,
+    /// The lists arm's two views notify themselves on every wheel event they get (#1482 criterion 7).
+    WheelNotifiesEveryEvent,
+    /// GPUI reuses a cached view as it did before it kept the view's accessibility nodes (#1482 criterion 8).
+    ReuseDropsAccessibility,
     /// A play under `piece_seed: run` keeps the document's seed, so every run generates the same floors (#556
     /// criterion 3).
     KeepsDocumentSeed,
@@ -66,6 +76,11 @@ impl Plant {
             "drops-first-bot-entry" => Some(Plant::DropsFirstBotEntry),
             "entry-on-change" => Some(Plant::EntryOnChange),
             "explorer-ignores-links" => Some(Plant::IgnoresLinks),
+            "notifies-root-per-move" => Some(Plant::NotifiesRootPerMove),
+            "read-back-fails" => Some(Plant::ReadBackFails),
+            "drops-notify-record" => Some(Plant::DropsNotifyRecord),
+            "wheel-notifies-every-event" => Some(Plant::WheelNotifiesEveryEvent),
+            "reuse-drops-accessibility" => Some(Plant::ReuseDropsAccessibility),
             "keeps-document-seed" => Some(Plant::KeepsDocumentSeed),
             _ => None,
         }
