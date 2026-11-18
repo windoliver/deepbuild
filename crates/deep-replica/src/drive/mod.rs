@@ -12,8 +12,11 @@
 //! read once, before any input, over a connection closed straight after. `DEEP_DRIVE_PLANT` lifts one guard at a
 //! time, for the checks that must catch it.
 
+mod arms;
 mod check;
+mod clocks;
 mod core;
+mod counts;
 mod frames;
 pub mod glyphs;
 mod hubcopy;
@@ -221,6 +224,8 @@ struct Replica {
     script: Option<Entity<gpui_shell::ScriptView>>,
     /// Issue #1546: in `launch.frames: "dirty"`, the frames GPUI drew on request and each step's comparison.
     dirty: Option<frames::Dirty>,
+    /// Issue #1482: in that mode, what each frame asked for and drew.
+    counts: Option<counts::Counts>,
     /// Issue #1462: the replica's copy of the hub, which every call the app makes of its hub reaches.
     hub_copy: Arc<hubcopy::HubCopy>,
     /// #1498: the app's canvas panel, which the copy of the canvas core presents to, and the replica's clock as the
@@ -290,6 +295,26 @@ impl Replica {
         // #1546: "every" draws every view each frame; "dirty" only the frames GPUI says the window needs.
         let frames = word("frames", &["every", "dirty"], "every")?;
         let dirty = frames == "dirty";
+        // #1482: which window, whether each drawn frame is read back, and whether accessibility is active: each needs the
+        // mode that draws only the frames GPUI says the window needs.
+        let arm = word("arm", &["app", "blank", "lists"], "app")?;
+        let read_back = word("read_back", &["tiles", "off"], "tiles")?;
+        let accessibility = match &args["accessibility"] {
+            Value::Null => false,
+            Value::Bool(on) => *on,
+            other => {
+                return Err(fail(
+                    "refused",
+                    format!("launch.accessibility is true or false, not {other}"),
+                ))
+            }
+        };
+        if !dirty && (arm != "app" || !args["read_back"].is_null() || accessibility) {
+            return Err(fail(
+                "refused",
+                "launch.arm, read_back and accessibility need frames: \"dirty\"",
+            ));
+        }
         let scale = match &args["scale"] {
             Value::Null => 2.,
             v if v == 2 => 2.,
@@ -563,6 +588,9 @@ impl Replica {
                 },
                 ..crate::shell::window_options()
             };
+            if arm != "app" {
+                return arms::open(&arm, options, plant == Some(Plant::WheelNotifiesEveryEvent), cx);
+            }
             // The window opens where the app opens, unless the launch names a page (#1461). A panel with no area goes in
             // the list's slot, as before; one registered to an area goes there; one replacing Needs you fills the list's
             // first section.
@@ -749,23 +777,37 @@ impl Replica {
             reduced,
             script,
             dirty: None,
+            counts: None,
             hub_copy,
             pointer: kept_pointer,
             canvas,
             shared_clock,
         };
+        // #1482: an assistive client connects before the window draws, so its first frame builds the tree.
+        if accessibility && !gpui_kit::activate_accessibility() {
+            return Err(fail("blocked", "the window took no accessibility adapter"));
+        }
+        #[cfg(feature = "env-plants")]
+        gpui_kit::frame_counts::reuse_plainly(plant == Some(Plant::ReuseDropsAccessibility));
         replica.draw();
         replica.draw();
         if dirty {
             replica.cx.draw_on_request();
             replica.dirty = Some(frames::Dirty::new(replica.live_tree()));
+            let read = if read_back == "off" { "off" } else { "tiles" };
+            replica.start_counts(arm.clone(), read, accessibility);
         }
-        let reply = json!({
+        let mut reply = json!({
             "replica": replica.id,
             "window": {"size": [size.0 as u32, size.1 as u32], "scale": scale as u32},
             "locale": locale,
             "frames": frames,
         });
+        if dirty {
+            reply["arm"] = json!(arm);
+            reply["read_back"] = json!(read_back);
+            reply["accessibility"] = json!(accessibility);
+        }
         replica
             .trace
             .push(json!({"call": "launch", "launch": args, "reply": reply}));
@@ -777,8 +819,10 @@ impl Replica {
         let index = self.steps.len() + 1;
         let acts = name == "act";
         let before = acts.then(|| self.snapshot_file());
-        self.begin_step();
+        self.begin_step(index);
         let result = match name {
+            "refresh" => self.refresh(),
+            "accessibility" => self.accessibility(),
             "act" => self.act(call),
             "hub" => self.hub(call),
             "feed" => self.feed(call),
@@ -1030,12 +1074,20 @@ impl Replica {
         }
         // In the dirty mode the window draws what the input changed at its next frame, as a real one does (#1546).
         let forced = self.dirty.is_none();
+        // #1482's planted replica notifies the window's root with each pointer move it delivers.
+        if self.plant == Some(Plant::NotifiesRootPerMove) && matches!(event, PlatformInput::MouseMove(_)) {
+            let _ = self.cx.update_window(self.window, |root, _, cx| cx.notify(root.entity_id()));
+        }
+        let mark = clocks::Mark::now();
         let _ = self.cx.update_window(self.window, |_, window, cx| {
             window.dispatch_event(event, cx);
             if forced {
                 window.render_frame(cx);
             }
         });
+        if let Some(counts) = &mut self.counts {
+            counts.input_cost(mark.since());
+        }
     }
 
     fn act(&mut self, call: &Value) -> Result<Value, Fail> {
@@ -1074,7 +1126,8 @@ impl Replica {
             let p = p.as_array().filter(|p| p.len() == 2)?;
             Some([p[0].as_i64().unwrap_or(0), p[1].as_i64().unwrap_or(0)])
         };
-        // A pointer action at a point in device pixels: no locator, no wait for stillness and no hit test (#1461, #1498).
+        // A pointer action at a point in device pixels: no locator, no wait for stillness and no hit test (#1461, #1482,
+        // #1498).
         if locator.is_null() && matches!(kind.as_str(), "click" | "double_click" | "drag" | "hover")
         {
             if let Some(p) = xy(&act["point"]) {
@@ -1149,6 +1202,25 @@ impl Replica {
             _ => self.actionable(locator, timeout_ms)?,
         };
         let center = target.center();
+        // `events` wheel events of `dy` points each at the target's centre, one a frame (#1482): the list under the
+        // centre takes them, whichever of its rows is there.
+        if kind == "wheel" {
+            let (dy, events) = (act["dy"].as_f64().unwrap_or(0.) as f32, act["events"].as_u64().unwrap_or(1));
+            let position = at(center);
+            self.input_at(self.clock.t);
+            if self.pointer.get() != position {
+                self.input(MouseMoveEvent { position, pressed_button: None, modifiers: Modifiers::default() }.to_platform_input());
+            }
+            for _ in 0..events {
+                let delta = ScrollDelta::Pixels(point(px(0.), px(-dy)));
+                self.input(ScrollWheelEvent { position, delta, ..Default::default() }.to_platform_input());
+                self.tick();
+            }
+            self.focus = Some(target.clone());
+            self.tick();
+            self.tick();
+            return Ok(json!({"point": center, "box": target.bounds, "waited_ms": waited * 1000 / FLICKS, "result": "delivered"}));
+        }
         // A pointer action asks the frame what the event would reach before anything is sent.
         let pointer = kind != "press" && !locator.is_null();
         if pointer && self.plant != Some(Plant::NoHitTest) {
@@ -2112,8 +2184,8 @@ impl Replica {
             },
             "trace": {"sha256": hash, "path": path},
         });
-        if let Some(dirty) = &self.dirty {
-            closed["frames"] = dirty.report();
+        if self.dirty.is_some() {
+            closed["frames"] = self.frames_report();
         }
         closed
     }

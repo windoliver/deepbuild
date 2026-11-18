@@ -41,6 +41,9 @@ chrome-fixture = ["deep-app/chrome-fixture"]
 # Issue #184 criterion 15's planted replica: every play renders a frame at every step and keeps only those asked. In no
 # shipped build; allowed in a release build, where the throughput budget is timed.
 test-renders-unkept-frames = []
+# Issue #1482: each frame's CPU, GPU and allocations in `deep-drive`'s frames report, and GPUI's profiler in the build. In
+# no shipped build; allowed in a release build, where the hover's cost is timed.
+frame-clocks = ["gpui-kit/profiler"]
 
 # The live capture asks AppKit for the window's accessibility children and their frames.
 [target.'cfg(target_os = "macos")'.dependencies]
