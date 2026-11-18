@@ -1,11 +1,11 @@
-// The `./unchecked` entry (#2655): the facts files, and the shipped adapters built from them with no registration
+// The `./unchecked` entry (#2655): the shipped adapters built from their facts with no registration
 // check, so a thread that only reads an agent's facts, caps and replies loads no validator. Whatever maps hooks in the
 // same process holds the same facts to the published shapes, through the full entry's registry. The hub's event loop
 // reads its adapters here.
 import { shippedIn } from './facts.js';
 import type { Adapter, AdapterRegistry } from './types.js';
 
-export { ADAPTERS, factsAdapter, readFacts } from './facts.js';
+export { ADAPTERS, factsAdapter } from './facts.js';
 export type { Adapter, AdapterRegistry, HookRequestLine, JsonObject } from './types.js';
 
 /** An empty registry that checks nothing at registration. */

@@ -194,6 +194,7 @@ impl Sways {
                         label: Some("scene3d sway"),
                     });
             {
+                deep_gpu::counted::compute_pass();
                 let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                     label: Some("scene3d sway"),
                     timestamp_writes: None,

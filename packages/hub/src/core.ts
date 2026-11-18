@@ -50,9 +50,8 @@ import { continueLine, fit, type Part } from './context-fit.js';
 
 import { briefing, headOf, loadsOf } from './session-facts.js';
 
-import { GateRunner } from './gate-runner.js';
+import { GateRunner, type KeptRow } from './gate-runner.js';
 import { Siblings } from './siblings.js';
-import type { KeyFacts } from './shared-runs.js';
 import { groupUnder } from './children.js';
 import { deepHook, repoOf, rootOf, type Root } from './paths.js';
 import { OWNER, People, scopeOf } from './people.js';
@@ -191,7 +190,7 @@ export class Core {
   /** The record's raw reads, as the helpers that take them call them: parameters bound. */
   private readonly raw: RecordStore['raw'] = (sql, params) => this.record.raw(sql, params);
   /** The log's pages, read-ahead and stream; a read waits for the appends in flight, and the owner's stream reads what the owner may see (#1337). */
-  private readonly log = new LogReads({ raw: this.raw, settled: () => Promise.allSettled([...this.inflight]), ownerSeen: () => this.state.seenBy(OWNER), emit: (sub, json, caught) => this.emit(sub, json, caught) });
+  private readonly log = new LogReads({ raw: this.raw, settled: () => Promise.allSettled([...this.inflight.keys()]), ownerSeen: () => this.state.seenBy(OWNER), emit: (sub, json, caught) => this.emit(sub, json, caught) });
   private asks!: Asks;
   /** Online model libraries (#1731): which are on, your standing rules, searches and fetches. */
   private libraries?: Libraries;
@@ -293,8 +292,11 @@ export class Core {
   }
   /** Each session's deep_drive replicas (#124). */
   private replicas!: Replicas;
-  /** Appends handed to the record and not yet settled: a read waits for them, so it sees every hook acknowledged before it. */
-  private readonly inflight = new Set<Promise<unknown>>();
+  /**
+   * Appends handed to the record and not yet settled, by event ID: a read waits for them, so it sees every hook
+   * acknowledged before it.
+   */
+  private readonly inflight = new Map<Promise<unknown>, string>();
   private readonly timers: NodeJS.Timeout[] = [];
   /**
    * Each background job's failures in a row, when the first of them was and the last one's error, cleared by its
@@ -492,7 +494,7 @@ export class Core {
       over: (session) => { const s = this.sessionStarts.runOf(session); return s !== undefined && !this.sessionStarts.live(s.run); },
     });
     this.delivery.answers = new Answers({
-      raw: this.raw, settled: () => Promise.allSettled([...this.inflight]),
+      raw: this.raw, settled: (except) => Promise.allSettled([...this.inflight].flatMap(([append, id]) => (id === except ? [] : [append]))),
       excluded: (id) => this.delivery.handed.has(id) || this.delivery.prompts.has(`ask:${id}`),
       delivered: options.plant === 'words-only-at-turn-start' ? undefined : (session) => { const live = this.state.live.get(session); if (live) live.words ??= 'answer'; },
       append: (data, v) => this.appendCore('delivery.outcome', data, { subject: data.delivery, ...(v === 2 ? { v } : {}) }),
@@ -665,13 +667,14 @@ export class Core {
       // Each open sign-in task's probe, on the recorded login PATH (#1349).
       signIn: signInCheck(() => this.agents.loginPath(), (agent) => this.runner?.account(agent as Agent) ?? null, this.now),
       // The hub's own adapters answer, so the facts it maps hooks by are the facts that decide a continue.
-      errorTurnHook: (agent) => adapterOf(agent)?.caps.errorTurnHook === true,
+      errorTurnHook: (agent) => adapterOf(agent)?.caps.errorTurnHook === true, ...(this.options.plant === 'asks-without-tool-before' ? { plant: this.options.plant } : {}),
     });
     await this.delivery.continues();
     this.askingSoon();
-    // The results every session's claims share (#1018): each kept run's key, from its finish, read once at start.
-    const kept = (await this.record.raw(`SELECT data FROM events WHERE kind = 'run.finished' AND json_extract(data, '$.key') IS NOT NULL ORDER BY log_pos`)) as { data: string }[];
-    this.gate.kept(kept.map((row) => JSON.parse(row.data) as { run: string; check: string; outcome: string; tests_run: number; findings: string[]; evidence: string[]; key: KeyFacts }));
+    // The results every session's claims share (#1018): each kept run's key, from its finish, read once at start, a row
+    // at a time and each parsed as the runner takes it, so the start never holds them all (#2652).
+    const kept = this.record.rows(`SELECT data FROM events WHERE kind = 'run.finished' AND json_extract(data, '$.key') IS NOT NULL ORDER BY log_pos`) as Iterable<{ data: string }>;
+    this.gate.kept((function* () { for (const row of kept) yield JSON.parse(row.data) as KeptRow; })());
     // Every second, once an open ask's deadline has passed, the asks core takes its default (showing it first if it
     // hadn't shown), so no ask waits on a read; once a stop or a verdict landed, or while a task waits on its check,
     // it reads them for the task, the continue or the resume they call for (#85). With nothing due it reads nothing,
@@ -758,8 +761,8 @@ export class Core {
     for (const id of [...this.state.rows.keys()].filter((id) => id.startsWith('job:'))) this.state.jobRowAppend(id, null);
     this.state.statesRead = true;
     this.state.stateSoon();
-    // Each minute every session is read again: a state that changes with time alone (quiet) has no append to say so.
-    this.every('states', 60_000, async () => { this.state.touched = 'all'; this.state.stateSoon(); });
+    // Each minute the sessions whose state the clock has ended are read again: such a change has no append to say so.
+    this.every('states', 60_000, async () => this.state.minutePassed());
     this.every('unpushed', 60_000, () => this.flags.unpushedAgain());
     void this.run('unpushed', () => this.flags.unpushedAgain());
     this.every('gates', 1000, () => this.flags.gatesWatched());
@@ -886,8 +889,9 @@ export class Core {
     const plant = this.options.plant?.startsWith('job-build-') ? { plant: this.options.plant as 'job-build-entry-only' } : {};
     const extensions = this.extensions = await openExtensionHost({ record: this.record, supervisor: this.supervisor, trust, home: this.root.dir, release: [], now: this.now, leases, runner: this.runner, evidence: this.store, point: () => this.durable.point('terminals_rewrite'),
       // A check runner's reads and plays of a canvas piece (#411, #184): the hub's canvas core, and a replica playing the
-      // revision's canonical document, its programs from the evidence store.
-      canvas: (call) => this.canvasSide.canvasCall(call), replica: (call) => this.play(call), ...plant });
+      // revision's canonical document, its programs from the evidence store. A job kind's qualification by the core
+      // (#518) goes the same way, with the tools it names in the world.
+      canvas: (call) => this.canvasSide.qualifyTool(call), replica: (call) => this.play(call), ...plant });
     this.jobKinds = new Jobs({
       root: this.root.dir, now: this.now, host: () => this.extensions, plant: this.options.plant,
       keep: async (bytes, source) => (await this.control.stored(await this.store.connect({ role: 'deepbuild', via: 'job' }).put({ bytes, kind: 'file', source, redaction: 'complete', license: { name: 'job output', allows: [] } }), `a job output from ${source}`)).sha256,
@@ -1088,7 +1092,7 @@ export class Core {
     if (this.lost) throw Error(this.blocked);
     const appended = this.record.append(connection, input);
     // No read waits for a backfill: nobody was acknowledged for its events.
-    if (!backfill) this.inflight.add(appended);
+    if (!backfill) this.inflight.set(appended, input.id);
     try {
       await appended;
     } catch (error) {
@@ -1148,11 +1152,16 @@ export class Core {
     this.askingSoon();
     for (const [owner, agents] of Object.entries(RUN_BY)) {
       const problem = found.filter((u) => u.agent === owner).map(describe).join('; ');
-      const open = (await this.record.raw(`SELECT id, agent, last_seen FROM sessions WHERE agent IN (${agents.map(() => '?').join(', ')}) AND id NOT IN (SELECT session_id FROM events WHERE kind IN ('session.end', 'session.gone', 'session.archived') AND session_id IS NOT NULL)`, [...agents])) as { id: string; agent: string; last_seen: number | null }[];
+      // Quiet sessions can change only if their last hook-program reading said hooks can't run.
+      const open = (await this.record.raw(`SELECT * FROM (SELECT id, agent, last_seen,
+        (SELECT json_extract(data, '$.reading') FROM events WHERE session_id = sessions.id AND kind = 'session.reading'
+          AND (json_extract(data, '$.reading') LIKE ? OR json_extract(data, '$.reading') LIKE ?) ORDER BY log_pos DESC LIMIT 1) AS text
+        FROM sessions WHERE agent IN (${agents.map(() => '?').join(', ')}) AND id NOT IN (SELECT session_id FROM events WHERE kind IN ('session.end', 'session.gone', 'session.archived') AND session_id IS NOT NULL))
+        WHERE coalesce(last_seen, 0) >= ? OR text LIKE ?`, [`${CANT_RUN}%`, `${CAN_RUN}%`, ...agents, this.now() - DAY, `${CANT_RUN}%`])) as { id: string; agent: string; last_seen: number | null; text: string | null }[];
       for (const s of open) {
         // A reading counts as the session seen, so one quiet for a day reads BLOCKED only if it already did.
         const quiet = (s.last_seen ?? 0) < this.now() - DAY;
-        const [last] = (await this.record.raw(`SELECT json_extract(data, '$.reading') AS text FROM events WHERE session_id = ? AND kind = 'session.reading' AND (json_extract(data, '$.reading') LIKE ? OR json_extract(data, '$.reading') LIKE ?) ORDER BY log_pos DESC LIMIT 1`, [s.id, `${CANT_RUN}%`, `${CAN_RUN}%`])) as { text: string }[];
+        const last = s.text === null ? undefined : { text: s.text };
         if (problem && quiet && !last?.text.startsWith(CANT_RUN)) continue;
         const text = problem ? `${CANT_RUN}, so this session's holds and every block but the floor are watch-only: ${problem}. Run \`deep setup\` to point them at a deep-hook that runs.` : last?.text.startsWith(CANT_RUN) ? `${CAN_RUN}: this session's gates hold again.` : undefined;
         if (text && text !== last?.text) await this.queue(async () => { await this.appendReading(s.id, s.agent, text); await this.flags.watchOnly(s.id, s.agent, 'hooks', text.startsWith(CANT_RUN)); });
@@ -1317,7 +1326,7 @@ export class Core {
     // A spooled line whose hook the hub already recorded live changes nothing: no count, no stamp, no append.
     if (replayed && /^[0-9A-HJKMNP-TV-Z]{26}$/.test(meta.id)) {
       // Its live copy may be acknowledged and still on its way to the record.
-      await Promise.allSettled([...this.inflight]);
+      await Promise.allSettled([...this.inflight.keys()]);
       const known = await this.record.raw(`SELECT json_extract(data, '$.late') AS late FROM events WHERE id ${this.options.plant === 'replay-keeps-place-by-id' ? '>=' : '='} ? LIMIT 1`, [meta.id]);
       if (known.length) {
         // Unless deep-hook gave up on an acknowledgement the hub sent just too late: the live copy is in the record
@@ -2348,7 +2357,8 @@ export class Core {
           this.delivery.unread.delete(ask);
           if (woken) await this.delivery.answers.outcome(ask, 'next_prompt', 'delivered');
         }
-        const waiting = await this.delivery.answers.waitingFor(meta.session);
+        // Never behind the prompt's own event, which answers no ask: a resume commits FULL once the evidence it names is synced (#1410).
+        const waiting = await this.delivery.answers.waitingFor(meta.session, undefined, meta.id);
         if (status && !waiting.length && !r.later.length && !this.delivery.promiseDueFor(meta.session)) {
           // The prompt's event read as the session working; it stays as it was, since no model runs on it.
           const live = this.state.live.get(meta.session);
@@ -2484,7 +2494,7 @@ export class Core {
     const from = spliced?.get(meta.id)?.from;
     spliced?.delete(meta.id);
     if (from !== undefined) return from;
-    await Promise.allSettled([...this.inflight]);
+    await Promise.allSettled([...this.inflight.keys()]);
     const [row] = (await this.record.raw(`SELECT json_extract(data, '$.from') AS f FROM events WHERE id = ?`, [meta.id])) as { f: string | null }[];
     return row ? row.f ?? 'unknown' : undefined;
   }

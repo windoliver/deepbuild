@@ -6,7 +6,7 @@
 
 use std::collections::BTreeSet;
 
-use deep_canvas::geometry_audit::{Change, Config, Fault, Seat, Shape, Solid, V3};
+use deep_canvas::geometry_audit::{Change, Config, Fault, PartOf, Seat, Shape, Solid, V3};
 use deep_canvas::interval::Iv;
 use deep_canvas_motion::program::{Program, TRANSFORM};
 use deep_canvas_scene3d::scene::{self, Affine3};
@@ -200,6 +200,7 @@ pub(crate) fn solids_at(
                         ends: Vec::new(),
                         moved: moved.contains(id),
                         seat: None,
+                        part_of: None,
                     });
                 }
             }
@@ -243,6 +244,7 @@ pub(crate) fn solids_at(
                         ends: Vec::new(),
                         moved: true,
                         seat: None,
+                        part_of: None,
                     });
                 }
                 continue;
@@ -254,6 +256,23 @@ pub(crate) fn solids_at(
                 let Some(mesh) = built.mesh.filter(|m| m.triangles() > 0) else {
                     continue;
                 };
+                // #1636: a builder whose pieces name its branches (a tree's capsule chains) enters
+                // as one solid per branch, `<item>#<branch>`, with the joints at its forks.
+                let pieces = deep_canvas_scene3d::shapes::pieces(id, &mesh, m);
+                if !pieces.is_empty() {
+                    out.extend(pieces.into_iter().map(|(piece, shapes, joints)| Solid {
+                        id: piece,
+                        shapes,
+                        ends: Vec::new(),
+                        moved: moved.contains(id),
+                        seat: None,
+                        part_of: Some(PartOf {
+                            item: id.clone(),
+                            joints,
+                        }),
+                    }));
+                    continue;
+                }
                 let numbers = mesh
                     .positions
                     .iter()
@@ -275,6 +294,7 @@ pub(crate) fn solids_at(
             ends,
             moved: moved.contains(id),
             seat: Some(seat),
+            part_of: None,
         });
     }
     Ok(out)

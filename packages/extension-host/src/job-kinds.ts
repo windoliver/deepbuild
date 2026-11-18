@@ -15,17 +15,19 @@ export interface JobKind {
   outputs: Record<string, { media?: string }>;
   key: string[];
   output_checks: string[];
-  qualification: { fixtures: JobFixture[] };
+  /** `core` (#518) names the canvas core's call that qualifies a tool of a kind whose input arrives while it runs, as `encode`'s does. */
+  qualification: { fixtures: JobFixture[]; core?: string };
 }
 /** A weight file an open model's tool runs, by its name on the host and its hash (#1924). */
 export interface Weight { name: string; sha256: string }
 /**
  * A tool runs as its own files (`run {dir, entry}`), or off the machine at a URL on the one host its manifest names
  * (`run {url}`, #1924); one that runs an open model there declares its weight files by hash and the capabilities its
- * call needs, which the host reports before each call.
+ * call needs, which the host reports before each call. A tool of the build's own canvas core (`run {core: true}`,
+ * #518), as today's encoders are, has no files here: the core runs it.
  */
 export interface JobTool {
-  tool: string; params: Schema; run: { dir: string; entry: string } | { url: string }; qualification: unknown; cost?: { usd: number };
+  tool: string; params: Schema; run: { dir: string; entry: string } | { url: string } | { core: true }; qualification: unknown; cost?: { usd: number };
   weights?: Weight[]; needs?: string[];
 }
 /**
@@ -116,7 +118,9 @@ export function kindOf(kind: string, raw: unknown): JobKind {
   if (!isPlain(k.outputs) || !Object.keys(k.outputs).length) throw Error(`the job kind ${kind} declares no outputs`);
   if (!Array.isArray(k.key) || KEY_PARTS.some((p) => !k.key!.includes(p)) || k.key.some((p) => !KEY_PARTS.includes(p))) throw Error(`the job kind ${kind}'s key is hash(tool@version, params, input hashes): its key lists tool, params and inputs`);
   if (!Array.isArray(k.output_checks) || !k.output_checks.every((c) => typeof c === 'string' && c)) throw Error(`the job kind ${kind} lists its output checks by check kind`);
-  if (!fixtures.length) throw Error(`the job kind ${kind} declares no qualification fixtures`);
+  const core = isPlain(k.qualification) ? k.qualification.core : undefined;
+  if (core !== undefined && (typeof core !== 'string' || !core)) throw Error(`the job kind ${kind}'s qualification.core names the canvas core's call that qualifies a tool`);
+  if (!fixtures.length && core === undefined) throw Error(`the job kind ${kind} declares no qualification fixtures`);
   for (const f of fixtures as Partial<JobFixture>[]) {
     if (!isPlain(f) || typeof f.name !== 'string' || !texts(f.inputs) || !texts(f.expect)) throw Error(`the job kind ${kind}'s qualification fixture ${JSON.stringify((f as { name?: unknown })?.name)} names no inputs and expected outputs as text`);
     try {
@@ -125,7 +129,7 @@ export function kindOf(kind: string, raw: unknown): JobKind {
       throw Error(`the job kind ${kind}'s qualification fixture ${f.name}: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
-  return plain(k) as unknown as JobKind;
+  return plain({ ...k, qualification: { ...k.qualification, fixtures } }) as unknown as JobKind;
 }
 
 /**
@@ -135,8 +139,10 @@ export function kindOf(kind: string, raw: unknown): JobKind {
 export function toolOf(kind: string, raw: unknown, folder: string, host?: string): JobTool {
   const t = (isPlain(raw) ? raw : {}) as Partial<JobTool>;
   if (typeof t.tool !== 'string' || !TOOL.test(t.tool)) throw Error(`a tool of ${kind} is pinned by name@version, not ${JSON.stringify(t.tool)}`);
-  const run = (isPlain(t.run) ? t.run : {}) as { dir?: unknown; entry?: unknown; url?: unknown };
-  if (run.url !== undefined || host !== undefined) {
+  const run = (isPlain(t.run) ? t.run : {}) as { dir?: unknown; entry?: unknown; url?: unknown; core?: unknown };
+  if (run.core === true && run.url === undefined && host === undefined) {
+    if (run.dir !== undefined || run.entry !== undefined || t.weights !== undefined || t.needs !== undefined) throw Error(`${t.tool} runs in the canvas core (run {core: true}), so it names no files, weights or needs`);
+  } else if (run.url !== undefined || host !== undefined) {
     let url: URL | undefined;
     try { url = new URL(String(run.url)); } catch { /* not a URL */ }
     // Over https, or plain http on loopback only, as a model's call is made.

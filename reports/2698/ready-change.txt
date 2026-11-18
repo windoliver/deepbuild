@@ -1,0 +1,2 @@
+{"bench":"hub","mode":"start-to-ready","readyMs":10037.680208,"instructions":4107398017}
+exit=0

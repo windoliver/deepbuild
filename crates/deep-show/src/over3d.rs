@@ -101,7 +101,10 @@ impl Hub<'_> {
         let (mut rgba, scene) = self.painted3d(doc, t, size)?;
         let shown = crate::shared::drawable(doc);
         let overlays = deep_canvas_scene3d::views::framed(doc);
-        let inside: BTreeSet<String> = overlays.iter().flat_map(|f| f.items.iter().cloned()).collect();
+        let inside: BTreeSet<String> = overlays
+            .iter()
+            .flat_map(|f| f.items.iter().cloned())
+            .collect();
         let record = self.record();
         let mut layer = |this: &mut Hub<'_>, mut drawn: Drawn, view: Option<Affine>| {
             drawn.view = view;
@@ -111,8 +114,14 @@ impl Hub<'_> {
         let prepare = |this: &mut Hub<'_>, part: &Value| -> Result<Drawn, Unfit> {
             let map: &Map<String, Value> = part.as_object().expect("a document is an object");
             let look = &this.look;
-            this.renderer
-                .prepare(map, t, &look.light, look.status.as_ref(), &record, &this.scenario.evidence)
+            this.renderer.prepare(
+                map,
+                t,
+                &look.light,
+                look.status.as_ref(),
+                &record,
+                &this.scenario.evidence,
+            )
         };
         let base = match drawing {
             Some(d) => {
@@ -134,7 +143,12 @@ impl Hub<'_> {
         };
         layer(self, base, None);
         for f in &overlays {
-            let Some(origin) = scene.overlays.iter().find(|o| o.id == f.overlay).and_then(|o| o.origin) else {
+            let Some(origin) = scene
+                .overlays
+                .iter()
+                .find(|o| o.id == f.overlay)
+                .and_then(|o| o.origin)
+            else {
                 continue;
             };
             let shift = Affine::translate((origin[0] - f.corner[0], origin[1] - f.corner[1]));
@@ -144,8 +158,11 @@ impl Hub<'_> {
         // Each view overlay: the document again from its camera, one level deep.
         let look = deep_canvas_scene3d::look::Look3::from_roles(self.look.light.clone());
         let [w, h] = size.map(u32::from);
-        let placed = deep_canvas_scene3d::views::placed(doc, [w, h], Some(&look))
-            .map_err(|r| Unfit { code: r.code, path: r.path })?;
+        let placed =
+            deep_canvas_scene3d::views::placed(doc, [w, h], Some(&look)).map_err(|r| Unfit {
+                code: r.code,
+                path: r.path,
+            })?;
         for p in placed {
             let mut sub = deep_canvas_scene3d::views::document(doc, &p);
             sub["size"] = json!([p.rect[2], p.rect[3]]);
@@ -159,7 +176,12 @@ impl Hub<'_> {
 
     /// The view of `doc` at `t`, a 3D document, as [`Hub::frame3d`] draws it; `None` without a
     /// GPU.
-    pub(crate) fn view3d(&mut self, doc: &Value, t: i64) -> Result<Option<(Vec<u8>, [u16; 2])>, Value> {
+    #[allow(clippy::type_complexity)]
+    pub(crate) fn view3d(
+        &mut self,
+        doc: &Value,
+        t: i64,
+    ) -> Result<Option<(Vec<u8>, [u16; 2])>, Value> {
         let size = snapshot::px([0, 1].map(|i| doc["size"][i].as_f64().unwrap_or(1.0)));
         match self.frame3d(doc, t, size, None) {
             Ok(rgba) => Ok(Some((rgba, size))),

@@ -1,0 +1,47 @@
+The redrafted criterion 1 test (README-ruling.md) on the merge base fcd8c3852, run 2026-11-14 on an aarch64 Linux
+machine at load average ~70 with Node 24.22.0, from a scratch copy: the base's scripts/, packages/contracts/ with its
+built dist/, the root's files and this folder, without any scripts/not-event-kinds.txt.
+
+  node --test tests/acceptance/2063/ac1-recorded-tracker-ruled.test.mjs
+
+Trimmed to the result and the failure reason. Local paths are redacted as <checkout>, and the node binary's path as
+node. Timings under this load are not evidence.
+
+ℹ tests 1
+ℹ pass 0
+ℹ fail 1
+
+test at tests/acceptance/2063/ac1-recorded-tracker-ruled.test.mjs:20:1
+✖ #2063.1fc4ef66 criterion 1 (on the ruling that brief.uncited is an event kind): on the recorded tracker copy the lane fails with an empty list, naming the five names with their issues; with the 
+day's list, which holds every other recorded name that is no event kind and not brief.uncited, it names no listed name, and it passes if the catalogue holds brief.uncited, else fails naming 
+brief.uncited and #1193 alone (3150.028988ms)
+  AssertionError [ERR_ASSERTION]: with the day's list the lane still names layer.puffs, which the list holds beside #2142:
+  LANE catalogue drift
+  RUN catalogue drift
+  scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `node scripts/catalogue-drift.mjs` runs unleased
+  FAIL 17 event kinds named in backticks are not in the catalogue: layer.puffs (#2142), job.status (#2136), lease.gpu (#2133), user.pan (#2056), archive.scene (#2036), plan.overlay (#1261), 
+plan.sheet (#1260), plan.overlay (#1260), brief.uncited (#1193), process.conserve (#983), process.busy (#983), process.little (#983), process.conserve (#980), process.busy (#980), process.little 
+(#980), stack.slot (#335), move.feel (#274)
+  FAIL catalogue drift: 17 event kinds named in backticks are not in the catalogue: layer.puffs (#2142), job.status (#2136), lease.gpu (#2133), user.pan (#2056), archive.scene (#2036), plan.overlay 
+(#1261), plan.sheet (#1260), plan.overlay (#1260), brief.uncited (#1193), process.conserve (#983), process.busy (#983), process.little (#983), process.conserve (#980), process.busy (#980), 
+process.little (#980), stack.slot (#335), move.feel (#274)
+    Fix: Add each kind named above to the catalogue with its schema, or write the name so it does not read as an event kind; offline, run again with network and gh signed in.
+    Elapsed: 0.97 s
+  + 'FAIL 17 event kinds named in backticks are not in the catalogue: layer.puffs (#2142), job.status (#2136), lease.gpu (#2133), user.pan (#2056), archive.scene (#2036), plan.overlay (#1261), 
+plan.sheet (#1260), plan.overlay (#1260), brief.uncited (#1193), process.conserve (#983), process.busy (#983), process.little (#983), process.conserve (#980), process.busy (#980), process.little 
+(#980), stack.slot (#335), move.feel (#274)'
+  - undefined
+
+It fails at its own assertion, after its "before" half and the list's checks held. With the day's list, the base's
+lane still reads every listed name as an event kind, because it reads no list.
+
+Other programs, each in its own scratch copy of the base, running this test alone:
+
+| Program | Result |
+|---|---|
+| The blind job's throwaway fix (the lane in twins/ without a fault) | passes: FAIL naming brief.uncited (#1193) alone, since the base's catalogue lacks it |
+| The throwaway fix with the frozen list (brief.uncited #1193 among its entries) | fails at "the recorded list holds brief.uncited, which the owner ruled an event kind" |
+| twins/passes-any-name-once-listed | fails at "brief.uncited is an event kind the catalogue lacks, so with the day's list the lane's verdict on the recorded tracker is FAIL" |
+
+In the worktree (the change, with packages/contracts/dist built, whose catalogue lacks brief.uncited), the test was
+run once and passed: the lane failed naming brief.uncited and #1193 and no listed name.

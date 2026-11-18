@@ -99,6 +99,8 @@ export type Plant =
   | 'ended-answer-to-worktree' | 'ended-answer-at-next-prompt'
   // #321's: a proceed that covers its turn's calls, holds for synced servers only, and holds filed as approving choices.
   | 'proceed-covers-turn' | 'holds-synced-only' | 'hold-as-choice'
+  // #1836's: a proceed's turn that a subagent's stop ends.
+  | 'proceed-ends-at-child-stop'
   // #23's: the agent's "always allow" picked, typed words saved as a decision, a
   // decision over the permission mode or before the guards, a rule's answer without its reason, and no rule copied.
   | 'permission-always-allow' | 'typed-saves-decision' | 'decision-over-mode' | 'decision-before-guard'
@@ -232,6 +234,9 @@ export type Plant =
   // #1018's: runs keyed by session too, a key without the files runs read, a shared run counted once per claim that
   // reads it, a store of the newest result per key, and a carry that copies the source run's evidence whole.
   | 'keys-runs-by-session' | 'key-leaves-out-reads' | 'counts-shared-run-per-claim' | 'keeps-latest-result-per-key' | 'carry-copies-evidence'
+  // #2652's: a runner that keeps the first 2,000 characters a run printed in place of the last, and one that gives a
+  // later kept run an earlier one's list of read paths, then changes it for the earlier run.
+  | 'keeps-output-head' | 'shares-read-across-runs'
   // #41's: a hub that opens a record a newer version wrote for writing, as if it could read every kind in it.
   | 'append-unknown-kind'
   // #41's soak: a hub that opens one file each session it ends and never closes it.
@@ -282,6 +287,9 @@ export type Plant =
   | 'status-lists-every-ask'
   // #1577's: a request ID marked in progress where the mark outlives the hub, and an undo applied past a newer change.
   | 'pending-across-restart' | 'applies-stale-undo'
+  // #2646's: a state pass that leaves out each session whose promise fell due, and an asks core whose reads of the log
+  // leave tool.before out of their kinds.
+  | 'pass-skips-due-promise' | 'state-pass-skips-due-promise' | 'asks-without-tool-before'
   // #2655's: a server that hands its parser a view of the socket's chunk in place of the line's own bytes.
   | 'hands-over-socket-chunk';
 const PLANTS: readonly string[] = [
@@ -310,7 +318,7 @@ const PLANTS: readonly string[] = [
   'waiter-never-wakes', 'waiter-outlives-session', 'waiter-gives-up-at-600s', 'waiter-per-stop', 'waiter-under-stop-only', 'waiter-polls', 'waiter-checks-every-5s',
   'delivered-on-waiter-exit', 'wake-assumed', 'delivered-to-dead-waiter', 'routes-from-settings', 'routes-kept-across-sessions',
   'ended-answer-to-worktree', 'ended-answer-at-next-prompt',
-  'proceed-covers-turn', 'holds-synced-only', 'hold-as-choice',
+  'proceed-covers-turn', 'holds-synced-only', 'hold-as-choice', 'proceed-ends-at-child-stop',
   'permission-always-allow', 'typed-saves-decision', 'decision-over-mode', 'decision-before-guard',
   'rule-without-reason', 'copies-no-standing-rules',
   'status-omits-commit', 'doctor-misses-hooks', 'on-stays-off',
@@ -367,6 +375,7 @@ const PLANTS: readonly string[] = [
   'proceed-unrecorded', 'keys-ask-from-words', 'sends-back-held-stop', 'holds-every-ask', 'proceed-alone', 'sends-back-no-tool', 'records-switch-only', 'link-from-agent-url',
   'trusts-channel-proof', 'last-writer-wins', 'live-buttons-after-answer', 'closes-on-failed-send', 'takes-turns-at-token', 'reconnects-every-channel', 'buttons-for-authority', 'keeps-unpaired-key',
   'keys-runs-by-session', 'key-leaves-out-reads', 'counts-shared-run-per-claim', 'keeps-latest-result-per-key', 'carry-copies-evidence',
+  'keeps-output-head', 'shares-read-across-runs',
   'append-unknown-kind', 'leak-file-per-session',
   'starts-without-approval', 'starts-without-sandbox', 'sandbox-way-out-open', 'sandbox-cuts-hub-socket',
   'rule-reads-context-alone', 'agent-credential-merges', 'agent-credential-pushes-default-branch', 'agent-credential-pushes-approved-tags',
@@ -393,6 +402,7 @@ const PLANTS: readonly string[] = [
   'parser-pool-messages-only', 'parser-pool-leaves-line-waiting',
   'status-lists-every-ask',
   'pending-across-restart', 'applies-stale-undo',
+  'pass-skips-due-promise', 'state-pass-skips-due-promise', 'asks-without-tool-before',
   'hands-over-socket-chunk',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {

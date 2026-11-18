@@ -1,0 +1,83 @@
+{
+ "id": "look-182-demo",
+ "format": 1,
+ "basis": "physical",
+ "license": "Apache-2.0",
+ "description": "A #182 demo look.",
+ "palette": {
+  "night": "#101114",
+  "graphite": "#1b1d22",
+  "slate": "#5d6470",
+  "stone": "#c9ced6",
+  "sand": "#f0a64a",
+  "teal": "#3fb6b2"
+ },
+ "roles": {
+  "ground": "night",
+  "ink": "graphite",
+  "muted": "slate",
+  "stone": "stone",
+  "sand": "sand",
+  "accent": "teal"
+ },
+ "themes": {
+  "light": {},
+  "dark": {}
+ },
+ "fonts": {
+  "body": {
+   "family": "Inter",
+   "file": "Inter-Regular.ttf",
+   "license": "OFL-1.1",
+   "embed": true,
+   "single_line": false
+  },
+  "mono": {
+   "family": "JetBrains Mono",
+   "file": "JetBrainsMono-Regular.ttf",
+   "license": "OFL-1.1",
+   "embed": true,
+   "single_line": false
+  }
+ },
+ "tone_map": "none",
+ "exposure": -0.2630344058337938,
+ "finish": [],
+ "deband": "none",
+ "bloom": "none",
+ "ground_3d": {
+  "kind": "none"
+ },
+ "status": {
+  "pass": "#007429",
+  "fail": "#bf232b",
+  "invalid": "#8645b0",
+  "blocked": "#a44700",
+  "inconclusive": "#666600",
+  "running": "#0063b8",
+  "needs_you": "#8a5900",
+  "stale": "#326c6f",
+  "idle": "#636464"
+ },
+ "status_treatment": {
+  "core_min_px": 4,
+  "glyph": {
+   "pass": "✓",
+   "fail": "✗",
+   "invalid": "⊘",
+   "blocked": "■",
+   "inconclusive": "?",
+   "running": "↻",
+   "needs_you": "!",
+   "stale": "◇",
+   "idle": "○"
+  }
+ },
+ "min_distance": 0.1,
+ "attention_treatment": {
+  "line": "dashed",
+  "role": "ink",
+  "glyph": "⚠"
+ },
+ "legend": "auto"
+}

@@ -1,0 +1,45 @@
+# #1836: r8's 15 lint-lane sources (NEW FAIL in affected-r8-summary.txt), counted at the head against main f7d661d67.
+# 2026-11-17. Each scripts/ command of the lint check (scripts/lanes.mjs), run as affected.mjs runs it, its output
+# read by affected.mjs's own lintFindings. Head: this worktree at 5b3d84910. Main: a clean detached worktree at
+# f7d661d67 after `npm ci` and `npm run build --workspaces`, as the head has. Capped unit (MemoryMax=24G, CARGO_BUILD_JOBS=2).
+#
+# Which lane prints which r8 source: repo-rules (deps, secrets, size), vendor-rebase (vendor/... files, row #177),
+# canvas-lint, size-ratchet (size literal), conformance-lint (code mappings, slot kit environment@1), slots-check
+# (slots), canvas-closures (drift), record-reader-guard (record reader), color-literal-guard (color literal).
+#
+# Per lane: exit at head/main, findings at head/main, then every finding key whose count differs.
+lane | exit head/main | findings head/main
+scripts/repo-rules.mjs | 1/1 | 58/58
+scripts/vendor-rebase.mjs | 1/1 | 19/19
+scripts/canvas-lint.mjs | 1/1 | 54/54
+scripts/size-ratchet.mjs | 1/1 | 62/62
+scripts/conformance-lint.mjs | 1/1 | 25/25
+scripts/slots-check.mjs | 1/1 | 1/1
+scripts/canvas-closures.mjs | 1/1 | 1/1
+scripts/record-reader-guard.mjs | 1/1 | 1/1
+scripts/render-lint.mjs | 0/0 | 0/0
+scripts/plant-lint.mjs | 0/0 | 0/0
+scripts/loads-lint.mjs | 0/0 | 0/0
+scripts/blocking-call-guard.mjs | 0/0 | 0/0
+scripts/keymap-guard.mjs | 0/0 | 0/0
+scripts/color-literal-guard.mjs | 1/1 | 8/6
+  DIFF head 1 main 0: FAIL color literal: crates/deep-app/panels/claude-code/@deepbuild/panel.js: `if (at === s.hi) item = item.bg("#e7e5e4");` names a color; use the look's role divider (crates/deep-canvas-marks/looks/clean.json): read it from crate::chrome (a panel script: the theme's color.*), or end the line with // color-literal-exception: <reason>; review <YYYY-MM-DD>
+  DIFF head 1 main 0: FAIL color literal: crates/deep-app/panels/codex/@deepbuild/panel.js: `if (at === s.hi) item = item.bg("#e7e5e4");` names a color; use the look's role divider (crates/deep-canvas-marks/looks/clean.json): read it from crate::chrome (a panel script: the theme's color.*), or end the line with // color-literal-exception: <reason>; review <YYYY-MM-DD>
+scripts/guide.mjs | 0/0 | 0/0
+scripts/panel-catalog.mjs | 0/0 | 0/0
+scripts/known-failures-check.mjs | 0/1 | 0/3
+scripts/fetch-lock.mjs | 0/0 | 0/0
+
+finding keys with more at head than on main: 2
+
+# known-failures-check differs only by 3 INCONCLUSIVE lines on main's side: GitHub reads that timed out (TLS
+# handshake), not findings. canvas-closures runs twice (closures, drift); the table keeps the second, which matches.
+#
+# The two color-literal findings at the head are in crates/deep-app/panels/{claude-code,codex}/@deepbuild/panel.js:
+# gitignored copies the app writes from the tracked crates/deep-app/panel-menu.js when it serves a panel (deep-app's
+# panel_module.rs), left in this worktree by a deep-app test on 2026-11-15. The bare main tree has none. This PR
+# changes neither panel-menu.js, the panels nor the guard (git diff f7d661d67 HEAD: empty). With the same two
+# files copied into the main tree, main's color-literal-guard prints the same 8 findings as the head, line for line.
+#
+# So every lint finding r8 called NEW is on main too, at the same count. They are new against
+# scripts/known-failures.json, which main has outgrown, not against main.

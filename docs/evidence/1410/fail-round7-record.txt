@@ -1,0 +1,69 @@
+== record tests at the round 7 test file, against 04a92ef9's packages/record/src/index.ts
+
+ RUN  v5.0.5 ~/deepbuild/.claude/worktrees/issue-1410-77182b/packages/record
+
+ ❯ test/record.test.ts (80 tests | 2 failed | 73 skipped) 1520ms
+   ❯ a FULL commit syncs the evidence its data names beside its own list (#1410) (3)
+     × an answer given as a screenshot names its image, and the page it approved, and it is synced before the commit 68ms
+     × a workspace's reading names the bytes it read, and it is synced before the commit 53ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/record.test.ts > a FULL commit syncs the evidence its data names beside its own list (#1410) > an answer given as a screenshot names its image, and the page it approved, and it is synced before the commit
+AssertionError: one sync naming every file the data names, done with the event not yet in the log: expected [ { …(2) } ] to deeply equal [ { named: [ …(2) ], committed: 1 } ]
+
+- Expected
++ Received
+
+  [
+    {
+      "committed": 1,
+      "named": [
+        "6c043a95dd43f123ccc16ed42802fff8fa70fd20b0c49f77c814a44a1e2f3549",
+-       "ef98b1fc1606094e901758456a6d008768b397b23f887d075ef64f1466247915",
+      ],
+    },
+  ]
+
+ ❯ test/record.test.ts:1197:103
+    1195|     await r.append(hook(S), event('session.start', T0 - 1000, undefine…
+    1196|     await r.append(core(S), input);
+    1197|     expect(seen, 'one sync naming every file the data names, done with…
+       |                                                                                                       ^
+    1198|   });
+    1199| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  test/record.test.ts > a FULL commit syncs the evidence its data names beside its own list (#1410) > a workspace's reading names the bytes it read, and it is synced before the commit
+AssertionError: one sync naming every file the data names, done with the event not yet in the log: expected [] to deeply equal [ { …(2) } ]
+
+- Expected
++ Received
+
+- [
+-   {
+-     "committed": 1,
+-     "named": [
+-       "a358d490c17fed3f0a3b0bef7d951a30afe48b442f2ac8b30eb43493c0a8ff5e",
+-     ],
+-   },
+- ]
++ []
+
+ ❯ test/record.test.ts:1197:103
+    1195|     await r.append(hook(S), event('session.start', T0 - 1000, undefine…
+    1196|     await r.append(core(S), input);
+    1197|     expect(seen, 'one sync naming every file the data names, done with…
+       |                                                                                                       ^
+    1198|   });
+    1199| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 5 passed | 73 skipped (80)
+   Start at  00:05:55
+   Duration  1.95s (tests 88%, import 8%, transform 4%)
+

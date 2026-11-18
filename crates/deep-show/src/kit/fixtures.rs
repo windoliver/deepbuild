@@ -57,8 +57,8 @@ fn lowered_of(hub: &Hub<'_>, doc: &Value, item: &str) -> Value {
     })
 }
 
-/// The document with the sidecar's twin applied: `{path, value}` at `items/<id>/...`.
-fn twinned(doc: &Value, twin: &Value) -> Option<Value> {
+/// The document with a twin applied: `{path, value}` at `items/<id>/...`.
+pub(super) fn twinned(doc: &Value, twin: &Value) -> Option<Value> {
     let path = twin["path"].as_str()?;
     let mut out = doc.clone();
     let parts: Vec<&str> = path.split('/').collect();

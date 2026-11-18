@@ -1,0 +1,14 @@
+{
+  "issue": 457,
+  "criterion": "#457.08351b79",
+  "verdict": "looks_right",
+  "who": "Claude, on the owner's delegation (\"validate for me\", Nov 15)",
+  "when": "2026-11-16T05:16:51Z",
+  "screenshots": {
+    "castle-before.png": "5d031dc86fcd0671287619213ad07b72bf7643313b3b313cf5c046ed4cb68ca0",
+    "castle-after.png": "ef3e861fb8879c181fbd749139d65fc0e0ac6277913ea50c9f725e1e1f8eb691",
+    "piston-cutaway-on.png": "06694a2ade311c79ad553b74ce5c3630bd8e19bca200e7c7120703806cb1223f",
+    "piston-cutaway-off.png": "8dd2412efda525e5293717ab5c16c86266a4d7bc75139029c1fd6b0d37beb534"
+  },
+  "note": "castle-before: the market stall hides the tower below the eye height; castle-after: camera.framing's elevation step raises the camera so more of the tower clears the stall; piston-cutaway-on: the half-section opens the casing to show the piston and the crank with the valve in front of it; piston-cutaway-off: the closed casing hides both."
+}

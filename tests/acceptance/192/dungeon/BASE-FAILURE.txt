@@ -1,0 +1,98 @@
+# One run of tests/acceptance/192/dungeon at the base, 06e231702 ("Merge pull request #2735 …"), with these files in
+# place, on this Mac (macOS arm64), Nov 16 2026. deep-show `full,test-mesh-item` was built at the base under the
+# machine's build throttle (its queue held the slot for hours; the first request timed out after 120 minutes, the
+# second got it). The run itself went through scripts/lease, which ran it unleased (no hub token here), and not through
+# the test throttle, whose queue was then hours long; it ran three short deep-show scenarios, 15 seconds in all.
+#
+# 3 of 3 fail, each at its first check of a surface the base lacks, before any Linux leg:
+#   ac05: the base refuses a provider use among a logic item's assets ("assets is a list of asset IDs").
+#   ac07: the base ignores mesh_in, so the voxelizer gets no mesh and writes an empty one (its bounds aren't finite).
+#   ac08: the base runs no equality fixture, so the pack with the planted library form installs.
+# Home paths are redacted as <checkout>.
+
+deep lease: DeepBuild isn't set up here (no hub token), so `npx vitest run --root tests/acceptance/192/dungeon --testTimeout=600000 --no-file-parallelism` runs unleased
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/192/dungeon
+
+ ❯ ac07-mesh-in.test.ts (1 test | 1 failed) 6265ms
+   ❯ #192.f3c60337 mesh_in: another item's built mesh by its content key, and what a provider may not take or link (1)
+     × #192.f3c60337 a voxelizer meshes a builder's output at check, its key and output following the builder's params and kept by a revision that leaves them; a logic-fed instancer and a library with fixtures unrun refused, each named 6244ms
+ ❯ ac05-tile-graph.test.ts (1 test | 1 failed) 4191ms
+   ❯ #192.59d34e71 the dungeon provider's tile graph as a data asset (1)
+     × #192.59d34e71 a 40 × 40 floor's tile graph from the seed: read by a logic item at step 0, the same bytes on macOS arm64 and Linux x86_64, another seed's other bytes under another key 4176ms
+ ❯ ac08-library-form.test.ts (1 test | 1 failed) 4046ms
+   ❯ #192.b641f8a3 the library form: floor 40 in play equals floor 40 at check (1)
+     × #192.b641f8a3 floor 40 made in play by a logic item sliced across steps has the provider's bytes; a library form seeding from the step fails the pack's equality fixture, naming the provider and the first byte that differs 4031ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac05-tile-graph.test.ts > #192.59d34e71 the dungeon provider's tile graph as a data asset > #192.59d34e71 a 40 × 40 floor's tile graph from the seed: read by a logic item at step 0, the same bytes on macOS arm64 and Linux x86_64, another seed's other bytes under another key
+AssertionError: the board of seed A raises no error at check: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "{\"check\":\"document.validate\",\"code\":\"logic_refused\",\"severity\":\"error\",\"ids\":[\"reader\"],\"path\":\"items/reader/params\",\"actual\":{\"ok\":false,\"code\":\"logic_refused\",\"item\":\"reader\",\"refusals\":[{\"rule\":\"field\",\"what\":\"assets is a list of asset IDs\",\"field\":\"assets\"}]},\"what\":\"the logic module refuses this logic item\",\"fix\":\"See the issue.\"}",
++   "{\"check\":\"document.validate\",\"code\":\"out_of_range\",\"severity\":\"error\",\"ids\":[\"reader\"],\"path\":\"items/reader/params/assets\",\"actual\":[{\"gen\":\"dungeon.floor\",\"params\":{\"floor\":1,\"height\":40,\"width\":40}}],\"what\":\"assets takes a list of a string (asset ID); got an object with gen, params at 0\",\"fix\":\"Write assets as [asset ID]: a list of a string (asset ID).\",\"forms\":[\"[asset ID]\"]}",
++ ]
+
+ ❯ presented helpers.ts:302:98
+    300| /** A deep_show that presented its document with no error; the message…
+    301| export function presented(reply: JsonObject, what: string): void {
+    302|   expect(errorsOf(reply, what).map((i) => show(i.raw, 600)), `${what} …
+       |                                                                                                  ^
+    303|   expect(reply['outcome'], `${what} is presented: ${show(reply, 2000)}…
+    304| }
+ ❯ ac05-tile-graph.test.ts:74:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  ac07-mesh-in.test.ts > #192.f3c60337 mesh_in: another item's built mesh by its content key, and what a provider may not take or link > #192.f3c60337 a voxelizer meshes a builder's output at check, its key and output following the builder's params and kept by a revision that leaves them; a logic-fed instancer and a library with fixtures unrun refused, each named
+AssertionError: revision 1: vox: bounds[0][0] is a finite number, got null: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ num helpers.ts:60:101
+     58| }
+     59| export function num(v: JsonValue | undefined, what: string): number {
+     60|   expect(typeof v === 'number' && Number.isFinite(v), `${what} is a fi…
+       |                                                                                                     ^
+     61|   return v as number;
+     62| }
+ ❯ helpers.ts:323:131
+ ❯ helpers.ts:323:117
+ ❯ triples helpers.ts:323:82
+ ❯ meshOf helpers.ts:326:109
+ ❯ ac07-mesh-in.test.ts:83:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  ac08-library-form.test.ts > #192.b641f8a3 the library form: floor 40 in play equals floor 40 at check > #192.b641f8a3 floor 40 made in play by a logic item sliced across steps has the provider's bytes; a library form seeding from the step fails the pack's equality fixture, naming the provider and the first byte that differs
+AssertionError: test/dungeonplant@1.0.0, whose library form seeds from the step, fails its equality fixture: {"outcome":"installed","pack":"test/dungeonplant","version":"1.0.0","issues":[],"layouts":[{"name":"dungeonplant.tiles@1","state":"admitted","twins":[{"asset":"000e1f6cd1e9cd3ebd4cc77ae33d0b9bbcb70fa409c4c66efe3de4eff3ee0c48","valid":false,"offset":32}]}],"core":"core@0.0.0","set_digest":"6a8ada322b08bff799fe7ad04aa1dfe09f37faeb5e72621e9813a634268efce3"}: expected 'installed' to be 'refused' // Object.is equality
+
+Expected: "refused"
+Received: "installed"
+
+ ❯ ac08-library-form.test.ts:71:146
+     69|
+     70|     // The planted library form: refused at install by the equality fi…
+     71|     expect(r[1]!['outcome'], `test/dungeonplant@1.0.0, whose library f…
+       |                                                                                                                                                  ^
+     72|     const naming = issuesOf(r[1]!, 'test/dungeonplant@1.0.0').filter((…
+     73|     expect(naming.length, `test/dungeonplant@1.0.0's refusal names the…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  3 failed (3)
+   Start at  23:09:36
+   Duration  15.04s (tests 99%, transform 1%)
+
+exit=1

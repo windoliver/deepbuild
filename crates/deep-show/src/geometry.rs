@@ -606,12 +606,23 @@ impl Hub<'_> {
                         .get_mut("outputs")
                         .and_then(Value::as_object_mut)
                         .and_then(|o| o.remove("grid_lines"));
+                    // #1636: a tree's branches, forks and leaf cards stand on the row.
+                    let tree: Vec<(&str, Value)> = ["branches", "forks", "cards"]
+                        .into_iter()
+                        .filter_map(|k| {
+                            let v = mj.get_mut("outputs")?.as_object_mut()?.remove(k)?;
+                            Some((k, v))
+                        })
+                        .collect();
                     r.extend(mj);
                     if let Some(rings) = rings {
                         r.insert("rings".into(), rings);
                     }
                     if let Some(grid) = grid {
                         r.insert("grid_lines".into(), grid);
+                    }
+                    for (k, v) in tree {
+                        r.insert(k.into(), v);
                     }
                     // #224: its colors in OKLab, through the document's look's roles.
                     let params = items

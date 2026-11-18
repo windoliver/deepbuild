@@ -1,0 +1,13 @@
+# Criterion 1: the maintainers' private list against scripts/studied-names.json, 2026-11-15, macOS arm64, from the repo
+# root: node scripts/studied-names.mjs <private list>. The list stays outside the repo: 308 names, and 167 plain words
+# marked `plain:`, which are never listed. The script prints counts and line numbers, never a name.
+== 1. the base's list (031292bf1, 106 hashes): this change's script, run beside it in a scratch folder
+FAIL 287 of 308 names on the private list hash to no entry of scripts/studied-names.json: line 5, line 6, line 7, line 8, line 9, line 10, line 11, line 12, … (287 line numbers in all; cut here)
+exit=1
+== 2. this change's list (392 hashes, the same salt: the base's 106, less the one #2596 took out on main, and 287 added)
+studied names: all 308 names on the private list hash to an entry of scripts/studied-names.json; 167 plain words left out
+exit=0
+== 3. the blind live test on the same list (DEEP_STUDIED_NAMES_LIST set; it withholds any output line that shares a word with the list)
+✔ #2405.94f76478 AC1 (live): every name on the maintainers' private list that isn't a plain word hashes to an entry of scripts/studied-names.json, and the script, run on that list, exits 0, prints that count and no name (170691.695708ms)
+ℹ node scripts/studied-names.mjs <private list>, exit 0:
+studied names: all 308 names on the private list hash to an entry of scripts/studied-names.json; 167 plain words left out
