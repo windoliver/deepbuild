@@ -302,11 +302,23 @@ impl Core {
             .iter()
             .map(|(id, b)| {
                 let kind = &document["items"][id]["kind"];
-                let value = match page.texts.iter().find(|t| &t.item == id) {
-                    Some(t) => json!({"kind": kind, "text": t.source}),
-                    None => json!({"kind": kind}),
+                // A text's box holds every line it draws.
+                let (value, b) = match page.texts.iter().find(|t| &t.item == id) {
+                    Some(t) => {
+                        let r = t.rect;
+                        let (x0, y0) = (b[0].min(r[0]), b[1].min(r[1]));
+                        let (x1, y1) = (
+                            (b[0] + b[2]).max(r[0] + r[2]),
+                            (b[1] + b[3]).max(r[1] + r[3]),
+                        );
+                        (
+                            json!({"kind": kind, "text": t.source}),
+                            [x0, y0, x1 - x0, y1 - y0],
+                        )
+                    }
+                    None => (json!({"kind": kind}), *b),
                 };
-                json!({"id": id, "value": value, "box": page.to_px(*b)})
+                json!({"id": id, "value": value, "box": page.to_px(b)})
             })
             .collect();
         Ok(json!({
