@@ -1,0 +1,11 @@
+✔ AC1 #2655 the main thread loads no module of @deepbuild/evidence and none of @deepbuild/contracts but the one it names (2038.41225ms)
+ℹ change, main thread 0: evidence []; contracts [packages/contracts/dist/json.js]
+ℹ merge base, main thread 0: evidence []; contracts [packages/contracts/dist/runtime.js, packages/contracts/dist/json.js, packages/contracts/dist/errors.js, packages/contracts/dist/validate.js, packages/contracts/dist/canonical.js, packages/contracts/dist/schemas.js, packages/contracts/dist/lifecycle.js]
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2096.749917

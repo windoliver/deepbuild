@@ -50,9 +50,8 @@ import { continueLine, fit, type Part } from './context-fit.js';
 
 import { briefing, headOf, loadsOf } from './session-facts.js';
 
-import { GateRunner } from './gate-runner.js';
+import { GateRunner, type KeptRow } from './gate-runner.js';
 import { Siblings } from './siblings.js';
-import type { KeyFacts } from './shared-runs.js';
 import { groupUnder } from './children.js';
 import { deepHook, repoOf, rootOf, type Root } from './paths.js';
 import { OWNER, People, scopeOf } from './people.js';
@@ -262,6 +261,8 @@ export class Core {
   private chain: Promise<unknown> = Promise.resolve();
   /** Whether the start has finished: from then on, work waiting for it joins the queue at once. */
   private opened = false;
+  /** Whether the start failed: nothing is replayed then, and the spool waits for the next start (#2783). */
+  private unstarted = false;
   private blocked: string | undefined;
   /** The hub's lock file was removed or replaced under it (#909): appends stop for good, so `blocked` never clears. */
   private lost = false;
@@ -592,7 +593,7 @@ export class Core {
       evidence: (sha) => this.store.read(sha).catch(() => null),
     });
     this.ready = this.init();
-    this.ready.then(() => { this.opened = true; }, () => undefined);
+    this.ready.then(() => { this.opened = true; }, () => { this.unstarted = true; });
     // A start that fails stops nothing else; each call then reports why.
     this.ready.catch(() => undefined);
   }
@@ -674,9 +675,10 @@ export class Core {
     });
     await this.delivery.continues();
     this.askingSoon();
-    // The results every session's claims share (#1018): each kept run's key, from its finish, read once at start.
-    const kept = (await this.record.raw(`SELECT data FROM events WHERE kind = 'run.finished' AND json_extract(data, '$.key') IS NOT NULL ORDER BY log_pos`)) as { data: string }[];
-    this.gate.kept(kept.map((row) => JSON.parse(row.data) as { run: string; check: string; outcome: string; tests_run: number; findings: string[]; evidence: string[]; key: KeyFacts }));
+    // The results every session's claims share (#1018): each kept run's key, from its finish, read once at start, a row
+    // at a time and each parsed as the runner takes it, so the start never holds them all (#2652).
+    const kept = this.record.rows(`SELECT data FROM events WHERE kind = 'run.finished' AND json_extract(data, '$.key') IS NOT NULL ORDER BY log_pos`) as Iterable<{ data: string }>;
+    this.gate.kept((function* () { for (const row of kept) yield JSON.parse(row.data) as KeptRow; })());
     // Every second, once an open ask's deadline has passed, the asks core takes its default (showing it first if it
     // hadn't shown), so no ask waits on a read; once a stop or a verdict landed, or while a task waits on its check,
     // it reads them for the task, the continue or the resume they call for (#85). With nothing due it reads nothing,
@@ -850,6 +852,8 @@ export class Core {
     this.runner = await openRunner({
       record: this.record, asks, supervisor: this.supervisor, ledger, now: this.now, root: this.root.dir, loginPath: config.loginPath, env: process.env, keychain,
       settings: { plan: { reserve_pct: config.reservePct }, asks: { unblock: { deadline_ms: 2 * DAY } } },
+      // #2650's planted runner, selected with the hub's variable.
+      ...(this.options.plant === 'churn-keeps-every-output' ? { plant: this.options.plant } : {}),
     });
     this.sessionStarts = new Starts({
       credentials: this.providers.forge,
@@ -887,13 +891,17 @@ export class Core {
       sendBack: (r) => this.delivery.landingSendBack(r),
       appendCore: (kind, data, extra) => this.appendCore(kind, data, extra),
     });
-    // #1922's planted hosts build a tool's digest wrongly: the host's plants, selected with the hub's variable.
-    const plant = this.options.plant?.startsWith('job-build-') ? { plant: this.options.plant as 'job-build-entry-only' } : {};
+    // #1922's planted hosts build a tool's digest wrongly, and #2650's keep what they finished: the host's plants,
+    // selected with the hub's variable.
+    const plant = this.options.plant?.startsWith('job-build-') ? { plant: this.options.plant as 'job-build-entry-only' }
+      : this.options.plant === 'churn-keeps-every-answer' || this.options.plant === 'churn-keeps-every-result' || this.options.plant === 'churn-keeps-every-name-set' ? { plant: this.options.plant } : {};
     const extensions = this.extensions = await openExtensionHost({ record: this.record, supervisor: this.supervisor, trust, home: this.root.dir, release: [], now: this.now, leases, runner: this.runner, evidence: this.store, point: () => this.durable.point('terminals_rewrite'),
       // A check runner's reads and plays of a canvas piece (#411, #184): the hub's canvas core, and a replica playing the
       // revision's canonical document, its programs from the evidence store. A job kind's qualification by the core
       // (#518) goes the same way, with the tools it names in the world.
-      canvas: (call) => this.canvasSide.qualifyTool(call), replica: (call) => this.play(call), ...plant });
+      canvas: (call) => this.canvasSide.qualifyTool(call), replica: (call) => this.play(call), ...plant,
+      // Nothing in the hub records its source calls, so it keeps no answer (#2650).
+      recording: false });
     this.jobKinds = new Jobs({
       root: this.root.dir, now: this.now, host: () => this.extensions, plant: this.options.plant,
       keep: async (bytes, source) => (await this.control.stored(await this.store.connect({ role: 'deepbuild', via: 'job' }).put({ bytes, kind: 'file', source, redaction: 'complete', license: { name: 'job output', allows: [] } }), `a job output from ${source}`)).sha256,
@@ -1269,7 +1277,8 @@ export class Core {
    * replayed then, beside the hooks that follow, rather than at the next start.
    */
   private replayLate(kept = false): void {
-    if (this.stopping) return;
+    // A start that failed leaves the spool where it is: asking again would find it again, without end (#2783).
+    if (this.stopping || this.unstarted) return;
     if (this.replaying) {
       this.retake ||= kept;
       return;
@@ -2647,7 +2656,7 @@ export class Core {
     // Each worktree's stack goes down with the hub, through the supervisor.
     await this.stacks.close();
     // Each running job is stopped through the supervisor; one still stopping is reaped on the next start.
-    const jobs = await this.runner.list().catch(() => [] as JobRecord[]);
+    const jobs = await this.runner.recent().catch(() => [] as JobRecord[]);
     await Promise.race([Promise.allSettled(jobs.filter((j) => j.state === 'running' || j.state === 'waiting').map((j) => this.runner.cancel(j.job))), new Promise((done) => setTimeout(done, 5000))]);
     await this.runner.close();
     await this.runs.settled();

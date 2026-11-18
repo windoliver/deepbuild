@@ -88,6 +88,10 @@ use crate::util::{
 };
 pub use prompts::*;
 
+mod handed; // DeepBuild patch (windoliver/deepbuild#1482)
+#[cfg(feature = "test-support")]
+pub mod frame_counts; // DeepBuild patch (windoliver/deepbuild#1482)
+
 /// Default window size used when no explicit size is provided.
 pub const DEFAULT_WINDOW_SIZE: Size<Pixels> = size(px(1536.), px(1095.));
 
@@ -3449,6 +3453,8 @@ impl Window {
             self.refresh();
         }
         self.invalidate_entities();
+        #[cfg(feature = "test-support")]
+        self.begin_frame_counts(); // DeepBuild patch (windoliver/deepbuild#1482)
         cx.entities.clear_accessed();
         debug_assert!(self.rendered_entity_stack.is_empty());
         self.invalidator.set_dirty(false);
@@ -3485,6 +3491,8 @@ impl Window {
             }
         }
         self.dirty_views.clear();
+        #[cfg(feature = "test-support")]
+        self.end_frame_counts(); // DeepBuild patch (windoliver/deepbuild#1482)
         self.next_frame.window_active = self.active.get();
 
         // Register requested input handler with the platform window.

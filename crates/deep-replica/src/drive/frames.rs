@@ -68,12 +68,29 @@ impl Replica {
         }
         // A frame redraws every view, so the canvas items it lists are this frame's alone.
         deep_app::canvas::clear_items();
+        let mark = super::clocks::Mark::now();
         let drew = self.cx.request_frame(self.window);
+        let cost = mark.since();
         if drew {
             let glyphs = self.glyphs.clone();
             let _ = self
                 .cx
                 .update_window(self.window, |_, window, _| glyphs.keep_scene(window));
+        }
+        self.count_frames(Some((drew, cost)));
+        // A real window draws again at once while a frame left it dirty: a view that drew in a state that changed as it
+        // drew asks for the frame after (#1482). Each is a frame GPUI drew, counted as one.
+        let mut after = 0;
+        while drew && after < 4 && self.cx.request_frame(self.window) {
+            after += 1;
+            let glyphs = self.glyphs.clone();
+            let _ = self
+                .cx
+                .update_window(self.window, |_, window, _| glyphs.keep_scene(window));
+            self.count_frames(None);
+            if let Some(dirty) = self.dirty.as_mut() {
+                dirty.drew += 1;
+            }
         }
         let read = drew.then(|| self.live_tree());
         let dirty = self.dirty.as_mut().expect("the dirty mode");
@@ -89,14 +106,42 @@ impl Replica {
     pub(super) fn input_drew(&mut self) {
         if self.dirty.is_some() {
             let read = self.live_tree();
+            // Typing draws a frame a character, as it is delivered.
+            let drew = self.count_frames(None).max(1) as u64;
             let dirty = self.dirty.as_mut().expect("the dirty mode");
-            dirty.drew += 1;
+            dirty.drew += drew;
             dirty.drawn = read;
         }
     }
 
+    /// The counts' start, once the replica's own frames are drawn: the frames GPUI drew to launch are no one's, and the
+    /// window read back now is what the first frame is compared with.
+    pub(super) fn start_counts(&mut self, arm: String, read_back: &'static str, accessibility: bool) {
+        let root = self
+            .cx
+            .update_window(self.window, |root, _, _| root.entity_id())
+            .expect("the replica's window is open");
+        self.counts = Some(super::counts::Counts::new(arm, read_back, accessibility, root));
+        self.drop_counts();
+        let _ = self.read_tiles();
+    }
+
+    /// Forgets the frames GPUI drew and the entities it was told of since the last call: those no step counts.
+    pub(super) fn drop_counts(&mut self) {
+        let _ = gpui_kit::frame_counts::take_frame_counts();
+        let _ = gpui_kit::frame_counts::take_notified();
+        let _ = deep_app::views::take_rows_built();
+    }
+
     /// A step begins: nothing passed or drew yet.
-    pub(super) fn begin_step(&mut self) {
+    pub(super) fn begin_step(&mut self, step: usize) {
+        if self.dirty.is_some() {
+            // What the step before left, its forced comparison frame among it, is no frame of this one.
+            self.drop_counts();
+        }
+        if let Some(counts) = &mut self.counts {
+            counts.step = step;
+        }
         if let Some(dirty) = &mut self.dirty {
             dirty.frames = 0;
             dirty.drew = 0;
@@ -111,9 +156,13 @@ impl Replica {
         let glyphs = self.glyphs.clone();
         let _ = self.cx.update_window(self.window, |_, window, cx| {
             deep_app::canvas::clear_items();
+            // A complete frame: every view renders, cached or not, so the check sees what a view left stale (#1482).
+            window.refresh();
             window.render_frame(cx);
             glyphs.keep_scene(window);
         });
+        // The comparison frame is the check's, never a frame the report counts.
+        self.drop_counts();
         let forced = self.live_tree();
         let t = self.clock.t;
         let dirty = self.dirty.as_mut().expect("the dirty mode");

@@ -115,6 +115,11 @@ export interface RecordStore {
   sync(): Promise<void>;
   /** One read-only SELECT; each `?` in it takes the next of `params`, bound, never written into the text. */
   raw(sql: string, params?: readonly (string | number | bigint | null)[]): Promise<unknown[]>;
+  /**
+   * raw's SELECT, a row at a time as the caller takes each, so no row it has passed is held (#2652). Nothing else reads
+   * or writes the record until the last is taken or the caller's loop ends.
+   */
+  rows(sql: string, params?: readonly (string | number | bigint | null)[]): Iterable<unknown>;
   /** What a session reads at its start, and, for the rules you typed, at its next prompt (#62). */
   startSlice(session: string): Promise<SliceEntry[]>;
   /**
@@ -298,7 +303,7 @@ class SqliteRecord implements RecordStore {
   private readonly db: Db;
   /** Statements on `events` and `meta`, which no rebuild drops, compiled once: appends run them per event. */
   private readonly statements = new Map<string, Statement<unknown[]>>();
-  /** raw()'s read statements, the READS_KEPT most recently used, compiled once: SQLite recompiles one whose tables a rebuild replaced. */
+  /** raw()'s and rows()' read statements, the READS_KEPT most recently used, compiled once: SQLite recompiles one whose tables a rebuild replaced. */
   private readonly reads = new Map<string, Statement<unknown[]>>();
   private readonly backend: Backend;
   private readonly projector: Projector;
@@ -846,6 +851,12 @@ class SqliteRecord implements RecordStore {
 
   /** Reads only: a statement that would write, the log's triggers and tables included, is refused. */
   async raw(sql: string, params: readonly (string | number | bigint | null)[] = []): Promise<unknown[]> {
+    return this.reading(sql).all(...params);
+  }
+  rows(sql: string, params: readonly (string | number | bigint | null)[] = []): Iterable<unknown> {
+    return this.reading(sql).iterate(...params);
+  }
+  private reading(sql: string): Statement<unknown[]> {
     // Refused before it is prepared: SQLite runs a PRAGMA while compiling it, so a check after prepare is too late.
     if (!/^\s*(SELECT|WITH)\b/i.test(sql) || /;\s*\S/.test(sql)) throw new RecordError('storage', 'raw SQL reads the record with one SELECT; it never writes it');
     let statement = this.reads.get(sql);
@@ -857,7 +868,7 @@ class SqliteRecord implements RecordStore {
     }
     // Most recently used last, so the oldest goes first.
     this.reads.set(sql, statement);
-    return statement.all(...params);
+    return statement;
   }
 
   async startSlice(session: string): Promise<SliceEntry[]> {

@@ -1,0 +1,38 @@
+// The test feeds plug-in (#2650 AC5): two sources whose calls the hub makes and records, one answering text and one
+// whose files are binary.
+// - level (polled, on api.feeds.example): a number read from a JSON answer's `level`, in metres.
+// - library (library, on files.feeds.example): search reads the library's search API through the hub's ctx.fetch;
+//   its files' bytes are fetched by the hub itself (the host's libraryFile and assetFile), never by this code.
+interface Answer { status: number; headers: Record<string, string>; body: string }
+interface Ctx { fetch(r: { method: string; path: string; headers?: Record<string, string> }): Promise<Answer> }
+
+export default async function (deep: any): Promise<void> {
+  await deep.registerSource('ext.feeds.level', {
+    variant: 'polled',
+    host: 'api.feeds.example',
+    path: '/level',
+    quota: { per_minute: 600, per_day: 100_000 },
+    timeout: 10_000,
+    freshFor: 1_000,
+    parse(answer: Answer): { value: number; unit: string } {
+      if (answer.status !== 200) throw Error(`no level in a ${answer.status} answer`);
+      return { value: Number(JSON.parse(answer.body).level), unit: 'm' };
+    },
+  });
+  await deep.registerSource('ext.feeds.library', {
+    variant: 'library',
+    host: 'files.feeds.example',
+    quota: { per_minute: 600, per_day: 100_000 },
+    timeout: 10_000,
+    async search(ctx: Ctx, q: { words: string }) {
+      const a = await ctx.fetch({ method: 'GET', path: `/api/search?q=${encodeURIComponent(q.words)}` });
+      if (a.status !== 200) throw Error(`the library answered ${a.status} to the search`);
+      return { rows: JSON.parse(a.body).rows };
+    },
+    async fetch(ctx: Ctx, q: { id: string }) {
+      const a = await ctx.fetch({ method: 'GET', path: `/api/assets/${encodeURIComponent(q.id)}` });
+      if (a.status !== 200) return { failed: 'not found' };
+      return JSON.parse(a.body);
+    },
+  });
+}
