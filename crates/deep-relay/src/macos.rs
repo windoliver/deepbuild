@@ -17,7 +17,9 @@ use rustls::{ClientConfig, ClientConnection, RootCertStore, StreamOwned};
 use serde_json::Value;
 use tungstenite::{Message, WebSocket};
 
+#[cfg(test)]
 use crate::wire;
+pub use crate::wire::{check_hello, host, Limits};
 
 pub const BACKEND: Backend = Backend {
     name: "network.macos",
@@ -26,49 +28,6 @@ pub const BACKEND: Backend = Backend {
 
 /// How long a copy waits to connect and for the relay's hello.
 const OPEN: Duration = Duration::from_secs(10);
-
-/// What a relay's hello allows per connection.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Limits {
-    pub frames_per_s: u64,
-    pub frame_bytes: u64,
-}
-
-/// The host a relay URL names: `https://<host>[/...]` → `<host>`.
-pub fn host(relay: &str) -> String {
-    let rest = relay.strip_prefix("https://").unwrap_or(relay);
-    rest.split('/').next().unwrap_or_default().to_string()
-}
-
-/// The hello check: a relay that names another protocol or digest, or no limits, is refused
-/// before anything is sent, naming its host and what it answered.
-pub fn check_hello(host: &str, hello: &Value) -> Result<Limits, String> {
-    let protocol = hello["protocol"].as_str().unwrap_or("nothing");
-    if protocol != wire::PROTOCOL {
-        return Err(format!(
-            "refused the relay {host}: its hello answered {protocol}, not {}",
-            wire::PROTOCOL
-        ));
-    }
-    let (digest, committed) = (hello["digest"].as_str().unwrap_or("none"), wire::digest());
-    if digest != committed {
-        return Err(format!(
-            "refused the relay {host}: its hello answered relay@1 with the digest {digest}, not the committed {committed}"
-        ));
-    }
-    let limit = |name: &str| hello["limits"][name].as_u64().filter(|n| *n > 0);
-    match (limit("frames_per_s"), limit("frame_bytes")) {
-        (Some(frames_per_s), Some(frame_bytes)) if frame_bytes > wire::HEADER as u64 => {
-            Ok(Limits {
-                frames_per_s,
-                frame_bytes,
-            })
-        }
-        _ => Err(format!(
-            "refused the relay {host}: its hello names no usable limits"
-        )),
-    }
-}
 
 /// What arrived on a connection.
 pub enum Event {
@@ -87,9 +46,31 @@ pub struct Connection {
 impl Connection {
     /// Connects to the relay `relay` names, trusting the PEM authorities `ca`, and reads its hello.
     pub fn open(relay: &str, ca: &[u8]) -> Result<(Connection, Value), String> {
+        Connection::open_with(relay, ca, RootCertStore::empty())
+    }
+
+    /// #549: a Join's connection, which trusts the platform's own authorities beside `ca`.
+    pub fn open_for_join(relay: &str, ca: &[u8]) -> Result<(Connection, Value), String> {
+        let mut roots = RootCertStore::empty();
+        for cert in rustls_native_certs::load_native_certs().certs {
+            // A platform certificate rustls can't read is left out; the handshake names the rest.
+            let _ = roots.add(cert);
+        }
+        Connection::open_with(relay, ca, roots)
+    }
+
+    /// The address this copy reaches the relay from, which a direct path listens on.
+    pub fn local_ip(&self) -> Option<std::net::IpAddr> {
+        self.ws.get_ref().sock.local_addr().ok().map(|a| a.ip())
+    }
+
+    fn open_with(
+        relay: &str,
+        ca: &[u8],
+        mut roots: RootCertStore,
+    ) -> Result<(Connection, Value), String> {
         let host = host(relay);
         let fail = |what: String| format!("the relay {host} {what}");
-        let mut roots = RootCertStore::empty();
         for cert in CertificateDer::pem_slice_iter(ca) {
             let cert = cert.map_err(|e| format!("the authority for {host} can't be read: {e}"))?;
             roots

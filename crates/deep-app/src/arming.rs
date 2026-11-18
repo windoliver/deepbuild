@@ -13,8 +13,11 @@ use serde::{Deserialize, Serialize};
 /// `arm_after`: how long a presented card stays still before it arms, in ms.
 pub const ARM_AFTER: u64 = 500;
 
-/// What the card says on a click before it arms.
+/// What the card says on a click before it arms, while its interval runs (#1808: only then).
 pub const HOLD_STILL: &str = "Hold still";
+
+/// What a card too tall for its page says on a click: its options aren't all in view, so it can't arm (#1808).
+pub const TOO_SMALL: &str = "Make the window taller";
 
 /// Where an input came from, as the platform names it (Input router: `source`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -122,6 +125,9 @@ pub struct Machine {
     down: Option<Down>,
     /// An option chosen by an untrusted input, waiting for the OS to confirm you.
     confirming: Option<(u64, usize)>,
+    /// Why the card can't arm besides its interval and its slot, which a press is told (#1808): a long card's end not
+    /// shown yet, or options folded behind a count not opened yet.
+    held: Option<&'static str>,
 }
 
 impl Machine {
@@ -136,6 +142,7 @@ impl Machine {
             slot: None,
             down: None,
             confirming: None,
+            held: None,
         }
     }
 
@@ -166,9 +173,9 @@ impl Machine {
     /// The card as drawn measured `size` points. One that outgrew its slot stops being armed, and arms again only
     /// once it fits and its interval ran anew.
     pub fn measured(&mut self, size: [i64; 2], t: u64) {
-        let fitted = self.may_arm();
+        let fitted = self.fits();
         self.size = size;
-        let fits = self.may_arm();
+        let fits = self.fits();
         match self.state {
             State::Armed { seq } if !fits => {
                 self.state = State::Presented { seq, t };
@@ -192,8 +199,34 @@ impl Machine {
         }
     }
 
-    fn may_arm(&self) -> bool {
+    fn fits(&self) -> bool {
         self.slot.is_some_and(|slot| slot.arms(self.size))
+    }
+
+    fn may_arm(&self) -> bool {
+        self.fits() && self.held.is_none()
+    }
+
+    /// Why the card can't arm at `t` besides its interval, or `None` once nothing holds it (#1808). A card held armed
+    /// stops being armed; one no longer held arms once its interval ran, counted from its presentation.
+    pub fn hold(&mut self, held: Option<&'static str>, t: u64) {
+        self.held = held;
+        if let (State::Armed { seq }, Some(_)) = (self.state, held) {
+            self.state = State::Presented { seq, t };
+            self.since = t;
+            self.down = None;
+            self.confirming = None;
+        }
+        self.tick(t);
+    }
+
+    /// What a press before the card armed is told: why it can't arm, or to hold still while only its interval runs.
+    pub fn says(&self) -> &'static str {
+        if !self.fits() {
+            TOO_SMALL
+        } else {
+            self.held.unwrap_or(HOLD_STILL)
+        }
     }
 
     /// Time passed to `t`: a presented card arms once its interval ran while it may arm.
@@ -223,7 +256,7 @@ impl Machine {
         if !armed {
             return Outcome::Refused {
                 seq,
-                says: HOLD_STILL,
+                says: self.says(),
             };
         }
         self.down = Some(Down {

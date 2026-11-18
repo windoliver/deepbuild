@@ -31,6 +31,7 @@ pub fn clear_items() {
     DRAWN.with(|drawn| drawn.borrow_mut().clear());
     PLACED.with(|placed| placed.borrow_mut().clear());
     crate::views::forget_drawn();
+    crate::show::forget_placed();
 }
 
 /// The items drawn since [`clear_items`], by ID, with their evaluated values.

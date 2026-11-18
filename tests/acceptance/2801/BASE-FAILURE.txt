@@ -1,0 +1,148 @@
+#2801's acceptance suite at its base, run 2026-11-17 on this worktree's HEAD d4cef00fb (origin/main, the merge of
+#2787), on macOS 27.2 with Node v24.22.0, after `npm ci`, `npm run build --workspaces` and
+`cargo build --locked -p deep-hook`. The one-minute load was about 209 to 207 on this Mac (other sessions' builds
+and tests; nothing here waited for a quiet machine). Run once, alone:
+
+  node node_modules/vitest/vitest.mjs run --root tests/acceptance/2801 --no-file-parallelism startup.test.ts
+
+Type-check: `node node_modules/typescript/bin/tsc --noEmit -p tests/acceptance/2801/tsconfig.json` reports nothing
+under tests/acceptance/2801.
+
+Each criterion test fails for its criterion's reason:
+
+- AC1 #2801.9ff40b64: 19 hub.health calls sent while the core was starting (its evidence journal not yet read, so the
+  record not yet open) were refused with {"code":"unavailable", ..., "remediation":"Cannot read properties of
+  undefined (reading 'raw')"}: the internal TypeError's message, the issue's refusal exactly. (events.read, sent in
+  the same window, waited and answered; it is not what fails.)
+- AC2 #2801.a166701c: try 1 (the moment `deep hub start` returned) got that refusal, an answer; try 2, while the core
+  read its transcript cursors on its own thread, got "no answer within 2000 ms": the drop from an answer back to no
+  answer. Tries 3 to 5 got the health.
+- AC3 #2801.9e13fccc: `deep hub start` exited 0 after 461 ms with the core's start still held; `deep hub status` run
+  right after exited 3 with the same TypeError refusal.
+
+Earlier runs of this job (load 360 to 480) gave the same three failures; one, before deep-hook was built, ended with
+"deep hub: the core stopped: Error: no deep-hook is built under <checkout>/target" (now a BLOCKED precondition in
+helpers.ts, requireDeepHook).
+
+Home and temp paths below are redacted: <checkout> is the worktree, $TMPDIR the system temp folder.
+
+---- startup.test.ts ----
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/2801
+
+stdout | startup.test.ts > AC1 #2801.9ff40b64 while the hub starts, a control call waits for the core or is refused as starting, never with an internal error > AC1 #2801.9ff40b64 hub.health and events.read sent every 100 ms on the socket from the moment `deep hub start --root` runs until the core has started: every refusal is a plain unavailable naming the startup, none carries an internal error's message
+AC1 deep hub start exit 0 at +330 ms; evidence journal read from +1208 ms, released +4209 ms; transcript cursors read from +4246 ms, released +7246 ms; 121 calls: 99 answered, 19 refused, 3 unanswered
+  19 × sent +449 ms to +4124 ms: hub.health {"code":"unavailable","retryable":true,"remediation":"Cannot read properties of undefined (reading 'raw')","path":"","actual":"","evidence":[]}
+
+stdout | startup.test.ts > AC2 #2801.a166701c polled every 2 s from the moment deep hub start returns, deep hub status never drops from an answer back to no answer > AC2 #2801.a166701c `deep hub status --root` every 2 s from the moment `deep hub start --root` exits, until the health has answered three times in a row: no try after an answered one (health or refusal) gets no answer
+AC2 deep hub start exit 0 after 1305 ms; evidence journal read 1475 ms, released 1489 ms; transcript cursors read 1573 ms, released 4291 ms (times from start's return)
+  try 1 at +0 ms (1478 ms): refusal, exit 3: deep hub status: no hub could be read at unix:$TMPDIR/dh2801-wAChxj/r/hub.sock: hub.health was refused: {"code":"unavailable","retryable":true,"remediation":"Cannot read properties of undefined (reading 'raw')","path":"","actual":"","evidence":[]}
+  try 2 at +2002 ms (2289 ms): none, exit 3: deep hub status: no hub could be read at unix:$TMPDIR/dh2801-wAChxj/r/hub.sock: no answer within 2000 ms
+  try 3 at +4292 ms (779 ms): health, exit 0: {"pid":53410,"start":"01M7PB34N9XMNHMJQ87EPZCWCZ","off":false,"parsers":1,"gates":{"watch_only":false,"reason":null},"notifications":null,"secrets":"reachable","network":"reachable","claude":{"relations":[],"readings":[]},"codex":{"relations":[],"readings":[],"trust":null},"sessions":[],"jobs":{"hook-programs":{"failing":null},"spool":{"failing":null},"asks":{"failing":null},"leases":{"failing":nu
+  try 4 at +6296 ms (611 ms): health, exit 0: {"pid":53410,"start":"01M7PB34N9XMNHMJQ87EPZCWCZ","off":false,"parsers":1,"gates":{"watch_only":false,"reason":null},"notifications":null,"secrets":"reachable","network":"reachable","claude":{"relations":[],"readings":[]},"codex":{"relations":[],"readings":[],"trust":null},"sessions":[],"jobs":{"hook-programs":{"failing":null},"spool":{"failing":null},"asks":{"failing":null},"leases":{"failing":nu
+  try 5 at +8297 ms (319 ms): health, exit 0: {"pid":53410,"start":"01M7PB34N9XMNHMJQ87EPZCWCZ","off":false,"parsers":1,"gates":{"watch_only":false,"reason":null},"notifications":null,"secrets":"reachable","network":"reachable","claude":{"relations":[],"readings":[]},"codex":{"relations":[],"readings":[],"trust":null},"sessions":[],"jobs":{"hook-programs":{"failing":null},"spool":{"failing":null},"asks":{"failing":null},"leases":{"failing":nu
+
+stdout | startup.test.ts > AC3 #2801.9e13fccc deep hub start exits 0 only once the core answers hub.health, so deep hub status right after it succeeds > AC3 #2801.9e13fccc `deep hub status --root` run the moment `deep hub start --root` exits 0 exits 0 with the health JSON
+AC3 deep hub start exit 0 after 461 ms (no stderr); the core's start held from +887 ms to not yet; deep hub status right after: exit 3 after 432 ms, stdout (none), stderr deep hub status: no hub could be read at unix:$TMPDIR/dh2801-CdZZlp/r/hub.sock: hub.health was refused: {"code":"unavailable","retryable":true,"remediation":"Cannot read properties of undefined (reading 'raw')","path":"","actual":"","evidence":[]}
+
+ ❯ startup.test.ts (3 tests | 3 failed) 33491ms
+   ❯ AC1 #2801.9ff40b64 while the hub starts, a control call waits for the core or is refused as starting, never with an internal error (1)
+     × AC1 #2801.9ff40b64 hub.health and events.read sent every 100 ms on the socket from the moment `deep hub start --root` runs until the core has started: every refusal is a plain unavailable naming the startup, none carries an internal error's message 20879ms
+   ❯ AC2 #2801.a166701c polled every 2 s from the moment deep hub start returns, deep hub status never drops from an answer back to no answer (1)
+     × AC2 #2801.a166701c `deep hub status --root` every 2 s from the moment `deep hub start --root` exits, until the health has answered three times in a row: no try after an answered one (health or refusal) gets no answer 10607ms
+   ❯ AC3 #2801.9e13fccc deep hub start exits 0 only once the core answers hub.health, so deep hub status right after it succeeds (1)
+     × AC3 #2801.9e13fccc `deep hub status --root` run the moment `deep hub start --root` exits 0 exits 0 with the health JSON 2002ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  startup.test.ts > AC1 #2801.9ff40b64 while the hub starts, a control call waits for the core or is refused as starting, never with an internal error > AC1 #2801.9ff40b64 hub.health and events.read sent every 100 ms on the socket from the moment `deep hub start --root` runs until the core has started: every refusal is a plain unavailable naming the startup, none carries an internal error's message
+AssertionError: refusals that are not a plain unavailable naming the startup, or carry an internal error's message (deep hub start exit 0 at +330 ms; evidence journal read from +1208 ms, released +4209 ms; transcript cursors read from +4246 ms, released +7246 ms; 121 calls: 99 answered, 19 refused, 3 unanswered); every distinct refusal:
+  19 × sent +449 ms to +4124 ms: hub.health {"code":"unavailable","retryable":true,"remediation":"Cannot read properties of undefined (reading 'raw')","path":"","actual":"","evidence":[]}: expected [ …(19) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "hub.health sent +449 ms, settled +1201 ms: refusal {\"code\":\"unavailable\",\"retryable\":true,\"remediation\":\"Cannot read properties of undefined (reading 'raw')\",\"path\":\"\",\"actual\":\"\",\"evidence\":[]}",
++   "hub.health sent +653 ms, settled +1202 ms: refusal {\"code\":\"unavailable\",\"retryable\":true,\"remediation\":\"Cannot read properties of undefined (reading 'raw')\",\"path\":\"\",\"actual\":\"\",\"evidence\":[]}",
++   "hub.health sent +859 ms, settled +1202 ms: refusal {\"code\":\"unavailable\",\"retryable\":true,\"remediation\":\"Cannot read properties of undefined (reading 'raw')\",\"path\":\"\",\"actual\":\"\",\"evidence\":[]}",
++   "hub.health sent +1064 ms, settled +1207 ms: refusal {\"code\":\"unavailable\",\"retryable\":true,\"remediation\":\"Cannot read properties of undefined (reading 'raw')\",\"path\":\"\",\"actual\":\"\",\"evidence\":[]}",
++   "hub.health sent +1271 ms, settled +1340 ms: refusal {\"code\":\"unavailable\",\"retryable\":true,\"remediation\":\"Cannot read properties of undefined (reading 'raw')\",\"path\":\"\",\"actual\":\"\",\"evidence\":[]}",
++   "hub.health sent +1472 ms, settled +1475 ms: refusal {\"code\":\"unavailable\",\"retryable\":true,\"remediation\":\"Cannot read properties of undefined (reading 'raw')\",\"path\":\"\",\"actual\":\"\",\"evidence\":[]}",
++   "hub.health sent +1673 ms, settled +1683 ms: refusal {\"code\":\"unavailable\",\"retryable\":true,\"remediation\":\"Cannot read properties of undefined (reading 'raw')\",\"path\":\"\",\"actual\":\"\",\"evidence\":[]}",
++   "hub.health sent +1875 ms, settled +1878 ms: refusal {\"code\":\"unavailable\",\"retryable\":true,\"remediation\":\"Cannot read properties of undefined (reading 'raw')\",\"path\":\"\",\"actual\":\"\",\"evidence\":[]}",
++   "hub.health sent +2077 ms, settled +2080 ms: refusal {\"code\":\"unavailable\",\"retryable\":true,\"remediation\":\"Cannot read properties of undefined (reading 'raw')\",\"path\":\"\",\"actual\":\"\",\"evidence\":[]}",
++   "hub.health sent +2278 ms, settled +2288 ms: refusal {\"code\":\"unavailable\",\"retryable\":true,\"remediation\":\"Cannot read properties of undefined (reading 'raw')\",\"path\":\"\",\"actual\":\"\",\"evidence\":[]}",
++   "hub.health sent +2481 ms, settled +2484 ms: refusal {\"code\":\"unavailable\",\"retryable\":true,\"remediation\":\"Cannot read properties of undefined (reading 'raw')\",\"path\":\"\",\"actual\":\"\",\"evidence\":[]}",
++   "hub.health sent +2684 ms, settled +2706 ms: refusal {\"code\":\"unavailable\",\"retryable\":true,\"remediation\":\"Cannot read properties of undefined (reading 'raw')\",\"path\":\"\",\"actual\":\"\",\"evidence\":[]}",
++   "hub.health sent +2896 ms, settled +2898 ms: refusal {\"code\":\"unavailable\",\"retryable\":true,\"remediation\":\"Cannot read properties of undefined (reading 'raw')\",\"path\":\"\",\"actual\":\"\",\"evidence\":[]}",
++   "hub.health sent +3100 ms, settled +3132 ms: refusal {\"code\":\"unavailable\",\"retryable\":true,\"remediation\":\"Cannot read properties of undefined (reading 'raw')\",\"path\":\"\",\"actual\":\"\",\"evidence\":[]}",
++   "hub.health sent +3309 ms, settled +3312 ms: refusal {\"code\":\"unavailable\",\"retryable\":true,\"remediation\":\"Cannot read properties of undefined (reading 'raw')\",\"path\":\"\",\"actual\":\"\",\"evidence\":[]}",
++   "hub.health sent +3511 ms, settled +3515 ms: refusal {\"code\":\"unavailable\",\"retryable\":true,\"remediation\":\"Cannot read properties of undefined (reading 'raw')\",\"path\":\"\",\"actual\":\"\",\"evidence\":[]}",
++   "hub.health sent +3718 ms, settled +3727 ms: refusal {\"code\":\"unavailable\",\"retryable\":true,\"remediation\":\"Cannot read properties of undefined (reading 'raw')\",\"path\":\"\",\"actual\":\"\",\"evidence\":[]}",
++   "hub.health sent +3919 ms, settled +3944 ms: refusal {\"code\":\"unavailable\",\"retryable\":true,\"remediation\":\"Cannot read properties of undefined (reading 'raw')\",\"path\":\"\",\"actual\":\"\",\"evidence\":[]}",
++   "hub.health sent +4124 ms, settled +4168 ms: refusal {\"code\":\"unavailable\",\"retryable\":true,\"remediation\":\"Cannot read properties of undefined (reading 'raw')\",\"path\":\"\",\"actual\":\"\",\"evidence\":[]}",
++ ]
+
+ ❯ startup.test.ts:62:180
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  startup.test.ts > AC2 #2801.a166701c polled every 2 s from the moment deep hub start returns, deep hub status never drops from an answer back to no answer > AC2 #2801.a166701c `deep hub status --root` every 2 s from the moment `deep hub start --root` exits, until the health has answered three times in a row: no try after an answered one (health or refusal) gets no answer
+AssertionError: tries after the first answered one (try 1) that got no answer:
+deep hub start exit 0 after 1305 ms; evidence journal read 1475 ms, released 1489 ms; transcript cursors read 1573 ms, released 4291 ms (times from start's return)
+  try 1 at +0 ms (1478 ms): refusal, exit 3: deep hub status: no hub could be read at unix:$TMPDIR/dh2801-wAChxj/r/hub.sock: hub.health was refused: {"code":"unavailable","retryable":true,"remediation":"Cannot read properties of undefined (reading 'raw')","path":"","actual":"","evidence":[]}
+  try 2 at +2002 ms (2289 ms): none, exit 3: deep hub status: no hub could be read at unix:$TMPDIR/dh2801-wAChxj/r/hub.sock: no answer within 2000 ms
+  try 3 at +4292 ms (779 ms): health, exit 0: {"pid":53410,"start":"01M7PB34N9XMNHMJQ87EPZCWCZ","off":false,"parsers":1,"gates":{"watch_only":false,"reason":null},"notifications":null,"secrets":"reachable","network":"reachable","claude":{"relations":[],"readings":[]},"codex":{"relations":[],"readings":[],"trust":null},"sessions":[],"jobs":{"hook-programs":{"failing":null},"spool":{"failing":null},"asks":{"failing":null},"leases":{"failing":nu
+  try 4 at +6296 ms (611 ms): health, exit 0: {"pid":53410,"start":"01M7PB34N9XMNHMJQ87EPZCWCZ","off":false,"parsers":1,"gates":{"watch_only":false,"reason":null},"notifications":null,"secrets":"reachable","network":"reachable","claude":{"relations":[],"readings":[]},"codex":{"relations":[],"readings":[],"trust":null},"sessions":[],"jobs":{"hook-programs":{"failing":null},"spool":{"failing":null},"asks":{"failing":null},"leases":{"failing":nu
+  try 5 at +8297 ms (319 ms): health, exit 0: {"pid":53410,"start":"01M7PB34N9XMNHMJQ87EPZCWCZ","off":false,"parsers":1,"gates":{"watch_only":false,"reason":null},"notifications":null,"secrets":"reachable","network":"reachable","claude":{"relations":[],"readings":[]},"codex":{"relations":[],"readings":[],"trust":null},"sessions":[],"jobs":{"hook-programs":{"failing":null},"spool":{"failing":null},"asks":{"failing":null},"leases":{"failing":nu: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ startup.test.ts:99:117
+     97|     const first = tries.findIndex((t) => t.kind !== 'none');
+     98|     const dropped = tries.filter((t, i) => first >= 0 && i > first && …
+     99|     expect(dropped.length, `tries after the first answered one (try ${…
+       |                                                                                                                     ^
+    100|   }, 300_000);
+    101| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  startup.test.ts > AC3 #2801.9e13fccc deep hub start exits 0 only once the core answers hub.health, so deep hub status right after it succeeds > AC3 #2801.9e13fccc `deep hub status --root` run the moment `deep hub start --root` exits 0 exits 0 with the health JSON
+AssertionError: deep hub status right after deep hub start exits 0: deep hub start exit 0 after 461 ms (no stderr); the core's start held from +887 ms to not yet; deep hub status right after: exit 3 after 432 ms, stdout (none), stderr deep hub status: no hub could be read at unix:$TMPDIR/dh2801-CdZZlp/r/hub.sock: hub.health was refused: {"code":"unavailable","retryable":true,"remediation":"Cannot read properties of undefined (reading 'raw')","path":"","actual":"","evidence":[]}: expected 3 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 3
+
+ ❯ startup.test.ts:120:88
+    118|     console.log(`AC3 ${what}`);
+    119|     expect(start.code, `deep hub start --root exits 0: ${what}\n${hubL…
+    120|     expect(status.code, `deep hub status right after deep hub start ex…
+       |                                                                                        ^
+    121|     const health = JSON.parse(status.stdout.trim().split('\n').pop() ?…
+    122|     expect(typeof health?.start === 'string' && Number.isInteger(healt…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  19:26:39
+   Duration  33.94s (tests 100%)
+
+
+real	0m35.649s
+user	0m2.189s
+sys	0m0.848s
+19:27  up 4 days, 12:29, 2 users, load averages: 206.89 266.04 322.52

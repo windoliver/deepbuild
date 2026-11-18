@@ -258,6 +258,10 @@ pub fn map_uses(
             }
         }
     }
+    // An image mark's picture (#1992), color as a base color map is.
+    for i in scene.layers.iter().flat_map(|l| &l.images) {
+        out.entry(i.asset.clone()).or_default().insert("base_color");
+    }
     out
 }
 
@@ -281,10 +285,17 @@ pub fn map_role(uses: &std::collections::BTreeSet<&str>) -> &'static str {
 /// isn't in the store is answered (#1729).
 pub fn map_field(doc: &Value, sha: &str) -> Option<String> {
     let names = |v: &Value| v.as_str().or_else(|| v.get("sha256")?.as_str()) == Some(sha);
-    doc.get("items")?
-        .as_object()?
+    let kind = |i: &Value, k: &str| i.get("kind").and_then(Value::as_str) == Some(k);
+    let items = doc.get("items")?.as_object()?;
+    let image = items
         .iter()
-        .filter(|(_, i)| i.get("kind").and_then(Value::as_str) == Some("material@1"))
+        .find(|(_, i)| kind(i, "mark.image@1") && i.pointer("/params/asset").is_some_and(names));
+    if let Some((id, _)) = image {
+        return Some(format!("items/{id}/params/asset"));
+    }
+    items
+        .iter()
+        .filter(|(_, i)| kind(i, "material@1"))
         .find_map(|(id, i)| {
             let p = i.get("params")?;
             let maps = p.get("maps").and_then(Value::as_object);

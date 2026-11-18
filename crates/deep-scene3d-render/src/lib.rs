@@ -456,6 +456,9 @@ struct EnvUniform {
     /// disk's radiance.
     sun: [f32; 4],
     sun_color: [f32; 4],
+    /// The linear fog curve's near and far, in m, and what the background draws as a scale
+    /// (#1992).
+    range: [f32; 4],
 }
 
 /// Our DFG table (#421): for 32 cosines of the view angle across and 32 roughnesses down, the
@@ -556,7 +559,8 @@ fn sheen_table() -> Vec<[f32; 4]> {
     flat.chunks(4).map(|c| [c[0], c[1], c[2], c[3]]).collect()
 }
 
-/// A text record's flag: the label pass draws its color after the upscale (scene3d.wgsl).
+/// A text record's flag: the label pass draws its color after the upscale (scene3d.wgsl). A
+/// label the sky's fog applies to (bit 9; #1992) draws in the geometry pass, where the fog is.
 const LATER: u32 = 256;
 /// A segment record's flags in the outline pass (outline.wgsl).
 const EXACT: u32 = 2;
@@ -1286,6 +1290,11 @@ struct Batch {
     clouds: Vec<(wgpu::Buffer, u32)>,
     /// One record per inked glyph of its labels.
     labels: Set,
+    /// One record per image mark (#1992); each one's picture in the same order, with what it was
+    /// made from (its hash, and whether its texels were here); and how often they were made.
+    images: Set,
+    image_binds: Vec<(wgpu::BindGroup, String, bool)>,
+    image_made: u64,
     bundle: Option<wgpu::RenderBundle>,
     /// Each solid's set, its record's place in that set, its pick ID and its tie rank, in the
     /// layer's solid order.
@@ -2020,12 +2029,18 @@ pub(crate) fn op_blend_pipeline(
 struct Families {
     module: wgpu::ShaderModule,
     draw_layout: wgpu::PipelineLayout,
+    /// The lines' and points': the frame and the lights' group, whose sky fogs them (#1992).
+    mark_layout: wgpu::PipelineLayout,
     text_layout: wgpu::PipelineLayout,
+    /// The image marks' (#1992): the labels', with a picture and the labels' sampler in group 2.
+    image_layout: wgpu::PipelineLayout,
+    image_group: wgpu::BindGroupLayout,
     forward_z: bool,
     samples: u32,
     line: Option<wgpu::RenderPipeline>,
     point: Option<wgpu::RenderPipeline>,
     text: Option<wgpu::RenderPipeline>,
+    image: Option<wgpu::RenderPipeline>,
 }
 
 impl Families {
@@ -2038,10 +2053,11 @@ impl Families {
         names: &mut Vec<&'static str>,
     ) -> u32 {
         let mut made = 0;
-        let (module, draw, text, fz, samples) = (
+        let (module, draw, text, image, fz, samples) = (
             &self.module,
-            &self.draw_layout,
+            &self.mark_layout,
             &self.text_layout,
+            &self.image_layout,
             self.forward_z,
             self.samples,
         );
@@ -2071,6 +2087,15 @@ impl Families {
                 text,
                 "text_vs",
                 "text_fs",
+                instance(std::mem::size_of::<TextRecord>() as u64, &TEXT),
+            ),
+            (
+                "scene3d.image",
+                !layer.images.is_empty(),
+                &mut self.image,
+                image,
+                "text_vs",
+                "image_fs",
                 instance(std::mem::size_of::<TextRecord>() as u64, &TEXT),
             ),
         ] {
@@ -2395,7 +2420,38 @@ impl Renderer {
             ao.shade_layout.clone(),
             maps.layout.clone(),
         ];
-        let text_layout = layout(&[Some(&frame_layout), Some(&mask_layout)]);
+        let mark_layout = layout(&[Some(&frame_layout), Some(&lights_layout)]);
+        let text_layout = layout(&[
+            Some(&frame_layout),
+            Some(&lights_layout),
+            Some(&mask_layout),
+        ]);
+        let image_group = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("scene3d image"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+            ],
+        });
+        let image_layout = layout(&[
+            Some(&frame_layout),
+            Some(&lights_layout),
+            Some(&image_group),
+        ]);
         let output_pipeline_layout = layout(&[Some(&output_layout)]);
         let mesh_buffers = mesh_buffers();
         let mesh = |cull| {
@@ -2688,12 +2744,16 @@ impl Renderer {
             families: Families {
                 module,
                 draw_layout,
+                mark_layout,
                 text_layout,
+                image_layout,
+                image_group,
                 forward_z: planted.forward_z,
                 samples,
                 line: None,
                 point: None,
                 text: None,
+                image: None,
             },
             output_pipeline,
             output_f32,
@@ -3422,15 +3482,22 @@ impl Renderer {
                 u.moon = v4(env::direction(az, el), radius.to_radians().cos());
             }
             let (h_top, h_density) = sky.fog_height.unwrap_or((0.0, 0.0));
-            let curve = match sky.fog_curve {
-                Curve::Exp => 0.0,
-                Curve::Exp2 => 1.0,
+            let (curve, near, far) = match sky.fog_curve {
+                Curve::Exp => (0.0, 0.0, 0.0),
+                Curve::Exp2 => (1.0, 0.0, 0.0),
+                Curve::Linear { near, far } => (2.0, near, far),
             };
             u.fog = [
                 sky.fog_density as f32,
                 curve,
                 h_top as f32,
                 h_density as f32,
+            ];
+            u.range = [
+                near as f32,
+                far as f32,
+                sky.background_intensity as f32,
+                0.0,
             ];
             u.fog_color = match sky.fog {
                 Fog::Color(c) => v4(c, 0.0),
@@ -5767,6 +5834,38 @@ impl Renderer {
         for l in &layer.labels {
             self.pick(&l.id);
         }
+        for i in &layer.images {
+            self.pick(&i.id);
+        }
+        // Each image mark's picture with the labels' sampler (#1992): its texels once the host
+        // made them ready, the white stand-in until then; made again only when one changes.
+        let held = &self.batches[&layer.id].image_binds;
+        let stale = held.len() != layer.images.len()
+            || held.iter().zip(&layer.images).any(|((_, sha, ready), i)| {
+                *sha != i.asset || *ready != self.maps.texels.contains_key(&i.asset)
+            });
+        let image_binds = stale.then(|| {
+            let made = |i: &deep_canvas_scene3d::scene::Image| {
+                let ready = self.maps.texels.contains_key(&i.asset);
+                let view = self.maps.view_of(&device.device, &device.queue, &i.asset);
+                let bind = device.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("scene3d image"),
+                    layout: &self.families.image_group,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: wgpu::BindingResource::Sampler(&self.mask.1),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 2,
+                            resource: wgpu::BindingResource::TextureView(&view),
+                        },
+                    ],
+                });
+                (bind, i.asset.clone(), ready)
+            };
+            layer.images.iter().map(made).collect::<Vec<_>>()
+        });
         let picks = &self.picks;
         let batch = self.batches.get_mut(&layer.id).expect("made above");
         for set in batch.solids.values_mut().chain(batch.casters.values_mut()) {
@@ -5992,7 +6091,8 @@ impl Renderer {
                         | (u32::from(l.joined) << 3)
                         | (u32::from(l.dash_world) << 4)
                         | (u32::from(seg.hidden) << 5)
-                        | (deep_canvas_scene3d::points::cap_bits(l, k) << 6),
+                        | (deep_canvas_scene3d::points::cap_bits(l, k) << 6)
+                        | (u32::from(l.fog) << 9),
                     dash: half_bits(l.dash[0]) | (half_bits(l.dash[1]) << 16),
                     fade: l
                         .trail
@@ -6028,7 +6128,7 @@ impl Renderer {
                 p: v4(p.pos, p.size),
                 color: pack(p.color),
                 pick: picks[&p.id],
-                flags: u32::from(p.world) | (shape << 1),
+                flags: u32::from(p.world) | (shape << 1) | (u32::from(p.fog) << 3),
                 pad: 0,
             };
             batch.points.push(&p.id, bytemuck::bytes_of(&record));
@@ -6056,7 +6156,8 @@ impl Renderer {
                     flags: u32::from(l.world)
                         | (facing << 1)
                         | (a.page << 3)
-                        | if l.world || self.planted.labels_before_upscale {
+                        | (u32::from(l.fog) << 9)
+                        | if l.world || l.fog || self.planted.labels_before_upscale {
                             0
                         } else {
                             LATER
@@ -6067,6 +6168,32 @@ impl Renderer {
             }
         }
         batch.labels.finish(device, &mut next, &mut written);
+        batch.images.begin();
+        for i in &layer.images {
+            let facing = match i.facing {
+                Facing::Camera => 0,
+                Facing::Upright => 1,
+                Facing::Fixed => 2,
+            };
+            let [w, h] = i.size.map(|s| s as f32);
+            let record = TextRecord {
+                p: v4(i.pos, 1.0),
+                rect: [-w / 2.0, -h / 2.0, w, h],
+                uv: [0.0, 0.0, 1.0, 1.0],
+                right: v4(i.axes[0], 0.0),
+                up: v4(i.axes[1], 0.0),
+                color: pack([255; 3]),
+                pick: picks[&i.id],
+                flags: u32::from(i.world) | (facing << 1) | (u32::from(i.fog) << 9),
+                pad: 0,
+            };
+            batch.images.push(&i.id, bytemuck::bytes_of(&record));
+        }
+        batch.images.finish(device, &mut next, &mut written);
+        if let Some(binds) = image_binds {
+            batch.image_binds = binds;
+            batch.image_made += 1;
+        }
         self.next_generation = next;
         self.counts.instances_written += written;
 
@@ -6094,6 +6221,15 @@ impl Renderer {
                     .next_key
                     .extend([family, set.generation, u64::from(set.len())]);
             }
+        }
+        // The image marks' draws bind their pictures, so a picture made again is a new resource.
+        if batch.images.len() > 0 {
+            batch.next_key.extend([
+                14,
+                batch.images.generation,
+                u64::from(batch.images.len()),
+                batch.image_made,
+            ]);
         }
         batch.next_key.extend(clouds::key(&batch.clouds));
         if !batch.clear_draws.is_empty() {
@@ -6465,8 +6601,16 @@ impl Renderer {
         ) {
             enc.set_pipeline(pipeline);
             enc.set_vertex_buffer(0, buffer.slice(..));
-            enc.set_bind_group(1, &atlas.bind, &[]);
+            enc.set_bind_group(2, &atlas.bind, &[]);
             enc.draw(0..6, 0..batch.labels.len());
+        }
+        if let (Some(buffer), Some(pipeline)) = (&batch.images.buffer, &self.families.image) {
+            enc.set_pipeline(pipeline);
+            enc.set_vertex_buffer(0, buffer.slice(..));
+            for (k, (bind, ..)) in (0..batch.images.len()).zip(&batch.image_binds) {
+                enc.set_bind_group(2, bind, &[]);
+                enc.draw(0..6, k..k + 1);
+            }
         }
         let bundle = enc.finish(&wgpu::RenderBundleDescriptor { label: Some(id) });
         (bundle, calls)

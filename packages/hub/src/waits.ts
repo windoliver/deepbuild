@@ -63,9 +63,18 @@ export function neverEnds(command: string): boolean {
   return endless();
 }
 
-/** The key a call's history is kept under: a shell command as typed, white space collapsed; any other call its tool. */
+/**
+ * How much of a shell command its history key holds: the 8,192 characters the record keeps of it (#2655), so the
+ * commands remembered are bounded in bytes as in number, and a hub started on the record keys a command the same.
+ */
+const KEY_CUT = 8192;
+/** The key a call's history is kept under: a shell command as typed, cut as the record cuts it, white space collapsed; any other call its tool. */
 export function historyKey(kind: string, command: string | null, tool: string): string {
-  return kind === 'shell' && command ? `shell\0${command.trim().replace(/\s+/g, ' ')}` : `${kind}\0${tool}`;
+  if (kind !== 'shell' || !command) return `${kind}\0${tool}`;
+  // No half of a surrogate pair is kept, as in the record's cut.
+  const kept = command.length > KEY_CUT ? command.slice(0, KEY_CUT).replace(/[\uD800-\uDBFF]$/, '') : command;
+  // A string of its own, made from its bytes: a slice, and what a replace pieces together, keep the whole command alive.
+  return Buffer.from(`shell\0${kept.trim().replace(/\s+/g, ' ')}`).toString();
 }
 
 /** How long each command took before, and the expected time that gives: the median of its last runs. */

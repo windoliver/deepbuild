@@ -210,6 +210,24 @@ pub enum Mask {
     Slot,
 }
 
+/// #1619: a tape's tracking band, `band` px of rows torn sideways by up to `shift` px, placed
+/// anew each step at `rate` from `seed` and the document's.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Tracking {
+    pub band: f64,
+    pub rate: f64,
+    pub shift: f64,
+    pub seed: u32,
+}
+
+/// #1619: a vertical roll, the picture slipping `amount` of the frame's height over each
+/// `period` seconds, then back in place.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Roll {
+    pub period: f64,
+    pub amount: f64,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Screen {
     pub kind: &'static str,
@@ -217,6 +235,10 @@ pub struct Screen {
     pub mask: Mask,
     pub curvature: f64,
     pub convergence: f64,
+    /// #1619: the direction red and blue part along, degrees from the frame's +x toward +y.
+    pub convergence_angle: f64,
+    pub tracking: Option<Tracking>,
+    pub roll: Option<Roll>,
     pub bleed: f64,
     pub noise: f64,
     pub rate: f64,
@@ -300,7 +322,12 @@ pub fn read(look: &Value, roles: &Palette, width: f64) -> Result<Print, Refused>
             "vignette" => print.vignette = vignette(o, roles, &path)?,
             "print_wear" => print.wear = wear(o, &path)?,
             "tone_curve" => print.tone = tone_curve(o, roles, &path)?,
-            _ => print.screen = screen(o, &path)?,
+            _ => {
+                let indexed = look
+                    .get("basis")
+                    .is_some_and(|b| b.get("indexed").is_some());
+                print.screen = screen(o, indexed, &path)?
+            }
         }
     }
     Ok(print)
@@ -481,10 +508,82 @@ fn tone_curve(
     Ok((!identity).then_some(t))
 }
 
-fn screen(o: &Map<String, Value>, path: &str) -> Result<Option<Screen>, Refused> {
+/// A span in seconds: a bare number, or a time literal such as `2s`.
+fn seconds(o: &Map<String, Value>, key: &str, path: &str) -> Result<f64, Refused> {
+    let span = match o.get(key) {
+        Some(Value::Number(n)) => n.as_f64(),
+        Some(v) => deep_canvas::document::duration(&Value::Null, v)
+            .ok()
+            .map(|flicks| flicks as f64 / FLICKS as f64),
+        None => None,
+    };
+    match span.filter(|s| s.is_finite() && *s > 0.0) {
+        Some(s) => Ok(s),
+        None => refuse("out_of_range", format!("{path}/{key}")),
+    }
+}
+
+/// A screen's `tracking` or `roll`: its fields, or `None` for `none` and when left out.
+fn part<'a>(
+    o: &'a Map<String, Value>,
+    key: &str,
+    path: &str,
+) -> Result<Option<&'a Map<String, Value>>, Refused> {
+    match o.get(key) {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::String(s)) if s == "none" => Ok(None),
+        Some(Value::Object(fields)) => Ok(Some(fields)),
+        Some(_) => refuse("bad_input", format!("{path}/{key}")),
+    }
+}
+
+fn screen(o: &Map<String, Value>, indexed: bool, path: &str) -> Result<Option<Screen>, Refused> {
     const KINDS: [&str; 5] = ["crt", "kinescope", "fiche", "dv", "vhs"];
     let named = word(o, "kind", &KINDS, path)?;
     let kind = KINDS.iter().copied().find(|k| *k == named).unwrap_or("crt");
+    let rate = number(o, "rate", 30.0, path)?.max(0.0);
+    let tracking = part(o, "tracking", path)?;
+    let roll = part(o, "roll", path)?;
+    // #1619: an indexed look draws palette colors alone, which red and blue parted along an
+    // angle and a band's torn rows would leave.
+    if indexed {
+        let angled = o.get("convergence_angle").is_some_and(|v| !v.is_null());
+        for (key, set) in [
+            ("convergence_angle", angled),
+            ("tracking", tracking.is_some()),
+        ] {
+            if set {
+                return refuse("leaves_palette", format!("{path}/{key}"));
+            }
+        }
+    }
+    let tracking = match tracking {
+        None => None,
+        Some(t) => {
+            let at = format!("{path}/tracking");
+            let t = Tracking {
+                band: length(t, "band", 0.0, 1.0, &at)?.max(0.0),
+                rate: number(t, "rate", rate, &at)?.max(0.0),
+                shift: length(t, "shift", 0.0, 1.0, &at)?,
+                seed: number(t, "seed", 0.0, &at)? as u32,
+            };
+            (t.band > 0.0 && t.shift != 0.0).then_some(t)
+        }
+    };
+    let roll = match roll {
+        None => None,
+        Some(r) => {
+            let at = format!("{path}/roll");
+            let r = Roll {
+                period: seconds(r, "period", &at)?,
+                amount: share(r, "amount", 0.0, &at)?,
+            };
+            if !(0.0..=1.0).contains(&r.amount) {
+                return refuse("out_of_range", format!("{at}/amount"));
+            }
+            (r.amount > 0.0).then_some(r)
+        }
+    };
     let mask = match o.get("mask") {
         None | Some(Value::Null) => Mask::None,
         _ => match word(o, "mask", &["aperture", "shadow", "slot", "none"], path)? {
@@ -500,14 +599,19 @@ fn screen(o: &Map<String, Value>, path: &str) -> Result<Option<Screen>, Refused>
         mask,
         curvature: number(o, "curvature", 0.0, path)?.max(0.0),
         convergence: length(o, "convergence", 0.0, 1.0, path)?,
+        convergence_angle: number(o, "convergence_angle", 0.0, path)?,
+        tracking,
+        roll,
         bleed: number(o, "bleed", 0.0, path)?.clamp(0.0, 1.0),
         noise: share(o, "noise", 0.0, path)?.clamp(0.0, 1.0),
-        rate: number(o, "rate", 30.0, path)?.max(0.0),
+        rate,
     };
     let identity = s.scanlines == 0
         && s.mask == Mask::None
         && s.curvature == 0.0
         && s.convergence == 0.0
+        && s.tracking.is_none()
+        && s.roll.is_none()
         && s.bleed == 0.0
         && s.noise == 0.0;
     Ok((!identity).then_some(s))
@@ -587,6 +691,13 @@ pub struct Frame {
     pub weave: [f64; 2],
     /// Each separation's registration offset, px.
     pub offsets: [[f64; 2]; MAX_SEPARATIONS],
+    /// #1619: the tracking band's frame index at its rate, its seed with the document's, and
+    /// its top row as a share of the frame's height.
+    pub tracking_step: u32,
+    pub tracking_seed: u32,
+    pub tracking: f64,
+    /// #1619: how far the picture has rolled, as a share of the frame's height.
+    pub roll: f64,
 }
 
 /// The frame at document time `t` (flicks), held still under reduced motion.
@@ -600,6 +711,18 @@ pub fn frame(print: &Print, seed: u32, t: i64, reduced_motion: bool) -> Frame {
     }
     if let Some(s) = print.screen {
         f.screen_step = step(t, s.rate, reduced_motion);
+        if let Some(band) = s.tracking {
+            f.tracking_step = step(t, band.rate, reduced_motion);
+            f.tracking_seed = seed ^ band.seed;
+            f.tracking = unit(f.tracking_step, f.tracking_seed, 0x81);
+        }
+        if let Some(r) = s.roll {
+            // The screen's frames to a period; a still screen never rolls.
+            let frames = r.period * s.rate;
+            if frames > 0.0 {
+                f.roll = r.amount * (f64::from(f.screen_step) / frames).fract();
+            }
+        }
     }
     if let Some(w) = print.wear {
         let n = step(t, w.rate, reduced_motion);
@@ -817,6 +940,87 @@ mod tests {
             read(&off, &roles(), 800.0).unwrap().grain.unwrap().amount,
             0.04
         );
+    }
+
+    /// #1619: the screen's angle, band and roll as the look gives them; none of them set is the
+    /// identity, whatever the angle.
+    #[test]
+    fn a_screen_reads_its_angle_band_and_roll() {
+        let off = json!({"finish": [{"screen": {"convergence": 0, "convergence_angle": 90, "tracking": "none", "roll": "none"}}]});
+        assert!(read(&off, &roles(), 800.0).unwrap().is_identity());
+        let on = json!({"finish": [{"screen": {"convergence": 2, "convergence_angle": 90,
+            "tracking": {"band": 12, "rate": 15, "shift": "6px", "seed": 7}, "roll": {"period": "2s", "amount": "50%"}}}]});
+        let s = read(&on, &roles(), 800.0).unwrap().screen.unwrap();
+        assert_eq!((s.convergence, s.convergence_angle), (2.0, 90.0));
+        let band = Tracking {
+            band: 12.0,
+            rate: 15.0,
+            shift: 6.0,
+            seed: 7,
+        };
+        assert_eq!(s.tracking, Some(band));
+        assert_eq!(
+            s.roll,
+            Some(Roll {
+                period: 2.0,
+                amount: 0.5
+            })
+        );
+    }
+
+    /// #1619: both would leave the palette, so an indexed look refuses each, naming the field;
+    /// the convergence it had before stays.
+    #[test]
+    fn an_indexed_look_refuses_the_angle_and_the_band_naming_the_field() {
+        let look = |screen: Value| json!({"basis": {"indexed": {"palette": ["ink", "body"]}}, "finish": [{"screen": screen}]});
+        for (screen, field) in [
+            (
+                json!({"convergence": 2, "convergence_angle": 90}),
+                "convergence_angle",
+            ),
+            (json!({"tracking": {"band": 8, "shift": 4}}), "tracking"),
+        ] {
+            let r = read(&look(screen), &roles(), 800.0).unwrap_err();
+            assert_eq!(
+                (r.code, r.path),
+                ("leaves_palette", format!("look/finish/0/screen/{field}"))
+            );
+        }
+        let plain = look(json!({"convergence": 2, "tracking": "none"}));
+        assert_eq!(
+            read(&plain, &roles(), 800.0)
+                .unwrap()
+                .screen
+                .unwrap()
+                .convergence,
+            2.0
+        );
+    }
+
+    /// #1619: the band's place holds inside a step at its rate and is drawn anew at the next,
+    /// from its seed with the document's; the roll is its closed form of the screen's frame
+    /// index; both hold still under reduced motion.
+    #[test]
+    fn the_band_and_the_roll_come_from_the_frame_index_at_their_rates() {
+        let look = json!({"finish": [{"screen": {"rate": 30,
+            "tracking": {"band": 12, "rate": 15, "shift": 6, "seed": 7}, "roll": {"period": 2, "amount": 0.5}}}]});
+        let p = read(&look, &roles(), 800.0).unwrap();
+        let at = |n: i64| frame(&p, 1619, n * FLICKS / 60, false);
+        let places: Vec<f64> = (0..16).map(|n| at(n).tracking).collect();
+        for step in places.chunks(4) {
+            assert!(step.iter().all(|y| *y == step[0] && (0.0..1.0).contains(y)));
+        }
+        let mut steps = places.clone();
+        steps.dedup();
+        assert_eq!(steps.len(), 4, "a new place each step: {places:?}");
+        assert_ne!(at(0).tracking, frame(&p, 1620, 0, false).tracking);
+        // 60 screen frames to a period: a quarter of the way at 0.5 s, back in place at 2 s.
+        assert_eq!(at(30).roll, 0.5 * 0.25);
+        assert_eq!(at(31).roll, at(30).roll, "one value inside a screen frame");
+        assert_eq!(at(119).roll, 0.5 * (59.0 / 60.0));
+        assert_eq!(at(120).roll, 0.0);
+        let held = frame(&p, 1619, 95 * FLICKS / 60, true);
+        assert_eq!((held.tracking, held.roll), (at(0).tracking, 0.0));
     }
 
     #[test]

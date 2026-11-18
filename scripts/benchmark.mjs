@@ -266,11 +266,11 @@ export function prepareCopy(directory) {
 
 // A timing or memory budget counts only on a reference Mac, on mains power, with Low Power Mode
 // off and the thermal state nominal (design: The reference Mac). There are three, and a budget holds
-// on each.
-const references = [
-  { name: 'Mac15,7 (M3 Pro, 36 GB)', model: 'Mac15,7', chip: 'Apple M3 Pro', memoryBytes: 36 * 2 ** 30 },
-  { name: 'Mac15,12 (M3, 16 GB)', model: 'Mac15,12', chip: 'Apple M3', memoryBytes: 16 * 2 ** 30 },
-  { name: 'Mac17,10 (M5 Max, 64 GB)', model: 'Mac17,10', chip: 'Apple M5 Max', memoryBytes: 64 * 2 ** 30 },
+// on each. The agent harness and the canvas cost writer import this list, and deep-show's copy is held to it (#1831).
+export const references = [
+  { name: 'Mac15,7 (M3 Pro, 36 GB)', model: 'Mac15,7', chip: 'Apple M3 Pro', memoryBytes: 36 * 2 ** 30, cores: 12 },
+  { name: 'Mac15,12 (M3, 16 GB)', model: 'Mac15,12', chip: 'Apple M3', memoryBytes: 16 * 2 ** 30, cores: 8 },
+  { name: 'Mac17,10 (M5 Max, 64 GB)', model: 'Mac17,10', chip: 'Apple M5 Max', memoryBytes: 64 * 2 ** 30, cores: 18 },
 ];
 const hardware = ['model', 'chip', 'memoryBytes'];
 const conditions = [
