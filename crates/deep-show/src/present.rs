@@ -10,7 +10,7 @@ use std::collections::BTreeSet;
 
 use deep_canvas::schedule::Scheduler;
 use deep_canvas::scope::Event;
-use deep_canvas_input::track::{Entry, Writer};
+use deep_canvas_input::track::{Entry, Writer, REWIND};
 use deep_canvas_media::mix::{Gain, Strip};
 use deep_canvas_motion::present::{Kind, Path, Stop, MOST_PATHS};
 use deep_canvas_motion::program::Program;
@@ -596,6 +596,32 @@ impl Hub<'_> {
         written
     }
 
+    /// #860: back on a presented piece that declares rewind, which is the reader's: a rewind to the
+    /// stop before on the piece's input track, and its logic baked again on the track, so frames
+    /// from now fold the current branch; the entry as the track writes it. None on a piece without.
+    fn present_rewind(&mut self, serial: u64) -> Option<Value> {
+        let doc = self.present.as_ref()?.doc.clone();
+        self.forms.get(&doc)?.get("rewind")?;
+        let now = self.now;
+        let track = self.tracks.entry(doc.clone()).or_default();
+        track.append(Entry {
+            t: now,
+            seq: 0,
+            control: REWIND.to_string(),
+            value: json!({"to": {"stop": 1}}),
+            samples: None,
+            writer: Writer::You,
+            serial: Some(serial as u32),
+        });
+        let written = track
+            .entries()
+            .last()
+            .map(Entry::to_json)
+            .unwrap_or(Value::Null);
+        self.rebake(&doc, now);
+        Some(written)
+    }
+
     /// A key while present mode shows the piece in `panel`: present mode's meaning wins over the
     /// film viewer's and a control's (Marker: present mode); `None` for a key it doesn't hold.
     pub(crate) fn present_key(&mut self, panel: &str, event: &Event, serial: u64) -> Option<Value> {
@@ -614,7 +640,13 @@ impl Hub<'_> {
             |appended: Vec<Value>| json!({"serial": serial, "appended": appended, "present": true});
         let entry = match key.as_str() {
             "ArrowRight" | " " | "PageDown" => json!("advance"),
-            "ArrowLeft" | "PageUp" => json!("back"),
+            "ArrowLeft" | "PageUp" => match self.present_rewind(serial) {
+                Some(written) => {
+                    self.present.as_mut()?.notice = None;
+                    return Some(reply(vec![written]));
+                }
+                None => json!("back"),
+            },
             "b" | "B" => {
                 let p = self.present.as_mut()?;
                 p.blank = !p.blank;

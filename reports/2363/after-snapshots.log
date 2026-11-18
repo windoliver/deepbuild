@@ -1,0 +1,24 @@
+
+ RUN  v5.0.5 <home>/deepbuild-bays/1/change
+
+ ✓ tests/acceptance/2085/fixtures.test.ts > #2085.a93c4567 every fixture the full build's fixtures call lists is presented by deep_show in that build, as #387's and #855's suites take them > #2085.a93c4567 the fixtures call of full lists fixtures, the effects module's own shadowed-box among them, and deep_show presents every one it lists 5865ms
+ ✓ tests/acceptance/2085/fixtures.test.ts > #2085.688e488c until #387's and #855's seven cases pass, scripts/known-failures.json lists them with #2085 > #2085.688e488c while a fixture the full build lists isn't presented, each of the seven cases is listed naming #2085; once every one is, nothing of tests/acceptance/387/perturb.test.ts or tests/acceptance/855/hash.test.ts is listed 6ms
+ ✓ tests/acceptance/388/schedule.test.ts > #388.46473baa the sealed plan equals its committed snapshot > #388.46473baa core: sealed with exactly text and look, its published plan (deep://schedule/<core version>) equals crates/deep-show/schedule/core.json and runs only the core's, text's and look's operators 5062ms
+ ✓ tests/acceptance/388/schedule.test.ts > #388.46473baa the sealed plan equals its committed snapshot > #388.46473baa r1: sealed with exactly text, look, marks2d, data, graph, record, sheet and motion, its published plan equals crates/deep-show/schedule/r1.json and runs only those modules' and the core's operators 2873ms
+ ✓ tests/acceptance/388/schedule.test.ts > #388.46473baa the sealed plan equals its committed snapshot > #388.46473baa the core and r1 plans are two plans: r1's published plan differs from the core snapshot, naming operators of the modules r1 adds, so neither snapshot can stand for the other 247ms
+ ✓ tests/acceptance/388/sets.test.ts > #388.c1a5581d the core and r1 build sets seal with exactly the canvas modules their lists name; a build that leaves look or text out refuses startup, naming the module > #388.c1a5581d the core build set seals with exactly text and look 5646ms
+ ✓ tests/acceptance/388/sets.test.ts > #388.c1a5581d the core and r1 build sets seal with exactly the canvas modules their lists name; a build that leaves look or text out refuses startup, naming the module > #388.c1a5581d the r1 build set seals with exactly text, look, marks2d, data, graph, record, sheet and motion 5176ms
+ ✓ tests/acceptance/388/sets.test.ts > #388.c1a5581d the core and r1 build sets seal with exactly the canvas modules their lists name; a build that leaves look or text out refuses startup, naming the module > #388.c1a5581d a test build that leaves look out (core,test-leave-out-look) refuses startup, naming look 5077ms
+stderr | tests/acceptance/388/sets.test.ts
+vitest-setup: stopping 4 process(es) this file left running:
+  15445 (node)
+  15446 (node)
+  15448 (node)
+  15450 (node)
+
+ ✓ tests/acceptance/388/sets.test.ts > #388.c1a5581d the core and r1 build sets seal with exactly the canvas modules their lists name; a build that leaves look or text out refuses startup, naming the module > #388.c1a5581d a test build that leaves text out (core,test-leave-out-text) refuses startup, naming text 4790ms
+
+ Test Files  3 passed (3)
+      Tests  9 passed (9)
+   Start at  15:23:15
+   Duration  291.38s (tests 100%)

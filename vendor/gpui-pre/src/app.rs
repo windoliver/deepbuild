@@ -3050,6 +3050,8 @@ impl App {
 
     /// Tell GPUI that an entity has changed and observers of it should be notified.
     pub fn notify(&mut self, entity_id: EntityId) {
+        #[cfg(feature = "test-support")]
+        crate::window::frame_counts::note_notified(entity_id); // DeepBuild patch (windoliver/deepbuild#1482)
         let window_invalidators = mem::take(
             self.window_invalidators_by_entity
                 .entry(entity_id)
