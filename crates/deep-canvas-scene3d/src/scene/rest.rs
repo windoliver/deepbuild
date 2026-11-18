@@ -263,6 +263,15 @@ pub(crate) fn paint(look: &Look3, params: &Value, path: &str) -> Result<[u8; 3],
     }
 }
 
+/// A mark in 3D's `fog` (Marks in 3D; #1992): whether the sky's fog applies to it, `default`
+/// where it doesn't say.
+pub(crate) fn fog(params: &Value, default: bool) -> bool {
+    params
+        .get("fog")
+        .and_then(Value::as_bool)
+        .unwrap_or(default)
+}
+
 /// A solid's `paint.stroke {role, width}`: an outline around a box or a built mesh (a recipe's
 /// parts among them, #173); a cylinder's or a sphere's isn't drawn yet, so it's refused rather
 /// than left out.
@@ -325,6 +334,49 @@ pub(super) fn point_of(
     Ok(apply(&crate::cut::inverse(model), p))
 }
 
+/// How a text or image mark turns (Marks in 3D: facing).
+fn facing(params: &Value, path: &str) -> Result<Facing, Refused> {
+    match params.get("facing").and_then(Value::as_str) {
+        None | Some("camera") => Ok(Facing::Camera),
+        Some("upright") => Ok(Facing::Upright),
+        Some("fixed") => Ok(Facing::Fixed),
+        Some(_) => refused("out_of_range", format!("{path}/facing")),
+    }
+}
+
+/// A `mark.image@1` at the world `m` (#1992; Marks in 3D): its picture by hash, on one quad of
+/// `size` centred on the item.
+pub(super) fn image(id: &str, params: &Value, path: &str, m: &Affine3) -> Result<Image, Refused> {
+    let asset = match params.get("asset").and_then(Value::as_str) {
+        Some(s) if s.len() == 64 && s.bytes().all(|b| b.is_ascii_hexdigit()) => s,
+        _ => return refused("out_of_range", format!("{path}/asset")),
+    };
+    let size = match params
+        .get("size")
+        .and_then(Value::as_array)
+        .map(Vec::as_slice)
+    {
+        Some([w, h]) => [num(Some(w)), num(Some(h))],
+        _ => [None; 2],
+    };
+    let [Some(w), Some(h)] = size.map(|s| s.filter(|s| *s > 0.0)) else {
+        return refused("out_of_range", format!("{path}/size"));
+    };
+    Ok(Image {
+        id: id.to_string(),
+        asset: asset.to_ascii_lowercase(),
+        pos: origin(m),
+        size: [w, h],
+        world: params.get("size_space").and_then(Value::as_str) == Some("world"),
+        facing: facing(params, path)?,
+        axes: [
+            normalize(turn(m, [1.0, 0.0, 0.0])),
+            normalize(turn(m, [0.0, 1.0, 0.0])),
+        ],
+        fog: fog(params, true),
+    })
+}
+
 /// A `mark.text@1`'s label at the world `m` (#226: a module's marks draw theirs through it too).
 pub(crate) fn label(
     id: &str,
@@ -339,12 +391,7 @@ pub(crate) fn label(
     let Some(role) = Role::parse(font) else {
         return refused("out_of_range", format!("{path}/font"));
     };
-    let facing = match params.get("facing").and_then(Value::as_str) {
-        None | Some("camera") => Facing::Camera,
-        Some("upright") => Facing::Upright,
-        Some("fixed") => Facing::Fixed,
-        Some(_) => return refused("out_of_range", format!("{path}/facing")),
-    };
+    let facing = facing(params, path)?;
     let world_space = params.get("size_space").and_then(Value::as_str) == Some("world");
     let size = num(params.get("size")).unwrap_or(if world_space { 0.25 } else { 13.0 });
     // A screen-size label's run is a 2D text's of that text, font and size.
@@ -372,6 +419,7 @@ pub(crate) fn label(
             normalize(turn(m, [0.0, 1.0, 0.0])),
         ],
         color: paint(look, params, path)?,
+        fog: fog(params, false),
     })
 }
 
@@ -469,6 +517,7 @@ pub(crate) fn line(
         cap: crate::points::cap(params, &path)?,
         trail: None,
         points: written_points,
+        fog: fog(params, true),
     })
 }
 
@@ -797,6 +846,7 @@ pub(super) fn edge_line(
         cap: Default::default(),
         trail: None,
         points: Vec::new(),
+        fog: fog(params, true),
     })
 }
 

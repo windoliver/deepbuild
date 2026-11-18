@@ -11,7 +11,7 @@ use gpui_kit::*;
 use super::layout::{Anchor, Heights};
 use super::runs::RunCache;
 use super::{sort, text, Buf, Rows};
-use crate::chrome;
+use deep_app::chrome;
 
 /// The uniform row height; a cell's text is the look's body role, a step of space in from its edge (#1458).
 pub const ROW: f64 = 32.;
@@ -107,15 +107,6 @@ impl TableView {
         } else {
             Heights::uniform(n, ROW)
         }
-    }
-
-    pub fn rows(&self) -> &std::sync::Arc<dyn Rows> {
-        &self.rows
-    }
-
-    pub fn with_rich(mut self, rich: Rich) -> Self {
-        self.rich = Some(rich);
-        self
     }
 
     pub fn focus_handle(&self) -> &FocusHandle {
@@ -435,7 +426,7 @@ impl Element for TableElement {
         let colors = *chrome::of(window);
         let scale = window.scale_factor();
         let font = window.text_style().font();
-        let s = crate::chrome::sizes();
+        let s = chrome::sizes();
         let run = TextRun {
             len: 0,
             font,

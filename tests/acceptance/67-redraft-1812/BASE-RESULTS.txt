@@ -1,0 +1,149 @@
+Base commit c0a9de979eae03d05db91248467e488c89f537b8 (main at 16dc5eab0, plus #1812's blind suite, its design line and
+the lint lane's entry), branch redraft-67-1812, with nothing changed but this folder and its line in scripts/lanes.mjs,
+uncommitted. November 18, 2026, PST. Node 24.22.0, Vitest 5.0.5, macOS, 18 cores, on a Mac shared with other
+sessions (one-minute load 11.6 when the run started, 12.1 when it ended). Built first: npm ci; npm run build
+--workspaces; CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 cargo build --locked -p deep-hook (target/debug/deep-hook
+built at 09:15 and there when the run started at 09:17).
+
+Commands, from the checkout's root (written <repo> below):
+
+  NO_COLOR=1 node scripts/throttle.mjs test --wait 30 -- node node_modules/vitest/vitest.mjs run --root tests/acceptance/67-redraft-1812 --no-file-parallelism --testTimeout=600000 --reporter=verbose
+  node node_modules/typescript/bin/tsc -p tests/acceptance/67-redraft-1812/tsconfig.json
+
+The throttle only waits for a test grant and runs the command as given. One run, at 09:17:53, 4.1 s: 6 files
+failed; of 18 tests, 5 failed and 13 were skipped.
+
+Every failure is at the first `deep workspace` call its test makes or builds on, with `--json`: it must exit 0, and at
+the base it isn't understood. The base's parser takes exact argument counts, so it prints the usage on stderr and
+exits 2. That is the line #1812 moves. Nothing failed before it. In each file the hub started, and in landing's second
+test the session, the work item's task, the workspace the hub made for it, the two assertions on it and the commit in
+it all came first. Every command the run names ends in `--json`, so ./hub.ts's `workspace()` is the one called.
+
+Per test ("<usage>" is the base's six-line usage of deep workspace, which starts "Usage: deep workspace new <topic>
+[--folder <path>]"):
+
+  FAIL  diff.test.ts > AC3 #67.798381ee a setting and a file changed after the lock are named, and those changed
+        between the workspace's making and the lock are not (redraft 1812)                                 264 ms
+        `deep workspace new Web host --json` must exit 0: exit 2 after 32 ms, stdout "", stderr "<usage>"
+        (diff.test.ts:21, newWorkspace)
+  SKIP  drift.test.ts, all 8 (redraft 1812): AC6 #67.4a8b02f5 with nothing changed ...; AC6 web-1's drift marks ...;
+        AC6 only the check whose input changed ...; AC7 #67.bb36d821 the key holds one digest ...; AC7 two verdicts on
+        one commit ...; AC7 the first is never reused ...; AC7 a key of only the commit ... (the plant); AC11
+        #67.b3d12369 the fixture setting changes ...
+        The file's beforeAll failed: `deep workspace new Web fleet --json` must exit 0: exit 2 after 35 ms, stdout "",
+        stderr "<usage>" (drift.test.ts:62, setUp, newWorkspace). Its tests read that one scenario and didn't run, as
+        the frozen file's did at its own base (67/BASE-FAILURE.txt).
+  FAIL  landing.test.ts > #67 a workspace is a git repo DeepBuild keeps, ... > a workspace is made under
+        ~/.deepbuild/workspaces/ with no question and no git identity; another in a folder you pick; each is a project
+        of its own, recorded by the core (redraft 1812)                                                    259 ms
+        `deep workspace new Household budget --json` must exit 0: exit 2 after 30 ms, stdout "", stderr "<usage>"
+        (landing.test.ts:19, newWorkspace)
+  FAIL  landing.test.ts > #67 a task from a work source with no repo lands in a new workspace, and you can move it > a
+        work item named outside any repo opens its task in a new workspace; moved to a folder you pick it keeps its
+        id, files and history, and a session there is in the same project (redraft 1812)                   604 ms
+        `deep workspace move Monthlyclientreporte8cbc5e6 /private/tmp/dh67-r1xSe9/clients/acme --json` must exit 0:
+        exit 2 after 30 ms, stdout "", stderr "<usage>" (landing.test.ts:64, workspace)
+  SKIP  loop.test.ts, all 5 (redraft 1812): AC1 #67.04ad1434 what done means ...; AC1 checks ...; AC1 asks ...; AC1 a
+        receipt ...; and, under AC1's Proof, the workspace holds its history ...
+        The file's beforeAll failed: `deep workspace new Weekly report --json` must exit 0: exit 2 after 31 ms, stdout
+        "", stderr "<usage>" (loop.test.ts:29, newWorkspace). Its tests read that one scenario and didn't run, as the
+        frozen file's did at its own base.
+  FAIL  revert.test.ts > AC2 #67.a680fef7 a commit that rewrote a definition, took a script's mode, deleted a note and
+        added a script is undone byte for byte; a later commit stays (redraft 1812)                        264 ms
+        `deep workspace new Server upkeep --json` must exit 0: exit 2 after 31 ms, stdout "", stderr "<usage>"
+        (revert.test.ts:33, newWorkspace)
+  FAIL  targets.test.ts > #67 targets a definition names keep stable ids, ... > a script two requirements target is
+        renamed: the claim follows it, and one proposal names both paths, leaving the definition as it was
+        (redraft 1812)                                                                                     267 ms
+        `deep workspace new Report script --json` must exit 0: exit 2 after 32 ms, stdout "", stderr "<usage>"
+        (targets.test.ts:25, newWorkspace)
+
+None ended BLOCKED or INCONCLUSIVE. After the run no process this run started was alive (no `deep` process of this
+checkout in ps), and no /tmp/dh67-* folder of this run was left; seven older ones, dated November 15 to 17, belong to
+other sessions' runs and were left alone. Vitest's cache in this folder, node_modules/.vite, was deleted.
+
+Type check: clean (exit 0, no output). With --listFiles it reads ../67/hub.ts, ./hub.ts and the six test files.
+
+Not run: any implementation of #1812; none exists here. So the redraft's passing side, each object read with `--json`,
+is unverified. The test bodies after each first call are the frozen suite's, unchanged but for their names.
+
+==== The reporter's lines for the run (the checkout written <repo>, the usage text cut to <usage>, code frames left out)
+
+ RUN  v5.0.5 <repo>/tests/acceptance/67-redraft-1812
+
+ ↓ drift.test.ts > AC6 #67.4a8b02f5 a host's drift marks the verdicts that read it stale and re-runs only those checks > AC6 #67.4a8b02f5 with nothing changed a read of the hosts marks nothing and runs nothing (redraft 1812)
+ ↓ drift.test.ts > AC6 #67.4a8b02f5 a host's drift marks the verdicts that read it stale and re-runs only those checks > AC6 #67.4a8b02f5 web-1's drift marks the verdict that read it stale, and not the verdict that read only web-2 (redraft 1812)
+ ↓ drift.test.ts > AC6 #67.4a8b02f5 a host's drift marks the verdicts that read it stale and re-runs only those checks > AC6 #67.4a8b02f5 only the check whose input changed runs again; the claim's other check keeps its result (redraft 1812)
+ ↓ drift.test.ts > AC7 #67.bb36d821 a workspace verdict's key holds state_digests; two verdicts on one commit whose host readings differ get different keys > AC7 #67.bb36d821 the key holds one digest for each touch its checks read, a SHA-256 (redraft 1812)
+ ↓ drift.test.ts > AC7 #67.bb36d821 a workspace verdict's key holds state_digests; two verdicts on one commit whose host readings differ get different keys > AC7 #67.bb36d821 two verdicts on one commit whose host readings differ have different keys, differing only in state_digests (redraft 1812)
+ ↓ drift.test.ts > AC7 #67.bb36d821 a workspace verdict's key holds state_digests; two verdicts on one commit whose host readings differ get different keys > AC7 #67.bb36d821 the first is never reused for the second: when the new reading fails the check, the claim's verdict is FAIL on the same commit (redraft 1812)
+ ↓ drift.test.ts > AC7 #67.bb36d821 a workspace verdict's key holds state_digests; two verdicts on one commit whose host readings differ get different keys > AC7 #67.bb36d821 a key of only the commit, document revisions, check digests, environment and tools gives both one key and fails this test (redraft 1812)
+ ↓ drift.test.ts > AC11 #67.b3d12369 a verdict pinned to the real source goes stale on the change a planted source can't see > AC11 #67.b3d12369 the fixture setting changes through the shipped host source, and the verdict pinned to its reading goes stale, naming what it read (redraft 1812)
+ ↓ loop.test.ts > AC1 #67.04ad1434 a non-code task runs the same loop as code in a workspace > AC1 #67.04ad1434 what done means: the task opens in the workspace's project and its definition locks with its check (redraft 1812)
+ ↓ loop.test.ts > AC1 #67.04ad1434 a non-code task runs the same loop as code in a workspace > AC1 #67.04ad1434 checks: the stop short of the definition is sent back naming R1 and its check, and the stop that meets it passes (redraft 1812)
+ ↓ loop.test.ts > AC1 #67.04ad1434 a non-code task runs the same loop as code in a workspace > AC1 #67.04ad1434 asks: a call that needs you waits in the workspace's project on your answer, and runs once you say yes (redraft 1812)
+ ↓ loop.test.ts > AC1 #67.04ad1434 a non-code task runs the same loop as code in a workspace > AC1 #67.04ad1434 a receipt: changes.read for the claim shows the PASS, the check it ran and the file the task wrote (redraft 1812)
+ ↓ loop.test.ts > AC1 #67.04ad1434 the Proof: a weekly report run end to end in a workspace, with its history, a state-source diff and an undone change > the workspace holds its history, the ledger's change shows as a state-source diff, and reverting the report's commit undoes it (redraft 1812)
+ × landing.test.ts > #67 a workspace is a git repo DeepBuild keeps, or a folder you pick, and a project id covers it > a workspace is made under ~/.deepbuild/workspaces/ with no question and no git identity; another in a folder you pick; each is a project of its own, recorded by the core (redraft 1812) 259ms
+ × landing.test.ts > #67 a task from a work source with no repo lands in a new workspace, and you can move it > a work item named outside any repo opens its task in a new workspace; moved to a folder you pick it keeps its id, files and history, and a session there is in the same project (redraft 1812) 604ms
+ × targets.test.ts > #67 targets a definition names keep stable ids, so a rename is followed and offered as one proposed diff > a script two requirements target is renamed: the claim follows it, and one proposal names both paths, leaving the definition as it was (redraft 1812) 267ms
+ × revert.test.ts > AC2 #67.a680fef7 reverting a workspace commit restores its definitions and scripts exactly > AC2 #67.a680fef7 a commit that rewrote a definition, took a script's mode, deleted a note and added a script is undone byte for byte; a later commit stays (redraft 1812) 264ms
+ × diff.test.ts > AC3 #67.798381ee a state source's diff names what changed since the definition was fixed > AC3 #67.798381ee a setting and a file changed after the lock are named, and those changed between the workspace's making and the lock are not (redraft 1812) 264ms
+
+ FAIL  drift.test.ts [ drift.test.ts ]
+Error: `deep workspace new Web fleet --json` must exit 0: exit 2 after 35 ms, stdout "", stderr "<usage>"
+ ❯ must ../67/hub.ts:50:18
+ ❯ workspace hub.ts:26:3
+ ❯ newWorkspace hub.ts:33:11
+ ❯ setUp drift.test.ts:28:14
+ ❯ drift.test.ts:62:15
+
+ FAIL  loop.test.ts [ loop.test.ts ]
+Error: `deep workspace new Weekly report --json` must exit 0: exit 2 after 31 ms, stdout "", stderr "<usage>"
+ ❯ must ../67/hub.ts:50:18
+ ❯ workspace hub.ts:26:3
+ ❯ newWorkspace hub.ts:33:11
+ ❯ loop.test.ts:29:8
+
+ FAIL  diff.test.ts > ... (redraft 1812)
+Error: `deep workspace new Web host --json` must exit 0: exit 2 after 32 ms, stdout "", stderr "<usage>"
+ ❯ workspace hub.ts:26:3
+ ❯ newWorkspace hub.ts:33:11
+ ❯ diff.test.ts:21:16
+
+ FAIL  landing.test.ts > ... recorded by the core (redraft 1812)
+Error: `deep workspace new Household budget --json` must exit 0: exit 2 after 30 ms, stdout "", stderr "<usage>"
+ ❯ workspace hub.ts:26:3
+ ❯ newWorkspace hub.ts:33:11
+ ❯ landing.test.ts:19:18
+
+ FAIL  landing.test.ts > ... a session there is in the same project (redraft 1812)
+Error: `deep workspace move Monthlyclientreporte8cbc5e6 /private/tmp/dh67-r1xSe9/clients/acme --json` must exit 0: exit 2 after 30 ms, stdout "", stderr "<usage>"
+ ❯ workspace hub.ts:26:3
+ ❯ landing.test.ts:64:19
+
+ FAIL  revert.test.ts > ... a later commit stays (redraft 1812)
+Error: `deep workspace new Server upkeep --json` must exit 0: exit 2 after 31 ms, stdout "", stderr "<usage>"
+ ❯ workspace hub.ts:26:3
+ ❯ newWorkspace hub.ts:33:11
+ ❯ revert.test.ts:33:16
+
+ FAIL  targets.test.ts > ... leaving the definition as it was (redraft 1812)
+Error: `deep workspace new Report script --json` must exit 0: exit 2 after 32 ms, stdout "", stderr "<usage>"
+ ❯ workspace hub.ts:26:3
+ ❯ newWorkspace hub.ts:33:11
+ ❯ targets.test.ts:25:16
+
+ Test Files  6 failed (6)
+      Tests  5 failed | 13 skipped (18)
+   Start at  09:17:53
+   Duration  4.10s (tests 97%, transform 1%, import 1%)
+
+The usage, in full, as stderr held it each time:
+
+Usage: deep workspace new <topic> [--folder <path>]
+       deep workspace task <id> <title> --criterion <text> [--criterion <text>]... [--blocked-by <n>]...
+       deep workspace move <id> <folder | repo checkout>
+       deep workspace revert <id> [<commit>]
+       deep workspace diff <id>
+       deep workspace drift <id>

@@ -420,6 +420,7 @@ impl Hub<'_> {
                     cap: Default::default(),
                     trail: None,
                     points: Vec::new(),
+                    fog: false,
                 }],
                 ..Default::default()
             });

@@ -113,6 +113,17 @@ impl Hub<'_> {
                     }
                 }
             }
+            // #1498: a live text selection is the quote of an ask about the selection, or one pointing into it.
+            let into = self.scopes[panel].scope.text_selection().is_some_and(|r| {
+                pointer.is_none()
+                    || pointed
+                        .id
+                        .as_ref()
+                        .is_some_and(|id| *id == r.anchor.0 || *id == r.focus.0)
+            });
+            if let Some(quote) = self.selection_quote(panel).filter(|_| into) {
+                pointed.quote = Some(quote);
+            }
             let scope = &self.scopes[panel].scope;
             let ids: Vec<String> = match (&pointer, &pointed.id) {
                 (None, _) => scope.selection().to_vec(),

@@ -1,0 +1,7 @@
+{
+  "id": "test/safe1879",
+  "version": "1.0.0",
+  "digest": "d1:0000000000000000000000000000000000000000000000000000000000000000",
+  "actions": ["ext.safe1879.ping"],
+  "requires": { "preview": ["deep.registerAction"] }
+}

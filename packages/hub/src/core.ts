@@ -259,6 +259,8 @@ export class Core {
   private chain: Promise<unknown> = Promise.resolve();
   /** Whether the start has finished: from then on, work waiting for it joins the queue at once. */
   private opened = false;
+  /** Whether the start failed: nothing is replayed then, and the spool waits for the next start (#2783). */
+  private unstarted = false;
   private blocked: string | undefined;
   /** The hub's lock file was removed or replaced under it (#909): appends stop for good, so `blocked` never clears. */
   private lost = false;
@@ -589,7 +591,7 @@ export class Core {
       evidence: (sha) => this.store.read(sha).catch(() => null),
     });
     this.ready = this.init();
-    this.ready.then(() => { this.opened = true; }, () => undefined);
+    this.ready.then(() => { this.opened = true; }, () => { this.unstarted = true; });
     // A start that fails stops nothing else; each call then reports why.
     this.ready.catch(() => undefined);
   }
@@ -895,7 +897,7 @@ export class Core {
       // A check runner's reads and plays of a canvas piece (#411, #184): the hub's canvas core, and a replica playing the
       // revision's canonical document, its programs from the evidence store. A job kind's qualification by the core
       // (#518) goes the same way, with the tools it names in the world.
-      canvas: (call) => this.canvasSide.qualifyTool(call), replica: (call) => this.play(call), ...plant,
+      canvas: (call) => this.canvasSide.qualifyTool(call), replica: (call) => this.play(call), ...plant, ...(this.options.safe ? { safe: true } : {}),
       // Nothing in the hub records its source calls, so it keeps no answer (#2650).
       recording: false });
     this.jobKinds = new Jobs({
@@ -918,8 +920,9 @@ export class Core {
     for (const pkg of await extensions.installed()) {
       // One installed by a hub that ran no conformance at install has no kept result: it runs now, once, so the
       // package loads from its result at this start and each later one, as one installed since #785 does. A check
-      // that can't run (an untrusted project) is left to the load's refusal, which names it.
-      if (!extensions.checked(pkg)) await extensions.check(pkg).catch(() => undefined);
+      // that can't run (an untrusted project) is left to the load's refusal, which names it. In safe mode none runs:
+      // a check runs the package's code, and the load is refused anyway (#1879).
+      if (!this.options.safe && !extensions.checked(pkg)) await extensions.check(pkg).catch(() => undefined);
       const load = await extensions.load(pkg);
       if (load.status === 'refused') process.stderr.write(`deep hub: extension ${pkg.id}@${pkg.version} not loaded: ${load.reason}\n`);
       // One installed before panel@1 ran at install has no kept verdict for its views: they run now, once.
@@ -1272,7 +1275,8 @@ export class Core {
    * replayed then, beside the hooks that follow, rather than at the next start.
    */
   private replayLate(kept = false): void {
-    if (this.stopping) return;
+    // A start that failed leaves the spool where it is: asking again would find it again, without end (#2783).
+    if (this.stopping || this.unstarted) return;
     if (this.replaying) {
       this.retake ||= kept;
       return;

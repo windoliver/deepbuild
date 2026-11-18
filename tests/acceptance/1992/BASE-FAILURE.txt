@@ -1,0 +1,172 @@
+# #1992 acceptance suite at the base commit 16dc5eab0 (before any #1992 implementation), each file run once, one at a time:
+#   CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1992 --no-file-parallelism --testTimeout=14400000 <file>
+# on a loaded Mac (one-minute load 6 to 34 on 18 cores) with deep-gpu and deep-show built first through scripts/throttle.mjs.
+# Result: 1 passed, 16 failed (17 tests in 8 files). Every failure is at an assertion of the test's own; none is a crash, a
+# refusal of a fixture or a missing helper. Long lists of per-pixel failures are cut to their first lines below.
+#
+#   FAIL  AC1 linear-curve (1) the panels: the 30 m and 60 m panels read 1.0, should read 0.75 and 0.5 (an object fog_curve falls
+#         to the default; no fog on an unlit part). The 8 m and 10 m panels read 1.0, and every fixture check holds.
+#   FAIL  AC1 linear-curve (2) the planted exp curve: its 10 m panel reads 1.0, should read 0.897 (no fog on an unlit part under exp).
+#   FAIL  AC1 linear-curve (3) the refusal: fog_curve linear {near: 50, far: 10} is drawn, not refused.
+#   FAIL  AC2 eye-distance (linear), (exp), (exp2): both panels read 1.0, should read 0.75; the fixture checks hold in both poses.
+#   FAIL  AC3 marks (1) default fog: the line and the point read 1.0 and the image 0.0 (no image mark draws), should read 0.75.
+#   FAIL  AC3 marks (2) fog: false: the label's 3,190 ink pixels read 1.0 as they should; the image reads 0.0, should read 1.0.
+#         The planted fog: true on the label is not reached on the base.
+#   FAIL  AC3 marks (3) status: the chip is #bf232b exactly under all three curves and the planted tint fails the judge naming
+#         the mark, as they should (the base already draws status after tone mapping); the fixture's fog does not reach the
+#         mark: its unlit body reads 1.0 at 60 m, should read 0.5, 0.625 and 0.531.
+#   FAIL  AC4 background: the sphere's 20,000+ pixels are byte-equal in both frames and the planted environment.intensity 0.25
+#         fails the sphere judge naming pixels, as they should; the background reads 1.0, should read 0.25 (the field isn't read).
+#   PASS  AC5 castle-guard (1) the guard, expected to pass on the base: the castle, and the castle with labels, drawn by this
+#         checkout's deep-gpu have the pixel hashes of the merge base's own deep-gpu, built by the file itself from the exported
+#         tree of 16dc5eab0. That first run of the file, through scripts/throttle.mjs, took 63.7 s, about 55 s of it the export,
+#         the clone and cargo; it kept 344 MB and gave back about 2 GB of scratch. The run below is the next one, on the kept
+#         binary: 9 s, the same verdicts.
+#   FAIL  AC5 castle-guard (2) the planted default: fog: true written on the labels changes no pixel (the base reads no fog on text).
+#   FAIL  AC6 cost: benchmarks/budgets.json has no task canvas-fog-linear. Nothing is drawn or timed before that on the base.
+#   INCONCLUSIVE/FAIL  AC7 taste: the four screenshots are written; no TASTE.json (by design). On the base marks-fogged.png and
+#         marks-unfogged.png are the same bytes, and neither shows an image mark.
+#   FAIL  kinds (AC1): sky@1.fog_curve's forms are exp and exp2, no linear with near and far.
+#   FAIL  kinds (AC3): mark.line@1.fog has no default; mark.point@1 and mark.text@1 list no fog; mark.image@1 is no kind.
+#   FAIL  kinds (AC4): sky@1 lists no background_intensity.
+# Typecheck: node node_modules/typescript/bin/tsc -p tests/acceptance/1992/tsconfig.json exits 0.
+AC1 #1992.cf298652: 8 m reads 1.0000, 1.0000, 1.0000; 10 m reads 1.0000, 1.0000, 1.0000; 30 m reads 1.0000, 1.0000, 1.0000; 60 m reads 1.0000, 1.0000, 1.0000
+ ❯ linear-curve.test.ts (3 tests | 3 failed) 4473ms
+   ❯ AC1 #1992.cf298652 a linear fog curve between two distances (3)
+     × AC1 #1992.cf298652 under fog color 0.5 and fog_curve linear {near: 10, far: 50} an unlit white panel reads 1.0 at 8 m from the eye, 0.75 at 30 m and 0.5 at 60 m within 1/255 on the linear target 2507ms
+     × AC1 #1992.cf298652 a planted exp curve fitted to the same halfway distance (density 0.0231 per m) reads 0.897 at 10 m and fails, naming the sky 509ms
+     × AC1 #1992.cf298652 a sky with near 50 and far 10 is refused at check, naming the sky; near = far is refused too, and near 1% under far is drawn 594ms
+ FAIL  linear-curve.test.ts > AC1 #1992.cf298652 a linear fog curve between two distances > AC1 #1992.cf298652 under fog color 0.5 and fog_curve linear {near: 10, far: 50} an unlit white panel reads 1.0 at 8 m from the eye, 0.75 at 30 m and 0.5 at 60 m within 1/255 on the linear target
+AssertionError: the panels read 1.0 at 8 m, 0.75 at 30 m and 0.5 at 60 m:
+  the linear fixture: the sky `sky` (fog_curve: linear {near: 10, far: 50}): the panel `p30` 30 m from the eye reads 1.0000, 1.0000, 1.0000 at (388, 180), should read 0.7500
+  the linear fixture: the sky `sky` (fog_curve: linear {near: 10, far: 50}): the panel `p60` 60 m from the eye reads 1.0000, 1.0000, 1.0000 at (532, 180), should read 0.5000: expected [ …(2) ] to deeply equal []
+ ❯ linear-curve.test.ts:51:5
+ FAIL  linear-curve.test.ts > AC1 #1992.cf298652 a linear fog curve between two distances > AC1 #1992.cf298652 a planted exp curve fitted to the same halfway distance (density 0.0231 per m) reads 0.897 at 10 m and fails, naming the sky
+AssertionError: the planted exp curve's panel at 10 m reads 1.0000, 1.0000, 1.0000, should read 0.897 (the fog reaches an unlit panel under exp): expected 0.10299999999999998 to be less than or equal to 0.00392156862745098
+ ❯ linear-curve.test.ts:62:156
+ FAIL  linear-curve.test.ts > AC1 #1992.cf298652 a linear fog curve between two distances > AC1 #1992.cf298652 a sky with near 50 and far 10 is refused at check, naming the sky; near = far is refused too, and near 1% under far is drawn
+AssertionError: fog_curve linear {near: 50, far: 10} is refused, naming the sky: expected 'it is drawn, not refused: {"frames":[…' to be '' // Object.is equality
+ ❯ linear-curve.test.ts:73:101
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+AC2 #1992.80a02b86 linear: on_axis reads 1.0000, 1.0000, 1.0000, turned 1.0000, 1.0000, 1.0000; off_axis reads 1.0000, 1.0000, 1.0000, turned 1.0000, 1.0000, 1.0000
+AC2 #1992.80a02b86 exp: on_axis reads 1.0000, 1.0000, 1.0000, turned 1.0000, 1.0000, 1.0000; off_axis reads 1.0000, 1.0000, 1.0000, turned 1.0000, 1.0000, 1.0000
+AC2 #1992.80a02b86 exp2: on_axis reads 1.0000, 1.0000, 1.0000, turned 1.0000, 1.0000, 1.0000; off_axis reads 1.0000, 1.0000, 1.0000, turned 1.0000, 1.0000, 1.0000
+ ❯ eye-distance.test.ts (3 tests | 3 failed) 5143ms
+   ❯ AC2 #1992.80a02b86 fog reads distance from the eye (3)
+     × AC2 #1992.80a02b86 under linear, a panel 30 m away on the axis and one 30 m away 40° off it both read 0.75 within 1/255 and a 40° turn in place moves neither by more than 1/255; a planted fog by view depth fails, naming the pixel 2811ms
+     × AC2 #1992.80a02b86 under exp, a panel 30 m away on the axis and one 30 m away 40° off it both read 0.75 within 1/255 and a 40° turn in place moves neither by more than 1/255; a planted fog by view depth fails, naming the pixel 533ms
+     × AC2 #1992.80a02b86 under exp2, a panel 30 m away on the axis and one 30 m away 40° off it both read 0.75 within 1/255 and a 40° turn in place moves neither by more than 1/255; a planted fog by view depth fails, naming the pixel 540ms
+ FAIL  eye-distance.test.ts > AC2 #1992.80a02b86 fog reads distance from the eye > AC2 #1992.80a02b86 under linear, a panel 30 m away on the axis and one 30 m away 40° off it both read 0.75 within 1/255 and a 40° turn in place moves neither by more than 1/255; a planted fog by view depth fails, naming the pixel
+AssertionError: under fog_curve: linear {near: 10, far: 50} both panels read 0.75 and the turn moves neither:
+  (320, 180) the panel `on_axis` 30 m from the eye, 0° off the axis, under fog_curve: linear {near: 10, far: 50}: reads 1.0000, 1.0000, 1.0000, should read 0.7500
+  (588, 180) the panel `off_axis` 30 m from the eye, 40° off the axis, under fog_curve: linear {near: 10, far: 50}: reads 1.0000, 1.0000, 1.0000, should read 0.7500: expected [ …(2) ] to deeply equal []
+ ❯ eye-distance.test.ts:48:7
+ FAIL  eye-distance.test.ts > AC2 #1992.80a02b86 fog reads distance from the eye > AC2 #1992.80a02b86 under exp, a panel 30 m away on the axis and one 30 m away 40° off it both read 0.75 within 1/255 and a 40° turn in place moves neither by more than 1/255; a planted fog by view depth fails, naming the pixel
+AssertionError: under fog_curve: exp, fog_density: 0.0231 both panels read 0.75 and the turn moves neither:
+  (320, 180) the panel `on_axis` 30 m from the eye, 0° off the axis, under fog_curve: exp, fog_density: 0.0231: reads 1.0000, 1.0000, 1.0000, should read 0.7500
+  (588, 180) the panel `off_axis` 30 m from the eye, 40° off the axis, under fog_curve: exp, fog_density: 0.0231: reads 1.0000, 1.0000, 1.0000, should read 0.7500: expected [ …(2) ] to deeply equal []
+ ❯ eye-distance.test.ts:48:7
+ FAIL  eye-distance.test.ts > AC2 #1992.80a02b86 fog reads distance from the eye > AC2 #1992.80a02b86 under exp2, a panel 30 m away on the axis and one 30 m away 40° off it both read 0.75 within 1/255 and a 40° turn in place moves neither by more than 1/255; a planted fog by view depth fails, naming the pixel
+AssertionError: under fog_curve: exp2, fog_density: 0.02775 both panels read 0.75 and the turn moves neither:
+  (320, 180) the panel `on_axis` 30 m from the eye, 0° off the axis, under fog_curve: exp2, fog_density: 0.02775: reads 1.0000, 1.0000, 1.0000, should read 0.7500
+  (588, 180) the panel `off_axis` 30 m from the eye, 40° off the axis, under fog_curve: exp2, fog_density: 0.02775: reads 1.0000, 1.0000, 1.0000, should read 0.7500: expected [ …(2) ] to deeply equal []
+ ❯ eye-distance.test.ts:48:7
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+AC3 #1992.5703f3eb default fog: line reads 1.0000, 1.0000, 1.0000; point reads 1.0000, 1.0000, 1.0000; image reads 0.0000, 0.0000, 0.0000
+AC3 #1992.5703f3eb the label: 3190 pixels of ink, the first at (104, 199) reads 1.0000, 1.0000, 1.0000
+AC3 #1992.5703f3eb fog: false: line reads 1.0000, 1.0000, 1.0000; point reads 1.0000, 1.0000, 1.0000; image reads 0.0000, 0.0000, 0.0000
+ ❯ marks.test.ts (3 tests | 3 failed) 5487ms
+   ❯ AC3 #1992.5703f3eb fog on unlit 3D marks, and never on a status color (3)
+     × AC3 #1992.5703f3eb under the linear fixture a world-size mark.line 0.1 m wide, a mark.point 0.2 m across and a camera-facing image mark, each white at 30 m, read 0.75 within 1/255 2935ms
+     × AC3 #1992.5703f3eb the same marks with fog: false, and a mark.text label by default, read 1.0; a planted default of fog: true on the label fails, naming the mark 660ms
+     × AC3 #1992.5703f3eb a mark with a status binding reads its exact status color at 60 m under linear, exp and exp2; a planted fog that tints it fails, naming the mark 686ms
+ FAIL  marks.test.ts > AC3 #1992.5703f3eb fog on unlit 3D marks, and never on a status color > AC3 #1992.5703f3eb under the linear fixture a world-size mark.line 0.1 m wide, a mark.point 0.2 m across and a camera-facing image mark, each white at 30 m, read 0.75 within 1/255
+AssertionError: the line, the point and the image take the sky's fog:
+  the mark `line` by default, 30 m from the eye under fog_curve linear {near: 10, far: 50}: reads 1.0000, 1.0000, 1.0000 at (117, 88), should read 0.7500
+  the mark `point` by default, 30 m from the eye under fog_curve linear {near: 10, far: 50}: reads 1.0000, 1.0000, 1.0000 at (320, 88), should read 0.7500
+  the mark `image` by default, 30 m from the eye under fog_curve linear {near: 10, far: 50}: reads 0.0000, 0.0000, 0.0000 at (522, 88), should read 0.7500: expected [ …(3) ] to deeply equal []
+ ❯ marks.test.ts:71:5
+ FAIL  marks.test.ts > AC3 #1992.5703f3eb fog on unlit 3D marks, and never on a status color > AC3 #1992.5703f3eb the same marks with fog: false, and a mark.text label by default, read 1.0; a planted default of fog: true on the label fails, naming the mark
+AssertionError: the line, the point and the image with fog: false keep their color:
+  the mark `image` with fog: false, 30 m from the eye under fog_curve linear {near: 10, far: 50}: reads 0.0000, 0.0000, 0.0000 at (522, 88), should read 1.0000: expected [ Array(1) ] to deeply equal []
+ ❯ marks.test.ts:98:5
+ FAIL  marks.test.ts > AC3 #1992.5703f3eb fog on unlit 3D marks, and never on a status color > AC3 #1992.5703f3eb a mark with a status binding reads its exact status color at 60 m under linear, exp and exp2; a planted fog that tints it fails, naming the mark
+AssertionError: the fog covers the bound mark, whose status color it leaves alone:
+  the bound mark under linear: the fog doesn't reach the mark: its body 60 m from the eye reads 1.0000, 1.0000, 1.0000, should read 0.5000 under fog_curve: linear {near: 10, far: 50}
+  the bound mark under exp: the fog doesn't reach the mark: its body 60 m from the eye reads 1.0000, 1.0000, 1.0000, should read 0.6250 under fog_curve: exp, fog_density: 0.0231
+  the bound mark under exp2: the fog doesn't reach the mark: its body 60 m from the eye reads 1.0000, 1.0000, 1.0000, should read 0.5313 under fog_curve: exp2, fog_density: 0.02775: expected [ …(3) ] to deeply equal []
+ ❯ marks.test.ts:132:5
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+AC4 #1992.6b71e62f: the background reads 1.0000, 1.0000, 1.0000 at background_intensity 0.25 and 1.0000, 1.0000, 1.0000 at 1; the sphere's centre 1.0010, 1.0010, 1.0010 and 1.0010, 1.0010, 1.0010
+ ❯ background.test.ts (1 test | 1 failed) 4953ms
+   ❯ AC4 #1992.6b71e62f a background brightness of its own (1)
+     × AC4 #1992.6b71e62f with a uniform HDR of radiance 1 and background_intensity 0.25 the background reads 0.25 within 1/255 and a white matte sphere's pixels equal the frame at background_intensity 1 byte for byte; a planted control that scales the environment's lighting fails, naming the pixel 3685ms
+ FAIL  background.test.ts > AC4 #1992.6b71e62f a background brightness of its own > AC4 #1992.6b71e62f with a uniform HDR of radiance 1 and background_intensity 0.25 the background reads 0.25 within 1/255 and a white matte sphere's pixels equal the frame at background_intensity 1 byte for byte; a planted control that scales the environment's lighting fails, naming the pixel
+AssertionError: at background_intensity 0.25 the background reads 0.25:
+  (0, 0) at background_intensity 0.25: the background reads 1.0000, 1.0000, 1.0000, should read 0.2500
+  (1, 0) at background_intensity 0.25: the background reads 1.0000, 1.0000, 1.0000, should read 0.2500
+  (2, 0) at background_intensity 0.25: the background reads 1.0000, 1.0000, 1.0000, should read 0.2500
+ ❯ background.test.ts:79:5
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+AC5 #1992.597ff532: the merge base is 16dc5eab0e5c, its deep-gpu kept at <checkout>/target/acceptance-1992-base/16dc5eab0e5c/deep-gpu
+ ❯ castle-guard.test.ts (2 tests | 1 failed) 9172ms
+   ❯ AC5 #1992.597ff532 a document with no new field draws as the merge base draws it (2)
+     ✓ AC5 #1992.597ff532 the castle fixture, and the castle with labels, have the merge base's pixel hash on this machine 6147ms
+     × AC5 #1992.597ff532 a planted default of fog: true on text dims the fixture's labels and fails, naming the first differing pixel 1573ms
+ FAIL  castle-guard.test.ts > AC5 #1992.597ff532 a document with no new field draws as the merge base draws it > AC5 #1992.597ff532 a planted default of fog: true on text dims the fixture's labels and fails, naming the first differing pixel
+AssertionError: the planted default of fog: true on text fails this check, but the check found nothing wrong: expected 0 to be greater than 0
+ ❯ castle-guard.test.ts:64:5
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+ ❯ cost.test.ts (1 test | 1 failed) 1491ms
+   ❯ AC6 #1992.9d39bde2 linear fog costs what exp does (1)
+     × AC6 #1992.9d39bde2 the castle with fog_curve linear holds its p50 frame time within 2% of the castle with exp, recorded against the merge base and judged on the reference Mac 6ms
+ FAIL  cost.test.ts > AC6 #1992.9d39bde2 linear fog costs what exp does > AC6 #1992.9d39bde2 the castle with fog_curve linear holds its p50 frame time within 2% of the castle with exp, recorded against the merge base and judged on the reference Mac
+AssertionError: benchmarks/budgets.json has the task canvas-fog-linear: expected undefined to be defined
+ ❯ cost.test.ts:56:70
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+AC7 #1992.b0119deb: screenshots written from this run's pixels:
+  target/acceptance/1992/panels-8-10-30-60m.png  b52226f93b96c46e6f972d206f56362882b5a41cb0551ef176f9c4bf34f0d138
+  target/acceptance/1992/off-axis-pair.png  7622cbd763513a2fc2ca0a6243439c913190840956f19f673f3c35d20465dc8e
+  target/acceptance/1992/marks-fogged.png  0213e5c3449fbe9146e5f2795aa7c3cdd54d7981836f4b1777fb5b5e2ddc9bb5
+  target/acceptance/1992/marks-unfogged.png  0213e5c3449fbe9146e5f2795aa7c3cdd54d7981836f4b1777fb5b5e2ddc9bb5
+ ❯ taste.test.ts (1 test | 1 failed) 4250ms
+   ❯ AC7 #1992.b0119deb the screenshots and the one taste call on them (1)
+     × AC7 #1992.b0119deb the run writes the linear fixture's panels, the off-axis pair, and the fogged and unfogged marks from the renderer's own output, and the owner's recorded call on exactly those says they look right 2964ms
+ FAIL  taste.test.ts > AC7 #1992.b0119deb the screenshots and the one taste call on them > AC7 #1992.b0119deb the run writes the linear fixture's panels, the off-axis pair, and the fogged and unfogged marks from the renderer's own output, and the owner's recorded call on exactly those says they look right
+AssertionError: INCONCLUSIVE: no taste call is recorded: show the owner
+  target/acceptance/1992/panels-8-10-30-60m.png  b52226f93b96c46e6f972d206f56362882b5a41cb0551ef176f9c4bf34f0d138
+  target/acceptance/1992/off-axis-pair.png  7622cbd763513a2fc2ca0a6243439c913190840956f19f673f3c35d20465dc8e
+  target/acceptance/1992/marks-fogged.png  0213e5c3449fbe9146e5f2795aa7c3cdd54d7981836f4b1777fb5b5e2ddc9bb5
+  target/acceptance/1992/marks-unfogged.png  0213e5c3449fbe9146e5f2795aa7c3cdd54d7981836f4b1777fb5b5e2ddc9bb5
+and record the answer in tests/acceptance/1992/TASTE.json (README: The taste call); this is not a pass
+ ❯ taste.test.ts:48:29
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+ ❯ kinds.test.ts (3 tests | 3 failed) 2957ms
+   ❯ deep_kinds lists the new fields (3)
+     × AC1 #1992.cf298652 deep_kinds lists sky@1.fog_curve with the forms exp, exp2 and linear {near, far}, its default exp2 2147ms
+     × AC3 #1992.5703f3eb deep_kinds lists fog on mark.line@1, mark.point@1 and mark.image@1 with the default true, and on mark.text@1 with the default false 1ms
+     × AC4 #1992.6b71e62f deep_kinds lists sky@1.background_intensity with the default 1 0ms
+ FAIL  kinds.test.ts > deep_kinds lists the new fields > AC1 #1992.cf298652 deep_kinds lists sky@1.fog_curve with the forms exp, exp2 and linear {near, far}, its default exp2
+AssertionError: deep_kinds lists the linear curve:
+  sky@1.fog_curve: its forms don't name linear, near, far: {"name":"fog_curve","type":"json","unit":null,"range":null,"list":false,"default":"exp2","grammar":"form","forms":["exp","exp2"],"path":"sky@1.fog_curve","module":"scene3d","stability":"stable"}: expected [ Array(1) ] to deeply equal []
+ ❯ kinds.test.ts:43:5
+ FAIL  kinds.test.ts > deep_kinds lists the new fields > AC3 #1992.5703f3eb deep_kinds lists fog on mark.line@1, mark.point@1 and mark.image@1 with the default true, and on mark.text@1 with the default false
+AssertionError: deep_kinds lists fog on the four marks with their defaults:
+  mark.line@1.fog: its default is null, not true: {"name":"fog","type":"json","unit":null,"range":null,"list":false,"default":null,"grammar":"form","forms":["bool"],"path":"mark.line@1.fog","module":"scene3d","stability":"stable"}
+  mark.point@1.fog: deep_kinds lists no such field; mark.point@1 lists size, shape, from, size_space, paint, status, open
+  mark.image@1.fog: deep_kinds refuses mark.image@1: {"code":"unknown_field","retryable":false,"remediation":"mark.image@1 is no kind this build lists. Did you mean mark.line@1?","path":"/path","actual":"mark.image@1","evidence":[]}
+  mark.text@1.fog: deep_kinds lists no such field; mark.text@1 lists text, font, size, facing, size_space, paint, status, open: expected [ …(4) ] to deeply equal []
+ ❯ kinds.test.ts:51:5
+ FAIL  kinds.test.ts > deep_kinds lists the new fields > AC4 #1992.6b71e62f deep_kinds lists sky@1.background_intensity with the default 1
+AssertionError: deep_kinds lists the background's own intensity:
+  sky@1.background_intensity: deep_kinds lists no such field; sky@1 lists top, low, ambient_top, ambient_low, fog, fog_density, fog_curve, fog_height, stars, moon, sun, exposure, environment, background, background_blur, background_ground: expected [ Array(1) ] to deeply equal []
+ ❯ kinds.test.ts:59:5
+ Test Files  1 failed (1)
+      Tests  3 failed (3)

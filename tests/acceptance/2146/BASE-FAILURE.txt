@@ -1,0 +1,156 @@
+# #2146 acceptance tests: the run on the base
+
+Base: 72fe11a1 (origin/main, "Merge pull request #2523 from windoliver/fix/2067-release-checks"; no fix applied), built
+with `npm run build --workspaces`.
+$ npx vitest run tests/acceptance/2146 --maxWorkers=2 --reporter=verbose
+Run once, 2026-11-14, node v24.22.0, linux; verbatim but for the checkout's path, which reads <repo>. Exit code: 1.
+
+3 failed | 14 passed (17).
+- AC1 (lint.test.ts, 2 tests) FAILS on the issue's defect: the lint prints 23 `FAIL code mappings: … maps to no
+  verdict` lines (doctor service_unpromoted and 22 state words) and exits 1. The second test also lists this machine's
+  one `slot kit environment@1 … BLOCKED … (lsof failed)` line, which the first sets apart.
+- AC3 (digests.test.ts, 1 test) FAILS on the issue's defect: doctor.item@1 is frozen as d1:72e75837… and its schema
+  hashes to another digest (not the issue's d1:e73497b4…: the schema has gained codes since the issue was written).
+- AC2 (unmapped.test.ts, 14 tests) PASSES: the property already holds at the base and must still hold after the fix.
+  Each fails on a lint that stops naming a code added to that list (README, "What AC2's tests fail on").
+
+
+ RUN  v5.0.5 <repo>
+
+ × tests/acceptance/2146/digests.test.ts > #2146.9b146cf0 AC3: Every schema's frozen digest in `packages/contracts/digests.json` is the digest of its schema > #2146.9b146cf0 AC3: Every schema's frozen digest in `packages/contracts/digests.json` is the digest of its schema: no schema drifts, doctor.item among them 123ms
+   → expected [ Array(1) ] to deeply equal []
+ ✓ tests/acceptance/2146/unmapped.test.ts > #2146.bd46e9b3 AC2: A code added to a schema with no mapping still fails it, naming the code > #2146.bd46e9b3 AC2: a doctor code added to the doctor family's enum (doctor.item's code) with no mapping is named: doctor flaky_maybe 42ms
+ ✓ tests/acceptance/2146/unmapped.test.ts > #2146.bd46e9b3 AC2: A code added to a schema with no mapping still fails it, naming the code > #2146.bd46e9b3 AC2: a word added to landing.made@1's list at /properties/data/properties/outcome, which holds PASS, with no mapping is named: flaky_maybe 40ms
+ ✓ tests/acceptance/2146/unmapped.test.ts > #2146.bd46e9b3 AC2: A code added to a schema with no mapping still fails it, naming the code > #2146.bd46e9b3 AC2: a word added to row.set@1's list at /properties/data/properties/word, which holds PASS, with no mapping is named: flaky_maybe 23ms
+ ✓ tests/acceptance/2146/unmapped.test.ts > #2146.bd46e9b3 AC2: A code added to a schema with no mapping still fails it, naming the code > #2146.bd46e9b3 AC2: a word added to row.set@2's list at /properties/data/properties/word, which holds PASS, with no mapping is named: flaky_maybe 29ms
+ ✓ tests/acceptance/2146/unmapped.test.ts > #2146.bd46e9b3 AC2: A code added to a schema with no mapping still fails it, naming the code > #2146.bd46e9b3 AC2: a word added to row.set@3's list at /properties/data/properties/word, which holds PASS, with no mapping is named: flaky_maybe 26ms
+ ✓ tests/acceptance/2146/unmapped.test.ts > #2146.bd46e9b3 AC2: A code added to a schema with no mapping still fails it, naming the code > #2146.bd46e9b3 AC2: a word added to row.set@4's list at /properties/data/properties/word, which holds PASS, with no mapping is named: flaky_maybe 23ms
+ ✓ tests/acceptance/2146/unmapped.test.ts > #2146.bd46e9b3 AC2: A code added to a schema with no mapping still fails it, naming the code > #2146.bd46e9b3 AC2: a word added to schedule.run@1's list at /properties/data/properties/verdict, which holds PASS, with no mapping is named: flaky_maybe 24ms
+ ✓ tests/acceptance/2146/unmapped.test.ts > #2146.bd46e9b3 AC2: A code added to a schema with no mapping still fails it, naming the code > #2146.bd46e9b3 AC2: a word added to session.state@2's list at /properties/data/properties/state, which holds PASS, with no mapping is named: flaky_maybe 25ms
+ ✓ tests/acceptance/2146/unmapped.test.ts > #2146.bd46e9b3 AC2: A code added to a schema with no mapping still fails it, naming the code > #2146.bd46e9b3 AC2: a word added to verdict.made@1's list at /$defs/requirements/items/properties/outcome, which holds PASS, with no mapping is named: flaky_maybe 45ms
+ ✓ tests/acceptance/2146/unmapped.test.ts > #2146.bd46e9b3 AC2: A code added to a schema with no mapping still fails it, naming the code > #2146.bd46e9b3 AC2: a word added to verdict.made@2's list at /$defs/requirements/items/properties/outcome, which holds PASS, with no mapping is named: flaky_maybe 37ms
+ ✓ tests/acceptance/2146/unmapped.test.ts > #2146.bd46e9b3 AC2: A code added to a schema with no mapping still fails it, naming the code > #2146.bd46e9b3 AC2: a word added to verdict.outcome@1's list at (root), which holds PASS, with no mapping is named: flaky_maybe 28ms
+ ✓ tests/acceptance/2146/unmapped.test.ts > #2146.bd46e9b3 AC2: A code added to a schema with no mapping still fails it, naming the code > #2146.bd46e9b3 AC2: a word added to verdict@1's list at /$defs/requirement/properties/outcome, which holds PASS, with no mapping is named: flaky_maybe 25ms
+ ✓ tests/acceptance/2146/unmapped.test.ts > #2146.bd46e9b3 AC2: A code added to a schema with no mapping still fails it, naming the code > #2146.bd46e9b3 AC2: a word added to work.attempt@1's list at /properties/data/properties/cause, which holds PASS, with no mapping is named: flaky_maybe 46ms
+ ✓ tests/acceptance/2146/unmapped.test.ts > #2146.bd46e9b3 AC2: A code added to a schema with no mapping still fails it, naming the code > #2146.bd46e9b3 AC2: a word added to work.state@1's list at /properties/data/properties/word, which holds PASS, with no mapping is named: flaky_maybe 37ms
+ × tests/acceptance/2146/lint.test.ts > #2146.9d5eea71 AC1: `node scripts/conformance-lint.mjs` exits 0 on main > #2146.9d5eea71 AC1: `node scripts/conformance-lint.mjs` exits 0 on main: its code mappings check passes, no line reads "maps to no verdict", and nothing but a machine's unreadable ports fails it 11ms
+   → expected [ …(23) ] to deeply equal []
+ × tests/acceptance/2146/lint.test.ts > #2146.9d5eea71 AC1: `node scripts/conformance-lint.mjs` exits 0 on main > #2146.9d5eea71 AC1: `node scripts/conformance-lint.mjs` exits 0 on main: exit code 0, every line a PASS 2ms
+   → expected [ …(24) ] to deeply equal []
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2146/digests.test.ts > #2146.9b146cf0 AC3: Every schema's frozen digest in `packages/contracts/digests.json` is the digest of its schema > #2146.9b146cf0 AC3: Every schema's frozen digest in `packages/contracts/digests.json` is the digest of its schema: no schema drifts, doctor.item among them
+AssertionError: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "doctor.item@1 is frozen as d1:72e758375c39be52dd55b3a298b7c75cfcbfcd64bdde98d766acb09f2746cc66 and hashes to d1:1f388d82a50337711e330eea5cced40d40772d237323e011f992731c24defda6",
++ ]
+
+ ❯ tests/acceptance/2146/digests.test.ts:19:21
+     17|       .filter((e) => e.frozen !== e.digest)
+     18|       .map((e) => `${e.name} is frozen as ${e.frozen} and hashes to ${…
+     19|     expect(drifted).toEqual([]);
+       |                     ^
+     20|     expect(frozenDigests()).toEqual(frozen);
+     21|     expect(frozenDrift(entries, frozenDigests())).toEqual([]);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  tests/acceptance/2146/lint.test.ts > #2146.9d5eea71 AC1: `node scripts/conformance-lint.mjs` exits 0 on main > #2146.9d5eea71 AC1: `node scripts/conformance-lint.mjs` exits 0 on main: its code mappings check passes, no line reads "maps to no verdict", and nothing but a machine's unreadable ports fails it
+AssertionError: expected [ …(23) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "FAIL code mappings: doctor service_unpromoted maps to no verdict",
++   "FAIL code mappings: verdict none maps to no verdict",
++   "FAIL code mappings: verdict queued maps to no verdict",
++   "FAIL code mappings: verdict working maps to no verdict",
++   "FAIL code mappings: verdict says done maps to no verdict",
++   "FAIL code mappings: verdict sent back maps to no verdict",
++   "FAIL code mappings: verdict needs you maps to no verdict",
++   "FAIL code mappings: verdict stale maps to no verdict",
++   "FAIL code mappings: verdict quiet maps to no verdict",
++   "FAIL code mappings: verdict stuck maps to no verdict",
++   "FAIL code mappings: verdict flagged maps to no verdict",
++   "FAIL code mappings: verdict finished maps to no verdict",
++   "FAIL code mappings: verdict running maps to no verdict",
++   "FAIL code mappings: verdict landed with the budget window open maps to no verdict",
++   "FAIL code mappings: verdict gave up its slot maps to no verdict",
++   "FAIL code mappings: verdict replaced by you maps to no verdict",
++   "FAIL code mappings: verdict sent back past its rounds maps to no verdict",
++   "FAIL code mappings: verdict stalled maps to no verdict",
++   "FAIL code mappings: verdict context full maps to no verdict",
++   "FAIL code mappings: verdict plan window or spend cap maps to no verdict",
++   "FAIL code mappings: verdict crashed or interrupted maps to no verdict",
++   "FAIL code mappings: verdict closed maps to no verdict",
++   "FAIL code mappings: verdict closed before the gate maps to no verdict",
++ ]
+
+ ❯ tests/acceptance/2146/lint.test.ts:23:22
+     21|     expect(lint.signal, lint.stderr).toBeNull();
+     22|     const unmapped = lint.lines.filter((line) => line.includes('maps t…
+     23|     expect(unmapped).toEqual([]);
+       |                      ^
+     24|     // The lint reads the built package; the source it was built from …
+     25|     expect(unmappedCodes().map((u) => `${u.family} ${u.code}`)).toEqua…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  tests/acceptance/2146/lint.test.ts > #2146.9d5eea71 AC1: `node scripts/conformance-lint.mjs` exits 0 on main > #2146.9d5eea71 AC1: `node scripts/conformance-lint.mjs` exits 0 on main: exit code 0, every line a PASS
+AssertionError: expected [ …(24) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "FAIL code mappings: doctor service_unpromoted maps to no verdict",
++   "FAIL code mappings: verdict none maps to no verdict",
++   "FAIL code mappings: verdict queued maps to no verdict",
++   "FAIL code mappings: verdict working maps to no verdict",
++   "FAIL code mappings: verdict says done maps to no verdict",
++   "FAIL code mappings: verdict sent back maps to no verdict",
++   "FAIL code mappings: verdict needs you maps to no verdict",
++   "FAIL code mappings: verdict stale maps to no verdict",
++   "FAIL code mappings: verdict quiet maps to no verdict",
++   "FAIL code mappings: verdict stuck maps to no verdict",
++   "FAIL code mappings: verdict flagged maps to no verdict",
++   "FAIL code mappings: verdict finished maps to no verdict",
++   "FAIL code mappings: verdict running maps to no verdict",
++   "FAIL code mappings: verdict landed with the budget window open maps to no verdict",
++   "FAIL code mappings: verdict gave up its slot maps to no verdict",
++   "FAIL code mappings: verdict replaced by you maps to no verdict",
++   "FAIL code mappings: verdict sent back past its rounds maps to no verdict",
++   "FAIL code mappings: verdict stalled maps to no verdict",
++   "FAIL code mappings: verdict context full maps to no verdict",
++   "FAIL code mappings: verdict plan window or spend cap maps to no verdict",
++   "FAIL code mappings: verdict crashed or interrupted maps to no verdict",
++   "FAIL code mappings: verdict closed maps to no verdict",
++   "FAIL code mappings: verdict closed before the gate maps to no verdict",
++   "FAIL slot kit environment@1: planted proof leaves-grandchild: planted fill leaves-grandchild is first refused on health-route as BLOCKED \"the environment's listening ports can't be read (lsof failed), so whether it binds its lease alone is unknown\" not with its own message \"left its process running after down\"",
++ ]
+
+ ❯ tests/acceptance/2146/lint.test.ts:33:68
+     31|
+     32|   it('#2146.9d5eea71 AC1: `node scripts/conformance-lint.mjs` exits 0 …
+     33|     expect(lint.lines.filter((line) => !line.startsWith('PASS '))).toE…
+       |                                                                    ^
+     34|     expect(lint.lines.length).toBeGreaterThan(0);
+     35|     expect({ status: lint.status, signal: lint.signal }, lint.stderr).…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  2 failed | 1 passed (3)
+      Tests  3 failed | 14 passed (17)
+   Start at  15:23:25
+   Duration  5.40s (tests 95%, import 3%, transform 2%)
+

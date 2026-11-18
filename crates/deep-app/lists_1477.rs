@@ -15,12 +15,16 @@ use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering::Relaxed};
 use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 
-use deep_app::table::view::{TableView, LINE, LINE_TOP, ROW};
-use deep_app::table::{Rows, Value};
+// The table this bench measures lives with it, out of the shipped crate (#1808): the list draws its own rows.
+#[path = "lists_1477/table/mod.rs"]
+mod table;
+
 use gpui_kit::component::table::{Column, DataTable, TableDelegate, TableState};
 use gpui_kit::test::TestWindowExt;
 use gpui_kit::*;
 use serde_json::{json, Value as Json};
+use table::view::{TableView, LINE, LINE_TOP, ROW};
+use table::{Rows, Value};
 
 // ---------------------------------------------------------------------------------------------------------------
 // Counting: allocations on every thread, process CPU, the physical footprint, the load and the fingerprint.
@@ -559,7 +563,7 @@ fn arm(name: &str) -> Json {
     let name_owned = name.to_string();
     let is_list = list_name.is_some();
     let list_name = list_name.map(str::to_string);
-    deep_app::table::view::ALLOCATIONS.set(allocations).ok();
+    table::view::ALLOCATIONS.set(allocations).ok();
     let made = RefCell::new(Some(made));
     let run2 = run.clone();
     let out2 = out.clone();
@@ -1311,7 +1315,7 @@ fn soak() -> i32 {
 }
 
 fn access() -> i32 {
-    deep_app::table::view::ALLOCATIONS.set(allocations).ok();
+    table::view::ALLOCATIONS.set(allocations).ok();
     application().run(|cx| {
         gpui_kit::init(cx);
         deep_app::init(cx);
