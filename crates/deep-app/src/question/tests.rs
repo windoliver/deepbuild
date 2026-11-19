@@ -152,11 +152,11 @@ fn a_click_before_the_interval_is_refused_and_recorded_once_and_one_after_answer
         click(&mut card, &events, NOW + ARM_AFTER - 1, Target::Option(1)),
         Did::Refused
     );
-    assert!(card.lines().contains(&HOLD_STILL.to_owned()));
+    assert!(card.lines().contains(&copy::text(HOLD_STILL).to_owned()));
     assert!(card.take_answers().is_empty());
     card.tick(NOW + ARM_AFTER);
     assert!(
-        !card.lines().contains(&HOLD_STILL.to_owned()),
+        !card.lines().contains(&copy::text(HOLD_STILL).to_owned()),
         "armed, it no longer says to hold still"
     );
     assert_eq!(
@@ -200,12 +200,12 @@ fn an_approval_whose_own_step_cant_be_undone_waits_for_its_switch() {
         card.take_answers().is_empty(),
         "the core would run the delete: nothing is sent"
     );
-    assert!(card.lines().contains(&SWITCH_FIRST.to_owned()));
+    assert!(card.lines().contains(&copy::text(SWITCH_FIRST).to_owned()));
     assert_eq!(
         click(&mut card, &events, NOW + ARM_AFTER + 100, Target::Step(0)),
         Did::Switched
     );
-    assert!(!card.lines().contains(&SWITCH_FIRST.to_owned()));
+    assert!(!card.lines().contains(&copy::text(SWITCH_FIRST).to_owned()));
     assert_eq!(card.approve(), Some((1, 1)));
     assert_eq!(
         click(&mut card, &events, NOW + ARM_AFTER + 200, Target::Option(0)),
@@ -239,7 +239,7 @@ fn switching_the_asks_own_steps_off_while_the_os_asks_sends_nothing() {
         card.take_answers().is_empty(),
         "the step was switched off: nothing is sent"
     );
-    assert!(card.lines().contains(&SWITCH_FIRST.to_owned()));
+    assert!(card.lines().contains(&copy::text(SWITCH_FIRST).to_owned()));
 }
 
 #[test]
@@ -250,7 +250,10 @@ fn on_an_asks_page_the_box_holds_the_words_and_says_no_on_an_approval() {
     push.type_words("yes, but squash first");
     assert_eq!(
         push.words_send(),
-        ("Say no", vec![ANSWERS_THIS_ASK_ONLY, WONT_RUN])
+        (
+            "Say no",
+            vec![copy::text(ANSWERS_THIS_ASK_ONLY), copy::text(WONT_RUN)]
+        )
     );
     let rows = push.page_rows();
     assert!(
@@ -259,10 +262,13 @@ fn on_an_asks_page_the_box_holds_the_words_and_says_no_on_an_approval() {
     );
     assert!(rows
         .iter()
-        .all(|r| !r.label().starts_with("Your words") && r.label() != WONT_RUN));
+        .all(|r| !r.label().starts_with("Your words") && r.label() != copy::text(WONT_RUN)));
     let mut taste = Controller::present(&events, "ask:B", NOW, SLOT, Faults::default()).unwrap();
     taste.type_words("keep it, but smaller");
-    assert_eq!(taste.words_send(), ("Answer", vec![ANSWERS_THIS_ASK_ONLY]));
+    assert_eq!(
+        taste.words_send(),
+        ("Answer", vec![copy::text(ANSWERS_THIS_ASK_ONLY)])
+    );
     // A moved slot presents it again, unarmed.
     taste.tick(NOW + ARM_AFTER);
     assert_eq!(taste.state_name(), "armed");
@@ -286,7 +292,7 @@ fn words_alone_answer_this_ask_only_and_a_typed_yes_never_runs_the_plan() {
     ];
     let mut card = Controller::present(&events, "ask:P", NOW, SLOT, Faults::default()).unwrap();
     card.type_words("yes");
-    assert!(card.lines().contains(&WONT_RUN.to_owned()));
+    assert!(card.lines().contains(&copy::text(WONT_RUN).to_owned()));
     assert_eq!(
         click(&mut card, &events, NOW + ARM_AFTER, Target::Send),
         Did::Answered
@@ -310,7 +316,9 @@ fn words_alone_answer_this_ask_only_and_a_typed_yes_never_runs_the_plan() {
 
     let mut card = Controller::present(&events, "ask:B", NOW, SLOT, Faults::default()).unwrap();
     card.type_words("darker");
-    assert!(card.lines().contains(&ANSWERS_THIS_ASK_ONLY.to_owned()));
+    assert!(card
+        .lines()
+        .contains(&copy::text(ANSWERS_THIS_ASK_ONLY).to_owned()));
     assert_eq!(
         click(&mut card, &events, NOW + ARM_AFTER, Target::Send),
         Did::Answered

@@ -343,7 +343,8 @@ impl Replica {
                 ))
             }
         };
-        // Nothing the app draws is localized yet, so every locale draws the same; the reply says which one ran.
+        // #2403: the locale stands for the system's preferred language: the app draws in the first table it has for it,
+        // English when it has none, and the reply says which ran.
         let locale = match &args["locale"] {
             Value::Null => "en-US".to_owned(),
             Value::String(tag)
@@ -437,6 +438,7 @@ impl Replica {
         };
         std::fs::create_dir_all(&out)
             .map_err(|e| fail("refused", format!("{}: {e}", out.display())))?;
+        deep_app::copy::show(deep_app::copy::choose([locale.as_str()]));
 
         // Your record is read once, before the replica exists; the connection closes when the reader drops.
         let mut hub = None;
@@ -548,6 +550,13 @@ impl Replica {
         deep_app::hub::set_local(Some(Arc::new(move |method, params| {
             taker.take(method, params)
         })));
+        // #1498: the app's canvas panel on a session's page, as the app makes it at launch, set before the window's first
+        // frame reads it: a replica launched after another in one process (ui_check's renders) would read the last one's.
+        let canvas = cx.update(|cx| {
+            let panel = cx.new(|_| deep_app::show::CanvasPanel::new(evidence));
+            deep_app::views::set_canvas(panel.clone());
+            panel
+        });
         let reduced = args["reduced_motion"].as_bool().unwrap_or(false);
         let window = cx.update(|cx| {
             gpui_kit::init(cx);
@@ -589,7 +598,12 @@ impl Replica {
                 ..crate::shell::window_options()
             };
             if arm != "app" {
-                return arms::open(&arm, options, plant == Some(Plant::WheelNotifiesEveryEvent), cx);
+                return arms::open(
+                    &arm,
+                    options,
+                    plant == Some(Plant::WheelNotifiesEveryEvent),
+                    cx,
+                );
             }
             // The window opens where the app opens, unless the launch names a page (#1461). A panel with no area goes in
             // the list's slot, as before; one registered to an area goes there; one replacing Needs you fills the list's
@@ -736,12 +750,6 @@ impl Replica {
         if let Some(setting) = NotificationSetting::parse(&notifications) {
             notifier.set_setting(setting, now);
         }
-        // #1498: the app's canvas panel on a session's page, as the app makes it at launch.
-        let canvas = cx.update(|cx| {
-            let panel = cx.new(|_| deep_app::show::CanvasPanel::new(evidence));
-            deep_app::views::set_canvas(panel.clone());
-            panel
-        });
         let mut replica = Replica {
             id,
             cx,
@@ -1075,8 +1083,12 @@ impl Replica {
         // In the dirty mode the window draws what the input changed at its next frame, as a real one does (#1546).
         let forced = self.dirty.is_none();
         // #1482's planted replica notifies the window's root with each pointer move it delivers.
-        if self.plant == Some(Plant::NotifiesRootPerMove) && matches!(event, PlatformInput::MouseMove(_)) {
-            let _ = self.cx.update_window(self.window, |root, _, cx| cx.notify(root.entity_id()));
+        if self.plant == Some(Plant::NotifiesRootPerMove)
+            && matches!(event, PlatformInput::MouseMove(_))
+        {
+            let _ = self
+                .cx
+                .update_window(self.window, |root, _, cx| cx.notify(root.entity_id()));
         }
         let mark = clocks::Mark::now();
         let _ = self.cx.update_window(self.window, |_, window, cx| {
@@ -1205,21 +1217,40 @@ impl Replica {
         // `events` wheel events of `dy` points each at the target's centre, one a frame (#1482): the list under the
         // centre takes them, whichever of its rows is there.
         if kind == "wheel" {
-            let (dy, events) = (act["dy"].as_f64().unwrap_or(0.) as f32, act["events"].as_u64().unwrap_or(1));
+            let (dy, events) = (
+                act["dy"].as_f64().unwrap_or(0.) as f32,
+                act["events"].as_u64().unwrap_or(1),
+            );
             let position = at(center);
             self.input_at(self.clock.t);
             if self.pointer.get() != position {
-                self.input(MouseMoveEvent { position, pressed_button: None, modifiers: Modifiers::default() }.to_platform_input());
+                self.input(
+                    MouseMoveEvent {
+                        position,
+                        pressed_button: None,
+                        modifiers: Modifiers::default(),
+                    }
+                    .to_platform_input(),
+                );
             }
             for _ in 0..events {
                 let delta = ScrollDelta::Pixels(point(px(0.), px(-dy)));
-                self.input(ScrollWheelEvent { position, delta, ..Default::default() }.to_platform_input());
+                self.input(
+                    ScrollWheelEvent {
+                        position,
+                        delta,
+                        ..Default::default()
+                    }
+                    .to_platform_input(),
+                );
                 self.tick();
             }
             self.focus = Some(target.clone());
             self.tick();
             self.tick();
-            return Ok(json!({"point": center, "box": target.bounds, "waited_ms": waited * 1000 / FLICKS, "result": "delivered"}));
+            return Ok(
+                json!({"point": center, "box": target.bounds, "waited_ms": waited * 1000 / FLICKS, "result": "delivered"}),
+            );
         }
         // A pointer action asks the frame what the event would reach before anything is sent.
         let pointer = kind != "press" && !locator.is_null();

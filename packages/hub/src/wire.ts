@@ -242,6 +242,8 @@ export interface CoreOptions {
   held: string[];
   plant?: Plant;
   vfs?: VfsSettings;
+  /** Safe mode, from `deep hub run --safe`: the extension host loads no extension. */
+  safe?: boolean;
   /** A module whose default export takes the local host and returns the host@1 the hub uses instead, from DEEP_HUB_TEST_HOST; only tests set it. */
   host?: string;
   /** The term of every lease the hub grants, from DEEP_HUB_TEST_LEASE_MS; only tests set it. */
@@ -256,6 +258,8 @@ export interface CoreOptions {
   index?: string;
   /** The forge's REST API the archive copies CI runs from, from DEEP_HUB_TEST_FORGE; only tests set it. */
   forge?: string;
+  /** The package registry a dependency's reading is read from in place of the public ones, from DEEP_HUB_TEST_REGISTRY; only tests set it (#1509). */
+  registry?: string;
   /** The planted sorter's file, from DEEP_HUB_TEST_SORTER: the questions it answers "proceed" and its rule; only tests set it. */
   sorter?: string;
   /** The definitions handed to the kernel, from DEEP_HUB_TEST_DRAFTS: by a prompt's text or a work item's ID; only tests set it. */

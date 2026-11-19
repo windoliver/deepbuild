@@ -561,9 +561,10 @@ impl Card {
 
     /// The box's send control on the card's page and the lines above it (#1461).
     pub fn words_send(&self) -> (&'static str, Vec<&'static str>) {
-        self.controller
-            .as_ref()
-            .map_or(("Answer", Vec::new()), Controller::words_send)
+        self.controller.as_ref().map_or(
+            (crate::copy::text("card.answer"), Vec::new()),
+            Controller::words_send,
+        )
     }
 
     /// The down of a press on `target`.
@@ -775,7 +776,7 @@ impl Card {
         if let Some(choice) = choice {
             let beside: Vec<String> = choice
                 .recommended
-                .then(|| "recommended".to_owned())
+                .then(|| crate::copy::text("card.recommended").to_owned())
                 .into_iter()
                 .chain(choice.cost.clone())
                 .collect();
@@ -945,7 +946,7 @@ impl Render for Card {
                             card.child(
                                 crate::views::observed("card-words")
                                     .role(Role::TextInput)
-                                    .aria_label("Your words")
+                                    .aria_label("Your words") // copy-exception: planted wrong program
                                     .h(sizes().space(5))
                                     .w_full(),
                             )
@@ -1139,7 +1140,7 @@ impl Card {
                         card.child(
                             crate::views::observed("card-words")
                                 .role(Role::TextInput)
-                                .aria_label("Your words")
+                                .aria_label("Your words") // copy-exception: planted wrong program
                                 .h(sizes().space(5))
                                 .w_full(),
                         )

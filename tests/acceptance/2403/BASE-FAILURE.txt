@@ -1,0 +1,75 @@
+The run on the base, c21400b438fb43ec0139cdceed05512ac6f85591 (origin/main), 2026-11-18, on the shared Mac (18 cores), each
+file once, after `npm ci --ignore-scripts` and `npm run build --workspaces`, with cargo 1.99.1 first on PATH:
+
+  node node_modules/vitest/vitest.mjs run --root tests/acceptance/2403 --no-file-parallelism --testTimeout=600000 <file>
+
+Every test fails; each at an assertion, but AC7, which is BLOCKED before it takes anything. Wall times are the whole
+vitest run of the file, the builds already in the cache (the checkout's deep-drive took 13 minutes cold, the merge base's
+7, deep-app 1.5).
+
+lint.test.ts                                        0.7 s, load 24.1 (1-minute average) before and after
+  AC2 #2403.940d60a6  the lint lane in scripts/lanes.mjs runs node scripts/app-copy-lint.mjs: expected false to be true
+  AC4 #2403.d67d213a  (the planted joined sentence) AssertionError: there is no table at crates/deep-app/copy/en.json
+
+release.test.ts                                     0.6 s, load 23.3
+  AC6 #2403.7d32942a  the release preflight runs node scripts/app-copy-lint.mjs --release: expected false to be true
+
+counts.test.ts                                      21.7 s, load 23.5 -> 25.5
+  AC4 #2403.d67d213a  Its first assertion holds: en-US reads the merge base's sentences at 0, 1, 2 and 11 open asks. Then:
+    zh-Hans says each count in Chinese, not as en-US says it (0: en-US "Nothing needs you", zh-Hans "Nothing needs you";
+    1: en-US "1 ask needs you", zh-Hans "1 ask needs you"; 2: en-US "2 asks need you", zh-Hans "2 asks need you";
+    11: en-US "11 asks need you", zh-Hans "11 asks need you")
+
+words.test.ts                                       31.9 s, load 26.2 -> 169.1
+  AC1 #2403.f805f24b  (the main test) Its first two assertions hold: the zh-Hans visits draw deepbuild/sidebar, home,
+    session, welcome, agents and rules, and the question card. Then, at the judge, as the issue says of the merge base:
+    each zh-Hans launch draws otherwise than en-US and holds no English string the table has a key for: expected [ …(8) ]
+    to deeply equal []
+      the first open ask's page with its card, zh-Hans: the zh-Hans launch draws the same as en-US (snapshot bd482af3f02c);
+        its first node with English words is node 1 (group list "Tasks")
+      (the same for a session's page, the Agents page, the Rules page, a project's page, the empty state and the first
+        launch's page, each naming node 1 (group list "Tasks"))
+      there is no table at crates/deep-app/copy/en.json
+  AC1 #2403.f805f24b  (the merge base's build through the judge) Its first assertion holds: the merge base draws each of
+    the seven zh-Hans visits the same as en-US. Then: the judge names the node of the merge base's first zh-Hans visit that
+    first holds an English string the table has a key for: expected undefined to be defined (no table, so no key).
+  At the base the checkout is the merge base, and every en-US snapshot of this checkout's build equalled the merge base's
+  build's byte for byte (seen in an exploratory run of the same visits; the test's own run stopped earlier, at the judge).
+
+layout.test.ts                                      1.4 s, load 245.1 (run again once the file was final, after
+                                                    a filter past its first assertion changed; 3.2 s at 187.3 before)
+  AC3 #2403.5f7fc02a  (both languages, both widths) AssertionError: there is no table at crates/deep-app/copy/en.json
+  AC3 #2403.5f7fc02a  (zh-twice-as-long)            AssertionError: there is no table at crates/deep-app/copy/en.json
+  Seen apart from the test, at the base: `ui_check` panics at its second render. With the default fixture and
+  {"call": "ui_check", "ui_check": {"changed": ["crates/deep-app/src/views.rs"]}}, deep-drive prints
+    thread 'main' panicked at vendor/gpui-pre/src/app/entity_map.rs:174:9: used a entity with the wrong context
+  and exits with no reply. A second `launch` in one deep-drive process after `close` panics the same way at its first
+  `wait_for`. So this suite launches once a process, and AC3 needs the replica fixed. The base's `ui_check` also takes no
+  `locale`, renders at 1512 and 720 wide only, and has no audit for two strings drawn over each other.
+
+asks.test.ts                                        17.1 s, load 199.8 -> 241.0
+  AC5 #2403.83c0c375  Its first assertion holds: the replica posts a notification for the approval in en-US and in
+    zh-Hans. Then: the zh-Hans notification reads otherwise than the en-US one: both read
+    "ledger · Reconcile ledger exports across regions\n! needs you — Push the ledger branch to origin/main? If you don't
+    answer: Wait for the audit, at Sun 08:00." (the text as an exploratory run of the same world printed it).
+  Seen apart from the test, at the base: the real deep-app started as `deep-app -AppleLanguages '(en-US)'` exits 101
+  before its window: "panicked at crates/deep-app/src/main.rs:449:22: unknown argument -AppleLanguages"; started with no
+  argument on a world with one open ask, #1462's probe reads its status item's title from the accessibility tree as
+  ["1 ask needs you"].
+
+shown.test.ts                                       2.5 s, load 259.3
+  AC7 #2403.a13ac61c  Error: BLOCKED: this process has no Screen Recording permission, so nothing can take the real
+    window's pictures; grant it to the app the tests run under. (`probe access` here: {"locked":false,"ax":true,
+    "screen":false}.)
+
+Facts of the base this run settled:
+- The replica spells Simplified Chinese: on a fixture whose task title and question are Chinese, `see` gives
+  "修复购物车总价的四舍五入问题吗？" whole, "修复购物车总价的四…" and "修复购物车在叠加多个折扣后总…" cut at an ellipsis, as runs and
+  names. (#1808 recorded that at its base the replica spelled no Arabic.)
+- A launch with `locale: "zh-Hans"` draws byte for byte what `locale: "en-US"` draws, every chrome word in English:
+  "Tasks", "Needs you", "Pop out", "Approval", "Pick one", "How it looks", "Default: … · at …", "Say no", "Terminal",
+  "Send", "New task", "Nothing needs you", "Set up", the menu bar's "3 asks need you" and its lines "· ! needs you".
+- A fixture launch is the same in two builds: the record a hub made, replayed at the replica's NOW, drew the same seven
+  snapshots (by `see`'s sha256) in this checkout's deep-drive and in the merge base's own build.
+
+Total for the seven files: about 76 s at loads from 23 to 259.
