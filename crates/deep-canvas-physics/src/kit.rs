@@ -141,6 +141,19 @@ pub enum Measure {
     },
     /// #2309: how far below where it started `body` is after step `step`, along y, m.
     Sink { body: &'static str, step: usize },
+    /// #2241: how far `body` has moved along `along` by the end of step `step`, m, signed.
+    Along {
+        body: &'static str,
+        along: [f64; 3],
+        step: usize,
+    },
+    /// #2241: `body`'s speed along `along` after each step from `from` on, m/s: the one farthest
+    /// from the answer.
+    Held {
+        body: &'static str,
+        along: [f64; 3],
+        from: usize,
+    },
 }
 
 /// One fixture of the behavior part.
@@ -663,6 +676,25 @@ fn read(m: &Measure, t: &Trace, b: &dyn Backend, w: &World, f: &Fixture) -> Read
             let sink = p.get(*step).zip(p.first()).map(|(a, z)| z[1] - a[1]);
             reading(sink, json!({"body": body}))
         }
+        Measure::Along { body, along, step } => {
+            let p = path(t, body);
+            let ends = p.get(*step).zip(p.first());
+            let moved = ends.map(|(a, z)| (0..3).map(|i| (a[i] - z[i]) * along[i]).sum());
+            reading(moved, json!({"body": body}))
+        }
+        Measure::Held { body, along, from } => {
+            let steps = t.states.iter().enumerate().skip(*from);
+            let speeds = steps.filter_map(|(k, s)| {
+                let v = body_of(s, body)?.linear;
+                Some((k, (0..3).map(|i| v[i] * along[i]).sum::<f64>()))
+            });
+            let off = |x: &(usize, f64)| (x.1 - f.answer).abs();
+            let worst = speeds.max_by(|a, b| off(a).total_cmp(&off(b)));
+            reading(
+                worst.map(|w| w.1),
+                json!({"body": body, "step": worst.map(|w| w.0)}),
+            )
+        }
     }
 }
 
@@ -735,6 +767,12 @@ fn named_measure(m: &Measure) -> String {
         }
         Measure::Sink { body, step } => {
             format!("how far {body} is below where it started after step {step}, m")
+        }
+        Measure::Along { body, step, .. } => {
+            format!("how far {body} has moved along its belt by step {step}, m")
+        }
+        Measure::Held { body, from, .. } => {
+            format!("speed of {body} along its belt from step {from} on, m/s")
         }
     }
 }
