@@ -835,7 +835,7 @@ export function mutation({ root, change }, runs, say, print) {
       const starts = proven.length ? selectBinaries(directory, proven).hub : [];
       for (const files of [proven.filter((path) => !starts.includes(path)), proven.filter((path) => starts.includes(path))]) if (files.length) groups.push([null, files]);
       hub = groups.map(([, files]) => selectBinaries(directory, files).target);
-      bin = buildBinaries(directory, join(temporary('deep-proof-binaries-'), 'bin'), [...new Set(hub.flat())], (command, args, options) => spawnIn(directory, command, args, options));
+      bin = buildBinaries(directory, join(temporary('deep-proof-binaries-'), 'bin'), [...new Set(hub.flat())], (command, args, options) => spawnIn(directory, command, args, options), { timeout: 0 });
     } catch (error) {
       // buildBinaries and selectBinaries name their verdict first: `BLOCKED test binaries: …`, `INCONCLUSIVE no grant: …`.
       const [, level, why] = /^(BLOCKED|INCONCLUSIVE) (.*)$/s.exec(error.message) ?? [, 'BLOCKED', error.message];
