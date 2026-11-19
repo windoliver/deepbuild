@@ -76,6 +76,9 @@ mod chrome;
 #[cfg(target_os = "macos")]
 #[path = "probes/color_check.rs"]
 mod color_check;
+#[cfg(all(feature = "contact-sheet", target_os = "macos"))]
+#[path = "probes/contact_sheet.rs"]
+mod contact_sheet;
 #[cfg(all(feature = "hdr-fixture", target_os = "macos"))]
 #[path = "probes/hdr.rs"]
 mod hdr;
@@ -115,6 +118,12 @@ fn main() {
     #[cfg(all(feature = "hdr-fixture", target_os = "macos"))]
     if std::env::args().nth(1).as_deref() == Some("--hdr") {
         hdr::run(std::env::args().nth(2));
+        return;
+    }
+    // Issue #1592: `--contact-sheet`, in a contact-sheet build.
+    #[cfg(all(feature = "contact-sheet", target_os = "macos"))]
+    if std::env::args().nth(1).as_deref() == Some("--contact-sheet") {
+        contact_sheet::run();
         return;
     }
     // Issue #1485: `--canvas <scenario.json>`, in a canvas-fixture build.

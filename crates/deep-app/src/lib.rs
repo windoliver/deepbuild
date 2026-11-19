@@ -28,6 +28,8 @@ pub mod chrome;
 pub mod chrome_fixture;
 pub mod chrome_fx;
 pub mod chrome_gallery;
+#[cfg(feature = "contact-sheet")]
+pub mod contact_sheet;
 pub mod codes;
 pub mod commands;
 pub mod confirm;
@@ -43,6 +45,7 @@ pub mod hdr_fixture;
 #[cfg(target_os = "macos")]
 pub mod hdr_layer;
 pub mod hub;
+pub mod icons;
 /// #1486: chrome thumbnails through the one image service.
 pub mod images;
 pub mod installed;

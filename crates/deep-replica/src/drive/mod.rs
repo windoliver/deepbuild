@@ -1790,6 +1790,25 @@ impl Replica {
                 json!({"name": name, "bounds": bounds})
             })
             .collect();
+        // #1592: each icon the frame drew, named as in the kit's set, with its bounds and the size it was laid out at in
+        // points. The brand's artwork and the status marks are SVGs too, and no icons.
+        json["icons"] = frame
+            .svgs
+            .iter()
+            .filter(|svg| svg.visible)
+            .filter_map(|svg| {
+                let icon = match deep_app::icons::drawing(&svg.path) {
+                    Some(deep_app::icons::Drawing::Icon(name, _)) => name.to_owned(),
+                    Some(_) => return None,
+                    None => (svg.path.strip_prefix("icons/"))
+                        .and_then(|file| file.strip_suffix(".svg"))
+                        .unwrap_or(&svg.path)
+                        .to_owned(),
+                };
+                let size = svg.size[0].max(svg.size[1]) as f32 / scale;
+                Some(json!({"icon": icon, "bounds": svg.bounds, "size": size}))
+            })
+            .collect();
         (json, frame)
     }
 
