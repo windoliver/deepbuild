@@ -1,7 +1,7 @@
 //! What #1929's Scope states and its acceptance suite leaves out: `moves` left out, `on`, a box
 //! with a side of 0 m, a control mesh that is not manifold, wound inward or too small, a vertex
-//! within 1e-6 m of the control mesh, the 64 vertices a refusal names at most, and the bind a host's
-//! memo keeps between its frames.
+//! within 1e-6 m of the control mesh, the 64 vertices a refusal names at most, the bind a host's memo
+//! keeps between its frames, and the path a refusal has where the scene builds the item.
 
 use super::*;
 use crate::builders::{self, Ctx, CODED};
@@ -181,4 +181,18 @@ fn a_host_that_keeps_a_memo_binds_once_between_its_frames() {
     let (lifted, second) = frame(1.0);
     assert_eq!((first, second), (true, false));
     assert_ne!(still, lifted);
+}
+
+#[test]
+fn the_scene_names_the_modifier_a_refusal_is_at() {
+    let away = json!({"from": [5, 5, 5], "to": [6, 6, 6], "points": [2, 2, 2]});
+    let deform = json!({"kind": BOX, "params": away});
+    let item = json!({"kind": "slab@1", "params": {"size": [1, 1, 1]}, "modifiers": [deform]});
+    let doc = json!({"items": {"it": item}});
+    let fills = crate::contributed::Fills::default();
+    let refused = crate::scene::mesh_of(&doc, "it", &doc["items"]["it"], 0.0, fills).unwrap_err();
+    assert_eq!(
+        (refused.code, refused.path.as_str()),
+        (CODES[0], "items/it/modifiers/0")
+    );
 }
