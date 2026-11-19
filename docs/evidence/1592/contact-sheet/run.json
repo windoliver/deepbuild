@@ -1,0 +1,235 @@
+{
+  "issue": 1592,
+  "criterion": "AC4",
+  "app": "e6f8382ddcba77ebba50654562c1cf9888021b9540a932b6c3377e89cad3ff8e",
+  "reports": {
+    "light": {
+      "contact_sheet": 1592,
+      "appearance": "light",
+      "scale": 2,
+      "window": [
+        960,
+        640
+      ],
+      "marks": [
+        {
+          "entry": "pass",
+          "rect": [
+            128,
+            62,
+            16,
+            16
+          ]
+        },
+        {
+          "entry": "fail",
+          "rect": [
+            321,
+            62,
+            16,
+            16
+          ]
+        },
+        {
+          "entry": "invalid",
+          "rect": [
+            597,
+            62,
+            16,
+            16
+          ]
+        },
+        {
+          "entry": "blocked",
+          "rect": [
+            128,
+            182,
+            16,
+            16
+          ]
+        },
+        {
+          "entry": "inconclusive",
+          "rect": [
+            393,
+            182,
+            16,
+            16
+          ]
+        },
+        {
+          "entry": "running",
+          "rect": [
+            649,
+            182,
+            16,
+            16
+          ]
+        },
+        {
+          "entry": "needs_you",
+          "rect": [
+            128,
+            302,
+            16,
+            16
+          ]
+        },
+        {
+          "entry": "stale",
+          "rect": [
+            351,
+            302,
+            16,
+            16
+          ]
+        },
+        {
+          "entry": "idle",
+          "rect": [
+            540,
+            302,
+            16,
+            16
+          ]
+        }
+      ],
+      "icons": [
+        {
+          "name": "external-link",
+          "size": 14,
+          "rect": [
+            128,
+            419,
+            14,
+            14
+          ]
+        },
+        {
+          "name": "external-link",
+          "size": 16,
+          "rect": [
+            128,
+            446,
+            16,
+            16
+          ]
+        }
+      ]
+    },
+    "dark": {
+      "contact_sheet": 1592,
+      "appearance": "dark",
+      "scale": 2,
+      "window": [
+        960,
+        640
+      ],
+      "marks": [
+        {
+          "entry": "pass",
+          "rect": [
+            128,
+            62,
+            16,
+            16
+          ]
+        },
+        {
+          "entry": "fail",
+          "rect": [
+            321,
+            62,
+            16,
+            16
+          ]
+        },
+        {
+          "entry": "invalid",
+          "rect": [
+            597,
+            62,
+            16,
+            16
+          ]
+        },
+        {
+          "entry": "blocked",
+          "rect": [
+            128,
+            182,
+            16,
+            16
+          ]
+        },
+        {
+          "entry": "inconclusive",
+          "rect": [
+            393,
+            182,
+            16,
+            16
+          ]
+        },
+        {
+          "entry": "running",
+          "rect": [
+            649,
+            182,
+            16,
+            16
+          ]
+        },
+        {
+          "entry": "needs_you",
+          "rect": [
+            128,
+            302,
+            16,
+            16
+          ]
+        },
+        {
+          "entry": "stale",
+          "rect": [
+            351,
+            302,
+            16,
+            16
+          ]
+        },
+        {
+          "entry": "idle",
+          "rect": [
+            540,
+            302,
+            16,
+            16
+          ]
+        }
+      ],
+      "icons": [
+        {
+          "name": "external-link",
+          "size": 14,
+          "rect": [
+            128,
+            419,
+            14,
+            14
+          ]
+        },
+        {
+          "name": "external-link",
+          "size": 16,
+          "rect": [
+            128,
+            446,
+            16,
+            16
+          ]
+        }
+      ]
+    }
+  }
+}
