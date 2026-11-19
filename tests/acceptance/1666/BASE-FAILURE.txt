@@ -1,0 +1,136 @@
+One run of tests/acceptance/1666 at the base b7b24aae8 (main, 2026-11-18), Node 24.22.0, macOS, git 2.56.0,
+Claude Code 2.1.308 and Codex 0.166.0-alpha.5.1 (the real binaries, from DEEP_1666_AGENT_BIN), load average ~100:
+
+  DEEP_1666_AGENT_BIN=$HOME/.cache/deepbuild-agents/148/node_modules/.bin \
+    NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1666 --no-file-parallelism --testTimeout=600000
+
+Paths are redacted: <test home> is a /Users/Shared/dh1666-* folder, <repo> this checkout, $HOME the user's home.
+
+Why each reads as it does, as the issue says of the base:
+- claude-code 2.1.308, AC1: passes. Its sandbox opens the repo's whole .git but config and hooks, so the commit is made.
+- claude-code 2.1.308, AC2: fails, naming the checkout's .git/index and .git/HEAD and two files in the other worktree's
+  git folder (.git/worktrees/shop-other), each written; the checkout's tracked README.md was refused (EPERM).
+- codex 0.166.0-alpha.5.1, AC1: fails, naming index.lock: its profile opens only the worktree folder, so git can't
+  create <checkout>/.git/worktrees/<id>/index.lock.
+- codex 0.166.0-alpha.5.1, AC2: passes: every write outside the worktree was refused (EPERM) and no file changed.
+- The four plant tests read BLOCKED: the base hub lists neither sandbox-closes-worktree-git nor sandbox-opens-whole-git,
+  so it refuses to start with either.
+Each session's agent ran its one command and exited; no hub, wrapper or agent process was left, and every test home
+was removed.
+
+
+ RUN  v5.0.5 <repo>/tests/acceptance/1666
+
+ ❯ plants.test.ts (4 tests | 4 failed) 5914ms
+   × AC1 #1666.a6894a2d claude-code 2.1.308: a start whose sandbox leaves the worktree's git folder closed fails the test, naming index.lock 755ms
+   × AC2 #1666.2a45598e claude-code 2.1.308: a sandbox that opens the repo's whole .git lets the writes through and fails the test, naming each path 455ms
+   × AC1 #1666.a6894a2d codex 0.166.0-alpha.5.1: a start whose sandbox leaves the worktree's git folder closed fails the test, naming index.lock 2736ms
+   × AC2 #1666.2a45598e codex 0.166.0-alpha.5.1: a sandbox that opens the repo's whole .git lets the writes through and fails the test, naming each path 1869ms
+ ❯ sessions.test.ts (4 tests | 2 failed) 30114ms
+   × AC2 #1666.2a45598e claude-code 2.1.308: that command's writes to a tracked file in the checkout, its .git/index and .git/HEAD, and another worktree's git folder are each refused 8ms
+   × AC1 #1666.a6894a2d codex 0.166.0-alpha.5.1: a command in a started session commits in its worktree, and the commit is on the session's branch 8513ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  plants.test.ts > AC1 #1666.a6894a2d claude-code 2.1.308: a start whose sandbox leaves the worktree's git folder closed fails the test, naming index.lock
+ FAIL  plants.test.ts > AC1 #1666.a6894a2d codex 0.166.0-alpha.5.1: a start whose sandbox leaves the worktree's git folder closed fails the test, naming index.lock
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=sandbox-closes-worktree-git did not start (a hub that doesn't list a plant refuses to start): <repo>/packages/hub/dist/plant.js:127
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=sandbox-closes-worktree-git names no planted program
+    at plantOf <repo>/packages/hub/dist/plant.js:127:15)
+    at Module.runHub <repo>/packages/hub/dist/server.js:1579:19)
+    at hubCommand <repo>/packages/hub/dist/hub-command.js:29:58)
+    at async <repo>/packages/cli/dist/main.js:353:24
+
+Node.js v24.22.0
+
+ ❯ runHub helpers.ts:380:11
+    378|   if (ready?.ready !== true) {
+    379|     if (child.pid && alive(child.pid)) try { process.kill(child.pid, '…
+    380|     throw Error(`BLOCKED: the hub${plant ? ` with the plant DEEP_HUB_P…
+       |           ^
+    381|   }
+    382|   return { pid: child.pid!, socket: String(ready.socket), child, exit,…
+ ❯ openWorld helpers.ts:431:15
+ ❯ startedSession helpers.ts:537:13
+ ❯ plants.test.ts:9:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+ FAIL  plants.test.ts > AC2 #1666.2a45598e claude-code 2.1.308: a sandbox that opens the repo's whole .git lets the writes through and fails the test, naming each path
+ FAIL  plants.test.ts > AC2 #1666.2a45598e codex 0.166.0-alpha.5.1: a sandbox that opens the repo's whole .git lets the writes through and fails the test, naming each path
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=sandbox-opens-whole-git did not start (a hub that doesn't list a plant refuses to start): <repo>/packages/hub/dist/plant.js:127
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=sandbox-opens-whole-git names no planted program
+    at plantOf <repo>/packages/hub/dist/plant.js:127:15)
+    at Module.runHub <repo>/packages/hub/dist/server.js:1579:19)
+    at hubCommand <repo>/packages/hub/dist/hub-command.js:29:58)
+    at async <repo>/packages/cli/dist/main.js:353:24
+
+Node.js v24.22.0
+
+ ❯ runHub helpers.ts:380:11
+    378|   if (ready?.ready !== true) {
+    379|     if (child.pid && alive(child.pid)) try { process.kill(child.pid, '…
+    380|     throw Error(`BLOCKED: the hub${plant ? ` with the plant DEEP_HUB_P…
+       |           ^
+    381|   }
+    382|   return { pid: child.pid!, socket: String(ready.socket), child, exit,…
+ ❯ openWorld helpers.ts:431:15
+ ❯ startedSession helpers.ts:537:13
+ ❯ plants.test.ts:16:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+
+ FAIL  sessions.test.ts > AC2 #1666.2a45598e claude-code 2.1.308: that command's writes to a tracked file in the checkout, its .git/index and .git/HEAD, and another worktree's git folder are each refused
+AssertionError: AC2 #1666.2a45598e claude-code 2.1.308: the session's command wasn't refused writing <test home>/src/shop/.git/index (written); <test home>/src/shop/.git/HEAD (written); <test home>/src/shop/.git/worktrees/shop-other/written-by-the-session (written); <test home>/src/shop/.git/worktrees/shop-other/HEAD (written) (the sandbox it was launched with: "{\"sandbox\":{\"enabled\":true,\"failIfUnavailable\":true,\"autoAllowBashIfSandboxed\":true,\"allowUnsandboxedCommands\":false,\"filesystem\":{\"denyRead\":[\"<test home>/.ssh\",\"<test home>/.aws\",\"<test home>/.gnupg\",\"<test home>/.config/gh\",\"<test home>/.netrc\",\"<test home>/.docker\",\"<test home>/.kube\",\"<test home>/Library/Keychains\",\"<test home>/.codex/auth.json\",\"<test home>/.claude/.credentials.json\",\"<test home>/.deepbuild/starts\"]},\"network\":{\"allowedDomains\":[],\"allowUnixSockets\":[\"<test home>/.deepbuild/hub.sock\"]}}}"): expected [ …(4) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "<test home>/src/shop/.git/index (written)",
++   "<test home>/src/shop/.git/HEAD (written)",
++   "<test home>/src/shop/.git/worktrees/shop-other/written-by-the-session (written)",
++   "<test home>/src/shop/.git/worktrees/shop-other/HEAD (written)",
++ ]
+
+ ❯ refusesTheRest helpers.ts:609:187
+    607|     for (const f of changed) if (!notRefused.some((n) => n.startsWith(…
+    608|   }
+    609|   expect(notRefused, `${what}: the session's command wasn't refused wr…
+       |                                                                                                                                                                                           ^
+    610| }
+    611|
+ ❯ sessions.test.ts:19:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯
+
+ FAIL  sessions.test.ts > AC1 #1666.a6894a2d codex 0.166.0-alpha.5.1: a command in a started session commits in its worktree, and the commit is on the session's branch
+AssertionError: AC1 #1666.a6894a2d codex 0.166.0-alpha.5.1: the command's git commit in its worktree <test home>/.deepbuild/worktrees/shop/run01M7RXSSD7PPQAZT4RQK467398 failed: fatal: Unable to create '<test home>/src/shop/.git/worktrees/run01M7RXSSD7PPQAZT4RQK467398/index.lock': Operation not permitted | fatal: Unable to create '<test home>/src/shop/.git/worktrees/run01M7RXSSD7PPQAZT4RQK467398/index.lock': Operation not permitted (the sandbox it was launched with: "default_permissions=\"deepbuild\" permissions.deepbuild.extends=\":workspace\" permissions.deepbuild.filesystem={\"<test home>\"=\"read\",\"<test home>/.ssh\"=\"deny\",\"<test home>/.aws\"=\"deny\",\"<test home>/.gnupg\"=\"deny\",\"<test home>/.config/gh\"=\"deny\",\"<test home>/.netrc\"=\"deny\",\"<test home>/.docker\"=\"deny\",\"<test home>/.kube\"=\"deny\",\"<test home>/Library/Keychains\"=\"deny\",\"<test home>/.codex/auth.json\"=\"deny\",\"<test home>/.claude/.credentials.json\"=\"deny\",\"<test home>/.deepbuild/starts\"=\"deny\"} permissions.deepbuild.network.enabled=false"): expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "fatal: Unable to create '<test home>/src/shop/.git/worktrees/run01M7RXSSD7PPQAZT4RQK467398/index.lock': Operation not permitted",
++   "fatal: Unable to create '<test home>/src/shop/.git/worktrees/run01M7RXSSD7PPQAZT4RQK467398/index.lock': Operation not permitted",
++ ]
+
+ ❯ commitsOnItsBranch helpers.ts:572:198
+
+ ❯ sessions.test.ts:16:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  6 failed | 2 passed (8)
+   Start at  19:32:09
+   Duration  36.95s (tests 99%, import 1%)
