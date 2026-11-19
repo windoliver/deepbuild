@@ -62,19 +62,20 @@ function sourceSlice(file, source, requested) {
 
 // What a checkout's hub runs from that checkout's target/{release,debug}/ (#2817): deepHook() in
 // packages/hub/src/paths.ts and canvasCore() in packages/hub/src/canvas.ts. A test that names the hub's or the CLI's
-// package can start that hub.
+// package, in a literal, a template's text or the pieces of a join or resolve call, can start that hub.
 const HUB_BINARIES = ['deep-hook', 'deep-show'];
 const HUB_ENTRY = /(?:^|\/)packages\/(?:hub|cli)(?:\/|$)|^@deepbuild\/(?:hub|cli)(?:\/|$)/;
 
-/** Selected tests' DEEP_BIN_DIR binaries. */
-export const binaryNames = (cwd, patterns) => selectBinaries(cwd, patterns).bin;
+/** Selected tests' DEEP_BIN_DIR binaries, for a run in the checkout itself, which keeps its own target/. */
+export const binaryNames = (cwd, patterns) => selectBinaries(cwd, patterns, false).bin;
 
 /**
  * Selected tests and the helper declarations they reach: `bin`, the binaries their DEEP_BIN_DIR consumers name, and
  * `target`, the hub's binaries when one of them names the hub's or the CLI's package.
  */
-export function selectBinaries(cwd, patterns) {
+export function selectBinaries(cwd, patterns, hubBinaries = true) {
   let hub = false;
+  const names = (text) => { if (HUB_ENTRY.test(text)) hub = true; };
   const sources = [], roots = patterns.flatMap((path) => path.includes('*') ? globSync(path, { cwd }) : [path]);
   for (const root of roots) {
     const seen = new Set(), own = [], queue = [{ path: root, requested: null }];
@@ -102,6 +103,13 @@ export function selectBinaries(cwd, patterns) {
             const names = bindings && ts.isNamedImports(bindings) && !node.importClause?.name ? bindings.elements.filter((n) => !n.isTypeOnly).map((n) => (n.propertyName ?? n.name).text) : null;
             if (!node.importClause?.isTypeOnly) follow(node.moduleSpecifier.text, names);
           }
+          // A helper's re-export reaches the helper it names, as an import does.
+          if (ts.isExportDeclaration(node) && !node.isTypeOnly && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text.startsWith('.')) {
+            const clause = node.exportClause;
+            follow(node.moduleSpecifier.text, clause && ts.isNamedExports(clause) ? clause.elements.filter((n) => !n.isTypeOnly).map((n) => (n.propertyName ?? n.name).text) : null);
+          }
+          // Types are no run: a type-only import or export reaches no hub.
+          if ((ts.isImportDeclaration(node) && node.importClause?.isTypeOnly) || (ts.isExportDeclaration(node) && node.isTypeOnly)) return;
           if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword && ts.isStringLiteral(node.arguments[0])) follow(node.arguments[0].text, null);
           if ((ts.isPropertyAccessExpression(node) && node.expression.getText() === 'process.env' && node.name.text === 'DEEP_BIN_DIR')
             || (ts.isElementAccessExpression(node) && node.expression.getText() === 'process.env' && ts.isStringLiteral(node.argumentExpression) && node.argumentExpression.text === 'DEEP_BIN_DIR')) readsBin = true;
@@ -109,9 +117,11 @@ export function selectBinaries(cwd, patterns) {
             const command = node.arguments[0];
             if (!command || !ts.isStringLiteralLike(command) || !['cargo', 'git', 'npm', 'node', 'ps', 'sh'].includes(command.text)) executes = true;
           }
+          if (ts.isCallExpression(node) && /^(?:join|resolve)$/.test(node.expression.getText().split('.').at(-1))) names(node.arguments.filter(ts.isStringLiteralLike).map((arg) => arg.text).join('/'));
+          if (ts.isTemplateHead(node) || ts.isTemplateMiddle(node) || ts.isTemplateTail(node)) names(node.text);
           if (ts.isStringLiteralLike(node)) {
             own.push(node.text);
-            if (HUB_ENTRY.test(node.text)) hub = true;
+            names(node.text);
           }
           ts.forEachChild(node, visit);
         };
@@ -120,6 +130,7 @@ export function selectBinaries(cwd, patterns) {
     }
     if (readsBin && executes) sources.push(own.join('\n'));
   }
+  if (!hubBinaries) hub = false;
   // Only actual redrafted consumers need a build; a missing workspace is not a wrong executable.
   if (!sources.length && !hub) return { bin: [], target: [] };
   if (!existsSync(join(cwd, 'Cargo.toml'))) {
