@@ -308,7 +308,7 @@ export type Plant =
   // #1509's: a gate that asks for every package run straight from a registry, whatever its age.
   | 'asks-every-registry-run'
   // #1868's: a hub that builds the asks and readings of the canvas core's world once and reads them so ever after.
-  | 'world-built-once';
+  | 'canvas-world-built-once';
 const PLANTS: readonly string[] = [
   'asks-every-registry-run',
   'statusline-user-settings-only', 'window-unknown-as-zero', 'window-carried-from-other-repo', 'sends-block-whole',
@@ -427,7 +427,7 @@ const PLANTS: readonly string[] = [
   'pass-skips-due-promise', 'state-pass-skips-due-promise', 'asks-without-tool-before',
   'hands-over-socket-chunk',
   'rubric-holds-every-rule', 'review-without-caller',
-  'world-built-once',
+  'canvas-world-built-once',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;

@@ -90,7 +90,7 @@ export class HubCanvas {
     const state = (a: { session_id: string | null; status: string }) => ({ session: a.session_id, state: a.status === 'open' || a.status === 'later' ? 'needs_you' : 'done' });
     const first = this.readingsAt === undefined;
     // The planted world is built once: what the record gained since is never read (#1868's wrong program).
-    if (!first && this.options.plant === 'world-built-once') return;
+    if (!first && this.options.plant === 'canvas-world-built-once') return;
     // What is marked from here on is read by the next call: an event that lands during these reads is read twice at worst.
     const asks = first ? undefined : [...this.asksBehind];
     this.asksBehind.clear();
