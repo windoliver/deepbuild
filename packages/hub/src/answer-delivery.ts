@@ -1167,7 +1167,7 @@ export class AnswerDelivery {
   }
 
   /** Whether a saved decision covers what a prompt is about, asked of resolver-decisions with nothing raised. */
-  private async covered(session: string, about: About): Promise<boolean> {
+  async covered(session: string, about: About): Promise<boolean> {
     const options = [{ id: 'approve', label: about.options[0], decision: 'allow' as const }, { id: 'decline', label: about.options[1], decision: 'deny' as const }];
     const key = subjectKey({ kind: 'authority', subject: about.subject, options } as unknown as Parameters<typeof subjectKey>[0], '');
     const answer = await this.precheck({
