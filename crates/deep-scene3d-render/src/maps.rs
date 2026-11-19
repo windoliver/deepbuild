@@ -72,6 +72,15 @@ pub fn format(name: &str) -> Option<wgpu::TextureFormat> {
         "bc4-r-unorm" => F::Bc4RUnorm,
         "rgba8unorm-srgb" => F::Rgba8UnormSrgb,
         "rgba8unorm" => F::Rgba8Unorm,
+        // #1040: the web player's maps where the adapter has ASTC but no BC.
+        "astc-4x4-unorm-srgb" => F::Astc {
+            block: wgpu::AstcBlock::B4x4,
+            channel: wgpu::AstcChannel::UnormSrgb,
+        },
+        "astc-4x4-unorm" => F::Astc {
+            block: wgpu::AstcBlock::B4x4,
+            channel: wgpu::AstcChannel::Unorm,
+        },
         _ => return None,
     })
 }

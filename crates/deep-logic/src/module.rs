@@ -326,11 +326,31 @@ fn rate(doc: &Value) -> Option<i64> {
 pub struct State {
     pub saved: Value,
     pub arrays: BTreeMap<String, Vec<Value>>,
+    /// Each item's read region, its offset and size in bytes: what the host writes every step.
+    pub reads: Vec<(usize, usize)>,
 }
 
 impl Canonical for State {
+    /// The items' state as values, never the step each would run next, and never each item's
+    /// read region, which the host rewrites every step (its entries and the step's seed): two
+    /// plays that carry the same state hash equal whatever clock brought them there (Carried
+    /// state; #1040's pages).
     fn encode(&self, out: &mut Vec<u8>) {
-        out.extend(canonical(&self.saved));
+        for (i, item) in self.saved.as_array().into_iter().flatten().enumerate() {
+            let fields = item.as_object().into_iter().flatten();
+            for (k, v) in fields.filter(|(k, _)| *k != "next") {
+                out.extend(canonical(&Value::String(k.clone())));
+                match (k.as_str(), v.as_str(), self.reads.get(i)) {
+                    ("memory", Some(hex), Some(&(at, len))) => {
+                        // Two hex digits a byte.
+                        let (from, to) = ((2 * at).min(hex.len()), (2 * (at + len)).min(hex.len()));
+                        let masked = format!("{}{}", &hex[..from], &hex[to..]);
+                        out.extend(canonical(&Value::String(masked)));
+                    }
+                    _ => out.extend(canonical(v)),
+                }
+            }
+        }
     }
 }
 
@@ -507,6 +527,9 @@ fn step(v: &mut View<'_>) -> Result<(), OpError> {
         Val::typed(State {
             saved: world.saved(),
             arrays,
+            reads: (piece.items.iter())
+                .map(|i| (i.reads_at as usize, i.layout.size("reads") as usize))
+                .collect(),
         }),
     )
 }
