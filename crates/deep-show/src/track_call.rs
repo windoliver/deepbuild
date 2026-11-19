@@ -32,7 +32,7 @@ impl Hub<'_> {
 }
 
 /// An entry in the form [`Entry::to_json`] writes; `seq` is the track's to give again.
-fn entry_of(v: &Value) -> Option<Entry> {
+pub(crate) fn entry_of(v: &Value) -> Option<Entry> {
     // #860: a rewind names no control either; the logic module reads where it returns.
     let (control, value) = match (v.get("present"), v.get("rewind")) {
         (Some(p), _) => (String::new(), p.clone()),

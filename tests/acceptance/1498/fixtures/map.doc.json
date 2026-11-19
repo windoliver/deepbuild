@@ -1,0 +1,37 @@
+{
+  "format": 1,
+  "profile": "figure",
+  "title": "Harbor map",
+  "description": "A map of the harbor: its water, a pier and the names of three places on it.",
+  "size": [800, 450],
+  "camera": "cam",
+  "items": {
+    "cam": {
+      "id": "cam", "kind": "camera@1", "name": "Camera", "order": "a0",
+      "params": { "projection": "orthographic", "target": [400, 225, 0], "view_width": 800, "user": { "zoom": [0.25, 8], "pan": { "bounds": "none" } } }
+    },
+    "dd-map-water": {
+      "id": "dd-map-water", "kind": "rect@1", "name": "Water", "role": "decoration", "order": "a1",
+      "params": { "box": [0, 0, 800, 450], "paint": { "fill": { "role": "muted" } } }
+    },
+    "dd-map-pier": {
+      "id": "dd-map-pier", "kind": "rect@1", "name": "Pier", "role": "part", "order": "a2",
+      "params": { "box": [300, 200, 200, 40], "paint": { "fill": { "role": "ink" } } }
+    },
+    "dd-map-light": {
+      "id": "dd-map-light", "kind": "text@1", "name": "Harbor Lighthouse", "role": "label", "order": "a3",
+      "params": { "text": "Harbor Lighthouse", "font": "body", "size": 18, "box": { "w": 240, "h": 26 } },
+      "at": { "pos": [60, 60, 0] }
+    },
+    "dd-map-market": {
+      "id": "dd-map-market", "kind": "text@1", "name": "Fish Market", "role": "label", "order": "a4",
+      "params": { "text": "Fish Market", "font": "body", "size": 18, "box": { "w": 200, "h": 26 } },
+      "at": { "pos": [60, 300, 0] }
+    },
+    "dd-map-ferry": {
+      "id": "dd-map-ferry", "kind": "text@1", "name": "Ferry Terminal", "role": "label", "order": "a5",
+      "params": { "text": "Ferry Terminal", "font": "body", "size": 18, "box": { "w": 200, "h": 26 } },
+      "at": { "pos": [520, 120, 0] }
+    }
+  }
+}

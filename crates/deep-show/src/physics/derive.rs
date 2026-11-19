@@ -37,7 +37,7 @@ pub(crate) const MODULES_FIRST: bool = cfg!(feature = "test-launch-module-first"
 /// World `w`'s entries from the core's input track `track` and from what `form`'s canvas modules
 /// fire, each as the bake keeps it, in the order they apply (the shared rule, #172).
 pub(crate) fn kept(form: &Value, w: &World, track: &[Value]) -> Result<Vec<Value>, Box<Refusal>> {
-    deep_play::derive::kept(w, track, &fired(form), MODULES_FIRST)
+    deep_play::derive::kept(form, w, track, &fired(form), MODULES_FIRST)
 }
 
 pub(crate) use deep_play::derive::{missing, track_of};

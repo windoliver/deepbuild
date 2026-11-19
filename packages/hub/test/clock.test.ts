@@ -45,7 +45,7 @@ it.each([
       const [got, want] = [when(at, now), byLocale.when(at, now)];
       if (got !== want) differing.push(`${new Date(at).toISOString()} from ${new Date(now).toISOString()}: "${got}", not "${want}"`);
     }
-    const [got, want] = [hubDown(at), `The hub isn't answering, since ${byLocale.clock(at)}; this is the list its database holds.`];
+    const [got, want] = [hubDown(at), `The hub isn't answering, since ${byLocale.clock(at)}; start it with deep hub start. This is the list its database holds.`];
     if (got !== want) differing.push(`${new Date(at).toISOString()}: "${got}", not "${want}"`);
   }
   expect(offsets.size, 'the week holds the change').toBe(2);
@@ -67,7 +67,7 @@ it.each(['Asia/Kathmandu', 'Pacific/Kiritimati', 'UTC'])('every day of two years
 
 it('a time that is no time reads as the locale\'s formatter writes it', () => {
   expect(when(Number.NaN, 0)).toBe(byLocale.when(Number.NaN, 0));
-  expect(hubDown(Number.NaN)).toBe(`The hub isn't answering, since ${byLocale.clock(Number.NaN)}; this is the list its database holds.`);
+  expect(hubDown(Number.NaN)).toBe(`The hub isn't answering, since ${byLocale.clock(Number.NaN)}; start it with deep hub start. This is the list its database holds.`);
 });
 
 it('deep status with the hub down says since when in a clock time, and constructs no date formatter to say it', async () => {
@@ -95,7 +95,7 @@ Intl.DateTimeFormat = new Proxy(Intl.DateTimeFormat, {
 `);
     const result = spawnSync(process.execPath, ['--import', preload, CLI, 'status'], { env: { ...process.env, HOME: home, TZ: 'Asia/Kathmandu' }, encoding: 'utf8' });
     const since = new Date(last).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Kathmandu' });
-    expect(result.stdout, result.stderr).toContain(`The hub isn't answering, since ${since}; this is the list its database holds.`);
+    expect(result.stdout, result.stderr).toContain(`The hub isn't answering, since ${since}; start it with deep hub start. This is the list its database holds.`);
     expect(result.status).toBe(3);
     expect(existsSync(log) ? readFileSync(log, 'utf8').split('\n').filter(Boolean) : []).toEqual([]);
   } finally {

@@ -584,7 +584,7 @@ fn worlds(
                         .join("; ")
                 ))
             })?;
-        let kept = deep_play::derive::kept(&w, track, &[], false)
+        let kept = deep_play::derive::kept(form, &w, track, &[], false)
             .map_err(|r| refusal(format!("the world {id}'s inputs are refused: {}", r.what)))?;
         let step = step_flicks(&w);
         steps.push(step);

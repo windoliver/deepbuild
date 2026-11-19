@@ -10,7 +10,7 @@ import type { EvidenceStore } from '@deepbuild/evidence';
 import type { Connection, Message, RecordStore } from '@deepbuild/record';
 import { ulid } from '@deepbuild/record/ids';
 import { startOf } from './wire.js';
-import { call, withPrompt, type Reply } from './client.js';
+import { call, notAnswered, withPrompt, type Reply } from './client.js';
 import { hubAddress, installedRoot, repoOf, rootOf } from './paths.js';
 import { dropEntries, writeRejected } from './guards.js';
 
@@ -237,8 +237,7 @@ export async function memoryCommand(args: readonly string[]): Promise<number> {
       ? await withPrompt(() => call(hubAddress().path, token, 'memory.act', { verb: args[0], lesson: args[1] }, peer))
       : await call(hubAddress().path, token, 'memory.list', {});
   } catch (error) {
-    process.stderr.write(`BLOCKED: ${error instanceof Error ? error.message : String(error)}\n`);
-    return 3;
+    return notAnswered(error);
   }
   if ('error' in reply) {
     process.stderr.write(`${reply.error.remediation}\n`);

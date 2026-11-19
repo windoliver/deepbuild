@@ -2,7 +2,8 @@
 // The release pack check (#41): packs the root package and every public workspace package from a clean
 // checkout of one commit, reads each archive back from its own bytes, and requires its `bin`, `main` and
 // every `exports` target (wildcards included) to resolve to a file in that archive. Only then does it
-// write <out>/manifest.json with the commit and each archive's sha256. It never publishes anything.
+// write <out>/manifest.json with the commit and each archive's sha256 and `holds`: every binary, bundled font and
+// first-party pack file in it, by path and sha256 (#1495). It never publishes anything.
 //   node scripts/release-pack.mjs --repo <dir> --commit <sha> --out <dir> [--key <ed25519.pem> --preflight <report.json>]
 // A release passes --key and --preflight together: the preflight report must say PASS on this very commit, and the
 // manifest is signed with the offline key into manifest.json.sig. Without both it is the pack check alone, unsigned.
@@ -12,6 +13,8 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFile
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { preflightRefusal } from './preflight-record.mjs';
+import { contentsOf, extract } from './release-artifacts.mjs';
 
 const fail = (message) => {
   console.error(`release-pack: ${message}`);
@@ -45,14 +48,8 @@ if (keyArg && !reportArg) fail('--key signs a release, which needs --preflight: 
 if (reportArg && !keyArg) fail('--preflight is for a release, which needs --key: a release manifest is never left unsigned');
 let key;
 if (keyArg) {
-  let report;
-  try {
-    report = JSON.parse(readFileSync(resolve(reportArg), 'utf8'));
-  } catch (error) {
-    fail(`the preflight report ${resolve(reportArg)} can't be read as JSON: ${error instanceof Error ? error.message : String(error)}`);
-  }
-  if (report?.verdict !== 'PASS') fail(`the preflight report's verdict is ${report?.verdict === undefined ? 'missing' : report.verdict}, not PASS, so nothing is released`);
-  if (report.commit !== wanted) fail(`the preflight passed on ${report.commit}, not on ${wanted}, the commit asked to pack`);
+  const refused = preflightRefusal(reportArg, wanted);
+  if (refused) fail(refused);
   try {
     key = createPrivateKey(readFileSync(resolve(keyArg)));
   } catch (error) {
@@ -118,7 +115,10 @@ try {
     // A conditions object at the top level is the "." entry.
     const keyed = Object.keys(map).some((k) => k.startsWith('.')) ? map : { '.': map };
     for (const [key, value] of Object.entries(keyed)) for (const t of targets(value)) need(`exports entry ${key} ->`, t);
-    archives.push({ name: meta.name, file: filename, sha256: createHash('sha256').update(readFileSync(file)).digest('hex') });
+    // What it holds (#1495), read from its own bytes extracted afresh: each binary, bundled font and first-party pack file.
+    const into = join(work, 'holds', filename);
+    extract(file, into);
+    archives.push({ name: meta.name, file: filename, sha256: createHash('sha256').update(readFileSync(file)).digest('hex'), holds: contentsOf(into) });
   }
   if (problems.length) fail(`nothing was written or published:\n  ${problems.join('\n  ')}`);
 

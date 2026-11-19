@@ -52,6 +52,31 @@ function refusal(e) {
   return `The save ${save} isn't opened: it doesn't match ${differs.join(', ') || 'this piece'}.`;
 }
 
+// Issue #1040: whether this browser can run the bundle, asked before anything loads. It needs WebGPU, an adapter,
+// every feature the bundle's gpu_needs lists, one feature of each of its any_of sets and every limit it lists. The
+// device request it answers asks for exactly those, the first feature of each set the adapter has; what it lacks it
+// names, and the index page then opens the fallback page in the player's place, so the player never starts.
+async function gate(needs) {
+  if (!navigator.gpu) return { lacks: 'WebGPU' };
+  const adapter = await navigator.gpu.requestAdapter().catch(() => null);
+  if (!adapter) return { lacks: 'a WebGPU adapter' };
+  const features = [];
+  for (const f of needs.features) {
+    if (!adapter.features.has(f)) return { lacks: f };
+    features.push(f);
+  }
+  for (const set of needs.any_of) {
+    const f = set.find((x) => adapter.features.has(x));
+    if (!f) return { lacks: set.join(' or ') };
+    features.push(f);
+  }
+  for (const [k, v] of Object.entries(needs.limits)) {
+    const has = adapter.limits[k];
+    if (has === undefined || (k.startsWith('min') ? v < has : v > has)) return { lacks: k };
+  }
+  return { request: { features, any_of: [], limits: needs.limits } };
+}
+
 class DeepPlayer extends HTMLElement {
   #started = false;
   #player = null;
@@ -344,6 +369,11 @@ class DeepPlayer extends HTMLElement {
   }
 
   async #load() {
+    const can = await gate(bundle.gpu_needs);
+    if (can.lacks) {
+      location.replace(`./${bundle.fallback.index}`);
+      return;
+    }
     const files = new Map();
     for (const f of bundle.files) files.set(f.sha256, await this.#fetch(f.path, f.sha256));
     const glue = await import('deep-player-glue');
@@ -353,7 +383,7 @@ class DeepPlayer extends HTMLElement {
     for (const [sha, bytes] of files) player.add_file(sha, bytes);
     player.levels(JSON.stringify(bundle.images));
     player.load(bundle.document, bundle.track, JSON.stringify(bundle.logic));
-    const gpu = await glue.open_gpu(this.#canvas, JSON.stringify(bundle.gpu_needs));
+    const gpu = await glue.open_gpu(this.#canvas, JSON.stringify(can.request));
     this.#backend = gpu.backend;
     this.#adapter = gpu.adapter;
     player.attach(gpu);

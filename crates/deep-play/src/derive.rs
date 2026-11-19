@@ -28,13 +28,15 @@ pub struct Fired {
 /// `{t, seq, control, value, …}`) and from `fired`, what the build's canvas modules fire, each as
 /// the bake keeps it, in the order they apply: `{step, kind, target, data, input, from,
 /// written}`. `modules_first`: the other modules write a step's entries before the input
-/// module's (a planted build's order).
+/// module's (a planted build's order). A choice of `form` reads as its option's index (#1040).
 pub fn kept(
+    form: &Value,
     w: &World,
     track: &[Value],
     fired: &[Fired],
     modules_first: bool,
 ) -> Result<Vec<Value>, Box<Refusal>> {
+    let track = &indexed(form, track)[..];
     let h = step_flicks(w);
     // The core input track as the modules wrote it: each step's input-module entries and the
     // other modules' in the order the build writes them; each entry's place in it, by its source.
@@ -101,6 +103,24 @@ pub fn kept(
     };
     out.sort_by_key(key);
     Ok(out)
+}
+
+/// `track` with each entry of a choice of `form` valued as its option's index (Control: in an
+/// expression a choice reads as the index of its option), so a world input's data reads it as a
+/// number.
+fn indexed(form: &Value, track: &[Value]) -> Vec<Value> {
+    let index = |e: &Value| {
+        let c = &form["controls"][e["control"].as_str()?];
+        let name = e["value"].as_str().filter(|_| c["kind"] == "choice")?;
+        let names = deep_canvas::document::variants::option_names(form, c);
+        let mut e = e.clone();
+        e["value"] = json!(names.iter().position(|n| n == name)?);
+        Some(e)
+    };
+    track
+        .iter()
+        .map(|e| index(e).unwrap_or_else(|| e.clone()))
+        .collect()
 }
 
 /// The kept entries as the runner's track: each by its input, with its fields.

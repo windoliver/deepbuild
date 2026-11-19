@@ -7,6 +7,7 @@ import net from 'node:net';
 import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { hubAddress, installedPrograms, installedRoot, lastingNode, onPath, rootOf, underTemp, type Root } from './paths.js';
+import { notAnswered, Unanswered } from './client.js';
 import { line } from './wire.js';
 
 const LABEL = 'com.deepbuild.hub';
@@ -307,11 +308,17 @@ async function coreAnswers(root: Root): Promise<number> {
 
 /**
  * `deep hub start [--root <folder>]`: exits 0 once a hub, started now or already running, answers `hub.health` on the
- * root's socket: its core has started, and a `deep hub status` run right after reads it (#2801).
+ * root's socket: its core has started, and a `deep hub status` run right after reads it (#2801). It says so in one line
+ * (#1812); setup, which starts it too, says what it set up instead.
  */
-export async function startHub(options: { root?: string; cli: string }): Promise<number> {
+export async function startHub(options: { root?: string; cli: string; quiet?: boolean }): Promise<number> {
   const root = rootOf(options.root ?? installedRoot());
-  if (await answers(root.socket)) return coreAnswers(root);
+  const up = async (already: boolean): Promise<number> => {
+    const code = await coreAnswers(root);
+    if (code === 0 && !options.quiet) process.stdout.write(`The hub is up${already ? '; it was already running' : ''}.\n`);
+    return code;
+  };
+  if (await answers(root.socket)) return up(true);
   mkdirSync(root.logs, { recursive: true, mode: 0o700 });
   // An installed version's login service runs the versions folder's current link, which every update keeps, never a
   // version's own folder (#41); a checkout's runs its own CLI through Node.
@@ -328,7 +335,7 @@ export async function startHub(options: { root?: string; cli: string }): Promise
       return 3;
     }
   }
-  if (await waitForHub(root.socket)) return coreAnswers(root);
+  if (await waitForHub(root.socket)) return up(false);
   process.stderr.write(`deep hub start: no hub answered at unix:${root.socket} within ${WAIT_MS / 1000} s; see ${join(root.logs, 'hub.log')}\n`);
   return 3;
 }
@@ -347,8 +354,9 @@ export async function hubStatus(options: { root?: string }): Promise<number> {
     process.stdout.write(`${JSON.stringify(await control(path, tokenFile, 'hub.health', {}, 2000, STATUS_REPLY_MS))}\n`);
     return 0;
   } catch (error) {
-    process.stderr.write(`deep hub status: no hub could be read at unix:${path}: ${error instanceof Error ? error.message : String(error)}\n`);
-    return 3;
+    // No socket, nothing listening, or a home whose hub never wrote its token: the one sentence (#1812).
+    const code = (error as NodeJS.ErrnoException).code;
+    return notAnswered(code === 'ENOENT' || code === 'ECONNREFUSED' || code === 'EOF' ? new Unanswered(String(error)) : error, path);
   }
 }
 

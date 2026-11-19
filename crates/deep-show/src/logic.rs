@@ -287,6 +287,52 @@ impl Hub<'_> {
     }
 }
 
+impl Hub<'_> {
+    /// #1040's planted page (`page_keys_logic_by_step_hash`): each logic item of `form` keyed by
+    /// its step hash at `t` alone (its globals, the arrays it wrote and the rows it emitted, never
+    /// its memory), replayed on the form's track as the `logic` call replays it.
+    pub(crate) fn logic_step_rows(
+        &self,
+        form: &Value,
+        t: i64,
+    ) -> Vec<deep_canvas::schedule::CarriedState> {
+        let track = form["track"].as_array().cloned().unwrap_or_default();
+        let Ok(Some(piece)) = self.logic_piece(form, &track) else {
+            return Vec::new();
+        };
+        let piece = Rc::new(piece);
+        let entries: Vec<Entry> = track.iter().filter_map(Entry::parse).collect();
+        let mut rec = Record::default();
+        let world = World::new(
+            piece.clone(),
+            track_of(&entries),
+            false,
+            Default::default(),
+            &mut rec,
+            None,
+        );
+        let Ok(mut world) = world else {
+            return Vec::new();
+        };
+        let k = t / piece.items.first().map_or(1, |i| i.step.max(1));
+        world.run(k, &mut rec, &mut |_, _| {});
+        let rows = rec.rows();
+        let hash = |id: &str| {
+            let row = rows.get(&(k - 1)).and_then(|r| r.0.get(id));
+            row.and_then(|r| r.get("hash"))
+                .map_or(String::new(), Value::to_string)
+        };
+        (piece.items.iter())
+            .map(|i| deep_canvas::schedule::CarriedState {
+                module: "logic".into(),
+                kind: "step".into(),
+                key: i.id.clone(),
+                hash: hash(&i.id),
+            })
+            .collect()
+    }
+}
+
 /// #1164: the logic twins a scenario's `planted` may name, alone or as a list applied together.
 const PLANTED: [&str; 2] = ["restore_zeroes_move_count", "check_compares_step_hashes"];
 
