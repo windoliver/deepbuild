@@ -6,6 +6,11 @@ version 0 works: Criteria to tests, Criteria in a checked shape, Wrong programs,
 `212f16d09`. No implementation was seen. The implementing agent doesn't edit these files (AGENTS.md, Proof); a dispute
 goes to a blind redraft of this job.
 
+**Criterion 2 is redrafted (2026-11-18).** After main's #2650, this folder's `world-built-once` twin, which widens `Plant`
+to `string`, no longer builds over the change. The owner chose a blind redraft of criterion 2 at base `9d0256132`. It is
+`../1868-redraft-ac2/`, and the owner adopted it. `world-fresh.test.ts`, `twins.json` and `twins/` were removed from here
+then. What this README says about them is as written for base `212f16d09`.
+
 ## Run
 
 The checkout built: `npm ci && npm run build --workspaces`, `cargo build -p deep-hook` (a hub refuses to start without
