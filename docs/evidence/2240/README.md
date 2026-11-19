@@ -50,7 +50,7 @@ A uniform bar 1 m long on a hinge at its top end, released from 10°, baked 5 s.
 The 45° world with the centre written, sought to 1.5 s (restored at step 140) and played on: its 221 step hashes are the
 straight run's, the last `6b96d3719b3d96dd`. Thirteen worlds with no `centre_of_mass` (the box on three slopes, the bar,
 #251's lap and eight drawn worlds of one and two shapes a body): 4,573 step hashes, each the same string as on the merge
-base `9d0256132543`.
+base `9d0256132543`, and again, after main was merged, as on `81c6b9c340f6`.
 
 ## Kit
 
