@@ -7,7 +7,7 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import net from 'node:net';
-import tls from 'node:tls';
+import type tls from 'node:tls';
 import { basename, dirname, join } from 'node:path';
 import { Worker } from 'node:worker_threads';
 import type { HookRequestLine } from '@deepbuild/adapters';
@@ -18,7 +18,7 @@ import { Conn, type Role } from './connection.js';
 import { contractAdapter, rpcTable, type DeprecatedNotice } from './contracts.js';
 import type { CoreMessage, CoreRequest } from './core-worker.js';
 import { prCommands } from './pr-commands.js';
-import { registry } from './adapter-facts.js';
+import { registry } from './socket-adapters.js';
 import { agentReply, allowReply, contextParts, coreReplyLine, EMPTY_REPLY, heavyReply, withWaits } from './hook-replies.js';
 import { takeLock, type Lock } from './lock.js';
 import { reaches } from './memory.js';
@@ -32,7 +32,7 @@ import { identityAt, idOf, type Identity } from './identity.js';
 import { plantedStart } from './plant.js';
 import { gatesOff } from './watch.js';
 import { AUTHORITY, CONTRACT, EXTENSION_HOLD_MS, FEATURES, line, plantOf, refuse, refusal, Refused, STAGE_HOLD_MS, ulid, VERSION, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Parsed, type Plant, type Refusal, type Scope, type Scoped, SCREEN_TOOLS, type StageReach, type VfsSettings } from './wire.js';
-import { isRecord as isObj } from '@deepbuild/contracts/runtime';
+import { isRecord as isObj } from '@deepbuild/contracts/json';
 import { writeSynced } from './vfs.js';
 
 /** How often the hub checks that its lock file is still the one it holds (#909): the design says at least once a minute. */
@@ -278,7 +278,8 @@ function parserPool(given: readonly string[], plant: Plant | undefined, dir: str
       const worker = size > BIG ? (big ??= make()) : small;
       return new Promise((resolve) => {
         pending.set(++n, { resolve, worker });
-        worker.postMessage({ n, chunks, first });
+        // A line in a buffer of its own is handed to the parser's thread, not copied to it; a short one sits in Node's shared pool, which stays here.
+        worker.postMessage({ n, chunks, first }, [...new Set(chunks.filter((c) => plant === 'hands-over-socket-chunk' || c.buffer.byteLength === c.byteLength).map((c) => c.buffer as ArrayBuffer))]);
       });
     },
     scrub(values) {
@@ -387,7 +388,7 @@ class Hub {
   private identity!: Identity;
   /** The network listener (#1338), open only while a project here has a member. */
   private network: tls.Server | undefined;
-  constructor(private readonly root: Root, private readonly token: string, private readonly lock: Lock, private readonly plant: Plant | undefined, private readonly vfs: VfsSettings | undefined) {
+  constructor(private readonly root: Root, private readonly token: string, private readonly lock: Lock, private readonly plant: Plant | undefined, private readonly vfs: VfsSettings | undefined, private readonly safe: boolean) {
     this.people = new People(root.dir);
     this.waits = new Waits({ rewrites: (agent) => this.rewrites(agent), ...(plant ? { plant } : {}) });
   }
@@ -396,7 +397,7 @@ class Hub {
     this.now = () => clock.start + (Date.now() - clock.real);
     const held = [this.token, ...testHeld()];
     this.off = gatesOff(this.root.dir);
-    const options: CoreOptions = { root: this.root.dir, clock, held, ...(this.plant ? { plant: this.plant } : {}), ...(this.vfs ? { vfs: this.vfs } : {}),
+    const options: CoreOptions = { root: this.root.dir, clock, held, ...(this.plant ? { plant: this.plant } : {}), ...(this.vfs ? { vfs: this.vfs } : {}), ...(this.safe ? { safe: true } : {}),
       ...(process.env.DEEP_HUB_TEST_HOST ? { host: process.env.DEEP_HUB_TEST_HOST } : {}),
       ...(Number(process.env.DEEP_HUB_TEST_LEASE_MS) > 0 ? { leaseMs: Number(process.env.DEEP_HUB_TEST_LEASE_MS) } : {}),
       ...(process.env.DEEP_HUB_TEST_CRASH === 'start-recorded' || process.env.DEEP_HUB_TEST_CRASH === 'spawned' ? { crash: process.env.DEEP_HUB_TEST_CRASH } : {}),
@@ -634,14 +635,13 @@ class Hub {
     if (this.stopping || (conn.done && !conn.first)) return;
     const first = conn.first;
     conn.first = false;
-    const size = parts.reduce((sum, p) => sum + p.length, 0);
-    // A small line is copied out of the socket's buffer, so only its own bytes cross to the parser.
-    const chunks = size > BIG ? parts : [parts.length === 1 ? Buffer.from(parts[0]!) : Buffer.concat(parts)];
+    // The line is copied once, out of the socket's chunks, which other lines share (#2655); the planted wrong program hands over the chunks themselves.
+    const chunks = this.plant === 'hands-over-socket-chunk' ? parts : [Buffer.concat(parts)];
     const parsed = await this.parsers.parse(chunks, first);
     if (this.stopping) return;
     if (parsed.kind === 'hook' && this.plant === 'log-raw-command') {
       // The planted wrong program: the command as the hook sent it, unscrubbed, in the hub's log.
-      try { process.stderr.write(`deep hub: call ${String((JSON.parse(Buffer.concat(chunks).toString('utf8')) as { payload?: { tool_input?: { command?: unknown } } }).payload?.tool_input?.command)}\n`); } catch { /* not JSON */ }
+      try { process.stderr.write(`deep hub: call ${String((JSON.parse(Buffer.concat(parts).toString('utf8')) as { payload?: { tool_input?: { command?: unknown } } }).payload?.tool_input?.command)}\n`); } catch { /* not JSON */ }
     }
     if (parsed.kind === 'hook' && conn.spool) {
       // Stamped with the connection's person, as a live hook is, and recorded once whichever copy arrives first.
@@ -1125,7 +1125,7 @@ class Hub {
   /**
    * Opens the network listener while a project here has a member, an invited person included, and closes it once none
    * is left (#1338): `hub.listen` in this hub's config.json, `<host>:<port>`, else every interface's port 7433. TLS 1.3
-   * only, with this hub's own certificate, and each client's certificate asked for, so its key is proved.
+   * only, with this hub's own certificate, and each client's certificate asked for, so its key is proved. TLS loads here, with the listener (#2655).
    */
   private async syncNetwork(): Promise<void> {
     const want = this.people.any || this.plant === 'listen-without-members';
@@ -1139,7 +1139,7 @@ class Hub {
     }
     if (this.network) return;
     const at = listenAt(this.root.dir);
-    const server = tls.createServer({ key: this.identity.key, cert: this.identity.cert, requestCert: true, rejectUnauthorized: false, minVersion: 'TLSv1.3' }, (sock) => {
+    const server = process.getBuiltinModule('node:tls').createServer({ key: this.identity.key, cert: this.identity.cert, requestCert: true, rejectUnauthorized: false, minVersion: 'TLSv1.3' }, (sock) => {
       const cert = sock.getPeerX509Certificate();
       this.accept(sock, { key: cert ? idOf(cert) : undefined });
     });
@@ -1296,9 +1296,10 @@ class Hub {
         return void reply(this.core.request({ op: 'call', method, params, context: { role: conn.name } }));
       case 'hub.health':
       case 'health':
+        // Health waits for the core's start, as calls through the core's queue do (#2801): its readings aren't open before.
         // The process readings after the core's: its own checks start short-lived children (the secret store's) that
         // would count as the hub's.
-        return void reply(this.core.request({ op: 'health', role: conn.name }).then(async (health) => ({ pid: process.pid, start: this.start, off: this.off, parsers: this.parsers.count(), ...(health as Obj), process: await processHealth() })));
+        return void reply(this.core.started.then(() => this.core.request({ op: 'health', role: conn.name })).then(async (health) => ({ pid: process.pid, start: this.start, off: this.off, parsers: this.parsers.count(), ...(health as Obj), process: await processHealth() })));
       case 'stream.subscribe': {
         const sub = `${conn.id}:${JSON.stringify(id)}`;
         const after = Number.isSafeInteger(params.after) && (params.after as number) >= 0 ? (params.after as number) : 0;
@@ -1425,10 +1426,10 @@ function writeToken(root: Root): string {
   return token;
 }
 
-/** `deep hub run [--root <folder>]`: the hub itself, in this process. Resolves only if it couldn't start. */
 /**
- * Runs the hub. In safe mode (`safe`) it loads no extension; the hub loads none yet in either mode, and the
- * floor (the fail_closed entries and the `.deepbuild/` guard) is deep-hook's, so it holds the same in both.
+ * `deep hub run [--root <folder>] [--safe]`: the hub itself, in this process. Resolves only if it couldn't start.
+ * In safe mode (`--safe`) the extension host loads no extension: each installed one is refused with the safe-mode
+ * reason. The floor (the fail_closed entries and the `.deepbuild/` guard) is deep-hook's, so it holds the same in both.
  */
 export async function runHub(options: { root?: string; safe?: boolean }): Promise<number> {
   dropTestSettings(options.root ?? installedRoot());
@@ -1470,7 +1471,7 @@ export async function runHub(options: { root?: string; safe?: boolean }): Promis
   process.on('SIGHUP', () => undefined);
   process.stdout.on('error', () => undefined);
   process.stderr.on('error', () => undefined);
-  const hub = new Hub(root, writeToken(root), lock, plant, vfs);
+  const hub = new Hub(root, writeToken(root), lock, plant, vfs, options.safe === true);
   for (const signal of ['SIGTERM', 'SIGINT'] as const) process.on(signal, () => void hub.stop(`signal:${signal}`));
   await hub.open(clock);
   process.stdout.write(`${JSON.stringify({ v: 1, ready: true, pid: process.pid, socket: root.socket, start: hub.start, ...(options.safe ? { safe: true } : {}) })}\n`);

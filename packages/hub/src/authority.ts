@@ -6,7 +6,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync, realpathSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { writeJson } from './claude-settings.js';
-import { call, withPrompt, type Reply } from './client.js';
+import { call, failure, notAnswered, withPrompt, type Reply } from './client.js';
 import { hubAddress, installedRoot, rootOf } from './paths.js';
 import { startOf } from './wire.js';
 
@@ -24,19 +24,17 @@ export async function confirmed(command: string, detail?: string): Promise<strin
     const reply = await asYou('you.confirm', { command, ...(detail ? { detail } : {}) });
     return 'error' in reply ? reply.error.remediation : undefined;
   } catch (error) {
-    return `${command} changed nothing: no hub answered to ask the OS to confirm you (${error instanceof Error ? error.message : String(error)}). Start it with deep hub start, then run ${command} again.`;
+    return failure(error, hubAddress(null).path);
   }
 }
 
 /** `deep off` or `deep on`: every gate watch-only at once, or back, while the floor holds. */
 export async function gatesCommand(off: boolean): Promise<number> {
-  const command = off ? 'deep off' : 'deep on';
   let reply: Reply;
   try {
     reply = await asYou(off ? 'gates.off' : 'gates.on', {});
   } catch (error) {
-    process.stderr.write(`${command} changed nothing: no hub answered to ask the OS to confirm you (${error instanceof Error ? error.message : String(error)}).\n`);
-    return 3;
+    return notAnswered(error, hubAddress(null).path);
   }
   if ('error' in reply) {
     process.stderr.write(`${reply.error.remediation}\n`);

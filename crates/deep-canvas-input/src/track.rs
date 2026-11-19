@@ -210,13 +210,19 @@ impl Track {
             .map(|&i| &self.entries[i])
     }
 
-    /// The track's hash: its entries and `fork_at`, in their written order.
+    /// The track's hash: of [`Track::bytes`].
     pub fn hash(&self) -> String {
+        sha256_hex(&self.bytes())
+    }
+
+    /// The track as its hash reads it: its entries and `fork_at`, in their written order (#1040:
+    /// a web bundle's track file, so the bundle's track is the app's by hash).
+    pub fn bytes(&self) -> Vec<u8> {
         let doc = json!({
             "entries": self.entries.iter().map(Entry::to_json).collect::<Vec<_>>(),
             "fork_at": self.fork_at,
         });
-        sha256_hex(doc.to_string().as_bytes())
+        doc.to_string().into_bytes()
     }
 
     pub fn to_json(&self) -> Value {

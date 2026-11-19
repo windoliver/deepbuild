@@ -22,6 +22,8 @@ import { relationItems } from './setup.js';
 import { describe, unrunnable } from './hook-programs.js';
 import { claudeHomes, denyHolds, homeMods, loginPlan, managedSettings, overrideWords } from './mods.js';
 import { probeSignIn } from './sign-in.js';
+import { lostIn } from './rule-load.js';
+import { readRuleFiles } from './rules.js';
 import { isRecord as isObj } from '@deepbuild/contracts';
 import type { DoctorItem } from '@deepbuild/contracts';
 
@@ -180,6 +182,7 @@ export async function doctorItems(env: NodeJS.ProcessEnv, options: { prompt: boo
   const repo = topLevel(options.cwd);
   const shadows = plant() === 'statusline-user-settings-only' ? [] : shadowedBy(repo);
   for (const s of shadows) add('claude.statusline_shadowed', 'claude-code', 'statusline_shadowed', 'warn', `${s.file} sets ${s.key}, which Claude Code runs instead of the forwarder in ${repo}, so no plan window is read there`, `Take ${s.key} out of ${s.file}, or run your status line from statusline.yours in ~/.deepbuild/config.json, which the forwarder runs after it reads the windows.`);
+  items.push(...rulesItems(repo));
 
   // Each agent's binary, version, sign-in and billing; Claude Code's token lifetime, test prompt and jobs' binary.
   const path = env.PATH ?? '';
@@ -189,6 +192,18 @@ export async function doctorItems(env: NodeJS.ProcessEnv, options: { prompt: boo
   // The canvas: its GPU adapter and tier, a fixture rendered headless against its golden, and its verdict (#140).
   items.push(...(await canvasItems(env)));
   return items;
+}
+
+/**
+ * The rule lines an agent never gets in a repo (#1514), as each agent's facts' rule-load entry predicts them: one failed
+ * item per file an agent loses lines of, naming the file, its first line lost and why, else one item that's ok.
+ */
+function rulesItems(repo: string): Item[] {
+  if (!existsSync(join(repo, '.git'))) return [];
+  const p = plant();
+  const lost = lostIn(repo, readRuleFiles(repo, null).map((f) => dirname(f.path)), { perFile: p === 'doctor-sums-per-file', linesOnly: p === 'doctor-counts-lines-only' });
+  if (!lost.length) return [{ item: 'rules.not_loaded', agent: 'deepbuild', code: 'healthy', level: 'ok', evidence: `every rule line in ${repo} reaches each agent its facts cover, by the agent's own loading`, fix: 'Nothing to do.' }];
+  return lost.map((l) => ({ item: 'rules.not_loaded', agent: l.agent, code: 'not_loaded', level: 'fail', evidence: l.why, fix: `${l.fix} Until then DeepBuild sends these rules to ${l.name}'s sessions itself where they fit.` }));
 }
 
 /**
@@ -460,7 +475,8 @@ export async function doctorCommand(args: readonly string[], also: () => Promise
   const next = (i: Item) => (fixes(i) ? `\n  Fix: ${i.fix}` : i.code === 'not_checked' ? `\n  To check: ${i.fix}` : '');
   for (const i of items) {
     const state = i.code === 'not_checked' ? 'not checked' : i.level.toUpperCase();
-    console.log(json ? JSON.stringify(i) : `${agents[i.agent] ?? i.agent} ${i.item}: ${state} (${i.code})\n  ${i.evidence}${next(i)}`);
+    // Its state once, in words; its code name is the JSON's (#1812).
+    console.log(json ? JSON.stringify(i) : `${agents[i.agent] ?? i.agent} ${i.item}: ${state}\n  ${i.evidence}${next(i)}`);
   }
   const failed = items.some((i) => i.level === 'fail');
   // A shadowed status line leaves the plan windows unread, which no item can decide (#1296).

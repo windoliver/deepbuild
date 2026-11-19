@@ -149,12 +149,21 @@ fn audio(
     Ok((a, bytes))
 }
 
-/// A sample's bytes, read where they lie.
+/// A sample's bytes, read where they lie. The decode worker runs on Unix; the web player, which
+/// links this crate for its map transcoder (#1040), never streams a file.
 fn read_at(file: &File, s: &mp4::Sample) -> std::io::Result<Vec<u8>> {
-    use std::os::unix::fs::FileExt;
-    let mut buf = vec![0u8; s.size as usize];
-    file.read_exact_at(&mut buf, s.offset)?;
-    Ok(buf)
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::FileExt;
+        let mut buf = vec![0u8; s.size as usize];
+        file.read_exact_at(&mut buf, s.offset)?;
+        Ok(buf)
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (file, s);
+        Err(std::io::ErrorKind::Unsupported.into())
+    }
 }
 
 /// The stream's replies: the head (sent with the sound before the first frame, once the

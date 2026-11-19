@@ -44,6 +44,8 @@ use std::{
 
 use super::ImageCacheProvider;
 
+mod wheel_end; // DeepBuild patch (windoliver/deepbuild#1482)
+
 #[cfg(feature = "stacker")]
 type StackSafe<T> = stacksafe::StackSafe<T>;
 #[cfg(not(feature = "stacker"))]
@@ -3335,6 +3337,7 @@ impl Interactivity {
             let allow_concurrent_scroll = style.allow_concurrent_scroll;
             let restrict_scroll_to_axis = style.restrict_scroll_to_axis;
             let line_height = window.line_height();
+            let scroll_max = self.scroll_max(hitbox.bounds, style, window); // DeepBuild patch (windoliver/deepbuild#1482)
             let hitbox = hitbox.clone();
             let current_view = window.current_view();
             window.on_mouse_event(move |event: &ScrollWheelEvent, phase, window, cx| {
@@ -3379,6 +3382,7 @@ impl Interactivity {
                     }
                     scroll_offset.y += delta_y;
                     scroll_offset.x += delta_x;
+                    *scroll_offset = wheel_end::clamp(*scroll_offset, scroll_max); // DeepBuild patch (windoliver/deepbuild#1482)
                     if *scroll_offset != old_scroll_offset {
                         cx.notify(current_view);
                     }

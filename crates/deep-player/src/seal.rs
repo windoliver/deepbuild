@@ -6,8 +6,7 @@
 use deep_canvas::registry::{BuildSet, Module, Registry, Sealed};
 
 /// The canvas modules the player carries: its set's shipped modules. The full set is the full
-/// build set's, less those whose work runs only in the app (the net module's relay and Join, which
-/// #1042 brings to the player).
+/// build set's, less those whose work runs only in the app (export).
 pub fn modules() -> Vec<Module> {
     #[allow(unused_mut)]
     let mut out = vec![
@@ -40,6 +39,9 @@ pub fn modules() -> Vec<Module> {
         deep_canvas_loop::module(),
         deep_canvas_media::module::module(),
     ]);
+    // #549: the net module, on logic: a piece's match plays in the full player too.
+    #[cfg(feature = "full")]
+    out.push(deep_net::kind::module());
     out
 }
 

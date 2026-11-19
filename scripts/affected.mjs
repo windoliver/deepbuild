@@ -540,7 +540,8 @@ async function main(args) {
     const [cls, id] = (process.env.DEEP_THROTTLE ?? '').split(':');
     if (id && process.env.DEEP_THROTTLE !== held.before) release({ class: cls, id });
     const own = { DEEP_THROTTLE: held.before };
-    if (runTimed && timedFiles.vitest.length) jobs.push(await vitest(timedFiles.vitest, ['--no-file-parallelism'], 'vitest-timed', root, own));
+    // A timed test measures for as long as its issue says, #1477's arms 8 s each: its limit is its own, or ten minutes, never vitest's 5 s (#2569).
+    if (runTimed && timedFiles.vitest.length) jobs.push(await vitest(timedFiles.vitest, ['--no-file-parallelism', '--testTimeout=600000'], 'vitest-timed', root, own));
     if (runTimed && timedFiles.node.length) jobs.push(await node(timedFiles.node, ['--test-concurrency=1'], 'node-timed', root, own));
 
     if (stopped) return console.log(`BLOCKED affected: stopped by ${stopped}; its jobs were stopped and none of their results is read; logs in ${logs}`), 128 + constants.signals[stopped];

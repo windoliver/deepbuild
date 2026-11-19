@@ -1,0 +1,65 @@
+
+ RUN  v5.0.5 <home>/deepbuild-bays/1/base
+
+ × tests/acceptance/2085/fixtures.test.ts > #2085.a93c4567 every fixture the full build's fixtures call lists is presented by deep_show in that build, as #387's and #855's suites take them > #2085.a93c4567 the fixtures call of full lists fixtures, the effects module's own shadowed-box among them, and deep_show presents every one it lists 6326ms
+   → every fixture the fixtures call lists is presented by deep_show in the build that lists it (#387 README, Fixtures); 1 of 46 aren't, each with its outcome and the codes it raised: expected [ Array(1) ] to deeply equal []
+ × tests/acceptance/2085/fixtures.test.ts > #2085.688e488c until #387's and #855's seven cases pass, scripts/known-failures.json lists them with #2085 > #2085.688e488c while a fixture the full build lists isn't presented, each of the seven cases is listed naming #2085; once every one is, nothing of tests/acceptance/387/perturb.test.ts or tests/acceptance/855/hash.test.ts is listed 5ms
+   → 1 fixtures the full build lists aren't presented: logic/counter: refused: logic_refused (error at items/counter/params); so #387's and #855's seven cases fail, and each is listed in scripts/known-failures.json: expected [ …(7) ] to deeply equal []
+ ✓ tests/acceptance/388/schedule.test.ts > #388.46473baa the sealed plan equals its committed snapshot > #388.46473baa core: sealed with exactly text and look, its published plan (deep://schedule/<core version>) equals crates/deep-show/schedule/core.json and runs only the core's, text's and look's operators 5710ms
+ ✓ tests/acceptance/388/schedule.test.ts > #388.46473baa the sealed plan equals its committed snapshot > #388.46473baa r1: sealed with exactly text, look, marks2d, data, graph, record, sheet and motion, its published plan equals crates/deep-show/schedule/r1.json and runs only those modules' and the core's operators 4045ms
+ ✓ tests/acceptance/388/schedule.test.ts > #388.46473baa the sealed plan equals its committed snapshot > #388.46473baa the core and r1 plans are two plans: r1's published plan differs from the core snapshot, naming operators of the modules r1 adds, so neither snapshot can stand for the other 577ms
+ ✓ tests/acceptance/388/sets.test.ts > #388.c1a5581d the core and r1 build sets seal with exactly the canvas modules their lists name; a build that leaves look or text out refuses startup, naming the module > #388.c1a5581d the core build set seals with exactly text and look 5201ms
+ ✓ tests/acceptance/388/sets.test.ts > #388.c1a5581d the core and r1 build sets seal with exactly the canvas modules their lists name; a build that leaves look or text out refuses startup, naming the module > #388.c1a5581d the r1 build set seals with exactly text, look, marks2d, data, graph, record, sheet and motion 5263ms
+ ✓ tests/acceptance/388/sets.test.ts > #388.c1a5581d the core and r1 build sets seal with exactly the canvas modules their lists name; a build that leaves look or text out refuses startup, naming the module > #388.c1a5581d a test build that leaves look out (core,test-leave-out-look) refuses startup, naming look 4981ms
+ ✓ tests/acceptance/388/sets.test.ts > #388.c1a5581d the core and r1 build sets seal with exactly the canvas modules their lists name; a build that leaves look or text out refuses startup, naming the module > #388.c1a5581d a test build that leaves text out (core,test-leave-out-text) refuses startup, naming text 2852ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2085/fixtures.test.ts > #2085.a93c4567 every fixture the full build's fixtures call lists is presented by deep_show in that build, as #387's and #855's suites take them > #2085.a93c4567 the fixtures call of full lists fixtures, the effects module's own shadowed-box among them, and deep_show presents every one it lists
+AssertionError: every fixture the fixtures call lists is presented by deep_show in the build that lists it (#387 README, Fixtures); 1 of 46 aren't, each with its outcome and the codes it raised: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "logic/counter: refused: logic_refused (error at items/counter/params)",
++ ]
+
+ ❯ tests/acceptance/2085/fixtures.test.ts:49:236
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/acceptance/2085/fixtures.test.ts > #2085.688e488c until #387's and #855's seven cases pass, scripts/known-failures.json lists them with #2085 > #2085.688e488c while a fixture the full build lists isn't presented, each of the seven cases is listed naming #2085; once every one is, nothing of tests/acceptance/387/perturb.test.ts or tests/acceptance/855/hash.test.ts is listed
+AssertionError: 1 fixtures the full build lists aren't presented: logic/counter: refused: logic_refused (error at items/counter/params); so #387's and #855's seven cases fail, and each is listed in scripts/known-failures.json: expected [ …(7) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "tests/acceptance/387/perturb.test.ts › #387.f46de50b for every shipped operator a change outside its read set leaves its key and result byte-identical; equal keys always give byte-identical results; a planted static accent reader fails naming the operator and the role; an undeclared read fails a test build › #387.f46de50b every fixture of the full build is presented and evaluated, and every operator the registry lists has a node in some fixture",
++   "tests/acceptance/387/perturb.test.ts › #387.f46de50b for every shipped operator a change outside its read set leaves its key and result byte-identical; equal keys always give byte-identical results; a planted static accent reader fails naming the operator and the role; an undeclared read fails a test build › #387.f46de50b each fixture session lists its perturbation targets: the six view inputs, the seed, its look tokens with accent among them, and every array its nodes write",
++   "tests/acceptance/387/perturb.test.ts › #387.f46de50b for every shipped operator a change outside its read set leaves its key and result byte-identical; equal keys always give byte-identical results; a planted static accent reader fails naming the operator and the role; an undeclared read fails a test build › #387.f46de50b a change to any one array, table, view input, look token, seed or asset outside an operator's read set leaves its key and result byte-identical, for every node of every fixture",
++   "tests/acceptance/387/perturb.test.ts › #387.f46de50b for every shipped operator a change outside its read set leaves its key and result byte-identical; equal keys always give byte-identical results; a planted static accent reader fails naming the operator and the role; an undeclared read fails a test build › #387.f46de50b equal keys always give byte-identical results over fuzzed sequences of edits, views and times on the fixtures (fast-check seed 3870001, 40 sequences of up to 25 clean evaluations)",
++   "tests/acceptance/387/perturb.test.ts › #387.f46de50b for every shipped operator a change outside its read set leaves its key and result byte-identical; equal keys always give byte-identical results; a planted static accent reader fails naming the operator and the role; an undeclared read fails a test build › #387.f46de50b in a test build every access every shipped operator makes on every fixture is one of its declared reads (or a contribution to one)",
++   "tests/acceptance/855/hash.test.ts › #855.6df0cf9c content keys and result digests with hash@2 key equal documents equally on two machines, and a cache written under hash@1 still hits after the migration's single rekey › #855.6df0cf9c equal documents get equal keys and result digests on two machines: the debug build here, and the release build in another time zone, locale, home and thread count, on the documents spelled otherwise",
++   "tests/acceptance/855/hash.test.ts › #855.6df0cf9c content keys and result digests with hash@2 key equal documents equally on two machines, and a cache written under hash@1 still hits after the migration's single rekey › #855.6df0cf9c equal documents get equal keys and result digests on a machine of another architecture: the x86_64 build under Rosetta (INCONCLUSIVE where this Mac can't build or run it)",
++ ]
+
+ ❯ tests/acceptance/2085/fixtures.test.ts:65:124
+     63|       const unlisted = SEVEN.filter((id) => !(id in known));
+     64|       const why = fixtures.length === 0 ? 'the full build lists no fix…
+     65|       expect(unlisted, `${why}; so #387's and #855's seven cases fail,…
+       |                                                                                                                            ^
+     66|       const without = SEVEN.filter((id) => !/#2085\b/.test(known[id]!)…
+     67|       expect(without, 'each of the seven names this issue, #2085').toE…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed | 2 passed (3)
+      Tests  2 failed | 7 passed (9)
+   Start at  15:47:31
+   Duration  329.38s (tests 100%)

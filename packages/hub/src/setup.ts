@@ -76,7 +76,7 @@ interface Said { code: number; line: string | undefined; later: string[] }
 
 /**
  * Runs the rows of the one list (setup-steps.ts) that apply here. Exit 0 once everything is in place; 1 when a file of
- * yours refused it, with nothing written; 3 when the hub didn't start; 4 when the wiki wasn't built. `quiet` keeps
+ * yours refused it, with nothing written; 3 when the hub didn't start or the wiki wasn't built (#1812). `quiet` keeps
  * stdout empty and holds every failure after the hooks for the caller to say after its one line.
  */
 async function install(cli: string, quiet = false): Promise<Said> {
@@ -176,7 +176,7 @@ async function install(cli: string, quiet = false): Promise<Said> {
   if (!quiet) console.log(`Its hooks and status line forwarder are in ${settingsFile}, beside yours; its MCP server in ${userFile}; its skill at ${skillDir()}; its safety rules at ${join(root, 'rules.json')}.`);
   // Only a relation that doesn't hold needs you; deep doctor lists them all.
   if (!quiet) for (const r of relations(root)) if (!r.holds) console.log(`BROKEN ${r.text}`);
-  const started = await startHub({ cli });
+  const started = await startHub({ cli, quiet: true });
   if (started !== 0) {
     tell('deep setup: the hub didn\'t start through its login service; deep doctor names what is missing.\n');
     return said(stopped(root, 3, 'the hub didn\'t start through its login service', 'Run deep doctor, which names what is missing, then Set up again.', done));
@@ -221,7 +221,7 @@ const version = (cli: string): string => (JSON.parse(readFileSync(join(dirname(c
  * Once the hub is up, it reads your Claude Code and Codex history into the wiki (#356): pattern matching written first,
  * then each reading job finished or waiting on the plan reserve. Each wiki page that changed gets a line, unless quiet.
  * The reading is the hub's; the agent's own session and settings are already in place, so a failure here is told and
- * setup still stands: 4 only when the hub couldn't be asked.
+ * setup still stands: 3, not checked, when it wasn't read.
  */
 async function readHistory(quiet: boolean, tell: (text: string) => void): Promise<number> {
   try {
@@ -229,13 +229,13 @@ async function readHistory(quiet: boolean, tell: (text: string) => void): Promis
     const reply = await call(hubAddress().path, readFileSync(rootOf(root).token, 'utf8').trim(), 'wiki.build', {});
     if ('error' in reply) {
       tell(`deep setup: the wiki wasn't built: ${reply.error.remediation}\n`);
-      return 4;
+      return 3;
     }
     if (!quiet) for (const page of (reply.result.changed as string[] | undefined) ?? []) console.log(`Wiki: ${page}`);
     return 0;
   } catch (error) {
     tell(`deep setup: the wiki wasn't built: ${error instanceof Error ? error.message : String(error)}\n`);
-    return 4;
+    return 3;
   }
 }
 /**
