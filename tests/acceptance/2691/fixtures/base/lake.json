@@ -1,0 +1,24 @@
+{
+  "issue": 2691,
+  "commit": "89863843d85271d0aadcd9ca4702e411d67c7613",
+  "changed": [],
+  "machine": {
+    "model": "Mac17,10",
+    "chip": "Apple M5 Max",
+    "macosBuild": "26B8119"
+  },
+  "binary": "cargo build --locked --release --bin deep-gpu",
+  "file": "lake.png",
+  "sha256": "26568c3046cbfbac574ac46cc21ccaf47cfa4ff9faf1b6d2cc51329bafea6316",
+  "size_px": [
+    3024,
+    1964
+  ],
+  "internal_scale": 0.5,
+  "internal_px": [
+    1512,
+    982
+  ],
+  "mirror_px": null,
+  "frame": 0
+}

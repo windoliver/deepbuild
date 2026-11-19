@@ -1,0 +1,32 @@
+{
+  "issue": 2691,
+  "commit": "89863843d85271d0aadcd9ca4702e411d67c7613",
+  "changed": [],
+  "machine": {
+    "model": "Mac17,10",
+    "chip": "Apple M5 Max",
+    "macosBuild": "26B8119"
+  },
+  "binary": "cargo build --locked --release --bin deep-gpu",
+  "size_px": [
+    3456,
+    2234
+  ],
+  "internal_scale": 0.5,
+  "internal_px": [
+    1728,
+    1117
+  ],
+  "mirror_px": null,
+  "gpu_bytes": [
+    505151488,
+    536133632,
+    536133632,
+    536133632,
+    536133632,
+    536133632,
+    536133632,
+    536133632
+  ],
+  "peak_bytes": 536133632
+}
