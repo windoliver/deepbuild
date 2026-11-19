@@ -71,6 +71,12 @@ mod sys {
             info: *mut [u32; 21],
             count: *mut u32,
         ) -> i32;
+        pub fn mach_vm_purgable_control(
+            task: u32,
+            address: u64,
+            control: i32,
+            state: *mut i32,
+        ) -> i32;
     }
 }
 
@@ -102,8 +108,9 @@ pub fn footprint_of(_pid: i32) -> Got {
 }
 
 /// What the allocator holds in the footprint: the pages of the regions malloc tags as its own, resident or compressed,
-/// less those it gave back as reusable. Free blocks on pages it keeps are in the footprint, so they're the heap's too;
-/// the bytes in use alone would move `unaccounted` each time the heap frees blocks or reuses them.
+/// less those it gave back as reusable and those of purgeable regions made volatile, which the footprint leaves out.
+/// Free blocks on pages it keeps are in the footprint, so they're the heap's too; the bytes in use alone would move
+/// `unaccounted` each time the heap frees blocks or reuses them.
 #[cfg(target_os = "macos")]
 pub fn heap() -> Got {
     // VM_MEMORY_MALLOC to VM_MEMORY_MALLOC_PROB_GUARD (<mach/vm_statistics.h>).
@@ -134,7 +141,18 @@ pub fn heap() -> Got {
         }
         if info[submap] == 0 && MALLOC.contains(&info[tag]) {
             let held = u64::from(info[resident]) + u64::from(info[swapped]);
-            pages += held.saturating_sub(u64::from(info[reusable]));
+            let held = held.saturating_sub(u64::from(info[reusable]));
+            // VM_PURGABLE_GET_STATE; a region that isn't purgeable answers an error and is held.
+            let mut state = 0;
+            // SAFETY: the call only writes `state`.
+            let asked = held > 0
+                && unsafe {
+                    sys::mach_vm_purgable_control(sys::mach_task_self_, address, 1, &mut state)
+                } == 0;
+            // VM_PURGABLE_VOLATILE or VM_PURGABLE_EMPTY, under VM_PURGABLE_STATE_MASK.
+            if !(asked && matches!(state & 3, 1 | 2)) {
+                pages += held;
+            }
         }
         address += size;
     }
