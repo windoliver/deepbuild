@@ -1090,6 +1090,10 @@ byHand.push('tests/acceptance/2204/rules-unreadable.test.ts');
 // #2776's files build deep-show (full with the test module test.paths) and export 3D scenes to the web.
 alone.push('tests/acceptance/2776/seal.test.ts', 'tests/acceptance/2776/export.test.ts', 'tests/acceptance/2776/listing.test.ts');
 
+// #1215's files each build deep-canvas-render, and AC5 deep-text and AC7 deep-show (full); its taste call draws with the
+// app's frame path on macOS; no timing.
+alone.push('tests/acceptance/1215/');
+
 // #1489's files build deep-canvas-render (release) and deep-drive (debug, env-plants); ui-thread.test.ts times the UI thread.
 alone.push('tests/acceptance/1489/');
 timed.push('tests/acceptance/1489/ui-thread.test.ts');

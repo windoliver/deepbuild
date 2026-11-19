@@ -73,6 +73,9 @@ pub struct Request {
     pub formulas: crate::formulas::Ctx,
     /// #1485's wrong program on the images' decode and cap.
     pub image_plant: asset::Plant,
+    /// #1215: a page point to hit-test, in document u: the answer names the text item and the
+    /// grapheme whose box holds it, and gives each text's carets.
+    pub hit: Option<[f64; 2]>,
 }
 
 /// What a text's per-glyph layout reads at a frame (#496): the document, its evaluated items,
@@ -138,7 +141,12 @@ impl deep_canvas_marks::animator::Host for Host<'_> {
 /// A glyph's outline in its own frame, as `texts` reports it (#496).
 fn outline_row(g: &deep_text::Glyph) -> Value {
     use deep_text::outlines::Cmd;
-    let cmds: Vec<Value> = deep_text::outlines::outline_of(g)
+    // #1215: in the glyph's own frame, upright; a turned glyph's row turns it by its transform.
+    let upright = deep_text::Glyph {
+        turn: false,
+        ..g.clone()
+    };
+    let cmds: Vec<Value> = deep_text::outlines::outline_of(&upright)
         .unwrap_or_default()
         .into_iter()
         .map(|c| match c {
@@ -211,13 +219,14 @@ impl Config {
 /// What a painter draws glyphs on: Vello CPU's context with the drawing's resources, or Vello
 /// GPU's scene with its own.
 pub(crate) trait Glyphs: Canvas {
-    /// `glyphs` of one face at `size`, slanted `skew` degrees (#1964: a faux italic), filled in
-    /// the current paint as one glyph run.
+    /// `glyphs` of one face at `size`, slanted `skew` degrees (#1964: a faux italic) and (#1215)
+    /// turned a quarter clockwise when a vertical run turns them, filled in the current paint as
+    /// one glyph run.
     fn fill_run(
         &mut self,
         resources: &mut Resources,
         font: &FontData,
-        size_skew: (f32, f32),
+        size_skew: (f32, f32, bool),
         coords: &[i16],
         glyphs: &[vello_cpu::Glyph],
     );
@@ -227,7 +236,7 @@ pub(crate) trait Glyphs: Canvas {
         &mut self,
         resources: &mut Resources,
         font: &FontData,
-        size_skew: (f32, f32),
+        size_skew: (f32, f32, bool),
         coords: &[i16],
         glyph: vello_cpu::Glyph,
         width: f64,
@@ -245,7 +254,7 @@ impl Glyphs for RenderContext {
         &mut self,
         resources: &mut Resources,
         font: &FontData,
-        (size, skew): (f32, f32),
+        (size, skew, turn): (f32, f32, bool),
         coords: &[i16],
         glyphs: &[vello_cpu::Glyph],
     ) {
@@ -253,7 +262,7 @@ impl Glyphs for RenderContext {
         let _ = run
             .font_size(size)
             .hint(false)
-            .glyph_transform(deep_text::atlas::slant(skew))
+            .glyph_transform(deep_text::atlas::glyph_transform(skew, turn))
             .normalized_coords(coords)
             .fill_glyphs(glyphs.iter().copied());
     }
@@ -262,7 +271,7 @@ impl Glyphs for RenderContext {
         &mut self,
         resources: &mut Resources,
         font: &FontData,
-        (size, skew): (f32, f32),
+        (size, skew, turn): (f32, f32, bool),
         coords: &[i16],
         glyph: vello_cpu::Glyph,
         width: f64,
@@ -272,7 +281,7 @@ impl Glyphs for RenderContext {
         let _ = run
             .font_size(size)
             .hint(false)
-            .glyph_transform(deep_text::atlas::slant(skew))
+            .glyph_transform(deep_text::atlas::glyph_transform(skew, turn))
             .normalized_coords(coords)
             .stroke_glyphs(std::iter::once(glyph));
     }
@@ -358,6 +367,7 @@ fn shaped_apart(label: &deep_text_gpui::Label, runs: &[scene::TextRun]) -> deep_
         for g in &piece.glyphs {
             out.glyphs.push(deep_text::Glyph {
                 x: g.x + out.width,
+                origin: [g.origin[0] + out.width, g.origin[1]],
                 grapheme: g.grapheme + pair[0],
                 ..g.clone()
             });
@@ -368,13 +378,22 @@ fn shaped_apart(label: &deep_text_gpui::Label, runs: &[scene::TextRun]) -> deep_
 }
 
 /// A glyph of a text's run as `texts` reports it, in document units (#381), with (#417) the
-/// language its run was shaped in; the app's frame reports its runs the same way (#140).
+/// language its run was shaped in; the app's frame reports its runs the same way (#140). Its `x`
+/// and `y` are its origin as the run places it: (#1215) in a vertical run its column's axis at the
+/// top of its place, with how it stands there, `upright` or `turned`.
 pub(crate) fn glyph_row(g: &deep_text::Glyph, role: Option<&str>, lang: Option<&str>) -> Value {
     let font = deep_text::face_of(&g.font).map(|f| format!("crates/deep-text/fonts/{}", f.file));
-    json!({
-        "font": font, "size": g.size, "id": g.id, "x": g.x, "y": g.y,
+    let mut row = json!({
+        "font": font, "size": g.size, "id": g.id, "x": g.origin[0], "y": g.origin[1],
         "grapheme": g.grapheme, "role": role, "lang": lang,
-    })
+    });
+    if let Some(stand) = g.stand {
+        row["orientation"] = json!(match stand {
+            deep_text::Stand::Turned => "turned",
+            deep_text::Stand::Upright | deep_text::Stand::Across => "upright",
+        });
+    }
+    row
 }
 
 impl<C: Glyphs> Painter<'_, C> {
@@ -436,8 +455,8 @@ impl<C: Glyphs> Painter<'_, C> {
             (color, scene::run_opacity(runs, g.grapheme))
         };
         for stretch in shaped.glyphs.chunk_by(|a, b| {
-            (&a.font, a.size, a.skew, &a.coords, paint(a))
-                == (&b.font, b.size, b.skew, &b.coords, paint(b))
+            (&a.font, a.size, a.skew, a.turn, &a.coords, paint(a))
+                == (&b.font, b.size, b.skew, b.turn, &b.coords, paint(b))
         }) {
             let g = &stretch[0];
             let (color, opacity) = paint(g);
@@ -450,7 +469,7 @@ impl<C: Glyphs> Painter<'_, C> {
                     y: g.y + origin[1] as f32,
                 })
                 .collect();
-            let size = (g.size, g.skew);
+            let size = (g.size, g.skew, g.turn);
             self.ctx
                 .fill_run(&mut self.resources, &g.font, size, &g.coords, &placed);
         }
@@ -464,7 +483,12 @@ impl<C: Glyphs> Painter<'_, C> {
             let f = origin[1] + f64::from(g.y);
             row["advance"] = json!(g.advance);
             row["outline"] = outline_row(g);
-            row["transform"] = json!([1.0, 0.0, 0.0, 1.0, e, f]);
+            // #1215: a glyph a vertical run turns is drawn a quarter turn clockwise.
+            row["transform"] = if g.turn {
+                json!([0.0, 1.0, -1.0, 0.0, e, f])
+            } else {
+                json!([1.0, 0.0, 0.0, 1.0, e, f])
+            };
             row["clip"] = Value::Null;
             if opacity < 1.0 {
                 row["opacity"] = json!(opacity);
@@ -540,7 +564,7 @@ impl<C: Glyphs> Painter<'_, C> {
                 x: 0.0,
                 y: 0.0,
             };
-            let size = (g.size, g.skew);
+            let size = (g.size, g.skew, g.turn);
             match p.paint.write {
                 None => self
                     .ctx
@@ -580,7 +604,7 @@ impl<C: Glyphs> Painter<'_, C> {
                     self.ctx.glyph_stroke(
                         &mut self.resources,
                         &g.font,
-                        (g.size, g.skew),
+                        (g.size, g.skew, g.turn),
                         &g.coords,
                         glyph,
                         *width,
@@ -600,7 +624,13 @@ impl<C: Glyphs> Painter<'_, C> {
             let mut row = glyph_row(g, role, lang);
             row["advance"] = json!(g.advance);
             row["outline"] = outline_row(g);
-            row["transform"] = json!(p.transform);
+            row["transform"] = if g.turn {
+                let turned =
+                    Affine::new(p.transform) * Affine::new([0.0, 1.0, -1.0, 0.0, 0.0, 0.0]);
+                json!(turned.as_coeffs())
+            } else {
+                json!(p.transform)
+            };
             row["clip"] = json!(p.clip);
             row["opacity"] = json!(opacity);
             if let Some([drawn, filled]) = p.paint.write {
@@ -754,12 +784,21 @@ impl<C: Glyphs> Painter<'_, C> {
                     (scene::Align::End, Some(w)) => w - f64::from(shaped.width),
                     _ => 0.0,
                 };
-                let bounds = [
-                    origin[0] + at,
-                    origin[1],
-                    f64::from(shaped.width),
-                    f64::from(shaped.height),
-                ];
+                let bounds = match shaped.columns_box() {
+                    // #1215: a vertical run's columns, where its glyphs draw.
+                    Some([x, y, w, h]) => [
+                        origin[0] + f64::from(x),
+                        origin[1] + f64::from(y),
+                        f64::from(w),
+                        f64::from(h),
+                    ],
+                    None => [
+                        origin[0] + at,
+                        origin[1],
+                        f64::from(shaped.width),
+                        f64::from(shaped.height),
+                    ],
+                };
                 if !item.contains('#') || row_of_set {
                     self.texts.insert(
                         item.clone(),
@@ -1142,6 +1181,22 @@ fn draw(req: &Request, kept: &RefCell<asset::Kept>) -> Result<Value, Value> {
         // #1486: the level each picture drew at, the levels live frames draw.
         "levels": kept.borrow().levels,
     });
+    // #1215: the text item and grapheme whose box holds the point, and each text's carets, from
+    // the shaped runs the frame drew (a vertical text's lie across its column).
+    if let Some(c) = req.hit {
+        use deep_canvas_marks::select;
+        let boxes = select::texts(&frame, &mut deep_text::Shaper::new());
+        answer["hit"] = match select::index_at(&boxes, c) {
+            Some((item, index)) => json!({"item": item, "index": index}),
+            None => Value::Null,
+        };
+        for b in &boxes {
+            if let Some(text) = answer["texts"].get_mut(&b.item) {
+                let carets: Vec<[f64; 4]> = (0..=b.len()).map(|k| b.caret_segment(k)).collect();
+                text["carets"] = json!(carets);
+            }
+        }
+    }
     if let Some(dir) = &req.blend_inputs {
         let write = |name: String, pixmap: &Pixmap| -> Result<String, Value> {
             let path = dir.join(name);
