@@ -1,0 +1,13 @@
+repo-rules.mjs: base exit 1 with 10 findings, change exit 1 with 10; 0 only in the change, 0 only in the base
+size-ratchet.mjs: base exit 1 with 23 findings, change exit 1 with 23; 0 only in the change, 0 only in the base
+canvas-closures.mjs closures: base exit 0 with 0 findings, change exit 0 with 0; 0 only in the change, 0 only in the base
+canvas-closures.mjs drift: base exit 0 with 0 findings, change exit 0 with 0; 0 only in the change, 0 only in the base
+record-reader-guard.mjs: base exit 0 with 0 findings, change exit 0 with 0; 0 only in the change, 0 only in the base
+render-lint.mjs: base exit 0 with 0 findings, change exit 0 with 0; 0 only in the change, 0 only in the base
+plant-lint.mjs: base exit 0 with 0 findings, change exit 0 with 0; 0 only in the change, 0 only in the base
+loads-lint.mjs: base exit 0 with 0 findings, change exit 0 with 0; 0 only in the change, 0 only in the base
+blocking-call-guard.mjs: base exit 0 with 0 findings, change exit 0 with 0; 0 only in the change, 0 only in the base
+keymap-guard.mjs: base exit 0 with 0 findings, change exit 0 with 0; 0 only in the change, 0 only in the base
+color-literal-guard.mjs: base exit 1 with 2 findings, change exit 1 with 2; 0 only in the change, 0 only in the base
+known-failures-check.mjs: base exit 0 with 0 findings, change exit 0 with 0; 0 only in the change, 0 only in the base
+exit 0

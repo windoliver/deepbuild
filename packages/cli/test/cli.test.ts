@@ -62,22 +62,24 @@ describe('deep checkout command', () => {
     }
   }, 70_000);
 
-  it('deep run follow in a home where no hub ever ran says so on one line, with no stack trace', () => {
+  // #1812: the one sentence for a hub that isn't answering, with its fix, and the exit table's 3, not checked.
+  it('deep run follow in a home where no hub ever ran says so in the one sentence, naming deep setup, and exits 3', () => {
     const home = realpathSync(mkdtempSync(join(tmpdir(), 'deep-cli-home-')));
     try {
       const env: NodeJS.ProcessEnv = { ...process.env, HOME: home };
       for (const key of Object.keys(env)) if (key.startsWith('DEEP_') || key.startsWith('CLAUDE')) delete env[key];
       const result = spawnSync(process.execPath, [cli, 'run', 'follow', 'run:01K74FX2B4D6F8H0K2M4P6R8T0'], { encoding: 'utf8', env, cwd: home, timeout: 60_000 });
-      expect(result.stderr).toMatch(/^BLOCKED: [^\n]+\n$/);
-      expect(result.status).toBe(1);
+      expect(result.stderr).toBe("The hub isn't answering; set this home up with deep setup.\n");
+      expect(result.status).toBe(3);
     } finally {
       rmSync(home, { recursive: true, force: true });
     }
   }, 70_000);
 });
 
-// #1359: help never acts. An agent asks a command for help before it uses it, so `-h`, `--help` or `help` anywhere in
-// the arguments prints that command's usage and runs nothing: no setup in a fresh home, no call to a running hub.
+// #1359: help never acts. An agent asks a command for help before it uses it, so `-h` or `--help` anywhere in the
+// arguments prints that command's usage and runs nothing: no setup in a fresh home, no call to a running hub. The word
+// `help` asks only as `deep help` (#1812).
 describe('deep <command> --help', () => {
   /** A home nobody set up, whose service managers only fail, so a wrong program that sets up reaches nothing real. */
   const fresh = () => {
@@ -102,7 +104,7 @@ describe('deep <command> --help', () => {
     return out;
   };
 
-  it.each([['status', '--help'], ['inbox', '-h'], ['memory', 'help']])('deep %s %s in a fresh home prints its usage and leaves the home byte-identical', (command, word) => {
+  it.each([['status', '--help'], ['inbox', '-h'], ['memory', '--help']])('deep %s %s in a fresh home prints its usage and leaves the home byte-identical', (command, word) => {
     const { home, env } = fresh();
     try {
       const before = snapshot(home);

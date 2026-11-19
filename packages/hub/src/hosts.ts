@@ -28,7 +28,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, isAbsolute, join } from 'node:path';
 import type { PlanInput } from '@deepbuild/asks';
-import { call } from './client.js';
+import { call, notAnswered, type Reply } from './client.js';
 import { hubAddress, installedRoot, rootOf } from './paths.js';
 import { activePlant, refusal, Refused, ulid, type Plant } from './wire.js';
 import { shellQuote as q } from './shell.js';
@@ -634,7 +634,12 @@ export async function followCommand(run: string): Promise<number> {
   let token: string | undefined;
   const output = async (from: number) => call(hubAddress().path, token ??= readFileSync(rootOf(installedRoot()).token, 'utf8').trim(), 'run.output', { run, from });
   for (let from = 0; ;) {
-    const reply = await output(from).catch((error: Error) => ({ error: { remediation: `BLOCKED: ${error.message}` } }));
+    let reply: Reply;
+    try {
+      reply = await output(from);
+    } catch (error) {
+      return notAnswered(error);
+    }
     if ('error' in reply) {
       process.stderr.write(`${reply.error.remediation}\n`);
       return 1;
@@ -657,17 +662,24 @@ export const isRoot = (argv: string[]): boolean => ['sudo', 'su', 'doas', 'pkexe
  * one line of JSON, each with when it was read; `--refresh` reads them over SSH now.
  */
 export async function hostCommand(args: string[]): Promise<number> {
-  const hub = async (method: string, params: Obj): Promise<{ result?: Obj; error?: { remediation: string } }> => {
+  type Answer = { result?: Obj; error?: { remediation: string }; exit?: number };
+  const hub = async (method: string, params: Obj): Promise<Answer> => {
     try {
-      return await call(hubAddress().path, readFileSync(rootOf(installedRoot()).token, 'utf8').trim(), method, params) as { result?: Obj; error?: { remediation: string } };
+      return await call(hubAddress().path, readFileSync(rootOf(installedRoot()).token, 'utf8').trim(), method, params) as Answer;
     } catch (error) {
-      return { error: { remediation: `BLOCKED: the hub can't be reached: ${error instanceof Error ? error.message : String(error)}` } };
+      return { exit: await notAnswered(error) };
     }
   };
   const say = (text: string, to: NodeJS.WriteStream = process.stdout) => new Promise<void>((done) => to.write(`${text}\n`, () => done()));
+  /** A call that did nothing: the hub's refusal said, 1, or a hub that isn't answering, said already, 3. */
+  const failed = async (reply: Answer): Promise<number> => {
+    if (reply.exit !== undefined) return reply.exit;
+    await say(reply.error?.remediation ?? 'no reply', process.stderr);
+    return 1;
+  };
   if (args[0] === 'changes' && args.length === 2) {
     const reply = await hub('host.changes', { host: args[1] });
-    if (!reply.result) { await say(reply.error?.remediation ?? 'no reply', process.stderr); return 1; }
+    if (!reply.result) return failed(reply);
     const changes = reply.result.changes as { ts: number; change: string; undo: string | null; grant: string; ask: string | null }[];
     await say(`${args[1]}: ${changes.length} change${changes.length === 1 ? '' : 's'} recorded`);
     for (const c of changes) await say(`  ${new Date(c.ts).toISOString()}  ${c.grant === 'root' ? `as root (${c.ask})` : 'as you'}  ${c.change}\n      undo: ${c.undo ?? "can't undo"}`);
@@ -675,7 +687,7 @@ export async function hostCommand(args: string[]): Promise<number> {
   }
   if (args[0] === 'remove' && args.length === 2) {
     const reply = await hub('host.remove', { host: args[1] });
-    if (!reply.result) { await say(reply.error?.remediation ?? 'no reply', process.stderr); return 1; }
+    if (!reply.result) return failed(reply);
     const { you, root } = reply.result as { you: Undid | null; root: { ask: string; changes: string[] } | null };
     if (!you && !root) await say(`${args[1]}: nothing to undo; every change recorded there with an undo is undone`);
     if (you) {
@@ -693,13 +705,13 @@ export async function hostCommand(args: string[]): Promise<number> {
   }
   if (args[0] === 'list' && args.length === 1) {
     const reply = await hub('host.list', {});
-    if (!reply.result) { await say(reply.error?.remediation ?? 'no reply', process.stderr); return 1; }
+    if (!reply.result) return failed(reply);
     for (const { name } of reply.result.hosts as { name: string }[]) await say(name);
     return 0;
   }
   if (args[0] === 'facts' && args[1] && !args[1].startsWith('-') && (args.length === 2 || (args.length === 3 && args[2] === '--refresh'))) {
     const reply = await hub('host.facts', { host: args[1], refresh: args.length === 3 });
-    if (!reply.result) { await say(reply.error?.remediation ?? 'no reply', process.stderr); return 1; }
+    if (!reply.result) return failed(reply);
     await say(JSON.stringify(reply.result));
     return 0;
   }
@@ -708,7 +720,7 @@ export async function hostCommand(args: string[]): Promise<number> {
     return 2;
   }
   const reply = await hub('host.plan', { ask: args[1] });
-  if (!reply.result) { await say(reply.error?.remediation ?? 'no reply', process.stderr); return 1; }
+  if (!reply.result) return failed(reply);
   const p = reply.result as { ask: string; host: string; script: string; sha256: string; run: string; paths: string[]; rule: string; how: string };
   const ssh = (extra: string[], command: string, stdio: StdioOptions) => spawn('ssh', ['-F', join(homedir(), '.ssh', 'config'), ...extra, '-o', 'ControlMaster=no', '-o', 'ControlPath=none', '--', p.host, command], { stdio });
   // The planted wrong program runs the script where the agent wrote it, with no copy and no check.

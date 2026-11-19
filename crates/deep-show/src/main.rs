@@ -84,6 +84,7 @@ mod seams;
 mod serve;
 mod shaper;
 mod shared;
+mod sizes;
 mod snapshot;
 mod spatial;
 mod spawn;
@@ -372,7 +373,15 @@ fn query_call(c: &Map<String, Value>) -> Option<query::Query> {
         Some(Some("summary")) => query::What::Summary,
         Some(Some("why")) => query::What::Why,
         Some(Some("logic")) => query::What::Logic,
+        Some(Some("refs_to")) => query::What::RefsTo,
+        Some(Some("cost")) => query::What::Cost,
         _ => return None,
+    };
+    // #1801: what `refs_to` names: an asset by its SHA-256, a keyed copy's table row as
+    // `<table>[<key>]`, a pack entry as `name@major`, else an item by its ID.
+    let named = match c.get("target") {
+        None => None,
+        Some(t) => Some(deep_canvas::refs::Name::of_target(t.as_str()?)),
     };
     let items = match c.get("items") {
         None => None,
@@ -423,6 +432,8 @@ fn query_call(c: &Map<String, Value>) -> Option<query::Query> {
             None => 0,
             Some(t) => flicks(t.as_str()?)?,
         },
+        named,
+        by: optional(c.get("by"), |b| Some(b.as_str()?.to_string()))?,
     })
 }
 
@@ -655,7 +666,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "terrain_rays" => return terrain::parse(c).map(|r| Call::TerrainRays(Box::new(r))),
         "physics_bake" => return physics::parse(c).map(|b| Call::PhysicsBake(Box::new(b))),
         "world" => return points::parse_world(c).map(|(doc, world)| Call::World { doc, world }),
-        "match" => return points::parse_match(c).map(|(doc, steps)| Call::Match { doc, steps }),
+        "match" | "play_match" | "sockets" => return net::parse(name, c),
         "packs" => return Some(Call::Packs),
         "install_pack" => {
             return Some(Call::InstallPack {
@@ -1350,6 +1361,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 || *p == deep_canvas_motion::held::FLIP_HOLDS_LAST
                 // #223's in the marks2d module's warp.
                 || deep_canvas_marks::warp::PLANTED.contains(p)
+                || deep_net::Planted::named(p).is_some()
                 // #225's in the data module's integrator.
                 || *p == deep_canvas_marks::vector_field::PLANTED_EULER
                 // #548's deep_query region map that lays the reads out by name.
@@ -1511,6 +1523,10 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "why_names_operator_only" => Planted::WhyNamesOperatorOnly,
                 "why_names_key_only" => Planted::WhyNamesKeyOnly,
                 "cuts_by_row_order" => Planted::CutsByRowOrder,
+                "refusal_names_first_ref" => Planted::RefusalNamesFirstRef,
+                "refs_parents_only" => Planted::RefsParentsOnly,
+                "refs_read_one_layer" => Planted::RefsReadOneLayer,
+                "cost_without_shared_assets" => Planted::CostWithoutSharedAssets,
                 "frame_index_i64_product" => Planted::FrameIndexI64Product,
                 "frame_index_truncating_division" => Planted::FrameIndexTruncatingDivision,
                 "panel_policy_open" => Planted::PanelPolicyOpen,
@@ -1763,6 +1779,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         panels,
         docs,
         docs_for,
+        net: net::given(input)?,
         record,
         runs,
         claims,
@@ -2125,9 +2142,21 @@ fn modules(set: BuildSet) -> Vec<Module> {
         // items itself.
         #[cfg(feature = "test-scene3d-reads-vector")]
         out.push(twins::scene3d_reads_vector());
+        // Issue #1781: `test-attrs` holds scene3d with its fixture builder's kind registered.
+        #[cfg(feature = "test-attrs")]
+        out.push({
+            let mut m = deep_canvas_scene3d::module::module();
+            m.register = |r| {
+                let tie = deep_canvas_scene3d::light::Tie::Id;
+                deep_canvas_scene3d::module::register_with(r, tie);
+                deep_canvas_scene3d::attrs::register_fixture(r);
+            };
+            m
+        });
         #[cfg(not(any(
             feature = "test-scene3d-tie-by-order",
-            feature = "test-scene3d-reads-vector"
+            feature = "test-scene3d-reads-vector",
+            feature = "test-attrs"
         )))]
         out.push(deep_canvas_scene3d::module::module());
         // Issue #380: the shipped effects, whose passes go into scene3d's frame; #200's planted
@@ -2167,9 +2196,7 @@ fn modules(set: BuildSet) -> Vec<Module> {
             deep_canvas_input::module::module(),
             deep_canvas_export::module::module(),
         ]);
-        out.extend(physics::module());
-        // #540: the net module's `net@1`, as far as a lockstep match's point entries need it.
-        out.push(net::module());
+        out.extend(physics::module().into_iter().chain(net::module()));
     }
     // Issue #238: the sandbox module, on core alone; `test-sandbox-alt` seals the test
     // implementation `sandbox.alt` in its place, and `test-sandbox-needs-logic` plants a manifest

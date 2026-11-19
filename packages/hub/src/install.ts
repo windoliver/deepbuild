@@ -35,7 +35,7 @@ export async function installCommand(args: readonly string[], setUp: () => Promi
       const stopped = await setUp();
       if (stopped) return stopped;
       process.stdout.write(`Source: ${from}\n  ${pack.ref}, digest ${pack.digest}\n  Assets fetch only on first use after an authority ask or your standing rule.\n`);
-      const result = await callAsYou('extension.install', { from, digest: pack.digest }, 'nothing was installed');
+      const result = await callAsYou('extension.install', { from, digest: pack.digest });
       if (typeof result === 'number') return result;
       if (result.status !== 'installed') { process.stderr.write(`deep install: ${String(result.reason ?? JSON.stringify(result))}\n`); return 1; }
       process.stdout.write(`Installed ${pack.ref}\n`);
@@ -70,7 +70,7 @@ export async function installCommand(args: readonly string[], setUp: () => Promi
     ...deprecatedCalls(m).map((e) => `  deprecated: ${m.id} calls ${e.method}, deprecated since ${e.deprecated_since}; it is served through ${e.replaced_by}${e.stops_serving ? ` until ${e.stops_serving}` : ''}, so call ${e.replaced_by}`),
     '',
   ].join('\n'));
-  const result = await callAsYou('extension.install', { from, ...(trustKey ? { trust_key: true } : {}) }, 'nothing was installed');
+  const result = await callAsYou('extension.install', { from, ...(trustKey ? { trust_key: true } : {}) });
   if (typeof result === 'number') return result;
   process.stdout.write(`Installed ${String(result.id)}@${String(result.version)}\n`);
   if (typeof result.not_loaded === 'string') {

@@ -10,7 +10,7 @@
 import { execFile } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { isRecord as isObj, validate } from '@deepbuild/contracts/runtime';
+import { isRecord as isObj } from '@deepbuild/contracts/json';
 import { callAsYou } from './client.js';
 import { writeSynced } from './vfs.js';
 import type { Plant } from './wire.js';
@@ -86,6 +86,8 @@ export async function addGuards(dir: string, given: unknown, o: { deepHook: stri
     return refused('Give a file of {"v": 1, "entries": {<name>: guard@1}, "proofs": {<name>: {"planted": <call>, "twin": <call>}}}.');
   }
   const proofs = isObj(given.proofs) ? given.proofs : {};
+  // The validator loads with an install, in the core: the event loop reads this module for its rules alone (#2655).
+  const { validate } = await import('@deepbuild/contracts/runtime');
   for (const [name, entry] of Object.entries(given.entries)) {
     const checked = validate('guard@1', entry);
     if (!checked.ok) return refused(`${name} isn't a guard@1 entry: ${checked.issues[0]!.path} ${checked.issues[0]!.remediation}`);
@@ -181,7 +183,7 @@ export async function guardCommand(args: readonly string[], setUp: () => Promise
   }
   const stopped = await setUp();
   if (stopped) return stopped;
-  const result = await callAsYou('guard.add', { guards }, 'nothing was added');
+  const result = await callAsYou('guard.add', { guards });
   if (typeof result === 'number') return result;
   process.stdout.write(`Added ${(result.names as string[]).join(', ')} to your rules\n`);
   return 0;

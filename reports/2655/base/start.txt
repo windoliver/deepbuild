@@ -1,0 +1,36 @@
+✔ the judging fails planted numbers: a heap 0.4 MB under, and 3% more instructions; and passes their twins (9.858209ms)
+✖ AC3 #2655 the main thread's heap after two full collections is at least 0.5 MB under the merge base's (67802.783125ms)
+ℹ heap after two full collections, bytes: merge base [7481160,7477752,7477744,7478272,7477616,7477840,7477720,7477752,7477752,7477784,7477648,7477720,7477680,7477648,7477648,7477792,7477752,7477752,7477776,7477648]; change [7477544,7471176,7477648,7477512,7477544,7477576,7477616,7478024,7477512,7477544,7477648,7477616,7477536,7477544,7477544,7477512,7477616,7477544,7477752,7477576]
+ℹ FAIL: the main thread's heap after two full collections is 7.13 MB (median of 20), the merge base's 7.13 MB: 0.00 MB under it; at least 0.50 MB under is required
+✖ AC3 #2655 the hub's own process retires no more instructions from start to its socket's first answer than the merge base's (2.222625ms)
+ℹ instructions retired, start to first answer, per round: [{"main":830576688,"change":832989933},{"change":823807686,"main":910416492},{"main":852702042,"change":974522770},{"change":838973078,"main":863967125},{"main":825364452,"change":823911381},{"change":817367652,"main":820073169},{"main":865808441,"change":868508559},{"change":828898892,"main":832542204},{"main":835741390,"change":895441397},{"change":825367389,"main":829925282},{"main":823965097,"change":821567789},{"change":871367868,"main":843272974},{"main":870302295,"change":824017620},{"change":836165060,"main":832425168},{"main":811260430,"change":825020552},{"change":822612279,"main":816403537},{"main":830402159,"change":838056976},{"change":818055037,"main":819267989},{"main":838224084,"change":822190587},{"change":839000065,"main":855894781}] (proc_pid_rusage ri_instructions of the hub's own process)
+ℹ INCONCLUSIVE: from start to the socket's first answer the hub retires -0.16% against the merge base (median of 20 pairs; p 0.42 that it is above, p 0.048 that it is under 2% above; seed 2655): the pairs can't tell it from 2% above
+ℹ tests 3
+ℹ suites 0
+ℹ pass 1
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 67885.101375
+
+✖ failing tests:
+
+test at tests/acceptance/2655/start.test.mjs:152:1
+✖ AC3 #2655 the main thread's heap after two full collections is at least 0.5 MB under the merge base's (67802.783125ms)
+  Error: the main thread's heap after two full collections is 7.13 MB (median of 20), the merge base's 7.13 MB: 0.00 MB under it; at least 0.50 MB under is required
+      at hold (file://<scratch>/base/tests/acceptance/2655/start.test.mjs:117:66)
+      at TestContext.<anonymous> (file://<scratch>/base/tests/acceptance/2655/start.test.mjs:158:3)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+
+test at tests/acceptance/2655/start.test.mjs:161:1
+✖ AC3 #2655 the hub's own process retires no more instructions from start to its socket's first answer than the merge base's (2.222625ms)
+  Error: INCONCLUSIVE: from start to the socket's first answer the hub retires -0.16% against the merge base (median of 20 pairs; p 0.42 that it is above, p 0.048 that it is under 2% above; seed 2655): the pairs can't tell it from 2% above
+      at hold (file://<scratch>/base/tests/acceptance/2655/start.test.mjs:117:66)
+      at TestContext.<anonymous> (file://<scratch>/base/tests/acceptance/2655/start.test.mjs:168:3)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+exit 1

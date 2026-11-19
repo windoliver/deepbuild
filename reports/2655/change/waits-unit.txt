@@ -1,0 +1,23 @@
+
+ RUN  v5.0.5 <scratch>/work
+
+ ✓ packages/hub/test/waits.test.ts > expected times > come from the kind with no history, and from the median of the command's past runs with it 5ms
+ ✓ packages/hub/test/waits.test.ts > expected times > key a command by the 8,192 characters the record keeps of it (#2655) 1ms
+ ✓ packages/hub/test/waits.test.ts > expected times > know a command that never ends on its own 2ms
+ ✓ packages/hub/test/waits.test.ts > expected times > say a span in words 0ms
+ ✓ packages/hub/test/waits.test.ts > an overrun > is due at the expected time, shows one line while the call runs, and tells the agent at the call's next hook 1ms
+ ✓ packages/hub/test/waits.test.ts > an overrun > is not recorded for a call that ends in time, and a failed call teaches nothing 0ms
+ ✓ packages/hub/test/waits.test.ts > a deadline > is attached to a command that never ends, only where the adapter rewrites and the session bypasses approvals, with no decision 1ms
+ ✓ packages/hub/test/waits.test.ts > the lines > announce a wait expected to take over a minute when it starts 1ms
+ ✓ packages/hub/test/waits.test.ts > the lines > follow no call outside a turn the hub saw begin, and at most 256 calls of one turn at once 2ms
+ ✓ packages/hub/test/waits.test.ts > the lines > rewrite the command the agent typed, not the record's redacted copy; cap the timeout; follow no background call 1ms
+ ✓ packages/hub/test/waits.test.ts > the lines > drop a call blocked or denied before it ran, and every call of a turn at its stop or at the next prompt 0ms
+ ✓ packages/hub/test/waits.test.ts > the lines > give a turn ten minutes without a readable line one at its next hook, naming the ask, the step, the time so far and the time left 1ms
+ ✓ packages/hub/test/waits.test.ts > the lines > come every ten minutes while a single call still runs, through the in-call route 1ms
+ ✓ packages/hub/test/waits.test.ts > the lines > wait for the stop under the planted wrong program, so a long turn shows none 0ms
+
+ Test Files  1 passed (1)
+      Tests  14 passed (14)
+   Start at  13:59:17
+   Duration  409ms (tests 68%, transform 24%, setup 4%, import 2%, worker 2%)
+

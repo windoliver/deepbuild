@@ -1041,6 +1041,7 @@ fn register_data(r: &mut Registrar, decimate: fn(&mut View<'_>) -> Result<(), Op
         "codes": ["unknown_kind"],
         "twin": {"path": "items/ys/params/range", "value": [190, 30]},
     }));
+    crate::arrays::fixture(r, points_board());
     r.fixture("decimated", decimated_board(), None)
         .sidecar(json!({
             "checks": [{"kind": "document.validate"}],
@@ -1303,10 +1304,7 @@ fn register_marks2d_with(r: &mut Registrar, planted: relations::Planted) {
         json!({"form": "path", "fixture": crate::outline_sources::path_fixture()}),
         crate::outline_sources::path_fill,
     );
-    // #221: placement by relation, the module's entries in the core's `constraint@1`.
-    for (name, value) in relations::entries(planted) {
-        r.entry("constraint@1", name, value, "R2");
-    }
+    relations::register(r, planted, marks_board());
     // Each frame, every placed item's world position from its relations, solved in one order
     // over the evaluated boxes; then each placed item's own transform there.
     r.array("marks2d.places", "places", "document", "transform", "items");

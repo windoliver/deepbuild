@@ -3,7 +3,7 @@
 // you, which the hub asks for; run inside an agent's process tree, the command acts as that agent's session, and no
 // agent answers.
 import { readFileSync } from 'node:fs';
-import { call, UNDECIDED_CODES, withPrompt, type Reply } from './client.js';
+import { call, notAnswered, UNDECIDED_CODES, withPrompt, type Reply } from './client.js';
 import { hubAddress, installedRoot, rootOf } from './paths.js';
 import { asksNeedYou, databaseRead, hubDown, when } from './list.js';
 import { elapsed } from './promises.js';
@@ -57,10 +57,7 @@ export async function inboxCommand(args: readonly string[], setUp: () => Promise
   } catch (error) {
     // With the hub down the list reads its database, as deep does, and says so and since when (#2026).
     const read = answering || undoing || saving ? undefined : await databaseRead(hubAddress().path, false).catch(() => undefined);
-    if (!read) {
-      process.stderr.write(`BLOCKED: ${error instanceof Error ? error.message : String(error)}${answering ? `; ${args[1]} stays open` : undoing ? `; ${args[1]} keeps its default` : saving ? `; ${args[1]} isn't saved` : ''}\n`);
-      return 3;
-    }
+    if (!read) return notAnswered(error);
     down = read.down;
     reply = { result: { log_pos: read.log_pos, rows: read.rows.filter((r) => r.id.startsWith('ask:')), asks: [], offers: [] } };
   }
@@ -142,12 +139,11 @@ export async function raceCommand(args: readonly string[]): Promise<number> {
     const token = readFileSync(rootOf(installedRoot()).token, 'utf8').trim();
     reply = await call(hubAddress().path, token, 'race.start', { issue: Number(args[0]) }, { pid: process.pid, start: (await startOf(process.pid)) ?? '' });
   } catch (error) {
-    process.stderr.write(`BLOCKED: ${error instanceof Error ? error.message : String(error)}; no race started\n`);
-    return 3;
+    return notAnswered(error);
   }
   if ('error' in reply) {
     process.stderr.write(`${reply.error.remediation}\n`);
-    return 1;
+    return UNDECIDED_CODES.has(reply.error.code) ? 3 : 1;
   }
   process.stdout.write(`A race on issue #${args[0]} started: its sessions settle on the first PASS.\n`);
   return 0;

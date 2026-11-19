@@ -134,6 +134,18 @@ pub fn ages_written() -> Option<u64> {
     AGE_CHANGES.with(std::cell::Cell::take)
 }
 
+/// What `write` returns, with the soonest change of what it wrote, in ms from now (#1482). What it wrote still counts
+/// for the view drawing now, so a view can keep what `write` gave it until then and draw with no tick missed.
+pub fn written_in<R>(write: impl FnOnce() -> R) -> (R, Option<u64>) {
+    let before = ages_written();
+    let written = write();
+    let during = ages_written();
+    for wait in [before, during].into_iter().flatten() {
+        changes_after(wait);
+    }
+    (written, during)
+}
+
 /// Notes that something just written from the clock reads differently `wait` ms from now.
 pub fn changes_after(wait: u64) {
     AGE_CHANGES.with(|soonest| {
@@ -467,6 +479,39 @@ struct Session {
 }
 
 impl Table {
+    /// Whether folding `event` in would leave the table as it is (#1482): the hub writing a row it already wrote, or
+    /// the core reading a session's state again as it already holds it. Nothing else is judged a no-op.
+    pub fn is_noop(&self, event: &Value) -> bool {
+        let data = &event["data"];
+        match event["kind"].as_str().unwrap_or_default() {
+            "row.set" => {
+                let Some(id) = data["id"].as_str() else {
+                    return false;
+                };
+                let held = self.rows.get(id);
+                self.listed
+                    && match data["listed"] == true {
+                        true => held.is_some_and(|(order, row)| {
+                            order.as_str() == data["order"].as_str().unwrap_or_default()
+                                && row == data
+                        }),
+                        false => held.is_none(),
+                    }
+            }
+            "session.state" => {
+                let Some(session) = event["session"].as_str() else {
+                    return false;
+                };
+                let word = |key: &str| data[key].as_str().unwrap_or_default().to_owned();
+                event["writer"] == "core"
+                    && self.sessions.get(session).is_some_and(|held| {
+                        held.listed == Some((word("state"), word("cause")))
+                    })
+            }
+            _ => false,
+        }
+    }
+
     /// Folds one event in, the next in log order.
     pub fn apply(&mut self, event: &Value) {
         if cfg!(feature = "plant-drops-close") && event["kind"] == "ask.moot" {

@@ -7,7 +7,7 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync }
 import { join, resolve } from 'node:path';
 import { prepareRestore, type PreparedRestore } from '@deepbuild/record';
 import { writtenOf } from '@deepbuild/wiki';
-import { call, withPrompt } from './client.js';
+import { call, notAnswered, withPrompt } from './client.js';
 import { Confirmer } from './confirm.js';
 import { takeLock } from './lock.js';
 import { dropTestSettings, hubAddress, installedRoot, rootOf } from './paths.js';
@@ -37,8 +37,7 @@ export async function backupCommand(args: readonly string[]): Promise<number> {
       return 1;
     }
   } catch (error) {
-    process.stderr.write(`deep backup: no hub answered (${error instanceof Error ? error.message : String(error)}); the record is backed up through the hub. Start it with deep hub start, then run deep backup again.\n`);
-    return 1;
+    return notAnswered(error, hubAddress(null).path);
   }
   process.stdout.write(`Backed up the record, its evidence and its wiki to ${folder}. deep restore ${folder} puts them back.\n`);
   return 0;

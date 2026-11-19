@@ -82,6 +82,7 @@ pub fn moved(scene: &Scene) -> Option<Scene> {
             }
             l.points.iter_mut().for_each(|p| point(&mut p.pos));
             l.labels.iter_mut().for_each(|p| point(&mut p.pos));
+            l.images.iter_mut().for_each(|p| point(&mut p.pos));
             l.puffs.iter_mut().for_each(|p| point(&mut p.pos));
         }
     };

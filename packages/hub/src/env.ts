@@ -1,7 +1,7 @@
 // `deep env up` and `deep env down` (#331): the worktree's stack, asked of the hub over its socket as the cli
 // role, since only the hub's supervisor may start, signal and stop a stack's processes.
 import { readFileSync, realpathSync } from 'node:fs';
-import { call } from './client.js';
+import { call, notAnswered } from './client.js';
 import { hubAddress, installedRoot, rootOf } from './paths.js';
 import { startOf } from './wire.js';
 
@@ -36,12 +36,14 @@ export async function envCommand(args: readonly string[], setUp: () => Promise<n
   try {
     // Named as this process, so the hub's peer check finds the agent session above it: its leases are that session's (#332).
     const reply = await call(socket, readFileSync(at.token, 'utf8').trim(), `env.${command}`, { worktree }, { pid: process.pid, start: (await startOf(process.pid)) ?? '' });
-    if ('error' in reply) throw Error(reply.error.remediation);
+    // A refusal is said where every command's is, on stderr; the stack's own states stay on stdout.
+    if ('error' in reply) {
+      process.stderr.write(`${reply.error.remediation}\n`);
+      return 3;
+    }
     result = reply.result;
   } catch (error) {
-    const cause = error instanceof Error ? error.message : String(error);
-    say({ status: 'BLOCKED', worktree, cause }, `BLOCKED: ${cause}`);
-    return 3;
+    return notAnswered(error, socket);
   }
   if (command === 'up') {
     const ports = Object.entries((result.ports ?? {}) as Obj).map(([k, v]) => `${k}=${String(v)}`).join(' ');
