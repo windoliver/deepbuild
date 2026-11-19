@@ -1524,7 +1524,7 @@ export function runLanes(lanes, { cwd = root } = {}) {
               const { binaryNames, buildBinaries, commandFiles, watchBinaries } = require('./proof-binaries.mjs');
               watchBinaries(binaries);
               const files = selected.flatMap((lane) => lane.commands).flatMap((command) => commandFiles(cwd, command));
-              buildBinaries(cwd, join(binaries, 'bin'), binaryNames(cwd, files));
+              buildBinaries(cwd, join(binaries, 'bin'), binaryNames(cwd, files), undefined, { timeout: 0 });
             } catch (error) { binaryError = error; }
           }
           if (reported && binaryError) throw binaryError;
