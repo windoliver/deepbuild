@@ -1,6 +1,6 @@
 # #1810 evidence
 
-`final-13a35ce37/`: `tests/acceptance/1810` on the Mac (Mac15,12, macOS 27.2.1), in a GitHub-only fresh clone at 13a35ce37. That is the final code head. The commits after it add only this folder and one entry in `scripts/known-failures.json` (0ca80ac97), with no code or test changes.
+`final-13a35ce37/`: `tests/acceptance/1810` on the Mac (Mac15,12, macOS 27.2.1), in a GitHub-only fresh clone at 13a35ce37. It was the code head then. Later heads merged main twice (444c638cd, 8f2e51904) with no change to this PR's code, added and then dropped a `scripts/known-failures.json` entry (0ca80ac97, 8a2a8a745), and added evidence; their runs are listed at the end.
 
 - Setup exit 0: `npm ci`, the workspace build, `deep-hook`, and `deep-drive` prebuilt.
 - 12 of 13 tests pass, including both `count.test.ts` tests (#1810.eebcb4a2, the replica's list on macOS among them), `defaulted.test.ts` (#1810.a646c123) and `width.test.ts` (#1810.1a3e8cda).
@@ -20,5 +20,5 @@ At the later heads, after merging main:
 - `linux-444c638cd.txt`, `unit-tests-444c638cd.txt`, `final-444c638cd/` (Mac): 444c638cd, main 0f34aacbe merged. Mac 12/13, the one failure the #2690 line.
 - `main-comparison-444c638cd.txt`: the affected run at 444c638cd and each of its new failures checked at main 0f34aacbe.
 - `linux-8f2e51904.txt`, `unit-tests-8f2e51904.txt`, `final-8f2e51904/` (Mac): 8f2e51904, main 79bf7e203 merged. Mac 11/13: the #2690 line, and count.test.ts's replica read at log_pos 39 where `deep status --json` said 35.
-- `mac-log-pos-probe-8f2e51904.txt`: why 39 and 35 can differ. About 10 s after the status question, the hub writes 4 events (two `delivery.outcome` stalled, two `session.reading`) because the fixture's answers never reach an agent. When they land between the test's `deep status --json` read and the replica's copy of the record, the two log positions differ by 4. That code is main's (since 953b1dc40, 2026-11-10); this PR doesn't touch it.
+- `linux-log-pos-probe-8f2e51904.txt`: a probe on Linux showing why 39 and 35 can differ. About 10 s after the status question, the hub writes 4 events (two `delivery.outcome` stalled, two `session.reading`) because the fixture's answers never reach an agent. When they land between the test's `deep status --json` read and the replica's copy of the record, the two log positions differ by 4. That code is main's (since 953b1dc40, 2026-11-10); this PR doesn't touch it.
 - `linux-8a2a8a745.txt`: after the owner dropped the #2690 entry from `scripts/known-failures.json` (2026-11-18): the guard passes, and #1115's failures test passes 3/3.
