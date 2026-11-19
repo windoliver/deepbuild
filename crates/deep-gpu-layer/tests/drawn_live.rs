@@ -2,7 +2,9 @@
 //! `film2d` does, in the two places the acceptance fixture doesn't reach. A size written against
 //! the frame (`fw`, `fh`) converts at the document's size, and a paper's tooth read from an image
 //! is read from the call's assets. Each drives `deep-gpu run` on the GPU, as the acceptance tests
-//! do, and compares the live window's frame with `film2d`'s by pixel hash.
+//! do, and compares the live window's frame with `film2d`'s by the pixels of the PNG each keeps:
+//! the two surfaces differ under a flat ground, which the live window draws and `film2d` lays
+//! under its frame after.
 #![cfg(target_os = "macos")]
 
 use std::io::Write;
@@ -80,22 +82,32 @@ fn run(dir: &Path, calls: Value) -> Vec<Value> {
     answer["replies"].as_array().expect("replies").clone()
 }
 
-/// `film2d`'s first frame of the document under `look`: its pixel hash.
-fn film2d(dir: &Path, look: &Value, assets: &Value) -> String {
-    let call = json!({"call": "film2d", "doc": doc(), "look": look, "fps": 4, "frames": 1,
-                      "hash": true, "assets": assets});
-    let reply = &run(dir, json!([call]))[0];
-    let hash = reply["frames"][0]["pixel_hash"].as_str();
-    hash.unwrap_or_else(|| panic!("film2d drew a frame: {reply}"))
-        .to_string()
+/// The pixels of the PNG `name` a call kept under `dir`: RGBA rows.
+fn picture(dir: &Path, name: &Value, of: &Value) -> Vec<u8> {
+    let name = name
+        .as_str()
+        .unwrap_or_else(|| panic!("a captured frame: {of}"));
+    let file = dir.join(format!("{name}.png"));
+    image::open(&file)
+        .expect("the frame's PNG")
+        .to_rgba8()
+        .into_raw()
 }
 
-/// The live window's first frame of the document under `look`: its pixel hash, the session's
+/// `film2d`'s first frame of the document under `look`: its pixels.
+fn film2d(dir: &Path, look: &Value, assets: &Value) -> Vec<u8> {
+    let call = json!({"call": "film2d", "doc": doc(), "look": look, "fps": 4, "frames": 1,
+                      "capture": [0], "assets": assets});
+    let reply = &run(dir, json!([call]))[0];
+    picture(dir, &reply["frames"][0]["final"], reply)
+}
+
+/// The live window's first frame of the document under `look`: its pixels, the session's
 /// document admitted.
-fn live(dir: &Path, look: &Value, assets: &Value) -> String {
+fn live(dir: &Path, look: &Value, assets: &Value) -> Vec<u8> {
     let path = dir.join("payload.json");
     std::fs::write(&path, payload().to_string()).expect("the payload is written");
-    let call = json!({"call": "live", "look": look, "fps": 4, "frames": 1, "report": ["hashes"],
+    let call = json!({"call": "live", "look": look, "fps": 4, "frames": 1, "capture": [1],
                       "assets": assets,
                       "sessions": [{"session": "view", "writer": "agent:a", "doc": path}]});
     let reply = &run(dir, json!([call]))[0];
@@ -104,9 +116,7 @@ fn live(dir: &Path, look: &Value, assets: &Value) -> String {
         session["state"], "refused",
         "the live window admitted the document: {session}"
     );
-    let hash = reply["frames"][0]["views"][0]["pixel_hash"].as_str();
-    hash.unwrap_or_else(|| panic!("the live window drew a frame: {reply}"))
-        .to_string()
+    picture(dir, &reply["frames"][0]["views"][0]["final"], reply)
 }
 
 #[test]
@@ -116,19 +126,13 @@ fn a_size_written_against_the_frame_converts_at_the_documents_size_in_the_live_w
     // 1/80 of a 160 u frame is 2 u; of the 1920 u a look read alone assumes, 24 u.
     let relative = look(json!("1/80fw"), None);
     let wanted = film2d(&dir, &relative, &none);
-    assert_eq!(
-        wanted,
-        film2d(&dir, &look(json!(2), None), &none),
-        "film2d draws 1/80fw as 2 u"
-    );
-    assert_ne!(
-        wanted,
-        film2d(&dir, &look(json!(24), None), &none),
-        "a 24 u line is another picture"
-    );
+    let two = film2d(&dir, &look(json!(2), None), &none);
+    assert!(wanted == two, "film2d draws 1/80fw as 2 u");
+    let wide = film2d(&dir, &look(json!(24), None), &none);
+    assert!(wanted != wide, "a 24 u line is another picture");
     let got = live(&dir, &relative, &none);
     let _ = std::fs::remove_dir_all(&dir);
-    assert_eq!(got, wanted, "the live window's frame is film2d's");
+    assert!(got == wanted, "the live window's frame is film2d's");
 }
 
 #[test]
@@ -152,8 +156,8 @@ fn a_paper_tooth_read_from_an_image_draws_in_the_live_window_as_film2d_draws_it(
     let assets = json!({sha: file});
     let wanted = film2d(&dir, &toothed, &assets);
     let plain = film2d(&dir, &look(json!(2), Some(paper(built_in))), &json!({}));
-    assert_ne!(wanted, plain, "the image is in film2d's frame");
+    assert!(wanted != plain, "the image is in film2d's frame");
     let got = live(&dir, &toothed, &assets);
     let _ = std::fs::remove_dir_all(&dir);
-    assert_eq!(got, wanted, "the live window's frame is film2d's");
+    assert!(got == wanted, "the live window's frame is film2d's");
 }
