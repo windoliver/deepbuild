@@ -23,6 +23,8 @@ use std::{
 
 use serde_json::Value;
 
+use crate::copy;
+
 /// A row of setup's one list (#1100), as packages/hub/src/setup-steps.ts reads it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Step {
@@ -125,7 +127,7 @@ fn search_path() -> String {
     }
     READING.get_or_init(|| {
         let _ = std::thread::Builder::new()
-            .name("login PATH".into())
+            .name("login PATH".into()) // copy-exception: a thread's name
             .spawn(|| {
                 let _ = LOGIN.set(
                     login_path().unwrap_or_else(|_| std::env::var("PATH").unwrap_or_default()),
@@ -189,17 +191,19 @@ pub struct Screen {
     pub lines: Vec<(&'static str, String)>,
 }
 
-/// What a hook means, as the One word per idea table says it (docs/canvas-primitives.md): the screen says it beside
-/// the word.
-pub const HOOK_MEANS: &str =
-    "A command an agent runs at set points of its work, which tells DeepBuild what the agent is doing";
+/// The key of what a hook means, as the One word per idea table says it (docs/canvas-primitives.md): the screen says it
+/// beside the word.
+pub const HOOK_MEANS: &str = "setup.hook_means";
 
-/// "A", "A and B", "A, B and C".
+/// "A", "A and B", "A, B and C", in the language shown.
 fn listed(names: &[String]) -> String {
     match names {
         [] => String::new(),
         [one] => one.clone(),
-        [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
+        [rest @ .., last] => copy::fill(
+            "setup.list_and",
+            &[&rest.join(copy::text("setup.list_comma")), last],
+        ),
     }
 }
 
@@ -224,17 +228,9 @@ pub fn screen_of(plan: &[(Step, bool)]) -> Screen {
         .filter_map(|(row, _)| row.words.as_ref().map(|words| format!("“{words}”")))
         .collect();
     let undo = if words.is_empty() {
-        "To take it back, run deep setup --undo.".to_owned()
+        copy::text("setup.undo_run").to_owned()
     } else {
-        format!(
-            "To take it back, say {} in the box, or run deep setup --undo.",
-            words.join(" or ")
-        )
-    };
-    let reads = if history {
-        " and reads their history into the wiki, read by your own agent, on your plan"
-    } else {
-        ""
+        copy::fill("setup.undo_say", &[&words.join(copy::text("setup.or"))])
     };
     // An agent Set up installs (#1349): said first, with what its maker charges and when that was read.
     let installs: Vec<&Value> = plan
@@ -249,12 +245,10 @@ pub fn screen_of(plan: &[(Step, bool)]) -> Screen {
             let plan = &agent["plan"];
             let paid = match (plan["price"].as_str(), plan["read"].as_str()) {
                 _ if plan["paid"] != Value::Bool(true) => String::new(),
-                (Some(price), Some(read)) => {
-                    format!(" It needs a paid plan from its maker: {price}, as their price page said on {read}.")
-                }
-                _ => " It needs a paid plan from its maker.".to_owned(),
+                (Some(price), Some(read)) => copy::fill("setup.paid_price", &[&price, &read]),
+                _ => copy::text("setup.paid").to_owned(),
             };
-            format!("Installs {name} with its maker's own installer.{paid} ")
+            copy::fill("setup.installs", &[&name, &paid])
         })
         .collect();
     let kept: Vec<String> = installs
@@ -264,24 +258,22 @@ pub fn screen_of(plan: &[(Step, bool)]) -> Screen {
     let undo = if kept.is_empty() {
         undo
     } else {
-        format!("{undo} {} stays installed.", listed(&kept))
+        copy::fill("setup.stays_installed", &[&undo, &listed(&kept)])
+    };
+    // What setup adds, after any agent it installs, and the history it reads, with what a hook is.
+    let adds = match (first.is_empty(), history) {
+        (true, false) => "setup.adds",
+        (true, true) => "setup.adds_reads",
+        (false, false) => "setup.then_adds",
+        (false, true) => "setup.then_adds_reads",
     };
     Screen {
         lines: vec![
             (
                 "adds",
-                format!(
-                    "{first}{}dds hooks to {}{reads}. A hook is {}{}.",
-                    if first.is_empty() { "A" } else { "Then it a" },
-                    listed(&names),
-                    HOOK_MEANS[..1].to_lowercase(),
-                    &HOOK_MEANS[1..]
-                ),
+                copy::fill(adds, &[&listed(&names), &copy::text(HOOK_MEANS), &first]),
             ),
-            (
-                "never",
-                "Never reads credential files, signs in or sends your code anywhere.".to_owned(),
-            ),
+            ("never", copy::text("setup.never").to_owned()),
             ("undo", undo),
         ],
         agents,
@@ -308,9 +300,9 @@ pub fn screen() -> Screen {
         };
         if crate::plain::planted(planted) {
             *line = match *id {
-                "undo" => "To take it back, run deep uninstall.",
-                "adds" => "It adds PreToolUse hooks to Claude Code and Codex.",
-                _ => "Nothing leaves this Mac.",
+                "undo" => "To take it back, run deep uninstall.", // copy-exception: planted wrong program
+                "adds" => "It adds PreToolUse hooks to Claude Code and Codex.", // copy-exception: planted wrong program
+                _ => "Nothing leaves this Mac.", // copy-exception: planted wrong program
             }
             .to_owned();
         }
@@ -334,8 +326,8 @@ fn written(plan: &[(Step, bool)]) -> Vec<(Step, bool)> {
         (row, done)
     };
     let agents = [
-        ("claude-code", "Claude Code"),
-        ("codex", "Codex"),
+        ("claude-code", "Claude Code"), // copy-exception: a product's name, in a planted wrong program
+        ("codex", "Codex"), // copy-exception: a product's name, in a planted wrong program
         ("pi", "pi"),
     ];
     let hooks = agents
@@ -465,9 +457,9 @@ pub fn count() -> Option<&'static str> {
     if !needed() {
         None
     } else if disk() == Disk::Stopped {
-        Some("Setup didn't finish")
+        Some(copy::text("setup.didnt_finish"))
     } else {
-        Some("Not set up yet")
+        Some(copy::text("setup.not_set_up"))
     }
 }
 
@@ -480,10 +472,7 @@ pub fn reason() -> Option<String> {
 
 fn read_reason() -> Option<String> {
     let (reason, fix) = stopped()?;
-    let line = format!(
-        "Setup didn't finish: {}. {fix}",
-        reason.trim_end_matches('.')
-    );
+    let line = copy::fill("setup.reason", &[&reason.trim_end_matches('.'), &fix]);
     let home = PathBuf::from(std::env::var_os("HOME").unwrap_or_default());
     // macOS resolves /tmp and /var to /private, so setup may have named either form of the same home.
     let homes = [std::fs::canonicalize(&home).unwrap_or_default(), home];
@@ -504,11 +493,9 @@ pub fn login_path() -> Result<String, String> {
         .ok()
         .filter(|shell| !shell.is_empty())
         .unwrap_or_else(|| "/bin/sh".into());
-    let unreadable = |why: String| {
-        format!("couldn't read your login shell's PATH from {shell}: {why}. Fix {shell}, or set SHELL to a login shell that starts, then Set up again.")
-    };
+    let unreadable = |why: String| copy::fill("setup.path_unreadable", &[&shell, &why]);
     let mut child = Command::new(&shell)
-        .args(["-l", "-c", "printf %s \"$PATH\""])
+        .args(["-l", "-c", "printf %s \"$PATH\""]) // copy-exception: a shell command
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
@@ -525,7 +512,7 @@ pub fn login_path() -> Result<String, String> {
                 // the headless check_for_updates.
                 let _ = child.wait();
                 return Err(unreadable(waited.err().map_or_else(
-                    || format!("it didn't answer within {} s", LOGIN_SHELL_WAIT.as_secs()),
+                    || copy::fill("setup.no_answer", &[&LOGIN_SHELL_WAIT.as_secs()]),
                     |error| error.to_string(),
                 )));
             }
@@ -536,8 +523,8 @@ pub fn login_path() -> Result<String, String> {
         let _ = out.read_to_string(&mut path);
     }
     match path.trim() {
-        _ if !status.success() => Err(unreadable(format!("it exited with {status}"))),
-        "" => Err(unreadable("it printed no PATH".into())),
+        _ if !status.success() => Err(unreadable(copy::fill("setup.exited_with", &[&status]))),
+        "" => Err(unreadable(copy::text("setup.printed_no_path").to_owned())),
         path => Ok(path.to_owned()),
     }
 }
@@ -556,7 +543,7 @@ fn find(path: &str, name: &str) -> Option<PathBuf> {
 /// The app's own runtime folder's `deep` (#1349), beside its program in the bundle: `Contents/MacOS/deep-app` ships
 /// with `Contents/Resources/runtime/bin/deep`.
 fn shipped(exe: &Path) -> Option<PathBuf> {
-    let deep = exe.parent()?.parent()?.join("Resources/runtime/bin/deep");
+    let deep = exe.parent()?.parent()?.join("Resources/runtime/bin/deep"); // copy-exception: a path in the bundle
     deep.is_file().then_some(deep)
 }
 
@@ -602,11 +589,11 @@ pub struct Stopped {
 /// never waits on `deep setup` (#1556). It says it once; a thread that couldn't start says that.
 pub fn start() -> Receiver<Result<String, Stopped>> {
     let (said, heard) = mpsc::channel();
-    let thread = std::thread::Builder::new().name("deep setup".into());
+    let thread = std::thread::Builder::new().name("deep setup".into()); // copy-exception: a thread's name
     let running = said.clone();
     if let Err(error) = thread.spawn(move || running.send(set_up())) {
         let _ = said.send(Err(Stopped {
-            line: Some("Set up couldn't start. Press Set up to try again.".into()),
+            line: Some(copy::text("setup.couldnt_start").into()),
             output: error.to_string(),
         }));
     }
@@ -619,16 +606,14 @@ pub fn start() -> Receiver<Result<String, Stopped>> {
 pub fn set_up() -> Result<String, Stopped> {
     let started = SystemTime::now();
     let path = login_path().map_err(|error| Stopped {
-        line: Some(format!("Set up {error}")),
+        line: Some(copy::fill("setup.set_up_error", &[&error])),
         output: String::new(),
     })?;
     let mut setup = deep(&path);
     // blocking call: off the UI thread, on start's thread or in the headless `deep-app --set-up`.
     let output = setup.arg("setup").output();
     let output = output.map_err(|error| Stopped {
-        line: Some(
-            "Set up couldn't run DeepBuild's deep command. Press Set up to try again.".into(),
-        ),
+        line: Some(copy::text("setup.couldnt_run_deep").into()),
         output: error.to_string(),
     })?;
     let Output {
@@ -643,7 +628,7 @@ pub fn set_up() -> Result<String, Stopped> {
     let line = stdout.lines().map(str::trim).rfind(|line| !line.is_empty());
     if status.success() || written_since(&crate::hub::root().join("setup-finished.json"), started) {
         return line.map(str::to_owned).ok_or_else(|| Stopped {
-            line: Some("Set up finished without a word. Press Set up to try again.".into()),
+            line: Some(copy::text("setup.finished_without_a_word").into()),
             output: format!("{stdout}{stderr}"),
         });
     }
@@ -662,7 +647,7 @@ pub fn set_up() -> Result<String, Stopped> {
                         && !line.contains("exit status")
                 })
                 .map_or_else(
-                    || "Set up stopped before it said why. Press Set up to try again.".to_owned(),
+                    || copy::text("setup.stopped_before_why").to_owned(),
                     str::to_owned,
                 )
         }),
@@ -692,12 +677,12 @@ pub fn check_for_updates() -> String {
             .map_or_else(
                 || {
                     format!(
-                        "Couldn't check for updates: deep update --check said nothing ({}).",
+                        "Couldn't check for updates: deep update --check said nothing ({}).", // copy-exception: the headless --check-for-updates line, printed, never drawn
                         output.status
                     )
                 },
                 str::to_owned,
             ),
-        Err(error) => format!("Couldn't check for updates: deep didn't start ({error})."),
+        Err(error) => format!("Couldn't check for updates: deep didn't start ({error})."), // copy-exception: the headless --check-for-updates line, printed, never drawn
     }
 }

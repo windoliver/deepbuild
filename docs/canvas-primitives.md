@@ -994,7 +994,7 @@ An agent drives a headless copy of the app, sees it and records it
 
 **Fields**
 
-- `launch: {from: fixture handle | record_copy | empty = fixture, size: [px, px] = the reference window, scale: 1 | 2 = 2, theme: light | dark, reduced_motion: bool = false, locale, clock: virtual | real = virtual, packs: [name@version]}` (a record copy is read-only and redacted)
+- `launch: {from: fixture handle | record_copy | empty = fixture, size: [px, px] = the reference window, scale: 1 | 2 = 2, theme: light | dark, reduced_motion: bool = false, locale, clock: virtual | real = virtual, packs: [name@version]}` (a record copy is read-only and redacted; `locale` stands for the system's preferred language, and the app draws in the first table it has for it)
 - `locate: {role, name} | {item: ID[#sub]} | {id} | {handle} | {text} | {label}` (strict: exactly one match, or an issue naming the matches; `{id}` is a node's `id` in the snapshot, and `{handle}` the row whose `id` is that record handle)
 - `act: click | double_click | type {text} | press {keys} | drag {to: locator | [px, px]} | scroll {dx, dy} | hover | set {control, value}`, each waiting until its target is visible, enabled and stable for two frames
 - `open: {address} | {url: deepbuild link}` → the address the window shows, or `said`, what became of it: one address through the app's one open, as a click, ⌘K or `deep open` opens it, or a link as the OS hands it over; it opens and changes nothing (#1460). `notification: {click: n}` clicks the body of the `n`th notification the replica posted, as the OS's click handler does, and answers `{t, ask, session, text}`
@@ -1005,7 +1005,7 @@ An agent drives a headless copy of the app, sees it and records it
 - `record` also takes `mask: [locator] = []` and `mask_kind: fill | blur = fill`, and returns the occurrence list `<asset>.actions: [{t, kind, point: [px, px], box: [x, y, w, h], locator}]`
 - `expect: {locator, assert: visible | text | value | count | state}` (assertions make it a journey check)
 - `probe: {locator}` → the point a click would use, what would receive it and whether that's the target; it sends nothing
-- `ui_check: {changed: [file], fixture, panel, promise: nothing_visible, base: {drive, panel}}` → each view the change touches, rendered four ways with its audit findings, the files no rendered view loads, each render beside the merge base's, and a claim
+- `ui_check: {changed: [file], fixture, panel, locale, promise: nothing_visible, base: {drive, panel}}` → each view the change touches, rendered four ways (the reference window and 360 pt wide, light and dark, in `locale`) with its audit findings (text past its frame, cut off or drawn over other text, an unnamed control, a raw key), the files no rendered view loads, each render beside the merge base's, and a claim
 - `ui_check: {journey: [call]}` → the journey replayed in a fresh replica and audited after every step, adding a control under a sibling, under the system bar and under the keyboard, each finding naming its step: `{journey, steps: [{step, id, snapshot, findings}], findings, claim}`
 - `launch` also takes `device: {system_bar: pt, keyboard: pt}`: a system bar over the window's top edge, and an on-screen keyboard over its bottom while a text input has focus
 

@@ -245,12 +245,12 @@ pub fn look_colors(dark: bool) -> Screen {
         let name = if i < 8 {
             NAMES[i].to_owned()
         } else {
-            format!("bright {}", NAMES[i - 8])
+            format!("bright {}", NAMES[i - 8]) // copy-exception: a terminal's own sample text, drawn as its cells
         };
         let end = if i < 15 { "\r\n" } else { "" };
         term.feed(
             format!(
-                "\x1b[38;5;{i}m\u{2588}\u{2588} {i:>2} {name:<15} The quick brown fox\x1b[0m{end}"
+                "\x1b[38;5;{i}m\u{2588}\u{2588} {i:>2} {name:<15} The quick brown fox\x1b[0m{end}" // copy-exception: a terminal's own sample text, drawn as its cells
             )
             .as_bytes(),
         );
@@ -285,7 +285,7 @@ pub fn terminal(
         .key_context("Terminal")
         .track_focus(focus)
         .role(gpui_kit::Role::MultilineTextInput)
-        .aria_label("Terminal")
+        .aria_label(crate::copy::text("cells.terminal"))
         .a11y_synthetic_children(move |builder| lines_and_caret(builder, &lines, caret, y))
         .relative()
         // The whole tab in the grid's background, past the last column and row too.
