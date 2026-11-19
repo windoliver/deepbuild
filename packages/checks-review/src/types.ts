@@ -3,12 +3,17 @@ import type { CheckContext, CheckResult, CheckRunnerFill, CheckSpec } from '@dee
 
 /** check@1's spec for kind `review`: base..head on a claim's first round, or since.commit..head alone on a re-review,
  *  `since.items` being the items sent back on the claim still open. `rubric` is the wiki's rubric page, whose list
- *  items `- <rule>: <text>` are its rules, in order. */
+ *  items `- <rule>: <text>` are its rules, in order. `rules` are the rules page's text-only rules in scope of the diff
+ *  (#1512), as the hub puts them in the run's request: each joins the rubric under its ID, in order, while the lines
+ *  added hold to `RULE_TOKENS`; one left out is named in the run's output. */
 export interface ReviewSpec extends CheckSpec {
   kind: 'review'; runner: 'second-model'; oracle: 'model';
   base: string; head: string; rubric: string;
   since: { commit: string; items: SendBackItem[] } | null;
+  rules?: RubricRule[];
 }
+/** A rules page rule a review may carry (#1512): its ID, its text, and its rubric line's size in tokens. */
+export interface RubricRule { id: string; text: string; tokens: number }
 /** What the second model is given: the diff alone and the rubric's rules, never a transcript, a claim or PR text. */
 export interface ReviewRequest { diff: string; rubric: string[] }
 /** The second model's structured answer: findings, beside whatever prose it adds, which is never trusted. */

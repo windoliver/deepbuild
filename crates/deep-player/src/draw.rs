@@ -8,12 +8,20 @@ use std::sync::Arc;
 #[cfg(feature = "full")]
 use deep_canvas_scene3d::contributed::Fills;
 #[cfg(feature = "full")]
+use deep_canvas_scene3d::light::{map_uses, Texels};
+#[cfg(feature = "full")]
 use deep_canvas_scene3d::look::Look3;
 #[cfg(feature = "full")]
 use deep_canvas_scene3d::scene::{has_3d, Labels, Scene};
 use deep_marks_raster::Renderer;
 
 use crate::play::Played;
+
+/// The texture maps made ready at load, by SHA-256 (the 3D module's; a set without it has none).
+#[cfg(feature = "full")]
+pub type Maps = std::collections::BTreeMap<String, Arc<Texels>>;
+#[cfg(not(feature = "full"))]
+pub type Maps = ();
 
 /// What a frame draws.
 pub enum Frame {
@@ -42,15 +50,21 @@ impl Draw {
         }
     }
 
-    /// The frame the session last evaluated, at `size` pixels.
-    pub fn frame(&mut self, p: &Played, size: [u32; 2]) -> Frame {
+    /// The frame the session last evaluated, at `size` pixels, a 3D frame's maps from `maps` (by
+    /// SHA-256, as the player made them ready at load).
+    pub fn frame(
+        &mut self,
+        p: &Played,
+        size: [u32; 2],
+        #[cfg_attr(not(feature = "full"), allow(unused_variables))] maps: &Maps,
+    ) -> Frame {
         let px = size.map(|v| v.clamp(1, 8192) as u16);
         let fill = |rgba: [u8; 4]| rgba.repeat((size[0] * size[1]) as usize);
         let [r, g, b] = p.ground;
         #[cfg(feature = "full")]
         if has_3d(p.document()) {
             return self
-                .scene(p, px, &|| fill([0, 0, 0, 0]))
+                .scene(p, px, maps, &|| fill([0, 0, 0, 0]))
                 .unwrap_or_else(|| Frame::Pixels(fill([r, g, b, 255])));
         }
         Frame::Pixels(
@@ -69,7 +83,13 @@ impl Draw {
     /// A 3D frame: the scene evaluated at the session's time, with its 2D writer layers to lay
     /// over it (`clear`'s where it has none); none when the scene is refused.
     #[cfg(feature = "full")]
-    fn scene(&mut self, p: &Played, px: [u16; 2], clear: &dyn Fn() -> Vec<u8>) -> Option<Frame> {
+    fn scene(
+        &mut self,
+        p: &Played,
+        px: [u16; 2],
+        maps: &Maps,
+        clear: &dyn Fn() -> Vec<u8>,
+    ) -> Option<Frame> {
         let store = self.store.clone();
         let read = move |sha: &str| store.read(&deep_images::hash_of(sha)?).ok();
         let fills = Fills {
@@ -88,6 +108,12 @@ impl Draw {
             fills,
         )
         .ok()?;
+        let mut scene = scene;
+        for (sha, _) in map_uses(&scene) {
+            if let Some(t) = maps.get(&sha) {
+                scene.texels.insert(sha, t.clone());
+            }
+        }
         let over = self.layers(p, px, None).unwrap_or_else(clear);
         Some(Frame::Scene(Box::new(scene), Box::new(look), over))
     }

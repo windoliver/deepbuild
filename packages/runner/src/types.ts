@@ -115,7 +115,9 @@ export interface JobRecord {
  *  (`five_hour`/`seven_day`: `used_percentage`, `resets_at` in Unix seconds); a Codex token event's `rate_limits`. */
 export interface WindowReport { agent: Agent; account: string; rate_limits: unknown }
 /** The planted wrong programs the acceptance tests select; tests only. */
-export type Plant = 'records-launched-model' | 'checkout-of-session-head' | 'worktree-of-mirror' | 'widens-range-on-smoke' | 'first-model-listed';
+export type Plant = 'records-launched-model' | 'checkout-of-session-head' | 'worktree-of-mirror' | 'widens-range-on-smoke' | 'first-model-listed'
+  // #2650's: a runner that keeps every ended job with its output, and one that answers '' for an ended job still inside the bound.
+  | 'churn-keeps-every-output' | 'empty-output-inside-bound';
 export interface RunnerOptions {
   record: RecordStore;
   asks: Asks;
@@ -143,11 +145,13 @@ export interface Runner {
   /** deep.runner.run(job): submit, then wait. */
   run(spec: JobSpec): Promise<JobRecord>;
   status(job: string): Promise<JobRecord>;
-  /** Every job the record holds, newest last. */
+  /** Every job the record holds, newest last: an ended job past the newest 64 as the record holds it (#2650). */
   list(): Promise<JobRecord[]>;
+  /** The jobs held in memory, newest last: every live one and the newest 64 ended. What the hook path reads (#2650). */
+  recent(): Promise<JobRecord[]>;
   /** Stops its group; resolves with the job as it reads then. */
   cancel(job: string): Promise<JobRecord>;
-  /** Its stdout, as the runner read it. */
+  /** Its stdout, as the runner read it: '' for an ended job whose output is no longer kept (#2650). */
   output(job: string): Promise<string>;
   report(reading: WindowReport): Promise<void>;
   /** The newest reading of each account's 5-hour window, by account: used percent, reset and when it was read, by the clock. */

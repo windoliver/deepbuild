@@ -7,11 +7,24 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { CheckContext, Failure } from '@deepbuild/conformance';
 import { diffOf, follow, hunks, newSide, norm } from './diff.js';
-import type { DroppedFinding, ReviewerAnswer, ReviewFinding, ReviewResult, ReviewSpec, Reviewer, SendBackItem } from './types.js';
+import type { DroppedFinding, ReviewerAnswer, ReviewFinding, ReviewResult, ReviewSpec, Reviewer, RubricRule, SendBackItem } from './types.js';
 
 /** The rubric page's rules, `<rule>: <text>`, in order. */
 const rubricRules = (page: string): { rule: string; text: string }[] =>
   [...page.matchAll(/^\s*[-*]\s+([A-Za-z0-9][\w.-]*):\s*(.+)$/gm)].map(([, rule, text]) => ({ rule: rule!, text: text!.trim() }));
+
+/** The size, in tokens, that the rules page's lines added to a review's rubric hold to: the check's drafted size (#1512). */
+const RULE_TOKENS = 1500;
+/** The rules page's rules a request carries, in order, each while its line fits what is left of the size; the rest left out. */
+function bounded(rules: readonly RubricRule[]): { joined: RubricRule[]; left: RubricRule[] } {
+  const joined: RubricRule[] = [];
+  const left: RubricRule[] = [];
+  let room = RULE_TOKENS;
+  for (const r of rules) {
+    if (r.tokens <= room) { joined.push(r); room -= r.tokens; } else left.push(r);
+  }
+  return { joined, left };
+}
 
 const nothing = (): Omit<ReviewResult, 'outcome' | 'testsRun' | 'failures' | 'verdictLine'> =>
   ({ evidence: [], read: [], mask: null, sendBack: null, open: [], followUps: [], dropped: [] });
@@ -76,27 +89,31 @@ export function judgeAnswer(diff: string, rules: string[], answer: ReviewerAnswe
 }
 
 export async function review(spec: ReviewSpec, ctx: CheckContext, reviewer: Reviewer): Promise<ReviewResult> {
+  // The rules page's rules join under their IDs while their lines fit; one left out stays text only for this run,
+  // and the run's output names it.
+  const added = bounded(spec.rules ?? []);
+  const carried = { ...nothing(), evidence: listed(`rules left out of the rubric past its ${RULE_TOKENS} tokens, text only for this run: `, added.left.map((r) => r.id)) };
   const crashed = (why: string): ReviewResult => ({
-    ...nothing(), outcome: 'failed', testsRun: 0, verdictLine: 'review: stopped before its findings',
+    ...carried, outcome: 'failed', testsRun: 0, verdictLine: 'review: stopped before its findings',
     failures: [{ test: 'review: run', file: spec.rubric, line: 1, stack: null, assertion: false, message: `the review stopped before its assertion: ${why}` }],
   });
   let diff: string;
   let rules: { rule: string; text: string }[];
   try {
-    rules = rubricRules(readFileSync(resolve(ctx.checkout, spec.rubric), 'utf8'));
+    rules = [...rubricRules(readFileSync(resolve(ctx.checkout, spec.rubric), 'utf8')), ...added.joined.map((r) => ({ rule: r.id, text: r.text }))];
     diff = diffOf(ctx.checkout, spec.since?.commit ?? spec.base, spec.head);
   } catch (e) {
     return crashed(e instanceof Error ? e.message : String(e));
   }
   // A rubric with no rule can send nothing back: the review ran nothing, never a pass.
-  if (!rules.length) return { ...nothing(), outcome: 'ran_nothing', testsRun: 0, failures: [], verdictLine: `review: ${spec.rubric} holds no rule (- <rule>: <text>)` };
+  if (!rules.length) return { ...carried, outcome: 'ran_nothing', testsRun: 0, failures: [], verdictLine: `review: ${spec.rubric} holds no rule (- <rule>: <text>)` };
   let answer: unknown;
   try {
     answer = await answerBy(reviewer, { diff, rubric: rules.map((r) => `${r.rule}: ${r.text}`) }, ctx.deadline);
   } catch (e) {
     return crashed(e instanceof Error ? e.message : String(e));
   }
-  if (answer === late) return { ...nothing(), outcome: 'overran', testsRun: 0, failures: [], verdictLine: 'review: overran its deadline' };
+  if (answer === late) return { ...carried, outcome: 'overran', testsRun: 0, failures: [], verdictLine: 'review: overran its deadline' };
   if (!Array.isArray((answer as { findings?: unknown } | null)?.findings)) return crashed('the second model\'s answer holds no list of findings');
 
   const { items, followUps, dropped, read } = judgeAnswer(diff, rules.map((r) => r.rule), answer as ReviewerAnswer, spec.since?.items ?? []);
@@ -113,8 +130,22 @@ export async function review(spec: ReviewSpec, ctx: CheckContext, reviewer: Revi
   if (open.length) said.push(`${open.length} still open`);
   if (followUps.length) said.push(`pre-existing: ${followUps.map((f) => `${f.rule} at ${f.file}:${f.line}`).join(', ')}`);
   if (dropped.length) said.push(`${dropped.length} dropped`);
+  if (added.left.length) said.push(`${added.left.length} rules left out`);
+  // The rules the second model read and answered on: what the rules page names the review the enforcer of.
   return {
-    outcome: items.length ? 'failed' : 'passed', testsRun: 1, failures, evidence: [], read, mask: null,
+    ...carried, outcome: items.length ? 'failed' : 'passed', testsRun: 1, failures, read, evidence: [...listed(RULES_READ, added.joined.map((r) => r.id)), ...carried.evidence],
     sendBack: items.length ? { items } : null, open, followUps, dropped, verdictLine: said.join('; '),
   };
+}
+/** How a review's output names the rules page's rules its second model read (#1512); the hub's rules page reads it back. */
+export const RULES_READ = 'rubric rules from the rules page: ';
+/** Rule IDs after a prefix, in as many lines as keep each within the 8,192 characters a run record's finding holds. */
+function listed(prefix: string, ids: readonly string[]): string[] {
+  const out: string[] = [];
+  let line = '';
+  for (const id of ids) {
+    const next = line ? `${line}, ${id}` : `${prefix}${id}`;
+    if (line && next.length > 8000) { out.push(line); line = `${prefix}${id}`; } else line = next;
+  }
+  return line ? [...out, line] : out;
 }

@@ -1,0 +1,255 @@
+#1831's acceptance suite at its base, run 2026-11-17 on this worktree's HEAD 212f16d09 (origin/main), with no
+implementation. Machine: Mac15,12 (Apple M3, 8 cores, 16 GB), macOS build 26B131, on mains power, no thermal or
+performance warning recorded (`pmset -g therm`), with the one-minute load between about 40 and 360 on its 8 cores
+(other sessions' builds and tests; the load at each run's start and end is printed with it below). Node v24.22.0.
+
+Builds, from the base, with the pinned 1.99.1 toolchain first on PATH, CARGO_INCREMENTAL=0 and
+CARGO_PROFILE_DEV_DEBUG=0, each exit 0, 13:42 to 14:49 in all:
+
+  cargo build --locked --bin deep-show
+  cargo build --locked --bin deep-gpu
+  cargo build --locked --release -p deep-show
+
+Each file was run once, alone, after its last edit:
+
+  node --test tests/acceptance/1831/spine.test.mjs
+  node --test tests/acceptance/1831/harness.test.mjs
+  node --test tests/acceptance/1831/deep-show.test.mjs
+  node --test tests/acceptance/1831/canvas.test.mjs
+
+All four tests fail, each at the assertion its criterion names:
+
+  AC2 #1831.2e170a8b  spine.test.mjs      #13's row is 7222b1696e35128335f7ef7218a5bd23add6787b, not 96ee0fc4d7b8882145961ca215ad50c3e3d4a1ee
+  AC1 #1831.13f43b1f  harness.test.mjs    on the planted Mac17,10: machine.reference false, "model Mac17,10, not Mac15,7 or Mac15,12"
+  AC1 #1831.13f43b1f  deep-show.test.mjs  on the planted Mac17,10: cpu_ms 1.71673696, 1.60 times the Mac15,7's 1.0729605999999998
+  AC1 #1831.13f43b1f  canvas.test.mjs     on the planted Mac17,10: exit 1, "coefficients come from a reference Mac; this is Mac17,10"
+
+The Mac14,2 guards inside the three AC1 tests held at the base, as they should: each test got past them to its
+Mac17,10 assertion (harness: reference false with a why; deep-show: the Mac14,2's estimate differs from the
+Mac15,7's; canvas.mjs: non-zero exit and the costs untouched). After the canvas run the checkout's own
+crates/deep-canvas/costs.json had the SHA-256 it had before (fad6b2307b16…), and `git status` showed only this folder.
+
+The harness lane's status is BLOCKED on both planted Macs ("read-only-job/codex: the read-only job wrote …"): #48's
+fake Codex no longer passes the read-only job at the base. The test doesn't read the status (README).
+tests/acceptance/607/reference-macs.test.mjs, run once here for comparison, fails all 7 of its tests at the base.
+
+In the canvas run, most of its 1,302 s was the wait for the release build's lock; the stderr it quotes also holds
+cargo's warning that rust-objcopy can't load libLLVM.dylib on this Mac, which doesn't fail the build.
+
+Lines over 1,500 characters are cut at 1,500, and the home folder is written ~.
+
+---- spine.test.mjs ----
+Tue Nov 17 14:51:20 PST 2026
+14:51  up 4 days,  7:53, 1 user, load averages: 48.12 138.73 200.88
+✖ AC2 #1831.2e170a8b `node scripts/spine.mjs list` shows #13 at 96ee0fc4d7b8882145961ca215ad50c3e3d4a1ee, the merge commit of PR #1675 (308.647166ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 385.843375
+
+✖ failing tests:
+
+test at tests/acceptance/1831/spine.test.mjs:11:1
+✖ AC2 #1831.2e170a8b `node scripts/spine.mjs list` shows #13 at 96ee0fc4d7b8882145961ca215ad50c3e3d4a1ee, the merge commit of PR #1675 (308.647166ms)
+  AssertionError [ERR_ASSERTION]: scripts/spine.mjs: #13 has one row, at PR #1675's merge commit
+  + actual - expected
+  
+    [
+  +   '#13 7222b1696e35128335f7ef7218a5bd23add6787b'
+  -   '#13 96ee0fc4d7b8882145961ca215ad50c3e3d4a1ee'
+    ]
+  
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/chore-1831-three-reference-macs-8072b1/tests/acceptance/1831/spine.test.mjs:15:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ '#13 7222b1696e35128335f7ef7218a5bd23add6787b' ],
+    expected: [ '#13 96ee0fc4d7b8882145961ca215ad50c3e3d4a1ee' ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+exit 1
+Tue Nov 17 14:51:21 PST 2026
+14:51  up 4 days,  7:53, 1 user, load averages: 48.12 138.73 200.88
+
+---- harness.test.mjs ----
+13:46  up 4 days,  6:48, 1 user, load averages: 218.46 196.59 122.75
+✖ AC1 #1831.13f43b1f the agent harness's budgets lane counts a run on a planted Mac17,10 (M5 Max, 18 cores, 64 GB) as on a reference Mac, and a run on a planted Mac14,2 as off the list (35891.511458ms)
+ℹ {"status":"BLOCKED","machine":{"model":"Mac14,2","reference":false,"why":"model Mac14,2, not Mac15,7 or Mac15,12"}}
+ℹ {"status":"BLOCKED","machine":{"model":"Mac17,10","reference":false,"why":"model Mac17,10, not Mac15,7 or Mac15,12"}}
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 36172.894875
+
+✖ failing tests:
+
+test at tests/acceptance/1831/harness.test.mjs:33:1
+✖ AC1 #1831.13f43b1f the agent harness's budgets lane counts a run on a planted Mac17,10 (M5 Max, 18 cores, 64 GB) as on a reference Mac, and a run on a planted Mac14,2 as off the list (35891.511458ms)
+  AssertionError [ERR_ASSERTION]: scripts/agent-harness.mjs keeps a reference list without the Mac17,10: the design's third reference Mac, on mains power with Low Power Mode off and a nominal thermal state, must count: {"lane":"harness budgets","status":"BLOCKED","reason":"runs that didn't pass measured nothing: read-only-job/codex: the read-only job wrote /private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-1831-harness-KtX3uX/out/run_e5fb2c9c363f/work/probe.txt","baseCommit":"1de288cb4c27b33e83f75ef854d49caaaff41088","touched":["scripts/agent-harness.mjs"],"budgets":"~/private/deepbuild-core/.claude/worktrees/chore-1831-three-reference-macs-8072b1/benchmarks/budgets.json","limits":{"sessionMs":60000,"wholeMs":600000},"machine":{"model":"Mac17,10","reference":false,"why":"model Mac17,10, not Mac15,7 or Mac15,12"},"current":{"wholeMs":13797,"sessions":[{"scenario":"held-stop","agent":"claude","elapsedMs":4563},{"scenario":"idle-wake","agent":"claude","elapsedMs":7617},{"scenario":"read-only-job","agent":"claude","elapsedMs":946},{"scenario":"read-only-job","agent":"codex","elapsedMs":667}]}}
+  
+  false !== true
+  
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/chore-1831-three-reference-macs-8072b1/tests/acceptance/1831/harness.test.mjs:41:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+exit 1
+13:47  up 4 days,  6:49, 1 user, load averages: 212.74 197.68 126.53
+
+---- deep-show.test.mjs ----
+Tue Nov 17 14:24:14 PST 2026
+14:24  up 4 days,  7:26, 1 user, load averages: 125.16 215.34 276.63
+✖ AC1 #1831.13f43b1f deep-show scales its estimate by 1.0 on a planted Mac17,10, the refusal a Mac15,7 gets, and by another factor on a planted Mac14,2 (8513.4825ms)
+ℹ {"Mac15,7":{"cpu_ms":1.0729605999999998,"gpu_ms":0,"gpu_mb":0,"operators":{"core.fields":0.000975,"core.transform":0.00296,"look.palette":0.0013,"core.world":0.0017085,"marks2d.frame":1.0660170999999998},"fingerprint":{"model":"Mac15,7","chip":"Apple M3 Pro","memoryBytes":38654705664,"macosBuild":"25G241"}},"Mac17,10":{"cpu_ms":1.71673696,"gpu_ms":0,"gpu_mb":0,"operators":{"core.fields":0.00156,"core.transform":0.004736,"look.palette":0.00208,"core.world":0.0027336000000000005,"marks2d.frame":1.70562736},"fingerprint":{"model":"Mac15,7","chip":"Apple M3 Pro","memoryBytes":38654705664,"macosBuild":"25G241"}},"Mac14,2":{"cpu_ms":1.71673696,"gpu_ms":0,"gpu_mb":0,"operators":{"core.fields":0.00156,"core.transform":0.004736,"look.palette":0.00208,"core.world":0.0027336000000000005,"marks2d.frame":1.70562736},"fingerprint":{"model":"Mac15,7","chip":"Apple M3 Pro","memoryBytes":38654705664,"macosBuild":"25G241"}}}
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 258994.731583
+
+✖ failing tests:
+
+test at tests/acceptance/1831/deep-show.test.mjs:50:1
+✖ AC1 #1831.13f43b1f deep-show scales its estimate by 1.0 on a planted Mac17,10, the refusal a Mac15,7 gets, and by another factor on a planted Mac14,2 (8513.4825ms)
+  AssertionError [ERR_ASSERTION]: crates/deep-show/src/hub.rs keeps a reference list without the Mac17,10: the design's third reference Mac must scale by 1.0, the refusal a Mac15,7 gets (cpu_ms 1.0729605999999998), and got cpu_ms 1.71673696, 1.60 times it
+  + actual - expected
+  ... Skipped lines
+  
+    {
+      actual: {
+  +     cpu_ms: 1.71673696,
+  -     cpu_ms: 1.0729605999999998,
+        fingerprint: {
+          chip: 'Apple M3 Pro',
+          macosBuild: '25G241',
+          memoryBytes: 38654705664,
+          model: 'Mac15,7'
+  ...
+        operators: {
+  +       'core.fields': 0.00156,
+  +       'core.transform': 0.004736,
+  +       'core.world': 0.0027336000000000005,
+  +       'look.palette': 0.00208,
+  +       'marks2d.frame': 1.70562736
+  -       'core.fields': 0.000975,
+  -       'core.transform': 0.00296,
+  -       'core.world': 0.0017085,
+  -       'look.palette': 0.0013,
+  -       'marks2d.frame': 1.0660170999999998
+        }
+      },
+      check: 'document.validate',
+      code: 'over_budget',
+      fix: 'Make the items cheaper, or fewer, so the frame fits its CPU budget.',
+  ...
+      severity: 'error',
+  +   what: "the document's estimate per frame passes its core_view class: CPU 1.717 ms past 0.001 ms; the costliest operator is marks2d.frame at 1.706 ms"
+  -   what: "the document's estimate per frame passes its core_view class: CPU 1.073 ms past 0.001 ms; the costliest operator is marks2d.frame at 1.066 ms"
+    }
+  
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/chore-1831-three-reference-macs-8072b1/tests/acceptance/1831/deep-show.test.mjs:63:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: { check: 'document.validate', code: 'over_budget', severity: 'error', ids: [ 'path-0', 'path-1', 'path-2' ], path: 'budget', actual: { cpu_ms: 1.71673696, gpu_ms: 0, gpu_mb: 0, operators: [Object], fingerprint: [Object] }, what: "the document's estimate per frame passes its core_view class: CPU 1.717 ms past 0.001 ms; the costliest operator is marks2d.frame at 1.706 ms", fix: 'Make the items cheaper, or fewer, so the frame fits its CPU budget.' },
+    expected: { check: 'document.validate', code: 'over_budget', severity: 'error', ids: [ 'path-0', 'path-1', 'path-2' ], path: 'budget', actual: { cpu_ms: 1.0729605999999998, gpu_ms: 0, gpu_mb: 0, operators: [Object], fingerprint: [Object] }, what: "the document's estimate per frame passes its core_view class: CPU 1.073 ms past 0.001 ms; the costliest operator is marks2d.frame at 1.066 ms", fix: 'Make the items cheaper, or fewer, so the frame fits its CPU budget.' },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+exit 1
+Tue Nov 17 14:28:33 PST 2026
+14:28  up 4 days,  7:30, 1 user, load averages: 155.35 172.76 240.32
+
+---- canvas.test.mjs ----
+Tue Nov 17 14:28:52 PST 2026
+14:28  up 4 days,  7:30, 1 user, load averages: 151.20 171.00 238.51
+✖ AC1 #1831.13f43b1f `node benchmarks/canvas.mjs costs --write` writes its costs on a planted Mac17,10 (M5 Max, 64 GB), and refuses on a planted Mac14,2, leaving the costs as they were (1302443.38775ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1306974.619125
+
+✖ failing tests:
+
+test at tests/acceptance/1831/canvas.test.mjs:53:1
+✖ AC1 #1831.13f43b1f `node benchmarks/canvas.mjs costs --write` writes its costs on a planted Mac17,10 (M5 Max, 64 GB), and refuses on a planted Mac14,2, leaving the costs as they were (1302443.38775ms)
+  AssertionError [ERR_ASSERTION]: benchmarks/canvas.mjs keeps a reference list without the Mac17,10: on the design's third reference Mac --write must write the costs
+  exit 1
+  stdout:
+  
+  stderr:
+  ~/.rustup/toolchains/1.99.1-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/rust-objcopy
+              Reason: tried: '~/.rustup/toolchains/1.99.1-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '~/.rustup/toolchains/1.99.1-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '~/private/deepbuild-core/.claude/worktrees/chore-1831-three-reference-macs-8072b1/target/release/deps/libLLVM.dylib' (no such file), '~/lib/libLLVM.dylib' (no such file), '/usr/local/lib/libLLVM.dylib' (no such file), '/usr/lib/libLLVM.dylib' (no such file, not in dyld cache)
+            
+  
+  warning: `deep-show` (build script) generated 1 warning
+  warning: stripping debug info with `rust-objcopy` failed: signal: 6 (SIGABRT)
+    |
+    = note: dyld[47689]: Library not loaded: @rpath/libLLVM.dylib
+              Referenced from: <D6B3C499-A2AF-3E42-8F77-C42BD658AAB5> ~/.rustup/toolchains/1.99.1-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/rust-objcopy
+              Reason: tried: '~/.rustup/toolchains/1.99.1-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '~/.rustup/toolchains/1.99.1-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '~/private/deepbuild-core/.claude/worktrees/chore-1831-three-reference-macs-8072b1/target/release/deps/libLLVM.dylib' (no such file), '~/lib/libLLVM.dylib' (no such file), '/usr/local/lib/libLLVM.dylib' (no such file), '/usr/lib/libLLVM.dylib' (no such file, not in dyld cache)
+            
+  
+  warning: `deep-show` (bin "deep-show") generated 1 warning
+      Finished `release` profile [optimized] target(s) in 1.96s
+  warning: the following packages contain code that will be rejected by a future version of Rust: block v0.1.6
+  note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+  file:///private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-1831-canvas-xDcUDZ/checkout/benchmarks/canvas.mjs:281
+      if (!['Mac15,7', 'Mac15,12'].includes(machine.model)) throw Error(`coefficients come from a reference Mac; this is ${machine.model}`);
+                                                                  ^
+  
+  Error: coefficients come from a reference Mac; this is Mac17,10
+      at workloads.costs (file:///private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-1831-canvas-xDcUDZ/checkout/benchmarks/canvas.mjs:281:65)
+      at file:///private/var/folders/76/l4bh9ngs72s0jbpybj1ckhzh0000gn/T/deep-1831-canvas-xDcUDZ/checkout/benchmarks/canvas.mjs:1876:22
+      at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+      at async node:internal/modules/esm/loader:647:26
+      at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)
+  
+  Node.js v24.22.0
+  
+  
+  1 !== 0
+  
+      at TestContext.<anonymous> (file://~/private/deepbuild-core/.claude/worktrees/chore-1831-three-reference-macs-8072b1/tests/acceptance/1831/canvas.test.mjs:65:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+exit 1
+Tue Nov 17 14:50:39 PST 2026
+14:50  up 4 days,  7:52, 1 user, load averages: 41.31 151.23 208.10
+

@@ -1,0 +1,8 @@
+// The hello plug-in (#1879 AC2): one read action, `greet`, whose output only this code makes. A hub that lists and
+// runs it loaded the package.
+const strict = (properties: Record<string, unknown>) => ({ type: 'object', properties, required: Object.keys(properties), additionalProperties: false });
+
+export default function (deep: any): void {
+  deep.registerAction('ext.hello.greet', { declares: 'read', input: strict({ name: { type: 'string' } }), output: strict({ greeting: { type: 'string' }, letters: { type: 'integer' } }) },
+    async (input: { name: string }) => ({ greeting: `hello, ${input.name}, from test/hello`, letters: input.name.length }));
+}

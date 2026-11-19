@@ -982,6 +982,10 @@ pub fn take_unseen() -> Vec<Value> {
 
 /// One call to the hub on the one reader's connection; `None` when no hub is connected or it refused.
 pub fn call(method: &str, params: Value) -> Option<Value> {
+    // #1498: a replica's copy of the hub hosts the canvas core a session's page reads, in place of a socket.
+    if let Some(local) = crate::hub::local().filter(|_| method == "canvas.user") {
+        return local(method, &params).ok();
+    }
     READER.with(|cell| match cell.borrow_mut().as_mut() {
         Some(Source::Hub(reader)) => reader.client.as_mut()?.call(method, params).ok(),
         _ => None,
