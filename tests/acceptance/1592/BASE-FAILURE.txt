@@ -1,0 +1,96 @@
+One run of this suite on the base, f6ddd396f404cd5538ab7c8026b35838c7bd6cdb (main), before any implementation, on
+2026-11-18, on macOS with the suite's own builds (deep-drive with env-plants and plain; deep-app with contact-sheet,
+which doesn't exist). Command, from the checkout:
+
+  CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 NO_COLOR=1 caffeinate -di npx vitest run --root tests/acceptance/1592 \
+    --no-file-parallelism --testTimeout=600000
+
+Every test fails, each for the reason its criterion names: AC1 at the missing surface (no `icons` in the snapshot) and
+because the app draws no icon; AC2 because the nine marks are one shape with color off (each an 8 pt square of its
+color); AC3 because a session's page draws `⊘` through font fallback; AC4 at the missing surface (no `contact-sheet`
+feature). AC2's plant half is "caught" at the base only because every pair is already one shape; the clean half fails
+first. AC3's plant isn't caught at the base: no plant exists, and Needs you's list draws squares, not glyphs. Code frames
+and diff markers are trimmed below; the messages are as printed.
+
+Two edits came after this run, on paths the base never reaches, so the run wasn't repeated: AC1's judge now reports a
+wrong-sized icon once per page rather than once per pointer position (at the base it stops at the missing `icons` list
+first), and AC4 compiles #1459's probe before it waits on a window (at the base it stops at the build first).
+
+ RUN  v5.0.5 tests/acceptance/1592
+
+ ❯ shown.test.ts (1 test | 1 failed) 54ms
+     × AC4 #1592.15a3cc5f: the check run takes the contact sheet of every state mark and icon from the real app in light and dark, and reads INCONCLUSIVE unless a recorded taste call on exactly these files says it looks right 52ms
+ ❯ replica.test.ts (3 tests | 3 failed) 62595ms
+     × AC1 #1592.9baca743: every icon on the shipped pages is 14 or 16; a planted 18 fails, naming the view 61742ms
+     × AC2 #1592.7a78eb3d: each state has its own mark, told apart with color off; a planted pair with the same shape fails, naming them 570ms
+     × AC3 #1592.edcecbf6: a status mark draws with no font fallback; a planted glyph fails 272ms
+
+ FAIL  replica.test.ts > AC1 #1592.9baca743
+AssertionError: every icon each shipped page draws, at rest and with the pointer over each node: expected [ …(6) ] to deeply equal []
++   "deepbuild/needs-you: the snapshot has no `icons` list, each icon the frame drew with its name, bounds and size in points (README, Pinned 1)",
++   "deepbuild/home: the snapshot has no `icons` list, each icon the frame drew with its name, bounds and size in points (README, Pinned 1)",
++   "deepbuild/session: the snapshot has no `icons` list, each icon the frame drew with its name, bounds and size in points (README, Pinned 1)",
++   "deepbuild/welcome: the snapshot has no `icons` list, each icon the frame drew with its name, bounds and size in points (README, Pinned 1)",
++   "deepbuild/agents: the snapshot has no `icons` list, each icon the frame drew with its name, bounds and size in points (README, Pinned 1)",
++   "question card: the snapshot has no `icons` list, each icon the frame drew with its name, bounds and size in points (README, Pinned 1)",
+
+ FAIL  replica.test.ts > AC1 #1592.9baca743
+AssertionError: the icons the shipped pages draw: an icon set at 14 in rows and 16 in page chrome draws some (README, Ambiguities 4): expected [] to not deeply equal []
+
+ FAIL  replica.test.ts > AC1 #1592.9baca743
+AssertionError: the planted 18 pt icon on deepbuild/session wasn't caught: ["deepbuild/session: the snapshot has no `icons` list, each icon the frame drew with its name, bounds and size in points (README, Pinned 1)"]: expected false to be true
+
+ FAIL  replica.test.ts > AC2 #1592.7a78eb3d
+AssertionError: the nine status-map entries' marks on the list, color off: expected [ …(36) ] to deeply equal []
++   "pass and fail draw the same shape with color off: their marks differ in 0.0% of the pixels either inks, under 10%",
++   "pass and invalid draw the same shape with color off: their marks differ in 0.0% of the pixels either inks, under 10%",
++   "pass and blocked draw the same shape with color off: their marks differ in 0.0% of the pixels either inks, under 10%",
++   "pass and inconclusive draw the same shape with color off: their marks differ in 0.0% of the pixels either inks, under 10%",
++   "pass and running draw the same shape with color off: their marks differ in 0.0% of the pixels either inks, under 10%",
++   "pass and needs_you draw the same shape with color off: their marks differ in 0.0% of the pixels either inks, under 10%",
++   "pass and stale draw the same shape with color off: their marks differ in 0.0% of the pixels either inks, under 10%",
++   "pass and idle draw the same shape with color off: their marks differ in 0.0% of the pixels either inks, under 10%",
++   "fail and invalid draw the same shape with color off: their marks differ in 0.0% of the pixels either inks, under 10%",
++   "fail and blocked draw the same shape with color off: their marks differ in 0.0% of the pixels either inks, under 10%",
++   "fail and inconclusive draw the same shape with color off: their marks differ in 0.0% of the pixels either inks, under 10%",
++   "fail and running draw the same shape with color off: their marks differ in 0.0% of the pixels either inks, under 10%",
++   "fail and needs_you draw the same shape with color off: their marks differ in 0.0% of the pixels either inks, under 10%",
++   "fail and stale draw the same shape with color off: their marks differ in 0.0% of the pixels either inks, under 10%",
++   "fail and idle draw the same shape with color off: their marks differ in 0.0% of the pixels either inks, under 10%",
++   "invalid and blocked draw the same shape with color off: their marks differ in 0.0% of the pixels either inks, under 10%",
++   "invalid and inconclusive draw the same shape with color off: their marks differ in 0.0% of the pixels either inks, under 10%",
++   "invalid and running draw the same shape with color off: their marks differ in 0.0% of the pixels either inks, under 10%",
++   "invalid and needs_you draw the same shape with color off: their marks differ in 0.0% of the pixels either inks, under 10%",
++   "invalid and stale draw the same shape with color off: their marks differ in 0.0% of the pixels either inks, under 10%",
++   "invalid and idle draw the same shape with color off: their marks differ in 0.0% of the pixels either inks, under 10%",
++   "blocked and inconclusive draw the same shape with color off: their marks differ in 0.0% of the pixels either inks, under 10%",
++   "blocked and running draw the same shape with color off: their marks differ in 0.0% of the pixels either inks, under 10%",
++   "blocked and needs_you draw the same shape with color off: their marks differ in 0.0% of the pixels either inks, under 10%",
++   "blocked and stale draw the same shape with color off: their marks differ in 0.0% of the pixels either inks, under 10%",
++   "blocked and idle draw the same shape with color off: their marks differ in 0.0% of the pixels either inks, under 10%",
++   "inconclusive and running draw the same shape with color off: their marks differ in 0.0% of the pixels either inks, under 10%",
++   "inconclusive and needs_you draw the same shape with color off: their marks differ in 0.0% of the pixels either inks, under 10%",
++   "inconclusive and stale draw the same shape with color off: their marks differ in 0.0% of the pixels either inks, under 10%",
++   "inconclusive and idle draw the same shape with color off: their marks differ in 0.0% of the pixels either inks, under 10%",
++   "running and needs_you draw the same shape with color off: their marks differ in 0.0% of the pixels either inks, under 10%",
++   "running and stale draw the same shape with color off: their marks differ in 0.0% of the pixels either inks, under 10%",
++   "running and idle draw the same shape with color off: their marks differ in 0.0% of the pixels either inks, under 10%",
++   "needs_you and stale draw the same shape with color off: their marks differ in 0.0% of the pixels either inks, under 10%",
++   "needs_you and idle draw the same shape with color off: their marks differ in 0.0% of the pixels either inks, under 10%",
++   "stale and idle draw the same shape with color off: their marks differ in 0.0% of the pixels either inks, under 10%",
+
+ FAIL  replica.test.ts > AC3 #1592.edcecbf6
+AssertionError: every status mark on the shipped pages draws from fonts its text asked for: expected [ …(2) ] to deeply equal []
++   "deepbuild/session: the invalid mark \"line-status\" draws \"⊘\" from a font no text asked for: font fallback (deepbuild/session)",
++   "deepbuild/session: the invalid mark \"return-card\" draws \"⊘\" from a font no text asked for: font fallback (deepbuild/session)",
+
+ FAIL  replica.test.ts > AC3 #1592.edcecbf6
+AssertionError: the planted marks drawn as the look's glyphs in the chrome's face weren't caught: []: expected false to be true
+
+ FAIL  shown.test.ts > AC4 #1592.15a3cc5f
+Error: cargo build -p deep-app --bin deep-app --features contact-sheet: the feature contact-sheet doesn't exist (README, Pinned 3 and 4), so this build can't be made
+
+ Test Files  2 failed (2)
+      Tests  4 failed (4)
+   Duration  66.91s (tests 94%, transform 5%)
+vitest exit 1

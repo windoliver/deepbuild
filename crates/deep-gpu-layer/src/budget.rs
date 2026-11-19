@@ -323,6 +323,8 @@ pub fn call(app: &mut App, call: &Value) -> Value {
             Err(e) => return e,
         };
         let mut reply = result(&a.limits, &runs[1..], reference, planted);
+        // #1431: the process's footprint as the runs left it, beside the gauges.
+        reply["footprint"] = deep_gpu::footprint::read(deep_gpu::footprint::SYSTEM).json();
         if args.frames {
             let rows: Vec<Value> = runs
                 .iter()

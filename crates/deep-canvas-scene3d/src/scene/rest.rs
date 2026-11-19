@@ -753,13 +753,24 @@ pub fn mesh_of(
     let built = if crate::building::KINDS.contains(&kind) {
         crate::building::build(doc, id, item)
     } else {
+        // #1929: a host that keeps a memo between its frames keeps each deform's bind there.
+        let memo = outlines.memo;
         let run = crate::stack::Run {
             outlines: outlines.outlines.to_vec(),
             fills: outlines.module.to_vec(),
             planted: outlines.planted.map(str::to_string),
+            kept: memo
+                .and_then(|m| m.borrow().binds.get(id).cloned())
+                .unwrap_or_default(),
             ..Default::default()
         };
-        crate::build::built(doc, id, item, &run, t).map(|b| b.mesh.unwrap_or_default())
+        crate::build::built(doc, id, item, &run, t).map(|b| {
+            if let Some(m) = memo.filter(|_| b.rows.iter().any(|r| r.bind.is_some())) {
+                let binds = b.rows.iter().map(|r| r.bind.clone()).collect();
+                m.borrow_mut().binds.insert(id.to_string(), binds);
+            }
+            b.mesh.unwrap_or_default()
+        })
     };
     built.map_err(|path| match path.split_once(crate::builders::CODED) {
         Some((code, at)) => Refused {

@@ -1,0 +1,11 @@
+$ PATH=/opt/homebrew/bin:$PATH node tests/acceptance/2365/probe/proof.mjs --archive repair-evidence/round2/alloc-nothing.mjs
+node: v24.22.2 (/opt/homebrew/bin/node)
+started: 2026-11-18T01:36:52Z; load averages: 59.38 49.08 66.63
+-----
+pass | time | longest unserved stretch | peak resident memory | evidence added | outcome
+80 MB, first copy | 0.30 s | 7 ms | 28 MB (from 27 MB) | 0.00 MB | ok
+90 MB | 0.30 s | 7 ms | 27 MB (from 27 MB) | 0.00 MB | ok
+100 MB | 0.30 s | 7 ms | 27 MB (from 27 MB) | 0.00 MB | ok
+540 MB, never archived | 0.30 s | 45 ms | 28 MB (from 28 MB) | 0.00 MB | ok
+-----
+EXIT 0; ended: 2026-11-18T01:37:13Z; load averages: 59.02 49.65 66.31

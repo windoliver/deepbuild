@@ -1,0 +1,21 @@
+$ PLANT=no-steps PATH=repair-evidence/round2/planted-base:<node 24.22.0's bin>:$PATH NO_COLOR=1 node node_modules/vitest/vitest.mjs run --configLoader runner tests/acceptance/2365-redraft-ac5/suite.test.ts -t AC10
+node: v24.22.0 (<home>/.local/share/fnm/node-versions/v24.22.0/installation/bin/node)
+the planted merge base: see repair-evidence/round2/planted-base/git (PLANT=no-steps)
+-----
+
+ RUN  v5.0.5 <home>/doneright-2365-repair
+
+stdout | tests/acceptance/2365-redraft-ac5/suite.test.ts > AC5 #2365.c0521de3 for every transcript in #20's suite, the parts joined equal the merge base's one copy, and an unchanged transcript's second pass reads none of it > AC5 #20 AC10 (growth.test.ts): a session archived at 10 lines and again at 50
+#20 AC10 (growth.test.ts): a session archived at 10 lines and again at 50: session:f819d13946ce44fda96164f03a864868 18263 B, 4 joins, read 0 B
+
+ ✓ tests/acceptance/2365-redraft-ac5/suite.test.ts (12 tests | 11 skipped) 10159ms
+   ✓ AC5 #2365.c0521de3 for every transcript in #20's suite, the parts joined equal the merge base's one copy, and an unchanged transcript's second pass reads none of it (10)
+     ✓ AC5 #20 AC10 (growth.test.ts): a session archived at 10 lines and again at 50 9796ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 11 skipped (12)
+   Start at  17:24:10
+   Duration  10.47s (tests 98%, transform 2%, import 1%)
+
+-----
+EXIT 0

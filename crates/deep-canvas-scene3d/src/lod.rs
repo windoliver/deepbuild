@@ -8,6 +8,8 @@ use std::sync::Arc;
 
 use serde_json::Value;
 
+use deep_canvas::gauge::{Gauge, Kept, Place};
+
 use crate::geom::{Mesh, V3};
 use crate::scene::{matmul, Affine3, Camera, Refused, Scene, Shape, Solid};
 
@@ -496,17 +498,36 @@ fn proxy_level(lod: &Lod, level: Option<usize>) -> Option<&Level> {
     lod.proxy_mesh.as_ref()
 }
 
+/// #1431: the proxies made (`proxy_of`'s process-wide map), a failed one counted in entries:
+/// past either bound, the proxies asked for longest ago go first.
+pub static PROXY_GAUGE: Gauge = Gauge::new("PROXIES", Place::Heap, 1_024, 64_000_000);
+
+/// The heap bytes a proxy level's mesh holds: its vertices' arrays and its indices.
+fn level_bytes(level: &Option<Level>) -> u64 {
+    level.as_ref().map_or(0, |l| {
+        let m = &l.mesh;
+        (24 * (m.positions.len() + m.normals.len())
+            + 16 * (m.uv0.len() + m.uv1.len())
+            + 32 * m.tangents.len()
+            + 4 * m.indices.len()) as u64
+    })
+}
+
 /// The proxy of `mesh` (keyed by `hash`) that keeps `p.ratio` of its triangles within `p.error`,
 /// made once per content key by meshoptimizer and stored by hash, never per frame.
 pub fn proxy_of(mesh: &Mesh, hash: u64, p: Proxy) -> Option<Level> {
-    use std::collections::HashMap;
     use std::sync::{Mutex, OnceLock};
     type Key = (u64, u64, u64);
-    static MADE: OnceLock<Mutex<HashMap<Key, Option<Level>>>> = OnceLock::new();
+    // cache: entries 1_024, bytes 64_000_000
+    static PROXIES: OnceLock<Mutex<Kept<Key, Option<Level>>>> = OnceLock::new();
     let key = (hash, p.ratio.to_bits(), p.error.unwrap_or(-1.0).to_bits());
-    let made = MADE.get_or_init(Default::default);
-    if let Some(l) = made.lock().ok()?.get(&key) {
-        return l.clone();
+    let made = PROXIES.get_or_init(|| Mutex::new(Kept::new(&PROXY_GAUGE)));
+    {
+        let mut made = made.lock().ok()?;
+        made.turn();
+        if let Some(l) = made.get(&key) {
+            return l.clone();
+        }
     }
     let positions: Vec<f32> = mesh
         .positions
@@ -536,7 +557,8 @@ pub fn proxy_of(mesh: &Mesh, hash: u64, p: Proxy) -> Option<Level> {
             levels(&Arc::new(leveled), hash ^ 0x5052_4f58_5900_0000).pop()
         });
     if let Ok(mut m) = made.lock() {
-        m.insert(key, level.clone());
+        m.insert(key, level.clone(), level_bytes(&level));
+        m.evict();
     }
     level
 }

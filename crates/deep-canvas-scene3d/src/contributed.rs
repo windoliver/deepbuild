@@ -36,6 +36,9 @@ pub struct Memo {
     points: BTreeMap<String, (String, Vec<V3>)>,
     meshes: BTreeMap<String, (String, Mesh)>,
     mapped: Vec<String>,
+    /// Each item's box and mesh deforms' binds (#1929), by modifier, as its last build left
+    /// them: a frame whose mesh and box or control mesh are unchanged reads its weights here.
+    pub(crate) binds: BTreeMap<String, Vec<Option<crate::bind::Bind>>>,
 }
 
 impl Memo {

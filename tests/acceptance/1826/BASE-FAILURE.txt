@@ -1,0 +1,199 @@
+Base commit: 9550dc0f04d45844b5d7bb9ce74d89926c681724
+Command: CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node scripts/throttle.mjs test --wait 30 -- npx vitest run --root tests/acceptance/1826 --no-file-parallelism --testTimeout=600000
+Run in a clean export of the base commit holding only these test files, the repo's node_modules from npm ci, and CARGO_TARGET_DIR set to a scratch folder outside the checkout. Each file's beforeAll built its binary (deep-graph, deep-canvas-render) at the base; both builds succeeded, so every test reached its assertions.
+Date: 2026-11-19T05:08:02.075Z  Node v24.22.2  vitest 5.0.5 darwin-arm64  cargo 1.99.1
+Exit code: 1
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/1826
+
+ ❯ taste.test.ts (1 test | 1 failed) 1456ms
+   ❯ #1826.a4284c92 the screenshots and the one taste call on them (1)
+     × #1826.a4284c92 the run draws the 7-node tree, the 4-leaf treemap and the 10-node grid from the canvas's own frames, and the owner's call recorded on exactly those says they look right 930ms
+ ❯ grid.test.ts (1 test | 1 failed) 486ms
+   ❯ #1826.52792868 grid: 10 nodes, then an 11th (1)
+     × #1826.52792868 10 nodes lay out in rows of 4, 4 and 2 in stable-ID order; an 11th whose ID sorts last lands at the end of the third row and leaves the first 10 where they were, bit for bit 155ms
+ ❯ tree.test.ts (3 tests | 3 failed) 453ms
+   ❯ #1826.8c543993 tree: the 7-node binary tree (3)
+     × #1826.8c543993 laid out tree, direction down: each child 48 u below its parent, each parent centred over its two children within 0.5 u, and the same graph twice gives the same bytes 122ms
+     × #1826.8c543993 the same graph with one more edge that closes a cycle is refused, naming that edge 4ms
+     × #1826.8c543993 a planted layout that ranks nodes by ID order instead of depth fails, naming the first misplaced node 2ms
+ ❯ treemap.test.ts (2 tests | 2 failed) 455ms
+   ❯ #1826.f1dd5338 treemap: 4 leaves sized 1, 1, 2 and 4 in a 400 × 200 u box (2)
+     × #1826.f1dd5338 each leaf's area is in proportion to its size within 0.5%, and the rectangles tile the box with no overlap and no gap over 0.5 u 122ms
+     × #1826.f1dd5338 a planted treemap that splits the box evenly fails, naming the leaf 4ms
+ ❯ memory.test.ts (1 test | 1 failed) 451ms
+   ❯ #1826.86ed5db7 tree memory: one leaf added under a leaf (1)
+     × #1826.86ed5db7 adding one leaf under a leaf of the 7-node tree keeps every kept node's rank, order, x and y bit for bit 122ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 8 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  grid.test.ts > #1826.52792868 grid: 10 nodes, then an 11th > #1826.52792868 10 nodes lay out in rows of 4, 4 and 2 in stable-ID order; an 11th whose ID sorts last lands at the end of the third row and leaves the first 10 where they were, bit for bit
+AssertionError: the 10-node grid: accepted, got {"ok":false,"code":"layout.algo_unsupported","names":"algo"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ accepted helpers.ts:110:67
+    108| export function accepted(bin: string, input: JsonValue, what: string):…
+    109|   const [out] = lines(bin, ['layout'], [input]);
+    110|   expect(out!['ok'], `${what}: accepted, got ${show(out, 2500)}`).toBe…
+       |                                                                   ^
+    111|   return out!;
+    112| }
+ ❯ grid.test.ts:35:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/8]⎯
+
+ FAIL  memory.test.ts > #1826.86ed5db7 tree memory: one leaf added under a leaf > #1826.86ed5db7 adding one leaf under a leaf of the 7-node tree keeps every kept node's rank, order, x and y bit for bit
+AssertionError: the 7-node tree: accepted, got {"ok":false,"code":"layout.algo_unsupported","names":"algo"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ accepted helpers.ts:110:67
+    108| export function accepted(bin: string, input: JsonValue, what: string):…
+    109|   const [out] = lines(bin, ['layout'], [input]);
+    110|   expect(out!['ok'], `${what}: accepted, got ${show(out, 2500)}`).toBe…
+       |                                                                   ^
+    111|   return out!;
+    112| }
+ ❯ memory.test.ts:15:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/8]⎯
+
+ FAIL  taste.test.ts > #1826.a4284c92 the screenshots and the one taste call on them > #1826.a4284c92 the run draws the 7-node tree, the 4-leaf treemap and the 10-node grid from the canvas's own frames, and the owner's call recorded on exactly those says they look right
+AssertionError: raster draws tree.png: {"ok":false,"code":"layout.algo_unsupported","issues":[{"check":"document.validate","code":"layout.algo_unsupported","severity":"error","ids":[""],"path":"items/g/params/algo","actual":null,"what":"the graph can't be laid out as its params say","fix":"See the issue."}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ taste.test.ts:45:82
+     43|   const hashes = {} as Record<Name, string>;
+     44|   NAMES.forEach((name, i) => {
+     45|     expect(answers[i]!['ok'], `raster draws ${name}: ${show(answers[i]…
+       |                                                                                  ^
+     46|     const image = readPng(inputs[i]!.out);
+     47|     expect([image.width, image.height], `${name}: the PNG is the docum…
+ ❯ screenshots taste.test.ts:44:9
+ ❯ taste.test.ts:60:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/8]⎯
+
+ FAIL  tree.test.ts > #1826.8c543993 tree: the 7-node binary tree > #1826.8c543993 laid out tree, direction down: each child 48 u below its parent, each parent centred over its two children within 0.5 u, and the same graph twice gives the same bytes
+AssertionError: the 7-node tree: accepted, got {"ok":false,"code":"layout.algo_unsupported","names":"algo"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ accepted helpers.ts:110:67
+    108| export function accepted(bin: string, input: JsonValue, what: string):…
+    109|   const [out] = lines(bin, ['layout'], [input]);
+    110|   expect(out!['ok'], `${what}: accepted, got ${show(out, 2500)}`).toBe…
+       |                                                                   ^
+    111|   return out!;
+    112| }
+ ❯ tree.test.ts:17:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/8]⎯
+
+ FAIL  tree.test.ts > #1826.8c543993 tree: the 7-node binary tree > #1826.8c543993 the same graph with one more edge that closes a cycle is refused, naming that edge
+AssertionError: the graph with e7 is refused as no tree: {"ok":false,"code":"layout.algo_unsupported","names":"algo"}: expected [ false, 'layout.algo_unsupported' ] to deeply equal [ false, 'layout.not_a_tree' ]
+
+- Expected
++ Received
+
+  [
+    false,
+-   "layout.not_a_tree",
++   "layout.algo_unsupported",
+  ]
+
+ ❯ tree.test.ts:30:122
+     28|   it(`${ID} the same graph with one more edge that closes a cycle is r…
+     29|     const [out] = lines(bin('deep-graph'), ['layout'], [{ ...treeLine(…
+     30|     expect([out!['ok'], out!['code']], `the graph with ${String(CYCLE_…
+       |                                                                                                                          ^
+     31|     expect(out!['names'], 'the refusal names the edge that closes the …
+     32|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/8]⎯
+
+ FAIL  tree.test.ts > #1826.8c543993 tree: the 7-node binary tree > #1826.8c543993 a planted layout that ranks nodes by ID order instead of depth fails, naming the first misplaced node
+AssertionError: the planted rank_by_id layout: accepted, got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ accepted helpers.ts:110:67
+    108| export function accepted(bin: string, input: JsonValue, what: string):…
+    109|   const [out] = lines(bin, ['layout'], [input]);
+    110|   expect(out!['ok'], `${what}: accepted, got ${show(out, 2500)}`).toBe…
+       |                                                                   ^
+    111|   return out!;
+    112| }
+ ❯ tree.test.ts:35:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/8]⎯
+
+ FAIL  treemap.test.ts > #1826.f1dd5338 treemap: 4 leaves sized 1, 1, 2 and 4 in a 400 × 200 u box > #1826.f1dd5338 each leaf's area is in proportion to its size within 0.5%, and the rectangles tile the box with no overlap and no gap over 0.5 u
+AssertionError: the 4-leaf treemap: accepted, got {"ok":false,"code":"layout.algo_unsupported","names":"algo"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ accepted helpers.ts:110:67
+    108| export function accepted(bin: string, input: JsonValue, what: string):…
+    109|   const [out] = lines(bin, ['layout'], [input]);
+    110|   expect(out!['ok'], `${what}: accepted, got ${show(out, 2500)}`).toBe…
+       |                                                                   ^
+    111|   return out!;
+    112| }
+ ❯ treemap.test.ts:17:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/8]⎯
+
+ FAIL  treemap.test.ts > #1826.f1dd5338 treemap: 4 leaves sized 1, 1, 2 and 4 in a 400 × 200 u box > #1826.f1dd5338 a planted treemap that splits the box evenly fails, naming the leaf
+AssertionError: the planted even_treemap: accepted, got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ accepted helpers.ts:110:67
+    108| export function accepted(bin: string, input: JsonValue, what: string):…
+    109|   const [out] = lines(bin, ['layout'], [input]);
+    110|   expect(out!['ok'], `${what}: accepted, got ${show(out, 2500)}`).toBe…
+       |                                                                   ^
+    111|   return out!;
+    112| }
+ ❯ treemap.test.ts:24:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/8]⎯
+
+
+ Test Files  5 failed (5)
+      Tests  8 failed (8)
+   Start at  21:07:22
+   Duration  3.70s (tests 98%, import 1%, transform 1%)
+

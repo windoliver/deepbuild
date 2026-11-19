@@ -14,6 +14,7 @@ use std::{
     sync::Arc,
 };
 
+use deep_canvas::gauge::{Gauge, Place};
 use deep_canvas_marks::path::{self, Verb};
 use deep_text::outlines::{outline_of, Cmd};
 use deep_text::{Align, Atlas, Glyph, Placed, Shaper, Span, Spec, MAX_DEVICE_SIZE, PAGE, PHASES};
@@ -30,6 +31,21 @@ pub const OUTLINE_ABOVE: f32 = 64.;
 
 /// The most glyph tessellations kept; the cache empties whole past it, as the shaped runs do.
 const OUTLINES: usize = 4_096;
+
+/// #1431: the text cache, its shaped runs (`Text::shaped`) and glyph tessellations (`Text::outlines`), in the heap;
+/// each empties whole past either of its bounds.
+static SHAPED: Gauge = Gauge::new("Text::shaped", Place::Heap, 4_096, 32_000_000);
+static OUTLINED: Gauge = Gauge::new("Text::outlines", Place::Heap, OUTLINES as u64, 64_000_000);
+
+/// What a shaped run holds: its glyphs and decorations, at about 80 bytes each.
+fn shaped_bytes(s: &Shaped) -> u64 {
+    80 * (s.glyphs.len() + s.decorations.len()) as u64
+}
+
+/// What a tessellation holds: three corners of four f32s a triangle.
+fn outline_bytes(t: &Option<Triangles>) -> u64 {
+    t.as_ref().map_or(0, |t| 48 * t.len() as u64)
+}
 
 /// A Text item's fields a label needs (canvas primitives: Text `text@1`).
 #[derive(Clone, Debug, PartialEq)]
@@ -409,9 +425,13 @@ fn tessellate(glyph: &Glyph, bucket: i32) -> Option<Vec<[[f32; 4]; 3]>> {
 struct Text {
     shaper: Shaper,
     atlas: Atlas,
+    // cache: entries 4_096, bytes 32_000_000
     shaped: HashMap<ShapeKey, Arc<Shaped>>,
     /// #1479: glyph tessellations; `None` for a glyph its face holds no outline for.
+    // cache: entries 4_096, bytes 64_000_000
     outlines: HashMap<OutlineKey, Option<Triangles>>,
+    /// #1431: the bytes `shaped` and `outlines` hold.
+    held: [u64; 2],
     /// #1479: glyphs above [`OUTLINE_ABOVE`] device px drawn from the atlas's largest raster,
     /// since their face holds no outline.
     from_largest: u64,
@@ -434,6 +454,7 @@ impl Text {
             atlas: Atlas::new(),
             shaped: HashMap::new(),
             outlines: HashMap::new(),
+            held: [0; 2],
             from_largest: 0,
             frame: None,
             uploaded: HashMap::new(),
@@ -454,10 +475,17 @@ impl Text {
         if let Some(shaped) = self.shaped.get(&key) {
             return shaped.clone();
         }
-        if self.shaped.len() >= 4_096 {
-            self.shaped.clear();
-        }
         let shaped = self.shaper.shape(&label.spec());
+        let bytes = shaped_bytes(&shaped);
+        if self.shaped.len() as u64 >= SHAPED.bound.entries
+            || self.held[0] + bytes > SHAPED.bound.bytes
+        {
+            SHAPED.sub(self.shaped.len() as u64, self.held[0]);
+            self.shaped.clear();
+            self.held[0] = 0;
+        }
+        SHAPED.add(1, bytes);
+        self.held[0] += bytes;
         self.shaped.insert(key, shaped.clone());
         shaped
     }
@@ -477,10 +505,15 @@ impl Text {
         if let Some(found) = self.outlines.get(&key) {
             return found.clone();
         }
-        if self.outlines.len() >= OUTLINES {
-            self.outlines.clear();
-        }
         let made: Option<Triangles> = tessellate(glyph, key.bucket).map(Into::into);
+        let bytes = outline_bytes(&made);
+        if self.outlines.len() >= OUTLINES || self.held[1] + bytes > OUTLINED.bound.bytes {
+            OUTLINED.sub(self.outlines.len() as u64, self.held[1]);
+            self.outlines.clear();
+            self.held[1] = 0;
+        }
+        OUTLINED.add(1, bytes);
+        self.held[1] += bytes;
         self.outlines.insert(key, made.clone());
         made
     }

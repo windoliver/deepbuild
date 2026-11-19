@@ -1,0 +1,16 @@
+The tasks of benchmarks/budgets.json the budget window would run for this branch: scripts/budget-window.mjs's
+reachable(), over the worktree at af9dda088 against its merge base ed03dc60d (162 changed files). 73 of 149.
+Each must read PASS, its instructions retired included, for the window to close an issue on the commit.
+
+hook-startup evidence-put-5mb evidence-redact-text evidence-retain-30d corpus-replay record-append-20k
+record-replay-100k asks-raise-answer asks-inbox-10k plan-preview resolver-match-10k
+record-learn-apply-rollback-1k record-learn-rebuild-10k hub-start-to-ready hub-cold-start hub-round-trip hub-idle
+hub-stream hub-history hub-prompt hub-compact otlp-receive-20k-spans deep-hook-overhead deep-hook-fail-open
+deep-hook-guards deep-hook-unread deep-hook-heavy deep-hook-during-backup sandbox-setup runner-job
+command-check-count env-up env-down extension-host deep-inbox-30d lease-grant deep-mcp-30d claude-code-map
+claude-code-backfill archive-growth archive-live archive-month archive-backlog deep-status-30 deep-doctor
+reading-slice reading-find wiki-build wiki-memory-compile deep-hook-day-overhead deep-hook-day-fail-open
+readings-recompute readings-update pi-client paseo-plugin hosted-terminal-60hz hosted-terminals-10
+extension-source-call extension-store-query work-item-to-task extension-schedule-fire reading-batch-refresh
+reading-value-at-position composition-wire composition-edge-read target-origins products-place channels
+journey-run deep-list-700 host-link hub-lifecycle-start hub-lifecycle-stop
