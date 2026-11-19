@@ -56,3 +56,12 @@ test('a test starting the hub with one command string gets the hub\'s binaries, 
   for (const file of ['tests/acceptance/7/hub.test.mjs', 'tests/acceptance/8/scoped.test.mjs']) assert.deepEqual(selectBinaries(dir, [file]).target, ['deep-hook', 'deep-show'], file);
   assert.deepEqual(selectBinaries(dir, ['tests/acceptance/9/other.test.mjs']).target, []);
 });
+
+test('a test inside the hub\'s package gets the hub\'s binaries, and a path ending a sentence names the hub', (t) => {
+  const dir = repo(t, {
+    'packages/hub/test/core.test.ts': "import { test } from 'vitest';\nimport { start } from '../src/core.js';\ntest('core', () => start());\n",
+    'packages/hub/src/core.ts': 'export const start = () => 0;\n',
+    'tests/acceptance/10/sentence.test.mjs': `${start}// Starts packages/hub.\ntest('hub', () => spawnSync('sh', ['-c', 'see packages/hub.']));\n`,
+  });
+  for (const file of ['packages/hub/test/core.test.ts', 'tests/acceptance/10/sentence.test.mjs']) assert.deepEqual(selectBinaries(dir, [file]).target, ['deep-hook', 'deep-show'], file);
+});

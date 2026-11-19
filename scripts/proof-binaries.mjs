@@ -63,9 +63,10 @@ function sourceSlice(file, source, requested) {
 // What a checkout's hub runs from that checkout's target/{release,debug}/ (#2817): deepHook() in
 // packages/hub/src/paths.ts and canvasCore() in packages/hub/src/canvas.ts. A test that names the hub's or the CLI's
 // package, in a literal, a template's text or the pieces of a join or resolve call, can start that hub; a whole
-// command such as `node packages/cli/dist/main.js hub run` names it too.
+// command such as `node packages/cli/dist/main.js hub run` names it too, and so does a test or helper inside either
+// package, which reaches the hub through ../src.
 const HUB_BINARIES = ['deep-hook', 'deep-show'];
-const HUB_ENTRY = /(?<![\w.@-])packages\/(?:hub|cli)(?![\w.-])|(?<![\w./@-])@deepbuild\/(?:hub|cli)(?![\w.-])/;
+const HUB_ENTRY = /(?<![\w.@-])packages\/(?:hub|cli)(?![\w-]|\.\w)|(?<![\w./@-])@deepbuild\/(?:hub|cli)(?![\w-]|\.\w)/;
 
 /** Selected tests' DEEP_BIN_DIR binaries, for a run in the checkout itself, which keeps its own target/. */
 export const binaryNames = (cwd, patterns) => selectBinaries(cwd, patterns, false).bin;
@@ -93,6 +94,7 @@ export function selectBinaries(cwd, patterns, hubBinaries = true) {
         const key = `${full}:${requested?.join(',') ?? '*'}`;
         if (seen.has(key)) continue;
         seen.add(key);
+        names(relative(cwd, full));
         let source;
         try { source = readFileSync(full, 'utf8'); } catch { continue; }
         const follow = (dependency, names) => {
