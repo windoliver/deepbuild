@@ -1025,6 +1025,8 @@ fn register_data(r: &mut Registrar, decimate: fn(&mut View<'_>) -> Result<(), Op
     crate::axes3d::register(r);
     // #225: the vector field, its stream table and flow, and its `follow_stream` entry.
     crate::vector_field::register(r);
+    // #2776: what each path does with the two kinds drawn as marks in 3D.
+    r.paths(include_str!("paths.json"));
     // A scale it can't read raises marks2d's `scale_type` or `bad_scale`, which mark sets and
     // axes raise through the same scale.
     r.fixture("points", points_board(), None).sidecar(json!({

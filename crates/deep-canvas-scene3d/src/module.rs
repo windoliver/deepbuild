@@ -581,6 +581,8 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
         }));
     // #486: the lobe outputs, occlusion and normal in gpu.output@1, core.bump@1 in gpu.function@1.
     crate::gpu::register(r);
+    // #2776: every kind above draws in 3D, and says what each path does with it.
+    r.in_3d(include_str!("paths.json"));
 }
 
 /// A 10 × 10 m plate with bushes and flowers scattered over it at least 0.5 m apart, none in

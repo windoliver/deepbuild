@@ -134,6 +134,10 @@ test-scatter = ["dep:deep-canvas-test-modules"]
 test-tick = ["dep:deep-canvas-test-modules"]
 # #172: the full set and the test canvas module test.native, which no web player carries.
 test-web-lacks = ["dep:deep-canvas-test-modules"]
+# #2776: the test canvas module test.paths, three kinds drawn in 3D with their paths' answers, and
+# the planted twin whose test.paths.mist@1 gives no answer for a final.
+test-paths = ["dep:deep-canvas-test-modules"]
+test-paths-no-final = ["test-paths"]
 test-frame-cache = ["dep:deep-canvas-test-modules"]
 # Issue #497: a module stepping at its item's step_rate into a held array.
 test-held = ["dep:deep-canvas-test-modules"]

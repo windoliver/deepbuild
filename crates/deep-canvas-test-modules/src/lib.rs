@@ -14,6 +14,8 @@ use serde_json::{json, Value};
 
 pub mod kinds;
 pub mod launch;
+mod paths;
+pub use paths::paths;
 mod time;
 pub use time::{cache, held, latch, native, tick};
 pub mod probe;
