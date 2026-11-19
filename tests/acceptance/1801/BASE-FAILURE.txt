@@ -1,0 +1,81 @@
+The #1801 acceptance suite at the base, f6ddd396f ("Merge pull request #2628 …"), trimmed: every test fails, none
+passes. Run on 2026-11-18 on a Mac17,10 (one of the reference Macs) under a load average of 50 to 110 from other
+sessions, after `npm ci --ignore-scripts`, `npm run build --workspaces` and, with CARGO_INCREMENTAL=0
+CARGO_PROFILE_DEV_DEBUG=0, `cargo build --locked -q -p deep-show -p deep-hook`:
+
+  npx vitest run --root tests/acceptance/1801 --no-file-parallelism --testTimeout=600000
+
+cost.test.ts was edited after that run (it follows a cost reply's `next` pages) and run alone again on the base; its
+lines below are from that second run, which failed at the same first call as the first.
+
+ ❯ listed.test.ts (3 tests | 3 failed)
+     × AC7 deep_query in tools/list through deep mcp takes what: refs_to and cost, with refs_to's target and cost's by, for a Claude Code and a Codex session
+     × AC7 the Claude Code and Codex facts count deep_query as a read, by the hub's read list and by the adapter's mapping, and each one's toolKinds conformance case passes
+     × AC7 a facts file that counts deep_query as a change fails its conformance case, naming the tool
+ ❯ cost.test.ts (2 tests | 2 failed)
+     × AC5 the texture is first by GPU memory and the mesh first by GPU time, and each column's rows sum to the meter's total within 1%
+     × AC5 a planted table that leaves out shared assets sums short of the meter's total and fails, naming the texture
+ ❯ city.test.ts (2 tests | 2 failed)
+     × AC3 returns 400 of the rows that name the stone and a coverage block with the total of 600
+     × AC3 refs_to the stone under a 400-row cap takes under 50 ms in five runs after a warm-up, judged on the reference Mac
+ ❯ absence.test.ts (2 tests | 2 failed)
+     × AC2 refs_to the picture three posters and a material use gives four rows; a hash nothing names gives none, with a coverage block that read the whole document
+     × AC2 a planted read that returns no rows after reading only the caller's layer fails, naming the picture and the rows it missed
+ ❯ kit.test.ts (2 tests | 2 failed)
+     × AC6 test.kit.pointer, whose points_to names an item without being declared a reference, fails its kit, naming the field
+     × AC6 with points_to declared a reference the module passes its kit's references part, and refs_to the rect lists the pointer's field
+ ❯ refs.test.ts (2 tests | 2 failed)
+     × AC1 refs_to the door returns exactly its five rows of four kinds, each with its field's path, and four once a patch removes the constraint
+     × AC1 a planted read that walks only parents returns the two handles' rows and fails, naming the missing kinds
+ ❯ refusal.test.ts (2 tests | 2 failed)
+     × AC4 the patch deleting the door is refused as today, and its ref_unresolved naming the door has as actual refs_to's five rows, in the same order
+     × AC4 a planted refusal that names only the first row fails, naming the four rows it left out
+
+Why each failed (the first failed assertion):
+
+AC1, AC2, AC3 (both, the timing test at its first run, before any reading), AC4 and AC5, each test:
+  AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true
+  (a deep_query with `what: "refs_to"` or `"cost"` doesn't parse at the base, nor does a `planted` value of this
+  suite, so the scenario holding it answers bad_input)
+
+AC6, both tests:
+  AssertionError: the binary builds: deep-show with features full,test-kit-pointer: expected 'cargo build …' to be ''
+  + cargo build --locked --bin deep-show --no-default-features --features full,test-kit-pointer failed:
+  + error: none of the selected packages contains this feature: test-kit-pointer
+  (and the same for full,test-kit-pointer-declared)
+
+AC7, tools/list through deep mcp (a real hub, the Claude Code session's deep mcp):
+  AssertionError: the Claude Code: login fix session's deep_query lists what: refs_to (its what takes
+  ["rows","summary","why",null]): expected [ 'rows', 'summary', 'why', null ] to include 'refs_to'
+
+AC7, the facts:
+  AssertionError: the Claude Code facts list mcp__deep__deep_query in toolKinds.tools as a read, the list the hub's
+  guards count reads by (it lists undefined): expected [ 'read', 'search' ] to include undefined
+
+AC7, the planted facts:
+  AssertionError: the planted Claude Code facts' toolKinds.conformance names claude/toolKinds/unknown-otherwise, a
+  case adapter@1 runs; it runs hooks/who-is-calling, hooks/threads-across-rotated-ids, hooks/late-event-in-stopped-turn,
+  hooks/one-id-per-event, permission/not-from-label, permission/not-from-words, hooks/unparsed-stop-reads-unknown,
+  facts/hook-timeouts, context/reaches-model, drive/order-by-seq, drive/clock-stepped-back, drive/unknown-not-finished,
+  drive/steer, drive/follow-up, drive/interrupt, drive/respond, drive/history, deliver/answer-permission,
+  deliver/one-owner-per-session, de… (cut)
+
+ Test Files  7 failed (7)
+      Tests  15 failed (15)
+   Duration  17.48s
+
+What the base does with this suite's fixtures, seen in scratch runs of `deep-show run` before the suite was written
+(README: What the base does):
+
+- The door scene, drawn by alpha as revision 1 of the shared document, is presented. A patch on revision 1 deleting
+  the door is refused with two issues:
+    {"code":"ref_unresolved","ids":["handle.left"],"path":"items/handle.left/parent","actual":"door", …}
+    {"code":"ref_unresolved","ids":["handle.right"],"path":"items/handle.right/parent","actual":"door", …}
+  and none for constraints/aim/target, drivers/sway/vars/a or items/doors/params/of/0. A patch deleting the
+  constraint `aim` is refused {"code":"ref_unresolved","ids":["aim"],"path":"items/aim","actual":"aim","what":"no such item"}.
+- The cost scene is presented in the export class; its twin with every cap at 0.0001 is refused with
+    {"code":"over_budget","ids":["panel.a","panel.b","cam"],"path":"budget","actual":{"cpu_ms":3.7766,"gpu_ms":0.0162,
+     "gpu_mb":8.6016,"operators":{…},"fingerprint":{"model":"Mac15,7",…}}, …}
+- The posters (revision 0 of a shared document) and the 5,000-item city are presented; deep_query's rows read them.
+- The shipped adapters map a PreToolUse of mcp__deep__deep_query to a tool.before of kind "mcp", by the rule
+  /toolKinds/prefixes/mcp__, for Claude Code and for Codex.

@@ -1812,7 +1812,7 @@ export class Core {
       // The lone-command hook retains its #83 reading; joined calls use the branch lookup.
       if (draft.kind === 'tool.after') await this.delivery.prAfter(meta, data.command);
       if (draft.kind === 'session.start') {
-        data.loads = await loadsOf(meta.cwd).catch(() => []);
+        data.loads = await loadsOf(meta.cwd, live.agent ?? meta.agent).catch(() => []);
         if (!foreign) void this.control.enteredProject(meta.session, meta.cwd);
         // Each server's tool list, read off this hook's path: recorded after the start, its changes held for you.
         if (!foreign && session) void this.holds.listed(meta.session, live.agent, meta.cwd).catch((error: unknown) => process.stderr.write(`deep hub: tool lists for ${meta.session} not recorded: ${error instanceof Error ? error.message : String(error)}\n`));

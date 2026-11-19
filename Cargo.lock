@@ -2719,6 +2719,7 @@ dependencies = [
  "deep-canvas-seams",
  "deep-canvas-sheet",
  "deep-canvas-vector",
+ "deep-codecs",
  "deep-gpu",
  "deep-images",
  "deep-logic",

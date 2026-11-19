@@ -68,6 +68,14 @@
     const c = axes.get(node.id);
     if (!c) return el('div', { class: 'control', role: node.role || null, 'aria-label': node.name, 'data-deep-id': node.id }, node.name);
     const value = s.controls[c.id];
+    // A momentary button (#1040): pressed, then released, each its own edge.
+    if (c.kind === 'press') {
+      const [up, down] = c.options;
+      const on = same(value, down.value);
+      const b = el('button', { type: 'button', class: 'control', 'aria-label': node.name, 'data-deep-id': node.id, 'data-control': c.id, 'aria-pressed': String(on) }, node.name);
+      b.addEventListener('click', () => play(edgeTo(s, c.id, on ? up.value : down.value)));
+      return b;
+    }
     if (c.kind === 'toggle') {
       const on = value === true;
       const checked = node.role === 'switch' || node.role === 'checkbox';
@@ -171,6 +179,7 @@
 
   // The clip's last frame stays on screen until the next state's still has decoded in its place,
   // so a landing never shows the state it left.
+  let landed = null;
   async function land(edge) {
     const to = states.get(edge.to);
     await ready(stillOf(to));
@@ -180,6 +189,7 @@
     html.removeAttribute('data-deep-edge');
     announce(states.get(edge.from), to);
     busy = false;
+    if (landed) landed();
   }
 
   // An edge plays its clip, with its sound, and lands; one that takes no time lands at once. A
@@ -230,4 +240,25 @@
     bound.append(item);
   }
   show(current);
+
+  // A tour page (#1040: a web player's fallback past the page's caps) plays the piece's tour by itself, as the tour
+  // plays where no one gives input: each edge's clip at its key's own time on the tour's clock, which starts with the
+  // page, or as soon as the clip before it has landed, in the tour's order. Your first gesture stops it, and the page
+  // is yours from there.
+  if (manifest.tour) {
+    const FLICKS = 705600000;
+    const begun = performance.now();
+    let stopped = false;
+    const stop = () => { stopped = true; landed = null; };
+    window.addEventListener('pointerdown', stop, { capture: true, once: true });
+    window.addEventListener('keydown', stop, { capture: true, once: true });
+    const step = () => {
+      const edge = edgesOf(states.get(current))[0];
+      if (stopped || !edge) return;
+      const due = begun + ((edge.tour_at || 0) / FLICKS) * 1000;
+      setTimeout(() => { if (!stopped) play(edge); }, Math.max(0, due - performance.now()));
+    };
+    landed = step;
+    step();
+  }
 })();
