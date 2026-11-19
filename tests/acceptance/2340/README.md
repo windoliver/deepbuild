@@ -141,7 +141,8 @@ open issue. The issue numbers are made up; no fixture holds a secret or personal
 ### The stand-in
 
 `gh-standin.mjs`, run by a `gh` launcher first on `PATH` in a sandbox whose `HOME`, `TMPDIR` and XDG folders are its
-own, with no GitHub token, host or repo variable and no `DEEP_OPEN_ISSUES`. It serves the calls above from the test's
+own, with no GitHub token, host or repo variable, no `DEEP_OPEN_ISSUES`, and no git variable that points at another
+repository (`GIT_DIR`, `GIT_WORK_TREE` and the like). It serves the calls above from the test's
 tracker in pages of 100, whatever `per_page` says (the issue's "pages of 100"); a page past the end is `[]`. With
 `failFromPage: 2`, every page of the closed issues from the second on fails as an HTTP 502 does (`gh: Server Error
 (HTTP 502)` on stderr, exit 1). It records every call, one line of arguments each; the tests show the calls in their
@@ -150,9 +151,13 @@ messages and diagnostics, which is the Proof's "recorded `gh` calls".
 ### The scratch copy
 
 Each run gets a sandbox under the OS temp folder, removed after the test. Its `repo/` holds the checkout's own root
-files (never a `.env*`) and `scripts/` (without any `node_modules` or `target`), the fixture's two docs as its only `docs/`,
-`node_modules` linked to the checkout's, and a fresh `git init` with `https://github.com/windoliver/deepbuild.git` as
-`origin`. The script runs there with that folder as its working folder. A planted program runs the same way, from
+files (never `.git` or a `.env*`) and `scripts/` (without any `node_modules`, `target` or `.git`), the fixture's two
+docs as its only `docs/`, `node_modules` linked to the checkout's, and a fresh repository of its own from `git init`,
+with `https://github.com/windoliver/deepbuild.git` as `origin`. In a git worktree the checkout's `.git` is a file
+pointing at the shared repository, so it is never copied, and git runs there without `GIT_DIR`, `GIT_WORK_TREE` or
+the other variables that point it elsewhere: the copy's `git init` can't reach the checkout's repository. `remote add`
+runs only once `repo/.git` is the new repository's own folder; otherwise the run stops `BLOCKED`. The script runs
+there with that folder as its working folder. A planted program runs the same way, from
 `tests/acceptance/2340/planted/`.
 
 ## Criteria to tests, and the planted programs
@@ -186,7 +191,9 @@ assertion, and no planted program runs on the base (`BASE-FAILURE.txt`).
 In a scratch copy of the base outside this checkout (its `scripts/`, three root files and this folder),
 `scripts/design-issues.mjs` was the twin with no fault, `import { main } from './design-issues-twin.mjs'; main();`, with
 `planted/twin.mjs` copied beside it as `scripts/design-issues-twin.mjs`. All six tests passed there, through the
-throttle, each printing its planted program's failure as a diagnostic (`BASE-FAILURE.txt`, second part). Before that,
+throttle, each printing its planted program's failure as a diagnostic. They passed the same way from a git worktree of
+a throwaway repository with an `origin`, once plainly and once with `GIT_DIR` and `GIT_WORK_TREE` pointing at that
+repository, and every file under its `.git` kept its content, size and mtime (`BASE-FAILURE.txt`, second part). Before that,
 a probe outside the suite ran the clean twin and each planted program once over its fixture and read every judgement
 on each: the clean twin passed all of them, and each planted program failed its own criterion's judgement, naming what
 the issue says. No other wrong program was run.

@@ -4,7 +4,7 @@
 // planted program. The README gives the surface they read, the fixture and the stand-in. Node built-ins only.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -109,25 +109,35 @@ export const ROW = {
 /** AC4's 250 closed issues, #9250 down to #9001, each closed as completed and linking the alpha section. */
 export const PAGED = Array.from({ length: 250 }, (_, i) => issue(9250 - i, 'closed', 'completed', [`**Design:** [Alpha section](${BLOB}${TD}#alpha-section)`]));
 
+// The variables that point git at a repository other than the one its working folder holds. None reaches git in a
+// scratch copy, or the script run there.
+const GIT_LOCATION = ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR', 'GIT_INDEX_FILE', 'GIT_OBJECT_DIRECTORY', 'GIT_ALTERNATE_OBJECT_DIRECTORIES', 'GIT_NAMESPACE'];
+const withoutGitLocation = (env) => Object.fromEntries(Object.entries(env).filter(([name]) => !GIT_LOCATION.includes(name)));
+
 /**
  * A sandbox under the OS temp folder, removed after the test. `repo/` holds the checkout's own root files and
  * scripts/, the fixture's two docs as its only docs/, node_modules linked to the checkout's, and a fresh git
- * repository whose origin is the project's. HOME, TMPDIR and the XDG folders are the sandbox's own.
+ * repository of its own whose origin is the project's. HOME, TMPDIR and the XDG folders are the sandbox's own.
  */
 function scratch(t) {
   const sandbox = realpathSync(mkdtempSync(join(tmpdir(), 'deep-2340-')));
   t.after(() => rmSync(sandbox, { recursive: true, force: true }));
   const repo = join(sandbox, 'repo');
   mkdirSync(join(repo, 'docs'), { recursive: true });
-  // The root's own files, but never a local .env, which may hold secrets.
-  for (const entry of readdirSync(CHECKOUT, { withFileTypes: true })) if (entry.isFile() && !entry.name.startsWith('.env')) copyFileSync(join(CHECKOUT, entry.name), join(repo, entry.name));
-  cpSync(join(CHECKOUT, 'scripts'), join(repo, 'scripts'), { recursive: true, filter: (from) => !/\/(?:node_modules|target)(?:\/|$)/.test(from.slice(CHECKOUT.length)) });
+  // The root's own files, but never .git, which in a worktree is a file pointing at the shared repository, and never
+  // a local .env, which may hold secrets.
+  for (const entry of readdirSync(CHECKOUT, { withFileTypes: true })) if (entry.isFile() && entry.name !== '.git' && !entry.name.startsWith('.env')) copyFileSync(join(CHECKOUT, entry.name), join(repo, entry.name));
+  cpSync(join(CHECKOUT, 'scripts'), join(repo, 'scripts'), { recursive: true, filter: (from) => !/\/(?:node_modules|target|\.git)(?:\/|$)/.test(from.slice(CHECKOUT.length)) });
   for (const [path, text] of Object.entries(DOCS)) writeFileSync(join(repo, path), text);
   if (existsSync(join(CHECKOUT, 'node_modules'))) symlinkSync(join(CHECKOUT, 'node_modules'), join(repo, 'node_modules'));
-  for (const args of [['init', '-q'], ['remote', 'add', 'origin', 'https://github.com/windoliver/deepbuild.git']]) {
-    const git = spawnSync('git', ['-c', 'core.hooksPath=/dev/null', ...args], { cwd: repo, encoding: 'utf8' });
-    if (git.status !== 0) throw new Error(`BLOCKED: git ${args.join(' ')} failed in the scratch copy: ${git.error?.message ?? git.stderr}`);
-  }
+  const git = (args) => {
+    const run = spawnSync('git', ['-c', 'core.hooksPath=/dev/null', ...args], { cwd: repo, env: withoutGitLocation(process.env), encoding: 'utf8' });
+    if (run.status !== 0) throw new Error(`BLOCKED: git ${args.join(' ')} failed in the scratch copy: ${run.error?.message ?? run.stderr}`);
+  };
+  git(['init', '-q']);
+  // remote add writes the repository's config, so only into the copy's own new repository.
+  if (!lstatSync(join(repo, '.git'), { throwIfNoEntry: false })?.isDirectory()) throw new Error(`BLOCKED: git init made no repository of the scratch copy's own at ${join(repo, '.git')}`);
+  git(['remote', 'add', 'origin', 'https://github.com/windoliver/deepbuild.git']);
   for (const folder of ['home', 'tmp', 'cache', 'config', 'bin', 'out']) mkdirSync(join(sandbox, folder));
   return { sandbox, repo };
 }
@@ -146,9 +156,12 @@ function standIn(sandbox, issues, failFromPage) {
   return log;
 }
 
-/** No GitHub token, host or repo, no cached open issues, the sandbox's own home and the stand-in first on PATH. */
+/**
+ * No GitHub token, host or repo, no git variable pointing at another repository, no cached open issues, the sandbox's
+ * own home and the stand-in first on PATH.
+ */
 function sandboxEnv(sandbox) {
-  const env = { ...process.env };
+  const env = withoutGitLocation(process.env);
   for (const name of ['GH_TOKEN', 'GITHUB_TOKEN', 'GH_ENTERPRISE_TOKEN', 'GITHUB_ENTERPRISE_TOKEN', 'GH_HOST', 'GH_REPO', 'DEEP_OPEN_ISSUES', 'DEEP_PREFLIGHT', 'NODE_OPTIONS', 'NODE_TEST_CONTEXT']) delete env[name];
   return {
     ...env,
