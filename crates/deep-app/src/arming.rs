@@ -13,11 +13,12 @@ use serde::{Deserialize, Serialize};
 /// `arm_after`: how long a presented card stays still before it arms, in ms.
 pub const ARM_AFTER: u64 = 500;
 
-/// What the card says on a click before it arms, while its interval runs (#1808: only then).
-pub const HOLD_STILL: &str = "Hold still";
+/// What the card says on a click before it arms, while its interval runs (#1808: only then): its key in the app's
+/// table (#2403).
+pub const HOLD_STILL: &str = "arming.hold_still";
 
 /// What a card too tall for its page says on a click: its options aren't all in view, so it can't arm (#1808).
-pub const TOO_SMALL: &str = "Make the window taller";
+pub const TOO_SMALL: &str = "arming.too_small";
 
 /// Where an input came from, as the platform names it (Input router: `source`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -220,12 +221,13 @@ impl Machine {
         self.tick(t);
     }
 
-    /// What a press before the card armed is told: why it can't arm, or to hold still while only its interval runs.
+    /// What a press before the card armed is told, in the language shown: why it can't arm, or to hold still while
+    /// only its interval runs.
     pub fn says(&self) -> &'static str {
         if !self.fits() {
-            TOO_SMALL
+            crate::copy::text(TOO_SMALL)
         } else {
-            self.held.unwrap_or(HOLD_STILL)
+            self.held.unwrap_or_else(|| crate::copy::text(HOLD_STILL))
         }
     }
 
@@ -409,10 +411,7 @@ mod tests {
         let mut card = presented();
         assert!(matches!(
             click(&mut card, hardware(1_499, 0)),
-            Outcome::Refused {
-                seq: 1,
-                says: HOLD_STILL
-            }
+            Outcome::Refused { seq: 1, says } if says == crate::copy::text(HOLD_STILL)
         ));
         assert_eq!(card.state(), State::Presented { seq: 1, t: 1_000 });
         assert_eq!(

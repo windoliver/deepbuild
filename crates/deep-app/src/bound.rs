@@ -49,7 +49,11 @@ pub struct Shown {
 impl Shown {
     /// The accessibility name its node carries, which the replica finds it by.
     pub fn name(&self) -> String {
-        format!("{} {}: {}", self.surface.name(), self.id, self.text)
+        let key = match self.surface {
+            Surface::Card => "bound.card_named",
+            Surface::Panel => "bound.panel_named",
+        };
+        crate::copy::fill(key, &[&self.id, &self.text])
     }
 }
 
@@ -194,10 +198,10 @@ fn resolve(runs: &[Run], surface: Surface, id: &str, bind: &Value) -> Option<Sho
     Some(Shown {
         surface,
         id: id.to_string(),
-        from: format!(
-            "{} · {assertion}",
-            of.map_or("no run", |r| r.check.as_str())
-        ),
+        from: {
+            let check = of.map_or(crate::copy::text("bound.no_run"), |r| r.check.as_str());
+            format!("{check} · {assertion}")
+        },
         text: runs::text(bind, source, value, 0)?,
         missing,
     })

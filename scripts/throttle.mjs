@@ -11,7 +11,7 @@ import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // The Mac has one bay pair and one build at a time; the Spark, Linux, has the cores for more.
-const LIMITS = process.platform === 'darwin' ? { build: 1, 'bay-pair': 1, test: 2, timed: 1 } : { build: 2, 'bay-pair': 3, test: 4, timed: 1 };
+const LIMITS = process.platform === 'darwin' ? { build: 1, 'bay-pair': 1, test: 2, timed: 1 } : { build: 2, 'bay-pair': 3, test: 6, timed: 1 };
 const CLASSES = Object.keys(LIMITS);
 const POLL_MS = 200;
 // A CLI grant's default bound, in minutes: the longest full run seen on the Spark was about 9 hours.
