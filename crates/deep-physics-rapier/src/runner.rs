@@ -33,6 +33,7 @@ use serde_json::{json, Map, Value};
 mod audit;
 pub mod centre;
 pub mod contact;
+pub mod fast;
 mod held;
 pub mod kit;
 #[cfg(not(target_arch = "wasm32"))]
@@ -84,6 +85,9 @@ pub struct Run {
     kit_planted: deep_canvas_physics::kit::Planted,
     /// #191 criterion 12's planted recipe: it leaves a flagged body's ccd off.
     leave_ccd_off: bool,
+    /// #2239's planted lint, and its planted kit: it turns ccd on for a flagged kinematic body too.
+    lint: deep_canvas_physics::fast::Planted,
+    ccd_on_kinematic: bool,
     /// #251's planted vehicle controller or check.
     vehicle: crate::VehiclePlant,
     /// #2240's planted check or output.
@@ -459,6 +463,8 @@ impl Run {
             test: None,
             kit_planted: deep_canvas_physics::kit::Planted::None,
             leave_ccd_off: false,
+            lint: deep_canvas_physics::fast::Planted::None,
+            ccd_on_kinematic: false,
             vehicle: crate::VehiclePlant::None,
             centre: centre::Plant::None,
             #[cfg(not(target_arch = "wasm32"))]
@@ -495,7 +501,8 @@ impl Run {
                     && !vehicle::planted(name, &mut run)
                     && !walk::planted(name, &mut run)
                     && !contact::planted(name, &mut run)
-                    && !centre::planted(name, &mut run) =>
+                    && !centre::planted(name, &mut run)
+                    && !fast::planted(name, &mut run) =>
             {
                 return None
             }
@@ -618,10 +625,9 @@ impl Run {
         let c = b.canonical();
         let joints = b.joints();
         t.step_hashes.push(self.hash(&c, &joints));
-        for x in c.iter().filter(|x| x.values.len() == FIELDS.len()) {
-            t.fast
-                .at(k, &x.id, [0, 1, 2].map(|i| f64::from(x.values[i])));
-        }
+        let bodies = c.iter().filter(|x| x.values.len() == FIELDS.len());
+        t.fast
+            .step(k, bodies.map(|x| (x.id.as_str(), x.values.as_slice())));
         for (id, o) in &w.outputs {
             let (Some(at), Some(x)) = (o.read.vec3_at(), c.iter().find(|x| x.id == o.from)) else {
                 continue;
@@ -737,7 +743,7 @@ impl Run {
         let mut t = Trace {
             bodies,
             particles,
-            fast: deep_canvas_physics::fast::FastBodies::new(&w),
+            fast: deep_canvas_physics::fast::FastBodies::new(&w, self.caps.sweep, self.lint),
             vehicles: vehicle::named(call, &b),
             ..Trace::default()
         };

@@ -1,0 +1,50 @@
+Base 9550dc0f04d45844b5d7bb9ce74d89926c681724, on a Mac17,10 (a reference Mac), one-minute load about 1.2 a core.
+
+Ran once each, after `npm ci` and `cargo build --locked --bin deep-gpu` (CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0):
+
+  node node_modules/typescript/bin/tsc -p tests/acceptance/1993/fields/tsconfig.json
+    passes, no error.
+
+  CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1993/fields --no-file-parallelism --testTimeout=600000 <file>
+
+cloth.test.ts: 1 test, FAILS at its own assertion, for the criterion's "held as three fields".
+  #1993.9b40f0f2 over 600 steps of 8 constraint passes … fails the 0 m line
+    cloth.test.ts:180  AssertionError: held as three fields: carried and checkpointed together on every frame:
+      expected [ …(3) ] to deeply equal []
+      "at frame 360 the three fields aren't carried and checkpointed together: cloth.position at step 360 holding
+       checkpoints [0, 120, 240, 360]; cloth.previous at step 360 holding checkpoints [0, 120, 240, 360];
+       cloth.pinned at step 360 holding checkpoints [0, 60, 120, 180, 240, 300, 360]"
+  The base keeps a ring for each carried storage output, so the three fields' rings thin apart. Everything before
+  that line passes at the base, which already steps several carried storage outputs of one operator: the ten
+  operators check, the start is the stated one and the fields step, every pinned point moves 0 m, and the longest
+  edge peaks at 1.037 × its rest length (step 82). With that one line taken out of a scratch copy (deleted), the rest
+  of the test passed at the base too: the seek to step 300 has the play's three hashes, restored from step 240, and
+  the planted cloth fails the 0 m line with "pinned point 0 (row 0, column 0) moved 0.00002724318272348735 m by
+  step 1, not 0 m (64 pinned points moved)", which is g ÷ rate².
+
+bodies.test.ts: 2 tests, both PASS at the base. Nothing criterion 6 names is missing there.
+  #1993.7a269d05 over 1,000 steps total momentum stays within 1e-5 … fails the momentum line: passes (9.9 s).
+    At the base the points' total momentum drifts 4.2e-8 of the summed momentum magnitudes by step 1,000; the planted
+    points (the others' positions read from this step) drift 1.6e-5 at step 1 and 8.8e-2 by step 1,000, and fail the
+    line as the test expects.
+  #1993.7a269d05 one step takes under 2 ms of GPU on the reference Mac …: passes (23.4 s).
+    "4,096 points under softened gravity, GPU ms a step (p95 of 1,000 steps): 0.287, 0.338, 0.336, 0.379, 0.368
+     against 2 (margin 5%, load 1.19 a core)"
+  Why: #252's code already carries several storage outputs of one stepped operator and reads each as the previous
+  step left it, and the points need nothing else: the fixture fits the base's limits (8 fetches an element, 8 storage
+  buffers an operator, 1,048,576 elements a dispatch), and its wrong program is a wrong document. So these two tests
+  hold criterion 6 without failing at the base; they prove it only through the planted step they run themselves.
+
+taste.test.ts: 1 test, FAILS at its own assertion, because the base doesn't carry a texture.
+  #1993.c2ad7c76 the ring at step 100, the pattern at 10 s and the hanging cloth …
+    taste.test.ts:79  AssertionError: ring: the screenshot's frame shows carried water.height at step 100:
+      expected undefined to be 100
+  At the base the check reads past a texture output's `carry`, a texture input's `step: previous` and
+  `stepped.bound` (the ring's and the pattern's operators are accepted), and a stepped operator that writes a
+  texture doesn't run: its fallback draws and its frames carry no `carried` row. The ring and the pattern therefore
+  never ran here; their arithmetic was run on the CPU instead (ring crest 20.5, 40.5 and 60.5 cells out at steps 50,
+  100 and 150; the pattern a labyrinth over about 60% of the grid at step 6,000). With the fixtures cut to the cloth
+  in a scratch copy (deleted), the test ran at the base to its last step: the cloth's screenshot at step 600, its
+  61-frame recording, and "INCONCLUSIVE: no taste call is recorded on these files …".
+
+Not run: scripts/affected.mjs, preflight, any other suite.

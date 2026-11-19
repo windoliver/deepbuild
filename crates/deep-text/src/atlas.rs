@@ -157,6 +157,8 @@ struct Key {
     phase: [u8; 2],
     /// #1964: the glyph's faux-italic slant in degrees, as its bits.
     skew: u32,
+    /// #1215: turned 90° clockwise, as a vertical run turns a glyph.
+    turn: bool,
     /// #1484: the variation coordinates it was shaped at, so two instances of a variable face
     /// never share a raster.
     coords: Arc<[i16]>,
@@ -263,6 +265,19 @@ impl Atlas {
         phase: [u8; 2],
         skew: f32,
     ) -> Option<Placed> {
+        self.glyph_turned(font, (glyph, coords), device_size, phase, (skew, false))
+    }
+
+    /// [`Atlas::glyph_at`], turned 90° clockwise about its pen position when `turn` (#1215: a
+    /// glyph a vertical run turns).
+    pub fn glyph_turned(
+        &mut self,
+        font: &FontData,
+        (glyph, coords): (u32, &Arc<[i16]>),
+        device_size: f32,
+        phase: [u8; 2],
+        (skew, turn): (f32, bool),
+    ) -> Option<Placed> {
         let phase = phase.map(|p| p.min(PHASES - 1));
         let key = Key {
             blob: font.data.id(),
@@ -271,6 +286,7 @@ impl Atlas {
             size64: (device_size * 64.).round() as u32,
             phase,
             skew: skew.to_bits(),
+            turn,
             coords: coords.clone(),
         };
         if let Some(placed) = self.placed.get(&key) {
@@ -283,7 +299,7 @@ impl Atlas {
             self.placed.insert(key, None);
             return None;
         }
-        let placed = self.rasterize(font, (glyph, coords), device_size, phase, skew);
+        let placed = self.rasterize(font, (glyph, coords), device_size, phase, (skew, turn));
         if self.full {
             return None;
         }
@@ -297,15 +313,23 @@ impl Atlas {
         (glyph, coords): (u32, &[i16]),
         device_size: f32,
         phase: [u8; 2],
-        skew: f32,
+        (skew, turn): (f32, bool),
     ) -> Option<Placed> {
         // Room for an em of ascent and bearings on every side; the glyph's box is found after.
         let margin = (0.5 * device_size).ceil() + 2.;
         let width = (device_size * 2.5 + 2. * margin).ceil() as u16;
         let height = (device_size * 2. + 2. * margin).ceil() as u16;
         // Whole device pixels, so the raster and its placement agree on the baseline; the glyph's
-        // pen sits `phase` along from there.
-        let origin = (margin, margin + (device_size * 1.25).ceil());
+        // pen sits `phase` along from there. A turned glyph's ascent runs right of its pen and its
+        // advance down from it.
+        let origin = if turn {
+            (
+                margin + (device_size * 0.5).ceil(),
+                margin + (device_size * 0.25).ceil(),
+            )
+        } else {
+            (margin, margin + (device_size * 1.25).ceil())
+        };
         let ctx = self
             .ctx
             .get_or_insert_with(|| RenderContext::new_with(width, height, self.settings));
@@ -315,7 +339,7 @@ impl Atlas {
         ctx.glyph_run(&mut self.resources, font)
             .font_size(device_size)
             .hint(false)
-            .glyph_transform(slant(skew))
+            .glyph_transform(glyph_transform(skew, turn))
             .normalized_coords(coords)
             .fill_glyphs(std::iter::once(VelloGlyph {
                 id: glyph,
@@ -421,4 +445,15 @@ impl Atlas {
 /// asks for an italic it lacks. Vello applies it with y down, so a forward lean shears x by −y.
 pub fn slant(skew: f32) -> Affine {
     Affine::skew(-deep_canvas::ops::tan(f64::from(skew).to_radians()), 0.)
+}
+
+/// #1215: a glyph's transform about its pen position: its slant, then, for a glyph a vertical
+/// run turns, a quarter turn clockwise (y down), so its baseline runs down the column and its
+/// ascent faces the column's start side.
+pub fn glyph_transform(skew: f32, turn: bool) -> Affine {
+    if turn {
+        Affine::new([0., 1., -1., 0., 0., 0.]) * slant(skew)
+    } else {
+        slant(skew)
+    }
 }

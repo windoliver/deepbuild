@@ -80,6 +80,8 @@ impl Run {
             test: self.test,
             kit_planted: self.kit_planted,
             leave_ccd_off: self.leave_ccd_off,
+            lint: self.lint,
+            ccd_on_kinematic: self.ccd_on_kinematic,
             views: std::cell::RefCell::default(),
         }
     }

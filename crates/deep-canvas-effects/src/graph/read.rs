@@ -1,5 +1,26 @@
 use super::*;
 
+/// An output's carried state (#252; #1993 on a texture): `carry: {every: steps ≥ 1, budget:
+/// bytes}`.
+fn carry(name: &str, output: &Value, issues: &mut Vec<Issue>) -> Option<Carry> {
+    let c = output.get("carry")?;
+    let every = c
+        .get("every")
+        .and_then(Value::as_u64)
+        .and_then(|e| u32::try_from(e).ok());
+    match (every, c.get("budget").and_then(Value::as_u64)) {
+        (Some(every @ 1..), Some(budget)) => Some(Carry { every, budget }),
+        _ => {
+            issues.push(Issue::at_path(
+                "operator_type",
+                &format!("outputs/{name}/carry"),
+                "carry is {every: steps, at least 1, budget: bytes}",
+            ));
+            None
+        }
+    }
+}
+
 /// Reads an operator. Refuses shader text in a field of its own (`operator_source`), unknown
 /// fields and malformed parts (`operator_type`) before any later check runs.
 pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
@@ -222,6 +243,7 @@ pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
                         size: [size[0], size[1], if dim3 { size[2] } else { 1 }],
                         dim3,
                         mips,
+                        carry: (!dim3).then(|| carry(name, v, &mut issues)).flatten(),
                     },
                 );
                 continue;
@@ -262,25 +284,7 @@ pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
                     ));
                 }
                 let sc = s.get("type").and_then(Value::as_str).and_then(Ty::parse);
-                // Carried state (#252): `carry: {every: steps ≥ 1, budget: bytes}`.
-                let carry = v.get("carry").map(|c| {
-                    let every = c
-                        .get("every")
-                        .and_then(Value::as_u64)
-                        .and_then(|e| u32::try_from(e).ok());
-                    match (every, c.get("budget").and_then(Value::as_u64)) {
-                        (Some(every @ 1..), Some(budget)) => Some(Carry { every, budget }),
-                        _ => {
-                            issues.push(Issue::at_path(
-                                "operator_type",
-                                &format!("outputs/{name}/carry"),
-                                "carry is {every: steps, at least 1, budget: bytes}",
-                            ));
-                            None
-                        }
-                    }
-                });
-                let carry = carry.flatten();
+                let carry = carry(name, v, &mut issues);
                 match (sc, s.get("count").and_then(Value::as_u64)) {
                     (Some(Ty::V(sc, 1)), Some(count)) => {
                         storage.insert(
@@ -429,6 +433,32 @@ pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
             }
         },
     };
+    // Its stability bound (#1993): `stepped.bound: {speed: m/s, cell: m, max = 0.5}`.
+    let bound = o
+        .get("stepped")
+        .and_then(|st| st.get("bound"))
+        .and_then(|b| {
+            let positive = |k: &str| {
+                b.get(k)
+                    .and_then(Value::as_f64)
+                    .filter(|x| *x > 0.0 && x.is_finite())
+            };
+            let max = match b.get("max") {
+                None => Some(0.5),
+                Some(_) => positive("max"),
+            };
+            match (positive("speed"), positive("cell"), max) {
+                (Some(speed), Some(cell), Some(max)) => Some(Bound { speed, cell, max }),
+                _ => {
+                    issues.push(Issue::at_path(
+                    "operator_type",
+                    "stepped/bound",
+                    "bound is {speed: m/s, cell: m, max: a ratio, 0.5 unless given}, each above 0",
+                ));
+                    None
+                }
+            }
+        });
     let origin = match o.get("origin").and_then(Value::as_str) {
         Some("shipped") => Origin::Shipped,
         Some("pack") => Origin::Pack,
@@ -467,6 +497,7 @@ pub fn read(v: &Value) -> Result<Operator, Vec<Issue>> {
         elements: elements.and_then(Value::as_u64).unwrap_or(0) as u32,
         counted,
         stepped,
+        bound,
         workgroup: o.get("workgroup").and_then(Value::as_u64).unwrap_or(64) as u32,
         source,
         uses,

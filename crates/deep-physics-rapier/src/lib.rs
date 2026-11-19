@@ -160,12 +160,20 @@ pub enum Twin {
     /// inertia.
     CentreIgnored,
     CentreParallelAxis,
+    /// #2239's: a wrapper that drops each body's `ccd`, so none starts a sweep of another body.
+    DropsBodyCcd,
     /// #2241's wrong belts: a wrapper that leaves the contact hook out; one that applies a
     /// belt's speed along world +X, however its shape use is turned; and one that takes it
     /// along level ground, not in the contact's plane.
     BeltWithoutHook,
     BeltAlongWorldX,
     BeltAlongLevel,
+    /// #2243's wrong wrappers: one that leaves each moved character body's pose stale until the
+    /// engine's step, so every character body moves against the last step's poses; and one
+    /// whose walker passes into a character body that wants no move, which its own controller
+    /// then moves out of the way.
+    StalePoses,
+    StandingGivesWay,
 }
 
 /// A Rapier world behind the backend interface.
@@ -223,6 +231,8 @@ pub struct Rapier {
     walked: Vec<Raw>,
     up: Vector,
     fall: f32,
+    /// #2243: within a step's character moves, what the later ones cast against.
+    stage: Option<character::Stage>,
     /// #251: its vehicle bodies, and the wheel contacts this step's places and drives wrote.
     pub(crate) vehicles: vehicle::Vehicles,
     wheel_rows: Vec<Raw>,
@@ -960,6 +970,7 @@ impl Backend for Rapier {
                 }
                 _ => RigidBodyBuilder::kinematic_position_based(),
             };
+            let ccd = b.ccd && !matches!(self.twin, Twin::NoSweep | Twin::DropsBodyCcd);
             let mut rb = builder
                 .pose(pose(&b.pose))
                 .linvel(v3(b.linear))
@@ -967,10 +978,10 @@ impl Backend for Rapier {
                 .linear_damping(b.linear_damping as f32)
                 .angular_damping(b.angular_damping as f32)
                 .gravity_scale(b.gravity_scale as f32)
-                .ccd_enabled(b.ccd && self.twin != Twin::NoSweep)
+                .ccd_enabled(ccd)
                 // #191: a body with ccd is also met by the contacts its next step reaches, so its
                 // contact begins in the step it hits, not the one after.
-                .soft_ccd_prediction(if b.ccd && self.twin != Twin::NoSweep {
+                .soft_ccd_prediction(if ccd {
                     (w.solver.max_speed / w.step_rate) as f32
                 } else {
                     0.0

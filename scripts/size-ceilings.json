@@ -1,6 +1,6 @@
 {
   "crates/deep-app/src/views.rs": 3606,
-  "crates/deep-canvas-effects/src/check.rs": 1698,
+  "crates/deep-canvas-effects/src/check.rs": 1660,
   "crates/deep-canvas-effects/src/emit.rs": 1626,
   "crates/deep-canvas-effects/src/interp.rs": 1501,
   "crates/deep-canvas-marks/src/animator.rs": 1782,
