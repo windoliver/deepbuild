@@ -52,6 +52,9 @@ Only the walker writes: the standing one's controller makes no move, so it touch
 natively and in the wasm32 build, where all 60 fixtures pass. On `no_character_controller` both read
 `excluded_by_caps`, 36 pass, 25 are excluded and the verdict is `pass`.
 
+After the merge with main, which brought #2241's belts, the kit holds 64 fixtures and all pass natively, and the
+blind suite reads 8 of 8 again. The wasm32 kit and the proof lanes below were run before that merge and not after.
+
 ## What stayed as it was
 
 - The 58 fixture worlds the base's kit holds and #182's level of 16 character bodies among 499 pillars (600 steps),
