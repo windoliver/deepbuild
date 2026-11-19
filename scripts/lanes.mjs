@@ -1067,6 +1067,9 @@ alone.push('tests/acceptance/1415/');
 // refusal sets it reverses (tests/acceptance/806-redraft-ac3/DISPUTE.md); its blind redraft runs in its place.
 alone.push('tests/acceptance/806-redraft-ac3/');
 byHand.push('tests/acceptance/806/unbound.test.ts');
+// #1430's files build deep-text in release; ac4-budgets judges the text-reflow budgets on the reference Mac.
+alone.push('tests/acceptance/1430/');
+timed.push('tests/acceptance/1430/ac4-budgets.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
