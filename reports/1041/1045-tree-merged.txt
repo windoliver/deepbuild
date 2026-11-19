@@ -1,13 +1,3 @@
-# tests/acceptance/1045/tree.test.ts after the fourth merge: first at a load above 800 (a hook and a ready wait timed out), then once more at a load near 35
- FAIL  tree.test.ts [ tree.test.ts ]
-Error: Hook timed out in 180000ms.
-⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
- FAIL  tree.test.ts > AC1 #1045.ccb3fe36 the accessibility fixture figure in the web player keeps the app's accessibility tree as DOM beside its canvas > AC1 #1045.ccb3fe36 in headless Chrome the figure's tree equals the app's as data, Tab reaches every contro
-AssertionError: the figure's player: the player (<deep-player>) is ready within 60000 ms; it shows no <deep-player>, notices [], page errors []: expected false to be true // Object.is equality
- Test Files  1 failed (1)
-      Tests  1 failed | 2 passed (3)
-
-# again
 deep lease: DeepBuild isn't set up here (no hub token), so `node node_modules/vitest/vitest.mjs run --root tests/acceptance/1045 tree.test.ts --no-file-parallelism --testTimeout=3600000 --hookTimeout=180000` runs unleased
 
  RUN  v5.0.5 <checkout>/tests/acceptance/1045
@@ -15,6 +5,6 @@ deep lease: DeepBuild isn't set up here (no hub token), so `node node_modules/vi
 
  Test Files  1 passed (1)
       Tests  3 passed (3)
-   Start at  14:07:28
-   Duration  149.95s (tests 100%)
+   Start at  17:52:31
+   Duration  64.10s (tests 100%)
 

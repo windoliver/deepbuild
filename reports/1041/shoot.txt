@@ -1,17 +1,3 @@
-# docs/evidence/1041/shoot.test.mjs after the fourth merge: three runs
-## 1: a page evaluation timed out at a load above 800
-⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
- FAIL  shoot.test.mjs > takes the #1041 taste pictures
-Error: Runtime.evaluate: no answer within 60000 ms
- Test Files  1 failed (1)
-      Tests  1 failed (1)
-## 2: target/debug/deep-show was not there (ENOENT) when the run started
-⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
- FAIL  shoot.test.mjs > takes the #1041 taste pictures
-+ spawnSync <checkout>/target/debug/deep-show ENOENT
- Test Files  1 failed (1)
-      Tests  1 failed (1)
-## 3
 deep lease: DeepBuild isn't set up here (no hub token), so `node node_modules/vitest/vitest.mjs run --root docs/evidence/1041 shoot.test.mjs --testTimeout=900000` runs unleased
 
  RUN  v5.0.5 <checkout>/docs/evidence/1041
@@ -19,6 +5,6 @@ deep lease: DeepBuild isn't set up here (no hub token), so `node node_modules/vi
 
  Test Files  1 passed (1)
       Tests  1 passed (1)
-   Start at  14:25:17
-   Duration  92.75s (tests 100%)
+   Start at  17:50:41
+   Duration  109.38s (tests 100%)
 
