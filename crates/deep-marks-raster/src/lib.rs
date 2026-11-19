@@ -1047,7 +1047,7 @@ impl Renderer {
                     lang: None,
                     size: spec.size as f32,
                     weight: spec.weight,
-                    line_height: None,
+                    line_height: spec.columns_line_height(),
                     width: spec.width.map(|w| w as f32),
                     max_lines: None,
                     align,
@@ -1057,6 +1057,7 @@ impl Renderer {
                     spans: &spec.spans,
                     gap: spec.gap as f32,
                     indent: spec.indent as f32,
+                    flow: spec.flow,
                 });
                 self.glyphs(ctx, &shaped, *origin, (*c, runs), at, None);
             }
@@ -1204,7 +1205,8 @@ impl Renderer {
                     .glyph_run(&mut self.resources, &g.font)
                     .font_size(g.size)
                     .hint(false)
-                    .glyph_transform(deep_text::atlas::slant(g.skew))
+                    .glyph_transform(deep_text::atlas::glyph_transform(g.skew, g.turn))
+                    .normalized_coords(&g.coords)
                     .fill_glyphs(one);
             }
             ctx.set_transform(at);
@@ -1221,6 +1223,8 @@ impl Renderer {
                         && g.font.index == first.font.index
                         && g.size == first.size
                         && g.skew == first.skew
+                        && g.turn == first.turn
+                        && g.coords == first.coords
                         && paint(g) == paint(first)
                         && alpha_of(g) == alpha_of(first)
                 })
@@ -1237,7 +1241,8 @@ impl Renderer {
                 .glyph_run(&mut self.resources, &first.font)
                 .font_size(first.size)
                 .hint(false)
-                .glyph_transform(deep_text::atlas::slant(first.skew))
+                .glyph_transform(deep_text::atlas::glyph_transform(first.skew, first.turn))
+                .normalized_coords(&first.coords)
                 .fill_glyphs(glyphs);
             start += run;
         }

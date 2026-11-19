@@ -71,6 +71,9 @@ pub struct Label {
     /// #1966: a list's gap after each of its items, and the indent its lines start at.
     pub gap: f32,
     pub indent: f32,
+    /// #1215: lines across, or columns top to bottom, and the line height columns are spaced by.
+    pub flow: deep_text::Flow,
+    pub line_height: Option<f32>,
 }
 
 impl Label {
@@ -90,6 +93,8 @@ impl Label {
             spans: Vec::new(),
             gap: 0.,
             indent: 0.,
+            flow: deep_text::Flow::Horizontal,
+            line_height: None,
         }
     }
 
@@ -101,7 +106,7 @@ impl Label {
             lang: self.lang.as_deref(),
             size: self.size,
             weight: self.weight,
-            line_height: None,
+            line_height: self.line_height,
             width: self.width,
             max_lines: self.max_lines,
             align: self.align,
@@ -111,6 +116,7 @@ impl Label {
             spans: &self.spans,
             gap: self.gap,
             indent: self.indent,
+            flow: self.flow,
         }
     }
 }
@@ -132,6 +138,9 @@ struct ShapeKey {
     spans: Vec<Span>,
     gap: u32,
     indent: u32,
+    /// #1215: the flow, `upright: all`, `combine_upright`, the column's length and line height,
+    /// and the planted vertical shaper.
+    flow: (u8, bool, u8, Option<u32>, Option<u32>, u8),
 }
 
 impl ShapeKey {
@@ -151,6 +160,17 @@ impl ShapeKey {
             spans: label.spans.clone(),
             gap: label.gap.to_bits(),
             indent: label.indent.to_bits(),
+            flow: match label.flow {
+                deep_text::Flow::Horizontal => (0, false, 0, None, None, 0),
+                deep_text::Flow::Vertical(c) => (
+                    if c.rl { 1 } else { 2 },
+                    c.upright,
+                    c.combine,
+                    c.height.map(f32::to_bits),
+                    label.line_height.map(f32::to_bits),
+                    deep_text::vertical::planted().bits(),
+                ),
+            },
         }
     }
 }
@@ -196,6 +216,8 @@ struct OutlineKey {
     size: u32,
     coords: Arc<[i16]>,
     skew: u32,
+    /// #1215: turned by a vertical run.
+    turn: bool,
     bucket: i32,
 }
 
@@ -445,6 +467,8 @@ struct Text {
     new_glyphs: Option<Vec<(u32, u32)>>,
     /// The planted pre-#1480 path: see [`plant_whole_page_upload`].
     whole_page: bool,
+    /// #1484 AC1's planted shaper: see [`plant_ignores_opsz`].
+    ignores_opsz: bool,
 }
 
 impl Text {
@@ -460,12 +484,16 @@ impl Text {
             uploaded: HashMap::new(),
             new_glyphs: None,
             whole_page: false,
+            ignores_opsz: false,
         }
     }
 
     /// The label's shape, from the cache: a label is shaped once, never per frame. The cache is
     /// emptied whole at 4,096 runs, so a frame of more than that shapes some of them again.
     fn shape(&mut self, label: &Label) -> Arc<Shaped> {
+        if self.ignores_opsz {
+            return Arc::new(self.shaper.shape_ignoring_opsz(&label.spec()));
+        }
         let key = ShapeKey::of(label);
         if let Some(frame) = &mut self.frame {
             if !frame.contains(&key) {
@@ -500,6 +528,7 @@ impl Text {
             size: glyph.size.to_bits(),
             coords: glyph.coords.clone(),
             skew: glyph.skew.to_bits(),
+            turn: glyph.turn,
             bucket: path::bucket(f64::from(scale)),
         };
         if let Some(found) = self.outlines.get(&key) {
@@ -549,7 +578,7 @@ impl Text {
                     }
                     let k = device / MAX_DEVICE_SIZE;
                     self.atlas
-                        .glyph(&glyph.font, glyph.id, MAX_DEVICE_SIZE)
+                        .glyph(&glyph.font, glyph.id, &glyph.coords, MAX_DEVICE_SIZE)
                         .map(|place| Shown::Sprite {
                             place,
                             at: [at[0] + place.left as f32 * k, at[1] + place.top as f32 * k],
@@ -560,7 +589,13 @@ impl Text {
                     let (x, px) = pen(at[0]);
                     let (y, py) = pen(at[1]);
                     self.atlas
-                        .glyph_at(&glyph.font, glyph.id, device, [px, py], glyph.skew)
+                        .glyph_turned(
+                            &glyph.font,
+                            (glyph.id, &glyph.coords),
+                            device,
+                            [px, py],
+                            (glyph.skew, glyph.turn),
+                        )
                         .map(|place| Shown::Sprite {
                             place,
                             at: [(x + place.left) as f32, (y + place.top) as f32],
@@ -627,6 +662,12 @@ pub fn take_new_glyphs() -> Vec<(u32, u32)> {
 /// generation, as before the rect path. Only the proof binary turns it on.
 pub fn plant_whole_page_upload(on: bool) {
     TEXT.with(|text| text.borrow_mut().whole_page = on);
+}
+
+/// #1484 AC1's planted shaper: on, every label is shaped with its optical size left at the face's
+/// default, past every cache. Only the proof binary's `shaper_ignores_opsz` turns it on.
+pub fn plant_ignores_opsz(on: bool) {
+    TEXT.with(|text| text.borrow_mut().ignores_opsz = on);
 }
 
 /// The size a label takes, for a layout that sizes to its text.

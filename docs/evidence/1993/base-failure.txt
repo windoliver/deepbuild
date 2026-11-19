@@ -1,0 +1,37 @@
+Base 9550dc0f04d45844b5d7bb9ce74d89926c681724, on a Mac17,10, each part's folder run once by the implementing session on
+the base's own deep-gpu (built in the blind jobs' worktrees), 2026-11-19 00:12 to 00:17:
+
+  CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1993/<part> --no-file-parallelism --testTimeout=1800000
+
+ring (criteria 1 and 2): 5 failed (5). Each fails at an assertion of its own file:
+  bound.test.ts: #1993.1cdd279a at 2 m/s the ratio is 3.33 and the operator is refused at check, before anything runs, naming the operator and 3.33
+    AssertionError: the refusal line: the check refuses the 3.33 document, naming the operator and 3.33: expected [ Array(1) ] to deeply equal []
+  bound.test.ts: #1993.1cdd279a at 0.24 m/s it checks, and the largest height over 3,600 steps stays under twice the drop's
+    AssertionError: each frame k shows the carried height (water.height) at step k: expected [ 'frame 0 shows step null', …(4) ] to deeply equal []
+  bound.test.ts: #1993.1cdd279a a planted check that skips the bound (--planted check_skips_bound) accepts the 3.33 document and fails the refusal line
+    AssertionError: deep-gpu run --planted check_skips_bound answered the check: expected 'deep-gpu run --planted check_skips_bo…' to be '' // Object.is equality
+  radius.test.ts: #1993.c7c8c280 at 0.24 m/s the ring's radius is 20, 40 and 60 cells at steps 50, 100 and 150, each within one cell; a planted step that only diffus...
+    AssertionError: frames 0, 50, 100, 150 show the carried height (water.height) at steps 0, 50, 100, 150: expected [ null, null, null, null ] to deeply equal [ +0, 50, 100, 150 ]
+  radius.test.ts: #1993.c7c8c280 one step costs under 0.5 ms of GPU on the reference Mac (five runs of 600 steps after a warm-up), or the budget part reads INCONCLUSIVE
+    AssertionError: timed run 0: each frame k ran step k of water.height: expected [ 'frame 1 shows step null', …(4) ] to deeply equal []
+
+track (criteria 3 and 4): 4 failed (4). Each fails at an assertion of its own file:
+  ac3-drops-from-track.test.ts: #1993.cef70375 a 512 × 512 grid takes 20 drops from a recorded input track over 20 s; seeking back to 7.5 s gives the hash play had at 7.5 s, and r...
+    AssertionError: every frame of the play reports the pond's two carried textures: expected [ Array(1) ] to deeply equal []
+  ac3-drops-from-track.test.ts: #1993.cef70375 a planted step that reads the live pointer (--planted step_reads_live_pointer) differs on replay and fails the replay line, naming t...
+    AssertionError: the planted step_reads_live_pointer played and replayed the pond: expected 'deep-gpu run --planted step_reads_liv…' to be '' // Object.is equality
+  ac4-pattern-ring.test.ts: #1993.82266148 a reaction-diffusion pattern in two carried 1,024 × 1,024 r32float textures runs 600 steps a second for 10 s; its ring never holds m...
+    AssertionError: every frame reports the pattern's two carried textures: expected [ Array(1) ] to deeply equal []
+  ac4-pattern-ring.test.ts: #1993.82266148 a planted ring that checkpoints the two textures on alternate steps (--planted ring_checkpoints_textures_on_alternate_steps) restore...
+    AssertionError: the planted ring_checkpoints_textures_on_alternate_steps played and sought the pattern: expected 'deep-gpu run --planted ring_checkpoin…' to be '' // Object.is equality
+
+loss (criterion 7): 1 failed (1). Each fails at an assertion of its own file:
+  loss.test.ts: #1993.e693a7be the run that loses its device at step 900 has the unbroken run's state hash at step 1,800 and every frame before the state is rebuil...
+    AssertionError: unbroken, every frame holds water.height and water.rate at its own step; the frames that don't: expected 'frame 0 (no carried water.height, no …' to be 'none' // Object.is equality
+
+fields (criteria 5, 6 and 8): run by its blind job, tests/acceptance/1993/fields/BASE-FAILURE.txt. cloth.test.ts and
+taste.test.ts fail at their own assertions; bodies.test.ts (criterion 6) passes at the base, 2 of 2, since the base
+already carries several storage outputs of one stepped operator. Its planted document fails the momentum line there.
+
+The track and loss parts' own BASE-FAILURE.txt files, written by their blind jobs, say the same of their tests. The ring
+part's blind job wrote no README or BASE-FAILURE.txt; the run above is its only base record.

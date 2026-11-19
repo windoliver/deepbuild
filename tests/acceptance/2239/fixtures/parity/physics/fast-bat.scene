@@ -1,0 +1,47 @@
+{
+  "format": 1,
+  "id": "01JB2239FB0000000000000001",
+  "profile": "scene",
+  "title": "Fast bat",
+  "description": "Issue #2239 criterion 1: at 120 Hz, a kinematic bat 0.02 m thick follows a channel at 30 m/s along +x, its leading face starting 0.90 m before the centre of a resting dynamic ball of radius 0.05 m with gravity_scale 0.",
+  "size": [640, 360],
+  "camera": "cam",
+  "transport": { "span": "1s", "frame_rate": [60, 1] },
+  "requires": { "modules": { "scene3d": "^1" } },
+  "items": {
+    "cam": { "id": "cam", "kind": "camera@1", "name": "Camera", "order": "a0", "params": { "projection": "perspective", "position": [0, 2, 6], "target": [0, 0, 0], "fov": 40 } },
+    "bat": { "id": "bat", "kind": "mark.box@1", "name": "Bat", "order": "a1", "params": { "size": [0.02, 1, 1] }, "at": { "pos": [-0.91, 0, 0] } }
+  },
+  "channels": {
+    "bat": {
+      "target": "items/bat/at/pos",
+      "type": "vec3",
+      "keys": {
+        "k0": { "t": "0s", "value": [-0.91, 0, 0], "interp": "linear" },
+        "k1": { "t": "1s", "value": [29.09, 0, 0], "interp": "hold" }
+      }
+    }
+  },
+  "worlds": {
+    "court": {
+      "kind": "physics.world@1",
+      "dimensions": 3,
+      "step_rate": 120,
+      "substeps": 4,
+      "gravity": [0, -9.81, 0],
+      "seed": 2239,
+      "mode": "dynamic",
+      "capacity": { "bodies": 8, "shapes": 8, "joints": 4, "contacts": 32, "particles": 0 },
+      "backend": { "name": "rapier3d", "version": "=0.36.1" },
+      "contact_materials": { "m": { "friction": 0.5, "restitution": 0, "density": 1000 } },
+      "shapes": {
+        "bat": { "kind": "box", "half": [0.01, 0.5, 0.5] },
+        "ball": { "kind": "sphere", "radius": 0.05 }
+      },
+      "bodies": {
+        "bat": { "kind": "kinematic", "shapes": [{ "shape": "bat", "contact_material": "m" }], "pose": { "pos": [-0.91, 0, 0] }, "follow": "items/bat/at/pos" },
+        "ball": { "kind": "dynamic", "shapes": [{ "shape": "ball", "contact_material": "m" }], "pose": { "pos": [0, 0, 0] }, "gravity_scale": 0 }
+      }
+    }
+  }
+}

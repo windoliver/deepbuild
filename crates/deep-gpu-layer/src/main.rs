@@ -466,6 +466,11 @@ pub enum Planted {
     StepsPerFrame,
     RingKeepsEveryCheckpoint,
     CarriedClassExact,
+    // #1993: stepped grids' and fields' wrong programs (tests/acceptance/1993/*/README.md).
+    StepReadsLivePointer,
+    RingCheckpointsTexturesOnAlternateSteps,
+    RestoreStartsFromClearValue,
+    CheckSkipsBound,
     // #464: print and pixel looks' wrong programs (tests/acceptance/464/README.md).
     VignettePixels,
     GrainFromT,
@@ -852,6 +857,12 @@ impl Planted {
             "steps_per_frame" => Planted::StepsPerFrame,
             "ring_keeps_every_checkpoint" => Planted::RingKeepsEveryCheckpoint,
             "carried_class_exact" => Planted::CarriedClassExact,
+            "step_reads_live_pointer" => Planted::StepReadsLivePointer,
+            "restore_starts_from_clear_value" => Planted::RestoreStartsFromClearValue,
+            "check_skips_bound" => Planted::CheckSkipsBound,
+            "ring_checkpoints_textures_on_alternate_steps" => {
+                Planted::RingCheckpointsTexturesOnAlternateSteps
+            }
             "vignette_pixels" => Planted::VignettePixels,
             "grain_from_t" => Planted::GrainFromT,
             "partial_coverage" => Planted::PartialCoverage,

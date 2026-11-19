@@ -1,0 +1,40 @@
+At base 9550dc0f04d45844b5d7bb9ce74d89926c681724 each of the two test files was run once, on a Mac17,10 (macOS 27.2, a Metal GPU), from the checkout root, with the base's `deep-gpu` already built in target/debug. All four tests failed, each at an assertion in its own file, because the base carries nothing in a texture and knows neither planted name. `node node_modules/typescript/bin/tsc -p tests/acceptance/1993/track/tsconfig.json` passes at the base.
+
+What was run (once each, no rerun):
+
+  CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 PATH=/opt/homebrew/opt/rustup/bin:$PATH node node_modules/vitest/vitest.mjs run --root tests/acceptance/1993/track --no-file-parallelism --testTimeout=1800000 ac3-drops-from-track.test.ts
+  CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 PATH=/opt/homebrew/opt/rustup/bin:$PATH node node_modules/vitest/vitest.mjs run --root tests/acceptance/1993/track --no-file-parallelism --testTimeout=1800000 ac4-pattern-ring.test.ts
+
+ac3-drops-from-track.test.ts: 2 tests, 2 failed, exit 1 (26.8 s).
+
+  1. "#1993.cef70375 a 512 × 512 grid takes 20 drops from a recorded input track over 20 s; seeking back to 7.5 s gives the hash play had at 7.5 s, and replaying the track gives the played hash at every checkpoint"
+     fails at ac3-drops-from-track.test.ts:106:123
+       expect(carriedProblems(r.play, KEYS, 'the play'), 'every frame of the play reports the pond\'s two carried textures').toEqual([]);
+     AssertionError: every frame of the play reports the pond's two carried textures: expected [ Array(1) ] to deeply equal []
+     received: "the play: frame 0 (reply entry 0) reports no carried row for pond.height; it reports none"
+     The line before it passed: the base's check accepted the pond's operator and view3d played, sought and replayed the document (the refusal is empty). `carry` on a texture output and `step` on a texture input are fields the base doesn't read, so nothing is carried and no frame has a `carried` row.
+
+  2. "#1993.cef70375 a planted step that reads the live pointer (--planted step_reads_live_pointer) differs on replay and fails the replay line, naming the first checkpoint that differs"
+     fails at ac3-drops-from-track.test.ts:131:91
+       expect(r.refusal, 'the planted step_reads_live_pointer played and replayed the pond').toBe('');
+     AssertionError: the planted step_reads_live_pointer played and replayed the pond: expected 'deep-gpu run --planted step_reads_liv…' to be ''
+     received: deep-gpu run --planted step_reads_live_pointer exited 2, so the scenario did not run; stdout: {"ok":false,"code":"bad_input"}; stderr: (none)
+     The planted name is unknown at the base.
+
+ac4-pattern-ring.test.ts: 2 tests, 2 failed, exit 1 (17.6 s).
+
+  1. "#1993.82266148 a reaction-diffusion pattern in two carried 1,024 × 1,024 r32float textures runs 600 steps a second for 10 s; its ring never holds more than 160 MiB, 20 checkpoints of 8 MiB, and a seek to step 3,000 equals play at step 3,000 by hash"
+     fails at ac4-pattern-ring.test.ts:107:114
+       expect(carriedProblems(p.view, KEYS, 'the play'), 'every frame reports the pattern\'s two carried textures').toEqual([]);
+     AssertionError: every frame reports the pattern's two carried textures: expected [ Array(1) ] to deeply equal []
+     received: "the play: frame 0 (reply entry 0) reports no carried row for pattern.u; it reports none"
+     The line before it passed: the base's check accepted the pattern's operator and view3d played and sought the document. Nothing is carried in a texture, so no frame has a `carried` row.
+
+  2. "#1993.82266148 a planted ring that checkpoints the two textures on alternate steps (--planted ring_checkpoints_textures_on_alternate_steps) restores a mixed state and fails the seek line"
+     fails at ac4-pattern-ring.test.ts:129:113
+       expect(p.refusal, 'the planted ring_checkpoints_textures_on_alternate_steps played and sought the pattern').toBe('');
+     AssertionError: the planted ring_checkpoints_textures_on_alternate_steps played and sought the pattern: expected 'deep-gpu run --planted ring_checkpoin…' to be ''
+     received: deep-gpu run --planted ring_checkpoints_textures_on_alternate_steps exited 2, so the scenario did not run; stdout: {"ok":false,"code":"bad_input"}; stderr: (none)
+     The planted name is unknown at the base.
+
+Not reached at the base, so not shown to hold or fail there: every assertion after the ones above (the checkpoint steps, the drops' volume, both seek lines, the replay line, the ring's bytes, and each twin failing its criterion's line).

@@ -17,6 +17,7 @@ mod gltf;
 mod guards;
 mod lottie;
 mod page;
+mod paths;
 mod pdf;
 mod planes;
 mod program;
@@ -117,6 +118,8 @@ pub enum Guard {
     WebNoTree,
     /// #1045: the web player announces each readout on every frame it draws, changed or not.
     WebAnnouncesEveryFrame,
+    /// #2776: the web export reads no refused web answer, so it carries an entry its answer refuses.
+    WebCarriesRefused,
     /// A wrong encoder, muxer or reader in the helper processes, by its name there.
     Codec(&'static str),
 }
@@ -202,6 +205,7 @@ pub(crate) fn planted(name: &str) -> Option<Planted> {
         "web_picks_full_set" => Planted::Export(G::WebPicksFullSet),
         "web_no_tree" => Planted::Export(G::WebNoTree),
         "web_announces_every_frame" => Planted::Export(G::WebAnnouncesEveryFrame),
+        "web_export_carries_refused" => Planted::Export(G::WebCarriesRefused),
         other => Planted::Export(G::Codec(CODEC_PLANTS.iter().find(|p| **p == other)?)),
     })
 }

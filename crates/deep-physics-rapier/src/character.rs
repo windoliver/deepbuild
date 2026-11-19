@@ -6,6 +6,8 @@
 //! launch sets it instead; the controller moves its capsule by (wants + up × vertical) × the
 //! step's length, and the new pose is its kinematic target for the step. Its own state rides in
 //! the checkpoint after the soft bodies' bytes, and in the canonical state after every body's.
+//! #2243: one moved later in that order meets the character bodies moved before it where they
+//! now are. Two stop at each other, each keeping its own offset, and neither moves the other.
 
 use deep_canvas_physics::backend::{Canonical, CharacterState, ShapeRef, CHARACTER_FIELDS};
 use deep_canvas_physics::doc::{BodyKind, Character, World};
@@ -31,6 +33,24 @@ const CLEAR: f32 = 1.0e-3;
 
 /// The tag that starts the character bodies' state a checkpoint carries after the soft bodies'.
 const TAG: &[u8] = b"deep.characters@1";
+
+/// #2243: what a step's character bodies cast against in a world of several: the world's
+/// colliders and broad phase as the last step left them, with each character body moved earlier
+/// in the step's order at its new pose.
+pub(crate) struct Stage {
+    colliders: ColliderSet,
+    broad_phase: BroadPhaseBvh,
+}
+
+/// #2243: character capsule `c` as another character body's controller meets it, at `at` in the
+/// world: with no body. The engine's controller carries a character with a kinematic body it
+/// touches, at that body's velocity, and a character body is never moved by another's walk.
+fn bodiless(c: &Collider, at: Pose) -> Collider {
+    let mut alone = ColliderBuilder::new(c.shared_shape().clone()).build();
+    alone.copy_from(c);
+    alone.set_position(at);
+    alone
+}
 
 /// One character body as this backend moves it.
 #[derive(Clone, Debug)]
@@ -237,13 +257,76 @@ impl Rapier {
         }
     }
 
-    /// The query pipeline walker `i` moves through: everything but its own body and sensors.
+    /// The colliders a walker meets: this step's stage (#2243) among several character bodies,
+    /// the world's own otherwise.
+    fn seen(&self) -> &ColliderSet {
+        self.stage
+            .as_ref()
+            .map_or(&self.world.colliders, |s| &s.colliders)
+    }
+
+    /// The query pipeline walker `i` moves through: everything but its own capsule and sensors.
     fn walls(&self, i: usize) -> QueryPipeline<'_> {
-        self.world.query_pipeline_with_filter(
-            QueryFilter::default()
-                .exclude_rigid_body(self.walkers[i].body)
-                .exclude_sensors(),
-        )
+        let wk = &self.walkers[i];
+        let filter = QueryFilter::default()
+            .exclude_rigid_body(wk.body)
+            .exclude_collider(wk.collider)
+            .exclude_sensors();
+        match &self.stage {
+            Some(s) => s.broad_phase.as_query_pipeline(
+                self.world.narrow_phase.query_dispatcher(),
+                &self.world.bodies,
+                &s.colliders,
+                filter,
+            ),
+            None => self.world.query_pipeline_with_filter(filter),
+        }
+    }
+
+    /// #2243: walker `i`'s capsule as the other character bodies' controllers meet it, at `at` in
+    /// the world. The planted wrapper leaves one that wants no move out of what a walker meets,
+    /// as a sensor.
+    fn capsule_at(&self, i: usize, at: Pose) -> Collider {
+        let wk = &self.walkers[i];
+        let mut capsule = bodiless(&self.world.colliders[wk.collider], at);
+        if self.twin == Twin::StandingGivesWay && wk.state.wants == [0.0; 3] {
+            capsule.set_sensor(true);
+        }
+        capsule
+    }
+
+    /// #2243: what this step's character bodies cast against when the world holds several: the
+    /// world as the last step left it, with each character body's capsule as [`bodiless`].
+    fn stage(&mut self) {
+        let mut colliders = self.world.colliders.clone();
+        for (i, wk) in self.walkers.iter().enumerate() {
+            let at = *self.world.colliders[wk.collider].position();
+            colliders[wk.collider] = self.capsule_at(i, at);
+        }
+        self.stage = Some(Stage {
+            colliders,
+            broad_phase: self.world.broad_phase.clone(),
+        });
+    }
+
+    /// #2243: puts walker `i`'s new pose, where its move changed it, into what the walkers after
+    /// it in this step's order cast against. The world itself keeps its pose until the engine's
+    /// step, so everything else still meets it as the last step left it.
+    fn show(&mut self, i: usize) {
+        let wk = &self.walkers[i];
+        let own = &self.world.colliders[wk.collider];
+        let local = *own.position_wrt_parent().unwrap_or(&Pose::IDENTITY);
+        let to = *self.world.bodies[wk.body].next_position() * local;
+        if to == *own.position() {
+            return;
+        }
+        let (c, moved) = (wk.collider, self.capsule_at(i, to));
+        let params = self.world.integration_parameters;
+        let aabb = moved.compute_broad_phase_aabb(&params, &self.world.bodies);
+        if let Some(stage) = &mut self.stage {
+            stage.colliders[c] = moved;
+            stage.broad_phase.set_aabb(&params, c, aabb);
+        }
     }
 
     /// Walker `i`'s `shape` at `at` cast along the unit `dir` up to `max` m, keeping `gap` m from
@@ -430,16 +513,22 @@ impl Rapier {
         c.set_position_wrt_parent(at);
     }
 
-    /// The walls walker `i`'s `shape` at `at` touches that `want` presses into: each as the normal
-    /// from the wall toward it, surfaces steeper than its slope limit that aren't ceilings.
-    fn pressed(&self, i: usize, at: &Pose, shape: &dyn Shape, want: Vector) -> Vec<Vector> {
+    /// The walls walker `i`'s `shape` at `at` touches that `want` presses into: each with the
+    /// normal from the wall toward it, surfaces steeper than its slope limit that aren't ceilings.
+    fn pressed(
+        &self,
+        i: usize,
+        at: &Pose,
+        shape: &dyn Shape,
+        want: Vector,
+    ) -> Vec<(ColliderHandle, Vector)> {
         let wk = &self.walkers[i];
         let near = wk.conf.offset as f32 + 1.0e-3;
         let q = self.walls(i);
         let aabb = shape.compute_aabb(at).loosened(near);
         let walkable = wk.conf.walkable() as f32;
-        let mut walls: Vec<Vector> = Vec::new();
-        for (_, c) in q.intersect_aabb_conservative(aabb) {
+        let mut walls = Vec::new();
+        for (h, c) in q.intersect_aabb_conservative(aabb) {
             let Ok(Some(k)) = parry_query::contact(at, shape, c.position(), c.shape(), near) else {
                 continue;
             };
@@ -447,7 +536,7 @@ impl Rapier {
             // 0 up to rounding.
             let n = -k.normal1;
             if n.dot(self.up).abs() < walkable && want.dot(n) < -1.0e-4 * want.length() {
-                walls.push(n);
+                walls.push((h, n));
             }
         }
         walls
@@ -473,12 +562,21 @@ impl Rapier {
     }
 
     /// Moves every character body one step (#182), writing the contacts each starts and stops.
+    /// #2243: one moved later in the order meets the ones moved before it where they now are.
     pub(crate) fn walk(&mut self) {
         let dt = self.world.integration_parameters.dt;
+        if self.walkers.len() > 1 {
+            self.stage();
+        }
         for i in 0..self.walkers.len() {
             let rows = self.walk_one(i, dt);
             self.walked.extend(rows);
+            // The planted wrapper leaves a moved character body's pose stale.
+            if self.stage.is_some() && self.twin != Twin::StalePoses {
+                self.show(i);
+            }
         }
+        self.stage = None;
     }
 
     fn walk_one(&mut self, i: usize, dt: f32) -> Vec<Raw> {
@@ -506,7 +604,15 @@ impl Rapier {
         let wk = &self.walkers[i];
         let (shape, at) = self.capsule(i);
         let mut want = v3(wk.state.wants.map(f64::from)) + self.up * vertical;
-        let walls = self.pressed(i, &at, shape.as_ref(), want);
+        let pressed = self.pressed(i, &at, shape.as_ref(), want);
+        // #2243: a walk into a character body it touches ends there, with no slide round it, so
+        // two that meet come to rest: only its part along up is left, its fall or its jump.
+        let character = |c: &ColliderHandle| self.walkers.iter().any(|w| w.collider == *c);
+        let held: Vec<ColliderHandle> = pressed.iter().map(|w| w.0).filter(character).collect();
+        if !held.is_empty() {
+            want = self.up * want.dot(self.up);
+        }
+        let walls: Vec<Vector> = pressed.into_iter().map(|w| w.1).collect();
         // The planted controller resolves one wall's contact a step, alternating, and leaves the
         // other alone.
         let alone = (self.twin == Twin::EachWallAlone && walls.len() >= 2)
@@ -570,19 +676,20 @@ impl Rapier {
         {
             self.crouch_to(i, false);
         }
-        // What it touches now: what its move met and what lies under it, by shape use.
+        // What it touches now: what its move met, the character bodies its walk ended at and what
+        // lies under it, by shape use.
         let mut now: BTreeMap<ShapeRef, (Vector, Vector)> = BTreeMap::new();
         for (c, p, n) in under {
             if let Some(u) = self.uses.get(&c) {
                 now.insert(u.clone(), (p, n));
             }
         }
-        for c in met {
+        for c in met.into_iter().chain(held) {
             let Some(u) = self.uses.get(&c) else { continue };
             if now.contains_key(u) {
                 continue;
             }
-            let other = &self.world.colliders[c];
+            let other = &self.seen()[c];
             let k =
                 parry_query::contact(&end, shape.as_ref(), other.position(), other.shape(), 1.0)
                     .ok()
