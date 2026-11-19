@@ -791,6 +791,8 @@ timed.push('tests/acceptance/172/budgets.test.ts', 'tests/acceptance/172/images.
 // place.
 alone.push('tests/acceptance/172-redraft-ac2/');
 byHand.push('tests/acceptance/172/refusals.test.ts');
+// #1041's files each build deep-show (full) and play the dungeon's saves in headless Chrome with WebGPU on.
+alone.push('tests/acceptance/1041/');
 // #1045's files each build deep-show (full) and drive headless Chrome with WebGPU on.
 alone.push('tests/acceptance/1045/');
 // #1490's files each build deep-show (full) and export bundles, and its parity file drives headless Chrome with WebGPU on.
