@@ -1,0 +1,16 @@
+A watch for a quiet moment on 8eff1c02a, with no grant: it ran AC1's heavy test (Node 24.22.0) and archive-growth's judge
+(Node 24.22.2) when the load read under 9 with the thermal state nominal. One attempt in 50 minutes; the load rose as it ran.
+
+watch from 23:18:21 at 8eff1c02a: nominal 5.4
+attempt 1 23:19:17: heavy/ac1 exit=1; archive-growth targets INCONCLUSIVE; nominal 27.7
+end 00:08:35 after 1 attempts
+
+#2365 AC1 the pass ends within 1 s: 256 ms; 257 ms; 300 ms; 287 ms; 265 ms → INCONCLUSIVE (a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state nominal): load 18.74462890625 at a run's start or end is above the 18 cores)
+#2365 AC1 the 5 ms timer is served at least every 50 ms: longest unserved stretch 13.5 ms; longest unserved stretch 15.7 ms; longest unserved stretch 17.7 ms; longest unserved stretch 18.7 ms; longest unserved stretch 19.8 ms → INCONCLUSIVE (a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal stat
+#2365 AC1 resident memory rises by under 64 MB: peak resident memory 103.1 MB from 72.6 MB: +30.4 MB; peak resident memory 103.4 MB from 73.2 MB: +30.3 MB; peak resident memory 102.2 MB from 72.4 MB: +29.8 MB; peak resident memory 104.3 MB from 73.5 MB: +30.8 MB; peak resident memory 102.5 MB from 73.0 MB: +29.6 MB → INCONCLUSIVE (a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac1
+
+archive-growth targets INCONCLUSIVE
+    ms INCONCLUSIVE [274.1, 276.0, 239.6, 281.8, 261.8]
+    maxGapMs INCONCLUSIVE [11.8, 13.8, 12.6, 10.4, 9.9]
+    rise INCONCLUSIVE [29.9, 30.1, 30.0, 30.1, 29.8]
+    added PASS [293019, 293019, 293019, 293019, 293019, 293019]

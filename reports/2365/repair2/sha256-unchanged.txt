@@ -1,0 +1,37 @@
+# sha256 of every file in tests/acceptance/2365, 2365-redraft-ac4 and 2365-redraft-ac5 that round 2 did NOT change (shasum -a 256, from the repo root).
+# Round 2 changed six files and added one; their sha256 before and after are at the end.
+286287a30ba07d58c2ba30b4b76ac136a4201e95cf5c95cb9a833a3ccf42b34d  tests/acceptance/2365-redraft-ac4/README.md
+d2813507be143a22f7a122e759f2407c5d0d9936377ff6269767b8282948a6fe  tests/acceptance/2365-redraft-ac4/helpers.ts
+e853abc05accb887215d0703f0c0f746cd2baef2a8fdef1be326007f8dd620bd  tests/acceptance/2365-redraft-ac4/rewritten.test.ts
+c5b0031dc2191959d86202363d79087b03e941d881587792b08e308dc9e69c0a  tests/acceptance/2365-redraft-ac4/tsconfig.json
+607e688dc4304cf1ac6bff8af57dd6f8a33e151ac7c25490cdf3d07a13b2fe9a  tests/acceptance/2365-redraft-ac4/wrong.ts
+c85d0b6ac2dd74f1d4b5d62cbca6b89654222cc82b2b171430f8a5b6d84a63b8  tests/acceptance/2365-redraft-ac5/meter.test.ts
+e3fb17701f76c47f9798577edb75e72ef7fa7204cf46f9bee46d963408ab52b2  tests/acceptance/2365-redraft-ac5/meter.ts
+b8663a73b3548e49f0dea9b305619dcbeaf31460404d3a28a3a4ea4956884f87  tests/acceptance/2365-redraft-ac5/perf.test.ts
+77e2418496768bf2042a4f950360b571757c55ca18080b57f6bb0a8b4d53afed  tests/acceptance/2365-redraft-ac5/scenarios.ts
+e6eacbc8caf872d27688880d24bef334ad6477c20afdbacbb33c7fbae4a591ae  tests/acceptance/2365-redraft-ac5/suite.test.ts
+c5b0031dc2191959d86202363d79087b03e941d881587792b08e308dc9e69c0a  tests/acceptance/2365-redraft-ac5/tsconfig.json
+fdeaa730b6d86d1a63e1f8383d372f3d8274700fadb79a9f13a51a7cde2654a4  tests/acceptance/2365-redraft-ac5/wrong.ts
+993707c30f374f90909147c18780f603a06b65b1c9b4ff9336db966fe0202a92  tests/acceptance/2365/criteria.ts
+4099256f1980b372eaafc7d41ec7acc873256e093b348144e3408e56c83dc042  tests/acceptance/2365/heavy.config.ts
+02117a76c082229f40b2676a203209cd3f009b826bb5c79e47134f62790fe2e2  tests/acceptance/2365/heavy/ac1.heavy.ts
+9740a3ebf96bda168877779a91b192d569ad2f3dfb41aa3a233537662af819c6  tests/acceptance/2365/heavy/ac2.heavy.ts
+a3d2129ce68c0bca98afcd5752d6a11d63ad6abb77f530d2820fa5ae590860e7  tests/acceptance/2365/heavy/budgets.heavy.ts
+b142ccf1164333bd83a3b50350268e87236814fe53cddbc3543282031e0f1c31  tests/acceptance/2365/helpers.ts
+bdc827eea7679f3213b49cb6a801f2f8608067d35bc69d2a7d46ffaae9f9f27d  tests/acceptance/2365/identity.test.ts
+c176d8a9ae8aff97336ac18d39c0e68634a262bbdf48cc83c0d530f46ec4d825  tests/acceptance/2365/probe/fixture.mjs
+05cdb8e94a95b95338f0e4bc2b7c43213bc3ad7e27f0da9da80e337f9d9b5b89  tests/acceptance/2365/probe/proof.mjs
+6cb036e2a08348208869772bffa99322b5d5fea175eae4bfc57856465f3d1086  tests/acceptance/2365/probe/twin-whole.mjs
+13116b3f091066efccdca24c61d178a616c2584a542c5419114efe01d55be0ba  tests/acceptance/2365/reads.ts
+ceb5c37222caf87f22841e406da2341ca8302bc4871905e524fefa9d5003abbe  tests/acceptance/2365/rewrite.test.ts
+b5852ebec89e8709b159fbbc5827fc27b6700ac6981c1ee241500e78645f3155  tests/acceptance/2365/tail.test.ts
+c5b0031dc2191959d86202363d79087b03e941d881587792b08e308dc9e69c0a  tests/acceptance/2365/tsconfig.json
+258aaea75a3d9fb8e95791ae63588c46a0729c32c9524c877e260fa2a3a12a81  tests/acceptance/2365/wrong.ts
+# changed by round 2 (before, from .orig2/, then after):
+0a7041d3fad45085d4347198b3c5218616853392f4b62ed6bd2b86a9d04e10b2 -> b78545c921a54b82a376c3299f46929c3528227d82049f6839268695181fac07  tests/acceptance/2365/probe/pass.mjs
+163996f9023a873f0359e4e3c35c35f9e240ab5dc0f89cc5776dc3ec032abb26 -> b8401bd7050665607da6ee4bbf34cd286d9ea44365d6290d2da5c66fe8612b89  tests/acceptance/2365/heavy/run.ts
+e8b2ac9194c19c3a7195b99a7e51a0c9967b0583e3be9953c99c81097872f33f -> 9aa0dfd12665edc00fe2a241dc6e87c1db70f83f79560bbb6b66b12ff553f205  tests/acceptance/2365/README.md
+0a72eecb8c0db3c00607532c0c77e5dfa7051ab42b69fbe4546a4216a18bec5e -> 720fbe1ff8ed58c6acd7f7bbcbc216fcab7b29cf9da0f7d2330f5eb7bab12f00  tests/acceptance/2365-redraft-ac5/base.ts
+8eedb163929552d6444cd5668f60e2629d1a3fa5f4da195d14fdb4b0af9660a7 -> 1766be00b77580d504d626c687f05f9ac5c6b942fb4189bfc9a133a621842071  tests/acceptance/2365-redraft-ac5/base-copy.mjs
+e0da7ec30f2f55ef4c3070016e0ba37d76e42693a3a93bab7f9f73f5064bf4e8 -> 6f81e59b91a1be3ccb115d37ffa9c6255badec2d3b1925d927ae41bbeaed041f  tests/acceptance/2365-redraft-ac5/README.md
+(new file) -> 362fd373bad074bb1f0c221d06a763b033f0b29de6e59447e4e71b369cc506fc  tests/acceptance/2365-redraft-ac5/base-resolve.mjs

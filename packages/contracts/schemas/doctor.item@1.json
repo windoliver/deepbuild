@@ -37,6 +37,9 @@
         "service_unpromoted",
         "statusline_shadowed",
         "pack_refused",
+        "polkit_action_missing",
+        "hooks_modified",
+        "mod_overrides_guard",
         "not_loaded",
         "unknown"
       ],

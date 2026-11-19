@@ -2,7 +2,7 @@
 
 ## What it is for
 
-A 2D writer layer's frame on the GPU layer (#1561), as a render crate both `deep-gpu` (crates/deep-gpu-layer) and `deep-show` draw through: the group compositor (#430: a layer's marks drawn run by run by Vello GPU, each composited group isolated, its passes, blend and backdrop), a drawn look's passes and the page they read (#149: the paper ground, a mark laid through its medium, relief), the paint and light built from a mark's coverage (#467, #2031), and a 2D document's frame under a look as `film2d` draws it. It moved here from deep-gpu-layer, which no crate may depend on, so the live window, `film2d` and deep-show's `frames` draw one picture of a drawn look.
+A 2D writer layer's frame on the GPU layer (#1561), as a render crate both `deep-gpu` (crates/deep-gpu-layer) and `deep-show` draw through: the group compositor (#430: a layer's marks drawn run by run by Vello GPU, each composited group isolated, its passes, blend and backdrop), a drawn look's passes and the page they read (#149: the paper ground, a mark laid through its medium, relief), the paint and light built from a mark's coverage (#467, #2031, with #2032's cast shadows), and a 2D document's frame under a look as `film2d` draws it. It moved here from deep-gpu-layer, which no crate may depend on, so the live window, `film2d` and deep-show's `frames` draw one picture of a drawn look.
 
 ## Where new code goes
 
@@ -11,7 +11,7 @@ A 2D writer layer's frame on the GPU layer (#1561), as a render crate both `deep
 - `src/frame2.rs`: a 2D frame as `film2d` draws it: its items through the 2D camera, its page, the layer the compositor takes, and `Frames2`, a host's frames drawn off any window.
 - `src/read.rs`: a texture read back from the device.
 - `src/lib.rs`: the `Planted` wrong programs these modules hold, each reachable only through a binary's `--planted`.
-- Tests: the acceptance suites drive it through `deep-gpu` and `deep-show` (tests/acceptance/430, 149, 467, 2031, 1561); the one unit test, in `src/drawn.rs`, validates the passes' shader.
+- Tests: the acceptance suites drive it through `deep-gpu` and `deep-show` (tests/acceptance/430, 149, 467, 2031, 2032, 1561); the one unit test, in `src/drawn.rs`, validates the passes' shader.
 - A film's shots, print finishes, indexed looks and look regions stay in deep-gpu-layer's `film.rs`; a look's fields as read and checked belong in deep-canvas-drawn, which touches no GPU.
 
 ## What it may import

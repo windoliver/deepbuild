@@ -1835,6 +1835,10 @@
           "spec": "* path=../deep-scene3d-render",
           "why": "Issue #1561: the status guard an operator's pixels pass, and scene3d's post hook a drawing look's 3D passes run in (moved with the compositor from deep-gpu-layer)."
         },
+        "bytemuck": {
+          "spec": "^1",
+          "why": "Issue #1561: #2032's occluder segments and bins cast to bytes for the light pass's buffers (moved with lightfx.rs from deep-gpu-layer)."
+        },
         "image": {
           "spec": "^0.25",
           "why": "Issue #1561: a layer read back as straight RGBA, and a paper tooth read from a gray PNG (moved with the compositor from deep-gpu-layer)."

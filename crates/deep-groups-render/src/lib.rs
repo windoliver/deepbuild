@@ -14,7 +14,8 @@ pub mod paintfx;
 pub mod read;
 
 /// The wrong programs the compositor and its passes plant, each reachable only through a
-/// binary's `--planted` (the acceptance READMEs of #430, #149, #467 and #2031: Planted programs).
+/// binary's `--planted` (the acceptance READMEs of #430, #149, #467, #2031 and #2032: Planted
+/// programs).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Planted {
     GroupPassAtLayerEnd,
@@ -33,6 +34,11 @@ pub enum Planted {
     PassEncodedIn3d,
     InkFillFlat,
     RimKeepsFirst,
+    ShadowBoundingBoxes,
+    SunFarPointLight,
+    ShadowInsideOutline,
+    ShadowRemovesAmbient,
+    ShadowEdgeAliased,
 }
 
 /// A refusal as a call answers it.

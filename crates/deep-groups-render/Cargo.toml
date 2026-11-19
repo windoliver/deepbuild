@@ -21,6 +21,7 @@ deep-effects-render = { path = "../deep-effects-render" }
 deep-gpu = { path = "../deep-gpu" }
 deep-marks-render = { path = "../deep-marks-render" }
 deep-scene3d-render = { path = "../deep-scene3d-render" }
+bytemuck = "1"
 image = { version = "0.25", default-features = false, features = ["png"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 wgpu = { version = "30", default-features = false }

@@ -1,0 +1,4 @@
+start 17:19:33 at 5f3348a4c node v24.22.0 load { 332.33 244.09 167.40 }
+exit=0 64s load=343 packages/reading/test/wiki-refused.test.ts :: 5 passed (5)
+exit=1 95s load=262 packages/contracts/test/rust-checks.test.ts :: 1 failed | 311 passed (312)
+end 17:22:13

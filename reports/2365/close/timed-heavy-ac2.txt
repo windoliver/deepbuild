@@ -1,0 +1,11 @@
+node v24.22.0, at e1d6fd4f9, nominal ac 85.3
+
+ RUN  v5.0.5 <home>/doneright-2365/tests/acceptance/2365
+
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  20:48:35
+   Duration  151.38s (tests 100%)
+
+exit=0

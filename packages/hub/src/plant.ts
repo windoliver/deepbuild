@@ -174,6 +174,9 @@ export type Plant =
   | 'deep-wait-polls' | 'stop-answers-waiting'
   // #806's: a deep_show stamped with the payload's writer, and one that waits for the app instead of rendering headless.
   | 'deep-show-writer-from-payload' | 'deep-show-waits-for-app'
+  // #1415's: deep_kinds publishing op as optional while its handler needs it, returning its refusals as ordinary
+  // results, and answering a listing with what loaded so far while the hub still loads.
+  | 'kinds-op-optional' | 'kinds-refusal-as-text' | 'kinds-partial-while-loading'
   // #139's: a deprecated JSON-RPC method served through its replacement with no notice.
   | 'silent-deprecated'
   // #875's: a fix check's base run counted as its proof whatever way it failed.
@@ -304,8 +307,11 @@ export type Plant =
   | 'hands-over-socket-chunk'
   // #1512's: a review whose rubric holds every rule the hub knows, whatever its scope, how it was known or what enforces
   // it, with no size bound; and a hub that holds the review kind but adds the review to no claim that opens a PR.
-  | 'rubric-holds-every-rule' | 'review-without-caller';
+  | 'rubric-holds-every-rule' | 'review-without-caller'
+  // #1509's: a gate that asks for every package run straight from a registry, whatever its age.
+  | 'asks-every-registry-run';
 const PLANTS: readonly string[] = [
+  'asks-every-registry-run',
   'statusline-user-settings-only', 'window-unknown-as-zero', 'window-carried-from-other-repo', 'sends-block-whole',
   'doctor-sums-per-file', 'doctor-counts-lines-only',
   'box-applies-at-once', 'box-ignores-revision',
@@ -360,6 +366,7 @@ const PLANTS: readonly string[] = [
   'repeat-reaches-you',
   'deep-wait-polls', 'stop-answers-waiting',
   'deep-show-writer-from-payload', 'deep-show-waits-for-app',
+  'kinds-op-optional', 'kinds-refusal-as-text', 'kinds-partial-while-loading',
   'silent-deprecated',
   'deep-drive-no-lease',
   'no-work-never-sent-back', 'skips-prompt-turns',

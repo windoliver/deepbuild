@@ -1,4 +1,5 @@
 export * from './runtime.js';
+export type { DoctorItem } from './generated/types.js';
 export { d1Digest, frozenDrift, parseDigest, recordHash } from './digest.js';
 export { lintSchemas, type LintProblem } from './lint.js';
 export { compilePattern, type Inst } from './pattern.js';

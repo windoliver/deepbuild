@@ -105,6 +105,12 @@ test-peek = ["dep:deep-canvas-test-modules"]
 # Issue #157: `test.guards`, whose kinds plant a NaN in a frame's float target, lose the device at
 # a frame, and draw a frame differently the second time it is drawn.
 test-export-guards = ["dep:deep-canvas-test-modules"]
+# Issue #1415: `test.boom`, whose operator panics at a frame at or after its `at`, freezing a live
+# session as an operator's panic does; and the state table's planted call, left undecided for one
+# state (deep-show then fails to compile) or decided for all six.
+test-boom = ["dep:deep-canvas-test-modules"]
+test-session-call-undecided = []
+test-session-call-decided = []
 # Issue #518: the native test encode tools of the #518 acceptance README, each a tool of the job
 # kind `encode` that encodes only for an export whose brief pins it. Its AV1 tools encode with
 # rav1e (BSD-2-Clause), which the image crate's AVIF writer already brings into the lock; its

@@ -61,7 +61,7 @@ import { Teardowns } from './teardowns.js';
 import { Agents, type Sync } from './agents.js';
 import { Box } from './box.js';
 import { NEWER_SET, OLDER_SET } from './status.js';
-import { aboutCall, aboutPermission } from './standing.js';
+import { aboutPermission, decide } from './standing.js';
 import { Channels } from './channels.js';
 import type { WorkspacesProvider, WorkspaceService } from './workspaces-port.js';
 import { Devices } from './trusted.js';
@@ -356,7 +356,7 @@ export class Core {
     this.flags = new SessionFlags({ services: lazyServices({ record: () => this.record, now: () => this.now, asks: () => this.asks, agents: () => this.agents, root: () => this.root, siblings: () => this.siblings, transcriptReader: () => this.transcriptReader }), state: () => this.state, mcp: () => this.mcp, events: { append: (connection, input, backfill) => this.append(connection, input, backfill), connection: (writer, extra) => this.connection(writer, extra) }, schedule: { queue: (work, starting) => this.queue(work, starting) }, readCodexTrust: (cwd) => this.readCodexTrust(cwd) });
     this.canvasSide = new HubCanvas({
       root: rootOf(options.root), now: () => this.now(), plant: options.plant, doneSpec: this.doneSpec,
-      record: () => this.record, store: () => this.store, libraries: () => this.libraries, sessions: () => this.state.sessions,
+      record: () => this.record, store: () => this.store, libraries: () => this.libraries, sessions: () => this.state.sessions, extensions: () => this.extensions,
       evidence: { stored: (put, what) => this.control.stored(put, what) },
       events: { append: (connection, input) => this.append(connection, input), connection: (writer, extra) => this.connection(writer, extra), agentConnection: (session) => this.mcp.agentConnection(session) },
       agentAbove: (peer) => this.state.agentAbove(peer),
@@ -2232,9 +2232,9 @@ export class Core {
       const staged = await this.staging.gate(meta, call, true);
       if (staged.held) return staged;
     }
-    // A dependency or a cloud resource the plan doesn't name: answered by your standing rule, or asked (#23).
-    const about = call.decided?.length && call.command ? aboutCall(call.decided, call.command, homedir()) : undefined;
-    return about ? this.holds.decide(meta, about) : {};
+    // A dependency or a cloud resource the plan doesn't name: answered by your standing rule, or asked (#23); a dependency
+    // with its registry's reading, and a package run straight from one isn't asked once it's a week old (#1509).
+    return decide({ holds: this.holds, covered: (s, a) => this.delivery.covered(s, a), now: () => this.now(), reading: (s, a, t) => this.appendReading(s, a, t), registry: this.options.registry, plant: this.options.plant }, meta, call);
   }
   /** The session is on `display` once its switch ran, if that is a screen it leases. */
   private async switched(session: string, display: string): Promise<void> {
