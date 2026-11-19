@@ -38,7 +38,7 @@ pub(crate) fn glyph(
             .glyph_run(resources, &g.font)
             .font_size(g.size)
             .hint(false)
-            .glyph_transform(deep_text::atlas::slant(g.skew))
+            .glyph_transform(deep_text::atlas::glyph_transform(g.skew, g.turn))
             .normalized_coords(&g.coords)
             .fill_glyphs(one);
         ctx.pop_layer();
