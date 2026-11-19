@@ -257,6 +257,10 @@ pub fn map_uses(
             }
         }
     }
+    // An image mark's picture (#1992), color as a base color map is.
+    for i in scene.layers.iter().flat_map(|l| &l.images) {
+        out.entry(i.asset.clone()).or_default().insert("base_color");
+    }
     out
 }
 
@@ -275,15 +279,45 @@ pub fn map_role(uses: &std::collections::BTreeSet<&str>) -> &'static str {
     }
 }
 
+/// Every map the `material@1` items of `doc` name, by its hash, with the decode worker's role
+/// for the fields that name it ([`map_role`]): what a host makes ready before it draws, such as
+/// the web player at load (#1040).
+pub fn material_maps(doc: &Value) -> std::collections::BTreeMap<String, &'static str> {
+    let mut uses: std::collections::BTreeMap<String, std::collections::BTreeSet<&str>> =
+        Default::default();
+    let items = doc.get("items").and_then(Value::as_object).into_iter();
+    for (_, i) in items.flatten().filter(|(_, i)| i["kind"] == "material@1") {
+        let p = &i["params"];
+        let maps = ["base_color", "metallic_roughness", "emission", "occlusion"];
+        let fields = (maps.map(|f| (f, &p["maps"][f])).into_iter())
+            .chain([("normal_map", &p["normal_map"])]);
+        for (field, v) in fields {
+            if let Some(sha) = v.as_str().or_else(|| v.get("sha256")?.as_str()) {
+                uses.entry(sha.to_ascii_lowercase())
+                    .or_default()
+                    .insert(field);
+            }
+        }
+    }
+    (uses.into_iter()).map(|(sha, u)| (sha, map_role(&u))).collect()
+}
+
 /// The first field of a `material@1` in `doc` that names map `sha`, as
 /// `items/<id>/params/maps/<map>` or `items/<id>/params/normal_map`: where a map whose image
 /// isn't in the store is answered (#1729).
 pub fn map_field(doc: &Value, sha: &str) -> Option<String> {
     let names = |v: &Value| v.as_str().or_else(|| v.get("sha256")?.as_str()) == Some(sha);
-    doc.get("items")?
-        .as_object()?
+    let kind = |i: &Value, k: &str| i.get("kind").and_then(Value::as_str) == Some(k);
+    let items = doc.get("items")?.as_object()?;
+    let image = items
         .iter()
-        .filter(|(_, i)| i.get("kind").and_then(Value::as_str) == Some("material@1"))
+        .find(|(_, i)| kind(i, "mark.image@1") && i.pointer("/params/asset").is_some_and(names));
+    if let Some((id, _)) = image {
+        return Some(format!("items/{id}/params/asset"));
+    }
+    items
+        .iter()
+        .filter(|(_, i)| kind(i, "material@1"))
         .find_map(|(id, i)| {
             let p = i.get("params")?;
             let maps = p.get("maps").and_then(Value::as_object);

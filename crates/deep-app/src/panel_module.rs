@@ -133,17 +133,17 @@ fn write_source(per_frame: bool, release_always: bool) -> String {
         by_module.entry(from).or_default().push(name);
     }
     let mut source = String::from(
-        "// Written by DeepBuild each time it loads this panel (#1425): @deepbuild/panel, the one module a panel imports.\n",
+        "// Written by DeepBuild each time it loads this panel (#1425): @deepbuild/panel, the one module a panel imports.\n", // copy-exception: script source
     );
     for (module, names) in by_module {
         source.push_str(&format!(
-            "export {{ {} }} from \"{module}\";\n",
+            "export {{ {} }} from \"{module}\";\n", // copy-exception: script source
             names.join(", ")
         ));
     }
     source.push_str(&MENU.replace(
-        "const RELEASE_ALWAYS = false;",
-        &format!("const RELEASE_ALWAYS = {release_always};"),
+        "const RELEASE_ALWAYS = false;", // copy-exception: script source
+        &format!("const RELEASE_ALWAYS = {release_always};"), // copy-exception: script source
     ));
     source
 }

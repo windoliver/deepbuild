@@ -1,0 +1,46 @@
+
+ RUN  v5.0.5 <scratch>/base
+
+ ✓ packages/hub/test/waits.test.ts > expected times > come from the kind with no history, and from the median of the command's past runs with it 3ms
+ × packages/hub/test/waits.test.ts > expected times > key a command by the 8,192 characters the record keeps of it (#2655) 8ms
+   → expected 'shell\u0000cat > out.txt <<\'EOF\' a …' to be 'shell\u0000cat > out.txt <<\'EOF\' a …' // Object.is equality
+ ✓ packages/hub/test/waits.test.ts > expected times > know a command that never ends on its own 2ms
+ ✓ packages/hub/test/waits.test.ts > expected times > say a span in words 0ms
+ ✓ packages/hub/test/waits.test.ts > an overrun > is due at the expected time, shows one line while the call runs, and tells the agent at the call's next hook 2ms
+ ✓ packages/hub/test/waits.test.ts > an overrun > is not recorded for a call that ends in time, and a failed call teaches nothing 0ms
+ ✓ packages/hub/test/waits.test.ts > a deadline > is attached to a command that never ends, only where the adapter rewrites and the session bypasses approvals, with no decision 1ms
+ ✓ packages/hub/test/waits.test.ts > the lines > announce a wait expected to take over a minute when it starts 0ms
+ ✓ packages/hub/test/waits.test.ts > the lines > follow no call outside a turn the hub saw begin, and at most 256 calls of one turn at once 1ms
+ ✓ packages/hub/test/waits.test.ts > the lines > rewrite the command the agent typed, not the record's redacted copy; cap the timeout; follow no background call 0ms
+ ✓ packages/hub/test/waits.test.ts > the lines > drop a call blocked or denied before it ran, and every call of a turn at its stop or at the next prompt 0ms
+ ✓ packages/hub/test/waits.test.ts > the lines > give a turn ten minutes without a readable line one at its next hook, naming the ask, the step, the time so far and the time left 1ms
+ ✓ packages/hub/test/waits.test.ts > the lines > come every ten minutes while a single call still runs, through the in-call route 0ms
+ ✓ packages/hub/test/waits.test.ts > the lines > wait for the stop under the planted wrong program, so a long turn shows none 0ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/hub/test/waits.test.ts > expected times > key a command by the 8,192 characters the record keeps of it (#2655)
+AssertionError: expected 'shell\u0000cat > out.txt <<\'EOF\' a …' to be 'shell\u0000cat > out.txt <<\'EOF\' a …' // Object.is equality
+
+- Expected
++ Received
+
+- shell\0cat > out.txt <<'EOF' a row of the file a row of the file a row of the file a row of the file a row of the file a row of the file a row of the file a row of the file a row of the file a row of the file a row of the file a row of the file a row of the file a row of the file a row of the file a row of the file a row of the file a row of the file a row of the file a row of the file a row of the file a row of the file a row of the file a row of the file a row of the file a row of the file a row of the file a row of the file a row of the file a row of the file a row of the file a row of th … (7601 more characters cut)
++ shell\0cat > out.txt <<'EOF' a row of the file a row of the file a row of the file a row of the file a row of the file a row of the file a row of the file a row of the file a row of the file a row of the file a row of the file a row of the file a row of the file a row of the file a row of the file a row of the file a row of the file a row of the file a row of the file a row of the file a row of the file a row of the file a row of the file a row of the file a row of the file a row of the file a row of the file a row of the file a row of the file a row of the file a row of the file a row of th … (107434 more characters cut)
+
+ ❯ packages/hub/test/waits.test.ts:33:50
+     31|     // A heredoc of 100 KB keys as its record's cut does, so a hub sta…
+     32|     const heredoc = `cat > out.txt <<'EOF'\n${'a row of the file\n'.re…
+     33|     expect(historyKey('shell', heredoc, 'Bash')).toBe(historyKey('shel…
+       |                                                  ^
+     34|     expect(historyKey('shell', heredoc, 'Bash')).not.toBe(historyKey('…
+     35|     // The record's cut keeps no half of a surrogate pair, and neither…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 13 passed (14)
+   Start at  13:59:14
+   Duration  411ms (tests 70%, transform 21%, setup 4%, worker 3%, import 3%)
+

@@ -1,0 +1,15 @@
+✔ the judging fails planted numbers: a heap 0.4 MB under, and 3% more instructions; and passes their twins (10.951209ms)
+✔ AC3 #2655 the main thread's heap after two full collections is at least 0.5 MB under the merge base's (62427.989333ms)
+ℹ heap after two full collections, bytes: merge base [7453048,7453264,7453048,7453048,7453120,7453016,7453088,7453088,7453192,7453088,7453048,7453120,7453048,7453016,7453160,7453120,7453032,7453192,7453008,7453016]; change [6836176,6836112,6836112,6836080,6836112,6836112,6836184,6836080,6836152,6836184,6836080,6836080,6836080,6836112,6836184,6836136,6836072,6836152,6836152,6836080]
+ℹ PASS: the main thread's heap after two full collections is 6.52 MB (median of 20), the merge base's 7.11 MB: 0.59 MB under it
+✔ AC3 #2655 the hub's own process retires no more instructions from start to its socket's first answer than the merge base's (4.407375ms)
+ℹ instructions retired, start to first answer, per round: [{"main":820045907,"change":810885322},{"change":796281433,"main":831773381},{"main":825263636,"change":795112016},{"change":802003415,"main":820650235},{"main":821074987,"change":789472503},{"change":800947755,"main":899287236},{"main":823291720,"change":813552611},{"change":797237192,"main":815373607},{"main":1407803892,"change":799433379},{"change":841557374,"main":820232234},{"main":825140732,"change":932552691},{"change":791383156,"main":838678238},{"main":821797568,"change":806593950},{"change":808552782,"main":829408292},{"main":819429484,"change":817697735},{"change":819642166,"main":829017743},{"main":827559011,"change":820398155},{"change":828039356,"main":820769946},{"main":830572476,"change":797913164},{"change":816061394,"main":874475316}] (proc_pid_rusage ri_instructions of the hub's own process)
+ℹ PASS: from start to the socket's first answer the hub retires -2.25% against the merge base (median of 20 pairs; p 0.98 that it is above, p 0.00090 that it is under 2% above; seed 2655)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 62507.8135

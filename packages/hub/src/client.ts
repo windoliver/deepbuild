@@ -2,8 +2,9 @@
 // call the peer check judges, naming this process as the peer, so the hub can tell whether an agent's process tree
 // runs the command.
 import { spawn } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import net from 'node:net';
+import { dirname, join } from 'node:path';
 import { hubAddress, installedRoot, rootOf } from './paths.js';
 import { checkCompat, type Hello } from './compat.js';
 import { refusedGeneration, StaleHub } from './generations.js';
@@ -12,6 +13,58 @@ import { CONTRACT, startOf, type Refusal } from './wire.js';
 type Obj = Record<string, unknown>;
 /** The hub's answer to one call: its result, or its refusal. */
 export type Reply = { result: Obj } | { error: Refusal };
+
+/** A hub nothing answered for: no socket, nothing listening on it, or a connection closed before the hub said hello. */
+export class Unanswered extends Error {}
+
+/** `at` as a clock time in your time zone: 16:40. */
+export const clock = (at: number): string => {
+  const d = new Date(at);
+  return Number.isNaN(d.getTime()) ? 'Invalid Date' : `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+};
+
+/** The one sentence in a home that is set up: since when, if the record says, and the one fix. */
+export const notAnsweringSince = (since: number | undefined): string => `The hub isn't answering${since === undefined ? '' : `, since ${clock(since)}`}; start it with deep hub start.`;
+/**
+ * The one sentence every deep command prints for a hub that isn't answering (#1812): that it isn't, since when if the
+ * record says (its newest event), and the one fix, `deep setup` in a home that isn't set up, else `deep hub start`.
+ * No path and no errno: what failed underneath is the hub's logs' to say.
+ */
+export async function notAnswering(socket?: string): Promise<string> {
+  const root = rootOf(installedRoot());
+  // Set up as the first command reads it (packages/cli/src/main.ts): finished, or a folder no stopped setup left.
+  const setUp = existsSync(join(root.dir, 'setup-finished.json')) || (existsSync(root.dir) && !existsSync(join(root.dir, 'setup-stopped.json')));
+  if (!setUp) return "The hub isn't answering; set this home up with deep setup.";
+  let since: number | undefined;
+  const ledger = [...(socket ? [join(dirname(socket), 'ledger.db')] : []), root.ledger].find((p) => existsSync(p));
+  if (ledger) {
+    try {
+      const { default: Database } = await import('better-sqlite3');
+      const db = new Database(ledger, { readonly: true, fileMustExist: true });
+      try {
+        since = (db.prepare('SELECT ts FROM events ORDER BY log_pos DESC LIMIT 1').get() as { ts: number } | undefined)?.ts;
+      } finally {
+        db.close();
+      }
+    } catch { /* a record that can't be read says nothing of since when */ }
+  }
+  return notAnsweringSince(since);
+}
+
+/**
+ * What a deep command says when its call to the hub failed, from this one place (#1812): for a hub that isn't
+ * answering (an `Unanswered` call, or no control token where a hub would have written one), the one sentence; for any
+ * other failure (a hub on another contract, a copy left behind), its own words.
+ */
+export async function failure(error: unknown, socket?: string): Promise<string> {
+  const tokenless = typeof (error as { path?: unknown })?.path === 'string' && (error as { path: string }).path.endsWith('control.token');
+  return error instanceof Unanswered || tokenless ? notAnswering(socket) : error instanceof Error ? error.message : String(error);
+}
+/** `failure`'s words on stderr, and the exit of a call that decided nothing: 3. */
+export async function notAnswered(error: unknown, socket?: string): Promise<3> {
+  process.stderr.write(`${await failure(error, socket)}\n`);
+  return 3;
+}
 
 /**
  * polkit prompts the process it's asked about (confirm.ts), so on Linux, at a terminal, this process holds an agent of
@@ -40,8 +93,8 @@ export async function call(socket: string, token: string, method: string, params
     let buffer = '';
     let hello = false;
     sock.setEncoding('utf8');
-    sock.on('error', (error) => reject(Error(`can't reach the hub at ${socket}: ${error.message}`)));
-    sock.on('close', () => reject(Error('the hub closed the connection before it answered')));
+    sock.on('error', (error) => reject(new Unanswered(`can't reach the hub at ${socket}: ${error.message}`)));
+    sock.on('close', () => reject(hello ? Error('the hub closed the connection before it answered') : new Unanswered(`the hub at ${socket} closed the connection before it said hello`)));
     sock.on('data', (chunk: string) => {
       buffer += chunk;
       let i: number;
@@ -86,17 +139,16 @@ export const UNDECIDED_CODES = new Set(['unconfirmed', 'role', 'unavailable']);
 /**
  * One call to the installed hub as this process, so its peer check can tell whether an agent's process tree runs it:
  * the result of a call the hub did, or, once stderr says why, the exit code of one it didn't: 1 refused, 2 refused
- * at the door, 3 not decided (`nothing` says what was left undone).
+ * at the door, 3 not decided.
  */
-export async function callAsYou(method: string, params: Obj, nothing: string): Promise<Obj | number> {
+export async function callAsYou(method: string, params: Obj): Promise<Obj | number> {
   let reply: Reply;
   try {
     const token = readFileSync(rootOf(installedRoot()).token, 'utf8').trim();
     const peer = { pid: process.pid, start: (await startOf(process.pid)) ?? '' };
     reply = await withPrompt(() => call(hubAddress().path, token, method, params, peer));
   } catch (error) {
-    process.stderr.write(`BLOCKED: ${error instanceof Error ? error.message : String(error)}; ${nothing}\n`);
-    return 3;
+    return notAnswered(error);
   }
   if ('error' in reply) {
     process.stderr.write(`${reply.error.remediation}\n`);

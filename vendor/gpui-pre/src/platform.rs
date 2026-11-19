@@ -17,6 +17,9 @@ mod threaded_dispatcher;
 #[cfg(any(test, feature = "test-support", feature = "bench-support"))]
 mod test;
 
+#[cfg(any(test, feature = "test-support", feature = "bench-support"))]
+mod a11y_tap; // DeepBuild patch (windoliver/deepbuild#1482)
+
 #[cfg(all(target_os = "macos", any(test, feature = "test-support")))]
 mod visual_test;
 
@@ -179,6 +182,9 @@ pub(crate) use test::*;
 
 #[cfg(any(test, feature = "test-support"))]
 pub use test::{TestDispatcher, TestScreenCaptureSource, TestScreenCaptureStream};
+
+#[cfg(any(test, feature = "test-support", feature = "bench-support"))]
+pub use a11y_tap::{TappedNode, TappedTree, accessibility_tree, activate_accessibility}; // DeepBuild patch (windoliver/deepbuild#1482)
 
 #[cfg(any(test, feature = "test-support", feature = "bench-support"))]
 pub use threaded_dispatcher::ThreadedDispatcher;

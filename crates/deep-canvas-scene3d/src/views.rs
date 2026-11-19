@@ -293,6 +293,7 @@ pub fn seen(scene: &Scene, v: &View) -> Scene {
         layer.lines.retain(|x| keeps(&x.id));
         layer.points.retain(|x| keeps(&x.id));
         layer.labels.retain(|x| keeps(&x.id));
+        layer.images.retain(|x| keeps(&x.id));
         layer.puffs.retain(|x| keeps(&x.id));
     }
     // An eye inset's view follows the viewing camera as it is now, at the frame's own size.

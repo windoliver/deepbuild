@@ -670,6 +670,8 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             if writes_document && motifs.is_some() {
                 write_places(&mut held, &items);
             }
+            // #1619: what the look's finish pass is given for this frame, on any backend.
+            let finish_hash = frame.print.as_ref().map(|p| p.finish_hash(size));
             *marks.lock().unwrap_or_else(|e| e.into_inner()) = Arc::new(frame);
             {
                 let win = app.window.as_ref().expect("opened");
@@ -728,6 +730,9 @@ fn run(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
             });
             if hash {
                 row["pixel_hash"] = json!(pixels);
+            }
+            if let Some(h) = finish_hash {
+                row["finish_hash"] = json!(h);
             }
             // #451: each asked 2D particles item's evaluated data at the frame's time.
             if !asked.is_empty() {

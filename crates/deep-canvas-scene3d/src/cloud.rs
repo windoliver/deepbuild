@@ -12,7 +12,7 @@ use serde_json::{json, Value};
 
 use crate::look::Look3;
 use crate::scene::{apply, num, origin, paint, Affine3, Point, PointShape, Refused};
-use crate::spec::{common, item, p, Spec, G, S};
+use crate::spec::{common, fog, item, p, Spec, G, S};
 
 /// A step leaves one point per `step`-th pixel of each row and column, at most this far apart.
 pub const MAX_STEP: u64 = 8;
@@ -177,6 +177,7 @@ pub(crate) fn point(
                 ..c
             })
         }),
+        fog: crate::scene::fog(params, true),
     })
 }
 
@@ -206,6 +207,7 @@ pub(crate) fn spec() -> Spec {
                 video(5),
                 video(6),
             ),
+            fog(true),
         ]),
         reads: None,
         fixture: json!({"it": item("mark.point@1", json!({"size": 4, "paint": {"fill": {"role": "ink"}}}))}),

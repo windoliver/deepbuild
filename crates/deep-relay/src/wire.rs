@@ -36,6 +36,47 @@ pub fn match_id(text: &str) -> Option<MatchId> {
     Some(id)
 }
 
+/// What a relay's hello allows per connection.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Limits {
+    pub frames_per_s: u64,
+    pub frame_bytes: u64,
+}
+
+/// The host a relay URL names: `https://<host>[/...]` → `<host>`.
+pub fn host(relay: &str) -> String {
+    let rest = relay.strip_prefix("https://").unwrap_or(relay);
+    rest.split('/').next().unwrap_or_default().to_string()
+}
+
+/// The hello check: a relay that names another protocol or digest, or no limits, is refused
+/// before anything is sent, naming its host and what it answered.
+pub fn check_hello(host: &str, hello: &serde_json::Value) -> Result<Limits, String> {
+    let protocol = hello["protocol"].as_str().unwrap_or("nothing");
+    if protocol != PROTOCOL {
+        return Err(format!(
+            "refused the relay {host}: its hello answered {protocol}, not {}",
+            PROTOCOL
+        ));
+    }
+    let (digest, committed) = (hello["digest"].as_str().unwrap_or("none"), digest());
+    if digest != committed {
+        return Err(format!(
+            "refused the relay {host}: its hello answered relay@1 with the digest {digest}, not the committed {committed}"
+        ));
+    }
+    let limit = |name: &str| hello["limits"][name].as_u64().filter(|n| *n > 0);
+    match (limit("frames_per_s"), limit("frame_bytes")) {
+        (Some(frames_per_s), Some(frame_bytes)) if frame_bytes > HEADER as u64 => Ok(Limits {
+            frames_per_s,
+            frame_bytes,
+        }),
+        _ => Err(format!(
+            "refused the relay {host}: its hello names no usable limits"
+        )),
+    }
+}
+
 /// One frame: a copy's steps from `first`, each step's entries opaque to the relay.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Frame {

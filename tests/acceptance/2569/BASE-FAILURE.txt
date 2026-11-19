@@ -1,0 +1,43 @@
+#2569 acceptance tests at the base, 212f16d09 (origin/main when written).
+
+Run by the implementing session, not the blind job (which may not build or open a window), in a checkout at
+212f16d09 with this folder copied in and no other change, on a reference Mac (Mac15,12), mains power, 2026-11-17.
+Four other sessions were using the Mac: load 272 at the start and 230 at the end of the first run.
+
+$ npx vitest run --root tests/acceptance/2569 --no-file-parallelism deadline.test.ts outlives.test.ts
+ × deadline.test.ts > #2569.aedf09ed … > #2569.aedf09ed `arm blank`, its real window covered 3 s after it opens so it
+   gets no more frames: one INCONCLUSIVE line whose reason says no frame for 10 s, and exit 0, within 20 s of the cover
+   → `lists_1477 arm blank` exits within 20 s of its window being covered (the stated 10 s with no frame, and 10 s
+     more); it is still waiting, with no deadline: stdout "", exit null, stderr "": expected false to be true
+ × outlives.test.ts > #2569.b4a750e6 … > #2569.b4a750e6 `arm blank`, started as #1477's tests start it: 5 s after its
+   starter is killed, it is no longer in the process table
+   → 5 s after the process that started it was killed, `lists_1477 arm blank` (pid 8242 (…/lists_1477-plain arm
+     blank)) is still running: it outlives the run that started it: expected [ Array(1) ] to deeply equal []
+ × outlives.test.ts > #2569.b4a750e6 … > #2569.b4a750e6 `measure --arms blank`, started as #1477's tests start it: 5 s
+   after its starter is killed, neither it nor the arm it started is in the process table
+   → 5 s after the process that started `lists_1477 measure` was killed, of pid 8493 (…/lists_1477-plain measure --out
+     …/record.json --arms blank); pid 8494 (…/lists_1477-plain arm blank) these are still running: they outlive the
+     run that started them: expected [ …(2) ] to deeply equal []
+ Test Files  2 failed (2)
+      Tests  3 failed (3)
+   Duration  83.10s
+
+Each fails at its criterion's own assertion.
+
+$ npx vitest run --root tests/acceptance/2569 --no-file-parallelism main.test.ts      (load 207, thermal state fair)
+ × main.test.ts > #2569.97a55309 … > #2569.97a55309 `node scripts/affected.mjs --timed` on #1477's three files, in this
+   checkout: every test of theirs passes, or is KNOWN with its cause named in scripts/known-failures.json; none is a
+   NEW FAIL, and the run ends within 90 min leaving no lists_1477 process
+   → INCONCLUSIVE: this isn't a reference Mac left alone, so the run isn't started: a reading, not a budget result:
+     … thermal state is "fair", not "nominal"; load 207.2509765625 at a run's start or end is above the 8 cores; this
+     is not a pass
+
+This one did not reach its criterion's assertion: the Mac was not left alone, so it reads INCONCLUSIVE, which is not
+a failure for the expected reason. The issue's command, run by hand right after, read the same way:
+
+$ node scripts/affected.mjs --timed tests/acceptance/1477/built.test.ts tests/acceptance/1477/record.test.ts tests/acceptance/1477/redraft/record.test.ts
+INCONCLUSIVE tests/acceptance/1477/built.test.ts › (file): no timed grant came within 30 min
+INCONCLUSIVE tests/acceptance/1477/record.test.ts › (file): no timed grant came within 30 min
+INCONCLUSIVE tests/acceptance/1477/redraft/record.test.ts › (file): no timed grant came within 30 min
+
+Type-check: `node node_modules/typescript/bin/tsc -p tests/acceptance/2569/tsconfig.json` prints nothing (exit 0).

@@ -388,7 +388,8 @@ pub fn serve() -> ExitCode {
                         object(vec![("tools", empty.clone()), ("resources", empty.clone())]);
                     let info = object(vec![
                         ("name", text("deep-actions")),
-                        ("version", text("0.0.0")),
+                        // #1495: the hook binary's version is its crate's, which a release moves.
+                        ("version", text(env!("CARGO_PKG_VERSION"))),
                     ]);
                     send(
                         &id,

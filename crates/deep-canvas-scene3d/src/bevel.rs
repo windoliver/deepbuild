@@ -552,6 +552,18 @@ fn assemble(p: &Poly, faces: NewFaces, pos: &[V3], from: &[u32], harden: bool) -
             normals.push(faces.normals[at..at + face.len()].to_vec());
         }
     }
+    // The typed attributes (#1781): each point takes its old point's value, each face its source
+    // face's, and each corner its source face's corner's at its old point.
+    let old = |q: u32| from[order[q as usize] as usize];
+    out.typed = crate::attrs::onto(
+        &p.typed,
+        p,
+        &out,
+        &old,
+        &|f| faces.src[f] as usize,
+        &|f, k| old(out.faces[f][k]),
+        false,
+    );
     Beveled {
         poly: out,
         normals: harden.then_some(normals),

@@ -1,0 +1,53 @@
+✖ AC4 #2655 a 512 KiB hook line reaches the parser with one copy made on the event loop (1063.607958ms)
+ℹ 1048576 bytes copied on the event loop for the 524288-byte line, 2 whole copies of it (Buffer.concat 524288, postMessage 524288)
+✔ AC4 #2655 the 512 KiB line's event is the merge base's (1190.804083ms)
+✔ AC4 #2655 every line reaches the parser as it was sent: the 512 KiB line, and three lines that share a chunk of the socket (1312.637291ms)
+✖ AC4 #2655 (wrong program) a server that hands over a view of the socket's chunk (DEEP_HUB_PLANT=hands-over-socket-chunk) fails, naming the line that changed under the parser (1236.758125ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 2
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4871.145708
+
+✖ failing tests:
+
+test at tests/acceptance/2655/line-copies.test.mjs:106:1
+✖ AC4 #2655 a 512 KiB hook line reaches the parser with one copy made on the event loop (1063.607958ms)
+  AssertionError [ERR_ASSERTION]: 1048576 bytes copied on the event loop for the 524288-byte line, 2 whole copies of it (Buffer.concat 524288, postMessage 524288); one copy is required
+  
+  2 !== 1
+  
+      at TestContext.<anonymous> (file://<scratch>/base/tests/acceptance/2655/line-copies.test.mjs:130:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 2,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2655/line-copies.test.mjs:161:1
+✖ AC4 #2655 (wrong program) a server that hands over a view of the socket's chunk (DEEP_HUB_PLANT=hands-over-socket-chunk) fails, naming the line that changed under the parser (1236.758125ms)
+  Error: BLOCKED: no planted server ran: `DEEP_HUB_PLANT=hands-over-socket-chunk deep hub run` must start a hub that hands its parser a view of the socket's chunk in place of the line's own bytes. BLOCKED: the hub of <scratch>/base exited 1 before it was ready: <scratch>/base/packages/hub/dist/plant.js:123
+          throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+                ^
+  
+  Error: DEEP_HUB_PLANT=hands-over-socket-chunk names no planted program
+      at plantOf (file://<scratch>/base/packages/hub/dist/plant.js:123:15)
+      at Module.runHub (file://<scratch>/base/packages/hub/dist/server.js:1616:19)
+      at hubCommand (file://<scratch>/base/packages/hub/dist/hub-command.js:29:58)
+      at async file://<scratch>/base/packages/cli/dist/main.js:345:24
+  
+  Node.js v24.22.2
+  
+      at TestContext.<anonymous> (file://<scratch>/base/tests/acceptance/2655/line-copies.test.mjs:170:11)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+exit 1

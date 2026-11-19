@@ -228,71 +228,48 @@ fn sha256_hex(bytes: &[u8]) -> String {
     super::hex(Sha256::digest(bytes))
 }
 
+/// A playable page built in a folder: its listing, frame rate and manifest, and its media by path,
+/// each also written in the folder.
+pub(super) struct Built {
+    pub listing: Listing,
+    pub rate: (u32, u32),
+    pub manifest: Value,
+    pub files: BTreeMap<String, Vec<u8>>,
+}
+
+/// A refusal past the page's caps that the logic module's carried state keeps apart, naming the
+/// document's logic items, which hold it.
+fn naming_logic(doc: &Value, mut refusal: Value) -> Value {
+    let rows = refusal["carried"].as_array().cloned().unwrap_or_default();
+    if refusal["code"] != "page_states" || !rows.iter().any(|r| r["module"] == "logic") {
+        return refusal;
+    }
+    let items: Vec<&str> = (doc["items"].as_object().into_iter().flatten())
+        .filter(|(_, i)| i["kind"] == deep_logic::module::INTERFACE)
+        .map(|(id, _)| id.as_str())
+        .collect();
+    let why = refusal["why"].as_str().unwrap_or_default();
+    refusal["why"] = json!(format!("{why}: the logic item {}", items.join(", ")));
+    refusal["items"] = json!(items);
+    refusal
+}
+
 impl Hub<'_> {
     /// `video.codec: page`: the playable page of `doc`, written as a folder at `job.out`.
     pub(super) fn export_page(&mut self, job: &Job, doc: &Value) -> Result<Value, Value> {
         let started = Instant::now();
-        let opts = options(doc, &job.page)?;
-        // A page can't keep the status rule, as a Lottie can't (#162).
-        if let Some(r) = doc.as_object().and_then(|d| {
-            deep_canvas_export::lottie::status_binding(
-                d,
-                "page.status_binding",
-                "a playable page",
-                "a playable page",
-            )
-        }) {
-            return Err(
-                json!({"outcome": "refused", "code": r.code, "path": r.path, "why": r.what, "issues": [r.json()]}),
-            );
-        }
-        let (p, q) = job
-            .frame_rate
-            .or_else(|| doc.get("transport").and_then(frame_rate_of))
-            .unwrap_or((60, 1));
-        let frame = clock::frame_length(p, q)
-            .map_err(|why| json!({"code": "bad_rate", "frame_rate": [p, q], "why": why}))?;
-        let by_picture = self.planted(Planted::Export(Guard::PageKeysByPicture));
-        let listing = {
-            let mut probe = |form: &Value, t: i64| self.page_probe(form, t, by_picture, job.size);
-            list::list(doc, frame, &mut probe)?
-        };
         let out = PathBuf::from(&job.out);
         let temp = temp_of(&out);
         let _ = std::fs::remove_dir_all(&temp);
-        std::fs::create_dir_all(temp.join("media"))
-            .and_then(|()| std::fs::create_dir_all(temp.join("player")))
-            .map_err(|_| json!({"code": "export_unwritable"}))?;
-        let mut files: BTreeMap<String, Vec<u8>> = BTreeMap::new();
-        let cx = Ctx {
-            job,
-            doc,
-            listing: &listing,
-            frame,
-            temp: &temp,
-            opts: &opts,
-        };
-        let mut states = Vec::with_capacity(listing.states.len());
-        for (k, s) in listing.states.iter().enumerate() {
-            states.push(self.page_state(&cx, k, s, &mut files)?);
-        }
-        let mut edges = Vec::with_capacity(listing.edges.len());
-        for (k, e) in listing.edges.iter().enumerate() {
-            edges.push(self.page_edge(&cx, k, e, &mut files)?);
-        }
-        let mut manifest = write::manifest(doc, &listing, states, edges, self.page_bound(doc));
-        if let Some((control, n)) = &opts.sample {
-            let c = &doc["controls"][control];
-            manifest["sample"] =
-                json!({"control": control, "label": c["label"], "values": sample_values(c, *n)});
-        }
-        if let Some(n) = opts.orbit {
-            manifest["orbit"] = json!({"frames": n});
-        }
-        if self.planted(Planted::Export(Guard::PageTargetsOnImage)) {
-            // Planted (#169 AC7): the targets are only boxes on each still.
-            manifest["targets_on_image"] = json!(true);
-        }
+        let built = self.page_built(job, doc, None, &temp);
+        let Built {
+            listing,
+            rate: (p, q),
+            manifest,
+            mut files,
+        } = built.inspect_err(|_| {
+            let _ = std::fs::remove_dir_all(&temp);
+        })?;
         let manifest_bytes = serde_json::to_vec_pretty(&manifest).unwrap_or_default();
         files.insert("manifest.json".into(), manifest_bytes);
         files.insert(
@@ -332,17 +309,117 @@ impl Hub<'_> {
         }))
     }
 
-    /// The core's carried state of `form` at `t`, read in a fresh session; planted, the frame's
-    /// raw hash in its place, so states are keyed by the picture and the controls alone.
+    /// The playable page of `doc` built in folder `temp`: every state its listing finds, or with
+    /// `tour` (one pass of the piece's tour, as input entries) a tour page's states (#1040).
+    pub(super) fn page_built(
+        &mut self,
+        job: &Job,
+        doc: &Value,
+        tour: Option<&[Value]>,
+        temp: &Path,
+    ) -> Result<Built, Value> {
+        let opts = options(doc, &job.page)?;
+        // A page can't keep the status rule, as a Lottie can't (#162).
+        if let Some(r) = doc.as_object().and_then(|d| {
+            deep_canvas_export::lottie::status_binding(
+                d,
+                "page.status_binding",
+                "a playable page",
+                "a playable page",
+            )
+        }) {
+            return Err(
+                json!({"outcome": "refused", "code": r.code, "path": r.path, "why": r.what, "issues": [r.json()]}),
+            );
+        }
+        let (p, q) = job
+            .frame_rate
+            .or_else(|| doc.get("transport").and_then(frame_rate_of))
+            .unwrap_or((60, 1));
+        let frame = clock::frame_length(p, q)
+            .map_err(|why| json!({"code": "bad_rate", "frame_rate": [p, q], "why": why}))?;
+        // Planted (#1040 AC9): states keyed by the picture and the logic alone.
+        let and_logic = self.planted(Planted::Export(Guard::PageKeysByPictureAndLogic));
+        let by_picture = and_logic || self.planted(Planted::Export(Guard::PageKeysByPicture));
+        let listing = {
+            let hub = std::cell::RefCell::new(&mut *self);
+            let mut probe = |form: &Value, t: i64| {
+                (hub.borrow_mut()).page_probe(form, t, by_picture, and_logic, job.size)
+            };
+            // Each play rests once its worlds' bodies do (#1040).
+            let mut settle = |form: &Value| hub.borrow().settled(form);
+            match tour {
+                Some(entries) => list::tour(doc, frame, entries, &mut probe, &mut settle)?,
+                None => list::list_keyed(doc, frame, &mut probe, &mut settle, !and_logic)
+                    .map_err(|r| naming_logic(doc, r))?,
+            }
+        };
+        std::fs::create_dir_all(temp.join("media"))
+            .and_then(|()| std::fs::create_dir_all(temp.join("player")))
+            .map_err(|_| json!({"code": "export_unwritable"}))?;
+        let mut files: BTreeMap<String, Vec<u8>> = BTreeMap::new();
+        let cx = Ctx {
+            job,
+            doc,
+            listing: &listing,
+            frame,
+            temp,
+            opts: &opts,
+        };
+        let mut states = Vec::with_capacity(listing.states.len());
+        for (k, s) in listing.states.iter().enumerate() {
+            states.push(self.page_state(&cx, k, s, &mut files)?);
+        }
+        let mut edges = Vec::with_capacity(listing.edges.len());
+        for (k, e) in listing.edges.iter().enumerate() {
+            edges.push(self.page_edge(&cx, k, e, &mut files)?);
+        }
+        let mut manifest = write::manifest(doc, &listing, states, edges, self.page_bound(doc));
+        if let Some((control, n)) = &opts.sample {
+            let c = &doc["controls"][control];
+            manifest["sample"] =
+                json!({"control": control, "label": c["label"], "values": sample_values(c, *n)});
+        }
+        if let Some(n) = opts.orbit {
+            manifest["orbit"] = json!({"frames": n});
+        }
+        if self.planted(Planted::Export(Guard::PageTargetsOnImage)) {
+            // Planted (#169 AC7): the targets are only boxes on each still.
+            manifest["targets_on_image"] = json!(true);
+        }
+        Ok(Built {
+            listing,
+            rate: (p, q),
+            manifest,
+            files,
+        })
+    }
+
+    /// The core's carried state of `form` at `t`, read in a fresh session, and each world's bake
+    /// there; planted, the frame's raw hash in its place, so states are keyed by the picture and
+    /// the controls alone, or (`and_logic`) by the picture and the logic module's carried state.
     fn page_probe(
         &mut self,
         form: &Value,
         t: i64,
         by_picture: bool,
+        and_logic: bool,
         size: Option<[u16; 2]>,
     ) -> Result<Vec<CarriedState>, Value> {
+        // The logic module steps only with each item's program inlined, as the hub's forms hold
+        // it; without, its carried state is the same empty row for every play (#1040).
+        let mut programs = form.clone();
+        self.inline_programs(&mut programs);
+        let form = &programs;
         if !by_picture {
-            return Ok(self.carried_at(form, t));
+            let mut rows = self.carried_at(form, t);
+            if self.planted(Planted::Export(Guard::PageKeysLogicByStepHash)) {
+                // Planted (#1040 AC8): logic keyed by its step hash alone.
+                rows.retain(|r| r.module != "logic");
+                rows.extend(self.logic_step_rows(form, t));
+            }
+            rows.extend(self.world_rows(form, t));
+            return Ok(rows);
         }
         let mut sched = Scheduler::new(&self.startup.sealed, self.options());
         let mut session = self.new_session();
@@ -354,12 +431,27 @@ impl Hub<'_> {
             .flat_map(|p| [p[2], p[1], p[0], p[3]])
             .collect();
         let hash = self.gpu_hash(&bgra, size.map(u32::from))?;
-        Ok(vec![CarriedState {
+        let mut rows = vec![CarriedState {
             module: "picture".into(),
             kind: "frame".into(),
             key: String::new(),
             hash: super::hex(hash),
-        }])
+        }];
+        if and_logic {
+            let logic = self.carried_at(form, t).into_iter();
+            rows.extend(logic.filter(|r| r.module == "logic"));
+        }
+        Ok(rows)
+    }
+
+    /// `form` with its worlds and logic items baked on its own track and each program inlined, as
+    /// the export's frames and the hub's sessions hold it (#1040).
+    fn baked(&self, form: &Value) -> Value {
+        let Some(mut out) = self.baked_once(form) else {
+            return form.clone();
+        };
+        self.inline_programs(&mut out);
+        out
     }
 
     /// The core's carried-state list as a play of `form` leaves it at `t`, read through the core
@@ -422,7 +514,7 @@ impl Hub<'_> {
             orbit.push(r);
         }
         let shown = crate::played::at(&form, t).into_owned();
-        let (targets, size) = self.page_targets(&form, &shown, t, cx.job.size)?;
+        let (targets, size, hidden) = self.page_targets(&form, &shown, t, cx.job.size)?;
         let program = shown.as_object().and_then(|m| Program::compile(m).ok());
         let data = access::data_at(&shown, program.as_ref(), t);
         Ok(json!({
@@ -440,7 +532,7 @@ impl Hub<'_> {
             "view": s.node.view,
             "size": size,
             "targets": targets,
-            "tree": access::tree(&shown, &[]),
+            "tree": access::tree(&shown, &hidden),
             "readouts": access::readouts(&data, &[]),
         }))
     }
@@ -565,18 +657,20 @@ impl Hub<'_> {
 
     /// Each target of the state that draws, in the Tab order, with the screen box a click on it
     /// lands in: the largest rectangle of its item's own pixels in the still, from the 3D object
-    /// ID pass, or from the 2D marks' boxes painted in draw order; and the still's size.
+    /// ID pass, or from the 2D marks' boxes painted in draw order; the still's size; and the
+    /// items its opacity hides there, which neither a target nor the tree holds (#1040).
+    #[allow(clippy::type_complexity)]
     fn page_targets(
         &mut self,
         form: &Value,
         shown: &Value,
         t: i64,
         size: Option<[u16; 2]>,
-    ) -> Result<(Vec<Value>, [u16; 2]), Value> {
-        let (raster, names, boxes, size) = self.page_ids(form, shown, t, size)?;
+    ) -> Result<(Vec<Value>, [u16; 2], Vec<String>), Value> {
+        let (raster, names, boxes, size, hidden) = self.page_ids(form, shown, t, size)?;
         let dims = [usize::from(size[0]), usize::from(size[1])];
         let step = (dims[0] / 320).max(1);
-        let targets = deep_canvas::scope::pick_targets(shown, &[])
+        let targets = deep_canvas::scope::pick_targets(shown, &hidden)
             .into_iter()
             .filter_map(|p| {
                 let id = names
@@ -592,11 +686,11 @@ impl Hub<'_> {
                 )
             })
             .collect();
-        Ok((targets, size))
+        Ok((targets, size, hidden))
     }
 
     /// The still's pixels as item indices (into the names, from 1; 0 where nothing draws), each
-    /// item's box in px, and the still's size.
+    /// item's box in px, the still's size, and the 2D items whose opacity hides them at `t`.
     #[allow(clippy::type_complexity)]
     fn page_ids(
         &mut self,
@@ -604,7 +698,16 @@ impl Hub<'_> {
         shown: &Value,
         t: i64,
         size: Option<[u16; 2]>,
-    ) -> Result<(Vec<u32>, Vec<String>, Vec<(String, [f64; 4])>, [u16; 2]), Value> {
+    ) -> Result<
+        (
+            Vec<u32>,
+            Vec<String>,
+            Vec<(String, [f64; 4])>,
+            [u16; 2],
+            Vec<String>,
+        ),
+        Value,
+    > {
         let mut names: Vec<String> = Vec::new();
         let index = |id: &str, names: &mut Vec<String>| -> u32 {
             let id = id.split('#').next().unwrap_or(id);
@@ -649,8 +752,12 @@ impl Hub<'_> {
                     }
                 }
             }
-            return Ok((raster, names, scene.boxes(), size));
+            return Ok((raster, names, scene.boxes(), size, Vec::new()));
         }
+        // The form as the export's own frames evaluate it: worlds and logic baked, programs inlined.
+        let baked = self.baked(form);
+        let form = &baked;
+        let shown = &crate::played::at(form, t).into_owned();
         let mut sched = Scheduler::new(&self.startup.sealed, self.options());
         let mut session = self.new_session();
         session.load(&mut sched, form);
@@ -665,8 +772,33 @@ impl Hub<'_> {
         let [w, h] = [usize::from(size[0]), usize::from(size[1])];
         let mut raster = vec![0u32; w * h];
         let mut boxes = Vec::new();
+        // #1040: an item its opacity hides at `t` draws nothing, so it neither takes a click nor
+        // covers one.
+        let all = drawn.boxes();
+        let hidden: Vec<String> = shown
+            .as_object()
+            .and_then(|doc| {
+                let program = Program::compile(doc).ok()?;
+                let mut state = program.state();
+                program.evaluate(t, deep_canvas_motion::eval::Validity::Full, &mut state);
+                let items = deep_canvas_motion::eval::items(doc, &program, &state);
+                let hides =
+                    |i: &Value| i.pointer("/adjust/opacity").and_then(Value::as_f64) == Some(0.0);
+                Some(
+                    items
+                        .iter()
+                        .filter(|(_, i)| hides(i))
+                        .map(|(id, _)| id.clone())
+                        .collect(),
+                )
+            })
+            .unwrap_or_default();
+        let hides = |id: &str| hidden.iter().any(|h| h == id);
         // Later marks draw over earlier ones, so each box is painted over those before it.
-        for (id, b) in drawn.boxes() {
+        for (id, b) in all {
+            if hides(&id) {
+                continue;
+            }
             let b = b.map(|v| v * scale);
             let k = index(&id, &mut names);
             let (x0, x1) = (
@@ -678,7 +810,7 @@ impl Hub<'_> {
             }
             boxes.push((id, b));
         }
-        Ok((raster, names, boxes, size))
+        Ok((raster, names, boxes, size, hidden))
     }
 
     /// Each bound value as the text it shows, with its source and as-of time: a page holds the

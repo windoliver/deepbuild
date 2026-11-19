@@ -141,6 +141,10 @@ sha2 = "0.10"
 ed25519-dalek = "3"
 # Issue #883: a notification gives the default's time as a clock time in your time zone (the version gpui already uses).
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
+# Issue #1808: a row's title reads in the direction of its first strong character, and one cut short ends at a whole
+# character (the versions already in the tree).
+unicode-bidi = "0.3"
+unicode-segmentation = "1"
 
 # The menu-bar count: gpui-kit has no status item. Versions already in gpui's tree.
 # Issue #339 adds the screen-capture access calls and the HID table reads (objc2-core-graphics); its cursor window
@@ -157,9 +161,10 @@ security-framework = { version = "3", default-features = false }
 # Issue #1462: the window forwards an assistive client's question of what is focused to gpui's view, so the row or
 # control the keys are on is what VoiceOver and Full Keyboard Access follow (the version gpui uses, vendored).
 accesskit_macos = "0.26"
+# Issue #2403 adds NSLocale: the system's preferred languages, read at launch.
 # Issue #79 adds NSData, NSImage, NSImageRep, NSBitmapImageRep and NSCell: the dock icon and the
 # menu-bar template from the kit's bytes.
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSData", "NSGeometry", "NSError", "NSURL", "NSArray", "NSBundle", "NSEnumerator", "NSDictionary", "NSValue", "NSNotification", "NSOperation", "NSDate", "NSRunLoop", "block2"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSData", "NSGeometry", "NSError", "NSURL", "NSArray", "NSBundle", "NSEnumerator", "NSDictionary", "NSValue", "NSNotification", "NSOperation", "NSDate", "NSRunLoop", "NSLocale", "block2"] }
 # Issue #883: `--notification-center` reads what Notification Center holds from the app (the version gpui uses).
 objc2-user-notifications = { version = "0.3", default-features = false, features = ["std", "block2", "UNUserNotificationCenter", "UNNotification", "UNNotificationRequest", "UNNotificationContent", "UNNotificationSettings"] }
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "objc2-core-foundation", "objc2-core-graphics", "block2", "NSStatusBar", "NSStatusItem", "NSStatusBarButton", "NSButton", "NSControl", "NSView", "NSResponder", "NSEvent", "NSApplication", "NSWindow", "NSImage", "NSImageRep", "NSBitmapImageRep", "NSCell", "NSScreen", "NSGraphics", "NSSound", "NSWorkspace", "NSMenu", "NSMenuItem"] }
