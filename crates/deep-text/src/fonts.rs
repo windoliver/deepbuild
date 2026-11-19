@@ -175,8 +175,9 @@ pub static FACES: &[Face] = &[
         license_file: "LICENSE-Inter.txt",
         bytes: face_bytes!("Inter-SemiBold.ttf"),
     },
-    // #496: the variable face, a weight axis from 100 to 900, for text whose weight a channel
-    // drives; every weight it takes is shaped from these bytes, never snapped to a static face.
+    // #496, #1484: the variable face, an optical size axis from 14 to 32 and a weight axis from
+    // 100 to 900, which every text in Inter is set on (`shaped_in`); the static faces above stay
+    // the files a look names its role by.
     Face {
         family: "Inter Variable",
         weight: 400,
@@ -243,30 +244,25 @@ pub static FACES: &[Face] = &[
     },
 ];
 
-/// #496: the family a text at `weight` is set in: `family` itself when it has a face at that
-/// weight or no variable twin, else its variable twin, so a weight between or past the static
-/// faces is drawn at that weight on the variable face's axis, never snapped to the nearest static.
-pub fn family_at(family: &'static str, weight: u16) -> &'static str {
-    let twin = match family {
+/// #1484: the family a text set in `family` is shaped in: its variable twin when the bundled
+/// faces hold one, so its optical size follows its size and every weight draws as asked (#496:
+/// never snapped to a static face), else `family` itself.
+pub fn shaped_in(family: &str) -> &str {
+    match family {
         "Inter" => "Inter Variable",
-        _ => return family,
-    };
-    if FACES
-        .iter()
-        .any(|f| f.family == family && f.weight == weight)
-    {
-        family
-    } else {
-        twin
+        _ => family,
     }
 }
 
-/// The static family a variable twin stands in for (#496's planted snapping build).
-pub fn static_of(family: &'static str) -> &'static str {
-    match family {
-        "Inter Variable" => "Inter",
-        _ => family,
-    }
+/// #496's planted snapping build: the weight of `family`'s static face nearest `weight`, the
+/// lighter on a tie; `weight` itself for a family with no static face.
+pub fn static_weight(family: &str, weight: u16) -> u16 {
+    FACES
+        .iter()
+        .filter(|f| f.family == family)
+        .map(|f| f.weight)
+        .min_by_key(|w| (w.abs_diff(weight), *w))
+        .unwrap_or(weight)
 }
 
 /// A face's bytes as the blob the font collection and the rasterizer share.

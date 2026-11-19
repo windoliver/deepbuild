@@ -1067,6 +1067,11 @@ alone.push('tests/acceptance/1929/');
 // #1826's files each build deep-graph, and its taste call deep-canvas-render; CPU only, no GPU and no timing.
 alone.push('tests/acceptance/1826/');
 
+// #1484's files (blind) each build deep-canvas-render or deep-text and draw with GPUI's offscreen renderer, as #1479's
+// do; warm.test.ts builds deep-text for release here and at the merge base and times warm shaping, with each run's loads.
+alone.push('tests/acceptance/1484/');
+timed.push('tests/acceptance/1484/warm.test.ts');
+
 // #1415's files (blind) build deep-show with test features, start real hubs and time a hub's start.
 alone.push('tests/acceptance/1415/');
 // #806's first AC3 draft reads a refused deep_show as a result with the error flag unset, which #1415's rule that every
