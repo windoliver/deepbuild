@@ -383,3 +383,23 @@ export function crashing(record: RecordStore, point: string): RecordStore {
   };
   return withAppend(record, append);
 }
+/**
+ * A wait on `key`, woken by whoever wakes `waits` for it, by the hub stopping or after `ms`. It counts from the
+ * call, so a wake that comes while the caller still reads what it waits on isn't missed; `cancel` ends it.
+ */
+export function wakeable(waits: Map<string, Set<() => void>>, key: string, ms: number): { woken: Promise<void>; cancel: () => void } {
+  const set = waits.get(key) ?? new Set();
+  waits.set(key, set);
+  let wake = (): void => undefined;
+  const woken = new Promise<void>((done) => {
+    wake = () => {
+      clearTimeout(timer);
+      set.delete(wake);
+      if (!set.size && waits.get(key) === set) waits.delete(key);
+      done();
+    };
+  });
+  const timer = setTimeout(wake, Math.max(0, ms));
+  set.add(wake);
+  return { woken, cancel: wake };
+}
