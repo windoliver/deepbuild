@@ -62,24 +62,28 @@ function sourceSlice(file, source, requested) {
 
 // What a checkout's hub runs from that checkout's target/{release,debug}/ (#2817): deepHook() in
 // packages/hub/src/paths.ts and canvasCore() in packages/hub/src/canvas.ts. A test that names the hub's or the CLI's
-// package, in a literal, a template's text or the pieces of a join or resolve call, can start that hub.
+// package, in a literal, a template's text or the pieces of a join or resolve call, can start that hub; a whole
+// command such as `node packages/cli/dist/main.js hub run` names it too.
 const HUB_BINARIES = ['deep-hook', 'deep-show'];
-const HUB_ENTRY = /(?:^|\/)packages\/(?:hub|cli)(?:\/|$)|^@deepbuild\/(?:hub|cli)(?:\/|$)/;
+const HUB_ENTRY = /(?<![\w.@-])packages\/(?:hub|cli)(?![\w.-])|(?<![\w./@-])@deepbuild\/(?:hub|cli)(?![\w.-])/;
 
 /** Selected tests' DEEP_BIN_DIR binaries, for a run in the checkout itself, which keeps its own target/. */
 export const binaryNames = (cwd, patterns) => selectBinaries(cwd, patterns, false).bin;
 
 /**
- * Selected tests and the helper declarations they reach: `bin`, the binaries their DEEP_BIN_DIR consumers name, and
- * `target`, the hub's binaries when one of them names the hub's or the CLI's package.
+ * Selected tests and the helper declarations they reach: `bin`, the binaries their DEEP_BIN_DIR consumers name,
+ * `target`, the hub's binaries when one of them names the hub's or the CLI's package, and `hub`, the selected paths
+ * that do, which alone may find `target` in place (#2817).
  */
 export function selectBinaries(cwd, patterns, hubBinaries = true) {
-  let hub = false;
-  const names = (text) => { if (HUB_ENTRY.test(text)) hub = true; };
+  const hubRoots = [];
+  let reaches = false;
+  const names = (text) => { if (HUB_ENTRY.test(text)) reaches = true; };
   const sources = [], roots = patterns.flatMap((path) => path.includes('*') ? globSync(path, { cwd }) : [path]);
   for (const root of roots) {
     const seen = new Set(), own = [], queue = [{ path: root, requested: null }];
     let readsBin = false, executes = false;
+    reaches = false;
     while (queue.length) {
       const { path, requested } = queue.pop();
       const candidates = /\.(?:[cm]?[jt]s|tsx)$/.test(path) ? [path] : globSync(`${path.replace(/\/$/, '')}/**/*.{ts,mjs,js}`, { cwd });
@@ -129,12 +133,13 @@ export function selectBinaries(cwd, patterns, hubBinaries = true) {
       }
     }
     if (readsBin && executes) sources.push(own.join('\n'));
+    if (reaches) hubRoots.push(root);
   }
-  if (!hubBinaries) hub = false;
+  const hub = hubBinaries && hubRoots.length > 0;
   // Only actual redrafted consumers need a build; a missing workspace is not a wrong executable.
-  if (!sources.length && !hub) return { bin: [], target: [] };
+  if (!sources.length && !hub) return { bin: [], target: [], hub: [] };
   if (!existsSync(join(cwd, 'Cargo.toml'))) {
-    if (!sources.length) return { bin: [], target: [] };
+    if (!sources.length) return { bin: [], target: [], hub: [] };
     throw Error('BLOCKED test binaries: selected binary consumer has no Cargo.toml');
   }
   const source = sources.join('\n');
@@ -145,7 +150,8 @@ export function selectBinaries(cwd, patterns, hubBinaries = true) {
   const bins = sources.length ? packages.flatMap((pkg) => pkg.targets.filter((target) => target.kind.includes('bin') && (mentions(target.name) || mentions(pkg.name))).map((target) => target.name)) : [];
   if (sources.length && !bins.length) throw Error('BLOCKED test binaries: a selected consumer names DEEP_BIN_DIR but no workspace binary');
   const workspace = new Set(packages.flatMap((pkg) => pkg.targets.filter((target) => target.kind.includes('bin')).map((target) => target.name)));
-  return { bin: [...new Set(bins)], target: hub ? HUB_BINARIES.filter((name) => workspace.has(name)) : [] };
+  const target = hub ? HUB_BINARIES.filter((name) => workspace.has(name)) : [];
+  return { bin: [...new Set(bins)], target, hub: target.length ? hubRoots : [] };
 }
 
 /**
