@@ -252,7 +252,6 @@ enum Decoder {
     },
     Webp {
         reader: Box<image_webp::WebPDecoder<Cursor<Arc<[u8]>>>>,
-        rgb: Vec<u8>,
     },
     Apng {
         reader: Box<png::Reader<Cursor<Arc<[u8]>>>>,
@@ -260,7 +259,6 @@ enum Decoder {
         skip: bool,
         last: Option<([u32; 4], png::DisposeOp)>,
         saved: Vec<u8>,
-        raw: Vec<u8>,
     },
 }
 
@@ -310,7 +308,6 @@ impl Decoder {
             }
             Format::Webp => Decoder::Webp {
                 reader: Box::new(image_webp::WebPDecoder::new(cursor).map_err(undecodable)?),
-                rgb: Vec::new(),
             },
             Format::Apng => {
                 let mut decoder = png::Decoder::new(cursor);
@@ -325,7 +322,6 @@ impl Decoder {
                     reader: Box::new(reader),
                     last: None,
                     saved: Vec::new(),
-                    raw: Vec::new(),
                 }
             }
         })
@@ -383,13 +379,14 @@ impl Decoder {
                 *last = Some((rect, dispose));
                 Ok(())
             }
-            Decoder::Webp { reader, rgb } => {
+            Decoder::Webp { reader } => {
                 if reader.has_alpha() {
                     reader.read_frame(canvas).map_err(undecodable)?;
                     return Ok(());
                 }
-                rgb.resize(canvas.len() / 4 * 3, 0);
-                reader.read_frame(rgb).map_err(undecodable)?;
+                // A decode buffer of the frame's own, let go once composited, so it is never held.
+                let mut rgb = vec![0u8; canvas.len() / 4 * 3];
+                reader.read_frame(&mut rgb).map_err(undecodable)?;
                 for (px, from) in
                     (canvas.as_chunks_mut::<4>().0.iter_mut()).zip(rgb.as_chunks::<3>().0)
                 {
@@ -403,12 +400,12 @@ impl Decoder {
                 skip,
                 last,
                 saved,
-                raw,
             } => {
+                // A decode buffer of the frame's own, let go once composited, so it is never held.
                 let room = reader.output_buffer_size().ok_or(refused("over_budget"))?;
-                raw.resize(room, 0);
+                let mut raw = vec![0u8; room];
                 if std::mem::take(skip) {
-                    reader.next_frame(raw).map_err(undecodable)?;
+                    reader.next_frame(&mut raw).map_err(undecodable)?;
                 }
                 let first = last.is_none();
                 if let Some((rect, dispose)) = last.take() {
@@ -418,7 +415,7 @@ impl Decoder {
                         png::DisposeOp::None => {}
                     }
                 }
-                let out = reader.next_frame(raw).map_err(undecodable)?;
+                let out = reader.next_frame(&mut raw).map_err(undecodable)?;
                 let fc = reader.info().frame_control.unwrap_or_default();
                 let full = [fc.x_offset, fc.y_offset, out.width, out.height];
                 let rect = clipped(full, size);
@@ -581,10 +578,10 @@ impl Player {
         let every: usize = self.every.iter().flatten().map(Vec::len).sum();
         let decoder = match &self.decoder {
             Some(Decoder::Gif { saved, .. }) => saved.len(),
-            Some(Decoder::Webp { reader, rgb }) => {
-                rgb.len() + (reader.dimensions().0 * reader.dimensions().1 * 4) as usize
+            Some(Decoder::Webp { reader }) => {
+                (reader.dimensions().0 * reader.dimensions().1 * 4) as usize
             }
-            Some(Decoder::Apng { saved, raw, .. }) => saved.len() + raw.len(),
+            Some(Decoder::Apng { saved, .. }) => saved.len(),
             None => 0,
         };
         (self.canvas.len() + every + decoder) as u64
@@ -658,6 +655,30 @@ mod tests {
             assert_eq!(sought.frame(k).unwrap(), &pictures[k][..], "frame {k}");
         }
         assert_eq!(&pictures[2][..4], &[2, 253, 14, 255]);
+    }
+
+    #[test]
+    fn an_apng_holds_its_canvas_between_frames_not_its_decode_buffer() {
+        let mut bytes = Vec::new();
+        {
+            let mut enc = png::Encoder::new(&mut bytes, 8, 8);
+            enc.set_color(png::ColorType::Rgba);
+            enc.set_animated(3, 0).unwrap();
+            enc.set_frame_delay(1, 10).unwrap();
+            let mut writer = enc.write_header().unwrap();
+            for k in 0..3u8 {
+                writer
+                    .write_image_data(&[k * 80, 9, 9, 255].repeat(64))
+                    .unwrap();
+            }
+            writer.finish().unwrap();
+        }
+        let mut player = Player::open(Arc::from(bytes), false).unwrap().unwrap();
+        for k in 0..3 {
+            assert_eq!(&player.frame(k).unwrap()[..4], &[k as u8 * 80, 9, 9, 255]);
+            player.ahead(true).unwrap();
+            assert_eq!(player.held(), 8 * 8 * 4, "frame {k}");
+        }
     }
 
     #[test]
