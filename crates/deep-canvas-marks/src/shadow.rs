@@ -735,4 +735,23 @@ mod tests {
         assert_eq!((outlines.len(), segments, open.is_none()), (2, 6, true));
         assert_eq!(under(&items, "other").1, 3);
     }
+
+    #[test]
+    fn a_curve_counts_the_segments_it_casts_from_at_zoom_one() {
+        let d = "M 100 0 C 100 55 55 100 0 100 C -55 100 -100 55 -100 0 \
+                 C -100 -55 -55 -100 0 -100 C 55 -100 100 -55 100 0 Z";
+        let mut items = Map::new();
+        let lamps = json!({"kind": "group@1", "params": {"light": {}}});
+        let disc =
+            json!({"kind": "path@1", "parent": "lamps", "params": {"d": d, "occlude": true}});
+        items.insert("lamps".into(), lamps);
+        items.insert("disc".into(), disc);
+        let (outlines, segments, _) = under(&items, "lamps");
+        let cast = build(&[], &outlines, 1.0)
+            .expect("the disc occludes")
+            .segs
+            .len();
+        assert!(segments > 4, "its four curves flatten: {segments}");
+        assert_eq!(segments, cast);
+    }
 }

@@ -593,4 +593,15 @@ mod tests {
             Some(json!({"ambient": AMBIENT, "lights": [sun]}))
         );
     }
+
+    #[test]
+    fn a_sun_turns_with_its_group() {
+        let lights = json!([{"kind": "sun", "angle": 0, "color": "ground"}]);
+        let group = json!({"kind": "group@1", "at": {"rot": [0, 0, 90]},
+            "params": {"light": {"lights": lights}}});
+        let palette = Palette::from([("ground".to_string(), [255, 255, 255])]);
+        let light = read("g", &group, &Map::new(), &palette, Planted::None);
+        let sun = &light.unwrap().unwrap().lights[0];
+        assert_eq!((sun.sun, sun.range), (Some([0.0, 1.0]), f64::INFINITY));
+    }
 }
