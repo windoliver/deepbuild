@@ -332,7 +332,7 @@ pub fn edges(marks: &[Arc<Drawn>]) -> Result<Vec<[f64; 4]>, Value> {
                     .ok_or_else(|| refused("bad_font", &format!("items/{item}/params/font")))?;
                 for g in &deep_text_gpui::shape(&label).glyphs {
                     let at = [origin[0] + f64::from(g.x), origin[1] + f64::from(g.y)];
-                    glyph_edges(&g.font, g.id, g.size, at, &mut out);
+                    glyph_edges(&g.font, g.id, (g.size, g.turn), at, &mut out);
                 }
             }
         }
@@ -382,15 +382,21 @@ fn segments(path: &BezPath, out: &mut Vec<[f64; 4]>) {
     close(&mut start, last, out);
 }
 
-/// Collects a glyph outline, y down, at a pen position in device px.
+/// Collects a glyph outline, y down, at a pen position in device px, turned when `turn`.
 struct Pen {
     path: BezPath,
     at: [f64; 2],
+    turn: bool,
 }
 
 impl Pen {
     fn p(&self, x: f32, y: f32) -> kurbo::Point {
-        kurbo::Point::new(self.at[0] + f64::from(x), self.at[1] - f64::from(y))
+        let (x, y) = (f64::from(x), f64::from(y));
+        if self.turn {
+            kurbo::Point::new(self.at[0] + y, self.at[1] + x)
+        } else {
+            kurbo::Point::new(self.at[0] + x, self.at[1] - y)
+        }
     }
 }
 
@@ -417,11 +423,12 @@ impl OutlinePen for Pen {
 }
 
 /// A glyph's outline, unhinted at `size` px a em with its origin at `at`, as the rasterizer reads
-/// it from the bundled face (skrifa, the outline reader Vello CPU's glyphs use).
+/// it from the bundled face (skrifa, the outline reader Vello CPU's glyphs use), (#1215) turned a
+/// quarter clockwise about `at` when a vertical run turns it.
 fn glyph_edges(
     font: &deep_text::FontData,
     id: u32,
-    size: f32,
+    (size, turn): (f32, bool),
     at: [f64; 2],
     out: &mut Vec<[f64; 4]>,
 ) {
@@ -434,6 +441,7 @@ fn glyph_edges(
     let mut pen = Pen {
         path: BezPath::new(),
         at,
+        turn,
     };
     let settings = DrawSettings::unhinted(Size::new(size), LocationRef::default());
     if glyph.draw(settings, &mut pen).is_ok() {
