@@ -17,6 +17,7 @@ use deep_canvas::ops;
 
 use crate::place::Place;
 use crate::scene::{num, pair, Blend, Drawn, Effect, Palette, Planted, Refused, Scope};
+use crate::shadow;
 
 /// The most lights one group holds.
 pub const MAX_LIGHTS: usize = 16;
@@ -29,20 +30,25 @@ pub const AMBIENT: f64 = 0.25;
 pub struct Light {
     pub ambient: f64,
     pub lights: Vec<Point>,
+    /// #2032: the outlines of the group's paths that occlude, where they draw: each blocks
+    /// every light of the list.
+    pub occluders: shadow::Occluders,
     /// The wrong program planted in how it lights, which both renderers follow.
     pub plant: Plant,
 }
 
-/// One point light, where it draws.
+/// One point light, where it draws; or a sun (#2032), which has no `at` and reaches everywhere.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Point {
     /// Its `at` through the group's transform, u in the frame.
     pub at: [f64; 2],
-    /// Its `range` scaled with the group, u.
+    /// Its `range` scaled with the group, u; infinite for a sun, whose reach is then 1.
     pub range: f64,
     pub energy: f64,
     /// Its role's color in linear light.
     pub color: [f64; 3],
+    /// A sun's `angle` through the group's transform: the unit direction its shadows run in.
+    pub sun: Option<[f64; 2]>,
 }
 
 /// A wrong program a light's tests plant.
@@ -72,11 +78,18 @@ pub fn reach(d2: f64, range: f64, plant: Plant) -> f64 {
 }
 
 impl Light {
-    /// Each light's term at `p` (u), per channel: energy × reach × color.
-    fn terms(&self, p: [f64; 2], plant: Plant) -> impl Iterator<Item = [f64; 3]> + '_ {
-        self.lights.iter().map(move |l| {
+    /// Each light's term at `p` (u), per channel: energy × reach × color, times the `share` of
+    /// the light no occluder blocks there (#2032).
+    fn terms<'a>(
+        &'a self,
+        p: [f64; 2],
+        plant: Plant,
+        share: &'a dyn Fn(usize) -> f64,
+    ) -> impl Iterator<Item = [f64; 3]> + 'a {
+        self.lights.iter().enumerate().map(move |(k, l)| {
             let (dx, dy) = (p[0] - l.at[0], p[1] - l.at[1]);
             let r = l.energy * reach(dx * dx + dy * dy, l.range, plant);
+            let r = if r == 0.0 { r } else { r * share(k) };
             l.color.map(|c| r * c)
         })
     }
@@ -84,13 +97,13 @@ impl Light {
     /// The encoded color `rgb` (0..1) of a lit child at `p` (u): decoded to linear light,
     /// multiplied by ambient plus the lights' terms, clamped to 1 and encoded once. The
     /// encoded-sum plant encodes the ambient's and each light's product apart and adds those.
-    pub fn lit(&self, rgb: [f64; 3], p: [f64; 2]) -> [f64; 3] {
+    pub fn lit(&self, rgb: [f64; 3], p: [f64; 2], share: &dyn Fn(usize) -> f64) -> [f64; 3] {
         let plant = self.plant;
         let linear = rgb.map(srgb_decode);
         let encode = |v: f64| srgb_encode(v.clamp(0.0, 1.0));
         if plant == Plant::EncodedSum {
             let mut out = linear.map(|c| encode(c * self.ambient));
-            for t in self.terms(p, plant) {
+            for t in self.terms(p, plant, share) {
                 for k in 0..3 {
                     out[k] += encode(linear[k] * t[k]);
                 }
@@ -98,7 +111,7 @@ impl Light {
             return out.map(|v| v.clamp(0.0, 1.0));
         }
         let mut sum = [self.ambient; 3];
-        for t in self.terms(p, plant) {
+        for t in self.terms(p, plant, share) {
             for k in 0..3 {
                 sum[k] += t[k];
             }
@@ -106,15 +119,18 @@ impl Light {
         std::array::from_fn(|k| encode(linear[k] * sum[k]))
     }
 
-    /// `rgba`'s pixels, `width` px a row, lit as a lit child is where each draws: at the point
-    /// `at` gives for its centre; premultiplied or straight alpha.
+    /// `rgba`'s pixels, `width` px a row at `zoom` px a u, lit as a lit child is where each
+    /// draws: at the point `at` gives for its centre, each light's share there the part of the
+    /// pixel's samples no occluder blocks it at; premultiplied or straight alpha.
     pub fn light_pixels(
         &self,
         rgba: &mut [u8],
         width: usize,
         premultiplied: bool,
+        zoom: f64,
         at: impl Fn(f64, f64) -> [f64; 2],
     ) {
+        let shadows = shadow::build(&self.lights, &self.occluders.outlines, zoom);
         for (i, px) in rgba.chunks_exact_mut(4).enumerate() {
             if px[3] == 0 {
                 continue;
@@ -125,7 +141,14 @@ impl Light {
                 1.0
             };
             let rgb = [0, 1, 2].map(|k| (f64::from(px[k]) / 255.0 / a).min(1.0));
-            let c = self.lit(rgb, at((i % width) as f64 + 0.5, (i / width) as f64 + 0.5));
+            let (x, y) = ((i % width) as f64 + 0.5, (i / width) as f64 + 0.5);
+            let p = at(x, y);
+            let share = |k: usize| {
+                let Some(s) = &shadows else { return 1.0 };
+                let samples = shadow::SAMPLES.map(|o| at(x + o[0], y + o[1]));
+                s.share(k, &self.lights[k], p, &samples)
+            };
+            let c = self.lit(rgb, p, &share);
             for k in 0..3 {
                 px[k] = (c[k] * a * 255.0).round().clamp(0.0, 255.0) as u8;
             }
@@ -143,7 +166,7 @@ pub struct Problem {
     pub what: String,
 }
 
-fn lit_group(item: &Value) -> bool {
+pub(crate) fn lit_group(item: &Value) -> bool {
     item.get("kind").and_then(Value::as_str) == Some("group@1")
         && item
             .get("params")
@@ -292,11 +315,13 @@ pub fn ranges(doc: &Map<String, Value>) -> Vec<Problem> {
     out
 }
 
-/// The light of the group `id` at t, placed in the frame by the group's transform; `None` for a
-/// group with no `light`. A field out of its range is refused, naming it.
+/// The light of the group `id` at t, placed in the frame by the group's transform, with the
+/// outlines of `items` that occlude under it; `None` for a group with no `light`. A field out
+/// of its range is refused, naming it.
 pub(crate) fn read(
     id: &str,
     item: &Value,
+    items: &Map<String, Value>,
     palette: &Palette,
     planted: Planted,
 ) -> Result<Option<Light>, Refused> {
@@ -331,11 +356,37 @@ pub(crate) fn read(
     let mut lights = Vec::with_capacity(list.len());
     for (k, l) in list.iter().enumerate() {
         let path = |f: &str| format!("{base}/lights/{k}/{f}");
-        let Some(at) = pair(l.get("at")) else {
-            return bad("bad_doc", path("at"));
+        // #2032: a sun has an `angle` and no `at`, `range` or falloff.
+        let (at, range, sun) = match l.get("kind") {
+            None | Some(Value::Null) => (l.get("at"), l.get("range"), None),
+            Some(Value::String(kind)) if kind == "point" => (l.get("at"), l.get("range"), None),
+            Some(Value::String(kind)) if kind == "sun" => match num(l.get("angle")) {
+                Some(angle) => (None, None, Some(crate::turn::sin_cos(angle))),
+                None => return bad("bad_doc", path("angle")),
+            },
+            Some(_) => return bad("bad_doc", path("kind")),
         };
-        let Some(range) = num(l.get("range")).map(|r| r.max(0.0)) else {
-            return bad("out_of_range", path("range"));
+        let (at, range, sun) = match sun {
+            Some((sin, cos)) => {
+                let (o, d) = (place.at([0.0, 0.0]), place.at([cos, sin]));
+                let v = [d[0] - o[0], d[1] - o[1]];
+                let len = ops::hypot(v[0], v[1]);
+                let dir = if len > 0.0 {
+                    [v[0] / len, v[1] / len]
+                } else {
+                    [cos, sin]
+                };
+                ([0.0, 0.0], f64::INFINITY, Some(dir))
+            }
+            None => {
+                let Some(at) = pair(at) else {
+                    return bad("bad_doc", path("at"));
+                };
+                let Some(range) = num(range).map(|r| r.max(0.0)) else {
+                    return bad("out_of_range", path("range"));
+                };
+                (place.at(at), range * grow, None)
+            }
         };
         let energy = match l.get("energy") {
             None | Some(Value::Null) => 1.0,
@@ -351,10 +402,11 @@ pub(crate) fn read(
             return bad("role_unresolved", format!("{}: {role}", path("color")));
         };
         lights.push(Point {
-            at: place.at(at),
-            range: range * grow,
+            at,
+            range,
             energy,
             color: rgb.map(|c| srgb_decode(f64::from(c) / 255.0)),
+            sun,
         });
     }
     let plant = match planted {
@@ -362,9 +414,11 @@ pub(crate) fn read(
         Planted::LightEncodedSum => Plant::EncodedSum,
         _ => Plant::None,
     };
+    let occluders = shadow::occluders(items, id)?;
     Ok(Some(Light {
         ambient,
         lights,
+        occluders,
         plant,
     }))
 }
@@ -435,9 +489,15 @@ pub fn evaluated(item: &Value) -> Option<Value> {
         .into_iter()
         .flatten()
         .map(|l| {
+            let energy = l.get("energy").filter(|e| !e.is_null()).cloned();
+            let energy = energy.unwrap_or(json!(1.0));
+            if l.get("kind").and_then(Value::as_str) == Some("sun") {
+                let (angle, color) = (l.get("angle"), l.get("color"));
+                return json!({"kind": "sun", "angle": angle, "color": color, "energy": energy});
+            }
             json!({
                 "at": l.get("at"), "color": l.get("color"), "range": l.get("range"),
-                "energy": l.get("energy").filter(|e| !e.is_null()).cloned().unwrap_or(json!(1.0)),
+                "energy": energy,
             })
         })
         .collect();
@@ -452,7 +512,9 @@ pub fn around(items: &Map<String, Value>, id: &str, palette: &Palette) -> Option
     for _ in 0..=items.len() {
         let group = items.get(at?)?;
         if lit_group(group) {
-            return read(at?, group, palette, Planted::None).ok().flatten();
+            return read(at?, group, items, palette, Planted::None)
+                .ok()
+                .flatten();
         }
         at = group.get("parent").and_then(Value::as_str);
     }
@@ -514,5 +576,32 @@ fn light_of(s: &Scope) -> Option<&Arc<Light>> {
             effect: Some(e), ..
         } => e.light.as_ref(),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_sun_is_reported_by_its_kind_and_angle() {
+        let lights = json!([{"kind": "sun", "angle": 30, "color": "ground"}]);
+        let group = json!({"kind": "group@1", "params": {"light": {"lights": lights}}});
+        let sun = json!({"kind": "sun", "angle": 30, "color": "ground", "energy": 1.0});
+        assert_eq!(
+            evaluated(&group),
+            Some(json!({"ambient": AMBIENT, "lights": [sun]}))
+        );
+    }
+
+    #[test]
+    fn a_sun_turns_with_its_group() {
+        let lights = json!([{"kind": "sun", "angle": 0, "color": "ground"}]);
+        let group = json!({"kind": "group@1", "at": {"rot": [0, 0, 90]},
+            "params": {"light": {"lights": lights}}});
+        let palette = Palette::from([("ground".to_string(), [255, 255, 255])]);
+        let light = read("g", &group, &Map::new(), &palette, Planted::None);
+        let sun = &light.unwrap().unwrap().lights[0];
+        assert_eq!((sun.sun, sun.range), (Some([0.0, 1.0]), f64::INFINITY));
     }
 }
