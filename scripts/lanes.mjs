@@ -336,6 +336,9 @@ alone.push('tests/acceptance/1718/');
 // #1637's files build deep-gpu and draw a city of 120,000 solids on Metal; its budget runs as a timed file.
 alone.push('tests/acceptance/1637/');
 timed.push('tests/acceptance/1637/budgets.test.ts');
+// #1634's files build deep-gpu and draw streets and a city of fill lamps on Metal; its budget runs as a timed file.
+alone.push('tests/acceptance/1634/');
+timed.push('tests/acceptance/1634/budgets.test.ts');
 // #1458's replica file builds deep-drive plain and with env-plants and starts many replicas; its AC13 file opens the
 // real app's window on a real hub, with Accessibility and Screen Recording, by hand.
 alone.push('tests/acceptance/1458/');
@@ -927,6 +930,9 @@ timed.push('tests/acceptance/182/ac11-budgets.test.ts');
 byHand.push('tests/acceptance/182-oracle/character-controller-rapier.test.ts');
 // #2309's files build deep-physics (shipped and release), its wasm32 library and the merge base's release build.
 alone.push('tests/acceptance/2309/');
+// #2241's files build deep-physics (release and test-backends) and the merge base's release build; the blind redraft of
+// #2009's third criterion under it builds deep-physics, as #2009's files do.
+alone.push('tests/acceptance/2241/', 'tests/acceptance/2009-redraft-2241/');
 
 // #2742's files build deep-gpu; ac1 compares two films' GPU time on any Mac, and ac2 runs #417's suite.
 alone.push('tests/acceptance/2742/');
@@ -1065,6 +1071,16 @@ alone.push('tests/acceptance/1826/');
 // do; warm.test.ts builds deep-text for release here and at the merge base and times warm shaping, with each run's loads.
 alone.push('tests/acceptance/1484/');
 timed.push('tests/acceptance/1484/warm.test.ts');
+
+// #1415's files (blind) build deep-show with test features, start real hubs and time a hub's start.
+alone.push('tests/acceptance/1415/');
+// #806's first AC3 draft reads a refused deep_show as a result with the error flag unset, which #1415's rule that every
+// refusal sets it reverses (tests/acceptance/806-redraft-ac3/DISPUTE.md); its blind redraft runs in its place.
+alone.push('tests/acceptance/806-redraft-ac3/');
+byHand.push('tests/acceptance/806/unbound.test.ts');
+
+// #2402's files (blind) start two hubs and time each tool call against a control hub's, and time two extension hosts.
+alone.push('tests/acceptance/2402/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
