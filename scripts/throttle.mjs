@@ -92,6 +92,9 @@ function folder() {
 // a request's ps runs before it is taken; a timed-out drain's and a past-bound holder's, inside it. The lock names
 // its holder by number and start, and only a lock whose holder is gone is taken over: aside, by a rename only one process can make, and removed only if it is the lock judged gone. Two runs
 // that judge the same one gone can, in the microseconds between, both go on, which needs that holder's death first.
+// The requests this process gave up on while the table couldn't be written (#2869): each later table write of this
+// process takes them out, so one left behind never drains the machine while the process lives on.
+const abandoned = new Set();
 function locked(act) {
   mkdirSync(folder(), { recursive: true, mode: 0o700 });
   const mark = join(folder(), 'table.lock');
@@ -148,12 +151,28 @@ function locked(act) {
     }
     // A holder's or a waiter's death releases what it held or asked for.
     const gave = table.grants.filter(ended);
-    for (const grant of gave) log({ event: 'released', class: grant.class, id: grant.id, pid: grant.pid, reason: 'holder gone' });
     table.grants = table.grants.filter((grant) => !gave.includes(grant));
-    table.requests = table.requests.filter((request) => !ended(request));
+    const dropped = [...abandoned];
+    table.requests = table.requests.filter((request) => !ended(request) && !dropped.includes(request.id));
     const result = act(table, processes());
-    writeFileSync(`${file}.${process.pid}`, JSON.stringify(table));
-    renameSync(`${file}.${process.pid}`, file);
+    // A write that fails leaves the table as it was, and no new one of this run's behind; the error is the write's.
+    try {
+      writeFileSync(`${file}.${process.pid}`, JSON.stringify(table));
+      renameSync(`${file}.${process.pid}`, file);
+    } catch (error) {
+      try {
+        rmSync(`${file}.${process.pid}`, { force: true });
+      } catch {}
+      throw error;
+    }
+    for (const id of dropped) abandoned.delete(id);
+    // Logged once the table holds it, so a write tried again logs nothing twice. A full disk can't take the line
+    // either, and the release stands; any other error ends the run, the table already written.
+    try {
+      for (const grant of gave) log({ event: 'released', class: grant.class, id: grant.id, pid: grant.pid, reason: 'holder gone' });
+    } catch (error) {
+      if (error.code !== 'ENOSPC') throw error;
+    }
     return result;
   } finally {
     // Only this run's own lock goes.
@@ -228,23 +247,55 @@ export function acquire(cls, { wait = 30, window = false } = {}) {
   if (!LIMITS[cls]) throw Error(`no throttle class ${cls}; the classes are ${CLASSES.join(', ')}`);
   const pid = process.pid;
   let deadline = Date.now() + wait * 60_000, polled = Date.now();
-  const request = locked((table, procs) => {
-    const held = inherited(table, procs, chain(procs, pid));
-    if (held.length && (cls === 'build' || cls === 'test' || (cls === 'timed' && held.some((grant) => grant.class === 'timed')))) {
-      log({ event: 'passed', class: cls, pid, through: process.env.DEEP_THROTTLE });
-      return { pass: true };
+  // A full disk leaves the table unchanged, so it delays a wait rather than ending it (#2869): a table write that
+  // fails with ENOSPC is tried again until the deadline, which a window the last look saw open still holds off, and
+  // past it the request reads as timed out. The wait counts from when the request is in line, unless the table
+  // couldn't be written while it got in line. Its request is then taken out by this process's next table write that
+  // lands, or by its exit.
+  let windowed = false, retried = false;
+  const attempt = (act) => {
+    for (;;) {
+      try {
+        return locked(act);
+      } catch (error) {
+        if (error.code !== 'ENOSPC') throw error;
+        retried = true;
+        const now = Date.now();
+        if (windowed) deadline += now - polled;
+        polled = now;
+        if (now > deadline) return undefined;
+        sleep(POLL_MS);
+      }
     }
+  };
+  const request = attempt((table, procs) => {
+    const held = inherited(table, procs, chain(procs, pid));
+    if (held.length && (cls === 'build' || cls === 'test' || (cls === 'timed' && held.some((grant) => grant.class === 'timed')))) return { pass: true };
     const entry = { id: randomBytes(8).toString('hex'), class: cls, pid, start: procs.get(pid).start, nested: held.length > 0, window, seq: (table.seq = (table.seq ?? 0) + 1) };
     table.requests.push(entry);
     return entry;
   });
-  if (request.pass) return { class: cls, token: process.env.DEEP_THROTTLE, pass: true };
+  if (!request) return null;
+  if (request.pass) {
+    // Logged once the table write landed; a full disk can't take the line either, and any other error ends it BLOCKED.
+    try {
+      log({ event: 'passed', class: cls, pid, through: process.env.DEEP_THROTTLE });
+    } catch (error) {
+      if (error.code !== 'ENOSPC') throw error;
+    }
+    return { class: cls, token: process.env.DEEP_THROTTLE, pass: true };
+  }
+  if (!retried) {
+    deadline = Date.now() + wait * 60_000;
+    polled = Date.now();
+  }
   for (;;) {
-    const grant = locked((table, procs) => {
+    const grant = attempt((table, procs) => {
       const pending = table.requests.find((other) => other.id === request.id);
       if (!pending) return 'timeout';
       const now = Date.now();
-      if ([...table.grants, ...table.requests].some((other) => other.window && other.id !== request.id)) deadline += now - polled;
+      windowed = [...table.grants, ...table.requests].some((other) => other.window && other.id !== request.id);
+      if (windowed) deadline += now - polled;
       polled = now;
       if (!grantable(table, procs, pending)) {
         if (now <= deadline) return null;
@@ -263,15 +314,43 @@ export function acquire(cls, { wait = 30, window = false } = {}) {
       const index = Array.from({ length: LIMITS[cls] }, (_, k) => k + 1).find((k) => !taken.has(k));
       const entry = { id: request.id, class: cls, pid, start: request.start, nested: request.nested, window, index, at: now };
       table.grants.push(entry);
-      const load = loadavg()[0], cores = cpus().length;
-      log({ event: 'granted', class: cls, grant: entry.nested ? 'nested' : 'top-level', id: entry.id, pid, index, load, cores, wait });
       return entry;
     });
-    if (grant === 'timeout') {
-      log({ event: 'timeout', class: cls, id: request.id, pid, wait, ...blocked.length ? { blockers: blocked } : {} });
+    if (grant === undefined) {
+      abandoned.add(request.id);
+      try {
+        locked(() => {});
+      } catch {}
       return null;
     }
-    if (grant) return { class: cls, id: grant.id, index: grant.index, token: `${cls}:${grant.id}`, pass: false };
+    if (grant === 'timeout') {
+      // A full disk can't take the line either, and the wait still ran out; any other error ends it BLOCKED.
+      try {
+        log({ event: 'timeout', class: cls, id: request.id, pid, wait, ...blocked.length ? { blockers: blocked } : {} });
+      } catch (error) {
+        if (error.code !== 'ENOSPC') throw error;
+      }
+      return null;
+    }
+    if (grant) {
+      const load = loadavg()[0], cores = cpus().length;
+      // Logged once the table holds the grant. A full disk can't take the line either, and the grant stands; any other
+      // error ends the request BLOCKED with nothing granted, as before #2869, the grant taken back if the table allows.
+      try {
+        log({ event: 'granted', class: cls, grant: grant.nested ? 'nested' : 'top-level', id: grant.id, pid, index: grant.index, load, cores, wait });
+      } catch (error) {
+        if (error.code !== 'ENOSPC') {
+          try {
+            locked((table) => {
+              const at = table.grants.findIndex((other) => other.id === grant.id);
+              if (at >= 0) table.grants.splice(at, 1);
+            });
+          } catch {}
+          throw error;
+        }
+      }
+      return { class: cls, id: grant.id, index: grant.index, token: `${cls}:${grant.id}`, pass: false };
+    }
     sleep(POLL_MS * (0.75 + Math.random() / 2));
   }
 }
