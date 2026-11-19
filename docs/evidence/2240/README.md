@@ -35,6 +35,50 @@ A uniform bar 1 m long on a hinge at its top end, released from 10°, baked 5 s.
 | none | 1.64139 s | 2π√(2L ÷ 3g) × (1 + θ² ÷ 16) = 1.64107 s | 0.02% |
 | 0.75 m from the hinge | 1.86529 s | 2π√((L² ÷ 12 + 0.75²) ÷ (0.75 g)) × (1 + θ² ÷ 16) = 1.86510 s | 0.01% |
 
+## Pictures
+
+`node docs/evidence/2240/shoot.mjs` draws the kit's six fixture worlds of this issue through `deep-gpu`'s `view3d`,
+which bakes each world itself and moves the drawn body by one `pose` output and nothing else. The camera is
+orthographic and square on. The teal disc rides at the point the body's weight acts at; the pale line hangs from where
+that point starts (the box) or from the hinge (the bar).
+
+![The box's four runs at 3 s; under them the two planted programs and the bar's two runs at 0 s](stills.png)
+
+Top row, the box at 3 s: on 20° with no `centre_of_mass` it stands, on 33° it has fallen over, and on 33° and 45° with
+`centre_of_mass: (0, −0.75, 0)` it stands. Bottom row: the planted `centre_of_mass_ignored` on the 33° world with the
+field, fallen over; the planted `pose_reads_centre_of_mass`, the box drawn 0.75 m down its own axis into the slope, its
+true place in stone; the bar at 0 s with its weight at its middle and 0.75 m from the hinge.
+
+| The box's four runs, 3 s at 30 fps | The bar's two runs released together, 4 s at 60 fps |
+|---|---|
+| ![The box's four runs](box.apng) | ![The bar's two runs](bar.apng) |
+
+The script then reads the pixels of all 846 frames and holds them to `deep-physics`'s own bake of the same world at each
+frame's step: the sand body's outline as a rectangle (its middle, which is the body's origin, its long axis and its two
+sides) and the disc's middle. The most any frame is off, with a pixel 14.6 mm in a box frame and 3.75 mm in a bar frame:
+
+| Fixture | Frames | Middle | Long axis | Sides | Disc | The kit's measure, from the frames alone | From the bake | The kit's answer |
+|---|---|---|---|---|---|---|---|---|
+| `box_slope_20` | 91 | 0.02 px | 0.01° | 0.04 px | 0.06 px | turned 0.01° | 0.0030° | under 1° |
+| `box_slope_33` | 91 | 0.17 px | 0.16° | 0.59 px | 0.19 px | turned 90.17° | 90.26° | past 45° |
+| `box_slope_33_centre` | 91 | 0.01 px | 0.03° | 0.20 px | 0.08 px | turned 0.04° | 0.0012° | under 1° |
+| `box_slope_45_centre` | 91 | 0.03 px | 0.00° | 0.69 px | 0.13 px | turned 0.00° | 0.0015° | under 1° |
+| `bar_period` | 241 | 0.41 px | 0.17° | 0.66 px | 0.32 px | period 1.6448 s | 1.6414 s | 1.6411 s within 1% |
+| `bar_period_centre` | 241 | 0.40 px | 0.14° | 0.66 px | 0.32 px | period 1.8663 s | 1.8653 s | 1.8651 s within 1% |
+
+The script fails a frame more than a pixel off in place, a pixel and a half in a side or half a degree in turn, and a
+measure off the kit's answer. Held to a bake that isn't theirs, the same frames read off it: `box_slope_33_centre`'s
+against the planted `centre_of_mass_ignored`'s bake, 130 px in the middle and 90° in turn; `bar_period_centre`'s
+against the bake of the bar with no `centre_of_mass`, 36 px in the middle. Its readings are in `check.json`.
+
+What the pictures don't show: a planted program can't run inside `view3d`, so its two pictures pose the box from
+`deep-physics --planted`'s bake and no frame of theirs is read. The refusals and the step hashes have no picture. The
+box that falls over is at its most turned, 90.26°, at step 166, between two frames, and comes to rest at 90.00° in the
+picture's plane, turned 2.4° about the slope's normal; the frames' 90.17° is the box at rest, read 0.17° off.
+
+The files here are from debug binaries built on the tree merged with main (`81c6b9c340f6`). On binaries built from this
+change before the merge, the script wrote the same four files, byte for byte.
+
 ## Refusals (check)
 
 | World | Result |
