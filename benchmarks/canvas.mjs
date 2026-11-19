@@ -325,14 +325,17 @@ workloads.class = () => {
       report.cold = { ms: performance.now() - started };
       if (first.sessions[0]?.state !== 'live') throw Error(`${cls}: the fixture isn't live: ${JSON.stringify(first.sessions[0]).slice(0, 800)}`);
     }
+    // The five warm runs share one deep-gpu process, so each carries the one-minute load at that process's start and end (#2870).
+    const loadStart = loadavg()[0];
     const runs = liveCalls(dir, Array.from({ length: 5 }, () => ({ docs: [doc], frames: WARM_UP + WARM_FRAMES })));
+    const loadEnd = loadavg()[0];
     // #140: the seams' backends that drew the frames, as the live view names them.
     report.backends = runs[0]?.backends;
     report.warm = {
       limits: CLASS_LIMITS[cls],
       runs: runs.map((r) => {
         const frames = r.frames.slice(WARM_UP);
-        return { frames: frames.length, gpu_p95_ms: p95(frames.map((f) => f.gpu_ms)), cpu_p95_ms: p95(frames.map((f) => f.cpu_ms)) };
+        return { frames: frames.length, gpu_p95_ms: p95(frames.map((f) => f.gpu_ms)), cpu_p95_ms: p95(frames.map((f) => f.cpu_ms)), loadStart, loadEnd };
       }),
     };
     if (!warmOnly) {
@@ -543,10 +546,11 @@ workloads.judge = () => {
   const limits = CLASS_LIMITS[cls];
   if (!limits) throw Error(`Unknown class ${cls}`);
   const warm = {};
+  const warmRuns = current.warm?.runs ?? [];
   for (const key of ['gpu', 'cpu']) {
     const limit = limits[`${key}_ms`];
     warm[key] = limit === null ? { status: 'PASS', reason: `the ${cls} class has no frame cap` }
-      : judgeLimit({ limit, runs: (current.warm?.runs ?? []).map((r) => r[`${key}_p95_ms`]), fingerprint: current.fingerprint });
+      : judgeLimit({ limit, runs: warmRuns.map((r) => r[`${key}_p95_ms`]), fingerprint: current.fingerprint, loads: loadsOf(warmRuns) });
   }
   const statuses = Object.values(warm).map((v) => v.status);
   let status = statuses.includes('FAIL') ? 'FAIL' : statuses.every((s) => s === 'PASS') ? 'PASS' : 'INCONCLUSIVE';
@@ -599,6 +603,8 @@ const runs = (once) => {
     return { ...once(false), loadStart, loadEnd: loadavg()[0] };
   });
 };
+/** Each run's load at its start and end, as `judge` gives them to judgeLimit (#2870). */
+const loadsOf = (measured) => measured.map((r) => ({ start: r.loadStart, end: r.loadEnd }));
 const toolchain = () => spawnSync('rustc', ['-V'], { cwd: root, encoding: 'utf8' }).stdout.trim();
 function release(pkg, bin) {
   const built = spawnSync('cargo', ['build', '--locked', '--release', '-p', pkg, '--bin', bin], { cwd: root, stdio: ['ignore', 'ignore', 'inherit'] });
@@ -1349,8 +1355,22 @@ const EFFICIENCY = {
   'playtest-crawler': Object.fromEntries(['crawler_80_runs_s', 'legal_added_s', 'reach_200_floors_s', 'idle_work'].map((k) => [k, (r) => r[k]])),
 };
 const COUNTS = new Set(['summary_tokens', 'page_rows', 'frames', 'upload_bytes_per_item', 'indexed_target_bytes', 'still_steps', 'idle_steps', 'still_maps', 'still_code_steps', 'idle_work', 'frame_expansions', 'forest_draws_per_variant_material', 'light_lists_bytes']);
-/** Targets that are floors, each reading at or above its limit: judged as the limit on their negations (#184's multiple of real time). */
+/** Targets that are floors, each reading at or above its limit (#184's multiple of real time). */
 const FLOORS = new Set(['fixture_realtime_x']);
+/**
+ * A floor's verdict (#2870). judgeLimit judges a ceiling on readings of zero or more, so a floor is that limit on its
+ * readings mirrored about it, 2 × limit − reading (0 past twice the floor): five at or above the floor pass, five under it
+ * by more than the margin fail, the same fraction of the limit, and the verdict keeps the readings themselves.
+ */
+function judgeFloor({ limit, runs, fingerprint, loads }) {
+  const mirrored = runs.map((v) => (Number.isFinite(v) && v >= 0 ? Math.max(0, 2 * limit - v) : NaN));
+  const verdict = { ...judgeLimit({ limit, runs: mirrored, fingerprint, loads }), limit, runs };
+  const under = (what) => `${what} under ${limit} by more than the ${(verdict.margin * 100).toFixed(1)}% margin`;
+  if (verdict.status === 'BLOCKED') verdict.reason = `a floor is judged on five readings taken after warm-up, got ${JSON.stringify(runs)}`;
+  else if (verdict.status === 'FAIL') verdict.reason = under('all five runs are');
+  else if (verdict.reason?.startsWith('the five runs')) verdict.reason = under(`the five runs are neither all at or above ${limit} nor all`);
+  return verdict;
+}
 
 /** The stage that took the most of a sample's time, as a reason names it (#896); none for a sample without stages. */
 const costliest = (s) => {
@@ -1405,6 +1425,7 @@ function judgeEfficiency(current) {
   const { targets } = JSON.parse(readFileSync(join(root, 'benchmarks', 'budgets.json'), 'utf8')).tasks.find((t) => t.id === task);
   const judged = {};
   const reasons = [];
+  const loads = loadsOf(current.runs ?? []);
   for (const [name, limit] of Object.entries(targets)) {
     const values = (current.runs ?? []).map(EFFICIENCY[task][name]);
     const why = (current.runs ?? []).map((r) => unjudged[name]?.(r)).find(Boolean);
@@ -1420,12 +1441,12 @@ function judgeEfficiency(current) {
         ? (values.some((v) => v > limit) ? { status: 'FAIL', limit, runs: values } : { status: 'PASS', limit, runs: values })
         : { status: 'BLOCKED', limit, runs: values, reason: `a count is judged on five runs, got ${JSON.stringify(values)}` };
     } else if (FLOORS.has(name)) {
-      verdict = { ...judgeLimit({ limit: -limit, runs: values.map((v) => -v), fingerprint: current.fingerprint }), limit, runs: values };
+      verdict = judgeFloor({ limit, runs: values, fingerprint: current.fingerprint, loads });
     } else {
-      verdict = judgeLimit({ limit, runs: values, fingerprint: current.fingerprint });
+      verdict = judgeLimit({ limit, runs: values, fingerprint: current.fingerprint, loads });
     }
     if (verdict.status === 'FAIL') {
-      verdict.reason = [`${name} over ${limit}`, ...(named[name]?.(current.runs, limit) ?? [verdict.reason])].join('; ');
+      verdict.reason = [`${name} ${FLOORS.has(name) ? 'under' : 'over'} ${limit}`, ...(named[name]?.(current.runs, limit) ?? [verdict.reason])].join('; ');
       reasons.push(verdict.reason);
     } else if (verdict.reason) {
       reasons.push(`${name}: ${verdict.reason}`);
