@@ -1,0 +1,116 @@
+twin away-denial-unnamed laid over crates/deep-hook/src/main.rs on base 74e6e2634001e76820c711bea05fe7bb6a7cf3b6
+Thu Nov 19 07:45:55 PST 2026
+cargo exit 0
+Thu Nov 19 07:46:11 PST 2026
+ 7:46  up 5 days, 17:55, 18 users, load averages: 79.55 149.05 159.52
+
+ RUN  v5.0.5 <repo>/tests/acceptance/2204-redraft-ac3
+
+stdout | ac3-hub-stopped.test.ts > #2204.7c1b9c13 with the hub stopped, rules.json cut to its first 40 bytes denies a PreToolUse for `pkill -f node`, naming the file and that it isn't JSON, as today
+`pkill -f node`: exit 2 after 11.5 ms, stdout "", stderr "DeepBuild blocked this: deep-hook can't check its guards while the hub doesn't answer. Retry it.\n"
+
+stdout | ac3-hub-stopped.test.ts > #2204.7c1b9c13 with the hub stopped, a readable rules.json that gains one entry whose match is effect:not-a-class denies a PreToolUse for `pkill -f node`, naming the file and the entry, as today
+`pkill -f node`: exit 2 after 11.7 ms, stdout "", stderr "DeepBuild blocked this: deep-hook can't check its guards while the hub doesn't answer. Retry it.\n"
+
+stdout | ac3-hub-stopped.test.ts
+the hub ran at /private/tmp/dh2204r3-VDTjTF/h/.deepbuild/hub.sock and was stopped (clean); rules.json then held 39 entries in 35581 bytes
+
+ ❯ ac3-hub-stopped.test.ts (2 tests | 2 failed) 904ms
+   × #2204.7c1b9c13 with the hub stopped, rules.json cut to its first 40 bytes denies a PreToolUse for `pkill -f node`, naming the file and that it isn't JSON, as today 16ms
+   × #2204.7c1b9c13 with the hub stopped, a readable rules.json that gains one entry whose match is effect:not-a-class denies a PreToolUse for `pkill -f node`, naming the file and the entry, as today 13ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac3-hub-stopped.test.ts > #2204.7c1b9c13 with the hub stopped, rules.json cut to its first 40 bytes denies a PreToolUse for `pkill -f node`, naming the file and that it isn't JSON, as today
+AssertionError: with the hub stopped and rules.json cut to its first 40 bytes, the denial names rules.json, as today: exit 2 after 11.5 ms, stdout "", stderr "DeepBuild blocked this: deep-hook can't check its guards while the hub doesn't answer. Retry it.\n": expected 'DeepBuild blocked this: deep-hook can…' to match /rules\.json/
+
+- Expected:
+/rules\.json/
+
++ Received:
+"DeepBuild blocked this: deep-hook can't check its guards while the hub doesn't answer. Retry it.
+"
+
+ ❯ judge ac3-hub-stopped.test.ts:73:111
+     71|     throw Error(`INCONCLUSIVE: the call was denied, but in ${r.ms.toFi…
+     72|   }
+     73|   expect.soft(reason, `with the hub stopped and ${file}, the denial na…
+       |                                                                                                               ^
+     74|   expect.soft(reason, `with the hub stopped and ${file}, the denial sa…
+     75| }
+ ❯ ac3-hub-stopped.test.ts:83:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  ac3-hub-stopped.test.ts > #2204.7c1b9c13 with the hub stopped, rules.json cut to its first 40 bytes denies a PreToolUse for `pkill -f node`, naming the file and that it isn't JSON, as today
+AssertionError: with the hub stopped and rules.json cut to its first 40 bytes, the denial says that it isn't JSON, as today: exit 2 after 11.5 ms, stdout "", stderr "DeepBuild blocked this: deep-hook can't check its guards while the hub doesn't answer. Retry it.\n": expected 'DeepBuild blocked this: deep-hook can…' to match /\b(?:isn['’]t|is not|not)\b[^.\n]{0,2…/
+
+- Expected:
+/\b(?:isn['’]t|is not|not)\b[^.\n]{0,24}?\bJSON\b|\b(?:invalid|malformed)\s+JSON\b/
+
++ Received:
+"DeepBuild blocked this: deep-hook can't check its guards while the hub doesn't answer. Retry it.
+"
+
+ ❯ judge ac3-hub-stopped.test.ts:74:109
+     72|   }
+     73|   expect.soft(reason, `with the hub stopped and ${file}, the denial na…
+     74|   expect.soft(reason, `with the hub stopped and ${file}, the denial sa…
+       |                                                                                                             ^
+     75| }
+     76|
+ ❯ ac3-hub-stopped.test.ts:83:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  ac3-hub-stopped.test.ts > #2204.7c1b9c13 with the hub stopped, a readable rules.json that gains one entry whose match is effect:not-a-class denies a PreToolUse for `pkill -f node`, naming the file and the entry, as today
+AssertionError: with the hub stopped and a readable rules.json that gains the entry newer-85fe28d7, whose match is effect:not-a-class, the denial names rules.json, as today: exit 2 after 11.7 ms, stdout "", stderr "DeepBuild blocked this: deep-hook can't check its guards while the hub doesn't answer. Retry it.\n": expected 'DeepBuild blocked this: deep-hook can…' to match /rules\.json/
+
+- Expected:
+/rules\.json/
+
++ Received:
+"DeepBuild blocked this: deep-hook can't check its guards while the hub doesn't answer. Retry it.
+"
+
+ ❯ judge ac3-hub-stopped.test.ts:73:111
+     71|     throw Error(`INCONCLUSIVE: the call was denied, but in ${r.ms.toFi…
+     72|   }
+     73|   expect.soft(reason, `with the hub stopped and ${file}, the denial na…
+       |                                                                                                               ^
+     74|   expect.soft(reason, `with the hub stopped and ${file}, the denial sa…
+     75| }
+ ❯ ac3-hub-stopped.test.ts:92:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  ac3-hub-stopped.test.ts > #2204.7c1b9c13 with the hub stopped, a readable rules.json that gains one entry whose match is effect:not-a-class denies a PreToolUse for `pkill -f node`, naming the file and the entry, as today
+AssertionError: with the hub stopped and a readable rules.json that gains the entry newer-85fe28d7, whose match is effect:not-a-class, the denial says the entry newer-85fe28d7, as today: exit 2 after 11.7 ms, stdout "", stderr "DeepBuild blocked this: deep-hook can't check its guards while the hub doesn't answer. Retry it.\n": expected 'DeepBuild blocked this: deep-hook can…' to match /newer-85fe28d7/
+
+- Expected:
+/newer-85fe28d7/
+
++ Received:
+"DeepBuild blocked this: deep-hook can't check its guards while the hub doesn't answer. Retry it.
+"
+
+ ❯ judge ac3-hub-stopped.test.ts:74:109
+     72|   }
+     73|   expect.soft(reason, `with the hub stopped and ${file}, the denial na…
+     74|   expect.soft(reason, `with the hub stopped and ${file}, the denial sa…
+       |                                                                                                             ^
+     75| }
+     76|
+ ❯ ac3-hub-stopped.test.ts:92:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  07:46:12
+   Duration  1.00s (tests 98%, import 1%)
+
+vitest exit 1
+Thu Nov 19 07:46:13 PST 2026
+ 7:46  up 5 days, 17:55, 18 users, load averages: 79.55 149.05 159.52
