@@ -61,6 +61,9 @@ pub struct Renderer {
     /// The light grid this frame, and the buffer its cells are in (#446).
     pub(super) clusters: Option<clusters::Grid>,
     pub(super) cluster_buffer: wgpu::Buffer,
+    /// The fill lights' pass, whose lights and lists follow the grid's cells in its buffer
+    /// (#1634).
+    pub(super) fill: fill::Fill,
     /// The environment's prefilter and cubes (#422).
     pub(super) env: EnvState,
     /// Whether this frame has a sky, which draws first; its pipeline once compiled (#422); the

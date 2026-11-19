@@ -46,6 +46,10 @@ const SETTLE_TIMEOUT: Duration = Duration::from_secs(2);
 /// The criteria's wrong programs, each reachable only through the scenario's `planted`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Planted {
+    /// #1415: a patch whose ops change nothing is committed as a new revision.
+    NoOpCommits,
+    /// #1415: a create of an ID the document holds replaces the item that holds it.
+    CreateOverwrites,
     /// #1801: a refusal of a removal lists only the first row that names the removed item.
     RefusalNamesFirstRef,
     /// #1801: `refs_to` walks only items' parents.
@@ -773,6 +777,10 @@ pub struct Hub<'a> {
     pub ring: crate::ring::Ring,
     /// When each revision of a document that isn't shared became current, by doc ID.
     pub shown_at: BTreeMap<String, Vec<(i64, u64)>>,
+    /// #1415: the documents whose session `close` closed.
+    pub closed: BTreeSet<String>,
+    /// #1415: the documents whose newest revision sent was refused, the last good one current.
+    pub refused: BTreeSet<String>,
     /// The messages each session was sent from an ask box, by session ID (#384).
     pub asks: BTreeMap<String, Vec<crate::ask::Asked>>,
     /// The verdicts made on each claim, in the order made, each as recorded (#403).
@@ -974,6 +982,8 @@ impl<'a> Hub<'a> {
                 ring
             },
             shown_at: BTreeMap::new(),
+            closed: BTreeSet::new(),
+            refused: BTreeSet::new(),
             asks: BTreeMap::new(),
             verdicts_made: BTreeMap::new(),
             audit_asks: BTreeMap::new(),
@@ -1471,11 +1481,24 @@ impl<'a> Hub<'a> {
                 deep_text::cache::scope(std::hash::Hasher::finish(&h) | 1);
             }
         }
+        // #1415: a session call its state's cell refuses is answered with the cell's code.
+        let called = crate::states::session_call(call).map(|(d, c)| (d.to_string(), c));
+        if let Some(mut refused) = called
+            .as_ref()
+            .and_then(|(d, c)| self.refused_by_state(d, *c))
+        {
+            self.stamp(&mut refused);
+            return refused;
+        }
+        let frozen = called.as_ref().map(|(d, _)| self.session_state(d));
+        let frozen = frozen == Some(crate::states::State::Frozen);
         if let Call::Show(show) = call {
             self.vias.insert(show.doc.clone(), show.via.clone());
         }
         let mut reply = match call {
             Call::Show(show) => self.show_call(show),
+            Call::Close(doc) => self.close(doc),
+            Call::SessionTable => crate::states::table(),
             Call::Mode(show, args) => {
                 self.vias.insert(show.doc.clone(), show.via.clone());
                 self.mode_show(show, args)
@@ -1735,6 +1758,7 @@ impl<'a> Hub<'a> {
             Call::RuntimeGolden(g) => self.golden_call(g),
             Call::Term(t) => self.term_call(t),
         };
+        self.after_session_call(called, frozen, &reply);
         for shaping in deep_text::cache::take_log() {
             *self.shapings.entry(shaping.key).or_default() += 1;
         }
@@ -1981,6 +2005,7 @@ impl<'a> Hub<'a> {
                 blocked = self.blocked_in_claim(show, &result.notices);
                 let mut issues = crate::mixdown::score_plan::library_issues(&doc, result.issues);
                 issues.append(&mut probe_issues);
+                self.plant_axis_titles(&doc, &mut issues);
                 blocked.extend(self.missing_in_claim(show, &mut issues, &mut skipped));
                 // #488's planted check takes every sample rate from 8 to 192 kHz and refuses
                 // the rest.

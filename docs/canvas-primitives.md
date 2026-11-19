@@ -1,6 +1,6 @@
 # Canvas primitives, field by field
 
-This is the field-level companion to the tech design's "The primitives, defined": for every primitive the canvas draws with, it gives the fields with types, units and defaults, what the primitive does, what it costs, what it can never do, and the release it lands in. Read the conventions and the names first, because every table uses them. Fields are written `name: type, unit = default`, and costs are targets for each operator's micro-benchmark unless a figure says it was measured.
+This is the field-level companion to the tech design's "The primitives, defined": for every primitive the canvas draws with, it gives the fields with types, units and defaults, what the primitive does, what it costs, what it can never do, the release it lands in and, for one that puts shape, light or shading into a 3D frame, what real-time rays, a final and the web player do with it (Paths: rays, finals and the web player). Read the conventions and the names first, because every table uses them. Fields are written `name: type, unit = default`, and costs are targets for each operator's micro-benchmark unless a figure says it was measured.
 
 <a id="conventions"></a>
 
@@ -99,6 +99,19 @@ This is the field-level companion to the tech design's "The primitives, defined"
 | export | headless renders | no frame cap; draft: at least 4x real time at 1080p60; delivery with every guard: at least 2x real time; each speed fixture on its own, on the reference Mac, from the command to the file | no cap | 300 MB per film | 1 | none | not shown |
 
 A document names its class and may only tighten it; only you raise a class's caps. Every class draws nothing while still. Numbers marked * are proposals rather than figures from a report, and the first measurement on the reference Mac may move each once, as the tech design's budget rule allows.
+
+<a id="paths"></a>
+
+### Paths: rays, finals and the web player
+
+Three paths draw a 3D document besides the real-time frame: real-time rays (Light: ray traced), a path-traced final (Export: path-traced finals) and the web player (Export: web player). Every primitive that puts shape, light or shading into a 3D frame carries a sixth row, **Paths**, between It can never and Lands, with one answer for each, and a field that turns a behavior on may carry its own. The row is a table headed `| Entry | rays | final | web |`, one line per sealed entry, written `` `kind@major` ``, or per field that carries its own answers, written `` `kind@major.field` ``; a section about a field holds the field's line, and an entry's line and its fields' may sit in different sections. A cell is one of:
+
+- `` `same`, held by `<check kind or module/fixture>` ``: the path draws what the real-time frame draws, held by that check kind or fixture of the sealed set;
+- `` `stand_in`: <what it draws> (receipt: <what the receipt lists>) ``: the path draws something else, and its receipt lists the item with the answer's words;
+- `` `refused` `<code>` ``, with ` (#<n>)` where an open task decides the cell: a document that asks for the path and uses the primitive is refused at check with the code, before anything renders;
+- `` `not_applicable`: <why> ``: the path has nothing to do with the primitive.
+
+An answer the design or a landed task gives is taken as it stands. Where they're silent the answer is `refused` with `path_undefined`, naming the open task that decides the cell where one does, so no path draws a primitive nobody decided, and no answer is `same` until a landed check or fixture holds it. The sealed entry carries the same answers as data (Registry and seal: registries), `deep_kinds` returns them with the entry, and each path takes its refusals and stand-ins from them: the web player's export today, real-time rays and finals as they land. A web export reads each item's web answer before it picks the player's set: a `refused` refuses the export, naming the item, the entry and the code, and a `stand_in` lists the item in the receipt's `stand_in`, so a module only stand-ins use needn't be in the player's set. The sealed listing, `packages/contracts/canvas-paths.json`, is a committed snapshot of what the full build seals: every check kind and fixture of the sealed set, and each 3D entry and field with its module, its section and its answers, which a unit test holds to the seal. A lane in the local preflight, beside the closure lane, holds the rows and that listing together: every holder the listing names has its line in its section's row saying the listing's answers, a row holds no line the listing doesn't give that section, and every `same` is held by a check kind or fixture the listing names. It prints each `same` with what holds it and, for each path, how many holders answer with each word and how many of the refusals are `path_undefined`. A primitive the build doesn't seal yet carries no row, since it has no entry to answer for; it gains one when its entry lands, which can't seal without its answers. 2D draw paths are outside it, since draw-path parity holds them (Draw path: GPUI or the GPU layer).
 
 <a id="names"></a>
 
@@ -459,10 +472,10 @@ For: a label beside a formula, a title on the frame's top edge, a brace as wide 
 
 - `{patch: ULID, doc, base: rev, writer (from the connection), reason: string, gesture: serial (optional), dry_run: bool = false, coalesce_key: string (optional), ops: [op]}`
 - Ops: `create {item}`; `set {id, path, value}`; `unset {id, path}`; `delete {id, cascade = false}`; `move {id, parent, keep: world | local = world}`; `reorder {id, after | before}`; `rows {id, append | set | remove, by key}`; `break_out {instancer, element} | {instance, item}` (an instancer's element, or a recipe instance's derived item)
-- Result: `{outcome: applied | superseded | conflict | refused, rev, ids: {~n → ID}, achieved: {created: {kind: n}, updated: n, deleted: {kind: n}, unchanged: bool}, issues: [{code, ids, path, actual, what, fix}], truncated: {shown, total, by_code}, cost_delta: {cpu_ms, gpu_ms, vertices, lights, gpu_mb}, undo: [op]}` (`undo`: the inverse ops, for the same writer; `truncated`: only when the issues were cut at the read cap, as What holds a document to its rules says)
-- Refusal codes (closed): `not_your_layer, lease_held, derived_item, record_view, unknown_kind, kind_too_new, unknown_field, out_of_range, ref_unresolved, cycle, over_budget, stale_base, undo_conflict, gesture_required, too_large, over_quota, module_missing, pack_missing, unintended_removal, outside_selection, preview_unrequested` ; a session's state adds `session_frozen` and `session_closed` (Document session), and `over_quota` on a rate cap carries `retry_after_ms` (Writer connection)
+- Result: `{outcome: applied | superseded | conflict | refused | no_change, rev, ids: {~n → ID}, achieved: {created: {kind: n}, updated: n, deleted: {kind: n}, unchanged: bool}, issues: [{code, ids, path, actual, what, fix}], truncated: {shown, total, by_code}, cost_delta: {cpu_ms, gpu_ms, vertices, lights, gpu_mb}, undo: [op]}` (`undo`: the inverse ops, for the same writer; `truncated`: only when the issues were cut at the read cap, as What holds a document to its rules says)
+- Refusal codes (closed): `not_your_layer, lease_held, derived_item, record_view, unknown_kind, kind_too_new, unknown_field, out_of_range, ref_unresolved, cycle, over_budget, stale_base, undo_conflict, gesture_required, too_large, over_quota, module_missing, pack_missing, unintended_removal, outside_selection, preview_unrequested, id_taken` ; a session's state adds `session_frozen` and `session_closed` (Document session), and `over_quota` on a rate cap carries `retry_after_ms` (Writer connection)
 
-**Semantics:** All or nothing: validated against a simulated state, re-checked incrementally, and recorded as one `doc.patched` event (per gesture for you, per call for an agent). A stale base rebases when no ID it touches changed since; otherwise it's a conflict naming both writers. Undo is the inverse patch, by the same writer only, and is refused if another writer has touched those paths since. A panel's patch writes as you only from the editor panel the app ships, or from a panel whose plug-in you granted `edit_as_you` by name on its install card, which no agent can grant, and only when its `gesture` is the serial of your input that ended a gesture in that panel, from hardware input or VoiceOver, as the serial ring records it, unspent, for the document open there; from such a panel a patch whose `gesture` fails this is refused with `gesture_required`, and one without a gesture writes as the panel's plug-in, while every other panel's patch writes as its plug-in whatever its `gesture`, so a click in an agent-built panel never makes its patch yours (Editor panel: patches as you). "Put back as before this stop", the return card's action, is one patch per document the agent's turn changed before that stop, written as you and shown first as a dry run: each item the turn changed gets back its values from the revision before the turn's first change to it, each item it deleted is created again with its ID, as an undo would, and each item it created is deleted. An item another writer changed since is left out with `undo_conflict`, and one under another writer's live lease with `lease_held`, each listed. Every item it puts back becomes yours (Writer layer): that is the trade for one step, and the agent's later patches to those items are refused, leaving suggestions. The IDs a patch touches are those its ops target, plus the parent a create or move names and the neighbor a reorder names. The kit's patch fuzzer checks five laws on every patch it draws: (1) a dry run returns the outcome, achieved counts, issues and cost change the commit then returns on the same base; (2) a refused patch or a dry run leaves the canonical bytes unchanged; (3) a patch followed by its `undo` from the same writer, with nothing between, gives back the base's revision hash; (4) two patches from different writers on one base that touch disjoint IDs give one revision hash in either arrival order, order keys included, since a key falls between its neighbors in the patch's base; (5) the incremental check after a patch returns the same issues, by code, IDs and path, as a full check of that revision. On a patch that changes only values, and on its undo, no step builds a mesh, reads or decodes an asset, uploads mesh or image bytes, or writes an asset's bytes again.
+**Semantics:** All or nothing: validated against a simulated state, re-checked incrementally, and recorded as one `doc.patched` event (per gesture for you, per call for an agent). A patch whose ops leave every item's content key as it was answers `no_change` with the current revision's hash, and makes no revision and no undo step. A create never replaces an item: one naming an ID the document holds is refused with `id_taken`, naming the ID and the writer layer that holds it. A stale base rebases when no ID it touches changed since; otherwise it's a conflict naming both writers. Undo is the inverse patch, by the same writer only, and is refused if another writer has touched those paths since. A panel's patch writes as you only from the editor panel the app ships, or from a panel whose plug-in you granted `edit_as_you` by name on its install card, which no agent can grant, and only when its `gesture` is the serial of your input that ended a gesture in that panel, from hardware input or VoiceOver, as the serial ring records it, unspent, for the document open there; from such a panel a patch whose `gesture` fails this is refused with `gesture_required`, and one without a gesture writes as the panel's plug-in, while every other panel's patch writes as its plug-in whatever its `gesture`, so a click in an agent-built panel never makes its patch yours (Editor panel: patches as you). "Put back as before this stop", the return card's action, is one patch per document the agent's turn changed before that stop, written as you and shown first as a dry run: each item the turn changed gets back its values from the revision before the turn's first change to it, each item it deleted is created again with its ID, as an undo would, and each item it created is deleted. An item another writer changed since is left out with `undo_conflict`, and one under another writer's live lease with `lease_held`, each listed. Every item it puts back becomes yours (Writer layer): that is the trade for one step, and the agent's later patches to those items are refused, leaving suggestions. The IDs a patch touches are those its ops target, plus the parent a create or move names and the neighbor a reorder names. The kit's patch fuzzer checks five laws on every patch it draws: (1) a dry run returns the outcome, achieved counts, issues and cost change the commit then returns on the same base; (2) a refused patch or a dry run leaves the canonical bytes unchanged; (3) a patch followed by its `undo` from the same writer, with nothing between, gives back the base's revision hash; (4) two patches from different writers on one base that touch disjoint IDs give one revision hash in either arrival order, order keys included, since a key falls between its neighbors in the patch's base; (5) the incremental check after a patch returns the same issues, by code, IDs and path, as a full check of that revision. On a patch that changes only values, and on its undo, no step builds a mesh, reads or decodes an asset, uploads mesh or image bytes, or writes an asset's bytes again.
 
 **Cost:** Apply ≤ 2 ms; dry run ≤ 20 ms; a move touches one 64-byte instance record, never a mesh
 
@@ -1112,14 +1125,16 @@ For: adding an extension point later without a redesign: a canvas module declare
 - Closure, on every list the canvas documents: `registry name@major` | `closed {reason: ring | record | determinism | card | budget | interval_forms | draw_path, reopens_if: string, instead: string | nothing}` (record: the record and the kernel's document contract; draw_path: a shape the core draws as a path; `instead`: what a document can write today in the list's place, such as a keyed shot's own channels for a shot move the list lacks, or `nothing`) | `open {declared_by: item | pack}` (a list each item or pack declares for itself, such as a logic item's occurrence kinds); a closed list also says whether it is exhaustive, so adding a value takes a new major, or extensible, so adding one takes a new minor and a reader maps a value it doesn't know to the list's `unknown`
 - Field list, on every field of a sealed entry whose value is one of a set of words: each place in the forms its reader declares, as `deep_kinds` prints them, where a document writes a bare word is a list: a choice with a word or a tagged word among its alternatives, so `m | auto` offers a list of one, or a word that is a whole form on its own. It is named `<entry>.<field>`, with `.<object field>`, `.<tag>` or `.<named slot>` for each it sits in, such as `camera@1.projection` and `camera@1.lens.fit`, and its closure is `{registry}` | `{closed, reopens_if, instead}` | `{open}`. A list a canvas module reads outside its kinds' params, such as an emitter's distance models, is sealed beside them under the name its module gives. The core's closures are one line a list in `crates/deep-canvas/src/registry/fields.json`, and a canvas module may declare its own kind's beside the kind
 - Published: `deep://registries/<core version>`, every registry with its entries, their origins and their kit results, and every hub slot with its fills and their kit results
+- On a sealed entry that draws in 3D, and optionally on one of its fields: `paths: {rays, final, web}`, each `same {held_by}` | `stand_in {draws, receipt}` | `refused {code}` | `not_applicable {why}` (Paths: rays, finals and the web player)
+- Issue: `path_undefined {entry, path}`
 
-**Semantics:** A canvas module declares a registry in its register call, as it registers kinds, when no other canvas module fills it at the seal; the core declares each registry that more than one canvas module fills at the seal, such as the column sources (Array and table: column view), and the seal refuses a canvas module's entry in a registry another canvas module declares, naming the registry and both modules. An entry is data or a program under the logic subset, which the sandbox module admits and runs (Logic: sandbox), never Rust from outside the module set, so a registry opens a list without opening the ring. `fill` says who may add entries: canvas modules, first-party packs, any pack, or a hub plug-in through its manifest. Entries a canvas module fills are checked at the seal and join the filling module's own interface digest, never another module's (Canvas module: interface and implementation). Entries a pack or a plug-in fills resolve per document through the pinned pack or the installed plug-in, as a pack's kinds do, and the document's `requires` names where each came from. Every entry passes the registry's kit before it's admitted: at the seal, at pack check or at install. The seal also runs the kit on each planted wrong entry and refuses a registry whose kit admits one, naming the registry and the entry, so a kit that can't fail never ships. A kit lists its rules, and each rule has its own planted wrong entry or fill that breaks that rule alone and fails with that rule's message; the preflight refuses a kit with a rule no planted entry isolates. An entry from an outside pack or a plug-in carries its name, as `<pack>.<name>`, so it never takes a first-party name, while a first-party pack's entries keep their bare names, as a reopened list's first entries do, and two entries of one name are refused. With `binds: author`, an entry the working agent wrote binds only its own claims, as its own checks do. A registry is a contract entry, with `since`, a frozen digest of its entry schema and, once replaced, `replaced_by`; a breaking change to its entry schema takes a new major and an additive one a new minor, as the tech design's version policy says for every contract entry. To open a closed list, its owning module declares a registry whose first entries are the list's values, each keeping its `since` and digest, so no document, content key or golden changes. The closure rule: every list the canvas documents, and every enum in its schemas, is a registry or closed with its reason and what would reopen it, or open, declared by each item or pack that uses it (Registries and closed lists). The local preflight fails an enum with no closure, and a registry declared without a kit, a planted wrong entry or `since`, naming it. The rule reaches a kind's fields too: the seal refuses a field list with no closure, or one that breaks the rule, naming the entry and the field, and the sealed listing carries every field list with its words and closure. The closure lane reads that listing, not the schema files, so a list can't be missed by living outside one, and it prints one reading a run: how many closed lists say `instead: nothing`, and which the change added, a reading and never a verdict. A document that sets a word a closed list lacks is refused as before, and the refusal now names the list, what would reopen it and `instead`; `deep_kinds` returns the same for a list. `deep_kinds` lists every registry and its entries in one shape. The hub's slots, what a plug-in fills through `deep.register*`, list beside them in the same shape and under the same closure rule, but a slot is not a registry: its fills are hub code or out-of-process pieces that install and replace, never entries, so a registry's `owner` stays the core or a canvas module. An entry with no description carries none in the listing and on its sheet, and no sentence is generated for it. A lane in the local preflight fails a description that is empty, that only restates the entry's name, that equals another's in the same registry, or that is longer than 200 characters (a starting value). The lane counts entries with no description against a checked-in count per registry that only falls: a new entry with none fails, naming the entry, and a recorded count above the real one fails as stale, naming the registry. The listing's dump carries `described` and `total` per registry.
+**Semantics:** A canvas module declares a registry in its register call, as it registers kinds, when no other canvas module fills it at the seal; the core declares each registry that more than one canvas module fills at the seal, such as the column sources (Array and table: column view), and the seal refuses a canvas module's entry in a registry another canvas module declares, naming the registry and both modules. An entry is data or a program under the logic subset, which the sandbox module admits and runs (Logic: sandbox), never Rust from outside the module set, so a registry opens a list without opening the ring. `fill` says who may add entries: canvas modules, first-party packs, any pack, or a hub plug-in through its manifest. Entries a canvas module fills are checked at the seal and join the filling module's own interface digest, never another module's (Canvas module: interface and implementation). Entries a pack or a plug-in fills resolve per document through the pinned pack or the installed plug-in, as a pack's kinds do, and the document's `requires` names where each came from. Every entry passes the registry's kit before it's admitted: at the seal, at pack check or at install. The seal also runs the kit on each planted wrong entry and refuses a registry whose kit admits one, naming the registry and the entry, so a kit that can't fail never ships. A kit lists its rules, and each rule has its own planted wrong entry or fill that breaks that rule alone and fails with that rule's message; the preflight refuses a kit with a rule no planted entry isolates. An entry from an outside pack or a plug-in carries its name, as `<pack>.<name>`, so it never takes a first-party name, while a first-party pack's entries keep their bare names, as a reopened list's first entries do, and two entries of one name are refused. With `binds: author`, an entry the working agent wrote binds only its own claims, as its own checks do. A registry is a contract entry, with `since`, a frozen digest of its entry schema and, once replaced, `replaced_by`; a breaking change to its entry schema takes a new major and an additive one a new minor, as the tech design's version policy says for every contract entry. To open a closed list, its owning module declares a registry whose first entries are the list's values, each keeping its `since` and digest, so no document, content key or golden changes. The closure rule: every list the canvas documents, and every enum in its schemas, is a registry or closed with its reason and what would reopen it, or open, declared by each item or pack that uses it (Registries and closed lists). The local preflight fails an enum with no closure, and a registry declared without a kit, a planted wrong entry or `since`, naming it. The rule reaches a kind's fields too: the seal refuses a field list with no closure, or one that breaks the rule, naming the entry and the field, and the sealed listing carries every field list with its words and closure. The closure lane reads that listing, not the schema files, so a list can't be missed by living outside one, and it prints one reading a run: how many closed lists say `instead: nothing`, and which the change added, a reading and never a verdict. A document that sets a word a closed list lacks is refused as before, and the refusal now names the list, what would reopen it and `instead`; `deep_kinds` returns the same for a list. `deep_kinds` lists every registry and its entries in one shape. The hub's slots, what a plug-in fills through `deep.register*`, list beside them in the same shape and under the same closure rule, but a slot is not a registry: its fills are hub code or out-of-process pieces that install and replace, never entries, so a registry's `owner` stays the core or a canvas module. An entry with no description carries none in the listing and on its sheet, and no sentence is generated for it. A lane in the local preflight fails a description that is empty, that only restates the entry's name, that equals another's in the same registry, or that is longer than 200 characters (a starting value). The lane counts entries with no description against a checked-in count per registry that only falls: a new entry with none fails, naming the entry, and a recorded count above the real one fails as stale, naming the registry. The listing's dump carries `described` and `total` per registry. Every kind a canvas module seals that draws in 3D, scene3d's and building's kinds and those a module draws as marks in 3D through the core's fills, answers each of real-time rays, a final and the web player, and a field that turns a behavior on may carry answers of its own; the seal refuses one that leaves a path unanswered, naming the kind and the path, and `deep_kinds` and the dump carry the answers with the entry. The answers stay out of every digest, so a task that decides a cell changes an answer, never a kind (Paths: rays, finals and the web player).
 
 **Cost:** Entries a canvas module fills: O(entries) at the seal, inside its 50 ms (estimate); a pack's entries O(entries) once per pack version at pack check, plus their kits; a lookup O(1) by interned name; nothing per frame
 
-**It can never:** Hold Rust from outside the module set; take a canvas module's entry into a registry another canvas module declares; admit an entry that fails its kit; ship a kit that admits its own planted wrong entry; let a pack or a plug-in take a first-party name; change an entry's digest without a new version; open a ring list (bands, the question card, status colors, phases); change after the seal; seal a field list with no closure; refuse a value without naming what would reopen its list; count a list as open because no schema holds it
+**It can never:** Hold Rust from outside the module set; take a canvas module's entry into a registry another canvas module declares; admit an entry that fails its kit; ship a kit that admits its own planted wrong entry; let a pack or a plug-in take a first-party name; change an entry's digest without a new version; open a ring list (bands, the question card, status colors, phases); change after the seal; seal a field list with no closure; refuse a value without naming what would reopen its list; count a list as open because no schema holds it; seal a 3D entry with no answer for a path; call a path `same` with nothing that holds it; let a path draw an entry its answer refuses; let the reference and the listing disagree
 
-**Lands:** R2, with the registry and seal; pack entries with outside packs, and plug-in entries with the plug-in blocks
+**Lands:** R2, with the registry and seal; pack entries with outside packs, and plug-in entries with the plug-in blocks; R6 the paths' answers
 
 #### Phase
 
@@ -1339,6 +1354,7 @@ Every list the canvas documents is a registry, which names who may fill it, its 
 | Synth presets; audio nodes | Synth `synth@1` | registry `synth.preset@1`, filled by first-party packs and packs, foley@1's presets among them; the node list closed: determinism | Every node in the list, no cycle but through a delay, and a cost within its estimate; planted: a preset whose feedback loop has no delay. The nodes reopen if a preset needs one the list lacks, as a first-party node with its fixtures | nothing |
 | Pack looks | Pack: studio@1 quality defaults; Look `look@1` | open: declared per pack | The look kit at pack check: the look's schema; no status color moved, and every data role at the status distance from each status color; its GPU cost at defaults measured within 25% of what it states, or refused with `cost_understated`; planted: a look whose finish moves a status color, and one that states half its measured cost | — |
 | Pack dependencies | Pack: dependencies | open: declared per pack | Exact versions and no cycle | — |
+| Paths and their answers | Paths: rays, finals and the web player | closed: ring | Real-time rays, a final and the web player are the renderers beside the real-time frame, each ring code, and same, stand_in, refused and not_applicable are the four answers every sealed 3D entry and every Paths row gives. Reopens with a renderer a release adds | nothing |
 
 Every field list of the sealed listing, generated from it: each place where a sealed kind's field, or a field the listing holds past a kind's params, offers a bare word, and each list a canvas module reads outside its kinds' params (an emitter's distance models, foley's materials and actions, the light kinds and the GPU deforms). Each is closed with its reason, `reopens_if` and `instead` in `crates/deep-canvas/src/registry/fields.json`, one line a list, unless its module declares its closure beside its kind. The drift lane holds this table to the listing and the one above to `packages/contracts/canvas-closures.json`.
 
@@ -1641,6 +1657,9 @@ For: every change the panel makes: checked like an agent's, undone by writer, ne
 - `baseline: alphabetic | rule:n` (a ruled-paper line)
 - `numerals: tabular | proportional` (tabular when bound)
 - `dir: auto | ltr | rtl = auto`; `lang: BCP 47`
+- `flow: horizontal | vertical_rl | vertical_lr = horizontal`
+- `upright: auto | all = auto` (vertical flow only)
+- `combine_upright: u8 ≤ 4 = 2` (vertical flow only; 0 turns every digit with Latin text)
 - `fallback: [font name] = the look's fallback list` (a grapheme the run's font lacks is set in the first face that has it)
 - `list: {marker: bullet | number | none = none, indent: u = 1.2 × size, gap: u = 0}` (each line after `\n` an item; `#line:n` anchors as code's)
 - `widest: string | the bound value's range`
@@ -1653,7 +1672,7 @@ For: every change the panel makes: checked like an agent's, undone by writer, ne
 
 **Cost:** Shaping O(chars) on change, about 0.2 µs per char (10,000 chars under 2 ms, the bar the R1 spike measures and the shaper decision reopens on); O(visible glyphs) per frame (50,000 glyphs under 1 ms of CPU); 1 MB per atlas page; glyphs above about 64 px draw as paths
 
-**It can never:** Use a system font; be measured by one engine and drawn by another; ellipsize or wrap a number; show a number with a unit that isn't bound or computed; shape per frame
+**It can never:** Use a system font; be measured by one engine and drawn by another; ellipsize or wrap a number; show a number with a unit that isn't bound or computed; shape per frame; rotate a whole horizontal run to fake a column; mix flows inside one item; set a `combine_upright` run wider than the column
 
 **Lands:** R1 labels and readouts; R2 the rest; R6 reveal and copy tables, runs and code; R6 fallback, `text.glyph_missing` and lists
 
@@ -1876,6 +1895,12 @@ For: a vector field drawn as arrows or as the lines that follow it, a dot the fl
 **Cost:** An integration O(starts × time ÷ step × 4 evaluations), about 25 ms for 1,000 streams of 60 steps (estimate); arrows about 50 ns each per changed frame.
 
 **It can never:** Integrate between frames; keep state; exceed 4,096 starts or arrows; change its step count during a run.
+
+**Paths**
+
+| Entry | rays | final | web |
+|---|---|---|---|
+| `vector_field@1` | `refused` `path_undefined` (#475) | `refused` `path_undefined` (#178) | `same`, held by `document.determinism` |
 
 **Lands:** R6
 
@@ -3154,6 +3179,22 @@ For: the house's interiors in hero films and stills, where bounce light should h
 
 **It can never:** Read the clock, the network or an undeclared item; exceed its declared vertex count; emit non-finite positions; run per frame unless a param is bound to time
 
+**Paths**
+
+| Entry | rays | final | web |
+|---|---|---|---|
+| `ball@1` | `refused` `path_undefined` (#475) | `refused` `path_undefined` (#178) | `same`, held by `document.determinism` |
+| `coil@1` | `refused` `path_undefined` (#475) | `refused` `path_undefined` (#178) | `same`, held by `document.determinism` |
+| `display@1` | `refused` `path_undefined` (#475) | `refused` `path_undefined` (#178) | `same`, held by `document.determinism` |
+| `extrude@1` | `refused` `path_undefined` (#475) | `refused` `path_undefined` (#178) | `same`, held by `document.determinism` |
+| `hull@1` | `refused` `path_undefined` (#475) | `refused` `path_undefined` (#178) | `same`, held by `document.determinism` |
+| `lathe@1` | `refused` `path_undefined` (#475) | `refused` `path_undefined` (#178) | `same`, held by `document.determinism` |
+| `plate@1` | `refused` `path_undefined` (#475) | `refused` `path_undefined` (#178) | `same`, held by `document.determinism` |
+| `slab@1` | `refused` `path_undefined` (#475) | `refused` `path_undefined` (#178) | `same`, held by `document.determinism` |
+| `surface@1` | `refused` `path_undefined` (#475) | `refused` `path_undefined` (#178) | `same`, held by `document.determinism` |
+| `tree@1` | `refused` `path_undefined` (#475) | `refused` `path_undefined` (#178) | `same`, held by `document.determinism` |
+| `tube@1` | `refused` `path_undefined` (#475) | `refused` `path_undefined` (#178) | `same`, held by `document.determinism` |
+
 **Lands:** R6
 
 #### Builder `ball`: tessellation
@@ -3281,6 +3322,12 @@ For: the castle on its hill, the city's edge, physics labs with slopes
 
 **It can never:** Be painted or sculpted; read a heightmap from a URL; exceed 4,097 × 4,097 samples in one plate, or in one height tile of a chunk tree.
 
+**Paths**
+
+| Entry | rays | final | web |
+|---|---|---|---|
+| `plate@1.terrain` | `refused` `path_undefined` (#2772) | `refused` `path_undefined` (#2772) | `same`, held by `document.determinism` |
+
 **Lands:** R6, after the modeling rows
 
 #### Builder plate: terrain overlays
@@ -3398,6 +3445,12 @@ For: the city's streets and rails, the castle's walls and paths, films' camera a
 
 **It can never:** Hold NaN or two coincident consecutive points (refused); iterate without a fixed count; reorder points silently (ids keep identity).
 
+**Paths**
+
+| Entry | rays | final | web |
+|---|---|---|---|
+| `curve@1` | `refused` `path_undefined` (#475) | `refused` `path_undefined` (#178) | `same`, held by `document.determinism` |
+
 **Lands:** R6; 2D paths stay `path@1` (R1 and R2)
 
 #### Curve `curve@1`: bspline mode
@@ -3453,6 +3506,12 @@ For: films (a baked flag, tablecloth or splash), the house (curtains in a breeze
 
 **It can never:** Simulate; change per frame except by t; load from a URL; feed a physics check.
 
+**Paths**
+
+| Entry | rays | final | web |
+|---|---|---|---|
+| `mesh.sequence@1` | `refused` `path_undefined` (#475) | `refused` `path_undefined` (#178) | `same`, held by `document.determinism` |
+
 **Lands:** R6, with the simulate job; from_clip with skinned playback
 
 #### Row sequence `rows.sequence@1`
@@ -3496,6 +3555,19 @@ For: a film's simulated swarm, flock, particle cloud or trajectory that the agen
 **Cost:** Mitres computed once per level in a batch; in the prototype, switching to cutaway rebuilt 10 of 91 nodes
 
 **It can never:** Read an item it didn't declare; use runtime boolean geometry; be extended by a plug-in
+
+**Paths**
+
+| Entry | rays | final | web |
+|---|---|---|---|
+| `arch.guard_rail@1` | `refused` `path_undefined` (#475) | `refused` `path_undefined` (#178) | `same`, held by `document.determinism` |
+| `arch.level@1` | `refused` `path_undefined` (#475) | `refused` `path_undefined` (#178) | `same`, held by `document.determinism` |
+| `arch.opening@1` | `refused` `path_undefined` (#475) | `refused` `path_undefined` (#178) | `same`, held by `document.determinism` |
+| `arch.roof@1` | `refused` `path_undefined` (#475) | `refused` `path_undefined` (#178) | `same`, held by `document.determinism` |
+| `arch.slab@1` | `refused` `path_undefined` (#475) | `refused` `path_undefined` (#178) | `same`, held by `document.determinism` |
+| `arch.stair@1` | `refused` `path_undefined` (#475) | `refused` `path_undefined` (#178) | `same`, held by `document.determinism` |
+| `arch.wall@1` | `refused` `path_undefined` (#475) | `refused` `path_undefined` (#178) | `same`, held by `document.determinism` |
+| `arch.zone@1` | `refused` `path_undefined` (#475) | `refused` `path_undefined` (#178) | `same`, held by `document.determinism` |
 
 **Lands:** R6
 
@@ -4069,6 +4141,12 @@ For: the hard-surface look on every built prop, figure and piece of furniture
 
 **It can never:** Override an element's prototype geometry; nest past the cap; reuse an element ID; read its culled count back to draw; cull by an earlier frame's depth; cull a shadow map, cascade, probe capture or inset by the camera's occlusion
 
+**Paths**
+
+| Entry | rays | final | web |
+|---|---|---|---|
+| `instance@1` | `refused` `path_undefined` (#2772) | `refused` `path_undefined` (#2772) | `same`, held by `document.determinism` |
+
 **Lands:** R6; instanced 2D marks come through mark sets
 
 #### Instance `instance@1`: logic columns
@@ -4178,6 +4256,13 @@ For: a crowd of 100,000 walkers out of step, a flock flapping at its own pace, m
 
 **It can never:** Carry a status color; bring shader code; load a texture from the network; keep light between frames to fake scattering, or spread light past a subsurface part (Material: subsurface)
 
+**Paths**
+
+| Entry | rays | final | web |
+|---|---|---|---|
+| `material@1` | `refused` `path_undefined` (#2773) | `refused` `path_undefined` (#2773) | `same`, held by `document.determinism` |
+| `material@1.translucency` | `refused` `path_undefined` (#2773) | `refused` `path_undefined` (#2759) | `same`, held by `document.determinism` |
+
 **Lands:** R6; look roles R1
 
 #### Material: texture maps
@@ -4236,6 +4321,12 @@ For: a 3D figure standing on the notebook look's 2D paper with its contact shado
 
 **It can never:** Darken a status color (they draw after, on top); occlude items behind it; count as a solid in the geometry audit.
 
+**Paths**
+
+| Entry | rays | final | web |
+|---|---|---|---|
+| `material@1.catch` | `refused` `path_undefined` (#475) | `refused` `path_undefined` (#2774) | `same`, held by `document.determinism` |
+
 **Lands:** R6
 
 #### Material: mirror
@@ -4251,6 +4342,12 @@ For: a black gloss floor under a product, a lake under a castle, a shop window
 **Cost:** One extra scene pass at half resolution plus a blur, roughly a quarter of the scene's frame time (estimate); counted in the class. Budget class: work product, showpiece, export.
 
 **It can never:** Recurse (a mirror inside a mirror draws its fallback); read an earlier frame; mirror status colors or overlays.
+
+**Paths**
+
+| Entry | rays | final | web |
+|---|---|---|---|
+| `material@1.mirror` | `refused` `path_undefined` (#2772) | `refused` `path_undefined` (#2772) | `same`, held by `document.determinism` |
 
 **Lands:** R6
 
@@ -4269,6 +4366,12 @@ For: a lake in a nature flyover, a harbor or a moat in a film, rain falling on a
 
 **It can never:** Simulate, integrate or read an earlier frame; feed a check or the physics module; move a vertex further than its waves' summed amplitude.
 
+**Paths**
+
+| Entry | rays | final | web |
+|---|---|---|---|
+| `material@1.water` | `stand_in`: the shadow map, which the light keeps for this caster since rays can't honor its waves (receipt: the light that kept its map) | `refused` `path_undefined` (#2761) | `same`, held by `document.determinism` |
+
 **Lands:** R6
 
 #### Material: subsurface
@@ -4284,6 +4387,12 @@ For: a presenter's face in a close shot, candles and wax, jade, marble and soap 
 **Cost:** One pass over subsurface pixels at 16 taps each: about 0.5 ms for a face that fills half a 1080p frame; thin light one shadow fetch per light per pixel (estimates). Budget class: work product, showpiece, export.
 
 **It can never:** Spread light onto another part or another material; keep light between frames; add energy; carry a status color.
+
+**Paths**
+
+| Entry | rays | final | web |
+|---|---|---|---|
+| `material@1.subsurface` | `refused` `path_undefined` (#475) | `refused` `path_undefined` (#178) | `same`, held by `document.determinism` |
 
 **Lands:** R6
 
@@ -4308,14 +4417,23 @@ For: a licensed character's hair in a close shot, a presenter in a film, fur on 
 
 **Fields**
 
-- Light: `kind: light.point | light.spot | light.sun | light.area@1` (closed: new light shapes stay first-party, since raster light, rays, probes, the light job and path-traced finals share one light model; it reopens if a case needs a shape these four can't stand in for. A light function filters the ones there are: Light: light function); `color: linear RGB = [1, 1, 1] | temperature: K = 6500`; `power: lm = 800` (point, spot, area) or `illuminance: lx = 10,000` (sun); `range: m = auto` (√(power ÷ (4π × threshold)), threshold 0.05 lx by default: about 36 m at 800 lm); `radius: m = 0.05`; spot `inner: deg = 0, outer: deg = 45` (half angles, from the cone's axis; a spot's `power` counts the whole sphere, as a point light's does: lm = 4π × cd); area `shape: rect | disk, size: [m, m] = [0.5, 0.5]`; `shadow: bool = false` (true for the key sun); `priority: i8 = 0`; `flicker: channel` (optional)
-- Policy, per view: `shaded ≤ 32`; `shadowed: 1 sun (≤ 4 cascades) + 2 spots`; `margin = 10%` (lights near the cut dim by score); notice `lights_over_budget`
+- Light: `kind: light.point | light.spot | light.sun | light.area@1` (closed: new light shapes stay first-party, since raster light, rays, probes, the light job and path-traced finals share one light model; it reopens if a case needs a shape these four can't stand in for. A light function filters the ones there are: Light: light function); `color: linear RGB = [1, 1, 1] | temperature: K = 6500`; `power: lm = 800` (point, spot, area) or `illuminance: lx = 10,000` (sun); `range: m = auto` (√(power ÷ (4π × cut)), the cut the illuminance that lifts a white diffuse surface to 1/4,096 of linear 1.0 after the shot's exposure, under one 8-bit code value: π ÷ (4,096 × the exposure's scale) lx, which is 0.05 lx at EV100 5.76, where 800 lm reaches about 36 m; a range given in metres is kept as given); `radius: m = 0.05`; spot `inner: deg = 0, outer: deg = 45` (half angles, from the cone's axis; a spot's `power` counts the whole sphere, as a point light's does: lm = 4π × cd); area `shape: rect | disk, size: [m, m] = [0.5, 0.5]`; `shadow: bool = false` (true for the key sun); `priority: i8 = 0`; `flicker: channel` (optional); `fill: bool = false` (a fill light: `light.point` or `light.spot` with a finite `range` and `shadow: false`; with `shadow: true`, or on a sun or an area light, it is refused at check, naming the light)
+- Policy, per view: `shaded ≤ 32` key lights; `shadowed: 1 sun (≤ 4 cascades) + 2 spots`; `margin = 10%` (lights near the cut dim by score); notice `lights_over_budget`; `fill_shaded` fill lights per budget class (32 in figure and below, 512 in work product, 2,048 in showpiece and export: starting values); `per_cluster: u8 = 64` (the fill lights a cluster shades at most); notice `cluster_over_budget {clusters, dropped}`
 
-**Semantics:** Recomputed only when a light or the camera changes: each light is scored by its estimated illuminance at the view (power ÷ max(d², r²) inside its range, times its range's overlap with the frustum), plus a priority bonus. The top N go into a fixed-size array ordered by (score bucket, ID), as a pure function of the view: a light within the margin of the cut is shaded at a weight that ramps with its score, so it dims smoothly as the view moves and the set at a view is the same however the view got there, with no session hysteresis and no fade in wall-clock time. Lights left out are reported once per change, by ID. Above 8 lights, culling is by screen tile and depth slice. Shadowed lights near the shadow cap lose their shadow by score, blended across a score margin, before any light dims; each dropped shadow is reported by ID. Each cluster's list is ordered by score bucket, then light ID, after any GPU fill, and the grid's far plane comes from this frame's lights and view only. A shadow-casting light whose direction has zero length at one t is refused at check, naming the light and the time. A local light's inverse square is faded by the window `(1 − (d ÷ range)⁴)²`, where d is the distance from the light, so it reaches 0 at `range`.
+**Semantics:** Recomputed only when a light or the camera changes: each light is scored by its estimated illuminance at the view (power ÷ max(d², r²) inside its range, times its range's overlap with the frustum), plus a priority bonus. The top N go into a fixed-size array ordered by (score bucket, ID), as a pure function of the view: a light within the margin of the cut is shaded at a weight that ramps with its score, so it dims smoothly as the view moves and the set at a view is the same however the view got there, with no session hysteresis and no fade in wall-clock time. Lights left out are reported once per change, by ID. Above 8 lights, culling is by screen tile and depth slice. Shadowed lights near the shadow cap lose their shadow by score, blended across a score margin, before any light dims; each dropped shadow is reported by ID. Each cluster's list is ordered by score bucket, then light ID, after any GPU fill, and the grid's far plane comes from this frame's lights and view only. A shadow-casting light whose direction has zero length at one t is refused at check, naming the light and the time. Fill lights sit outside the key lights' 32 and change neither their cut nor its notice: every fill light whose range meets the view is shaded, in every lit material, light responses included, and wherever key lights reach, with its `receivers` and no shadow. A compute pass, run only when a light or the view changes, walks the fill lights in the policy's order for each cell of the grid and lists the ones whose range reaches it, so a list is in that order whatever ran first. A cell past `per_cluster` keeps its first `per_cluster`, weighs each by the same ramp against the first light it drops, and the frame raises `cluster_over_budget` with every such cluster and the lights dropped from any, once per change. A document holding more fill lights than its class's `fill_shaded` is refused at check, naming the count and the class. A local light's inverse square is faded by the window `(1 − (d ÷ range)⁴)²`, where d is the distance from the light, so it reaches 0 at `range`.
 
-**Cost:** GPU per pixel grows with the lights in its cluster; each shadowed light is one depth pass per cascade; static shadow maps are cached by everything they read; CPU O(lights) per change
+**Cost:** GPU per pixel grows with the lights in its cluster; each shadowed light is one depth pass per cascade; static shadow maps are cached by everything they read; CPU O(lights) per change; the fill lights' pass is its cells × the lights in view, and their lists `per_cluster` entries a cell
 
 **It can never:** Be dropped silently; exceed the shadow budget; recompile when the count changes; show a status color
+
+**Paths**
+
+| Entry | rays | final | web |
+|---|---|---|---|
+| `light.area@1` | `refused` `path_undefined` (#475) | `refused` `path_undefined` (#178) | `same`, held by `document.determinism` |
+| `light.point@1` | `refused` `path_undefined` (#475) | `refused` `path_undefined` (#178) | `same`, held by `document.determinism` |
+| `light.spot@1` | `refused` `path_undefined` (#475) | `refused` `path_undefined` (#178) | `same`, held by `document.determinism` |
+| `light.sun@1` | `refused` `path_undefined` (#475) | `refused` `path_undefined` (#178) | `same`, held by `document.determinism` |
 
 **Lands:** R6
 
@@ -4520,6 +4638,12 @@ For: glossy floors in the castle's hall, a product on a reflective stand, interi
 
 **It can never:** Carry a status color; change a light count
 
+**Paths**
+
+| Entry | rays | final | web |
+|---|---|---|---|
+| `sky@1` | `refused` `path_undefined` (#475) | `refused` `path_undefined` (#2775) | `same`, held by `document.determinism` |
+
 **Lands:** R6
 
 #### Sky `sky@1`: atmosphere
@@ -4583,6 +4707,12 @@ For: the house's interiors (bounced daylight, lamps, local reflections), the cas
 **Cost:** A reflection capture is 6 renders at 128 px (about 2 ms, estimate), then 1 or 2 fetches per pixel and about 0.5 MB; irradiance is 8 fetches per pixel (about 0.2 ms) and a 32³ grid is about 0.8 MB; a bake of 16,000 probes × 128 rays takes 0.2 to 1 s in the job (estimates). Each extra time adds its capture or grid to memory, and inside a mix the probe's fetches double. Budget class: work product, showpiece, export; figures and data views refuse probes.
 
 **It can never:** Be captured per frame or from the moving camera; update a share of itself per frame; include moving items' bounce, except through ray-traced light (Light: ray traced); show a partial bake as complete; mix more than two captures at a pixel; feed a check; carry a status color.
+
+**Paths**
+
+| Entry | rays | final | web |
+|---|---|---|---|
+| `light.probe@1` | `refused` `path_undefined` (#475) | `refused` `path_undefined` (#178) | `same`, held by `document.determinism` |
 
 **Lands:** R6: reflection captures as a shipped operator; irradiance through the light job in the asset-tools plug-in
 
@@ -4649,6 +4779,12 @@ For: sunbeams through a hall's windows, a spotlit product reveal, beams between 
 **Cost:** O(puffs) to sort when the camera moves; per pixel, overdraw dominates; light adds a few ALU per pixel and one transmittance fetch per puff
 
 **It can never:** Exceed the declared cap (refused, naming the count); carry state between frames
+
+**Paths**
+
+| Entry | rays | final | web |
+|---|---|---|---|
+| `puff@1` | `refused` `path_undefined` (#475) | `refused` `path_undefined` (#178) | `same`, held by `document.determinism` |
 
 **Lands:** R6
 
@@ -4866,6 +5002,18 @@ For: an arrow at the frame's edge toward a teammate out of view; a callout that 
 
 **It can never:** Show a status color except through a status binding; use a system font; show a number nothing measured
 
+**Paths**
+
+| Entry | rays | final | web |
+|---|---|---|---|
+| `mark.box@1` | `refused` `path_undefined` (#475) | `refused` `path_undefined` (#178) | `same`, held by `document.determinism` |
+| `mark.cylinder@1` | `refused` `path_undefined` (#475) | `refused` `path_undefined` (#178) | `same`, held by `document.determinism` |
+| `mark.image@1` | `refused` `path_undefined` (#475) | `refused` `path_undefined` (#178) | `same`, held by `document.determinism` |
+| `mark.point@1` | `refused` `path_undefined` (#475) | `refused` `path_undefined` (#178) | `same`, held by `document.determinism` |
+| `mark.point@1.from` | `refused` `path_undefined` (#475) | `refused` `path_undefined` (#178) | `refused` `web.video_points` |
+| `mark.sphere@1` | `refused` `path_undefined` (#475) | `refused` `path_undefined` (#178) | `same`, held by `document.determinism` |
+| `mark.text@1` | `refused` `path_undefined` (#475) | `refused` `path_undefined` (#178) | `same`, held by `document.determinism` |
+
 **Lands:** R2 on the Map; R6
 
 #### Marks in 3D: lines
@@ -4886,6 +5034,12 @@ For: the transit map's routes, the city's streets, figures' wires and leader lin
 **Cost:** One instance per segment, 32 to 48 B; O(segments) on change; nothing per frame while still; an anchored point re-reads its item's evaluated transform when that item moves
 
 **It can never:** Draw thinner than one device px (a thinner request draws at one px with its alpha scaled by its width); carry a status color except through a status binding
+
+**Paths**
+
+| Entry | rays | final | web |
+|---|---|---|---|
+| `mark.line@1` | `refused` `path_undefined` (#475) | `refused` `path_undefined` (#178) | `same`, held by `document.determinism` |
 
 **Lands:** R2 on the Map; R6
 
@@ -4956,11 +5110,17 @@ For: a surface, a space curve or a vector field read in its own coordinates; a s
 - `planes: [xy | yz | xz] = []` (grid planes, roles from the look)
 - `mod.axes@1 {axes: ID}`: a deform the data module fills in the core's modifier registry (Modifier), mapping each vertex's x, y and z through the axes' three scales
 
-**Semantics:** `axes3d@1` is the data module's, beside `scale@1` and `axis@1`, and draws its ticks, labels and planes in 3D as a contribution (Array and table), so scene3d names no chart kind and the data module no scene3d kind. A point mark, a line, a surface or a curve fn parented to the axes takes its place from them and its coordinates through `mod.axes@1`, and a vector field names them in its `axes`, so each sits at its numbers wherever the axes are placed and moves with them without a rebuild. Ticks come from `axis@1`'s rule, on 1, 2 and 5 × 10^k, and enter and leave by opacity as `axis@1`'s do; labels face the camera, so an orbit never mirrors them.
+**Semantics:** `axes3d@1` is the data module's, beside `scale@1` and `axis@1`, and draws its ticks, labels and planes in 3D as a contribution (Array and table), so scene3d names no chart kind and the data module no scene3d kind. A point mark, a line, a surface or a curve fn parented to the axes takes its place from them and its coordinates through `mod.axes@1`, and a vector field names them in its `axes`, so each sits at its numbers wherever the axes are placed and moves with them without a rebuild. Ticks come from `axis@1`'s rule, on 1, 2 and 5 × 10^k, and enter and leave by opacity as `axis@1`'s do; labels face the camera, so an orbit never mirrors them. A title that names a `vector@1` item draws that item at its axis's end, at the title's size and facing as the labels do; one that names an item of any other kind is refused at check (`bad_axis`), naming the field.
 
 **Cost:** As its ticks, labels and planes, drawn as marks in 3D; an item that carries `mod.axes@1` maps through three scales per change. Budget class: every 3D class.
 
 **It can never:** Take values ≤ 0 on a log scale; carry a status color; mirror a label.
+
+**Paths**
+
+| Entry | rays | final | web |
+|---|---|---|---|
+| `axes3d@1` | `refused` `path_undefined` (#475) | `refused` `path_undefined` (#178) | `same`, held by `document.determinism` |
 
 **Lands:** R6
 
@@ -5019,6 +5179,12 @@ For: a temperature map draped on terrain in a science flyover; a route laid on a
 **Cost:** Measured per kind in ms per megapixel at its resolution; the check sums effects against `budget.effects_gpu_ms`
 
 **It can never:** Feed a check; be a plug-in shader; recolor or cover a status color
+
+**Paths**
+
+| Entry | rays | final | web |
+|---|---|---|---|
+| `effect@1` | `refused` `path_undefined` (#475) | `refused` `path_undefined` (#178) | `same`, held by `document.determinism` |
 
 **Lands:** R6
 
@@ -5107,6 +5273,12 @@ For: the house, figures, a part from a CAD case
 **Cost:** One dot product per plane per vertex through WebGPU's `clip_distances` outputs (none per pixel); a cap adds one stencil pass; a plane count change never recompiles (a fixed array of 4 and a count); the clip distances run in the shadow passes too, at no extra cost
 
 **It can never:** Change true shapes or the geometry audit; hide a status color, a needs-you item or its legend; enter the document as an edit while it's a view input
+
+**Paths**
+
+| Entry | rays | final | web |
+|---|---|---|---|
+| `cutaway@1` | `refused` `path_undefined` (#475) | `refused` `path_undefined` (#178) | `same`, held by `document.determinism` |
 
 **Lands:** R6
 
@@ -6330,11 +6502,17 @@ A removable singularity is a function of its own: sinc's interval form holds 1 a
 - `backend: {name: rapier2d | rapier3d, version: =0.36.1, features: [enhanced-determinism, serde-serialize], excluded: [simd8, parallel], threads: 1, libm: pure Rust, target, target_features: baseline, rustc}`
 - Backend interface: `id() caps() build(doc) step(inputs) occurrences() read(state) query(ray | sweep | overlap) move_character(body, translation) drive_vehicle(body) hash() checkpoint() restore()`
 
-**Semantics:** Building a world creates everything in canonical order or returns issues. A world runs inside each scene that lists it: its outputs' item paths and its bodies' follow channels resolve in that scene, its inputs are entries on that scene's one input track, and its occurrence list is named `<world ID>.occurrences` there. Each step: apply the inputs stamped for it, ordered by kind then target ID; set kinematic targets from channels at t(k+1); move each character body through the backend's character controller, which sets its kinematic target (Body `body@1`: character); update each vehicle body through the backend's vehicle controller, whose wheels push its chassis (Body `body@1`: vehicle); add forces from the state at t(k); run the backend step, whose substeps are the solver's iterations, not repeated steps; read and sort occurrences; write state into a two-step ring; take the cheap hash. `caps()` decides what the document check refuses. `query()` answers a ray, a sweep or an overlap against the state the last step left, collision groups applied, and `physics.query`, `physics.cast@1` and `nav.reach` reach the backend only through it; `move_character()` is the character controller a character body moves through (Body `body@1`: character), and `drive_vehicle()` the vehicle controller a vehicle body drives through (Body `body@1`: vehicle). The behavior kit tests all three. The interface absorbs 0.36's API break: its step takes the soft-body set with the rigid ones, and a snapshot from before 0.36 doesn't load, so no checkpoint or bake crosses that version and no world document sees it. Rapier 0.36.1 has no `simd` or `fast-math` feature: its four-wide SIMD solver always runs and is part of its cross-platform promise, `simd8` breaks that promise, and enhanced determinism forces scalar math through libm. The crate builds for the target's baseline features, never `target-cpu=native` or `+fma`, as Rapier's own cross-architecture goldens do. Rapier caps each body's speed at `max_speed` and its turn at 45° a step, and a body it caps writes `fault {kind: speed_cap}` naming it, so no cap is silent. It has no restitution threshold: a new contact with restitution bounces at any approach speed, and one that persists into the next step rests, so `caps()` refuses a `restitution_threshold` other than 0. While sound plays, a live world steps until its time is at least one audio block past the timeline position of the first sample not yet written, before that block renders, so it holds while the timeline holds (Marker: present mode), so a spawn starts each of its occurrences on its own sample; a step that isn't ready in time counts an underrun in the device gate's stats and never moves a voice. The exception is restitution 1 or more: such a contact never rests, so a cradle of touching balls passes momentum along. Rapier is the reference implementation of the physics interface, `physics@1`, declared `measured` with `backend_bytes` state (Canvas module: interface and implementation), and any backend, Rapier included, passes the world's behavior fixtures within their tolerances before a build can choose it (Physics: behavior kit).
+**Semantics:** Building a world creates everything in canonical order or returns issues. A world runs inside each scene that lists it: its outputs' item paths and its bodies' follow channels resolve in that scene, its inputs are entries on that scene's one input track, and its occurrence list is named `<world ID>.occurrences` there. Each step: apply the inputs stamped for it, ordered by kind then target ID; set kinematic targets from channels at t(k+1); move each character body through the backend's character controller, which sets its kinematic target (Body `body@1`: character); update each vehicle body through the backend's vehicle controller, whose wheels push its chassis (Body `body@1`: vehicle); add forces from the state at t(k); run the backend step, whose substeps are the solver's iterations, not repeated steps; read and sort occurrences; write state into a two-step ring; take the cheap hash. `caps()` decides what the document check refuses. `caps()` also says what the backend's swept collision holds, as data. On Rapier 0.36.1 only a dynamic body starts a sweep: with `ccd` off it holds fixed shapes only, and with `ccd` on it also holds a body that moves or rests, unless that body has `ccd` on too or is itself fast. A body with `ccd` on also predicts its contacts along its own move in a step, which holds a body in its path whatever that body's `ccd`, and reaches neither its own turn nor the other body's move. So `ccd: true` on a kinematic or a static body is refused, naming the field and the backend. The lint `physics.fast_body`, run over every bake, reads the same data: a body is fast when its fastest point, its centre of mass's move plus its turn times the farthest its shapes reach from that centre, moves farther in a step than half its thinnest extent. It raises an issue for a fast dynamic body with `ccd` off, one of kind `kinematic` for a fast kinematic body, and one of kind `pair` for two bodies neither a sweep nor a prediction holds, each with the fix that settles it; the last two fail a playtest run. `query()` answers a ray, a sweep or an overlap against the state the last step left, collision groups applied, and `physics.query`, `physics.cast@1` and `nav.reach` reach the backend only through it; `move_character()` is the character controller a character body moves through (Body `body@1`: character), and `drive_vehicle()` the vehicle controller a vehicle body drives through (Body `body@1`: vehicle). The behavior kit tests all three. The interface absorbs 0.36's API break: its step takes the soft-body set with the rigid ones, and a snapshot from before 0.36 doesn't load, so no checkpoint or bake crosses that version and no world document sees it. Rapier 0.36.1 has no `simd` or `fast-math` feature: its four-wide SIMD solver always runs and is part of its cross-platform promise, `simd8` breaks that promise, and enhanced determinism forces scalar math through libm. The crate builds for the target's baseline features, never `target-cpu=native` or `+fma`, as Rapier's own cross-architecture goldens do. Rapier caps each body's speed at `max_speed` and its turn at 45° a step, and a body it caps writes `fault {kind: speed_cap}` naming it, so no cap is silent. It has no restitution threshold: a new contact with restitution bounces at any approach speed, and one that persists into the next step rests, so `caps()` refuses a `restitution_threshold` other than 0. While sound plays, a live world steps until its time is at least one audio block past the timeline position of the first sample not yet written, before that block renders, so it holds while the timeline holds (Marker: present mode), so a spawn starts each of its occurrences on its own sample; a step that isn't ready in time counts an underrun in the device gate's stats and never moves a voice. The exception is restitution 1 or more: such a contact never rests, so a cradle of touching balls passes momentum along. Rapier is the reference implementation of the physics interface, `physics@1`, declared `measured` with `backend_bytes` state (Canvas module: interface and implementation), and any backend, Rapier included, passes the world's behavior fixtures within their tolerances before a build can choose it (Physics: behavior kit).
 
 **Cost:** Per step ≈ a × awake bodies + b × contacts × substeps + c × joints × substeps + d × bodies × forces; 2D joints about 56 ns per joint-substep (estimate); a deep checkpoint about 4 KB per body
 
 **It can never:** Run code per step; read the wall clock; run on the GPU when it feeds a check; grow past its capacity; build with fast math or features that change results
+
+**Paths**
+
+| Entry | rays | final | web |
+|---|---|---|---|
+| `fixture.world@1` | `refused` `path_undefined` (#475) | `refused` `path_undefined` (#178) | `same`, held by `document.determinism` |
 
 **Lands:** R6
 
@@ -6391,11 +6569,11 @@ For: bounded games and labs with someone who walks: a platformer's hero, a guard
 - Outputs: `read: grounded | sliding | velocity | pose`
 - State: `{wants: vec, vertical: m/s, grounded: bool, sliding: bool, touching: [shape use]}` (in every checkpoint and hash; touching: the shapes its controller touched in its last step, which its next step's `contact_begin` and `contact_end` compare against; grounded: a walkable surface lies within `offset` + 0.05 m below the capsule; sliding: it stands on a surface steeper than `slope_limit` and moves down it)
 
-**Semantics:** A kinematic capsule that the backend's character controller moves, behind the backend interface, so no backend type reaches a document. The behavior below is the physics interface's, not a backend's: every backend's controller, Rapier's first, must show it in the behavior kit's character fixtures before a build can choose that backend (Physics: behavior kit). Its up is against the world's gravity, or +Y in a world with none. Each step, after the step's inputs apply and before forces and the backend step, each character body moves in canonical (priority, ID) order against the world as the last step left it. With g the size of the world's gravity, off the ground its vertical speed first falls by g × gravity_scale × the step's length; on the ground it's 0, and a jump on a grounded step sets it to √(2 × g × gravity_scale × height) instead, while a jump off the ground does nothing. The controller then moves the capsule by (wants + up × vertical) × the step's length, sliding along what it meets and keeping `offset` from it: a slope steeper than `slope_limit` stops its climb and slides it down, a step no higher than `step.height` with `step.width` free on top lifts it, and moving down from the ground it snaps to ground within `snap`. Its new pose is its kinematic target for the backend step. Dynamic bodies stop it as static shapes do, and it pushes none. Each shape its controller touches in a step that it didn't touch the step before writes `contact_begin` naming it, and each it leaves writes `contact_end`, sorted with the rest. Outputs read `grounded`, `sliding`, its pose and `velocity`, the move it made over the step's length, so logic reads them as earlier steps left them and items draw from them. Its state joins every checkpoint beside the backend's, and the cheap and canonical hashes after the bodies', so a seek restores it and steps forward, and seeking equals playing. A rig or a skinned asset draws on it through its pose; the body only moves. `caps()` says whether the backend has a character controller, and a world with a character body on one that doesn't is refused, naming the body and the backend. With `platform: {carry: bool = true, on_leave: keep | add_velocity | add_upward = add_velocity}`, a character grounded on a kinematic body with a follow channel is first moved each step by that body's motion over the step, by its composed pose and never by its velocity at a point, so a turning platform keeps the body's distance from its axis and turns its heading; once it leaves, it keeps the platform's velocity, its upward part or nothing until it lands. The body it stands on and the velocity it carries join every checkpoint and hash, and a dynamic body never carries a character.
+**Semantics:** A kinematic capsule that the backend's character controller moves, behind the backend interface, so no backend type reaches a document. The behavior below is the physics interface's, not a backend's: every backend's controller, Rapier's first, must show it in the behavior kit's character fixtures before a build can choose that backend (Physics: behavior kit). Its up is against the world's gravity, or +Y in a world with none. Each step, after the step's inputs apply and before forces and the backend step, each character body moves in canonical (priority, ID) order against the world as the last step left it, and against each character body moved before it in that order where it now is. With g the size of the world's gravity, off the ground its vertical speed first falls by g × gravity_scale × the step's length; on the ground it's 0, and a jump on a grounded step sets it to √(2 × g × gravity_scale × height) instead, while a jump off the ground does nothing. The controller then moves the capsule by (wants + up × vertical) × the step's length, sliding along what it meets and keeping `offset` from it: a slope steeper than `slope_limit` stops its climb and slides it down, a step no higher than `step.height` with `step.width` free on top lifts it, and moving down from the ground it snaps to ground within `snap`. Its new pose is its kinematic target for the backend step. Dynamic bodies stop it as static shapes do, and it pushes none. Another character body stops it too, each keeping its own `offset`, so two never end a step overlapping: the distance between their capsules' axes is at least the sum of their radii. A walk into a character body it touches ends there, with no slide round it, and only its fall or its jump goes on, so two that walk into each other come to rest. Neither is moved by the other's approach: one that wants no move stays where it is, and none is moved against the walk it wants. Each shape its controller touches in a step that it didn't touch the step before writes `contact_begin` naming it, and each it leaves writes `contact_end`, sorted with the rest. Outputs read `grounded`, `sliding`, its pose and `velocity`, the move it made over the step's length, so logic reads them as earlier steps left them and items draw from them. Its state joins every checkpoint beside the backend's, and the cheap and canonical hashes after the bodies', so a seek restores it and steps forward, and seeking equals playing. A rig or a skinned asset draws on it through its pose; the body only moves. `caps()` says whether the backend has a character controller, and a world with a character body on one that doesn't is refused, naming the body and the backend. With `platform: {carry: bool = true, on_leave: keep | add_velocity | add_upward = add_velocity}`, a character grounded on a kinematic body with a follow channel is first moved each step by that body's motion over the step, by its composed pose and never by its velocity at a point, so a turning platform keeps the body's distance from its axis and turns its heading; once it leaves, it keeps the platform's velocity, its upward part or nothing until it lands. The body it stands on and the velocity it carries join every checkpoint and hash, and a dynamic body never carries a character.
 
 **Cost:** A few shape casts a step per character body: about 20 to 60 µs at 120 Hz in a level of a few hundred static shapes (estimate); its state about 32 B in each checkpoint. Budget class: as the world.
 
-**It can never:** Move except by its inputs, its controller and gravity; climb a slope steeper than its limit or a step higher than its step height; pass into a static shape; push a dynamic body; hold a shape other than one capsule
+**It can never:** Move except by its inputs, its controller and gravity; climb a slope steeper than its limit or a step higher than its step height; pass into a static shape; push a dynamic body; end a step overlapping another character body, or push one; hold a shape other than one capsule
 
 **Lands:** R6, after the physics module
 
@@ -6465,10 +6643,10 @@ For: physics labs (a beam that snaps at its weakest bond, a tower that gives way
 - `restitution: f32 = 0`
 - `density: kg/m³` (kg/m² in 2D; required unless the body sets its mass)
 - `rolling_resistance: f32 = 0`
-- `tangent_speed: m/s = 0`
+- `tangent_speed: m/s = 0` (on a shape use of a static or kinematic body only)
 - `tag: string` (such as "wood")
 
-**Semantics:** The two sides of a contact combine by the world's combine rule. Sounds map from tags in the media module's spawn rules, never from the material. Rapier has no rolling resistance or tangent speed, so on it `caps()` refuses `rolling_resistance` and `tangent_speed` other than 0, naming the field; a ball that should roll to rest takes angular damping (Body).
+**Semantics:** The two sides of a contact combine by the world's combine rule. Sounds map from tags in the media module's spawn rules, never from the material. A `tangent_speed` makes a surface a belt: the speed it carries what rests on it, as a conveyor, a treadmill or a moving walkway does. Each contact of a shape use whose material sets one takes a surface velocity of `tangent_speed` along the belt's direction, taken in the contact's plane, and the belt's own body never moves for it. In 3D the direction is the shape use's local +X, turned by its offset and its body's pose; in 2D it is the contact's tangent, counter-clockwise about the shape. Only a shape use of a static or kinematic body may carry one: on any other body it is refused at check, naming the field. At 0 a surface's contacts are the ones a plain surface gives. Rapier takes a belt's speed through the contact hook its wrapper installs, which the wrapper fills from the material, so no document holds code. Rapier has no rolling resistance, so on it `caps()` refuses a `rolling_resistance` other than 0, naming the field; a ball that should roll to rest takes angular damping (Body). A backend whose `caps()` leave belts out refuses a `tangent_speed` other than 0 the same way.
 
 **Cost:** O(1) per contact
 
@@ -6713,10 +6891,11 @@ For: a second physics backend that must behave like the documented world, not me
 - restitution 0.5 against 0.9, dropped 1 m, under each combine rule: the first bounce's height e²h (max 0.81 m, min 0.25 m, average 0.49 m, geometric 0.45 m, multiply 0.2025 m), within 3%
 - friction 0.2 against 0.8, a box sliding from 5 m/s on flat ground, under each combine rule: the distance v² ÷ 2μg (geometric 3.186 m, average 2.548 m, min 6.371 m, max 1.593 m, multiply 7.964 m), within 3%
 - a box on a 30° slope: friction 0.6 holds it within 1 mm for 2 s, and 0.5 slides it g(sin θ − μ cos θ)t²/2 = 1.314 m in 2 s, within 3%
+- belts, a box of friction 0.5 set at rest on a static belt of friction 0.5 with `tangent_speed: 1`: on a level belt it reaches 1 m/s along the belt's +X at v ÷ (μg) = 0.204 s, within 2 steps, and has moved v·t − v² ÷ (2μg) = 1.898 m at 2 s, within 1%, while the belt's body never moves; the same belt turned 90° about +Y carries it 1.898 m along world −Z, and `tangent_speed: −1` on the level belt carries it −1.898 m along x; on the belt tilted 10° up along its +X it reaches 1 m/s up the slope at 1 ÷ (g × (0.5 cos 10° − sin 10°)) = 0.320 s, within 2 steps, and then holds that speed within 1%
 - joints: a hinge limited to ±30° under gravity never past 30.5°; a slider limited to 0.5 m never past 0.505 m; a hinge motor set to 90°/s with torque to spare within 1% of it after 0.5 s
 - occurrences: a ball whose lowest point falls 1 m writes its first contact at √(2h/g) = 0.4515 s, within one step, with a speed of √(2gh) = 4.429 m/s, within 2%; a sensor 0.5 m below it writes its entry at 0.3193 s, within one step
 - sleep: a box that settles writes `rest` and sleeps within the world's sleep time plus 2 steps of its speed falling under the sleep speed, and with sleep off it never does
-- character body: the slope (with a 45° limit a 30° ramp is climbed and a 50° one isn't; with 25° the 30° ramp stops it), the step (with a 0.35 m step height a 0.3 m step is climbed and a 0.4 m one isn't), the snap (grounded at every step down a 20° ramp at 3 m/s with snap 0.2 m, airborne at least once with snap 0) and the jump (a 1 m jump at 120 Hz peaks 1.0185 m up, within 1 mm)
+- character body: the slope (with a 45° limit a 30° ramp is climbed and a 50° one isn't; with 25° the 30° ramp stops it), the step (with a 0.35 m step height a 0.3 m step is climbed and a 0.4 m one isn't), the snap (grounded at every step down a 20° ramp at 3 m/s with snap 0.2 m, airborne at least once with snap 0) and the jump (a 1 m jump at 120 Hz peaks 1.0185 m up, within 1 mm); and two that meet, each of radius 0.3 m and offset 0.01 m, their axes 4 m apart along x: head-on (walking toward each other at 2 m/s, they rest with their axes 0.3 + 0.3 + 0.01 = 0.61 m apart, within 1 mm, no step ends with them under 0.609 m apart, neither moves more than 1 mm from 1 s to 3 s, and each writes `contact_begin` naming the other within four steps of (4 − 0.61) ÷ 4 = 0.8475 s) and into one that stands (one walks at 2 m/s into the other, which wants no move: it stops with their axes 0.61 m apart, within 1 mm, and the standing one is never more than 1e-6 m from where it was built)
 - vehicle body, a 1,000 kg chassis on four wheels at the corners of a 2.5 m wheelbase and a 1.6 m track, centred under its centre of mass, front wheels steering and rear wheels driving: the sag (on 2 Hz springs it settles g ÷ (2π × 2)² = 0.0621 m, within 2%), the brake (from 10 m/s on level ground, a brake of 4,000 N stops it in m·v² ÷ 2F = 12.5 m, within 3%), the drive (from rest, a drive of 2,000 N reaches 4 m/s in 2 s, within 2%), the turn (at 3 m/s with steer 15°, the middle of the rear axle circles at L ÷ tan δ = 9.330 m, within 3%) and the contacts (dropped from 1 m above where its rays reach the floor, each wheel writes its first contact_begin at √(2h/g) = 0.4515 s, within one step)
 - queries: rays, sweeps and overlaps through `query()` on a world of mixed shapes and collision groups return exactly the hits a brute-force scan over every shape returns, groups applied, sorted by distance, then ID
 - force laws, with gravity_scale 0: an orbit (a 2 kg body 2 m from the point of `inverse_square {k: −4π² N·m²}`, launched at π m/s square to the line at 1 substep, stays 2 m from the point within 1% for 8 s and first comes back to its start line after 2π√(m r³ ÷ |k|) = 4.000 s, within 1%); a gyration (a 1 kg body under `magnetic {field: (0, 0, 3) T, charge: 2 C}`, started at the origin at (3, 0, 0) m/s, keeps 3 m/s within 0.1% and circles at m·v ÷ (q·B) = 0.5 m, within 1%, between y = −1.000 m and 0 m, once every 2π·m ÷ (q·B) = 1.047 s); and a pair's rest distance (two 1 kg bodies under `lennard_jones {epsilon: 1 J, sigma: 0.5 m, cutoff: 1.25 m}` and `drag {linear: 2}`, released at rest 0.7 m apart, are 2^(1/6) × σ = 0.5612 m apart at 10 s, within 0.5%)
@@ -7406,6 +7585,12 @@ For: generated and licensed game assets that `mesh.asset` places
 **Cost:** Probe O(accessor bytes) once, in the decode worker; no cost per frame.
 
 **It can never:** Be decoded outside the worker; lose its license or made_by; be shown skinned or animated except through Asset: skinned playback; be admitted with an extension its file requires that the probe can't read.
+
+**Paths**
+
+| Entry | rays | final | web |
+|---|---|---|---|
+| `mesh.asset@1` | `refused` `path_undefined` (#475) | `refused` `path_undefined` (#178) | `same`, held by `document.determinism` |
 
 **Lands:** R6, with `mesh.asset`
 
@@ -9497,6 +9682,14 @@ Where GPUI can't draw, the canvas core runs GPU operators: typed graphs of steps
 **Cost:** Check O(steps × repeat counts); compile once per content key, off the UI thread; per frame its declared cost × pixels or elements, summed into the class budget
 
 **It can never:** Carry shader text the GPU runs as written, or call code; read its own earlier output or any state from a previous frame; read or write a status color; run before it passes the check
+
+**Paths**
+
+| Entry | rays | final | web |
+|---|---|---|---|
+| `gpu.compute@1` | `refused` `path_undefined` (#475) | `refused` `path_undefined` (#178) | `same`, held by `document.determinism` |
+| `gpu.material@1` | `refused` `path_undefined` (#2773) | `refused` `path_undefined` (#2762) | `same`, held by `document.determinism` |
+| `gpu.pass@1` | `refused` `path_undefined` (#475) | `refused` `path_undefined` (#178) | `same`, held by `document.determinism` |
 
 **Lands:** R2 shipped operators, with the GPU layer; R6 composed graphs, once the cost model is calibrated
 

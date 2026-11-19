@@ -1,4 +1,5 @@
 use super::*;
+use crate::states::{keys_unchanged, taken_for_creates};
 
 impl Hub<'_> {
     /// Opens every shared document: from the state folder's record when it has one (a restart),
@@ -115,6 +116,23 @@ impl Hub<'_> {
                 Map::new(),
                 None,
             ),
+            // #1415: nothing changed, so no revision: the code and the current revision's hash.
+            Outcome::NoChange => {
+                let shared = &self.shared[&call.doc];
+                let hash = shared.hash(shared.revs.len() - 1, &self.startup.sealed);
+                reply.insert("code".into(), json!("no_change"));
+                reply.insert("hash".into(), json!(hash));
+                let none = Map::new();
+                (
+                    "no_change",
+                    current_rev,
+                    zero,
+                    Vec::new(),
+                    Vec::new(),
+                    none,
+                    None,
+                )
+            }
             Outcome::Conflict { ids, writers } => {
                 let writers: Vec<Value> = writers.iter().map(Writer::to_json).collect();
                 reply.insert("conflict".into(), json!({"ids": ids, "writers": writers}));
@@ -168,7 +186,9 @@ impl Hub<'_> {
             reply.insert("checked".into(), json!(checked));
             reply.insert("current".into(), json!(current));
         }
-        Value::Object(reply)
+        let reply = Value::Object(reply);
+        self.note_outcome(&call.doc, &reply);
+        reply
     }
 
     fn check_patch(
@@ -185,6 +205,10 @@ impl Hub<'_> {
         };
         if !self.shared.contains_key(&call.doc) {
             return refused("ref_unresolved", "doc", "no shared document has this ID");
+        }
+        // #1415: a patch or an undo its session's state refuses is answered with the cell's code.
+        if let Some(issue) = self.patch_refused(&call.doc, &call.body, reply) {
+            return Outcome::Refused(vec![issue]);
         }
         self.take_lost(&call.doc, &writer, reply);
         // A writer's quota: patches applied in the second before this check, the bytes a message
@@ -397,6 +421,11 @@ impl Hub<'_> {
                 shared.owners = owners.clone();
             }
         };
+        // Planted (#1415): a create of an ID the document holds replaces the item that holds it.
+        let overwritten = match self.scenario.planted == Some(Planted::CreateOverwrites) {
+            true if undoing.is_none() => taken_for_creates(&mut shared.doc, &patch),
+            _ => Patched::default(),
+        };
         let applied = match undoing {
             Some(target) => {
                 // The pack versions it named in place of others, named back (#1961).
@@ -441,10 +470,20 @@ impl Hub<'_> {
         let mut patched = match applied {
             Ok(p) => p,
             Err(issue) => {
-                take_back(shared, &Patched::default());
+                take_back(shared, &overwritten);
                 return Outcome::Refused(vec![*issue]);
             }
         };
+        patched.before.extend(overwritten.before);
+        // #1415: ops that leave every item's content key and the envelope as they were change
+        // nothing: no revision, no undo step. Planted: it commits a new revision, as the base did.
+        let envelope =
+            added.is_some() || removed_entries.is_some() || patched.packs_before.is_some();
+        let commits = self.scenario.planted == Some(Planted::NoOpCommits);
+        if undoing.is_none() && !envelope && !commits && keys_unchanged(&patched, &shared.doc) {
+            take_back(shared, &patched);
+            return Outcome::NoChange;
+        }
         let mut changed = patched.changed(&shared.doc);
         changed.extend(entries.iter().map(|(_, id)| id.clone()));
         changed.extend(restores.iter().map(|(_, id, _)| id.clone()));

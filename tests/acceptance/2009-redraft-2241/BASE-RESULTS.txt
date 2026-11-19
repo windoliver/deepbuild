@@ -1,0 +1,33 @@
+The #2009 criterion 3 redraft under #2241 (#2009.43ed60cb), run once at the base commit
+9d02561325430d91e0b8cff3242e11011cc1b8cc (no implementation of #2241; this folder and `tests/acceptance/2241/` untracked
+beside it), on 2026-11-19, macOS 27.2 arm64, Node 24.22.2, vitest 5.0.5, cargo 1.99.1 (rustc 1.99.1), with
+`PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node node_modules/vitest/vitest.mjs run --root tests/acceptance/2009-redraft-2241 --no-file-parallelism --testTimeout=600000 --reporter=verbose`
+(the checkout's path redacted to `<checkout>`; `target/` already held the base's builds of `deep-physics`).
+
+The type-check, `node node_modules/typescript/bin/tsc -p tests/acceptance/2009-redraft-2241/tsconfig.json`
+(typescript 5.9.3), exits 0.
+
+2 of 2 tests pass and vitest exits 0. No test fails, so there is no failing line to give.
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/2009-redraft-2241
+
+ ✓ ac3-rolling-and-caps.test.ts > #2009.43ed60cb rolling_resistance and a dynamic gear are refused on Rapier; a damped rolling ball slows as v0·e^(−2ct/7) > #2009.43ed60cb rolling_resistance 0.05 and a gear of two hinges in dynamic mode are each refused at check naming the field and rapier3d; at 0, tangent_speed 0 too, and without the gear each world is admitted; each cap's twin is caught (redraft 2241) 320ms
+ ✓ ac3-rolling-and-caps.test.ts > #2009.43ed60cb rolling_resistance and a dynamic gear are refused on Rapier; a damped rolling ball slows as v0·e^(−2ct/7) > #2009.43ed60cb a solid ball of radius 0.1 m rolling at 2 m/s with angular damping 2/s slows below 0.05 m/s between 6 and 7.5 s (6.46 s predicted) 91ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  02:00:10
+   Duration  50.92s (tests 100%)
+
+
+Per test:
+1. Refusals: PASS. The base refuses `rolling_resistance: 0.05` and the dynamic gear naming the field and rapier3d, admits
+   each control (`rolling_resistance: 0`, `tangent_speed: 0`, no gear), and `--planted caps_allow_rolling_resistance` and
+   `--planted caps_allow_dynamic_gear` each exit 0, answer and are caught by the judge.
+2. The rolling ball: PASS. It is the frozen test, line for line, which #2009's work already met.
+
+What it means: the redraft reads only what the base and a program that meets #2241 have in common, so it passes at the
+base and is not the test that fails first for #2241 (that is `tests/acceptance/2241/`); it differs from the frozen test
+only in no longer requiring the `tangent_speed: 1` refusal, which the base still gives and #2241 lifts.
+Not run: the redraft on a program that meets #2241 (this job never sees one), and the frozen `tests/acceptance/2009/`.

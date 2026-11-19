@@ -20,6 +20,14 @@
 //     fill <tree>/crates/deep-canvas/src/registry/fields.json holds (this checkout's, for a tree that holds none).
 //   node scripts/canvas-closures.mjs table [--root <tree>] [--listing <dump>]
 //     Writes the generated table into <tree>/docs/canvas-primitives.md from the listing (or the built deep-show's).
+//   node scripts/canvas-closures.mjs paths [--root <tree>]
+//     The paths lane (#2776; canvas primitives: Paths: rays, finals and the web player): every holder of answers in
+//     <tree>/packages/contracts/canvas-paths.json, the sealed listing (each 3D entry the full build seals, and each
+//     field of one that carries its own answers), has a line in its section's Paths row in
+//     <tree>/docs/canvas-primitives.md saying the listing's answer for rays, a final and the web player; a row holds
+//     no line the listing doesn't give that section; and every `same` is held by a check kind or a fixture the
+//     listing names. Prints each `same` with what holds it and, per path, how many holders answer with each word.
+//     It reads those two files and nothing else.
 // Output: `PASS <command>: ...`, `FAIL <command>: <list>: <why>`, `NOTE fields: ...`; exit 0, 1, or 3 when blocked.
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -366,11 +374,126 @@ function table() {
   return 0;
 }
 
+const PATHS = ['rays', 'final', 'web'];
+const WORDS = ['same', 'stand_in', 'refused', 'not_applicable'];
+/** A holder's name in a Paths row: `<entry>[.<field>]`, `<registry>/` before an entry of a registry but kind@1. */
+const holderName = (h) => `${h.registry === 'kind@1' ? '' : `${h.registry}/`}${h.entry}${h.field ? `.${h.field}` : ''}`;
+/** One answer cell, as JSON tagged by `answer`, or null when it can't be read. */
+function cellAnswer(text) {
+  const cell = text.trim();
+  let m;
+  if ((m = /^`same`(?:, held by `([^`]+)`)?$/.exec(cell))) return m[1] ? { answer: 'same', held_by: m[1] } : { answer: 'same' };
+  if ((m = /^`refused` `([^`]+)`(?: \((#\d+)\))?$/.exec(cell))) return m[2] ? { answer: 'refused', code: m[1], task: m[2] } : { answer: 'refused', code: m[1] };
+  if ((m = /^`not_applicable`: (.+)$/.exec(cell))) return { answer: 'not_applicable', why: m[1] };
+  if ((m = /^`stand_in`: (.+)$/.exec(cell)) && m[1].endsWith(')')) {
+    const at = m[1].lastIndexOf(' (receipt: ');
+    if (at > 0) return { answer: 'stand_in', draws: m[1].slice(0, at), receipt: m[1].slice(at + ' (receipt: '.length, -1) };
+  }
+  return null;
+}
+/** Each section of the reference with a Paths row: heading text → {lines: Map(holder → cells)}, or null with no row. */
+function pathsRows(text) {
+  const lines = text.split('\n');
+  const rows = new Map();
+  for (let i = 0; i < lines.length; i++) {
+    if (!lines[i].startsWith('#### ')) continue;
+    const section = lines[i].slice(5).trimEnd();
+    let end = i + 1;
+    while (end < lines.length && !/^#{1,4} /.test(lines[end])) end++;
+    const label = lines.slice(i + 1, end).findIndex((l) => l.trim() === '**Paths**');
+    let row = null;
+    if (label >= 0) {
+      row = { lines: new Map(), unread: [] };
+      let k = i + 1 + label + 1;
+      while (k < end && lines[k].trim() === '') k++;
+      const table = [];
+      while (k < end && lines[k].trim().startsWith('|')) table.push(lines[k++].trim());
+      const cells = (l) => l.replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim());
+      if (table[0] !== '| Entry | rays | final | web |' || !/^\|(?:\s*-+\s*\|){4}$/.test(table[1] ?? '')) row.unread.push('the Paths row is not a table headed | Entry | rays | final | web |');
+      for (const l of table.slice(2)) {
+        const c = cells(l);
+        const name = /^`([^`]+)`$/.exec(c[0] ?? '')?.[1];
+        if (!name || c.length !== 4) row.unread.push(`the line ${l} names no holder in one code span, with three answers`);
+        else row.lines.set(name, c.slice(1));
+      }
+    }
+    rows.set(section, row);
+    i = end - 1;
+  }
+  return rows;
+}
+const sameAnswer = (a, b) => {
+  const keys = new Set([...Object.keys(a ?? {}), ...Object.keys(b ?? {})]);
+  return [...keys].every((k) => a?.[k] === b?.[k]);
+};
+const shownAnswer = (a) => (a ? JSON.stringify(a) : 'nothing');
+
+function paths() {
+  const docPath = at('docs/canvas-primitives.md');
+  const dataPath = at('packages/contracts/canvas-paths.json');
+  for (const p of [docPath, dataPath]) {
+    if (!existsSync(p)) {
+      console.log(`BLOCKED paths: ${p} is missing`);
+      return 3;
+    }
+  }
+  const listing = JSON.parse(readFileSync(dataPath, 'utf8'));
+  const rows = pathsRows(readFileSync(docPath, 'utf8'));
+  const holders = Array.isArray(listing.entries) ? listing.entries : [];
+  const holds = new Set([...(listing.checks ?? []), ...(listing.fixtures ?? [])]);
+  const failed = [];
+  const fail = (...parts) => failed.push(parts.join(': '));
+  const given = new Map();
+  for (const h of holders) {
+    const name = holderName(h);
+    if (!given.has(h.section)) given.set(h.section, new Set());
+    given.get(h.section).add(name);
+    for (const p of PATHS) {
+      const a = h.paths?.[p];
+      if (a?.answer === 'same' && !holds.has(a.held_by)) {
+        fail(h.section, name, p, a.held_by ? `same, held by ${a.held_by}, which is no check kind or fixture the sealed listing names` : 'same, with nothing named that holds it');
+      }
+    }
+    if (!rows.has(h.section)) { fail(h.section, name, 'the reference has no section of this heading'); continue; }
+    const row = rows.get(h.section);
+    if (!row) { fail(h.section, `${name} draws in 3D and the section has no Paths row`); continue; }
+    const cells = row.lines.get(name);
+    if (!cells) { fail(h.section, name, 'the section\'s Paths row has no line for it'); continue; }
+    PATHS.forEach((p, k) => {
+      const said = cellAnswer(cells[k]);
+      if (!said) fail(h.section, name, p, `the cell ${cells[k]} can't be read as same, stand_in, refused or not_applicable`);
+      else if (!sameAnswer(said, h.paths?.[p])) fail(h.section, name, p, `the row says ${shownAnswer(said)}, the sealed listing ${shownAnswer(h.paths?.[p])}`);
+    });
+  }
+  for (const [section, row] of rows) {
+    if (!row) continue;
+    for (const why of row.unread) fail(section, why);
+    for (const name of row.lines.keys()) {
+      if (!given.get(section)?.has(name)) fail(section, name, 'a line the sealed listing doesn\'t give this section');
+    }
+  }
+  for (const h of holders) {
+    for (const p of PATHS) {
+      const a = h.paths?.[p];
+      if (a?.answer === 'same' && holds.has(a.held_by)) console.log(`same paths: ${p}: ${holderName(h)}: held by ${a.held_by}`);
+    }
+  }
+  for (const p of PATHS) {
+    const n = Object.fromEntries(WORDS.map((w) => [w, holders.filter((h) => h.paths?.[p]?.answer === w).length]));
+    const undefinedRefusals = holders.filter((h) => h.paths?.[p]?.answer === 'refused' && h.paths[p].code === 'path_undefined').length;
+    console.log(`count paths: ${p}: same ${n.same}, stand_in ${n.stand_in}, refused ${n.refused} (path_undefined ${undefinedRefusals}), not_applicable ${n.not_applicable}`);
+  }
+  for (const f of failed) console.log(`FAIL paths: ${f}`);
+  if (!failed.length) console.log(`PASS paths: the reference's Paths rows say what the sealed listing holds for its ${holders.length} holders, each in its section, and every same is held`);
+  return failed.length ? 1 : 0;
+}
+
 if (command === 'closures') process.exitCode = closures();
 else if (command === 'drift') process.exitCode = drift();
 else if (command === 'fields') process.exitCode = fields();
 else if (command === 'table') process.exitCode = table();
+else if (command === 'paths') process.exitCode = paths();
 else {
-  console.log('BLOCKED closures: usage: canvas-closures.mjs closures|drift|fields|table [--root <tree>] [--listing <dump>] [--base <dump>] [--built]');
+  console.log('BLOCKED closures: usage: canvas-closures.mjs closures|drift|fields|table|paths [--root <tree>] [--listing <dump>] [--base <dump>] [--built]');
   process.exitCode = 3;
 }

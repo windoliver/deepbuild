@@ -8,6 +8,7 @@ use std::f64::consts::PI;
 use serde_json::Value;
 
 use crate::look::Look3;
+use deep_canvas::budget::Class;
 use deep_canvas::camera::Vec3;
 
 use crate::scene::{num, Camera, Depth, Refused};
@@ -542,6 +543,11 @@ pub struct Light {
     pub caster_bit: u32,
     /// Its IES distribution (Light: IES distribution).
     pub distribution: Option<LampTable>,
+    /// A fill light (#1634): a point or a spot with a finite range that casts no shadow, shaded
+    /// beside the key lights up to its class's `fill_shaded`.
+    pub fill: bool,
+    /// Whether it names no `range`, so its range follows the shot's exposure.
+    pub auto_range: bool,
 }
 
 /// A light's IES table: its layer in the scene's distributions, what its values are multiplied by
@@ -556,9 +562,34 @@ pub struct LampTable {
 
 /// The light policy's budget per view (Light and the light policy).
 pub const SHADED: usize = 32;
-const MARGIN: f64 = 0.1;
-/// The illuminance an auto range ends at.
+pub const MARGIN: f64 = 0.1;
+/// The illuminance an auto range ends at, at the exposure [`range_cut`] gives it back at.
 const THRESHOLD: f64 = 0.05;
+/// The most fill lights any class shades (#1634), and a cluster's most, `light_policy`'s
+/// `per_cluster` before a document names one.
+pub const MOST_FILL: usize = 2048;
+pub const PER_CLUSTER: usize = 64;
+
+/// A document's `fill_shaded` (#1634): its class's, and the most when it names none.
+pub fn fill_shaded(class: Option<Class>) -> usize {
+    class.map_or(MOST_FILL, Class::fill_shaded)
+}
+
+/// The illuminance an automatic range ends at under `exposure`, a linear scale (#1634): what
+/// lifts a white diffuse surface to 1/4,096 of linear 1.0 after exposure, under one 8-bit code.
+pub fn range_cut(exposure: f64) -> f64 {
+    PI / (4096.0 * exposure)
+}
+
+/// Gives each light that names no range the one the shot's exposure cuts it at.
+pub fn follow_exposure(lights: &mut [Light], exposure: f64) {
+    if exposure > 0.0 {
+        let k = (THRESHOLD / range_cut(exposure)).sqrt();
+        for l in lights.iter_mut().filter(|l| l.auto_range) {
+            l.range *= k;
+        }
+    }
+}
 
 fn color3(v: Option<&Value>) -> Option<Vec3> {
     let a = v?.as_array()?;
@@ -946,6 +977,8 @@ pub fn light(
         receiver_bit: 0,
         caster_bit: 0,
         distribution: None,
+        fill: params.get("fill").and_then(Value::as_bool).unwrap_or(false),
+        auto_range: kind != LightKind::Sun && num(params.get("range")).is_none(),
     })
 }
 
@@ -978,6 +1011,8 @@ pub struct Shadowing {
     pub local_map: u32,
     /// `cache: static`: a map holds until its key changes.
     pub cache: bool,
+    /// `per_cluster` (#1634): the fill lights a cluster shades at most.
+    pub per_cluster: usize,
 }
 
 /// The most spots a policy may shadow; points take four, which the budget class never raises.
@@ -994,6 +1029,7 @@ impl Default for Shadowing {
             points: 0,
             local_map: 512,
             cache: true,
+            per_cluster: PER_CLUSTER,
         }
     }
 }
@@ -1100,14 +1136,9 @@ pub fn policy_by(lights: &[Light], camera: &Camera, tie: Tie) -> Policy {
     }
     let mut scored: Vec<(i64, &str, usize, f64)> = Vec::new();
     for (i, score) in scores(lights, camera).into_iter().enumerate() {
-        if score > 0.0 {
-            // Eight buckets per stop: a light's rank moves only when its score does.
-            scored.push((
-                -(score.log2() * 8.0).floor() as i64,
-                &lights[i].id,
-                i,
-                score,
-            ));
+        // A fill light is no key light: its clusters shade it (#1634).
+        if score > 0.0 && !lights[i].fill {
+            scored.push((bucket(score), &lights[i].id, i, score));
         }
     }
     match tie {
@@ -1129,6 +1160,26 @@ pub fn policy_by(lights: &[Light], camera: &Camera, tie: Tie) -> Policy {
         .map(|s| s.1.to_string())
         .collect();
     Policy { shaded, left_out }
+}
+
+/// A score's bucket, eight per stop, the brightest first: a light's rank moves only when its
+/// score does.
+fn bucket(score: f64) -> i64 {
+    -(score.log2() * 8.0).floor() as i64
+}
+
+/// The fill lights a view shades (#1634), each with its score, by the policy's order: score
+/// bucket, then ID. One whose range misses the frustum isn't among them.
+pub fn fill_order(lights: &[Light], scores: &[f64]) -> Vec<(usize, f64)> {
+    let mut order: Vec<(i64, &str, usize, f64)> = lights
+        .iter()
+        .zip(scores)
+        .enumerate()
+        .filter(|(_, (l, score))| l.fill && **score > 0.0)
+        .map(|(i, (l, score))| (bucket(*score), l.id.as_str(), i, *score))
+        .collect();
+    order.sort_by(|a, b| (a.0, a.1).cmp(&(b.0, b.1)));
+    order.into_iter().map(|(_, _, i, s)| (i, s)).collect()
 }
 
 /// Each light's score at the view, in the lights' order (#425 reads them): its estimated
@@ -1403,5 +1454,93 @@ mod tests {
         // 12 lm: an auto range of 4.4 m, 10 m from the eye at the scene's centre.
         let p = policy(&[point("candle", [0.0, 0.0, 0.0], 12.0)], &camera());
         assert_eq!(p.shaded, vec![(0, 1.0)]);
+    }
+
+    #[test]
+    fn fill_lights_leave_the_key_lights_cut_alone_and_order_by_score_bucket_then_id() {
+        let cam = camera();
+        let fill = |id: &str, power: f64| {
+            let p = serde_json::json!({"power": power, "range": 6, "fill": true});
+            light(
+                id,
+                "light.point@1",
+                &p,
+                [0.0, 1.0, 0.0],
+                [0.0, -1.0, 0.0],
+                AXES,
+                1.0,
+            )
+            .expect("a fill light")
+        };
+        let keys: Vec<Light> = (0..40)
+            .map(|i| point(&format!("k{i:02}"), [0.0, 1.0, 0.0], 800.0))
+            .collect();
+        let alone = policy(&keys, &cam);
+        // Brighter than every key light, in one bucket apart from `dim`, and listed out of order.
+        let mut lights = keys.clone();
+        lights.extend([
+            fill("f-b", 9000.0),
+            fill("f-dim", 90.0),
+            fill("f-a", 9100.0),
+        ]);
+        let beside = policy(&lights, &cam);
+        assert_eq!(
+            (beside.shaded.len(), &beside.left_out),
+            (32, &alone.left_out)
+        );
+        assert!(beside.shaded.iter().all(|(i, _)| !lights[*i].fill));
+        let order = fill_order(&lights, &scores(&lights, &cam));
+        let ids: Vec<&str> = order.iter().map(|(i, _)| lights[*i].id.as_str()).collect();
+        assert_eq!(ids, ["f-a", "f-b", "f-dim"]);
+        // One whose range misses the view is in no list.
+        let far = light(
+            "far",
+            "light.point@1",
+            &serde_json::json!({"range": 6, "fill": true}),
+            [0.0, 1.0, 500.0],
+            [0.0, -1.0, 0.0],
+            AXES,
+            1.0,
+        )
+        .expect("a fill light");
+        assert!(fill_order(&[far.clone()], &scores(&[far], &cam)).is_empty());
+    }
+
+    #[test]
+    fn an_automatic_range_ends_where_the_exposure_cuts_it_and_a_named_one_stays() {
+        // The exposure whose cut is today's 0.05 lx leaves today's ranges.
+        let today = PI / (4096.0 * THRESHOLD);
+        assert!((range_cut(today) - THRESHOLD).abs() < 1e-15);
+        let lamps = |power: f64| {
+            vec![
+                point("auto", [0.0; 3], power),
+                of(
+                    "light.point@1",
+                    serde_json::json!({"power": power, "range": 6}),
+                ),
+            ]
+        };
+        let mut bright = lamps(800.0);
+        follow_exposure(&mut bright, today);
+        assert!((bright[0].range - (800.0 / (4.0 * PI * THRESHOLD)).sqrt()).abs() < 1e-9);
+        // A hundredth of the power under a hundred times the exposure reaches as far.
+        let mut dim = lamps(8.0);
+        follow_exposure(&mut dim, today * 100.0);
+        assert!(
+            (dim[0].range - bright[0].range).abs() < 1e-9,
+            "{}",
+            dim[0].range
+        );
+        assert_eq!((bright[1].range, dim[1].range), (6.0, 6.0));
+    }
+
+    #[test]
+    fn each_budget_class_holds_its_fill_lights() {
+        let caps: Vec<usize> = deep_canvas::budget::CLASSES
+            .iter()
+            .map(|c| fill_shaded(Some(*c)))
+            .collect();
+        assert_eq!(caps, [32, 32, 32, 512, 2048, 2048]);
+        assert_eq!(fill_shaded(None), MOST_FILL);
     }
 }

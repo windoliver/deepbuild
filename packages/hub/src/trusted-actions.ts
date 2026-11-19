@@ -306,6 +306,23 @@ export class TrustedActions {
     }
   }
 
+  /**
+   * An extension restarted from your own terminal (#2402): its code stops and loads again, which gives a hook handler
+   * set aside a fresh try. A deep command inside an agent's process tree acts as that session, and no agent restarts one.
+   */
+  async restartExtension(params: Obj, context: CallContext): Promise<Obj> {
+    const { id } = params;
+    if (typeof id !== 'string' || !id) throw new Refused(refusal('type', '/params/id', 'Name the extension by its ID, owner/name.', id));
+    const agent = await this.options.state().agentAbove(context.peer);
+    if (agent) throw new Refused(refusal('role', '/method', `Nothing was restarted: this deep command runs inside agent session ${agent}'s process tree, and no agent restarts an extension. Restart it from your own terminal.`, 'extension.restart'));
+    const extensions = this.options.services.extensions;
+    if (!extensions) throw new Refused(refusal('unavailable', '', 'The hub has no extension host yet; try again once it is ready.', id, true));
+    if (!(await extensions.loaded()).some((l) => l.id === id)) throw new Refused(refusal('not_found', '/params/id', `No extension ${id} is loaded, so there is nothing to restart.`, id));
+    // A load its restart refuses (an untrusted project, bytes changed since checked) leaves it stopped, and says why.
+    const load = await extensions.restart(id);
+    return load.status === 'refused' ? { status: 'refused', reason: load.reason } : { status: 'restarted', id, version: load.version };
+  }
+
   /** Each view's panel held to panel@1 (#1454), its verdict kept for the app: what failed, in words, or undefined. */
   async panelKits(id: string, unrun = false): Promise<string | undefined> {
     const failed: string[] = [];

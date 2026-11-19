@@ -76,6 +76,8 @@ fn register(r: &mut Registrar) {
                 Decl::new("params/holes", Holds::Item, names::TARGET),
             ]);
     }
+    // #2776: every arch kind draws in 3D, and says what each path does with it.
+    r.in_3d(include_str!("building_paths.json"));
     crate::build::operators(r, "building", is_building, shades, keyed);
     // A corner of a house, so the kit evaluates the module's operators on its kinds.
     r.fixture("house", house(), None).sidecar(json!({

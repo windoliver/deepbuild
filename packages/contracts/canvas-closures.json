@@ -61,5 +61,6 @@
   {"list": "Caption plates", "closures": [{"closed": "draw_path", "instead": "nothing"}]},
   {"list": "Synth presets; audio nodes", "closures": [{"closed": "determinism", "instead": "nothing"}, {"registry": "synth.preset@1"}]},
   {"list": "Pack looks", "closures": [{"open": "pack"}]},
-  {"list": "Pack dependencies", "closures": [{"open": "pack"}]}
+  {"list": "Pack dependencies", "closures": [{"open": "pack"}]},
+  {"list": "Paths and their answers", "closures": [{"closed": "ring", "instead": "nothing"}]}
 ]

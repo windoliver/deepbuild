@@ -18,6 +18,7 @@ pub mod core_lists;
 pub mod fields;
 mod implementation;
 pub mod lists;
+pub mod paths;
 mod semver;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -313,6 +314,8 @@ pub struct Kind {
     /// (`field[.<object field or tag>…]`), for every major (#2777); a list it declares none for
     /// takes the core's fill.
     pub closes: Vec<(String, fields::Closure)>,
+    /// Whether it draws in 3D, so it says what each path does with it (#2776: `paths`).
+    pub in_3d: bool,
 }
 
 /// A preview kind's history (#412, #1802): the issue that tracks it, the release it became a
@@ -781,6 +784,10 @@ pub struct Registrar {
     pub removed: Vec<Removed>,
     /// The lists of words a document sets outside its kinds' params that it reads (#2777).
     pub word_lists: Vec<fields::Declared>,
+    /// The paths data it gives by kind, and the answers the seal admitted from it, by kind
+    /// (`family.name@major`), for every kind it draws in 3D (#2776).
+    pub paths_data: Vec<(String, Result<paths::KindPaths, String>)>,
+    pub paths: BTreeMap<String, paths::KindPaths>,
 }
 
 impl Registrar {
@@ -797,6 +804,7 @@ impl Registrar {
             probes: None,
             refs: Vec::new(),
             closes: Vec::new(),
+            in_3d: false,
         });
         self
     }
@@ -2072,6 +2080,8 @@ impl Registry {
             (module.register)(&mut registrar);
             shapes.push((module.manifest.name.clone(), registrar));
         }
+        // #2776: every kind a module draws in 3D answers each path.
+        paths::check(&mut shapes)?;
 
         // Arrays: `module.x` named for its owner, one owner each, in a phase of the lists.
         let mut arrays: BTreeMap<String, SealedArray> = BTreeMap::new();
