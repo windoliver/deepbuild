@@ -8,7 +8,7 @@ use serde_json::{json, Value};
 
 use super::fixtures::{fixture, material, world, G, HZ};
 use super::{Fixture, Measure, Tolerance};
-use crate::backend::{BodyState, State, VehicleState};
+use crate::backend::{rotate, BodyState, State, VehicleState};
 use deep_canvas::ops;
 
 /// The car's wheel radius and suspension rest, m: its chassis's mount points sit rest + radius
@@ -375,21 +375,6 @@ pub fn circle_of(states: &[State], id: &str, point: [f64; 3], step: usize) -> Op
         }
     }
     fit(&pts)
-}
-
-/// `v` turned by the quaternion `q` (`[x, y, z, w]`).
-fn rotate(q: [f64; 4], v: [f64; 3]) -> [f64; 3] {
-    let (u, w) = ([q[0], q[1], q[2]], q[3]);
-    let cross = |a: [f64; 3], b: [f64; 3]| {
-        [
-            a[1] * b[2] - a[2] * b[1],
-            a[2] * b[0] - a[0] * b[2],
-            a[0] * b[1] - a[1] * b[0],
-        ]
-    };
-    let t = cross(u, v).map(|x| 2.0 * x);
-    let c = cross(u, t);
-    [0, 1, 2].map(|i| v[i] + w * t[i] + c[i])
 }
 
 /// The least-squares circle through `pts` (Kåsa's fit about their mean), its radius.

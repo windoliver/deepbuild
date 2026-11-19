@@ -1,0 +1,458 @@
+Base commit: a42e4f03d95448f81277f197fb25bee71232568b ("Merge pull request #2841 from windoliver/worktree-composed-wandering-sutton")
+Command: NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node node_modules/vitest/vitest.mjs run --root tests/acceptance/2776 --no-file-parallelism --testTimeout=1800000 --hookTimeout=7200000
+Run in the worktree at the base commit holding only these test files (untracked), node_modules from npm ci and the
+workspaces built (npm run build --workspaces), the pinned toolchain first on PATH.
+Date: 2026-11-19T16:04:17Z  Node v24.22.2  vitest 5.0.5  cargo 1.99.1  darwin-arm64
+Exit code: 1. Duration 1.64 s: nothing was compiled, since cargo refuses an unknown feature before it builds anything.
+
+All 17 tests fail, each at an assertion in this folder; none fails to load, and the suite type-checks
+(node node_modules/typescript/bin/tsc -p tests/acceptance/2776/tsconfig.json, exit 0).
+
+- lane.test.ts (10): scripts/canvas-closures.mjs has no paths command: it prints `BLOCKED closures: usage:
+  canvas-closures.mjs closures|drift [--root <tree>]` and exits 3, so every test that first runs a tree it expects to
+  pass (AC2 agree, AC4 ×2, AC5 ×2, AC8 timing and network) fails at lanePasses' `exit 0`, and every test that runs a
+  plant first (AC2 no-row, AC3) at laneFailsNaming's `exit 1`. AC8's lint-lane test fails at "the lint lane runs
+  canvas-closures.mjs paths right after drift": the lint lane holds no such command (-1, not 10). With a paths command
+  that passed, AC4 and AC5 would next fail at "the sealed listing is committed at packages/contracts/canvas-paths.json".
+- seal.test.ts (1), export.test.ts (3), listing.test.ts (3): crates/deep-show/Cargo.toml has no feature test-paths or
+  test-paths-no-final, so `cargo build --locked --bin deep-show --no-default-features --features full,test-paths`
+  (and full,test-paths-no-final) stops at "error: none of the selected packages contains this feature", and each test
+  fails at helpers.ts's "the binary builds: deep-show with features …". Read from the base's code, with the features
+  there the next assertion each meets is: AC1's "the refusal's reason is …, not path_unanswered" or an exit 0 where 2
+  is due (the base's seal checks no answers); AC6 refused: "the refusal gives glow no entry with the code
+  test.paths.no_web" (the base gives it module_missing alone); AC6 stand_in: "… is exported", the export refused
+  module_missing; AC6 plant: the scenario refused as bad_input (no such planted name); AC7 list: "test.paths.glow@1.paths
+  is an object" (no paths on any entry); AC7 message: "the refusal gives mist an entry with the code path_undefined";
+  AC7 dump: "the full build seals 3D entries with their answers" (none in the dump).
+
+The output follows, with the checkout's path replaced by <worktree>.
+
+
+ RUN  v5.0.5 <worktree>/tests/acceptance/2776
+
+ ❯ lane.test.ts (10 tests | 10 failed) 640ms
+   ❯ AC2 #2776.43b1fe3a the lane holds every Paths row to the sealed listing, and every 3D section to a row (2)
+     × AC2 #2776.43b1fe3a a planted section whose row says same where the listing says refused fails the lane, naming the section and the path; the agreeing tree passes 74ms
+     × AC2 #2776.43b1fe3a a 3D section with no Paths row fails the lane, naming it 53ms
+   ❯ AC3 #2776.c440ce00 a same names a check or a fixture that exists (1)
+     × AC3 #2776.c440ce00 a planted same that names a check no registry holds fails the lane, naming the entry 66ms
+   ❯ AC4 #2776.cab3192b after the first fill the lane passes and counts each path's answers (2)
+     × AC4 #2776.cab3192b on the checkout the lane passes and prints, for each path, how many entries answer same, stand_in, refused and not_applicable, and how many refusals are path_undefined, as the listing it read holds 68ms
+     × AC4 #2776.cab3192b on the scratch tree the counts are the fixture's: rays 2 same and 2 refused, final 3 refused and 1 not_applicable, web 1 stand_in, 2 refused (1 path_undefined) and 1 not_applicable 53ms
+   ❯ AC5 #2776.9ecba479 the first fill calls a path same only where a landed check or fixture holds it (2)
+     × AC5 #2776.9ecba479 the lane lists each same with what holds it: the scratch tree's two, and every one of the first fill 51ms
+     × AC5 #2776.9ecba479 a planted fill that marks a silent cell same, with nothing that holds it, fails the lane, naming the entry and the path 56ms
+   ❯ AC8 #2776.7c0bede8 the lane runs in the local preflight beside the closure lane, in under 2 s, reading no network (3)
+     × AC8 #2776.7c0bede8 the local preflight's lint lane runs canvas-closures.mjs paths right after canvas-closures.mjs drift 38ms
+     × AC8 #2776.7c0bede8 the lane on the checkout takes under 2 s, five runs after a warm-up 48ms
+     × AC8 #2776.7c0bede8 the lane reads no network: under a guard that records every socket, lookup, request and process it passes, with none recorded 127ms
+ ❯ listing.test.ts (3 tests | 3 failed) 83ms
+   ❯ AC7 #2776.95a7c6cc deep_kinds returns each 3D entry's three answers, and a refusal's message names the entry, the path and the open task (3)
+     × AC7 #2776.95a7c6cc deep_kinds list returns the test module's three entries, each with its three answers 4ms
+     × AC7 #2776.95a7c6cc a refusal's message names the entry, the path and, for path_undefined, the open task the row names 1ms
+     × AC7 #2776.95a7c6cc every 3D entry and field the build seals, with its three answers as the dump writes them, is what packages/contracts/canvas-paths.json holds 0ms
+ ❯ export.test.ts (3 tests | 3 failed) 97ms
+   ❯ AC6 #2776.c726fb11 the web export takes its refusals and stand-ins from the entries' web answers (3)
+     × AC6 #2776.c726fb11 a piece using an entry whose web answer is refused is refused with that entry's code, nothing written 6ms
+     × AC6 #2776.c726fb11 a piece using an entry whose web answer is stand_in exports, its receipt listing the item with the answer's words 1ms
+     × AC6 #2776.c726fb11 a planted export that carries a refused entry fails, naming the item 1ms
+ ❯ seal.test.ts (1 test | 1 failed) 200ms
+   ❯ AC1 #2776.e33547f5 the seal refuses a 3D entry with no answer for a path (1)
+     × AC1 #2776.e33547f5 a planted module whose kind draws in 3D and declares no answer for a final is refused at the seal, naming the kind and final; its twin that declares refused with a code seals 7ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 17 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  export.test.ts > AC6 #2776.c726fb11 the web export takes its refusals and stand-ins from the entries' web answers > AC6 #2776.c726fb11 a piece using an entry whose web answer is refused is refused with that entry's code, nothing written
+AssertionError: the binary builds: deep-show with features full,test-paths: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features full,test-paths failed:
++ error: none of the selected packages contains this feature: test-paths
++ selected packages: deep-contracts, deep-canvas-seams, deep-canvas, deep-relay, deep-net, deep-codecs, deep-canvas-cells, deep-hook, deep-app, deep-canvas-effects, deep-canvas-scene3d, deep-canvas-drawn, deep-canvas-marks, deep-text, deep-canvas-motion, deep-gpu, deep-images, deep-marks-gpui, deep-text-gpui, deep-effects-render, deep-scene3d-render, deep-panel-host, deep-gpu-layer, deep-canvas-graph, deep-canvas-input, deep-canvas-media, deep-canvas-physics, deep-canvas-record, deep-canvas-sheet, deep-canvas-test-modules, deep-canvas-sandbox, deep-canvas-vector, deep-logic, deep-sandbox-wasmtime, deep-marks-render, deep-marks-vello, deep-replica, deep-marks-raster, deep-physics-rapier, deep-canvas-export, deep-lottie-reader, deep-motion, deep-input, deep-canvas-loop, deep-player, deep-play, deep-show, deep-text-render, deep-typeset, deep-lottie, deep-synth-job
++ help: there is a similarly named feature: test-attrs
++
+
+ ❯ helpers.ts:162:72
+    160|     const e = made.get(s);
+    161|     if (!e) throw Error(`the file didn't list the build ${s} in useBui…
+    162|     expect(e.error, `the binary builds: deep-show with features ${s}`)…
+       |                                                                        ^
+    163|     return e.bin;
+    164|   };
+ ❯ export.test.ts:30:31
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/17]⎯
+
+ FAIL  export.test.ts > AC6 #2776.c726fb11 the web export takes its refusals and stand-ins from the entries' web answers > AC6 #2776.c726fb11 a piece using an entry whose web answer is stand_in exports, its receipt listing the item with the answer's words
+AssertionError: the binary builds: deep-show with features full,test-paths: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features full,test-paths failed:
++ error: none of the selected packages contains this feature: test-paths
++ selected packages: deep-contracts, deep-canvas-seams, deep-canvas, deep-relay, deep-net, deep-codecs, deep-canvas-cells, deep-hook, deep-app, deep-canvas-effects, deep-canvas-scene3d, deep-canvas-drawn, deep-canvas-marks, deep-text, deep-canvas-motion, deep-gpu, deep-images, deep-marks-gpui, deep-text-gpui, deep-effects-render, deep-scene3d-render, deep-panel-host, deep-gpu-layer, deep-canvas-graph, deep-canvas-input, deep-canvas-media, deep-canvas-physics, deep-canvas-record, deep-canvas-sheet, deep-canvas-test-modules, deep-canvas-sandbox, deep-canvas-vector, deep-logic, deep-sandbox-wasmtime, deep-marks-render, deep-marks-vello, deep-replica, deep-marks-raster, deep-physics-rapier, deep-canvas-export, deep-lottie-reader, deep-motion, deep-input, deep-canvas-loop, deep-player, deep-play, deep-show, deep-text-render, deep-typeset, deep-lottie, deep-synth-job
++ help: there is a similarly named feature: test-attrs
++
+
+ ❯ helpers.ts:162:72
+    160|     const e = made.get(s);
+    161|     if (!e) throw Error(`the file didn't list the build ${s} in useBui…
+    162|     expect(e.error, `the binary builds: deep-show with features ${s}`)…
+       |                                                                        ^
+    163|     return e.bin;
+    164|   };
+ ❯ export.test.ts:36:43
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/17]⎯
+
+ FAIL  export.test.ts > AC6 #2776.c726fb11 the web export takes its refusals and stand-ins from the entries' web answers > AC6 #2776.c726fb11 a planted export that carries a refused entry fails, naming the item
+AssertionError: the binary builds: deep-show with features full,test-paths: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features full,test-paths failed:
++ error: none of the selected packages contains this feature: test-paths
++ selected packages: deep-contracts, deep-canvas-seams, deep-canvas, deep-relay, deep-net, deep-codecs, deep-canvas-cells, deep-hook, deep-app, deep-canvas-effects, deep-canvas-scene3d, deep-canvas-drawn, deep-canvas-marks, deep-text, deep-canvas-motion, deep-gpu, deep-images, deep-marks-gpui, deep-text-gpui, deep-effects-render, deep-scene3d-render, deep-panel-host, deep-gpu-layer, deep-canvas-graph, deep-canvas-input, deep-canvas-media, deep-canvas-physics, deep-canvas-record, deep-canvas-sheet, deep-canvas-test-modules, deep-canvas-sandbox, deep-canvas-vector, deep-logic, deep-sandbox-wasmtime, deep-marks-render, deep-marks-vello, deep-replica, deep-marks-raster, deep-physics-rapier, deep-canvas-export, deep-lottie-reader, deep-motion, deep-input, deep-canvas-loop, deep-player, deep-play, deep-show, deep-text-render, deep-typeset, deep-lottie, deep-synth-job
++ help: there is a similarly named feature: test-attrs
++
+
+ ❯ helpers.ts:162:72
+    160|     const e = made.get(s);
+    161|     if (!e) throw Error(`the file didn't list the build ${s} in useBui…
+    162|     expect(e.error, `the binary builds: deep-show with features ${s}`)…
+       |                                                                        ^
+    163|     return e.bin;
+    164|   };
+ ❯ export.test.ts:47:31
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/17]⎯
+
+ FAIL  lane.test.ts > AC2 #2776.43b1fe3a the lane holds every Paths row to the sealed listing, and every 3D section to a row > AC2 #2776.43b1fe3a a planted section whose row says same where the listing says refused fails the lane, naming the section and the path; the agreeing tree passes
+AssertionError: the scratch reference and listing, which agree: exit 0
+exit 3
+BLOCKED closures: usage: canvas-closures.mjs closures|drift [--root <tree>]
+: expected 3 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 3
+
+ ❯ lanePasses helpers.ts:449:50
+    447| export function lanePasses(r: LaneRun, what: string): void {
+    448|   expect(failLines(r), `${what}: no FAIL paths line\n${shown(r)}`).toE…
+    449|   expect(r.code, `${what}: exit 0\n${shown(r)}`).toBe(0);
+       |                                                  ^
+    450|   expect(/^PASS paths: /m.test(r.out), `${what}: a PASS paths line\n${…
+    451| }
+ ❯ lane.test.ts:37:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/17]⎯
+
+ FAIL  lane.test.ts > AC2 #2776.43b1fe3a the lane holds every Paths row to the sealed listing, and every 3D section to a row > AC2 #2776.43b1fe3a a 3D section with no Paths row fails the lane, naming it
+AssertionError: Test mist without its Paths row: exit 1
+exit 3
+BLOCKED closures: usage: canvas-closures.mjs closures|drift [--root <tree>]
+: expected 3 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 3
+
+ ❯ lane.test.ts:44:76
+     42|   it(`${AC[2]} a 3D section with no Paths row fails the lane, naming i…
+     43|     const r = paths(laneTree('no-row', withoutPathsRow(fixtureReferenc…
+     44|     expect(r.code, `Test mist without its Paths row: exit 1\n${shown(r…
+       |                                                                            ^
+     45|     // Test mist: depth is another section, whose row stays: a line ab…
+     46|     const own = failLines(r).filter((l) => l.includes('Test mist') && …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/17]⎯
+
+ FAIL  lane.test.ts > AC3 #2776.c440ce00 a same names a check or a fixture that exists > AC3 #2776.c440ce00 a planted same that names a check no registry holds fails the lane, naming the entry
+AssertionError: glow's rays same, held by test.paths.nowhere, in the row and the listing alike: exit 1
+exit 3
+BLOCKED closures: usage: canvas-closures.mjs closures|drift [--root <tree>]
+: expected 3 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 3
+
+ ❯ laneFailsNaming helpers.ts:454:50
+    452| /** The lane failed: exit 1, and one FAIL line naming every one of `na…
+    453| export function laneFailsNaming(r: LaneRun, names: readonly string[], …
+    454|   expect(r.code, `${what}: exit 1\n${shown(r)}`).toBe(1);
+       |                                                  ^
+    455|   failsNaming(failLines(r), names, what);
+    456| }
+ ❯ lane.test.ts:55:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/17]⎯
+
+ FAIL  lane.test.ts > AC4 #2776.cab3192b after the first fill the lane passes and counts each path's answers > AC4 #2776.cab3192b on the checkout the lane passes and prints, for each path, how many entries answer same, stand_in, refused and not_applicable, and how many refusals are path_undefined, as the listing it read holds
+AssertionError: the paths lane on the checkout: exit 0
+exit 3
+BLOCKED closures: usage: canvas-closures.mjs closures|drift [--root <tree>]
+: expected 3 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 3
+
+ ❯ lanePasses helpers.ts:449:50
+    447| export function lanePasses(r: LaneRun, what: string): void {
+    448|   expect(failLines(r), `${what}: no FAIL paths line\n${shown(r)}`).toE…
+    449|   expect(r.code, `${what}: exit 0\n${shown(r)}`).toBe(0);
+       |                                                  ^
+    450|   expect(/^PASS paths: /m.test(r.out), `${what}: a PASS paths line\n${…
+    451| }
+ ❯ lane.test.ts:69:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/17]⎯
+
+ FAIL  lane.test.ts > AC4 #2776.cab3192b after the first fill the lane passes and counts each path's answers > AC4 #2776.cab3192b on the scratch tree the counts are the fixture's: rays 2 same and 2 refused, final 3 refused and 1 not_applicable, web 1 stand_in, 2 refused (1 path_undefined) and 1 not_applicable
+AssertionError: the scratch reference and listing: exit 0
+exit 3
+BLOCKED closures: usage: canvas-closures.mjs closures|drift [--root <tree>]
+: expected 3 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 3
+
+ ❯ lanePasses helpers.ts:449:50
+    447| export function lanePasses(r: LaneRun, what: string): void {
+    448|   expect(failLines(r), `${what}: no FAIL paths line\n${shown(r)}`).toE…
+    449|   expect(r.code, `${what}: exit 0\n${shown(r)}`).toBe(0);
+       |                                                  ^
+    450|   expect(/^PASS paths: /m.test(r.out), `${what}: a PASS paths line\n${…
+    451| }
+ ❯ lane.test.ts:93:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/17]⎯
+
+ FAIL  lane.test.ts > AC5 #2776.9ecba479 the first fill calls a path same only where a landed check or fixture holds it > AC5 #2776.9ecba479 the lane lists each same with what holds it: the scratch tree's two, and every one of the first fill
+AssertionError: the scratch reference and listing: exit 0
+exit 3
+BLOCKED closures: usage: canvas-closures.mjs closures|drift [--root <tree>]
+: expected 3 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 3
+
+ ❯ lanePasses helpers.ts:449:50
+    447| export function lanePasses(r: LaneRun, what: string): void {
+    448|   expect(failLines(r), `${what}: no FAIL paths line\n${shown(r)}`).toE…
+    449|   expect(r.code, `${what}: exit 0\n${shown(r)}`).toBe(0);
+       |                                                  ^
+    450|   expect(/^PASS paths: /m.test(r.out), `${what}: a PASS paths line\n${…
+    451| }
+ ❯ lane.test.ts:105:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/17]⎯
+
+ FAIL  lane.test.ts > AC5 #2776.9ecba479 the first fill calls a path same only where a landed check or fixture holds it > AC5 #2776.9ecba479 a planted fill that marks a silent cell same, with nothing that holds it, fails the lane, naming the entry and the path
+AssertionError: the first fill, unplanted: exit 0
+exit 3
+BLOCKED closures: usage: canvas-closures.mjs closures|drift [--root <tree>]
+: expected 3 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 3
+
+ ❯ lanePasses helpers.ts:449:50
+    447| export function lanePasses(r: LaneRun, what: string): void {
+    448|   expect(failLines(r), `${what}: no FAIL paths line\n${shown(r)}`).toE…
+    449|   expect(r.code, `${what}: exit 0\n${shown(r)}`).toBe(0);
+       |                                                  ^
+    450|   expect(/^PASS paths: /m.test(r.out), `${what}: a PASS paths line\n${…
+    451| }
+ ❯ lane.test.ts:122:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/17]⎯
+
+ FAIL  lane.test.ts > AC8 #2776.7c0bede8 the lane runs in the local preflight beside the closure lane, in under 2 s, reading no network > AC8 #2776.7c0bede8 the local preflight's lint lane runs canvas-closures.mjs paths right after canvas-closures.mjs drift
+AssertionError: the lint lane runs canvas-closures.mjs paths right after drift: ["fmt --all -- --check","scripts/repo-rules.mjs","clippy --workspace --all-targets --locked -- -D warnings","scripts/vendor-rebase.mjs check","scripts/canvas-lint.mjs","scripts/size-ratchet.mjs","scripts/conformance-lint.mjs","scripts/slots-check.mjs","scripts/canvas-closures.mjs closures","scripts/canvas-closures.mjs drift","scripts/record-reader-guard.mjs","scripts/render-lint.mjs","scripts/plant-lint.mjs","scripts/loads-lint.mjs","scripts/cache-lint.mjs","scripts/blocking-call-guard.mjs","scripts/ask-sources-guard.mjs","scripts/keymap-guard.mjs","scripts/color-literal-guard.mjs","scripts/guide.mjs --check","scripts/panel-catalog.mjs","scripts/known-failures-check.mjs","scripts/fetch-lock.mjs lint","scripts/exit-lint.mjs","scripts/app-copy-lint.mjs"]: expected -1 to be 10 // Object.is equality
+
+- Expected
++ Received
+
+- 10
++ -1
+
+ ❯ lane.test.ts:141:149
+    139|     const at = (sub: string): number => lint!.commands.findIndex((c) =…
+    140|     expect(at('drift'), 'the lint lane runs canvas-closures.mjs drift'…
+    141|     expect(at('paths'), `the lint lane runs canvas-closures.mjs paths …
+       |                                                                                                                                                     ^
+    142|   }, TIMEOUT);
+    143|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/17]⎯
+
+ FAIL  lane.test.ts > AC8 #2776.7c0bede8 the lane runs in the local preflight beside the closure lane, in under 2 s, reading no network > AC8 #2776.7c0bede8 the lane on the checkout takes under 2 s, five runs after a warm-up
+AssertionError: the warm-up run: exit 0
+exit 3
+BLOCKED closures: usage: canvas-closures.mjs closures|drift [--root <tree>]
+: expected 3 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 3
+
+ ❯ lanePasses helpers.ts:449:50
+    447| export function lanePasses(r: LaneRun, what: string): void {
+    448|   expect(failLines(r), `${what}: no FAIL paths line\n${shown(r)}`).toE…
+    449|   expect(r.code, `${what}: exit 0\n${shown(r)}`).toBe(0);
+       |                                                  ^
+    450|   expect(/^PASS paths: /m.test(r.out), `${what}: a PASS paths line\n${…
+    451| }
+ ❯ lane.test.ts:145:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/17]⎯
+
+ FAIL  lane.test.ts > AC8 #2776.7c0bede8 the lane runs in the local preflight beside the closure lane, in under 2 s, reading no network > AC8 #2776.7c0bede8 the lane reads no network: under a guard that records every socket, lookup, request and process it passes, with none recorded
+AssertionError: the paths lane under the network guard: exit 0
+exit 3
+BLOCKED closures: usage: canvas-closures.mjs closures|drift [--root <tree>]
+: expected 3 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 3
+
+ ❯ lanePasses helpers.ts:449:50
+    447| export function lanePasses(r: LaneRun, what: string): void {
+    448|   expect(failLines(r), `${what}: no FAIL paths line\n${shown(r)}`).toE…
+    449|   expect(r.code, `${what}: exit 0\n${shown(r)}`).toBe(0);
+       |                                                  ^
+    450|   expect(/^PASS paths: /m.test(r.out), `${what}: a PASS paths line\n${…
+    451| }
+ ❯ lane.test.ts:163:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/17]⎯
+
+ FAIL  listing.test.ts > AC7 #2776.95a7c6cc deep_kinds returns each 3D entry's three answers, and a refusal's message names the entry, the path and the open task > AC7 #2776.95a7c6cc deep_kinds list returns the test module's three entries, each with its three answers
+AssertionError: the binary builds: deep-show with features full,test-paths: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features full,test-paths failed:
++ error: none of the selected packages contains this feature: test-paths
++ selected packages: deep-contracts, deep-canvas-seams, deep-canvas, deep-relay, deep-net, deep-codecs, deep-canvas-cells, deep-hook, deep-app, deep-canvas-effects, deep-canvas-scene3d, deep-canvas-drawn, deep-canvas-marks, deep-text, deep-canvas-motion, deep-gpu, deep-images, deep-marks-gpui, deep-text-gpui, deep-effects-render, deep-scene3d-render, deep-panel-host, deep-gpu-layer, deep-canvas-graph, deep-canvas-input, deep-canvas-media, deep-canvas-physics, deep-canvas-record, deep-canvas-sheet, deep-canvas-test-modules, deep-canvas-sandbox, deep-canvas-vector, deep-logic, deep-sandbox-wasmtime, deep-marks-render, deep-marks-vello, deep-replica, deep-marks-raster, deep-physics-rapier, deep-canvas-export, deep-lottie-reader, deep-motion, deep-input, deep-canvas-loop, deep-player, deep-play, deep-show, deep-text-render, deep-typeset, deep-lottie, deep-synth-job
++ help: there is a similarly named feature: test-attrs
++
+
+ ❯ helpers.ts:162:72
+    160|     const e = made.get(s);
+    161|     if (!e) throw Error(`the file didn't list the build ${s} in useBui…
+    162|     expect(e.error, `the binary builds: deep-show with features ${s}`)…
+       |                                                                        ^
+    163|     return e.bin;
+    164|   };
+ ❯ listing.test.ts:27:35
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/17]⎯
+
+ FAIL  listing.test.ts > AC7 #2776.95a7c6cc deep_kinds returns each 3D entry's three answers, and a refusal's message names the entry, the path and the open task > AC7 #2776.95a7c6cc a refusal's message names the entry, the path and, for path_undefined, the open task the row names
+AssertionError: the binary builds: deep-show with features full,test-paths: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features full,test-paths failed:
++ error: none of the selected packages contains this feature: test-paths
++ selected packages: deep-contracts, deep-canvas-seams, deep-canvas, deep-relay, deep-net, deep-codecs, deep-canvas-cells, deep-hook, deep-app, deep-canvas-effects, deep-canvas-scene3d, deep-canvas-drawn, deep-canvas-marks, deep-text, deep-canvas-motion, deep-gpu, deep-images, deep-marks-gpui, deep-text-gpui, deep-effects-render, deep-scene3d-render, deep-panel-host, deep-gpu-layer, deep-canvas-graph, deep-canvas-input, deep-canvas-media, deep-canvas-physics, deep-canvas-record, deep-canvas-sheet, deep-canvas-test-modules, deep-canvas-sandbox, deep-canvas-vector, deep-logic, deep-sandbox-wasmtime, deep-marks-render, deep-marks-vello, deep-replica, deep-marks-raster, deep-physics-rapier, deep-canvas-export, deep-lottie-reader, deep-motion, deep-input, deep-canvas-loop, deep-player, deep-play, deep-show, deep-text-render, deep-typeset, deep-lottie, deep-synth-job
++ help: there is a similarly named feature: test-attrs
++
+
+ ❯ helpers.ts:162:72
+    160|     const e = made.get(s);
+    161|     if (!e) throw Error(`the file didn't list the build ${s} in useBui…
+    162|     expect(e.error, `the binary builds: deep-show with features ${s}`)…
+       |                                                                        ^
+    163|     return e.bin;
+    164|   };
+ ❯ listing.test.ts:39:31
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/17]⎯
+
+ FAIL  listing.test.ts > AC7 #2776.95a7c6cc deep_kinds returns each 3D entry's three answers, and a refusal's message names the entry, the path and the open task > AC7 #2776.95a7c6cc every 3D entry and field the build seals, with its three answers as the dump writes them, is what packages/contracts/canvas-paths.json holds
+AssertionError: the binary builds: deep-show with features full,test-paths: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features full,test-paths failed:
++ error: none of the selected packages contains this feature: test-paths
++ selected packages: deep-contracts, deep-canvas-seams, deep-canvas, deep-relay, deep-net, deep-codecs, deep-canvas-cells, deep-hook, deep-app, deep-canvas-effects, deep-canvas-scene3d, deep-canvas-drawn, deep-canvas-marks, deep-text, deep-canvas-motion, deep-gpu, deep-images, deep-marks-gpui, deep-text-gpui, deep-effects-render, deep-scene3d-render, deep-panel-host, deep-gpu-layer, deep-canvas-graph, deep-canvas-input, deep-canvas-media, deep-canvas-physics, deep-canvas-record, deep-canvas-sheet, deep-canvas-test-modules, deep-canvas-sandbox, deep-canvas-vector, deep-logic, deep-sandbox-wasmtime, deep-marks-render, deep-marks-vello, deep-replica, deep-marks-raster, deep-physics-rapier, deep-canvas-export, deep-lottie-reader, deep-motion, deep-input, deep-canvas-loop, deep-player, deep-play, deep-show, deep-text-render, deep-typeset, deep-lottie, deep-synth-job
++ help: there is a similarly named feature: test-attrs
++
+
+ ❯ helpers.ts:162:72
+    160|     const e = made.get(s);
+    161|     if (!e) throw Error(`the file didn't list the build ${s} in useBui…
+    162|     expect(e.error, `the binary builds: deep-show with features ${s}`)…
+       |                                                                        ^
+    163|     return e.bin;
+    164|   };
+ ❯ listing.test.ts:48:25
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/17]⎯
+
+ FAIL  seal.test.ts > AC1 #2776.e33547f5 the seal refuses a 3D entry with no answer for a path > AC1 #2776.e33547f5 a planted module whose kind draws in 3D and declares no answer for a final is refused at the seal, naming the kind and final; its twin that declares refused with a code seals
+AssertionError: the binary builds: deep-show with features full,test-paths-no-final: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features full,test-paths-no-final failed:
++ error: none of the selected packages contains this feature: test-paths-no-final
++ selected packages: deep-contracts, deep-canvas-seams, deep-canvas, deep-relay, deep-net, deep-codecs, deep-canvas-cells, deep-hook, deep-app, deep-canvas-effects, deep-canvas-scene3d, deep-canvas-drawn, deep-canvas-marks, deep-text, deep-canvas-motion, deep-gpu, deep-images, deep-marks-gpui, deep-text-gpui, deep-effects-render, deep-scene3d-render, deep-panel-host, deep-gpu-layer, deep-canvas-graph, deep-canvas-input, deep-canvas-media, deep-canvas-physics, deep-canvas-record, deep-canvas-sheet, deep-canvas-test-modules, deep-canvas-sandbox, deep-canvas-vector, deep-logic, deep-sandbox-wasmtime, deep-marks-render, deep-marks-vello, deep-replica, deep-marks-raster, deep-physics-rapier, deep-canvas-export, deep-lottie-reader, deep-motion, deep-input, deep-canvas-loop, deep-player, deep-play, deep-show, deep-text-render, deep-typeset, deep-lottie, deep-synth-job
++
+
+ ❯ helpers.ts:162:72
+    160|     const e = made.get(s);
+    161|     if (!e) throw Error(`the file didn't list the build ${s} in useBui…
+    162|     expect(e.error, `the binary builds: deep-show with features ${s}`)…
+       |                                                                        ^
+    163|     return e.bin;
+    164|   };
+ ❯ seal.test.ts:22:38
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/17]⎯
+
+
+ Test Files  4 failed (4)
+      Tests  17 failed (17)
+   Start at  08:04:17
+   Duration  1.64s (tests 85%, transform 10%, import 4%, worker 1%)
+
+    Isolate  4 workers spawned · ~88ms startup each (spawn + environment, per file)
+             at least ~263ms faster with isolate: false — reuses workers across files instead of one per file
+

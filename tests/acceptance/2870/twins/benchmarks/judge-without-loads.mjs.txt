@@ -1,0 +1,17 @@
+// #2870 AC2's planted judge under benchmarks/. A test lays this file, without its .txt, as
+// benchmarks/judge-without-loads.mjs in a scratch checkout: a benchmark's judge that gives judgeLimit no loads, for a
+// plain target and for a floor, in the two forms benchmarks/canvas.mjs's judgeEfficiency had at the base. The loads
+// lint must list each line marked finding. Never run.
+import { readFileSync } from 'node:fs';
+import { judgeLimit } from '../scripts/benchmark.mjs';
+
+const { current } = JSON.parse(readFileSync(0, 'utf8'));
+const { targets } = JSON.parse(readFileSync(new URL('./budgets.json', import.meta.url), 'utf8')).tasks.find((task) => task.id === current.task);
+const judged = {};
+for (const [name, limit] of Object.entries(targets)) {
+  const values = current.runs.map((run) => run[name]);
+  judged[name] = name.endsWith('_x')
+    ? { ...judgeLimit({ limit: -limit, runs: values.map((value) => -value), fingerprint: current.fingerprint }), limit, runs: values } // finding
+    : judgeLimit({ limit, runs: values, fingerprint: current.fingerprint }); // finding
+}
+console.log(JSON.stringify({ task: current.task, targets: judged }));

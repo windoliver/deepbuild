@@ -17,6 +17,7 @@ mod bare;
 pub mod core_lists;
 mod implementation;
 pub mod lists;
+pub mod paths;
 mod semver;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -308,6 +309,8 @@ pub struct Kind {
     /// The params that name an item, a table row or an asset, each with its kind of reference
     /// (#1801): what `refs_to` reads, and what the kit holds the module's fixtures to.
     pub refs: Vec<crate::refs::Decl>,
+    /// Whether it draws in 3D, so it says what each path does with it (#2776: `paths`).
+    pub in_3d: bool,
 }
 
 /// A preview kind's history (#412, #1802): the issue that tracks it, the release it became a
@@ -774,6 +777,10 @@ pub struct Registrar {
     pub pack_fields: Vec<(String, crate::document::packs::module_fields::PackField)>,
     /// The preview kinds it removed (#1802).
     pub removed: Vec<Removed>,
+    /// The paths data it gives by kind, and the answers the seal admitted from it, by kind
+    /// (`family.name@major`), for every kind it draws in 3D (#2776).
+    pub paths_data: Vec<(String, Result<paths::KindPaths, String>)>,
+    pub paths: BTreeMap<String, paths::KindPaths>,
 }
 
 impl Registrar {
@@ -789,6 +796,7 @@ impl Registrar {
             description: None,
             probes: None,
             refs: Vec::new(),
+            in_3d: false,
         });
         self
     }
@@ -2030,6 +2038,8 @@ impl Registry {
             (module.register)(&mut registrar);
             shapes.push((module.manifest.name.clone(), registrar));
         }
+        // #2776: every kind a module draws in 3D answers each path.
+        paths::check(&mut shapes)?;
 
         // Arrays: `module.x` named for its owner, one owner each, in a phase of the lists.
         let mut arrays: BTreeMap<String, SealedArray> = BTreeMap::new();

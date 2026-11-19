@@ -190,6 +190,8 @@ pub struct Effects {
     /// #508: the color a check reads back this frame, copied where the document's operators
     /// read the chain (before any display-only pass), when the settings ask for it.
     checks: Option<([u32; 2], wgpu::Texture, wgpu::TextureView)>,
+    /// The device everything above was made on (#1993): its epoch.
+    built_on: Option<u64>,
 }
 
 struct SparkDraw {
@@ -282,6 +284,7 @@ impl Effects {
             op_rows: Vec::new(),
             clouds: BTreeMap::new(),
             checks: None,
+            built_on: None,
         }
     }
 
@@ -967,18 +970,41 @@ impl Effects {
         ))
     }
 
-    /// Builds the document's operators on the device, the first frame that needs them.
+    /// Builds the document's operators on the device, the first frame that needs them. On the
+    /// device that replaced a lost one (#1993) nothing made on the lost one is kept: each
+    /// pipeline and target is made again as its frame asks, and the operators are built again,
+    /// their carried state stepped from the start.
     fn build_docops(&mut self, device: &Device) {
-        if let Some((doc, options, planted)) = self.op_doc.take() {
+        let replaced = self
+            .built_on
+            .replace(device.epoch)
+            .is_some_and(|e| e != device.epoch);
+        if replaced {
+            let kept = Effects::new(self.settings.clone(), self.planted);
+            let lost = std::mem::replace(self, kept);
+            self.profiler = lost.profiler;
+            self.op_doc = lost.op_doc;
+            self.op_hooks = lost.op_hooks;
+            self.op_resolution = lost.op_resolution;
+            self.op_canonical = lost.op_canonical;
+            self.built_on = Some(device.epoch);
+        }
+        if self.docops.is_some() {
+            return;
+        }
+        if let Some((doc, options, planted)) = &self.op_doc {
             self.docops = Some(crate::docops::DocOps::with(
                 device,
-                &doc,
-                options,
-                planted,
+                doc,
+                *options,
+                *planted,
                 &[],
                 self.op_hooks,
                 BTreeMap::new(),
             ));
+        }
+        if let Some(ops) = self.docops.as_mut().filter(|_| replaced) {
+            ops.rebuild_after_loss();
         }
     }
 }

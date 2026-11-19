@@ -1,6 +1,6 @@
 {
   "crates/deep-app/src/views.rs": 3606,
-  "crates/deep-canvas-effects/src/check.rs": 1698,
+  "crates/deep-canvas-effects/src/check.rs": 1660,
   "crates/deep-canvas-effects/src/emit.rs": 1626,
   "crates/deep-canvas-effects/src/interp.rs": 1501,
   "crates/deep-canvas-marks/src/animator.rs": 1782,
@@ -9,7 +9,7 @@
   "crates/deep-canvas-marks/src/pathops.rs": 1996,
   "crates/deep-canvas-marks/src/scene.rs": 5841,
   "crates/deep-canvas-motion/src/doc.rs": 2938,
-  "crates/deep-canvas-motion/src/program.rs": 2991,
+  "crates/deep-canvas-motion/src/program.rs": 2978,
   "crates/deep-canvas-scene3d/src/builders.rs": 2589,
   "crates/deep-canvas-scene3d/src/scene.rs": 3541,
   "crates/deep-canvas-scene3d/src/spec.rs": 2183,

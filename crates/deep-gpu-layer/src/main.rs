@@ -75,6 +75,7 @@ mod testgpu;
 mod textures;
 mod timing;
 mod tone;
+mod touches;
 mod trails;
 mod validation;
 mod video;
@@ -238,6 +239,10 @@ pub enum Planted {
     ShoreCalmIgnoresField,
     /// #968: the flow's noise moved in one phase, jumping back at every wrap.
     WaterFlowSinglePhase,
+    /// #2760: each touch's ring centred where the rain's hash puts a drop.
+    WaterRingsAtRainHash,
+    /// #2760: a ring started when a drawn frame first passes its occurrence, kept as state.
+    WaterRingsStartOnDrawnFrame,
     /// #854's wrong program: the renderer compiles its pipelines in the first frame.
     CompilesOnFirstFrame,
     /// #777's wrong programs (tests/acceptance/777/README.md: Planted programs).
@@ -461,6 +466,11 @@ pub enum Planted {
     StepsPerFrame,
     RingKeepsEveryCheckpoint,
     CarriedClassExact,
+    // #1993: stepped grids' and fields' wrong programs (tests/acceptance/1993/*/README.md).
+    StepReadsLivePointer,
+    RingCheckpointsTexturesOnAlternateSteps,
+    RestoreStartsFromClearValue,
+    CheckSkipsBound,
     // #464: print and pixel looks' wrong programs (tests/acceptance/464/README.md).
     VignettePixels,
     GrainFromT,
@@ -641,6 +651,8 @@ impl Planted {
             "shore_field_from_centre" => Planted::ShoreFieldFromCentre,
             "shore_calm_ignores_field" => Planted::ShoreCalmIgnoresField,
             "water_flow_single_phase" => Planted::WaterFlowSinglePhase,
+            "water_rings_at_rain_hash" => Planted::WaterRingsAtRainHash,
+            "water_rings_start_on_drawn_frame" => Planted::WaterRingsStartOnDrawnFrame,
             "compiles_on_first_frame" => Planted::CompilesOnFirstFrame,
             "budgets_each_window" => Planted::BudgetsEachWindow,
             "steps_main_window" => Planted::StepsMainWindow,
@@ -816,6 +828,12 @@ impl Planted {
             "steps_per_frame" => Planted::StepsPerFrame,
             "ring_keeps_every_checkpoint" => Planted::RingKeepsEveryCheckpoint,
             "carried_class_exact" => Planted::CarriedClassExact,
+            "step_reads_live_pointer" => Planted::StepReadsLivePointer,
+            "restore_starts_from_clear_value" => Planted::RestoreStartsFromClearValue,
+            "check_skips_bound" => Planted::CheckSkipsBound,
+            "ring_checkpoints_textures_on_alternate_steps" => {
+                Planted::RingCheckpointsTexturesOnAlternateSteps
+            }
             "vignette_pixels" => Planted::VignettePixels,
             "grain_from_t" => Planted::GrainFromT,
             "partial_coverage" => Planted::PartialCoverage,

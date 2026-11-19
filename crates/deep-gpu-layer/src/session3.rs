@@ -567,6 +567,16 @@ pub fn close_on(worker: &Worker) {
     worker.call(|state| state.scene3d = None);
 }
 
+/// Forces the session's device lost (#1993: view3d's `lose_device_at`); its next frame draws on
+/// the device that replaces it.
+pub fn lose_device(app: &App) {
+    app.worker.call(|state| {
+        if let Some(s) = state.scene3d.as_ref() {
+            s.view.lose_device();
+        }
+    });
+}
+
 /// What the render thread answers for one frame.
 #[derive(Clone)]
 pub struct Drawn {
