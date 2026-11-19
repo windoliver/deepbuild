@@ -1,0 +1,16 @@
+{
+  "criterion": "#1993.c2ad7c76",
+  "by": "you",
+  "delegated": "On 2026-11-19 the owner asked the session's agent to close the gaps so the PR can close the issue. The agent looked at each screenshot and at four frames of each recording (first, quarter, half, last): the ring at step 100 is one clean circle about 40 cells out on still water, and its recording grows it from the drop to a circle near the rim with no ripples running ahead of it; the pattern at 10 s is a labyrinth over most of the grid, and its recording grows it from scattered seeds through round spots that meet and merge; the cloth hangs from its straight top row with its lower edge swung and curled, and its recording lets it down from the start without the top row moving. The owner has not looked at these files and may overturn this call.",
+  "screenshots": [
+    "4086ee7254a1741d0a7f5e43124de086c2aa14e23cdd0526c04a464d4c2f043a",
+    "82902a5e898865b5579308f0329244c1b5b17a448ab80a8ecd843b33adf4349c",
+    "5f831deaf4138a5cda21a3913137ffbfeb3cf8fa58284ee8d88fefeb006d436f"
+  ],
+  "recordings": [
+    "27a75bcc50b37378c85bc1cd8036cb039407f3a99446bf1b7ffa8765b29f81cd",
+    "0f8f4007764fa35c7d30be6c0b6947f56de803795814a7752a112b42c75e467c",
+    "cf4f176649a29da7386981ae2d4f71b4c08abe01604888a2123c76b847067d20"
+  ],
+  "call": "looks_right"
+}

@@ -11,6 +11,7 @@ pub fn inputs(
     for (name, input) in &c.op.inputs {
         let v = match &input.from {
             From::Target { .. }
+            | From::Previous { .. }
             | From::Asset(_)
             | From::Texture3d { .. }
             | From::Storage { .. }

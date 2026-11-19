@@ -375,6 +375,8 @@ fn run_view(
     let (doc_look, doc_look_json) = (args.look.clone(), args.look_json.clone());
     // #462's planted strokes: the camera the frame before drew through.
     let mut last_camera: Option<deep_canvas_scene3d::scene::Camera> = None;
+    // #1993: how many times `lose_device_at` forced the device lost.
+    let mut device_losses = 0u64;
     let result = (|| -> Result<(), Value> {
         // The lights the policy last left out: a change is reported once, by ID (#421).
         let mut left_out: Vec<String> = Vec::new();
@@ -390,6 +392,10 @@ fn run_view(
         };
         for &(n, reach) in &reached {
             let frame_started = std::time::Instant::now();
+            if args.lose_at == Some(n) && device_losses == 0 {
+                session3::lose_device(app);
+                device_losses += 1;
+            }
             // A seek applies every patch up to the frame it opens at.
             let mut patched = false;
             for (k, (frame, writer, ops)) in args.patches.iter().enumerate() {
@@ -1608,11 +1614,19 @@ fn run_view(
             frame.insert("settled".into(), json!(settled));
             // What each stepped operator's carried output holds as this frame drew (#252).
             let fx2 = fx.clone();
-            let carried = app
-                .worker
-                .call(move |_| lock(&fx2).docops.as_ref().map(|o| o.carried()));
-            if let Some(c) = carried.filter(|c| c.as_object().is_some_and(|m| !m.is_empty())) {
+            let carried = app.worker.call(move |_| {
+                let fx = lock(&fx2);
+                fx.docops.as_ref().map(|o| (o.carried(), o.settling()))
+            });
+            let (carried, behind) = carried.unzip();
+            if let Some(c) =
+                carried.filter(|c: &Value| c.as_object().is_some_and(|m| !m.is_empty()))
+            {
                 frame.insert("carried".into(), c);
+            }
+            // A frame drawn before the carried state is rebuilt after a lost device (#1993).
+            if behind == Some(true) {
+                frame.insert("settling".into(), json!(true));
             }
             if args.timings {
                 frame.insert("wall_ms".into(), json!(wall_ms));
@@ -2264,6 +2278,9 @@ fn run_view(
         "render_targets": render_targets,
         "layers": layers_report(&args.doc, &args.hidden),
     });
+    if args.lose_at.is_some() {
+        reply["device_losses"] = json!(device_losses);
+    }
     if !worlds.is_empty() {
         reply["worlds"] = Value::Object(
             worlds
