@@ -174,6 +174,9 @@ export type Plant =
   | 'deep-wait-polls' | 'stop-answers-waiting'
   // #806's: a deep_show stamped with the payload's writer, and one that waits for the app instead of rendering headless.
   | 'deep-show-writer-from-payload' | 'deep-show-waits-for-app'
+  // #1415's: deep_kinds publishing op as optional while its handler needs it, returning its refusals as ordinary
+  // results, and answering a listing with what loaded so far while the hub still loads.
+  | 'kinds-op-optional' | 'kinds-refusal-as-text' | 'kinds-partial-while-loading'
   // #139's: a deprecated JSON-RPC method served through its replacement with no notice.
   | 'silent-deprecated'
   // #875's: a fix check's base run counted as its proof whatever way it failed.
@@ -363,6 +366,7 @@ const PLANTS: readonly string[] = [
   'repeat-reaches-you',
   'deep-wait-polls', 'stop-answers-waiting',
   'deep-show-writer-from-payload', 'deep-show-waits-for-app',
+  'kinds-op-optional', 'kinds-refusal-as-text', 'kinds-partial-while-loading',
   'silent-deprecated',
   'deep-drive-no-lease',
   'no-work-never-sent-back', 'skips-prompt-turns',
