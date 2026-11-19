@@ -4,7 +4,7 @@
 // scratch tree with a sandboxed HOME, so the throttle table and its log are the sandbox's (README: AC2).
 import assert from 'node:assert/strict';
 import { after, before, describe, test } from 'node:test';
-import { calls, dump, jobLogs, LONG, NODE, probes, sandbox, SRC, start, summary, throttleLog, timedPath, tree, VITEST, nodeProbe } from './helpers.mjs';
+import { calls, dump, jobLogs, LONG, NODE, probes, sandbox, SRC, start, throttleLog, timedPath, tree, VITEST, nodeProbe } from './helpers.mjs';
 
 async function within(child, ms) {
   let timer;
