@@ -59,11 +59,24 @@ function sourceSlice(file, source, requested) {
   return { forEachChild: (visit) => [...imports.filter((node) => !node.importClause || [node.importClause.name, ...(node.importClause.namedBindings && ts.isNamedImports(node.importClause.namedBindings) ? node.importClause.namedBindings.elements.map((n) => n.name) : [node.importClause.namedBindings?.name])].some((name) => name && used.has(name.text))), ...nodes].forEach(visit) };
 }
 
-/** Selected tests and the helper declarations they reach. */
-export function binaryNames(cwd, patterns) {
-  const sources = [], roots = patterns.flatMap((path) => path.includes('*') ? globSync(path, { cwd }) : [path]);
+/** Selected tests and the helper declarations they reach: the binaries they read through DEEP_BIN_DIR. */
+export const binaryNames = (cwd, patterns) => binaryPlan(cwd, patterns, { own: false }).names;
+
+// The flags a test's own `cargo build` may carry for the run to build it first (#2820): those that only pick what
+// and how it builds. Any other, or a value the source doesn't write out, leaves that build to the test.
+const PLAIN = new Set(['--locked', '--offline', '--release', '--no-default-features', '--all-features']);
+const VALUED = new Set(['--bin', '-p', '--package', '--features']);
+const PROFILE = ['CARGO_INCREMENTAL', 'CARGO_PROFILE_DEV_DEBUG'];
+
+/**
+ * binaryNames' walk, which also finds the `cargo build`s the selected tests and their helpers start themselves (#2820):
+ * `builds` holds each one's arguments, written out in the source, for the run to build first in each checkout, so the
+ * test finds it fresh. A `--bin` whose name is a variable stands for each workspace binary the test's sources name.
+ */
+export function binaryPlan(cwd, patterns, { own: findBuilds = true } = {}) {
+  const sources = [], selfBuilt = [], roots = patterns.flatMap((path) => path.includes('*') ? globSync(path, { cwd }) : [path]);
   for (const root of roots) {
-    const seen = new Set(), own = [], queue = [{ path: root, requested: null }];
+    const seen = new Set(), own = [], builds = [], queue = [{ path: root, requested: null }];
     let readsBin = false, executes = false;
     while (queue.length) {
       const { path, requested } = queue.pop();
@@ -94,6 +107,13 @@ export function binaryNames(cwd, patterns) {
           if (ts.isCallExpression(node) && /^(?:spawn|spawnSync|execFile|execFileSync|exec|execSync)$/.test(node.expression.getText().split('.').at(-1))) {
             const command = node.arguments[0];
             if (!command || !ts.isStringLiteralLike(command) || !['cargo', 'git', 'npm', 'node', 'ps', 'sh'].includes(command.text)) executes = true;
+            const [, list, options] = node.arguments;
+            if (command && ts.isStringLiteralLike(command) && command.text === 'cargo' && list && ts.isArrayLiteralExpression(list) && !options?.getText().includes('CARGO_TARGET_DIR')) {
+              const args = list.elements.map((element) => ts.isStringLiteralLike(element) ? element.text : null);
+              // The test's profile: the acceptance helpers default these to 0 where their file names them (#2820).
+              const profile = Object.fromEntries(PROFILE.filter((key) => source.includes(key)).map((key) => [key, '0']));
+              if (findBuilds && args[0] === 'build') builds.push({ args: args.slice(1).filter((arg) => arg !== '-q' && arg !== '--quiet'), profile });
+            }
           }
           if (ts.isStringLiteralLike(node)) own.push(node.text);
           ts.forEachChild(node, visit);
@@ -102,21 +122,66 @@ export function binaryNames(cwd, patterns) {
       }
     }
     if (readsBin && executes) sources.push(own.join('\n'));
+    if (builds.length) selfBuilt.push({ builds, source: own.join('\n') });
   }
-  // Only actual redrafted consumers need a build; a missing workspace is not a wrong executable.
-  if (!sources.length) return [];
+  // Only actual redrafted consumers need a build; a missing workspace is not a wrong executable, and a test's own
+  // build in a checkout with no workspace is the test's to report.
+  if (!sources.length && !(selfBuilt.length && existsSync(join(cwd, 'Cargo.toml')))) return { names: [], builds: [] };
   if (!existsSync(join(cwd, 'Cargo.toml'))) throw Error('BLOCKED test binaries: selected binary consumer has no Cargo.toml');
-  const source = sources.join('\n');
   const metadata = spawnSync('cargo', ['metadata', '--no-deps', '--format-version', '1', '--offline'], { cwd, encoding: 'utf8', maxBuffer: 1 << 28 });
   if (metadata.status !== 0) throw Error(`BLOCKED test binaries: cargo metadata failed: ${metadata.error?.message ?? metadata.stderr}`);
-  const mentions = (name) => source.match(new RegExp(`(?<![\\w-])${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w-])`));
-  const bins = JSON.parse(metadata.stdout).packages.flatMap((pkg) => pkg.targets.filter((target) => target.kind.includes('bin') && (mentions(target.name) || mentions(pkg.name))).map((target) => target.name));
-  if (!bins.length) throw Error('BLOCKED test binaries: a selected consumer names DEEP_BIN_DIR but no workspace binary');
-  return [...new Set(bins)];
+  const packages = JSON.parse(metadata.stdout).packages;
+  const mentions = (source, name) => source.match(new RegExp(`(?<![\\w-])${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w-])`));
+  const binsIn = (source) => packages.flatMap((pkg) => pkg.targets.filter((target) => target.kind.includes('bin') && (mentions(source, target.name) || mentions(source, pkg.name))).map((target) => target.name));
+  const names = sources.length ? [...new Set(binsIn(sources.join('\n')))] : [];
+  if (sources.length && !names.length) throw Error('BLOCKED test binaries: a selected consumer names DEEP_BIN_DIR but no workspace binary');
+  const binsOf = new Map(packages.map((pkg) => [pkg.name, pkg.targets.filter((target) => target.kind.includes('bin')).map((target) => target.name)]));
+  // A build is the run's to make only when every flag is one that picks what it builds, every value is written out,
+  // and it names workspace binaries, of the package it names if it names one: a bare `cargo build` builds the whole
+  // workspace, or a fixture's.
+  const known = (args) => {
+    const picked = { bins: [], packages: [] };
+    for (let at = 0; at < args.length; at++) {
+      if (PLAIN.has(args[at])) continue;
+      if (!VALUED.has(args[at]) || typeof args[at + 1] !== 'string') return false;
+      if (args[at] === '--bin') picked.bins.push(args[at + 1]);
+      if (args[at] === '-p' || args[at] === '--package') picked.packages.push(args[at + 1]);
+      at++;
+    }
+    if (picked.packages.some((name) => !binsOf.has(name))) return false;
+    const allowed = picked.packages.length ? picked.packages.flatMap((name) => binsOf.get(name)) : [...binsOf.values()].flat();
+    return picked.bins.length + picked.packages.length > 0 && picked.bins.every((name) => allowed.includes(name));
+  };
+  const builds = new Map();
+  for (const { builds: calls, source } of selfBuilt) for (const { args, profile } of calls) {
+    const slot = args.findIndex((arg, at) => arg === null && args[at - 1] === '--bin');
+    // A variable --bin is filled only with the binaries the test names, not every binary of a package it names.
+    const filled = slot < 0 ? [args] : packages.flatMap((pkg) => pkg.targets.filter((target) => target.kind.includes('bin') && mentions(source, target.name)).map((target) => target.name)).map((name) => args.map((arg, at) => at === slot ? name : arg));
+    for (const each of filled) if (known(each)) builds.set(JSON.stringify([each, profile]), { args: each, profile });
+  }
+  return { names, builds: [...builds.values()] };
+}
+
+/**
+ * The selected tests' own `cargo build`s (binaryPlan), each run in `cwd` as the test will run it, its target/, the
+ * run's environment and the test's profile, so the test's build finds every unit fresh and compiles nothing (#2820). On
+ * the caller's build grant.
+ */
+export function buildInPlace(cwd, builds) {
+  const base = { ...process.env };
+  for (const key of ['DEEP_BIN_DIR', 'NODE_TEST_CONTEXT', '__STRYKER_ACTIVE_MUTANT__']) delete base[key];
+  for (const { args, profile } of builds) {
+    const env = { ...base };
+    for (const [key, value] of Object.entries(profile)) env[key] ??= value;
+    // No time limit: it holds no test slot, only the run's build grant and its own checkouts, and a cold build of the
+    // largest binaries took over an hour on the Linux machine at load 54 (2026-11-18), so a bound would only BLOCK slow runs.
+    const result = spawnSync(lease, ['cargo', 'build', ...args], { cwd, env, encoding: 'utf8', maxBuffer: 1 << 28 });
+    if (result.status !== 0) throw Error(`BLOCKED test binaries: cargo build ${args.join(' ')} failed in ${cwd}: ${result.error?.message ?? (result.signal ? `stopped by ${result.signal}` : result.stderr?.trim().split('\n').slice(-20).join('\n'))}`);
+  }
 }
 
 /** Build once before any consumer starts; copy only executables Cargo reports from this successful build. */
-export function buildBinaries(cwd, bin, names, run = spawnSync) {
+export function buildBinaries(cwd, bin, names, run = spawnSync, { timeout = 20 * 60_000 } = {}) {
   mkdirSync(bin, { recursive: true });
   // The proof tooling's JavaScript-only fixture repositories have no Rust build.
   if (!names.length) return bin;
@@ -132,8 +197,8 @@ export function buildBinaries(cwd, bin, names, run = spawnSync) {
       '--config', `build.build-dir=${JSON.stringify(join(cwd, 'target'))}`, '--message-format=json-render-diagnostics'];
     const started = spawnSync('ps', ['-o', 'lstart=', '-p', String(process.pid)], { encoding: 'utf8', env: { ...env, TZ: 'UTC', LC_ALL: 'C' } }).stdout?.trim();
     if (!started) throw Error('BLOCKED test binaries: cannot identify the build owner');
-    const result = run(lease, [process.execPath, buildSupervisor, dirname(bin), String(process.pid), started, 'cargo', ...args], { cwd, env, detached: true, encoding: 'utf8', maxBuffer: 1 << 28, timeout: 20 * 60_000 });
-    if (result.status !== 0) throw Error(`BLOCKED test binaries: cargo build failed: ${result.error?.message ?? result.stderr?.trim() ?? result.signal ?? result.status}`);
+    const result = run(lease, [process.execPath, buildSupervisor, dirname(bin), String(process.pid), started, 'cargo', ...args], { cwd, env, detached: true, encoding: 'utf8', maxBuffer: 1 << 28, timeout: timeout || undefined });
+    if (result.status !== 0) throw Error(`BLOCKED test binaries: cargo build failed for ${names.join(', ')}: ${result.error?.message ?? result.stderr?.trim() ?? result.signal ?? result.status}`);
     const artifacts = result.stdout.split('\n').filter(Boolean).map((line) => JSON.parse(line));
     if (!artifacts.some((artifact) => artifact.reason === 'build-finished' && artifact.success)) throw Error('BLOCKED test binaries: cargo reported no successful build');
     const binaries = artifacts.filter((artifact) => artifact.reason === 'compiler-artifact' && artifact.target.kind.includes('bin') && artifact.executable && !artifact.profile.test);

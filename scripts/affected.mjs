@@ -22,18 +22,19 @@
 // the selection without running it. A test that starts a package's build is selected when the change is in that
 // package or the test is in the changed file's own package; otherwise it is WIDE, and --wide also runs it (select, below). --record, run on main, writes what failed into known-failures.json.
 import { spawn, spawnSync } from 'node:child_process';
-import { closeSync, existsSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync, writeSync } from 'node:fs';
+import { closeSync, existsSync, mkdtempSync, openSync, readFileSync, renameSync, rmSync, writeFileSync, writeSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { availableParallelism, constants, loadavg, tmpdir } from 'node:os';
 import { dirname, join, posix, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
-import { alone, byHand, cargoResults, changedPaths, checks, crates, exclusive, listed, ownLane, readSkips, reportResults, slow, timed, worst } from './lanes.mjs';
+import { alone, byHand, cargoResults, changedPaths, checks, crates, exactTree, exclusive, listed, ownLane, readSkips, reportResults, slow, timed, worst } from './lanes.mjs';
 import { isTestFile, listFiles, named, underTestPaths } from './proof-change.mjs';
 import { namedByConfig } from './proof-guard.mjs';
 import { childEnv } from './proof-runs.mjs';
-import { binaryNames, buildBinaries, watchBinaries } from './proof-binaries.mjs';
-import { claimShards, roomy } from './shards.mjs';
-import { release } from './throttle.mjs';
+import { binaryNames, binaryPlan, buildBinaries, buildInPlace, watchBinaries } from './proof-binaries.mjs';
+import { claimShards, cloneBuilds, roomy } from './shards.mjs';
+import { acquire, release } from './throttle.mjs';
 
 export { cargoResults, crates, reportResults };
 
@@ -426,10 +427,10 @@ async function runGroups(groups, places, files, vitest, node, label, env = {}, m
 // its own gives it back before the timed files, which then ask as the caller would. With no grant in the wait, no job started, and every file reads INCONCLUSIVE.
 // DEEP_TEST_GRANT_WAIT sets the wait in minutes, for tests.
 const HELD = 'DEEP_AFFECTED_HELD';
-async function queued(args, files, started) {
+async function queued(args, files, started, prep) {
   const marker = join(mkdtempSync(join(tmpdir(), 'deep-affected-grant-')), 'started');
   const wait = process.env.DEEP_TEST_GRANT_WAIT ?? '30';
-  const child = spawn(process.execPath, [join(root, 'scripts/throttle.mjs'), 'test', '--wait', wait, '--', process.execPath, fileURLToPath(import.meta.url), ...args], { stdio: 'inherit', env: { ...process.env, [HELD]: JSON.stringify({ marker, before: process.env.DEEP_THROTTLE ?? '' }) } });
+  const child = spawn(process.execPath, [join(root, 'scripts/throttle.mjs'), 'test', '--wait', wait, '--', process.execPath, fileURLToPath(import.meta.url), ...args], { stdio: 'inherit', env: { ...process.env, [HELD]: JSON.stringify({ marker, before: process.env.DEEP_THROTTLE ?? '', prep }) } });
   // A terminal's SIGINT reaches the whole group; a SIGTERM or SIGHUP sent to this process alone is passed on.
   process.on('SIGINT', () => {});
   for (const signal of ['SIGTERM', 'SIGHUP']) process.on(signal, () => child.kill(signal));
@@ -438,10 +439,92 @@ async function queued(args, files, started) {
   rmSync(dirname(marker), { recursive: true, force: true });
   if (ran) return status;
   // throttle.mjs said why: no grant in the wait (3), or a table it couldn't use (2).
-  const state = status === 3 ? 'INCONCLUSIVE' : 'BLOCKED';
-  for (const file of files) console.log(`${state} ${file}: not run, for want of a test grant`);
+  return unrun(status === 3 ? 'INCONCLUSIVE' : 'BLOCKED', files, started);
+}
+
+// A run's unrun files when it takes no grant: the first line, then each file, then the summary, as with no test grant.
+function unrun(state, files, started, first, why = 'for want of a test grant') {
+  if (first) console.log(first);
+  for (const file of files) console.log(`${state} ${file}: not run, ${why}`);
   console.log(`${state} affected: 0 new, 0 already failing on main, ${files.length} inconclusive or blocked, 0 listed skips, 0 passed, in ${((performance.now() - started) / 1000).toFixed(0)} s at load ${loadavg()[0].toFixed(0)}; no job started`);
   return state === 'INCONCLUSIVE' ? 2 : 3;
+}
+
+// A shard lock the run took before its test grant names the run's first process, until its test-grant child names
+// itself (main), so the shard stays the run's while the child runs, whatever becomes of the first. Once given back
+// another run may take it at the same path, so a process gives back only a lock that names it.
+const ours = ({ lock, holder }) => {
+  try {
+    return JSON.parse(readFileSync(join(lock, 'holder.json'), 'utf8')).pid === holder;
+  } catch {
+    return false;
+  }
+};
+// What the run's binaries and shards were made for: the worktree's tree and the files selected.
+const madeFor = (files) => createHash('sha256').update(JSON.stringify([exactTree(root), files])).digest('hex');
+const giveBack = (shard) => { if (ours(shard)) rmSync(shard.lock, { recursive: true, force: true }); };
+const tick = () => new Promise((done) => setImmediate(done));
+
+/**
+ * What the run makes before it asks for its test grant (#2820), so no test slot waits on cargo: its shards, and in the
+ * worktree and each shard the Rust binaries its selected tests need, those read through DEEP_BIN_DIR and the builds an
+ * untimed test starts itself (binaryPlan), all on one build grant of the run's own, waited for as long as its test grant,
+ * each with its test's profile. A run that builds no binary takes none. The shards stay the run's through its
+ * wait, so what was built in them is still theirs when its tests start. A stop is seen before each checkout's builds, not between one checkout's. Returns what the
+ * run's test-grant child reads, or the exit status, having printed why.
+ */
+async function prepare(untimed, timedFiles, alone, listedFiles, started) {
+  const logs = mkdtempSync(join(tmpdir(), 'deep-affected-')), binRoot = join(logs, 'binaries');
+  watchBinaries(binRoot);
+  const stop = (signal) => { stopped ??= signal; };
+  let grant = null, shards = [];
+  const before = process.env.DEEP_THROTTLE;
+  try {
+    const plan = binaryPlan(root, untimed);
+    if (timedFiles.length) plan.names = [...new Set([...plan.names, ...binaryNames(root, timedFiles)])];
+    if (plan.names.length || plan.builds.length) {
+      const wait = Number(process.env.DEEP_TEST_GRANT_WAIT ?? '30');
+      try {
+        grant = acquire('build', { wait });
+      } catch (error) {
+        throw Error(`BLOCKED throttle: ${error.message}`);
+      }
+      if (!grant) return unrun('INCONCLUSIVE', listedFiles, started, `INCONCLUSIVE no grant: no build grant came within ${wait} min for the run's binaries; no test grant was asked for`, 'for want of a build grant');
+      process.env.DEEP_THROTTLE = grant.token;
+    }
+    // A stop while the run waited ended it; from here one is seen between the builds, which run synchronously.
+    for (const signal of ['SIGTERM', 'SIGHUP', 'SIGINT']) process.on(signal, stop);
+    const groups = shardGroups(alone);
+    shards = groups.shared.length > 1 && SHARDS > 1 ? await claimShards(root, Math.min(SHARDS, groups.shared.length), (line) => console.log(line)) : [];
+    // All final executables are captured before any consumer or sibling cargo test starts. Each shard builds from its
+    // own checkout; its first use covers every group it could take from the shared queue.
+    const binaries = [];
+    for (const cwd of [root, ...shards.map(({ dir }) => dir)]) {
+      await tick();
+      if (stopped) break;
+      const at = performance.now(), { names, builds } = cwd === root ? plan : binaryPlan(cwd, groups.shared.flat().filter((file) => untimed.includes(file)));
+      buildInPlace(cwd, builds);
+      // No time limit before the test grant: a cold build holds no test slot, and at 2 jobs one ran past 20 minutes.
+      binaries.push([cwd, buildBinaries(cwd, join(binRoot, String(binaries.length), 'bin'), names, undefined, { timeout: 0 })]);
+      if (names.length || builds.length) console.log(`BINARIES ${cwd}: ${[...names.map((name) => `${name} (DEEP_BIN_DIR)`), ...builds.map(({ args }) => `cargo build ${args.join(' ')}`)].join(', ')}; built in ${((performance.now() - at) / 1000).toFixed(0)} s, before the test grant`);
+    }
+    await tick();
+    if (stopped) {
+      for (const shard of shards) shard.release();
+      console.log(`BLOCKED affected: stopped by ${stopped} before its test grant; logs in ${logs}`);
+      return 128 + constants.signals[stopped];
+    }
+    return { logs, binRoot, binaries, madeFor: madeFor(listedFiles), shards: shards.map(({ dir, lock }) => ({ dir, lock, holder: process.pid })) };
+  } catch (error) {
+    for (const shard of shards) shard.release();
+    const state = error.message.startsWith('INCONCLUSIVE') ? 'INCONCLUSIVE' : 'BLOCKED';
+    return unrun(state, listedFiles, started, `${/^(?:BLOCKED|INCONCLUSIVE)\b/.test(error.message) ? '' : 'BLOCKED test binaries: '}${error.message}`, 'for want of its binaries');
+  } finally {
+    for (const signal of ['SIGTERM', 'SIGHUP', 'SIGINT']) process.off(signal, stop);
+    if (before === undefined) delete process.env.DEEP_THROTTLE;
+    else process.env.DEEP_THROTTLE = before;
+    release(grant);
+  }
 }
 
 async function main(args) {
@@ -475,35 +558,63 @@ async function main(args) {
   if (!held && selection.wide.length) console.log(`WIDE ${selection.wide.length} more see the change only through a process that starts another package (--wide runs them): ${selection.wide.join(' ')}`);
   if (args.includes('--list')) return 0;
   const files = [...Object.values(blocks).flatMap((block) => [...block.vitest, ...block.node]), ...runTimed ? [...timedFiles.vitest, ...timedFiles.node] : []];
-  if (!held) return queued(args, [...files, ...selection.crates.map((name) => `cargo test -p ${name}`)], started);
+  if (!held) {
+    const listedFiles = [...files, ...selection.crates.map((name) => `cargo test -p ${name}`)];
+    const timedRun = runTimed ? [...timedFiles.vitest, ...timedFiles.node] : [];
+    const prep = await prepare(files.filter((file) => !timedRun.includes(file)), timedRun, [...blocks.alone.vitest, ...blocks.alone.node], listedFiles, started);
+    if (typeof prep === 'number') return prep;
+    try {
+      return await queued(args, listedFiles, started, prep);
+    } finally {
+      for (const shard of prep.shards) giveBack(shard);
+      rmSync(prep.binRoot, { recursive: true, force: true });
+    }
+  }
   // Stopped, the run passes the stop to its jobs, starts none, and ends once they have, through its own clean-up (its
   // shards' locks too, which a shard still being made keeps till it is), so none runs on once its grant is given back.
-  // A stop that comes during a binary build is seen when that build ends.
+  // A stop that comes before the test grant, during the binary builds, is seen when they end (prepare).
   for (const signal of ['SIGTERM', 'SIGHUP', 'SIGINT']) process.on(signal, () => {
     stopped ??= signal;
     for (const child of live) child.kill(signal === 'SIGINT' ? 'SIGTERM' : signal);
   });
 
-  const logs = mkdtempSync(join(tmpdir(), 'deep-affected-'));
-  const binaries = new Map(), binRoot = join(logs, 'binaries');
-  watchBinaries(binRoot);
+  // What the run made before its test grant (prepare): its logs, binaries, shards and package build.
+  const { logs, binRoot } = held.prep;
+  const binaries = new Map(held.prep.binaries);
   const binEnv = (cwd = root) => ({ DEEP_BIN_DIR: binaries.get(cwd) });
-  const prepareBinaries = (cwd, selected) => binaries.set(cwd, buildBinaries(cwd, join(binRoot, String(binaries.size), 'bin'), binaryNames(cwd, selected)));
-  let shards = [], pool = null;
+  // What was made while the run waited is for the tree and the files it was made for; a change since leaves it unproven.
+  const listedFiles = [...files, ...selection.crates.map((name) => `cargo test -p ${name}`)];
+  if (madeFor(listedFiles) !== held.prep.madeFor) return unrun('BLOCKED', listedFiles, started, 'BLOCKED affected: the worktree or the files it selects changed while the run waited for its test grant; run it again', 'for its binaries were built for another tree');
+  // The shards' locks name this process from here (ours), so they stay the run's whatever becomes of the one that took them.
+  const own = spawnSync('ps', ['-o', 'lstart=', '-p', String(process.pid)], { encoding: 'utf8', env: { ...process.env, TZ: 'UTC', LC_ALL: 'C' } }).stdout.trim();
+  let shards = held.prep.shards.filter(ours).map((shard) => {
+    writeFileSync(join(shard.lock, 'holder.next.json'), JSON.stringify({ pid: process.pid, start: own }));
+    renameSync(join(shard.lock, 'holder.next.json'), join(shard.lock, 'holder.json'));
+    const mine = { ...shard, holder: process.pid };
+    return { dir: shard.dir, release: () => giveBack(mine) };
+  }), pool = null;
   try {
     const vitest = (files, extra, label, cwd, env = {}) => run(logs, label, process.execPath, ['node_modules/vitest/vitest.mjs', 'run', ...extra, '--reporter=dot', '--reporter=./scripts/proof-vitest-reporter.mjs', ...files], { ...env, ...binEnv(cwd), DEEP_PROOF_VITEST_REPORT: join(logs, `${label}.jsonl`) }, cwd);
     const node = (files, extra, label, cwd, env = {}) => run(logs, label, process.execPath, ['--test', ...extra, '--test-reporter=./scripts/proof-reporter.mjs', `--test-reporter-destination=${join(logs, `${label}.jsonl`)}`, '--test-reporter=dot', '--test-reporter-destination=stdout', ...files], { ...env, ...binEnv(cwd) }, cwd);
     const jobs = [];
-    // Tests that run a package's build read dist, so a change to a package builds them first, as the typecheck lane does.
-    if (changed.some((path) => /^packages\/[^/]+\/src\//.test(path))) jobs.push(await run(logs, 'build', 'npm', ['run', 'build', '--workspaces']));
-    // Shards copy the worktree's package builds, so they are claimed once those are built.
+    // Tests that run a package's build read dist, so a change to a package builds them first, as the typecheck lane does,
+    // and the shards, claimed before it (prepare), take the new builds.
+    if (changed.some((path) => /^packages\/[^/]+\/src\//.test(path))) {
+      jobs.push(await run(logs, 'build', 'npm', ['run', 'build', '--workspaces']));
+      // A shard whose copy fails is left unused, as one that can't be made is.
+      shards = shards.filter((shard) => {
+        try {
+          cloneBuilds(root, shard.dir);
+          return true;
+        } catch (error) {
+          console.log(`SHARD ${shard.dir} not used: ${error.message}`);
+          shard.release();
+          return false;
+        }
+      });
+    }
     const groups = shardGroups([...blocks.alone.vitest, ...blocks.alone.node]);
-    shards = groups.shared.length > 1 && SHARDS > 1 ? await claimShards(root, Math.min(SHARDS, groups.shared.length), (line) => console.log(line)) : [];
-    // All final executables are captured before any consumer or sibling cargo test starts. Each shard builds
-    // from its own checkout; its first use covers every group it could take from the shared queue.
-    prepareBinaries(root, files);
-    for (const { dir } of shards) prepareBinaries(dir, groups.shared.flat());
-    // Those builds ran one at a time; from here the run's builds run at once, so they share its jobserver.
+    // The binary builds ran before the grant, one at a time; from here the run's builds run at once, so they share its jobserver.
     pool = jobserver(shards.length);
     const lints = checks.find(({ name }) => name === 'lint').commands.filter(([, script]) => script?.startsWith('scripts/'));
     if (selection.owners.length) lints.push(['cargo', 'fmt', '--all', '--', '--check'], ['cargo', 'clippy', '--locked', '--keep-going', '--all-targets', ...selection.owners.flatMap((name) => ['-p', name]), '--', '-D', 'warnings']);
