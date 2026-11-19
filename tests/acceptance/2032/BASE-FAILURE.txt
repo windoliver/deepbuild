@@ -1,0 +1,65 @@
+#2032 acceptance suite at the base, e748313c3 (Merge pull request #2809), before any implementation.
+
+Run by the implementing session, not by the blind job: that job wrote the suite and ran it at the base (15 of 15
+failed) but ended without writing this file, so the run was made again and is recorded here. The suite's files are
+the blind job's, unchanged. The base's tree was exported with `git archive` (as ac7's `useMergeBase` exports it), its
+own deep-canvas-render and deep-gpu built there (cargo build --locked), the suite copied into it, and run once on this
+Mac (macOS arm64, Metal), one file at a time:
+  PATH=$HOME/.rustup/toolchains/1.99.1-aarch64-apple-darwin/bin:$PATH CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    node node_modules/vitest/vitest.mjs run --root tests/acceptance/2032 --no-file-parallelism \
+    --testTimeout=1800000 ac1 ac2 ac3 ac4 ac5 ac6 ac8
+15 tests, 15 failed, each at its own assertion for missing behavior; none failed to load or crashed.
+ac7-plain-lit.test.ts was not run at the base: there it draws the base against itself.
+
+ac1-points.test.ts
+  × 256 seeded points at least 2 px from any shadow edge read lit or shadowed as the CPU f64 segment test says
+      point 2 at pixel (157, 403) reads 247, 247, 247 (lit); the CPU f64 segment test says shadowed, code 137 …
+      (printed: the CPU test says 89 of 256 points shadowed; 89 points read otherwise)
+  × a planted test against the polygons' bounding boxes fails, naming the first wrong point
+      deep-gpu run --planted shadow_bounding_boxes exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+
+ac2-sun.test.ts
+  × 64 seeded points read as the CPU f64 test says, the two named points among them
+      window2d of shadow-sun was answered, not refused: {"code":"bad_doc","reason":"items/lamps/params/light/lights/0/at"}
+  × a planted sun drawn as the far point light fails at the first of the two named points, naming it
+      deep-gpu run --planted sun_far_point_light exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+
+ac3-wall.test.ts
+  × the wall's centre is within 1 code of the frame with occlude off, and a pixel behind the wall reads ambient alone
+      wall: pixel (200, 80) behind it reads 228, 228, 228, not the ambient level alone, code 137 within 1 code
+  × a planted pass that shadows the inside of the outline reads ambient at the centre and fails, naming the path
+      deep-gpu run --planted shadow_inside_outline exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+
+ac4-ambient.test.ts
+  × a shadowed white pixel with ambient 0.25 reads 137, and 188 with a second light that isn't blocked, within 1 code
+      the blocked light alone: the shadowed pixel (128, 64) reads 255, 255, 255, not 137 within 1 code
+      the blocked light and the open one: the shadowed pixel (128, 64) reads 255, 255, 255, not 188 within 1 code
+  × a planted shadow that removes ambient as well reads 0 and fails
+      deep-gpu run --planted shadow_removes_ambient exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+
+ac5-edge.test.ts
+  × on a row across a 45° shadow edge, a pixel reads strictly between shadowed and lit, and none farther than 2 px from the CPU edge does
+      row 200: no pixel reads strictly between the shadowed value 137 and the lit value; near the CPU edge it reads
+      (198) 246, 246, 246; (199) 246, 246, 246; (200) 246, 246, 246; (201) 246, 246, 246; (202) 246, 246, 246
+  × a planted edge with no antialiasing has no such pixel and fails
+      deep-gpu run --planted shadow_edge_aliased exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+
+ac6-refusals.test.ts
+  × a closed occluding path and 4,096 segments pass; an open one is refused naming the path, and 4,097 segments reading segments: 4097, cap: 4096
+      an open path with occlude: true: the check answers ok true, not a refusal
+      an open path with occlude: true: no error names the path fence; errors: none
+      a group of 4,097 occluder segments: the check answers ok true, not a refusal
+      a group of 4,097 occluder segments: no error reads segments: 4097, cap: 4096; errors: none
+  × a planted check that accepts the open occluding path fails
+      check takes the line with planted occlude_accepts_open_path: {"ok":false,"code":"bad_input"}
+  × a planted check that accepts 4,097 segments fails
+      check takes the line with planted occlude_accepts_past_cap: {"ok":false,"code":"bad_input"}
+
+ac6-seek-play.test.ts
+  × the frames at 1 s, 3 s and 5 s have the same pixel hash by seeking and by playing
+      frame 30: the occluders cast no shadow: the played frame hashes bdfb0b8520ea6861, as it does with occlude off
+
+ac8-budget.test.ts
+  × 16 lights and 4,096 occluder segments at 1920 × 1080 cost under 2 ms of GPU time a frame, on the reference Mac
+      the shadowed side draws its shadows: its first frame hashes apart from the same document with occlude off:
+      expected 'ffa33146c0ce1971…' not to be 'ffa33146c0ce1971…'

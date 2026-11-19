@@ -1,0 +1,6 @@
+start 09:24:26 at 9e6ea04aa node v24.22.0 load { 39.73 19.44 24.49 }
+exit=0 10s load=51 tests/acceptance/2365-redraft-ac5/suite.test.ts :: 12 passed (12)
+exit=0 1s load=51 tests/acceptance/2365-redraft-ac5/meter.test.ts :: 1 passed (1)
+exit=0 514s load=224 tests/acceptance/2365-redraft-ac5/perf.test.ts :: 6 passed (6)
+exit=0 20s load=206 tests/acceptance/2365/identity.test.ts :: 4 passed (4)
+end 09:33:31

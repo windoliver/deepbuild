@@ -673,6 +673,23 @@
       "initialReason": "Issue #18 first measurement: the merge base has no Claude Code bench. One process writes 100 sessions' transcripts over 30 days, each 2,000 lines of the corpus's recorded tools transcript, starts the hub on a temp home under the test VFS and backfills each through test.load, then counts the events through events.read, so p50 includes the writing, the hub's start and Node's; the issue's 2 minutes stays in tests/acceptance/18/kit/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {
+      "id": "archive-growth",
+      "command": [
+        "node",
+        "benchmarks/archive-growth.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "ms": 1000,
+        "maxGapMs": 50,
+        "rise": 64000000,
+        "added": 2000000
+      },
+      "criteria": ["#2365.76739980", "#2365.51dff57d"],
+      "initialReason": "Issue #2365 first measurement: a 100 MB Claude Code transcript, 94% tool results and one 2 MB line, is archived and gains 1 MB. One warm-up and five fresh-process passes report only that added-megabyte pass's wall time, longest 5 ms timer gap, RSS rise and evidence bytes; the targets judge uses the issue's exact limits and the reference-Mac/load policy. Existing archive-live, archive-month and archive-backlog definitions remain unchanged."
+    },
+    {
       "id": "archive-live",
       "command": [
         "node",
@@ -1970,6 +1987,27 @@
       "initialReason": "Issue #210 first measurement (#210.91594eec): the merge base has no ports and no each reading. The drum pad with its port open is played for 10 s of virtual time, a note every 50 ms, and each Out carries its delay_ns, from the end of its step's run to its handoff to the plug-in; the sensor piece is baked over 600 steps with 16 values a step and with none, and each step reports its read_ns. The issue's numbers on the reference Mac (a step's entries delivered within 2 ms at p99, 16 values adding under 0.05 ms a step, and no port work in any frame of a piece with no port) are judged in tests/acceptance/210/ac8-budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task.",
       "criteria": [
         "#210.91594eec"
+      ]
+    },
+    {
+      "id": "canvas-many-lamps",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "many-lamps"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "frame_gpu_p95_ms": 10,
+        "cluster_pass_gpu_p95_ms": 0.5,
+        "scoring_cpu_p95_ms": 1,
+        "light_lists_bytes": 4000000,
+        "estimate_off": 0.25
+      },
+      "initialReason": "Issue #1634 first measurement (#1634.5a35384c): the merge base has no fill lights and no such task. A release deep-gpu plays the night city of tests/acceptance/1634 (1,024 fill point and 1,024 fill spot lamps, ranges 6 to 12 m) at 1920 x 1080 for 300 frames with timings, five runs after a warm-up one, each a fresh process; canvas.mjs judge holds the frame's GPU p95, the cluster pass's, the CPU scoring's and each estimate's distance from its measurement on a reference Mac, and the light lists' bytes anywhere. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#1634.5a35384c"
       ]
     },
     {

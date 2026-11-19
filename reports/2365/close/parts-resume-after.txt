@@ -1,0 +1,11 @@
+load { 607.98 489.27 410.44 }
+
+ RUN  v5.0.5 <home>/doneright-2365
+
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  00:26:14
+   Duration  29.94s (tests 93%, transform 7%)
+
+exit=0

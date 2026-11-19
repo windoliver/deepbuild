@@ -12,6 +12,8 @@ export type Plant =
   // #1330's: a start with no approval on the record, a start with no sandbox, a sandbox setting that leaves the agent's
   // way out open, and a sandbox that cuts the hub's socket.
   | 'starts-without-approval' | 'starts-without-sandbox' | 'sandbox-way-out-open' | 'sandbox-cuts-hub-socket'
+  // #1883's: a start that records folder trust by renaming over the config path, which replaces a link with a file.
+  | 'trust-renames-over-link'
   // #1666's: a started session's sandbox that leaves its worktree's git folder closed, and one that opens the repo's
   // whole git folder.
   | 'sandbox-closes-worktree-git' | 'sandbox-opens-whole-git'
@@ -165,6 +167,8 @@ export type Plant =
   | 'churn-no-full-collection' | 'churn-no-resident-read'
   // #2650's: the four stores the churn benchmark must catch, each kept with nothing let go.
   | 'churn-keeps-every-answer' | 'churn-keeps-every-result' | 'churn-keeps-every-output' | 'churn-keeps-every-name-set'
+  // #2402's: a host that counts a hook handler's failures and never clears them.
+  | 'failures-never-cleared'
   // #824's per-session reading: deep mcp loading the whole hub package, a waiter keeping its session's transcript, and
   // a platform that reads no process's memory.
   | 'mcp-loads-hub' | 'waiter-keeps-transcript' | 'sessions-no-memory-read'
@@ -174,6 +178,9 @@ export type Plant =
   | 'deep-wait-polls' | 'stop-answers-waiting'
   // #806's: a deep_show stamped with the payload's writer, and one that waits for the app instead of rendering headless.
   | 'deep-show-writer-from-payload' | 'deep-show-waits-for-app'
+  // #1415's: deep_kinds publishing op as optional while its handler needs it, returning its refusals as ordinary
+  // results, and answering a listing with what loaded so far while the hub still loads.
+  | 'kinds-op-optional' | 'kinds-refusal-as-text' | 'kinds-partial-while-loading'
   // #139's: a deprecated JSON-RPC method served through its replacement with no notice.
   | 'silent-deprecated'
   // #875's: a fix check's base run counted as its proof whatever way it failed.
@@ -361,10 +368,12 @@ const PLANTS: readonly string[] = [
   'churn-keeps-ended-session', 'churn-keeps-reload-listener', 'churn-leaves-socket', 'churn-leaves-timer', 'churn-leaves-child',
   'churn-no-full-collection', 'churn-no-resident-read',
   'churn-keeps-every-answer', 'churn-keeps-every-result', 'churn-keeps-every-output', 'churn-keeps-every-name-set',
+  'failures-never-cleared',
   'mcp-loads-hub', 'waiter-keeps-transcript', 'sessions-no-memory-read',
   'repeat-reaches-you',
   'deep-wait-polls', 'stop-answers-waiting',
   'deep-show-writer-from-payload', 'deep-show-waits-for-app',
+  'kinds-op-optional', 'kinds-refusal-as-text', 'kinds-partial-while-loading',
   'silent-deprecated',
   'deep-drive-no-lease',
   'no-work-never-sent-back', 'skips-prompt-turns',
@@ -398,7 +407,7 @@ const PLANTS: readonly string[] = [
   'keys-runs-by-session', 'key-leaves-out-reads', 'counts-shared-run-per-claim', 'keeps-latest-result-per-key', 'carry-copies-evidence',
   'keeps-output-head', 'shares-read-across-runs',
   'append-unknown-kind', 'leak-file-per-session',
-  'starts-without-approval', 'starts-without-sandbox', 'sandbox-way-out-open', 'sandbox-cuts-hub-socket',
+  'starts-without-approval', 'starts-without-sandbox', 'sandbox-way-out-open', 'sandbox-cuts-hub-socket', 'trust-renames-over-link',
   'sandbox-closes-worktree-git', 'sandbox-opens-whole-git',
   'rule-reads-context-alone', 'agent-credential-merges', 'agent-credential-pushes-default-branch', 'agent-credential-pushes-approved-tags',
   'agent-credential-posts-statuses', 'passes-gate-credential',

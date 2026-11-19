@@ -18,6 +18,8 @@ pub(crate) fn plant_name(planted: Option<Planted>) -> Option<&'static str> {
         Planted::Axes3dOwnTickRule => Some("axes3d_own_tick_rule"),
         // #506: scene3d draws an eye inset's centred twin.
         Planted::EyeInsetCentredFrustum => Some("eye_inset_centred_frustum"),
+        // #1634: scene3d cuts an automatic range at a fixed 0.05 lx.
+        Planted::AutoRangeFixedCut => Some("auto_range_fixed_cut"),
         _ => None,
     }
 }

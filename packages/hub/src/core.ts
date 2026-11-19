@@ -13,7 +13,7 @@ import { openAsks, signInSignature, type Asks } from '@deepbuild/asks';
 import { openLedger, type Ledger } from '@deepbuild/budget';
 import { canonicalize, contextBoundFor, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { openEvidenceStore, scrubText, type EvidenceStore } from '@deepbuild/evidence';
-import { openExtensionHost, openTrust, type ExtensionHost, type ProjectTrust } from '@deepbuild/extension-host';
+import { openExtensionHost, openTrust, type ExtensionHost, type ProjectTrust, type ReleaseEntry } from '@deepbuild/extension-host';
 import { openRecord, RecordError, type Connection, type EventInput, type Message, type RecordStore } from '@deepbuild/record';
 import type { DecisionsProvider } from './decisions-port.js';
 import type { EnvironmentProvider, ComposeResource } from './environment-port.js';
@@ -39,6 +39,7 @@ import { PromptItems } from './prompt-items.js';
 import { SizeScope } from './scope.js';
 
 import { Holds } from './holds.js';
+import { HandlerFailures } from './handler-failures.js';
 import { Spool } from './spool.js';
 
 import { Questions } from './questions.js';
@@ -305,6 +306,8 @@ export class Core {
    * next clean run (#909): one blip reads apart from a job that has failed for an hour.
    */
   private readonly jobs = new Map<string, { failures: number; since: number; at: number; error: string } | null>();
+  /** What a hook handler's failures leave on the record (#2402). */
+  private readonly handlerFailures = new HandlerFailures({ appendCore: (kind, data, extra, who) => this.appendCore(kind, data, extra, who), appendReading: (session, agent, reading) => this.appendReading(session, agent, reading) });
   private stopping = false;
   private replaying: Promise<unknown> | undefined;
   /** Only the drops-post-tool-use and replay-appends-twice plants read them. */
@@ -356,7 +359,7 @@ export class Core {
     this.flags = new SessionFlags({ services: lazyServices({ record: () => this.record, now: () => this.now, asks: () => this.asks, agents: () => this.agents, root: () => this.root, siblings: () => this.siblings, transcriptReader: () => this.transcriptReader }), state: () => this.state, mcp: () => this.mcp, events: { append: (connection, input, backfill) => this.append(connection, input, backfill), connection: (writer, extra) => this.connection(writer, extra) }, schedule: { queue: (work, starting) => this.queue(work, starting) }, readCodexTrust: (cwd) => this.readCodexTrust(cwd) });
     this.canvasSide = new HubCanvas({
       root: rootOf(options.root), now: () => this.now(), plant: options.plant, doneSpec: this.doneSpec,
-      record: () => this.record, store: () => this.store, libraries: () => this.libraries, sessions: () => this.state.sessions,
+      record: () => this.record, store: () => this.store, libraries: () => this.libraries, sessions: () => this.state.sessions, extensions: () => this.extensions,
       evidence: { stored: (put, what) => this.control.stored(put, what) },
       events: { append: (connection, input) => this.append(connection, input), connection: (writer, extra) => this.connection(writer, extra), agentConnection: (session) => this.mcp.agentConnection(session) },
       agentAbove: (peer) => this.state.agentAbove(peer),
@@ -893,11 +896,13 @@ export class Core {
       sendBack: (r) => this.delivery.landingSendBack(r),
       appendCore: (kind, data, extra) => this.appendCore(kind, data, extra),
     });
-    // #1922's planted hosts build a tool's digest wrongly, and #2650's keep what they finished: the host's plants,
-    // selected with the hub's variable.
+    // #1922's planted hosts build a tool's digest wrongly, #2650's keep what they finished, and #2402's never clears a
+    // handler's failures: the host's plants, selected with the hub's variable.
     const plant = this.options.plant?.startsWith('job-build-') ? { plant: this.options.plant as 'job-build-entry-only' }
-      : this.options.plant === 'churn-keeps-every-answer' || this.options.plant === 'churn-keeps-every-result' || this.options.plant === 'churn-keeps-every-name-set' ? { plant: this.options.plant } : {};
-    const extensions = this.extensions = await openExtensionHost({ record: this.record, supervisor: this.supervisor, trust, home: this.root.dir, release: [], now: this.now, leases, runner: this.runner, evidence: this.store, point: () => this.durable.point('terminals_rewrite'),
+      : this.options.plant === 'churn-keeps-every-answer' || this.options.plant === 'churn-keeps-every-result' || this.options.plant === 'churn-keeps-every-name-set' || this.options.plant === 'failures-never-cleared' ? { plant: this.options.plant } : {};
+    // No package is in the hub's own release yet; a test may hand it one, which then loads in the hub (#2402).
+    const release = this.options.release ? (JSON.parse(readFileSync(this.options.release, 'utf8')) as ReleaseEntry[]) : [];
+    const extensions = this.extensions = await openExtensionHost({ record: this.record, supervisor: this.supervisor, trust, home: this.root.dir, release, now: this.now, leases, runner: this.runner, evidence: this.store, point: () => this.durable.point('terminals_rewrite'),
       // A check runner's reads and plays of a canvas piece (#411, #184): the hub's canvas core, and a replica playing the
       // revision's canonical document, its programs from the evidence store. A job kind's qualification by the core
       // (#518) goes the same way, with the tools it names in the world.
@@ -2572,12 +2577,15 @@ export class Core {
   /**
    * The extensions' joined reply to a tool.before, or null when it takes the hook's fail-open policy: while appends
    * fail every gate is watch-only, and the extensions' denies and context go with them. A handler that failed is
-   * named on stderr; its reply is already out of the join.
+   * named on stderr; its reply is already out of the join. Its failure, a set-aside and the reading of a session it
+   * would have judged go on the record after the reply (#2402).
    */
-  async extensionHook(data: unknown): Promise<ExtensionReply | null> {
+  async extensionHook(data: unknown, meta: { id?: string; session?: string; agent?: string } = {}): Promise<ExtensionReply | null> {
     if (this.blocked || !this.extensions) return null;
     const reply = await this.extensions.hook({ kind: 'tool.before', data, deadline: EXTENSION_HOOK_MS, bound: contextBoundFor(EXTENSION_HOOK_MS) });
     for (const { reason } of reply.failed) process.stderr.write(`deep hub: tool.before handler failed: ${reason}\n`);
+    const call = isObj(data) && typeof data.call === 'string' ? data.call : meta.id ?? 'unknown';
+    if (reply.failed.length || reply.aside) void this.queue(() => this.handlerFailures.note('tool.before', reply, call, meta.session, meta.agent)).catch(() => undefined);
     return { denies: reply.denies, context: reply.context };
   }
 

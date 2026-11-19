@@ -3,28 +3,36 @@
 //! and gives the service's level for the size the thumbnail draws at, so a thumbnail never holds a
 //! picture at full size and shares its levels, queue and budget with the canvas.
 
-use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 
+use deep_canvas::gauge::{Gauge, Kept, Place};
 use deep_images::{Key, Queue, Shown, Store};
 use gpui_kit::*;
 
 /// A thumbnail as the window takes it: its sprite, with the one it replaced, or why it failed.
 type Thumbnail = Result<(Arc<RenderImage>, Option<Arc<RenderImage>>), ImageCacheError>;
 
+/// #1431: the thumbnails' sprites (`Thumbnails.made`), decoded in the heap: past either bound, the ones asked for
+/// longest ago go, and the window lets go of their atlas slots.
+pub static THUMBNAILS: Gauge = Gauge::new("Thumbnails::made", Place::Heap, 512, 64_000_000);
+
 /// Thumbnails of `side` px, each picture fitted inside a square of that side.
 pub struct Thumbnails {
     side: f64,
     /// Each picture's sprite, by its path, with the level's hash it was made from.
-    made: HashMap<Arc<Path>, ([u8; 32], Arc<RenderImage>)>,
+    // cache: entries 512, bytes 64_000_000
+    made: Kept<Arc<Path>, ([u8; 32], Arc<RenderImage>)>,
+    /// Sprites freed since the window last loaded one, for it to let go of.
+    gone: Vec<Arc<RenderImage>>,
 }
 
 impl Thumbnails {
     pub fn new(side: f64) -> Thumbnails {
         Thumbnails {
             side,
-            made: HashMap::new(),
+            made: Kept::new(&THUMBNAILS),
+            gone: Vec::new(),
         }
     }
 
@@ -59,6 +67,7 @@ impl Thumbnails {
             Shown::Exact(l) | Shown::Nearest(l, _) => l,
             Shown::Nothing => return images.failed(&key).and_then(|r| fail(r.code)),
         };
+        self.made.turn();
         if let Some((sha, image)) = self.made.get(path) {
             if *sha == level.sha256 {
                 return Some(Ok((image.clone(), None)));
@@ -68,11 +77,14 @@ impl Thumbnails {
         for px in bgra.as_chunks_mut::<4>().0 {
             px.swap(0, 2);
         }
+        let bytes = bgra.len() as u64;
         let frame = image::RgbaImage::from_raw(level.size[0], level.size[1], bgra)?;
         let image = Arc::new(RenderImage::new([image::Frame::new(frame)]));
-        let replaced = self
-            .made
-            .insert(path.clone(), (level.sha256, image.clone()));
+        let replaced = self.made.remove(path);
+        self.made
+            .insert(path.clone(), (level.sha256, image.clone()), bytes);
+        self.gone
+            .extend(self.made.evict().into_iter().map(|(_, (_, old))| old));
         Some(Ok((image, replaced.map(|(_, old)| old))))
     }
 }
@@ -89,7 +101,11 @@ impl ImageCache for Thumbnails {
                 "a thumbnail is a path in a content store".into(),
             )));
         };
-        match self.thumbnail(path) {
+        let found = self.thumbnail(path);
+        for old in self.gone.drain(..) {
+            let _ = window.drop_image(old);
+        }
+        match found {
             // Until its level arrives, the next frame asks again.
             None => {
                 window.request_animation_frame();

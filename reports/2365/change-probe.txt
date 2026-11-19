@@ -1,0 +1,5 @@
+pass | time | longest unserved stretch | peak resident memory | evidence added | outcome
+80 MB, first copy | 27.71 s | 31 ms | 137 MB (from 37 MB) | 23.85 MB | ok
+90 MB | 3.68 s | 20 ms | 125 MB (from 37 MB) | 3.04 MB | ok
+100 MB | 4.09 s | 25 ms | 124 MB (from 38 MB) | 3.04 MB | ok
+540 MB, never archived | 140.00 s | 58 ms | 163 MB (from 37 MB) | 160.92 MB | ok
