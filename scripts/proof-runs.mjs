@@ -419,13 +419,15 @@ function runTests(directory, files, { env = {}, timed = [] } = {}) {
     // that can start the copy's hub gets this side's hub binaries in the copy's target/, where that hub looks (#2817).
     let names;
     ({ bin: names, target, hub } = selectBinaries(directory, [...files]));
-    bin = buildBinaries(directory, join(temporary('deep-proof-binaries-'), 'bin'), [...new Set([...names, ...target])], (command, args, options) => spawnIn(directory, command, args, options));
+    bin = buildBinaries(directory, join(temporary('deep-proof-binaries-'), 'bin'), [...new Set([...names, ...target])], (command, args, options) => spawnIn(directory, command, args, options), { timeout: 0 });
     env = { ...env, DEEP_BIN_DIR: bin };
   } catch (error) {
     return { results: new Map(), fileErrors: new Map(), unrunnable: new Map(files.map((file) => [file, error.message])) };
   }
-  // A runner given no file runs every test it finds, so each starts only with files of its own. Tests that name
-  // neither the hub's nor the CLI's package run first, with no hub binary in the copy; then the hub's tests, with them.
+  // A runner given no file runs every test it finds, so each starts only with files of its own. Each node file runs
+  // alone under its own TIMEOUT, so a file stopped at the cap, or whose run wrote no report, blocks only itself (#2813).
+  // Tests that name neither the hub's nor the CLI's package run first, with no hub binary in the copy; then the hub's
+  // tests, with them (#2817).
   const run = (some) => [some.filter((file) => !hub.includes(file)), some.filter((file) => hub.includes(file))].flatMap((own, withHub) => {
     if (!own.length) return [];
     try {
@@ -433,8 +435,8 @@ function runTests(directory, files, { env = {}, timed = [] } = {}) {
     } catch (error) {
       return [{ results: new Map(), fileErrors: new Map(), unrunnable: new Map(own.map((file) => [file, `BLOCKED test binaries: ${error.message}`])) }];
     }
-    return [own.filter((file) => !file.endsWith('.ts')), own.filter((file) => file.endsWith('.ts'))]
-      .map((group, at) => group.length && (at ? runVitest : runNode)(directory, group, env)).filter(Boolean);
+    const vitestFiles = own.filter((file) => file.endsWith('.ts'));
+    return [...own.filter((file) => !file.endsWith('.ts')).map((file) => runNode(directory, [file], env)), ...(vitestFiles.length ? [runVitest(directory, vitestFiles, env)] : [])];
   });
   const parts = run(files.filter((file) => !timed.includes(file)));
   // The timed set spawns only once it holds timed, so a wait for the grant never eats into its runner's TIMEOUT.

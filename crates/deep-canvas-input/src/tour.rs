@@ -220,6 +220,13 @@ impl Tour {
         }
     }
 
+    /// The entries of one pass of the tour, in its order, where no one gives input (its clock
+    /// starts `idle_after` past 0): what a tour page lists (#1040; Export: web player).
+    pub fn pass(&self) -> Vec<Entry> {
+        let stops = self.stops(self.idle_after, 0, 0);
+        stops.iter().map(|s| self.entry(s)).collect()
+    }
+
     /// The entries the tour writes up to `until` where no one gives input: its clock starts
     /// `idle_after` past 0 and nothing stops it.
     pub fn entries(&self, until: i64) -> Vec<Entry> {

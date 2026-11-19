@@ -112,7 +112,7 @@ mod macos {
             #[unsafe(method(contentSharingPickerStartDidFailWithError:))]
             fn picker_failed(&self, error: &NSError) {
                 note(self.ivars(), |r| {
-                    r.failed = Some(format!("picker: {error}"))
+                    r.failed = Some(format!("picker: {error}")) // copy-exception: a probe's failure, never drawn
                 });
             }
         }
@@ -133,7 +133,7 @@ mod macos {
             #[unsafe(method(recordingOutput:didFailWithError:))]
             fn recording_failed(&self, _: &SCRecordingOutput, error: &NSError) {
                 note(self.ivars(), |r| {
-                    r.failed = Some(format!("recording: {error}"))
+                    r.failed = Some(format!("recording: {error}")) // copy-exception: a probe's failure, never drawn
                 });
             }
 
@@ -259,7 +259,7 @@ mod macos {
 
     impl Indicator {
         pub fn show(mtm: MainThreadMarker) -> Self {
-            Self::titled(mtm, "● Recording a bug — let go of ⌥Space to stop")
+            Self::titled(mtm, crate::copy::text("capture.recording_a_bug"))
         }
 
         /// The app's indicator with its own words (#498: the camera and microphone).

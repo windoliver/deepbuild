@@ -4,12 +4,16 @@
 // you typed in a session (`rule: <text>.`). Each keeps its file, its scope (`all`, a nested file's folder, or the glob
 // its file applies to), its size in tokens and what enforces it: a guard only while its planted call is denied and its
 // twin allowed, otherwise text only. A rule line an agent's edit removed stays in force here, held, as a proposal to you.
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import type { RubricRule } from '@deepbuild/checks-review';
 import type { RecordStore } from '@deepbuild/record';
 import { callAsYou } from './client.js';
+import { indexFile, loaders, lostIn, marksOf, type Lost, type Marks } from './rule-load.js';
+import { visible } from './visible.js';
 import type { HookMeta, Scoped } from './wire.js';
 
 type Raw = RecordStore['raw'];
@@ -22,10 +26,14 @@ export interface RuleFile {
   scope: string;
   tokens: number;
   rules: string[];
+  /** Each rule's line in the file, from 1, in the order of `rules`. */
+  lines?: number[];
   /** The agent that reads this file by itself, so its start slice doesn't repeat it. */
   native?: 'claude-code' | 'codex';
   /** The repo folder a repo file is in. */
   repo?: string;
+  /** An agent's own memory index (#1514): its lines go to no other agent, and to its own only past the index limit. */
+  index?: true;
 }
 export interface Rule {
   id: string; text: string; file: string; scope: string; known: 'you' | 'repo'; tokens: number; enforcer: Enforcer;
@@ -36,6 +44,10 @@ export interface Rule {
   native?: 'claude-code' | 'codex';
   /** The proposal an agent's removal of its line became; the rule stays in force until you apply it. */
   held?: string;
+  /** Its file's path and its line there (#1514), so the lines an agent never gets can be told. */
+  path?: string;
+  line?: number;
+  index?: true;
 }
 export interface Held { id: string; text: string; file: string; scope: string; repo: string; proposal: string; ask: string }
 
@@ -45,7 +57,7 @@ export const sameRule = (text: string): string => text.replace(/\s+/g, ' ').trim
 export const ruleId = (file: string, text: string): string => sha256(`${file}\u0000${sameRule(text)}`).slice(0, 12);
 export const handleOf = (rule: Pick<Rule, 'id'>): string => `wiki:rules#${rule.id}`;
 /** A rule's size in tokens: each word piece of up to five letters, each number and each mark is one. */
-const tokensOf = (text: string): number =>
+export const tokensOf = (text: string): number =>
   (text.match(/[A-Za-z]+|\d+|[^\sA-Za-z\d]/g) ?? []).reduce((n, piece) => n + (/^[A-Za-z]+$/.test(piece) ? Math.ceil(piece.length / 5) : 1), 0);
 
 /** A glob as rule files write one: `**` any folders, `*` within a name, `?` one character; several apart by commas. */
@@ -97,13 +109,17 @@ function frontOf(text: string): { fields: Map<string, string>; body: string } {
 }
 /** The bullets of a file's body, outside code fences: each one rule. */
 function bulletsOf(body: string): string[] {
-  const out: string[] = [];
+  return bulletLines(body).map((b) => b.text);
+}
+/** Each bullet of a body with its line in the body, from 1. */
+function bulletLines(body: string): { text: string; line: number }[] {
+  const out: { text: string; line: number }[] = [];
   let fenced = false;
-  for (const line of body.split('\n')) {
-    if (/^\s*(```|~~~)/.test(line)) { fenced = !fenced; continue; }
+  body.split('\n').forEach((line, i) => {
+    if (/^\s*(```|~~~)/.test(line)) { fenced = !fenced; return; }
     const m = fenced ? undefined : /^\s*[-*+]\s+(.+?)\s*$/.exec(line);
-    if (m && !/^\[[ xX]\]\s*$/.test(m[1]!)) out.push(m[1]!);
-  }
+    if (m && !/^\[[ xX]\]\s*$/.test(m[1]!)) out.push({ text: m[1]!, line: i + 1 });
+  });
   return out;
 }
 
@@ -137,20 +153,59 @@ function repoFiles(repo: string): string[] {
 function readFile(path: string, file: string, scopeOf: (fields: Map<string, string>) => string, native?: RuleFile['native'], repo?: string): RuleFile | undefined {
   let text: string;
   try { text = readFileSync(path, 'utf8'); } catch { return undefined; }
+  return fileOf(text, path, file, scopeOf, native, repo);
+}
+function fileOf(text: string, path: string, file: string, scopeOf: (fields: Map<string, string>) => string, native?: RuleFile['native'], repo?: string): RuleFile {
   const { fields, body } = frontOf(text);
-  return { file, path, scope: scopeOf(fields), tokens: tokensOf(text), rules: [...new Set(bulletsOf(body))], ...(native ? { native } : {}), ...(repo ? { repo } : {}) };
+  // A rule's line counts the front matter's lines too; a rule written twice is at its first line.
+  const before = text.slice(0, text.length - body.length).split('\n').length - 1;
+  const at = new Map<string, number>();
+  for (const b of bulletLines(body)) if (!at.has(b.text)) at.set(b.text, b.line + before);
+  return { file, path, scope: scopeOf(fields), tokens: tokensOf(text), rules: [...at.keys()], lines: [...at.values()], ...(native ? { native } : {}), ...(repo ? { repo } : {}) };
+}
+/**
+ * A repo's memory indexes (#1514): each agent's whose facts name one, as a rule file, its bullets the rules, so the
+ * page can mark the lines past its limit. Read from the agent's own folder for the repo; none when it has no index.
+ */
+export function indexFiles(repo: string): RuleFile[] {
+  return loaders().flatMap((l) => {
+    const path = indexFile(l, repo);
+    const read = path ? readFile(path, path.replace(homedir(), '~'), () => 'all', l.agent as RuleFile['native'], repo) : undefined;
+    return read ? [{ ...read, index: true as const }] : [];
+  });
+}
+/** A repo rule file's scope from its front matter, and the agent that reads it by itself. */
+function repoScope(rel: string): { scopeOf: (fields: Map<string, string>) => string; native: RuleFile['native'] } {
+  const name = basename(rel);
+  const folder = dirname(rel);
+  return {
+    native: name === 'CLAUDE.md' ? 'claude-code' : name === 'AGENTS.md' ? 'codex' : undefined,
+    scopeOf: (fields) => rel.startsWith('.github/instructions/') ? fields.get('applyTo') || 'all'
+      : rel.startsWith('.cursor/rules/') ? (fields.get('alwaysApply') === 'true' ? 'all' : fields.get('globs') || 'all')
+        : folder === '.' || rel.startsWith('.github/') ? 'all' : `${folder}/**`,
+  };
+}
+/**
+ * The rule files of `repo` as `commit` holds them (#1512), read through git in `dir`, never from the checkout a claim
+ * could change: the files `repoFiles` finds, in its order.
+ */
+export function ruleFilesAt(dir: string, commit: string, repo: string): RuleFile[] {
+  const git = (args: string[]): string => execFileSync('git', ['-C', dir, '-c', 'core.quotePath=false', ...args], { encoding: 'utf8', maxBuffer: 256 << 20 });
+  const tracked = git(['ls-tree', '-r', '-z', '--name-only', commit]).split('\0').filter(Boolean);
+  const walked = tracked.filter((p) => /(^|\/)(AGENTS|CLAUDE)\.md$/.test(p) && !p.split('/').slice(0, -1).some((d) => SKIP.has(d) || d.startsWith('.')));
+  const under = (folder: string, end: string): string[] => tracked.filter((p) => dirname(p) === folder && p.endsWith(end)).sort();
+  const listed = [...[...walked, ...tracked.filter((p) => p === '.github/copilot-instructions.md')].sort(), ...under('.github/instructions', '.instructions.md'), ...under('.cursor/rules', '.mdc')];
+  return listed.map((rel) => {
+    const { scopeOf, native } = repoScope(rel);
+    return fileOf(git(['show', `${commit}:${rel}`]), join(repo, rel), rel, scopeOf, native, repo);
+  });
 }
 /** One repo's rule files, and your user-level ones (`~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`) unless `home` is null. */
 export function readRuleFiles(repo: string | undefined, home: string | null = homedir()): RuleFile[] {
   const out: RuleFile[] = [];
   for (const rel of repo ? repoFiles(repo) : []) {
-    const name = basename(rel);
-    const folder = dirname(rel);
-    const native = name === 'CLAUDE.md' ? 'claude-code' : name === 'AGENTS.md' ? 'codex' : undefined;
-    const read = readFile(join(repo!, rel), rel, (fields) =>
-      rel.startsWith('.github/instructions/') ? fields.get('applyTo') || 'all'
-        : rel.startsWith('.cursor/rules/') ? (fields.get('alwaysApply') === 'true' ? 'all' : fields.get('globs') || 'all')
-          : folder === '.' || rel.startsWith('.github/') ? 'all' : `${folder}/**`, native, repo);
+    const { scopeOf, native } = repoScope(rel);
+    const read = readFile(join(repo!, rel), rel, scopeOf, native, repo);
     if (read) out.push(read);
   }
   for (const [rel, native] of home === null ? [] : [['.claude/CLAUDE.md', 'claude-code'], ['.codex/AGENTS.md', 'codex']] as const) {
@@ -171,11 +226,11 @@ export function rulesOf(o: { files: readonly RuleFile[]; typed: readonly { targe
   const repos = new Set(o.files.map((f) => f.repo).filter(Boolean));
   for (const f of o.files) {
     const repo = f.repo;
-    for (const text of f.rules) {
+    f.rules.forEach((text, i) => {
       const id = ruleId(f.file, text);
       at.add(id);
-      out.push({ id, text, file: f.file, scope: f.scope, known: 'repo', tokens: tokensOf(text), enforcer: enforcer(text), ...(repo ? { repo } : {}), ...(f.native ? { native: f.native } : {}) });
-    }
+      out.push({ id, text, file: f.file, scope: f.scope, known: 'repo', tokens: tokensOf(text), enforcer: enforcer(text), ...(repo ? { repo } : {}), ...(f.native ? { native: f.native } : {}), path: f.path, ...(f.lines?.[i] ? { line: f.lines[i] } : {}), ...(f.index ? { index: true as const } : {}) });
+    });
   }
   for (const h of o.held) {
     if (at.has(h.id) || !repos.has(h.repo)) continue;
@@ -192,8 +247,25 @@ export function rulesOf(o: { files: readonly RuleFile[]; typed: readonly { targe
   return out;
 }
 
-/** The rules page's lines: each file's total, then its rules, each a claim line with its file, scope, enforcer and size. */
-export function pageLines(rules: readonly Rule[], files: readonly RuleFile[]): string[] {
+/** The paths a diff from `from` to `to` touches in the git repo `dir`: each side of a rename, a deleted file's too. */
+export const diffPaths = (dir: string, from: string, to: string): string[] =>
+  execFileSync('git', ['-C', dir, '-c', 'core.quotePath=false', 'diff', '--no-renames', '--name-only', '-z', from, to], { encoding: 'utf8', maxBuffer: 256 << 20 }).split('\0').filter(Boolean);
+
+/**
+ * The rubric lines a review of a diff touching `paths` carries (#1512): each rule here that no guard enforces whose scope
+ * covers one of the paths (a rule with no path scope covers every diff), once per wording, as `<id>: <text>` with its size.
+ */
+export function rubricLines(rules: readonly Rule[], paths: readonly string[]): RubricRule[] {
+  const seen = new Set<string>();
+  return rules.filter((r) => r.enforcer.kind === 'text' && paths.some((p) => covers(r.scope, p)) && !seen.has(sameRule(r.text)) && seen.add(sameRule(r.text)))
+    .map((r) => ({ id: r.id, text: r.text, tokens: tokensOf(`- ${r.id}: ${r.text}`) }));
+}
+
+/**
+ * The rules page's lines: each file's total, then its rules, each a claim line with its file, scope, enforcer and size,
+ * and its marks (#1514): the agents that never get it and why, or the sessions whose record shows it loaded.
+ */
+export function pageLines(rules: readonly Rule[], files: readonly RuleFile[], marks: (r: Rule) => Marks = () => ({}), review: { read: ReadonlySet<string>; sent: ReadonlyMap<string, SentBack> } = { read: new Set(), sent: new Map() }): string[] {
   const out: string[] = [];
   const claim = (text: string, record: Record<string, unknown>): string => `- ${text} <!-- deep:claim ${JSON.stringify(record).replace(/>/g, '\\u003e')} -->`;
   const byFile = new Map<string, Rule[]>();
@@ -205,9 +277,14 @@ export function pageLines(rules: readonly Rule[], files: readonly RuleFile[]): s
     const tokens = (read?.tokens ?? 0) + list.filter((r) => r.held || !read).reduce((n, r) => n + r.tokens, 0);
     out.push(`- ${file} <!-- deep:rule-file ${JSON.stringify({ file, ...(repo ? { repo } : {}), tokens })} -->`);
     for (const r of list) {
+      // A text-only rule a counted review read in the last 30 days reads review as its enforcer, and its line carries
+      // the send-backs that named it in those days and how they ended (#1512): a reading only.
+      const back = review.sent.get(r.id);
+      const enforcer = r.enforcer.kind === 'text' && review.read.has(r.id) ? { kind: 'review', note: 'can send back, can\'t pass' } : r.enforcer;
       out.push(claim(r.text, {
         id: r.id, known: r.known, proof: 1, sources: [{ path: r.file, quote: r.text }], file: r.file, ...(r.repo ? { repo: r.repo } : {}),
-        scope: r.scope, enforcer: r.enforcer, tokens: r.tokens, ...(r.held ? { held: r.held } : {}),
+        scope: r.scope, enforcer, tokens: r.tokens, ...(r.held ? { held: r.held } : {}), ...marks(r),
+        ...(back ? { sent_back: back } : {}),
       }));
     }
   }
@@ -223,11 +300,28 @@ export const RULE_EDITS = new Set(['Edit', 'MultiEdit', 'Write', 'NotebookEdit',
  * each is heard once, at its first call inside its scope. Never one for every path (the start slice has those), and
  * never a file the session's own agent reads by itself. Marks each in `heard`.
  */
-export function noticesFor(rules: readonly Rule[], paths: readonly string[], agent: string, heard: Set<string>): Rule[] {
+export function noticesFor(rules: readonly Rule[], paths: readonly string[], agent: string, heard: Set<string>, lost: readonly Lost[] = []): Rule[] {
   const own = agent === 'codex' ? 'codex' : 'claude-code';
-  const out = rules.filter((r) => r.scope !== 'all' && r.native !== own && !heard.has(r.id) && paths.some((p) => covers(r.scope, p)));
+  const out = rules.filter((r) => r.scope !== 'all' && reaches(r, own, lost) && !heard.has(r.id) && paths.some((p) => covers(r.scope, p)));
   for (const r of out) heard.add(r.id);
   return out;
+}
+/**
+ * Whether DeepBuild's route gives a rule to a session of `own` (#344, #1514): one from another agent's file, and one from
+ * its own agent's file that the rule-load entry says it never gets. A memory index's line goes only to its own agent,
+ * and only past the index limit.
+ */
+export function reaches(r: Rule, own: string, lost: readonly Lost[]): boolean {
+  const gone = (marksOf(r.path ?? '', r.line ?? 0, lost.filter((l) => l.agent === own), new Map()).not_loaded ?? []).length > 0;
+  return r.index ? r.native === own && gone : r.native !== own || gone;
+}
+/** What each agent loses of a repo's files, read again at most every few seconds, so the hook path walks no folder each time. */
+export function cachedLost(cache: Map<string, { at: number; lost: Lost[] }>, repo: string, files: readonly RuleFile[]): Lost[] {
+  const hit = cache.get(repo);
+  if (hit && Date.now() - hit.at < 3000) return hit.lost;
+  const lost = lostIn(repo, files.filter((f) => f.repo === repo && !f.index).map((f) => dirname(f.path)));
+  cache.set(repo, { at: Date.now(), lost });
+  return lost;
 }
 export const noticeText = (rules: readonly Pick<Rule, 'scope' | 'file' | 'text'>[]): string => rules.map((r) => `DeepBuild: a rule you wrote for ${r.scope} (${r.file}): ${r.text}`).join('\n');
 
@@ -235,7 +329,7 @@ export const noticeText = (rules: readonly Pick<Rule, 'scope' | 'file' | 'text'>
 export function cachedRuleFiles(cache: Map<string, { at: number; files: RuleFile[] }>, repo: string): RuleFile[] {
   const hit = cache.get(repo);
   if (hit && Date.now() - hit.at < 3000) return hit.files;
-  const files = readRuleFiles(repo, null);
+  const files = [...readRuleFiles(repo, null), ...indexFiles(repo)];
   cache.set(repo, { at: Date.now(), files });
   return files;
 }
@@ -252,6 +346,7 @@ export const readHeld = (dir: string): Held[] => readJson<Held[]>(heldFile(dir),
 export const saveHeld = (dir: string, held: readonly Held[]): void => writeJson(heldFile(dir), held);
 
 const scopedFiles = new Map<string, { at: number; files: RuleFile[] }>();
+const scopedLost = new Map<string, { at: number; lost: Lost[] }>();
 /** The rules of a file list, built once for it and for the held file as it is: `saveHeld` renames a new file in. */
 const scopedBuilt = new WeakMap<RuleFile[], { held: string; rules: Rule[] }>();
 /**
@@ -274,7 +369,7 @@ export function scopedAt(meta: HookMeta, dir: string): Scoped | undefined {
     try { const s = statSync(heldFile(dir)); held = `${s.ino}:${s.size}:${s.mtimeMs}`; } catch { /* no rule is held */ }
     let built = scopedBuilt.get(files);
     if (!built || built.held !== held) scopedBuilt.set(files, built = { held, rules: rulesOf({ files, typed: [], held: readHeld(dir), guards: [] }) });
-    const rules = noticesFor(built.rules, paths, meta.agent, new Set()).map(({ id, scope, file, text }) => ({ id, scope, file, text }));
+    const rules = noticesFor(built.rules, paths, meta.agent, new Set(), cachedLost(scopedLost, repo, files)).map(({ id, scope, file, text }) => ({ id, scope, file, text }));
     return rules.length || before.length ? { rules, before } : undefined;
   } catch (error) {
     process.stderr.write(`deep hub: rules at ${meta.session}'s call: ${error instanceof Error ? error.message : String(error)}\n`);
@@ -317,6 +412,44 @@ export async function reachOf(raw: Raw, repo: string, scope: string, since: numb
 }
 export const reachSince = (now: number, days: number): number => now - days * DAY;
 
+/** The send-backs that named a rule (#1512): how many, and how many of them ended fixed and left; the rest are open. */
+export interface SentBack { count: number; fixed: number; left: number }
+/**
+ * The send-backs that named each rule since `since`, by rule, as the review's records hold them (#87, #1862): each
+ * item a counted round sent back (`review.read`), fixed or left once a claim on its pull request settled
+ * (`review.settled`, the newest), open until then. A reading only: nothing here moves a verdict.
+ */
+export async function sentBackOf(raw: Raw, since: number): Promise<Map<string, SentBack>> {
+  const rows = (await raw(`SELECT kind, data FROM events WHERE kind IN ('review.read', 'review.settled') AND ts >= ? ORDER BY log_pos`, [since])) as { kind: string; data: string }[];
+  type Item = { rule: string; sites: unknown };
+  const key = (pr: string, i: Item): string => `${pr}\u0000${i.rule}\u0000${JSON.stringify(i.sites)}`;
+  const sent: { key: string; rule: string }[] = [];
+  const ended = new Map<string, 'fixed' | 'left'>();
+  for (const r of rows) {
+    const d = JSON.parse(r.data) as { pr: string; sent?: Item[]; outcomes?: (Item & { ended: 'fixed' | 'left' })[] };
+    if (r.kind === 'review.read') for (const i of d.sent ?? []) sent.push({ key: key(d.pr, i), rule: i.rule });
+    else for (const o of d.outcomes ?? []) ended.set(key(d.pr, o), o.ended);
+  }
+  const out = new Map<string, SentBack>();
+  for (const s of sent) {
+    const n = out.get(s.rule) ?? { count: 0, fixed: 0, left: 0 };
+    const how = ended.get(s.key);
+    out.set(s.rule, { count: n.count + 1, fixed: n.fixed + (how === 'fixed' ? 1 : 0), left: n.left + (how === 'left' ? 1 : 0) });
+  }
+  return out;
+}
+
+/**
+ * The rules a counted review's second model read since `since` (#1512), as each review run's output in the record
+ * names them: the rules the page reads review as the enforcer of, one that can send back and can't pass.
+ */
+export async function reviewedOf(raw: Raw, since: number): Promise<Set<string>> {
+  const { RULES_READ } = await import('@deepbuild/checks-review');
+  const rows = (await raw(`SELECT f.value AS line FROM events e, json_each(e.data, '$.findings') f WHERE e.kind = 'run.finished' AND e.ts >= ?
+    AND json_extract(e.data, '$.outcome') IN ('passed', 'failed') AND substr(f.value, 1, ?) = ?`, [since, RULES_READ.length, RULES_READ])) as { line: string }[];
+  return new Set(rows.flatMap((r) => r.line.slice(RULES_READ.length).split(', ')));
+}
+
 /** The sessions whose record names a rule's delivery: the ones a judgment of that rule credits. */
 export async function creditOf(raw: Raw, handle: string): Promise<string[]> {
   const rows = (await raw(`SELECT DISTINCT e.session_id AS session FROM events e, json_each(e.data, '$.rules') r WHERE e.kind = 'session.rules_delivered' AND r.value = ? ORDER BY e.log_pos`, [handle])) as { session: string }[];
@@ -342,10 +475,22 @@ export async function rulesCommand(args: readonly string[]): Promise<number> {
   else if (rest[0] === 'credit' && rest.length === 2) [method, params] = ['rules.credit', { rule: rest[1] }];
   else if (rest[0] === 'session' && rest.length === 2) [method, params] = ['session.rules', { session: rest[1] }];
   else { process.stderr.write(`${USAGE}\n`); return 2; }
-  const result = await callAsYou(method, params, 'nothing was read');
+  const result = await callAsYou(method, params);
   if (typeof result === 'number') return result;
   if (json) process.stdout.write(`${JSON.stringify(result)}\n`);
-  else if (method === 'rules.sync') process.stdout.write(`The rules page lists ${String(result.rules)} rules from ${String(result.files)} files.\n`);
-  else process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+  else process.stdout.write(`${visible(said(method, params, result))}\n`);
   return 0;
+}
+/** What a rules call found, in words (#1812); `--json` prints the result itself. */
+function said(method: string, params: Record<string, unknown>, r: Record<string, unknown>): string {
+  if (method === 'rules.sync') return `The rules page lists ${String(r.rules)} rules from ${String(r.files)} files.`;
+  if (method === 'rules.reach') {
+    const sessions = r.sessions as { handle: string; tool_calls: number }[];
+    return `${sessions.length} session${sessions.length === 1 ? '' : 's'} made ${String(r.tool_calls)} tool calls under ${String(params.scope)} in the last 30 days${sessions.length ? `: ${sessions.map((s) => `${s.handle} ${s.tool_calls}`).join(', ')}` : ''}.`;
+  }
+  if (method === 'rules.credit') {
+    const sessions = r.sessions as string[];
+    return sessions.length ? `${String(params.rule)} was given to ${sessions.length} session${sessions.length === 1 ? '' : 's'}: ${sessions.join(', ')}.` : `${String(params.rule)} was given to no session.`;
+  }
+  return `${String(r.session)} runs the ${String(r.runs)} set of rules, given at log position ${String(r.set)}, and a regression in it is credited to the set at ${String(r.credited_to)}.`;
 }

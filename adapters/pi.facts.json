@@ -135,9 +135,9 @@
     "agent_settled": { "kind": "session.activity", "data": { "activity": "=agent_settled" } }
   },
   "toolKinds": {
-    "readBy": "a tool call's kind (shell, read, edit, write, search, fetch, mcp or unknown, which guards treat as change), by tool name or name prefix",
-    "conformance": "pi/toolKinds/unknown-otherwise",
-    "tools": { "bash": "shell", "read": "read", "edit": "edit", "write": "write", "grep": "search", "find": "search", "ls": "search" },
+    "readBy": "a tool call's kind (shell, read, edit, write, search, fetch, mcp or unknown, which guards treat as change), by tool name, then by name prefix; deep_query changes nothing, so it is a read (#1801)",
+    "conformance": "facts/reads-count-as-read",
+    "tools": { "bash": "shell", "read": "read", "edit": "edit", "write": "write", "grep": "search", "find": "search", "ls": "search", "mcp__deep__deep_query": "read" },
     "prefixes": { "mcp__": "mcp" },
     "otherwise": "unknown"
   },

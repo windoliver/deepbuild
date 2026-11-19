@@ -171,8 +171,11 @@ export function placeHubBinaries(cwd, bin, names) {
   }
 }
 
-/** Build once before any consumer starts; copy only executables Cargo reports from this successful build. */
-export function buildBinaries(cwd, bin, names, run = spawnSync) {
+/**
+ * Build once before any consumer starts; copy only executables Cargo reports from this successful build. `timeout` 0
+ * lets cargo run as long as it needs, as the lanes' builds do: a cold bay build runs past 20 minutes on a loaded machine.
+ */
+export function buildBinaries(cwd, bin, names, run = spawnSync, { timeout = 20 * 60_000 } = {}) {
   mkdirSync(bin, { recursive: true });
   // The proof tooling's JavaScript-only fixture repositories have no Rust build.
   if (!names.length) return bin;
@@ -188,7 +191,7 @@ export function buildBinaries(cwd, bin, names, run = spawnSync) {
       '--config', `build.build-dir=${JSON.stringify(join(cwd, 'target'))}`, '--message-format=json-render-diagnostics'];
     const started = spawnSync('ps', ['-o', 'lstart=', '-p', String(process.pid)], { encoding: 'utf8', env: { ...env, TZ: 'UTC', LC_ALL: 'C' } }).stdout?.trim();
     if (!started) throw Error('BLOCKED test binaries: cannot identify the build owner');
-    const result = run(lease, [process.execPath, buildSupervisor, dirname(bin), String(process.pid), started, 'cargo', ...args], { cwd, env, detached: true, encoding: 'utf8', maxBuffer: 1 << 28, timeout: 20 * 60_000 });
+    const result = run(lease, [process.execPath, buildSupervisor, dirname(bin), String(process.pid), started, 'cargo', ...args], { cwd, env, detached: true, encoding: 'utf8', maxBuffer: 1 << 28, timeout: timeout || undefined });
     if (result.status !== 0) throw Error(`BLOCKED test binaries: cargo build failed: ${result.error?.message ?? result.stderr?.trim() ?? result.signal ?? result.status}`);
     const artifacts = result.stdout.split('\n').filter(Boolean).map((line) => JSON.parse(line));
     if (!artifacts.some((artifact) => artifact.reason === 'build-finished' && artifact.success)) throw Error('BLOCKED test binaries: cargo reported no successful build');
