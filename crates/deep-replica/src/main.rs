@@ -339,10 +339,9 @@ mod replica {
             let ms = clicked.elapsed().as_millis();
             let line = serde_json::json!({ "ms": ms, "tree": snapshot.tree.to_json() });
             writeln!(frames, "{line}").expect("frames.jsonl is written");
-            let working = snapshot
-                .flatten()
-                .iter()
-                .any(|node| node.name.as_deref() == Some(deep_app::welcome::SETTING_UP));
+            let working = snapshot.flatten().iter().any(|node| {
+                node.name.as_deref() == Some(deep_app::copy::text(deep_app::welcome::SETTING_UP))
+            });
             // A setup that stops gives the button back (#1100): what it said is the first frame no longer working.
             seen_working |= working;
             if !working && (seen_working || button(&snapshot).is_none()) {

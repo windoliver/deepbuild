@@ -6,12 +6,21 @@ use std::path::Path;
 
 use serde_json::Value;
 
+use crate::copy;
+
 /// One rule file of the page, with its rules in the page's order.
 #[derive(Clone, Debug, PartialEq)]
 pub struct File {
     pub file: String,
     pub tokens: u64,
     pub rules: Vec<Rule>,
+}
+
+impl Rule {
+    /// Whether nothing enforces it: the page's list to shrink.
+    pub fn text_only(&self) -> bool {
+        self.enforcer == copy::text("rules.text_only")
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -60,7 +69,10 @@ pub fn parse(text: &str) -> Vec<File> {
                 text: text.to_owned(),
                 scope: scope.to_owned(),
                 enforcer: match (kind, enforcer["name"].as_str()) {
-                    ("text", _) | (_, None) => "text only".to_owned(),
+                    ("text", _) | (_, None) => copy::text("rules.text_only").to_owned(),
+                    ("guard", Some(name)) => copy::fill("rules.guard", &[&name]),
+                    ("check", Some(name)) => copy::fill("rules.check", &[&name]),
+                    ("requirement", Some(name)) => copy::fill("rules.requirement", &[&name]),
                     (kind, Some(name)) => format!("{kind} {name}"),
                 },
                 tokens: j["tokens"].as_u64().unwrap_or(0),

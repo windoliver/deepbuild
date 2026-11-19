@@ -9,6 +9,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::address::{Address, Place};
+use crate::copy;
 
 /// How long a row that left its state keeps its slot once you've left the list, in ms.
 pub const HOLD: u64 = 2_000;
@@ -77,8 +78,12 @@ impl Doing {
     pub fn line(&self, now: u64) -> String {
         let age = now.saturating_sub(self.at);
         crate::states::changes_after(crate::states::changes_in(age));
-        let ago = if self.ago { " ago" } else { "" };
-        format!("{} · {}{ago}", self.words, crate::states::span(age))
+        let span = crate::states::span(age);
+        if self.ago {
+            copy::fill("list.doing_ago", &[&self.words, &span])
+        } else {
+            format!("{} · {span}", self.words)
+        }
     }
 }
 
@@ -110,12 +115,12 @@ pub fn doing_of(
     }
     if crate::plain::planted("line-keeps-running") {
         if let Some(object) = doing.words.strip_prefix("Couldn't run ") {
-            (doing.words, doing.ago) = (format!("Running {object}"), false);
+            (doing.words, doing.ago) = (format!("Running {object}"), false); // copy-exception: planted wrong program
         }
     }
     if crate::plain::planted("line-whole-command") {
         if let Some(command) = newest("tool.before").and_then(|e| e["data"]["command"].as_str()) {
-            doing.words = format!("Running {command}");
+            doing.words = format!("Running {command}"); // copy-exception: planted wrong program
         }
     }
     if crate::plain::planted("line-stalls-on-timer") && stalled(view, session, now) {
@@ -210,8 +215,8 @@ impl Item {
 
 /// The heading Needs you's id; a project's is `heading:<project>`.
 pub const HEADING: &str = "heading:needs-you";
-/// What a project with no name is listed under.
-pub const NO_PROJECT: &str = "No project";
+/// The key of what a project with no name is listed under.
+pub const NO_PROJECT: &str = "list.no_project";
 
 /// A project's id in an address: its name, with anything an address can't hold made a dash.
 pub fn project_id(project: Option<&str>) -> String {
@@ -242,21 +247,21 @@ pub fn build(asks: &[Ask], sessions: &[Session]) -> Vec<Item> {
     }
     items.push(Item::Heading {
         id: HEADING.to_owned(),
-        title: "Needs you".to_owned(),
+        title: copy::text("list.needs_you").to_owned(),
         count: Some(asks.len()),
     });
     for ask in asks {
         let waits = match ask.status.as_str() {
             // #1461's planted list tells them apart by ink alone, as the base drew them.
             _ if crate::plain::planted("wait-by-ink") => None,
-            "folded" => Some("folded"),
-            "later" => Some("set for later"),
-            "held" => Some("held"),
+            "folded" => Some(copy::text("list.folded")),
+            "later" => Some(copy::text("list.set_for_later")),
+            "held" => Some(copy::text("list.held")),
             _ => None,
         };
         // #1461's planted list draws every ask's word alike.
         let kind = if crate::plain::planted("ask-words-alike") {
-            "needs you".to_owned()
+            "needs you".to_owned() // copy-exception: planted wrong program
         } else {
             ask.kind.clone()
         };
@@ -293,7 +298,7 @@ pub fn build(asks: &[Ask], sessions: &[Session]) -> Vec<Item> {
         let id = project_id(project);
         items.push(Item::Heading {
             id: format!("heading:{}", project.unwrap_or("none")),
-            title: project.unwrap_or(NO_PROJECT).to_owned(),
+            title: project.unwrap_or(copy::text(NO_PROJECT)).to_owned(),
             count: None,
         });
         let mine = sessions.iter().filter(|s| s.project.as_deref() == project);
@@ -320,10 +325,7 @@ pub fn build(asks: &[Ask], sessions: &[Session]) -> Vec<Item> {
             items.push(Item::Row(Box::new(Row {
                 id: format!("quiet:{id}"),
                 address: Address::new(Place::Project, &id),
-                title: match quiet.len() {
-                    1 => "1 quiet session".to_owned(),
-                    n => format!("{n} quiet sessions"),
-                },
+                title: copy::count("list.quiet_sessions", quiet.len() as u64, &[]),
                 word: "quiet".to_owned(),
                 value: "idle".to_owned(),
                 entry: "idle",
@@ -627,7 +629,7 @@ impl Kept {
                         row.loud = false;
                         // An ask's row that left is drawn answered, in its slot, until it goes.
                         if row.id.starts_with("ask:") {
-                            row.word = "answered".to_owned();
+                            row.word = copy::text("list.answered").to_owned();
                             row.value = "answered".to_owned();
                         }
                     }

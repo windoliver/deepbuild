@@ -10,6 +10,8 @@ use std::time::Duration;
 
 use serde_json::{json, Value};
 
+use crate::copy;
+
 /// The installed hub's root: ~/.deepbuild.
 pub fn root() -> PathBuf {
     PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(".deepbuild")
@@ -51,9 +53,9 @@ pub const NEEDS: &[&str] = &[
     "canvas.drawn",
     "canvas.user",
 ];
-const HUB_FIX: &str =
-    "Update DeepBuild so the hub matches this app, then restart it with `deep setup`.";
-const CLIENT_FIX: &str = "Update this app or CLI to the version that matches the running hub.";
+/// The keys of the one step that fixes each side being older.
+const HUB_FIX: &str = "hub.hub_fix";
+const CLIENT_FIX: &str = "hub.client_fix";
 
 /// The one screen the app shows instead of calling, when the hub's hello doesn't cover what the app calls: which side
 /// is older and the one step that fixes it, as packages/hub/src/compat.ts words it. `None` when the hello covers it.
@@ -75,18 +77,26 @@ pub fn older(hello: &Value) -> Option<String> {
     };
     let missing: Vec<&str> = NEEDS.iter().filter(|m| !listed(m)).copied().collect();
     match contract.map(parts) {
-        Some(have) if have.0 > need.0 => Some(format!(
-            "This app is older than the hub: it speaks contract {CONTRACT} and the hub speaks {}.\n{CLIENT_FIX}",
-            contract.unwrap_or_default()
+        Some(have) if have.0 > need.0 => Some(copy::fill(
+            "hub.app_older",
+            &[
+                &CONTRACT,
+                &contract.unwrap_or_default(),
+                &copy::text(CLIENT_FIX),
+            ],
         )),
         Some(have) if have >= need && missing.is_empty() => None,
-        Some(have) if have >= need => Some(format!(
-            "The hub is older than this app: it does not list {}.\n{HUB_FIX}",
-            missing.join(", ")
+        Some(have) if have >= need => Some(copy::fill(
+            "hub.hub_missing",
+            &[&missing.join(", "), &copy::text(HUB_FIX)],
         )),
-        _ => Some(format!(
-            "The hub is older than this app: it speaks contract {} and this app needs {CONTRACT}.\n{HUB_FIX}",
-            contract.unwrap_or("none")
+        _ => Some(copy::fill(
+            "hub.hub_older",
+            &[
+                &contract.unwrap_or(copy::text("hub.none")),
+                &CONTRACT,
+                &copy::text(HUB_FIX),
+            ],
         )),
     }
 }

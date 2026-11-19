@@ -16,6 +16,7 @@ use gpui_kit::*;
 use serde_json::{json, Value};
 
 use crate::chrome::{self, sizes, Typed as _};
+use crate::copy;
 use crate::question::Target;
 use crate::views::observed;
 use crate::views::{control, Control};
@@ -152,17 +153,17 @@ impl WordsBox {
                         question: reply["question"].as_str().unwrap_or_default().to_owned(),
                     },
                     // Words for a new project (#1342): its brief is being worked out, and its card comes to Needs you.
-                    Ok(reply) if reply["state"] == "working" => Said::Unread(format!(
-                        "Working on it: {}. Its card comes to Needs you when it's ready.",
-                        reply["heading"].as_str().unwrap_or_default()
+                    Ok(reply) if reply["state"] == "working" => Said::Unread(copy::fill(
+                        "words.working_on_it",
+                        &[&reply["heading"].as_str().unwrap_or_default()],
                     )),
                     Ok(reply) => Said::Unread(
                         reply["unread"]
                             .as_str()
-                            .unwrap_or("Nothing was drafted.")
+                            .unwrap_or(copy::text("words.nothing_drafted"))
                             .to_owned(),
                     ),
-                    Err(error) => Said::Unread(format!("The hub didn't take it: {error}")),
+                    Err(error) => Said::Unread(copy::fill("words.hub_didnt_take", &[&error])),
                 };
                 cx.notify();
             });
@@ -179,7 +180,7 @@ fn answering(cx: &App) -> Option<Entity<crate::card::Card>> {
 /// The preferences ⌘K lists, each with the words it is found by: there is no Settings page, so each opens the box.
 pub const PREFERENCES: &[(&str, &[&str])] = &[
     (
-        "Sounds",
+        "Sounds", // copy-exception: a preference's identity; ⌘K draws preference_label
         &[
             "sound",
             "sounds",
@@ -190,28 +191,54 @@ pub const PREFERENCES: &[(&str, &[&str])] = &[
         ],
     ),
     // Neither has a value you can change yet, so neither drafts a change: each says what it is.
-    ("Appearance", &["theme", "font"]),
-    ("Keys", &["keys", "shortcuts"]),
+    ("Appearance", &["theme", "font"]), // copy-exception: a preference's identity
+    ("Keys", &["keys", "shortcuts"]),   // copy-exception: a preference's identity
 ];
+
+/// A preference's name as ⌘K draws it in the language shown (#2403); the English name stays its identity.
+fn preference_label(name: &str) -> &str {
+    match name {
+        "Sounds" => copy::text("words.sounds"),
+        "Appearance" => copy::text("words.appearance"),
+        "Keys" => copy::text("words.keys"),
+        _ => name,
+    }
+}
+
+/// The English name of the preference ⌘K drew as `shown`.
+fn preference_named(shown: &str) -> &str {
+    PREFERENCES
+        .iter()
+        .map(|(name, _)| *name)
+        .find(|name| *name == shown || preference_label(name) == shown)
+        .unwrap_or(shown)
+}
 
 /// ⌘K's entries for the preferences.
 pub fn preference_entries() -> Vec<crate::commands::Entry> {
     PREFERENCES
         .iter()
         .map(|(name, words)| crate::commands::Entry::Preference {
-            name: (*name).to_owned(),
+            name: preference_label(name).to_owned(),
             words,
         })
         .collect()
 }
 
 /// A preference's change drafted beside its current value: turning sounds off beside sounds being on, and so on.
+/// The drafted words stay English: they are your words to the hub's box, which reads English sentences.
 pub fn preference(name: &str) -> (&'static str, String) {
-    match name {
-        "Sounds" if crate::hub::sounds_on() => ("turn sounds off", "Sounds are on.".to_owned()),
-        "Sounds" => ("turn sounds on", "Sounds are off.".to_owned()),
-        "Appearance" => ("", "The theme follows macOS's light or dark appearance, in the system font at its default size.".to_owned()),
-        _ => ("", "⌘K opens commands and pages; Return sends the box's words.".to_owned()),
+    match preference_named(name) {
+        "Sounds" if crate::hub::sounds_on() => (
+            "turn sounds off", // copy-exception: words the hub's box reads, sent as your words
+            copy::text("words.sounds_on").to_owned(),
+        ),
+        "Sounds" => (
+            "turn sounds on", // copy-exception: words the hub's box reads, sent as your words
+            copy::text("words.sounds_off").to_owned(),
+        ),
+        "Appearance" => ("", copy::text("words.appearance_now").to_owned()),
+        _ => ("", copy::text("words.keys_now").to_owned()),
     }
 }
 
@@ -252,7 +279,7 @@ impl Render for WordsBox {
         // On an ask's page the box is the card's words, and its control says what the press does (#1461).
         let (send, lines) = match &card {
             Some(card) => card.read(cx).words_send(),
-            None => ("Send", Vec::new()),
+            None => (copy::text("words.send"), Vec::new()),
         };
         let said = match (&self.said, &card) {
             (_, Some(_)) | (Said::Nothing, _) => None,
@@ -264,14 +291,18 @@ impl Render for WordsBox {
                         .flex()
                         .gap(s.space(1))
                         .items_center()
-                        .child(line("box-said", format!("Drafted: {question}")))
+                        .child(line("box-said", copy::fill("words.drafted", &[question])))
                         .child(
-                            control("box-open", Control::Plain, "Open its card", chrome).on_click(
-                                move |_, window, cx| {
-                                    let ask = crate::address::Address::ask(&ask);
-                                    crate::open::open(&ask, window, cx).ok();
-                                },
-                            ),
+                            control(
+                                "box-open",
+                                Control::Plain,
+                                copy::text("words.open_its_card"),
+                                chrome,
+                            )
+                            .on_click(move |_, window, cx| {
+                                let ask = crate::address::Address::ask(&ask);
+                                crate::open::open(&ask, window, cx).ok();
+                            }),
                         )
                         .into_any_element(),
                 )
@@ -311,7 +342,7 @@ impl Render for WordsBox {
         .size_full();
         observed("box")
             .role(Role::Group)
-            .aria_label("Say a change in words")
+            .aria_label(copy::text("words.say_a_change"))
             .relative()
             // A press in the box takes the keyboard from the card on an ask's page (#1461).
             .capture_any_mouse_down(|_, _, _| crate::card::let_go())
@@ -357,11 +388,11 @@ impl Render for WordsBox {
                     .child(
                         observed("box-draft")
                             .role(Role::TextInput)
-                            .aria_label("Say a change in words")
+                            .aria_label(copy::text("words.say_a_change"))
                             .aria_value(draft)
                             .flex_1()
                             .min_w_0()
-                            .when(on_page, |d| d.aria_label("Your words"))
+                            .when(on_page, |d| d.aria_label(copy::text("words.your_words")))
                             .child(Textarea::new(&self.input)),
                     )
                     .child(send_control),

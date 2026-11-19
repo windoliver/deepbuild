@@ -1,0 +1,1597 @@
+{
+  "actions.back": {
+    "text": "返回",
+    "source": "76900f1bfd16c8d4dd3d25e6f46638d7165aee23883ccea6bfe071c514421769"
+  },
+  "actions.close_window": {
+    "text": "关闭窗口",
+    "source": "32fd144c1f4b399d6437cdf06de3dbea637a981eb794a52930b392a91bd0527f"
+  },
+  "actions.commands": {
+    "text": "命令",
+    "source": "b269dc4e81a528a4d42e9e74101923514a626f55f8dd76b1461e0690e72d041a"
+  },
+  "actions.copy": {
+    "text": "拷贝",
+    "source": "e21f935f11d7e966dbbae78da9daa378fe8142a14e7c0cd7434183005faa6c5c"
+  },
+  "actions.copy_link": {
+    "text": "拷贝链接",
+    "source": "dbf362d4f210c780513a9258278d4d07abe8a224f84ba7ad775d819039342e77"
+  },
+  "actions.copy_title": {
+    "text": "拷贝标题",
+    "source": "6e681eadb6306821520dc4c5a7987e67874f05fe64a1b16d49cab1e005893024"
+  },
+  "actions.cut": {
+    "text": "剪切",
+    "source": "1f45f02561f41db9483cfc00675900237967b8e382b9750d33f677812fe70842"
+  },
+  "actions.didnt_run": {
+    "text": "{0}未能执行：{1}",
+    "source": "e68b76a430f2cfc178e57dd495278f1741b3190efa61750d14923908045f8401"
+  },
+  "actions.forward": {
+    "text": "前进",
+    "source": "f1c65e14817efef2b77973a4f63446a7d462cd2636bbe721207107b7d126a001"
+  },
+  "actions.hide_deepbuild": {
+    "text": "隐藏 DeepBuild",
+    "source": "288d7d0d155c8e230cd1ff56686b76ef43b8e74e5715fe744aa383f9e119873e"
+  },
+  "actions.keyboard_shortcuts": {
+    "text": "键盘快捷键",
+    "source": "e9bef0b0f3c25e6eaf3a754817a8b4f62e1c8473cb2be3e190975926dbf72d6f"
+  },
+  "actions.later": {
+    "text": "稍后",
+    "source": "73b6e48a1b552d112502d37a7b7870436efc5ea1de0bca58ccf12d6ae15d3a0c"
+  },
+  "actions.menu_edit": {
+    "text": "编辑",
+    "source": "464c4ffd019e1e9691dcf0537c797353ef2b1c1d4833d3d463e5b74ae4547344"
+  },
+  "actions.menu_file": {
+    "text": "文件",
+    "source": "50009ce1da4d15e1c4a04024df691eed5f0d598e2c4c67092f205366d0adf99e"
+  },
+  "actions.menu_go": {
+    "text": "前往",
+    "source": "6cc8519b91584e8bd435d63341e0838a99721948718b1c9c1e9c358c64ba992a"
+  },
+  "actions.menu_help": {
+    "text": "帮助",
+    "source": "b79cac926e0b2e347e72cc91d5174037c9e17ae7733fd7bdb570f71b10cd7bfc"
+  },
+  "actions.menu_session": {
+    "text": "会话",
+    "source": "6959b4159575d8dd76d9f3bbe2c6437904f861e7860c35abd18deffb1c3425a0"
+  },
+  "actions.menu_view": {
+    "text": "显示",
+    "source": "dcc839a4015c4b7dd9db959a8f757833b8adb92462a751b973386e453c6d58a3"
+  },
+  "actions.menu_window": {
+    "text": "窗口",
+    "source": "19734a1b58cabc22cae1f88493289ee94f40ff2b350f7f1b9f7011ea84096916"
+  },
+  "actions.minimize": {
+    "text": "最小化",
+    "source": "d72e311c4ddaf4ac6f39136038420b3b01a9eefc09790efa74616ad8a65478d5"
+  },
+  "actions.next_area": {
+    "text": "下一个区域",
+    "source": "befcfecd1c5becf8166e950d4ee8be5954cdc18eb16964448336231ca0a3294f"
+  },
+  "actions.next_ask": {
+    "text": "下一个请求",
+    "source": "4297dc3f3246b376a3477bf83c615ab45d47721068478cf50bdf5ae398d743c5"
+  },
+  "actions.open": {
+    "text": "打开",
+    "source": "ed077f3d8125d60dca1979c7133601bd187d47c73ed9975028f677e49e709942"
+  },
+  "actions.paste": {
+    "text": "粘贴",
+    "source": "f3380f7b44bd70af2a369de6026bf2ca2a7b36fde9086935efcd62a0e379cc7a"
+  },
+  "actions.pause": {
+    "text": "暂停",
+    "source": "858e4ba7a29fd38b630ed73a79e2738333b3fc6778fafa90252f5556c1262fdc"
+  },
+  "actions.preferences": {
+    "text": "偏好设置",
+    "source": "66962f72a08883733c35df6f82a049b929f9579f19c4bc083ac99bead602eab3"
+  },
+  "actions.quit_deepbuild": {
+    "text": "退出 DeepBuild",
+    "source": "c00856551556e073b688560c44af9688b2796c00fca005edfe88a014bedc1dce"
+  },
+  "actions.rename": {
+    "text": "重命名",
+    "source": "3064d79a295cefe4b384b8fe5cb29fd6b06d7eb1ad94b8895f4148039d06b330"
+  },
+  "actions.select_all": {
+    "text": "全选",
+    "source": "d1ec69e64b9609d089aae09f7adc5c566d2cd222f8d8325f0ab3b523f0ac2690"
+  },
+  "actions.space": {
+    "text": "空格",
+    "source": "20eac5aae274985fd88629d19eddccbbec21dacd82a8c7a7dd99661f2135be02"
+  },
+  "actions.undo_answer": {
+    "text": "撤销回答",
+    "source": "2c09555143c6ae6d57aae1d63db65e8644e976e22391a8ed49fedacd2d2a08ee"
+  },
+  "actions.write_in_the_box": {
+    "text": "在输入框中书写",
+    "source": "745c052c955d2a581afb3d154c5e90db911ce92a305c7378c0f3d1bcb1d9b138"
+  },
+  "actions.write_to_it": {
+    "text": "给它写消息",
+    "source": "35a3867f757d8d35e1ccf9abaab469f13097db0244e1d557a3227ac60259e1ac"
+  },
+  "arming.hold_still": {
+    "text": "请稍等",
+    "source": "680d9bd4dd8d92a39e5d3c50fe30c4b381e751991b7b710c51cdd38993192a39"
+  },
+  "arming.too_small": {
+    "text": "请把窗口拉高一些",
+    "source": "1e7ce73b197ceeb14302e3f2b5a5d7672c88dfab6299a5e4546be24c8d496719"
+  },
+  "bound.card_named": {
+    "text": "卡片 {0}：{1}",
+    "source": "e59bbe5d8183bacd0404825bbba6c3ba026a3d5e19d970df32f7081ff64cd927"
+  },
+  "bound.no_run": {
+    "text": "无运行",
+    "source": "2c913c7159feae1862fb983e2b597692289fce1c94f61c3f8679eb28d90edff4"
+  },
+  "bound.panel_named": {
+    "text": "面板 {0}：{1}",
+    "source": "52400356fad2d0d46653d1a29d843e00fd090a77acd037f77b02328e7122c2a8"
+  },
+  "capture.recording_a_bug": {
+    "text": "● 正在录制错误——松开 ⌥空格 即停止",
+    "source": "1b9b701ec70359a6a0cd660c83722dcd35c1b3a02623fdbe23fbf423fd2e402b"
+  },
+  "card.answer": {
+    "text": "回答",
+    "source": "b2a3aa602762a782e47a4f8e93bb5ae1b8819d1b92b7e6ceb3ef46a3c7077eb0"
+  },
+  "card.recommended": {
+    "text": "推荐",
+    "source": "dd6d876548037ec722252b45795206575e7040eba1ca076cf1732a4a903cadba"
+  },
+  "cells.terminal": {
+    "text": "终端",
+    "source": "e0926fdac700b09497b5f0218ea3dd54fa13c0bdeaee6caa7b85e50b852aa05f"
+  },
+  "codes.allowed": {
+    "text": "已允许",
+    "source": "1bb201d188352e9b4633f85e4fb8a31ea93fd14dec702443fd3e2713d657fd2d"
+  },
+  "codes.allowed_failed": {
+    "text": "已允许 · 运行失败 · 已告知智能体",
+    "source": "cf1988c1f147935b4e6484657035a857bf2d3506ae91452d5fe875f6a9b23f27"
+  },
+  "codes.allowed_failed_error": {
+    "text": "已允许 · 运行失败：{0} · 已告知智能体",
+    "source": "9f8fc4f41f1e0ab7a6dbe5a5ac9f4a61f8c254973a1576eec8ab8bce2980631e"
+  },
+  "codes.allowed_not_yet": {
+    "text": "已允许 · 尚未运行",
+    "source": "c7abf6a0d7fc408d7da36b785211a4b4f3519cf918ff8bf7e59355bea475a2ba"
+  },
+  "codes.allowed_ran": {
+    "text": "已允许 · 已运行",
+    "source": "d1a97a1cb4c807bd0bb7d5b6ea88a118bb465aaca4c82682c0275c6c5c26d8bf"
+  },
+  "codes.allowed_then": {
+    "text": "已允许 · {0}",
+    "source": "64e0484178418605e36b2deeb9e56e06d6f91cec5706953ea6bb36782700c369"
+  },
+  "codes.allowed_unknown": {
+    "text": "已允许 · 结果未知",
+    "source": "3937b50faf09c3d06a5c2e1fd32ec2ee88fc4baf1fb6d0eff4d28e4f6401a0b9"
+  },
+  "codes.ask.outcome.answered": {
+    "text": "已回答",
+    "source": "665590354e719bcf6610c39fe617cf8cf8109e96a59e64c73a41a028b74369f9"
+  },
+  "codes.ask.outcome.cancelled": {
+    "text": "已取消",
+    "source": "a760eac0aa545149654be49cd69808bb0d6da3333e3d3660ea888e8863bf3fde"
+  },
+  "codes.ask.outcome.decided_for_you": {
+    "text": "已替你决定",
+    "source": "a76a6897c770504d1bd971442c89ee28d222d61e039b70099f34394ab5e21ea2"
+  },
+  "codes.ask.outcome.defaulted": {
+    "text": "已采用默认",
+    "source": "7c08ede322e7b192a97583f77923dc7a3671c59ee48c2e81232b66e6cf033aae"
+  },
+  "codes.ask.outcome.escalated": {
+    "text": "已转给下一位负责人",
+    "source": "3da11a545e3a4cf8a0556b6eb746c9c8db410e1cadb379582419a6c30a80a350"
+  },
+  "codes.ask.outcome.moot": {
+    "text": "不再需要",
+    "source": "cfa0c46e21d39583ecbf5476f4064c3dd5513015d138d5d45d9c33cafd188761"
+  },
+  "codes.ask.outcome.superseded": {
+    "text": "已被更新的请求取代",
+    "source": "66d1e9909b63db4895dc7dc0e36adc4fab80fe733962bc88fcb9317c51a157c0"
+  },
+  "codes.ask.outcome.unanswerable": {
+    "text": "无法回答",
+    "source": "5f28e25ae5b1ba55ff7d7fb160b5630971f6f50adb3c00d089808ddad1711519"
+  },
+  "codes.ask.outcome.unanswered": {
+    "text": "未回答即关闭",
+    "source": "424e3d339750cb9e5690c5acbeba9d76dd419826cdb5346ff00984bc99ddb9ba"
+  },
+  "codes.not_a_pass": {
+    "text": "不是 PASS：{0}",
+    "source": "14d54f7aa74880747ab3ff3de152269ebf7b945dbc9015fce21e77d849f7be9e"
+  },
+  "codes.steps_failed": {
+    "text": {
+      "other": "{0} 个失败"
+    },
+    "source": "1e23c986a529710ca966949c7828c12341c24c2f12333f1d5ed83befc2853d15"
+  },
+  "codes.steps_failed_error": {
+    "text": {
+      "other": "{0} 个失败：{1} · 已告知智能体"
+    },
+    "source": "084fa0a68a6a4cdc743599761c372ec130b227335b1873928c2173f881c215ba"
+  },
+  "codes.steps_failed_told": {
+    "text": {
+      "other": "{0} 个失败 · 已告知智能体"
+    },
+    "source": "0da69e8aabd54622fbfe61d3aeb17d62d782defe9b7fad6ffc69e4b563a230c7"
+  },
+  "codes.steps_not_yet": {
+    "text": {
+      "other": "{0} 个尚未运行"
+    },
+    "source": "0e6f6391e56ac964df145ef7ff045ba7d1e610201f156f8a2b3e36109e991b57"
+  },
+  "codes.steps_ran": {
+    "text": {
+      "other": "{0} 个已运行"
+    },
+    "source": "feec48f2c0ba67fee179858f3168d67354c64a08ef3bed3990ed48b097334822"
+  },
+  "codes.steps_unknown": {
+    "text": {
+      "other": "{0} 个结果未知"
+    },
+    "source": "31a74ac7b978c27aff0b45a52d88da6410de9280a25983f8c2928ea67731099c"
+  },
+  "codes.stop.cause.agent_crashed": {
+    "text": "它的智能体崩溃了",
+    "source": "364948309a3ada7b53954d9911db1258ab060a9b839c15a5e7968c8fadf437eb"
+  },
+  "codes.stop.cause.context_overflow": {
+    "text": "上下文用完了",
+    "source": "3bb81df06a4eec3fbc1ab54b39ff0a6911421ae2d5a3e6f1e4948307aa161949"
+  },
+  "codes.stop.cause.max_turns": {
+    "text": "已达到最大轮数",
+    "source": "cb13a78fc2573cbc662c48bbced582c1aff5d9fc503d50d21986a99e6ab4e98c"
+  },
+  "codes.stop.cause.plan_window_spent": {
+    "text": "套餐额度已用完；它在等额度重置，什么都不会丢失",
+    "source": "d18c794846aac494151be041f938d2657c1dc31af0579fef22f899ec2b47d32a"
+  },
+  "codes.stop.cause.rate_limited": {
+    "text": "被限流或服务过载",
+    "source": "22446d1940d560fb7ebdb546c87f303b88239875fb940e94d81e2d498c78d3dd"
+  },
+  "codes.stop.cause.refusal": {
+    "text": "模型拒绝了",
+    "source": "10715a284fc7f04f3633921300bbb95d99fa3a96cd5762a43b07833e05202d1b"
+  },
+  "codes.stop.cause.sign_in_required": {
+    "text": "登录已失效；它在等你登录，什么都不会丢失",
+    "source": "16b822ce3ac9a352ae12eefb10ce027b3c2334027d2bf939a29ef80f059d2ad9"
+  },
+  "codes.stop.cause.timed_out": {
+    "text": "超时了",
+    "source": "497cfd00c812f2bafe80877dc56b968472babb5ca2044411b6b3c90ad5c26695"
+  },
+  "codes.stop.cause.token_refresh_failed": {
+    "text": "登录已失效；它在等你登录，什么都不会丢失",
+    "source": "16b822ce3ac9a352ae12eefb10ce027b3c2334027d2bf939a29ef80f059d2ad9"
+  },
+  "codes.stop.cause.tool_schema_rejected": {
+    "text": "某个工具的 schema 被拒绝",
+    "source": "51a5790b520b2c7c89c625e11c56210daa09c656fdfcb4ac11ea595a8525ce7c"
+  },
+  "codes.stop.cause.unknown": {
+    "text": "原因不明，智能体没有说明",
+    "source": "94af6d5a2481b5c72f7f10a37eb0481ce537044ff035d0c359e24d060289210e"
+  },
+  "codes.stopped": {
+    "text": "已停止：{0}",
+    "source": "a38d02f1ba9390fadc3828065ca7d621edc17abb33d6a02ae856d0cae71202ab"
+  },
+  "codes.verdict.reason.checks_not_started": {
+    "text": "它的检查没有启动",
+    "source": "ff1bcea29903bbcb921361cf2b902c84cb50b1863631cbcc7620403015cb5efe"
+  },
+  "codes.verdict.reason.denied_call_ran": {
+    "text": "DeepBuild 拒绝的调用仍然运行了",
+    "source": "00905531242f442b56f8934589bf57df96f39b1cb2dd2508866505d3e4f14d5d"
+  },
+  "codes.verdict.reason.open_items": {
+    "text": "任务遗留的事项仍未完成",
+    "source": "0137b1506a385b57a42dbd1d3f1055678af0df6c5254b9217224b3954e4dbda4"
+  },
+  "codes.verdict.reason.option_switched": {
+    "text": "智能体按一个选项继续后，你选了另一个选项",
+    "source": "a3303a259a60bb16e87701519ad67f1729be3736bcc2963fc32eafdd7e9ca073"
+  },
+  "codes.verdict.reason.target_unresolved": {
+    "text": "它指定的某个目标已无法解析",
+    "source": "53ad5a36d5a15deb2d42c92694a705c544fc888796b8350b2e2f022247d96b97"
+  },
+  "codes.verdict.reason.threshold_without_unit": {
+    "text": "某个阈值没有单位，所以任何运行都无法判定",
+    "source": "3ff85de4a3c85a2051c97fe2539539d91a956f8a08ded04e807007102df2a536"
+  },
+  "codes.verdict.reason.unknown": {
+    "text": "原因无法由当前版本说明",
+    "source": "3c7ce46e00dd5172d045d84c648afe2e1e47783137026ccc638c811b86e2d6fb"
+  },
+  "codes.verdict.reason.untrusted_project": {
+    "text": "项目尚未被信任，所以它的规格检查从未运行",
+    "source": "77735d4ddd98b736226a8c19264838d94db777e61a7aba76aecd02c41eaaf3eb"
+  },
+  "commands.commands_and_pages": {
+    "text": "命令和页面",
+    "source": "ab44794644dd69ba19a4a6bef5277afac03f695c3b86a40940a43d9af833d06f"
+  },
+  "commands.no_match": {
+    "text": "没有匹配项",
+    "source": "cd8d844d2c3dedc1f6d5c56924a9f743bba1fc43278772da035935446c2db0f5"
+  },
+  "commands.search": {
+    "text": "搜索命令和页面",
+    "source": "76dbdee3bb42ad92c5b80d56bbb11ea98a6bbb42bc2e4ebd4f07b94bf86b9917"
+  },
+  "confirm.reason": {
+    "text": "用“{1}”回答“{0}”",
+    "source": "72c981c3ed1e9e8e63602a42055517144c106f8b8b833bd6bc0d184a84627f73"
+  },
+  "connect.ask": {
+    "text": "要把 {0} 连接到 {1} 吗？",
+    "source": "92ff89df5516873ee3145e7738ad8d41ac848d6f12d0dfc5fcfdd60818c3ff26"
+  },
+  "connect.connect": {
+    "text": "连接",
+    "source": "1a2303ede07493acc7caaa7c737f3c52bcc9cf04372be19ed1b0af6b9f2c791e"
+  },
+  "connect.connected": {
+    "text": "{0} 已连接到 {1}",
+    "source": "7592f3a13f88b8308e9009a4664d2236efe3c4ab14e03d7aab4fe009b0c15bd0"
+  },
+  "connect.disconnect": {
+    "text": "断开连接",
+    "source": "acfc5be785a9bb3da11c9f05adb69bd5633096f09002aa44813a1b3207e912ad"
+  },
+  "connect.makes_sound": {
+    "text": "发出声音",
+    "source": "0e0d113512b1cd1c3628d97b6c13dab37dfa4ee293cd4e78a4688876ab7e2795"
+  },
+  "connect.not_now": {
+    "text": "以后再说",
+    "source": "a0e63d7c7125d29af84d6919af5550529be77c327324940c98c4b2cb13a99c8c"
+  },
+  "connect.nothing": {
+    "text": "无",
+    "source": "1785cfc3bc6ac7738e8b38cdccd1af12563c2b9070e07af336a1bf8c0f772b6a"
+  },
+  "connect.opened": {
+    "text": "作品播放时它会发送，你关闭作品后它就停止。",
+    "source": "8d0e06700653160ab079eb5ddf5542a796791e1e4fd97ccd72ea65bd28378b2b"
+  },
+  "connect.reaches": {
+    "text": "连接到",
+    "source": "08d641af4250b4dca26c4b661dc970a4d6f2def9a2cb5e51d389475f64341ead"
+  },
+  "connect.reads_in": {
+    "text": "读取",
+    "source": "0b886d58b53d06e419e99f5b63d7d105849294a8afa4d8290b142bba1d2a6072"
+  },
+  "connect.sends_out": {
+    "text": "发送",
+    "source": "55deba24e79b58b565d4a7268075a8e9ac04cfe077f3c442abcd6e208fd15450"
+  },
+  "connect.sound_no": {
+    "text": "否",
+    "source": "9390298f3fb0c5b160498935d79cb139aef28e1c47358b4bbba61862b9c26e59"
+  },
+  "connect.sound_yes": {
+    "text": "是：静音或勿扰时段会让它停下",
+    "source": "0ab788fab6d7bb840bd90638d12a260b9c495ca1179458831f705e45e6c45df9"
+  },
+  "empties.hub_down": {
+    "text": "中枢没有响应",
+    "source": "a1d82a6828abb769e306dd353c8888a9538ece1a7bb1b95e9eaaf87e0ba2a18b"
+  },
+  "empties.hub_down_since": {
+    "text": "中枢自 {0} 起没有响应",
+    "source": "890008feebd96387f47b8be0ba0b913f2f9fb12647d46364f57fc4efbf6c3385"
+  },
+  "empties.reading": {
+    "text": "读取中",
+    "source": "d70afca615203838da3d858e60dda12f900e83e4a6fb03a63cfadb8576ca8985"
+  },
+  "hub.app_older": {
+    "text": "此应用比中枢旧：它使用契约 {0}，而中枢使用 {1}。\n{2}",
+    "source": "fcbbcccf9744a502624a0b1af236bf3e2a014abde81e6c18f4faaa64bba4cc4d"
+  },
+  "hub.client_fix": {
+    "text": "请把此应用或 CLI 更新到与正在运行的中枢匹配的版本。",
+    "source": "86beeaff8e8c2ac933ad39cfbd9f5f1a010e3b08c278ada5d78183439454da33"
+  },
+  "hub.hub_fix": {
+    "text": "请更新 DeepBuild，让中枢与此应用匹配，然后用 `deep setup` 重新启动中枢。",
+    "source": "d1d18e968a2cfd62fb5b0faac46977563ca4335c2e007dcbcfaca75256368eda"
+  },
+  "hub.hub_missing": {
+    "text": "中枢比此应用旧：它没有列出 {0}。\n{1}",
+    "source": "1b3765bac6de72fd40a425cdb336af7b66d9db866ccdf7fc18389c1f0803ee61"
+  },
+  "hub.hub_older": {
+    "text": "中枢比此应用旧：它使用契约 {0}，而此应用需要 {1}。\n{2}",
+    "source": "8609c9935c3fcfa9c8f00d56c7b9a63480c839f0cefb47acb1014913342362b5"
+  },
+  "hub.none": {
+    "text": "无",
+    "source": "140bedbf9c3f6d56a9846d2ba7088798683f4da0c248231336e6a05679e4fdfe"
+  },
+  "installed.agents": {
+    "text": "智能体",
+    "source": "279b44d2ab4b40c0fc132f8f3051293544cca91de9c8aa14f2cd29adb132b0ee"
+  },
+  "installed.didnt_load": {
+    "text": "{0} 没有加载：{1}",
+    "source": "a51bb66702a87d5cc165147e29fb7c247c19fe8e262f3d0fefe0e6b8e74a6773"
+  },
+  "installed.didnt_run": {
+    "text": "{0} 没有运行：{1}",
+    "source": "e68b76a430f2cfc178e57dd495278f1741b3190efa61750d14923908045f8401"
+  },
+  "installed.home": {
+    "text": "主页",
+    "source": "3a78695388b38b5cceefaf6796b0137877514593543b91af2752d5a17e3d736c"
+  },
+  "installed.kit_reads": {
+    "text": "panel@1 的结果是 {0}",
+    "source": "b3ea71d670141ef7a5d4b2fba3af1eb703cbb1612e5754fbe1ebf063f87e5e7d"
+  },
+  "installed.needs_you": {
+    "text": "待你处理",
+    "source": "74b6abdf59690fdffec2059089487cd63658249da5301cbf065e9977518fbd8f"
+  },
+  "installed.no_folder": {
+    "text": "它没有指明文件夹",
+    "source": "4ca3e3b19ca0095b3e7fd21108f7476b10f906640df88c668c4189e092d98984"
+  },
+  "installed.ran": {
+    "text": "{0} 已运行。",
+    "source": "4f091938d13e563345af9bba24782eebf8acefea0d34fadd67f906733f7bfcf6"
+  },
+  "installed.rules": {
+    "text": "规则",
+    "source": "4228aeb07c410ffc9d15b458bf7c2bf8d9dfa7af632f2c339e69f8cb54654da3"
+  },
+  "kinds.approve_runs": {
+    "text": {
+      "other": "批准：运行 {0} 个步骤中的 {1} 个 · {2} 个不可撤销"
+    },
+    "source": "cda41efb44371b4fdddd39c367f64e1ea6b1d6cbfaf8dd7487a439754005b309"
+  },
+  "kinds.attempts": {
+    "text": "再尝试一次",
+    "source": "5bb57d451635ed31e0b7351bd6622e1055e492cd941cd0b4471f334a9754eabf"
+  },
+  "kinds.changed_since": {
+    "text": "自 {0} 以来有变化：现在是 {1}",
+    "source": "4ac910127891cc873489ef6e4ea8118e29acfb98da98859e1fea60a16bd61ed1"
+  },
+  "kinds.check_running": {
+    "text": "{0} 运行中",
+    "source": "84978d65f1c2d9890273becc7b3266b8b7c1c680665292506b0de9a585d7f2af"
+  },
+  "kinds.check_still_running": {
+    "text": "{0}，仍在运行",
+    "source": "8fae2c5a2f47d17590f5d2872e405e0f00fdd7bdc26d5a6fbc69243e47953e21"
+  },
+  "kinds.default_no": {
+    "text": "否",
+    "source": "9390298f3fb0c5b160498935d79cb139aef28e1c47358b4bbba61862b9c26e59"
+  },
+  "kinds.default_no_change": {
+    "text": "不做更改",
+    "source": "5d69f9dac5b021003989d4809a5a207fd2ebea177c282caaf2f759fe8880fc31"
+  },
+  "kinds.default_recommended": {
+    "text": "推荐的选项",
+    "source": "21cc0af239e588a56e495775b4e35eec7ed0c14f0029ed5927ede6970bf3d1fe"
+  },
+  "kinds.default_requirement_out": {
+    "text": "不纳入这项要求",
+    "source": "1a064ef8a62c78f1fc3c5794056fda77b4d248a1f365c11520c28f552cfdb3f0"
+  },
+  "kinds.default_stays_blocked": {
+    "text": "保持阻塞",
+    "source": "be1db058c482ec5a0a0caa97c542102c04fe0ef513c6cc6abe81629dace2a7b8"
+  },
+  "kinds.default_with_id": {
+    "text": "{0}（{1}）",
+    "source": "fa1e7180cf6c8ea611aeffecae3ff04d94f9558bbd8f2c69960ac883c1f31595"
+  },
+  "kinds.field_changes": {
+    "text": "更改",
+    "source": "d0b4ba2311b3e84977dc4bb320fe72cd85426f5cf14b487a4c5352ae3ad8cb37"
+  },
+  "kinds.field_checks": {
+    "text": "检查",
+    "source": "961f787b0cd3443fbc7c456886ecd25749c0485c4ae9a02f10599b17dad9f944"
+  },
+  "kinds.field_checks_on": {
+    "text": "{0} 上的检查",
+    "source": "f0acd80906ca4bbb318c759f3c3362343137148e956a0f1a08ff0cc7aaac23e4"
+  },
+  "kinds.field_claim": {
+    "text": "声明",
+    "source": "dd1b3c312cf7d816130354452e9629ce39355b0c534129dd26a08cd9a4502ede"
+  },
+  "kinds.field_cost": {
+    "text": "费用",
+    "source": "9f82f7b375f4aa1bd7d50abe0f760c4ca5a8f0208aa68555489c39dd7c7aeeaa"
+  },
+  "kinds.field_diff": {
+    "text": "差异",
+    "source": "df087996d45b03e7eb8c133c0298fd98d35113fca26aaba58612fef3cc212cad"
+  },
+  "kinds.field_effect": {
+    "text": "作用",
+    "source": "dcb576426a17b7df13907007cb02a1f1dfc12fc6c69f603717abca59d03b888e"
+  },
+  "kinds.field_element": {
+    "text": "元素",
+    "source": "445929267209c034d1e324834c17e0c8305df3dcb21d1710a639ac6ca08c648b"
+  },
+  "kinds.field_live": {
+    "text": "实时",
+    "source": "247610f4dedd4ab7247d07dbda19c81ca9817f85820742cad49d407ffae9e4ed"
+  },
+  "kinds.field_look_at": {
+    "text": "请看",
+    "source": "2cc56642d9a6a07288b198b0e9961007e75d268746d420a08df4921f60c478ce"
+  },
+  "kinds.field_moved": {
+    "text": "已变动",
+    "source": "5edd1832df25e2f1a72585c0ee55c1e585e7f4902eb1d15f7abf1c71c1b296ae"
+  },
+  "kinds.field_open": {
+    "text": "未完成",
+    "source": "2348f998744212575d85959674f9607ab26f67708a917157472832386337c904"
+  },
+  "kinds.field_option_cost": {
+    "text": "{0} 的费用",
+    "source": "0299e728ca9f70ebd237bd56edaafc2e786ce5a374722640c9a248bfe3678de1"
+  },
+  "kinds.field_point": {
+    "text": "要点",
+    "source": "251fecd592e56e6c4a95121752f4a73bb802dffc1cc4bce6100206ee2b7cb650"
+  },
+  "kinds.field_proven": {
+    "text": "已证明",
+    "source": "db5344cc58ca48817a3419331e212b30fc77d25358dcf6b65d8be54c60328491"
+  },
+  "kinds.field_proves": {
+    "text": "证明方式",
+    "source": "1853ac3ef763440e6fa1e68cfcdf5ec55214b7bbc93cd8b34a832e5690ba9ec9"
+  },
+  "kinds.field_public": {
+    "text": "公开",
+    "source": "efa1f375d76194fa51a3556a97e641e61685f914d446979da50a551a4333ffd7"
+  },
+  "kinds.field_reference": {
+    "text": "参考",
+    "source": "52367a6622b19f08825e915fad80c542ad4f4c34dbcebad9f5007994b3e39208"
+  },
+  "kinds.field_requirement": {
+    "text": "要求",
+    "source": "f8dcb7a13bf4991a7d7969ea1c8add149e79b13ae91c0e6c13994da38eb3636a"
+  },
+  "kinds.field_screen": {
+    "text": "屏幕",
+    "source": "4cd6c2914887dd4a68e4c9ffbed8b077f048cf795d6cfa0b801d43e0ea5a1560"
+  },
+  "kinds.field_sheet": {
+    "text": "选项表",
+    "source": "78af7bdb5626eb0a046772b3edda705ca9e60ba7af0960eea89f7fa201d685a8"
+  },
+  "kinds.field_steps": {
+    "text": "步骤",
+    "source": "b7595e2a863957fc6c225ed540d335dd1e859dd3032451c2e11bceb0329defa6"
+  },
+  "kinds.field_target": {
+    "text": "目标",
+    "source": "34a04005bcaf206eec990bd9637d9fdb6725e0a0c0d4aebf003f17f4c956eb5c"
+  },
+  "kinds.field_undoable": {
+    "text": "可撤销",
+    "source": "36111aa6c885a91e8d0471636f904419ee042cc0f67df63eff0d00757e8638b1"
+  },
+  "kinds.field_waives": {
+    "text": "豁免",
+    "source": "30b6614d73594784f55c4812190904b4ace4902b0a8e5bfc5500c154a052ad17"
+  },
+  "kinds.field_where": {
+    "text": "位置",
+    "source": "b48111c10c65fc119368edafb19f97451759ee90b3f44647368135ca47aa4753"
+  },
+  "kinds.field_why": {
+    "text": "原因",
+    "source": "2be23c585f15e5fd3279d0663036dd9f6e634f4225ef326fc83fb874dbb81a0f"
+  },
+  "kinds.no": {
+    "text": "否",
+    "source": "9390298f3fb0c5b160498935d79cb139aef28e1c47358b4bbba61862b9c26e59"
+  },
+  "kinds.none_ran": {
+    "text": "没有运行任何检查",
+    "source": "acde9179b914bc8049729cd3a68355b57db7b91b72b9da48090a61271f548e9f"
+  },
+  "kinds.passed_of_ran": {
+    "text": {
+      "other": "{0} 项中 {1} 项通过"
+    },
+    "source": "1412fbc6545f0754e383202642c5b001734c9e5aad2c7ffd200fc1585dfc322f"
+  },
+  "kinds.plain_batched_authority": {
+    "text": "批准",
+    "source": "147fb813a2515718ef6121c61c9636d6ffbcb055bcdb45dbb483af667aa94c8b"
+  },
+  "kinds.plain_choice": {
+    "text": "选一个",
+    "source": "a880a59db4d3a8cc078941a6200f3491f2354673f83ee7528af6b535247d39b4"
+  },
+  "kinds.plain_definition": {
+    "text": "怎样算完成",
+    "source": "07685fc7976db1d65d8c2471fedcf6dc3512ebe03df8274a9276d248610d68e2"
+  },
+  "kinds.plain_exception": {
+    "text": "问题",
+    "source": "a1c5ae7bcb34bbf48104488eff8deede31b059aceceab562a6aace384f7fd64f"
+  },
+  "kinds.plain_stalled_claim": {
+    "text": "卡住了",
+    "source": "577c2254dc68ce8bd09e9d2d8e8d96df06b545c58b6f432d07f2abcf596e7a16"
+  },
+  "kinds.plain_taste": {
+    "text": "外观",
+    "source": "d5e06f4ea32be559466faa735907550409e6ac8318cfeafcb970e6a7e784665a"
+  },
+  "kinds.plain_unblock": {
+    "text": "你的步骤",
+    "source": "87baa07c313be9984076f0638c49d8787c37ff4c006d0f5512acb8d63a3575f8"
+  },
+  "kinds.reference_agents": {
+    "text": "智能体自己的",
+    "source": "b7fe4b84614467937fb29a0bc2c393aecc0f9d8f2ce59613fe96e1a7e48683b9"
+  },
+  "kinds.reverts": {
+    "text": "撤回这次更改",
+    "source": "d0218710a1bb74e6abbaeda0f3ffa582967c1e1390ccf48f7d6ada8876e1f016"
+  },
+  "kinds.saves_for_project": {
+    "text": "回答会保存到这个项目（{0}）",
+    "source": "4aa9a676e6bacba9dda3464dec6413c88e44338407eb2c11c37d26864df97130"
+  },
+  "kinds.saves_for_task": {
+    "text": "回答会保存到这个任务",
+    "source": "44c4b3f74fbf58542dbb0a62d41e8aff83d31d3382a74655e6cc0e01683efc92"
+  },
+  "kinds.yes": {
+    "text": "是",
+    "source": "8a798890fe93817163b10b5f7bd2ca4d25d84c52739a645a889c173eee7d9d3d"
+  },
+  "lib.hub_older": {
+    "text": "中枢版本较旧",
+    "source": "a6d0d7c215bf3e8c5bf80dd211124709b8016cedd16792885594be7bb8919230"
+  },
+  "lib.no_hub": {
+    "text": "没有中枢",
+    "source": "266e51e7470e609f37f753d6f8739e23b20d4dda261aa1d75138f8792a0a8284"
+  },
+  "list.answered": {
+    "text": "已回答",
+    "source": "68c780cd132a0299c7cd3fa8649783cbc2872a98d90cd4ed6b9696e3c61c4c68"
+  },
+  "list.doing_ago": {
+    "text": "{0} · {1}前",
+    "source": "3c99ace2b9da7e719109e5439fa6c3e46df69e25c5f9830d8e6a2d264ed6c250"
+  },
+  "list.folded": {
+    "text": "已折叠",
+    "source": "bbe900d10e989462b9015766416e926c8b434ccb56ecc2c1ac644d154851826a"
+  },
+  "list.held": {
+    "text": "保留中",
+    "source": "c20dea4d876b5b8fb0a1814b43017030cea6d4ac30b2d9ae71b404d2faba49b5"
+  },
+  "list.needs_you": {
+    "text": "待你处理",
+    "source": "74b6abdf59690fdffec2059089487cd63658249da5301cbf065e9977518fbd8f"
+  },
+  "list.no_project": {
+    "text": "无项目",
+    "source": "f34c2be0d1c5f5622eb03be1f67e13dee2ce3dbb71201d909e76a761c29d8bcb"
+  },
+  "list.quiet_sessions": {
+    "text": {
+      "other": "{0} 个无动静的会话"
+    },
+    "source": "54f96c2d4e878221800c55a5b493febb0094c486e1aa8c1e1e4e363c55083aeb"
+  },
+  "list.set_for_later": {
+    "text": "已设为稍后",
+    "source": "71afaa8266d3e71327e00a35a43cf7b4a321cf2ba28e07a23bd6361dcaf513c2"
+  },
+  "notify.alerts_none": {
+    "text": "提醒样式设为了“无”：请在“系统设置”中为 DeepBuild 选择一种提醒样式",
+    "source": "ffde80344c55b1f1198eef339ef7fcbbe2e0321ce34323e99ae96e894e0c808f"
+  },
+  "notify.ask": {
+    "text": "{0}\n{1} {2} — {3} 如果你不回答：将在 {5} 采用“{4}”。",
+    "source": "6d88b42f95045ccb6764144f61e1440fd4df690af74f6cf4369e300e20b912f6"
+  },
+  "notify.batch": {
+    "text": {
+      "other": "DeepBuild\n{1} {2} — 一张卡片上有 {0} 个问题。第一个：{3}"
+    },
+    "source": "863a72784045bb076f8b30225eb9bf920c089004634355ac55d7b50465d8e3e1"
+  },
+  "notify.count_comma": {
+    "text": "，",
+    "source": "0a07f659461970d8d8dcefe4fff96a1745599810dc7d47391e95c803b7b2072c"
+  },
+  "notify.denied": {
+    "text": "通知已关闭：请在“系统设置”中为 DeepBuild 打开“允许通知”",
+    "source": "e0d34868cc18a800494d0e917a5e1a0b52a6ba11f02269aebadb0da62cff9dbb"
+  },
+  "notify.end_notice": {
+    "text": "DeepBuild\n{0}：{1}。",
+    "source": "b838b5de0bf2c2baa71d9d8342ea9a122ebe7d2d8c36116afe3dbc796882e7fd"
+  },
+  "notify.hub_down": {
+    "text": "中枢没有响应",
+    "source": "a1d82a6828abb769e306dd353c8888a9538ece1a7bb1b95e9eaaf87e0ba2a18b"
+  },
+  "notify.notifications_off": {
+    "text": "通知已关闭",
+    "source": "44a3728738655ebd53d72c8b38dad2014fc7f64cf5af3f5a5224025704838ffe"
+  },
+  "notify.state_count": {
+    "text": {
+      "other": "{1} {0} 个"
+    },
+    "source": "875826408f6c4cecbe9a3d8ebe73e1e10887b537ce57cc6f127360ef1c8ca88a"
+  },
+  "notify.tasks_stopped": {
+    "text": {
+      "other": "这次运行的任务已全部停止（共 {0} 个）"
+    },
+    "source": "055aac1e3e2511e683b04fbf340829270eb33101ccd6c089aa7122402b4f22c3"
+  },
+  "open.archived": {
+    "text": "{0} 已归档",
+    "source": "849848f28b5a3364b6f345c474d8d342103b00f72dbcd406cb27a53ce558b22a"
+  },
+  "open.at": {
+    "text": "，时间 {0}",
+    "source": "4cd17e0936874c837daa4577931f2100145ad1ef95514e4d78ce093990b876e6"
+  },
+  "open.closed": {
+    "text": "{0} {1}{2}{3}{4}。{5}已没有需要回答的内容。",
+    "source": "7a258272fc9ed2af798da398286128b0bde67a019829d7c47db7ce786e8dbc69"
+  },
+  "open.from_inbox": {
+    "text": "，来自 deep inbox",
+    "source": "9c361c2ad2d69fa3441df8697e5c2fda0aba20bbe213499bcf9d7120565d343c"
+  },
+  "open.in_the_app": {
+    "text": "，在应用中",
+    "source": "0b81c04d81386d08b681ad5a264d3859abea2ea62810d89acfa9ce9221a94938"
+  },
+  "open.no_match": {
+    "text": "没有与“{0}”匹配的内容",
+    "source": "67c4c5b986111d946437c9a464b3ada9199c56f917631a506f706718d0a2caa3"
+  },
+  "open.receipt": {
+    "text": "{0}。",
+    "source": "fff42ef79a5a5025b92a5b6c034d10c9da94d2fceac4b0eacd7d0d5bc668124d"
+  },
+  "open.through": {
+    "text": "，通过 {0}",
+    "source": "cf58ebd0baa9fd7381df924591b916b263dc96ab09aaf4a13a5fe3ee455396a9"
+  },
+  "plain.agent_fixing": {
+    "text": "智能体正在修复，第 {0} 次尝试，共 {1} 次。",
+    "source": "32c5f26dc45dd7980643f87e23e24158ab2f8ac103bf99c4cf06a51a7b1095bc"
+  },
+  "plain.agent_looks_next": {
+    "text": "智能体接下来会处理它。",
+    "source": "dc30a3b5e8b7505d5beca3792c4ecb500702e9430fb5baabdfa56be6152fd0a5"
+  },
+  "plain.check_error": {
+    "text": "有一项检查因错误而停止。",
+    "source": "b89708f5084921b3bede015c5b0ff8ad34d8a0fd2339558587524ceaff749263"
+  },
+  "plain.check_unexpected": {
+    "text": "有一项检查没有得到预期的结果。",
+    "source": "35ad5ae582a43bbd72c289d483f15def15f50508ae9dc4c0a3fa2616ae58419c"
+  },
+  "plain.waits_for_answer": {
+    "text": "它在等你的回答。",
+    "source": "788f1b51d1bdd05ae0ca155940517f674147f2498a6d553ea6b883cac2772e3d"
+  },
+  "plain.waits_unblocked": {
+    "text": "它在等阻碍它的问题被解决。",
+    "source": "14c4f3ba52cc20b1b332dddd03647b1b52d91d35711b8dc3622322e3315cb3a5"
+  },
+  "question.also_answered": {
+    "text": "一并回答：{0}",
+    "source": "a1c9c80265d65f73955f121daa12056cad49102dfe0c1a8f5c24b87a92a176db"
+  },
+  "question.answer": {
+    "text": "回答",
+    "source": "b2a3aa602762a782e47a4f8e93bb5ae1b8819d1b92b7e6ceb3ef46a3c7077eb0"
+  },
+  "question.answered": {
+    "text": "已回答：{0}",
+    "source": "0a14272e8f79a5509383db6b12a2ce40bc61feee9b46d27c48ca1e987231c8f0"
+  },
+  "question.answers_more": {
+    "text": {
+      "other": "另外回答 {0} 个"
+    },
+    "source": "7af11dfe9257090a37af39b765277fd3d9ad2b0c569fcfb5762677a02c855c91"
+  },
+  "question.answers_this_ask_only": {
+    "text": "只回答这一个请求",
+    "source": "083db7b7aeffe356990ca28ab105c95d8f203dd00a1fcdbce35881b4bad12972"
+  },
+  "question.applies_at": {
+    "text": "{0} 将于 {1} 生效",
+    "source": "d1c0401b590ebf4db73b9b37135a4a5dc80945c15b02050a555e0416695c2746"
+  },
+  "question.back_sends": {
+    "text": "{0} · {1}",
+    "source": "cd55a9d95751fb9bb9e4a0988dd7ae3b08c7b49d0a28ba51cd94d9bafe6a27d0"
+  },
+  "question.default_at": {
+    "text": "默认：{0} · {1} 生效",
+    "source": "14b1857fae9dade75836409ad71f6c40a319e1b9dc01028d0c0431a37087f8c6"
+  },
+  "question.field": {
+    "text": "{0}：{1}",
+    "source": "fb62fe2ae6b2ae6cd472717ded838cce62600f4789e31aa5873e7e69407848bc"
+  },
+  "question.more_options": {
+    "text": {
+      "other": "还有 {0} 个选项"
+    },
+    "source": "b167c9801fc31995beeea015b8a927e18fd01d1e256d21c9ce813e638324ac94"
+  },
+  "question.open_the_fold": {
+    "text": "请先展开全部选项",
+    "source": "4c84965237ab727940c7d12bf99ae52edb29e9ee6089a0caa1c3935b8515d6d2"
+  },
+  "question.past_call": {
+    "text": "以往的决定：{0} · {1}",
+    "source": "8449dd9bb30798937c9d13b904ee32b510065a0bd8b37744d072d289626220c6"
+  },
+  "question.read_to_the_end": {
+    "text": "请先滚动到底部",
+    "source": "a177db26f3506eb00d3355255b82a10e6decc57e6cbcf55932e4a3ad32e6bbba"
+  },
+  "question.recommended": {
+    "text": "{0}（推荐）",
+    "source": "9e04708d4ef9577f30a2d76128b8200cfde2dd128588bdcd96fed8b051e71b9b"
+  },
+  "question.recommended_cost": {
+    "text": "{0}（推荐） · {1}",
+    "source": "cc28c36d02f5771106336fc0ffc6c7a002c6799a1edee04265b6731224a08b71"
+  },
+  "question.said_image": {
+    "text": "你的图片",
+    "source": "c1b858c81089f08f5bfd8351a352d8eea73fbcf9a5e3d81fb9f1435e6128dd7e"
+  },
+  "question.said_nothing": {
+    "text": "无",
+    "source": "1785cfc3bc6ac7738e8b38cdccd1af12563c2b9070e07af336a1bf8c0f772b6a"
+  },
+  "question.said_words": {
+    "text": "你的话“{0}”",
+    "source": "0f758452c83940a83650fb95399c0187c371871f733eeb6efdf9d422c908b8b2"
+  },
+  "question.say_no": {
+    "text": "拒绝",
+    "source": "7684ece9454ad439f4eabf1f3e183bb6f9d81a4cc342a8f39bced51f66f2f764"
+  },
+  "question.send": {
+    "text": "发送",
+    "source": "f6f4688ff23d50c67053963c251fa0ce64a925cf283537cf066b1f362cb9b778"
+  },
+  "question.sign_in": {
+    "text": "登录",
+    "source": "bfd402b2f6f3812529b55596136d3a11c51616317e3b1cd999928e2d4eae7d3f"
+  },
+  "question.step_not_undoable": {
+    "text": "{0} · 不可撤销",
+    "source": "e1a20150d180e4fe09ab537007eeca17f2d31c9188a7421469d70949e5cedacf"
+  },
+  "question.step_undoable": {
+    "text": "{0} · 可撤销",
+    "source": "b826c999753b0ff269d7944843a8a92cab4d603dd7a6aae3a3510b6adb568319"
+  },
+  "question.switch_first": {
+    "text": "打开这个请求的步骤后才能批准",
+    "source": "5122b14306534a9e686beda20001e71b29c6aeb375e9ee5e85c15b5545d913bd"
+  },
+  "question.undo": {
+    "text": "撤销",
+    "source": "a8283ade31856f71220db0e6f60a257c6889dc4dad0f275f66ad44b9ed9bf8d5"
+  },
+  "question.wont_run": {
+    "text": "把你的话作为理由发送；这一步不会运行",
+    "source": "0287ae7fb31b7cab2a48e837dab0f874347c962825c8a51de9e13136031f194c"
+  },
+  "question.your_image": {
+    "text": "你的图片：{0}",
+    "source": "9090b4d61fac023ae17dfdc7c2a6d473568d283a6db1c40237acd5b888b2aa0f"
+  },
+  "question.your_words": {
+    "text": "你的话：{0}",
+    "source": "b9680bb4fb6a197769ed66f8f31828ea3f2cb5fb633cc2b50f70d30e7bdeb11b"
+  },
+  "rules.check": {
+    "text": "检查 {0}",
+    "source": "9bbcee07beddb744ef761698721a4be757e7b67a92cc6176da189700900486be"
+  },
+  "rules.guard": {
+    "text": "守卫 {0}",
+    "source": "4c4d57a74aa0f6fbefa44f30bd54ec9ccc218783533ba3000370fdd38e343d24"
+  },
+  "rules.requirement": {
+    "text": "要求 {0}",
+    "source": "c61886be2b550969e4a257336053157b1a8f09cbddcd7780a933910bf03935d0"
+  },
+  "rules.text_only": {
+    "text": "仅文本",
+    "source": "3c8249cff04275cf5a1056321d7cd37b79d97001835a1d01d09cd181d58f639a"
+  },
+  "setup.adds": {
+    "text": "为 {0} 添加钩子。钩子是{1}。",
+    "source": "4a2a9ea39879ee4375a78103e11c9b7d88dafb0ab79218f4fde9ff773eafc7a2"
+  },
+  "setup.adds_reads": {
+    "text": "为 {0} 添加钩子，并把它们的历史读入 wiki，由你自己的智能体按你的套餐来读。钩子是{1}。",
+    "source": "a1db6169236b1d21bacb463394aba473d476bc2497aec18791dca7703f22ca26"
+  },
+  "setup.couldnt_run_deep": {
+    "text": "设置无法运行 DeepBuild 的 deep 命令。请再按“开始设置”重试。",
+    "source": "5bcc30d7922e7cfb478dfbb77c1cfdcde0ca02dabed7b1684a14aaf21e43a0b4"
+  },
+  "setup.couldnt_start": {
+    "text": "设置无法启动。请再按“开始设置”重试。",
+    "source": "fe9e9b68219788dd7c384daf53c2d39e3e0f93c974ece56eaa0232836102c4ac"
+  },
+  "setup.didnt_finish": {
+    "text": "设置未完成",
+    "source": "40f4b170a108d2cca63e1fb9a6c0c448f63eee76497780c0ff0eedcca261e050"
+  },
+  "setup.exited_with": {
+    "text": "它以 {0} 退出",
+    "source": "598bdf74c4587f042b46a5d12ab082e00de4b6a3670bb31eca4b4654b569a359"
+  },
+  "setup.finished_without_a_word": {
+    "text": "设置已结束，但没有给出任何说明。请再按“开始设置”重试。",
+    "source": "cfe771a5a2abc7fb9e320fe2d5924eb6e9e5958f7b00d02c9276cfbb9915dd52"
+  },
+  "setup.hook_means": {
+    "text": "智能体在工作中的固定节点运行的一条命令，用来告诉 DeepBuild 它正在做什么",
+    "source": "a51e84a21992a84c8997a2ab870a601a9bb07850f84128d653f0055c186a9ccb"
+  },
+  "setup.installs": {
+    "text": "用开发方自己的安装程序安装 {0}。{1}",
+    "source": "d681e223f479277a0882f43f0766f56c0003a98b363d0f1826a55aea2c4ffd31"
+  },
+  "setup.list_and": {
+    "text": "{0}和{1}",
+    "source": "8bfee7217ac583224997e757b98e7cf21ca8a80f07f9f31f929db8fcb05372bd"
+  },
+  "setup.list_comma": {
+    "text": "、",
+    "source": "0a07f659461970d8d8dcefe4fff96a1745599810dc7d47391e95c803b7b2072c"
+  },
+  "setup.never": {
+    "text": "从不读取凭据文件、从不登录，也从不把你的代码发送到任何地方。",
+    "source": "57ddc1bee0463c562f4fbe26699297b1ddfdd7c4d9d6334288f38c9175ee9e72"
+  },
+  "setup.no_answer": {
+    "text": "它在 {0} 秒内没有响应",
+    "source": "73365f80cfde40c0d4a3205709ba8acff2aace545025277fd53dfdfa2e2b9a1f"
+  },
+  "setup.not_set_up": {
+    "text": "尚未设置",
+    "source": "1a57d29071ca17cd46561d7b38173aa6abb1626f0431c3e1c4056494629a4ff6"
+  },
+  "setup.or": {
+    "text": "或",
+    "source": "e1a3e78cb5c8858631bf81f94369a0be3fd2aebb9e852e66368b381c8feef91f"
+  },
+  "setup.paid": {
+    "text": "它需要开发方的付费套餐。",
+    "source": "03c2c30a681f40bf1d0536485c9def11f32df577f9e2baaf4480dce88af8ca5f"
+  },
+  "setup.paid_price": {
+    "text": "它需要开发方的付费套餐：{0}（其价格页面在 {1} 如此标明）。",
+    "source": "02e6870fe7de2658ff8abd0ff1908e8dc798af9190867292079fb8450d4a7cde"
+  },
+  "setup.path_unreadable": {
+    "text": "无法从 {0} 读取你登录 shell 的 PATH：{1}。请修复 {0}，或把 SHELL 设为一个能启动的登录 shell，然后再次开始设置。",
+    "source": "6d599a606fbf5a0081538d1c1a04d91edfa28f35f2977e88d2d198f727016e6b"
+  },
+  "setup.printed_no_path": {
+    "text": "它没有输出 PATH",
+    "source": "55479df7e2f6acffd206edd621d9d5ff97cd9723a005b8f9fedd4a7e54cd1816"
+  },
+  "setup.reason": {
+    "text": "设置未完成：{0}。{1}",
+    "source": "dd787d3962306a1a3bd5c3b7ff0efc5f2f2dbcec3c589f008a92b06ffb0eda4a"
+  },
+  "setup.set_up_error": {
+    "text": "设置出错：{0}",
+    "source": "4e4ef4a2fe11205b2371bfb2b59fa245dd29fd5d0fc0cdac24bbbd5c3fe51497"
+  },
+  "setup.stays_installed": {
+    "text": "{0}{1} 会保持安装。",
+    "source": "e5e7c9fd1d5b9c725cd4e36f8b812e8586748300f96ad981508426a8fde1b141"
+  },
+  "setup.stopped_before_why": {
+    "text": "设置在说明原因之前就停止了。请再按“开始设置”重试。",
+    "source": "39ba999aff25440414c75fb3bdc722f00e36d41b07d1ff041af7c73b8f46314f"
+  },
+  "setup.then_adds": {
+    "text": "{2}然后为 {0} 添加钩子。钩子是{1}。",
+    "source": "f56fa2c995e42b267445b20134180d81dfd89720bfcef997be85d2ef9e599a9d"
+  },
+  "setup.then_adds_reads": {
+    "text": "{2}然后为 {0} 添加钩子，并把它们的历史读入 wiki，由你自己的智能体按你的套餐来读。钩子是{1}。",
+    "source": "6a3dbbcd31beb2aff52232d470f09ca4de7254b5aec1889980a9cf7d5e74b9a6"
+  },
+  "setup.undo_run": {
+    "text": "要撤销，请运行 deep setup --undo。",
+    "source": "e77c7aa0b1cba8c0bf29a73e9f7fbf51fdb87d2e820a6eedcc1009286cd3f9a6"
+  },
+  "setup.undo_say": {
+    "text": "要撤销，请在输入框中说 {0}，或运行 deep setup --undo。",
+    "source": "63abe2672ab9a294674d86c5266234825046f22754c00e4d480ffc1891012cd3"
+  },
+  "states.finished": {
+    "text": "已结束",
+    "source": "05343e9845302eb730fa9d18ac7b28d5e509893daf1eb76ede8d6e82d47b2da9"
+  },
+  "states.flagged": {
+    "text": "已标记",
+    "source": "5588be887fb18a7d83238d812cbbebb8d2ee193b60ca60c18c97b87dec656389"
+  },
+  "states.flagged_gone": {
+    "text": "已标记 · 进程在回合中途消失",
+    "source": "8ccba579c1ed97131de37024bc3d82025adbbd0b06e0eebc3ac8d6d28a95fb28"
+  },
+  "states.job_ran": {
+    "text": "{0} · {1} {2}",
+    "source": "b9305c3a54cdaa0b4231549883622d04a5d5e54baf415d16c50a585ce9381f4d"
+  },
+  "states.mark": {
+    "text": "{0} {1}",
+    "source": "10866a9df5f8be5be75c79314de01412b0b35db060b06fdc333c1d9cd82d73c0"
+  },
+  "states.menu_row": {
+    "text": "{0} · {1} {2}",
+    "source": "b9305c3a54cdaa0b4231549883622d04a5d5e54baf415d16c50a585ce9381f4d"
+  },
+  "states.menu_row_marked": {
+    "text": "{0} · {1}",
+    "source": "cd55a9d95751fb9bb9e4a0988dd7ae3b08c7b49d0a28ba51cd94d9bafe6a27d0"
+  },
+  "states.name_branch": {
+    "text": "分支 {0}",
+    "source": "e742d863ebbc22cdce5cc8446c77f7f00eb43e57103524ab3fbc36e2075efed2"
+  },
+  "states.name_issue": {
+    "text": "议题 #{0}",
+    "source": "dd5e3b41276ac031d3d45571ee68068ba53b6d2a259deedde28f305fb1449e1d"
+  },
+  "states.name_repo": {
+    "text": "仓库 {0}",
+    "source": "9cacce31af3367990d140ceede1f4a7115b5d048b03b12a9bf72d96913d6192a"
+  },
+  "states.name_session": {
+    "text": "会话 {0}",
+    "source": "cd3d984bcdf1469fb6283f3e668a2d5ec2771b8f6cb6281782f38dd99e510676"
+  },
+  "states.needs_you": {
+    "text": "待你处理",
+    "source": "db4113f70adb90b517605b89729ecfea135ef1306c48c6bb5527a5f3c8aa4a10"
+  },
+  "states.on_fri": {
+    "text": "周五 {0}",
+    "source": "dd23d276ba7467aedce7461493598b3ab7e2f6981086104389bf7291891d8d0c"
+  },
+  "states.on_mon": {
+    "text": "周一 {0}",
+    "source": "77a4ea4360c89196676653b35d087ba973d2bda5c09a8065d4db8b8cc7a7cc66"
+  },
+  "states.on_sat": {
+    "text": "周六 {0}",
+    "source": "b851ce6256bdd6888ab4d7498000803a87297c7ccc867ba9f7e3d045258ab905"
+  },
+  "states.on_sun": {
+    "text": "周日 {0}",
+    "source": "c9e08f97b882d9de5c688871125618c0f19cbfc70152211c7a64630fedd4da52"
+  },
+  "states.on_thu": {
+    "text": "周四 {0}",
+    "source": "8f489081267b523b1b56c917d9fae56a528cc01f7e38607eb2a0bf5096b3dac3"
+  },
+  "states.on_tue": {
+    "text": "周二 {0}",
+    "source": "fa817df4d53929e2d50c03916165a49d5756a214bbefa62479c448696b7ef884"
+  },
+  "states.on_wed": {
+    "text": "周三 {0}",
+    "source": "4c4a4d68186051b0f65f4867dd3c9506f28019453784f59eedf63ae2186e7770"
+  },
+  "states.queued": {
+    "text": "排队中",
+    "source": "d36be6494248ee06ac18f38ea1119dfe4699fdcfcbbcc30a2e4f1ccbce68dfac"
+  },
+  "states.quiet": {
+    "text": "无动静",
+    "source": "008f0747f4e27c8462baa991a538025bcc2dd143e78422f1afbdfcd9e757a20f"
+  },
+  "states.quiet_last_seen": {
+    "text": "无动静 · 已静默 {0}",
+    "source": "8bfcb2d67c951b7d54241583dcdb79a7baf0e77e9f63e0bd76128709e71b9922"
+  },
+  "states.running": {
+    "text": "运行中",
+    "source": "c071cf5f5ed6f884cc70155b6f05f755fd46a302d05e4261b7e92ce878bbfed8"
+  },
+  "states.says_done": {
+    "text": "称已完成",
+    "source": "44789a0d2460f469b8d6ac320acf6c8f959d4e6557d7c5cd6794a8a182b90b05"
+  },
+  "states.says_done_checks": {
+    "text": "称已完成 · 检查约需 {0}",
+    "source": "07d7d67f47b10779c859b02e31cd0715b57064372dcd70b149cbe758208a8935"
+  },
+  "states.sent_back": {
+    "text": "已退回",
+    "source": "9749d84bc3149f4444dc8773ef733c041410d5c39fa7e445e5ec0b0bb701b368"
+  },
+  "states.sent_back_round": {
+    "text": "已退回（第 {0} 次，共 {1} 次）",
+    "source": "7652afa4a08713baaa56bb98f93ecc05181e5089e4b48860af52dffee5b6469e"
+  },
+  "states.span_d": {
+    "text": "{0} 天",
+    "source": "96a573e33f27d13ef8aac93cafccbd0faaf4793469d71c3824a91416b5bd1b74"
+  },
+  "states.span_h": {
+    "text": "{0} 小时",
+    "source": "477a1b5f11304d3e4904bcc5f70ea9f89a78fd3a25058562e0278fa4675c570f"
+  },
+  "states.span_min": {
+    "text": "{0} 分钟",
+    "source": "96d15cf84b61a585c303169c0cf02914bf046268787391b33df3ff8855f28e12"
+  },
+  "states.span_s": {
+    "text": "{0} 秒",
+    "source": "dae58fb2bf4be8157f7f1e95f8d62c366685087b4da8fec7590ee247ae9ae81e"
+  },
+  "states.stale": {
+    "text": "已过时",
+    "source": "a03f2386ae06b21109577020844df367857b72c2fcce384c1896fed98a89c82b"
+  },
+  "states.stuck": {
+    "text": "卡住",
+    "source": "9c05ce79d0bfe037953b11f168069e5af4ea2605b8534a188f64dee6c0b643fe"
+  },
+  "states.tomorrow_at": {
+    "text": "明天 {0}",
+    "source": "0eef74582440a8f71064606dfef92c8503b7b95d1655566b1f43859e80f86ca1"
+  },
+  "states.turn_ended_failed": {
+    "text": "这一轮以失败结束",
+    "source": "a5a10aa1af967da172cc9b4b9fae89c8ff6d7c212c9897bbfd065141c9b7c361"
+  },
+  "states.untitled": {
+    "text": "会话 {0}",
+    "source": "cd3d984bcdf1469fb6283f3e668a2d5ec2771b8f6cb6281782f38dd99e510676"
+  },
+  "states.word_claim": {
+    "text": "{0} · {1}",
+    "source": "cd55a9d95751fb9bb9e4a0988dd7ae3b08c7b49d0a28ba51cd94d9bafe6a27d0"
+  },
+  "states.working": {
+    "text": "工作中",
+    "source": "dd5ace9e018dbd62336cbe039916ad7c817d0e9bc9934f70d67f3ff75544da88"
+  },
+  "views.actions": {
+    "text": "操作",
+    "source": "ff8059dc6752afdd30d275932b1d5031a2ec854b387a8c57ecc6689915293a43"
+  },
+  "views.agent_wrote": {
+    "text": "由智能体编写",
+    "source": "7722d4dd39098a4c9d5e28f46565d8bfc0807c267d08eabb8350e8e1e7782d7f"
+  },
+  "views.agents": {
+    "text": "智能体",
+    "source": "279b44d2ab4b40c0fc132f8f3051293544cca91de9c8aa14f2cd29adb132b0ee"
+  },
+  "views.ago": {
+    "text": "{0}前",
+    "source": "cace2682707ec31821e188c6f4962688cfe7ce4bdf8e714051a1a6079982c6ea"
+  },
+  "views.already_in_each_agent": {
+    "text": "各智能体中已有的",
+    "source": "8f66468c066b60a4e04f8adbaf6f2ead98085eac104c48a1c22705caa13db6c9"
+  },
+  "views.apply": {
+    "text": "应用",
+    "source": "31e392d1c0378beca611de66c0f4c71cba29159905cc54242d9bddee5b23d851"
+  },
+  "views.apply_the_sync": {
+    "text": "应用此同步",
+    "source": "ce3e2d7fc319f0e41a52e67e8b9062ea0c450c753821619f049794105f4b970d"
+  },
+  "views.approve_the_sync": {
+    "text": "批准同步 {0}：DeepBuild 只在用户级别写入它自己的条目",
+    "source": "b3f7a4b3ff9d55aa4e971e01c92d2cbf2c677ecdfdaba2ddf280a4136e7ae07d"
+  },
+  "views.asks_need_you": {
+    "text": {
+      "zero": "没有待你处理的事",
+      "other": "{0} 个请求待你处理"
+    },
+    "source": "8a21e896b3ea9f3e7ebe4156a3ffac5a5c30ea44f15230750ad38cc466df886b"
+  },
+  "views.asks_with_a_deadline": {
+    "text": "有截止时间的请求",
+    "source": "7aa0a16dc4f628217b0eddd282aabe6e795f12a9cd8942b9dc3acac583049a38"
+  },
+  "views.by_handle": {
+    "text": " · {0}（按句柄）",
+    "source": "be329ed8eec14a437039d3ca3886c5d47aae5dc34533a11257e949fca250f82f"
+  },
+  "views.cant_reach": {
+    "text": "它的会话连不上 DeepBuild：{0}",
+    "source": "bebefe49db67ddbbe661d37dc4349629d39965fedf6949e4dd286d19580d9067"
+  },
+  "views.claim": {
+    "text": "声明 {0}",
+    "source": "d716c5df692fd9f010f8e64c35883a95639f63e7c0d308a44323d7b8763fea01"
+  },
+  "views.close": {
+    "text": "关闭",
+    "source": "7d9eb7acb13e24625c404401d8e88b2350e32162455885f18276cf802f7701ed"
+  },
+  "views.enforced_by": {
+    "text": "执行方",
+    "source": "66a412c2ad56964e0d0fc05598d85fcde78d0d178e7fb4debd152650304cace8"
+  },
+  "views.every_repo": {
+    "text": "所有仓库",
+    "source": "d32667b9181b75951bc9a3319d781c90073c8bdf5b0ae94c50bfab3bf0b51be7"
+  },
+  "views.hours": {
+    "text": "{0} 小时",
+    "source": "477a1b5f11304d3e4904bcc5f70ea9f89a78fd3a25058562e0278fa4675c570f"
+  },
+  "views.hours_to_each_deadline": {
+    "text": "距各截止时间的小时数：{0}",
+    "source": "8777295d9fbcada20f18f635afe74d2a1fdfaaf763411f38dfe72467bce45f60"
+  },
+  "views.how_each_agent_reaches": {
+    "text": "各智能体如何连上 DeepBuild",
+    "source": "085668b1bbeaa07ab1a4b12d1f7e44fb67bddc413c734fde0e15f193c7146d60"
+  },
+  "views.installed": {
+    "text": "已安装：{0}",
+    "source": "15ffa882f44aa7a87a361b088286125995b7a2aee6150010c98cce9ac7c1893b"
+  },
+  "views.later": {
+    "text": "稍后",
+    "source": "73b6e48a1b552d112502d37a7b7870436efc5ea1de0bca58ccf12d6ae15d3a0c"
+  },
+  "views.mcp_servers": {
+    "text": "MCP 服务器",
+    "source": "22a7559f09bf8f82c510280f934bf50db4c45cc611fd4dd47d7cbf7c7d4f5b82"
+  },
+  "views.needs_you": {
+    "text": "待你处理",
+    "source": "74b6abdf59690fdffec2059089487cd63658249da5301cbf065e9977518fbd8f"
+  },
+  "views.needs_you_drawn": {
+    "text": "待你处理 {0}",
+    "source": "301f602346fbc4ad3d896e7b06b42ec96c09afd57816608e1d6888cd86a7ce79"
+  },
+  "views.new_task": {
+    "text": "新任务",
+    "source": "3e992276b2298a1fb8035727de54620ff01bbcfc451133124145633b2c8f8475"
+  },
+  "views.no_terminal": {
+    "text": "此会话没有终端。",
+    "source": "7a9b15c67974a3001a271dd5cd08170c21bf07da90eaf61dcae6231007fd619d"
+  },
+  "views.not_installed_here": {
+    "text": "此处未安装：{0}",
+    "source": "cd63d0e506dff6029ffef8e1445993dd682817b1e4ad90301d2c322e91b2a167"
+  },
+  "views.not_notified": {
+    "text": "{0} · 未通知",
+    "source": "55b11e88d21ac94116d372305d0106203273096ca32012252d1085da53573551"
+  },
+  "views.not_reported": {
+    "text": "{0} · 未报告",
+    "source": "bc9aed189dc1d4b700a5b64bbf88d81b071768e4c2563b7f6698825866bc7841"
+  },
+  "views.nothing_of_yours": {
+    "text": "没有你的内容",
+    "source": "56b84bc0dc1898d21a55a4c2b4ebfc68758ada714b489ba377bb8cb29ccaa443"
+  },
+  "views.pin_differs": {
+    "text": "与固定版本不同：有一个更新等你处理",
+    "source": "43c8ae3c77af3bd6f554c74e7196e524a18e66bb1df5bb48b47941d7ec441949"
+  },
+  "views.pin_matches": {
+    "text": "与固定版本一致",
+    "source": "cb9f84dc5f45f168f890fdfeecd5a8198f0b047db60268ba93fa147bea4f9dd8"
+  },
+  "views.pop_out": {
+    "text": "弹出",
+    "source": "7bdde36a88f0a2696cacacc6e0a64575f3f2619f06a2d2de69d4c5bdbf3c5180"
+  },
+  "views.pop_out_needs_you": {
+    "text": "弹出待你处理",
+    "source": "df81ef1673b58596bf9338132a61daa37bdc246e0228f074ef958eeacb7c61ce"
+  },
+  "views.reaches": {
+    "text": "它的会话能连上 DeepBuild",
+    "source": "202329f1f57cfdbf4d6ad7d7c904de43fcb68e0d298cb86e1bba17ebf23e868a"
+  },
+  "views.read_by": {
+    "text": "由 {0} 读取",
+    "source": "ffa6f3ac4be5272ed3cae0aaf8eb3147aa940ada1f4d34bde2d6e80c1d971d3b"
+  },
+  "views.read_by_both": {
+    "text": "由 {0} 和 {1} 读取：一次写入两者都会读到",
+    "source": "fb56b42b3342ca6a8761e75f650830e47085d7fe4e66a6f79b91f523e0371179"
+  },
+  "views.refuses_field": {
+    "text": "不适用于 {0}：它拒绝字段 {1}（{2}）",
+    "source": "100f080877b58a1097d5efda50e100608415edb4654192766c42cbb8c3f6664c"
+  },
+  "views.rename": {
+    "text": "重命名",
+    "source": "3064d79a295cefe4b384b8fe5cb29fd6b06d7eb1ad94b8895f4148039d06b330"
+  },
+  "views.review_the_diff": {
+    "text": "查看差异",
+    "source": "cfb339da63f986092769ecfc57f6b70c15b801da9b8f172acdbb63a5e38667e0"
+  },
+  "views.review_the_diff_of": {
+    "text": "查看 {0} 的差异",
+    "source": "348921a82895f4b66fd273833582bd7526658b2c134d483d77e5e2b2ac11c2be"
+  },
+  "views.rule": {
+    "text": "规则",
+    "source": "62845f31a2fe00be3ebaaeb93f5b27af82ab81dfcbaa1871c76f596cd98cf3c9"
+  },
+  "views.rule_held": {
+    "text": "{0} · 保留中：有智能体删除了它所在的行",
+    "source": "8f090a511addcc071da04c300af45e6c6d6334ae365d3f6a3b85e80b0d5bd1bc"
+  },
+  "views.rule_said": {
+    "text": "{0} · {1} · {2} · {3} 个词元",
+    "source": "31af442426faa7b868bac59b5d60b13bfd8bc3e975dce30b83d7c5c2b997254d"
+  },
+  "views.rule_typed_by_you": {
+    "text": "{0} · 由你输入",
+    "source": "4489c51531def3ade240ea99e60dbd6757f83b719fe96d3b6cc212298a6c42dd"
+  },
+  "views.rules": {
+    "text": "规则",
+    "source": "4228aeb07c410ffc9d15b458bf7c2bf8d9dfa7af632f2c339e69f8cb54654da3"
+  },
+  "views.rules_count": {
+    "text": "{0} 条规则 · {1} 条仅为文本",
+    "source": "ef1d053b8070d40eff0cbb7966af7f27dbe439d2a828bcd940b116038d376898"
+  },
+  "views.rules_file": {
+    "text": "{0} · 整个文件 {1} 个词元",
+    "source": "c4afa3d8030e67e92a2836744a8d0794808882d1f6370042a650ac81292cb004"
+  },
+  "views.scope": {
+    "text": "范围",
+    "source": "b073f6c68ef8721107fd9815b19b2c35ec111d526b75c2123d1111ba64424000"
+  },
+  "views.scoped_to": {
+    "text": "限于 {0}",
+    "source": "e7407209591915cc3dc5400a5384248c6a9d61fe228f5cb8583e4fcd8b7f27cd"
+  },
+  "views.session_named": {
+    "text": "会话 {0}",
+    "source": "cd3d984bcdf1469fb6283f3e668a2d5ec2771b8f6cb6281782f38dd99e510676"
+  },
+  "views.skill_at": {
+    "text": "{0} 于 {1} · {2}",
+    "source": "aa86933cc2c9b5a13211294f0102e6eacaf81d5b80cb7e109132fa1ebc9a4151"
+  },
+  "views.skills": {
+    "text": "技能",
+    "source": "66d0f523a379b2de6f8d5fba3a817ebc395f7bcaa54cc132ca9dfa665d1e9378"
+  },
+  "views.sync_files": {
+    "text": "{0} 个文件 · {1}",
+    "source": "6b55564e3deaf2907262144d4225967c451adc58112ce2e4ce864345bf005a0f"
+  },
+  "views.synced_to": {
+    "text": "已同步到 {0}",
+    "source": "093b714836e303699544e9059ffe3307f4290a582b1a872bab8d0a7d14498c33"
+  },
+  "views.synced_to_pin": {
+    "text": "已同步到 {0} · {1}",
+    "source": "8984d0b073ca2f816a73d27c871c5326b075c662d035ab08222a08d63703e1fb"
+  },
+  "views.tasks": {
+    "text": "任务",
+    "source": "b3a60e61a5233d0506ac737405a2a45280349683cac68722f18d0b73eb495ef4"
+  },
+  "views.terminal": {
+    "text": "终端",
+    "source": "e0926fdac700b09497b5f0218ea3dd54fa13c0bdeaee6caa7b85e50b852aa05f"
+  },
+  "views.tokens": {
+    "text": "{0} 个词元",
+    "source": "624f11b90280fc0aa749dc3e5b4ae6f35cc023eac45626f6bd4f55bf4f588513"
+  },
+  "views.tokens_head": {
+    "text": "词元",
+    "source": "a039dfb9628b53ddaebcfe8ef0793e3fdf19867601295f00d192acef59050869"
+  },
+  "views.untitled_task": {
+    "text": "未命名任务",
+    "source": "77efbb465696944aae233bd7d8d4d031d7059cd8f6dc8315c609a97b41b3a540"
+  },
+  "views.waiting_for_you": {
+    "text": "等你处理",
+    "source": "9f760ab207394414e76655e20267a56573691f5c5df523dd663ae13420656378"
+  },
+  "views.waits_first_session": {
+    "text": "等待它的第一个会话",
+    "source": "b00c70ecbd1d2e40437e00ebc3c826cf40fa75e949964c075f2609a9acb606bf"
+  },
+  "views.yours_left_alone": {
+    "text": "你的：DeepBuild 不会动这些",
+    "source": "cb956c7af04bbf69099a67e56f8e59095ff903c47fad7ad588ee4a0ba8df18f0"
+  },
+  "welcome.done": {
+    "text": "已完成",
+    "source": "a4c3ed04a95a3da14a9d235c83d868bed7c0f45cf7f3faa751ee8f50598d2211"
+  },
+  "welcome.hide_output": {
+    "text": "隐藏输出",
+    "source": "64876c475d9373ab7c7f93eb30f87e4ab5f11ed376981c628ea414e215a5e26b"
+  },
+  "welcome.not_yet": {
+    "text": "未完成",
+    "source": "3b82aae1ed24f6077df25a3b4e1b7a78f100716d5a6f6949a0610b05bc1f8959"
+  },
+  "welcome.set_up": {
+    "text": "开始设置",
+    "source": "4da10f1fbb17cac25e9e78536d4104cb4b2fbbc436dbc37dee5450f22c2accda"
+  },
+  "welcome.set_up_installs_it": {
+    "text": "设置时会安装它",
+    "source": "100e45e511a15092d50dad87b90ec180f64bef5ac32067efbc8a842f8265388e"
+  },
+  "welcome.setting_up": {
+    "text": "正在设置",
+    "source": "dbdf27e5db8d8cde8cc8a3b15f491db14868513a3253b62b194eb20cf414741a"
+  },
+  "welcome.show_output": {
+    "text": "显示输出",
+    "source": "9dbbb249c2a73b47d012a1400a3c4691302b025b42cc80ad58f62a7d37b83786"
+  },
+  "welcome.stopped_before_why": {
+    "text": "设置在说明原因之前就停止了。请再按“开始设置”重试。",
+    "source": "39ba999aff25440414c75fb3bdc722f00e36d41b07d1ff041af7c73b8f46314f"
+  },
+  "words.appearance": {
+    "text": "外观",
+    "source": "3907fa7f80722a6fc58cd8c1bd30abf7638095d6774f183b6e831b7093957d1b"
+  },
+  "words.appearance_now": {
+    "text": "主题跟随 macOS 的浅色或深色外观，使用系统字体的默认大小。",
+    "source": "e3f86c60daecf9b6d1a4bc6f1536a0347c3211d48d85e5e6ca11de975bab3b06"
+  },
+  "words.drafted": {
+    "text": "已起草：{0}",
+    "source": "9b040a418ba21b3db6ec1e8ffe131099676ead58ede38708abd5d16713b5b7bf"
+  },
+  "words.hub_didnt_take": {
+    "text": "中枢没有接收：{0}",
+    "source": "aab71d768e83e990038f0e34b5ae663cd41ba1b357c7c3dd1869a55786817280"
+  },
+  "words.keys": {
+    "text": "按键",
+    "source": "f0d66a79c138e951c2f840fcd94ea9bdf399f745088a832a9ba49cf07f7125de"
+  },
+  "words.keys_now": {
+    "text": "⌘K 打开命令和页面；按 Return 发送输入框中的文字。",
+    "source": "0b764cedf91ee9099b103458a45cc5c2ccef8a0db036dbefc3c2a3979b0091cf"
+  },
+  "words.nothing_drafted": {
+    "text": "没有起草任何更改。",
+    "source": "1a5213f52ceb9dfb47a65080c811032d7b6efdc6307bf29a0faeb574d225a399"
+  },
+  "words.open_its_card": {
+    "text": "打开它的卡片",
+    "source": "5ba8b4c1e948c84a75dd9668976b6e77fd0f516efff22ec714e76fa4d986bd61"
+  },
+  "words.say_a_change": {
+    "text": "用文字说出一项更改",
+    "source": "f6f84095d02daa5951780c49c31af3e20e90c1434a2e6c7f639ed3d53ad898c9"
+  },
+  "words.send": {
+    "text": "发送",
+    "source": "f6f4688ff23d50c67053963c251fa0ce64a925cf283537cf066b1f362cb9b778"
+  },
+  "words.sounds": {
+    "text": "声音",
+    "source": "6f305c4b18748376b835adf8bf633e2c633814744a5c363583103a0e3a8308fb"
+  },
+  "words.sounds_off": {
+    "text": "声音已关闭。",
+    "source": "fb62c6381b5b7822b1d200052172fa052192ec54f40517583d4755673865f28e"
+  },
+  "words.sounds_on": {
+    "text": "声音已打开。",
+    "source": "2ba180b22417a59059687070f8aee6190c5b24b2f0438e81da8914fcfc9b3005"
+  },
+  "words.working_on_it": {
+    "text": "正在处理：{0}。准备好后，它的卡片会出现在“待你处理”中。",
+    "source": "f397938f751e4ac512dc4a4d2a922acd57b636874d916641e3bd39322c9b016c"
+  },
+  "words.your_words": {
+    "text": "你的文字",
+    "source": "0dca9caa88b9501a8bd72b779d5aae5c037b00c0a5bff8b14c365d504fb71c3d"
+  }
+}
