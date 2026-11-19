@@ -1,0 +1,16 @@
+$ PATH=<home>/.local/share/fnm/node-versions/v24.22.0/installation/bin:$PATH env NO_COLOR=1 node node_modules/vitest/vitest.mjs run --configLoader runner tests/acceptance/2365-redraft-ac5/meter.test.ts
+node: v24.22.0 (<home>/.local/share/fnm/node-versions/v24.22.0/installation/bin/node)
+started: 2026-11-18T01:24:41Z; load averages: 119.69 111.49 90.11
+-----
+
+ RUN  v5.0.5 <home>/doneright-2365-repair
+
+ ✓ tests/acceptance/2365-redraft-ac5/meter.test.ts (1 test) 84ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  17:24:42
+   Duration  565ms (transform 59%, tests 21%, import 16%, setup 4%, worker 1%)
+
+-----
+EXIT 0; ended: 2026-11-18T01:24:43Z; load averages: 122.28 112.16 90.47

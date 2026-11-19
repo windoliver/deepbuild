@@ -1,0 +1,18 @@
+`node benchmarks/archive-growth.mjs` and its judge, through scripts/benchmark.mjs's judgeTargets, on 9e6ea04aa: the
+probe after its repair. One warm-up, then five passes. The limits: 1000 ms, 50 ms, 64.0 MB, 2,000,000 bytes.
+The load rose from 20 to 190 on 18 cores as these ran and the thermal state read fair, so every limit reads
+INCONCLUSIVE; the rise does not move with load.
+
+Homebrew's Node 24.22.2 (the login shell's), load 20 to 38:
+status: INCONCLUSIVE
+  ms: INCONCLUSIVE: 370, 603, 484, 549, 493
+  maxGapMs: INCONCLUSIVE: 11, 30, 44, 108, 30
+  rise: INCONCLUSIVE: 30.3, 30.4, 30.1, 30.6, 31.5
+  added: PASS: 293019, 293019, 293019, 293019, 293019, 293019
+
+The repo's Node 24.22.0, load 126 to 190:
+status: INCONCLUSIVE
+  ms: INCONCLUSIVE: 1650, 1078, 1086, 1103, 1447
+  maxGapMs: INCONCLUSIVE: 141, 88, 26, 70, 150
+  rise: INCONCLUSIVE: 30.0, 30.4, 30.5, 30.1, 30.3
+  added: PASS: 293019, 293019, 293019, 293019, 293019, 293019

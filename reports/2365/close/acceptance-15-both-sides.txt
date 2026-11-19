@@ -1,0 +1,6 @@
+doneright-2365-repair tests/acceptance/15/sharing.test.ts load=350 14s :: AssertionError: expected [] to deeply equal [ [ …(2) ] ]       Tests  1 failed | 2 passed (3) 
+doneright-2365-repair tests/acceptance/15/gitleaks.test.ts load=364 13s ::       Tests  2 passed (2) 
+doneright-2365-repair tests/acceptance/15/scrub-property.test.ts load=400 54s ::       Tests  2 passed (2) 
+doneright-2365 tests/acceptance/15/sharing.test.ts load=401 9s ::       Tests  3 passed (3) 
+doneright-2365 tests/acceptance/15/gitleaks.test.ts load=408 12s :: Error: Test timed out in 5000ms.       Tests  1 failed | 1 passed (2) 
+doneright-2365 tests/acceptance/15/scrub-property.test.ts load=440 49s ::       Tests  2 passed (2) 

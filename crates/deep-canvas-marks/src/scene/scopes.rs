@@ -270,7 +270,7 @@ pub(super) fn scopes_of(
         if item.get("kind").and_then(Value::as_str) != Some("group@1") {
             continue;
         }
-        if let Some(light) = crate::light::read(id, item, palette, planted)? {
+        if let Some(light) = crate::light::read(id, item, items, palette, planted)? {
             lit.insert(id.as_str(), Arc::new(light));
         }
     }

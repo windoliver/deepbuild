@@ -1,0 +1,11 @@
+$ PATH=<home>/.local/share/fnm/node-versions/v24.22.0/installation/bin:$PATH node node_modules/typescript/bin/tsc -p tests/acceptance/2365/tsconfig.json
+node: v24.22.0 (<home>/.local/share/fnm/node-versions/v24.22.0/installation/bin/node)
+started: 2026-11-18T01:13:43Z; load averages: 21.87 38.54 55.14
+-----
+tests/acceptance/2365/helpers.ts(100,7): error TS2322: Type 'Buffer<ArrayBufferLike>' is not assignable to type 'Buffer<ArrayBuffer>'.
+  Type 'ArrayBufferLike' is not assignable to type 'ArrayBuffer'.
+    Type 'SharedArrayBuffer' is not assignable to type 'ArrayBuffer'.
+      Types of property '[Symbol.toStringTag]' are incompatible.
+        Type '"SharedArrayBuffer"' is not assignable to type '"ArrayBuffer"'.
+-----
+EXIT 2; ended: 2026-11-18T01:13:46Z; load averages: 21.87 38.54 55.14
