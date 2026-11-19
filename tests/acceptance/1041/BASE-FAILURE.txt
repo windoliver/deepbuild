@@ -1,0 +1,73 @@
+#1041: why every test fails at the base 06e231702. Mostly a note, not a run of the suite.
+
+What was run at the base, in this checkout (macOS arm64, Google Chrome 157.0.8103.52, the shared Mac's one-minute load
+average between 90 and 470 over the session):
+
+- the type check (`node node_modules/typescript/bin/tsc -p tests/acceptance/1041/tsconfig.json`: exit 0) and
+  `vitest list --root tests/acceptance/1041` (10 tests in 4 files);
+- three of the ten tests, each once, with `deep-show` (`full`) built here (`cargo build --locked --bin deep-show
+  --no-default-features --features full`, 16 min 02 s): ac04-taste.test.ts, the second test of
+  ac01-saves-in-the-browser.test.ts and the third of ac03-persistent.test.ts; their failures are quoted below. A
+  first run of that ac01 test read `BLOCKED: … opened no DevTools port within 60 s` under a load average above 400;
+  the wait is 180 s now, and the run quoted is the one after;
+- a scratch check (not committed) of the fixture on the base's real components with this folder's helpers: both
+  pieces are presented with no issue; `deep_query`'s logic read gives the layout probe's region map; the app's
+  `logic` call replays 2,400 steps of each, `dungeon.request` 1 at steps 599, 1,199 and 1,799 only, the burst read as
+  16, 16 and 8 entries at steps 1,798, 1,799 and 1,800, 41 checkpoints (the dungeon's full-state hash
+  945858fde9f1581b at 600 and 9e1d942e411a1ee4 at 1,800, the cellar's 9fe13099c3f7860d and 1d1401602bd89c7a); the
+  dungeon's web export answers `exported`; the base player is ready (`backend` "webgpu (wgpu 30.0.1)", `duration`
+  40) and, played from the start, reads step 2,400 after 40.1 s with the app's full-state hash at all 41 checkpoints;
+  its probe() has the keys step, step_hash, checkpoint_hashes, values, set_digest, backend, adapter, frames,
+  first_frame_ms and decoded, and its page shows no button, label, input or link and no notice;
+- a scratch check (not committed) of the browser mechanics and of the suite's own logic on a hand-written stand-in
+  page: the three browser files as written, their export replaced by a stand-in `<deep-player>` that keeps saves as
+  the README asks and is told the app's hashes, passed 9 of 9, the two planted tests by failing the stand-in's planted
+  variants (ac03-persistent.test.ts once more, 3 of 3, after the helpers' browser cleanup was corrected); the same
+  stand-in keyed by the page's path failed the re-export test at "slot 1 of the re-exported dungeon holds the save
+  it wrote at its first path". The origin's quota override reached a page's writes only after
+  the browser's 30 s allotment had lapsed (a write right after it was taken; one 35 s after was refused with
+  QuotaExceededError and the first save kept); a stand-in variant keeping its saves in the page's local storage
+  took the write under the override (tried without the 35 s hold; its bytes counted 0 against the origin's quota).
+
+The other seven tests were not run at the base: each stops at one of the two assertions observed, before any play.
+
+What the base has, from its code:
+- crates/deep-player/web/element.js: the element's probe() returns the player's JSON with backend, adapter, frames,
+  first_frame_ms and decoded laid on; no `saves`. The element builds a canvas and, when it must, notices; no control.
+  It never touches the browser's storage and never asks for persistence.
+- crates/deep-player/src/play.rs: the player replays the logic on the recorded track at load (the app's World with no
+  saves folder), so a logic item's `request` writes nothing anywhere.
+- crates/deep-show/src/export.rs `planted`: the web twins are web_index_export_time, web_probe_test_variant,
+  web_requests_adapter_limits and web_fragment_writes_entry; main.rs answers any other name
+  `{"ok": false, "code": "bad_input"}`, so `web_saves_keyed_by_origin` and `web_saves_never_ask_persistence` do.
+- docs/evidence/1041/ doesn't exist.
+
+Per test (every browser test first builds deep-show, replays the piece in the app and exports it, all of which pass
+at the base):
+
+- ac01-saves-in-the-browser.test.ts
+  - AC1 "saved at step 1,800, the page closed …": fails in `openPiece` at the first page's first probe(): "the run
+    that never closed, once ready: probe().saves is an array, got undefined". Read from the code.
+  - AC1 "the same save exported to a file …" (observed): "AssertionError: the dungeon, once ready: probe().saves is an
+    array, got undefined: expected false to be true", at Page.probe (helpers.ts) from openPiece, 55 s into the test.
+  - AC1 "after one good save …": the same assertion, "the dungeon, once ready: probe().saves is an array, got
+    undefined". Read from the code.
+- ac02-kept-per-piece.test.ts
+  - AC2 "two different pieces …": after both replays and both exports, "The dungeon, once ready: probe().saves is an
+    array, got undefined". Read from the code.
+  - AC2 "the same piece re-exported …": "the dungeon at its first path, once ready: probe().saves is an array, got
+    undefined". Read from the code.
+  - AC2 "the planted player web_saves_keyed_by_origin …": after both replays, the first planted export fails in
+    `runShow`: "The dungeon exported to the web (planted web_saves_keyed_by_origin): deep-show run takes the scenario
+    (planted web_saves_keyed_by_origin): {"ok":false,"code":"bad_input"}". Read from the code and from the twin below.
+- ac03-persistent.test.ts
+  - AC3 "with persistence granted …": "the dungeon, once ready: probe().saves is an array, got undefined". Read from
+    the code.
+  - AC3 "with persistence refused …": the same. Read from the code.
+  - AC3 "the planted player web_saves_never_ask_persistence …" (observed): "AssertionError: The dungeon exported to
+    the web (planted web_saves_never_ask_persistence): deep-show run takes the scenario (planted
+    web_saves_never_ask_persistence): {"ok":false,"code":"bad_input"}: expected false to be true", at runShow from
+    exportPiece, 22 s into the test.
+- ac04-taste.test.ts
+  - AC4 (observed): "AssertionError: INCONCLUSIVE: the check run's pictures are not in docs/evidence/1041/:
+    player-save-controls.png, player-save-refused.png; this is not a pass".

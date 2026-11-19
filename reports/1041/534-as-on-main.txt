@@ -1,0 +1,21 @@
+# Excerpt: tests/acceptance/534 at this tree with its files as committed. Every test stops at the same BLOCKED line,
+# before it reaches the logic module; the base commit 06e231702 gives the same cargo error for the same command.
+
+deep lease: DeepBuild isn't set up here (no hub token), so `node node_modules/vitest/vitest.mjs run --root tests/acceptance/534 ac01-dungeon-reopen.test.ts ac02-written-whole.test.ts ac03-program-change.test.ts ac05-static-floor.test.ts ac06-fixture-state.test.ts ac07-adapter-fingerprint.test.ts ac08-binding-decodes.test.ts --testTimeout=5400000 --no-file-parallelism` runs unleased
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/534
+
+ ❯ ac06-fixture-state.test.ts (2 tests | 2 failed) 19313ms
+   ❯ #534.73983bd0 a fixture whose state spans a linear write, world pages, a mirror, a service and a search reopens as it played (2)
+...
+Error: BLOCKED: this suite's assembler (tests/acceptance/534/wat) didn't build: cargo build --locked --manifest-path <checkout>/tests/acceptance/534/wat/Cargo.toml failed:
+error: cannot update the lock file <checkout>/tests/acceptance/534/wat/Cargo.lock because --locked was passed to prevent this
+
+ ❯ blocked helpers.ts:37:56
+...
+
+ Test Files  7 failed (7)
+      Tests  16 failed (16)
+   Start at  10:09:19
+   Duration  84.83s (tests 98%, import 1%, transform 1%)
+

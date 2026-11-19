@@ -96,6 +96,7 @@ impl World {
             published,
             planted,
             saves_dir: None,
+            held: None,
             saved: Vec::new(),
             seen: 0,
             adapter: String::new(),
@@ -306,7 +307,7 @@ impl World {
                 }
             }
             if let Some(k) = self.at() {
-                if self.saves_dir.is_some() {
+                if self.saves_dir.is_some() || self.held.is_some() {
                     crate::saves::due(self, k, ended_at);
                 }
                 // #860: a rewind stamped by now comes before any step at this time, and the seen
@@ -622,15 +623,27 @@ impl World {
                 }
                 Read::Control => {
                     // Each entry a u32 player, 4 zero bytes, then its value as the control's
-                    // form lays it out; a value of another form leaves its bytes zero.
-                    // A string value (a choice's option) is no entry of a number's slot.
-                    let list: Vec<&Entry> = taken[e.name.as_str()]
+                    // form lays it out; a value of another form leaves its bytes zero. A
+                    // choice's option is its index in the choice's options as an f64 (#1040;
+                    // Control); any other string value is no entry of a number's slot.
+                    let options = match piece.limits.get(&e.name) {
+                        Some(crate::piece::Limit::Choice(options)) => &options[..],
+                        _ => &[],
+                    };
+                    let read = |x: &Entry| match &x.value {
+                        Given::Text(t) => {
+                            let i = options.iter().position(|o| o == t)?;
+                            Some(Given::Number(i as f64))
+                        }
+                        v => Some(v.clone()),
+                    };
+                    let list: Vec<(&Entry, Given)> = taken[e.name.as_str()]
                         .iter()
-                        .filter(|x| !matches!(x.value, Given::Text(_)))
+                        .filter_map(|x| Some((x, read(x)?)))
                         .collect();
                     let stride = (e.size as usize - 8) / PER_STEP;
                     region[at..at + 4].copy_from_slice(&(list.len() as u32).to_le_bytes());
-                    for (j, x) in list.iter().enumerate() {
+                    for (j, (x, value)) in list.iter().enumerate() {
                         let o = at + 8 + stride * j;
                         let player = if self.planted.read_region_drops_player {
                             0
@@ -638,7 +651,7 @@ impl World {
                             x.player
                         };
                         region[o..o + 4].copy_from_slice(&player.to_le_bytes());
-                        let v = x.value.bytes();
+                        let v = value.bytes();
                         if v.len() == stride - 8 {
                             region[o + 8..o + stride].copy_from_slice(&v);
                         }
@@ -1203,6 +1216,7 @@ impl World {
             cache: None,
             planted,
             saves_dir: None,
+            held: None,
             saved: Vec::new(),
             seen: 0,
             adapter: String::new(),
@@ -1364,6 +1378,7 @@ impl World {
             published,
             planted,
             saves_dir: None,
+            held: None,
             saved: Vec::new(),
             seen,
             adapter: String::new(),
@@ -1471,6 +1486,7 @@ impl World {
             store: self.piece.rewind.is_some(),
             planted: self.planted,
             saves_dir: None,
+            held: None,
             saved: Vec::new(),
             seen: self.seen,
             adapter: self.adapter.clone(),

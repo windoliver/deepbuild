@@ -1,0 +1,140 @@
+deep                                                                        3  wrote(1)                     deep hub start: <tmp>/bin/refusing-launcher exited 1: 
+deep --help                                                                 0                               DeepBuild 0.0.0
+deep --version                                                              0                               0.0.0
+deep bogus                                                                  2  unsupported                  Unsupported command "bogus". Run deep --help for available commands.
+deep stauts                                                                 2  unsupported                  Unsupported command "stauts". Did you mean deep status? Run deep --help for available commands.
+deep status                                                                 3  wrote(1)                     deep hub start: <tmp>/bin/refusing-launcher exited 1: 
+deep status --json                                                          3  wrote(1)                     deep hub start: <tmp>/bin/refusing-launcher exited 1: 
+deep status nosuch --why                                                    3  wrote(1)                     deep hub start: <tmp>/bin/refusing-launcher exited 1: 
+deep status --typo                                                          2  wrote(1)                     deep hub start: <tmp>/bin/refusing-launcher exited 1: 
+deep inbox                                                                  3  wrote(1)                     deep hub start: <tmp>/bin/refusing-launcher exited 1: 
+deep inbox --json                                                           3  wrote(1)                     deep hub start: <tmp>/bin/refusing-launcher exited 1: 
+deep inbox answer ask:01ARZ3NDEKTSV4RRFFQ69G5FAV yes                        3  wrote(1)                     deep hub start: <tmp>/bin/refusing-launcher exited 1: 
+deep inbox answer                                                           2  wrote(1)                     deep hub start: <tmp>/bin/refusing-launcher exited 1: 
+deep inbox undo ask:01ARZ3NDEKTSV4RRFFQ69G5FAV                              3  wrote(1)                     deep hub start: <tmp>/bin/refusing-launcher exited 1: 
+deep inbox save offer:x                                                     3  wrote(1)                     deep hub start: <tmp>/bin/refusing-launcher exited 1: 
+deep inbox --typo                                                           2  wrote(1)                     deep hub start: <tmp>/bin/refusing-launcher exited 1: 
+deep doctor                                                                 1                               DeepBuild hub.socket: FAIL
+deep doctor --json                                                          1                               {"item":"hub.socket","agent":"deepbuild","code":"hub_unreachable","level":"fail","evidence":"no hub answers at unix:~/.deepbuild/hub.sock","fix":"Run `deep setup`, which 
+deep doctor --typo                                                          2                               Usage: deep doctor [--json] [--prompt]
+deep off                                                                    3  wrote(1)                     deep hub start: <tmp>/bin/refusing-launcher exited 1: 
+deep on                                                                     3  wrote(1)                     deep hub start: <tmp>/bin/refusing-launcher exited 1: 
+deep off now                                                                2  wrote(1)                     deep hub start: <tmp>/bin/refusing-launcher exited 1: 
+deep explain                                                                2                               Usage: deep explain <recorded session folder> [--json]
+deep explain <tmp>/nosuch                              2                               deep explain: <tmp>/nosuch is not a recorded session folder; explaining a live session by ID needs the hub's record (#14, #16)
+deep run                                                                    2                               Usage: deep run --result <run.finished event file>
+deep run --result <tmp>/nosuch.json                    2                               deep run: no result at <tmp>/nosuch.json
+deep run follow run:nosuch                                                  3                               The hub isn't answering; set this home up with deep setup.
+deep run follow --typo                                                      3                               The hub isn't answering; set this home up with deep setup.
+deep host                                                                   2                               Usage: deep host run <ask>
+deep host list                                                              3                               The hub isn't answering; set this home up with deep setup.
+deep host facts nosuch                                                      3                               The hub isn't answering; set this home up with deep setup.
+deep host changes nosuch                                                    3                               The hub isn't answering; set this home up with deep setup.
+deep host run ask:01ARZ3NDEKTSV4RRFFQ69G5FAV                                3                               The hub isn't answering; set this home up with deep setup.
+deep hub                                                                    2                               Usage: deep hub run [--root <folder>] [--safe]
+deep hub status                                                             3                               The hub isn't answering; set this home up with deep setup.
+deep hub stop                                                               3                               The hub isn't answering; set this home up with deep setup.
+deep hub bogus                                                              2                               Usage: deep hub run [--root <folder>] [--safe]
+deep fix                                                                    2                               Usage: deep fix <id> [--json]   starts work from a work item at a source you switched on, such as LIN-42
+deep fix LIN-42                                                             3                               The hub isn't answering; set this home up with deep setup.
+deep land                                                                   2                               Usage: deep land [judge] --repo <checkout> [--json]   judge each open PR on its merge with main, or land the PASSes in turn
+deep land --repo <tmp>/w                               3                               The hub isn't answering; set this home up with deep setup.
+deep land judge --repo <tmp>/w --json                  3                               The hub isn't answering; set this home up with deep setup.
+deep work                                                                   2                               Usage: deep work "<scope>" [--repo <checkout>] [--json]   one approval for a run over the issues your words name, or a standing run over a rule
+deep work show                                                              3                               The hub isn't answering; set this home up with deep setup.
+deep work show --repo <tmp>/w                          3                               The hub isn't answering; set this home up with deep setup.
+deep work pause                                                             3                               The hub isn't answering; set this home up with deep setup.
+deep work work through #1 --repo <tmp>/w               3                               The hub isn't answering; set this home up with deep setup.
+deep workspace                                                              2                               Usage: deep workspace new <topic> [--folder <path>] [--json]
+deep workspace new topic                                                    3                               The hub isn't answering; set this home up with deep setup.
+deep workspace diff nosuch                                                  3                               The hub isn't answering; set this home up with deep setup.
+deep workspace drift nosuch                                                 3                               The hub isn't answering; set this home up with deep setup.
+deep workspace move nosuch <tmp>/ws                    3                               The hub isn't answering; set this home up with deep setup.
+deep setup --typo                                                           2                               Usage: deep setup [--undo]
+deep mcp bogus                                                              2                               Usage: deep mcp [actions]   the MCP server an agent starts, on stdio; actions serves deep-actions, the plug-ins' actions
+deep mcp-exec                                                               2                               Usage: deep mcp-exec <server name>
+deep mcp-exec nosuch                                                        3                               The hub isn't answering; set this home up with deep setup.
+deep env                                                                    2  wrote(1)                     deep hub start: <tmp>/bin/refusing-launcher exited 1: 
+deep env up                                                                 3  wrote(1)                     deep hub start: <tmp>/bin/refusing-launcher exited 1: 
+deep env up --json                                                          3  wrote(1)                     deep hub start: <tmp>/bin/refusing-launcher exited 1: 
+deep env down                                                               3  wrote(1)                     deep hub start: <tmp>/bin/refusing-launcher exited 1: 
+deep env --typo                                                             2  wrote(1)                     deep hub start: <tmp>/bin/refusing-launcher exited 1: 
+deep lease                                                                  2                               Usage: deep lease [kind...] -- <command>   the command run under a cpu.slot and a lease on each kind (browser, stack, gpu:shared, gpu:exclusive), at a lower priority
+deep lease -- true                                                          0                               The hub isn't answering; set this home up with deep setup. `true` runs with no lease.
+deep lease -- nosuchprogram-xyz                                           127                               The hub isn't answering; set this home up with deep setup. `nosuchprogram-xyz` runs with no lease.
+deep numbers                                                                3                               The hub isn't answering; set this home up with deep setup.
+deep numbers --json                                                         3                               The hub isn't answering; set this home up with deep setup.
+deep numbers refresh                                                        3                               The hub isn't answering; set this home up with deep setup.
+deep numbers baseline                                                       2                               Usage: deep numbers [--json] | refresh [--json] | baseline <manifest> | sample <before date> [manifest]
+deep numbers --typo                                                         2                               Usage: deep numbers [--json] | refresh [--json] | baseline <manifest> | sample <before date> [manifest]
+deep show                                                                   2                               Usage: deep show --doc <doc ID> --document <file> [--removes id,id] [--t <time>] [--size WxH] [--include issues,audit,timing,pixels] [--check] [--snap] [--claim <claim>] 
+deep show --doc 01ARZ3NDEKTSV4RRFFQ69G5FAV --document /private/tmp/dh181    2  errno                        deep show: can't read <tmp>/nosuch.json as JSON: ENOENT: no such file or directory, open '<tmp>/nosuch.json'
+deep export                                                                 2                               Usage: deep export --document <file> --still <frame | marker> --out <file.png>
+deep export --document <tmp>/nosuch.json --still 0     2  errno                        deep export: can't read <tmp>/nosuch.json as JSON: ENOENT: no such file or directory, open '<tmp>/nosuch.json'
+deep kinds                                                                  2                               Usage: deep kinds --dump <folder> | --diff <a> <b>   the canvas core's whole listing as canonical JSON named by its module-set digest, or two such dumps diffed
+deep kinds --dump <tmp>/kinds                          3                               deep kinds: No canvas core is built under <checkout>/target; run cargo build --bin deep-show first.
+deep kinds --diff <tmp>/a <tmp>    3                               deep kinds: No canvas core is built under <checkout>/target; run cargo build --bin deep-show first.
+deep open                                                                   2                               Usage: deep open <address>   ask/<id>, session/<id>, project/<id> or page/<name> opened in the app, which opens and changes nothing
+deep open page/agents                                                       1                               deep open: the app is not running
+deep open --typo                                                            1                               deep open: the app is not running
+deep race                                                                   2                               Usage: deep race <issue number>
+deep race 1                                                                 3                               The hub isn't answering; set this home up with deep setup.
+deep start                                                                  2                               Usage: deep start approve --repo <path> --issues <n>[,<n>...] --agents <agent>[,<agent>...] [--home <agent>=<folder>]...
+deep start --repo <tmp>/w --issue 1 --agent claude-    3                               The hub isn't answering; set this home up with deep setup.
+deep start approve --repo <tmp>/w --issues 1 --agen    3                               The hub isn't answering; set this home up with deep setup.
+deep gate                                                                   2                               Usage: deep gate rules [--json]   the rulesets your repo needs, as GitHub's create-a-repository-ruleset call takes them
+deep gate rules                                                             1                               deep gate rules: name the gate's GitHub App in your settings first, as github.gate: { "app_id": <id>, "key": "<Keychain service>" }
+deep gate rules --json                                                      1                               deep gate rules: name the gate's GitHub App in your settings first, as github.gate: { "app_id": <id>, "key": "<Keychain service>" }
+deep install                                                                2  wrote(1)                     deep hub start: <tmp>/bin/refusing-launcher exited 1: 
+deep install <tmp>/nosuch                              2  errno,wrote(1)               deep hub start: <tmp>/bin/refusing-launcher exited 1: 
+deep guard                                                                  2  wrote(1)                     deep hub start: <tmp>/bin/refusing-launcher exited 1: 
+deep guard add <tmp>/nosuch.json                       2  errno,wrote(1)               deep hub start: <tmp>/bin/refusing-launcher exited 1: 
+deep memory                                                                 3  wrote(1)                     deep hub start: <tmp>/bin/refusing-launcher exited 1: 
+deep memory --json                                                          3  wrote(1)                     deep hub start: <tmp>/bin/refusing-launcher exited 1: 
+deep memory keep nosuch                                                     3  wrote(1)                     deep hub start: <tmp>/bin/refusing-launcher exited 1: 
+deep memory remove nosuch                                                   3  wrote(1)                     deep hub start: <tmp>/bin/refusing-launcher exited 1: 
+deep memory overrule nosuch                                                 3  wrote(1)                     deep hub start: <tmp>/bin/refusing-launcher exited 1: 
+deep memory --typo                                                          2  wrote(1)                     deep hub start: <tmp>/bin/refusing-launcher exited 1: 
+deep rules                                                                  2                               Usage: deep rules sync
+deep rules sync                                                             3                               The hub isn't answering; set this home up with deep setup.
+deep rules credit rule:nosuch                                               3                               The hub isn't answering; set this home up with deep setup.
+deep rules reach --repo <tmp>/w --scope **             3                               The hub isn't answering; set this home up with deep setup.
+deep session                                                                2                               Usage: deep session rules <session> [--json]   the set of rules a session runs under
+deep session rules nosuch                                                   3                               The hub isn't answering; set this home up with deep setup.
+deep session rules --typo                                                   3                               The hub isn't answering; set this home up with deep setup.
+deep undo                                                                   2                               Usage: deep undo staged:<id> | sync:<id>
+deep undo staged:nosuch                                                     3                               The hub isn't answering; set this home up with deep setup.
+deep undo sync:nosuch                                                       3                               The hub isn't answering; set this home up with deep setup.
+deep secret                                                                 2  wrote(1)                     deep hub start: <tmp>/bin/refusing-launcher exited 1: 
+deep secret list                                                            3  wrote(1)                     deep hub start: <tmp>/bin/refusing-launcher exited 1: 
+deep secret list --json                                                     3  wrote(1)                     deep hub start: <tmp>/bin/refusing-launcher exited 1: 
+deep secret --typo                                                          2  wrote(1)                     deep hub start: <tmp>/bin/refusing-launcher exited 1: 
+deep join                                                                   2                               Usage: deep join <repo link> --invite <invite>, in a clone of that repo
+deep join https://github.com/a/b --invite x                                 2                               deep join: an invite starts deepbuild-invite:.
+deep person                                                                 2                               Usage: deep person invite <login> --address <host>:<port>, in a clone of the project's repo
+deep person invite someone --address 127.0.0.1:9                            3                               The hub isn't answering; set this home up with deep setup.
+deep person revoke someone                                                  3                               The hub isn't answering; set this home up with deep setup.
+deep library                                                                2                               Usage: deep library on <library>
+deep library on nosuch                                                      3                               The hub isn't answering; set this home up with deep setup.
+deep library off nosuch                                                     3                               The hub isn't answering; set this home up with deep setup.
+deep library rule nosuch MIT                                                3                               The hub isn't answering; set this home up with deep setup.
+deep pack                                                                   2                               Usage: deep pack rule <owner/name> <license>...
+deep pack rule a/b MIT                                                      3                               The hub isn't answering; set this home up with deep setup.
+deep job                                                                    2                               Usage: deep job rule <tool@version> <usd>
+deep job rule tool@1 1                                                      3                               The hub isn't answering; set this home up with deep setup.
+deep backup                                                                 2                               Usage: deep backup <folder>
+deep backup <tmp>/backup                               3                               The hub isn't answering; set this home up with deep setup.
+deep backup --typo                                                          3                               The hub isn't answering; set this home up with deep setup.
+deep restore                                                                2                               Usage: deep restore <folder>
+deep restore <tmp>/nosuch                              2                               deep restore changed nothing: <tmp>/nosuch holds no finished backup (no ledger.db).
+deep update                                                                 2                               Usage: deep update --check   whether a newer DeepBuild is out
+deep update --check                                                         3                               Couldn't check for updates; the last check was never.
+deep debug                                                                  2                               Usage: deep debug bundle   redacted logs, versions and doctor output, for a bug report
+deep debug bundle                                                           0  wrote(0)                     ~/.deepbuild/debug/bundle-2026-11-18T17-15-25-209Z.json.gz
+deep read                                                                   2                               Usage: deep read <handle> [--slice [<cursor>]] [--json] [--root <folder>] [-- <what>]
+deep read ev:nosuch                                                         1                               deep read ev:nosuch: no record to read at ~/.deepbuild: Cannot open database because the directory does not exist
+deep read ev:nosuch --json                                                  1                               deep read ev:nosuch: no record to read at ~/.deepbuild: Cannot open database because the directory does not exist
+deep find                                                                   2                               Usage: deep find [<query>] [--file <path>] [--slice [<cursor>]] [--json] [--root <folder>] [-- <what>]
+deep find nosuchword                                                        1                               deep find nosuchword: no record to read at ~/.deepbuild: Cannot open database because the directory does not exist
+deep find nosuchword --json                                                 1                               deep find nosuchword: no record to read at ~/.deepbuild: Cannot open database because the directory does not exist
+deep waiter                                                                 0  SILENT                       
