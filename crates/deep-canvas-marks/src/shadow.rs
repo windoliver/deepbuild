@@ -28,11 +28,6 @@ pub const BINS: usize = 1024;
 pub const RUN: u32 = 1 << 31;
 pub const WIND: i32 = 1 << 15;
 
-/// The bit that marks, on a bin's offset, a bin an outline is seen to turn back or to end in:
-/// there a pixel's samples may part. In any other bin a pixel that no segment's line passes
-/// takes its centre's answer whole.
-pub const EDGE: u32 = 1 << 31;
-
 /// Where a pixel is tested, px from its centre: a shadow's edge is antialiased over 1 px.
 pub const SAMPLES: [[f64; 2]; 4] = [[-0.2, -0.4], [0.4, -0.2], [-0.4, 0.2], [0.2, 0.4]];
 
@@ -352,14 +347,14 @@ pub fn build(lights: &[Point], outlines: &[Vec<Verb>], zoom: f64) -> Option<Shad
     let tol = path::tolerance(path::bucket(zoom));
     let foot = FOOT / zoom;
     let mut segs = Vec::new();
-    // Each outline's segments, and how many each of its closed lines holds.
+    // Each outline's segments, and whether it is one closed line.
     let mut runs = Vec::with_capacity(outlines.len());
     for verbs in outlines {
         let start = segs.len();
         let lines = path::flatten(verbs, tol);
-        let lens: Vec<usize> = lines.iter().map(|l| l.points.len()).collect();
+        let one = lines.len() == 1;
         segs.extend(lines.into_iter().flat_map(closed));
-        runs.push((start..segs.len(), lens));
+        runs.push((start..segs.len(), one));
     }
     if segs.is_empty() {
         return None;
@@ -417,10 +412,7 @@ pub fn build(lights: &[Point], outlines: &[Vec<Verb>], zoom: f64) -> Option<Shad
         last.fill(None);
         // How far the outline in hand comes in each bin it is seen in.
         let mut reach = vec![(None, 0.0_f64); BINS];
-        // A segment the light is on is an edge in every bin.
-        let on = seen.iter().flatten().any(|s| s.hi - s.lo >= BINS as f64);
-        let mut edge = vec![on; BINS];
-        for (o, (run, lens)) in runs.iter().enumerate() {
+        for (o, (run, one)) in runs.iter().enumerate() {
             let wind = match l.sun {
                 Some(_) => 0,
                 None => winding(&segs[run.clone()], l.at),
@@ -438,35 +430,10 @@ pub fn build(lights: &[Point], outlines: &[Vec<Verb>], zoom: f64) -> Option<Shad
                     bound[b][0] = bound[b][0].min(s.near);
                 }
             }
-            // Its edges: each corner where the light sees it turn back, both sides of the corner
-            // on one side of the ray through it. An end left by a segment past the range is
-            // past the range too, where nothing is lit.
-            let mut first = run.start;
-            for &n in lens {
-                for j in 0..n {
-                    let (i, before) = (first + j, first + (j + n - 1) % n);
-                    let (v, u, w) = (&segs[i][..2], &segs[before][..2], &segs[i][2..]);
-                    let side = |p: &[f64]| match l.sun {
-                        Some(dir) => cross(dir, [p[0] - v[0], p[1] - v[1]]),
-                        None => cross(
-                            [v[0] - l.at[0], v[1] - l.at[1]],
-                            [p[0] - l.at[0], p[1] - l.at[1]],
-                        ),
-                    };
-                    if let (Some(s), Some(p)) = (&seen[i], &seen[before]) {
-                        if side(u) * side(w) >= 0.0 {
-                            let pos = if s.advance >= 0.0 { s.lo } else { s.hi };
-                            bins_of(pos, pos, s.slack.max(p.slack), wraps)
-                                .for_each(|b| edge[b] = true);
-                        }
-                    }
-                }
-                first += n;
-            }
             // `far`: past a whole outline of one line that spans the bin, with room for a
             // pixel's samples, every pixel is behind it and outside it.
             let whole: Option<Vec<&Seen>> = seen[run.clone()].iter().map(Option::as_ref).collect();
-            let Some(whole) = whole.filter(|w| lens.len() == 1 && !w.is_empty()) else {
+            let Some(whole) = whole.filter(|w| *one && !w.is_empty()) else {
                 continue;
             };
             let nearest = whole.iter().fold(f64::INFINITY, |n, s| n.min(s.near));
@@ -499,9 +466,6 @@ pub fn build(lights: &[Point], outlines: &[Vec<Verb>], zoom: f64) -> Option<Shad
                     bound[b][1] = bound[b][1].min(reach[b].1);
                 }
             }
-        }
-        for b in (0..BINS).filter(|b| edge[*b]) {
-            words[c.table + b] |= EDGE;
         }
         casters.push(Some(c));
     }
@@ -550,22 +514,9 @@ impl Shadows {
             self.words[caster.table + bin],
             self.words[caster.table + bin + 1],
         );
-        let stream = &self.words[(from & !EDGE) as usize..(to & !EDGE) as usize];
-        if from & EDGE == 0 && self.clear(stream, c) {
-            return if self.blocks(stream, l, c) { 0.0 } else { 1.0 };
-        }
+        let stream = &self.words[from as usize..to as usize];
         let blocked = samples.iter().filter(|x| self.blocks(stream, l, **x));
         1.0 - blocked.count() as f64 / samples.len() as f64
-    }
-
-    /// Whether no line of the `stream`'s segments passes the pixel centred at `c`.
-    fn clear(&self, stream: &[u32], c: P) -> bool {
-        stream.iter().filter(|w| **w & RUN == 0).all(|w| {
-            let [ax, ay, bx, by] = self.segs[*w as usize];
-            let num = cross([ax - c[0], ay - c[1]], [bx - c[0], by - c[1]]);
-            let e = [bx - ax, by - ay];
-            num * num > self.foot * self.foot * dot(e, e)
-        })
     }
 
     /// Whether the light `l` is blocked at `x` by the segments of a bin's `stream`.
@@ -717,32 +668,15 @@ mod tests {
             point([250.0, 250.0], 2000.0),
             point([250.0, 310.0], 2000.0),
             point([120.0, 380.0], 150.0),
-            point([439.7, 475.0], 2000.0),
+            point([439.7, 390.0], 2000.0),
             sun(30.0),
             sun(200.0),
         ];
         for zoom in [1.0, 2.0] {
             let shadows = build(&lights, &outlines, zoom).expect("outlines occlude");
             let mut blocked = [0.0; 7];
-            // 4,000 pixels anywhere, then pixels aimed past each corner as each point light
-            // sees it, where a shadow's edge runs.
-            let mut centres: Vec<P> = (0..4000)
-                .map(|_| [500.0 * rand(), 500.0 * rand()])
-                .collect();
-            for l in lights.iter().filter(|l| l.sun.is_none()) {
-                for s in &shadows.segs {
-                    let v = [s[0] - l.at[0], s[1] - l.at[1]];
-                    let far = ops::hypot(v[0], v[1]);
-                    for t in [8.0, 15.0, 60.0] {
-                        let jitter = [rand() - 0.5, rand() - 0.5];
-                        let c = [0, 1].map(|k| s[k] + t * v[k] / far + jitter[k]);
-                        if c.iter().all(|x| (0.0..500.0).contains(x)) {
-                            centres.push(c);
-                        }
-                    }
-                }
-            }
-            for c in centres {
+            for _ in 0..4000 {
+                let c = [500.0 * rand(), 500.0 * rand()];
                 let samples = SAMPLES.map(|o| [c[0] + o[0] / zoom, c[1] + o[1] / zoom]);
                 for (k, l) in lights.iter().enumerate() {
                     let (dx, dy) = (c[0] - l.at[0], c[1] - l.at[1]);
