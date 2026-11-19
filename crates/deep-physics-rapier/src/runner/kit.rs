@@ -180,17 +180,25 @@ impl Run {
 
     /// #191's default for fast bodies: `world` baked over `steps` (1 s at its rate by default), each
     /// body physics.fast_body flags that leaves `ccd` unset turned to `ccd: true` with an
-    /// assumption row; refused, naming the body, when the expansion leaves one off.
+    /// assumption row; refused, naming the body, when the expansion leaves one off. #2239: `world`
+    /// is a document, or with `scene` the ID of a world the scene lists; only a fast dynamic body
+    /// gets a row, a kinematic body and a pair keeping their issues for the playtest run that
+    /// bakes the world; and the world the kit writes is checked as any other.
     fn expand(&self, call: &Value) -> Value {
-        let source = call.get("world").cloned().unwrap_or(Value::Null);
+        let listed = call.get("scene").and_then(|_| call["world"].as_str());
+        let source = match listed {
+            Some(id) => call["scene"]["worlds"][id].clone(),
+            None => call.get("world").cloned().unwrap_or(Value::Null),
+        };
         let steps = call
             .get("steps")
             .and_then(Value::as_u64)
             .or_else(|| source["step_rate"].as_u64())
             .unwrap_or(120);
-        let baked = self
-            .answer(&json!({"call": "bake", "world": source, "steps": steps, "read": []}))
-            .unwrap_or_else(|| json!({"ok": false, "code": "bad_input"}));
+        let mut ask = call.clone();
+        (ask["call"], ask["steps"], ask["read"]) = (json!("bake"), json!(steps), json!([]));
+        let bad = || json!({"ok": false, "code": "bad_input"});
+        let baked = self.answer(&ask).unwrap_or_else(bad);
         if baked["ok"] != true {
             return baked;
         }
@@ -199,6 +207,7 @@ impl Run {
             .into_iter()
             .flatten()
             .filter(|i| i["code"] == fast::FAST_BODY)
+            .filter(|i| i.get("kind").is_none() || self.ccd_on_kinematic)
             .filter_map(|i| {
                 let f = Flag {
                     step: i["step"].as_u64()?,
@@ -209,7 +218,15 @@ impl Run {
             })
             .collect();
         let (world, assumptions) = fast::expand(&source, &flagged, self.leave_ccd_off);
-        let refused = fast::refused(&source, &world, &flagged);
+        let mut refused = fast::refused(&source, &world, &flagged);
+        ask["call"] = json!("check");
+        match listed {
+            Some(id) => ask["scene"]["worlds"][id] = world.clone(),
+            None => ask["world"] = world.clone(),
+        }
+        let checked = self.answer(&ask).unwrap_or_else(bad);
+        let errors = checked["issues"].as_array().into_iter().flatten();
+        refused.extend(errors.filter(|i| i["severity"] == "error").cloned());
         if refused.is_empty() {
             json!({"ok": true, "world": world, "assumptions": assumptions})
         } else {
