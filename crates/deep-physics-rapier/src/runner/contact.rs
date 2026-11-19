@@ -2,15 +2,20 @@
 //! a check that holds `solver.contact_hz` to a quarter of (step rate × substeps), as it holds a
 //! joint's spring, not to the sixth a contact settles at; a backend wrapper that holds a contact
 //! with a static body at the same frequency as any other, not twice it; and a default that keeps
-//! 30 Hz whatever the step.
+//! 30 Hz whatever the step. #2241's planted belts (tests/acceptance/2241): a backend wrapper that
+//! leaves the contact hook out; one that applies a belt's speed along world +X; and one that
+//! takes it along level ground, not in the contact's plane.
 
 use super::*;
 
 /// The planted programs this file runs.
-pub const PLANTED: [&str; 3] = [
+pub const PLANTED: [&str; 6] = [
     "contact_hz_quarter",
     "static_contact_same_hz",
     "contact_default_30",
+    "belt_hook_left_out",
+    "belt_speed_along_world_x",
+    "belt_speed_along_level_ground",
 ];
 
 /// Plants `name`, one of [`PLANTED`], in `run`; false for another name.
@@ -19,6 +24,9 @@ pub fn planted(name: &str, run: &mut Run) -> bool {
         "contact_hz_quarter" => Twin::ContactsAtAQuarter,
         "static_contact_same_hz" => Twin::StaticContactSame,
         "contact_default_30" => Twin::Contact30,
+        "belt_hook_left_out" => Twin::BeltWithoutHook,
+        "belt_speed_along_world_x" => Twin::BeltAlongWorldX,
+        "belt_speed_along_level_ground" => Twin::BeltAlongLevel,
         _ => return false,
     };
     true

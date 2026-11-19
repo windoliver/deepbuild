@@ -932,17 +932,18 @@ fn create(
             &r.what,
         )));
     }
-    let items = items_mut(doc)?;
-    if items.contains_key(id) {
-        // The closed list has no duplicate-ID code; the ID is not usable, which is `bad_id`.
+    // A create never replaces an item (#1415): the ID is taken, in the writer layer holding it.
+    if let Some(held) = member(doc, "items").and_then(|i| member(i, id)) {
+        let layer = held["layer"].as_str().unwrap_or_default();
         return Err(Box::new(Issue::error(
-            "bad_id",
+            "id_taken",
             id,
             format!("items/{id}"),
-            json!(id),
-            "ID already exists",
+            json!({"id": id, "layer": layer}),
+            &format!("{id} is already an item, in layer {layer}"),
         )));
     }
+    let items = items_mut(doc)?;
     done.before.entry(id.clone()).or_insert(None);
     let mut stamped = item.clone();
     stamped.insert("layer".into(), json!(layer));

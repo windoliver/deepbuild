@@ -11,6 +11,7 @@ import { type Asks } from '@deepbuild/asks';
 import { fixtures, type JsonValue } from '@deepbuild/contracts';
 
 import { type RecordStore } from '@deepbuild/record';
+import type { ExtensionHost } from '@deepbuild/extension-host';
 
 import { verdict as claimVerdict, verdictLine } from '@deepbuild/verdicts';
 import { ClaudeSettings, relations } from './claude-settings.js';
@@ -20,6 +21,7 @@ import { codexRelations, modified, readTrust, trustProblems } from './codex-sett
 import { type Root } from './paths.js';
 
 import { changeSentence, openItemSentence, verdictSentence } from './sentences.js';
+import { RAN_LIKE, ranOf } from './dependencies.js';
 import { Forge, parsePrUrl } from './forge.js';
 
 
@@ -45,6 +47,8 @@ readonly now: () => number;
 readonly durable: Durable;
 readonly libraries: Libraries | undefined;
 readonly canvasSide: Pick<HubCanvas, "explainsOf">;
+/** The handlers it set aside, for the doctor (#2402). */
+readonly extensions: Pick<ExtensionHost, 'setAside'> | undefined;
  };
  events: Pick<HubEvents, "appendCore" | "append" | "connection">;
 kernel: Pick<HubRuntime, "blocked" | "jobs">;
@@ -118,7 +122,7 @@ export class HubReadings {
     // reads a watch-only session's unverified events too, or its own SessionEnd would leave it open here for good.
     const sessions = ((await this.options.services.record.raw(`SELECT s.id, COALESCE((SELECT e.kind <> 'session.start' FROM events e WHERE e.session_id = s.id AND e.kind IN ('session.start', 'session.end', 'session.archived') ORDER BY e.log_pos DESC LIMIT 1), 0) AS closed
       FROM sessions s WHERE s.last_seen IS NOT NULL${seen ? ` AND EXISTS (SELECT 1 FROM events WHERE session_id = s.id${seen})` : ''} ORDER BY s.last_seen DESC LIMIT 100`)) as { id: string; closed: number }[]).map((s) => ({ id: s.id, closed: s.closed === 1 }));
-    return { gates: { watch_only: this.options.kernel.blocked !== undefined, reason: this.options.kernel.blocked ?? null }, notifications: this.notifications, secrets: await this.secretStore(), network, claude, codex, sessions, jobs: Object.fromEntries([...this.options.kernel.jobs].map(([name, failing]) => [name, { failing }])), packs: await this.options.services.libraries?.packs.shipped() ?? [] };
+    return { gates: { watch_only: this.options.kernel.blocked !== undefined, reason: this.options.kernel.blocked ?? null }, notifications: this.notifications, secrets: await this.secretStore(), network, claude, codex, sessions, jobs: Object.fromEntries([...this.options.kernel.jobs].map(([name, failing]) => [name, { failing }])), packs: await this.options.services.libraries?.packs.shipped() ?? [], hooks: { aside: this.options.services.extensions?.setAside() ?? [] } };
   }
 
   /** Whether this process can reach the OS secret store, read at most every ten seconds. */
@@ -169,7 +173,9 @@ export class HubReadings {
       const [where] = state.session ? (await this.options.services.record.raw(`SELECT worktree FROM sessions WHERE id = ?`, [state.session])) as { worktree: string | null }[] : [];
       const named = files.map((f) => where?.worktree && f.startsWith(`${where.worktree}/`) ? relative(where.worktree, f) : basename(f));
       const said = this.options.settings.plant === 'sentence-from-agent-text' && state.session ? this.options.judging().lastMessage.get(state.session) : undefined;
-      const sentence = said ?? await say(changeSentence(named));
+      // What the session ran straight from a registry with no ask, with its age (#1509).
+      const ran = state.session ? ((await this.options.services.record.raw(`SELECT json_extract(data, '$.reading') AS reading FROM events WHERE kind = 'session.reading' AND session_id = ? AND json_extract(data, '$.reading') LIKE ? ORDER BY log_pos`, [state.session, RAN_LIKE])) as { reading: string }[]).flatMap((r) => ranOf(r.reading) ?? []) : [];
+      const sentence = said ?? await say(changeSentence(named, ran));
       const rounds = new Map(((await this.options.services.record.raw(`SELECT json_extract(data, '$.verdict') AS verdict, json_extract(data, '$.round') AS round FROM events WHERE kind = 'claim.sent_back' AND subject = ?`, [`claim:${id}`])) as { verdict: string; round: number }[]).map((r) => [r.verdict, Number(r.round)]));
       for (const v of verdicts as Obj[]) {
         const reqs = (JSON.parse(String(v.requirements ?? '[]')) as Obj[]).map((r) => ({ req: String(r.req), outcome: String(r.outcome), smallest: typeof r.smallest === 'string' ? r.smallest : null, points_to: typeof r.points_to === 'string' ? r.points_to : null }));

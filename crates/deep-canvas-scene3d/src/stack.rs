@@ -17,7 +17,7 @@ use crate::poly::{Boundary, Poly, Scheme, UvRule};
 /// The modifier kinds: each one's class, whether it is a GPU kind (a sway moves on the GPU, #2016;
 /// the others are evaluated here on the CPU from their per-instance params) and whether it reads
 /// time by its nature.
-pub const KINDS: [(&str, &str, bool, bool); 20] = [
+pub const KINDS: [(&str, &str, bool, bool); 22] = [
     ("mod.array@1", "generate", false, false),
     ("mod.mirror@1", "generate", false, false),
     ("mod.subdivide@1", "generate", false, false),
@@ -30,6 +30,8 @@ pub const KINDS: [(&str, &str, bool, bool); 20] = [
     ("mod.normals@1", "deform", false, false),
     ("mod.curve_deform@1", "deform", false, false),
     ("mod.simple_deform@1", "deform", false, false),
+    (crate::bind::BOX, "deform", false, false),
+    (crate::bind::MESH, "deform", false, false),
     ("mod.displace@1", "deform", false, false),
     ("mod.sway@1", "deform", true, true),
     ("mod.bob@1", "deform", true, true),
@@ -66,6 +68,9 @@ pub struct Run {
     pub clock: Option<fn() -> f64>,
     /// The host's worker threads and the thread count a builder may run its blocks on (#224).
     pub pool: Option<(std::sync::Arc<dyn deep_canvas::schedule::Pool>, usize)>,
+    /// The binds the build's last run kept, by modifier (#1929): a box or mesh deform whose mesh
+    /// and box or control mesh are the ones its bind was made from reads its weights there.
+    pub kept: Vec<Option<crate::bind::Bind>>,
 }
 
 impl Run {
@@ -149,6 +154,9 @@ pub struct Row {
     /// The step's time in milliseconds by the run's clock (0 for a skipped one); none without
     /// one (#2017). `to_json` leaves it out, so a build's key never reads it.
     pub ms: Option<f64>,
+    /// A box or mesh deform's bind (#1929), which the build's next run reads; `to_json` leaves
+    /// it out too.
+    pub bind: Option<crate::bind::Bind>,
 }
 
 impl Row {
@@ -287,7 +295,7 @@ fn axis_of(a: &str) -> Option<usize> {
     }
 }
 
-fn vec3(v: Option<&Value>) -> Option<V3> {
+pub(crate) fn vec3(v: Option<&Value>) -> Option<V3> {
     let a = v?.as_array().filter(|a| a.len() == 3)?;
     Some([a[0].as_f64()?, a[1].as_f64()?, a[2].as_f64()?])
 }
@@ -421,6 +429,7 @@ pub fn apply(
             enabled: on,
             gpu,
             ms: (run.clock.is_some() && !on).then_some(0.0),
+            bind: None,
         });
         if !on {
             continue;
@@ -528,6 +537,18 @@ pub fn apply(
                     }
                     _ => return Err(at("params/mode")),
                 }
+            }
+            crate::bind::BOX | crate::bind::MESH => {
+                let kept = run.kept.get(k).and_then(Option::as_ref);
+                let planted = run.planted.as_deref();
+                // A refusal names the item beside what it found.
+                let (moved, bind) = crate::bind::deform(&m, &only, &kind, &params, kept, planted)
+                    .map_err(|(code, mut found)| {
+                    found["item"] = json!(id);
+                    crate::attrs::coded(code, &format!("modifiers/{k}"), &found)
+                })?;
+                rows[k].bind = Some(bind);
+                mask(&m, faced(moved), &only)
             }
             "mod.displace@1" => {
                 let amount = num("amount", 0.05)?;
@@ -937,7 +958,11 @@ fn simple_deform(m: &Mesh, mode: &str, amount: f64) -> Mesh {
             _ => [p[0], p[1] * (1.0 + amount), p[2]],
         }
     };
-    let mut out = m.mapped(f, |_, n| n);
+    faced(m.mapped(f, |_, n| n))
+}
+
+/// The mesh a deform moved, with its normals from its faces.
+fn faced(mut out: Mesh) -> Mesh {
     // Normals from the moved faces: flat per triangle, accumulated at shared vertices.
     let mut acc = vec![[0.0; 3]; out.positions.len()];
     for t in 0..out.triangles() {

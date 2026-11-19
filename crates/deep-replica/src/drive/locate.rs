@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 use gpui_kit::{base::test_support::snapshots, point, px, ElementId, HitboxBehavior, Window};
 use serde_json::{json, Value};
 
-use super::glyphs::{Glyphs, Run};
+use super::glyphs::{Drawn, Glyphs, Run};
 use crate::snapshot::{author_id, role_name};
 
 /// The roles of a form control, the things `{label}` names.
@@ -63,6 +63,8 @@ impl Target {
 pub struct Frame {
     pub elements: Vec<Target>,
     pub runs: Vec<Run>,
+    /// The SVGs the frame drew, such as icons and status marks (#1592).
+    pub svgs: Vec<Drawn>,
     pub items: Vec<(String, Value)>,
     /// Where each canvas item was drawn, in device pixels.
     placed: BTreeMap<String, [i64; 4]>,
@@ -117,6 +119,7 @@ impl Frame {
         Frame {
             elements,
             runs: glyphs.runs(),
+            svgs: glyphs.svgs(),
             items: deep_app::canvas::items(),
             placed,
             carets: BTreeMap::new(),

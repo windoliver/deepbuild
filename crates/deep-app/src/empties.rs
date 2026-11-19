@@ -2,10 +2,12 @@
 //! differently, in words and in mark, so a failed read never looks calm (#1453 rule 11, invariant 2). Each line is on
 //! the safety list.
 
-/// What the hub says when it can't be read.
-pub const HUB_DOWN: &str = "The hub isn't answering";
-/// Where a count or a row isn't read yet: never 0.
-pub const READING: &str = "reading";
+use crate::copy;
+
+/// The key of what the hub says when it can't be read.
+pub const HUB_DOWN: &str = "empties.hub_down";
+/// The key of where a count or a row isn't read yet: never 0.
+pub const READING: &str = "empties.reading";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Empty {
@@ -31,11 +33,12 @@ impl Empty {
     pub fn words(self, nothing: &str, now: u64) -> String {
         match self {
             Empty::Nothing => nothing.to_owned(),
-            Empty::Reading => READING.to_owned(),
-            Empty::Unreachable { since: Some(since) } => {
-                format!("{HUB_DOWN} since {}", crate::states::moment(since, now))
-            }
-            Empty::Unreachable { since: None } => HUB_DOWN.to_owned(),
+            Empty::Reading => copy::text(READING).to_owned(),
+            Empty::Unreachable { since: Some(since) } => copy::fill(
+                "empties.hub_down_since",
+                &[&crate::states::moment(since, now)],
+            ),
+            Empty::Unreachable { since: None } => copy::text(HUB_DOWN).to_owned(),
         }
     }
 

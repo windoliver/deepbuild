@@ -141,6 +141,22 @@ pub enum Measure {
     },
     /// #2309: how far below where it started `body` is after step `step`, along y, m.
     Sink { body: &'static str, step: usize },
+    /// #2241: how far `body` has moved along `along` by the end of step `step`, m, signed.
+    Along {
+        body: &'static str,
+        along: [f64; 3],
+        step: usize,
+    },
+    /// #2241: `body`'s speed along `along` after each step from `from` on, m/s: the one farthest
+    /// from the answer.
+    Held {
+        body: &'static str,
+        along: [f64; 3],
+        from: usize,
+    },
+    /// #2243: how far apart the axes of two character bodies that meet stand after the last
+    /// step, m; it fails wherever one breaks the rule of their meeting.
+    Meet(walks::Meet),
 }
 
 /// One fixture of the behavior part.
@@ -354,6 +370,60 @@ fn walked(t: &Trace, cases: &[walks::Walk]) -> Vec<Value> {
         }
     }
     out
+}
+
+/// #2243: a meeting's reading, and each way the run breaks its rule, named: a step that ends
+/// with the two axes under the least they keep, with what it read; a body that wants no move and
+/// moves; one that leaves where it rests; and one whose controller doesn't first touch the
+/// other, writing `contact_begin`, at the step they meet.
+fn met(t: &Trace, m: &walks::Meet) -> Reading {
+    let (a, b) = (path(t, m.walker), path(t, m.other));
+    let extra = json!({"bodies": [m.walker, m.other]});
+    let Some(last) = a.len().min(b.len()).checked_sub(1).filter(|n| *n > 0) else {
+        return reading(None, extra);
+    };
+    let apart = |k: usize| dist([a[k][0], 0.0, a[k][2]], [b[k][0], 0.0, b[k][2]]);
+    let mut r = reading(Some(apart(last)), extra);
+    let mut broke = Vec::new();
+    if let Some(k) = (1..=last).find(|&k| apart(k) < walks::LEAST) {
+        r.extra.insert("step".into(), json!(k));
+        broke.push(format!("step {k} ends with the axes of {} and {} {:.4} m apart, under the {} m they keep at the end of every step", m.walker, m.other, apart(k), walks::LEAST));
+    }
+    // The first step from `from` on that ends with `p` more than `most` m from where step
+    // `from` left it.
+    let strays = |p: &[[f64; 3]], from: usize, most: f64| {
+        (from..=last).find(|&k| dist(p[k], p[from]) > most)
+    };
+    if m.stands {
+        if let Some(k) = strays(&b, 0, walks::STILL) {
+            broke.push(format!("body {}, which wants no move, is {:e} m from where it was built at step {k}, more than {:e} m", m.other, dist(b[k], b[0]), walks::STILL));
+        }
+    } else {
+        let (rest, due) = ((t.rate as usize).min(last), walks::MEETS * t.rate);
+        for (id, other, p) in [(m.walker, m.other, &a), (m.other, m.walker, &b)] {
+            if let Some(k) = strays(p, rest, walks::RESTS) {
+                broke.push(format!("body {id} is {:.4} m from where it stood at step {rest} by step {k}, more than the {} m it may move at rest", dist(p[k], p[rest]), walks::RESTS));
+            }
+            let touches = |k: &usize| {
+                let own = t.characters[*k].iter().find(|c| c.id == id);
+                own.is_some_and(|c| c.touching.iter().any(|u| u.body == other))
+            };
+            let first = (1..=last).find(touches);
+            let begun = |k: usize| {
+                let at = |r: &&Row| r.step as usize == k && kind_is(r, "contact_begin");
+                t.rows.iter().filter(at).any(|r| between(r, id, other))
+            };
+            let on_time = |k: usize| (k as f64 - due).abs() <= walks::WITHIN_STEPS;
+            if !first.is_some_and(|k| begun(k) && on_time(k)) {
+                let at = first.map_or_else(|| "no step".into(), |k| format!("step {k}"));
+                broke.push(format!("body {id}'s controller first touches {other}, writing contact_begin, at {at}, where step {due:.1} within {} steps is due", walks::WITHIN_STEPS));
+            }
+        }
+    }
+    if !broke.is_empty() {
+        r.broke = Some(broke.join("; "));
+    }
+    r
 }
 
 /// A position of `id` after each step.
@@ -663,6 +733,26 @@ fn read(m: &Measure, t: &Trace, b: &dyn Backend, w: &World, f: &Fixture) -> Read
             let sink = p.get(*step).zip(p.first()).map(|(a, z)| z[1] - a[1]);
             reading(sink, json!({"body": body}))
         }
+        Measure::Along { body, along, step } => {
+            let p = path(t, body);
+            let ends = p.get(*step).zip(p.first());
+            let moved = ends.map(|(a, z)| (0..3).map(|i| (a[i] - z[i]) * along[i]).sum());
+            reading(moved, json!({"body": body}))
+        }
+        Measure::Held { body, along, from } => {
+            let steps = t.states.iter().enumerate().skip(*from);
+            let speeds = steps.filter_map(|(k, s)| {
+                let v = body_of(s, body)?.linear;
+                Some((k, (0..3).map(|i| v[i] * along[i]).sum::<f64>()))
+            });
+            let off = |x: &(usize, f64)| (x.1 - f.answer).abs();
+            let worst = speeds.max_by(|a, b| off(a).total_cmp(&off(b)));
+            reading(
+                worst.map(|w| w.1),
+                json!({"body": body, "step": worst.map(|w| w.0)}),
+            )
+        }
+        Measure::Meet(m) => met(t, m),
     }
 }
 
@@ -736,6 +826,16 @@ fn named_measure(m: &Measure) -> String {
         Measure::Sink { body, step } => {
             format!("how far {body} is below where it started after step {step}, m")
         }
+        Measure::Along { body, step, .. } => {
+            format!("how far {body} has moved along its belt by step {step}, m")
+        }
+        Measure::Held { body, from, .. } => {
+            format!("speed of {body} along its belt from step {from} on, m/s")
+        }
+        Measure::Meet(m) => format!(
+            "distance between the axes of {} and {} after the last step, m",
+            m.walker, m.other
+        ),
     }
 }
 

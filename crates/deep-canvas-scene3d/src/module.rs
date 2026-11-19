@@ -76,6 +76,9 @@ pub const CULL_PASS: &str = "scene3d.cull";
 /// test of the camera's lists against it (#1637; Instance `instance@1`), each frame, from that
 /// frame's depth alone, after the cull and before anything draws.
 pub const PYRAMID_PASS: &str = "scene3d.depth_pyramid";
+/// The fill lights listed cell by cell in the light policy's grid (#1634; Light and the light
+/// policy), when a light or the view changes, before the geometry reads the lists.
+pub const FILL_PASS: &str = "scene3d.light_clusters";
 /// Ambient occlusion (#418; Look `look@1`: ao): the opaque solids' depth and normal prepass, the
 /// occlusion and its blur, before the geometry pass reads it; drawn only while the look has ao on.
 pub const AO_PASS: &str = "scene3d.ao";
@@ -509,6 +512,7 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
     });
     r.pass(CULL_PASS, "compute");
     r.pass(PYRAMID_PASS, "compute");
+    r.pass(FILL_PASS, "compute");
     r.pass(AO_PASS, "geometry");
     r.pass(GEOMETRY_PASS, "geometry");
     // #200: the shadow and object-ID passes compile from the core's base steps, which the seal
@@ -581,6 +585,8 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
         }));
     // #486: the lobe outputs, occlusion and normal in gpu.output@1, core.bump@1 in gpu.function@1.
     crate::gpu::register(r);
+    // #2776: every kind above draws in 3D, and says what each path does with it.
+    r.in_3d(include_str!("paths.json"));
 }
 
 /// A 10 × 10 m plate with bushes and flowers scattered over it at least 0.5 m apart, none in

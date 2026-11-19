@@ -3,14 +3,26 @@
 //! touches only its instance record. Every vertex carries its normal, two texture coordinates and
 //! a tangent with its handedness in w (glTF's TANGENT), which a material's maps read (#423).
 
+use deep_canvas::gauge::{Gauge, Place};
 use deep_canvas_scene3d::scene::Shape;
 use deep_gpu::device::Device;
+
+/// #1431: the renderer's uploaded meshes (`Renderer::meshes`), which a revision or a frame that
+/// builds a mesh adds one to: past either bound, the meshes no turn drew for longest go first.
+pub static MESHES: Gauge = Gauge::new("Renderer::meshes", Place::Device, 64, 256_000_000);
 
 #[derive(Clone)]
 pub struct Mesh {
     pub vertices: wgpu::Buffer,
     pub indices: wgpu::Buffer,
     pub count: u32,
+}
+
+impl Mesh {
+    /// The bytes its buffers hold on the device.
+    pub fn bytes(&self) -> u64 {
+        self.vertices.size() + self.indices.size()
+    }
 }
 
 const SEGMENTS: u32 = 48;

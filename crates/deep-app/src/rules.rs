@@ -6,12 +6,21 @@ use std::path::Path;
 
 use serde_json::Value;
 
+use crate::copy;
+
 /// One rule file of the page, with its rules in the page's order.
 #[derive(Clone, Debug, PartialEq)]
 pub struct File {
     pub file: String,
     pub tokens: u64,
     pub rules: Vec<Rule>,
+}
+
+impl Rule {
+    /// Whether nothing enforces it: the page's list to shrink.
+    pub fn text_only(&self) -> bool {
+        self.enforcer == copy::text("rules.text_only")
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -41,12 +50,20 @@ impl Rule {
     pub fn sent_back_said(&self) -> Option<String> {
         let s = self.sent_back?;
         let open = s.count.saturating_sub(s.fixed + s.left);
-        let ended: Vec<String> = [(s.fixed, "fixed"), (s.left, "left"), (open, "open")]
-            .into_iter()
-            .filter(|(n, _)| *n > 0)
-            .map(|(n, how)| format!("{n} {how}"))
-            .collect();
-        Some(format!("{} sent back: {}", s.count, ended.join(", ")))
+        let ended: Vec<String> = [
+            (s.fixed, "rules.sent_back_fixed"),
+            (s.left, "rules.sent_back_left"),
+            (open, "rules.sent_back_open"),
+        ]
+        .into_iter()
+        .filter(|(n, _)| *n > 0)
+        .map(|(n, how)| copy::count(how, n, &[]))
+        .collect();
+        Some(copy::count(
+            "rules.sent_back",
+            s.count,
+            &[&ended.join(copy::text("rules.list_comma"))],
+        ))
     }
 }
 
@@ -84,8 +101,11 @@ pub fn parse(text: &str) -> Vec<File> {
                 scope: scope.to_owned(),
                 enforcer: match (kind, enforcer["name"].as_str()) {
                     // The review can send a change back and can never pass it (#1512).
-                    ("review", _) => "review: can send back, can't pass".to_owned(),
-                    ("text", _) | (_, None) => "text only".to_owned(),
+                    ("review", _) => copy::text("rules.review").to_owned(),
+                    ("text", _) | (_, None) => copy::text("rules.text_only").to_owned(),
+                    ("guard", Some(name)) => copy::fill("rules.guard", &[&name]),
+                    ("check", Some(name)) => copy::fill("rules.check", &[&name]),
+                    ("requirement", Some(name)) => copy::fill("rules.requirement", &[&name]),
                     (kind, Some(name)) => format!("{kind} {name}"),
                 },
                 tokens: j["tokens"].as_u64().unwrap_or(0),

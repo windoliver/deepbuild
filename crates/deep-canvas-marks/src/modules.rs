@@ -237,6 +237,12 @@ impl Canonical for TextSpec {
         if !self.spans.is_empty() {
             format!("{:?}", self.spans).encode(out);
         }
+        // #1215: a vertical text's columns; a horizontal one encodes as it did before them.
+        if let deep_text::Flow::Vertical(c) = self.flow {
+            (c.rl, c.upright, c.combine).encode(out);
+            c.height.map(f64::from).encode(out);
+            self.line_height.encode(out);
+        }
     }
 }
 
@@ -247,6 +253,10 @@ impl Canonical for Run {
         s.glyphs.len().encode(out);
         for g in &s.glyphs {
             (g.font.index, g.size, g.id, g.x, g.y, g.grapheme).encode(out);
+            // #1215: a glyph a vertical run turns; an upright one encodes as before.
+            if g.turn {
+                true.encode(out);
+            }
         }
         (s.width, s.height, s.lines, s.ellipsized).encode(out);
         s.shown.encode(out);
@@ -1025,6 +1035,8 @@ fn register_data(r: &mut Registrar, decimate: fn(&mut View<'_>) -> Result<(), Op
     crate::axes3d::register(r);
     // #225: the vector field, its stream table and flow, and its `follow_stream` entry.
     crate::vector_field::register(r);
+    // #2776: what each path does with the two kinds drawn as marks in 3D.
+    r.paths(include_str!("paths.json"));
     // A scale it can't read raises marks2d's `scale_type` or `bad_scale`, which mark sets and
     // axes raise through the same scale.
     r.fixture("points", points_board(), None).sidecar(json!({
@@ -1401,6 +1413,10 @@ fn register_marks2d_with(r: &mut Registrar, planted: relations::Planted) {
         &["marks2d.frame"],
     )
     .document()
+    // A light is no mark (#1634): the frame builds nothing from one, and costs nothing on it.
+    .applies(|_, _, item| {
+        !(item.get("kind").and_then(Value::as_str)).is_some_and(|k| k.starts_with("light."))
+    })
     .run(frame);
     r.code(
         "bad_doc",
