@@ -5,6 +5,7 @@
 //! well it names into its own outline. Plan coordinates `[x, y]` are the item's x and z.
 
 use deep_canvas::ops::{rad, tan};
+use deep_canvas::refs::{kind as names, Decl, Holds};
 use deep_canvas::registry::{Dependency, Manifest, Module, Range, Registrar, Semver};
 use serde_json::{json, Map, Value};
 
@@ -68,7 +69,12 @@ pub fn module() -> Module {
 fn register(r: &mut Registrar) {
     for spec in crate::spec::building() {
         let name = &spec.kind["arch.".len()..spec.kind.len() - "@1".len()];
-        r.kind(crate::spec::entry(&spec, "arch", name), &[], "");
+        r.kind(crate::spec::entry(&spec, "arch", name), &[], "")
+            // #1801: the wall an opening cuts, and the items a slab's or a roof's holes take.
+            .refs(&[
+                Decl::new("params/wall", Holds::Item, names::TARGET),
+                Decl::new("params/holes", Holds::Item, names::TARGET),
+            ]);
     }
     crate::build::operators(r, "building", is_building, shades, keyed);
     // A corner of a house, so the kit evaluates the module's operators on its kinds.

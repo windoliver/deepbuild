@@ -176,12 +176,13 @@
     }
   },
   "toolKinds": {
-    "readBy": "a tool call's kind (shell, read, edit, write, search, fetch, mcp or unknown, which guards treat as change), by tool name or name prefix",
-    "conformance": "paseo/toolKinds/unknown-otherwise",
+    "readBy": "a tool call's kind (shell, read, edit, write, search, fetch, mcp or unknown, which guards treat as change), by tool name, then by name prefix; deep_query changes nothing, so it is a read (#1801)",
+    "conformance": "facts/reads-count-as-read",
     "tools": {
       "Bash": "shell",
       "bash": "shell",
-      "shell": "shell"
+      "shell": "shell",
+      "mcp__deep__deep_query": "read"
     },
     "prefixes": {
       "mcp__": "mcp"

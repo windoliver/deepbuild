@@ -3789,6 +3789,11 @@ impl Render for Shipped {
                                 if rule.held {
                                     said.push_str(" · held: an agent removed its line");
                                 }
+                                // The review's send-backs that named it (#1512): a reading, never a verdict.
+                                let sent = rule.sent_back_said();
+                                if let Some(sent) = &sent {
+                                    said.push_str(&format!(" · {sent} in the last 30 days"));
+                                }
                                 observed(("rules-row", row))
                                     .role(Role::Label)
                                     .aria_label(said)
@@ -3824,7 +3829,10 @@ impl Render for Shipped {
                                             .when(rule.enforcer != "text only", |e| {
                                                 e.font_weight(FontWeight::MEDIUM)
                                             })
-                                            .child(rule.enforcer.clone()),
+                                            .child(match sent {
+                                                Some(sent) => format!("{} · {sent}", rule.enforcer),
+                                                None => rule.enforcer.clone(),
+                                            }),
                                     )
                                     .child(
                                         div()
