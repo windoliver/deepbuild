@@ -311,8 +311,6 @@ timed.push('tests/acceptance/534/ac04-budgets.test.ts');
 alone.push('tests/acceptance/1820/');
 // #1732's files each build deep-show: one file at a time.
 alone.push('tests/acceptance/1732/');
-// #2179's file builds busy_disk and deep-hook in a target folder of its own and swaps in a stand-in hook.
-alone.push('tests/acceptance/2179/');
 // #190's files build deep-logic here, at the merge base and for Linux x86_64 in Docker, start headless Chrome, and read
 // CPU and wall times.
 alone.push('tests/acceptance/190/');
