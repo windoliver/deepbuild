@@ -917,6 +917,8 @@ timed.push('tests/acceptance/210/ac8-budgets.test.ts');
 // #2031's files build deep-gpu (ac7 also the merge base's binaries) and draw on Metal; ac8 judges the lights' GPU budget.
 alone.push('tests/acceptance/2031/');
 timed.push('tests/acceptance/2031/ac8-budget.test.ts');
+// #1561's files build deep-gpu and deep-show and draw on the GPU; frames are compared within one run, with no timing.
+alone.push('tests/acceptance/1561/');
 // #2032's files each build deep-gpu or deep-canvas-render and draw on Metal; ac7 also builds both at the merge base,
 // and ac8 judges the shadows' GPU budget on the reference Mac.
 alone.push('tests/acceptance/2032/', 'tests/acceptance/2032-redraft-ac8/');
@@ -1073,9 +1075,6 @@ alone.push('tests/acceptance/1415/');
 // refusal sets it reverses (tests/acceptance/806-redraft-ac3/DISPUTE.md); its blind redraft runs in its place.
 alone.push('tests/acceptance/806-redraft-ac3/');
 byHand.push('tests/acceptance/806/unbound.test.ts');
-
-// #1561's files build deep-gpu and deep-show and draw on the GPU; frames are compared within one run, with no timing.
-alone.push('tests/acceptance/1561/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
