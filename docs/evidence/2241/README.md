@@ -14,7 +14,7 @@ Worked answers: v ÷ (μg) = 0.2039 s, step 24.46; v·t − v² ÷ (2μg) = 1.89
 | Run under `--planted belt_hook_left_out` | Result |
 |---|---|
 | level belt, `tangent_speed: 1` | the box never moves: 0.0000 m along +X at 2 s, 0.0000 m/s |
-| kit, `belt_level` | `fail`: measured 0.00007 m where the answer is 1.8981 m within 1% |
+| kit, `belt_level`, `belt_turned`, `belt_reversed` | each `fail`: measured 0.0000 m where the answer is ±1.8981 m within 1% |
 | kit, `belt_tilted` | `fail`: measured 0.0000 m/s where the answer is 1 m/s within 1% |
 
 ## The three belts
@@ -67,7 +67,7 @@ and `pass` on Rapier in the same build.
 - The first world baked into a store and sought to step 120: it restores step 120 and plays 120 on, and its 121
   step hashes equal the straight run's (the last, `4aaf973cc852a221`, in both).
 - With `tangent_speed` left out, the same world gives 241 step hashes byte-identical to the merge base's
-  (`9d0256132543`); so does that world with its box sliding from 2 m/s.
+  (`9d0256132543` before the merge with main, `81c6b9c340f6` after); so does that world with its box sliding from 2 m/s.
 - The first world's hashes differ from the plain surface's from step 1, so the hash sees the belt carry the box.
 
 ## Open
