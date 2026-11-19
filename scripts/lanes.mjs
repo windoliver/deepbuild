@@ -992,6 +992,9 @@ alone.push('tests/acceptance/1831/');
 // #2652's files each start real hubs and read their heaps through the inspector; AC4 runs #1018's hub suite whole.
 alone.push('tests/acceptance/2652/');
 
+// #1928's files each build deep-show in the full set and drive the offsets and dissolves it builds.
+alone.push('tests/acceptance/1928/');
+
 // #2650's files read a hub's memory through the churn benchmark, or start sandboxed plug-ins and 10,000 agent jobs, so
 // they run one at a time, by name: budgets.long runs the benchmark's 5,000 cycles beside the merge base's on a
 // reference Mac, by hand, gated by environmentProblem().
