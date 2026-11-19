@@ -459,7 +459,7 @@ impl Content {
     pub fn of(
         doc: &Value,
         program: Result<deep_canvas_motion::program::Program, Refused>,
-        look: &Look3,
+        look: &crate::flat::CallLook,
         labels: &mut Labels,
         assets: Option<deep_canvas_scene3d::frames::Reader>,
         planted: Option<crate::Planted>,

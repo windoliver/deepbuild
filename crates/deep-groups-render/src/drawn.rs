@@ -79,10 +79,12 @@ fn rgb(palette: &BTreeMap<String, [f64; 3]>, role: &str) -> Result<[f64; 3], Val
         .ok_or_else(|| refused("role_unresolved", format!("look: {role}")))
 }
 
-/// A gray PNG's rows, value ÷ 255.
+/// A gray PNG's rows, value ÷ 255. The file is read by its content, whatever its name (#1561: a
+/// file of the evidence store is named by its hash alone).
 fn gray(path: &str) -> Result<(u32, u32, Vec<f32>), Value> {
-    let image =
-        image::open(path).map_err(|e| refused("asset_unreadable", format!("{path}: {e}")))?;
+    let unread = |e: &dyn std::fmt::Display| refused("asset_unreadable", format!("{path}: {e}"));
+    let reader = image::ImageReader::open(path).and_then(|r| r.with_guessed_format());
+    let image = (reader.map_err(|e| unread(&e))?.decode()).map_err(|e| unread(&e))?;
     let g = image.to_luma8();
     let (w, h) = g.dimensions();
     Ok((

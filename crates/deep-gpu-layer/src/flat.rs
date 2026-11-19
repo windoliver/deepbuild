@@ -58,6 +58,34 @@ pub struct Flat {
     shown: Option<(Vec<Drawn>, Option<Page>)>,
 }
 
+/// A `live` call's look as a 2D document's frames read it (#1561): the look as every view reads
+/// it, the look@1 itself, whose `fw` and `fh` sizes convert at each document's size as
+/// `film2d`'s do, and the call's assets, files by hash, which a paper's tooth is read from.
+pub struct CallLook {
+    look: Look3,
+    def: Value,
+    assets: Map<String, Value>,
+}
+
+impl CallLook {
+    /// `look`, read from a `live` call's `look`, with that call's `assets`.
+    pub fn of(look: Look3, call: &Value) -> CallLook {
+        CallLook {
+            look,
+            def: call["look"].clone(),
+            assets: call["assets"].as_object().cloned().unwrap_or_default(),
+        }
+    }
+}
+
+impl std::ops::Deref for CallLook {
+    type Target = Look3;
+
+    fn deref(&self) -> &Look3 {
+        &self.look
+    }
+}
+
 /// Whether a document draws as 2D in the live window: it names no camera, or (#1561) its camera
 /// is a 2D film's.
 pub fn is_flat(doc: &Value) -> bool {
@@ -130,7 +158,7 @@ impl Flat {
     /// path of what it can't compile.
     pub fn new(
         doc: &Value,
-        look: &Look3,
+        look: &CallLook,
         planted: Option<Planted>,
     ) -> Result<Flat, (&'static str, String)> {
         let doc = doc.as_object().cloned().unwrap_or_default();
@@ -142,13 +170,15 @@ impl Flat {
             .iter()
             .map(|(k, c)| (k.clone(), c.map(|v| f64::from(v) / 255.0)))
             .collect();
-        let drawn = look
-            .drawn
-            .clone()
-            .filter(|_| planted != Some(Planted::LivePassesNoPage));
+        // A drawing look's fields as film2d reads them: at the document's size.
+        let size = [0, 1].map(|i| doc["size"][i].as_f64().unwrap_or(0.0));
+        let drawn = match (&look.drawn, planted) {
+            (None, _) | (_, Some(Planted::LivePassesNoPage)) => None,
+            (Some(_), _) => drawn::read_look(&look.def, size).map_err(|r| (r.code, r.path))?,
+        };
         // The paper's fields hold still; each frame's camera and lamps place the pixels on it.
         let page = match &drawn {
-            Some(d) => Some(frame2::page_of(d, &doc, &roles)?),
+            Some(d) => Some(frame2::page_of(d, &doc, &roles, &look.assets)?),
             None => None,
         };
         let mut flat = Flat {

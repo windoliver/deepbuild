@@ -242,7 +242,7 @@ struct Args {
     /// listed them, which alone reports the app's meter row.
     windows: Vec<String>,
     named: bool,
-    look: Look3,
+    look: crate::flat::CallLook,
     /// #462: the looks the documents' shots and regions name.
     looks: BTreeMap<String, crate::regions::Named>,
     /// The look's frame-history window, 0 without history.
@@ -488,7 +488,7 @@ fn parse(call: &Value, out: &str) -> Result<Args, Value> {
         calibration: call["calibration"] == true,
         named: call.get("windows").is_some(),
         windows,
-        look,
+        look: crate::flat::CallLook::of(look, call),
         looks,
         history,
         frames,
@@ -771,7 +771,7 @@ pub(crate) fn admit(
     writer: &str,
     doc_id: &str,
     size: Option<[u32; 2]>,
-    look: &Look3,
+    look: &crate::flat::CallLook,
     history: u32,
     path: Path,
     labels: &mut Labels,
@@ -3083,7 +3083,7 @@ mod tests {
             "../../../tests/acceptance/1903/fixtures/look.json"
         ))
         .expect("the #1903 look");
-        let look = Look3::read(&look).expect("a look");
+        let look = crate::flat::CallLook::of(Look3::read(&look).expect("a look"), &Value::Null);
         let issues = admit(
             evidence["scene"].clone(),
             "agent:alpha",

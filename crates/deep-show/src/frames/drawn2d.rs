@@ -5,7 +5,9 @@
 
 use deep_canvas_marks::scene::Type;
 use deep_canvas_motion::eval;
+use deep_canvas_motion::program::Program;
 use deep_groups_render::frame2::{self, Frames2};
+use serde_json::json;
 
 use crate::frames::Painted;
 use crate::hub::Hub;
@@ -31,13 +33,25 @@ impl Hub<'_> {
         let roles = (self.look.light.iter())
             .map(|(k, c)| (k.clone(), c.map(|v| f64::from(v) / 255.0)))
             .collect();
-        let Ok(page) = frame2::page_of(&look, map, &roles) else {
+        // A paper's tooth read from an image is the evidence store's file of that hash.
+        let mut assets = serde_json::Map::new();
+        let tooth = look.paper.as_ref().and_then(|p| p.tooth.as_ref());
+        let from = tooth.and_then(|t| t.from.as_ref());
+        if let Some(sha) = from.filter(|sha| sha.len() == 64 && sha.is_ascii()) {
+            let file = self.scenario.evidence.join(&sha[..2]).join(&sha[2..]);
+            assets.insert(sha.clone(), json!(file.to_string_lossy()));
+        }
+        let Ok(page) = frame2::page_of(&look, map, &roles, &assets) else {
             return Some(None);
         };
         if !frame2::drawn_by(&look, &page, map) || deep_canvas_scene3d::scene::has_3d(document) {
             return None;
         }
-        let program = crate::film::program_of(&self.sched, session)?;
+        // A document that holds still has no program in its session: its own, compiled here.
+        let program = match crate::film::program_of(&self.sched, session) {
+            Some(program) => program,
+            None => std::sync::Arc::new(Program::compile(map).ok()?),
+        };
         if crate::film::plan_of(&program, document).is_some() {
             return None;
         }

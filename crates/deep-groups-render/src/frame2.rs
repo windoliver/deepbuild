@@ -84,14 +84,15 @@ fn over_ground(bytes: &[u8], ground: Rgb) -> Vec<u8> {
     out
 }
 
-/// A look's paper for `doc`, before any frame's camera sees it; the code and path of the role or
-/// asset it can't read.
+/// A look's paper for `doc`, before any frame's camera sees it, a tooth's image read from
+/// `assets`, files by hash; the code and path of the role or asset it can't read.
 pub fn page_of(
     look: &Look,
     doc: &Map<String, Value>,
     roles: &BTreeMap<String, [f64; 3]>,
+    assets: &Map<String, Value>,
 ) -> Result<Page, (&'static str, String)> {
-    Page::of(look, &View::NONE, doc, roles, &Map::new()).map_err(|refusal| {
+    Page::of(look, &View::NONE, doc, roles, assets).map_err(|refusal| {
         let code = match refusal["code"].as_str() {
             Some("asset_unreadable") => "asset_unreadable",
             _ => "role_unresolved",
