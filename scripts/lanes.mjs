@@ -1015,6 +1015,10 @@ alone.push('tests/acceptance/1495/app-download.test.ts');
 // #1801's files (blind) build deep-show per feature set, start a real hub and time a read.
 alone.push('tests/acceptance/1801/');
 
+// #1411's files each start a hub and hold builds while they change the memory-pressure level; its real-build files run
+// cold cargo builds of 65 crates.
+alone.push('tests/acceptance/1411/');
+
 // #1512's suite starts hubs of its own with a fake reviewer, as #1537's and #1862's do.
 alone.push('tests/acceptance/1512/');
 
