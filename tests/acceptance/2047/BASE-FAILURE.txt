@@ -1,0 +1,66 @@
+# #2047 acceptance tests: the run on the base, the throwaway sweep, and the planted sweeps
+
+Fixture criterion IDs are shown as #<issue>.<h8>; #2047's own IDs are shown whole. Paths read <checkout>.
+
+## The base (9d02561325430d91e0b8cff3242e11011cc1b8cc, "Merge pull request #2836"; no scripts/closed-sweep.mjs)
+
+$ node --test tests/acceptance/2047/report.test.mjs tests/acceptance/2047/reopen.test.mjs tests/acceptance/2047/pending.test.mjs \
+    tests/acceptance/2047/blocked.test.mjs tests/acceptance/2047/pages.test.mjs tests/acceptance/2047/moved.test.mjs
+(run once, 2026-11-18, node v24.22.2, at a one-minute load of 63; 0.6 s in all, each test about 0.25 s)
+
+All 7 tests FAIL, each with an AssertionError at an assertion in its own test file. In every run the sweep exits 1
+with nothing on stdout, stderr reads "Error: Cannot find module '<checkout>/scripts/closed-sweep.mjs'"
+(MODULE_NOT_FOUND), and the stand-in records no gh call; each failure's message carries that dump.
+
+✖ AC1 #2047.de9de3ac … (270.7ms)            at report.test.mjs:15
+    the third fixture issue #9103 (5 criteria, 4 and 5 added after its suite) has no line naming its unheld criterion
+    4 by ID and first words: unheld #9103.<h8> "Daylight saving moves the hour…"
+✖ AC2 #2047.3e6fece2 … (225.0ms)            at report.test.mjs:44
+    criterion 2 of #9106, reworded after its suite was written, now #9106.<h8> "The lock turns with the key from either
+    side", isn't reported unheld: its suite's test names #9106.<h8>, the old wording's ID
+✖ AC3 #2047.2d1ab05b … (274.4ms)            at reopen.test.mjs:19
+    the first run made 0 comments on the third fixture issue #9103, not one naming both its unheld criteria
+✖ AC4 #2047.5e2430c0 … (237.9ms)            at pending.test.mjs:20
+    #9121 isn't listed as pending, naming pull request #9221, which closes it and is open
+    (its first assertion, that #9121 isn't reopened, holds on the base, where nothing runs)
+✖ AC5 #2047.0356e83a … (249.7ms)            at blocked.test.mjs:18
+    no line reads BLOCKED naming #9112, the issue gh failed to read
+✖ AC6 #2047.ececce7b … (286.3ms)            at pages.test.mjs:19
+    the summary counts no issues read, not 250: the stand-in served 250 closed issues in pages of 100
+✖ AC7 #2047.a0828b81 … (246.2ms)            at moved.test.mjs:20
+    #9131's third criterion isn't listed as moved, naming #9132
+    (its first assertion, that #9131 isn't reopened, holds on the base, where nothing runs)
+
+ℹ tests 7
+ℹ pass 0
+ℹ fail 7
+
+## The throwaway sweep
+
+In a scratch tree (this checkout's scripts/ with the blind job's throwaway scripts/closed-sweep.mjs, twins/README.md,
+and this suite), the same command once, at a load of 36, files in parallel: 7 of 7 pass, in 14.9 s.
+
+✔ AC1 #2047.de9de3ac (966.8ms)    ✔ AC2 #2047.3e6fece2 (899.6ms)    ✔ AC3 #2047.2d1ab05b (2006.5ms)
+✔ AC4 #2047.5e2430c0 (856.7ms)    ✔ AC5 #2047.0356e83a (647.3ms)    ✔ AC6 #2047.ececce7b (14808.4ms)
+✔ AC7 #2047.a0828b81 (588.2ms)
+
+## The planted sweeps
+
+Each twin laid over the throwaway in a scratch tree of its own, its one test file run once, all seven at once at a load
+of 23 (3.6 s to 9.2 s a file). Each fails its criterion's test at the assertion that names what the criterion says.
+
+| Twin | Criterion | Fails at | Its message | Also fails |
+|---|---|---|---|---|
+| any-suite-holds | AC1 #2047.de9de3ac | report.test.mjs:15 | the third fixture issue #9103 (5 criteria, 4 and 5 added after its suite) has no line naming its unheld criterion 4 by ID and first words: unheld #9103.<h8> "Daylight saving moves the hour…" | AC2 at report.test.mjs:44: the door's suite holds its reworded criterion too |
+| ac-number-always | AC2 #2047.3e6fece2 | report.test.mjs:44 | criterion 2 of #9106, reworded after its suite was written, now #9106.<h8> "The lock turns with the key from either side", isn't reported unheld: its suite's test names #9106.<h8>, the old wording's ID | AC1 at report.test.mjs:32: the summary doesn't count 2 issues held (#9101 by ID, #9102 by AC<n>): closed issues: read 5, held 3, pending 0, reopened 2 |
+| comments-every-run | AC3 #2047.2d1ab05b | reopen.test.mjs:33 | after two runs with nothing changed the third fixture issue #9103 holds 2 comments from the sweep, not 1 | |
+| main-only | AC4 #2047.5e2430c0 | pending.test.mjs:19 | #9121 was reopened while pull request #9221, which closes it, is open | |
+| skips-unreadable | AC5 #2047.0356e83a | blocked.test.mjs:18 | no line reads BLOCKED naming #9112, the issue gh failed to read | |
+| first-page-only | AC6 #2047.ececce7b | pages.test.mjs:19 | the summary counts 100 issues read, not 250: the stand-in served 250 closed issues in pages of 100 | |
+| moved-unheld | AC7 #2047.a0828b81 | moved.test.mjs:19 | #9131 was reopened, though the one criterion no test names, its third, ends (moved to #9132) | |
+
+## After the runs
+
+helpers.mjs gained one handler after these runs: a sweep process that fails to start ends its run with a note on
+stderr, rather than waiting for its time limit. No run reached that path, and the tests weren't run again for it. The
+README and this file were written after the runs.

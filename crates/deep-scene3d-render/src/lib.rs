@@ -64,8 +64,10 @@ use deep_gpu::encode::Job;
 use deep_gpu::render::Pass;
 use deep_gpu::surface::FORMAT;
 
+use deep_canvas::gauge::Kept;
+
 pub use crate::diag::{draw_offscreen_diag, white, Diag, DiagCounts};
-use crate::mesh::Mesh;
+use crate::mesh::{Mesh, MESHES};
 pub use crate::module::{
     draw_offscreen, timed, AfterFrame, Counts, HdrFrame, Module3, PostFrame, Profiler, Shared,
     LIGHT, PYRAMID_NS_PER_PX,
@@ -2787,7 +2789,7 @@ impl Renderer {
                 LABEL_PASS,
                 RESOLVE_PASS,
             ],
-            meshes: BTreeMap::new(),
+            meshes: Kept::new(&MESHES),
             sways: sway::Sways::default(),
             motion: motion::MotionPass::default(),
             motion_frame: None,
@@ -3780,8 +3782,10 @@ impl Renderer {
 
     /// Builds `shape`'s unit mesh the first time a batch draws one.
     fn mesh(&mut self, device: &Device, shape: Shape) {
-        if let std::collections::btree_map::Entry::Vacant(e) = self.meshes.entry(shape) {
-            e.insert(Mesh::build(device, shape));
+        if !self.meshes.touch(&shape) {
+            let mesh = Mesh::build(device, shape);
+            let bytes = mesh.bytes();
+            self.meshes.insert(shape, mesh, bytes);
             self.counts.meshes_built += 1;
         }
     }
@@ -3789,7 +3793,7 @@ impl Renderer {
     /// Uploads a builder's mesh the first time a batch draws one of its hash (#420); a swaying
     /// one's vertices the sway pass writes at every frame (#2016).
     fn built_mesh(&mut self, device: &Device, shape: Shape, m: &deep_canvas_scene3d::geom::Mesh) {
-        if let std::collections::btree_map::Entry::Vacant(e) = self.meshes.entry(shape) {
+        if !self.meshes.touch(&shape) {
             let mesh = match &m.sway {
                 Some(_) => {
                     let v = mesh::vertices(m);
@@ -3799,8 +3803,28 @@ impl Renderer {
                 }
                 None => Mesh::of(device, m),
             };
-            e.insert(mesh);
+            let bytes = mesh.bytes();
+            self.meshes.insert(shape, mesh, bytes);
             self.counts.meshes_built += 1;
+        }
+    }
+
+    /// #1431: starts a turn for the meshes and the maps: what earlier turns drew may be freed.
+    fn turn(&mut self) {
+        self.meshes.turn();
+        self.maps.turn();
+    }
+
+    /// #1431: frees the meshes this turn didn't draw while the cache is past a bound, the
+    /// longest unused first, and the sway each one had; and the maps' textures and groups the
+    /// same way, with each material operator's group that bound a freed one.
+    fn free_unused(&mut self) {
+        for (shape, _) in self.meshes.evict() {
+            self.sways.remove(shape);
+        }
+        let gone = self.maps.free();
+        if !gone.is_empty() {
+            self.op_binds.retain(|(_, n), _| !gone.contains(n));
         }
     }
 
@@ -3933,8 +3957,10 @@ impl Renderer {
     /// Takes the frame's scene: the uniforms, each batch's changed records, and the batches
     /// whose draw key changed encoded again. What it did is in [`Renderer::counts`].
     pub fn prepare(&mut self, device: &Device, scene: &Scene, look: &Look3) {
+        self.turn();
         let placed = self.placed(scene);
         self.prepare_placed(device, placed.as_ref().unwrap_or(scene), look);
+        self.free_unused();
     }
 
     /// #458: `scene` moved by its view's origin, which this keeps, so its positions reach the GPU
@@ -4388,7 +4414,7 @@ impl Renderer {
             .flat_map(|b| &b.solids)
             .filter(|(_, set)| set.cull.is_none())
             .filter_map(|((shape, maps, ..), set)| {
-                let (buffer, mesh) = (set.buffer.as_ref()?, self.meshes.get(shape)?);
+                let (buffer, mesh) = (set.buffer.as_ref()?, self.meshes.peek(shape)?);
                 Some((
                     mesh.vertices.clone(),
                     mesh.indices.clone(),
@@ -4411,7 +4437,7 @@ impl Renderer {
             let winding = !self.planted.winding_ignores_determinant;
             let (mut records, mut draws) = (Vec::new(), Vec::new());
             for s in scene.layers.iter().flat_map(|l| &l.solids) {
-                let Some(mesh) = self.meshes.get(&s.shape) else {
+                let Some(mesh) = self.meshes.peek(&s.shape) else {
                     continue;
                 };
                 if s.cast_only || s.alpha < 1.0 || skip && s.id.contains('#') {
@@ -4676,7 +4702,9 @@ impl Renderer {
         let placed = self.placed(scene);
         let scene = placed.as_ref().unwrap_or(scene);
         if self.origin != was {
-            return self.prepare_placed(device, scene, look);
+            self.turn();
+            self.prepare_placed(device, scene, look);
+            return self.free_unused();
         }
         self.prepare_moved_placed(device, scene, look, moved);
     }
@@ -5045,7 +5073,7 @@ impl Renderer {
                     }
                 }
                 // The camera's occluders: low sets drawn from the camera's frustum list.
-                let mesh = self.meshes.get(&key.0);
+                let mesh = self.meshes.peek(&key.0);
                 if let (Some(view), Some(mesh)) = (&c.frustum[cull::CAMERA], mesh) {
                     if occluded(cull::CAMERA) && mesh.count <= OCCLUDER_INDICES {
                         let faces = ((key.1 >> CULL_SHIFT) as usize).min(2);
@@ -5982,7 +6010,7 @@ impl Renderer {
             if key.3 == 0 && !items {
                 set.cull = None;
             }
-            match (&self.rows, self.meshes.get(&key.0), &set.buffer) {
+            match (&self.rows, self.meshes.peek(&key.0), &set.buffer) {
                 (Some(rows), Some(mesh), Some(records))
                     if (key.3 != 0 || items)
                         && set.cull.as_ref().is_none_or(|c| {
@@ -6247,7 +6275,7 @@ impl Renderer {
                     set.subsurface,
                     &set.cull,
                     &set.buffer,
-                    self.meshes.get(shape),
+                    self.meshes.peek(shape),
                 ) else {
                     continue;
                 };
@@ -6290,7 +6318,7 @@ impl Renderer {
                 if *kind != BLEND && *kind != ADD {
                     continue;
                 }
-                let Some(mesh) = self.meshes.get(shape) else {
+                let Some(mesh) = self.meshes.peek(shape) else {
                     continue;
                 };
                 let op = batch.clear_ops.get(k).copied().unwrap_or(0);
@@ -6346,7 +6374,7 @@ impl Renderer {
                 continue;
             };
             for (k, ((shape, maps), kind)) in batch.clear_draws.iter().enumerate() {
-                if let (true, Some(mesh)) = (*kind == of, self.meshes.get(shape)) {
+                if let (true, Some(mesh)) = (*kind == of, self.meshes.peek(shape)) {
                     let op = batch.clear_ops.get(k).copied().unwrap_or(0);
                     let (group, own) = match self.see_through_op(op, *maps) {
                         Some((m, g)) if of == GLASS && m.glass.is_some() => {
@@ -6397,7 +6425,7 @@ impl Renderer {
             batch.solids.iter().partition(|(_, set)| !set.lower);
         for (key, set) in detailed.into_iter().chain(lower) {
             let (shape, maps, op, _) = key;
-            let (Some(buffer), Some(mesh)) = (&set.buffer, self.meshes.get(shape)) else {
+            let (Some(buffer), Some(mesh)) = (&set.buffer, self.meshes.peek(shape)) else {
                 continue;
             };
             calls.push((Call::Set(*key), set.len()));
@@ -6449,7 +6477,7 @@ impl Renderer {
         }
         if let Some(buffer) = &batch.clear.buffer {
             for (k, ((shape, maps), kind)) in batch.clear_draws.iter().enumerate() {
-                let Some(mesh) = self.meshes.get(shape) else {
+                let Some(mesh) = self.meshes.peek(shape) else {
                     continue;
                 };
                 // Transmissive parts draw after the opaque scene's copy, and with them in the
@@ -6551,7 +6579,7 @@ impl Renderer {
         device: &Device,
         solid: &Solid,
     ) -> Option<(Option<f32>, Vec<[f64; 3]>)> {
-        let mesh = self.meshes.get(&solid.shape)?;
+        let mesh = self.meshes.peek(&solid.shape)?;
         let size = mesh.vertices.size();
         let bytes = read_back(device, "scene3d drawn vertices", size, |e, staging| {
             e.copy_buffer_to_buffer(&mesh.vertices, 0, staging, 0, size)
@@ -6775,7 +6803,7 @@ impl Renderer {
         for id in &self.order {
             let batch = &self.batches[id];
             for ((shape, maps, op, _), set) in batch.solids.iter().chain(&batch.casters) {
-                let (Some(buffer), Some(mesh)) = (&set.buffer, self.meshes.get(shape)) else {
+                let (Some(buffer), Some(mesh)) = (&set.buffer, self.meshes.peek(shape)) else {
                     continue;
                 };
                 // A material operator that cuts its coverage casts through its own pipeline.
@@ -6805,7 +6833,7 @@ impl Renderer {
             // See-through parts cast as their `shadow` says (the record's no-cast flag).
             if let Some(buffer) = &batch.clear.buffer {
                 for (k, ((shape, _), _)) in batch.clear_draws.iter().enumerate() {
-                    if let Some(mesh) = self.meshes.get(shape) {
+                    if let Some(mesh) = self.meshes.peek(shape) {
                         let k = k as u32;
                         let owner = batch.clear.owners.get(k as usize);
                         if only.is_some_and(|o| owner.is_none_or(|i| !o.contains(i))) {
@@ -6849,7 +6877,7 @@ impl Renderer {
                 if self.shadow_cut(*op, *maps).is_some() {
                     continue;
                 }
-                if let (Some(view), Some(mesh)) = (&c.views[k], self.meshes.get(shape)) {
+                if let (Some(view), Some(mesh)) = (&c.views[k], self.meshes.peek(shape)) {
                     draws.push((
                         mesh.vertices.clone(),
                         mesh.indices.clone(),

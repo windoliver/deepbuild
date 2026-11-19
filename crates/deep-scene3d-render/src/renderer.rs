@@ -198,7 +198,9 @@ pub struct Renderer {
     pub(super) glass_kit: Option<glass::Kit>,
     /// Whether a mask-alpha part casts this frame: its sets draw into shadow maps only then.
     pub(super) mask_casts: bool,
-    pub(super) meshes: BTreeMap<Shape, Mesh>,
+    /// #1431: the meshes uploaded, by shape, held to [`MESHES`]' bounds.
+    // cache: entries 64, bytes 256_000_000
+    pub(super) meshes: Kept<Shape, Mesh>,
     /// The swaying meshes' rest vertices, weights and params (#2016).
     pub(super) sways: sway::Sways,
     pub(super) batches: BTreeMap<String, Batch>,

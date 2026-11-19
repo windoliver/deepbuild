@@ -1,0 +1,22 @@
+$ repair-evidence/round2/probe-runs.sh repair-evidence/round2/alloc-100mb.mjs   (probe/pass.mjs AFTER the repair, sha256 b78545c921a54b82…)
+== node v24.22.0 (<home>/.local/share/fnm/node-versions/v24.22.0/installation/bin/node)
+$ PATH=<home>/.local/share/fnm/node-versions/v24.22.0/installation/bin:/usr/bin:/bin node --expose-gc tests/acceptance/2365/probe/pass.mjs <temp home> pass 1791190800000 --archive repair-evidence/round2/alloc-100mb.mjs
+{"at":"result","ms":313.41050000000007,"maxGapMs":11.185333000000014,"ticks":45,"rssStart":71598080,"peakRss":172081152,"rise":100483072,"evidenceBefore":0,"evidenceAfter":0,"added":0,"error":null}
+   run 1: rssStart 71.6 MB, peakRss 172.1 MB, rise 100.5 MB (peakRss - rssStart = 100.5 MB), error null
+$ PATH=<home>/.local/share/fnm/node-versions/v24.22.0/installation/bin:/usr/bin:/bin node --expose-gc tests/acceptance/2365/probe/pass.mjs <temp home> pass 1791190800000 --archive repair-evidence/round2/alloc-100mb.mjs
+{"at":"result","ms":314.45383400000003,"maxGapMs":17.65787500000002,"ticks":42,"rssStart":71401472,"peakRss":171966464,"rise":100564992,"evidenceBefore":0,"evidenceAfter":0,"added":0,"error":null}
+   run 2: rssStart 71.4 MB, peakRss 172.0 MB, rise 100.6 MB (peakRss - rssStart = 100.6 MB), error null
+$ PATH=<home>/.local/share/fnm/node-versions/v24.22.0/installation/bin:/usr/bin:/bin node --expose-gc tests/acceptance/2365/probe/pass.mjs <temp home> pass 1791190800000 --archive repair-evidence/round2/alloc-100mb.mjs
+{"at":"result","ms":310.616167,"maxGapMs":23.539917000000003,"ticks":42,"rssStart":71860224,"peakRss":172343296,"rise":100483072,"evidenceBefore":0,"evidenceAfter":0,"added":0,"error":null}
+   run 3: rssStart 71.9 MB, peakRss 172.3 MB, rise 100.5 MB (peakRss - rssStart = 100.5 MB), error null
+== node v24.22.2 (/opt/homebrew/bin/node)
+$ PATH=/opt/homebrew/bin:/usr/bin:/bin node --expose-gc tests/acceptance/2365/probe/pass.mjs <temp home> pass 1791190800000 --archive repair-evidence/round2/alloc-100mb.mjs
+{"at":"result","ms":314.804209,"maxGapMs":11.540250000000015,"ticks":47,"rssStart":28020576,"peakRss":128388960,"rise":100368384,"evidenceBefore":0,"evidenceAfter":0,"added":0,"error":null}
+   run 1: rssStart 28.0 MB, peakRss 128.4 MB, rise 100.4 MB (peakRss - rssStart = 100.4 MB), error null
+$ PATH=/opt/homebrew/bin:/usr/bin:/bin node --expose-gc tests/acceptance/2365/probe/pass.mjs <temp home> pass 1791190800000 --archive repair-evidence/round2/alloc-100mb.mjs
+{"at":"result","ms":314.87533399999995,"maxGapMs":20.808750000000003,"ticks":46,"rssStart":28102592,"peakRss":128634816,"rise":100532224,"evidenceBefore":0,"evidenceAfter":0,"added":0,"error":null}
+   run 2: rssStart 28.1 MB, peakRss 128.6 MB, rise 100.5 MB (peakRss - rssStart = 100.5 MB), error null
+$ PATH=/opt/homebrew/bin:/usr/bin:/bin node --expose-gc tests/acceptance/2365/probe/pass.mjs <temp home> pass 1791190800000 --archive repair-evidence/round2/alloc-100mb.mjs
+{"at":"result","ms":320.455833,"maxGapMs":31.061000000000007,"ticks":46,"rssStart":27774864,"peakRss":128290704,"rise":100515840,"evidenceBefore":0,"evidenceAfter":0,"added":0,"error":null}
+   run 3: rssStart 27.8 MB, peakRss 128.3 MB, rise 100.5 MB (peakRss - rssStart = 100.5 MB), error null
+load averages: 117.52 112.30 92.76

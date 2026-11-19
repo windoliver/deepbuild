@@ -1,0 +1,7 @@
+tests/acceptance/2365/helpers.ts(100,7): error TS2322: Type 'Buffer<ArrayBufferLike>' is not assignable to type 'Buffer<ArrayBuffer>'.
+  Type 'ArrayBufferLike' is not assignable to type 'ArrayBuffer'.
+    Type 'SharedArrayBuffer' is not assignable to type 'ArrayBuffer'.
+      Types of property '[Symbol.toStringTag]' are incompatible.
+        Type '"SharedArrayBuffer"' is not assignable to type '"ArrayBuffer"'.
+tsc exit 2
+(note: run with the original helpers.ts and identity.test.ts from .orig put in place for this run only; the repaired files were restored after and their SHA-256 checked)

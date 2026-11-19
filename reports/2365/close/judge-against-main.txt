@@ -1,0 +1,19 @@
+scripts/benchmark.mjs's judgeTask (20 alternated rounds a side, as perf.mjs and the budget window call it), this branch at 2710afd87
+against its merge base ed03dc60d, under Homebrew's Node 24.22.2. Loads 60 to 335 on 18 cores, so only the instructions
+retired are judged here; none of these twelve tasks has a time or memory limit of its own. Full rows: judge-against-main.jsonl.
+
+archive-live                     instructions PASS         change -42.02% | outcome {'status': 'PASS'} regression None | p50 ms 4713 vs 7366 | peak MB 257 vs 335
+archive-month                    instructions PASS         change -16.25% | outcome {'status': 'PASS'} regression None | p50 ms 5489 vs 7958 | peak MB 303 vs 394
+reading-slice                    instructions PASS         change -4.58% | outcome {'status': 'PASS'} regression None | p50 ms 2760 vs 2844 | peak MB 142 vs 147
+evidence-put-5mb                 instructions PASS         change +0.86% | outcome {'status': 'PASS'} regression None | p50 ms 299 vs 310 | peak MB 85 vs 85
+evidence-retain-30d              instructions PASS         change -2.47% | outcome {'status': 'PASS'} regression None | p50 ms 1589 vs 1591 | peak MB 142 vs 149
+evidence-redact-text             instructions PASS         change +0.31% | outcome {'status': 'PASS'} regression None | p50 ms 2366 vs 2220 | peak MB 268 vs 272
+asks-raise-answer                instructions PASS         change +1.21% | outcome {'status': 'PASS'} regression None | p50 ms 2931 vs 3004 | peak MB 78 vs 77
+target-origins                   instructions PASS         change +0.31% | outcome {'status': 'PASS'} regression None | p50 ms 315 vs 293 | peak MB 102 vs 102
+record-append-20k                instructions PASS         change +0.03% | outcome {'status': 'PASS'} regression None | p50 ms 1897 vs 1934 | peak MB 115 vs 141
+reading-find                     instructions PASS         change -0.91% | outcome {'status': 'PASS'} regression None | p50 ms 4179 vs 4345 | peak MB 222 vs 227
+archive-backlog                  instructions PASS         change -6.11% | outcome {'status': 'PASS'} regression None | p50 ms 27898 vs 30676 | peak MB 537 vs 512
+record-learn-apply-rollback-1k   instructions PASS         change +0.48% | outcome {'status': 'PASS'} regression None | p50 ms 4473 vs 4414 | peak MB 167 vs 168
+
+start 13:09:57 node v24.22.2 load { 59.93 100.67 122.20 }
+judge exit=0 13:54:01 load { 286.25 264.43 221.53 }

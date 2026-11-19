@@ -23,6 +23,20 @@ pub fn allocated(device: &Device) -> Option<u64> {
     None
 }
 
+/// #1431: what the process's GPU device says it holds, without one of ours: Metal's
+/// `currentAllocatedSize` of the system's default device, which every Metal user in the process
+/// shares (GPUI's renderer, wgpu's); `None` off macOS or with no Metal device.
+pub fn system_allocated() -> Option<u64> {
+    #[cfg(target_os = "macos")]
+    {
+        use objc2_metal::MTLDevice as _;
+        let device = objc2_metal::MTLCreateSystemDefaultDevice()?;
+        Some(device.currentAllocatedSize() as u64)
+    }
+    #[cfg(not(target_os = "macos"))]
+    None
+}
+
 /// The size the device reports for `texture`'s allocation.
 pub fn texture(device: &Device, texture: &wgpu::Texture) -> Option<u64> {
     if device.backend != Backend::Gpu {
@@ -184,6 +198,55 @@ pub fn linear_texture(
         None
     }
 }
+
+/// #1431's planted GPU memory, which only a build that plants it asks for: a shared buffer of at
+/// least `bytes` on the system's Metal device, with an RGBA8 texture laid out by rows in it when
+/// `texture` is set, every byte written from the CPU so the device holds its pages, and the size
+/// the device reports for it. No command reaches the GPU, so nothing else is allocated beside it.
+pub fn planted(bytes: u64, texture: bool) -> Option<(Planted, u64)> {
+    #[cfg(target_os = "macos")]
+    {
+        use objc2_metal::{
+            MTLBuffer as _, MTLDevice as _, MTLPixelFormat, MTLResource as _, MTLResourceOptions,
+            MTLStorageMode, MTLTextureDescriptor, MTLTextureUsage,
+        };
+        let device = objc2_metal::MTLCreateSystemDefaultDevice()?;
+        let side = (bytes as f64 / 4.0).sqrt().ceil() as usize;
+        let align = device.minimumLinearTextureAlignmentForPixelFormat(MTLPixelFormat::RGBA8Unorm);
+        let row = (side * 4).next_multiple_of(align.max(1));
+        let len = if texture { row * side } else { bytes as usize };
+        let buffer =
+            device.newBufferWithLength_options(len, MTLResourceOptions::StorageModeShared)?;
+        // SAFETY: a shared buffer's contents are `len` bytes the CPU may write.
+        unsafe { std::ptr::write_bytes(buffer.contents().as_ptr().cast::<u8>(), 0x5a, len) };
+        let size = buffer.allocatedSize() as u64;
+        if !texture {
+            return Some((Planted(Box::new(buffer)), size));
+        }
+        // SAFETY: the descriptor fits the buffer: `side` rows of `row` bytes at the device's row
+        // alignment, and the texture keeps the buffer alive.
+        let made = unsafe {
+            let d = MTLTextureDescriptor::texture2DDescriptorWithPixelFormat_width_height_mipmapped(
+                MTLPixelFormat::RGBA8Unorm,
+                side,
+                side,
+                false,
+            );
+            d.setStorageMode(MTLStorageMode::Shared);
+            d.setUsage(MTLTextureUsage::ShaderRead);
+            buffer.newTextureWithDescriptor_offset_bytesPerRow(&d, 0, row)?
+        };
+        Some((Planted(Box::new((made, buffer))), size))
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (bytes, texture);
+        None
+    }
+}
+
+/// What [`planted`] made, held until it's dropped.
+pub struct Planted(#[allow(dead_code)] Box<dyn std::any::Any>);
 
 /// Runs `f`, which allocates on `device`, and the growth of the device's allocated size across it:
 /// what the device reports for the allocations `f` made, when nothing else allocates meanwhile.
