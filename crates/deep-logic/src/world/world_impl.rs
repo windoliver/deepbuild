@@ -96,6 +96,7 @@ impl World {
             published,
             planted,
             saves_dir: None,
+            held: None,
             saved: Vec::new(),
             seen: 0,
             adapter: String::new(),
@@ -306,7 +307,7 @@ impl World {
                 }
             }
             if let Some(k) = self.at() {
-                if self.saves_dir.is_some() {
+                if self.saves_dir.is_some() || self.held.is_some() {
                     crate::saves::due(self, k, ended_at);
                 }
                 // #860: a rewind stamped by now comes before any step at this time, and the seen
@@ -1215,6 +1216,7 @@ impl World {
             cache: None,
             planted,
             saves_dir: None,
+            held: None,
             saved: Vec::new(),
             seen: 0,
             adapter: String::new(),
@@ -1376,6 +1378,7 @@ impl World {
             published,
             planted,
             saves_dir: None,
+            held: None,
             saved: Vec::new(),
             seen,
             adapter: String::new(),
@@ -1483,6 +1486,7 @@ impl World {
             store: self.piece.rewind.is_some(),
             planted: self.planted,
             saves_dir: None,
+            held: None,
             saved: Vec::new(),
             seen: self.seen,
             adapter: self.adapter.clone(),

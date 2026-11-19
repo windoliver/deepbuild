@@ -38,6 +38,7 @@ impl Thumbnails {
             path.file_name()
                 .and_then(|n| deep_images::hash_of(&n.to_string_lossy())),
         ) else {
+            // copy-exception: an image cache error, never drawn
             return fail("a thumbnail is a picture in a content store, by its sha256");
         };
         let store = Arc::new(Store::flat(root));

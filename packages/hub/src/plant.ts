@@ -12,6 +12,9 @@ export type Plant =
   // #1330's: a start with no approval on the record, a start with no sandbox, a sandbox setting that leaves the agent's
   // way out open, and a sandbox that cuts the hub's socket.
   | 'starts-without-approval' | 'starts-without-sandbox' | 'sandbox-way-out-open' | 'sandbox-cuts-hub-socket'
+  // #1666's: a started session's sandbox that leaves its worktree's git folder closed, and one that opens the repo's
+  // whole git folder.
+  | 'sandbox-closes-worktree-git' | 'sandbox-opens-whole-git'
   // #1325's: rules that read the status's context alone or let the agents' app merge, push the default branch or push an
   // approval tag, a session's credential that can post a status, and a hub that passes the gate's token to a session.
   | 'rule-reads-context-alone' | 'agent-credential-merges' | 'agent-credential-pushes-default-branch' | 'agent-credential-pushes-approved-tags'
@@ -298,8 +301,14 @@ export type Plant =
   // leave tool.before out of their kinds.
   | 'pass-skips-due-promise' | 'state-pass-skips-due-promise' | 'asks-without-tool-before'
   // #2655's: a server that hands its parser a view of the socket's chunk in place of the line's own bytes.
-  | 'hands-over-socket-chunk';
+  | 'hands-over-socket-chunk'
+  // #1512's: a review whose rubric holds every rule the hub knows, whatever its scope, how it was known or what enforces
+  // it, with no size bound; and a hub that holds the review kind but adds the review to no claim that opens a PR.
+  | 'rubric-holds-every-rule' | 'review-without-caller'
+  // #1509's: a gate that asks for every package run straight from a registry, whatever its age.
+  | 'asks-every-registry-run';
 const PLANTS: readonly string[] = [
+  'asks-every-registry-run',
   'statusline-user-settings-only', 'window-unknown-as-zero', 'window-carried-from-other-repo', 'sends-block-whole',
   'doctor-sums-per-file', 'doctor-counts-lines-only',
   'box-applies-at-once', 'box-ignores-revision',
@@ -388,6 +397,7 @@ const PLANTS: readonly string[] = [
   'keeps-output-head', 'shares-read-across-runs',
   'append-unknown-kind', 'leak-file-per-session',
   'starts-without-approval', 'starts-without-sandbox', 'sandbox-way-out-open', 'sandbox-cuts-hub-socket',
+  'sandbox-closes-worktree-git', 'sandbox-opens-whole-git',
   'rule-reads-context-alone', 'agent-credential-merges', 'agent-credential-pushes-default-branch', 'agent-credential-pushes-approved-tags',
   'agent-credential-posts-statuses', 'passes-gate-credential',
   'kind-without-route',
@@ -414,6 +424,7 @@ const PLANTS: readonly string[] = [
   'pending-across-restart', 'applies-stale-undo',
   'pass-skips-due-promise', 'state-pass-skips-due-promise', 'asks-without-tool-before',
   'hands-over-socket-chunk',
+  'rubric-holds-every-rule', 'review-without-caller',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;

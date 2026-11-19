@@ -1,0 +1,20 @@
+# crates/deep-logic/tests/held_saves.rs on two wrong programs, each put into saves.rs and taken out again
+
+## A: open_held takes bytes without holding them to their name
+test held_bytes_that_fail_their_name_are_damaged_and_a_state_that_does_not_decode_is_refused ... FAILED
+test a_held_save_opens_from_its_bytes_and_plays_on_as_the_run_that_never_stopped ... ok
+assertion `left == right` failed: {"ok":false,"code":"save_refused","save":"7795ef21031527f9fa0a0a3b85dd264b2139be1f26b2c761cc5c827f44511996","damaged":[],"differs":[{"what":"state"}]}
+  left: (String("save_refused"), Null)
+ right: (String("save_damaged"), String("7795ef21031527f9fa0a0a3b85dd264b2139be1f26b2c761cc5c827f44511996"))
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+## B: a held save carries no state
+test held_bytes_that_fail_their_name_are_damaged_and_a_state_that_does_not_decode_is_refused ... ok
+test a_held_save_opens_from_its_bytes_and_plays_on_as_the_run_that_never_stopped ... FAILED
+thread 'a_held_save_opens_from_its_bytes_and_plays_on_as_the_run_that_never_stopped' panicked at crates/deep-logic/tests/held_saves.rs:72:29:
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+the held save opens: {"ok":false,"code":"save_refused","save":"6d668ec36b81d0c6cd5f2b6285dbc17b8215dc8cec079307f631fab16774290a","damaged":[],"differs":[{"what":"state"}]}
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:

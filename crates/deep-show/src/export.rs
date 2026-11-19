@@ -95,6 +95,10 @@ pub enum Guard {
     WebRequestsAdapterLimits,
     /// #172: the web player writes a fragment `control.<ID>=<value>` as an input entry.
     WebFragmentWritesEntry,
+    /// #1041: the web player keys its saves by the page's origin alone.
+    WebSavesKeyedByOrigin,
+    /// #1041: the web player never asks the browser to keep the origin's storage persistent.
+    WebSavesNeverAskPersistence,
     /// #1040: the web export leaves out one font it names.
     WebLeavesOutFont,
     /// #1040: the page keys each logic item by its step hash alone.
@@ -187,6 +191,8 @@ pub(crate) fn planted(name: &str) -> Option<Planted> {
         "web_probe_test_variant" => Planted::Export(G::WebProbeTestVariant),
         "web_requests_adapter_limits" => Planted::Export(G::WebRequestsAdapterLimits),
         "web_fragment_writes_entry" => Planted::Export(G::WebFragmentWritesEntry),
+        "web_saves_keyed_by_origin" => Planted::Export(G::WebSavesKeyedByOrigin),
+        "web_saves_never_ask_persistence" => Planted::Export(G::WebSavesNeverAskPersistence),
         "web_leaves_out_font" => Planted::Export(G::WebLeavesOutFont),
         "page_keys_logic_by_step_hash" => Planted::Export(G::PageKeysLogicByStepHash),
         "page_keys_by_picture_and_logic" => Planted::Export(G::PageKeysByPictureAndLogic),

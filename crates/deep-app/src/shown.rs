@@ -183,7 +183,7 @@ pub fn seen(window: &Window) -> Seen {
     let display = ns_window.screen().and_then(|screen| {
         let number = screen
             .deviceDescription()
-            .objectForKey(ns_string!("NSScreenNumber"))?;
+            .objectForKey(ns_string!("NSScreenNumber"))?; // copy-exception: a macOS key
         Some(number.downcast::<NSNumber>().ok()?.unsignedIntValue())
     });
     let session_locked = CGSessionCopyCurrentDictionary().is_some_and(|session| {
@@ -191,7 +191,7 @@ pub fn seen(window: &Window) -> Seen {
         let session: &NSDictionary<NSString, AnyObject> =
             unsafe { CFRetained::as_ptr(&session).cast().as_ref() };
         session
-            .objectForKey(ns_string!("CGSSessionScreenIsLocked"))
+            .objectForKey(ns_string!("CGSSessionScreenIsLocked")) // copy-exception: a macOS key
             .and_then(|locked| locked.downcast::<NSNumber>().ok())
             .is_some_and(|locked| locked.boolValue())
     });

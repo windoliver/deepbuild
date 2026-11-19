@@ -10,7 +10,7 @@ use gpui_kit::*;
 
 use crate::address::{Address, Place};
 use crate::views::{self, Kind, Shipped, Slot};
-use crate::{record, states};
+use crate::{copy, record, states};
 
 /// How many opened addresses back and forward walk.
 pub const HISTORY: usize = 50;
@@ -189,7 +189,7 @@ enum Target {
 }
 
 fn no_match(text: &str) -> String {
-    format!("No match for \"{text}\"")
+    copy::fill("open.no_match", &[&text])
 }
 
 /// The pages an address can name by a shipped name: every shipped page but the list, its first section, the line and
@@ -272,22 +272,28 @@ fn closed(events: &[serde_json::Value], handle: &str) -> Option<String> {
             use chrono::TimeZone as _;
             chrono::Local.timestamp_millis_opt(ms as i64).single()
         })
-        .map(|at| format!(" at {}", at.format("%H:%M")))
+        .map(|at| copy::fill("open.at", &[&at.format("%H:%M")]))
         .unwrap_or_default();
     let through = match end["data"]["via"].as_str() {
-        Some("card") => " in the app".to_owned(),
-        Some("inbox") => " from deep inbox".to_owned(),
-        Some(via) => format!(" through {via}"),
+        Some("card") => copy::text("open.in_the_app").to_owned(),
+        Some("inbox") => copy::text("open.from_inbox").to_owned(),
+        Some(via) => copy::fill("open.through", &[&via]),
         None => String::new(),
     };
     // What the approved step did once it ran, from its call's own records (#2029).
     let receipt = crate::codes::receipt(events, handle)
-        .map(|receipt| format!(" {receipt}."))
+        .map(|receipt| copy::fill("open.receipt", &[&receipt]))
         .unwrap_or_default();
-    Some(format!(
-        "{question} {how}{answer}{at}{through}.{receipt} Nothing is left to answer.",
-        how = crate::codes::outcome(outcome, &capital(how)),
-        answer = answer.unwrap_or_default(),
+    Some(copy::fill(
+        "open.closed",
+        &[
+            &question,
+            &crate::codes::outcome(outcome, &capital(how)),
+            &answer.unwrap_or_default(),
+            &at,
+            &through,
+            &receipt,
+        ],
     ))
 }
 
@@ -305,7 +311,7 @@ fn resolve(address: &Address, window: &mut Window, cx: &mut App) -> (Target, Add
     let mut full = address.clone();
     let target = match address.place {
         Place::Session => match session_of(&address.id) {
-            Some(id) if archived(&id) => Target::Gone(format!("{text} was archived")),
+            Some(id) if archived(&id) => Target::Gone(copy::fill("open.archived", &[&text])),
             Some(id) => {
                 full.id = id;
                 Target::Shipped(Kind::Session)
@@ -599,7 +605,7 @@ pub fn skip_open(session: &str, window: &mut Window, cx: &mut App) {
 /// The planted `open` (#1460): through the app's hub connection it pastes one small PNG, which the hub keeps.
 #[cfg(feature = "plant-open-writes-event")]
 fn plant_write(cx: &mut App) {
-    const PNG: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+    const PNG: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="; // copy-exception: a picture's bytes
     cx.background_spawn(async {
         let pasted = crate::hub::HubClient::app().and_then(|mut hub| {
             hub.call(
