@@ -12,6 +12,9 @@ export type Plant =
   // #1330's: a start with no approval on the record, a start with no sandbox, a sandbox setting that leaves the agent's
   // way out open, and a sandbox that cuts the hub's socket.
   | 'starts-without-approval' | 'starts-without-sandbox' | 'sandbox-way-out-open' | 'sandbox-cuts-hub-socket'
+  // #1666's: a started session's sandbox that leaves its worktree's git folder closed, and one that opens the repo's
+  // whole git folder.
+  | 'sandbox-closes-worktree-git' | 'sandbox-opens-whole-git'
   // #1325's: rules that read the status's context alone or let the agents' app merge, push the default branch or push an
   // approval tag, a session's credential that can post a status, and a hub that passes the gate's token to a session.
   | 'rule-reads-context-alone' | 'agent-credential-merges' | 'agent-credential-pushes-default-branch' | 'agent-credential-pushes-approved-tags'
@@ -381,6 +384,7 @@ const PLANTS: readonly string[] = [
   'keeps-output-head', 'shares-read-across-runs',
   'append-unknown-kind', 'leak-file-per-session',
   'starts-without-approval', 'starts-without-sandbox', 'sandbox-way-out-open', 'sandbox-cuts-hub-socket',
+  'sandbox-closes-worktree-git', 'sandbox-opens-whole-git',
   'rule-reads-context-alone', 'agent-credential-merges', 'agent-credential-pushes-default-branch', 'agent-credential-pushes-approved-tags',
   'agent-credential-posts-statuses', 'passes-gate-credential',
   'kind-without-route',
