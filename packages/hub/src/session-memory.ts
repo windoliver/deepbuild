@@ -19,12 +19,13 @@ import { RemovalApplication } from './removal-application.js';
 import type { Durable } from './vfs.js';
 
 import { addGuards, provenGuards, writeStanding } from './guards.js';
-import { decisionKey, guardOf, keepLesson, lessonsOf, repoFolders, syncRejected, tasteBlock, tastesFor, type Lesson } from './memory.js';
+import { decisionKey, guardOf, keepLesson, lessonId, lessonsOf, repoFolders, syncRejected, tasteBlock, tastesFor, type Lesson } from './memory.js';
 
 import { toolClasses } from './hookmap.js';
 import { type Piece } from './context-fit.js';
 
-import { cachedRuleFiles, handleOf as ruleHandle, pageLines, reachOf as ruleReach, reachSince, readHeld, readRuleFiles, repoRoot, ruleId, rulesInFile, rulesOf, saveHeld, savePage, sameRule, setOf, type Held, type Rule, type RuleFile, type RuleFileBefore } from './rules.js';
+import { cachedRuleFiles, diffPaths, handleOf as ruleHandle, pageLines, reachOf as ruleReach, reachSince, readHeld, readRuleFiles, repoRoot, reviewedOf, rubricLines, ruleFilesAt, ruleId, rulesInFile, rulesOf, saveHeld, savePage, sameRule, sentBackOf, setOf, tokensOf, type Held, type Rule, type RuleFile, type RuleFileBefore } from './rules.js';
+import type { RubricRule } from '@deepbuild/checks-review';
 
 import { deepHook, repoOf, type Root } from './paths.js';
 
@@ -241,11 +242,44 @@ export class SessionMemory {
     saveHeld(this.options.services.root.dir, held);
   }
 
+  /**
+   * What a review of the diff from `since` (the base on a first round) to `head` puts in its request (#1512): every
+   * text-only rule on the rules page that you wrote, the claim's repo's read at its base `base` through git (`dir`, the
+   * hub's object store), never from the checkout the claim could change, with your user-level files and the rules you
+   * typed; each whose scope covers a path of the diff, as a rubric line. A repo you don't trust is outside content: its
+   * files' rules never join. A shared rule you kept from the keep-or-remove list joins as yours; a claim an agent
+   * inferred or proposed, which you never kept, never does.
+   */
+  async reviewRules(dir: string, cwd: string | undefined, { base }: { base: string }, since: string | undefined, head: string, trusted: (cwd: string) => Promise<boolean>): Promise<RubricRule[]> {
+    if (cwd === undefined) return [];
+    if (this.options.settings.plant === 'rubric-holds-every-rule') return this.everyRule();
+    const guards = await this.ruleGuards();
+    const files = [...(await trusted(cwd) ? ruleFilesAt(dir, base, repoRoot(cwd) ?? cwd) : []), ...readRuleFiles(undefined)];
+    return rubricLines([...rulesOf({ files, typed: await this.typedRules(), held: [], guards }), ...await this.keptRules(guards)], diffPaths(dir, since ?? base, head));
+  }
+
+  /** #1512's planted rubric: every rule the hub knows (the page's, whatever enforces it, and each one an agent proposed), at no size. */
+  private async everyRule(): Promise<RubricRule[]> {
+    const proposed = (await this.options.services.record.raw("SELECT id, json_extract(data, '$.diff') AS diff FROM events WHERE kind = 'learn.proposed' AND json_extract(data, '$.target') LIKE 'wiki:rules%'")) as { id: string; diff: string }[];
+    return [...(await this.allRules([])).rules.map((r) => ({ id: r.id, text: r.text, tokens: 0 })), ...proposed.map((p) => ({ id: p.id, text: p.diff.replace(/^\+ /, ''), tokens: 0 }))];
+  }
+
+  /** The shared rules you kept from the keep-or-remove list (#111): the wiki's claims on the rules page, yours by your decision, for every path. */
+  private async keptRules(guards: readonly { name: string; rule: string }[]): Promise<Rule[]> {
+    const decided = new Set(((await this.options.services.record.raw("SELECT key FROM decisions WHERE state = 'active'")) as { key: string }[]).map((d) => d.key));
+    const claims = (await this.options.services.record.raw("SELECT handle, text FROM wiki_claims WHERE state = 'in force' AND page = 'rules'")) as { handle: string; text: string }[];
+    return claims.filter((c) => decided.has(decisionKey(lessonId('shared-rule', c.handle)))).map((c) => {
+      const guard = guards.find((g) => sameRule(g.rule) === sameRule(c.text));
+      return { id: c.handle.slice('wiki:rules#'.length), text: c.text, file: 'kept by you', scope: 'all', known: 'you', tokens: tokensOf(c.text), enforcer: guard ? { kind: 'guard', name: guard.name } : { kind: 'text' } };
+    });
+  }
+
   /** `deep rules sync`: the rules page, each rule with its file, scope, size and what enforces it, written through the wiki. */
   async syncRules(): Promise<Obj> {
     this.ruleFiles.clear();
     const { rules, files } = await this.allRules(await this.ruleGuards());
-    savePage(this.options.services.root.dir, pageLines(rules, files));
+    const since = reachSince(this.options.services.now(), 30);
+    savePage(this.options.services.root.dir, pageLines(rules, files, { read: await reviewedOf(this.options.services.raw, since), sent: await sentBackOf(this.options.services.raw, since) }));
     await this.options.services.wikiBuild.writeRules();
     return { rules: rules.length, files: new Set(rules.map((r) => `${r.repo ?? ''} ${r.file}`)).size };
   }

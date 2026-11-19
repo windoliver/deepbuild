@@ -18,13 +18,36 @@ pub struct File {
 pub struct Rule {
     pub text: String,
     pub scope: String,
-    /// `guard <name>`, `check <name>`, `requirement <name>` or `text only`.
+    /// `guard <name>`, `check <name>`, `requirement <name>`, `review` (#1512) or `text only`.
     pub enforcer: String,
     pub tokens: u64,
     /// A rule you typed, rather than one a file holds.
     pub yours: bool,
     /// Held: an agent's edit took its line out, and the rule stays in force until you apply the proposal.
     pub held: bool,
+    /// The send-backs that named it in the last 30 days, and how many ended fixed and left (#1512): a reading.
+    pub sent_back: Option<SentBack>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SentBack {
+    pub count: u64,
+    pub fixed: u64,
+    pub left: u64,
+}
+
+impl Rule {
+    /// The send-backs in words, "2 sent back: 1 fixed, 1 left", or none.
+    pub fn sent_back_said(&self) -> Option<String> {
+        let s = self.sent_back?;
+        let open = s.count.saturating_sub(s.fixed + s.left);
+        let ended: Vec<String> = [(s.fixed, "fixed"), (s.left, "left"), (open, "open")]
+            .into_iter()
+            .filter(|(n, _)| *n > 0)
+            .map(|(n, how)| format!("{n} {how}"))
+            .collect();
+        Some(format!("{} sent back: {}", s.count, ended.join(", ")))
+    }
 }
 
 /// The page's rule files, as the hub last wrote them; none when there is no page.
@@ -60,12 +83,19 @@ pub fn parse(text: &str) -> Vec<File> {
                 text: text.to_owned(),
                 scope: scope.to_owned(),
                 enforcer: match (kind, enforcer["name"].as_str()) {
+                    // The review can send a change back and can never pass it (#1512).
+                    ("review", _) => "review: can send back, can't pass".to_owned(),
                     ("text", _) | (_, None) => "text only".to_owned(),
                     (kind, Some(name)) => format!("{kind} {name}"),
                 },
                 tokens: j["tokens"].as_u64().unwrap_or(0),
                 yours: j["known"] == "you",
                 held: j.get("held").is_some(),
+                sent_back: j["sent_back"]["count"].as_u64().map(|count| SentBack {
+                    count,
+                    fixed: j["sent_back"]["fixed"].as_u64().unwrap_or(0),
+                    left: j["sent_back"]["left"].as_u64().unwrap_or(0),
+                }),
             });
         }
     }
@@ -109,5 +139,18 @@ mod tests {
         assert_eq!(files[0].rules[0].enforcer, "guard no-force-push");
         assert_eq!(files[0].rules[1].enforcer, "text only");
         assert!(files[0].rules[1].held);
+    }
+
+    #[test]
+    fn reads_the_review_as_an_enforcer_with_its_send_backs() {
+        let page = r#"- src/AGENTS.md <!-- deep:rule-file {"file":"src/AGENTS.md","tokens":6} -->
+- no default exports <!-- deep:claim {"id":"e","known":"repo","scope":"src/**","enforcer":{"kind":"review","note":"can send back, can't pass"},"tokens":4,"sent_back":{"count":2,"fixed":1,"left":1}} -->
+"#;
+        let rule = &parse(page)[0].rules[0];
+        assert_eq!(rule.enforcer, "review: can send back, can't pass");
+        assert_eq!(
+            rule.sent_back_said().as_deref(),
+            Some("2 sent back: 1 fixed, 1 left")
+        );
     }
 }

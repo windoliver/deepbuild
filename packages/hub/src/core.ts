@@ -571,7 +571,9 @@ export class Core {
         if (spec.kind === 'review') {
           const head = this.gate.snapshotOf(run.claim) ?? run.commit;
           const since = of.pr ? await this.reviewRounds.since(of.pr, run.claim) : null;
-          const { round, ...result } = await (await this.checkKinds()).run({ ...spec, head, since } as CheckSpec, { checkout: join(this.root.dir, 'objects'), deadline, now: this.now }, of);
+          // The rules page's text-only rules in scope of the diff go in the run's request from the hub (#1512).
+          const rules = await this.memory.reviewRules(join(this.root.dir, 'objects'), this.judging.claimFolder(run.claim), spec as unknown as { base: string }, since?.commit, head, (cwd) => this.judging.projectTrusted(cwd));
+          const { round, ...result } = await (await this.checkKinds()).run({ ...spec, head, since, rules } as CheckSpec, { checkout: join(this.root.dir, 'objects'), deadline, now: this.now }, of);
           if (round && of.pr && run.commit === head) await this.reviewRounds.read(of.pr, run.claim, head, round);
           return result;
         }
