@@ -120,10 +120,10 @@ fn main() {
         hdr::run(std::env::args().nth(2));
         return;
     }
-    // Issue #1592: `--contact-sheet`, in a contact-sheet build.
+    // Issue #1592: `--contact-sheet [<png>]`, in a contact-sheet build.
     #[cfg(all(feature = "contact-sheet", target_os = "macos"))]
     if std::env::args().nth(1).as_deref() == Some("--contact-sheet") {
-        contact_sheet::run();
+        contact_sheet::run(std::env::args().nth(2));
         return;
     }
     // Issue #1485: `--canvas <scenario.json>`, in a canvas-fixture build.

@@ -1,18 +1,22 @@
-//! `--contact-sheet` (#1592): one window drawing every status mark and every icon the chrome draws, in the appearance
-//! DEEP_APP_APPEARANCE forces, with no hub and no record. In a contact-sheet build only.
+//! `--contact-sheet [<png>]` (#1592): one window drawing every status mark and every icon the chrome draws, in the
+//! appearance DEEP_APP_APPEARANCE forces, with no hub and no record. Given a PNG, the frame the window presented is
+//! written there with one report line, then it quits. In a contact-sheet build only.
+
+use std::path::PathBuf;
 
 use gpui_kit::*;
 
-pub fn run() {
+pub fn run(png: Option<String>) {
     // macOS has no outside switch for one process's appearance, so a check forces it here, as for the app's window.
     match std::env::var("DEEP_APP_APPEARANCE").as_deref() {
         Ok("dark") => deep_app::chrome::force_dark(Some(true)),
         Ok("light") => deep_app::chrome::force_dark(Some(false)),
         _ => {}
     }
-    application().run(|cx| {
+    application().run(move |cx| {
         gpui_kit::init(cx);
-        deep_app::contact_sheet::open(cx);
+        deep_app::init(cx);
+        deep_app::contact_sheet::open(png.map(PathBuf::from), cx);
         cx.activate(true);
     });
 }

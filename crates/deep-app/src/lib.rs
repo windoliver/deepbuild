@@ -28,12 +28,12 @@ pub mod chrome;
 pub mod chrome_fixture;
 pub mod chrome_fx;
 pub mod chrome_gallery;
-#[cfg(feature = "contact-sheet")]
-pub mod contact_sheet;
 pub mod codes;
 pub mod commands;
 pub mod confirm;
 pub mod connect;
+#[cfg(all(feature = "contact-sheet", target_os = "macos"))]
+pub mod contact_sheet;
 pub mod device;
 pub mod empties;
 #[cfg(feature = "fixtures")]
