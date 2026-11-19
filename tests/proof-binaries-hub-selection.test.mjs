@@ -45,3 +45,14 @@ test('binaryNames never runs cargo for a selection that only reaches the hub', (
   const dir = repo(t, { 'tests/acceptance/6/hub.test.mjs': `${start}test('hub', () => spawnSync(process.execPath, ['packages/cli/dist/main.js', 'hub', 'run']));\n` }, 'not a manifest [\n');
   assert.deepEqual(binaryNames(dir, ['tests/acceptance/6/hub.test.mjs']), []);
 });
+
+test('a test starting the hub with one command string gets the hub\'s binaries, and a longer package name gets none', (t) => {
+  const exec = "import { execSync } from 'node:child_process';\nimport test from 'node:test';\n";
+  const dir = repo(t, {
+    'tests/acceptance/7/hub.test.mjs': `${exec}test('hub', () => execSync('node packages/cli/dist/main.js hub run'));\n`,
+    'tests/acceptance/8/scoped.test.mjs': `${exec}test('hub', () => execSync('npx @deepbuild/cli hub run'));\n`,
+    'tests/acceptance/9/other.test.mjs': `${exec}test('other', () => execSync('node mypackages/cli/main.js && node packages/client/main.js'));\n`,
+  });
+  for (const file of ['tests/acceptance/7/hub.test.mjs', 'tests/acceptance/8/scoped.test.mjs']) assert.deepEqual(selectBinaries(dir, [file]).target, ['deep-hook', 'deep-show'], file);
+  assert.deepEqual(selectBinaries(dir, ['tests/acceptance/9/other.test.mjs']).target, []);
+});
