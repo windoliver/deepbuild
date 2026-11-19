@@ -93,10 +93,10 @@ pub struct Over {
 /// orbit at 1920 × 1080 on an M5 Max (Mac17,10) at rest, release, medians: a frame's passes per
 /// pixel (1.08 ms for the city with no lamp), a pixel per light its cluster lists (2.1 ms more
 /// where a pixel's cluster lists 11 at the frame's mean), and the policy's scoring per light
-/// (0.27 ms for 2,048).
+/// (0.33 ms for 2,048).
 const FRAME_NS_PER_PX: f64 = 0.52;
 const LIGHT_NS_PER_PX: f64 = 0.09;
-const SCORING_NS_PER_LIGHT: f64 = 130.0;
+const SCORING_NS_PER_LIGHT: f64 = 160.0;
 
 /// The lights' own pass's terms: a cell, and a light a cell lists. The night city's cells list
 /// 6,200 lights and its pass takes 0.073 ms; with its ranges 8 times as long they list 257,000
