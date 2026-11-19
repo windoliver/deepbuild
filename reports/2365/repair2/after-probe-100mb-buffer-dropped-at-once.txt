@@ -1,0 +1,23 @@
+note: with HOLD_MS=0 the 100 MB Buffer is dropped in the step that made it, but its pages stay resident on both Node builds, so the probe's timer samples still see them. This is not the peak no sample can see; that is after-probe-100mb-transient.txt.
+$ repair-evidence/round2/probe-runs.sh repair-evidence/round2/alloc-100mb.mjs 0   (probe/pass.mjs AFTER the repair, sha256 b78545c921a54b82…)
+== node v24.22.0 (<home>/.local/share/fnm/node-versions/v24.22.0/installation/bin/node)
+$ HOLD_MS=0 PATH=<home>/.local/share/fnm/node-versions/v24.22.0/installation/bin:/usr/bin:/bin node --expose-gc tests/acceptance/2365/probe/pass.mjs <temp home> pass 1791190800000 --archive repair-evidence/round2/alloc-100mb.mjs
+{"at":"result","ms":9.067249999999987,"maxGapMs":9.067249999999987,"ticks":0,"rssStart":71680000,"peakRss":172064768,"rise":100384768,"evidenceBefore":0,"evidenceAfter":0,"added":0,"error":null}
+   run 1: rssStart 71.7 MB, peakRss 172.1 MB, rise 100.4 MB (peakRss - rssStart = 100.4 MB), error null
+$ HOLD_MS=0 PATH=<home>/.local/share/fnm/node-versions/v24.22.0/installation/bin:/usr/bin:/bin node --expose-gc tests/acceptance/2365/probe/pass.mjs <temp home> pass 1791190800000 --archive repair-evidence/round2/alloc-100mb.mjs
+{"at":"result","ms":10.188834,"maxGapMs":10.188834,"ticks":0,"rssStart":71090176,"peakRss":171425792,"rise":100335616,"evidenceBefore":0,"evidenceAfter":0,"added":0,"error":null}
+   run 2: rssStart 71.1 MB, peakRss 171.4 MB, rise 100.3 MB (peakRss - rssStart = 100.3 MB), error null
+$ HOLD_MS=0 PATH=<home>/.local/share/fnm/node-versions/v24.22.0/installation/bin:/usr/bin:/bin node --expose-gc tests/acceptance/2365/probe/pass.mjs <temp home> pass 1791190800000 --archive repair-evidence/round2/alloc-100mb.mjs
+{"at":"result","ms":9.153832999999992,"maxGapMs":9.153832999999992,"ticks":0,"rssStart":71565312,"peakRss":171950080,"rise":100384768,"evidenceBefore":0,"evidenceAfter":0,"added":0,"error":null}
+   run 3: rssStart 71.6 MB, peakRss 172.0 MB, rise 100.4 MB (peakRss - rssStart = 100.4 MB), error null
+== node v24.22.2 (/opt/homebrew/bin/node)
+$ HOLD_MS=0 PATH=/opt/homebrew/bin:/usr/bin:/bin node --expose-gc tests/acceptance/2365/probe/pass.mjs <temp home> pass 1791190800000 --archive repair-evidence/round2/alloc-100mb.mjs
+{"at":"result","ms":12.789709000000002,"maxGapMs":12.789709000000002,"ticks":0,"rssStart":28184440,"peakRss":128454520,"rise":100270080,"evidenceBefore":0,"evidenceAfter":0,"added":0,"error":null}
+   run 1: rssStart 28.2 MB, peakRss 128.5 MB, rise 100.3 MB (peakRss - rssStart = 100.3 MB), error null
+$ HOLD_MS=0 PATH=/opt/homebrew/bin:/usr/bin:/bin node --expose-gc tests/acceptance/2365/probe/pass.mjs <temp home> pass 1791190800000 --archive repair-evidence/round2/alloc-100mb.mjs
+{"at":"result","ms":11.286208000000002,"maxGapMs":11.286208000000002,"ticks":0,"rssStart":27905936,"peakRss":128176016,"rise":100270080,"evidenceBefore":0,"evidenceAfter":0,"added":0,"error":null}
+   run 2: rssStart 27.9 MB, peakRss 128.2 MB, rise 100.3 MB (peakRss - rssStart = 100.3 MB), error null
+$ HOLD_MS=0 PATH=/opt/homebrew/bin:/usr/bin:/bin node --expose-gc tests/acceptance/2365/probe/pass.mjs <temp home> pass 1791190800000 --archive repair-evidence/round2/alloc-100mb.mjs
+{"at":"result","ms":10.404499999999999,"maxGapMs":10.404499999999999,"ticks":0,"rssStart":27840280,"peakRss":128126744,"rise":100286464,"evidenceBefore":0,"evidenceAfter":0,"added":0,"error":null}
+   run 3: rssStart 27.8 MB, peakRss 128.1 MB, rise 100.3 MB (peakRss - rssStart = 100.3 MB), error null
+load averages: 117.52 112.30 92.76

@@ -41,7 +41,7 @@ const label = (feature: string): string => feature.replaceAll('_', ' ');
 
 /** canvas.gpu: the adapter, its tier and each feature of the tier's table, granted or absent. */
 async function gpuItem(): Promise<Item> {
-  const item = (code: string, level: Item['level'], evidence: string, fix: string): Item => ({ item: 'canvas.gpu', agent: AGENT, code, level, evidence, fix });
+  const item = (code: Item['code'], level: Item['level'], evidence: string, fix: string): Item => ({ item: 'canvas.gpu', agent: AGENT, code, level, evidence, fix });
   const bin = built('deep-gpu');
   if (!bin) return item('binary_missing', 'fail', `no deep-gpu is built under ${join(REPO, 'target')}`, 'Run `cargo build --locked --bin deep-gpu`, then `deep doctor` again.');
   const out = mkdtempSync(join(tmpdir(), 'deep-doctor-gpu-'));
@@ -69,7 +69,7 @@ async function gpuItem(): Promise<Item> {
 
 /** canvas.headless: the fixture rendered headless with Vello CPU, its PNG against its golden. */
 async function headlessItem(fault: string | undefined): Promise<Item> {
-  const item = (code: string, level: Item['level'], evidence: string, fix: string): Item => ({ item: 'canvas.headless', agent: AGENT, code, level, evidence, fix });
+  const item = (code: Item['code'], level: Item['level'], evidence: string, fix: string): Item => ({ item: 'canvas.headless', agent: AGENT, code, level, evidence, fix });
   if (fault === 'render_skipped') return item('not_checked', 'skip', 'unverified: the headless render was skipped, so nothing says the canvas draws', 'Run `deep doctor` again without skipping the render.');
   const fixture = JSON.parse(readFileSync(FIXTURE, 'utf8')) as { doc: Obj; look: Obj; golden: { png_sha256: string } };
   const bin = built('deep-canvas-render');

@@ -41,6 +41,9 @@ struct Seen {
     bags: HashMap<Vec<GlyphKey>, String>,
     /// The glyphs shaped for whitespace, which some fonts paint as a speck and others not at all.
     blank: HashSet<GlyphKey>,
+    /// Each SVG tile the atlas handed out, by texture and tile: the path GPUI keyed it by, and the size it was drawn at
+    /// in device pixels (#1592).
+    svgs: HashMap<(AtlasTextureId, u32), (String, [i64; 2])>,
     /// The last frame's glyph sprites: the tile, the bounds and the clip, in device pixels.
     sprites: Vec<Sprite>,
     /// The next frame the renderer is handed is for its glyphs only: no pixels are drawn.
@@ -71,6 +74,16 @@ pub struct Run {
     pub face: String,
     /// The weight its glyphs were shaped at: 400 regular, 500 medium (#1461).
     pub weight: f32,
+}
+
+/// #1592: one SVG the frame drew, such as an icon or a status mark: the path GPUI keyed its tile by, the size it was
+/// drawn at and its bounds, in device pixels, and whether any of it shows inside its clip.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Drawn {
+    pub path: String,
+    pub size: [i64; 2],
+    pub bounds: [i64; 4],
+    pub visible: bool,
 }
 
 /// What the replica's platform saw, shared by the text system, the atlas and the renderer it wraps.
@@ -173,6 +186,30 @@ impl Glyphs {
         }
         runs.sort_by_key(|r| (r.bounds[1], r.bounds[0]));
         runs
+    }
+
+    /// The SVGs the last frame drew (#1592), in the order they were painted.
+    pub fn svgs(&self) -> Vec<Drawn> {
+        let seen = self.0.lock().expect("glyphs");
+        let whole = |v: f32| v.round() as i64;
+        seen.sprites
+            .iter()
+            .filter_map(|sprite| {
+                let (path, size) = seen.svgs.get(&sprite.tile)?;
+                let b = sprite.bounds;
+                Some(Drawn {
+                    path: path.clone(),
+                    size: *size,
+                    bounds: [
+                        whole(b.origin.x.0),
+                        whole(b.origin.y.0),
+                        whole(b.size.width.0),
+                        whole(b.size.height.0),
+                    ],
+                    visible: b.intersects(&sprite.clip),
+                })
+            })
+            .collect()
     }
 
     /// Keeps the glyphs of the frame `window` last drew. A headless window never presents, so the frame is asked for
@@ -380,7 +417,22 @@ impl PlatformAtlas for Atlas {
             AtlasKey::Glyph(params) => Some(params.clone()),
             _ => None,
         };
+        // #1592: an SVG's tile, by the path it was keyed by and the size it was drawn at.
+        let svg = match &key {
+            AtlasKey::Svg(params) => Some(params.clone()),
+            _ => None,
+        };
         let tile = self.inner.get_or_insert_with(key, build)?;
+        if let (Some(params), Some(tile)) = (svg, &tile) {
+            let smooth = |v: i32| (v as f32 / SMOOTH_SVG_SCALE_FACTOR).round() as i64;
+            self.seen.0.lock().expect("glyphs").svgs.insert(
+                (tile.texture_id, tile.tile_id.0),
+                (
+                    params.path.to_string(),
+                    [smooth(params.size.width.0), smooth(params.size.height.0)],
+                ),
+            );
+        }
         if let (Some(params), Some(tile)) = (params, &tile) {
             let mut seen = self.seen.0.lock().expect("glyphs");
             let at = (tile.texture_id, tile.tile_id.0);

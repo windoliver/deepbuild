@@ -1,0 +1,37 @@
+$ PATH=<home>/.local/share/fnm/node-versions/v24.22.0/installation/bin:$PATH env NO_COLOR=1 node node_modules/vitest/vitest.mjs run --configLoader runner --config repair-evidence/round2/measured-pass.config.ts
+node: v24.22.0 (<home>/.local/share/fnm/node-versions/v24.22.0/installation/bin/node)
+started: 2026-11-18T01:15:53Z; load averages: 81.55 56.18 59.89
+-----
+
+ RUN  v5.0.5 <home>/doneright-2365-repair/repair-evidence/round2
+
+stdout | measured-pass.proof.ts > round 2, Defect 1: measuredPass (heavy/run.ts) under Node v24.22.0 > a pass that waits 300 ms and allocates almost nothing
+Node v24.22.0, a pass that waits 300 ms and allocates almost nothing, run 1: peak resident memory 71.9 MB from 71.7 MB (+0.3 MB); the highest `ps` reading 71.9 MB; error null
+
+stdout | measured-pass.proof.ts > round 2, Defect 1: measuredPass (heavy/run.ts) under Node v24.22.0 > a pass that waits 300 ms and allocates almost nothing
+Node v24.22.0, a pass that waits 300 ms and allocates almost nothing, run 2: peak resident memory 72.2 MB from 71.9 MB (+0.3 MB); the highest `ps` reading 72.2 MB; error null
+
+stdout | measured-pass.proof.ts > round 2, Defect 1: measuredPass (heavy/run.ts) under Node v24.22.0 > a pass that waits 300 ms and allocates almost nothing
+Node v24.22.0, a pass that waits 300 ms and allocates almost nothing, run 3: peak resident memory 71.9 MB from 71.6 MB (+0.3 MB); the highest `ps` reading 71.9 MB; error null
+
+stdout | measured-pass.proof.ts > round 2, Defect 1: measuredPass (heavy/run.ts) under Node v24.22.0 > a pass that holds a touched 100 MB buffer for 300 ms
+Node v24.22.0, a pass that holds a touched 100 MB buffer for 300 ms, run 1: peak resident memory 171.9 MB from 71.6 MB (+100.4 MB); the highest `ps` reading 171.9 MB; error null
+
+stdout | measured-pass.proof.ts > round 2, Defect 1: measuredPass (heavy/run.ts) under Node v24.22.0 > a pass that holds a touched 100 MB buffer for 300 ms
+Node v24.22.0, a pass that holds a touched 100 MB buffer for 300 ms, run 2: peak resident memory 172.4 MB from 71.9 MB (+100.5 MB); the highest `ps` reading 172.2 MB; error null
+
+stdout | measured-pass.proof.ts > round 2, Defect 1: measuredPass (heavy/run.ts) under Node v24.22.0 > a pass that holds a touched 100 MB buffer for 300 ms
+Node v24.22.0, a pass that holds a touched 100 MB buffer for 300 ms, run 3: peak resident memory 172.2 MB from 71.9 MB (+100.3 MB); the highest `ps` reading 172.2 MB; error null
+
+ ✓ measured-pass.proof.ts (2 tests) 3845ms
+   ✓ round 2, Defect 1: measuredPass (heavy/run.ts) under Node v24.22.0 (2)
+     ✓ a pass that waits 300 ms and allocates almost nothing 1706ms
+     ✓ a pass that holds a touched 100 MB buffer for 300 ms 2137ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  17:15:53
+   Duration  5.09s (tests 78%, transform 20%, import 2%)
+
+-----
+EXIT 0; ended: 2026-11-18T01:15:59Z; load averages: 82.63 56.82 60.10

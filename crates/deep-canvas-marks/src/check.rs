@@ -587,9 +587,11 @@ pub fn check(doc: &Map<String, Value>, look: &Look, min: Option<f64>) -> Vec<Iss
     // #2031: a lit group's cap, nesting and light colors, each named.
     let mut lights = crate::light::problems(items);
     lights.extend(crate::light::ranges(doc));
+    // #2032: an open path that occludes, and a lit group's occluders past their cap.
+    lights.extend(crate::shadow::problems(items));
     let lit_refused = !lights.is_empty();
     issues.extend(lights.into_iter().map(|p| Issue {
-        fix: "Keep at most 16 lights on one lit group, light only one group on a path from the root, and give each light a look role that isn't a status color.".into(),
+        fix: "Keep at most 16 lights on one lit group, light only one group on a path from the root, give each light a look role that isn't a status color, close every path that occludes, and keep a lit group's occluders within 4,096 segments.".into(),
         ..Issue::error(p.code, &p.id, p.path, p.actual, &p.what)
     }));
     // Status can show wherever a status binding is.
