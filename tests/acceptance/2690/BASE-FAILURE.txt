@@ -1,0 +1,32 @@
+#2690's acceptance suite, run once at the base b4c099e2e (clean worktree, no implementation).
+
+Machine: Linux (the Spark), Node v24.22.0. The app's parts need macOS, so they are BLOCKED here, never PASS; they have not
+been run on a Mac.
+Prerequisites: npm ci; npm run build --workspaces (at the base the hub and the CLI report one type error,
+packages/hub/src/footprint-doctor.ts(68,35): 'footprint_unknown' is not in the doctor contract's codes; tsc emits dist
+anyway); cargo build --locked -p deep-hook -p deep-show (exit 0).
+
+Command (2026-11-19T21:21:12Z to 21:21:23Z, in a systemd-run --user unit, MemoryMax=24G, CARGO_BUILD_JOBS=2):
+  NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/2690 --no-file-parallelism --silent=false
+Result: Tests 3 failed (3); exit 1. Each failure is BLOCKED:
+  Error: BLOCKED: the replica and the app draw on macOS only; this is linux
+  node node_modules/typescript/bin/tsc -p tests/acceptance/2690/tsconfig.json: no error in tests/acceptance/2690.
+
+Per test:
+
+C1 #2690.50174a03 (each open ask's word in the hub's row.set is the word deep status --json, deep and the app's drawn row
+give it): BLOCKED at the app's drawn row (row-word.test.ts:116, windowOf). The parts before it ran and held at the base:
+  the hub's ask rows: ask:01M7TTNRY75Y3KT7TZ7QHDE08M "Push release-1.4 to origin?" word "needs you";
+  ask:01M7TTQKH7D3ZVC6Q2MYP18KZR "Which header colour on the login page?" word "needs you";
+  ask:01M7TTSE47M9GQ2ZFWGEPKAD5G "Keep the cart on SQLite or plain files?" word "needs you"
+  and deep status --json and deep gave each row the same word "needs you".
+  Expected on a Mac at the base (from the code read and the failure the issue quotes, not run here): drawnFailures fails
+  on each ask row, e.g. row ask:… 's node reads "Push release-1.4 to origin? needs_you …", which lacks its word
+  "needs you": the row's name is the bare question, its value `needs_you`, its word slot the kind.
+
+C2 #2690.9af6aab5 plain (each ask's state-word slot draws Approval, How it looks, Pick one): BLOCKED. Expected to pass at the
+  base on a Mac (a regression guard; list.rs draws ask.kind in the slot).
+C2 #2690.9af6aab5 wrong program ask-words-alike: BLOCKED. Expected on a Mac: the judge fails naming each of the three ask
+  rows ("draws "needs you" in ask:…:word, not its kind …"), so the test passes.
+
+Open: run the suite on macOS at the base and record its output here.
