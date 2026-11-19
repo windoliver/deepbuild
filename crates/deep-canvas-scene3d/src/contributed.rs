@@ -39,9 +39,17 @@ pub struct Memo {
     /// Each item's box and mesh deforms' binds (#1929), by modifier, as its last build left
     /// them: a frame whose mesh and box or control mesh are unchanged reads its weights here.
     pub(crate) binds: BTreeMap<String, Vec<Option<crate::bind::Bind>>>,
+    /// #2760: the issue of the refusal the last evaluation ended on, where it names more than
+    /// its path.
+    pub(crate) refused: Option<Value>,
 }
 
 impl Memo {
+    /// The issue the last refused evaluation left, once.
+    pub fn take_refused(&mut self) -> Option<Value> {
+        self.refused.take()
+    }
+
     /// The items mapped since the last call, in the order they were.
     pub fn take_mapped(&mut self) -> Vec<String> {
         std::mem::take(&mut self.mapped)
