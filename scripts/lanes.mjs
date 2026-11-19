@@ -873,6 +873,9 @@ byHand.push('tests/acceptance/184/ac07-bots-refused.test.ts', 'tests/acceptance/
 alone.push('tests/acceptance/555/');
 // #1048's files start replicas and hubs and play rules.legal's samples, a 100,000-step soak and model runs for minutes.
 alone.push('tests/acceptance/1048/');
+// #1040's files each build deep-show (full), export pieces to the web and as pages, and open them in headless Chrome with
+// WebGPU off and on; the cutaway's and the maps' legs run on the reference Mac.
+alone.push('tests/acceptance/1040/');
 // #556's files start replicas and hubs and play grid.reach's 200-run playtests for minutes; ac05 times release replicas.
 alone.push('tests/acceptance/556/');
 timed.push('tests/acceptance/556/ac05-budgets.test.ts');
