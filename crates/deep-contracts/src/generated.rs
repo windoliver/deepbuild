@@ -88133,7 +88133,7 @@ impl Contract for TranscriptArchivedV3DataSource {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["size", "sha256", "stamp", "ended"])?;
         deep_contracts::check_member(members, at, "size", &RULE_4)?;
-        deep_contracts::check_member(members, at, "sha256", &RULE_83)?;
+        deep_contracts::check_member(members, at, "sha256", &RULE_85)?;
         deep_contracts::check_member(members, at, "stamp", &RULE_15)?;
         Ok(Self {
             size: deep_contracts::required(members, at, "size")?,
@@ -88163,8 +88163,8 @@ pub struct TranscriptArchivedV3Data {
 impl Contract for TranscriptArchivedV3Data {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["session", "evidence", "source", "parts"])?;
-        deep_contracts::check_member(members, at, "session", &RULE_107)?;
-        deep_contracts::check_member(members, at, "evidence", &RULE_83)?;
+        deep_contracts::check_member(members, at, "session", &RULE_109)?;
+        deep_contracts::check_member(members, at, "evidence", &RULE_85)?;
         deep_contracts::check_member(members, at, "parts", &RULE_9)?;
         Ok(Self {
             session: deep_contracts::required(members, at, "session")?,
@@ -88204,7 +88204,7 @@ impl Contract for TranscriptArchivedV3 {
         let members = deep_contracts::members(value, at, &["v", "id", "kind", "subject", "writer", "actor", "scope", "ts", "seq", "log_pos", "data", "evidence"])?;
         deep_contracts::check_member(members, at, "id", &RULE_0)?;
         deep_contracts::check_member(members, at, "subject", &RULE_2)?;
-        deep_contracts::check_member(members, at, "writer", &RULE_91)?;
+        deep_contracts::check_member(members, at, "writer", &RULE_93)?;
         deep_contracts::check_member(members, at, "actor", &RULE_3)?;
         deep_contracts::check_member(members, at, "scope", &RULE_3)?;
         deep_contracts::check_member(members, at, "ts", &RULE_4)?;
@@ -88288,7 +88288,7 @@ impl Contract for TranscriptArchivedV4DataSource {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["size", "sha256", "stamp", "ended", "continuable"])?;
         deep_contracts::check_member(members, at, "size", &RULE_4)?;
-        deep_contracts::check_member(members, at, "sha256", &RULE_83)?;
+        deep_contracts::check_member(members, at, "sha256", &RULE_85)?;
         deep_contracts::check_member(members, at, "stamp", &RULE_15)?;
         Ok(Self {
             size: deep_contracts::required(members, at, "size")?,
@@ -88320,8 +88320,8 @@ pub struct TranscriptArchivedV4Data {
 impl Contract for TranscriptArchivedV4Data {
     fn from_json(value: &Value, at: &str) -> Result<Self, String> {
         let members = deep_contracts::members(value, at, &["session", "evidence", "source", "parts"])?;
-        deep_contracts::check_member(members, at, "session", &RULE_107)?;
-        deep_contracts::check_member(members, at, "evidence", &RULE_83)?;
+        deep_contracts::check_member(members, at, "session", &RULE_109)?;
+        deep_contracts::check_member(members, at, "evidence", &RULE_85)?;
         deep_contracts::check_member(members, at, "parts", &RULE_9)?;
         Ok(Self {
             session: deep_contracts::required(members, at, "session")?,
@@ -88361,7 +88361,7 @@ impl Contract for TranscriptArchivedV4 {
         let members = deep_contracts::members(value, at, &["v", "id", "kind", "subject", "writer", "actor", "scope", "ts", "seq", "log_pos", "data", "evidence"])?;
         deep_contracts::check_member(members, at, "id", &RULE_0)?;
         deep_contracts::check_member(members, at, "subject", &RULE_2)?;
-        deep_contracts::check_member(members, at, "writer", &RULE_91)?;
+        deep_contracts::check_member(members, at, "writer", &RULE_93)?;
         deep_contracts::check_member(members, at, "actor", &RULE_3)?;
         deep_contracts::check_member(members, at, "scope", &RULE_3)?;
         deep_contracts::check_member(members, at, "ts", &RULE_4)?;
