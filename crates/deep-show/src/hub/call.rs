@@ -143,6 +143,10 @@ pub enum Call {
         doc: String,
         set: Option<Value>,
     },
+    /// #1415: a document's session closed, as you closing its panel.
+    Close(String),
+    /// #1415: what each state of a document session does with each call.
+    SessionTable,
     /// #501: the export's GPU hash pass on given BGRA8 frames.
     FrameHash {
         frames: Vec<([u32; 2], String)>,
