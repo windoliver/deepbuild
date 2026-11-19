@@ -33,6 +33,8 @@ pub struct Request<'a, 'd> {
 
 /// One mark a kind draws as, in the item's own space: a core mark kind (`mark.line@1`,
 /// `mark.text@1`) with its params, placed at `at`, its ID `<item>#<sub>`, drawn at `opacity`.
+/// A `mark.image@1` pictures the 2D item its `item` names, one boxed by its `size`, on one quad
+/// of the mark's `size` (#2450).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Mark {
     pub sub: String,

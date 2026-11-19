@@ -745,6 +745,9 @@ timed.push('tests/acceptance/169/budgets.test.ts');
 // ac7-budgets judges the task's budgets on the reference Mac.
 alone.push('tests/acceptance/226/');
 timed.push('tests/acceptance/226/ac7-budgets.test.ts');
+// #2450's files each build deep-gpu or deep-show (full, and ac1 also without vector); ac1 and ac3 draw on the Metal
+// GPU, and ac3-taste writes docs/evidence/2450/ and waits on your taste call in tests/acceptance/2450/TASTE.json.
+alone.push('tests/acceptance/2450/');
 // #226's first-draft Oracle lane needs a tick at every whole number on [−4, 4], where axis@1's rule ticks every other
 // one (tests/acceptance/226-oracle-redraft/DISPUTE.md); its blind redraft runs in its place.
 alone.push('tests/acceptance/226-oracle-redraft/');
