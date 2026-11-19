@@ -2144,7 +2144,7 @@ fn run_view(
             p.overlays.clear();
         }
     }
-    let (msaa, render_targets) = session3::render_targets(app);
+    let (msaa, render_targets, mirror_px) = session3::render_targets(app);
     session3::close(app);
     // An over-cap document is refused, its imports still reported: the import comes before the
     // count it makes (#423).
@@ -2216,7 +2216,7 @@ fn run_view(
         "internal_scale": scale,
         "upscale": upscale,
         "sharpen": args.surface.sharpen,
-        "size_px": size, "internal_px": internal, "msaa": msaa,
+        "size_px": size, "internal_px": internal, "mirror_px": mirror_px, "msaa": msaa,
     });
     let mut reply = json!({
         "frames": frames, "passes": passes, "status": status_report, "surface": drew,

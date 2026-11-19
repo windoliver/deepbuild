@@ -1,6 +1,6 @@
 //! Wrong-program switches used only by the proof binary. Public entry remains the crate root.
 
-use crate::{ao, cull, dof, flare, local, surface, water};
+use crate::{ao, cull, dof, flare, local, mirror, surface, water};
 
 /// The wrong programs, each reachable only through the binary's `--planted`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -55,6 +55,8 @@ pub struct Planted {
     pub winding_ignores_determinant: bool,
     /// #465: the flare's wrong programs.
     pub flare: flare::Planted,
+    /// #2691: the mirror's wrong programs.
+    pub mirror: mirror::Planted,
     /// #468: the depth of field's wrong programs.
     pub dof: dof::Planted,
     /// #166: the water's wrong program.
