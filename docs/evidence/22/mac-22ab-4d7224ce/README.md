@@ -17,4 +17,4 @@ Reference Mac (Mac15,12, M3, macOS 27.2.1), on AC power at thermal state 1. Load
 
 AC8 checks that each row says when its recommended answer applies. It failed with "the list has no row for ask:… to say when its recommended answer applies" on all five calls. The card's rows and the Needs you count were correct; only the list's `ask:…:time` nodes were missing. The same test passed at 4c5617fe (round 22aa) and at 97fffed5.
 
-Since 22aa this branch took main d4cef00fb in a merge (it includes #1482's cached row views) and four fold commits. Round 22ac Round 22ac (`../mac-22ac-1345/`) found AC8 failing the same way on main f17fa347c and at 3f2f86464, so the failure is main's, not this PR's.
+Since 22aa this branch took main d4cef00fb in a merge (it includes #1482's cached row views) and four fold commits. Round 22ac (`../mac-22ac-1345/`) found AC8 failing the same way on main f17fa347c and at 3f2f86464, so the failure is main's, not this PR's.
