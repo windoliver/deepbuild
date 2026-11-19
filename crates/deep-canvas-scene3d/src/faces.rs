@@ -920,6 +920,27 @@ mod tests {
     }
 
     #[test]
+    fn neither_step_has_a_rule_for_a_typed_attribute_and_each_says_so() {
+        use crate::attrs::{Attribute, Domain, Elements, Type};
+        let mut m = cube();
+        let e = Elements::of(&m);
+        let (domain, ty) = (Domain::Face, Type::U32);
+        let values = (0..e.count(domain)).map(|i| i as f64).collect();
+        let tag = Attribute { domain, ty, values };
+        e.write(&mut m, "tag", tag).unwrap();
+        for step in [
+            json!({"kind": OFFSET, "params": {"by": 0.1}}),
+            json!({"kind": DISSOLVE}),
+        ] {
+            let kind = step["kind"].as_str().unwrap().to_string();
+            let refused = run(&m, json!([step]), None).unwrap_err();
+            for name in ["attribute.no_rule", &kind, r#""attribute":"tag""#] {
+                assert!(refused.contains(name), "{refused} names {name}");
+            }
+        }
+    }
+
+    #[test]
     fn the_widest_offset_is_where_an_edge_ends_or_two_edges_meet() {
         let widest = |xy: &[[f64; 2]]| {
             Outline::of(&flat(xy), 0, Plants::default())
