@@ -1,12 +1,15 @@
+// Blind redraft, under #2833's limit, of #1115's three no-grant tests (REDRAFT.md). Each is the original but for how
+// the test class's limit is had: read from scripts/throttle.mjs's LIMITS line, never a hard-coded 2 or 4.
 // #1115: a vitest job the throttle ends with no grant ran nothing, so its files read INCONCLUSIVE, never FAIL "reported
 // no test". Another session's holders fill the real table's test class, and the real throttle runs with a 1.2 s wait
 // in place of 30 minutes (README: No grant).
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { affected, dump, failIds, hold, laneState, LONG, sandbox, started, stop, summary, tree, unit, until, vitestFile } from './helpers.mjs';
+import { affected, dump, failIds, hold, laneState, LONG, sandbox, started, stop, summary, tree, unit, until, vitestFile } from '../1115/helpers.mjs';
+import { testLimit } from './helpers.mjs';
 
-// section 6's test class: two grants on the Mac, four on the Spark.
-const LIMIT = process.platform === 'darwin' ? 2 : 4;
+// #2833: the test class's limit is the one scripts/throttle.mjs states for this platform (helpers.mjs here).
+const LIMIT = testLimit();
 const FILES = ['tests/fixture-1115/one.test.ts', 'tests/fixture-1115/two.test.ts'];
 const files = Object.fromEntries(FILES.map((file) => [file, vitestFile("test('it passes', () => { expect(1).toBe(1); });")]));
 

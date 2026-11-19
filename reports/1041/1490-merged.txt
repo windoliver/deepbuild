@@ -1,0 +1,10 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `node node_modules/vitest/vitest.mjs run --root tests/acceptance/1490 record.test.ts picks.test.ts parity.test.ts --no-file-parallelism --testTimeout=3600000 --hookTimeout=180000` runs unleased
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/1490
+
+
+ Test Files  3 passed (3)
+      Tests  3 passed (3)
+   Start at  17:53:36
+   Duration  673.19s (tests 100%)
+

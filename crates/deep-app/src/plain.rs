@@ -94,18 +94,18 @@ fn has_place(text: &str) -> bool {
 /// session whose newest run failed has one; what failed, its output and its trace are on the session's page.
 pub fn problem(table: &Table, session: &str) -> Option<(String, String)> {
     let failure = table.failure(session)?;
-    let happened = if trace(failure).is_empty() {
-        "A check didn't get what it expected."
+    let happened = crate::copy::text(if trace(failure).is_empty() {
+        "plain.check_unexpected"
     } else {
-        "A check stopped with an error."
-    };
+        "plain.check_error"
+    });
     let next = match table.state(session) {
         State::SentBack { round } => {
-            format!("The agent is fixing it, try {round} of {SEND_BACKS}.")
+            crate::copy::fill("plain.agent_fixing", &[&round, &SEND_BACKS])
         }
-        State::NeedsYou => "It waits for your answer.".to_owned(),
-        State::Blocked => "It waits until what blocks it is cleared.".to_owned(),
-        _ => "The agent looks at it next.".to_owned(),
+        State::NeedsYou => crate::copy::text("plain.waits_for_answer").to_owned(),
+        State::Blocked => crate::copy::text("plain.waits_unblocked").to_owned(),
+        _ => crate::copy::text("plain.agent_looks_next").to_owned(),
     };
     Some((happened.to_owned(), next))
 }
@@ -129,7 +129,7 @@ pub fn planted(name: &str) -> bool {
 }
 
 /// `card-line-pr`'s planted card line, and `session-page-line-pr`'s on a session's page.
-pub const PLANTED_PR_LINE: &str = "PR #12 is ready for review";
+pub const PLANTED_PR_LINE: &str = "PR #12 is ready for review"; // copy-exception: planted
 
 #[cfg(test)]
 mod tests {

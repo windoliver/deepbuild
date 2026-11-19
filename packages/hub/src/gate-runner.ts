@@ -55,6 +55,11 @@ export interface ClaimCheck {
   timing?: boolean;
   /** A document check's deliverable, by doc ID (#1723): the merge base holds no revision of it, so it never runs there. */
   document?: string;
+  /**
+   * The review of the claim's diff (#87): a run on the merge base would read the same diff, and a finding on a line the
+   * change didn't add is already its follow-up, so it never runs there, and a finding sends the claim back (#1512).
+   */
+  review?: true;
 }
 /**
  * What a workspace claim's checks read (#67): the digests its verdict pins, the reading each check's checkout holds
@@ -857,7 +862,7 @@ export class GateRunner {
     // from another session's, so a failure the merge base shares reads as inherited, BLOCKED, never as the claim's own
     // FAIL (design: How runs become one of five verdicts).
     const outcome = this.carriedFailure(e) ? 'failed' : e.outcome;
-    if (outcome !== (e.check.on_base === 'fails' ? 'passed' : e.check.source === 'spec' ? 'failed' : null) || e.check.document !== undefined) return;
+    if (outcome !== (e.check.on_base === 'fails' ? 'passed' : e.check.source === 'spec' ? 'failed' : null) || e.check.document !== undefined || e.check.review) return;
     const check = e.check.check;
     const token = `${e.claim} ${check} base`;
     const surface = this.o.plant === 'stand-in-surface-dropped' ? null : e.check.surface ?? null;

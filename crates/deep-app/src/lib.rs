@@ -34,6 +34,8 @@ pub mod confirm;
 pub mod connect;
 #[cfg(all(feature = "contact-sheet", target_os = "macos"))]
 pub mod contact_sheet;
+/// #2403: the app's own words, one table per language by key.
+pub mod copy;
 pub mod device;
 pub mod empties;
 #[cfg(feature = "fixtures")]
@@ -154,8 +156,8 @@ pub fn menu_bar_line() -> String {
     }
     match setup::count().or_else(|| reach.short().filter(|_| !reach.hub_down)) {
         Some(line) => line.to_owned(),
-        None if record::older().is_some() => "Hub is older".to_owned(),
-        None if !record::connected() && !reach.hub_down => "No hub".to_owned(),
+        None if record::older().is_some() => copy::text("lib.hub_older").to_owned(),
+        None if !record::connected() && !reach.hub_down => copy::text("lib.no_hub").to_owned(),
         // #2026's planted menu bar counts sessions, not asks.
         None if plain::planted("menu-bar-counts-sessions") => views::asks_need_you(
             record::with_view(|view| view.table().every_session().len()).unwrap_or(0),
@@ -442,7 +444,7 @@ pub fn mount_page(
     std::fs::write(
         dir.join(panel_module::PAGE_ENTRY),
         format!(
-            "import {{ View }} from \"@deepbuild/panel\";\nimport Panel from \"./main.js\";\n\nexport default class Page extends View {{\n  init(_props, cx) {{\n    this.panel = cx.new(Panel, {props});\n  }}\n\n  render() {{\n    return this.panel;\n  }}\n}}\n"
+            "import {{ View }} from \"@deepbuild/panel\";\nimport Panel from \"./main.js\";\n\nexport default class Page extends View {{\n  init(_props, cx) {{\n    this.panel = cx.new(Panel, {props});\n  }}\n\n  render() {{\n    return this.panel;\n  }}\n}}\n" // copy-exception: a page's entry script, written to disk
         ),
     )?;
     let loaded = runtime.load_application(dir, panel_module::PAGE_ENTRY)?;
@@ -462,5 +464,6 @@ pub fn fetched_dependency(dir: &Path) -> Option<String> {
 
 /// Why a panel whose manifest fetches a dependency is refused.
 pub fn fetch_refusal(dependency: &str) -> String {
+    // copy-exception: a refusal reason the kit and the loader report, never drawn
     format!("its manifest lists the Git dependency {dependency}; a panel loads nothing from the network")
 }

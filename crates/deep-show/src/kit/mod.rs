@@ -76,6 +76,10 @@ pub const CONTROL_PARTS: [&str; 5] = ["replay", "read_region", "keyboard", "inpu
 /// wrong entry that breaks it alone.
 pub const REGISTRY_PART: &str = "registries";
 
+/// The part a module whose fixtures hold its kinds' items runs (#1801): every field of those
+/// items that names another item or an asset is one its kind declares, so `refs_to` lists it.
+pub const REFERENCES_PART: &str = "references";
+
 /// The kit parts a canvas module's interface lists: every part, and `bit`; an interface with a
 /// behavior part lists it too.
 pub fn interface_parts() -> Vec<String> {
@@ -155,6 +159,7 @@ impl KitCall {
                 !PARTS.contains(&x.as_str())
                     && !INTERFACE_PARTS.contains(&x.as_str())
                     && x != REGISTRY_PART
+                    && x != REFERENCES_PART
                     && x != SANDBOX_PART
                     && !CONTROL_PARTS.contains(&x.as_str())
             })
@@ -435,7 +440,7 @@ impl<'a> Hub<'a> {
             for part in PARTS
                 .into_iter()
                 .chain(INTERFACE_PARTS)
-                .chain([REGISTRY_PART, SANDBOX_PART])
+                .chain([REGISTRY_PART, REFERENCES_PART, SANDBOX_PART])
                 .chain(CONTROL_PARTS)
             {
                 if !call.runs(part) {
@@ -532,6 +537,7 @@ impl<'a> Hub<'a> {
             "behavior" if ctx.module == "physics" => crate::physics::kit::behavior(ctx.module),
             "behavior" => interface::behavior(self, ctx),
             REGISTRY_PART => self.registries_part(ctx.module),
+            REFERENCES_PART => fixtures::references(self, ctx),
             SANDBOX_PART => sandbox_part(ctx.module),
             _ if CONTROL_PARTS.contains(&part) => self.control_part(part, ctx.module),
             _ => None,

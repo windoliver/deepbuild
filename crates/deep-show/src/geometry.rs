@@ -116,6 +116,9 @@ pub fn parse(c: &Map<String, Value>) -> Option<Geometry> {
 
 const BUILD_OPS: [&str; 3] = ["scene3d.build", "scene3d.rebuild", "building.build"];
 
+/// How many binds a played call's frames computed (#1929), by item and modifier.
+type Binds = std::collections::BTreeMap<(String, usize), u64>;
+
 fn has_geometry(kind: &str) -> bool {
     builders::KINDS.contains(&kind)
         || deep_canvas_scene3d::building::KINDS.contains(&kind)
@@ -216,8 +219,10 @@ fn placement(item: &Value) -> impl Fn([f64; 3]) -> [f64; 3] {
 
 impl Hub<'_> {
     pub(crate) fn geometry(&mut self, g: &Geometry) -> Value {
+        // #1929: the binds the played frames' builds computed, by item and modifier.
+        let mut binds = Binds::new();
         if g.track.is_none() && g.play.is_none() {
-            return self.geometry_rows(g);
+            return self.geometry_rows(g, &binds);
         }
         let t = match self.resolve_time(&g.doc, &g.t) {
             Ok(t) => t,
@@ -242,9 +247,19 @@ impl Hub<'_> {
                 };
                 let view = session_view(session, &Map::new());
                 session.frame(&mut self.sched, k * step, &view);
+                for array in ["scene3d.built", "scene3d.livebuilt"] {
+                    for (id, built) in session.ran_values(&self.sched, array) {
+                        let built = built.as_typed::<Built>();
+                        let rows = built.iter().flat_map(|b| b.rows.iter().enumerate());
+                        for (m, _) in rows.filter(|r| r.1.bind.as_ref().is_some_and(|b| b.computed))
+                        {
+                            *binds.entry((id.unwrap_or_default().into(), m)).or_default() += 1;
+                        }
+                    }
+                }
             }
         }
-        let reply = self.geometry_rows(g);
+        let reply = self.geometry_rows(g, &binds);
         // #504's rule: a call's own track lasts the call; the session goes back to the hub's.
         if g.track.is_some() {
             self.replay(&g.doc, t);
@@ -252,7 +267,7 @@ impl Hub<'_> {
         reply
     }
 
-    fn geometry_rows(&mut self, g: &Geometry) -> Value {
+    fn geometry_rows(&mut self, g: &Geometry, binds: &Binds) -> Value {
         let t = match self.resolve_time(&g.doc, &g.t) {
             Ok(t) => t,
             Err(code) => return json!({"code": code}),
@@ -327,6 +342,7 @@ impl Hub<'_> {
                     fills: self.startup.sealed.fills.clone(),
                     clock: None,
                     pool: None,
+                    kept: Vec::new(),
                 };
                 let ctx = Ctx {
                     id: id.as_str(),
@@ -508,6 +524,7 @@ impl Hub<'_> {
                             .pool
                             .clone()
                             .map(|p| (p, evaluated.threads())),
+                        kept: Vec::new(),
                     };
                     let seconds = t as f64 / deep_canvas::camera::FLICKS_PER_SECOND as f64;
                     let started = now_ms();
@@ -585,10 +602,15 @@ impl Hub<'_> {
             };
             let mut row = json!({"id": id, "kind": b.kind, "declared": declared_json(declared, welded), "key": node.key,
                                  "blocks": b.blocks,
-                                 "stack": b.rows.iter().map(|r| {
+                                 "stack": b.rows.iter().enumerate().map(|(k, r)| {
                                      let mut step = r.to_json();
                                      if let Some(ms) = r.ms {
                                          step["ms"] = json!(ms);
+                                     }
+                                     // #1929: a played call's work counters on a box or mesh deform.
+                                     if g.play.is_some() && r.bind.is_some() {
+                                         let n = binds.get(&(id.clone(), k)).copied().unwrap_or(0);
+                                         step["work"] = json!({"binds": n});
                                      }
                                      step
                                  }).collect::<Vec<_>>()});
