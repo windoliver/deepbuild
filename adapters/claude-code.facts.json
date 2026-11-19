@@ -1,5 +1,5 @@
 {
-  "schema": "adapter.facts@6",
+  "schema": "adapter.facts@7",
   "versions": ["2.1.299", "2.1.304", "2.1.308"],
   "agent": "claude",
   "hookTimeouts": {
@@ -966,6 +966,40 @@
       "kind": "session.attention",
       "data": { "state": "=working" }
     }
+  },
+  "ruleLoad": {
+    "readBy": "which rule lines reach a Claude Code session by Claude Code's own loading (#1514): the rules page marks a line it says won't, naming Claude Code and the cause, deep doctor reports the same as rules.not_loaded with the file and the first line lost, the start slice sends such a rule by DeepBuild's own route, and the session facts digest the files it says a session loads; a load the agent reports itself outranks it",
+    "conformance": "rules/load-entry",
+    "entries": [
+      {
+        "versions": ["2.1.299", "2.1.304", "2.1.308"],
+        "source": "code.claude.com/docs/en/memory (How CLAUDE.md files load; AGENTS.md: When Claude Code reads AGENTS.md, Choose which instruction files load; Auto memory: How it works) and code.claude.com/docs/en/hooks (InstructionsLoaded), read Nov 18 2026 against 2.1.309. They hold from 2.1.285 on, before these versions: AGENTS.md is read directly from 2.1.277, the setting's plugin ID cc-plugin-agents-md@builtin is read from 2.1.285, and the memory index is measured past its front matter from 2.1.211; the size limit on files loaded on demand starts at 2.1.309, after them",
+        "home": { "dir": "~/.claude", "env": "CLAUDE_CONFIG_DIR" },
+        "walk": { "from": "root" },
+        "sets": [
+          { "name": "claude", "files": ["CLAUDE.md", ".claude/CLAUDE.md", "CLAUDE.local.md"], "pick": "all" },
+          { "name": "agents", "files": ["AGENTS.md", ".claude/AGENTS.md"], "pick": "all" },
+          { "name": "rules", "files": [".claude/rules/*.md"], "pick": "all" }
+        ],
+        "user": { "name": "user", "files": ["~/.claude/CLAUDE.md", "~/.claude/rules/*.md"], "pick": "all" },
+        "setting": {
+          "name": "instructionFiles",
+          "file": "~/.claude/settings.json",
+          "keys": ["pluginConfigs.cc-plugin-agents-md@builtin.options.instructionFiles", "pluginConfigs.agents-md@builtin.options.instructionFiles"],
+          "default": "claude-md-or-agents-md"
+        },
+        "modes": {
+          "claude-md-or-agents-md": { "sets": ["claude", "agents", "rules"], "shadows": { "agents": "claude" }, "user": true },
+          "claude-md-and-agents-md": { "sets": ["claude", "agents", "rules"], "user": true },
+          "claude-md": { "sets": ["claude", "rules"], "user": true },
+          "managed-only": { "sets": [], "user": false }
+        },
+        "cap": { "maxBytes": 4194304, "per": "file", "past": "skipped" },
+        "memoryIndex": { "file": "~/.claude/projects/<project>/memory/MEMORY.md", "maxLines": 200, "maxBytes": 25000 },
+        "stops": [],
+        "loadEvent": { "hook": "InstructionsLoaded", "file": "file_path", "reason": "load_reason", "silent": ["agents"] }
+      }
+    ]
   },
   "retries": {
     "readBy": "a row reads retrying from these records alone (#2019): each entry the match names is the agent retrying a model call the provider refused, one model.call event by its own uuid and timestamp, with its attempt, its most and the cause its error names; the next assistant entry is the model's reply, which ends them",
