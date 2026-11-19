@@ -8,7 +8,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { cpus, homedir, loadavg } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { judgeTargets, judgeTask, prepareCopy, validateBudgets } from './benchmark.mjs';
+import { approvedItems, judgeTargets, judgeTask, prepareCopy, validateBudgets } from './benchmark.mjs';
 import { worst, writeRecord } from './lanes.mjs';
 import { holds } from './throttle.mjs';
 
@@ -79,17 +79,22 @@ function reachable(tree, { change, base }, tasks) {
   }
 }
 
-/** A task's row in the record: as perf reads it, with a load at or above the cores never a PASS (invariant 2). */
+/**
+ * A task's row in the record: as perf reads it, with a load at or above the cores never a PASS (invariant 2), and each
+ * limit's verdict, against the merge base's value, with its readings (#2665). A count's limit holds on any machine, so
+ * its FAIL stands under any load.
+ */
 function judged(task, established, cwd, baseCwd) {
-  let misses;
+  let misses, limits;
   try {
-    const { limits, instructions, regression } = judgeTask(task, established, cwd, baseCwd);
+    const result = judgeTask(task, established, cwd, baseCwd);
+    limits = result.limits;
     const targets = task.targets ? judgeTargets(task, cwd) : null;
     const load = loadavg()[0], cores = cpus().length;
     misses = [
-      ...regression ? [{ status: 'FAIL', reason: regression }] : [],
+      ...result.regression ? [{ status: 'FAIL', reason: result.regression }] : [],
       ...Object.entries(limits).map(([metric, limit]) => ({ ...limit, reason: `${metric}: ${limit.reason}` })),
-      ...instructions ? [{ ...instructions, reason: `instructions: ${instructions.reason}` }] : [],
+      ...result.instructions ? [{ ...result.instructions, reason: `instructions: ${result.instructions.reason}` }] : [],
       ...targets ? [{ ...targets, reason: `targets: ${targets.reason}` }] : [],
       ...load < cores ? [] : [{ status: 'INCONCLUSIVE', reason: `the load was ${load.toFixed(1)} on ${cores} cores` }],
     ].filter(({ status }) => status !== 'PASS');
@@ -97,16 +102,24 @@ function judged(task, established, cwd, baseCwd) {
     misses = [{ status: 'BLOCKED', reason: error.message }];
   }
   const state = worst(misses.map(({ status }) => status)) ?? 'PASS';
-  return { id: task.id, state, ...misses.length && { note: misses.map(({ reason }) => reason).join('; ') } };
+  return { id: task.id, state, ...misses.length && { note: misses.map(({ reason }) => reason).join('; ') }, ...limits && { limits } };
 }
+
+/** A row's limits whose highest reading is more than 20% under them, with both numbers, so slack is seen (#2665). */
+const slackOf = ({ id, limits }) => Object.entries(limits ?? {}).flatMap(([metric, { limit, runs }]) => {
+  if (!runs?.length || !runs.every(Number.isFinite)) return [];
+  const reading = Math.max(...runs);
+  return reading < 0.8 * limit ? [{ id, metric, limit, reading }] : [];
+});
 
 function measured(commit) {
   const { change, base } = sides(commit);
-  let tests, named = new Set(), notReached = [];
+  let tests, named = new Set(), notReached = [], lowered = [], noCeiling = null, slack = [];
   try {
     const current = budgetsAt(change), established = budgetsAt(base);
-    // Budget numbers stay as the merge base has them: a commit's own edit of one is no pass.
-    validateBudgets(current, established);
+    // A limit only moves down (#2665): a commit may lower one, and a raise, a removal, a wider margin or a new command
+    // passes only by an approved proposal on its commits. Its tasks are judged by the merge base's numbers either way.
+    const moved = validateBudgets(current, established, approvedItems(root, base, change));
     const here = treeOf('change', change), reach = reachable(here, { change, base }, current.tasks);
     // A task the commit can't reach doesn't run: its record lists it as not reached, never PASS. With none to run, no
     // copy is built.
@@ -115,13 +128,19 @@ function measured(commit) {
     if (run.length) ready('change', here);
     const there = run.length && established ? ready('base', treeOf('base', base)) : null;
     tests = run.map((task) => judged(task, established?.tasks.find(({ id }) => id === task.id), here, there));
+    // Each lowered limit keeps the merge base's value, the commit's, and the readings judged against the first.
+    lowered = moved.map((entry) => ({ ...entry, runs: tests.find(({ id }) => id === entry.id)?.limits?.[entry.metric]?.runs ?? null }));
+    // The tasks with no limit, by name, and how many: a task with targets has a judge of its own.
+    const open = current.tasks.filter((task) => !Object.keys(task.limits).length && !task.targets).map(({ id }) => id);
+    noCeiling = { count: open.length, tasks: open };
+    slack = tests.flatMap(slackOf);
     // What the commit's tasks proved (#1874): each that ran names its criteria by ID, and only its numbers stay the merge
     // base's. A criterion only an unreached task names stays unmeasured.
     named = new Set(run.flatMap(({ criteria }) => criteria ?? []));
   } catch (error) {
     tests = [{ id: manifest, state: 'BLOCKED', note: error.message }];
   }
-  return { commit, change, base, tests, named, notReached, state: worst(tests.map(({ state }) => state)) ?? 'PASS' };
+  return { commit, change, base, tests, named, notReached, lowered, noCeiling, slack, state: worst(tests.map(({ state }) => state)) ?? 'PASS' };
 }
 
 /** The issues a commit's messages name, as GitHub reads them, in this repository. */
@@ -171,7 +190,8 @@ function close(record, issue) {
 if (!inWindow()) blocked('outside a budget window', outside);
 mkdirSync(folder, { recursive: true, mode: 0o700 });
 try {
-  git('fetch', '-q', 'origin', 'main');
+  // With the approvals, which may hold a raised limit's proposal (#2665).
+  git('fetch', '-q', 'origin', 'main', '+refs/tags/deep/approved/*:refs/tags/deep/approved/*');
 } catch (error) {
   blocked(`can't fetch main: ${error.message}`, 'Restore the network or the remote; every commit stays for the next window.');
 }
@@ -198,7 +218,7 @@ for (const [at, commit] of commits.entries()) {
     blocked(`${commit}'s issues weren't read: ${error.message}`, 'Sign in to gh; the next window measures this commit again.');
   }
   const unmeasured = read.flatMap((issue) => (unticked(issue) ?? []).filter((id) => !record.named.has(id)));
-  writeRecord(`budget-window ${commit}`, record.state, tree, record.tests, { commit, base: record.base, unmeasured, notReached: record.notReached });
+  writeRecord(`budget-window ${commit}`, record.state, tree, record.tests, { commit, base: record.base, unmeasured, notReached: record.notReached, lowered: record.lowered, noCeiling: record.noCeiling, slack: record.slack });
   console.log(`${record.state} budget-window: ${commit} against ${record.base}, ${record.tests.length} tasks run, ${record.notReached.length} not reached`);
   try {
     if (record.state === 'FAIL') miss(record, issues.get(commit));

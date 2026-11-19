@@ -1401,6 +1401,10 @@ fn register_marks2d_with(r: &mut Registrar, planted: relations::Planted) {
         &["marks2d.frame"],
     )
     .document()
+    // A light is no mark (#1634): the frame builds nothing from one, and costs nothing on it.
+    .applies(|_, _, item| {
+        !(item.get("kind").and_then(Value::as_str)).is_some_and(|k| k.starts_with("light."))
+    })
     .run(frame);
     r.code(
         "bad_doc",

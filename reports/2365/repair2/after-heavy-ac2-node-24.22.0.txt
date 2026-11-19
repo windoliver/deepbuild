@@ -1,0 +1,58 @@
+$ PATH=<home>/.local/share/fnm/node-versions/v24.22.0/installation/bin:$PATH env NO_COLOR=1 node node_modules/vitest/vitest.mjs run --configLoader runner --config tests/acceptance/2365/heavy.config.ts heavy/ac2
+node: v24.22.0 (<home>/.local/share/fnm/node-versions/v24.22.0/installation/bin/node)
+started: 2026-11-18T01:38:02Z; load averages: 80.96 56.89 68.13
+-----
+
+ RUN  v5.0.5 <home>/doneright-2365-repair/tests/acceptance/2365
+
+stdout | heavy/ac2.heavy.ts > #2365 AC2 a 600 MB transcript, never archived, is copied in one pass > #2365 AC2 one pass: its parts in order equal the file scrubbed a line at a time, and session:<id>#m<n> resolves for its last message
+#2365 AC2 one pass of a 600.0 MB transcript never archived: 789 ms, longest unserved stretch 652 ms, peak resident memory 1273.9 MB from 71.6 MB, evidence +0.0 MB, error: the archive pass left 1 copy undone: Cannot create a string longer than 0x1fffffe8 characters
+
+stdout | heavy/ac2.heavy.ts > #2365 AC2 a 600 MB transcript, never archived, is copied in one pass > #2365 AC2 the copy of one session on demand (archive.session) takes the same path
+#2365 AC2 the copy on demand of a 600.0 MB transcript never archived: 895 ms, longest unserved stretch 784 ms, peak resident memory 1273.9 MB from 71.6 MB, evidence +0.0 MB, error: Cannot create a string longer than 0x1fffffe8 characters
+
+ ❯ heavy/ac2.heavy.ts (2 tests | 2 failed) 21918ms
+   ❯ #2365 AC2 a 600 MB transcript, never archived, is copied in one pass (2)
+     × #2365 AC2 one pass: its parts in order equal the file scrubbed a line at a time, and session:<id>#m<n> resolves for its last message 2175ms
+     × #2365 AC2 the copy of one session on demand (archive.session) takes the same path 2035ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  heavy/ac2.heavy.ts > #2365 AC2 a 600 MB transcript, never archived, is copied in one pass > #2365 AC2 one pass: its parts in order equal the file scrubbed a line at a time, and session:<id>#m<n> resolves for its last message
+AssertionError: #2365 AC2 the pass copies the transcript, leaving nothing undone: expected 'the archive pass left 1 copy undone: …' to be null
+
+- Expected:
+null
+
++ Received:
+"the archive pass left 1 copy undone: Cannot create a string longer than 0x1fffffe8 characters"
+
+ ❯ copiedWhole heavy/ac2.heavy.ts:42:126
+
+ ❯ heavy/ac2.heavy.ts:54:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  heavy/ac2.heavy.ts > #2365 AC2 a 600 MB transcript, never archived, is copied in one pass > #2365 AC2 the copy of one session on demand (archive.session) takes the same path
+AssertionError: #2365 AC2 the copy on demand copies the transcript, leaving nothing undone: expected 'Cannot create a string longer than 0x…' to be null
+
+- Expected:
+null
+
++ Received:
+"Cannot create a string longer than 0x1fffffe8 characters"
+
+ ❯ copiedWhole heavy/ac2.heavy.ts:42:126
+
+ ❯ heavy/ac2.heavy.ts:58:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  17:38:03
+   Duration  22.21s (tests 99%)
+
+-----
+EXIT 1; ended: 2026-11-18T01:38:25Z; load averages: 79.68 58.64 68.44

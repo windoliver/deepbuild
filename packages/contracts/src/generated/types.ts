@@ -6493,6 +6493,20 @@ export interface ErrorV4 {
   evidence: Array<string>;
 }
 
+/** error@5 */
+export interface ErrorV5 {
+  code: "unknown_schema" | "not_json" | "type" | "required" | "unlisted_field" | "enum" | "const" | "pattern" | "format" | "length" | "range" | "union" | "uncatalogued_kind" | "handle_syntax" | "handle_scheme" | "digest_algorithm" | "role" | "credential" | "unknown_method" | "not_found" | "unconfirmed" | "unbound" | "unavailable" | "too_large" | "fell_behind" | "unknown_field" | "missing_field" | "not_ready";
+  retryable: boolean;
+  remediation: string;
+  path: string;
+  actual: string;
+  evidence: Array<string>;
+  schema?: unknown;
+  loaded?: number;
+  total?: number;
+  retry_after_ms?: number;
+}
+
 /** evidence.put@1 */
 export interface EvidencePut {
   v: 1;
@@ -11211,6 +11225,59 @@ export interface TranscriptArchivedV2 {
       size: number;
       sha256: string;
     };
+  };
+  evidence?: Array<string>;
+}
+
+/** transcript.archived@3 */
+export interface TranscriptArchivedV3 {
+  v: 3;
+  id: string;
+  kind: "transcript.archived";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    session: string;
+    evidence: string;
+    source: {
+      size: number;
+      sha256: string;
+      stamp: string;
+      ended: boolean;
+    };
+    parts: Array<string>;
+  };
+  evidence?: Array<string>;
+}
+
+/** transcript.archived@4 */
+export interface TranscriptArchivedV4 {
+  v: 4;
+  id: string;
+  kind: "transcript.archived";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    session: string;
+    evidence: string;
+    source: {
+      size: number;
+      sha256: string;
+      stamp: string;
+      ended: boolean;
+      continuable: boolean;
+    };
+    parts: Array<string>;
   };
   evidence?: Array<string>;
 }

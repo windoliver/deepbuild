@@ -1,0 +1,16 @@
+$ PATH=<node 24.22.0's bin>:$PATH node scripts/affected.mjs --list tests/acceptance/2365/probe/pass.mjs tests/acceptance/2365/heavy/run.ts tests/acceptance/2365-redraft-ac5/base.ts tests/acceptance/2365-redraft-ac5/base-copy.mjs tests/acceptance/2365-redraft-ac5/base-resolve.mjs
+node: v24.22.0
+note: BLOCKED. --list only prints the selection, but it needs cargo, and this shell's PATH has none. The rustup proxy (/opt/homebrew/opt/rustup/bin) was not added: it may install toolchain parts outside the folders this job may write. Nothing was selected or run by affected.mjs; the files this change can reach were run one at a time instead (the other after-*.txt files).
+-----
+file://<home>/doneright-2365-repair/scripts/lanes.mjs:1177
+  if (result.error) throw Error(`cargo metadata failed: ${result.error.message}`);
+                          ^
+
+Error: cargo metadata failed: spawnSync cargo ENOENT
+    at crates (file://<home>/doneright-2365-repair/scripts/lanes.mjs:1177:27)
+    at main (file://<home>/doneright-2365-repair/scripts/affected.mjs:421:21)
+    at file://<home>/doneright-2365-repair/scripts/affected.mjs:566:82
+
+Node.js v24.22.0
+-----
+EXIT 1

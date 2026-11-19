@@ -447,6 +447,13 @@ pub enum Planted {
     LoopCallsCutLights,
     LoopWorldNormal,
     LoopViewAway,
+    // #1634 (tests/acceptance/1634/README.md: Planted programs): fill lights under the key
+    // lights' 32; a cluster pass that appends lights as they arrive; a cluster's cap that keeps
+    // the first of the document's order; an automatic range cut at a fixed 0.05 lx.
+    FillTop32,
+    ClusterArrivalOrder,
+    ClusterCapByListOrder,
+    AutoRangeFixedCut,
     // #483: the structural steps' wrong programs.
     IterateFeedsFirst,
     SortTiesDecreasing,
@@ -523,6 +530,12 @@ pub enum Planted {
     LightDefaultAmbientZero,
     LightEveryChild,
     LightStaleList,
+    /// #2032's wrong programs (tests/acceptance/2032/README.md: Planted programs).
+    ShadowBoundingBoxes,
+    SunFarPointLight,
+    ShadowInsideOutline,
+    ShadowRemovesAmbient,
+    ShadowEdgeAliased,
 }
 
 impl Planted {
@@ -562,6 +575,11 @@ impl Planted {
             "light_default_ambient_zero" => Planted::LightDefaultAmbientZero,
             "light_every_child" => Planted::LightEveryChild,
             "light_stale_list" => Planted::LightStaleList,
+            "shadow_bounding_boxes" => Planted::ShadowBoundingBoxes,
+            "sun_far_point_light" => Planted::SunFarPointLight,
+            "shadow_inside_outline" => Planted::ShadowInsideOutline,
+            "shadow_removes_ambient" => Planted::ShadowRemovesAmbient,
+            "shadow_edge_aliased" => Planted::ShadowEdgeAliased,
             "vivid_light_as_linear_light" => Planted::VividLightAsLinearLight,
             "dissolve_reads_playback" => Planted::DissolveReadsPlayback,
             "pass_linear_in_2d" => Planted::PassLinearIn2d,
@@ -791,6 +809,10 @@ impl Planted {
             "loop_calls_cut_lights" => Planted::LoopCallsCutLights,
             "loop_world_normal" => Planted::LoopWorldNormal,
             "loop_view_away" => Planted::LoopViewAway,
+            "fill_top_32" => Planted::FillTop32,
+            "cluster_arrival_order" => Planted::ClusterArrivalOrder,
+            "cluster_cap_by_list_order" => Planted::ClusterCapByListOrder,
+            "auto_range_fixed_cut" => Planted::AutoRangeFixedCut,
             "iterate_feeds_first" => Planted::IterateFeedsFirst,
             "sort_ties_decreasing" => Planted::SortTiesDecreasing,
             "compact_by_atomic" => Planted::CompactByAtomic,

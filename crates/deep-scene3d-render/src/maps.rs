@@ -9,8 +9,9 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use bytemuck::{Pod, Zeroable};
-use deep_canvas_scene3d::light::{InsetMap, Maps, Texels, Wrap};
+use deep_canvas::gauge::{Gauge, Kept, Place};
 use deep_canvas_scene3d::horizon::Horizon;
+use deep_canvas_scene3d::light::{InsetMap, Maps, Texels, Wrap};
 use deep_canvas_scene3d::terrain::Normals;
 
 /// The maps in the order the shader numbers them: base color, metallic-roughness, normal,
@@ -137,11 +138,27 @@ pub fn layout(d: &deep_gpu::counted::Wgpu) -> wgpu::BindGroupLayout {
     })
 }
 
+/// #1431: the maps' textures on the GPU (`Store::textures`), by their source's hash and format.
+pub static TEXTURES: Gauge = Gauge::new("Store::textures", Place::Device, 256, 256_000_000);
+/// #1431: the materials' bind groups (`Store::groups`), each with its uniform buffer; a group
+/// that binds a freed texture goes with it.
+pub static GROUPS: Gauge = Gauge::new("Store::groups", Place::Device, 1_024, 4_000_000);
+const GROUP_BYTES: u64 = std::mem::size_of::<MapsUniform>() as u64;
+
+/// A material's bind group: its index in draw keys and the store's textures it binds.
+struct Group {
+    n: u32,
+    group: wgpu::BindGroup,
+    textures: Vec<String>,
+}
+
 /// What the maps put on the GPU: each texture once by key, each material's bind group once by
-/// its maps, and the stand-in group a solid without maps binds.
+/// its maps, and the stand-in group a solid without maps binds. Both are held to their gauges'
+/// bounds: past one, what no frame has drawn for longest goes first (#1431).
 pub struct Store {
     pub layout: wgpu::BindGroupLayout,
-    textures: BTreeMap<String, (wgpu::Texture, wgpu::TextureView)>,
+    // cache: entries 256, bytes 256_000_000
+    textures: Kept<String, (wgpu::Texture, wgpu::TextureView)>,
     /// #1381: terrain plates' horizon tables by key, and the stand-in a solid without one binds.
     horizons: BTreeMap<String, wgpu::Buffer>,
     samplers: BTreeMap<([Wrap; 2], u8), wgpu::Sampler>,
@@ -151,7 +168,10 @@ pub struct Store {
     /// each target made, so a bind group made on an old one is never reused; and the last count.
     views: BTreeMap<String, (wgpu::TextureView, u64)>,
     view_count: u64,
-    groups: BTreeMap<String, (u32, wgpu::BindGroup)>,
+    // cache: entries 1_024, bytes 4_000_000
+    groups: Kept<String, Group>,
+    /// The textures the last bind group made binds.
+    bound: Vec<String>,
     pub none: wgpu::BindGroup,
     white: wgpu::TextureView,
     /// Textures uploaded, for a check that a second load makes none.
@@ -211,13 +231,14 @@ impl Store {
                 entries: &[],
             }),
             layout,
-            textures: BTreeMap::new(),
+            textures: Kept::new(&TEXTURES),
             horizons: BTreeMap::new(),
             samplers: BTreeMap::new(),
             texels: BTreeMap::new(),
             views: BTreeMap::new(),
             view_count: 0,
-            groups: BTreeMap::new(),
+            groups: Kept::new(&GROUPS),
+            bound: Vec::new(),
             white,
             uploads: 0,
             bytes: 0,
@@ -262,14 +283,42 @@ impl Store {
             .and_then(|s| self.views.get(&s.sha))
             .map_or(String::new(), |(_, n)| format!("|view {n}"));
         let key = format!("{}|{present}|{taps}{normals}{made}", maps.key);
-        if !self.groups.contains_key(&key) {
-            let layout = self.layout.clone();
-            let g = self.bind_with(d, queue, maps, taps, terrain, &layout, Vec::new());
-            let n = self.next;
-            self.next += 1;
-            self.groups.insert(key.clone(), (n, g));
+        if let Some(g) = self.groups.get(&key) {
+            // Its textures are this turn's too, so none is freed under it.
+            let (n, textures) = (g.n, g.textures.clone());
+            textures.iter().for_each(|t| _ = self.textures.touch(t));
+            return n;
         }
-        self.groups[&key].0
+        let layout = self.layout.clone();
+        let group = self.bind_with(d, queue, maps, taps, terrain, &layout, Vec::new());
+        let n = self.next;
+        self.next += 1;
+        let textures = std::mem::take(&mut self.bound);
+        self.groups
+            .insert(key, Group { n, group, textures }, GROUP_BYTES);
+        n
+    }
+
+    /// #1431: starts a frame's turn: what earlier frames drew may now be freed.
+    pub fn turn(&mut self) {
+        self.textures.turn();
+        self.groups.turn();
+    }
+
+    /// #1431: frees the groups and textures no frame has drawn for longest while either is past
+    /// a bound, and each group that binds a freed texture: the freed groups' indices.
+    pub fn free(&mut self) -> Vec<u32> {
+        let mut gone: Vec<u32> = self.groups.evict().into_iter().map(|(_, g)| g.n).collect();
+        for (key, _) in self.textures.evict() {
+            self.groups.retain(|_, g| {
+                let keep = !g.textures.contains(&key);
+                if !keep {
+                    gone.push(g.n);
+                }
+                keep
+            });
+        }
+        gone
     }
 
     /// #506: this frame's view pictures by key; one whose target was made again counts anew.
@@ -299,8 +348,8 @@ impl Store {
     pub fn by_index(&self, n: u32) -> &wgpu::BindGroup {
         self.groups
             .values()
-            .find(|(k, _)| *k == n)
-            .map_or(&self.none, |(_, g)| g)
+            .find(|g| g.n == n)
+            .map_or(&self.none, |g| &g.group)
     }
 
     fn texture(
@@ -312,7 +361,7 @@ impl Store {
         let t = self.texels.get(sha)?.clone();
         // Kept by the source's hash and its format.
         let key = format!("{sha}:{}", t.format);
-        if self.textures.contains_key(&key) {
+        if self.textures.touch(&key) {
             return Some(key);
         }
         let format = format(&t.format)?;
@@ -366,7 +415,8 @@ impl Store {
         self.uploads += 1;
         self.bytes += at as u64;
         let view = texture.create_view(&Default::default());
-        self.textures.insert(key.clone(), (texture, view));
+        self.textures
+            .insert(key.clone(), (texture, view), at as u64);
         Some(key)
     }
 
@@ -380,7 +430,7 @@ impl Store {
         sha: &str,
     ) -> wgpu::TextureView {
         match self.texture(d, queue, sha) {
-            Some(key) => self.textures[&key].1.clone(),
+            Some(key) => self.textures.peek(&key).expect("uploaded above").1.clone(),
             None => self.white.clone(),
         }
     }
@@ -394,7 +444,7 @@ impl Store {
         n: &Normals,
     ) -> String {
         let key = format!("terrain:{:016x}", n.key);
-        if !self.textures.contains_key(&key) {
+        if !self.textures.touch(&key) {
             let texture = d.create_texture(&wgpu::TextureDescriptor {
                 label: Some("scene3d terrain normals"),
                 size: wgpu::Extent3d {
@@ -414,7 +464,8 @@ impl Store {
             self.uploads += 1;
             self.bytes += bytes.len() as u64;
             let view = texture.create_view(&Default::default());
-            self.textures.insert(key.clone(), (texture, view));
+            self.textures
+                .insert(key.clone(), (texture, view), bytes.len() as u64);
         }
         key
     }
@@ -422,12 +473,10 @@ impl Store {
     /// #1381: a terrain plate's horizon table as a storage buffer: its texels a side in the first
     /// 16 bytes, then each texel's 16 bytes row by row; uploaded once by its key, and a stand-in
     /// of one empty table for a solid without one.
-    fn horizon(
-        &mut self,
-        d: &deep_gpu::counted::Wgpu,
-        h: Option<&Horizon>,
-    ) -> String {
-        let key = h.map_or("horizon:none".to_string(), |h| format!("horizon:{:016x}", h.key));
+    fn horizon(&mut self, d: &deep_gpu::counted::Wgpu, h: Option<&Horizon>) -> String {
+        let key = h.map_or("horizon:none".to_string(), |h| {
+            format!("horizon:{:016x}", h.key)
+        });
         if !self.horizons.contains_key(&key) {
             let mut words: Vec<[u32; 4]> = vec![h.map_or([0; 4], |h| [h.cols, h.rows, 0, 0])];
             words.extend(h.map_or(&[][..], |h| &h.texels[..]));
@@ -529,13 +578,19 @@ impl Store {
                 .entry(w)
                 .or_insert_with(|| sampler(d, w.0, w.1));
         }
+        // #1431: the store's textures this group binds, which go with it.
+        self.bound = keys
+            .iter()
+            .flatten()
+            .chain(&normals)
+            .filter(|k| self.textures.contains_key(k))
+            .cloned()
+            .collect();
+        let texture = |k: &String| &self.textures.peek(k).expect("uploaded above").1;
         let views: Vec<&wgpu::TextureView> = keys
             .iter()
             .map(|k| match k {
-                Some(k) => self
-                    .views
-                    .get(k)
-                    .map_or_else(|| &self.textures[k].1, |v| &v.0),
+                Some(k) => self.views.get(k).map_or_else(|| texture(k), |v| &v.0),
                 None => &self.white,
             })
             .collect();
@@ -558,9 +613,7 @@ impl Store {
         entries.push(wgpu::BindGroupEntry {
             binding: TERRAIN_NORMALS,
             resource: wgpu::BindingResource::TextureView(
-                normals
-                    .as_ref()
-                    .map_or(&self.white, |k| &self.textures[k].1),
+                normals.as_ref().map_or(&self.white, texture),
             ),
         });
         entries.push(wgpu::BindGroupEntry {

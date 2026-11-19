@@ -1,0 +1,401 @@
+$ PATH=/opt/homebrew/bin:$PATH env NO_COLOR=1 node node_modules/vitest/vitest.mjs run --configLoader runner tests/acceptance/2365-redraft-ac5/suite.test.ts
+node: v24.22.2 (/opt/homebrew/bin/node)
+started: 2026-11-18T01:34:29Z; load averages: 31.12 53.63 71.66
+-----
+
+ RUN  v5.0.5 <home>/doneright-2365-repair
+
+ ❯ tests/acceptance/2365-redraft-ac5/suite.test.ts (12 tests | 12 failed) 2811ms
+   ❯ AC5 #2365.c0521de3 for every transcript in #20's suite, the parts joined equal the merge base's one copy, and an unchanged transcript's second pass reads none of it (10)
+     × AC5 #20 AC1 (copies.test.ts): Claude Code and Codex in moved homes, a new adapter in its default home 1092ms
+     × AC5 #20 AC2 (copies.test.ts): two Claude Code sessions, one grown before its first pass, and a Codex rollout 169ms
+     × AC5 #20 AC3 (quiet.test.ts): a session captured hourly for three hours 879ms
+     × AC5 #20 AC3 (quiet.test.ts): a session captured every hour for 28 hours 1ms
+     × AC5 #20 AC4 (secrets.test.ts): a key pasted into a user message 0ms
+     × AC5 #20 AC4 (secrets.test.ts): a key pasted first, the session grown after two passes 0ms
+     × AC5 #20 AC5 (secrets.test.ts): a held value with no pattern pasted into a user message 0ms
+     × AC5 #20 AC8 (readback.test.ts): a plain session, a keyed one and a Codex rollout; and the session whose copy the store bent, here unbent 0ms
+     × AC5 #20 AC9 (retention.test.ts): a session with a deploy token, in Claude Code's default home 0ms
+     × AC5 #20 AC10 (growth.test.ts): a session archived at 10 lines and again at 50 0ms
+   ❯ AC5 #2365.c0521de3 planted wrong archives fail the criterion's check, naming the session (2)
+     × AC5 (wrong program) an archive that rereads each transcript on every pass reads all of an unchanged one: the check fails naming each session and the bytes it read 0ms
+     × AC5 (wrong program) an archive that leaves the newline out of each part: its parts joined differ from the merge base's copy, and the check fails naming the session and the first line that differs 0ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 12 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2365-redraft-ac5/suite.test.ts > AC5 #2365.c0521de3 for every transcript in #20's suite, the parts joined equal the merge base's one copy, and an unchanged transcript's second pass reads none of it > AC5 #20 AC1 (copies.test.ts): Claude Code and Codex in moved homes, a new adapter in its default home
+Error: BLOCKED: unpacking the merge base ed03dc60d51abe3d96cf61b766ecf92057a780eb failed: packages/jobs/typeset/tool/typeset.wasm: Write failed: No space left on device
+packages/leases/: Can't create 'packages/leases': No space left on device
+packages/leases/README.md: Failed to create dir 'packages/leases': No space left on device
+packages/leases/package.json: Failed to create dir 'packages/leases': No space left on device
+packages/leases/src/: Failed to create dir 'packages/leases': No space left on device
+packages/leases/src/index.ts: Failed to create dir 'packages/leases': No space left on device
+packages/leases/test/: Failed to create dir 'packages/leases': No space left on device
+packages/leases/test/liveness.test.ts: Failed to create dir 'packages/leases': No space left on device
+packages/leases/test/table.test.ts: Failed to create dir 'packages/leases': No space left on device
+packages/leases/tsconfig.json: Failed to create dir 'packages/leases': No space left on device
+packages/otlp/: Can't create 'packages/otlp': No space left on device
+packages/otlp/README.md: Failed to create dir 'packages/otlp': No space left on device
+packages/otlp/package.json: Failed to create dir 'packages/otlp': No space left on device
+packages/otlp/src/: Failed to create dir 'packages/otlp': No space left on device
+packages/otlp/src/doctor.ts: Failed to create dir 'packages/otlp': No space left on device
+packages/otlp/src/index.ts: Failed to create dir 'packages/otlp': No space left on device
+packages/otlp/src/wire.ts: Failed to create dir 'packages/otlp': No space left on device
+packages/otlp/test/: Failed to create dir 'packages/otlp': No space left on device
+packages/otlp/test/receiver.test.ts: Failed to create dir 'packages/otlp': No space left on device
+packages/otlp/tsconfig.json: Failed to create dir 'packages/otlp': No space left on device
+packages/paseo/: Can't create 'packages/paseo': No space left on device
+packages/paseo/README.md: Failed to create dir 'packages/paseo': No space left on device
+packages/paseo/index.server.ts: Failed to create dir 'packages/paseo': No space left on device
+packages/paseo/package.json: Failed to create dir 'packages/paseo': No space left on device
+packages/paseo/paseo-plugin.json: Failed to create dir 'packages/paseo': No space left on device
+packages/paseo/server/: Failed to create dir 'packages/paseo': No space left on device
+packages/paseo/server/hub.ts: Failed to create dir 'packages/paseo': No space left on device
+packages/paseo/server/plant.ts: Failed to create dir 'packages/paseo': No space left on device
+packages/paseo/server/plugin.ts: Failed to create dir 'packages/paseo': No space left on device
+packages/paseo/tsconfig.json: Failed to create dir 'packages/paseo': No space left on device
+packages/pi/: Can't create 'packages/pi': No space left on device
+packages/pi/README.md: Failed to create dir 'packages/pi': No space left on device
+packages/pi/package.json: Failed to create dir 'packages/pi': No space left on device
+packages/pi/src/: Failed to create dir 'packages/pi': No space left on device
+packages/pi/src/index.ts: Failed to create dir 'packages/pi': No space left on device
+packages/pi/test/: Failed to create dir 'packages/pi': No space left on device
+packages/pi/test/guards.test.ts: Failed to create dir 'packages/pi': No space left on device
+packages/pi/test/lifecycle.test.ts: Failed to create dir 'packages/pi': No space left on device
+packages/pi/tools.mjs: Failed to create dir 'packages/pi': No space left on device
+packages/pi/tsconfig.json: Failed to create dir 'packages/pi': No space left on device
+packages/proof/: Can't create 'packages/proof': No space left on device
+packages/proof/README.md: Failed to create dir 'packages/proof': No space left on device
+packages/proof/fixtures/: Failed to create dir 'packages/proof': No space left on device
+packages/proof/fixtures/kani/: Failed to create dir 'packages/proof': No space left on device
+packages/proof/fixtures/kani/Cargo.toml: Failed to create dir 'packages/proof': No space left on device
+packages/proof/fixtures/kani/src/: Failed to create dir 'packages/proof': No space left on device
+packages/proof/fixtures/kani/src/lib.rs: Failed to create dir 'packages/proof': No space left on device
+packages/proof/fixtures/kani/src/proofs.rs: Failed to create dir 'packages/proof': No space left on device
+packages/proof/fixtures/lean/: Failed to create dir 'packages/proof': No space left on device
+packages/proof/fixtures/lean/Kit.lean: Failed to create dir 'packages/proof': No space left on device
+packages/proof/fixtures/lean/Kit/: Failed to create dir 'packages/proof': No space left on device
+packages/proof/fixtures/lean/Kit/Code.lean: Failed to create dir 'packages/proof': No space left on device
+packages/proof/fixtures/lean/Kit/Proofs.lean: Failed to create dir 'packages/proof': No space left on device
+packages/proof/fixtures/lean/lake-manifest.json: Failed to create dir 'packages/proof': No space left on device
+packages/proof/fixtures/lean/lakefile.toml: Failed to create dir 'packages/proof': No space left on device
+packages/proof/fixtures/lean/lean-toolchain: Failed to create dir 'packages/proof': No space left on device
+packages/proof/package.json: Failed to create dir 'packages/proof': No space left on device
+packages/proof/src/: Failed to create dir 'packages/proof': No space left on device
+packages/proof/src/check.ts: Failed to create dir 'packages/proof': No space left on device
+packages/proof/src/index.ts: Failed to create dir 'packages/proof': No space left on device
+packages/proof/src/kani.ts: Failed to create dir 'packages/proof': No space left on device
+packages/proof/src/kit.ts: Failed to create dir 'packages/proof': No space left on device
+packages/proof/src/lean.ts: Failed to create dir 'packages/proof': No space left on device
+packages/proof/src/run.ts: Failed to create dir 'packages/proof': No space left on device
+packages/proof/src/types.ts: Failed to create dir 'packages/proof': No space left on device
+packages/proof/test/: Failed to create dir 'packages/proof': No space left on device
+packages/proof/test/kani.test.ts: Failed to create dir 'packages/proof': No space left on device
+packages/proof/test/outcome.test.ts: Failed to create dir 'packages/proof': No space left on device
+packages/proof/tsconfig.json: Failed to create dir 'packages/proof': No space left on device
+packages/reading/: Can't create 'packages/reading': No space left on device
+packages/reading/README.md: Failed to create dir 'packages/reading': No space left on device
+packages/reading/package.json: Failed to create dir 'packages/reading': No space left on device
+packages/reading/src/: Failed to create dir 'packages/reading': No space left on device
+packages/reading/src/claims.ts: Failed to create dir 'packages/reading': No space left on device
+packages/reading/src/index.ts: Failed to create dir 'packages/reading': No space left on device
+packages/reading/src/plan.ts: Failed to create dir 'packages/reading': No space left on device
+packages/reading/src/slices.ts: Failed to create dir 'packages/reading': No space left on device
+packages/reading/src/tools.mts: Failed to create dir 'packages/reading': No space left on device
+packages/reading/test/: Failed to create dir 'packages/reading': No space left on device
+packages/reading/test/claims.test.ts: Failed to create dir 'packages/reading': No space left on device
+packages/reading/test/failed.test.ts: Failed to create dir 'packages/reading': No space left on device
+packages/reading/test/invalid.test.ts: Failed to create dir 'packages/reading': No space left on device
+packages/reading/test/plan-start.test.ts: Failed to create dir 'packages/reading': No space left on device
+packages/reading/test/plan.test.ts: Failed to create dir 'packages/reading': No space left on device
+packages/reading/test/slicer.test.ts: Failed to create dir 'packages/reading': No space left on device
+packages/reading/test/wiki-refused.test.ts: Failed to create dir 'packages/reading': No space left on device
+packages/reading/tsconfig.json: Failed to create dir 'packages/reading': No space left on device
+packages/readings/: Can't create 'packages/readings': No space left on device
+packages/readings/README.md: Failed to create dir 'packages/readings': No space left on device
+packages/readings/package.json: Failed to create dir 'packages/readings': No space left on device
+packages/readings/src/: Failed to create dir 'packages/readings': No space left on device
+packages/readings/src/baseline.ts: Failed to create dir 'packages/readings': No space left on device
+packages/readings/src/classify.ts: Failed to create dir 'packages/readings': No space left on device
+packages/readings/src/impl.ts: Failed to create dir 'packages/readings': No space left on device
+packages/readings/src/index.ts: Failed to create dir 'packages/readings': No space left on device
+packages/readings/src/lifecycle.ts: Failed to create dir 'packages/readings': No space left on device
+packages/readings/src/panel.ts: Failed to create dir 'packages/readings': No space left on device
+packages/readings/src/record.ts: Failed to create dir 'packages/readings': No space left on device
+packages/readings/src/types.ts: Failed to create dir 'packages/readings': No space left on device
+packages/readings/src/usage.ts: Failed to create dir 'packages/readings': No space left on device
+packages/readings/test/: Failed to create dir 'packages/readings': No space left on device
+packages/readings/test/loops.test.ts: Failed to create dir 'packages/readings': No space left on device
+packages/readings/test/scope.test.ts: Failed to create dir 'packages/readings': No space left on device
+packages/readings/tsconfig.json: Failed to create dir 'packages/readings': No space left on device
+packages/record/: Can't create 'packages/record': No space left on device
+packages/record/README.md: Failed to create dir 'packages/record': No space left on device
+packages/record/build-versions.mjs: Failed to create dir 'packages/record': No space left on device
+packages/record/package.json: Failed to create dir 'packages/record': No space left on device
+packages/record/src/: Failed to create dir 'packages/record': No space left on device
+packages/record/src/archive.ts: Failed to create dir 'packages/record': No space left on device
+packages/record/src/ids.d.ts: Failed to create dir 'packages/record': No space left on device
+packages/record/src/ids.js: Failed to create dir 'packages/record': No space left on device
+packages/record/src/index.ts: Failed to create dir 'packages/record': No space left on device
+packages/record/src/learned.ts: Failed to create dir 'packages/record': No space left on device
+packages/record/src/lifecycle.ts: Failed to create dir 'packages/record': No space left on device
+packages/record/src/meta.ts: Failed to create dir 'packages/record': No space left on device
+packages/record/src/projections.ts: Failed to create dir 'packages/record': No space left on device
+packages/record/src/replay.ts: Failed to create dir 'packages/record': No space left on device
+packages/record/src/storage.ts: Failed to create dir 'packages/record': No space left on device
+packages/record/src/trust.ts: Failed to create dir 'packages/record': No space left on device
+packages/record/test/: Failed to create dir 'packages/record': No space left on device
+packages/record/test/archive.test.ts: Failed to create dir 'packages/record': No space left on device
+packages/record/test/gate-actions.test.ts: Failed to create dir 'packages/record': No space left on device
+packages/record/test/learned.test.ts: Failed to create dir 'packages/record': No space left on device
+packages/record/test/lifecycle.test.ts: Failed to create dir 'packages/record': No space left on device
+packages/record/test/record.test.ts: Failed to create dir 'packages/record': No space left on device
+packages/record/test/replay-hash.test.ts: Failed to create dir 'packages/record': No space left on device
+packages/record/tsconfig.json: Failed to create dir 'packages/record': No space left on device
+packages/resolver-decisions/: Can't create 'packages/resolver-decisions': No space left on device
+packages/resolver-decisions/README.md: Failed to create dir 'packages/resolver-decisions': No space left on device
+packages/resolver-decisions/fixtures/: Failed to create dir 'packages/resolver-decisions': No space left on device
+packages/resolver-decisions/fixtures/keys.json: Failed to create dir 'packages/resolver-decisions': No space left on device
+packages/resolver-decisions/package.json: Failed to create dir 'packages/resolver-decisions': No space left on device
+packages/resolver-decisions/src/: Failed to create dir 'packages/resolver-decisions': No space left on device
+packages/resolver-decisions/src/index.ts: Failed to create dir 'packages/resolver-decisions': No space left on device
+packages/resolver-decisions/src/rules.ts: Failed to create dir 'packages/resolver-decisions': No space left on device
+packages/resolver-decisions/test/: Failed to create dir 'packages/resolver-decisions': No space left on device
+packages/resolver-decisions/test/resolver.test.ts: Failed to create dir 'packages/resolver-decisions': No space left on device
+packages/resolver-decisions/tsconfig.json: Failed to create dir 'packages/resolver-decisions': No space left on device
+packages/routing-replay/: Can't create 'packages/routing-replay': No space left on device
+packages/routing-replay/README.md: Failed to create dir 'packages/routing-replay': No space left on device
+packages/routing-replay/make-snapshot.mjs: Failed to create dir 'packages/routing-replay': No space left on device
+packages/routing-replay/package.json: Failed to create dir 'packages/routing-replay': No space left on device
+packages/routing-replay/snapshot/: Failed to create dir 'packages/routing-replay': No space left on device
+packages/routing-replay/snapshot/4901b0250363cba72ec8ddc553f547904af03a85d0fc0c121781dc9e4976c363.json.gz: Failed to create dir 'packages/routing-replay': No space left on device
+packages/routing-replay/src/: Failed to create dir 'packages/routing-replay': No space left on device
+packages/routing-replay/src/index.ts: Failed to create dir 'packages/routing-replay': No space left on device
+packages/routing-replay/test/: Failed to create dir 'packages/routing-replay': No space left on device
+packages/routing-replay/test/replay.test.ts: Failed to create dir 'packages/routing-replay': No space left on device
+packages/routing-replay/tsconfig.json: Failed to create dir 'packages/routing-replay': No space left on device
+packages/runner/: Can't create 'packages/runner': No space left on device
+packages/runner/README.md: Failed to create dir 'packages/runner': No space left on device
+packages/runner/package.json: Failed to create dir 'packages/runner': No space left on device
+packages/runner/src/: Failed to create dir 'packages/runner': No space left on device
+packages/runner/src/agents.ts: Failed to create dir 'packages/runner': No space left on device
+packages/runner/src/egress.ts: Failed to create dir 'packages/runner': No space left on device
+packages/runner/src/index.ts: Failed to create dir 'packages/runner': No space left on device
+packages/runner/src/runner.ts: Failed to create dir 'packages/runner': No space left on device
+packages/runner/src/types.ts: Failed to create dir 'packages/runner': No space left on device
+packages/runner/test/: Failed to create dir 'packages/runner': No space left on device
+packages/runner/test/codex-versions.test.ts: Failed to create dir 'packages/runner': No space left on device
+packages/runner/test/eval-fail-closed-2077.test.ts: Failed to create dir 'packages/runner': No space left on device
+packages/runner/test/eval-isolation-2077.test.ts: Failed to create dir 'packages/runner': No space left on device
+packages/runner/test/eval-job.test.ts: Failed to create dir 'packages/runner': No space left on device
+packages/runner/test/eval-process.test.ts: Failed to create dir 'packages/runner': No space left on device
+packages/runner/test/eval-safety-2077.test.ts: Failed to create dir 'packages/runner': No space left on device
+packages/runner/test/pi-cost.test.ts: Failed to create dir 'packages/runner': No space left on device
+packages/runner/test/runner.test.ts: Failed to create dir 'packages/runner': No space left on device
+packages/runner/tsconfig.json: Failed to create dir 'packages/runner': No space left on device
+packages/sources/: Can't create 'packages/sources': No space left on device
+packages/sources/README.md: Failed to create dir 'packages/sources': No space left on device
+packages/sources/gmail/: Failed to create dir 'packages/sources': No space left on device
+packages/sources/gmail/deepbuild.json: Failed to create dir 'packages/sources': No space left on device
+packages/sources/gmail/index.ts: Failed to create dir 'packages/sources': No space left on device
+packages/sources/linear/: Failed to create dir 'packages/sources': No space left on device
+packages/sources/linear/deepbuild.json: Failed to create dir 'packages/sources': No space left on device
+packages/sources/linear/index.ts: Failed to create dir 'packages/sources': No space left on device
+packages/supervisor/: Can't create 'packages/supervisor': No space left on device
+packages/supervisor/README.md: Failed to create dir 'packages/supervisor': No space left on device
+packages/supervisor/build-helper.mjs: Failed to create dir 'packages/supervisor': No space left on device
+packages/supervisor/native/: Failed to create dir 'packages/supervisor': No space left on device
+packages/supervisor/native/helper-linux.c: Failed to create dir 'packages/supervisor': No space left on device
+packages/supervisor/native/helper.c: Failed to create dir 'packages/supervisor': No space left on device
+packages/supervisor/native/pty.c: Failed to create dir 'packages/supervisor': No space left on device
+packages/supervisor/package.json: Failed to create dir 'packages/supervisor': No space left on device
+packages/supervisor/src/: Failed to create dir 'packages/supervisor': No space left on device
+packages/supervisor/src/bubblewrap.test.ts: Failed to create dir 'packages/supervisor': No space left on device
+packages/supervisor/src/bubblewrap.ts: Failed to create dir 'packages/supervisor': No space left on device
+packages/supervisor/src/egress.test.ts: Failed to create dir 'packages/supervisor': No space left on device
+packages/supervisor/src/egress.ts: Failed to create dir 'packages/supervisor': No space left on device
+packages/supervisor/src/index.ts: Failed to create dir 'packages/supervisor': No space left on device
+packages/supervisor/src/leases.test.ts: Failed to create dir 'packages/supervisor': No space left on device
+packages/supervisor/src/node-runtime.test.ts: Failed to create dir 'packages/supervisor': No space left on device
+packages/supervisor/src/procs.ts: Failed to create dir 'packages/supervisor': No space left on device
+packages/supervisor/src/seatbelt.test.ts: Failed to create dir 'packages/supervisor': No space left on device
+packages/supervisor/src/seatbelt.ts: Failed to create dir 'packages/supervisor': No space left on device
+packages/supervisor/src/suite.ts: Failed to create dir 'packages/supervisor': No space left on device
+packages/supervisor/src/supervisor.test.ts: Failed to create dir 'packages/supervisor': No space left on device
+packages/supervisor/src/supervisor.ts: Failed to create dir 'packages/supervisor': No space left on device
+packages/supervisor/src/timer.ts: Failed to create dir 'packages/supervisor': No space left on device
+packages/supervisor/src/types.ts: Failed to create dir 'packages/supervisor': No space left on device
+packages/supervisor/tsconfig.json: Failed to create dir 'packages/supervisor': No space left on device
+packages/verdicts/: Can't create 'packages/verdicts': No space left on device
+packages/verdicts/README.md: Failed to create dir 'packages/verdicts': No space left on device
+packages/verdicts/model/: Failed to create dir 'packages/verdicts': No space left on device
+packages/verdicts/model/Vectors.lean: Failed to create dir 'packages/verdicts': No space left on device
+packages/verdicts/model/Verdicts.lean: Failed to create dir 'packages/verdicts': No space left on device
+packages/verdicts/model/Verdicts/: Failed to create dir 'packages/verdicts': No space left on device
+packages/verdicts/model/Verdicts/Model.lean: Failed to create dir 'packages/verdicts': No space left on device
+packages/verdicts/model/Verdicts/Proofs.lean: Failed to create dir 'packages/verdicts': No space left on device
+packages/verdicts/model/Verdicts/Top.lean: Failed to create dir 'packages/verdicts': No space left on device
+packages/verdicts/model/lake-manifest.json: Failed to create dir 'packages/verdicts': No space left on device
+packages/verdicts/model/lakefile.toml: Failed to create dir 'packages/verdicts': No space left on device
+packages/verdicts/package.json: Failed to create dir 'packages/verdicts': No space left on device
+packages/verdicts/src/: Failed to create dir 'packages/verdicts': No space left on device
+packages/verdicts/src/conduct.ts: Failed to create dir 'packages/verdicts': No space left on device
+packages/verdicts/src/contract.ts: Failed to create dir 'packages/verdicts': No space left on device
+packages/verdicts/src/engine.ts: Failed to create dir 'packages/verdicts': No space left on device
+packages/verdicts/src/index.ts: Failed to create dir 'packages/verdicts': No space left on device
+packages/verdicts/src/line.ts: Failed to create dir 'packages/verdicts': No space left on device
+packages/verdicts/src/record.ts: Failed to create dir 'packages/verdicts': No space left on device
+packages/verdicts/src/runs.ts: Failed to create dir 'packages/verdicts': No space left on device
+packages/verdicts/src/types.ts: Failed to create dir 'packages/verdicts': No space left on device
+packages/verdicts/test/: Failed to create dir 'packages/verdicts': No space left on device
+packages/verdicts/test/line.test.ts: Failed to create dir 'packages/verdicts': No space left on device
+packages/verdicts/test/verdicts.test.ts: Failed to create dir 'packages/verdicts': No space left on device
+packages/verdicts/tsconfig.json: Failed to create dir 'packages/verdicts': No space left on device
+packages/wiki/: Can't create 'packages/wiki': No space left on device
+packages/wiki/README.md: Failed to create dir 'packages/wiki': No space left on device
+packages/wiki/package.json: Failed to create dir 'packages/wiki': No space left on device
+packages/wiki/src/: Failed to create dir 'packages/wiki': No space left on device
+packages/wiki/src/index.ts: Failed to create dir 'packages/wiki': No space left on device
+packages/wiki/test/: Failed to create dir 'packages/wiki': No space left on device
+packages/wiki/test/wiki.test.ts: Failed to create dir 'packages/wiki': No space left on device
+packages/wiki/tsconfig.json: Failed to create dir 'packages/wiki': No space left on device
+packages/workspaces/: Can't create 'packages/workspaces': No space left on device
+packages/workspaces/README.md: Failed to create dir 'packages/workspaces': No space left on device
+packages/workspaces/package.json: Failed to create dir 'packages/workspaces': No space left on device
+packages/workspaces/src/: Failed to create dir 'packages/workspaces': No space left on device
+packages/workspaces/src/index.ts: Failed to create dir 'packages/workspaces': No space left on device
+packages/workspaces/test/: Failed to create dir 'packages/workspaces': No space left on device
+packages/workspaces/test/api-origin.test.ts: Failed to create dir 'packages/workspaces': No space left on device
+packages/workspaces/tsconfig.json: Failed to create dir 'packages/workspaces': No space left on device
+tar: Error exit delayed from previous errors.
+
+ ❯ baseTree tests/acceptance/2365-redraft-ac5/base.ts:53:29
+     51|   if (tar.status !== 0) throw Error(`BLOCKED: git archive of the merge…
+     52|   const x = spawnSync('tar', ['-x', '-C', dir], { input: tar.stdout, m…
+     53|   if (x.status !== 0) throw Error(`BLOCKED: unpacking the merge base $…
+       |                             ^
+     54|   // Its node_modules: the repo's installed packages, except the works…
+     55|   const modules = join(dir, 'node_modules');
+ ❯ baseCopies tests/acceptance/2365-redraft-ac5/base.ts:82:24
+ ❯ runScenario tests/acceptance/2365-redraft-ac5/scenarios.ts:129:18
+ ❯ tests/acceptance/2365-redraft-ac5/suite.test.ts:18:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/13]⎯
+
+ FAIL  tests/acceptance/2365-redraft-ac5/suite.test.ts > AC5 #2365.c0521de3 for every transcript in #20's suite, the parts joined equal the merge base's one copy, and an unchanged transcript's second pass reads none of it > AC5 #20 AC2 (copies.test.ts): two Claude Code sessions, one grown before its first pass, and a Codex rollout
+RecordError: the storage refused the write: database or disk is full
+ ❯ SqliteRecord.commit packages/record/src/index.ts:737:52
+    735|       for (const p of items) if (p.session) this.markLost(p.session);
+    736|       const message = error instanceof Error ? error.message : String(…
+    737|       throw error instanceof RecordError ? error : new RecordError('st…
+       |                                                    ^
+    738|     }
+    739|     for (const outcome of outcomes) {
+ ❯ SqliteRecord.flush packages/record/src/index.ts:651:41
+ ❯ Immediate.<anonymous> packages/record/src/index.ts:633:38
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/13]⎯
+
+ FAIL  tests/acceptance/2365-redraft-ac5/suite.test.ts > AC5 #2365.c0521de3 for every transcript in #20's suite, the parts joined equal the merge base's one copy, and an unchanged transcript's second pass reads none of it > AC5 #20 AC2 (copies.test.ts): two Claude Code sessions, one grown before its first pass, and a Codex rollout
+Error: ENOSPC: no space left on device, mkdir '/private/tmp/dh20-world-ZbGvLu/home/.deepbuild/evidence/83'
+ ❯ writeAtomic packages/evidence/src/index.ts:226:40
+    224|   /** Replaces the file at the path whole; `lasting` syncs the new one…
+    225|   async function writeAtomic(path: string, data: Uint8Array | string, …
+    226|     if (!folders.has(dirname(path))) { await mkdir(dirname(path), { re…
+       |                                        ^
+    227|     const temp = join(dirname(path), `.tmp-${randomUUID()}`);
+    228|     await writeFile(temp, data);
+ ❯ packages/evidence/src/index.ts:272:11
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/13]⎯
+
+ FAIL  tests/acceptance/2365-redraft-ac5/suite.test.ts > AC5 #2365.c0521de3 for every transcript in #20's suite, the parts joined equal the merge base's one copy, and an unchanged transcript's second pass reads none of it > AC5 #20 AC3 (quiet.test.ts): a session captured hourly for three hours
+SqliteError: database or disk is full
+ ❯ sqliteTransaction ../doneright/node_modules/better-sqlite3/lib/methods/transaction.js:69:9
+ ❯ Object.transact [as commit] packages/record/src/storage.ts:47:25
+     45|   if (mode === 'full') db.pragma('synchronous = FULL');
+     46|   try {
+     47|     db.transaction(work)();
+       |                         ^
+     48|   } finally {
+     49|     if (mode === 'full') db.pragma('synchronous = NORMAL');
+ ❯ SqliteRecord.full packages/record/src/index.ts:392:18
+ ❯ SqliteRecord.stop packages/record/src/index.ts:970:10
+ ❯ Object.w.close tests/acceptance/20/helpers.ts:217:27
+ ❯ runScenario tests/acceptance/2365-redraft-ac5/scenarios.ts:143:5
+ ❯ tests/acceptance/2365-redraft-ac5/suite.test.ts:18:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/13]⎯
+
+ FAIL  tests/acceptance/2365-redraft-ac5/suite.test.ts > AC5 #2365.c0521de3 for every transcript in #20's suite, the parts joined equal the merge base's one copy, and an unchanged transcript's second pass reads none of it > AC5 #20 AC3 (quiet.test.ts): a session captured every hour for 28 hours
+Error: ENOSPC: no space left on device, mkdir '/private/tmp/dh20-world-xKUK78/home/.deepbuild'
+ ❯ openWorld tests/acceptance/20/helpers.ts:209:3
+    207|   const home = o.home ?? join(dir, 'home');
+    208|   const root = join(home, '.deepbuild');
+    209|   mkdirSync(root, { recursive: true });
+       |   ^
+    210|   const clock = o.clock ?? makeClock();
+    211|   const env: Env = { HOME: home, ...o.env };
+ ❯ runScenario tests/acceptance/2365-redraft-ac5/scenarios.ts:110:19
+ ❯ tests/acceptance/2365-redraft-ac5/suite.test.ts:18:25
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/13]⎯
+
+ FAIL  tests/acceptance/2365-redraft-ac5/suite.test.ts > AC5 #2365.c0521de3 for every transcript in #20's suite, the parts joined equal the merge base's one copy, and an unchanged transcript's second pass reads none of it > AC5 #20 AC4 (secrets.test.ts): a key pasted into a user message
+ FAIL  tests/acceptance/2365-redraft-ac5/suite.test.ts > AC5 #2365.c0521de3 for every transcript in #20's suite, the parts joined equal the merge base's one copy, and an unchanged transcript's second pass reads none of it > AC5 #20 AC4 (secrets.test.ts): a key pasted first, the session grown after two passes
+ FAIL  tests/acceptance/2365-redraft-ac5/suite.test.ts > AC5 #2365.c0521de3 for every transcript in #20's suite, the parts joined equal the merge base's one copy, and an unchanged transcript's second pass reads none of it > AC5 #20 AC5 (secrets.test.ts): a held value with no pattern pasted into a user message
+ FAIL  tests/acceptance/2365-redraft-ac5/suite.test.ts > AC5 #2365.c0521de3 for every transcript in #20's suite, the parts joined equal the merge base's one copy, and an unchanged transcript's second pass reads none of it > AC5 #20 AC8 (readback.test.ts): a plain session, a keyed one and a Codex rollout; and the session whose copy the store bent, here unbent
+ FAIL  tests/acceptance/2365-redraft-ac5/suite.test.ts > AC5 #2365.c0521de3 for every transcript in #20's suite, the parts joined equal the merge base's one copy, and an unchanged transcript's second pass reads none of it > AC5 #20 AC9 (retention.test.ts): a session with a deploy token, in Claude Code's default home
+ FAIL  tests/acceptance/2365-redraft-ac5/suite.test.ts > AC5 #2365.c0521de3 for every transcript in #20's suite, the parts joined equal the merge base's one copy, and an unchanged transcript's second pass reads none of it > AC5 #20 AC10 (growth.test.ts): a session archived at 10 lines and again at 50
+Error: ENOSPC: no space left on device, mkdtemp '/tmp/dh20-world-XXXXXX'
+ ❯ tempDir tests/acceptance/20/helpers.ts:38:28
+     36| const made: string[] = [];
+     37| export function tempDir(tag: string): string {
+     38|   const dir = realpathSync(mkdtempSync(`/tmp/dh20-${tag}-`));
+       |                            ^
+     39|   made.push(dir);
+     40|   return dir;
+ ❯ openWorld tests/acceptance/20/helpers.ts:206:42
+ ❯ runScenario tests/acceptance/2365-redraft-ac5/scenarios.ts:110:19
+ ❯ tests/acceptance/2365-redraft-ac5/suite.test.ts:18:25
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/13]⎯
+
+ FAIL  tests/acceptance/2365-redraft-ac5/suite.test.ts > AC5 #2365.c0521de3 planted wrong archives fail the criterion's check, naming the session > AC5 (wrong program) an archive that rereads each transcript on every pass reads all of an unchanged one: the check fails naming each session and the bytes it read
+Error: ENOSPC: no space left on device, mkdtemp '/tmp/dh20-agents-XXXXXX'
+ ❯ tempDir tests/acceptance/20/helpers.ts:38:28
+     36| const made: string[] = [];
+     37| export function tempDir(tag: string): string {
+     38|   const dir = realpathSync(mkdtempSync(`/tmp/dh20-${tag}-`));
+       |                            ^
+     39|   made.push(dir);
+     40|   return dir;
+ ❯ Object.env tests/acceptance/2365-redraft-ac5/scenarios.ts:188:33
+ ❯ runScenario tests/acceptance/2365-redraft-ac5/scenarios.ts:109:19
+ ❯ tests/acceptance/2365-redraft-ac5/suite.test.ts:32:56
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/13]⎯
+
+ FAIL  tests/acceptance/2365-redraft-ac5/suite.test.ts > AC5 #2365.c0521de3 planted wrong archives fail the criterion's check, naming the session > AC5 (wrong program) an archive that leaves the newline out of each part: its parts joined differ from the merge base's copy, and the check fails naming the session and the first line that differs
+Error: ENOSPC: no space left on device, mkdtemp '/tmp/dh20-agents-XXXXXX'
+ ❯ tempDir tests/acceptance/20/helpers.ts:38:28
+     36| const made: string[] = [];
+     37| export function tempDir(tag: string): string {
+     38|   const dir = realpathSync(mkdtempSync(`/tmp/dh20-${tag}-`));
+       |                            ^
+     39|   made.push(dir);
+     40|   return dir;
+ ❯ Object.env tests/acceptance/2365-redraft-ac5/scenarios.ts:188:33
+ ❯ runScenario tests/acceptance/2365-redraft-ac5/scenarios.ts:109:19
+ ❯ tests/acceptance/2365-redraft-ac5/suite.test.ts:44:56
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/13]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  12 failed (12)
+   Start at  17:34:29
+   Duration  3.02s (tests 96%, transform 2%, import 2%)
+
+-----
+EXIT 1; ended: 2026-11-18T01:34:32Z; load averages: 31.12 53.63 71.66
