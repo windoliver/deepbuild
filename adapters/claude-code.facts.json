@@ -65,13 +65,13 @@
     }
   },
   "sandbox": {
-    "readBy": "a session DeepBuild starts runs inside the agent's own sandbox (#1330): per version, the settings that turn it on, the walls they hold, and how the agent's way out is turned off. {credentials} is the folders no command may read, {hosts} the hosts the approval names, {sockets} the hub's socket. A wall not named here is not held, and a version not listed starts with no sandbox and says so. Checked on 2.1.308 (spikes/1330): its hooks run outside the sandbox and reach the hub",
+    "readBy": "a session DeepBuild starts runs inside the agent's own sandbox (#1330): per version, the settings that turn it on, the walls they hold, and how the agent's way out is turned off. {credentials} is the folders no command may read, {hosts} the hosts the approval names, {sockets} the hub's socket. {gitWrites} is what a commit on the session's own branch writes outside its worktree (#1666): the worktree's git folder and the repo's shared objects, refs, packed refs and ref logs. {gitClosed} is the rest of the repo's git folder as it stands at the start, each entry with its lock (the checkout's own index, HEAD, config, hooks and HEAD log among them), and every other worktree's git folder by name, since denyWrite takes * but no character class. A wall not named here is not held, and a version not listed starts with no sandbox and says so. Checked on 2.1.308 (spikes/1330): its hooks run outside the sandbox and reach the hub",
     "conformance": "claude/sandbox/walls",
     "versions": {
       "2.1.308": {
-        "settings": "{\"sandbox\":{\"enabled\":true,\"failIfUnavailable\":true,\"autoAllowBashIfSandboxed\":true,\"allowUnsandboxedCommands\":false,\"filesystem\":{\"denyRead\":\"{credentials}\"},\"network\":{\"allowedDomains\":\"{hosts}\",\"allowUnixSockets\":\"{sockets}\"}}}",
+        "settings": "{\"sandbox\":{\"enabled\":true,\"failIfUnavailable\":true,\"autoAllowBashIfSandboxed\":true,\"allowUnsandboxedCommands\":false,\"filesystem\":{\"denyRead\":\"{credentials}\",\"allowWrite\":\"{gitWrites}\",\"denyWrite\":\"{gitClosed}\"},\"network\":{\"allowedDomains\":\"{hosts}\",\"allowUnixSockets\":\"{sockets}\"}}}",
         "walls": {
-          "writes": "a command writes only its worktree and the temp folders",
+          "writes": "a command writes only its worktree, the temp folders and what a commit on its branch writes, its worktree's git folder and the repo's shared objects, refs and ref logs: sandbox.filesystem.allowWrite. The checkout's files, its own index, HEAD, config and hooks, and every other worktree's git folder stay closed: 2.1.308 opens the repo's whole .git but config and hooks, so sandbox.filesystem.denyWrite, which holds over allowWrite, names the rest as it stands at the start; a name made later stays open",
           "credentials": "a command can't read the credential folders: sandbox.filesystem.denyRead",
           "network": "a command reaches only the hosts the approval names: sandbox.network.allowedDomains; the agent's own API calls run outside its sandbox"
         },

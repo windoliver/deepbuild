@@ -243,7 +243,7 @@ fn fault_of(id: &str, item: &Value, path: String) -> OpError {
     }
 }
 
-fn fault(id: &str, path: String) -> OpError {
+pub(crate) fn fault(id: &str, path: String) -> OpError {
     if path == crate::hull::FLAT {
         return OpError::new(crate::hull::FLAT, format!("items/{id}"));
     }
@@ -258,21 +258,29 @@ fn fault(id: &str, path: String) -> OpError {
             format!("items/{id}/{at}")
         };
         let e = OpError::new(code, at);
-        return match serde_json::from_str(found) {
-            Ok(found) => e.with(found),
+        return match serde_json::from_str::<Value>(found) {
+            Ok(mut found) => {
+                // #1928: an offset's refusal names its item too.
+                if code == crate::faces::TOO_WIDE {
+                    found["item"] = json!(id);
+                }
+                e.with(found)
+            }
             Err(_) => e,
         };
     }
     OpError::new("out_of_range", format!("items/{id}/{path}"))
 }
 
-/// A coded fault's code: one an outline source or a module's deform refuses with, else
-/// `out_of_range`.
+/// A coded fault's code: one an outline source, a module's deform, an offset or a box or mesh
+/// deform refuses with, else `out_of_range`.
 pub(crate) fn code_of(code: &str) -> &'static str {
     builders::OUTLINE_CODES
         .into_iter()
         .chain(crate::contributed::CODES)
         .chain(crate::attrs::CODES)
+        .chain([crate::faces::TOO_WIDE])
+        .chain(crate::bind::CODES)
         .find(|c| *c == code)
         .unwrap_or("out_of_range")
 }
@@ -338,6 +346,13 @@ pub fn built(
     })
 }
 
+/// The binds this node's last run kept in `array` (#1929), by modifier.
+fn kept(v: &View<'_>, array: &str) -> Vec<Option<crate::bind::Bind>> {
+    let last = v.last(array).and_then(|b| b.as_typed::<Built>());
+    last.map(|b| b.rows.iter().map(|r| r.bind.clone()).collect())
+        .unwrap_or_default()
+}
+
 fn run_scene3d(v: &mut View<'_>) -> Result<(), OpError> {
     let id = v.id().unwrap_or_default().to_string();
     let item = item_at(v)?;
@@ -347,6 +362,7 @@ fn run_scene3d(v: &mut View<'_>) -> Result<(), OpError> {
         outlines: v.outlines().to_vec(),
         fills: v.fills().to_vec(),
         pool: v.pool(),
+        kept: kept(v, "scene3d.built"),
         ..Default::default()
     };
     let out = built(doc, &id, &item, &run, 0.0).map_err(|p| fault_of(&id, &item, p))?;
@@ -377,6 +393,7 @@ fn run_scene3d_live(v: &mut View<'_>) -> Result<(), OpError> {
         outlines: v.outlines().to_vec(),
         fills: v.fills().to_vec(),
         pool: v.pool(),
+        kept: kept(v, "scene3d.livebuilt"),
         ..Default::default()
     };
     let out = built(doc, &id, &item, &run, t).map_err(|p| fault_of(&id, &item, p))?;
