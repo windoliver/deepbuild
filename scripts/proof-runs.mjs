@@ -823,11 +823,15 @@ export function mutation({ root, change }, runs, say, print) {
     };
     const reports = temporary('deep-proof-report-');
     const groups = unproven.map((test) => [test, [test.path]]);
-    if (unproven.length < tests.length) groups.push([null, [...new Set(tests.filter((test) => !unproven.includes(test)).map(({ path }) => path))]]);
+    const proven = [...new Set(tests.filter((test) => !unproven.includes(test)).map(({ path }) => path))];
     // A test that can start the copy's hub runs it from the copy's own target/, which a fresh copy lacks and a bay
     // keeps from an earlier use, a twin's, say: each StrykerJS run gets this copy's own hub binaries, or none (#2835).
     let hub, bin;
     try {
+      // The proven tests run together, but those that start the hub apart from those that name neither package, so
+      // these never find the hub's binaries.
+      const starts = proven.length ? selectBinaries(directory, proven).hub : [];
+      for (const files of [proven.filter((path) => !starts.includes(path)), proven.filter((path) => starts.includes(path))]) if (files.length) groups.push([null, files]);
       hub = groups.map(([, files]) => selectBinaries(directory, files).target);
       bin = buildBinaries(directory, join(temporary('deep-proof-binaries-'), 'bin'), [...new Set(hub.flat())], (command, args, options) => spawnIn(directory, command, args, options));
     } catch (error) {
