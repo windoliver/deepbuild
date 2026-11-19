@@ -1,0 +1,12 @@
+✔ a waiter whose table write fails with ENOSPC keeps waiting and its place, and is granted and runs its command once space and a slot are back (7746.436761ms)
+✔ a waiter whose table write fails with ENOSPC until its --wait runs out reads INCONCLUSIVE no grant, only then (14395.793647ms)
+✔ a waiter's table write that fails with ENOSPC leaves no temp file of its own behind (4130.137247ms)
+✔ a waiter whose table write fails with another error (EISDIR) still ends BLOCKED, its command not run (4203.440496ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 30744.041682
