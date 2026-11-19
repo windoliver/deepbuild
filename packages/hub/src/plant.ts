@@ -304,8 +304,11 @@ export type Plant =
   | 'hands-over-socket-chunk'
   // #1512's: a review whose rubric holds every rule the hub knows, whatever its scope, how it was known or what enforces
   // it, with no size bound; and a hub that holds the review kind but adds the review to no claim that opens a PR.
-  | 'rubric-holds-every-rule' | 'review-without-caller';
+  | 'rubric-holds-every-rule' | 'review-without-caller'
+  // #1509's: a gate that asks for every package run straight from a registry, whatever its age.
+  | 'asks-every-registry-run';
 const PLANTS: readonly string[] = [
+  'asks-every-registry-run',
   'statusline-user-settings-only', 'window-unknown-as-zero', 'window-carried-from-other-repo', 'sends-block-whole',
   'doctor-sums-per-file', 'doctor-counts-lines-only',
   'box-applies-at-once', 'box-ignores-revision',

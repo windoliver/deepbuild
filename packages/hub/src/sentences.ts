@@ -25,12 +25,16 @@ function list(items: readonly string[]): string {
   return items.length < 2 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`;
 }
 
-/** What a change wrote: each file as its name in the change's folder. */
-export function changeSentence(files: readonly string[]): string {
+/**
+ * What a change wrote: each file as its name in the change's folder; and each package its session ran straight from a
+ * registry with no ask, with its age, as the session's reading names it (#1509).
+ */
+export function changeSentence(files: readonly string[], ran: readonly string[] = []): string {
   const names = files.map(field).filter(Boolean);
-  if (!names.length) return 'Changed no files.';
-  if (names.length <= NAMED) return `Changed ${list(names)}.`;
-  return `Changed ${names.length} files: ${list([...names.slice(0, NAMED), `${names.length - NAMED} more`])}.`;
+  const changed = !names.length ? 'Changed no files'
+    : names.length <= NAMED ? `Changed ${list(names)}` : `Changed ${names.length} files: ${list([...names.slice(0, NAMED), `${names.length - NAMED} more`])}`;
+  const runs = ran.map(field).filter(Boolean);
+  return `${changed}${runs.length ? `, and ran ${list(runs)}` : ''}.`;
 }
 
 /** A verdict as the record keeps it: its outcome, its requirements, its own smallest case, whether its commit moved, and its send-back's round. */
