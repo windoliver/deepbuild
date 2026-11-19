@@ -82,12 +82,17 @@ const R = {
   calling: rule('who-is-calling'), order: rule('order-by-seq'), clock: rule('clock-stepped-back'), late: rule('late-event-in-stopped-turn'), quiet: rule('unknown-not-finished'),
   modelOnly: rule('block-only-where-it-reaches-model'), noStderr: rule('no-block-on-stderr-at-exit-0'),
   threads: rule('threads-across-rotated-ids'), owner: rule('one-owner-per-session'), decision: rule('allow-only-from-decision'), unparsed: rule('unparsed-stop-reads-unknown'), transcript: rule('delivery-confirmed-from-transcript'),
+  reads: rule('reads-count-as-read'),
 };
 const RULE_MESSAGES: Record<keyof typeof R, string> = {
   calling: "subagent event recorded as its parent's", order: 'duplicate event ID', clock: 'event stamped before its turn started', late: 'event after stop', quiet: 'quiet turn reported finished',
   modelOnly: 'needed block sent where it reaches no model', noStderr: 'needed block sent as stderr on exit 0',
   threads: 'rotated session ID not threaded', owner: 'answer delivered to another session', decision: 'allow taken from outside decision', unparsed: 'unparsed stop given a cause', transcript: 'acknowledged with no transcript sign',
+  reads: 'a tool that changes nothing counted as change',
 };
+
+/** The hub's tools that change nothing, as an agent names the MCP tool (#1801): deep_query's refs_to, cost and its other reads. */
+export const READ_TOOLS = ['mcp__deep__deep_query'] as const;
 
 const kase = (id: string, declares: Partial<Case['declares']>, run: (h: Harness) => void): Case => ({ id, revision: REVISION, declares: { flags: [], operations: [], kinds: [], ...declares }, run });
 
@@ -151,6 +156,14 @@ const cases: Case[] = [
   kase('hooks/unparsed-stop-reads-unknown', { kinds: ['agent.stop'] }, (h) => {
     const stop = only(h, hook(h, 6, 'Stop', { prompt_id: 't3', error: 'garbled: not a cause the facts list' }), 'agent.stop');
     if (stop.data.cause !== 'unknown') h.fail(RULE_MESSAGES.unparsed, [R.unparsed.code]);
+  }),
+  kase('facts/reads-count-as-read', { kinds: ['tool.before'] }, (h) => {
+    // A read the hub serves changes nothing, so the facts count it as read, never as change (#1801).
+    READ_TOOLS.forEach((tool, n) => {
+      const before = only(h, hook(h, 20 + n, 'PreToolUse', { prompt_id: 't6', tool_name: tool, tool_input: { what: 'refs_to', target: 'door' }, tool_use_id: `call_read_${n}` }), 'tool.before');
+      const kind = before.data.kind;
+      if (kind !== 'read' && kind !== 'search') h.fail(`${RULE_MESSAGES.reads}: ${tool} maps to ${String(kind)}, which the hub's guards count as change`, [R.reads.code]);
+    });
   }),
   kase('facts/hook-timeouts', {}, (h) => {
     const timeouts = isObject(h.facts) && isObject(h.facts.hookTimeouts) ? h.facts.hookTimeouts : {};
@@ -274,6 +287,7 @@ function fakes(): Fake[] {
     fake('acknowledged-without-sign', RULE_MESSAGES.transcript, [R.transcript.code], { rule: R.transcript.id }, { noSign: true }),
     fake('block-as-postcompact-stdout', RULE_MESSAGES.modelOnly, [R.modelOnly.code], { rule: R.modelOnly.id }, { contextAsStdout: true }),
     fake('block-as-stderr-exit-0', RULE_MESSAGES.noStderr, [R.noStderr.code], { rule: R.noStderr.id }, { contextAsStderr: true }),
+    fake('read-counted-as-change', RULE_MESSAGES.reads, [R.reads.code], { rule: R.reads.id }, { readsAsChange: true }),
   ];
   const flags: Fake[] = [
     ...(['startTurn', 'steer', 'followUp'] as const).map((flag) => fake(`flag-${flag}-unsupported`, HARNESS.flagUnsupported(flag, flag, SURFACE), [CODES.flag(flag)], { flag }, { unsupportedFlag: flag })),

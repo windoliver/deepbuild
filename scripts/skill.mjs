@@ -64,7 +64,7 @@ const TOOLS = {
     proves: 'A listing does not prove your document is right: only its check and the checks that run on it say so, and an example is read, never run.',
   },
   deep_query: {
-    use: 'Read a revision of a document as evaluated data by stable ID instead of as a picture: its rows and the values at items/<id>/<field> at the times you name, each answer with a coverage block that names what it cut; its summary, with counts by kind, writer layer and canvas module; or the why behind one value, naming the canvas module, operator and document paths that made it. It reads only what your session may read.',
+    use: 'Read a revision of a document as evaluated data by stable ID instead of as a picture: its rows and the values at items/<id>/<field> at the times you name, each answer with a coverage block that names what it cut; its summary, with counts by kind, writer layer and canvas module; the why behind one value, naming the canvas module, operator and document paths that made it; every row that names an item, a table row, a pack entry or an asset, before you remove or rename it; or what costs most, its items and assets ranked by the meter\'s own terms. It reads only what your session may read.',
     proves: 'A reading does not prove your work is right: it is never evidence for a claim, only check results are, and an absence concluded from a cut answer is refused.',
   },
   deep_job: {

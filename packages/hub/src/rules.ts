@@ -10,6 +10,7 @@ import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import type { RecordStore } from '@deepbuild/record';
 import { callAsYou } from './client.js';
+import { indexFile, loaders, lostIn, marksOf, type Lost, type Marks } from './rule-load.js';
 import { visible } from './visible.js';
 import type { HookMeta, Scoped } from './wire.js';
 
@@ -23,10 +24,14 @@ export interface RuleFile {
   scope: string;
   tokens: number;
   rules: string[];
+  /** Each rule's line in the file, from 1, in the order of `rules`. */
+  lines?: number[];
   /** The agent that reads this file by itself, so its start slice doesn't repeat it. */
   native?: 'claude-code' | 'codex';
   /** The repo folder a repo file is in. */
   repo?: string;
+  /** An agent's own memory index (#1514): its lines go to no other agent, and to its own only past the index limit. */
+  index?: true;
 }
 export interface Rule {
   id: string; text: string; file: string; scope: string; known: 'you' | 'repo'; tokens: number; enforcer: Enforcer;
@@ -37,6 +42,10 @@ export interface Rule {
   native?: 'claude-code' | 'codex';
   /** The proposal an agent's removal of its line became; the rule stays in force until you apply it. */
   held?: string;
+  /** Its file's path and its line there (#1514), so the lines an agent never gets can be told. */
+  path?: string;
+  line?: number;
+  index?: true;
 }
 export interface Held { id: string; text: string; file: string; scope: string; repo: string; proposal: string; ask: string }
 
@@ -98,13 +107,17 @@ function frontOf(text: string): { fields: Map<string, string>; body: string } {
 }
 /** The bullets of a file's body, outside code fences: each one rule. */
 function bulletsOf(body: string): string[] {
-  const out: string[] = [];
+  return bulletLines(body).map((b) => b.text);
+}
+/** Each bullet of a body with its line in the body, from 1. */
+function bulletLines(body: string): { text: string; line: number }[] {
+  const out: { text: string; line: number }[] = [];
   let fenced = false;
-  for (const line of body.split('\n')) {
-    if (/^\s*(```|~~~)/.test(line)) { fenced = !fenced; continue; }
+  body.split('\n').forEach((line, i) => {
+    if (/^\s*(```|~~~)/.test(line)) { fenced = !fenced; return; }
     const m = fenced ? undefined : /^\s*[-*+]\s+(.+?)\s*$/.exec(line);
-    if (m && !/^\[[ xX]\]\s*$/.test(m[1]!)) out.push(m[1]!);
-  }
+    if (m && !/^\[[ xX]\]\s*$/.test(m[1]!)) out.push({ text: m[1]!, line: i + 1 });
+  });
   return out;
 }
 
@@ -139,7 +152,22 @@ function readFile(path: string, file: string, scopeOf: (fields: Map<string, stri
   let text: string;
   try { text = readFileSync(path, 'utf8'); } catch { return undefined; }
   const { fields, body } = frontOf(text);
-  return { file, path, scope: scopeOf(fields), tokens: tokensOf(text), rules: [...new Set(bulletsOf(body))], ...(native ? { native } : {}), ...(repo ? { repo } : {}) };
+  // A rule's line counts the front matter's lines too; a rule written twice is at its first line.
+  const before = text.slice(0, text.length - body.length).split('\n').length - 1;
+  const at = new Map<string, number>();
+  for (const b of bulletLines(body)) if (!at.has(b.text)) at.set(b.text, b.line + before);
+  return { file, path, scope: scopeOf(fields), tokens: tokensOf(text), rules: [...at.keys()], lines: [...at.values()], ...(native ? { native } : {}), ...(repo ? { repo } : {}) };
+}
+/**
+ * A repo's memory indexes (#1514): each agent's whose facts name one, as a rule file, its bullets the rules, so the
+ * page can mark the lines past its limit. Read from the agent's own folder for the repo; none when it has no index.
+ */
+export function indexFiles(repo: string): RuleFile[] {
+  return loaders().flatMap((l) => {
+    const path = indexFile(l, repo);
+    const read = path ? readFile(path, path.replace(homedir(), '~'), () => 'all', l.agent as RuleFile['native'], repo) : undefined;
+    return read ? [{ ...read, index: true as const }] : [];
+  });
 }
 /** One repo's rule files, and your user-level ones (`~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`) unless `home` is null. */
 export function readRuleFiles(repo: string | undefined, home: string | null = homedir()): RuleFile[] {
@@ -172,11 +200,11 @@ export function rulesOf(o: { files: readonly RuleFile[]; typed: readonly { targe
   const repos = new Set(o.files.map((f) => f.repo).filter(Boolean));
   for (const f of o.files) {
     const repo = f.repo;
-    for (const text of f.rules) {
+    f.rules.forEach((text, i) => {
       const id = ruleId(f.file, text);
       at.add(id);
-      out.push({ id, text, file: f.file, scope: f.scope, known: 'repo', tokens: tokensOf(text), enforcer: enforcer(text), ...(repo ? { repo } : {}), ...(f.native ? { native: f.native } : {}) });
-    }
+      out.push({ id, text, file: f.file, scope: f.scope, known: 'repo', tokens: tokensOf(text), enforcer: enforcer(text), ...(repo ? { repo } : {}), ...(f.native ? { native: f.native } : {}), path: f.path, ...(f.lines?.[i] ? { line: f.lines[i] } : {}), ...(f.index ? { index: true as const } : {}) });
+    });
   }
   for (const h of o.held) {
     if (at.has(h.id) || !repos.has(h.repo)) continue;
@@ -193,8 +221,11 @@ export function rulesOf(o: { files: readonly RuleFile[]; typed: readonly { targe
   return out;
 }
 
-/** The rules page's lines: each file's total, then its rules, each a claim line with its file, scope, enforcer and size. */
-export function pageLines(rules: readonly Rule[], files: readonly RuleFile[]): string[] {
+/**
+ * The rules page's lines: each file's total, then its rules, each a claim line with its file, scope, enforcer and size,
+ * and its marks (#1514): the agents that never get it and why, or the sessions whose record shows it loaded.
+ */
+export function pageLines(rules: readonly Rule[], files: readonly RuleFile[], marks: (r: Rule) => Marks = () => ({})): string[] {
   const out: string[] = [];
   const claim = (text: string, record: Record<string, unknown>): string => `- ${text} <!-- deep:claim ${JSON.stringify(record).replace(/>/g, '\\u003e')} -->`;
   const byFile = new Map<string, Rule[]>();
@@ -208,7 +239,7 @@ export function pageLines(rules: readonly Rule[], files: readonly RuleFile[]): s
     for (const r of list) {
       out.push(claim(r.text, {
         id: r.id, known: r.known, proof: 1, sources: [{ path: r.file, quote: r.text }], file: r.file, ...(r.repo ? { repo: r.repo } : {}),
-        scope: r.scope, enforcer: r.enforcer, tokens: r.tokens, ...(r.held ? { held: r.held } : {}),
+        scope: r.scope, enforcer: r.enforcer, tokens: r.tokens, ...(r.held ? { held: r.held } : {}), ...marks(r),
       }));
     }
   }
@@ -224,11 +255,28 @@ export const RULE_EDITS = new Set(['Edit', 'MultiEdit', 'Write', 'NotebookEdit',
  * each is heard once, at its first call inside its scope. Never one for every path (the start slice has those), and
  * never a file the session's own agent reads by itself. Marks each in `heard`.
  */
-export function noticesFor(rules: readonly Rule[], paths: readonly string[], agent: string, heard: Set<string>): Rule[] {
+export function noticesFor(rules: readonly Rule[], paths: readonly string[], agent: string, heard: Set<string>, lost: readonly Lost[] = []): Rule[] {
   const own = agent === 'codex' ? 'codex' : 'claude-code';
-  const out = rules.filter((r) => r.scope !== 'all' && r.native !== own && !heard.has(r.id) && paths.some((p) => covers(r.scope, p)));
+  const out = rules.filter((r) => r.scope !== 'all' && reaches(r, own, lost) && !heard.has(r.id) && paths.some((p) => covers(r.scope, p)));
   for (const r of out) heard.add(r.id);
   return out;
+}
+/**
+ * Whether DeepBuild's route gives a rule to a session of `own` (#344, #1514): one from another agent's file, and one from
+ * its own agent's file that the rule-load entry says it never gets. A memory index's line goes only to its own agent,
+ * and only past the index limit.
+ */
+export function reaches(r: Rule, own: string, lost: readonly Lost[]): boolean {
+  const gone = (marksOf(r.path ?? '', r.line ?? 0, lost.filter((l) => l.agent === own), new Map()).not_loaded ?? []).length > 0;
+  return r.index ? r.native === own && gone : r.native !== own || gone;
+}
+/** What each agent loses of a repo's files, read again at most every few seconds, so the hook path walks no folder each time. */
+export function cachedLost(cache: Map<string, { at: number; lost: Lost[] }>, repo: string, files: readonly RuleFile[]): Lost[] {
+  const hit = cache.get(repo);
+  if (hit && Date.now() - hit.at < 3000) return hit.lost;
+  const lost = lostIn(repo, files.filter((f) => f.repo === repo && !f.index).map((f) => dirname(f.path)));
+  cache.set(repo, { at: Date.now(), lost });
+  return lost;
 }
 export const noticeText = (rules: readonly Pick<Rule, 'scope' | 'file' | 'text'>[]): string => rules.map((r) => `DeepBuild: a rule you wrote for ${r.scope} (${r.file}): ${r.text}`).join('\n');
 
@@ -236,7 +284,7 @@ export const noticeText = (rules: readonly Pick<Rule, 'scope' | 'file' | 'text'>
 export function cachedRuleFiles(cache: Map<string, { at: number; files: RuleFile[] }>, repo: string): RuleFile[] {
   const hit = cache.get(repo);
   if (hit && Date.now() - hit.at < 3000) return hit.files;
-  const files = readRuleFiles(repo, null);
+  const files = [...readRuleFiles(repo, null), ...indexFiles(repo)];
   cache.set(repo, { at: Date.now(), files });
   return files;
 }
@@ -253,6 +301,7 @@ export const readHeld = (dir: string): Held[] => readJson<Held[]>(heldFile(dir),
 export const saveHeld = (dir: string, held: readonly Held[]): void => writeJson(heldFile(dir), held);
 
 const scopedFiles = new Map<string, { at: number; files: RuleFile[] }>();
+const scopedLost = new Map<string, { at: number; lost: Lost[] }>();
 /** The rules of a file list, built once for it and for the held file as it is: `saveHeld` renames a new file in. */
 const scopedBuilt = new WeakMap<RuleFile[], { held: string; rules: Rule[] }>();
 /**
@@ -275,7 +324,7 @@ export function scopedAt(meta: HookMeta, dir: string): Scoped | undefined {
     try { const s = statSync(heldFile(dir)); held = `${s.ino}:${s.size}:${s.mtimeMs}`; } catch { /* no rule is held */ }
     let built = scopedBuilt.get(files);
     if (!built || built.held !== held) scopedBuilt.set(files, built = { held, rules: rulesOf({ files, typed: [], held: readHeld(dir), guards: [] }) });
-    const rules = noticesFor(built.rules, paths, meta.agent, new Set()).map(({ id, scope, file, text }) => ({ id, scope, file, text }));
+    const rules = noticesFor(built.rules, paths, meta.agent, new Set(), cachedLost(scopedLost, repo, files)).map(({ id, scope, file, text }) => ({ id, scope, file, text }));
     return rules.length || before.length ? { rules, before } : undefined;
   } catch (error) {
     process.stderr.write(`deep hub: rules at ${meta.session}'s call: ${error instanceof Error ? error.message : String(error)}\n`);

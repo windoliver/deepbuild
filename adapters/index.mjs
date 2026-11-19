@@ -75,6 +75,11 @@ function call(facts, payload) {
     if (paths.length > 0 || denied || patch.tools.includes(tool)) return { kind: 'edit', detail: { paths, ...(denied ? { denied } : {}) }, rule: pointer('patch') };
   }
   const prefix = Object.keys(kinds.prefixes ?? {}).find((start) => typeof tool === 'string' && tool.startsWith(start));
+  // A tool the table names exactly is that kind, before any prefix: deep_query is a read though every MCP tool is mcp (#1801).
+  if (prefix && Object.hasOwn(kinds.tools, tool)) {
+    const [server, ...name] = tool.slice(prefix.length).split('__');
+    return { kind: kinds.tools[tool], detail: { server, [facts.toolDetail?.mcp?.tool ?? 'name']: name.join('__') }, rule: pointer('toolKinds', 'tools', tool) };
+  }
   if (prefix) {
     const [server, ...name] = tool.slice(prefix.length).split('__');
     // The MCP tool's own name goes under the field the facts' toolDetail.mcp names; `name` by default.

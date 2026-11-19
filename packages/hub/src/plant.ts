@@ -253,6 +253,8 @@ export type Plant =
   // #1296's: a doctor that reads only your user settings for a status line, a session with no window reading shown
   // at 0% or with another repo's reading, and a hub that sends a hook's context whole past the cap.
   | 'statusline-user-settings-only' | 'window-unknown-as-zero' | 'window-carried-from-other-repo' | 'sends-block-whole'
+  // #1514's: a doctor that holds each AGENTS.md to the whole budget alone, and one that counts a memory index's lines only.
+  | 'doctor-sums-per-file' | 'doctor-counts-lines-only'
   // #1998's: a box that applies a change in words as it drafts it, and one whose approval applies whatever moved since.
   | 'box-applies-at-once' | 'box-ignores-revision'
   // #1999's: a change whose sentence is the agent's last message, sentences a headless agent call writes, and an open
@@ -299,6 +301,7 @@ export type Plant =
   | 'hands-over-socket-chunk';
 const PLANTS: readonly string[] = [
   'statusline-user-settings-only', 'window-unknown-as-zero', 'window-carried-from-other-repo', 'sends-block-whole',
+  'doctor-sums-per-file', 'doctor-counts-lines-only',
   'box-applies-at-once', 'box-ignores-revision',
   'sentence-from-agent-text', 'sentence-from-model', 'open-item-no-sentence',
   'posts-on-head', 'unguarded-marks-every-push', 'unguarded-marks-none',

@@ -24,7 +24,8 @@ import { decisionKey, guardOf, keepLesson, lessonsOf, repoFolders, syncRejected,
 import { toolClasses } from './hookmap.js';
 import { type Piece } from './context-fit.js';
 
-import { cachedRuleFiles, handleOf as ruleHandle, pageLines, reachOf as ruleReach, reachSince, readHeld, readRuleFiles, repoRoot, ruleId, rulesInFile, rulesOf, saveHeld, savePage, sameRule, setOf, type Held, type Rule, type RuleFile, type RuleFileBefore } from './rules.js';
+import { agentOf, marksOf, pathsOf } from './rule-load.js';
+import { cachedLost, cachedRuleFiles, handleOf as ruleHandle, indexFiles, pageLines, reaches, reachOf as ruleReach, reachSince, readHeld, readRuleFiles, repoRoot, ruleId, rulesInFile, rulesOf, saveHeld, savePage, sameRule, setOf, type Held, type Rule, type RuleFile, type RuleFileBefore } from './rules.js';
 
 import { deepHook, repoOf, type Root } from './paths.js';
 
@@ -76,6 +77,7 @@ export class SessionMemory {
 
   /** Each repo's rule files, read at most once a few seconds, so a call's notice reads no folder tree. */
   private ruleFiles = new Map<string, { at: number; files: RuleFile[] }>();
+  private ruleLost = new Map<string, { at: number; lost: import('./rule-load.js').Lost[] }>();
 
   firstPrompted = new Set<string>();
 
@@ -128,12 +130,12 @@ export class SessionMemory {
   }
 
   /** Every rule on the page: each repo a session worked in, your user-level files and the rules you typed. */
-  private async allRules(guards: readonly { name: string; rule: string }[]): Promise<{ rules: Rule[]; files: RuleFile[] }> {
+  private async allRules(guards: readonly { name: string; rule: string }[]): Promise<{ rules: Rule[]; files: RuleFile[]; repos: string[] }> {
     // The record's sessions, and the ones whose hooks reached the hub but aren't folded into it yet.
     const worktrees = [...((await this.options.services.record.raw('SELECT DISTINCT worktree FROM sessions WHERE worktree IS NOT NULL')) as { worktree: string }[]).map((w) => w.worktree), ...[...this.options.delivery().routes.values()].map((r) => r.cwd)];
     const repos = [...new Set(worktrees.map((w) => repoRoot(w)).filter((r): r is string => r !== undefined))].sort();
-    const files = [...repos.flatMap((repo) => readRuleFiles(repo, null)), ...readRuleFiles(undefined)];
-    return { rules: rulesOf({ files, typed: await this.typedRules(), held: await this.heldRules(), guards }), files };
+    const files = [...repos.flatMap((repo) => [...readRuleFiles(repo, null), ...indexFiles(repo)]), ...readRuleFiles(undefined)];
+    return { rules: rulesOf({ files, typed: await this.typedRules(), held: await this.heldRules(), guards }), files, repos };
   }
 
   /** What the start slice gives a session of your rules: every rule for all paths but the files its own agent reads, then the slice's entries. */
@@ -141,8 +143,10 @@ export class SessionMemory {
     const repo = repoRoot(cwd);
     const own = agent === 'codex' ? 'codex' : 'claude-code';
     const lines = new Map<string, string>();
-    for (const r of rulesOf({ files: [...(repo ? this.filesOf(repo) : []), ...readRuleFiles(undefined)], typed: [], held: await this.heldRules(), guards: [] })) {
-      if (r.scope === 'all' && r.native !== own) lines.set(ruleHandle(r), r.text);
+    const files = [...(repo ? this.filesOf(repo) : []), ...readRuleFiles(undefined)];
+    const lost = repo ? cachedLost(this.ruleLost, repo, files) : [];
+    for (const r of rulesOf({ files, typed: [], held: await this.heldRules(), guards: [] })) {
+      if (r.scope === 'all' && reaches(r, own, lost)) lines.set(ruleHandle(r), r.text);
     }
     for (const e of await this.options.services.record.startSlice(session)) lines.set(e.target, e.text);
     return { handles: [...lines.keys()], lines };
@@ -244,10 +248,28 @@ export class SessionMemory {
   /** `deep rules sync`: the rules page, each rule with its file, scope, size and what enforces it, written through the wiki. */
   async syncRules(): Promise<Obj> {
     this.ruleFiles.clear();
-    const { rules, files } = await this.allRules(await this.ruleGuards());
-    savePage(this.options.services.root.dir, pageLines(rules, files));
+    this.ruleLost.clear();
+    const { rules, files, repos } = await this.allRules(await this.ruleGuards());
+    const lost = repos.flatMap((repo) => cachedLost(this.ruleLost, repo, files));
+    const recorded = await this.recordedLoads();
+    savePage(this.options.services.root.dir, pageLines(rules, files, (r) => marksOf(r.path ?? '', r.line ?? 0, lost, recorded)));
     await this.options.services.wikiBuild.writeRules();
     return { rules: rules.length, files: new Set(rules.map((r) => `${r.repo ?? ''} ${r.file}`)).size };
+  }
+
+  /** What sessions' agents reported they loaded (session.loaded), newest first: each agent and file, by the session that holds it. */
+  private async recordedLoads(): Promise<Map<string, string>> {
+    const rows = (await this.options.services.record.raw("SELECT e.session_id AS session, COALESCE(e.agent, s.agent) AS agent, e.data AS data FROM events e LEFT JOIN sessions s ON s.id = e.session_id WHERE e.kind = 'session.loaded' ORDER BY e.log_pos DESC")) as { session: string | null; agent: string | null; data: string }[];
+    const out = new Map<string, string>();
+    for (const row of rows) {
+      let data: unknown;
+      try { data = JSON.parse(row.data); } catch { continue; }
+      for (const path of pathsOf(data)) {
+        const key = `${agentOf(row.agent)}\u0000${path}`;
+        if (!out.has(key)) out.set(key, `session:${String(row.session)}`);
+      }
+    }
+    return out;
   }
 
   /** The guard entries that enforce a rule: only those whose planted call deep-hook denies and whose twin it allows now. */
@@ -380,7 +402,19 @@ export class SessionMemory {
     const [row] = (await this.options.services.record.raw('SELECT worktree, agent FROM sessions WHERE id = ?', [session])) as { worktree: string | null; agent: string | null }[];
     const now = await this.startSet(session, row?.worktree ?? '', row?.agent ?? 'claude-code');
     const current = [...now.handles].sort().join('\n') === [...set.rules].sort().join('\n');
-    return { session: `session:${session}`, runs: current ? 'current' : 'earlier', set: set.pos, credited_to: set.pos };
+    return { session: `session:${session}`, runs: current ? 'current' : 'earlier', set: set.pos, credited_to: set.pos, loads: await this.sessionLoads(session) };
+  }
+
+  /** The instruction files a session loaded (#1514): what its agent reported, else the prediction its start recorded, saying which. */
+  private async sessionLoads(session: string): Promise<Obj> {
+    const reported = (await this.options.services.record.raw("SELECT data FROM events WHERE kind = 'session.loaded' AND session_id = ? ORDER BY log_pos", [session])) as { data: string }[];
+    const files = reported.flatMap((r) => { try { return pathsOf(JSON.parse(r.data) as unknown); } catch { return []; } });
+    if (files.length) return { from: 'agent', files: [...new Set(files)] };
+    const [start] = (await this.options.services.record.raw("SELECT json_extract(data, '$.loads') AS loads FROM events WHERE kind = 'session.start' AND session_id = ? ORDER BY log_pos DESC LIMIT 1", [session])) as { loads: string | null }[];
+    let loads: unknown;
+    try { loads = JSON.parse(start?.loads ?? '[]'); } catch { loads = []; }
+    const predicted = Array.isArray(loads) ? loads.flatMap((l) => (isObj(l) && l.kind === 'instructions' && typeof l.source === 'string' ? [l.source] : [])) : [];
+    return { from: 'prediction', files: predicted };
   }
 
   /**
