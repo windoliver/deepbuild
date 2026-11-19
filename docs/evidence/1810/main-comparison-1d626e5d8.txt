@@ -1,0 +1,684 @@
+# Each new failure of the affected run at 1d626e5d8 (affected-1d626e5d8.txt), checked at main 9550dc0f0, the PR's merge base, on Linux on 2026-11-19.
+# Result: 187 test files, each run alone at main and at the head, two at a time: 184 exit the same at both, 3 fail at main and pass at the head (packages/hub/test/done-reader-fold.test.ts, packages/hub/test/mcp-rebind.test.ts, tests/bays.test.mjs), and none fail only at the head.
+# The disk filled to 0 MB at about 17:11Z from other work on the machine, so every pair finishing after it (and those not reached) ran again (second part, with a 25 GB floor and the free space on each line); no rerun output mentions ENOSPC.
+# Lints, both trees: canvas-lint, repo-rules, vendor-rebase and conformance-lint fail on the same lines. size-ratchet differs only on packages/hub/src/core.ts, 2682 lines at main and 2684 at the head against a ceiling of 2638 (main is already over it; this PR adds 2). color-literal-guard lists 10 hits only in the head tree, all in crates/deep-app/panels/338-*/@deepbuild/panel.js, which is git-ignored build output a test wrote there, not this PR's diff.
+# 377/noop.test.ts (the affected run's only hook timeout, 3.3 h building deep-gpu behind a shared sccache server that compiled one crate at a time) is an environment reading: INCONCLUSIVE.
+
+## lint differences
+### color-literal-guard (< main, > head)
+### size-ratchet (< main, > head)
+26c26
+< FAIL size: packages/hub/src/core.ts: 2682 lines, over its ceiling of 2638
+---
+> FAIL size: packages/hub/src/core.ts: 2684 lines, over its ceiling of 2638
+
+## first part (valid pairs, finished before 17:11Z): kind file main head
+main-fail-head-pass packages/hub/test/done-reader-fold.test.ts
+main-fail-head-pass packages/hub/test/mcp-rebind.test.ts
+same packages/hub/test/actions-server.test.ts
+same packages/hub/test/actions.test.ts
+same packages/hub/test/answer-after-restart.test.ts
+same packages/hub/test/asleep.test.ts
+same packages/hub/test/background-group.test.ts
+same packages/hub/test/background.test.ts
+same packages/hub/test/checks-not-started.test.ts
+same packages/hub/test/claim-replay.test.ts
+same packages/hub/test/codes.test.ts
+same packages/hub/test/codex-hub.test.ts
+same packages/hub/test/continues.test.ts
+same packages/hub/test/detached.test.ts
+same packages/hub/test/env-resources.test.ts
+same packages/hub/test/gate-stop.test.ts
+same packages/hub/test/hub-down.test.ts
+same packages/hub/test/library-command.test.ts
+same packages/hub/test/lifecycle-events.test.mjs
+same packages/hub/test/memory.test.ts
+same packages/hub/test/monitor-ends.test.ts
+same packages/hub/test/notification-idle.test.ts
+same packages/hub/test/numbers.test.ts
+same packages/hub/test/onboarding.test.ts
+same packages/hub/test/pack-missing-open.test.ts
+same packages/hub/test/parsers.test.ts
+same packages/hub/test/probe-lifecycle.test.ts
+same packages/hub/test/products-keep-orphan-2122.test.ts
+same packages/hub/test/products-restart-reclaim-2122.test.ts
+same packages/hub/test/prompt-items.test.ts
+same packages/hub/test/reading.test.ts
+same packages/hub/test/row-actions.test.ts
+same packages/hub/test/setup-failure-safety.test.ts
+same packages/hub/test/shutdown-connection.test.ts
+same packages/hub/test/staging.test.ts
+same packages/hub/test/startup-memory.test.ts
+same packages/hub/test/wiki.test.ts
+same packages/hub/test/workspace-landing.test.ts
+same tests/acceptance/1113/measured.test.mjs
+same tests/acceptance/1113/waits.test.mjs
+same tests/acceptance/1114/timed-list.test.mjs
+same tests/acceptance/1202/entries.test.ts
+same tests/acceptance/1202/programs.test.ts
+same tests/acceptance/1329/ac1-design-source.test.mjs
+same tests/acceptance/1329/ac2-drift-lane.test.mjs
+same tests/acceptance/1334/crash.test.mjs
+same tests/acceptance/1334/hold.test.mjs
+same tests/acceptance/1334/misjudge.test.mjs
+same tests/acceptance/1348/plants.test.ts
+same tests/acceptance/139/corpus.test.ts
+same tests/acceptance/140/gpu/validation.test.ts
+same tests/acceptance/140/platform/wasm.test.ts
+same tests/acceptance/1421/no-cpu-line.test.mjs
+same tests/acceptance/1421/zero-cpu-base.test.mjs
+same tests/acceptance/1425/lint.test.ts
+
+## second part (rerun): kind file main-exit head-exit
+main-fail-head-pass tests/bays.test.mjs 1 0
+same tests/acceptance/1425/imports.test.ts 1 1
+same tests/acceptance/1454/lint.test.ts 1 1
+same tests/acceptance/1461/redraft/tree.test.ts 1 1
+same tests/acceptance/1495/verify.test.ts 1 1
+same tests/acceptance/1556/lint.test.ts 0 0
+same tests/acceptance/1556/twins.test.ts 0 0
+same tests/acceptance/1624/lanes.test.mjs 1 1
+same tests/acceptance/1624-redraft/alone.test.mjs 0 0
+same tests/acceptance/1687/ac3-redraft/ac3.test.mjs 1 1
+same tests/acceptance/1687/full/structure.test.mjs 1 1
+same tests/acceptance/1687/ownership-redraft/structure.test.mjs 1 1
+same tests/acceptance/1830/ac1-lint.test.ts 0 0
+same tests/acceptance/1830/ac2-redrafts.test.ts 0 0
+same tests/acceptance/1835/window.test.mjs 0 0
+same tests/acceptance/1874/window.test.mjs 0 0
+same tests/acceptance/1875/affected.test.mjs 0 0
+same tests/acceptance/1981/window.test.mjs 0 0
+same tests/acceptance/2063/ac1-recorded-tracker-exact.test.mjs 0 0
+same tests/acceptance/2063/ac1-recorded-tracker-ruled.test.mjs 0 0
+same tests/acceptance/2063/ac1-recorded-tracker.test.mjs 0 0
+same tests/acceptance/2063/ac2-uncatalogued-kind.test.mjs 0 0
+same tests/acceptance/2063/ac3-stale-entries.test.mjs 0 0
+same tests/acceptance/2063/ac4-listed-family.test.mjs 0 0
+same tests/acceptance/2119/merge-at-write.test.ts 1 1
+same tests/acceptance/2122/product-session.test.ts 1 1
+same tests/acceptance/2123/dispute-restart.test.ts 0 0
+same tests/acceptance/2144/lint-on-main.test.mjs 1 1
+same tests/acceptance/2176/kinds-no-core.test.mjs 0 0
+same tests/acceptance/2178/lint-lanes.test.mjs 1 1
+same tests/acceptance/2330/lifecycle.test.mjs 1 1
+same tests/acceptance/2405/ac1-names-script.test.mjs 0 0
+same tests/acceptance/2405/ac3-dependencies.test.mjs 0 0
+same tests/acceptance/2417/unreadable.test.mjs 0 0
+same tests/acceptance/2444/preflight-known-failures.test.mjs 0 0
+same tests/acceptance/246/perf.test.mjs 0 0
+same tests/acceptance/246/redraft/deps.test.mjs 1 1
+same tests/acceptance/246/repo-rules.test.mjs 1 1
+same tests/acceptance/246/secrets-property.test.mjs 1 1
+same tests/acceptance/2574/grant.test.mjs 0 0
+same tests/acceptance/2574-redraft-2833/grant.test.mjs 0 0
+same tests/acceptance/2574/shards-linux.test.mjs 0 0
+same tests/acceptance/2574/wide.test.mjs 0 0
+same tests/acceptance/2583/lane.test.mjs 1 1
+same tests/acceptance/2635/affected-cargo-missing.test.mjs 0 0
+same tests/acceptance/2646/ask-check.test.mjs 1 1
+same tests/acceptance/2646/asks-kinds.test.mjs 1 1
+same tests/acceptance/2646/budgets.long.test.mjs 1 1
+same tests/acceptance/2646/minute.test.mjs 1 1
+same tests/acceptance/2646-redraft-ac3/minute-pass.test.mjs 1 1
+same tests/acceptance/2646/statements.test.mjs 0 0
+same tests/acceptance/2655/history.test.mjs 1 1
+same tests/acceptance/2655/line-copies.test.mjs 1 1
+same tests/acceptance/2655/loads.test.mjs 1 1
+same tests/acceptance/2655/start.test.mjs 1 1
+same tests/acceptance/2655/tls.test.mjs 1 1
+same tests/acceptance/2741/cores.test.mjs 1 1
+same tests/acceptance/2813/before.test.mjs 0 0
+same tests/acceptance/309/chosen-relay.test.ts 0 0
+same tests/acceptance/309/relay-suite.test.ts 0 0
+same tests/acceptance/313/packaging.test.ts 1 1
+same tests/acceptance/317/floor.test.ts 0 0
+same tests/acceptance/326/panels/guard.test.mjs 0 0
+same tests/acceptance/337/spike.test.mjs 1 1
+same tests/acceptance/338/spike.test.mjs 1 1
+same tests/acceptance/33/bootstrap.test.ts 1 1
+same tests/acceptance/33/spine.test.ts 1 1
+same tests/acceptance/377/noop.test.ts 1 1
+same tests/acceptance/47/explain.test.mjs 1 1
+same tests/acceptance/47/preflight.test.mjs 0 0
+same tests/acceptance/569/before.test.mjs 0 0
+same tests/acceptance/569/decisions.test.mjs 0 0
+same tests/acceptance/569/guard.test.mjs 0 0
+same tests/acceptance/569/mutation.test.mjs 0 0
+same tests/acceptance/569/preflight.test.mjs 0 0
+same tests/acceptance/569/replay.test.mjs 0 0
+same tests/acceptance/569/suites.test.mjs 1 1
+same tests/acceptance/569/tolerance.test.mjs 0 0
+same tests/acceptance/569/trace.test.mjs 0 0
+same tests/acceptance/56/decision.test.mjs 1 1
+same tests/acceptance/594/build-dirs.test.mjs 1 1
+same tests/acceptance/594/margin.test.mjs 1 1
+same tests/acceptance/594/warm.test.mjs 1 1
+same tests/acceptance/605/catalogue-311.test.mjs 1 1
+same tests/acceptance/605/drift.test.mjs 0 0
+same tests/acceptance/605/offline.test.mjs 0 0
+same tests/acceptance/684/lanes.test.ts 1 1
+same tests/acceptance/689/preflight-env.test.mjs 1 1
+same tests/acceptance/689/toolchain.test.mjs 0 0
+same tests/acceptance/79/checks.test.mjs 0 0
+same tests/acceptance/79/mark.test.mjs 1 1
+same tests/acceptance/821/config-eval.test.mjs 0 0
+same tests/acceptance/821/predicate.test.mjs 0 0
+same tests/acceptance/821/unknown-change.test.mjs 0 0
+same tests/acceptance/821/verdict-proofs.test.mjs 0 0
+same tests/acceptance/824/sessions/readings.test.ts 1 1
+same tests/acceptance/82/pending.test.ts 1 1
+same tests/acceptance/879/cards.test.mjs 1 1
+same tests/acceptance/879/checkout.test.mjs 1 1
+same tests/acceptance/879/lane.test.mjs 1 1
+same tests/acceptance/87/gate/replay-lane.test.ts 1 1
+same tests/acceptance/880/plants.test.ts 1 1
+same tests/acceptance/882/inventory.test.mjs 1 1
+same tests/acceptance/882/lint.test.mjs 1 1
+same tests/acceptance/882/wrong.test.mjs 0 0
+same tests/acceptance/910/anchors.test.mjs 1 1
+same tests/acceptance/910/clean.test.mjs 1 1
+same tests/acceptance/992/gone.test.ts 1 1
+same tests/acceptance/992/notification.test.ts 1 1
+same tests/acceptance/993/doctor.test.ts 0 0
+same tests/acceptance/993/hub-check.test.ts 1 1
+same tests/acceptance/993/nested-caller.test.ts 0 0
+same tests/affected.test.mjs 1 1
+same tests/agent-name-branches.test.mjs 1 1
+same tests/ask-sources-guard.test.mjs 0 0
+same tests/budget-window.test.mjs 0 0
+same tests/cargo-blocked.test.mjs 0 0
+same tests/config-eval-storage.test.mjs 0 0
+same tests/config-eval.test.mjs 0 0
+same tests/hub-lifecycle-cleanup.test.mjs 0 0
+same tests/lane-reading.test.mjs 1 1
+same tests/listed-diagnostic.test.mjs 0 0
+same tests/listed-failures.test.mjs 1 1
+same tests/perf.test.mjs 1 1
+same tests/preflight-exclusion.test.mjs 0 0
+same tests/preflight-selection.test.mjs 0 0
+same tests/proof-binaries-errors.test.mjs 0 0
+same tests/proof-binaries-live-selection.test.mjs 1 1
+same tests/proof-binaries-shard-release.test.mjs 0 0
+same tests/proof.test.mjs 1 1
+same tests/shards.test.mjs 1 1
+same tests/takes-timed.test.mjs 1 1
+
+## raw lines
+lint canvas-lint main exit=2
+lint canvas-lint head exit=2
+lint color-literal-guard main exit=1
+lint color-literal-guard head exit=1
+lint repo-rules main exit=1
+lint repo-rules head exit=1
+lint size-ratchet main exit=1
+lint size-ratchet head exit=1
+lint vendor-rebase main exit=2
+lint vendor-rebase head exit=2
+lint conformance-lint main exit=1
+lint conformance-lint head exit=1
+head packages/hub/test/actions-server.test.ts exit=0 secs=10 load=60.39 16:25:24Z
+main packages/hub/test/actions-server.test.ts exit=0 secs=11 load=60.39 16:25:25Z
+main packages/hub/test/actions.test.ts exit=0 secs=7 load=63.40 16:25:31Z
+head packages/hub/test/actions.test.ts exit=0 secs=8 load=63.40 16:25:33Z
+main packages/hub/test/answer-after-restart.test.ts exit=0 secs=13 load=64.05 16:25:44Z
+head packages/hub/test/answer-after-restart.test.ts exit=0 secs=13 load=64.05 16:25:46Z
+main packages/hub/test/asleep.test.ts exit=1 secs=2 load=64.05 16:25:46Z
+head packages/hub/test/asleep.test.ts exit=1 secs=1 load=64.05 16:25:47Z
+main packages/hub/test/background-group.test.ts exit=1 secs=242 load=71.41 16:29:48Z
+head packages/hub/test/background-group.test.ts exit=1 secs=243 load=71.86 16:29:50Z
+main packages/hub/test/background.test.ts exit=1 secs=3 load=71.86 16:29:51Z
+head packages/hub/test/background.test.ts exit=1 secs=3 load=71.86 16:29:53Z
+head packages/hub/test/checks-not-started.test.ts exit=0 secs=4 load=71.23 16:29:57Z
+main packages/hub/test/checks-not-started.test.ts exit=0 secs=6 load=71.23 16:29:57Z
+main packages/hub/test/claim-replay.test.ts exit=0 secs=3 load=71.61 16:30:00Z
+head packages/hub/test/claim-replay.test.ts exit=0 secs=3 load=71.61 16:30:00Z
+main packages/hub/test/codes.test.ts exit=0 secs=3 load=71.61 16:30:03Z
+head packages/hub/test/codes.test.ts exit=0 secs=3 load=71.61 16:30:03Z
+main packages/hub/test/codex-hub.test.ts exit=1 secs=272 load=110.61 16:34:35Z
+head packages/hub/test/codex-hub.test.ts exit=1 secs=281 load=108.72 16:34:44Z
+main packages/hub/test/continues.test.ts exit=1 secs=95 load=134.73 16:36:10Z
+main packages/hub/test/detached.test.ts exit=1 secs=12 load=138.57 16:36:22Z
+head packages/hub/test/continues.test.ts exit=1 secs=98 load=138.57 16:36:22Z
+main packages/hub/test/done-reader-fold.test.ts exit=1 secs=7 load=139.17 16:36:29Z
+head packages/hub/test/detached.test.ts exit=1 secs=9 load=141.79 16:36:31Z
+head packages/hub/test/done-reader-fold.test.ts exit=0 secs=8 load=143.09 16:36:37Z
+head packages/hub/test/env-resources.test.ts exit=1 secs=185 load=86.97 16:39:42Z
+main packages/hub/test/env-resources.test.ts exit=1 secs=192 load=86.97 16:39:43Z
+head packages/hub/test/gate-stop.test.ts exit=1 secs=65 load=55.17 16:40:48Z
+main packages/hub/test/hub-down.test.ts exit=1 secs=0 load=55.17 16:40:48Z
+head packages/hub/test/hub-down.test.ts exit=1 secs=1 load=55.17 16:40:49Z
+main packages/hub/test/library-command.test.ts exit=0 secs=5 load=51.16 16:40:54Z
+head packages/hub/test/library-command.test.ts exit=0 secs=7 load=49.46 16:41:02Z
+main packages/hub/test/lifecycle-events.test.mjs exit=1 secs=6 load=48.54 16:41:08Z
+head packages/hub/test/lifecycle-events.test.mjs exit=1 secs=6 load=46.90 16:41:14Z
+main packages/hub/test/mcp-rebind.test.ts exit=1 secs=9 load=44.69 16:41:23Z
+head packages/hub/test/mcp-rebind.test.ts exit=0 secs=11 load=42.20 16:41:34Z
+main packages/hub/test/gate-stop.test.ts exit=1 secs=115 load=42.20 16:41:37Z
+main packages/hub/test/memory.test.ts exit=1 secs=13 load=39.65 16:41:47Z
+head packages/hub/test/memory.test.ts exit=1 secs=12 load=39.65 16:41:49Z
+main packages/hub/test/monitor-ends.test.ts exit=0 secs=70 load=39.09 16:42:57Z
+head packages/hub/test/monitor-ends.test.ts exit=0 secs=72 load=38.36 16:43:01Z
+main packages/hub/test/notification-idle.test.ts exit=0 secs=6 load=38.36 16:43:03Z
+head packages/hub/test/notification-idle.test.ts exit=0 secs=5 load=37.69 16:43:06Z
+main packages/hub/test/numbers.test.ts exit=0 secs=13 load=38.82 16:43:16Z
+head packages/hub/test/numbers.test.ts exit=0 secs=12 load=38.82 16:43:18Z
+main packages/hub/test/onboarding.test.ts exit=1 secs=35 load=61.58 16:43:51Z
+head packages/hub/test/onboarding.test.ts exit=1 secs=38 load=68.02 16:43:56Z
+main packages/hub/test/pack-missing-open.test.ts exit=0 secs=18 load=77.71 16:44:09Z
+head packages/hub/test/pack-missing-open.test.ts exit=0 secs=19 load=79.33 16:44:15Z
+main packages/hub/test/parsers.test.ts exit=1 secs=8 load=79.33 16:44:17Z
+head packages/hub/test/parsers.test.ts exit=1 secs=6 load=81.87 16:44:21Z
+head packages/hub/test/probe-lifecycle.test.ts exit=1 secs=69 load=102.30 16:45:30Z
+main packages/hub/test/products-keep-orphan-2122.test.ts exit=1 secs=3 load=102.30 16:45:33Z
+head packages/hub/test/products-keep-orphan-2122.test.ts exit=1 secs=3 load=103.88 16:45:36Z
+main packages/hub/test/products-restart-reclaim-2122.test.ts exit=1 secs=16 load=105.38 16:45:52Z
+head packages/hub/test/products-restart-reclaim-2122.test.ts exit=1 secs=12 load=102.01 16:46:05Z
+main packages/hub/test/prompt-items.test.ts exit=0 secs=41 load=82.24 16:46:46Z
+head packages/hub/test/prompt-items.test.ts exit=0 secs=11 load=70.66 16:46:57Z
+main packages/hub/test/reading.test.ts exit=0 secs=46 load=37.99 16:47:43Z
+head packages/hub/test/reading.test.ts exit=0 secs=45 load=21.44 16:48:28Z
+main packages/hub/test/row-actions.test.ts exit=0 secs=2 load=19.97 16:48:30Z
+head packages/hub/test/row-actions.test.ts exit=0 secs=3 load=19.97 16:48:33Z
+main packages/hub/test/setup-failure-safety.test.ts exit=0 secs=4 load=19.01 16:48:37Z
+head packages/hub/test/setup-failure-safety.test.ts exit=0 secs=3 load=17.88 16:48:40Z
+main packages/hub/test/shutdown-connection.test.ts exit=0 secs=15 load=15.57 16:48:55Z
+head packages/hub/test/shutdown-connection.test.ts exit=0 secs=15 load=14.04 16:49:10Z
+main packages/hub/test/staging.test.ts exit=1 secs=1 load=14.04 16:49:11Z
+head packages/hub/test/staging.test.ts exit=1 secs=1 load=14.04 16:49:12Z
+main packages/hub/test/startup-memory.test.ts exit=0 secs=10 load=12.35 16:49:22Z
+main packages/hub/test/probe-lifecycle.test.ts exit=1 secs=307 load=12.35 16:49:24Z
+main packages/hub/test/wiki.test.ts exit=1 secs=4 load=12.48 16:49:28Z
+head packages/hub/test/wiki.test.ts exit=1 secs=5 load=11.80 16:49:33Z
+head packages/hub/test/startup-memory.test.ts exit=0 secs=11 load=11.80 16:49:33Z
+main packages/hub/test/workspace-landing.test.ts exit=0 secs=1 load=11.80 16:49:34Z
+head packages/hub/test/workspace-landing.test.ts exit=0 secs=1 load=11.80 16:49:34Z
+main tests/acceptance/1113/measured.test.mjs exit=0 secs=11 load=10.93 16:49:45Z
+head tests/acceptance/1113/measured.test.mjs exit=0 secs=11 load=10.93 16:49:45Z
+head tests/acceptance/1113/waits.test.mjs exit=0 secs=86 load=19.10 16:51:11Z
+main tests/acceptance/1114/timed-list.test.mjs exit=1 secs=2 load=19.10 16:51:13Z
+head tests/acceptance/1114/timed-list.test.mjs exit=1 secs=2 load=17.97 16:51:15Z
+main tests/acceptance/1113/waits.test.mjs exit=0 secs=94 load=17.97 16:51:19Z
+main tests/acceptance/1202/entries.test.ts exit=0 secs=15 load=15.28 16:51:30Z
+head tests/acceptance/1202/entries.test.ts exit=0 secs=12 load=15.28 16:51:31Z
+main tests/acceptance/1202/programs.test.ts exit=1 secs=40 load=10.02 16:52:10Z
+head tests/acceptance/1202/programs.test.ts exit=1 secs=39 load=10.02 16:52:10Z
+head tests/acceptance/1329/ac1-design-source.test.mjs exit=1 secs=20 load=11.30 16:52:30Z
+main tests/acceptance/1329/ac1-design-source.test.mjs exit=1 secs=20 load=11.30 16:52:30Z
+main tests/acceptance/1329/ac2-drift-lane.test.mjs exit=1 secs=37 load=8.52 16:53:07Z
+head tests/acceptance/1329/ac2-drift-lane.test.mjs exit=1 secs=37 load=8.52 16:53:07Z
+main tests/acceptance/1334/crash.test.mjs exit=1 secs=2 load=8.00 16:53:09Z
+head tests/acceptance/1334/crash.test.mjs exit=1 secs=2 load=8.00 16:53:09Z
+main tests/acceptance/1334/hold.test.mjs exit=1 secs=5 load=8.00 16:53:14Z
+head tests/acceptance/1334/hold.test.mjs exit=1 secs=5 load=8.00 16:53:14Z
+head tests/acceptance/1334/misjudge.test.mjs exit=1 secs=2 load=7.60 16:53:16Z
+main tests/acceptance/1334/misjudge.test.mjs exit=1 secs=2 load=7.60 16:53:16Z
+head tests/acceptance/1348/plants.test.ts exit=1 secs=310 load=32.65 16:58:26Z
+main tests/acceptance/139/corpus.test.ts exit=1 secs=5 load=31.72 16:58:31Z
+head tests/acceptance/139/corpus.test.ts exit=1 secs=4 load=32.46 16:58:35Z
+main tests/acceptance/140/gpu/validation.test.ts exit=1 secs=574 load=15.57 17:08:09Z
+main tests/acceptance/1348/plants.test.ts exit=1 secs=894 load=15.52 17:08:10Z
+main tests/acceptance/140/platform/wasm.test.ts exit=1 secs=58 load=25.28 17:09:08Z
+head tests/acceptance/140/gpu/validation.test.ts exit=1 secs=66 load=22.66 17:09:15Z
+head tests/acceptance/140/platform/wasm.test.ts exit=1 secs=47 load=23.68 17:09:55Z
+main tests/acceptance/1421/no-cpu-line.test.mjs exit=0 secs=57 load=19.47 17:10:12Z
+head tests/acceptance/1421/no-cpu-line.test.mjs exit=0 secs=17 load=19.47 17:10:12Z
+main tests/acceptance/1421/zero-cpu-base.test.mjs exit=0 secs=1 load=19.47 17:10:13Z
+head tests/acceptance/1421/zero-cpu-base.test.mjs exit=0 secs=1 load=19.47 17:10:13Z
+head tests/acceptance/1425/imports.test.ts exit=1 secs=2 load=18.39 17:10:15Z
+main tests/acceptance/1425/lint.test.ts exit=0 secs=4 load=19.32 17:10:20Z
+head tests/acceptance/1425/lint.test.ts exit=0 secs=4 load=19.32 17:10:24Z
+main tests/acceptance/1425/imports.test.ts exit=1 secs=84 load=17.57 17:11:37Z
+head tests/acceptance/1454/lint.test.ts exit=1 secs=48 load=22.59 17:12:25Z
+main tests/acceptance/1461/redraft/tree.test.ts exit=1 secs=14 load=25.03 17:12:39Z
+main tests/acceptance/1454/lint.test.ts exit=1 secs=135 load=25.03 17:12:39Z
+main tests/acceptance/1495/verify.test.ts exit=1 secs=1 load=23.99 17:12:40Z
+head tests/acceptance/1495/verify.test.ts exit=1 secs=2 load=23.99 17:12:42Z
+head tests/acceptance/1461/redraft/tree.test.ts exit=1 secs=4 load=23.99 17:12:43Z
+head tests/acceptance/1556/lint.test.ts exit=1 secs=0 load=23.99 17:12:43Z
+main tests/acceptance/1556/twins.test.ts exit=1 secs=0 load=23.99 17:12:43Z
+main tests/acceptance/1556/lint.test.ts exit=1 secs=1 load=23.99 17:12:43Z
+main tests/acceptance/1624/lanes.test.mjs exit=1 secs=7 load=21.60 17:12:50Z
+head tests/acceptance/1624/lanes.test.mjs exit=1 secs=6 load=20.59 17:12:56Z
+main tests/acceptance/1624-redraft/alone.test.mjs exit=0 secs=0 load=20.59 17:12:57Z
+head tests/acceptance/1624-redraft/alone.test.mjs exit=0 secs=0 load=20.59 17:12:57Z
+main tests/acceptance/1687/ac3-redraft/ac3.test.mjs exit=1 secs=3 load=19.34 17:13:00Z
+head tests/acceptance/1687/ac3-redraft/ac3.test.mjs exit=1 secs=4 load=19.34 17:13:04Z
+head tests/acceptance/1556/twins.test.ts exit=1 secs=22 load=18.27 17:13:05Z
+main tests/acceptance/1687/full/structure.test.mjs exit=1 secs=2 load=18.27 17:13:06Z
+main tests/acceptance/1687/ownership-redraft/structure.test.mjs exit=1 secs=0 load=18.27 17:13:06Z
+head tests/acceptance/1687/full/structure.test.mjs exit=1 secs=2 load=18.27 17:13:07Z
+head tests/acceptance/1687/ownership-redraft/structure.test.mjs exit=1 secs=1 load=18.27 17:13:07Z
+main tests/acceptance/1830/ac1-lint.test.ts exit=0 secs=2 load=18.27 17:13:09Z
+head tests/acceptance/1830/ac1-lint.test.ts exit=0 secs=2 load=18.27 17:13:09Z
+main tests/acceptance/1830/ac2-redrafts.test.ts exit=0 secs=6 load=16.14 17:13:15Z
+head tests/acceptance/1830/ac2-redrafts.test.ts exit=0 secs=6 load=16.14 17:13:15Z
+main tests/acceptance/1835/window.test.mjs exit=0 secs=0 load=16.14 17:13:15Z
+head tests/acceptance/1835/window.test.mjs exit=0 secs=0 load=16.14 17:13:15Z
+main tests/acceptance/1874/window.test.mjs exit=0 secs=0 load=16.14 17:13:15Z
+head tests/acceptance/1874/window.test.mjs exit=0 secs=0 load=16.14 17:13:15Z
+head tests/acceptance/1875/affected.test.mjs exit=0 secs=6 load=16.05 17:13:21Z
+main tests/acceptance/1981/window.test.mjs exit=0 secs=0 load=16.05 17:13:21Z
+head tests/acceptance/1981/window.test.mjs exit=0 secs=0 load=16.05 17:13:21Z
+main tests/acceptance/1875/affected.test.mjs exit=0 secs=6 load=16.05 17:13:21Z
+head tests/acceptance/2063/ac1-recorded-tracker-exact.test.mjs exit=0 secs=1 load=16.05 17:13:22Z
+main tests/acceptance/2063/ac1-recorded-tracker-exact.test.mjs exit=0 secs=1 load=16.05 17:13:22Z
+head tests/acceptance/2063/ac1-recorded-tracker-ruled.test.mjs exit=0 secs=2 load=16.05 17:13:24Z
+main tests/acceptance/2063/ac1-recorded-tracker-ruled.test.mjs exit=0 secs=2 load=16.05 17:13:24Z
+main tests/acceptance/2063/ac1-recorded-tracker.test.mjs exit=0 secs=0 load=16.05 17:13:24Z
+head tests/acceptance/2063/ac1-recorded-tracker.test.mjs exit=0 secs=0 load=16.05 17:13:24Z
+main tests/acceptance/2063/ac2-uncatalogued-kind.test.mjs exit=0 secs=2 load=15.00 17:13:26Z
+head tests/acceptance/2063/ac2-uncatalogued-kind.test.mjs exit=0 secs=2 load=15.00 17:13:26Z
+main tests/acceptance/2063/ac3-stale-entries.test.mjs exit=0 secs=2 load=15.00 17:13:28Z
+head tests/acceptance/2063/ac3-stale-entries.test.mjs exit=0 secs=2 load=15.00 17:13:28Z
+main tests/acceptance/2063/ac4-listed-family.test.mjs exit=1 secs=1 load=15.00 17:13:29Z
+head tests/acceptance/2063/ac4-listed-family.test.mjs exit=1 secs=1 load=15.00 17:13:29Z
+main tests/acceptance/2119/merge-at-write.test.ts exit=1 secs=0 load=15.00 17:13:29Z
+head tests/acceptance/2119/merge-at-write.test.ts exit=1 secs=0 load=15.00 17:13:29Z
+head tests/acceptance/2122/product-session.test.ts exit=1 secs=1 load=13.88 17:13:30Z
+main tests/acceptance/2122/product-session.test.ts exit=1 secs=1 load=13.88 17:13:30Z
+head tests/acceptance/2123/dispute-restart.test.ts exit=0 secs=4 load=13.88 17:13:34Z
+main tests/acceptance/2123/dispute-restart.test.ts exit=0 secs=4 load=13.88 17:13:34Z
+main tests/acceptance/2144/lint-on-main.test.mjs exit=1 secs=2 load=13.01 17:13:36Z
+main tests/acceptance/2176/kinds-no-core.test.mjs exit=1 secs=0 load=13.01 17:13:36Z
+head tests/acceptance/2176/kinds-no-core.test.mjs exit=1 secs=0 load=13.01 17:13:36Z
+head tests/acceptance/2144/lint-on-main.test.mjs exit=1 secs=3 load=13.01 17:13:37Z
+main tests/acceptance/2178/lint-lanes.test.mjs exit=1 secs=13 load=11.54 17:13:49Z
+main tests/acceptance/2330/lifecycle.test.mjs exit=1 secs=0 load=11.54 17:13:49Z
+head tests/acceptance/2330/lifecycle.test.mjs exit=1 secs=1 load=11.54 17:13:50Z
+main tests/acceptance/2405/ac1-names-script.test.mjs exit=1 secs=0 load=11.10 17:13:50Z
+head tests/acceptance/2405/ac1-names-script.test.mjs exit=1 secs=0 load=11.10 17:13:50Z
+main tests/acceptance/2405/ac3-dependencies.test.mjs exit=1 secs=0 load=11.10 17:13:50Z
+head tests/acceptance/2405/ac3-dependencies.test.mjs exit=1 secs=0 load=11.10 17:13:50Z
+main tests/acceptance/2417/unreadable.test.mjs exit=1 secs=0 load=11.10 17:13:50Z
+head tests/acceptance/2417/unreadable.test.mjs exit=1 secs=0 load=11.10 17:13:50Z
+main tests/acceptance/2444/preflight-known-failures.test.mjs exit=1 secs=0 load=11.10 17:13:50Z
+head tests/acceptance/2444/preflight-known-failures.test.mjs exit=1 secs=0 load=11.10 17:13:50Z
+main tests/acceptance/246/perf.test.mjs exit=1 secs=0 load=11.10 17:13:50Z
+head tests/acceptance/246/perf.test.mjs exit=1 secs=0 load=11.10 17:13:50Z
+main tests/acceptance/246/redraft/deps.test.mjs exit=1 secs=0 load=11.10 17:13:50Z
+head tests/acceptance/246/redraft/deps.test.mjs exit=1 secs=0 load=11.10 17:13:50Z
+main tests/acceptance/246/repo-rules.test.mjs exit=1 secs=1 load=11.10 17:13:51Z
+head tests/acceptance/246/repo-rules.test.mjs exit=1 secs=0 load=11.10 17:13:51Z
+main tests/acceptance/246/secrets-property.test.mjs exit=1 secs=0 load=11.10 17:13:51Z
+head tests/acceptance/246/secrets-property.test.mjs exit=1 secs=0 load=11.10 17:13:51Z
+main tests/acceptance/2574/grant.test.mjs exit=1 secs=0 load=11.10 17:13:51Z
+head tests/acceptance/2574/grant.test.mjs exit=1 secs=0 load=11.10 17:13:51Z
+main tests/acceptance/2574-redraft-2833/grant.test.mjs exit=1 secs=0 load=11.10 17:13:51Z
+head tests/acceptance/2574-redraft-2833/grant.test.mjs exit=1 secs=0 load=11.10 17:13:51Z
+main canvas-lint exit=1 secs=0 load=2.48 free=60G 17:37:22Z
+head canvas-lint exit=1 secs=0 load=2.48 free=60G 17:37:22Z
+main color-literal-guard exit=1 secs=0 load=2.48 free=60G 17:37:23Z
+head color-literal-guard exit=1 secs=1 load=2.48 free=60G 17:37:23Z
+main conformance-lint exit=1 secs=0 load=2.48 free=60G 17:37:23Z
+head conformance-lint exit=1 secs=0 load=2.48 free=60G 17:37:23Z
+main repo-rules exit=1 secs=0 load=2.48 free=60G 17:37:23Z
+head repo-rules exit=1 secs=0 load=2.48 free=60G 17:37:23Z
+head size-ratchet exit=1 secs=0 load=2.48 free=60G 17:37:23Z
+main size-ratchet exit=1 secs=0 load=2.48 free=60G 17:37:23Z
+head tests/acceptance/1425/imports.test.ts exit=1 secs=62 load=5.81 free=54G 17:38:25Z
+main tests/acceptance/1425/imports.test.ts exit=1 secs=119 load=7.42 free=53G 17:39:22Z
+head tests/acceptance/1454/lint.test.ts exit=1 secs=207 load=43.36 free=38G 17:42:49Z
+main tests/acceptance/1454/lint.test.ts exit=1 secs=283 load=42.74 free=37G 17:43:08Z
+head tests/acceptance/1461/redraft/tree.test.ts exit=1 secs=29 load=48.86 free=34G 17:43:37Z
+main tests/acceptance/1495/verify.test.ts exit=1 secs=2 load=48.86 free=34G 17:43:39Z
+head tests/acceptance/1495/verify.test.ts exit=1 secs=2 load=50.32 free=33G 17:43:41Z
+main tests/acceptance/1461/redraft/tree.test.ts exit=1 secs=135 load=43.95 free=27G 17:45:04Z
+head tests/acceptance/1556/lint.test.ts exit=0 secs=157 load=28.84 free=14G 17:47:41Z
+main tests/acceptance/1556/lint.test.ts exit=0 secs=336 load=36.14 free=10G 17:49:17Z
+head tests/acceptance/1556/twins.test.ts exit=0 secs=50 load=4.99 free=30G 17:52:07Z
+main tests/acceptance/1624/lanes.test.mjs exit=1 secs=7 load=4.75 free=29G 17:52:14Z
+head tests/acceptance/1624/lanes.test.mjs exit=1 secs=6 load=4.61 free=28G 17:52:20Z
+main tests/acceptance/1624-redraft/alone.test.mjs exit=0 secs=0 load=4.61 free=28G 17:52:20Z
+head tests/acceptance/1624-redraft/alone.test.mjs exit=0 secs=0 load=4.48 free=28G 17:52:20Z
+main tests/acceptance/1687/ac3-redraft/ac3.test.mjs exit=1 secs=4 load=4.48 free=28G 17:52:24Z
+head tests/acceptance/1687/ac3-redraft/ac3.test.mjs exit=1 secs=3 load=4.36 free=28G 17:52:27Z
+main tests/acceptance/1687/full/structure.test.mjs exit=1 secs=2 load=4.36 free=28G 17:52:29Z
+head tests/acceptance/1687/full/structure.test.mjs exit=1 secs=1 load=4.81 free=28G 17:52:30Z
+main tests/acceptance/1687/ownership-redraft/structure.test.mjs exit=1 secs=1 load=4.81 free=28G 17:52:31Z
+head tests/acceptance/1687/ownership-redraft/structure.test.mjs exit=1 secs=0 load=4.81 free=29G 17:52:31Z
+main tests/acceptance/1556/twins.test.ts exit=0 secs=51 load=4.81 free=30G 17:52:32Z
+main tests/acceptance/1830/ac1-lint.test.ts exit=0 secs=3 load=4.81 free=30G 17:52:34Z
+head tests/acceptance/1830/ac1-lint.test.ts exit=0 secs=2 load=4.81 free=30G 17:52:34Z
+main tests/acceptance/1830/ac2-redrafts.test.ts exit=0 secs=5 load=4.59 free=30G 17:52:39Z
+main tests/acceptance/1835/window.test.mjs exit=0 secs=0 load=4.59 free=30G 17:52:39Z
+head tests/acceptance/1835/window.test.mjs exit=0 secs=0 load=4.59 free=30G 17:52:39Z
+main tests/acceptance/1874/window.test.mjs exit=0 secs=0 load=4.59 free=30G 17:52:39Z
+head tests/acceptance/1874/window.test.mjs exit=0 secs=0 load=4.59 free=30G 17:52:39Z
+head tests/acceptance/1830/ac2-redrafts.test.ts exit=0 secs=5 load=4.59 free=30G 17:52:39Z
+main tests/acceptance/1875/affected.test.mjs exit=0 secs=6 load=4.59 free=30G 17:52:45Z
+main tests/acceptance/1981/window.test.mjs exit=0 secs=1 load=4.59 free=30G 17:52:46Z
+head tests/acceptance/1875/affected.test.mjs exit=0 secs=7 load=4.59 free=30G 17:52:46Z
+head tests/acceptance/1981/window.test.mjs exit=0 secs=0 load=4.59 free=30G 17:52:46Z
+main tests/acceptance/2063/ac1-recorded-tracker-exact.test.mjs exit=0 secs=1 load=4.59 free=30G 17:52:47Z
+head tests/acceptance/2063/ac1-recorded-tracker-exact.test.mjs exit=0 secs=1 load=4.59 free=30G 17:52:47Z
+main tests/acceptance/2063/ac1-recorded-tracker-ruled.test.mjs exit=0 secs=1 load=4.59 free=30G 17:52:48Z
+main tests/acceptance/2063/ac1-recorded-tracker.test.mjs exit=0 secs=0 load=4.59 free=30G 17:52:48Z
+head tests/acceptance/2063/ac1-recorded-tracker-ruled.test.mjs exit=0 secs=1 load=4.59 free=30G 17:52:48Z
+head tests/acceptance/2063/ac1-recorded-tracker.test.mjs exit=0 secs=0 load=4.59 free=30G 17:52:48Z
+head tests/acceptance/2063/ac2-uncatalogued-kind.test.mjs exit=0 secs=2 load=4.59 free=30G 17:52:50Z
+main tests/acceptance/2063/ac2-uncatalogued-kind.test.mjs exit=0 secs=2 load=4.59 free=30G 17:52:50Z
+head tests/acceptance/2063/ac3-stale-entries.test.mjs exit=0 secs=2 load=4.46 free=30G 17:52:52Z
+main tests/acceptance/2063/ac3-stale-entries.test.mjs exit=0 secs=2 load=4.46 free=30G 17:52:52Z
+head tests/acceptance/2063/ac4-listed-family.test.mjs exit=0 secs=1 load=4.46 free=30G 17:52:53Z
+main tests/acceptance/2063/ac4-listed-family.test.mjs exit=0 secs=1 load=4.46 free=30G 17:52:53Z
+main tests/acceptance/2119/merge-at-write.test.ts exit=1 secs=0 load=4.46 free=30G 17:52:53Z
+head tests/acceptance/2119/merge-at-write.test.ts exit=1 secs=0 load=4.46 free=30G 17:52:53Z
+main tests/acceptance/2122/product-session.test.ts exit=1 secs=1 load=4.46 free=30G 17:52:54Z
+head tests/acceptance/2122/product-session.test.ts exit=1 secs=1 load=4.46 free=30G 17:52:54Z
+main tests/acceptance/2123/dispute-restart.test.ts exit=0 secs=4 load=4.42 free=30G 17:52:58Z
+head tests/acceptance/2123/dispute-restart.test.ts exit=0 secs=4 load=4.42 free=30G 17:52:58Z
+head tests/acceptance/2144/lint-on-main.test.mjs exit=1 secs=7 load=4.51 free=30G 17:53:05Z
+main tests/acceptance/2144/lint-on-main.test.mjs exit=1 secs=9 load=4.51 free=30G 17:53:07Z
+main tests/acceptance/2176/kinds-no-core.test.mjs exit=0 secs=2 load=4.51 free=30G 17:53:07Z
+head tests/acceptance/2176/kinds-no-core.test.mjs exit=0 secs=1 load=4.51 free=30G 17:53:08Z
+main tests/acceptance/2178/lint-lanes.test.mjs exit=1 secs=17 load=3.72 free=30G 17:53:24Z
+head tests/acceptance/2178/lint-lanes.test.mjs exit=1 secs=16 load=3.72 free=30G 17:53:25Z
+main tests/acceptance/2330/lifecycle.test.mjs exit=1 secs=31 load=2.51 free=30G 17:53:55Z
+head tests/acceptance/2330/lifecycle.test.mjs exit=1 secs=32 load=2.51 free=29G 17:53:57Z
+main tests/acceptance/2405/ac1-names-script.test.mjs exit=0 secs=3 load=2.51 free=29G 17:53:58Z
+head tests/acceptance/2405/ac1-names-script.test.mjs exit=0 secs=2 load=2.51 free=29G 17:53:59Z
+main tests/acceptance/2405/ac3-dependencies.test.mjs exit=0 secs=10 load=2.43 free=29G 17:54:08Z
+main tests/acceptance/2417/unreadable.test.mjs exit=0 secs=1 load=2.43 free=29G 17:54:09Z
+head tests/acceptance/2417/unreadable.test.mjs exit=0 secs=1 load=2.43 free=29G 17:54:10Z
+head tests/acceptance/2405/ac3-dependencies.test.mjs exit=0 secs=11 load=2.43 free=30G 17:54:10Z
+main tests/acceptance/2444/preflight-known-failures.test.mjs exit=0 secs=2 load=2.55 free=30G 17:54:12Z
+head tests/acceptance/2444/preflight-known-failures.test.mjs exit=0 secs=2 load=2.55 free=30G 17:54:12Z
+main tests/acceptance/246/perf.test.mjs exit=0 secs=0 load=2.55 free=30G 17:54:12Z
+head tests/acceptance/246/perf.test.mjs exit=0 secs=0 load=2.55 free=30G 17:54:12Z
+main tests/acceptance/246/redraft/deps.test.mjs exit=1 secs=1 load=2.55 free=30G 17:54:13Z
+head tests/acceptance/246/redraft/deps.test.mjs exit=1 secs=1 load=2.55 free=30G 17:54:13Z
+main tests/acceptance/246/repo-rules.test.mjs exit=1 secs=6 load=2.51 free=30G 17:54:19Z
+head tests/acceptance/246/repo-rules.test.mjs exit=1 secs=6 load=2.51 free=30G 17:54:19Z
+main tests/acceptance/246/secrets-property.test.mjs exit=1 secs=1 load=2.51 free=30G 17:54:20Z
+head tests/acceptance/246/secrets-property.test.mjs exit=1 secs=1 load=2.51 free=30G 17:54:20Z
+head tests/acceptance/2574/grant.test.mjs exit=0 secs=3 load=2.95 free=30G 17:54:23Z
+main tests/acceptance/2574/grant.test.mjs exit=0 secs=3 load=2.95 free=30G 17:54:23Z
+main tests/acceptance/2574-redraft-2833/grant.test.mjs exit=0 secs=14 load=3.89 free=30G 17:54:37Z
+head tests/acceptance/2574-redraft-2833/grant.test.mjs exit=0 secs=15 load=3.89 free=30G 17:54:38Z
+main tests/acceptance/2574/shards-linux.test.mjs exit=0 secs=1 load=3.89 free=30G 17:54:38Z
+head tests/acceptance/2574/shards-linux.test.mjs exit=0 secs=1 load=3.89 free=30G 17:54:39Z
+main tests/acceptance/2574/wide.test.mjs exit=0 secs=7 load=4.14 free=30G 17:54:45Z
+head tests/acceptance/2574/wide.test.mjs exit=0 secs=7 load=3.89 free=30G 17:54:46Z
+head tests/acceptance/2583/lane.test.mjs exit=1 secs=8 load=3.82 free=30G 17:54:54Z
+main tests/acceptance/2583/lane.test.mjs exit=1 secs=10 load=3.83 free=30G 17:54:55Z
+main tests/acceptance/2635/affected-cargo-missing.test.mjs exit=0 secs=1 load=3.83 free=30G 17:54:55Z
+main tests/acceptance/2646/ask-check.test.mjs exit=1 secs=0 load=3.83 free=30G 17:54:55Z
+head tests/acceptance/2646/ask-check.test.mjs exit=1 secs=0 load=3.83 free=30G 17:54:55Z
+main tests/acceptance/2646/asks-kinds.test.mjs exit=1 secs=1 load=3.83 free=30G 17:54:56Z
+head tests/acceptance/2646/asks-kinds.test.mjs exit=1 secs=0 load=3.83 free=30G 17:54:56Z
+main tests/acceptance/2646/budgets.long.test.mjs exit=1 secs=0 load=3.83 free=30G 17:54:56Z
+head tests/acceptance/2646/budgets.long.test.mjs exit=1 secs=0 load=3.83 free=30G 17:54:56Z
+main tests/acceptance/2646/minute.test.mjs exit=1 secs=0 load=3.83 free=30G 17:54:56Z
+head tests/acceptance/2646/minute.test.mjs exit=1 secs=0 load=3.83 free=30G 17:54:56Z
+head tests/acceptance/2635/affected-cargo-missing.test.mjs exit=0 secs=1 load=3.83 free=30G 17:54:56Z
+main tests/acceptance/2646-redraft-ac3/minute-pass.test.mjs exit=1 secs=6 load=3.60 free=29G 17:55:02Z
+head tests/acceptance/2646-redraft-ac3/minute-pass.test.mjs exit=1 secs=6 load=3.60 free=30G 17:55:02Z
+main tests/acceptance/2646/statements.test.mjs exit=0 secs=105 load=1.07 free=30G 17:56:47Z
+head tests/acceptance/2646/statements.test.mjs exit=0 secs=105 load=1.07 free=30G 17:56:47Z
+main tests/acceptance/2655/history.test.mjs exit=1 secs=19 load=1.22 free=29G 17:57:06Z
+head tests/acceptance/2655/history.test.mjs exit=1 secs=19 load=1.22 free=30G 17:57:06Z
+main tests/acceptance/2655/line-copies.test.mjs exit=1 secs=19 load=1.02 free=30G 17:57:25Z
+head tests/acceptance/2655/line-copies.test.mjs exit=1 secs=19 load=1.02 free=30G 17:57:25Z
+main tests/acceptance/2655/loads.test.mjs exit=1 secs=0 load=1.10 free=30G 17:57:25Z
+main tests/acceptance/2655/start.test.mjs exit=1 secs=1 load=1.10 free=30G 17:57:26Z
+head tests/acceptance/2655/start.test.mjs exit=1 secs=0 load=1.10 free=30G 17:57:26Z
+head tests/acceptance/2655/loads.test.mjs exit=1 secs=1 load=1.10 free=30G 17:57:26Z
+main tests/acceptance/2655/tls.test.mjs exit=1 secs=2 load=1.10 free=30G 17:57:28Z
+head tests/acceptance/2655/tls.test.mjs exit=1 secs=2 load=1.10 free=30G 17:57:28Z
+main tests/acceptance/2741/cores.test.mjs exit=1 secs=1 load=1.10 free=30G 17:57:29Z
+head tests/acceptance/2741/cores.test.mjs exit=1 secs=1 load=1.10 free=30G 17:57:29Z
+head tests/acceptance/2813/before.test.mjs exit=0 secs=0 load=1.10 free=30G 17:57:29Z
+main tests/acceptance/2813/before.test.mjs exit=0 secs=0 load=1.10 free=30G 17:57:29Z
+main tests/acceptance/309/chosen-relay.test.ts exit=0 secs=244 load=7.37 free=5G 18:01:33Z
+head tests/acceptance/309/chosen-relay.test.ts exit=0 secs=278 load=6.21 free=5G 18:02:07Z
+main tests/acceptance/309/relay-suite.test.ts exit=0 secs=18 load=11.94 free=1076G 19:31:52Z
+main tests/acceptance/313/packaging.test.ts exit=1 secs=97 load=29.22 free=1065G 19:33:29Z
+head tests/acceptance/313/packaging.test.ts exit=1 secs=154 load=78.31 free=1056G 19:36:03Z
+head tests/acceptance/309/relay-suite.test.ts exit=0 secs=322 load=77.29 free=1055G 19:36:29Z
+main tests/acceptance/317/floor.test.ts exit=0 secs=40 load=81.62 free=1054G 19:36:43Z
+main tests/acceptance/326/panels/guard.test.mjs exit=0 secs=3 load=81.62 free=1054G 19:36:46Z
+head tests/acceptance/326/panels/guard.test.mjs exit=0 secs=4 load=81.81 free=1053G 19:36:50Z
+main tests/acceptance/337/spike.test.mjs exit=1 secs=1 load=81.81 free=1053G 19:36:51Z
+head tests/acceptance/337/spike.test.mjs exit=1 secs=1 load=81.51 free=1053G 19:36:52Z
+main tests/acceptance/338/spike.test.mjs exit=1 secs=1 load=81.51 free=1053G 19:36:54Z
+head tests/acceptance/338/spike.test.mjs exit=1 secs=1 load=81.51 free=1053G 19:36:55Z
+main tests/acceptance/33/bootstrap.test.ts exit=1 secs=6 load=82.75 free=1053G 19:37:01Z
+head tests/acceptance/33/bootstrap.test.ts exit=1 secs=5 load=85.17 free=1053G 19:37:06Z
+main tests/acceptance/33/spine.test.ts exit=1 secs=4 load=87.16 free=1053G 19:37:10Z
+head tests/acceptance/33/spine.test.ts exit=1 secs=5 load=89.55 free=1052G 19:37:15Z
+head tests/acceptance/317/floor.test.ts exit=0 secs=196 load=124.67 free=1049G 19:39:45Z
+main tests/acceptance/377/noop.test.ts exit=1 secs=3913 load=227.50 free=865G 20:42:28Z
+main tests/acceptance/47/explain.test.mjs exit=1 secs=1 load=227.50 free=865G 20:42:29Z
+head tests/acceptance/47/explain.test.mjs exit=1 secs=1 load=227.50 free=865G 20:42:30Z
+main tests/acceptance/47/preflight.test.mjs exit=0 secs=1 load=227.50 free=865G 20:42:31Z
+head tests/acceptance/47/preflight.test.mjs exit=0 secs=0 load=227.50 free=865G 20:42:31Z
+main tests/acceptance/569/before.test.mjs exit=0 secs=61 load=213.73 free=859G 20:43:32Z
+head tests/acceptance/569/before.test.mjs exit=0 secs=77 load=203.94 free=856G 20:44:50Z
+head tests/acceptance/377/noop.test.ts exit=1 secs=3921 load=203.99 free=858G 20:45:06Z
+main tests/acceptance/569/decisions.test.mjs exit=0 secs=21 load=203.99 free=858G 20:45:11Z
+head tests/acceptance/569/decisions.test.mjs exit=0 secs=28 load=215.47 free=857G 20:45:34Z
+main tests/acceptance/569/guard.test.mjs exit=0 secs=68 load=203.73 free=855G 20:46:19Z
+head tests/acceptance/569/guard.test.mjs exit=0 secs=65 load=212.40 free=854G 20:46:39Z
+main tests/acceptance/569/mutation.test.mjs exit=0 secs=131 load=202.33 free=852G 20:48:30Z
+head tests/acceptance/569/mutation.test.mjs exit=0 secs=121 load=198.30 free=852G 20:48:40Z
+main tests/acceptance/569/preflight.test.mjs exit=0 secs=46 load=198.22 free=851G 20:49:17Z
+head tests/acceptance/569/preflight.test.mjs exit=0 secs=42 load=195.72 free=851G 20:49:22Z
+main tests/acceptance/569/replay.test.mjs exit=0 secs=33 load=204.51 free=850G 20:49:51Z
+main tests/acceptance/569/suites.test.mjs exit=1 secs=6 load=205.03 free=850G 20:49:57Z
+head tests/acceptance/569/replay.test.mjs exit=0 secs=37 load=205.91 free=849G 20:49:59Z
+head tests/acceptance/569/suites.test.mjs exit=1 secs=7 load=203.67 free=849G 20:50:04Z
+main tests/acceptance/569/tolerance.test.mjs exit=0 secs=49 load=192.01 free=847G 20:50:48Z
+head tests/acceptance/569/tolerance.test.mjs exit=0 secs=44 load=192.01 free=847G 20:50:48Z
+main tests/acceptance/569/trace.test.mjs exit=0 secs=63 load=167.57 free=846G 20:51:51Z
+head tests/acceptance/569/trace.test.mjs exit=0 secs=64 load=167.57 free=846G 20:51:52Z
+head tests/acceptance/56/decision.test.mjs exit=1 secs=5 load=166.48 free=846G 20:51:57Z
+main tests/acceptance/56/decision.test.mjs exit=1 secs=6 load=164.04 free=846G 20:51:58Z
+head tests/acceptance/594/build-dirs.test.mjs exit=1 secs=903 load=118.54 free=808G 21:07:01Z
+main tests/acceptance/594/build-dirs.test.mjs exit=1 secs=905 load=118.54 free=808G 21:07:02Z
+head tests/acceptance/594/margin.test.mjs exit=1 secs=902 load=84.97 free=768G 21:22:04Z
+main tests/acceptance/594/margin.test.mjs exit=1 secs=903 load=84.97 free=768G 21:22:04Z
+main tests/acceptance/594/warm.test.mjs exit=1 secs=10 load=83.06 free=767G 21:22:14Z
+head tests/acceptance/594/warm.test.mjs exit=1 secs=10 load=83.06 free=767G 21:22:14Z
+main tests/acceptance/605/catalogue-311.test.mjs exit=1 secs=0 load=83.06 free=767G 21:22:14Z
+head tests/acceptance/605/catalogue-311.test.mjs exit=1 secs=0 load=83.06 free=767G 21:22:14Z
+head tests/acceptance/605/drift.test.mjs exit=0 secs=267 load=99.05 free=760G 21:26:41Z
+main tests/acceptance/605/drift.test.mjs exit=0 secs=270 load=100.73 free=760G 21:26:44Z
+head tests/acceptance/605/offline.test.mjs exit=0 secs=68 load=114.52 free=757G 21:27:52Z
+main tests/acceptance/605/offline.test.mjs exit=0 secs=78 load=115.46 free=758G 21:27:59Z
+main tests/acceptance/684/lanes.test.ts exit=1 secs=36 load=108.99 free=757G 21:28:29Z
+head tests/acceptance/684/lanes.test.ts exit=1 secs=36 load=109.96 free=757G 21:28:35Z
+main tests/acceptance/689/preflight-env.test.mjs exit=1 secs=241 load=105.00 free=748G 21:32:30Z
+main tests/acceptance/689/toolchain.test.mjs exit=0 secs=0 load=105.00 free=748G 21:32:31Z
+head tests/acceptance/689/toolchain.test.mjs exit=0 secs=0 load=105.00 free=748G 21:32:31Z
+main tests/acceptance/79/checks.test.mjs exit=0 secs=3 load=103.80 free=748G 21:32:34Z
+head tests/acceptance/79/checks.test.mjs exit=0 secs=2 load=103.80 free=748G 21:32:36Z
+head tests/acceptance/689/preflight-env.test.mjs exit=1 secs=241 load=103.80 free=748G 21:32:36Z
+main tests/acceptance/79/mark.test.mjs exit=1 secs=4 load=101.41 free=748G 21:32:40Z
+head tests/acceptance/79/mark.test.mjs exit=1 secs=5 load=101.41 free=748G 21:32:41Z
+main tests/acceptance/821/config-eval.test.mjs exit=0 secs=12 load=101.76 free=748G 21:32:52Z
+head tests/acceptance/821/config-eval.test.mjs exit=0 secs=12 load=104.02 free=748G 21:32:53Z
+main tests/acceptance/821/predicate.test.mjs exit=0 secs=58 load=99.02 free=745G 21:33:51Z
+head tests/acceptance/821/predicate.test.mjs exit=0 secs=62 load=100.30 free=745G 21:33:55Z
+main tests/acceptance/821/unknown-change.test.mjs exit=0 secs=15 load=101.39 free=745G 21:34:06Z
+head tests/acceptance/821/unknown-change.test.mjs exit=0 secs=16 load=103.68 free=744G 21:34:11Z
+main tests/acceptance/821/verdict-proofs.test.mjs exit=0 secs=17 load=106.56 free=744G 21:34:23Z
+head tests/acceptance/821/verdict-proofs.test.mjs exit=0 secs=14 load=110.44 free=744G 21:34:25Z
+main tests/acceptance/824/sessions/readings.test.ts exit=1 secs=22 load=115.43 free=744G 21:34:45Z
+main tests/acceptance/82/pending.test.ts exit=1 secs=11 load=112.77 free=743G 21:34:56Z
+head tests/acceptance/824/sessions/readings.test.ts exit=1 secs=35 load=109.91 free=743G 21:35:00Z
+head tests/acceptance/82/pending.test.ts exit=1 secs=7 load=110.64 free=743G 21:35:03Z
+main tests/acceptance/879/cards.test.mjs exit=1 secs=10 load=106.82 free=744G 21:35:10Z
+head tests/acceptance/879/cards.test.mjs exit=1 secs=10 load=104.51 free=745G 21:35:13Z
+main tests/acceptance/879/checkout.test.mjs exit=1 secs=41 load=103.38 free=742G 21:35:51Z
+head tests/acceptance/879/checkout.test.mjs exit=1 secs=42 load=102.23 free=742G 21:35:55Z
+main tests/acceptance/879/lane.test.mjs exit=1 secs=11 load=101.17 free=742G 21:36:03Z
+head tests/acceptance/879/lane.test.mjs exit=1 secs=9 load=100.76 free=742G 21:36:04Z
+main tests/acceptance/87/gate/replay-lane.test.ts exit=1 secs=10 load=96.55 free=741G 21:36:13Z
+main tests/acceptance/880/plants.test.ts exit=1 secs=5 load=95.47 free=741G 21:36:18Z
+head tests/acceptance/87/gate/replay-lane.test.ts exit=1 secs=15 load=95.47 free=741G 21:36:19Z
+head tests/acceptance/880/plants.test.ts exit=1 secs=5 load=95.47 free=741G 21:36:23Z
+main tests/acceptance/882/inventory.test.mjs exit=1 secs=8 load=96.23 free=741G 21:36:27Z
+head tests/acceptance/882/inventory.test.mjs exit=1 secs=7 load=95.65 free=741G 21:36:30Z
+main tests/acceptance/882/lint.test.mjs exit=1 secs=17 load=98.94 free=740G 21:36:44Z
+head tests/acceptance/882/lint.test.mjs exit=1 secs=19 load=99.75 free=740G 21:36:49Z
+main tests/acceptance/882/wrong.test.mjs exit=0 secs=37 load=98.99 free=738G 21:37:21Z
+head tests/acceptance/882/wrong.test.mjs exit=0 secs=35 load=100.75 free=738G 21:37:24Z
+head tests/acceptance/910/anchors.test.mjs exit=1 secs=220 load=96.72 free=731G 21:41:04Z
+main tests/acceptance/910/anchors.test.mjs exit=1 secs=223 load=96.72 free=731G 21:41:04Z
+main tests/acceptance/910/clean.test.mjs exit=1 secs=172 load=88.46 free=723G 21:43:56Z
+head tests/acceptance/910/clean.test.mjs exit=1 secs=172 load=88.46 free=723G 21:43:57Z
+main tests/acceptance/992/gone.test.ts exit=1 secs=697 load=103.04 free=665G 21:55:34Z
+main tests/acceptance/992/notification.test.ts exit=1 secs=31 load=102.76 free=664G 21:56:05Z
+head tests/acceptance/992/gone.test.ts exit=1 secs=743 load=107.86 free=664G 21:56:20Z
+head tests/acceptance/992/notification.test.ts exit=1 secs=32 load=114.47 free=662G 21:56:37Z
+main tests/acceptance/993/doctor.test.ts exit=0 secs=34 load=109.76 free=661G 21:56:54Z
+head tests/acceptance/993/doctor.test.ts exit=0 secs=31 load=105.05 free=661G 21:57:09Z
+main tests/acceptance/993/hub-check.test.ts exit=1 secs=26 load=101.46 free=661G 21:57:20Z
+head tests/acceptance/993/hub-check.test.ts exit=1 secs=18 load=101.42 free=661G 21:57:27Z
+main tests/acceptance/993/nested-caller.test.ts exit=0 secs=11 load=103.07 free=661G 21:57:31Z
+main tests/affected.test.mjs exit=1 secs=2 load=103.07 free=661G 21:57:33Z
+head tests/affected.test.mjs exit=1 secs=2 load=99.70 free=660G 21:57:35Z
+main tests/agent-name-branches.test.mjs exit=1 secs=1 load=99.70 free=660G 21:57:36Z
+head tests/acceptance/993/nested-caller.test.ts exit=0 secs=9 load=99.70 free=660G 21:57:36Z
+head tests/agent-name-branches.test.mjs exit=1 secs=1 load=99.70 free=660G 21:57:37Z
+main tests/ask-sources-guard.test.mjs exit=0 secs=39 load=84.47 free=659G 21:58:15Z
+head tests/ask-sources-guard.test.mjs exit=0 secs=38 load=84.47 free=659G 21:58:15Z
+head tests/bays.test.mjs exit=0 secs=137 load=87.51 free=653G 22:00:32Z
+main tests/budget-window.test.mjs exit=0 secs=1 load=87.51 free=653G 22:00:33Z
+head tests/budget-window.test.mjs exit=0 secs=0 load=88.75 free=653G 22:00:33Z
+main tests/cargo-blocked.test.mjs exit=0 secs=0 load=88.75 free=653G 22:00:33Z
+main tests/bays.test.mjs exit=1 secs=138 load=88.75 free=653G 22:00:34Z
+head tests/cargo-blocked.test.mjs exit=0 secs=1 load=88.75 free=653G 22:00:34Z
+head tests/config-eval-storage.test.mjs exit=0 secs=1 load=88.75 free=653G 22:00:35Z
+main tests/config-eval-storage.test.mjs exit=0 secs=1 load=88.75 free=653G 22:00:35Z
+main tests/config-eval.test.mjs exit=0 secs=4 load=92.13 free=653G 22:00:39Z
+head tests/config-eval.test.mjs exit=0 secs=6 load=92.13 free=653G 22:00:41Z
+main tests/hub-lifecycle-cleanup.test.mjs exit=0 secs=19 load=96.74 free=652G 22:00:58Z
+head tests/hub-lifecycle-cleanup.test.mjs exit=0 secs=18 load=98.45 free=652G 22:00:59Z
+main tests/lane-reading.test.mjs exit=1 secs=4 load=98.45 free=652G 22:01:02Z
+head tests/lane-reading.test.mjs exit=1 secs=3 load=98.45 free=652G 22:01:02Z
+head tests/listed-diagnostic.test.mjs exit=0 secs=5 load=99.05 free=652G 22:01:07Z
+main tests/listed-diagnostic.test.mjs exit=0 secs=6 load=101.37 free=652G 22:01:08Z
+main tests/listed-failures.test.mjs exit=1 secs=2 load=101.37 free=652G 22:01:09Z
+head tests/listed-failures.test.mjs exit=1 secs=2 load=101.37 free=652G 22:01:10Z
+main tests/perf.test.mjs exit=1 secs=3601 load=221.97 free=554G 23:01:11Z
+head tests/perf.test.mjs exit=1 secs=3601 load=221.97 free=554G 23:01:11Z
+head tests/preflight-exclusion.test.mjs exit=0 secs=2 load=221.97 free=554G 23:01:13Z
+main tests/preflight-exclusion.test.mjs exit=0 secs=3 load=223.02 free=554G 23:01:14Z
+main tests/preflight-selection.test.mjs exit=0 secs=3 load=223.02 free=554G 23:01:16Z
+head tests/preflight-selection.test.mjs exit=0 secs=3 load=223.02 free=553G 23:01:17Z
+main tests/proof-binaries-errors.test.mjs exit=0 secs=9 load=222.66 free=553G 23:01:25Z
+head tests/proof-binaries-errors.test.mjs exit=0 secs=9 load=222.66 free=553G 23:01:26Z
+main tests/proof-binaries-live-selection.test.mjs exit=1 secs=4 load=222.53 free=553G 23:01:29Z
+head tests/proof-binaries-live-selection.test.mjs exit=1 secs=4 load=222.53 free=553G 23:01:30Z
+main tests/proof-binaries-shard-release.test.mjs exit=0 secs=16 load=224.35 free=552G 23:01:45Z
+head tests/proof-binaries-shard-release.test.mjs exit=0 secs=15 load=224.35 free=552G 23:01:46Z
+main tests/proof.test.mjs exit=1 secs=1 load=224.35 free=551G 23:01:46Z
+head tests/proof.test.mjs exit=1 secs=1 load=224.35 free=551G 23:01:47Z
+main tests/shards.test.mjs exit=1 secs=125 load=227.69 free=547G 23:03:51Z
+head tests/shards.test.mjs exit=1 secs=129 load=226.84 free=546G 23:03:57Z
+main tests/takes-timed.test.mjs exit=1 secs=15 load=229.16 free=545G 23:04:06Z
+main vendor-rebase exit=1 secs=0 load=229.16 free=545G 23:04:06Z
+head vendor-rebase exit=1 secs=0 load=229.16 free=545G 23:04:06Z
+head tests/takes-timed.test.mjs exit=1 secs=17 load=228.43 free=544G 23:04:14Z
+probe exit=1 free=534G 2026-11-19T23:07:52Z
