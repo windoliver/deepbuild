@@ -689,18 +689,29 @@ fn verdict(checked: &mut Value, accepted: &[(String, String)]) {
     checked["verdict"] = json!({"outcome": outcome, "open": open});
 }
 
-/// #2031 AC6's planted check: it accepts a 17th light on one group.
-const SEVENTEEN: &str = "light_accepts_seventeenth";
-
-/// The planted check's answer: a lit group's light count no longer refused.
-fn accepts_seventeenth(checked: &mut Value) {
-    if let Some(issues) = checked["issues"].as_array_mut() {
-        issues.retain(|i| {
-            !(i["code"] == "out_of_range"
+/// The issues a planted check lets through, by its name. #2031 AC6's accepts a 17th light on one
+/// group; #2032 AC6's two accept an open path that occludes, and a lit group's occluders past
+/// their cap.
+fn let_through(planted: Option<&str>) -> Option<fn(&Value) -> bool> {
+    Some(match planted? {
+        "light_accepts_seventeenth" => |i| {
+            i["code"] == "out_of_range"
                 && i["path"]
                     .as_str()
-                    .is_some_and(|p| p.ends_with("/params/light/lights")))
-        });
+                    .is_some_and(|p| p.ends_with("/params/light/lights"))
+        },
+        "occlude_accepts_open_path" => |i| i["code"] == "occluder_open",
+        "occlude_accepts_past_cap" => {
+            |i| i["code"] == "out_of_range" && i["actual"]["segments"].is_number()
+        }
+        _ => return None,
+    })
+}
+
+/// The planted check's answer: the issues it lets `through` no longer refused.
+fn accepts(checked: &mut Value, through: fn(&Value) -> bool) {
+    if let Some(issues) = checked["issues"].as_array_mut() {
+        issues.retain(|i| !through(i));
         let ok = !issues.iter().any(|i| i["severity"] == "error");
         checked["ok"] = json!(ok);
     }
@@ -866,12 +877,12 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
     // a square grid's sides (`check`).
     let parity = input.get("planted").and_then(Value::as_str) == Some("hex_shifts_other_parity");
     let sides = input.get("planted").and_then(Value::as_str) == Some("terrain_reads_square_sides");
-    // #2031 AC6's wrong check, which lets a 17th light on one group through.
-    let seventeen =
-        command == "check" && input.get("planted").and_then(Value::as_str) == Some(SEVENTEEN);
+    // #2031 AC6's and #2032 AC6's wrong checks, each of which lets one refusal through.
+    let through =
+        let_through(input.get("planted").and_then(Value::as_str)).filter(|_| command == "check");
     if command == "check" || command == "geometry" {
         if input.get("planted").is_some()
-            && !seventeen
+            && through.is_none()
             && skips == Twin::Honest
             && !near
             && !(unwrapped && command == "check")
@@ -893,8 +904,8 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
         let timing = input.get("timing") == Some(&Value::Bool(true));
         if command == "check" {
             let mut checked = checked;
-            if seventeen {
-                accepts_seventeenth(&mut checked);
+            if let Some(through) = through {
+                accepts(&mut checked, through);
             }
             if timing {
                 match raster::rank_ms(&doc) {

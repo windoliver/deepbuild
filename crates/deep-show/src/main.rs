@@ -740,6 +740,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "migrate" => return Some(Call::Migrate(hash_named(c.get("to")?.as_str()?)?)),
         // #1901: the fingerprint kept output is keyed by, a kept draw, and the padded key input.
         "fingerprint" => return Some(Call::Fingerprint),
+        "footprint" => return Some(Call::Footprint),
         "draw" => {
             let output = c.get("output")?.as_str()?;
             return Some(Call::Draw {

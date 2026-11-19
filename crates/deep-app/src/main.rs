@@ -76,6 +76,9 @@ mod chrome;
 #[cfg(target_os = "macos")]
 #[path = "probes/color_check.rs"]
 mod color_check;
+#[cfg(all(feature = "contact-sheet", target_os = "macos"))]
+#[path = "probes/contact_sheet.rs"]
+mod contact_sheet;
 #[cfg(all(feature = "hdr-fixture", target_os = "macos"))]
 #[path = "probes/hdr.rs"]
 mod hdr;
@@ -115,6 +118,12 @@ fn main() {
     #[cfg(all(feature = "hdr-fixture", target_os = "macos"))]
     if std::env::args().nth(1).as_deref() == Some("--hdr") {
         hdr::run(std::env::args().nth(2));
+        return;
+    }
+    // Issue #1592: `--contact-sheet [<png>]`, in a contact-sheet build.
+    #[cfg(all(feature = "contact-sheet", target_os = "macos"))]
+    if std::env::args().nth(1).as_deref() == Some("--contact-sheet") {
+        contact_sheet::run(std::env::args().nth(2));
         return;
     }
     // Issue #1485: `--canvas <scenario.json>`, in a canvas-fixture build.
@@ -580,8 +589,19 @@ mod notifications {
                             .accessibilityDisplayShouldReduceMotion(),
                     )
                 });
+                // #1431: the app's own reading, once each minute, off the UI thread: walking the heap takes milliseconds.
+                let background = cx.background_executor();
+                background
+                    .spawn(async { deep_app::footprint::each_minute() })
+                    .detach();
                 // A later launch brings the app forward; `deep open` and a link open their address (#1460).
                 for call in held.as_ref().map(Held::calls).unwrap_or_default() {
+                    // #1431: `deep doctor` asks for the app's reading; that brings nothing forward.
+                    if call.address.as_deref() == Some(deep_app::footprint::ASK) {
+                        let answer = async move { call.reply(&deep_app::footprint::answer()) };
+                        background.spawn(answer).detach();
+                        continue;
+                    }
                     eprintln!("deep-app: brought forward");
                     cx.update(|cx| {
                         cx.activate(true);

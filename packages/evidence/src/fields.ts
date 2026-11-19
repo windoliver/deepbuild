@@ -77,7 +77,7 @@ function secretName(name: string): boolean {
  * names where a trigger word was found, in ascending order. The field names, separators and quotes stay.
  * Each byte is read a bounded number of times: a hit inside a name or value already read is skipped.
  */
-export function fieldRanges(text: string, hits: readonly number[], mask: string): Range[] {
+export function fieldRanges(text: string, hits: readonly number[], mask: string, unfinished?: number[]): Range[] {
   const ranges: Range[] = [];
   let read = 0;
   const line = new Line(text);
@@ -251,6 +251,9 @@ export function fieldRanges(text: string, hits: readonly number[], mask: string)
       }
       const [far, closed] = json && !escape && !line.quoted ? brackets.end(at) : [-1, false];
       if (closed) { push([at, far, json]); continue; }
+      // A growing pretty-printed value may gain members on later lines. Report its start separately from its
+      // provisional mask: intake of a finished string still masks as before, but an archive must wait to cut it.
+      if (far >= 0 && (far >= text.length || /^\s*$/.test(text.slice(far)))) unfinished?.push(start);
       const [end, ended] = nestedEnd(text, at, escape && (json || !quotedKey) ? line.newline : eol, escape);
       // After a bare name, a scheme in braces, as `{bcrypt}$2a$...` or `{SSHA}W6ph...`, starts a value read on below;
       // a call on the group, as `{...}.get(x)`, or a quote, escaped or not, ends it.
