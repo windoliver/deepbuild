@@ -3,7 +3,7 @@
 // ranges), and the hub's strict check of a call's arguments against it. Their descriptions come from tools.json,
 // which scripts/skill.mjs generates from the design's Building blocks table with the skill.
 import { readFileSync } from 'node:fs';
-import { refuse } from './wire.js';
+import { activePlant, refuse, Refused } from './wire.js';
 
 type Obj = Record<string, unknown>;
 type Schema = Obj;
@@ -253,26 +253,40 @@ function descriptions(): Record<string, string> {
   return (described ??= JSON.parse(readFileSync(new URL('../tools.json', import.meta.url), 'utf8')) as Record<string, string>);
 }
 
+/** The schemas this hub publishes and holds calls to: #1415's planted hub marks deep_kinds's op optional though its handler needs one. */
+function published(): Readonly<Record<string, Schema>> {
+  if (activePlant() !== 'kinds-op-optional') return SCHEMAS;
+  const kinds = SCHEMAS.deep_kinds!;
+  const op = (kinds.properties as Record<string, Schema>).op!;
+  return { ...SCHEMAS, deep_kinds: { ...kinds, properties: { ...(kinds.properties as Obj), op: { ...op, type: ['string', 'null'], enum: [...(op.enum as string[]), null] } } } };
+}
+
 /**
  * The tools as deep mcp lists them. A tool tools.json doesn't describe isn't listed: only what the table generates
  * reaches an agent.
  */
 export function toolList(): { name: string; description: string; inputSchema: Schema }[] {
   const text = descriptions();
-  return Object.entries(SCHEMAS).filter(([name]) => text[name]).map(([name, inputSchema]) => ({ name, description: text[name]!, inputSchema }));
+  return Object.entries(published()).filter(([name]) => text[name]).map(([name, inputSchema]) => ({ name, description: text[name]!, inputSchema }));
 }
 
 /**
  * A call's arguments held to its tool's schema, as strictly as the hub holds any request: a field it doesn't list, a
- * missing required one or a wrong type is refused at its path. A nullable field left out reads as null.
+ * missing required one or a wrong type is refused at its path. A nullable field left out reads as null. A required
+ * field left out is `missing_field`, carrying the tool's input schema so the agent reads every field it takes (#1415).
  */
 export function checkArguments(tool: string, args: unknown): Obj {
-  const schema = SCHEMAS[tool] ?? ACTION_SCHEMAS[tool];
+  const schema = published()[tool] ?? ACTION_SCHEMAS[tool];
   if (!schema) {
     const near = nearest(tool, Object.keys(SCHEMAS));
     throw refuse('not_found', '/params/tool', near ? `Call ${near} in place of ${tool}.` : `Call one of the deep_* tools: ${Object.keys(SCHEMAS).join(', ')}.`, tool);
   }
-  return check(schema, args ?? {}, '/params/arguments') as Obj;
+  try {
+    return check(schema, args ?? {}, '/params/arguments') as Obj;
+  } catch (error) {
+    if (error instanceof Refused && error.refusal.code === 'missing_field') error.refusal.schema = schema;
+    throw error;
+  }
 }
 
 /** The edit distance between `a` and `b`, a swap of two neighbours counting as one edit, as the canvas's close names count it (#412). */
@@ -304,7 +318,9 @@ function check(schema: Schema, value: unknown, at: string): unknown {
   const types = Array.isArray(schema.type) ? (schema.type as string[]) : [schema.type as string];
   if (value === null || value === undefined) {
     if (types.includes('null')) return null;
-    throw refuse('required', at, `Give ${at.split('/').pop()}; it is required.`, value);
+    const field = at.split('/').pop();
+    if (value === undefined) throw refuse('missing_field', at, `Give ${field}: the call leaves it out, and the tool requires it. schema is the tool's input schema.`, '');
+    throw refuse('required', at, `Give ${field}; it is required.`, value);
   }
   const type = types.find((t) => t !== 'null')!;
   const wrong = () => refuse('type', at, `Give ${at.split('/').pop()} as ${type === 'array' ? 'a list' : type === 'object' ? 'an object' : `a ${type}`}.`, value);

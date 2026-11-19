@@ -356,7 +356,7 @@ export class Core {
     this.flags = new SessionFlags({ services: lazyServices({ record: () => this.record, now: () => this.now, asks: () => this.asks, agents: () => this.agents, root: () => this.root, siblings: () => this.siblings, transcriptReader: () => this.transcriptReader }), state: () => this.state, mcp: () => this.mcp, events: { append: (connection, input, backfill) => this.append(connection, input, backfill), connection: (writer, extra) => this.connection(writer, extra) }, schedule: { queue: (work, starting) => this.queue(work, starting) }, readCodexTrust: (cwd) => this.readCodexTrust(cwd) });
     this.canvasSide = new HubCanvas({
       root: rootOf(options.root), now: () => this.now(), plant: options.plant, doneSpec: this.doneSpec,
-      record: () => this.record, store: () => this.store, libraries: () => this.libraries, sessions: () => this.state.sessions,
+      record: () => this.record, store: () => this.store, libraries: () => this.libraries, sessions: () => this.state.sessions, extensions: () => this.extensions,
       evidence: { stored: (put, what) => this.control.stored(put, what) },
       events: { append: (connection, input) => this.append(connection, input), connection: (writer, extra) => this.connection(writer, extra), agentConnection: (session) => this.mcp.agentConnection(session) },
       agentAbove: (peer) => this.state.agentAbove(peer),

@@ -25,6 +25,8 @@ base64 = "0.22"
 # Issue #1498: the replica's copy of the hub's canvas core: the interaction scope, the marks module's text and its
 # selection, render-back's raster, the cells module's emulator and the shaper, as the hub's canvas core runs them.
 deep-canvas = { path = "../deep-canvas" }
+# Issue #1431: the process's footprint beside its gauges, and the planted GPU memory the suites must see in it.
+deep-gpu = { path = "../deep-gpu" }
 deep-canvas-marks = { path = "../deep-canvas-marks" }
 deep-canvas-cells = { path = "../deep-canvas-cells" }
 deep-marks-raster = { path = "../deep-marks-raster" }

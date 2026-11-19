@@ -112,7 +112,7 @@ pub(super) fn composite<'s>(
             content.marks(inside.iter())?;
             p.texts.append(&mut content.texts);
             let light = light_of(&marks[start].scopes[at]).expect("found lit");
-            let source = lit(&render(&mut content), &light, placed);
+            let source = lit(&render(&mut content), &light, placed, p.zoom);
             let outer = &marks[start].scopes[..at];
             p.scopes.enter(&mut p.ctx, &mut p.resources, outer);
             put(&mut p.ctx, source);
@@ -188,7 +188,7 @@ pub(super) fn composite<'s>(
         // #2031: a lit group's run of lit children, lit at each pixel.
         let light = light_of(&marks[start].scopes[at]);
         let source = match &light {
-            Some(l) => lit(&source, l, placed),
+            Some(l) => lit(&source, l, placed, p.zoom),
             None => source,
         };
         // What the layer drew so far keeps its texts' readings.
@@ -233,12 +233,12 @@ fn light_of(s: &Scope) -> Option<Arc<light::Light>> {
     }
 }
 
-/// #2031: `source`, a lit group's lit children drawn alone (premultiplied) through `placed`, lit
-/// at each pixel's centre.
-fn lit(source: &Pixmap, l: &light::Light, placed: Affine) -> Pixmap {
+/// #2031: `source`, a lit group's lit children drawn alone (premultiplied) through `placed` at
+/// `zoom` px a u, lit at each pixel's centre.
+fn lit(source: &Pixmap, l: &light::Light, placed: Affine, zoom: f64) -> Pixmap {
     let back = placed.inverse();
     let mut out = source.data_as_u8_slice().to_vec();
-    l.light_pixels(&mut out, usize::from(source.width()), true, |x, y| {
+    l.light_pixels(&mut out, usize::from(source.width()), true, zoom, |x, y| {
         let p = back * vello_cpu::kurbo::Point::new(x, y);
         [p.x, p.y]
     });

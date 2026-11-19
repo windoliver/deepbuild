@@ -7,6 +7,7 @@ import { join } from 'node:path';
 
 import { isRecord as isObj, type JsonValue } from '@deepbuild/contracts';
 import { type Evidence, type EvidenceStore, type PutResult } from '@deepbuild/evidence';
+import { type ExtensionHost } from '@deepbuild/extension-host';
 
 import { type Connection, type EventInput, type RecordStore } from '@deepbuild/record';
 
@@ -26,6 +27,8 @@ export interface HubCanvasOptions {
   doneSpec(cwd: string): unknown;
   root: Root; now: () => number; plant: Plant | undefined;
   record: () => RecordStore; store: () => EvidenceStore; libraries: () => Libraries | undefined;
+  /** The plug-ins' host, whose check kinds deep_kinds lists as the hub slot check.kind@1's fills (#1415). */
+  extensions: () => ExtensionHost | undefined;
   sessions: () => ReadonlyMap<string, Session>;
   evidence: { stored(put: PutResult, what: string): Promise<Evidence> };
   events: { append(connection: Connection, input: EventInput): Promise<void>; connection(writer: string, extra?: Partial<Connection>): Connection; agentConnection(session: string): Connection };
@@ -57,7 +60,12 @@ export class HubCanvas {
 
   /** The world the canvas core reads: the hub's live sessions, the record's asks and readings, and the world file. */
   private async canvasWorld(): Promise<CanvasWorld> {
-    const file = { ...this.worldFile.read(), packs: await this.options.libraries()?.packs.installed(this.canvas()) ?? [] };
+    const file: Obj = { ...this.worldFile.read(), packs: await this.options.libraries()?.packs.installed(this.canvas()) ?? [] };
+    // The hub slot check.kind@1's fills deep_kinds lists: each check kind a plug-in registered, with its kit at install (#1415).
+    const host = this.options.extensions();
+    const kits = (await host?.installed() ?? []).flatMap((p) => p.kits).filter((k) => k.slot === 'check.kind@1');
+    const fills = (await host?.checks() ?? []).map((c) => ({ slot: 'check.kind@1', fill: c.kind, kit: { verdict: kits.find((k) => k.fill === c.kind)?.verdict ?? null } }));
+    if (fills.length) file.installed = [...(Array.isArray(file.installed) ? file.installed : []), ...fills];
     const sessions = [...this.options.sessions().values()].filter((s) => !s.ended).map((s) => ({ id: s.id, thread: s.thread, name: nameOf(file, s.id, s.agent) }));
     const record: Obj = {};
     const asks = (await this.options.record().raw('SELECT id, session_id, status FROM asks')) as { id: string; session_id: string | null; status: string }[];

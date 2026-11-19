@@ -30,6 +30,9 @@ export class HostFiles {
   }
 }
 
+/** The packages installed under `home`, by ID, read before a host opens there (#1415). */
+export const installedIds = (home: string): string[] => Object.keys(new HostFiles(home).read('installed.json'));
+
 export class Overran extends Error {}
 export async function within<T>(ms: number, what: string, work: Promise<T>): Promise<T> {
   return stretchable(ms, what, work).done;

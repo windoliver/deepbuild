@@ -1,0 +1,62 @@
+$ PATH=<home>/.local/share/fnm/node-versions/v24.22.0/installation/bin:$PATH env NO_COLOR=1 node node_modules/vitest/vitest.mjs run --configLoader runner tests/acceptance/2365-redraft-ac5/perf.test.ts -t perf task archive-live
+node: v24.22.0 (<home>/.local/share/fnm/node-versions/v24.22.0/installation/bin/node)
+started: 2026-11-18T01:14:14Z; load averages: 59.84 45.74 57.15
+-----
+
+ RUN  v5.0.5 <home>/doneright-2365-repair
+
+ ❯ tests/acceptance/2365-redraft-ac5/perf.test.ts (6 tests | 1 failed | 5 skipped) 8017ms
+   ❯ AC5 #2365.c0521de3 for every transcript of #20's perf tasks, the parts joined equal the merge base's one copy, and an unchanged transcript's second pass reads none of it (3)
+     × AC5 perf task archive-live: ten sessions 1 MB in, 12 lines a minute, a pass a minute for five minutes 6973ms
+     ↓ AC5 perf task archive-month: four 5 MB sessions at half and whole
+     ↓ AC5 perf task archive-backlog: twenty 5 MB sessions in one pass
+   ↓ AC5 #2365.c0521de3 for every transcript of #20's budgets (its suite's budgets.test.ts), the same (3)
+     ↓ AC5 #20 AC7 (budgets.test.ts): ten live sessions, 1 MB in, 12 lines a minute for six minutes
+     ↓ AC5 #20 AC7 (budgets.test.ts): the heavy month, both days, 20 sessions a day at half and whole
+     ↓ AC5 #20 AC7 (budgets.test.ts): the 1 GB backlog, 200 sessions of 5 MB, in batches of 20
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2365-redraft-ac5/perf.test.ts > AC5 #2365.c0521de3 for every transcript of #20's perf tasks, the parts joined equal the merge base's one copy, and an unchanged transcript's second pass reads none of it > AC5 perf task archive-live: ten sessions 1 MB in, 12 lines a minute, a pass a minute for five minutes
+Error: BLOCKED: the merge base's archive (ed03dc60d51abe3d96cf61b766ecf92057a780eb) didn't run: exit 1 
+node:fs:483
+    return binding.readFileUtf8(path, stringToFlags(options.flag));
+                   ^
+
+Error: ENOENT: no such file or directory, open '/private/tmp/dh20-base2365-LvqYhA/packages/evidence/dist/patterns.json'
+    at readFileSync (node:fs:483:20)
+    at loadRules (/private/tmp/dh20-base2365-LvqYhA/packages/evidence/src/patterns.ts:16:28)
+    at <anonymous> (/private/tmp/dh20-base2365-LvqYhA/packages/evidence/src/scrub.ts:28:15)
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+    at async node:internal/modules/esm/loader:647:26
+    at async file://<home>/doneright-2365-repair/tests/acceptance/2365-redraft-ac5/base-copy.mjs:25:25 {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/private/tmp/dh20-base2365-LvqYhA/packages/evidence/dist/patterns.json'
+}
+
+Node.js v24.22.0
+
+ ❯ loadRules ../../../private/tmp/dh20-base2365-LvqYhA/packages/evidence/src/patterns.ts:16:28
+ ❯ <anonymous> ../../../private/tmp/dh20-base2365-LvqYhA/packages/evidence/src/scrub.ts:28:15
+ ❯ baseCopies tests/acceptance/2365-redraft-ac5/base.ts:58:54
+     56|   const r = spawnSync(NODE, ['--experimental-transform-types', '--cond…
+     57|   const manifest = join(work, 'out', 'manifest.json');
+     58|   if (r.status !== 0 || !existsSync(manifest)) throw Error(`BLOCKED: t…
+       |                                                      ^
+     59|   const m = JSON.parse(readFileSync(manifest, 'utf8')) as { error: str…
+     60|   const run = { sha, error: m.error, copies: m.copies.map((c) => ({ se…
+ ❯ runScenario tests/acceptance/2365-redraft-ac5/scenarios.ts:129:18
+ ❯ judged tests/acceptance/2365-redraft-ac5/perf.test.ts:14:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 5 skipped (6)
+   Start at  17:14:16
+   Duration  8.44s (tests 96%, transform 3%, import 1%)
+
+-----
+EXIT 1; ended: 2026-11-18T01:14:24Z; load averages: 62.18 46.74 57.37

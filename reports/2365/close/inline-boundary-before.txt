@@ -1,0 +1,32 @@
+at 158291c9c, load { 213.89 270.45 297.68 }
+
+ RUN  v5.0.5 <home>/doneright-2365
+
+ ❯ packages/archive/test/inline-boundary.test.ts (3 tests | 3 failed) 3248ms
+   × held spanning a quarter-part cut of a small transcript equals the whole-file scrub byte for byte 1492ms
+   × private key spanning a quarter-part cut of a small transcript equals the whole-file scrub byte for byte 820ms
+   × field value spanning a quarter-part cut of a small transcript equals the whole-file scrub byte for byte 737ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/archive/test/inline-boundary.test.ts > held spanning a quarter-part cut of a small transcript equals the whole-file scrub byte for byte
+ FAIL  packages/archive/test/inline-boundary.test.ts > private key spanning a quarter-part cut of a small transcript equals the whole-file scrub byte for byte
+ FAIL  packages/archive/test/inline-boundary.test.ts > field value spanning a quarter-part cut of a small transcript equals the whole-file scrub byte for byte
+AssertionError: the cut fell where a worker would not have cut: expected 1 to be greater than 1
+ ❯ packages/archive/test/inline-boundary.test.ts:28:87
+     26|       await archive.pass();
+     27|       const event = (await archivedOf(w.record, t.id)).at(-1)!;
+     28|       expect(event.evidence.length, 'the cut fell where a worker would…
+       |                                                                                       ^
+     29|       const actual = Buffer.from(await w.store.read(String(dataOf(even…
+     30|       expect(actual, `${name} is scrubbed whole even though its lines …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  10:27:53
+   Duration  3.99s (tests 87%, transform 7%, import 5%, worker 1%)
+
+exit=1
