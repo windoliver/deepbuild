@@ -231,6 +231,9 @@ export type Plant =
   // #1016's: a jobserver of its own for each build, a pipe topped up while a build runs, and a runner's share that
   // ignores the builds running beside it.
   | 'jobserver-per-build' | 'refills-while-running' | 'share-ignores-running-build'
+  // #1411's: a pool that gives held-back tokens back only once no leased command runs, one that follows each pressure
+  // reading at once, one that holds back the last token too, and a fixed job count joined to the pool as a build.
+  | 'restores-only-when-idle' | 'no-hysteresis' | 'holds-back-every-token' | 'pool-holds-fixed-count'
   // #65's: channels that take a channel's word, or cross one channel's trouble over to another.
   | 'trusts-channel-proof' | 'last-writer-wins' | 'live-buttons-after-answer' | 'closes-on-failed-send' | 'takes-turns-at-token' | 'reconnects-every-channel' | 'buttons-for-authority' | 'keeps-unpaired-key'
   // #1018's: runs keyed by session too, a key without the files runs read, a shared run counted once per claim that
@@ -374,6 +377,7 @@ const PLANTS: readonly string[] = [
   'reopens-every-item',
   'runner-passes-masked-exit', 'line-pass-without-verdict', 'status-from-model',
   'jobserver-per-build', 'refills-while-running', 'share-ignores-running-build',
+  'restores-only-when-idle', 'no-hysteresis', 'holds-back-every-token', 'pool-holds-fixed-count',
   'ask-covers-every-effect', 'reads-every-from', 'defaults-match-text', 'auto-merge-unpinned', 'holds-every-program',
   'proceed-unrecorded', 'keys-ask-from-words', 'sends-back-held-stop', 'holds-every-ask', 'proceed-alone', 'sends-back-no-tool', 'records-switch-only', 'link-from-agent-url',
   'trusts-channel-proof', 'last-writer-wins', 'live-buttons-after-answer', 'closes-on-failed-send', 'takes-turns-at-token', 'reconnects-every-channel', 'buttons-for-authority', 'keeps-unpaired-key',
