@@ -9,21 +9,45 @@ result below is a reading, `INCONCLUSIVE` by the timing rule, and none is a `PAS
 | criterion | merge base | change |
 |---|---|---|
 | 1 `#1868.f34f3f9c` `canvas.user` `cells`, 200,000 readings and 5,000 asks against an empty record | 1657.3 ms against 541.9 ms, 3.06 times; all five runs over the limit by more than the margin | 366.6 ms against 365.9 ms, 1.00 times (limit 1.20); all five runs within the limit; `INCONCLUSIVE` only for thermal state and load (17 to 33) |
-| 2 `#1868.a903f1c6` a later reading and an answered ask show in the next deep_show's world | fails for the planted program only (below) | passes (23.5 s, load 13) |
+| 2 `#1868.a903f1c6` a later reading and an answered ask show in the next deep_show's world | fails for the planted program only (below) | the original `world-fresh.test.ts` passed (23.5 s, load 13); its adopted redraft, `tests/acceptance/1868-redraft-ac2/world.test.ts`, passes (26.4 s, load 7.5), and fails with its twin (below) |
 | 3 `#1868.bf84aa8b` deep_status, 10 claims, 200,000 run events against 1,000 | 2031.1 ms against 7.19 ms, 282.67 times; all five runs over | 1.76 ms against 1.59 ms, 1.10 times (limit 1.20); runs 1.92, 1.76, 1.84, 1.66, 1.55 ms against 2.10, 2.22, 1.59, 1.59, 1.34 ms, so neither all within nor all over; `INCONCLUSIVE` (load 42 to 49). An earlier run of the same code read 3.84 ms against 4.38 ms, 0.88 times |
 
 The merge base's numbers are the blind job's, in `tests/acceptance/1868/BASE-FAILURE.txt`. On the change the
 whole files took 96.6 s (`canvas-cells`) and 36.5 s (`status-runs`), so neither goes in the `slow` lane; an earlier
 `canvas-cells` run at load 78 took 331 s.
 
-**The planted stale world.** With `tests/acceptance/1868/twins/world-built-once/` laid over
-`packages/hub/src/plant.ts` and the hub rebuilt, `world-fresh.test.ts` fails at the reading (load 11):
-
+**The planted stale world.** The original twin, `tests/acceptance/1868/twins/world-built-once/` laid over
+`packages/hub/src/plant.ts` with the hub rebuilt, made `world-fresh.test.ts` fail at the reading (load 11), quoted below.
+After main's #2650 that twin's hub build exits 2 (`core.ts(900,66) Type 'string' is not assignable to type 'Plant'`), and
+the lanes read a failed build as BLOCKED.
 ```
 AssertionError: the reading reading:01M7P2THBEEY7NZY6CQMTH0BCZ (1 runs, "runs saved by carrying across sessions ..."),
 recorded at log_pos 115 after the world was built, is not in the next deep_show's world: the deep_show that binds a
 value to it was refused, ref_unresolved naming reading:01M7P2THBEEY7NZY6CQMTH0BCZ
 ```
+
+**Criterion 2's blind redraft (owner's choice and adoption, 2026-11-18).** A fresh run of the blind job, at base
+`9d0256132`, wrote `tests/acceptance/1868-redraft-ac2/`. Its twin keeps main's plant list and plants
+`canvas-world-built-once`, so the change's plant now has that name (4a3eb8614). Run on the change:
+- The redraft's test passes (26.4 s, load 7.5).
+- With its twin laid over: `npm run build --workspaces` exits 0, and the test fails at the reading (load 8.1):
+```
+AssertionError: the reading reading:01M7SC1FWJEGM4NF021MEWD1TD (value 1 runs, "runs saved by carrying across sessions · ..."),
+recorded at log_pos 81 after the world was built at log_pos 22, must show in the next deep_show's world; deep_show said
+{... "code":"ref_unresolved" ...}
+```
+
+## After merging main (4b0a20c74, d7c257f63, bd9e5bcfe)
+
+Each conflict was resolved by keeping both sides: `plant.ts` twice, `lanes.mjs`, and deep-show's `Scenario` (main's `net`
+beside the shared record). Run on the merged code:
+- Criterion 2: passes.
+- Criterion 1: 0.95 times, then 1.00 times after the third merge (657.1 ms against 656.9 ms, load 38).
+- Criterion 3: 0.99 times (2.05 ms against 2.07 ms, load 178).
+
+All are `INCONCLUSIVE` as readings. `cargo test -p deep-show` passes but for `recipe_frames` (`film.blank`) and
+`render_back_pipeline` (216 pixels off). Both fail the same way with deep-show's three changed files set back to main's,
+so they fail on main on this Mac.
 
 ## Query plans on a seeded record, before and after
 
@@ -61,7 +85,7 @@ pull request's unrelated findings).
 
 ## Review
 
-Three rounds, each a fresh reviewer given the diff and the lists of what was fixed and declined, told to trace every
+Each round is a fresh reviewer given the diff and the lists of what was fixed and declined, told to trace every
 field read back to a real writer.
 
 - Round 1 fixed: a failed catch-up read lost its marks; the mark was set after the stream's wake; deep_claim's first
@@ -76,6 +100,9 @@ field read back to a real writer.
   test now runs uncoloured), disclosed the instructions-retired check in both tasks' reasons, and corrected the
   window times above.
 - Round 6: no bugs; two wording fixes (this list, and the benchmark's PASS reason naming each test's reference record).
+- Rounds 7 and 8: no findings.
+- Rounds 9 and 10, on the merges' conflict resolutions and on main's changes to the files this change touches: no findings.
+- Round 11, on the plant rename and the redraft's adoption: no defects; one wording fix (criterion 2's row above).
 - Declined, with reasons: the kept world's memory and the whole world resent when anything in it changed (the
   issue's scope is the reads; one resend per change replaces one per call); deep_status differs from the merge base
   only on records no writer produces (it follows the projection's rules on purpose); `Hub::record()` and
@@ -91,8 +118,10 @@ field read back to a real writer.
   limit; the test itself holds the number the verdict uses, as other benches' judges do.
 - `scripts/lanes.mjs` lists `tests/acceptance/1868/` (`alone`) and the two timed files (`timed`) in a commit of its
   own, 034ca75d5, which the owner approved with `deep/approved/034ca75d528d-sk`. `node scripts/proof.mjs guard`:
-  "PASS guard: 9 commits checked: no guarded edit lacks its own approved proposal" (load 335). The before and trace
-  lanes are unrun.
+  "PASS guard: 9 commits checked: no guarded edit lacks its own approved proposal" (load 335). Since then two more
+  guarded commits need the owner's tag: the `lanes.mjs` conflict resolution in 4b0a20c74, and the redraft's adoption in
+  ad87e9281 (its folder, the removed files, the README note and its `alone` entry). The pull request has both tag
+  commands and the before and trace results.
 - `node scripts/affected.mjs`: see the pull request for its result.
 - deep_claim's and the late hook's scope lines have no test of their own: their proof is the plans above and the
   existing suites that exercise them.
