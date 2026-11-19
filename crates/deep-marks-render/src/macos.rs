@@ -267,6 +267,9 @@ type PlacedKey = (ImageKey, [u64; 4], [u64; 4]);
 /// drawn size in device pixels (GPUI's sprite sampler is linear and can't change per draw).
 type ResampleKey = (ImageKey, ImageSampling, [u32; 2]);
 
+mod held;
+use held::{held, picture_bytes, resampled, room, IMAGES, PLACED, RESAMPLED};
+
 /// A document session: its windows, its caches and the frame on screen.
 struct Session {
     main: Option<Surface>,
@@ -307,7 +310,9 @@ struct Session {
     /// #1486: each sprite made from a level at an opacity, with the last frame that drew it; and
     /// each copy of one placed off whole pixels, by its rect and cut, with the whole-pixel rect it
     /// is drawn 1:1 in.
+    // cache: entries 4_096, bytes 134_217_728
     images: HashMap<ImageKey, (Arc<RenderImage>, u64)>,
+    // cache: entries 4_096, bytes 134_217_728
     placed: HashMap<PlacedKey, (Arc<RenderImage>, [f64; 4], u64)>,
     /// #1486: whether frames run on the real clock, so they draw what the image service holds
     /// and never wait; each image item's level, kept while its drawn size drifts within the band;
@@ -328,6 +333,7 @@ struct Session {
     frame_levels: BTreeMap<String, (u8, Option<u8>)>,
     started: deep_images::Started,
     /// The resampled copies the frame on screen draws, and how many the session has made.
+    // cache: entries 4_096, bytes 67_108_864
     resampled: HashMap<ResampleKey, Arc<RenderImage>>,
     resamples: u64,
     /// #1485's wrong program on the images' decode, cap or upload.
@@ -441,6 +447,12 @@ fn image_of(
             to: ask.to,
         }));
     }
+    if !room(session.images.len(), &IMAGES) {
+        return Err(refused(
+            "over_budget",
+            &format!("items/{item}/params/asset"),
+        ));
+    }
     let [w, h] = level.size;
     let mut bgra = level.rgba.clone();
     for px in bgra.as_chunks_mut::<4>().0 {
@@ -450,6 +462,7 @@ fn image_of(
     let frame_image = image::RgbaImage::from_raw(w, h, bgra)
         .ok_or_else(|| refused("asset_undecodable", &format!("items/{item}/params/asset")))?;
     let image = Arc::new(RenderImage::new([image::Frame::new(frame_image)]));
+    IMAGES.add(1, picture_bytes(&image));
     session.images.insert(key, (image.clone(), frame));
     Ok(Some(Pictured {
         image,
@@ -531,6 +544,9 @@ fn placed_copy(
         *seen = frame;
         return Ok((image.clone(), *hull));
     }
+    if !room(session.placed.len(), &PLACED) {
+        return Err(refused("over_budget", ""));
+    }
     let c = intersect(bounds, p.to).map(|v| v * zoom);
     let (x0, y0) = (c[0].floor(), c[1].floor());
     let (x1, y1) = (
@@ -569,6 +585,7 @@ fn placed_copy(
         .ok_or_else(|| refused("asset_undecodable", ""))?;
     let image = Arc::new(RenderImage::new([image::Frame::new(frame_image)]));
     let hull = [x0 / zoom, y0 / zoom, (x1 - x0) / zoom, (y1 - y0) / zoom];
+    PLACED.add(1, picture_bytes(&image));
     session.placed.insert(key, (image.clone(), hull, frame));
     Ok((image, hull))
 }
@@ -582,63 +599,6 @@ fn image_counts(vello: &Option<(Arc<deep_gpu::device::Gpu>, crate::gpu::Vello2d)
         stats.decoded,
         vello.as_ref().map_or(0, |(_, v)| v.uploads()),
     ]
-}
-
-/// The bytes of a `[w, h]` RGBA picture.
-fn bytes([w, h]: [u32; 2]) -> u64 {
-    u64::from(w) * u64::from(h) * 4
-}
-
-/// What the frame draws held: its levels and its resampled copies; #1485 AC2's wrong program
-/// counts only the copies.
-fn held(session: &Session) -> u64 {
-    let levels = match session.plant {
-        crate::asset::Plant::CapCountsCopiesOnly => 0,
-        _ => session.drawn_bytes,
-    };
-    levels + session.resampled.keys().map(|k| bytes(k.2)).sum::<u64>()
-}
-
-/// An image's copy resampled to its drawn size, made once and then reused. The copies and the
-/// levels a frame draws hold at most `asset::CAP`: a copy past it is refused, naming the image's
-/// asset.
-fn resampled(
-    session: &mut Session,
-    key: &ResampleKey,
-    source: &RenderImage,
-    size: [u32; 2],
-    (item, asset): (&str, &str),
-) -> Result<Arc<RenderImage>, Value> {
-    if let Some(found) = session.resampled.get(key) {
-        return Ok(found.clone());
-    }
-    // Named as a missing asset is: the field and the asset's hash.
-    let path = format!("items/{item}/params/asset: {asset}");
-    let to = key.2;
-    if held(session) + bytes(to) > crate::asset::CAP {
-        return Err(refused("over_budget", &path));
-    }
-    let narrow = |[w, h]: [u32; 2]| Some([u16::try_from(w).ok()?, u16::try_from(h).ok()?]);
-    let (Some(from16), Some(to16), Some(bgra)) = (narrow(size), narrow(to), source.as_bytes(0))
-    else {
-        return Err(refused("asset_undecodable", &path));
-    };
-    let mut rgba = bgra.to_vec();
-    rgba.as_chunks_mut::<4>()
-        .0
-        .iter_mut()
-        .for_each(|px| px.swap(0, 2));
-    let mut out = deep_marks_vello::resample(rgba, from16, key.1, to16);
-    out.as_chunks_mut::<4>()
-        .0
-        .iter_mut()
-        .for_each(|px| px.swap(0, 2));
-    let frame = image::RgbaImage::from_raw(to[0], to[1], out)
-        .ok_or_else(|| refused("asset_undecodable", &path))?;
-    let copy = Arc::new(RenderImage::new([image::Frame::new(frame)]));
-    session.resamples += 1;
-    session.resampled.insert(*key, copy.clone());
-    Ok(copy)
 }
 
 /// Compiles a revision once, so its frames only evaluate.
@@ -1155,8 +1115,11 @@ impl Renderer {
         true
     }
 
-    fn close(&mut self, session: Session) {
-        for s in [session.main, session.cache].into_iter().flatten() {
+    fn close(&mut self, mut session: Session) {
+        for s in [session.main.take(), session.cache.take()]
+            .into_iter()
+            .flatten()
+        {
             let _ = self.cx.update_window(s.handle, |_, w, _| w.remove_window());
         }
     }
@@ -1689,7 +1652,13 @@ impl Renderer {
                 }
             }
         }
-        session.resampled.retain(|k, _| copies.contains(k));
+        session.resampled.retain(|k, copy| {
+            let keep = copies.contains(k);
+            if !keep {
+                RESAMPLED.sub(1, picture_bytes(copy));
+            }
+            keep
+        });
 
         // Each prefix of the writer layers, ground first, keyed by everything it composites.
         let mut prefixes = Vec::with_capacity(frame.layers.len());
@@ -1926,6 +1895,7 @@ impl Renderer {
         session.images.retain(|_, (image, seen)| {
             let keep = *seen + 1 >= frame_no;
             if !keep {
+                IMAGES.sub(1, picture_bytes(image));
                 gone.push(image.clone());
             }
             keep
@@ -1933,6 +1903,7 @@ impl Renderer {
         session.placed.retain(|_, (image, _, seen)| {
             let keep = *seen + 1 >= frame_no;
             if !keep {
+                PLACED.sub(1, picture_bytes(image));
                 gone.push(image.clone());
             }
             keep
