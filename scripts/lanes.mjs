@@ -336,6 +336,9 @@ alone.push('tests/acceptance/1718/');
 // #1637's files build deep-gpu and draw a city of 120,000 solids on Metal; its budget runs as a timed file.
 alone.push('tests/acceptance/1637/');
 timed.push('tests/acceptance/1637/budgets.test.ts');
+// #1634's files build deep-gpu and draw streets and a city of fill lamps on Metal; its budget runs as a timed file.
+alone.push('tests/acceptance/1634/');
+timed.push('tests/acceptance/1634/budgets.test.ts');
 // #1458's replica file builds deep-drive plain and with env-plants and starts many replicas; its AC13 file opens the
 // real app's window on a real hub, with Accessibility and Screen Recording, by hand.
 alone.push('tests/acceptance/1458/');
@@ -927,6 +930,9 @@ timed.push('tests/acceptance/182/ac11-budgets.test.ts');
 byHand.push('tests/acceptance/182-oracle/character-controller-rapier.test.ts');
 // #2309's files build deep-physics (shipped and release), its wasm32 library and the merge base's release build.
 alone.push('tests/acceptance/2309/');
+// #2241's files build deep-physics (release and test-backends) and the merge base's release build; the blind redraft of
+// #2009's third criterion under it builds deep-physics, as #2009's files do.
+alone.push('tests/acceptance/2241/', 'tests/acceptance/2009-redraft-2241/');
 
 // #2742's files build deep-gpu; ac1 compares two films' GPU time on any Mac, and ac2 runs #417's suite.
 alone.push('tests/acceptance/2742/');
@@ -1067,6 +1073,9 @@ alone.push('tests/acceptance/1415/');
 // refusal sets it reverses (tests/acceptance/806-redraft-ac3/DISPUTE.md); its blind redraft runs in its place.
 alone.push('tests/acceptance/806-redraft-ac3/');
 byHand.push('tests/acceptance/806/unbound.test.ts');
+
+// #2402's files (blind) start two hubs and time each tool call against a control hub's, and time two extension hosts.
+alone.push('tests/acceptance/2402/');
 
 // #2776's files build deep-show (full with the test module test.paths) and export 3D scenes to the web.
 alone.push('tests/acceptance/2776/seal.test.ts', 'tests/acceptance/2776/export.test.ts', 'tests/acceptance/2776/listing.test.ts');

@@ -244,6 +244,7 @@ export class HubControl {
       case 'channel.link': return this.authority.link(params, context);
       case 'confirm.enroll': return this.authority.enrollAgain(params, context);
       case 'extension.install': return this.authority.install(params, context);
+      case 'extension.restart': return this.authority.restartExtension(params, context);
       case 'you.confirm': return this.authority.confirmCommand(params, context);
       case 'ask.confirm': return this.authority.confirmCard(params);
       case 'views.installed': return { views: this.options.services.extensions?.installedViews() ?? [] };

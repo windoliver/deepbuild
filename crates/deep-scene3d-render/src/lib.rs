@@ -16,6 +16,7 @@ mod diag;
 pub mod dof;
 pub mod env;
 pub mod exposure;
+pub mod fill;
 pub mod flare;
 mod glass;
 pub mod hdr;
@@ -422,6 +423,8 @@ struct LightsUniform {
     /// Each shaded light's weight near the cut and a hash of its ID (u32 bits), which a light
     /// response takes (#485).
     answers: [[f32; 4]; SHADED],
+    /// The fill lights' clusters and what their depth is measured from (#1634; fill.rs).
+    fill: [[f32; 4]; 2],
 }
 
 /// scene3d.wgsl's `Local` (#446).
@@ -2389,6 +2392,7 @@ impl Renderer {
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
+        let fill = fill::Fill::new(d, planted.fill);
         let tints = tint::Store::new(d);
         let insets = inset::Store::new(d);
         let lights_bind = lights_bind(
@@ -2693,6 +2697,7 @@ impl Renderer {
             to_world: None,
             clusters: None,
             cluster_buffer,
+            fill,
             env,
             sky: false,
             sky_pipeline: None,
@@ -3528,12 +3533,71 @@ impl Renderer {
         });
     }
 
+    /// A light as scene3d.wgsl's `Light` holds one: `weight` the policy's near the cut, `local`
+    /// 1 + its local shadow's slot, 0 for none.
+    fn light_rows(
+        &self,
+        scene: &Scene,
+        l: &light::Light,
+        weight: f64,
+        local: u32,
+    ) -> [[f32; 4]; 6] {
+        let kind = match l.kind {
+            LightKind::Sun => 0.0,
+            LightKind::Point => 1.0,
+            LightKind::Spot => 2.0,
+            LightKind::Area => 3.0,
+        };
+        let mut intensity = l.intensity * weight;
+        let table = l.distribution.as_ref();
+        intensity *= table.map_or(1.0, |t| t.scale);
+        if let (Some(t), true) = (table, self.planted.local.ies_peak) {
+            // The planted wrong program: a table scaled to its peak, not to its integral.
+            let d = &scene.distributions[t.layer as usize];
+            intensity /= d.table.iter().copied().fold(0.0, f32::max) as f64;
+        }
+        if l.kind == LightKind::Spot && self.planted.spot_counts_cone {
+            // The planted wrong program: lm ÷ 2π(1 − cos outer) in place of lm ÷ 4π.
+            intensity *= 2.0 / (1.0 - l.cone[0]).max(1e-6);
+        }
+        let range = if l.range.is_finite() { l.range } else { 0.0 };
+        [
+            [l.pos[0] as f32, l.pos[1] as f32, l.pos[2] as f32, kind],
+            [
+                l.dir[0] as f32,
+                l.dir[1] as f32,
+                l.dir[2] as f32,
+                range as f32,
+            ],
+            [
+                (l.color[0] * intensity) as f32,
+                (l.color[1] * intensity) as f32,
+                (l.color[2] * intensity) as f32,
+                l.radius as f32,
+            ],
+            [
+                l.cone[0] as f32,
+                l.cone[1] as f32,
+                local as f32,
+                f32::from_bits(l.receiver_bit),
+            ],
+            l.area.map_or(v4(l.axes[0], 0.0), |a| {
+                v4(a.right, if a.disk { 1.0 } else { 0.0 })
+            }),
+            {
+                let up = l.area.map_or(l.axes[1], |a| a.up);
+                v4(up, table.map_or(0.0, |t| f64::from(t.layer) + 1.0))
+            },
+        ]
+    }
+
     /// The lights the light policy shades at this frame's view, each with its weight (#421).
     fn prepare_lights(
         &mut self,
         device: &Device,
         scene: &Scene,
         policy: light::Policy,
+        scores: &[f64],
         dropped: Vec<String>,
     ) {
         let cam = &scene.camera;
@@ -3596,6 +3660,7 @@ impl Renderer {
             locals: [LocalUniform::zeroed(); local::SLOTS],
             items: [[[0.0; 4]; 6]; SHADED],
             answers: [[0.0; 4]; SHADED],
+            fill: [[0.0; 4]; 2],
         };
         // Each light's local map (#446).
         let mut local_of = BTreeMap::new();
@@ -3663,54 +3728,47 @@ impl Renderer {
             u.answers[0][2] = policy.left_out.len() as f32;
         }
         for (slot, &(i, weight)) in u.items.iter_mut().zip(&policy.shaded) {
-            let l = &scene.lights[i];
-            let kind = match l.kind {
-                LightKind::Sun => 0.0,
-                LightKind::Point => 1.0,
-                LightKind::Spot => 2.0,
-                LightKind::Area => 3.0,
-            };
-            let mut intensity = l.intensity * weight;
-            let table = l.distribution.as_ref();
-            intensity *= table.map_or(1.0, |t| t.scale);
-            if let (Some(t), true) = (table, self.planted.local.ies_peak) {
-                // The planted wrong program: a table scaled to its peak, not to its integral.
-                let d = &scene.distributions[t.layer as usize];
-                intensity /= d.table.iter().copied().fold(0.0, f32::max) as f64;
-            }
-            if l.kind == LightKind::Spot && self.planted.spot_counts_cone {
-                // The planted wrong program: lm ÷ 2π(1 − cos outer) in place of lm ÷ 4π.
-                intensity *= 2.0 / (1.0 - l.cone[0]).max(1e-6);
-            }
-            let range = if l.range.is_finite() { l.range } else { 0.0 };
-            *slot = [
-                [l.pos[0] as f32, l.pos[1] as f32, l.pos[2] as f32, kind],
-                [
-                    l.dir[0] as f32,
-                    l.dir[1] as f32,
-                    l.dir[2] as f32,
-                    range as f32,
-                ],
-                [
-                    (l.color[0] * intensity) as f32,
-                    (l.color[1] * intensity) as f32,
-                    (l.color[2] * intensity) as f32,
-                    l.radius as f32,
-                ],
-                [
-                    l.cone[0] as f32,
-                    l.cone[1] as f32,
-                    local_of.get(&i).copied().unwrap_or(0) as f32,
-                    f32::from_bits(l.receiver_bit),
-                ],
-                l.area.map_or(v4(l.axes[0], 0.0), |a| {
-                    v4(a.right, if a.disk { 1.0 } else { 0.0 })
-                }),
-                {
-                    let up = l.area.map_or(l.axes[1], |a| a.up);
-                    v4(up, table.map_or(0.0, |t| f64::from(t.layer) + 1.0))
-                },
-            ];
+            let local = local_of.get(&i).copied().unwrap_or(0);
+            *slot = self.light_rows(scene, &scene.lights[i], weight, local);
+        }
+        // The fill lights at this view (#1634), by the policy's order, for their clusters' pass.
+        let ordering = std::time::Instant::now();
+        let mut order = light::fill_order(&scene.lights, scores);
+        // The planted wrong programs: the lights in the document's order, and the key lights' cut
+        // at 32 with its margin.
+        if self.planted.fill.cap_by_list_order {
+            order.sort_by_key(|&(i, _)| i);
+        }
+        let cut = (order.get(SHADED))
+            .map(|&(_, score)| score)
+            .filter(|_| self.planted.fill.top_32);
+        if self.planted.fill.top_32 {
+            order.truncate(SHADED);
+        }
+        let records: Vec<fill::Record> = order
+            .iter()
+            .map(|&(i, score)| {
+                let l = &scene.lights[i];
+                let weight =
+                    cut.map_or(1.0, |c| ((score - c) / (c * light::MARGIN)).clamp(0.0, 1.0));
+                fill::Record {
+                    light: self.light_rows(scene, l, weight, 0),
+                    more: [f32::from_bits(op::light_hash(&l.id)), 0.0, 0.0, 0.0],
+                }
+            })
+            .collect();
+        let (lit, remade) =
+            (self.fill).prepare(device, scene, &order, &records, &mut self.cluster_buffer);
+        u.fill = lit;
+        self.counts.scoring_ms += ordering.elapsed().as_secs_f64() * 1e3;
+        self.counts.lists_bytes = self.fill.bytes(&self.cluster_buffer);
+        let [w, h] = self.internal();
+        let px = f64::from(w) * f64::from(h);
+        self.counts.light_estimate =
+            fill::estimate(scene, px, self.fill.walked, self.fill.listed);
+        if remade {
+            self.clusters = None;
+            self.rebind_lights(device);
         }
         self.counts.shadows_dropped = dropped;
         // Above eight lights, each tile and slice lists the lights that reach it, by the policy's
@@ -5389,11 +5447,13 @@ impl Renderer {
             .filter(|s| s.shadow && !cascaded)
             .and_then(|s| shadow::light_clip(scene, s.toward, 0.0));
         self.prepare_cascades(device, scene, &frame);
+        let scoring = std::time::Instant::now();
         let policy = scene
             .light_cut
             .clone()
             .unwrap_or_else(|| light::policy(&scene.lights, &scene.camera));
         let scores = light::scores(&scene.lights, &scene.camera);
+        self.counts.scoring_ms = scoring.elapsed().as_secs_f64() * 1e3;
         let shadowed = light::shadowed(&scene.lights, &policy, &scene.shadowing, &scores);
         self.prepare_locals(device, scene, &frame, &shadowed.kept);
         // A warm-up's prepare (#432) records no pass, so its maps stay undrawn: keyed as drawn,
@@ -5427,7 +5487,7 @@ impl Renderer {
             self.compiled += 1;
             self.names.push(backdrop::PASS);
         }
-        self.prepare_lights(device, scene, policy, dropped);
+        self.prepare_lights(device, scene, policy, &scores, dropped);
         if let Some(m) = self.shadow.clip {
             let mut light_frame = frame;
             for c in 0..4 {
@@ -6266,6 +6326,18 @@ impl Renderer {
         }
     }
 
+    /// After a frame (#1634): the clusters past their cap at its view, each with the fill lights
+    /// it dropped, into this frame's counts.
+    pub fn check_clusters(&mut self, device: &Device) {
+        self.counts.clusters_over = self.fill.check(device).to_vec();
+    }
+
+    /// Each cluster's fill lights as the frame just drawn walked them, by ID with their weights
+    /// (#1634), read back from the pass's lists.
+    pub fn read_clusters(&self, device: &Device) -> Vec<([u32; 3], Vec<(String, f32)>)> {
+        self.fill.read(device, &self.cluster_buffer)
+    }
+
     /// The opaque sets holding a part whose subsurface spreads, for the share pass (#481).
     fn share_draws(&self) -> Vec<sss::ShareDraw> {
         let mut draws = Vec::new();
@@ -6746,13 +6818,18 @@ impl Renderer {
     /// What the depth pyramid's pass prices this frame at, in ms, when the frame built one
     /// (#1637): its declared cost per pixel at the frame's internal size.
     pub fn declared_ms(&self) -> Vec<(&'static str, f64)> {
-        match (&self.pyramid, self.counts.pyramid) {
+        let mut declared = match (&self.pyramid, self.counts.pyramid) {
             (Some(p), true) => vec![(
                 cull::PYRAMID_PASS,
                 f64::from(PYRAMID_NS_PER_PX) * f64::from(p.size[0]) * f64::from(p.size[1]) / 1e6,
             )],
             _ => Vec::new(),
+        };
+        // #1634: the fill lights' pass, in a frame that ran it, by the lights its cells walked.
+        if self.counts.fill_walked > 0 {
+            declared.push((fill::PASS, fill::pass_ms(self.counts.fill_walked)));
         }
+        declared
     }
 
     /// Turns the camera's occlusion cull on or off: off, its lists are the frustum's (a view's
@@ -7292,6 +7369,11 @@ impl Renderer {
                     .take_while(|(name, _)| name != OUTPUT_PASS)
                     .map(|(_, job)| (inset::VIEW_PASS.to_string(), job)),
             );
+        }
+        // #1634: the fill lights' clusters, before the geometry walks their lists.
+        if let Some(job) = self.fill.job(&self.profiler) {
+            self.counts.fill_walked = self.fill.walked;
+            jobs.push((fill::PASS.into(), job));
         }
         jobs.push((GEOMETRY_PASS.into(), geometry));
         // #465: the mirror's view and its picture over the mirror's parts, before the effects.
