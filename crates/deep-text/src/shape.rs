@@ -30,14 +30,17 @@ const LAYOUT_BYTES_PER_CHAR: usize = 54;
 /// each width breaks again, the lines it was last broken into, and its graphemes' first bytes and
 /// its `\n`s.
 pub(crate) struct Paragraph {
-    layout: Mutex<(Layout<()>, Option<(Lines, Arc<Piece>)>)>,
+    layout: Mutex<Held>,
     starts: Vec<usize>,
     ends: Vec<usize>,
     chars: usize,
 }
 
+/// A paragraph's layout, with the lines it was last broken into and what they depend on.
+type Held = (Layout<()>, Option<(Lines, Arc<Piece>)>);
+
 impl Paragraph {
-    fn lock(&self) -> MutexGuard<'_, (Layout<()>, Option<(Lines, Arc<Piece>)>)> {
+    fn lock(&self) -> MutexGuard<'_, Held> {
         self.layout.lock().unwrap_or_else(|e| e.into_inner())
     }
 
