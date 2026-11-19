@@ -277,7 +277,21 @@
   "question.your_words": "Your words: {0}",
   "rules.check": "check {0}",
   "rules.guard": "guard {0}",
+  "rules.list_comma": ", ",
   "rules.requirement": "requirement {0}",
+  "rules.review": "review: can send back, can't pass",
+  "rules.sent_back": {
+    "other": "{0} sent back: {1}"
+  },
+  "rules.sent_back_fixed": {
+    "other": "{0} fixed"
+  },
+  "rules.sent_back_left": {
+    "other": "{0} left"
+  },
+  "rules.sent_back_open": {
+    "other": "{0} open"
+  },
   "rules.text_only": "text only",
   "setup.adds": "Adds hooks to {0}. A hook is {1}.",
   "setup.adds_reads": "Adds hooks to {0} and reads their history into the wiki, read by your own agent, on your plan. A hook is {1}.",
@@ -392,6 +406,7 @@
   "views.rule": "Rule",
   "views.rule_held": "{0} · held: an agent removed its line",
   "views.rule_said": "{0} · {1} · {2} · {3} tokens",
+  "views.rule_sent_back": "{0} · {1} in the last 30 days",
   "views.rule_typed_by_you": "{0} · typed by you",
   "views.rules": "Rules",
   "views.rules_count": "{0} rules · {1} text only",

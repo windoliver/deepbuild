@@ -975,9 +975,41 @@
     "text": "守卫 {0}",
     "source": "4c4d57a74aa0f6fbefa44f30bd54ec9ccc218783533ba3000370fdd38e343d24"
   },
+  "rules.list_comma": {
+    "text": "，",
+    "source": "0a07f659461970d8d8dcefe4fff96a1745599810dc7d47391e95c803b7b2072c"
+  },
   "rules.requirement": {
     "text": "要求 {0}",
     "source": "c61886be2b550969e4a257336053157b1a8f09cbddcd7780a933910bf03935d0"
+  },
+  "rules.review": {
+    "text": "审查：能退回，不能放行",
+    "source": "496cf249d7ecb6ae34c5901dfbd938329133f64ef8718e192bcdbc06888e8a05"
+  },
+  "rules.sent_back": {
+    "text": {
+      "other": "退回 {0} 次：{1}"
+    },
+    "source": "12fbb13f5d64a1bcdd7f3adf63d829e5e6d703d00b446cd4becd48448b3d1f0b"
+  },
+  "rules.sent_back_fixed": {
+    "text": {
+      "other": "{0} 个已修复"
+    },
+    "source": "7ad73aeb439e386375ab4b51b847122738b3bc0e38fe05deb3c3847dab8292d4"
+  },
+  "rules.sent_back_left": {
+    "text": {
+      "other": "{0} 个未修复即离开"
+    },
+    "source": "8878d16182e46678b6ced1f3a222b17f931208e231d799973beb6544cde8c53b"
+  },
+  "rules.sent_back_open": {
+    "text": {
+      "other": "{0} 个仍未结束"
+    },
+    "source": "ad0c0fb9d09ee473e11d5584359cc709aac0918676707b5554e7c4ef68a54b7f"
   },
   "rules.text_only": {
     "text": "仅文本",
@@ -1421,6 +1453,10 @@
   "views.rule_said": {
     "text": "{0} · {1} · {2} · {3} 个词元",
     "source": "31af442426faa7b868bac59b5d60b13bfd8bc3e975dce30b83d7c5c2b997254d"
+  },
+  "views.rule_sent_back": {
+    "text": "{0} · 近 30 天内{1}",
+    "source": "f4320f60be0074c64405e0121949f0f78e553cff6077fe7644a587f53de1cbd5"
   },
   "views.rule_typed_by_you": {
     "text": "{0} · 由你输入",

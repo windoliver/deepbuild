@@ -791,6 +791,8 @@ timed.push('tests/acceptance/172/budgets.test.ts', 'tests/acceptance/172/images.
 // place.
 alone.push('tests/acceptance/172-redraft-ac2/');
 byHand.push('tests/acceptance/172/refusals.test.ts');
+// #1041's files each build deep-show (full) and play the dungeon's saves in headless Chrome with WebGPU on.
+alone.push('tests/acceptance/1041/');
 // #1045's files each build deep-show (full) and drive headless Chrome with WebGPU on.
 alone.push('tests/acceptance/1045/');
 // #1490's files each build deep-show (full) and export bundles, and its parity file drives headless Chrome with WebGPU on.
@@ -939,6 +941,8 @@ timed.push('tests/acceptance/416/layouts/budgets.test.ts');
 
 // #1624: this live session spends plan usage and is explicitly run by hand, not as a skipped unit test.
 byHand.push('tests/acceptance/1330/start.live.test.ts');
+// #1666: every file runs the real Claude Code and Codex at the versions their facts list, by hand (its Proof).
+byHand.push('tests/acceptance/1666/');
 
 // #1624 / #2444: these files call the reference-Mac timing helpers at their own call sites.
 // Keep them measured under a timed grant; no test, limit or result is exempted.
@@ -992,6 +996,9 @@ alone.push('tests/acceptance/1831/');
 // #2652's files each start real hubs and read their heaps through the inspector; AC4 runs #1018's hub suite whole.
 alone.push('tests/acceptance/2652/');
 
+// #1928's files each build deep-show in the full set and drive the offsets and dissolves it builds.
+alone.push('tests/acceptance/1928/');
+
 // #2650's files read a hub's memory through the churn benchmark, or start sandboxed plug-ins and 10,000 agent jobs, so
 // they run one at a time, by name: budgets.long runs the benchmark's 5,000 cycles beside the merge base's on a
 // reference Mac, by hand, gated by environmentProblem().
@@ -1018,6 +1025,13 @@ alone.push('tests/acceptance/1801/');
 // AC5 opens the real app with Accessibility; its shown file takes the real app's pictures and waits on your taste call.
 alone.push('tests/acceptance/2403/');
 byHand.push('tests/acceptance/2403/shown.test.ts');
+
+// #1411's files each start a hub and hold builds while they change the memory-pressure level; its real-build files run
+// cold cargo builds of 65 crates.
+alone.push('tests/acceptance/1411/');
+
+// #1512's suite starts hubs of its own with a fake reviewer, as #1537's and #1862's do.
+alone.push('tests/acceptance/1512/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },

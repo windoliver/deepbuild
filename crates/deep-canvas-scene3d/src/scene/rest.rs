@@ -734,7 +734,11 @@ pub fn mesh_of(
     built.map_err(|path| match path.split_once(crate::builders::CODED) {
         Some((code, at)) => Refused {
             code: crate::build::code_of(code),
-            path: at.to_string(),
+            // What a refusal found follows its path under the item (#1928).
+            path: match at.split_once(crate::builders::CODED) {
+                Some((at, _)) => format!("items/{id}/{at}"),
+                None => at.to_string(),
+            },
         },
         None => Refused {
             code: "out_of_range",

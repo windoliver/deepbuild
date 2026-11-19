@@ -418,7 +418,8 @@ fn index_html(
         "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n\
 <meta http-equiv=\"Content-Security-Policy\" content=\"{policy}\">\n<meta name=\"referrer\" content=\"no-referrer\">\n{stamp}<title>{}</title>\n\
 <style>html,body{{margin:0;background:#101012;color:#e8e8ec;font:14px system-ui,sans-serif}}deep-player{{display:block}}\
-deep-player canvas{{display:block;width:100%;height:auto;max-height:100vh;object-fit:contain}}[data-deep-notice]{{margin:8px 12px}}</style>\n\
+deep-player canvas{{display:block;width:100%;height:auto;max-height:100vh;object-fit:contain}}[data-deep-notice]{{margin:8px 12px}}\
+[data-deep-saves]{{display:flex;gap:8px;margin:8px 12px}}[data-deep-saves] button,[data-deep-saves] select{{font:inherit;color:inherit;background:#232329;border:1px solid #4a4a55;border-radius:6px;padding:4px 10px}}</style>\n\
 <script type=\"importmap\">{map}</script>\n</head>\n<body>\n<deep-player></deep-player>\n\
 <script type=\"application/json\" id=\"deep-bundle\">{data}</script>\n\
 <script type=\"module\" src=\"./{}\" integrity=\"{}\"></script>\n</body>\n</html>\n",
@@ -450,6 +451,16 @@ fn element(guard: Option<Guard>) -> String {
         Some(Guard::WebIndexRequiresEveryAnyOf) => ELEMENT.replace(
             "    const can = await gate(bundle.gpu_needs);",
             "    const n = bundle.gpu_needs;\n    const can = await gate({ ...n, features: [...n.features, ...n.any_of.flat()], any_of: [] });",
+        ),
+        // Planted (#1041 AC2): saves keyed by the page's origin alone, so every piece there shares its slots.
+        Some(Guard::WebSavesKeyedByOrigin) => ELEMENT.replace(
+            "    this.#piece = piece;",
+            "    this.#piece = location.origin;",
+        ),
+        // Planted (#1041 AC3): the first save never asks the browser to keep the origin's storage persistent.
+        Some(Guard::WebSavesNeverAskPersistence) => ELEMENT.replace(
+            "      if (!this.#asked) await this.#persist();\n",
+            "",
         ),
         // Planted (#1045 AC1): no accessibility tree beside the canvas, and no live region.
         Some(Guard::WebNoTree) => ELEMENT.replace("    this.#keepTree();\n", ""),
@@ -586,6 +597,8 @@ impl Hub<'_> {
             Guard::WebProbeTestVariant,
             Guard::WebRequestsAdapterLimits,
             Guard::WebFragmentWritesEntry,
+            Guard::WebSavesKeyedByOrigin,
+            Guard::WebSavesNeverAskPersistence,
             Guard::WebLeavesOutFont,
             Guard::WebIndexChecksWebgpuOnly,
             Guard::WebIndexRequiresEveryAnyOf,
