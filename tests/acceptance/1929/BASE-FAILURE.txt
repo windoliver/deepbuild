@@ -1,0 +1,475 @@
+Base commit: 376f578e0 ("Merge pull request #2795 from windoliver/fix/2569-lists-1477-deadline"); no implementation of #1929.
+Machine: macOS 27.2 on arm64 (an Apple silicon Mac, shared with other sessions), node v24.22.2, vitest 5.0.5. The
+         issue's proof runs on Spark (Linux aarch64), which this job could not reach; every test is CPU only and reads
+         data, so the same run is expected there. The checkout's path is redacted to <checkout>.
+Build: cargo build --locked --bin deep-show --no-default-features --features full, CARGO_INCREMENTAL=0
+       CARGO_PROFILE_DEV_DEBUG=0, the pinned 1.99.1 toolchain: built once before this run (exit 0); each file's own
+       build below found it fresh.
+Command: NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 scripts/lease node node_modules/vitest/vitest.mjs run
+         --root tests/acceptance/1929 --no-file-parallelism   (unleased: scripts/lease found no deep CLI)
+Type-check: node node_modules/typescript/bin/tsc -p tests/acceptance/1929/tsconfig.json passes (exit 0, no output).
+
+Result: Test Files 7 failed (7), Tests 18 failed (18), exit 1. Every failure is an AssertionError raised in
+helpers.ts; none is a load, compile or type error.
+  - The 10 tests of the shipped program fail on the base's own refusal of the new kinds: the revision that holds
+    mod.box_deform@1 or mod.mesh_deform@1 is refused with out_of_range at items/<id>/modifiers/1/kind. Six read it
+    in `admitted` ("no error issue"); the four refusal tests read it in the refusal judge, which wants
+    box_deform.outside, box_deform.params, mesh_deform.outside or mesh_deform.mesh ("no error issue <code>; the
+    check raised [out_of_range at items/crate/modifiers/1/kind]").
+  - The 8 planted-program tests fail where the base refuses the unknown planted name: "deep-show run accepted the
+    scenario (its planted program is <name>): {"ok":false,"code":"bad_input"}". In the four arithmetic ones (AC1,
+    AC2, AC3, AC5) this suite's own twin had already given the issue's wrong numbers and failed the judge.
+
+The run, whole:
+
+scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `node node_modules/vitest/vitest.mjs run --root tests/acceptance/1929 --no-file-parallelism` runs unleased
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/1929
+
+ ❯ ac6-bind-once.test.ts (4 tests | 4 failed) 4163ms
+   ❯ AC6 #1929.ef5c1f92 a keyed move binds once (4)
+     × AC6 #1929.ef5c1f92 over 120 frames at 30 fps the stack's work counters show the bind computed once, and moving the +y point's rest place to 2.5 m computes it once more 1967ms
+     × AC6 #1929.ef5c1f92 frame 60 has moved the +x, +y, +z corner 7/48 m, and frame 60 sought equals frame 60 played bit for bit 114ms
+     × AC6 #1929.ef5c1f92 planted mesh_deform_binds_every_frame binds every frame: it counts 120 binds over the 120 frames and the judge fails, naming the item 109ms
+     × AC6 #1929.ef5c1f92 planted mesh_deform_key_without_mesh keys the bind without the control mesh: it keeps the old weights after the rest move and the judge fails, naming the item 109ms
+ ❯ ac5-octahedron.test.ts (2 tests | 2 failed) 2727ms
+   ❯ AC5 #1929.f933a85f a mesh deform by an octahedron (2)
+     × AC5 #1929.f933a85f every move (0.3, −0.2, 0.1) m moves the cube by that; each point moved by its own offset puts each vertex at twice its offset; only the +y point moved (0, 1, 0) m moves the +x, +y, +z corner 7/24 m and the +x, −y, +z corner 1/24 m along y, all within 1e-9 m 1943ms
+     × AC5 #1929.f933a85f planted mesh_deform_inverse_distance blends by normalized inverse distance: it passes the translation, puts the doubled +x, +y, +z corner 0.647193 m from the centre on each axis instead of 1 m, and the judge fails, naming the vertex 110ms
+ ❯ ac7-mesh-refusals.test.ts (3 tests | 3 failed) 2957ms
+   ❯ AC7 #1929.303648a3 vertices outside the control mesh and bad control meshes are refused at check (3)
+     × AC7 #1929.303648a3 with the octahedron's points 1 m out the item is refused at check with mesh_deform.outside, naming the cube's 8 corners and 12 edge midpoints, with 0 builds 2008ms
+     × AC7 #1929.303648a3 the 2 m octahedron less one triangle is refused with mesh_deform.mesh, naming its 3 open edges, and a control mesh of 65 points with the same code 120ms
+     × AC7 #1929.303648a3 planted mesh_deform_extrapolates_outside, a deform that extrapolates outside vertices, builds and fails 110ms
+ ❯ ac3-zero-and-uniform.test.ts (2 tests | 2 failed) 2694ms
+   ❯ AC3 #1929.9ba17166 zero moves and one move at every point, on three grids (2)
+     × AC3 #1929.9ba17166 on grids of 2 × 2 × 2, 3 × 3 × 3 and 4 × 3 × 2 points, every move 0 leaves the positions equal to the input bit for bit, and every move (0.3, −0.2, 0.1) m moves every point by that within 1e-12 m 1975ms
+     × AC3 #1929.9ba17166 planted box_deform_drops_last_weight leaves out the last point's weight: the points move by less and the judge fails, naming the vertex 116ms
+ ❯ ac4-box-refusals.test.ts (3 tests | 3 failed) 2777ms
+   ❯ AC4 #1929.2bce5ff8 outside vertices and bad params are refused at check (3)
+     × AC4 #1929.2bce5ff8 cube vertices 0.01 m outside the box are refused at check with box_deform.outside, naming the item and each vertex, with 0 builds; 0.01 m inside, the cube is presented 1958ms
+     × AC4 #1929.2bce5ff8 points: [5, 2, 2], and 7 moves for 8 points, are each refused at check with box_deform.params, with 0 builds 115ms
+     × AC4 #1929.2bce5ff8 planted box_deform_clamps_outside, a check that clamps outside vertices into the box, builds and fails 109ms
+ ❯ ac1-stretched-grid.test.ts (2 tests | 2 failed) 2706ms
+   ❯ AC1 #1929.eabb0101 a 2 × 2 × 2 grid stretched along x (2)
+     × AC1 #1929.eabb0101 the cube's +x face moves 0.75 m and its −x face 0.25 m along x, nothing moves along y or z, and the cube holds 1.5 m³, within 1e-12 relative 1958ms
+     × AC1 #1929.eabb0101 planted box_deform_own_bounds measures (s, t, u) over the item's own bounds: the +x face moves 1 m and the judge fails, naming the vertex 111ms
+ ❯ ac2-centre-point.test.ts (2 tests | 2 failed) 2702ms
+   ❯ AC2 #1929.c629697d a 3 × 3 × 3 grid with only its centre point moved (2)
+     × AC2 #1929.c629697d each corner moves 0.375³ m, each face centre 0.5 × 0.375 × 0.5 m and each edge midpoint 0.375² × 0.5 m along y, within 1e-12 m, with x and z unchanged 1957ms
+     × AC2 #1929.c629697d planted box_deform_trilinear_cells interpolates trilinearly cell by cell: the corners move 0.125 m and the face centres 0.5 m, and the judge fails, naming the vertex 109ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 18 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac1-stretched-grid.test.ts > AC1 #1929.eabb0101 a 2 × 2 × 2 grid stretched along x > AC1 #1929.eabb0101 the cube's +x face moves 0.75 m and its −x face 0.25 m along x, nothing moves along y or z, and the cube holds 1.5 m³, within 1e-12 relative
+AssertionError: the cube under the stretched grid: no error issue: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "{\"check\":\"document.validate\",\"code\":\"out_of_range\",\"severity\":\"error\",\"ids\":[\"crate\"],\"path\":\"items/crate/modifiers/1/kind\",\"actual\":null,\"what\":\"scene3d.build can't evaluate this\",\"fix\":\"Give the field a value of its type inside its range.\"}",
++ ]
+
+ ❯ admitted helpers.ts:200:75
+    198| export function admitted(reply: JsonObject, what: string): void {
+    199|   const errors = issuesOf(reply, what).filter((i) => i.severity === 'e…
+    200|   expect(errors.map((e) => shown(e.raw, 700)), `${what}: no error issu…
+       |                                                                           ^
+    201|   const skipped = arr(reply['notices'] ?? [], `${what}: notices`).filt…
+    202|   expect(skipped.map((n) => shown(n, 700)), `${what}: no item skipped …
+ ❯ stretched ac1-stretched-grid.test.ts:63:3
+ ❯ ac1-stretched-grid.test.ts:69:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/18]⎯
+
+ FAIL  ac1-stretched-grid.test.ts > AC1 #1929.eabb0101 a 2 × 2 × 2 grid stretched along x > AC1 #1929.eabb0101 planted box_deform_own_bounds measures (s, t, u) over the item's own bounds: the +x face moves 1 m and the judge fails, naming the vertex
+AssertionError: deep-show run accepted the scenario (its planted program is box_deform_own_bounds): {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:154:91
+    152|   const out = obj(answer, 'deep-show run: the answer');
+    153|   const planted = typeof sc['planted'] === 'string' ? ` (its planted p…
+    154|   expect(out['ok'], `deep-show run accepted the scenario${planted}: ${…
+       |                                                                                           ^
+    155|   const replies = arr(out['replies'], 'deep-show run: replies').map((r…
+    156|   expect(replies.length, 'deep-show run: one reply per call').toBe(arr…
+ ❯ stretched ac1-stretched-grid.test.ts:62:31
+ ❯ ac1-stretched-grid.test.ts:83:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/18]⎯
+
+ FAIL  ac2-centre-point.test.ts > AC2 #1929.c629697d a 3 × 3 × 3 grid with only its centre point moved > AC2 #1929.c629697d each corner moves 0.375³ m, each face centre 0.5 × 0.375 × 0.5 m and each edge midpoint 0.375² × 0.5 m along y, within 1e-12 m, with x and z unchanged
+AssertionError: the cube under the 3 × 3 × 3 grid: no error issue: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "{\"check\":\"document.validate\",\"code\":\"out_of_range\",\"severity\":\"error\",\"ids\":[\"crate\"],\"path\":\"items/crate/modifiers/1/kind\",\"actual\":null,\"what\":\"scene3d.build can't evaluate this\",\"fix\":\"Give the field a value of its type inside its range.\"}",
++ ]
+
+ ❯ admitted helpers.ts:200:75
+    198| export function admitted(reply: JsonObject, what: string): void {
+    199|   const errors = issuesOf(reply, what).filter((i) => i.severity === 'e…
+    200|   expect(errors.map((e) => shown(e.raw, 700)), `${what}: no error issu…
+       |                                                                           ^
+    201|   const skipped = arr(reply['notices'] ?? [], `${what}: notices`).filt…
+    202|   expect(skipped.map((n) => shown(n, 700)), `${what}: no item skipped …
+ ❯ lifted ac2-centre-point.test.ts:57:3
+ ❯ ac2-centre-point.test.ts:63:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/18]⎯
+
+ FAIL  ac2-centre-point.test.ts > AC2 #1929.c629697d a 3 × 3 × 3 grid with only its centre point moved > AC2 #1929.c629697d planted box_deform_trilinear_cells interpolates trilinearly cell by cell: the corners move 0.125 m and the face centres 0.5 m, and the judge fails, naming the vertex
+AssertionError: deep-show run accepted the scenario (its planted program is box_deform_trilinear_cells): {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:154:91
+    152|   const out = obj(answer, 'deep-show run: the answer');
+    153|   const planted = typeof sc['planted'] === 'string' ? ` (its planted p…
+    154|   expect(out['ok'], `deep-show run accepted the scenario${planted}: ${…
+       |                                                                                           ^
+    155|   const replies = arr(out['replies'], 'deep-show run: replies').map((r…
+    156|   expect(replies.length, 'deep-show run: one reply per call').toBe(arr…
+ ❯ lifted ac2-centre-point.test.ts:56:31
+ ❯ ac2-centre-point.test.ts:77:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/18]⎯
+
+ FAIL  ac3-zero-and-uniform.test.ts > AC3 #1929.9ba17166 zero moves and one move at every point, on three grids > AC3 #1929.9ba17166 on grids of 2 × 2 × 2, 3 × 3 × 3 and 4 × 3 × 2 points, every move 0 leaves the positions equal to the input bit for bit, and every move (0.3, −0.2, 0.1) m moves every point by that within 1e-12 m
+AssertionError: the cube under the three grids: no error issue: expected [ …(6) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "{\"check\":\"document.validate\",\"code\":\"out_of_range\",\"severity\":\"error\",\"ids\":[\"shift222\"],\"path\":\"items/shift222/modifiers/1/kind\",\"actual\":null,\"what\":\"scene3d.build can't evaluate this\",\"fix\":\"Give the field a value of its type inside its range.\"}",
++   "{\"check\":\"document.validate\",\"code\":\"out_of_range\",\"severity\":\"error\",\"ids\":[\"shift333\"],\"path\":\"items/shift333/modifiers/1/kind\",\"actual\":null,\"what\":\"scene3d.build can't evaluate this\",\"fix\":\"Give the field a value of its type inside its range.\"}",
++   "{\"check\":\"document.validate\",\"code\":\"out_of_range\",\"severity\":\"error\",\"ids\":[\"shift432\"],\"path\":\"items/shift432/modifiers/1/kind\",\"actual\":null,\"what\":\"scene3d.build can't evaluate this\",\"fix\":\"Give the field a value of its type inside its range.\"}",
++   "{\"check\":\"document.validate\",\"code\":\"out_of_range\",\"severity\":\"error\",\"ids\":[\"still222\"],\"path\":\"items/still222/modifiers/1/kind\",\"actual\":null,\"what\":\"scene3d.build can't evaluate this\",\"fix\":\"Give the field a value of its type inside its range.\"}",
++   "{\"check\":\"document.validate\",\"code\":\"out_of_range\",\"severity\":\"error\",\"ids\":[\"still333\"],\"path\":\"items/still333/modifiers/1/kind\",\"actual\":null,\"what\":\"scene3d.build can't evaluate this\",\"fix\":\"Give the field a value of its type inside its range.\"}",
++   "{\"check\":\"document.validate\",\"code\":\"out_of_range\",\"severity\":\"error\",\"ids\":[\"still432\"],\"path\":\"items/still432/modifiers/1/kind\",\"actual\":null,\"what\":\"scene3d.build can't evaluate this\",\"fix\":\"Give the field a value of its type inside its range.\"}",
++ ]
+
+ ❯ admitted helpers.ts:200:75
+    198| export function admitted(reply: JsonObject, what: string): void {
+    199|   const errors = issuesOf(reply, what).filter((i) => i.severity === 'e…
+    200|   expect(errors.map((e) => shown(e.raw, 700)), `${what}: no error issu…
+       |                                                                           ^
+    201|   const skipped = arr(reply['notices'] ?? [], `${what}: notices`).filt…
+    202|   expect(skipped.map((n) => shown(n, 700)), `${what}: no item skipped …
+ ❯ grids ac3-zero-and-uniform.test.ts:55:3
+ ❯ ac3-zero-and-uniform.test.ts:62:39
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/18]⎯
+
+ FAIL  ac3-zero-and-uniform.test.ts > AC3 #1929.9ba17166 zero moves and one move at every point, on three grids > AC3 #1929.9ba17166 planted box_deform_drops_last_weight leaves out the last point's weight: the points move by less and the judge fails, naming the vertex
+AssertionError: deep-show run accepted the scenario (its planted program is box_deform_drops_last_weight): {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:154:91
+    152|   const out = obj(answer, 'deep-show run: the answer');
+    153|   const planted = typeof sc['planted'] === 'string' ? ` (its planted p…
+    154|   expect(out['ok'], `deep-show run accepted the scenario${planted}: ${…
+       |                                                                                           ^
+    155|   const replies = arr(out['replies'], 'deep-show run: replies').map((r…
+    156|   expect(replies.length, 'deep-show run: one reply per call').toBe(arr…
+ ❯ grids ac3-zero-and-uniform.test.ts:54:31
+ ❯ ac3-zero-and-uniform.test.ts:80:39
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/18]⎯
+
+ FAIL  ac4-box-refusals.test.ts > AC4 #1929.2bce5ff8 outside vertices and bad params are refused at check > AC4 #1929.2bce5ff8 cube vertices 0.01 m outside the box are refused at check with box_deform.outside, naming the item and each vertex, with 0 builds; 0.01 m inside, the cube is presented
+AssertionError: the cube 0.01 m outside its box:
+  crate: no error issue box_deform.outside; the check raised [out_of_range at items/crate/modifiers/1/kind]: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "crate: no error issue box_deform.outside; the check raised [out_of_range at items/crate/modifiers/1/kind]",
++ ]
+
+ ❯ none helpers.ts:61:73
+     59| /** No failures; the message lists them. */
+     60| export function none(failures: readonly string[], what: string): void {
+     61|   expect(failures, `${what}:\n  ${failures.slice(0, 40).join('\n  ')}`…
+       |                                                                         ^
+     62| }
+     63| /** At least one failure, and one naming each of `names`: what a wrong…
+ ❯ ac4-box-refusals.test.ts:61:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/18]⎯
+
+ FAIL  ac4-box-refusals.test.ts > AC4 #1929.2bce5ff8 outside vertices and bad params are refused at check > AC4 #1929.2bce5ff8 points: [5, 2, 2], and 7 moves for 8 points, are each refused at check with box_deform.params, with 0 builds
+AssertionError: points: [5, 2, 2] with its 20 moves:
+  crate: no error issue box_deform.params; the check raised [out_of_range at items/crate/modifiers/1/kind]: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "crate: no error issue box_deform.params; the check raised [out_of_range at items/crate/modifiers/1/kind]",
++ ]
+
+ ❯ none helpers.ts:61:73
+     59| /** No failures; the message lists them. */
+     60| export function none(failures: readonly string[], what: string): void {
+     61|   expect(failures, `${what}:\n  ${failures.slice(0, 40).join('\n  ')}`…
+       |                                                                         ^
+     62| }
+     63| /** At least one failure, and one naming each of `names`: what a wrong…
+ ❯ ac4-box-refusals.test.ts:74:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/18]⎯
+
+ FAIL  ac4-box-refusals.test.ts > AC4 #1929.2bce5ff8 outside vertices and bad params are refused at check > AC4 #1929.2bce5ff8 planted box_deform_clamps_outside, a check that clamps outside vertices into the box, builds and fails
+AssertionError: deep-show run accepted the scenario (its planted program is box_deform_clamps_outside): {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:154:91
+    152|   const out = obj(answer, 'deep-show run: the answer');
+    153|   const planted = typeof sc['planted'] === 'string' ? ` (its planted p…
+    154|   expect(out['ok'], `deep-show run accepted the scenario${planted}: ${…
+       |                                                                                           ^
+    155|   const replies = arr(out['replies'], 'deep-show run: replies').map((r…
+    156|   expect(replies.length, 'deep-show run: one reply per call').toBe(arr…
+ ❯ outside ac4-box-refusals.test.ts:40:19
+ ❯ ac4-box-refusals.test.ts:79:40
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/18]⎯
+
+ FAIL  ac5-octahedron.test.ts > AC5 #1929.f933a85f a mesh deform by an octahedron > AC5 #1929.f933a85f every move (0.3, −0.2, 0.1) m moves the cube by that; each point moved by its own offset puts each vertex at twice its offset; only the +y point moved (0, 1, 0) m moves the +x, +y, +z corner 7/24 m and the +x, −y, +z corner 1/24 m along y, all within 1e-9 m
+AssertionError: the cube in the octahedron: no error issue: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "{\"check\":\"document.validate\",\"code\":\"out_of_range\",\"severity\":\"error\",\"ids\":[\"doubled\"],\"path\":\"items/doubled/modifiers/1/kind\",\"actual\":null,\"what\":\"scene3d.build can't evaluate this\",\"fix\":\"Give the field a value of its type inside its range.\"}",
++   "{\"check\":\"document.validate\",\"code\":\"out_of_range\",\"severity\":\"error\",\"ids\":[\"lifted\"],\"path\":\"items/lifted/modifiers/1/kind\",\"actual\":null,\"what\":\"scene3d.build can't evaluate this\",\"fix\":\"Give the field a value of its type inside its range.\"}",
++   "{\"check\":\"document.validate\",\"code\":\"out_of_range\",\"severity\":\"error\",\"ids\":[\"moved\"],\"path\":\"items/moved/modifiers/1/kind\",\"actual\":null,\"what\":\"scene3d.build can't evaluate this\",\"fix\":\"Give the field a value of its type inside its range.\"}",
++ ]
+
+ ❯ admitted helpers.ts:200:75
+    198| export function admitted(reply: JsonObject, what: string): void {
+    199|   const errors = issuesOf(reply, what).filter((i) => i.severity === 'e…
+    200|   expect(errors.map((e) => shown(e.raw, 700)), `${what}: no error issu…
+       |                                                                           ^
+    201|   const skipped = arr(reply['notices'] ?? [], `${what}: notices`).filt…
+    202|   expect(skipped.map((n) => shown(n, 700)), `${what}: no item skipped …
+ ❯ deformed ac5-octahedron.test.ts:89:3
+ ❯ ac5-octahedron.test.ts:96:31
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/18]⎯
+
+ FAIL  ac5-octahedron.test.ts > AC5 #1929.f933a85f a mesh deform by an octahedron > AC5 #1929.f933a85f planted mesh_deform_inverse_distance blends by normalized inverse distance: it passes the translation, puts the doubled +x, +y, +z corner 0.647193 m from the centre on each axis instead of 1 m, and the judge fails, naming the vertex
+AssertionError: deep-show run accepted the scenario (its planted program is mesh_deform_inverse_distance): {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:154:91
+    152|   const out = obj(answer, 'deep-show run: the answer');
+    153|   const planted = typeof sc['planted'] === 'string' ? ` (its planted p…
+    154|   expect(out['ok'], `deep-show run accepted the scenario${planted}: ${…
+       |                                                                                           ^
+    155|   const replies = arr(out['replies'], 'deep-show run: replies').map((r…
+    156|   expect(replies.length, 'deep-show run: one reply per call').toBe(arr…
+ ❯ deformed ac5-octahedron.test.ts:88:31
+ ❯ ac5-octahedron.test.ts:112:31
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/18]⎯
+
+ FAIL  ac6-bind-once.test.ts > AC6 #1929.ef5c1f92 a keyed move binds once > AC6 #1929.ef5c1f92 over 120 frames at 30 fps the stack's work counters show the bind computed once, and moving the +y point's rest place to 2.5 m computes it once more
+AssertionError: the cube in the keyed octahedron: no error issue: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "{\"check\":\"document.validate\",\"code\":\"out_of_range\",\"severity\":\"error\",\"ids\":[\"crate\"],\"path\":\"items/crate/modifiers/1/kind\",\"actual\":null,\"what\":\"scene3d.build can't evaluate this\",\"fix\":\"Give the field a value of its type inside its range.\"}",
++ ]
+
+ ❯ admitted helpers.ts:200:75
+    198| export function admitted(reply: JsonObject, what: string): void {
+    199|   const errors = issuesOf(reply, what).filter((i) => i.severity === 'e…
+    200|   expect(errors.map((e) => shown(e.raw, 700)), `${what}: no error issu…
+       |                                                                           ^
+    201|   const skipped = arr(reply['notices'] ?? [], `${what}: notices`).filt…
+    202|   expect(skipped.map((n) => shown(n, 700)), `${what}: no item skipped …
+ ❯ played ac6-bind-once.test.ts:96:3
+ ❯ ac6-bind-once.test.ts:105:39
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/18]⎯
+
+ FAIL  ac6-bind-once.test.ts > AC6 #1929.ef5c1f92 a keyed move binds once > AC6 #1929.ef5c1f92 frame 60 has moved the +x, +y, +z corner 7/48 m, and frame 60 sought equals frame 60 played bit for bit
+AssertionError: the cube in the keyed octahedron, played: no error issue: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "{\"check\":\"document.validate\",\"code\":\"out_of_range\",\"severity\":\"error\",\"ids\":[\"crate\"],\"path\":\"items/crate/modifiers/1/kind\",\"actual\":null,\"what\":\"scene3d.build can't evaluate this\",\"fix\":\"Give the field a value of its type inside its range.\"}",
++ ]
+
+ ❯ admitted helpers.ts:200:75
+    198| export function admitted(reply: JsonObject, what: string): void {
+    199|   const errors = issuesOf(reply, what).filter((i) => i.severity === 'e…
+    200|   expect(errors.map((e) => shown(e.raw, 700)), `${what}: no error issu…
+       |                                                                           ^
+    201|   const skipped = arr(reply['notices'] ?? [], `${what}: notices`).filt…
+    202|   expect(skipped.map((n) => shown(n, 700)), `${what}: no item skipped …
+ ❯ at ac6-bind-once.test.ts:112:7
+ ❯ ac6-bind-once.test.ts:115:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/18]⎯
+
+ FAIL  ac6-bind-once.test.ts > AC6 #1929.ef5c1f92 a keyed move binds once > AC6 #1929.ef5c1f92 planted mesh_deform_binds_every_frame binds every frame: it counts 120 binds over the 120 frames and the judge fails, naming the item
+AssertionError: deep-show run accepted the scenario (its planted program is mesh_deform_binds_every_frame): {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:154:91
+    152|   const out = obj(answer, 'deep-show run: the answer');
+    153|   const planted = typeof sc['planted'] === 'string' ? ` (its planted p…
+    154|   expect(out['ok'], `deep-show run accepted the scenario${planted}: ${…
+       |                                                                                           ^
+    155|   const replies = arr(out['replies'], 'deep-show run: replies').map((r…
+    156|   expect(replies.length, 'deep-show run: one reply per call').toBe(arr…
+ ❯ played ac6-bind-once.test.ts:92:19
+ ❯ ac6-bind-once.test.ts:124:39
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/18]⎯
+
+ FAIL  ac6-bind-once.test.ts > AC6 #1929.ef5c1f92 a keyed move binds once > AC6 #1929.ef5c1f92 planted mesh_deform_key_without_mesh keys the bind without the control mesh: it keeps the old weights after the rest move and the judge fails, naming the item
+AssertionError: deep-show run accepted the scenario (its planted program is mesh_deform_key_without_mesh): {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:154:91
+    152|   const out = obj(answer, 'deep-show run: the answer');
+    153|   const planted = typeof sc['planted'] === 'string' ? ` (its planted p…
+    154|   expect(out['ok'], `deep-show run accepted the scenario${planted}: ${…
+       |                                                                                           ^
+    155|   const replies = arr(out['replies'], 'deep-show run: replies').map((r…
+    156|   expect(replies.length, 'deep-show run: one reply per call').toBe(arr…
+ ❯ played ac6-bind-once.test.ts:92:19
+ ❯ ac6-bind-once.test.ts:130:39
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/18]⎯
+
+ FAIL  ac7-mesh-refusals.test.ts > AC7 #1929.303648a3 vertices outside the control mesh and bad control meshes are refused at check > AC7 #1929.303648a3 with the octahedron's points 1 m out the item is refused at check with mesh_deform.outside, naming the cube's 8 corners and 12 edge midpoints, with 0 builds
+AssertionError: the cube in the 1 m octahedron:
+  crate: no error issue mesh_deform.outside; the check raised [out_of_range at items/crate/modifiers/1/kind]: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "crate: no error issue mesh_deform.outside; the check raised [out_of_range at items/crate/modifiers/1/kind]",
++ ]
+
+ ❯ none helpers.ts:61:73
+     59| /** No failures; the message lists them. */
+     60| export function none(failures: readonly string[], what: string): void {
+     61|   expect(failures, `${what}:\n  ${failures.slice(0, 40).join('\n  ')}`…
+       |                                                                         ^
+     62| }
+     63| /** At least one failure, and one naming each of `names`: what a wrong…
+ ❯ ac7-mesh-refusals.test.ts:60:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/18]⎯
+
+ FAIL  ac7-mesh-refusals.test.ts > AC7 #1929.303648a3 vertices outside the control mesh and bad control meshes are refused at check > AC7 #1929.303648a3 the 2 m octahedron less one triangle is refused with mesh_deform.mesh, naming its 3 open edges, and a control mesh of 65 points with the same code
+AssertionError: the 2 m octahedron less one triangle:
+  crate: no error issue mesh_deform.mesh; the check raised [out_of_range at items/crate/modifiers/1/kind]: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "crate: no error issue mesh_deform.mesh; the check raised [out_of_range at items/crate/modifiers/1/kind]",
++ ]
+
+ ❯ none helpers.ts:61:73
+     59| /** No failures; the message lists them. */
+     60| export function none(failures: readonly string[], what: string): void {
+     61|   expect(failures, `${what}:\n  ${failures.slice(0, 40).join('\n  ')}`…
+       |                                                                         ^
+     62| }
+     63| /** At least one failure, and one naming each of `names`: what a wrong…
+ ❯ ac7-mesh-refusals.test.ts:83:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/18]⎯
+
+ FAIL  ac7-mesh-refusals.test.ts > AC7 #1929.303648a3 vertices outside the control mesh and bad control meshes are refused at check > AC7 #1929.303648a3 planted mesh_deform_extrapolates_outside, a deform that extrapolates outside vertices, builds and fails
+AssertionError: deep-show run accepted the scenario (its planted program is mesh_deform_extrapolates_outside): {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ runShow helpers.ts:154:91
+    152|   const out = obj(answer, 'deep-show run: the answer');
+    153|   const planted = typeof sc['planted'] === 'string' ? ` (its planted p…
+    154|   expect(out['ok'], `deep-show run accepted the scenario${planted}: ${…
+       |                                                                                           ^
+    155|   const replies = arr(out['replies'], 'deep-show run: replies').map((r…
+    156|   expect(replies.length, 'deep-show run: one reply per call').toBe(arr…
+ ❯ small ac7-mesh-refusals.test.ts:39:19
+ ❯ ac7-mesh-refusals.test.ts:91:41
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/18]⎯
+
+
+ Test Files  7 failed (7)
+      Tests  18 failed (18)
+   Start at  00:22:14
+   Duration  21.19s (tests 100%)
+
+exit 1
