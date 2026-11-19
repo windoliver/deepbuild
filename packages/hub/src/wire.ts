@@ -16,8 +16,14 @@ export const CONTRACT = '1.0';
 /** What a stream subscribe asks for (#1575): one session's events, or the list's rows; with none, every event, as the app subscribes. */
 export type Scope = { kind: 'session'; session: string } | { kind: 'list' };
 
-/** error@3: one refusal. */
-export interface Refusal { code: string; retryable: boolean; remediation: string; path: string; actual: string; evidence: string[] }
+/**
+ * error@5: one refusal. `missing_field` carries the tool's input schema; `not_ready` what loaded of the total and when to
+ * call again (#1415).
+ */
+export interface Refusal {
+  code: string; retryable: boolean; remediation: string; path: string; actual: string; evidence: string[];
+  schema?: Record<string, unknown>; loaded?: number; total?: number; retry_after_ms?: number;
+}
 const actualText = (actual: unknown): string => (typeof actual === 'string' ? actual : actual === undefined ? '' : JSON.stringify(actual) ?? String(actual));
 export function refusal(code: string, path: string, remediation: string, actual: unknown = '', retryable = false): Refusal {
   return { code, retryable, remediation, path, actual: actualText(actual).slice(0, 8192), evidence: [] };

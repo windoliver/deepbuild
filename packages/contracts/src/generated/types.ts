@@ -6493,6 +6493,20 @@ export interface ErrorV4 {
   evidence: Array<string>;
 }
 
+/** error@5 */
+export interface ErrorV5 {
+  code: "unknown_schema" | "not_json" | "type" | "required" | "unlisted_field" | "enum" | "const" | "pattern" | "format" | "length" | "range" | "union" | "uncatalogued_kind" | "handle_syntax" | "handle_scheme" | "digest_algorithm" | "role" | "credential" | "unknown_method" | "not_found" | "unconfirmed" | "unbound" | "unavailable" | "too_large" | "fell_behind" | "unknown_field" | "missing_field" | "not_ready";
+  retryable: boolean;
+  remediation: string;
+  path: string;
+  actual: string;
+  evidence: Array<string>;
+  schema?: unknown;
+  loaded?: number;
+  total?: number;
+  retry_after_ms?: number;
+}
+
 /** evidence.put@1 */
 export interface EvidencePut {
   v: 1;

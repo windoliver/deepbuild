@@ -1061,6 +1061,13 @@ alone.push('tests/acceptance/1929/');
 // #1826's files each build deep-graph, and its taste call deep-canvas-render; CPU only, no GPU and no timing.
 alone.push('tests/acceptance/1826/');
 
+// #1415's files (blind) build deep-show with test features, start real hubs and time a hub's start.
+alone.push('tests/acceptance/1415/');
+// #806's first AC3 draft reads a refused deep_show as a result with the error flag unset, which #1415's rule that every
+// refusal sets it reverses (tests/acceptance/806-redraft-ac3/DISPUTE.md); its blind redraft runs in its place.
+alone.push('tests/acceptance/806-redraft-ac3/');
+byHand.push('tests/acceptance/806/unbound.test.ts');
+
 // #2402's files (blind) start two hubs and time each tool call against a control hub's, and time two extension hosts.
 alone.push('tests/acceptance/2402/');
 

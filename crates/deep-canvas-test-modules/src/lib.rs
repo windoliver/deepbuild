@@ -12,6 +12,8 @@ use deep_canvas::schedule::core_ops::{Datum, Edit, Edits};
 use deep_canvas::schedule::{OpError, Val, View};
 use serde_json::{json, Value};
 
+mod boom;
+pub use boom::boom;
 pub mod kinds;
 pub mod launch;
 mod time;
