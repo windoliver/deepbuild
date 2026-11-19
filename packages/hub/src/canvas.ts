@@ -86,7 +86,7 @@ export async function exportCommand(args: readonly string[]): Promise<number> {
   }
   if (isObj(document) && Array.isArray(document.packs) && document.packs.length) {
     try {
-      const result = await callAsYou('canvas.export', { document, still }, 'no export was written');
+      const result = await callAsYou('canvas.export', { document, still });
       if (typeof result === 'number') return result;
       if (result.status !== 'exported' || typeof result.png !== 'string') {
         process.stderr.write(`BLOCKED: deep export: ${JSON.stringify(result)}\n`);
@@ -161,6 +161,8 @@ export interface CanvasWorld {
 
 /** One call to the canvas core: who it writes as, and #393's call fields. */
 type CanvasCall = Obj;
+/** What a failed answer says: a core that exited, in its own last words. */
+const why = (answer: Obj): string => (answer.code === 'canvas_core_exited' && typeof answer.said === 'string' ? `it exited, saying: ${answer.said}` : JSON.stringify(answer).slice(0, 300));
 
 /** The long-lived canvas core: one call at a time, in order. */
 export class Canvas {
@@ -174,7 +176,9 @@ export class Canvas {
   private start(): ChildProcessWithoutNullStreams {
     if (this.child) return this.child;
     const child = spawn(canvasCore(), ['canvas'], { stdio: ['pipe', 'pipe', 'pipe'] });
-    child.stderr.resume();
+    // The end of what the core says on stderr, so a core that exits says why (#1495: a read its sandbox refused).
+    let said = '';
+    child.stderr.setEncoding('utf8').on('data', (d: string) => { said = (said + d).slice(-2000); });
     child.stdin.on('error', () => undefined);
     createInterface({ input: child.stdout }).on('line', (line) => {
       let value: Obj;
@@ -184,7 +188,12 @@ export class Canvas {
     const gone = () => {
       if (this.child === child) this.child = undefined;
       this.world = '';
-      for (const wake of this.waiting.splice(0)) wake({ ok: false, code: 'canvas_core_exited' });
+      // Its last words may arrive after its exit: wait for stderr's end, briefly.
+      const waiters = this.waiting.splice(0);
+      const wake = () => { for (const w of waiters.splice(0)) w({ ok: false, code: 'canvas_core_exited', ...(said.trim() ? { said: said.trim() } : {}) }); };
+      if (child.stderr.readableEnded) return wake();
+      setTimeout(wake, 500).unref();
+      child.stderr.once('end', wake);
     };
     child.once('exit', gone);
     child.once('error', gone);
@@ -207,11 +216,11 @@ export class Canvas {
       const text = JSON.stringify(world.recordRev === undefined ? shaped : { ...shaped, record: world.recordRev });
       if (text !== this.world) {
         const set = await this.send({ world: shaped });
-        if (set.ok !== true) throw refuse('unavailable', '', `The canvas core refused the hub's world: ${JSON.stringify(set).slice(0, 300)}`, 'canvas', true);
+        if (set.ok !== true) throw refuse('unavailable', '', `The canvas core refused the hub's world: ${why(set)}`, 'canvas', true);
         this.world = text;
       }
       const answer = await this.send({ call });
-      if (answer.ok !== true || !isObj(answer.reply)) throw refuse('unavailable', '', `The canvas core gave no reply to ${String(call.call)}: ${JSON.stringify(answer).slice(0, 300)}`, String(call.call), true);
+      if (answer.ok !== true || !isObj(answer.reply)) throw refuse('unavailable', '', `The canvas core gave no reply to ${String(call.call)}: ${why(answer)}`, String(call.call), true);
       return { reply: answer.reply, ...(isObj(answer.presented) ? { presented: answer.presented } : {}) };
     });
     this.chain = run.catch(() => undefined);

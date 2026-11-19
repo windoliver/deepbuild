@@ -763,11 +763,13 @@ pub const MACHINE: &str = "same_machine.counter@1";
 /// #542: what a control's entries may hold: a text control's commit within `max` bytes, LF line
 /// ends and, with `many` false, none (Control: text); a scroll control's position within its
 /// range, `from` its default clamped there, which its first entry's delta counts from (Control:
-/// scroll).
+/// scroll). #1040: a choice's options in order, an entry of which a read region holds as its
+/// index (Control: a choice reads as the index of its option); a choice may hold any entry.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Limit {
     Text { max: u32, many: bool },
     Scroll { range: [i32; 2], from: i32 },
+    Choice(Vec<String>),
 }
 
 impl Limit {
@@ -808,6 +810,7 @@ impl Limit {
             (Limit::Scroll { range, .. }, Given::Number(n)) => {
                 n.fract() == 0.0 && *n >= f64::from(range[0]) && *n <= f64::from(range[1])
             }
+            (Limit::Choice(_), _) => true,
             _ => false,
         }
     }
@@ -831,6 +834,19 @@ pub struct Piece {
     pub machine: Vec<String>,
     /// The document by hash, which a save names but isn't bound to.
     pub document: String,
+    /// #860: its rewind, when it declares one.
+    pub rewind: Option<Rewind>,
+}
+
+/// #860: a piece's `rewind: {stops, depth, seen?}`: the item whose stops array marks the steps a
+/// reader stops at, with that array's bytes in its write region; how many stops back a rewind
+/// may go; and the seen array the piece carries across branches, by item and bytes.
+#[derive(Clone, Debug)]
+pub struct Rewind {
+    pub item: usize,
+    pub stops: (u32, u32),
+    pub depth: u16,
+    pub seen: Option<(usize, u32, u32)>,
 }
 
 impl Piece {

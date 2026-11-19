@@ -1,0 +1,245 @@
+# #1514 acceptance tests on the base (f6ddd396, origin/main, with no implementation of #1514)
+
+Setup:      npm ci; npm run build --workspaces; CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 cargo build --locked -q -p deep-hook
+            (Node v24.22.2, vitest 5.0.5, Rust 1.99.1 first on PATH, macOS, 18 cores)
+Command:    node node_modules/vitest/vitest.mjs run tests/acceptance/1514/ --no-file-parallelism --testTimeout=600000
+Type check: node node_modules/typescript/bin/tsc -p tests/acceptance/1514/tsconfig.json  -> exit 0
+
+Runs. Each file below is recorded from its last run on the base. No assertion changed between runs, only messages.
+  1. 15:00, the whole folder: 4 files, 9 tests, 9 failed; 12 s wall; 1-minute load 140.9 before, 146.2 after.
+     facts.test.ts and shadowed.test.ts are recorded from this run.
+  2. 15:03, budget.test.ts and memory.test.ts again, after their soft facts assertion was changed to print what the
+     shipped facts lack (it had printed "[ Array(1) ]"): 7 tests, 7 failed; 6 s; load 86.0 before, 79.8 after.
+     memory.test.ts is recorded from this run.
+  3. 15:04, budget.test.ts again, after AC1's failure message stopped printing every doctor item's evidence (the
+     canvas.packs item lists the release's packs by name): 4 tests, 4 failed; 4 s; load 44.7 before, 42.0 after.
+(Paths: the checkout reads <repo>, the home ~, test temp folders /tmp/<prefix>-<id>, the OS temp dir <tmp>; ANSI
+colors dropped; lines past 1,500 characters cut.)
+
+Result: 9 of 9 tests fail, each at an assertion; none fails at an import, a load error or a timeout.
+
+Test                                                         Time      First failing assertion
+AC1 #1514.63e8c235 the doctor names the nested file, line 193 2,449 ms  soft: adapters/codex.facts.json has no rule-load entry (ruleLoad); then
+                                                                       "AC1 deep doctor run in /tmp/dh19d-<id>/b-doctor/packages/core must report
+                                                                       rules.not_loaded for Codex naming packages/core/AGENTS.md; its rules items:
+                                                                       none" (the doctor exits 1 here anyway: canvas.gpu, canvas.headless and
+                                                                       canvas.verdict fail with the canvas binaries unbuilt)
+AC1 (wrong program) doctor-sums-per-file                       316 ms   only the soft facts assertion: the base doctor, which reads no such plant,
+                                                                       reports no rules item, so it reads OK and the AC1 judgment fails as it must
+AC2 #1514.1c915faf every rule untrusted for Codex              261 ms   soft facts; then "AC2 line 1 of AGENTS.md, in a project Codex doesn't trust,
+                                                                       is marked as not reaching Codex, cause untrusted" (listed, no mark)
+AC3 #1514.cf1be8d6 AGENTS.md shadowed for Claude Code          948 ms   "AC3 "never force-push", in AGENTS.md beside CLAUDE.md, is marked as not
+                                                                       reaching Claude Code, shadowed by another file" (listed, no mark)
+AC4 #1514.d19a73eb 307-line index, line 201                  2,172 ms   soft: adapters/claude-code.facts.json has no rule-load entry (ruleLoad);
+                                                                       then "AC4 deep doctor run in /tmp/dh19d-<id>/m-lines must report
+                                                                       rules.not_loaded for Claude Code naming its memory index ...; its rules
+                                                                       items: none"
+AC5 #1514.57ce9222 facts without the entry fail the case       215 ms   "AC5 with codex.facts.json lacking its rule-load entry, a FAIL line names the
+                                                                       field ruleLoad and Codex" (the FAIL lines are the corpus's own, none naming it)
+AC6 #1514.26da020e a recorded load outranks the prediction     250 ms   soft facts; then "AC6 line 225 of packages/core/AGENTS.md is past the 32 KiB
+                                                                       budget ..., so it is marked as not reaching Codex, over budget" (listed, no mark)
+AC7 #1514.a1d1911e 150 lines of 300 bytes, line 84             278 ms   soft facts; then "AC7 deep doctor run in /tmp/dh19d-<id>/m-bytes must report
+                                                                       rules.not_loaded for Claude Code naming its memory index ...; its rules
+                                                                       items: none"
+AC7 (wrong program) doctor-counts-lines-only                   182 ms   only the soft facts assertion, as AC1's wrong program
+
+What the base shows beside the failures: the fixture repos' rules are on the rules page with their files and scopes
+(AC2, AC3, AC6), so the page reader and the fixtures' rule texts agree. Two parts the failures stop short of were
+checked once in a throwaway test, run on the base and deleted before the commit: AC3's delivery half holds there
+("never force-push" is told at SessionStart, and session.rules_delivered, via start, names its handle), and the
+record refuses session.loaded as uncatalogued, written as the hook and as the core.
+
+==== budget.test.ts ====
+
+ ❯ tests/acceptance/1514/budget.test.ts (4 tests | 4 failed) 3423ms
+   ❯ AC1 #1514.63e8c235 a fixture repo whose root and nested AGENTS.md total 40 KiB, under a Codex facts budget of 32 KiB: deep doctor names the nested file and its first line past the budget, and exits non-zero; a doctor that sums per file reports OK and fails (2)
+     × AC1 #1514.63e8c235 deep doctor run in the repo names packages/core/AGENTS.md and line 193 in a rules.not_loaded item for Codex, and exits non-zero 2449ms
+     × AC1 #1514.63e8c235 (wrong program) a doctor that sums per file (doctor-sums-per-file) reports OK in the same repo and fails this test 316ms
+   ❯ AC2 #1514.1c915faf the same repo in a project Codex doesn't trust reports every rule as not reaching Codex, cause untrusted (1)
+     × AC2 #1514.1c915faf every rule of the root and nested AGENTS.md is marked on the rules page as not reaching Codex, cause untrusted 261ms
+   ❯ AC6 #1514.26da020e a rule marked over budget that a recorded native load event shows loaded reads as loaded, and the page says so (1)
+     × AC6 #1514.26da020e a nested rule past the budget is marked over budget for Codex; once a Codex session's record holds session.loaded naming its file, it reads as loaded, the page naming that session 250ms
+
+ FAIL  tests/acceptance/1514/budget.test.ts > AC1 #1514.63e8c235 a fixture repo whose root and nested AGENTS.md total 40 KiB, under a Codex facts budget of 32 KiB: deep doctor names the nested file and its first line past the budget, and exits non-zero; a doctor that sums per file reports OK and fails > AC1 #1514.63e8c235 deep doctor run in the repo names packages/core/AGENTS.md and line 193 in a rules.not_loaded item for Codex, and exits non-zero
+AssertionError: the fixture facts: the shipped facts with every byte cap of Codex's rule-load entry set to 32 KiB (README); what the shipped facts lack: expected 'adapters/codex.facts.json has no rule…' to be 'none' // Object.is equality
+
+Expected: "none"
+Received: "adapters/codex.facts.json has no rule-load entry (ruleLoad)"
+
+ ❯ factsReady tests/acceptance/1514/budget.test.ts:34:185
+     32| })());
+     33| const factsReady = (missing: string[]): void => {
+     34|   expect.soft(missing.join('; ') || 'none', 'the fixture facts: the sh…
+       |                                                                                                                                                                                         ^
+     35| };
+     36|
+ ❯ tests/acceptance/1514/budget.test.ts:58:5
+
+ FAIL  tests/acceptance/1514/budget.test.ts > AC1 #1514.63e8c235 a fixture repo whose root and nested AGENTS.md total 40 KiB, under a Codex facts budget of 32 KiB: deep doctor names the nested file and its first line past the budget, and exits non-zero; a doctor that sums per file reports OK and fails > AC1 #1514.63e8c235 deep doctor run in the repo names packages/core/AGENTS.md and line 193 in a rules.not_loaded item for Codex, and exits non-zero
+AssertionError: AC1 deep doctor run in /tmp/dh19d-<id>/b-doctor/packages/core must report rules.not_loaded for Codex naming packages/core/AGENTS.md; its rules items: none; all items: hub.socket:ok, hub.jobs:ok, canvas.packs:skip, app.notifications:skip, hub.disk:ok, hub.service:skip, hub.ports:ok, claude.hooks:ok, timing.codex_slow_lane:ok, timing.codex_deep_ask:ok, timing.stop_hold:ok, timing.waiter:ok, timing.deep_ask:ok, timing.stop_continuations:ok, timing.asks_and_batches:ok, claude.mcp:ok, claude.statusline:ok, codex.hooks:ok, claude.binary:ok, claude.jobs_binary:ok, claude.sign_in:ok, claude.token:ok, claude.billing:ok, codex.binary:ok, codex.sign_in:ok, codex.billing:ok, claude.mods:ok, claude.prompt:ok, canvas.gpu:fail, canvas.headless:fail, canvas.verdict:fail, otlp.telemetry:ok; exit 1, stderr ""
+ ❯ judgeBudget tests/acceptance/1514/budget.test.ts:49:30
+
+ ❯ tests/acceptance/1514/budget.test.ts:62:5
+
+ FAIL  tests/acceptance/1514/budget.test.ts > AC1 #1514.63e8c235 a fixture repo whose root and nested AGENTS.md total 40 KiB, under a Codex facts budget of 32 KiB: deep doctor names the nested file and its first line past the budget, and exits non-zero; a doctor that sums per file reports OK and fails > AC1 #1514.63e8c235 (wrong program) a doctor that sums per file (doctor-sums-per-file) reports OK in the same repo and fails this test
+AssertionError: the fixture facts: the shipped facts with every byte cap of Codex's rule-load entry set to 32 KiB (README); what the shipped facts lack: expected 'adapters/codex.facts.json has no rule…' to be 'none' // Object.is equality
+
+Expected: "none"
+Received: "adapters/codex.facts.json has no rule-load entry (ruleLoad)"
+
+ ❯ factsReady tests/acceptance/1514/budget.test.ts:34:185
+     32| })());
+     33| const factsReady = (missing: string[]): void => {
+     34|   expect.soft(missing.join('; ') || 'none', 'the fixture facts: the sh…
+       |                                                                                                                                                                                         ^
+     35| };
+     36|
+ ❯ tests/acceptance/1514/budget.test.ts:67:5
+
+ FAIL  tests/acceptance/1514/budget.test.ts > AC2 #1514.1c915faf the same repo in a project Codex doesn't trust reports every rule as not reaching Codex, cause untrusted > AC2 #1514.1c915faf every rule of the root and nested AGENTS.md is marked on the rules page as not reaching Codex, cause untrusted
+AssertionError: the fixture facts: the shipped facts with every byte cap of Codex's rule-load entry set to 32 KiB (README); what the shipped facts lack: expected 'adapters/codex.facts.json has no rule…' to be 'none' // Object.is equality
+
+Expected: "none"
+Received: "adapters/codex.facts.json has no rule-load entry (ruleLoad)"
+
+ ❯ factsReady tests/acceptance/1514/budget.test.ts:34:185
+     32| })());
+     33| const factsReady = (missing: string[]): void => {
+     34|   expect.soft(missing.join('; ') || 'none', 'the fixture facts: the sh…
+       |                                                                                                                                                                                         ^
+     35| };
+     36|
+ ❯ tests/acceptance/1514/budget.test.ts:79:5
+
+ FAIL  tests/acceptance/1514/budget.test.ts > AC2 #1514.1c915faf the same repo in a project Codex doesn't trust reports every rule as not reaching Codex, cause untrusted > AC2 #1514.1c915faf every rule of the root and nested AGENTS.md is marked on the rules page as not reaching Codex, cause untrusted
+AssertionError: AC2 line 1 of AGENTS.md, in a project Codex doesn't trust, is marked as not reaching Codex, cause untrusted: "Root rule 001 [u]: keep the root build reproducible.........." {"id":"ae8dc366dcd2","known":"repo","proof":1,"file":"AGENTS.md","repo":"/tmp/dh19d-<id>/b-untrusted","scope":"all","enforcer":{"kind":"text"},"tokens":24}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/acceptance/1514/budget.test.ts:89:188
+     87|       const p = onPage(page, rule.text);
+     88|       expect(p, `the rules page lists line ${rule.line} of ${rule.file…
+     89|       expect(markedAs(p!, CODEX, UNTRUSTED), `AC2 line ${rule.line} of…
+       |                                                                                                                                                                                            ^
+     90|     }
+     91|   }, 600_000);
+
+ FAIL  tests/acceptance/1514/budget.test.ts > AC6 #1514.26da020e a rule marked over budget that a recorded native load event shows loaded reads as loaded, and the page says so > AC6 #1514.26da020e a nested rule past the budget is marked over budget for Codex; once a Codex session's record holds session.loaded naming its file, it reads as loaded, the page naming that session
+AssertionError: the fixture facts: the shipped facts with every byte cap of Codex's rule-load entry set to 32 KiB (README); what the shipped facts lack: expected 'adapters/codex.facts.json has no rule…' to be 'none' // Object.is equality
+
+Expected: "none"
+Received: "adapters/codex.facts.json has no rule-load entry (ruleLoad)"
+
+ ❯ factsReady tests/acceptance/1514/budget.test.ts:34:185
+     32| })());
+     33| const factsReady = (missing: string[]): void => {
+     34|   expect.soft(missing.join('; ') || 'none', 'the fixture facts: the sh…
+       |                                                                                                                                                                                         ^
+     35| };
+     36|
+ ❯ tests/acceptance/1514/budget.test.ts:97:5
+
+ FAIL  tests/acceptance/1514/budget.test.ts > AC6 #1514.26da020e a rule marked over budget that a recorded native load event shows loaded reads as loaded, and the page says so > AC6 #1514.26da020e a nested rule past the budget is marked over budget for Codex; once a Codex session's record holds session.loaded naming its file, it reads as loaded, the page naming that session
+AssertionError: AC6 line 225 of packages/core/AGENTS.md is past the 32 KiB budget (the root file's 20 KiB and the nested file's first 192 lines spend it), so it is marked as not reaching Codex, over budget: "Core rule 225 [l]: keep the core build reproducible.........." {"id":"bb1e68e944b0","known":"repo","proof":1,"file":"packages/core/AGENTS.md","repo":"/tmp/dh19d-<id>/b-loaded","scope":"packages/core/**","enforcer":{"kind":"text"},"tokens":24}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/acceptance/1514/budget.test.ts:106:261
+
+==== memory.test.ts ====
+
+ ❯ tests/acceptance/1514/memory.test.ts (3 tests | 3 failed) 2746ms
+   ❯ AC4 #1514.d19a73eb a 307-line memory index marks lines 201 on as not loaded, naming line 201, with a facts limit of 200 lines (1)
+     × AC4 #1514.d19a73eb deep doctor names MEMORY.md and line 201 for Claude Code; the rules page marks lines 201 to 307 as not reaching Claude Code, past the index limit, and none before 2172ms
+   ❯ AC7 #1514.a1d1911e a 150-line memory index of 300 bytes a line, with facts limits of 200 lines and 25,000 bytes, marks lines 84 on as not loaded, naming line 84 and the byte limit; a doctor that counts lines only reads OK and fails (2)
+     × AC7 #1514.a1d1911e deep doctor names MEMORY.md, line 84 and the 25,000-byte limit for Claude Code; the rules page marks lines 84 to 150 as not reaching Claude Code, past the index limit, and none before 278ms
+     × AC7 #1514.a1d1911e (wrong program) a doctor that counts lines only (doctor-counts-lines-only) reads the 150-line index OK and fails this test 182ms
+
+ FAIL  tests/acceptance/1514/memory.test.ts > AC4 #1514.d19a73eb a 307-line memory index marks lines 201 on as not loaded, naming line 201, with a facts limit of 200 lines > AC4 #1514.d19a73eb deep doctor names MEMORY.md and line 201 for Claude Code; the rules page marks lines 201 to 307 as not reaching Claude Code, past the index limit, and none before
+AssertionError: the fixture facts: the shipped facts with Claude Code's memory index limits set to 200 lines and 25,000 bytes (README); what the shipped facts lack: expected 'adapters/claude-code.facts.json has n…' to be 'none' // Object.is equality
+
+Expected: "none"
+Received: "adapters/claude-code.facts.json has no rule-load entry (ruleLoad)"
+
+ ❯ factsReady tests/acceptance/1514/memory.test.ts:36:197
+
+ ❯ tests/acceptance/1514/memory.test.ts:42:5
+
+ FAIL  tests/acceptance/1514/memory.test.ts > AC4 #1514.d19a73eb a 307-line memory index marks lines 201 on as not loaded, naming line 201, with a facts limit of 200 lines > AC4 #1514.d19a73eb deep doctor names MEMORY.md and line 201 for Claude Code; the rules page marks lines 201 to 307 as not reaching Claude Code, past the index limit, and none before
+AssertionError: AC4 deep doctor run in /tmp/dh19d-<id>/m-lines must report rules.not_loaded for Claude Code naming its memory index /tmp/dh19d-<id>/h/.claude/projects/-private-tmp-dh19d-<id>-m-lines/memory/MEMORY.md; its rules items: none; all items: hub.socket:ok, hub.jobs:ok, canvas.packs:skip, app.notifications:skip, hub.disk:ok, hub.service:skip, hub.ports:ok, claude.hooks:ok, timing.codex_slow_lane:ok, timing.codex_deep_ask:ok, timing.stop_hold:ok, timing.waiter:ok, timing.deep_ask:ok, timing.stop_continuations:ok, timing.asks_and_batches:ok, claude.mcp:ok, claude.statusline:ok, codex.hooks:ok, codex.binary:ok, codex.sign_in:ok, codex.billing:ok, claude.binary:ok, claude.jobs_binary:ok, claude.sign_in:ok, claude.token:ok, claude.billing:ok, claude.mods:ok, claude.prompt:ok, canvas.gpu:fail, canvas.headless:fail, canvas.verdict:fail, otlp.telemetry:ok
+ ❯ judgeIndexDoctor tests/acceptance/1514/helpers.ts:264:29
+
+ ❯ tests/acceptance/1514/memory.test.ts:48:5
+
+ FAIL  tests/acceptance/1514/memory.test.ts > AC7 #1514.a1d1911e a 150-line memory index of 300 bytes a line, with facts limits of 200 lines and 25,000 bytes, marks lines 84 on as not loaded, naming line 84 and the byte limit; a doctor that counts lines only reads OK and fails > AC7 #1514.a1d1911e deep doctor names MEMORY.md, line 84 and the 25,000-byte limit for Claude Code; the rules page marks lines 84 to 150 as not reaching Claude Code, past the index limit, and none before
+AssertionError: the fixture facts: the shipped facts with Claude Code's memory index limits set to 200 lines and 25,000 bytes (README); what the shipped facts lack: expected 'adapters/claude-code.facts.json has n…' to be 'none' // Object.is equality
+
+Expected: "none"
+Received: "adapters/claude-code.facts.json has no rule-load entry (ruleLoad)"
+
+ ❯ factsReady tests/acceptance/1514/memory.test.ts:36:197
+
+ ❯ tests/acceptance/1514/memory.test.ts:57:5
+
+ FAIL  tests/acceptance/1514/memory.test.ts > AC7 #1514.a1d1911e a 150-line memory index of 300 bytes a line, with facts limits of 200 lines and 25,000 bytes, marks lines 84 on as not loaded, naming line 84 and the byte limit; a doctor that counts lines only reads OK and fails > AC7 #1514.a1d1911e deep doctor names MEMORY.md, line 84 and the 25,000-byte limit for Claude Code; the rules page marks lines 84 to 150 as not reaching Claude Code, past the index limit, and none before
+AssertionError: AC7 deep doctor run in /tmp/dh19d-<id>/m-bytes must report rules.not_loaded for Claude Code naming its memory index /tmp/dh19d-<id>/h/.claude/projects/-private-tmp-dh19d-<id>-m-bytes/memory/MEMORY.md; its rules items: none; all items: hub.socket:ok, hub.jobs:ok, canvas.packs:skip, app.notifications:skip, hub.disk:ok, hub.service:skip, hub.ports:ok, claude.hooks:ok, timing.codex_slow_lane:ok, timing.codex_deep_ask:ok, timing.stop_hold:ok, timing.waiter:ok, timing.deep_ask:ok, timing.stop_continuations:ok, timing.asks_and_batches:ok, claude.mcp:ok, claude.statusline:ok, codex.hooks:ok, codex.binary:ok, codex.sign_in:ok, codex.billing:ok, claude.binary:ok, claude.jobs_binary:ok, claude.sign_in:ok, claude.token:ok, claude.billing:ok, claude.mods:ok, claude.prompt:ok, canvas.gpu:fail, canvas.headless:fail, canvas.verdict:fail, otlp.telemetry:ok
+ ❯ judgeIndexDoctor tests/acceptance/1514/helpers.ts:264:29
+
+ ❯ tests/acceptance/1514/memory.test.ts:63:5
+
+ FAIL  tests/acceptance/1514/memory.test.ts > AC7 #1514.a1d1911e a 150-line memory index of 300 bytes a line, with facts limits of 200 lines and 25,000 bytes, marks lines 84 on as not loaded, naming line 84 and the byte limit; a doctor that counts lines only reads OK and fails > AC7 #1514.a1d1911e (wrong program) a doctor that counts lines only (doctor-counts-lines-only) reads the 150-line index OK and fails this test
+AssertionError: the fixture facts: the shipped facts with Claude Code's memory index limits set to 200 lines and 25,000 bytes (README); what the shipped facts lack: expected 'adapters/claude-code.facts.json has n…' to be 'none' // Object.is equality
+
+Expected: "none"
+Received: "adapters/claude-code.facts.json has no rule-load entry (ruleLoad)"
+
+ ❯ factsReady tests/acceptance/1514/memory.test.ts:36:197
+
+ ❯ tests/acceptance/1514/memory.test.ts:70:5
+
+==== facts.test.ts ====
+
+ ❯ tests/acceptance/1514/facts.test.ts (1 test | 1 failed) 285ms
+   ❯ AC5 #1514.57ce9222 a facts file without the rule-load entry fails the adapter-facts conformance case, naming the field (1)
+     × AC5 #1514.57ce9222 codex.facts.json, then claude-code.facts.json, without the rule-load entry: node scripts/corpus.mjs check fails with a line naming the field and the agent; the shipped facts carry the entry and the same check names no such field 215ms
+
+ FAIL  tests/acceptance/1514/facts.test.ts > AC5 #1514.57ce9222 a facts file without the rule-load entry fails the adapter-facts conformance case, naming the field > AC5 #1514.57ce9222 codex.facts.json, then claude-code.facts.json, without the rule-load entry: node scripts/corpus.mjs check fails with a line naming the field and the agent; the shipped facts carry the entry and the same check names no such field
+AssertionError: AC5 with codex.facts.json lacking its rule-load entry, a FAIL line names the field ruleLoad and Codex; the FAIL lines were: FAIL corpus: claude-code 2.1.299's set has no recorded FileChanged payload Fix: Record a session that fires FileChanged, or take it off that version's list. | FAIL corpus: claude-code 2.1.304's set has no recorded FileChanged payload Fix: Record a session that fires FileChanged, or take it off that version's list. | FAIL corpus: claude-code 2.1.308's set has no recorded FileChanged payload Fix: Record a session that fires FileChanged, or take it off that version's list. | FAIL corpus: codex 0.144.0's set has no recorded SubagentStart payload Fix: Record a session that fires SubagentStart, or take it off that version's list. | FAIL corpus: codex 0.144.0's set has no recorded SubagentStop payload Fix: Record a session that fires SubagentStop, or take it off that version's list. | FAIL corpus: codex 0.144.0's set has no recorded PreCompact payload Fix: Record a session that fires PreCompact, or take it off that version's list. | FAIL corpus: codex 0.144.0's set has no recorded PostCompact payload Fix: Record a session that fires PostCompact, or take it off that version's list. | FAIL corpus: codex 0.160.0's set has no recorded SubagentStart payload Fix: Record a session that fires SubagentStart, or take it off that version's list. | FAIL corpus: codex 0.160.0's set has no recorded SubagentStop payload Fix: Record a session that fires Subagen [cut]
+
+Compared values have no visual difference.
+
+ ❯ tests/acceptance/1514/facts.test.ts:50:192
+
+==== shadowed.test.ts ====
+
+ ❯ tests/acceptance/1514/shadowed.test.ts (1 test | 1 failed) 1106ms
+   ❯ AC3 #1514.cf1be8d6 a repo with both CLAUDE.md and AGENTS.md marks AGENTS.md's rules as shadowed for Claude Code; "never force-push", found only in AGENTS.md, still reaches the session by #344's route (1)
+     × AC3 #1514.cf1be8d6 AGENTS.md's rules are marked as not reaching Claude Code, shadowed, CLAUDE.md's are not; a Claude Code session started after is told "never force-push" and its record names that delivery 948ms
+
+ FAIL  tests/acceptance/1514/shadowed.test.ts > AC3 #1514.cf1be8d6 a repo with both CLAUDE.md and AGENTS.md marks AGENTS.md's rules as shadowed for Claude Code; "never force-push", found only in AGENTS.md, still reaches the session by #344's route > AC3 #1514.cf1be8d6 AGENTS.md's rules are marked as not reaching Claude Code, shadowed, CLAUDE.md's are not; a Claude Code session started after is told "never force-push" and its record names that delivery
+AssertionError: AC3 "never force-push", in AGENTS.md beside CLAUDE.md, is marked as not reaching Claude Code, shadowed by another file:
+  AGENTS.md: "never force-push" {"id":"6d1a1be1aaf0","known":"repo","proof":1,"file":"AGENTS.md","repo":"/tmp/dh303-<id>/repo","scope":"all","enforcer":{"kind":"text"},"tokens":4}
+  AGENTS.md: "Run the linter before every commit" {"id":"5de7b781cc0d","known":"repo","proof":1,"file":"AGENTS.md","repo":"/tmp/dh303-<id>/repo","scope":"all","enforcer":{"kind":"text"},"tokens":9}
+  CLAUDE.md: "Keep each function under forty lines" {"id":"26062b209335","known":"repo","proof":1,"file":"CLAUDE.md","repo":"/tmp/dh303-<id>/repo","scope":"all","enforcer":{"kind":"text"},"tokens":7}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/acceptance/1514/shadowed.test.ts:30:186
+     28|         expect(r, `the rules page lists "${text}" from AGENTS.md:\n  $…
+     29|         expect(r!.file, `"${text}" is AGENTS.md's`).toBe('AGENTS.md');
+     30|         expect(markedAs(r!, CLAUDE, SHADOWED), `AC3 "${text}", in AGEN…
+       |                                                                                                                                                                                          ^
+     31|       }
+     32|       const claudeRule = ruleNamed(rules, CLAUDE_RULE);

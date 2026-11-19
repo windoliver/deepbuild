@@ -1,0 +1,42 @@
+✖ AC1 #2655 the main thread loads no module of @deepbuild/evidence and none of @deepbuild/contracts but the one it names (2270.601708ms)
+ℹ change, main thread 0: evidence []; contracts [packages/contracts/dist/runtime.js, packages/contracts/dist/json.js, packages/contracts/dist/errors.js, packages/contracts/dist/validate.js, packages/contracts/dist/canonical.js, packages/contracts/dist/schemas.js, packages/contracts/dist/lifecycle.js]
+ℹ merge base, main thread 0: evidence []; contracts [packages/contracts/dist/runtime.js, packages/contracts/dist/json.js, packages/contracts/dist/errors.js, packages/contracts/dist/validate.js, packages/contracts/dist/canonical.js, packages/contracts/dist/schemas.js, packages/contracts/dist/lifecycle.js]
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2328.83125
+
+✖ failing tests:
+
+test at tests/acceptance/2655/loads.test.mjs:50:1
+✖ AC1 #2655 the main thread loads no module of @deepbuild/evidence and none of @deepbuild/contracts but the one it names (2270.601708ms)
+  AssertionError [ERR_ASSERTION]: the hub's main thread loaded 0 modules of @deepbuild/evidence (none allowed) and 7 of @deepbuild/contracts (the one it names allowed): packages/contracts/dist/runtime.js, packages/contracts/dist/json.js, packages/contracts/dist/errors.js, packages/contracts/dist/validate.js, packages/contracts/dist/canonical.js, packages/contracts/dist/schemas.js, packages/contracts/dist/lifecycle.js
+  + actual - expected
+  
+  + [
+  +   'packages/contracts/dist/runtime.js',
+  +   'packages/contracts/dist/json.js',
+  +   'packages/contracts/dist/errors.js',
+  +   'packages/contracts/dist/validate.js',
+  +   'packages/contracts/dist/canonical.js',
+  +   'packages/contracts/dist/schemas.js',
+  +   'packages/contracts/dist/lifecycle.js'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://<scratch>/base/tests/acceptance/2655/loads.test.mjs:60:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'packages/contracts/dist/runtime.js', 'packages/contracts/dist/json.js', 'packages/contracts/dist/errors.js', 'packages/contracts/dist/validate.js', 'packages/contracts/dist/canonical.js', 'packages/contracts/dist/schemas.js', 'packages/contracts/dist/lifecycle.js' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+exit 1

@@ -243,29 +243,43 @@ fn fault_of(id: &str, item: &Value, path: String) -> OpError {
     }
 }
 
-fn fault(id: &str, path: String) -> OpError {
+pub(crate) fn fault(id: &str, path: String) -> OpError {
     if path == crate::hull::FLAT {
         return OpError::new(crate::hull::FLAT, format!("items/{id}"));
     }
     // A refusal with its own code (#443): a missing module is named as itself.
     if let Some((code, at)) = path.split_once(builders::CODED) {
         let code = code_of(code);
+        // #1781: an attribute's refusal carries what it found after its path.
+        let (at, found) = at.split_once(builders::CODED).unwrap_or((at, ""));
         let at = if code == "module_missing" || at.starts_with("items/") {
             at.to_string()
         } else {
             format!("items/{id}/{at}")
         };
-        return OpError::new(code, at);
+        let e = OpError::new(code, at);
+        return match serde_json::from_str::<Value>(found) {
+            Ok(mut found) => {
+                // #1928: an offset's refusal names its item too.
+                if code == crate::faces::TOO_WIDE {
+                    found["item"] = json!(id);
+                }
+                e.with(found)
+            }
+            Err(_) => e,
+        };
     }
     OpError::new("out_of_range", format!("items/{id}/{path}"))
 }
 
-/// A coded fault's code: one an outline source or a module's deform refuses with, else
-/// `out_of_range`.
+/// A coded fault's code: one an outline source, a module's deform or an offset refuses with,
+/// else `out_of_range`.
 pub(crate) fn code_of(code: &str) -> &'static str {
     builders::OUTLINE_CODES
         .into_iter()
         .chain(crate::contributed::CODES)
+        .chain(crate::attrs::CODES)
+        .chain([crate::faces::TOO_WIDE])
         .find(|c| *c == code)
         .unwrap_or("out_of_range")
 }
@@ -311,7 +325,10 @@ pub fn built(
     let counts = builders::counts(&kind, &params, &ctx)?;
     let mesh = builders::build(&kind, &params, &ctx)?;
     let (last, rows) = stack::apply(mesh.clone(), item, doc, id, t, run)?;
-    let last = crate::skin::applied(last, item)?;
+    let mut last = crate::skin::applied(last, item)?;
+    if planted == Some(crate::attrs::KEPT_AS_F32) {
+        crate::attrs::kept_as_f32(&mut last);
+    }
     let declared = stack::estimate(counts, item, &|k| {
         Ok(stack::apply(mesh.clone(), &stack::prefix(item, k), doc, id, t, run)?.0)
     })?;

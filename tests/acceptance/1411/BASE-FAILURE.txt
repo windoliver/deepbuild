@@ -1,0 +1,57 @@
+Base commit: f6ddd396f (Merge pull request #2628 from windoliver/claude/fix-1879-safe-no-extensions-v3), with #1016's job pool
+Commands (one file at a time, Node 24.22.0, after npm ci, npm run build --workspaces and cargo build --locked -p deep-hook
+at the base, rustup's bin on PATH):
+  NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/1411/<file>.test.ts --testTimeout=600000
+Date: 2026-11-18  vitest 5.0.5  darwin-arm64, 18 cores, load 260-390 (the machine shared with other sessions)
+Toolchain: rustc 1.99.1 (58cf8f9c3 2026-10-13), cargo 1.99.1 (5f94df478 2026-08-27)
+Type check: node node_modules/typescript/bin/tsc -p tests/acceptance/1411/tsconfig.json exits 0 at the base.
+
+Every test fails at the base, each at a named assertion, none on a crash or a timeout. The tests of the criteria fail
+for the reason the issue gives: the base never holds a token back, so all 8 stay out at warn and at critical (AC1, and
+the held-back pool AC2 and AC3 first need); AC4's fails at "named in the output", since the base already leaves a
+fixed-count command alone and names it nowhere. Each wrong-program test fails at the hub's start, at the assertion
+#1016's startHub makes: the base lists no such plant ("DEEP_HUB_PLANT=<name> names no planted program"). Trimmed to the
+relevant lines; home paths shown as ~. All five files took 139 s.
+
+A first run, before three corrections to the suite (the stand-in's jobs all lasted 200 ms and so ended in lockstep; the
+real build's warn window was 6 s rather than counted in jobs ended, so a fast machine could leave no critical phase to
+read; the flapping count took a single token in transit for a change), failed every test at the same assertions, at
+load 110-160.
+
+== held-back.test.ts (AC1): Tests 1 failed (1), 44 s
+  AC1 tokens out over time (level in brackets): +0.3 s 8, +0.3 s [warn], +20.3 s [critical], +40.4 s build let go
+x AC1 #1411.5cf27caa with 8 tokens and a simulated `warn`, no more than 4 are out once running jobs return theirs; at `critical`, no more than 1
+  AssertionError: with 8 tokens and a simulated `warn`, no more than 4 may be out once running jobs return theirs (each job gives its token back within 300 ms): 8 tokens were still out 15.0 s after the level turned warn
+
+== restored.test.ts (AC2): Tests 3 failed (3), 26 s
+  AC2 as built: tokens out over time (level in brackets): +0.3 s 8, +0.4 s [warn], +17.5 s [normal], +18.5 s [warn], +19.2 s [normal], +19.9 s [warn], +20.6 s [normal], +21.3 s [warn], +22.0 s [normal], +22.5 s build let go. All 8 out again 1 ms after normal; in the 4000 ms from the first flap: 8 (0 change(s)); all 8 out 493 ms after it stayed normal
+x AC2 #1411.a9c42261 back at `normal`, all 8 are available again, and a flapping level doesn't change the pool more than once in its hysteresis window
+  AssertionError: all 8 "available again" at normal needs tokens held back first: with 8 tokens and a simulated `warn`, no more than 4 may be out once running jobs return theirs (each job gives its token back within 300 ms): 8 tokens were still out 15.0 s after the level turned warn
+x AC2 #1411.a9c42261 (wrong program) a pool that gives its tokens back only once no leased command runs (DEEP_HUB_PLANT=restores-only-when-idle) keeps them from a running build at normal and fails
+  AssertionError: the hub didn't start with DEEP_HUB_PLANT=restores-only-when-idle (the planted wrong program this test runs against): ... Error: DEEP_HUB_PLANT=restores-only-when-idle names no planted program
+x AC2 #1411.a9c42261 (wrong program) a pool that follows each reading at the next tick (DEEP_HUB_PLANT=no-hysteresis) changes with every flap and fails
+  AssertionError: the hub didn't start with DEEP_HUB_PLANT=no-hysteresis (the planted wrong program this test runs against): ... Error: DEEP_HUB_PLANT=no-hysteresis names no planted program
+  (At the base the pool never moves, so its flapping reads 0 changes and its return to normal is at once: those
+  assertions pass at the base, which is why each has a wrong program the implementer adds.)
+
+== floor.test.ts (AC3): Tests 2 failed (2), 26 s
+  AC3 as built: tokens out over time (level in brackets): +0.8 s 8, +0.9 s [critical], +18.9 s build let go at critical: exit 0 after its last 10 jobs; then, critical, no build running, the pipe held: +0 ms 8, +202 ms 8, +403 ms 8, +605 ms 8, +806 ms 8, +1007 ms 8, +1208 ms 8, +1410 ms 8, +1611 ms 8, +1812 ms 8, +2014 ms 8, +2215 ms 8, +2416 ms 8, +2618 ms 8, +2818 ms 8
+x AC3 #1411.36f7169d a held-back pool never reaches 0 tokens, so a running build always finishes
+  AssertionError: a "held-back pool" needs the pool held back at critical first: with 8 tokens and a simulated `critical`, no more than 1 may be out once running jobs return theirs (each job gives its token back within 300 ms): 8 tokens were still out 15.0 s after the level turned critical
+x AC3 #1411.36f7169d (wrong program) a pool that holds back every token at critical (DEEP_HUB_PLANT=holds-back-every-token) is left with none once the build ends, and fails
+  AssertionError: the hub didn't start with DEEP_HUB_PLANT=holds-back-every-token (the planted wrong program this test runs against): ... Error: DEEP_HUB_PLANT=holds-back-every-token names no planted program
+  (The build finishing at critical and the pipe's 8 once it ended pass at the base: it holds nothing back.)
+
+== fixed-count.test.ts (AC4): Tests 2 failed (2), 12 s
+  AC4 as built: the build's tokens out over time (level in brackets): +0.5 s 8, +0.5 s [warn], +5.8 s [critical], +8.8 s build let go; `steadyrun` started 2253 ms after warn, MAKEFLAGS null, CARGO_MAKEFLAGS null, words []; 53 heartbeats; exit 0; printed: `deep lease -- steadyrun` ""; `deep lease -- jobbuild` ""; the hub ""
+x AC4 #1411.50e54eec a command leased with a fixed job count is unaffected and is named in the output
+  AssertionError: a command leased with a fixed job count is named in the output: no line `deep lease -- steadyrun`, `deep lease -- jobbuild`, the hub printed names `steadyrun`: expected 0 to be greater than 0
+x AC4 #1411.50e54eec (wrong program) a fixed-count command run as a pool build (DEEP_HUB_PLANT=pool-holds-fixed-count) is held by the pool and fails
+  AssertionError: the hub didn't start with DEEP_HUB_PLANT=pool-holds-fixed-count (the planted wrong program this test runs against): ... Error: DEEP_HUB_PLANT=pool-holds-fixed-count names no planted program
+  (The "unaffected" assertions pass at the base: it never touches a fixed-count command.)
+
+== real-build.test.ts (AC1, AC3, the Proof's real build): Tests 1 failed (1), 31 s
+  Real build (rustc 1.99.1 (58cf8f9c3 2026-10-13), cargo 1.99.1 (5f94df478 2026-08-27), 64 crates and app, the hub's 8 tokens): jobs per second, the most in any sample: +0 s warn 8, +1 s warn 8, +2 s warn 8, +3 s warn 8, +4 s warn 8, +5 s warn 8, +6 s warn 8, +7 s warn 8, +8 s warn 8, +9 s warn 8, +10 s warn 8, +11 s warn 8, +12 s warn 8, +13 s warn 8, +14 s critical 8, +15 s critical 8, +16 s critical 8, +17 s critical 8, +18 s critical 8, +19 s critical 8, +20 s critical 8, +21 s critical 8, +22 s critical 8, +23 s critical 8, +24 s critical 7, +25 s critical 2, +26 s critical 1. 259 samples, median gap 101 ms; exit 0 at +26.1 s, the level critical from +13.5 s
+  Real build windows: warn 37 samples, at most 8 jobs at once; critical 62 samples, at most 8
+x AC1 #1411.5cf27caa AC3 #1411.36f7169d a cold `cargo build` under `deep lease`, the level planted at `warn` and then turned `critical`, runs no more than 4 jobs at warn and 1 at critical once running jobs return their tokens, and finishes
+  AssertionError: sample 1 of 37 (+9.7 s): 8 rustc and linker processes of the build at `warn`, once the jobs running at the start had returned their tokens, ran at once (rustc 24125, rustc 24128, rustc 24129, rustc 24134, rustc 24339, rustc 24351, rustc 24352, rustc 24361), over the 4 tokens

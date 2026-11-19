@@ -10,7 +10,6 @@
 //! of a lockstep match on it.
 
 use std::collections::BTreeMap;
-use std::rc::Rc;
 
 use deep_canvas::camera::{Pose, Projector, FLICKS_PER_SECOND};
 use deep_canvas::scope::Event;
@@ -19,7 +18,6 @@ use deep_canvas_marks::atlas;
 use deep_canvas_scene3d::look::Look3;
 use deep_canvas_scene3d::pointer::{self, Ground, Ray};
 use deep_canvas_scene3d::scene::{evaluate_with, placed_at, Labels, Scene};
-use deep_logic::world::Entry;
 use serde_json::{json, Map, Value};
 
 use crate::hub::Hub;
@@ -32,6 +30,9 @@ pub struct Gesture {
     /// #542: a scroll's unit is a wheel's line, and the scroll is a gesture's momentum tail.
     pub line: bool,
     pub momentum: bool,
+    /// #549: posted by a process, not hardware (`source: synthetic`), so it holds no gesture
+    /// serial.
+    pub synthetic: bool,
 }
 
 pub fn gesture(v: &Value) -> Gesture {
@@ -53,6 +54,7 @@ pub fn gesture(v: &Value) -> Gesture {
         ],
         line: v.get("unit").and_then(Value::as_str) == Some("line"),
         momentum: v.get("momentum").and_then(Value::as_bool) == Some(true),
+        synthetic: v.get("source").and_then(Value::as_str) == Some("synthetic"),
     }
 }
 
@@ -99,10 +101,7 @@ const AGAIN: [&str; 3] = [
 
 /// A document's lockstep match: its `net@1` item.
 fn net_of(form: &Value) -> Option<&Value> {
-    form.get("items")?
-        .as_object()?
-        .values()
-        .find(|i| i.get("kind").and_then(Value::as_str) == Some("net@1"))
+    deep_net::kind::item(form).map(|(_, item)| item)
 }
 
 /// An entry's stamp: the gesture's flick, or in a lockstep match the first match step at or
@@ -182,7 +181,7 @@ impl Hub<'_> {
 
     /// The revision `doc` presents, which holds every item as written (a lockstep match's
     /// `net@1` among them).
-    fn presented_doc(&self, doc: &str) -> Option<Value> {
+    pub(crate) fn presented_doc(&self, doc: &str) -> Option<Value> {
         self.sessions.get(doc).and_then(|s| s.document().cloned())
     }
 
@@ -692,39 +691,6 @@ impl Hub<'_> {
         };
         self.physics_bake_read(&bake, true)
     }
-
-    /// `match`: the document's lockstep match, as its `net@1` item declares it, every copy run
-    /// in this process over a test relay: each copy holds every player's entries at their
-    /// stamped steps (here the panel's, player 1's) and reports its logic items' steps.
-    pub(crate) fn match_call(&mut self, doc: &str, steps: i64) -> Value {
-        let (Some(form), Some(rev)) = (self.forms.get(doc).cloned(), self.presented_doc(doc))
-        else {
-            return json!({"code": "no_revision"});
-        };
-        let Some(net) = net_of(&rev) else {
-            return json!({"code": "no_match", "what": "the document has no net@1 item"});
-        };
-        let players = net
-            .pointer("/params/players")
-            .and_then(Value::as_u64)
-            .filter(|p| (1..=8).contains(p))
-            .unwrap_or(2);
-        let track = self.track_read(doc);
-        let piece = match self.logic_piece(&form, &track) {
-            Ok(Some(p)) => Rc::new(p),
-            Ok(None) => return json!({"code": "no_logic"}),
-            Err(i) => return json!({"code": i.code, "issues": [i.to_json()]}),
-        };
-        let entries: Vec<Entry> = track.iter().filter_map(Entry::parse).collect();
-        let mut copies = Vec::new();
-        for player in 1..=players {
-            match crate::picks::stepped(&piece, &entries, steps) {
-                Ok((s, _)) => copies.push(json!({"player": player, "steps": s, "track": track})),
-                Err(e) => return e,
-            }
-        }
-        json!({"copies": copies})
-    }
 }
 
 /// An entry's value before what it meets: its phase, button and modifiers.
@@ -734,19 +700,10 @@ fn base(press: &Press, phase: &str) -> Value {
            "mods": {"shift": m[0], "ctrl": m[1], "alt": m[2], "meta": m[3]}})
 }
 
-/// `world` and `match`: `{doc, world}` and `{doc, steps}`.
+/// `world`: `{doc, world}`.
 pub fn parse_world(c: &Map<String, Value>) -> Option<(String, String)> {
     Some((
         c.get("doc")?.as_str()?.to_string(),
         c.get("world")?.as_str()?.to_string(),
-    ))
-}
-
-pub fn parse_match(c: &Map<String, Value>) -> Option<(String, i64)> {
-    Some((
-        c.get("doc")?.as_str()?.to_string(),
-        c.get("steps")?
-            .as_i64()
-            .filter(|n| (1..=100_000).contains(n))?,
     ))
 }

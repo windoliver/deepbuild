@@ -1,0 +1,85 @@
+#549 criterion 2, the app after a person's click and the third connections (blind redraft): where the test fails at
+the base 06e231702bb4bf5c2ede8a4c76f40e4255e0e7a3 ("Merge pull request #2735"), with the first draft of the suite
+untracked in tests/acceptance/549/ and tests/acceptance/549-oracle/ and this folder added. Nothing else differs.
+Written 2026-11-17 on macOS arm64, Node v24.22.2, in <worktree>.
+
+NOT OBSERVED. The test was not run. Its beforeAll builds deep-show (features full) and deep-relay with cargo, and this
+job may not start a build on this machine. Below: what was run, and what was read from the base's code instead of a
+run. Only a run under the machine's build grant (the command in README.md) observes it; until then every statement
+below marked "read" is a reading of code, not a result.
+
+== What was run ==
+
+$ node node_modules/typescript/bin/tsc -p tests/acceptance/549-redraft-ac2/tsconfig.json
+(no output, exit 0)
+
+$ NO_COLOR=1 node node_modules/vitest/vitest.mjs list --root tests/acceptance/549-redraft-ac2
+ac2-third-connection.test.ts > ${AC[2]} nothing opens before a person clicks Join, and then only the declared relay and the other copy > ${AC[2]} in the app, after a person's click every connection goes to the declared relay or the other copy with no cookie or credential, and a third connection with a guessed match ID receives nothing from the match
+(exit 0; the listing parses the file without running it, so the title's ID shows as written)
+
+$ NO_COLOR=1 node node_modules/vitest/vitest.mjs list --root tests/acceptance/549-redraft-ac2 --staticParse=false
+ac2-third-connection.test.ts > AC2 #549.83ea272a nothing opens before a person clicks Join, and then only the declared relay and the other copy > AC2 #549.83ea272a in the app, after a person's click every connection goes to the declared relay or the other copy with no cookie or credential, and a third connection with a guessed match ID receives nothing from the match
+(exit 0; the file is imported and its tests collected; no hook runs, so nothing is built)
+
+83ea272a is the first 8 hex digits of the SHA-256 of criterion 2's text as the live issue holds it (criterionId in
+scripts/proof-change.mjs), computed here from `gh issue view 549`.
+
+== The assertion the test meets first at the base (read, not observed) ==
+
+The first draft's `presented`, in the first copy's first run:
+
+  ../549/helpers.ts:334  expect(r['outcome'], `${what} is presented: …`).toBe('presented')
+  called from liveCopy (../549/helpers.ts:771) as presented(first[0], 'AC2 two copies: the first copy: the piece'),
+  from livePair, from this file's one test.
+
+  Expected message: "AC2 two copies: the first copy: the piece is presented: [the reply's issues]: expected 'refused'
+  to be 'presented'", the issues being two errors `unknown_field` at items/match/params/hash_every and
+  items/match/params/timeout ("net@1.0 does not define `hash_every`", and the same for `timeout`).
+
+Why, from the base's code:
+
+1. The builds. `cargo build --locked --bin deep-show --no-default-features --features full` and
+   `cargo build --locked --bin deep-relay` are both the base's (crates/deep-relay/Cargo.toml names the bin; `full` is
+   the shipped set), so `useBuilds` gives both binaries. Not observed here.
+2. The relay and the door start: #309's `startRelay` on the shipped relay, and the first draft's `startDoor`.
+3. livePair starts the first copy. liveCopy's first `deep-show run` holds two calls the base has, `deep show` and
+   `scope` (crates/deep-show/src/main.rs, the call parser, lines 344 and 517). The scenario's `relay_ca` and `secrets`
+   keys are ones the base never reads; it reads a scenario key by key (`input.get(...)`, main.rs `scenario`), so they
+   change nothing. The run answers ok with two replies.
+4. The piece is the first draft's lockstepDoc with `hash_every: 1` and `timeout: 120` on its net@1 item. The base's
+   net@1 (crates/deep-show/src/net.rs, lines 31 to 38; #540) defines `relay`, `players`, `step_rate`, `delay` and
+   `window` only. A param the kind doesn't define is an error `unknown_field` (crates/deep-canvas/src/document/check.rs,
+   `check_params`, lines 1981 to 2045; the piece's `requires` names no kind's minor, so the notice branch isn't
+   taken). A revision with an error is refused (crates/deep-show/src/hub.rs, lines 2123 to 2147, and `refused_reply`,
+   line 535: outcome "refused").
+5. So `presented` fails. The first copy's promise rejects, `linkFrom` sees it finished and rethrows it, and the test
+   ends there. No copy has connected to the door, no link was written, and no third connection was made.
+
+This is the expected reason: at the base a piece can't declare the net item the criterion plays, and the app has no
+Join. Had the base presented the piece, the next assertion is the first draft's `promptOf`
+(../549/helpers.ts:341, "the scope's state says whether the app shows a Join prompt (state.join, null when it shows
+none)"): the base's `scope` reply is `{"state": …}` (crates/deep-show/src/input.rs, `scope_reply`, line 689) with no
+`join`; and after that the second run's `play_match` and `sockets`, which no file under crates/deep-show/src names.
+
+== The base fact behind the redraft (read, not observed) ==
+
+crates/deep-relay/src/relay.rs, `control`, lines 208 to 240:
+
+- a `join` for an ID the relay holds (`Entry::Occupied`) takes the next free seat, whatever its `open` says;
+- a `join` for an ID it doesn't hold is refused `unknown` when `open` isn't true, and opens the match when it is;
+- once every seat is taken, `{"start": {"players": n}}` goes to every seat of that match;
+- `forward`, `leave` and the `signal` branch send only to seats of the sender's own match.
+
+packages/contracts/slots/relay@1.json says the same of `join` ("a second opening join of a held match joins it") and
+`start` ("To every copy of a match once its last seat is taken").
+
+With the first draft's third connections (../549/ac2-join-only.test.ts, lines 144 to 151), the third sends
+{join: {match: near, players: 2, open: true}} and the fourth {join: {match: near, players: 2, open: false}}, `near`
+being one string. By the code above the shipped relay answers the third `{"joined": {"player": 0}}`, the fourth
+`{"joined": {"player": 1}}`, and then sends both `{"start": {"players": 2}}`. The first draft's line 181 lists each
+`start` as a failure. (If the relay read the fourth's join before the third's, the fourth would be refused `unknown`
+instead; the third's is sent before the fourth's connection is made, so that order isn't the likely one.)
+
+With this file's third connections, each ID is named by one connection. By the same code the two that open are
+answered `{"joined": {"player": 0}}`, the two that join `{"refused": "unknown"}`, and the relay sends none of them
+anything else while the copies' match runs.

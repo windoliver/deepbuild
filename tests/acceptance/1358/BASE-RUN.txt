@@ -1,0 +1,36 @@
+Issue: #1358
+Base: 212f16d096d0b2efd65497933abb4afb16742178
+Acceptance tests: independent draft from the issue, design and pristine base. The base already behaves as the
+  criteria say, so this is a record of the tests passing there, not of a failure; their wrong programs are the twins.
+Built first in the checkout: npm ci; npm run build --workspaces
+Command: NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/1358/
+  (run plain, not under scripts/throttle.mjs or scripts/lease: both act in the account's real ~/.deepbuild)
+Date: 2026-11-17  macOS 27.2  Node v24.22.0  vitest 5.0.5
+Load (sysctl -n vm.loadavg): before { 404.68 410.88 336.33 }, after { 396.21 409.02 336.11 }
+Paths: <checkout> is the checkout the run was made in. /private/tmp/dh1358-* are the run's own folders, removed at
+  its end.
+Exit code: 0
+Result: Test Files 2 passed (2); Tests 3 passed | 1 skipped (4). Duration 2.15 s.
+
+Passed, in launchd.test.ts: #1358.a5dca18a, #1358.1077c231 and #1358.e5fdc397 (the plist).
+Skipped, never a pass: #1358.e5fdc397 (the systemd unit) in systemd.test.ts, on macOS, where deep hub start writes no
+  unit. Its note, as the lanes' reporter wrote it: "INCONCLUSIVE: this half of the criterion is read on Linux, where
+  the login service is a systemd user unit; this is darwin, where deep hub start never writes or hands over that
+  definition, so nothing was read here, and this is not a pass". It was not run on Linux.
+
+On the twins, the same command, the same day (README: What the drafting job ran):
+  as-reported:      #1358.a5dca18a fails at launchd.test.ts:24, #1358.e5fdc397 (the plist) at launchd.test.ts:57;
+                    #1358.1077c231 passes; the systemd test is skipped as above.
+  every-loaded-job: #1358.1077c231 fails at launchd.test.ts:40; the other two launchd tests pass; the systemd test is
+                    skipped as above.
+
+The run's output:
+
+ RUN  v5.0.5 <checkout>
+
+
+ Test Files  2 passed (2)
+      Tests  3 passed | 1 skipped (4)
+   Start at  14:12:56
+   Duration  2.15s (tests 87%, setup 5%, import 4%, transform 3%, worker 1%)
+

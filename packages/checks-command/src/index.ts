@@ -357,8 +357,10 @@ async function runOnce(check: CommandCheck, clock: number): Promise<{ run: Comma
       failures: r.failures.map((f) => ({ ...f, test: scrub(f.test), message: scrub(f.message), stack: f.stack === null ? null : scrub(f.stack) })),
     });
     const done = (outcome: RunOutcome, rest: Partial<CommandRun>, ran: Ran[]): { run: CommandRun; ran: Ran[] } => ({ run: scrubbed(result(outcome, rest)), ran });
-    const stdout = scrub(Buffer.concat(chunks.stdout).toString('utf8'));
-    const stderr = scrub(Buffer.concat(chunks.stderr).toString('utf8'));
+    // Taken out of `chunks`, which the host's record of the run holds while it keeps the run answerable: the output
+    // stays with this run's record alone (#2652).
+    const stdout = scrub(Buffer.concat(chunks.stdout.splice(0)).toString('utf8'));
+    const stderr = scrub(Buffer.concat(chunks.stderr.splice(0)).toString('utf8'));
     const output = { stdout, stderr, sha256: { stdout: sha256(stdout), stderr: sha256(stderr) } };
     const limited = exit?.limit ? [`stopped at its ${exit.limit.limit} of ${exit.limit.max} MiB${exit.limit.reading === undefined ? '' : `, reading ${exit.limit.reading.toFixed(1)} MiB`}`] : [];
     const ended = { output, env: Object.keys(env).sort(), exit: exit ? { code: exit.code, signal: exit.signal, cause } : null, evidence: [`stdout ${output.sha256.stdout}`, `stderr ${output.sha256.stderr}`, ...limited] };

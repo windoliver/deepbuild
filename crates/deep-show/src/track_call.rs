@@ -2,7 +2,7 @@
 //! `fork_at` (Input track), and a recorded track loaded whole, which is how a fresh process
 //! replays a recording.
 
-use deep_canvas_input::track::{Entry, Sample, Track, Writer};
+use deep_canvas_input::track::{Entry, Sample, Track, Writer, REWIND};
 use serde_json::{json, Value};
 
 use crate::hub::Hub;
@@ -32,10 +32,12 @@ impl Hub<'_> {
 }
 
 /// An entry in the form [`Entry::to_json`] writes; `seq` is the track's to give again.
-fn entry_of(v: &Value) -> Option<Entry> {
-    let (control, value) = match v.get("present") {
-        Some(p) => (String::new(), p.clone()),
-        None => (
+pub(crate) fn entry_of(v: &Value) -> Option<Entry> {
+    // #860: a rewind names no control either; the logic module reads where it returns.
+    let (control, value) = match (v.get("present"), v.get("rewind")) {
+        (Some(p), _) => (String::new(), p.clone()),
+        (None, Some(r)) => (REWIND.to_string(), r.clone()),
+        (None, None) => (
             v.get("control")?.as_str()?.to_string(),
             v.get("value")?.clone(),
         ),

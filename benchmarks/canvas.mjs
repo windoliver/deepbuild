@@ -8,7 +8,7 @@ import { loadavg, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { performance } from 'node:perf_hooks';
-import { fingerprint, judgeLimit } from '../scripts/benchmark.mjs';
+import { fingerprint, judgeLimit, references } from '../scripts/benchmark.mjs';
 
 const root = join(fileURLToPath(new URL('.', import.meta.url)), '..');
 const DOC = '01JB96D0000000000000000001';
@@ -278,7 +278,7 @@ workloads.costs = () => {
   }
   const report = { fingerprint: machine, build: measured.build, terms, declared: declared.terms, declaredFingerprint: declared.fingerprint };
   if (write) {
-    if (!['Mac15,7', 'Mac15,12'].includes(machine.model)) throw Error(`coefficients come from a reference Mac; this is ${machine.model}`);
+    if (!references.some((reference) => reference.model === machine.model)) throw Error(`coefficients come from a reference Mac; this is ${machine.model}`);
     const { model, chip, memoryBytes, macosBuild } = machine;
     writeFileSync(COSTS, `${JSON.stringify({ fingerprint: { model, chip, memoryBytes, macosBuild }, build: measured.build, terms }, null, 2)}\n`);
   }
@@ -1259,6 +1259,35 @@ workloads.tree = () => {
   }
 };
 
+// #1992's cost: the castle's orbit, 300 frames at 30 fps at its own size, with its exp fog as committed and with the
+// linear curve of the same halfway distance; the reading is the ratio of their p50 GPU frame times.
+workloads['fog-linear'] = () => {
+  const fingerprint = release('deep-gpu-layer', 'deep-gpu');
+  const castle = JSON.parse(readFileSync(join(root, 'packs/examples/castle.json'), 'utf8'));
+  const look = JSON.parse(readFileSync(join(root, 'packs/examples/castle.look.json'), 'utf8'));
+  const linear = structuredClone(castle);
+  Object.values(linear.items).find((i) => i.kind === 'sky@1').params.fog_curve = { linear: { near: 0, far: 693 } };
+  const dir = mkdtempSync(join(tmpdir(), 'deep-canvas-bench-'));
+  try {
+    const docs = [castle, linear].map((d, k) => {
+      const path = join(dir, `castle-${k}.json`);
+      writeFileSync(path, JSON.stringify(d));
+      return path;
+    });
+    const measured = runs(() => {
+      const [exp, lin] = docs.map((doc) => {
+        const drawn = once('deep-gpu', ['run'], { out: dir, calls: [{ call: 'view3d', doc, look, size: castle.size, packs: [join(root, 'packs', 'composites-1.0.0')], frames: 300, fps: 30, timings: true }] });
+        if (drawn.ok !== true || drawn.replies[0]?.code) throw Error(`deep-gpu answered ${JSON.stringify(drawn).slice(0, 1500)}`);
+        return p50(drawn.replies[0].frames.map((f) => f.gpu_ms));
+      });
+      return { exp_gpu_ms: exp, linear_gpu_ms: lin, linear_over_exp: lin / exp };
+    });
+    console.log(JSON.stringify({ task: 'canvas-fog-linear', fingerprint, runs: measured }));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+};
+
 // #896's two boards of a run, the 1,000-item one first; `null` for a run with any other boards.
 const pair = (r) => {
   const [small, large] = r.boards ?? [];
@@ -1302,6 +1331,7 @@ const EFFICIENCY = {
     still_steps: (r) => r.still_steps, sway_gpu_ms: (r) => r.sway_gpu_ms,
   },
   'canvas-tree': { tree_build_ms: (r) => r.tree_build_ms, forest_draws_per_variant_material: (r) => r.forest_draws_per_variant_material },
+  'canvas-fog-linear': { linear_over_exp: (r) => r.linear_over_exp },
   // #538: each reading by its own name (benchmarks/game-state.mjs).
   'canvas-axes3d': { axes_over_marks: (r) => r.axes_over_marks, still_maps: (r) => r.still_maps },
   'canvas-surface': { rebuild_128_ms: (r) => r.rebuild_128_ms },
@@ -1314,6 +1344,8 @@ const EFFICIENCY = {
   // #184: each reading by its own name (benchmarks/playtest.mjs).
   'playtest-maze': { maze_40_runs_s: (r) => r.maze_40_runs_s, idle_work: (r) => r.idle_work },
   'playtest-throughput': { fixture_realtime_x: (r) => r.fixture_realtime_x },
+  // #556: each reading by its own name (benchmarks/playtest.mjs).
+  'playtest-crawler': Object.fromEntries(['crawler_80_runs_s', 'legal_added_s', 'reach_200_floors_s', 'idle_work'].map((k) => [k, (r) => r[k]])),
 };
 const COUNTS = new Set(['summary_tokens', 'page_rows', 'frames', 'upload_bytes_per_item', 'indexed_target_bytes', 'still_steps', 'idle_steps', 'still_maps', 'still_code_steps', 'idle_work', 'frame_expansions', 'forest_draws_per_variant_material']);
 /** Targets that are floors, each reading at or above its limit: judged as the limit on their negations (#184's multiple of real time). */
@@ -1869,7 +1901,7 @@ workloads.math = async () => (await import('./math.mjs')).math({ root, release, 
 workloads['between-steps'] = async () => (await import('./between-steps.mjs')).betweenSteps({ root, release, once, runs });
 // #184's budgets: the maze's 40 runs and replays on two replicas with no work added to a piece played without the
 // plug-in, and 20 runs of the 2-minute maze on four replicas as a multiple of real time (benchmarks/playtest.mjs).
-for (const task of ['playtest-maze', 'playtest-throughput']) workloads[task] = async () => (await import('./playtest.mjs')).playtest({ root, release, task, planted: planted() });
+for (const task of ['playtest-maze', 'playtest-throughput', 'playtest-crawler']) workloads[task] = async () => (await import('./playtest.mjs')).playtest({ root, release, task, planted: planted() });
 
 const task = process.argv[2];
 if (!workloads[task]) throw Error(`Unknown task ${task}; one of: ${Object.keys(workloads).join(', ')}`);

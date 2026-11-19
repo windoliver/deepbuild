@@ -40,8 +40,9 @@ pub use apply::{
     Patched, Refused, Writing,
 };
 pub use check::{
-    check, check_costed, check_in, check_packed, check_with, duration, frame_of, frame_rate_of,
-    literal_forms, recheck, recheck_skipping_referrers, recheck_with, CheckResult, Referrers,
+    check, check_costed, check_in, check_packed, check_sized, check_with, duration, frame_of,
+    frame_rate_of, literal_forms, recheck, recheck_skipping_referrers, recheck_with, CheckResult,
+    Referrers,
 };
 pub use close::{field_names, kind_names, owners, undeclared};
 pub use merge::{merge, Merged};
@@ -120,6 +121,8 @@ pub const ENVELOPE_KEYS: &[&str] = &[
     "foley_materials",
     // #903: the input module's tour (Tour), its keys and its pointer.
     "tour",
+    // #860: the logic module's rewind, its stops, depth and carried seen array.
+    "rewind",
     // #210: a piece's ports, each its declared way out to one plug-in and back (Port).
     "ports",
 ];

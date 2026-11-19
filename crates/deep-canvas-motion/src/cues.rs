@@ -11,6 +11,7 @@ use std::collections::BTreeMap;
 
 use deep_canvas::document::expands::{Lowered, Refusal, Request};
 use deep_canvas::grammar::FLICKS_PER_SECOND;
+use deep_canvas::refs::{kind as names, Decl, Holds};
 use serde_json::{json, Map, Value};
 
 use crate::doc::{self, Ctx, Lag, Order};
@@ -1002,7 +1003,9 @@ pub(crate) fn register(r: &mut deep_canvas::registry::Registrar) {
         },
         &[],
         "",
-    );
+    )
+    // #1801: the items each cue moves.
+    .refs(&[Decl::new("params/cues/*/targets", Holds::Item, names::TARGET)]);
     let mut def = registry();
     def.moves = Some(kit::moves);
     r.registry(def);

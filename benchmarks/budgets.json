@@ -1785,6 +1785,26 @@
       ]
     },
     {
+      "id": "playtest-crawler",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "playtest-crawler"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "crawler_80_runs_s": 300,
+        "legal_added_s": 60,
+        "reach_200_floors_s": 1,
+        "idle_work": 0
+      },
+      "initialReason": "Issue #556 first measurement: the merge base has no grid.reach. On release builds, on two deep-drive replicas, #555's playtest of its crawler (the playtest plug-in's grid.reach kit fixture), 4 bots × 20 runs of 4,000 steps, each run then replayed: crawler_80_runs_s, held to 300 s; rules.legal over those 80 runs: legal_added_s, held to 60 s; grid.reach's own searches over 200 recorded floors (200 descender runs of 2 steps): reach_200_floors_s, held to 1 s; five runs after a warm-up, judged on a reference Mac. idle_work counts the steps at which the crawler played with no play interface and no bot spends other fuel than deep-logic's own bake of it, judged anywhere: a piece with no play interface gains no work.",
+      "criteria": [
+        "#556.eb50d272"
+      ]
+    },
+    {
       "id": "canvas-art-frames",
       "command": [
         "node",
@@ -1870,6 +1890,23 @@
       "initialReason": "Issue #1636 first measurement: the merge base has no tree builder and no such task. Release deep-show's geometry call with timings builds a 4-level tree@1 of 4 children a fork, 12 sides and 10 rings (about 21,000 triangles) and reads its build_ms, the builder's own time with its count; and release deep-gpu draws a forest of 10,000 instances of 8 seeded tree variants, each in a bark and a leaf material, for one frame with counts, the reading the most color-pass draws any (variant, material) takes. Five runs after a warm-up one, each a fresh process per binary. canvas.mjs judge holds the time on a reference Mac and the count anywhere. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task.",
       "criteria": [
         "#1636.2d5eb798"
+      ]
+    },
+    {
+      "id": "canvas-fog-linear",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "fog-linear"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "linear_over_exp": 1.02
+      },
+      "initialReason": "Issue #1992 first measurement: the merge base reads no linear fog curve and has no such task. Release deep-gpu draws the castle's orbit, 300 frames at 30 fps at its own size with timings, with its exp fog as committed and with fog_curve linear {near: 0, far: 693}, the same halfway distance, each in a fresh process, five runs after a warm-up one; the reading is the ratio of their p50 GPU frame times. canvas.mjs judge holds the ratio on a reference Mac. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#1992.9d39bde2"
       ]
     },
     {

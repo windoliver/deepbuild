@@ -1,0 +1,31 @@
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/1041
+
+ ❯ ac04-taste.test.ts (1 test | 1 failed) 152ms
+   ❯ AC4 #1041.479f46e5 the player's save, export and import controls, the notice after a refused save, and the one taste call on them (1)
+     × AC4 #1041.479f46e5 the recorded call on exactly the check run's pictures says they look right; with none the run is INCONCLUSIVE, never PASS 135ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac04-taste.test.ts > AC4 #1041.479f46e5 the player's save, export and import controls, the notice after a refused save, and the one taste call on them > AC4 #1041.479f46e5 the recorded call on exactly the check run's pictures says they look right; with none the run is INCONCLUSIVE, never PASS
+AssertionError: INCONCLUSIVE: no taste call is recorded: show the owner
+  docs/evidence/1041/player-save-controls.png  69e2dba0d9b2abe56acbe55061b23571a5df569f5baa8d4e76d3fc0159d23f35
+  docs/evidence/1041/player-save-refused.png  11fc0211ad2056d02b0abf42408469574bfbeba92e86d2b6d6e57a1b1c74bf72
+and record the answer in tests/acceptance/1041/TASTE.json (README: The taste call); this is not a pass
+ ❯ inconclusive helpers.ts:81:17
+     79| /** The criterion stays open, whatever the reason: never a pass (AGENT…
+     80| export function inconclusive(reason: string): never {
+     81|   return expect.fail(`INCONCLUSIVE: ${reason}; this is not a pass`);
+       |                 ^
+     82| }
+     83| /** A platform need is missing here: never a pass. */
+ ❯ ac04-taste.test.ts:25:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  10:09:14
+   Duration  1.48s (import 47%, tests 30%, transform 21%, worker 2%)
+

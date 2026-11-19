@@ -182,6 +182,8 @@ mod any_view {
             .a11y
             .view_type_names
             .insert(view.entity_id(), std::any::type_name::<V>());
+        #[cfg(feature = "test-support")]
+        crate::window::frame_counts::note_rendered(window, view.entity_id(), std::any::type_name::<V>()); // DeepBuild patch (windoliver/deepbuild#1482)
         view.update(cx, |view, cx| view.render(window, cx).into_any_element())
     }
 }
@@ -232,6 +234,8 @@ impl<T: Render> View for Entity<T> {
 
     #[inline]
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        #[cfg(feature = "test-support")]
+        crate::window::frame_counts::note_rendered(window, Entity::entity_id(&self), type_name::<T>()); // DeepBuild patch (windoliver/deepbuild#1482)
         self.update(cx, |this, cx| {
             Render::render(this, window, cx).into_any_element()
         })
@@ -317,6 +321,7 @@ struct ViewElementState {
     paint_range: Range<PaintIndex>,
     cache_key: ViewElementCacheKey,
     accessed_entities: FxHashSet<EntityId>,
+    a11y: Option<crate::window::a11y::Kept>, // DeepBuild patch (windoliver/deepbuild#1482)
 }
 
 struct ViewElementCacheKey {
@@ -533,9 +538,15 @@ fn prepaint_view(
                     && element_state.cache_key.text_style == text_style
                     && !window.dirty_views.contains(&entity_id)
                     && !window.refreshing
+                    // DeepBuild patch (windoliver/deepbuild#1482): reused, it gives back the nodes it kept.
+                    && window.a11y.can_reuse(&element_state.a11y)
                 {
                     let prepaint_start = window.prepaint_index();
                     window.reuse_prepaint(element_state.prepaint_range.clone());
+                    // DeepBuild patch (windoliver/deepbuild#1482)
+                    window.a11y.give_back(&element_state.a11y, window.focus);
+                    #[cfg(feature = "test-support")]
+                    crate::window::frame_counts::note_reused(entity_id); // DeepBuild patch (windoliver/deepbuild#1482)
                     cx.entities
                         .extend_accessed(&element_state.accessed_entities);
                     let prepaint_end = window.prepaint_index();
@@ -546,12 +557,14 @@ fn prepaint_view(
 
                 let refreshing = mem::replace(&mut window.refreshing, true);
                 let prepaint_start = window.prepaint_index();
+                let a11y = window.a11y.start_kept(); // DeepBuild patch (windoliver/deepbuild#1482)
                 let (element, accessed_entities) = cx.detect_accessed_entities(|cx| {
                     let mut element = render(window, cx);
                     element.layout_as_root(Size::<AvailableSpace>::from(bounds.size), window, cx);
                     element.prepaint_at(bounds.origin, window, cx);
                     element
                 });
+                let a11y = window.a11y.kept_since(a11y); // DeepBuild patch (windoliver/deepbuild#1482)
 
                 let prepaint_end = window.prepaint_index();
                 window.refreshing = refreshing;
@@ -559,6 +572,7 @@ fn prepaint_view(
                 (
                     Some(element),
                     ViewElementState {
+                        a11y, // DeepBuild patch (windoliver/deepbuild#1482)
                         accessed_entities,
                         prepaint_range: prepaint_start..prepaint_end,
                         paint_range: PaintIndex::default()..PaintIndex::default(),
