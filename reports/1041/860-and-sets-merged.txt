@@ -1,0 +1,12 @@
+# After the fourth merge: cargo clippy --locked --no-deps -p deep-player --no-default-features --features <set> -- -D warnings
+== clippy figure exit 0
+== clippy game2d exit 0
+== clippy full exit 0
+
+# tests/acceptance/860: ac04-save.test.ts and ac05-determinism-web.test.ts, once each
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Duration  8.69s (tests 97%, transform 3%, import 1%)
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Duration  4036.33s (tests 100%)
