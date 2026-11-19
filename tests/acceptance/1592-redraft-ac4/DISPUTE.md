@@ -64,6 +64,20 @@ On the work (`124a2ad58`), with `DA1592_SHEETS=docs/evidence/1592/contact-sheet`
          Tests  1 passed (1)
    ```
 
+4. **22:02, after merging main (`c7df74473`).** The new binary took the sheets again. Both pictures came out byte for
+   byte the same; only `run.json`, which names the binary, changed. With the call on the earlier `run.json`, it read:
+
+   ```
+   AssertionError: INCONCLUSIVE: AC4: the recorded taste call was made on other files than this run's; this is not a pass
+   ```
+
+5. **22:03, call re-recorded.** The call was recorded again on the merged app's three files and the test passed:
+
+   ```
+    Test Files  1 passed (1)
+         Tests  1 passed (1)
+   ```
+
 The pictures are `docs/evidence/1592/contact-sheet/contact-light.png` and `contact-dark.png`.
 
 ## What is asked
