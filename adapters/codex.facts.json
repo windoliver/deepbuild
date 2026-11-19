@@ -51,7 +51,7 @@
     }
   },
   "sandbox": {
-    "readBy": "a session DeepBuild starts runs inside the agent's own sandbox (#1330): per version, the config overrides that turn it on (spliced where {sandbox} stands), the walls they hold, how the agent's way out is turned off, and the approval policy each mode takes under it. {filesystem} is a TOML inline table: your home read-only and each credential folder denied. A wall not named here is not held, and a version not listed starts with no sandbox and says so. Checked on 0.166.0-alpha.5.1 (spikes/1330): its trusted hooks run outside the sandbox and reach the hub",
+    "readBy": "a session DeepBuild starts runs inside the agent's own sandbox (#1330): per version, the config overrides that turn it on (spliced where {sandbox} stands), the walls they hold, how the agent's way out is turned off, and the approval policy each mode takes under it. {filesystem} is a TOML inline table: your home read-only, each credential folder denied, and what a commit on the session's own branch writes outside its worktree writable (#1666): the worktree's git folder and the repo's shared objects, refs, packed refs and ref logs. A wall not named here is not held, and a version not listed starts with no sandbox and says so. Checked on 0.166.0-alpha.5.1 (spikes/1330): its trusted hooks run outside the sandbox and reach the hub",
     "conformance": "codex/sandbox/walls",
     "versions": {
       "0.166.0-alpha.5.1": {
@@ -67,7 +67,7 @@
         ],
         "modes": { "on-request": "{granular={sandbox_approval=false,rules=true,mcp_elicitations=true,request_permissions=true,skill_approval=true}}" },
         "walls": {
-          "writes": "a command writes only its worktree and the temp folders, your home read-only: a profile extending :workspace",
+          "writes": "a command writes only its worktree, the temp folders and what a commit on its branch writes, its worktree's git folder and the repo's shared objects, refs and ref logs, each \"write\" in the profile's filesystem; your home, the checkout's files and the rest of its git folder, and every other worktree's git folder stay read-only: a profile extending :workspace",
           "credentials": "a command can't read the credential folders: each one \"deny\" in the profile's filesystem",
           "network": "a command reaches no host at all, the approval's hosts included, since naming hosts needs Codex's network proxy: the profile's network.enabled false; the agent's own API calls run outside its sandbox"
         },

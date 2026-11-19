@@ -941,6 +941,8 @@ timed.push('tests/acceptance/416/layouts/budgets.test.ts');
 
 // #1624: this live session spends plan usage and is explicitly run by hand, not as a skipped unit test.
 byHand.push('tests/acceptance/1330/start.live.test.ts');
+// #1666: every file runs the real Claude Code and Codex at the versions their facts list, by hand (its Proof).
+byHand.push('tests/acceptance/1666/');
 
 // #1624 / #2444: these files call the reference-Mac timing helpers at their own call sites.
 // Keep them measured under a timed grant; no test, limit or result is exempted.
@@ -1029,6 +1031,9 @@ alone.push('tests/acceptance/1512/');
 
 // #1509's files each start a hub that gates dependencies against a registry served on loopback: one file at a time.
 alone.push('tests/acceptance/1509/');
+
+// #1929's files each build deep-show (full); CPU only, no GPU and no timing.
+alone.push('tests/acceptance/1929/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
