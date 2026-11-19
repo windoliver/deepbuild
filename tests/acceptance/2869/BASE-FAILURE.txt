@@ -1,0 +1,71 @@
+✖ a waiter whose table write fails with ENOSPC keeps waiting and its place, and is granted and runs its command once space and a slot are back (6557.311155ms)
+✖ a waiter whose table write fails with ENOSPC until its --wait runs out reads INCONCLUSIVE no grant, only then (2052.435437ms)
+✖ a waiter's table write that fails with ENOSPC leaves no temp file of its own behind (1847.874359ms)
+✔ a waiter whose table write fails with another error (EISDIR) still ends BLOCKED, its command not run (2249.692461ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 1
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 12893.539959
+
+✖ failing tests:
+
+test at tests/acceptance/2869/enospc.test.mjs:125:1
+✖ a waiter whose table write fails with ENOSPC keeps waiting and its place, and is granted and runs its command once space and a slot are back (6557.311155ms)
+  AssertionError [ERR_ASSERTION]: the waiter ended while its table write failed with ENOSPC (exit 2):
+  BLOCKED throttle: ENOSPC: no space left on device, write
+    Fix: Repair what the line names: ~/.deepbuild/throttle/ this user's to write, its table readable, ps runnable.
+  
+  
+  2 !== null
+  
+      at TestContext.<anonymous> (file://~/deepbuild/.claude/worktrees/throttle-enospc/tests/acceptance/2869/enospc.test.mjs:136:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 2,
+    expected: null,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2869/enospc.test.mjs:149:1
+✖ a waiter whose table write fails with ENOSPC until its --wait runs out reads INCONCLUSIVE no grant, only then (2052.435437ms)
+  AssertionError [ERR_ASSERTION]: the waiter did not read INCONCLUSIVE (exit 2):
+  BLOCKED throttle: ENOSPC: no space left on device, write
+    Fix: Repair what the line names: ~/.deepbuild/throttle/ this user's to write, its table readable, ps runnable.
+  
+  
+  2 !== 3
+  
+      at TestContext.<anonymous> (file://~/deepbuild/.claude/worktrees/throttle-enospc/tests/acceptance/2869/enospc.test.mjs:158:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 2,
+    expected: 3,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2869/enospc.test.mjs:165:1
+✖ a waiter's table write that fails with ENOSPC leaves no temp file of its own behind (1847.874359ms)
+  AssertionError [ERR_ASSERTION]: the failed write left its temp file table/table.json.3087672 behind (waiter exit 2):
+  BLOCKED throttle: ENOSPC: no space left on device, write
+    Fix: Repair what the line names: ~/.deepbuild/throttle/ this user's to write, its table readable, ps runnable.
+  
+      at TestContext.<anonymous> (file://~/deepbuild/.claude/worktrees/throttle-enospc/tests/acceptance/2869/enospc.test.mjs:174:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
