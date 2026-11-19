@@ -1033,6 +1033,9 @@ alone.push('tests/acceptance/1411/');
 // #1512's suite starts hubs of its own with a fake reviewer, as #1537's and #1862's do.
 alone.push('tests/acceptance/1512/');
 
+// #1509's files each start a hub that gates dependencies against a registry served on loopback: one file at a time.
+alone.push('tests/acceptance/1509/');
+
 // #1929's files each build deep-show (full); CPU only, no GPU and no timing.
 alone.push('tests/acceptance/1929/');
 
