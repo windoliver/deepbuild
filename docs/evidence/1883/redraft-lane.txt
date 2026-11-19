@@ -1,5 +1,20 @@
-# tests/acceptance/1883-redraft-lane run alone at this branch under the repo's own vitest config (the lane's; no --testTimeout):
+# tests/acceptance/1883-redraft-lane run alone under the repo's own vitest config (the lane's; no --testTimeout), at e5b6fdbba2b538d1ac21da00e376c81de2adc784 (main 0f34aacbe merged in), 2026-11-17:
 # NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/1883-redraft-lane
+
+ RUN  v5.0.5 <repo>
+
+ ✓ tests/acceptance/1883-redraft-lane/trust.test.ts (3 tests) 52904ms
+   ✓ AC1 #1883.cba928bb with ~/.claude.json a symlink to a file elsewhere, a start that records trust leaves it a symlink and writes the trust key into its target 14026ms
+   ✓ AC2 #1883.6b16b1ac with ~/.claude.json a regular file, the start writes byte for byte what the merge base writes 12084ms
+   ✓ AC3 #1883.dd68075b a planted Starts.trust that renames over the link (trust-renames-over-link) fails the first criterion, naming the path 12242ms
+
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Start at  17:05:18
+   Duration  56.02s (tests 99%, transform 1%)
+
+
+# Earlier run, at 401487c155ec (before the main merge):
 
  RUN  v5.0.5 <repo>
 
@@ -9,3 +24,11 @@
    Start at  19:52:31
    Duration  38.04s (tests 95%, transform 5%)
 
+
+# At a06786cfc (main 9d0256132 merged in), 2026-11-18:
+ ✓ tests/acceptance/1883-redraft-lane/trust.test.ts (3 tests) 6116ms
+   ✓ AC1 #1883.cba928bb with ~/.claude.json a symlink to a file elsewhere, a start that records trust leaves it a symlink and writes the trust key into its target 1910ms
+   ✓ AC2 #1883.6b16b1ac with ~/.claude.json a regular file, the start writes byte for byte what the merge base writes 1765ms
+   ✓ AC3 #1883.dd68075b a planted Starts.trust that renames over the link (trust-renames-over-link) fails the first criterion, naming the path 1737ms
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
