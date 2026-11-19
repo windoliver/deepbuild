@@ -519,9 +519,9 @@ alone.push('tests/acceptance/2029/');
 alone.push('tests/acceptance/1056/');
 // #404's parts: #1897's files each build deep-show in their own feature set and hold the GPU for the pixel hash;
 // #1899's and #1903's build deep-gpu with test-meter, as #377's and #379's do; #2189's and its criterion-1 redraft
-// build deep-gpu for release and draw on this Mac's Metal GPU, so no two device runs share it.
+// build deep-gpu for release and draw on this Mac's Metal GPU, so no two device runs share it; so do #2691's files.
 alone.push('tests/acceptance/1897/', 'tests/acceptance/1899/', 'tests/acceptance/1903/');
-alone.push('tests/acceptance/2189/', 'tests/acceptance/2189-redraft-ac1/');
+alone.push('tests/acceptance/2189/', 'tests/acceptance/2189-redraft-ac1/', 'tests/acceptance/2691/');
 // #520's parts, the physics module: every file builds deep-physics on Rapier (#2010's AC1 a second time from a planted
 // lockfile); #2010's and #2012's build and run it in linux/amd64 and linux/arm64 containers under emulation, and #2012's
 // run Rapier's own tests there; #2011's build Rapier for release natively and for wasm32 and time steps in headless
