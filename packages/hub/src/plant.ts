@@ -298,7 +298,10 @@ export type Plant =
   // leave tool.before out of their kinds.
   | 'pass-skips-due-promise' | 'state-pass-skips-due-promise' | 'asks-without-tool-before'
   // #2655's: a server that hands its parser a view of the socket's chunk in place of the line's own bytes.
-  | 'hands-over-socket-chunk';
+  | 'hands-over-socket-chunk'
+  // #1512's: a review whose rubric holds every rule the hub knows, whatever its scope, how it was known or what enforces
+  // it, with no size bound; and a hub that holds the review kind but adds the review to no claim that opens a PR.
+  | 'rubric-holds-every-rule' | 'review-without-caller';
 const PLANTS: readonly string[] = [
   'statusline-user-settings-only', 'window-unknown-as-zero', 'window-carried-from-other-repo', 'sends-block-whole',
   'doctor-sums-per-file', 'doctor-counts-lines-only',
@@ -414,6 +417,7 @@ const PLANTS: readonly string[] = [
   'pending-across-restart', 'applies-stale-undo',
   'pass-skips-due-promise', 'state-pass-skips-due-promise', 'asks-without-tool-before',
   'hands-over-socket-chunk',
+  'rubric-holds-every-rule', 'review-without-caller',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;
