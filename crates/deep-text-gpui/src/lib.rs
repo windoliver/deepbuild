@@ -71,6 +71,9 @@ pub struct Label {
     /// #1966: a list's gap after each of its items, and the indent its lines start at.
     pub gap: f32,
     pub indent: f32,
+    /// #1215: lines across, or columns top to bottom, and the line height columns are spaced by.
+    pub flow: deep_text::Flow,
+    pub line_height: Option<f32>,
 }
 
 impl Label {
@@ -90,6 +93,8 @@ impl Label {
             spans: Vec::new(),
             gap: 0.,
             indent: 0.,
+            flow: deep_text::Flow::Horizontal,
+            line_height: None,
         }
     }
 
@@ -101,7 +106,7 @@ impl Label {
             lang: self.lang.as_deref(),
             size: self.size,
             weight: self.weight,
-            line_height: None,
+            line_height: self.line_height,
             width: self.width,
             max_lines: self.max_lines,
             align: self.align,
@@ -111,6 +116,7 @@ impl Label {
             spans: &self.spans,
             gap: self.gap,
             indent: self.indent,
+            flow: self.flow,
         }
     }
 }
@@ -132,6 +138,9 @@ struct ShapeKey {
     spans: Vec<Span>,
     gap: u32,
     indent: u32,
+    /// #1215: the flow, `upright: all`, `combine_upright`, the column's length and line height,
+    /// and the planted vertical shaper.
+    flow: (u8, bool, u8, Option<u32>, Option<u32>, u8),
 }
 
 impl ShapeKey {
@@ -151,6 +160,17 @@ impl ShapeKey {
             spans: label.spans.clone(),
             gap: label.gap.to_bits(),
             indent: label.indent.to_bits(),
+            flow: match label.flow {
+                deep_text::Flow::Horizontal => (0, false, 0, None, None, 0),
+                deep_text::Flow::Vertical(c) => (
+                    if c.rl { 1 } else { 2 },
+                    c.upright,
+                    c.combine,
+                    c.height.map(f32::to_bits),
+                    label.line_height.map(f32::to_bits),
+                    deep_text::vertical::planted().bits(),
+                ),
+            },
         }
     }
 }
@@ -196,6 +216,8 @@ struct OutlineKey {
     size: u32,
     coords: Arc<[i16]>,
     skew: u32,
+    /// #1215: turned by a vertical run.
+    turn: bool,
     bucket: i32,
 }
 
@@ -506,6 +528,7 @@ impl Text {
             size: glyph.size.to_bits(),
             coords: glyph.coords.clone(),
             skew: glyph.skew.to_bits(),
+            turn: glyph.turn,
             bucket: path::bucket(f64::from(scale)),
         };
         if let Some(found) = self.outlines.get(&key) {
@@ -566,13 +589,12 @@ impl Text {
                     let (x, px) = pen(at[0]);
                     let (y, py) = pen(at[1]);
                     self.atlas
-                        .glyph_at(
+                        .glyph_turned(
                             &glyph.font,
-                            glyph.id,
-                            &glyph.coords,
+                            (glyph.id, &glyph.coords),
                             device,
                             [px, py],
-                            glyph.skew,
+                            (glyph.skew, glyph.turn),
                         )
                         .map(|place| Shown::Sprite {
                             place,

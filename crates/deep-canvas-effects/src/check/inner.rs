@@ -104,6 +104,7 @@ fn check_iterating(op: &Operator, options: CheckOptions) -> Result<Checked, Vec<
             elements: 0,
             counted: false,
             stepped: None,
+            bound: None,
             workgroup: 64,
             source: None,
             uses: Vec::new(),
@@ -198,6 +199,63 @@ fn check_answering(op: &Operator, options: CheckOptions) -> Result<Checked, Vec<
     Ok(c)
 }
 
+/// Where #252's stepped fields may stand: `stepped` on a compute operator, and `carry`, a read of
+/// the previous step and the step index only in a stepped one. A stepped operator's bound
+/// (#1993) holds what it moves to `max` of a cell a step, refused before anything runs.
+fn stepped_rules(op: &Operator, options: CheckOptions, issues: &mut Vec<Issue>) {
+    let rule = |issues: &mut Vec<Issue>, path: &str, what: String| {
+        issues.push(Issue::at_path("operator_kind_rule", path, what));
+    };
+    if op.stepped.is_some() && op.kind != Kind::Compute {
+        rule(
+            issues,
+            "stepped",
+            format!("{} is stepped, and only compute work steps", op.id),
+        );
+    }
+    if let Some(rate) = op.stepped {
+        if let Some(b) = op.bound.filter(|_| !options.skips_bound) {
+            let ratio = b.ratio(rate);
+            if ratio > b.max {
+                issues.push(Issue::at_path(
+                    "operator_limit",
+                    "stepped/bound",
+                    format!(
+                        "{} crosses {ratio:.2} of a cell a step ({} m/s × 1/{rate} s ÷ {} m), past its bound of {}",
+                        op.id, b.speed, b.cell, b.max
+                    ),
+                ));
+            }
+        }
+        return;
+    }
+    let carried = (op.storage.iter().map(|(n, s)| (n, s.carry)))
+        .chain(op.textures.iter().map(|(n, t)| (n, t.carry)));
+    for (name, carry) in carried {
+        if carry.is_some() {
+            rule(
+                issues,
+                &format!("outputs/{name}/carry"),
+                format!(
+                    "{} carries {name} between frames, and only a stepped operator carries state",
+                    op.id
+                ),
+            );
+        }
+    }
+    for (name, input) in &op.inputs {
+        match &input.from {
+            From::Storage { op: from, output, previous: true } | From::Previous { op: from, output } => rule(
+                issues,
+                &format!("inputs/{name}"),
+                format!("{name} reads {from}.{output} as the previous step left it, and only a stepped operator reads an earlier step"),
+            ),
+            From::Step => rule(issues, &format!("inputs/{name}"), format!("{name} reads the fixed step, and only a stepped operator has one")),
+            _ => {}
+        }
+    }
+}
+
 /// The check over an operator with no iterate step left: `extra` ns its iterates' runs cost and
 /// `floor` the least class their bodies allow.
 fn check_inner(
@@ -226,7 +284,7 @@ fn check_inner(
         accs: Vec::new(),
     };
     let mut issues = Vec::new();
-    stepped_rules(op, &mut issues);
+    stepped_rules(op, options, &mut issues);
     let mut textures = Vec::new();
     let mut storage_inputs = Vec::new();
     for (name, input) in &op.inputs {
@@ -239,7 +297,10 @@ fn check_inner(
             ));
         }
         if matches!(input.ty, Ty::Tex(_))
-            != matches!(input.from, From::Target { .. } | From::Asset(_))
+            != matches!(
+                input.from,
+                From::Target { .. } | From::Previous { .. } | From::Asset(_)
+            )
             || matches!(input.ty, Ty::Tex3(_)) != matches!(input.from, From::Texture3d { .. })
         {
             issues.push(Issue::at_path(

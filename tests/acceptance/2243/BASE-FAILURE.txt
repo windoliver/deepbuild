@@ -1,0 +1,115 @@
+The #2243 suite run once at base commit 9d0256132 ("Merge pull request #2836 …"; no implementation of #2243), on
+macOS 27.2 arm64 (shared, 1-minute load about 55 while it ran), rustc 1.99.1, Node 24.22.2, vitest 5.0.5, one file per
+command, each file once:
+
+  PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    node node_modules/vitest/vitest.mjs run --root tests/acceptance/2243 --no-file-parallelism --testTimeout=600000 \
+    --reporter=verbose <file>
+
+for ac1-head-on.test.ts, ac2-into-standing.test.ts, ac3-seek-and-order.test.ts and ac4-behavior-kit.test.ts, with the
+two builds the suite reads already made in this checkout's target folder (the base's release deep-physics and its debug
+build with --features test-backends): the suite's own cargo calls found them made and copied them. The type-check
+(node node_modules/typescript/bin/tsc -p tests/acceptance/2243/tsconfig.json) is clean. The test files, helpers.ts
+and tsconfig.json are as they ran; twins.json lost one entry afterwards, and no test reads it.
+
+Result: Test Files 4 failed (4); Tests 7 failed | 1 passed (8); each file about 1 s with the builds made.
+
+Passing at the base, as it should (README: What the base already does):
+- ac2 "whichever of the two walks at 2 m/s into the other, it stops with their axes 0.61 m apart within 1 mm, and the
+  standing one's position never changes by more than 1e-6 m": at the base a character body with no move isn't moved
+  and a walker stops at it as at a static shape.
+    guard walking into hero: hero moves 0 m; the axes 0.610001 m apart at steps 240 and 360, and within 1 mm of
+    0.61 m at every step between
+    hero walking into guard: guard moves 0 m; the axes the same
+  The program this test fails on is the planted `approach_moves_standing`, which the base lacks (below).
+
+Every other test fails at an assertion in its own file, for the reason the README gives; none fails in a helper, at an
+import or at a timeout, and none is BLOCKED or INCONCLUSIVE.
+
+ac1-head-on.test.ts
+ × #2243.710b06f5 walking toward each other at 2 m/s from 4 m apart they come to rest 0.61 m apart within 1 mm, each
+   writes contact_begin naming the other within four steps of 0.8475 s, no step ends with their axes under 0.609 m
+   apart, and from 1 s to 3 s neither moves more than 1 mm
+   AssertionError (ac1-head-on.test.ts:31): the head-on world, baked 3 s:
+     step 102: guard and hero end it with their axes 0.600057 m apart, under 0.609 m (130 of 360 steps end under it)
+     step 120: guard and hero stand with their axes 0.600057 m apart, not 0.3 + 0.3 + 0.01 = 0.61 m within 1 mm (241
+     of the 241 steps from 1 s to 3 s are off)
+     guard: the head-on world has it 0.016667 m from where it stood at 1 s by step 121, more than 1 mm, so it isn't
+     at rest from 1 s to 3 s
+     hero: the head-on world has it 0.016667 m from where it stood at 1 s by step 121, more than 1 mm, so it isn't at
+     rest from 1 s to 3 s
+   : expected [ …(4) ] to deeply equal []
+   (The base is the program `characters_against_last_step` names: it reads the issue's 0.600 m on step 102, and the
+   judge's first line names the step and both bodies. The contact_begin clause finds nothing wrong at the base.)
+ × #2243.710b06f5 (twin: characters_against_last_step) a planted wrapper that moves both against the last step's poses
+   reads 0.600 m on step 102 and fails, naming the step and both bodies
+   AssertionError (ac1-head-on.test.ts:36): deep-physics --planted characters_against_last_step runs and bakes the
+   head-on world: expected 'deep-physics --planted characters_aga…' to be ''
+     + deep-physics --planted characters_against_last_step exits 2, not 0; stdout: {"ok":false,"code":"bad_input"}
+     + ; stderr:
+
+ac2-into-standing.test.ts
+ ✓ #2243.94c09b0c whichever of the two walks at 2 m/s into the other, … (above)
+ × #2243.94c09b0c (twin: approach_moves_standing) a planted wrapper that lets the walker's approach move the standing
+   one fails, naming the body
+   AssertionError (ac2-into-standing.test.ts:42): deep-physics --planted approach_moves_standing runs and bakes the
+   world with one body walking, once for each body: expected 'deep-physics --planted approach_moves…' to be ''
+     + deep-physics --planted approach_moves_standing exits 2, not 0; stdout: {"ok":false,"code":"bad_input"}
+     + ; stderr:
+
+ac3-seek-and-order.test.ts
+ × #2243.369a5712 the head-on world sought to 0.5 s and played on gives the same step hashes as a straight run
+   AssertionError (ac3-seek-and-order.test.ts:46): the head-on world, straight and sought to 0.5 s:
+     guard: the head-on world as written has it 0.016667 m from where it stood at 1 s by step 121, more than 1 mm, so
+     it isn't at rest from 1 s to 3 s
+     hero: the head-on world as written has it 0.016667 m from where it stood at 1 s by step 121, more than 1 mm, so
+     it isn't at rest from 1 s to 3 s
+   : expected [ …(2) ] to deeply equal []
+   (Nothing else is wrong there: the base's seek starts from step 60 and its 301 step hashes are the straight run's.)
+ × #2243.369a5712 with the two bodies' priorities swapped, each run is the same by hash on a second run, and the point
+   midway between them at rest moves by no more than two steps' walk, 0.0333 m
+   AssertionError (ac3-seek-and-order.test.ts:70): the head-on world as written and with its priorities swapped, each
+   run twice:
+     guard: the head-on world as written has it 0.016667 m from where it stood at 1 s by step 121, more than 1 mm, …
+     hero: the head-on world as written has it 0.016667 m from where it stood at 1 s by step 121, more than 1 mm, …
+     guard: the head-on world with its priorities swapped has it 0.016667 m from where it stood at 1 s by step 121, …
+     hero: the head-on world with its priorities swapped has it 0.016667 m from where it stood at 1 s by step 121, …
+   : expected [ …(4) ] to deeply equal []
+   (Nothing else is wrong there: each order repeats by hash, the two orders have their own bake keys, and the midpoint
+   moves 0 m. The criterion reads the midpoint "at rest", and at the base neither body rests.)
+
+ac4-behavior-kit.test.ts
+ × #2243.2a71ec4b a test backend that leaves each moved character's pose stale until the backend step (--backend
+   stale_character_poses) fails character/head_on, naming the backend, the fixture, the 0.609 m bound and the 0.600 m
+   it read
+   AssertionError (ac4-behavior-kit.test.ts:31): deep-physics --backend stale_character_poses runs in the
+   test-backends build and answers the kit's calls: expected 'deep-physics --backend stale_characte…' to be ''
+     + deep-physics --backend stale_character_poses exits 2, not 0; stdout: {"ok":false,"code":"bad_input"}
+     + ; stderr:
+ × #2243.2a71ec4b a test backend without a character controller (--backend no_character_controller) reads
+   excluded_by_caps on character/head_on and character/into_standing and passes the rest; Rapier passes both
+   AssertionError (ac4-behavior-kit.test.ts:77): the two fixtures in the kit's data:
+     character/head_on: the kit's data holds it 0 times, not once; its character fixtures: character/slope,
+     character/step, character/snap, character/jump, character/grounded_0.04, character/grounded_0.07,
+     character/sliding_30, character/sliding_50
+     character/into_standing: the kit's data holds it 0 times, not once; its character fixtures: (the same eight)
+   : expected [ …(2) ] to deeply equal []
+
+Probed apart from the suite on the base's binaries, with the suite's own world and judges (README: What the base
+already does):
+  head-on, the axes after steps 100 to 106:  0.666724 0.633391 0.600057 0.633391 0.600057 0.633391 0.600057 m
+  head-on, steps 102 to 360:                 the axes flip between 0.600057 m and 0.633391 m; 130 steps end under 0.609 m
+  head-on, guard's x after steps 120 to 123: -0.300029 -0.316695 -0.300029 -0.316695 m (hero's the same, positive)
+  head-on, the pair's rows:                  contact_begin twice at step 103 (one from each body), then contact_end
+                                             twice at step 104, and so on: 258 begins and 258 ends in 3 s; each
+                                             body's touching first names the other at step 103
+  priorities swapped:                        the pair's rows name hero as `a`; the step hashes differ from the world as
+                                             written's; the midpoint at step 360 is x = 0 in both
+  seek to 0.5 s:                             from step 60, checkpoints at 60, 120, 180, 240, 300 and 360
+  the kit on no_character_controller:        admitted, verdict pass; every fixture naming a cap it lacks reads
+                                             excluded_by_caps and every other passes
+
+What couldn't be run at the base: the passing paths of the twin tests and of ac4, which need the two planted names, the
+test backend and the two fixtures. The judges they use were run on the base's bakes (above) and on made-up runs: a pair
+that stops 0.61 m apart with one row from each body leaves no failure, and a dropped row, a standing body moved 2e-6 m
+and a fixture off its answer, tolerance, caps, track or steps each leave the failure the README names.
