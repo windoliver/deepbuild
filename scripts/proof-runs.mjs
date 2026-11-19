@@ -812,11 +812,30 @@ export function mutation({ root, change }, runs, say, print) {
       return [...workspaces(directory) ? ['npm run build --workspaces --if-present >/dev/null', `${quote(process.execPath)} --input-type=module -e ${quote(undo)}`] : [], ...runs].join(' && ');
     };
     const reports = temporary('deep-proof-report-');
-    const groups = unproven.map((test) => [test, command([test.path], test)]);
-    if (unproven.length < tests.length) groups.push([null, command([...new Set(tests.filter((test) => !unproven.includes(test)).map(({ path }) => path))])]);
+    const groups = unproven.map((test) => [test, [test.path]]);
+    if (unproven.length < tests.length) groups.push([null, [...new Set(tests.filter((test) => !unproven.includes(test)).map(({ path }) => path))]]);
+    // A test that can start the copy's hub runs it from the copy's own target/, which a fresh copy lacks and a bay
+    // keeps from an earlier use, a twin's, say: each StrykerJS run gets this copy's own hub binaries, or none (#2835).
+    let hub, bin;
+    try {
+      hub = groups.map(([, files]) => selectBinaries(directory, files).target);
+      bin = buildBinaries(directory, join(temporary('deep-proof-binaries-'), 'bin'), [...new Set(hub.flat())], (command, args, options) => spawnIn(directory, command, args, options));
+    } catch (error) {
+      // buildBinaries and selectBinaries name their verdict first: `BLOCKED test binaries: …`, `INCONCLUSIVE no grant: …`.
+      const [, level, why] = /^(BLOCKED|INCONCLUSIVE) (.*)$/s.exec(error.message) ?? [, 'BLOCKED', error.message];
+      say(level, 'mutation', `cannot build the hub's binaries for the mutants' copy, so the lines added to ${typescript.map(({ path }) => path).join(', ')} were not mutated: ${why}`, MUTATION_FIX);
+      return kills;
+    }
     const killed = new Set(), seen = new Map();
-    for (const [test, line] of groups) {
-      const run = strykerRun(root, directory, mutate, line);
+    for (const [index, [test, files]] of groups.entries()) {
+      try {
+        placeHubBinaries(directory, bin, hub[index]);
+      } catch (error) {
+        blocked = true;
+        say('BLOCKED', 'mutation', `cannot put the hub's binaries in the mutants' copy for ${test ? test.key : 'the tagged tests'}: ${error.message}`, MUTATION_FIX);
+        break;
+      }
+      const run = strykerRun(root, directory, mutate, command(files, test));
       if (run.error) {
         blocked = true;
         say('BLOCKED', 'mutation', `StrykerJS could not run ${test ? test.key : 'the tagged tests'}: ${run.error}`, MUTATION_FIX);
