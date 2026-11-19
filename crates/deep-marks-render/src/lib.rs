@@ -92,6 +92,8 @@ pub(crate) enum Theme {
 struct View {
     zoom: f64,
     theme: Theme,
+    /// #1489: reduced motion: an animated image holds the frame the view first showed.
+    reduced: bool,
 }
 
 /// One step of a document session: a whole revision (or the last one), the time of its first
@@ -379,6 +381,7 @@ fn view(value: Option<&Value>) -> Option<View> {
         return Some(View {
             zoom: 1.0,
             theme: Theme::Light,
+            reduced: false,
         });
     };
     let map = value.as_object()?;
@@ -393,7 +396,15 @@ fn view(value: Option<&Value>) -> Option<View> {
         Some("dark") => Theme::Dark,
         Some(_) => return None,
     };
-    Some(View { zoom, theme })
+    let reduced = match map.get("reduced_motion") {
+        None => false,
+        Some(r) => r.as_bool()?,
+    };
+    Some(View {
+        zoom,
+        theme,
+        reduced,
+    })
 }
 
 /// The content-addressed store an image is read from by its sha256: a directory whose files are
@@ -1172,7 +1183,12 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
                 Some(Value::String(p)) if p == "arms_only_on_readings" => {
                     (true, asset::Plant::None)
                 }
-                Some(Value::String(p)) if p == "decodes_per_draw" || p == "uploads_per_frame" => {
+                // #1489: an animation's decoder that decodes every frame up front and keeps them all.
+                Some(Value::String(p))
+                    if p == "decodes_per_draw"
+                        || p == "uploads_per_frame"
+                        || p == "decoder_holds_all_frames" =>
+                {
                     (false, asset::Plant::named(p)?)
                 }
                 Some(_) => return None,

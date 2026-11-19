@@ -1005,7 +1005,7 @@ thread_local! {
 /// Draws a `raster` request and writes its PNG.
 pub fn answer(req: Request) -> Value {
     KEPT.with(|kept| {
-        kept.borrow_mut().plant = req.image_plant;
+        (kept.borrow_mut()).start(req.image_plant, (&req.doc, req.store.as_deref(), req.t));
         let images = asset::images();
         images.configure(deep_images::BUDGET, deep_images::ENTRIES, req.image_plant);
         images.frame_start();
