@@ -61,6 +61,9 @@ pub struct Renderer {
     /// The light grid this frame, and the buffer its cells are in (#446).
     pub(super) clusters: Option<clusters::Grid>,
     pub(super) cluster_buffer: wgpu::Buffer,
+    /// The fill lights' pass, whose lights and lists follow the grid's cells in its buffer
+    /// (#1634).
+    pub(super) fill: fill::Fill,
     /// The environment's prefilter and cubes (#422).
     pub(super) env: EnvState,
     /// Whether this frame has a sky, which draws first; its pipeline once compiled (#422); the
@@ -198,7 +201,9 @@ pub struct Renderer {
     pub(super) glass_kit: Option<glass::Kit>,
     /// Whether a mask-alpha part casts this frame: its sets draw into shadow maps only then.
     pub(super) mask_casts: bool,
-    pub(super) meshes: BTreeMap<Shape, Mesh>,
+    /// #1431: the meshes uploaded, by shape, held to [`MESHES`]' bounds.
+    // cache: entries 64, bytes 256_000_000
+    pub(super) meshes: Kept<Shape, Mesh>,
     /// The swaying meshes' rest vertices, weights and params (#2016).
     pub(super) sways: sway::Sways,
     pub(super) batches: BTreeMap<String, Batch>,

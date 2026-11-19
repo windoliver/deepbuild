@@ -31,13 +31,14 @@ pub(crate) fn planted_decode() {
     }
 }
 
-/// What a run draws: the evidence store, the window in points, the planted decode, how long it runs and each revision
-/// with the time it's handed over from.
+/// What a run draws: the evidence store, the window in points, the planted decode, how long it runs, how often it reads
+/// the app's footprint (#1431) and each revision with the time it's handed over from.
 pub struct Scenario {
     evidence: PathBuf,
     window: [f32; 2],
     decode_ms: u64,
     run_ms: f64,
+    read_every_ms: Option<f64>,
     revisions: Vec<(f64, Presented)>,
 }
 
@@ -60,6 +61,15 @@ impl Scenario {
                 .map_err(|_| "window is [w, h]")?,
             decode_ms: v["decode_ms"].as_u64().ok_or("decode_ms is ms")?,
             run_ms: v["run_ms"].as_f64().ok_or("run_ms is ms")?,
+            read_every_ms: match &v["read_every_ms"] {
+                Value::Null => None,
+                every => Some(
+                    every
+                        .as_f64()
+                        .filter(|ms| *ms > 0.0)
+                        .ok_or("read_every_ms is ms")?,
+                ),
+            },
             revisions,
         })
     }
@@ -101,6 +111,10 @@ mod live {
         last: (f64, f64),
         frames: Vec<Value>,
         handed: Vec<Value>,
+        /// #1431: how often the app's footprint is read, when the next reading is due, and the readings.
+        read_every: Option<f64>,
+        read_next: f64,
+        readings: Vec<Value>,
     }
 
     pub fn run(scenario: Scenario, cx: &mut App) {
@@ -121,6 +135,7 @@ mod live {
             evidence,
             revisions,
             run_ms,
+            read_every_ms,
             ..
         } = scenario;
         open_window(options, cx, move |window, cx| {
@@ -139,6 +154,9 @@ mod live {
                 last: (0.0, 0.0),
                 frames: Vec::new(),
                 handed: Vec::new(),
+                read_every: read_every_ms,
+                read_next: 0.0,
+                readings: Vec::new(),
             };
             visible(window, 0, move |window, cx| {
                 let run = Run {
@@ -195,15 +213,23 @@ mod live {
                 cx.refresh_windows();
             }
             let now = (run.start.elapsed().as_secs_f64() * 1e3, thread_cpu_ms());
-            let painted = run.panel.read(cx).painted.clone();
-            run.frames.push(json!({"frame": k - 1, "at_ms": at, "cpu_ms": now.1 - cpu, "pictures": painted}));
+            let panel = run.panel.read(cx);
+            let (painted, held) = (panel.painted.clone(), panel.held());
+            run.frames.push(json!({"frame": k - 1, "at_ms": at, "cpu_ms": now.1 - cpu, "pictures": painted, "held": held}));
             run.last = now;
+            // #1431: the app's footprint after the first frame starting at or after each whole `read_every_ms`.
+            if let Some(every) = run.read_every.filter(|_| at >= run.read_next) {
+                let reading = crate::footprint::read(window);
+                run.readings.push(json!({"at_ms": at, "frame": k - 1, "reading": reading}));
+                run.read_next = ((at / every).floor() + 1.0) * every;
+            }
             if now.0 >= run.run_ms {
                 let scale = window.scale_factor();
-                println!(
-                    "{}",
-                    json!({"canvas": 1485, "scale": scale, "frames": run.frames, "handed": run.handed})
-                );
+                let mut report = json!({"canvas": 1485, "scale": scale, "frames": run.frames, "handed": run.handed});
+                if run.read_every.is_some() {
+                    report["readings"] = Value::Array(run.readings);
+                }
+                println!("{report}");
                 cx.quit();
             } else {
                 next(window, run, k + 1);

@@ -219,6 +219,8 @@ enum Outcome {
         ids: Vec<String>,
         writers: Vec<Writer>,
     },
+    /// #1415: its ops left every item's content key as it was, so it made no revision.
+    NoChange,
 }
 
 /// An applied patch's result.

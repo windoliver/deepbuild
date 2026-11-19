@@ -1,12 +1,16 @@
-// #2009.43ed60cb: on Rapier, a world whose contact material sets rolling_resistance 0.05 or tangent_speed 1 m/s, or that
-// joins two hinges with a gear in dynamic mode, is refused at check naming the field and the backend; a solid ball of
-// radius 0.1 m rolling at 2 m/s on a level floor with angular damping 2/s slows below 0.05 m/s between 6 and 7.5 s
-// (v = v0·e^(−2ct/7): 6.46 s). Each refusal's twin lets its world through, and is caught.
+// #2009.43ed60cb, redrafted under #2241 (REDRAFT.md): on Rapier, a world whose contact material sets rolling_resistance
+// 0.05, or that joins two hinges with a gear in dynamic mode, is refused at check naming the field and the backend; a
+// solid ball of radius 0.1 m rolling at 2 m/s on a level floor with angular damping 2/s slows below 0.05 m/s between 6
+// and 7.5 s (v = v0·e^(−2ct/7): 6.46 s). Each refusal's twin lets its world through, and is caught.
+// The criterion's "or tangent_speed 1 m/s" isn't read here: #2241 makes a tangent_speed other than 0 run on Rapier, and
+// its own suite (tests/acceptance/2241/) holds what is still refused of it. Of that case only its control stays: the
+// same world with tangent_speed 0 written is admitted.
 import { describe, expect, it } from 'vitest';
 import {
-  AC, TIMEOUT, admittedFailures, bake, box, caught, check, dynamic, floor, issuesOf, none, physics, prebuild, refusalFailures,
+  TIMEOUT, admittedFailures, bake, box, caught, check, dynamic, floor, issuesOf, none, physics, prebuild, refusalFailures,
   sphere, statesOf, world, type JsonObject, type Planted, type Want,
-} from './helpers.ts';
+} from '../2009/helpers.ts';
+import { CRITERIA as AC } from './criteria.ts';
 
 prebuild();
 
@@ -35,18 +39,20 @@ const gearWorld = (gear: boolean): JsonObject => {
 
 const CASES: { name: string; refused: JsonObject; admitted: JsonObject; want: Want; twin: Planted }[] = [
   { name: 'rolling_resistance 0.05', refused: padWorld({ rolling_resistance: 0.05 }), admitted: padWorld({ rolling_resistance: 0 }), want: { field: ['contact_materials', 'pad', 'rolling_resistance'], actual: 0.05 }, twin: 'caps_allow_rolling_resistance' },
-  { name: 'tangent_speed 1 m/s', refused: padWorld({ tangent_speed: 1 }), admitted: padWorld({ tangent_speed: 0 }), want: { field: ['contact_materials', 'pad', 'tangent_speed'], actual: 1 }, twin: 'caps_allow_tangent_speed' },
   { name: 'a gear joining two hinges in dynamic mode', refused: gearWorld(true), admitted: gearWorld(false), want: { field: ['joints', 'gear', 'kind'], actual: 'gear', id: 'gear' }, twin: 'caps_allow_dynamic_gear' },
 ];
+/** The frozen tangent_speed case's control, kept: the pad world with `tangent_speed: 0` written (#2241: a belt at speed 0 changes nothing). */
+const TANGENT_SPEED_0 = padWorld({ tangent_speed: 0 });
 
-describe(`${AC[3]} rolling_resistance, tangent_speed and a dynamic gear are refused on Rapier; a damped rolling ball slows as v0·e^(−2ct/7)`, () => {
-  it(`${AC[3]} rolling_resistance 0.05, tangent_speed 1 m/s and a gear of two hinges in dynamic mode are each refused at check naming the field and rapier3d; at 0 and without the gear each world is admitted; each cap's twin is caught`, () => {
-    const replies = physics(CASES.flatMap((c) => [check(c.refused), check(c.admitted)]));
+describe(`${AC[3]} rolling_resistance and a dynamic gear are refused on Rapier; a damped rolling ball slows as v0·e^(−2ct/7)`, () => {
+  it(`${AC[3]} rolling_resistance 0.05 and a gear of two hinges in dynamic mode are each refused at check naming the field and rapier3d; at 0, tangent_speed 0 too, and without the gear each world is admitted; each cap's twin is caught (redraft 2241)`, () => {
+    const replies = physics([...CASES.flatMap((c) => [check(c.refused), check(c.admitted)]), check(TANGENT_SPEED_0)]);
     const off: string[] = [];
     CASES.forEach((c, i) => {
       off.push(...refusalFailures(issuesOf(replies[2 * i]!, c.name), c.want).map((f) => `${c.name}: ${f}`));
       off.push(...admittedFailures(issuesOf(replies[2 * i + 1]!, `${c.name}, admitted twin of the world`)).map((f) => `${c.name} at 0 or without the gear: ${f}`));
     });
+    off.push(...admittedFailures(issuesOf(replies[2 * CASES.length]!, 'tangent_speed 0')).map((f) => `tangent_speed at 0: ${f}`));
     none(off, 'each refused, each control admitted');
     for (const c of CASES) {
       const [twin] = physics([check(c.refused)], c.twin);

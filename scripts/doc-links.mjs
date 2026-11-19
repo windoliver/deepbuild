@@ -1,0 +1,90 @@
+// Where a link into docs/*.md lands, shared by the design links lane (#910) and the design coverage script (#2340):
+// the link targets on a line, the doc file and anchor a target links to, and each doc's anchors with the heading
+// each belongs to.
+import { readFileSync } from 'node:fs';
+import { posix } from 'node:path';
+
+const REPO = 'https://github.com/windoliver/deepbuild/blob/main/';
+/** The design docs. */
+export const DOCS = ['docs/technical-design.md', 'docs/canvas-primitives.md'];
+
+// The lines outside fenced code, numbered from 1.
+export function* prose(text) {
+  let fence;
+  for (const [i, line] of text.split(/\r?\n/).entries()) {
+    const mark = line.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
+    if (fence) {
+      if (mark && mark[1][0] === fence[0] && mark[1].length >= fence.length && !mark[2].trim()) fence = undefined;
+    } else if (mark) fence = mark[1];
+    else yield { number: i + 1, line };
+  }
+}
+
+// GitHub's slug: lowercase, keeping letters, marks, numbers, connectors, spaces and hyphens, each space a hyphen.
+const slug = (text) => text.toLowerCase().replace(/[^\p{L}\p{M}\p{N}\p{Pc} -]/gu, '').replaceAll(' ', '-');
+// A heading's text as GitHub renders it: code spans, links and images by their text, without tags, entities,
+// emphasis or closing hashes.
+const headingText = (raw) => raw.replace(/\s+#+\s*$/, '').trim()
+  .replace(/(`+)(.+?)\1|!?\[([^\]]*)\]\([^)]*\)|<[^>]*>|&#?\w+;|\*+|__+/g, (_, tick, code, label) => code ?? label ?? '');
+
+// A doc's anchors in order, each to the slug of the heading it belongs to: a heading's own slug, slugged as GitHub
+// slugs it, and each explicit <a id> to the heading that follows it, or to the section it sits in when text comes
+// between them.
+const anchorsOf = new Map();
+export function anchors(file) {
+  if (!anchorsOf.has(file)) {
+    const found = new Map();
+    const headings = new Set();
+    let section;
+    let waiting = [];
+    const settle = (ids, heading) => { for (const id of ids) if (!found.has(id)) found.set(id, heading); };
+    for (const { line } of prose(readFileSync(file, 'utf8'))) {
+      const ids = [...line.matchAll(/<a\s[^>]*?\b(?:id|name)\s*=\s*["']([^"']+)["']/gi)].map((m) => m[1]);
+      const heading = line.match(/^ {0,3}#{1,6}\s+(.*)$/);
+      if (heading) {
+        // A repeated slug takes the first free -1, -2, … suffix, as GitHub's does.
+        const base = slug(headingText(heading[1]));
+        let id = base;
+        for (let n = 1; headings.has(id); n++) id = `${base}-${n}`;
+        headings.add(id);
+        section = id;
+        settle([id, ...waiting, ...ids], id);
+        waiting = [];
+      } else if (!line.replace(/<a\s[^>]*>(?:\s*<\/a>)?/gi, '').trim()) waiting.push(...ids);
+      else if (section) {
+        settle([...waiting, ...ids], section);
+        waiting = [];
+      } else waiting.push(...ids);
+    }
+    settle(waiting, section);
+    anchorsOf.set(file, found);
+  }
+  return anchorsOf.get(file);
+}
+
+// The link targets on a line, outside code spans: markdown links' targets, and bare links into this repo
+// without the trailing punctuation GitHub leaves out of an autolink.
+export function targets(line) {
+  const text = line.replace(/(`+).+?\1/g, '');
+  const linked = [...text.matchAll(/\]\(\s*<?([^\s)>]+)/g)].map((m) => m[1]);
+  const bare = text.replace(/\]\(\s*<?[^\s)>]+/g, '').split(REPO).slice(1).map((rest) => REPO + rest.match(/^[^\s)>\]"'`]*/)[0].replace(/[.,:;!?*_~]+$/, ''));
+  return [...linked, ...bare];
+}
+
+// The doc file and anchor a target links to, or null for a link that isn't into docs/*.md. A doc's relative
+// links resolve beside it; an issue's relative links count only as docs/<name>.md or <name>.md.
+export function resolve(target, from) {
+  const [, path, anchor = ''] = target.match(/^([^#?]*)(?:\?[^#]*)?(?:#(.*))?$/);
+  let file;
+  if (path.startsWith(REPO)) file = path.slice(REPO.length);
+  else if (/^[a-z][\w+.-]*:/i.test(path)) return null;
+  else if (from) file = path ? posix.join(posix.dirname(from), path) : from;
+  else if (/^(?:\.?\/)?(?:docs\/)?[^/]+\.md$/.test(path)) file = `docs/${path.split('/').at(-1)}`;
+  else return null;
+  if (!/^docs\/[^/]+\.md$/.test(file)) return null;
+  let id = anchor;
+  try {
+    id = decodeURIComponent(anchor);
+  } catch { /* an anchor that isn't valid percent-encoding is compared as written */ }
+  return { file, id };
+}

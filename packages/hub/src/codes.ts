@@ -19,8 +19,8 @@ export const CODES: readonly CodePage[] = [
     planted: call('deep_status', { verbose: true }), clean: call('deep_status', {}), fix: 'Send only the fields the tool\'s schema lists.',
   },
   {
-    code: 'required', meaning: 'A field the schema requires is missing or null.',
-    planted: call('deep_search', {}), clean: call('deep_search', { query: 'unit' }), fix: 'Give the field the error\'s path names.',
+    code: 'required', meaning: 'A field the schema requires is null. One left out is missing_field, which carries the tool\'s input schema.',
+    planted: call('deep_search', { query: null }), clean: call('deep_search', { query: 'unit' }), fix: 'Give the field the error\'s path names.',
   },
   {
     code: 'type', meaning: 'A field holds a value of the wrong type, such as a number where the schema takes a string.',

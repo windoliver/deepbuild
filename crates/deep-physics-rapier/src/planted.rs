@@ -8,10 +8,9 @@ use rapier3d::prelude::*;
 use crate::Rapier;
 
 /// The planted wrong programs, by name.
-pub const PLANTED: [&str; 25] = [
+pub const PLANTED: [&str; 24] = [
     "caps_allow_restitution_threshold",
     "caps_allow_rolling_resistance",
-    "caps_allow_tangent_speed",
     "caps_allow_dynamic_gear",
     "restore_ignores_version",
     "hash_rounds_1e6",

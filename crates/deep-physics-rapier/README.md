@@ -7,6 +7,7 @@ physics.world@1's backend (issue #2009): Rapier 0.36.1, pinned with enhanced-det
 ## Where new code goes
 
 - Building, stepping and reading a world, and checkpoints, go in `src/lib.rs`; applying an input in `src/inputs.rs`; anything that names an engine soft-body type in `src/soft.rs` alone (the `test-swap-soft-solver` build swaps that module's solver for a small one of ours, #524 criterion 3).
+- A belt's contact hook goes in `src/belt.rs` (issue #2241): a contact material's `tangent_speed` rides in its collider's `user_data`, so the world's bytes carry it, and the hook gives each of its contacts that surface velocity along the shape use's own +X.
 - What the build resolved goes in `build.rs`, read by `build()` in `src/lib.rs`.
 - The physics module's manifest is deep-canvas-physics's (`module::module`), built from `build()`: deep-show's full build links this crate for it, so the plan it publishes and a golden recorded here name the same implementation and pins (issue #1920).
 - The control register's guard goes in `src/fp.rs`.

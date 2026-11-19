@@ -205,6 +205,8 @@ struct Guard {
     fail_closed: bool,
     reason: String,
     next_step: String,
+    /// Set when this deep-hook can't read the entry whole (#2219), saying it is older than it: it meets every call.
+    unread: Option<String>,
 }
 
 /// What deep-hook reads of rules.json: its entries, what each tool the hub counted counts as, and the cloud owners
@@ -327,7 +329,8 @@ fn classes(value: Option<&Value>) -> Result<Vec<(String, String)>, String> {
         .collect()
 }
 
-/// One entry as guard@1 has it: every field there and of its type, and no other; None when it isn't one.
+/// One entry as guard@1 has it; None when it isn't an object or its `mode` or `fail_closed` can't be read. One with a
+/// field this deep-hook doesn't know or can't read, its `match` included, is unread (#2219).
 fn guard(name: &str, entry: &Value) -> Option<Guard> {
     let Value::Object(fields) = entry else {
         return None;
@@ -340,12 +343,6 @@ fn guard(name: &str, entry: &Value) -> Option<Guard> {
         "next_step",
         "fail_closed",
     ];
-    if fields
-        .iter()
-        .any(|(key, _)| !FIELDS.contains(&key.as_str()))
-    {
-        return None;
-    }
     let text = |key: &str| match member(entry, key) {
         Some(Value::String(s)) if !s.is_empty() => Some(s.clone()),
         _ => None,
@@ -353,18 +350,34 @@ fn guard(name: &str, entry: &Value) -> Option<Guard> {
     let Some(Value::Bool(fail_closed)) = member(entry, "fail_closed") else {
         return None;
     };
-    text("scope")?;
     if !["watch", "warn", "block"].contains(&text("mode")?.as_str()) {
         return None;
     }
-    let pattern = text("match").filter(|m| matcher::known(m))?;
+    let pattern = text("match").filter(|m| matcher::known(m));
+    let whole = pattern.is_some()
+        && ["scope", "reason", "next_step"]
+            .iter()
+            .all(|key| text(key).is_some())
+        && fields.iter().all(|(key, _)| FIELDS.contains(&key.as_str()));
     Some(Guard {
         name: name.to_string(),
-        pattern,
+        pattern: pattern.unwrap_or_default(),
         fail_closed: *fail_closed,
-        reason: text("reason")?,
-        next_step: text("next_step")?,
+        reason: text("reason").unwrap_or_default(),
+        next_step: text("next_step").unwrap_or_default(),
+        unread: (!whole).then(|| format!("This deep-hook is older than the entry {name} in ~/.deepbuild/rules.json and can't read it whole, so it counts every call as one the entry may hold.")),
     })
+}
+
+/// The entries a call meets: those whose `match` reads it, and each one this deep-hook can't read whole (#2219).
+fn met<'a>(guards: &'a [Guard], called: Option<&matcher::Call>) -> Vec<(&'a Guard, matcher::Hit)> {
+    guards
+        .iter()
+        .filter_map(|g| match g.unread.clone() {
+            Some(why) => Some((g, matcher::Hit { detail: Some(why) })),
+            None => called?.matches(&g.pattern).map(|hit| (g, hit)),
+        })
+        .collect()
 }
 
 /// The tools whose calls deep-hook reads itself; the planted wrong program for #304's AC5 counts only these.
@@ -542,7 +555,8 @@ fn check() -> ExitCode {
     let Ok(value) = parse(&input) else {
         return refuse("stdin isn't JSON");
     };
-    let Some(entry) = member(&value, "entry").and_then(|e| guard("entry", e)) else {
+    let entry = member(&value, "entry").and_then(|e| guard("entry", e));
+    let Some(entry) = entry.filter(|g| g.unread.is_none()) else {
         return refuse("entry isn't a guard@1 entry whose match deep-hook reads");
     };
     let classes = match classes(member(&value, "classes")) {
@@ -662,14 +676,7 @@ fn matching() -> ExitCode {
             ),
             Ok(rules) => {
                 let called = parsed.as_ref().and_then(|p| call(p, &rules.classes));
-                let matched: Vec<(&Guard, matcher::Hit)> = match &called {
-                    Some(call) => rules
-                        .guards
-                        .iter()
-                        .filter_map(|g| call.matches(&g.pattern).map(|hit| (g, hit)))
-                        .collect(),
-                    None => Vec::new(),
-                };
+                let matched = met(&rules.guards, called.as_ref());
                 let names = matched
                     .iter()
                     .map(|(g, _)| quoted(&g.name))
@@ -1167,14 +1174,7 @@ fn forward(agent: &str, event: &str) -> ExitCode {
         .as_ref()
         .filter(|_| ruling)
         .and_then(|p| call(p, &rules.classes));
-    let matched: Vec<(&Guard, matcher::Hit)> = match &called {
-        Some(call) => rules
-            .guards
-            .iter()
-            .filter_map(|g| call.matches(&g.pattern).map(|hit| (g, hit)))
-            .collect(),
-        None => Vec::new(),
-    };
+    let matched = met(&rules.guards, called.as_ref());
     // A cloud resource a standing rule the hub copied covers is let through, and spooled like any call (#23).
     // With the hub away, each fail_closed entry the call matched still denies it, each in its own words.
     let denied = denials(&matched, covered(parsed.as_ref(), &rules));
