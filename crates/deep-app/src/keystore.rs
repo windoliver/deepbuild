@@ -8,7 +8,7 @@ use std::path::PathBuf;
 
 /// The Keychain item's service; its account is the hub root the device paired with.
 #[cfg(target_os = "macos")]
-const SERVICE: &str = "DeepBuild device key";
+const SERVICE: &str = "DeepBuild device key"; // copy-exception: the OS secret store's service name
 
 fn account() -> String {
     crate::hub::root().to_string_lossy().into_owned()
@@ -108,6 +108,7 @@ mod os {
     pub fn set(account: &str, text: &str) -> std::io::Result<()> {
         set_generic_password(super::SERVICE, account, text.as_bytes()).map_err(|e| {
             std::io::Error::other(format!("the Keychain didn't keep the device key: {e}"))
+            // copy-exception: an error, never drawn
         })
     }
     pub fn delete(account: &str) {
@@ -137,7 +138,7 @@ mod os {
     }
     pub fn set(account: &str, text: &str) -> std::io::Result<()> {
         let mut child = Command::new(TOOL)
-            .args(["store", "--label=DeepBuild device key"])
+            .args(["store", "--label=DeepBuild device key"]) // copy-exception: a command's argument
             .args(item(account))
             .stdin(Stdio::piped())
             .stdout(Stdio::null())
@@ -152,7 +153,7 @@ mod os {
             Ok(())
         } else {
             Err(std::io::Error::other(
-                "the Secret Service didn't keep the device key",
+                "the Secret Service didn't keep the device key", // copy-exception: an error, never drawn
             ))
         }
     }

@@ -20,6 +20,8 @@ use deep_canvas_physics::check::check;
 #[cfg(feature = "game2d")]
 use deep_canvas_physics::occurrence::step_flicks;
 #[cfg(feature = "game2d")]
+use deep_logic::saves::{self, Held};
+#[cfg(feature = "game2d")]
 use deep_logic::world::{track_of, Entry, Record, World};
 #[cfg(feature = "game2d")]
 use deep_physics_rapier::runner::Run;
@@ -46,6 +48,16 @@ struct Run1 {
 /// Each world's or logic item's run, by ID.
 #[cfg(feature = "game2d")]
 type Runs = BTreeMap<String, Run1>;
+
+/// The logic items' runs, each one's program as this player rewrote it, the saves their steps ask
+/// for in step order, and the step a save opened them at (0 from the start).
+#[cfg(feature = "game2d")]
+struct Logic {
+    runs: Runs,
+    rewritten: BTreeMap<String, String>,
+    saves: Vec<Held>,
+    from: i64,
+}
 
 /// A played piece.
 pub struct Played {
@@ -75,6 +87,16 @@ pub struct Played {
     pub ground: [u8; 3],
     /// The sealed set, whose fills a 3D frame evaluates with.
     pub sealed: &'static Sealed,
+    /// The saves the piece's steps ask for on its track (Logic: saves), in step order, and the
+    /// step through which the page's store has taken them.
+    #[cfg(feature = "game2d")]
+    saves: Vec<Held>,
+    #[cfg(feature = "game2d")]
+    taken: i64,
+    /// Each step at which the recorded play asks for a save, with every logic item's full-state
+    /// hash there: the states a save can open at.
+    #[cfg(feature = "game2d")]
+    reached: Vec<(i64, Map<String, Value>)>,
 }
 
 fn refusal(what: impl Into<String>) -> String {
@@ -101,7 +123,12 @@ impl Played {
         #[cfg(feature = "game2d")]
         let worlds = worlds(&form, track, span, &mut steps)?;
         #[cfg(feature = "game2d")]
-        let (logic, rewritten) = logic(sealed, &form, track, read, span, &mut steps)?;
+        let Logic {
+            runs: logic,
+            rewritten,
+            saves,
+            ..
+        } = logic(sealed, &form, track, read, span, &mut steps, None)?;
         #[cfg(not(feature = "game2d"))]
         let (worlds, logic, rewritten) = Default::default();
         let step = steps.into_iter().min().unwrap_or(FLICKS / 60).max(1);
@@ -135,6 +162,15 @@ impl Played {
             ground: look.light.get("ground").copied().unwrap_or([255; 3]),
             look,
             sealed,
+            #[cfg(feature = "game2d")]
+            reached: saves
+                .iter()
+                .map(|s| (s.step, s.deep_hash.clone()))
+                .collect(),
+            #[cfg(feature = "game2d")]
+            saves,
+            #[cfg(feature = "game2d")]
+            taken: 0,
         })
     }
 
@@ -193,8 +229,17 @@ impl Played {
         track.sort_by_key(|e| (e["t"].as_i64().unwrap_or(0), e["seq"].as_i64().unwrap_or(0)));
         let mut again = Played::new(sealed, &self.source, &track, read, self.look.clone())?;
         again.frame(t);
+        #[cfg(feature = "game2d")]
+        {
+            again.taken = again.step_at();
+        }
         *self = again;
         Ok(())
+    }
+
+    /// The document's stable ID.
+    pub fn id(&self) -> &str {
+        self.source.get("id").and_then(Value::as_str).unwrap_or("")
     }
 
     /// The played form the session holds.
@@ -387,6 +432,116 @@ impl Played {
     }
 }
 
+/// The piece's saves (Logic: saves), in the sets that carry logic.
+#[cfg(feature = "game2d")]
+impl Played {
+    /// The most slots a logic item of the piece declares (Logic: saves); 0 for a piece with no saves.
+    pub fn slots(&self) -> i64 {
+        let items = self.doc.get("items").and_then(Value::as_object);
+        items
+            .into_iter()
+            .flatten()
+            .filter_map(|(_, i)| i.pointer("/params/saves"))
+            .map(|s| s.get("slots").and_then(Value::as_i64).unwrap_or(1))
+            .max()
+            .unwrap_or(0)
+    }
+
+    /// The saves asked for by the steps the shown time has reached since the last call, in step
+    /// order: each `{at, item, slot, step, ended, deep_hash}`, `at` its place for [`Self::save`].
+    pub fn due(&mut self) -> Vec<Value> {
+        let k = self.step_at();
+        let out = self
+            .saves
+            .iter()
+            .enumerate()
+            .filter(|(_, s)| s.step > self.taken && s.step <= k)
+            .map(|(at, s)| json!({"at": at, "item": s.item, "slot": s.slot, "step": s.step, "ended": s.ended, "deep_hash": s.deep_hash}))
+            .collect();
+        self.taken = self.taken.max(k);
+        out
+    }
+
+    /// The save at `at` as its slot's save number `seq`: its bytes, which its SHA-256 names.
+    pub fn save(&self, at: usize, seq: u64) -> Option<Vec<u8>> {
+        Some(self.saves.get(at)?.bytes(seq))
+    }
+
+    /// The viewer opens the save named `name`, its SHA-256 (Logic: saves): every logic item's
+    /// state is restored from `bytes` into fresh instances and played on along the track, so from
+    /// its step on the hashes are that run's, and the shown time is its step. This player plays
+    /// only its recorded input track, so a save opens where that play asks for a save with the
+    /// same full-state hashes; any other is refused, naming what differs, as one that fails its
+    /// hash or doesn't match the piece is.
+    pub fn open(
+        &mut self,
+        name: &str,
+        bytes: &[u8],
+        read: &dyn Fn(&str) -> Option<Vec<u8>>,
+    ) -> Result<Value, Value> {
+        let mut steps = Vec::new();
+        let opened = logic(
+            self.sealed,
+            &self.doc,
+            &self.track,
+            read,
+            self.span,
+            &mut steps,
+            Some((name, bytes)),
+        )
+        .map_err(|e| serde_json::from_str::<Value>(&e).unwrap_or(Value::String(e)))?;
+        let k = opened.from;
+        let deep = opened
+            .runs
+            .iter()
+            .filter_map(|(id, r)| Some((id.clone(), json!(r.checkpoints.first()?.hash))))
+            .collect::<Map<String, Value>>();
+        let reached = |(step, hashes): &(i64, Map<String, Value>)| {
+            *step == k && !deep.is_empty() && deep.iter().all(|(id, h)| hashes.get(id) == Some(h))
+        };
+        if !self.reached.iter().any(reached) {
+            return Err(
+                json!({"code": "save_refused", "save": name, "differs": [{"what": "play", "step": k}]}),
+            );
+        }
+        for (id, mut run) in opened.runs {
+            if let Some(was) = self.logic.get_mut(&id) {
+                let at = (k as usize).min(was.steps.len()).min(run.steps.len());
+                was.steps.truncate(at);
+                was.steps.extend(run.steps.drain(at..));
+                was.checkpoints.retain(|c| c.step < k);
+                was.checkpoints.append(&mut run.checkpoints);
+            }
+        }
+        self.saves = opened.saves;
+        self.taken = k;
+        self.frame(k * self.step);
+        Ok(json!({"hash": name, "step": k, "deep_hash": deep}))
+    }
+}
+
+/// A set without logic keeps no save.
+#[cfg(not(feature = "game2d"))]
+impl Played {
+    pub fn slots(&self) -> i64 {
+        0
+    }
+    pub fn due(&mut self) -> Vec<Value> {
+        Vec::new()
+    }
+    pub fn save(&self, _at: usize, _seq: u64) -> Option<Vec<u8>> {
+        None
+    }
+    pub fn open(
+        &mut self,
+        name: &str,
+        _bytes: &[u8],
+        _read: &dyn Fn(&str) -> Option<Vec<u8>>,
+    ) -> Result<Value, Value> {
+        Err(json!({"code": "save_refused", "save": name}))
+    }
+}
+
 /// The checkpoints taken at or before step `k`.
 fn held(cps: &[Checkpoint], k: i64) -> Value {
     Value::Array(
@@ -464,7 +619,9 @@ fn worlds(
 }
 
 /// Each logic item of `form` replayed on `track` over the span as the app's `logic` call replays
-/// it, with its checkpoints; each item's step added to `steps`.
+/// it, with its checkpoints and the saves its steps ask for; each item's step added to `steps`.
+/// With `opened`, a save's name and bytes, the items start from that save's state at its step, as
+/// the viewer opens it (a refusal is the logic module's own, as JSON).
 #[cfg(feature = "game2d")]
 fn logic(
     sealed: &Sealed,
@@ -473,10 +630,17 @@ fn logic(
     read: &dyn Fn(&str) -> Option<Vec<u8>>,
     span: i64,
     steps: &mut Vec<i64>,
-) -> Result<(Runs, BTreeMap<String, String>), String> {
+    opened: Option<(&str, &[u8])>,
+) -> Result<Logic, String> {
+    let none = Logic {
+        runs: Runs::new(),
+        rewritten: BTreeMap::new(),
+        saves: Vec::new(),
+        from: 0,
+    };
     let piece = match deep_play::logic::logic_piece(sealed, form, track, read, false) {
         Ok(Some(p)) => Rc::new(p),
-        Ok(None) => return Ok(Default::default()),
+        Ok(None) => return Ok(none),
         Err(i) => return Err(refusal(format!("{}: {}", i.code, i.to_json()))),
     };
     let entries: Vec<Entry> = track.iter().filter_map(Entry::parse).collect();
@@ -484,15 +648,26 @@ fn logic(
     steps.extend(piece.items.iter().map(|i| i.step));
     let count = (span + len - 1) / len;
     let mut rec = Record::default();
-    let mut world = World::new(
-        piece.clone(),
-        track_of(&entries),
-        false,
-        Default::default(),
-        &mut rec,
-        None,
-    )
-    .map_err(|e| refusal(format!("the logic items don't start: {e}")))?;
+    let (mut world, from) = match opened {
+        Some((name, bytes)) => {
+            let (world, via) = saves::open_held(&piece, name, bytes, &entries, "", &mut rec)
+                .map_err(|e| e.to_string())?;
+            (world, via["step"].as_i64().unwrap_or(0))
+        }
+        None => {
+            let mut world = World::new(
+                piece.clone(),
+                track_of(&entries),
+                false,
+                Default::default(),
+                &mut rec,
+                None,
+            )
+            .map_err(|e| refusal(format!("the logic items don't start: {e}")))?;
+            world.held = Some(Vec::new());
+            (world, 0)
+        }
+    };
     world.run(count, &mut rec, &mut |_, _| {});
     let mut out: BTreeMap<String, Run1> = BTreeMap::new();
     for item in &piece.items {
@@ -524,7 +699,12 @@ fn logic(
         .iter()
         .map(|i| (i.id.clone(), sha256_hex(&i.bytes)))
         .collect();
-    Ok((out, rewritten))
+    Ok(Logic {
+        runs: out,
+        rewritten,
+        saves: world.held.take().unwrap_or_default(),
+        from,
+    })
 }
 
 /// Lower-case hex SHA-256.

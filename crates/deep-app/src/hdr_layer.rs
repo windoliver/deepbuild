@@ -199,10 +199,10 @@ pub fn layers(gpui_view: &NSView, hdr: Option<&HdrLayer>) -> Vec<LayerRow> {
             "other"
         };
         let format = match metal.pixelFormat().0 {
-            80 => "BGRA8Unorm".to_string(),
-            81 => "BGRA8Unorm_sRGB".to_string(),
-            115 => "RGBA16Float".to_string(),
-            n => format!("MTLPixelFormat({n})"),
+            80 => "BGRA8Unorm".to_string(), // copy-exception: a pixel format's name
+            81 => "BGRA8Unorm_sRGB".to_string(), // copy-exception: a pixel format's name
+            115 => "RGBA16Float".to_string(), // copy-exception: a pixel format's name
+            n => format!("MTLPixelFormat({n})"), // copy-exception: a pixel format's name
         };
         let colorspace = metal
             .colorspace()

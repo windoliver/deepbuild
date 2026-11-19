@@ -7,6 +7,8 @@ use std::sync::OnceLock;
 
 use serde_json::Value;
 
+use crate::copy;
+
 /// How many times a claim is sent back before it becomes one ask (Stalled claims).
 pub const SEND_BACKS: u64 = 3;
 
@@ -44,14 +46,14 @@ pub enum State {
 /// list's rows carry (#1463); running is a running job's row (#1925).
 pub const TABLE: [(&str, &str, &[&str]); 15] = [
     ("queued", "idle", &[]),
-    ("working", "running", &["in progress"]),
-    ("says done", "running", &["done"]),
+    ("working", "running", &["in progress"]), // copy-exception: a state code
+    ("says done", "running", &["done"]),      // copy-exception: a state code
     ("PASS", "pass", &["proven", "passed"]),
-    ("sent back", "fail", &["failed"]),
+    ("sent back", "fail", &["failed"]), // copy-exception: a state code
     ("BLOCKED", "blocked", &[]),
     ("INVALID", "invalid", &[]),
     ("INCONCLUSIVE", "inconclusive", &[]),
-    ("needs you", "needs_you", &["waiting on you"]),
+    ("needs you", "needs_you", &["waiting on you"]), // copy-exception: a state code
     ("stale", "stale", &["pass", "passed", "proven"]),
     ("quiet", "idle", &[]),
     ("stuck", "blocked", &[]),
@@ -59,6 +61,49 @@ pub const TABLE: [(&str, &str, &[&str]); 15] = [
     ("finished", "idle", &[]),
     ("running", "running", &[]),
 ];
+
+/// A state word the hub sends (#2403), drawn in the language shown: every word of [`TABLE`] but the five verdict words,
+/// which stay as written, as does a word the table doesn't hold. The word itself stays the state's code: nothing
+/// decides a state by the words drawn.
+pub fn shown(word: &str) -> &str {
+    match word {
+        "queued" => copy::text("states.queued"),
+        "working" => copy::text("states.working"),
+        "says done" => copy::text("states.says_done"),
+        "sent back" => copy::text("states.sent_back"),
+        "needs you" => copy::text("states.needs_you"),
+        "stale" => copy::text("states.stale"),
+        "quiet" => copy::text("states.quiet"),
+        "stuck" => copy::text("states.stuck"),
+        "flagged" => copy::text("states.flagged"),
+        "finished" => copy::text("states.finished"),
+        "running" => copy::text("states.running"),
+        other => other,
+    }
+}
+
+/// Which table a state's words come from: the language shown, or English for what DeepBuild sends to an agent (#2403).
+#[derive(Clone, Copy)]
+enum Said {
+    Shown,
+    English,
+}
+
+impl Said {
+    fn fill(self, key: &'static str, args: &[&dyn std::fmt::Display]) -> String {
+        match self {
+            Said::Shown => copy::fill(key, args),
+            Said::English => copy::english(key, args),
+        }
+    }
+
+    fn word(self, word: &'static str) -> String {
+        match self {
+            Said::Shown => shown(word).to_owned(),
+            Said::English => word.to_owned(),
+        }
+    }
+}
 
 impl State {
     pub fn word(&self) -> &'static str {
@@ -86,23 +131,27 @@ impl State {
         }
     }
 
-    /// The word with its extra, as every surface writes it.
+    /// The word with its extra, as every surface writes it, in the language shown (#2403).
     pub fn text(&self, now: u64) -> String {
+        self.said(now, Said::Shown)
+    }
+
+    fn said(&self, now: u64, said: Said) -> String {
         match self {
-            State::SentBack { round } => format!("sent back {round} of {SEND_BACKS}"),
+            State::SentBack { round } => said.fill("states.sent_back_round", &[round, &SEND_BACKS]),
             State::SaysDone {
                 expected_ms: Some(ms),
-            } => format!("says done · checks take {}", span(*ms)),
+            } => said.fill("states.says_done_checks", &[&span_in(*ms, said)]),
             State::Quiet { last_seen } => {
                 let age = now.saturating_sub(*last_seen);
                 changes_after(changes_in(age));
                 // #1458's planted row reads its time the way no surface may, in a test build only.
                 if crate::plain::planted("row-says-ago") {
-                    return "quiet · last seen 2 min ago".to_owned();
+                    return "quiet · last seen 2 min ago".to_owned(); // copy-exception: planted
                 }
-                format!("quiet · last seen {}", span(age))
+                said.fill("states.quiet_last_seen", &[&span_in(age, said)])
             }
-            other => other.word().to_owned(),
+            other => said.word(other.word()),
         }
     }
 }
@@ -111,16 +160,38 @@ impl State {
 /// day its weekday, "Mon 16:40". An ask's row, its card and its notification say when its default applies in these
 /// words.
 pub fn moment(at: u64, now: u64) -> String {
-    use chrono::{Local, TimeZone as _};
+    use chrono::{Datelike as _, Local, TimeZone as _};
     let local = |ms: u64| Local.timestamp_millis_opt(ms as i64).unwrap();
     let (at, today) = (local(at), local(now).date_naive());
     let time = at.format("%H:%M");
     match (at.date_naive() - today).num_days() {
         0 => time.to_string(),
-        1 => format!("tomorrow {time}"),
-        _ => format!("{} {time}", at.format("%a")),
+        1 => copy::fill("states.tomorrow_at", &[&time]),
+        _ => copy::fill(
+            ON_WEEKDAY[at.weekday().num_days_from_monday() as usize],
+            &[&time],
+        ),
     }
 }
+
+/// A moment on another day by its weekday, Monday first (#2403): the table's words, never the platform's.
+const ON_WEEKDAY: [&str; 7] = [
+    "states.on_mon",
+    "states.on_tue",
+    "states.on_wed",
+    "states.on_thu",
+    "states.on_fri",
+    "states.on_sat",
+    "states.on_sun",
+];
+
+/// The table's lengths of time, longest unit first: what [`span`] writes and [`time_at_end`] finds.
+const SPANS: [&str; 4] = [
+    "states.span_d",
+    "states.span_h",
+    "states.span_min",
+    "states.span_s",
+];
 
 thread_local! {
     /// In ms from the `now` it was written at, when the soonest age a state's text showed since [`ages_written`]
@@ -167,17 +238,26 @@ pub fn changes_in(ms: u64) -> u64 {
 /// `words` and the length [`span`] wrote at their end, if one is: a row draws that length in a slot of its own at
 /// its right edge, so a ticking time moves nothing else in the row (#1458).
 pub fn time_at_end(words: &str) -> (&str, Option<&str>) {
-    let mut parts = words.rsplitn(3, ' ');
-    match (parts.next(), parts.next(), parts.next()) {
-        (Some(unit), Some(n), Some(rest))
-            if ["s", "min", "h", "d"].contains(&unit)
-                && !n.is_empty()
-                && n.bytes().all(|b| b.is_ascii_digit()) =>
-        {
-            (rest, Some(&words[rest.len() + 1..]))
+    for key in SPANS {
+        // The length as the language shown writes it: its words before and after the number (#2403).
+        let Some((before, after)) = copy::text(key).split_once("{0}") else {
+            continue;
+        };
+        let Some(head) = words.strip_suffix(after) else {
+            continue;
+        };
+        let digits = head.len() - head.trim_end_matches(|c: char| c.is_ascii_digit()).len();
+        let Some(rest) = head[..head.len() - digits]
+            .strip_suffix(before)
+            .and_then(|rest| rest.strip_suffix(' '))
+        else {
+            continue;
+        };
+        if digits > 0 {
+            return (rest, Some(&words[rest.len() + 1..]));
         }
-        _ => (words, None),
     }
+    (words, None)
 }
 
 /// A running job's row words after its kind (#1925): its count from its tool's own counter with its time left, as the
@@ -190,10 +270,13 @@ pub fn job_words(row: &Value, now: u64) -> String {
         None => {
             let ran = now.saturating_sub(row["since"].as_u64().unwrap_or(now));
             // A job's own word, such as a new project's working (#1342); running for one that names none.
-            format!(
-                "{title} · {} {}",
-                row["word"].as_str().unwrap_or("running"),
-                span(ran)
+            copy::fill(
+                "states.job_ran",
+                &[
+                    &title,
+                    &shown(row["word"].as_str().unwrap_or("running")),
+                    &span(ran),
+                ],
             )
         }
     }
@@ -202,11 +285,15 @@ pub fn job_words(row: &Value, now: u64) -> String {
 /// A length of time as every surface writes it (#1458): "40 s", "12 min", "3 h" or "2 d", with a space and no "ago",
 /// since the slot it's in says it's since.
 pub fn span(ms: u64) -> String {
+    span_in(ms, Said::Shown)
+}
+
+fn span_in(ms: u64, said: Said) -> String {
     match ms / 1000 {
-        s if s >= 86_400 => format!("{} d", s / 86_400),
-        s if s >= 3600 => format!("{} h", s / 3600),
-        s if s >= 60 => format!("{} min", s / 60),
-        s => format!("{s} s"),
+        s if s >= 86_400 => said.fill(SPANS[0], &[&(s / 86_400)]),
+        s if s >= 3600 => said.fill(SPANS[1], &[&(s / 3600)]),
+        s if s >= 60 => said.fill(SPANS[2], &[&(s / 60)]),
+        s => said.fill(SPANS[3], &[&s]),
     }
 }
 
@@ -233,7 +320,7 @@ pub fn color(entry: &str) -> u32 {
 
 /// A state as a status mark and its words: "✓ PASS".
 pub fn mark(state: &State, now: u64) -> String {
-    format!("{} {}", glyph(state.entry()), state.text(now))
+    copy::fill("states.mark", &[&glyph(state.entry()), &state.text(now)])
 }
 
 /// The kinds that close an ask: each move of the contract's ask.machine@1 into a final state, so the app keeps no
@@ -735,31 +822,32 @@ impl Table {
             .map_or(State::Queued, Session::state)
     }
 
-    /// The sidebar row's words after the session's title, and the status-map entry its mark draws (#992): the state
-    /// the core last recorded for the session as `session.state`, so the sidebar and `deep status` name it the same,
-    /// with "process gone mid-turn" for a process gone; then a claim's state, if the session's newest stop made one.
-    /// A session with no `session.state` yet reads as [`Table::state`] does, but for its stop's claim, which it keeps.
+    /// The sidebar row's words after the session's title, in the language shown (#2403), and the status-map entry its
+    /// mark draws (#992): the state the core last recorded for the session as `session.state`, so the sidebar and
+    /// `deep status` name it the same, with "process gone mid-turn" for a process gone; then a claim's state, if the
+    /// session's newest stop made one. A session with no `session.state` yet reads as [`Table::state`] does, but for its
+    /// stop's claim, which it keeps.
     pub fn row(&self, session: &str, now: u64) -> (String, &'static str) {
         // The hub's row (#1463), the one reading of the session (#2018): its word and its entry, read no second way.
         if let Some(row) = self.row_of(&format!("session:{session}")) {
             let word = row["word"].as_str().unwrap_or_default();
             // The planted app reads a session waiting on you as working, in a build with the env-plants feature only.
             if crate::plain::planted("waiting-as-working") && word == "needs you" {
-                return ("working".to_owned(), "running");
+                return (shown("working").to_owned(), "running");
             }
             return (
-                word.to_owned(),
+                shown(word).to_owned(),
                 entry_of(row["entry"].as_str().unwrap_or_default()),
             );
         }
         // The claim the row adds is its stop's, which only later work hides.
-        let shown = match self.sessions.get(session) {
+        let claim = match self.sessions.get(session) {
             Some(own) if self.open_asks(Some(session)).is_empty() => own.read(own.work),
             _ => self.state(session),
         };
         let Some((listed, cause)) = self.sessions.get(session).and_then(|s| s.listed.as_ref())
         else {
-            return (shown.text(now), shown.entry());
+            return (claim.text(now), claim.entry());
         };
         // The planted app reads a session waiting on you as working, in a build with the env-plants feature only.
         let planted = crate::plain::planted("waiting-as-working");
@@ -768,7 +856,7 @@ impl Table {
         if let Some((word, entry, _)) = TABLE.iter().find(|(word, ..)| {
             *word == listed
                 && ![
-                    "needs you",
+                    "needs you", // copy-exception: a state code
                     "stuck",
                     "flagged",
                     "working",
@@ -777,15 +865,15 @@ impl Table {
                 ]
                 .contains(word)
         }) {
-            return ((*word).to_owned(), entry);
+            return (shown(word).to_owned(), entry);
         }
         let (word, entry) = match listed.as_str() {
-            _ if planted && cause == "waiting" => ("working".to_owned(), "running"),
-            "needs you" => ("needs you".to_owned(), "needs_you"),
-            "stuck" => ("stuck".to_owned(), "blocked"),
-            "flagged" if cause == "gone" => ("flagged · process gone mid-turn".to_owned(), "fail"),
-            "flagged" => ("flagged".to_owned(), "fail"),
-            "finished" => ("finished".to_owned(), "idle"),
+            _ if planted && cause == "waiting" => (shown("working").to_owned(), "running"),
+            "needs you" => (shown(listed).to_owned(), "needs_you"),
+            "stuck" => (shown("stuck").to_owned(), "blocked"),
+            "flagged" if cause == "gone" => (copy::text("states.flagged_gone").to_owned(), "fail"),
+            "flagged" => (shown("flagged").to_owned(), "fail"),
+            "finished" => (shown("finished").to_owned(), "idle"),
             "quiet" => {
                 let last_seen = self
                     .sessions
@@ -794,16 +882,19 @@ impl Table {
                     .unwrap_or(0);
                 (State::Quiet { last_seen }.text(now), "idle")
             }
-            _ => ("working".to_owned(), "running"),
+            _ => (shown("working").to_owned(), "running"),
         };
-        match shown {
+        match claim {
             State::SaysDone { .. }
             | State::Pass
             | State::SentBack { .. }
             | State::Blocked
             | State::Invalid
             | State::Inconclusive
-            | State::Stale => (format!("{word} · {}", shown.text(now)), shown.entry()),
+            | State::Stale => (
+                copy::fill("states.word_claim", &[&word, &claim.text(now)]),
+                claim.entry(),
+            ),
             _ => (word, entry),
         }
     }
@@ -882,7 +973,7 @@ impl Table {
         let row = self.row_of(&format!("session:{session}"));
         let core = row
             .and_then(|row| row["why"].as_str())
-            .unwrap_or("its turn ended failed");
+            .unwrap_or_else(|| copy::text("states.turn_ended_failed"));
         Some((cause, core.to_owned()))
     }
 
@@ -907,10 +998,18 @@ impl Table {
         else {
             return Vec::new();
         };
-        let mut names = vec![format!("Session {session}")];
-        names.extend(start.issue.map(|issue| format!("Issue #{issue}")));
-        names.extend((!start.branch.is_empty()).then(|| format!("Branch {}", start.branch)));
-        names.extend((!start.repo.is_empty()).then(|| format!("Repo {}", start.repo)));
+        let mut names = vec![copy::fill("states.name_session", &[&session])];
+        names.extend(
+            start
+                .issue
+                .map(|issue| copy::fill("states.name_issue", &[&issue])),
+        );
+        names.extend(
+            (!start.branch.is_empty()).then(|| copy::fill("states.name_branch", &[&start.branch])),
+        );
+        names.extend(
+            (!start.repo.is_empty()).then(|| copy::fill("states.name_repo", &[&start.repo])),
+        );
         names
     }
 
@@ -1136,14 +1235,17 @@ fn took(
 
 /// A session's title when no task names it.
 fn untitled(session: &str) -> String {
-    format!("Session {}", &session[..session.len().min(8)])
+    copy::fill("states.untitled", &[&&session[..session.len().min(8)]])
 }
 
-/// The verdict line the app sends to the session's chat.
+/// The verdict line the app sends to the session's chat. What DeepBuild sends to an agent stays in English (#2403),
+/// whatever language the app draws in.
 pub fn verdict_line(table: &Table, session: &str, now: u64) -> String {
+    let state = table.state(session);
     format!(
-        "DeepBuild {} · {}",
-        mark(&table.state(session), now),
+        "DeepBuild {} {} · {}", // copy-exception: sent to the agent, in English
+        glyph(state.entry()),
+        state.said(now, Said::English),
         table.title(session)
     )
 }
@@ -1184,10 +1286,13 @@ pub fn menu(table: &Table, now: u64) -> Vec<String> {
             .map(|row| {
                 let text = |key: &str| row[key].as_str().unwrap_or_default();
                 let title = crate::question::visible(text("title"));
-                format!(
-                    "{title} · {} {}",
-                    glyph(entry_of(text("entry"))),
-                    text("word")
+                copy::fill(
+                    "states.menu_row",
+                    &[
+                        &title,
+                        &glyph(entry_of(text("entry"))),
+                        &shown(text("word")),
+                    ],
                 )
             })
             .collect();
@@ -1195,7 +1300,9 @@ pub fn menu(table: &Table, now: u64) -> Vec<String> {
     table
         .every_session()
         .into_iter()
-        .map(|(_, title, state)| format!("{title} · {}", mark(&state, now)))
+        .map(|(_, title, state)| {
+            copy::fill("states.menu_row_marked", &[&title, &mark(&state, now)])
+        })
         .collect()
 }
 
