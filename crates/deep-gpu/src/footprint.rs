@@ -16,8 +16,7 @@ pub type Got = Result<u64, String>;
 
 /// Where each field is read from, as a report names it.
 pub const FOOTPRINT_READ: &str = "proc_pid_rusage(RUSAGE_INFO_V2).ri_phys_footprint";
-pub const HEAP_READ: &str =
-    "mach_vm_region_recurse(malloc regions): resident + compressed - reusable pages";
+pub const HEAP_READ: &str = "mach_vm_region_recurse(malloc regions, vm.self_region_footprint): resident + compressed - reusable pages";
 pub const DEVICE_READ: &str = "MTLDevice.currentAllocatedSize";
 
 /// The reads a reading takes, so a planted program can stand in for any of them.
@@ -71,11 +70,12 @@ mod sys {
             info: *mut [u32; 21],
             count: *mut u32,
         ) -> i32;
-        pub fn mach_vm_purgable_control(
-            task: u32,
-            address: u64,
-            control: i32,
-            state: *mut i32,
+        pub fn sysctlbyname(
+            name: *const std::ffi::c_char,
+            old: *mut std::ffi::c_void,
+            old_len: *mut usize,
+            new: *const std::ffi::c_void,
+            new_len: usize,
         ) -> i32;
     }
 }
@@ -108,13 +108,31 @@ pub fn footprint_of(_pid: i32) -> Got {
 }
 
 /// What the allocator holds in the footprint: the pages of the regions malloc tags as its own, resident or compressed,
-/// less those it gave back as reusable and those of purgeable regions made volatile, which the footprint leaves out.
-/// Free blocks on pages it keeps are in the footprint, so they're the heap's too; the bytes in use alone would move
-/// `unaccounted` each time the heap frees blocks or reuses them.
+/// less those it gave back as reusable. Free blocks on pages it keeps are in the footprint, so they're the heap's too;
+/// the bytes in use alone would move `unaccounted` each time the heap frees blocks or reuses them. The regions are read
+/// as the footprint counts them (`vm.self_region_footprint`, the footprint tool's reading), so the pages of a block
+/// `realloc` moved, or of a purgeable region made volatile, which the footprint leaves out, aren't counted either.
 #[cfg(target_os = "macos")]
 pub fn heap() -> Got {
     // VM_MEMORY_MALLOC to VM_MEMORY_MALLOC_PROB_GUARD (<mach/vm_statistics.h>).
     const MALLOC: [u32; 10] = [1, 2, 3, 4, 7, 8, 9, 11, 12, 13];
+    let on: i32 = 1;
+    // SAFETY: sets this task's own flag from `on`; nothing is read back.
+    let set = unsafe {
+        sys::sysctlbyname(
+            c"vm.self_region_footprint".as_ptr(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            (&on as *const i32).cast(),
+            size_of::<i32>(),
+        )
+    };
+    if set != 0 {
+        return Err(format!(
+            "vm.self_region_footprint: {}",
+            std::io::Error::last_os_error()
+        ));
+    }
     // vm_region_submap_info_64's words (<mach/vm_region.h>): the user tag, the resident and swapped-out pages, whether
     // the region is a submap, and the reusable pages.
     let [tag, resident, swapped, submap, reusable] = [5, 6, 8, 12, 16];
@@ -141,18 +159,7 @@ pub fn heap() -> Got {
         }
         if info[submap] == 0 && MALLOC.contains(&info[tag]) {
             let held = u64::from(info[resident]) + u64::from(info[swapped]);
-            let held = held.saturating_sub(u64::from(info[reusable]));
-            // VM_PURGABLE_GET_STATE; a region that isn't purgeable answers an error and is held.
-            let mut state = 0;
-            // SAFETY: the call only writes `state`.
-            let asked = held > 0
-                && unsafe {
-                    sys::mach_vm_purgable_control(sys::mach_task_self_, address, 1, &mut state)
-                } == 0;
-            // VM_PURGABLE_VOLATILE or VM_PURGABLE_EMPTY, under VM_PURGABLE_STATE_MASK.
-            if !(asked && matches!(state & 3, 1 | 2)) {
-                pages += held;
-            }
+            pages += held.saturating_sub(u64::from(info[reusable]));
         }
         address += size;
     }
