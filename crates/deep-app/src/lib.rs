@@ -32,6 +32,8 @@ pub mod codes;
 pub mod commands;
 pub mod confirm;
 pub mod connect;
+#[cfg(all(feature = "contact-sheet", target_os = "macos"))]
+pub mod contact_sheet;
 /// #2403: the app's own words, one table per language by key.
 pub mod copy;
 pub mod device;
@@ -46,6 +48,7 @@ pub mod hdr_fixture;
 #[cfg(target_os = "macos")]
 pub mod hdr_layer;
 pub mod hub;
+pub mod icons;
 /// #1486: chrome thumbnails through the one image service.
 pub mod images;
 pub mod installed;

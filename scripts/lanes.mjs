@@ -1024,6 +1024,14 @@ alone.push('tests/acceptance/66-redraft-1812/');
 // #1495's AC7 builds the real app download once per commit (release-pack's full build, the app's runtime folder) and
 // runs it under the platform sandbox.
 alone.push('tests/acceptance/1495/app-download.test.ts');
+// #1592's replica file builds deep-drive plain and with env-plants and starts a replica for each shipped page; its AC4
+// file builds the app with its contact sheet and opens that window, with Accessibility and Screen Recording, by hand.
+alone.push('tests/acceptance/1592/');
+byHand.push('tests/acceptance/1592/shown.test.ts');
+
+// #1592's blind redraft of AC4 builds deep-app with contact-sheet and opens the real app's window on this Mac's screen,
+// in light and dark; it waits on your taste call, so it runs by hand, as #1458's AC13 does.
+byHand.push('tests/acceptance/1592-redraft-ac4/');
 
 // #1431: each file builds a binary and starts a replica, the app's window or deep-show; AC3 replays for an hour and
 // AC5 times the gauges' reading on the reference Mac.
@@ -1152,6 +1160,13 @@ export const releaseLanes = [
     name: 'copy',
     commands: [[process.execPath, 'scripts/app-copy-lint.mjs', '--release']],
     fix: 'Translate each key a copy release FAIL line names again in crates/deep-app/copy/<language>.json, or confirm the translation there still reads right: node scripts/app-copy-lint.mjs confirm <language> <key> [<text>].',
+  },
+  {
+    // #2047's: each issue closed as completed keeps a test on main naming each of its criteria; one that doesn't is
+    // reopened, naming them. It reads and writes issues with your gh sign-in, and runs no test and no model.
+    name: 'closed issues',
+    commands: [[process.execPath, 'scripts/closed-sweep.mjs']],
+    fix: 'Each BLOCKED line names an issue or a list gh could not read: check your gh sign-in (gh auth status) and run the lane again. A reopened issue closes again through its own change, with a test naming each criterion its comment names.',
   },
   {
     // #41's: every recorded budget task on this commit and on the last release, which per-change margins can't bound.
