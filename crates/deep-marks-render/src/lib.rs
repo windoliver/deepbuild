@@ -1060,6 +1060,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
                     || p == "on_curve_left_edge"
                     || p == "roll_moves_every_grapheme"
                     || p == "weight_snaps_to_static"
+                    || p == "shaper_ignores_opsz"
                     || p == "stops_at_midpoint"
                     || p == "drops_cells_by_corner_signs"
                     || p == "decodes_before_header"
@@ -1142,6 +1143,10 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
                 .unwrap_or_default(),
         };
         let mut request = request;
+        // #1484 AC1's planted shaper, for this line alone.
+        let ignores_opsz =
+            input.get("planted").and_then(Value::as_str) == Some("shaper_ignores_opsz");
+        deep_text_gpui::plant_ignores_opsz(ignores_opsz);
         // #496: the runs this line shapes, its check included, counted from here.
         deep_text::cache::record();
         let _ = deep_text::cache::take_log();
@@ -1155,6 +1160,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
         );
         request.vectors = vectors;
         let mut answer = refused_by_check(&checked).unwrap_or_else(|| raster::answer(request));
+        deep_text_gpui::plant_ignores_opsz(false);
         if answer.get("ok") == Some(&Value::Bool(true)) {
             answer["shaped"] = json!(deep_text::cache::take_log().len());
         }

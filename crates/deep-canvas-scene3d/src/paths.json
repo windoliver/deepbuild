@@ -1,0 +1,688 @@
+{
+  "ball@1": {
+    "section": "Builder",
+    "rays": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#475"
+    },
+    "final": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#178"
+    },
+    "web": {
+      "answer": "same",
+      "held_by": "document.determinism"
+    }
+  },
+  "coil@1": {
+    "section": "Builder",
+    "rays": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#475"
+    },
+    "final": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#178"
+    },
+    "web": {
+      "answer": "same",
+      "held_by": "document.determinism"
+    }
+  },
+  "curve@1": {
+    "section": "Curve `curve@1`",
+    "rays": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#475"
+    },
+    "final": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#178"
+    },
+    "web": {
+      "answer": "same",
+      "held_by": "document.determinism"
+    }
+  },
+  "cutaway@1": {
+    "section": "Cutaway `cutaway@1`",
+    "rays": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#475"
+    },
+    "final": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#178"
+    },
+    "web": {
+      "answer": "same",
+      "held_by": "document.determinism"
+    }
+  },
+  "display@1": {
+    "section": "Builder",
+    "rays": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#475"
+    },
+    "final": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#178"
+    },
+    "web": {
+      "answer": "same",
+      "held_by": "document.determinism"
+    }
+  },
+  "effect@1": {
+    "section": "Effect",
+    "rays": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#475"
+    },
+    "final": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#178"
+    },
+    "web": {
+      "answer": "same",
+      "held_by": "document.determinism"
+    }
+  },
+  "extrude@1": {
+    "section": "Builder",
+    "rays": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#475"
+    },
+    "final": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#178"
+    },
+    "web": {
+      "answer": "same",
+      "held_by": "document.determinism"
+    }
+  },
+  "fixture.world@1": {
+    "section": "World and backend `physics.world@1`",
+    "rays": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#475"
+    },
+    "final": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#178"
+    },
+    "web": {
+      "answer": "same",
+      "held_by": "document.determinism"
+    }
+  },
+  "hull@1": {
+    "section": "Builder",
+    "rays": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#475"
+    },
+    "final": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#178"
+    },
+    "web": {
+      "answer": "same",
+      "held_by": "document.determinism"
+    }
+  },
+  "instance@1": {
+    "section": "Instance `instance@1`",
+    "rays": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#2772"
+    },
+    "final": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#2772"
+    },
+    "web": {
+      "answer": "same",
+      "held_by": "document.determinism"
+    }
+  },
+  "lathe@1": {
+    "section": "Builder",
+    "rays": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#475"
+    },
+    "final": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#178"
+    },
+    "web": {
+      "answer": "same",
+      "held_by": "document.determinism"
+    }
+  },
+  "light.area@1": {
+    "section": "Light and the light policy",
+    "rays": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#475"
+    },
+    "final": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#178"
+    },
+    "web": {
+      "answer": "same",
+      "held_by": "document.determinism"
+    }
+  },
+  "light.point@1": {
+    "section": "Light and the light policy",
+    "rays": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#475"
+    },
+    "final": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#178"
+    },
+    "web": {
+      "answer": "same",
+      "held_by": "document.determinism"
+    }
+  },
+  "light.probe@1": {
+    "section": "Light probe `light.probe@1`",
+    "rays": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#475"
+    },
+    "final": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#178"
+    },
+    "web": {
+      "answer": "same",
+      "held_by": "document.determinism"
+    }
+  },
+  "light.spot@1": {
+    "section": "Light and the light policy",
+    "rays": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#475"
+    },
+    "final": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#178"
+    },
+    "web": {
+      "answer": "same",
+      "held_by": "document.determinism"
+    }
+  },
+  "light.sun@1": {
+    "section": "Light and the light policy",
+    "rays": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#475"
+    },
+    "final": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#178"
+    },
+    "web": {
+      "answer": "same",
+      "held_by": "document.determinism"
+    }
+  },
+  "mark.box@1": {
+    "section": "Marks in 3D",
+    "rays": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#475"
+    },
+    "final": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#178"
+    },
+    "web": {
+      "answer": "same",
+      "held_by": "document.determinism"
+    }
+  },
+  "mark.cylinder@1": {
+    "section": "Marks in 3D",
+    "rays": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#475"
+    },
+    "final": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#178"
+    },
+    "web": {
+      "answer": "same",
+      "held_by": "document.determinism"
+    }
+  },
+  "mark.image@1": {
+    "section": "Marks in 3D",
+    "rays": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#475"
+    },
+    "final": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#178"
+    },
+    "web": {
+      "answer": "same",
+      "held_by": "document.determinism"
+    }
+  },
+  "mark.line@1": {
+    "section": "Marks in 3D: lines",
+    "rays": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#475"
+    },
+    "final": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#178"
+    },
+    "web": {
+      "answer": "same",
+      "held_by": "document.determinism"
+    }
+  },
+  "mark.point@1": {
+    "section": "Marks in 3D",
+    "rays": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#475"
+    },
+    "final": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#178"
+    },
+    "web": {
+      "answer": "same",
+      "held_by": "document.determinism"
+    },
+    "fields": {
+      "from": {
+        "section": "Marks in 3D",
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#475"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#178"
+        },
+        "web": {
+          "answer": "refused",
+          "code": "web.video_points"
+        }
+      }
+    }
+  },
+  "mark.sphere@1": {
+    "section": "Marks in 3D",
+    "rays": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#475"
+    },
+    "final": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#178"
+    },
+    "web": {
+      "answer": "same",
+      "held_by": "document.determinism"
+    }
+  },
+  "mark.text@1": {
+    "section": "Marks in 3D",
+    "rays": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#475"
+    },
+    "final": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#178"
+    },
+    "web": {
+      "answer": "same",
+      "held_by": "document.determinism"
+    }
+  },
+  "material@1": {
+    "section": "Material",
+    "rays": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#2773"
+    },
+    "final": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#2773"
+    },
+    "web": {
+      "answer": "same",
+      "held_by": "document.determinism"
+    },
+    "fields": {
+      "catch": {
+        "section": "Material: shadow catcher",
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#475"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#2774"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      },
+      "mirror": {
+        "section": "Material: mirror",
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#2772"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#2772"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      },
+      "subsurface": {
+        "section": "Material: subsurface",
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#475"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#178"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      },
+      "translucency": {
+        "section": "Material",
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#2773"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#2759"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      },
+      "water": {
+        "section": "Material: water",
+        "rays": {
+          "answer": "stand_in",
+          "draws": "the shadow map, which the light keeps for this caster since rays can't honor its waves",
+          "receipt": "the light that kept its map"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#2761"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      }
+    }
+  },
+  "mesh.asset@1": {
+    "section": "Asset: meshes",
+    "rays": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#475"
+    },
+    "final": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#178"
+    },
+    "web": {
+      "answer": "same",
+      "held_by": "document.determinism"
+    }
+  },
+  "mesh.sequence@1": {
+    "section": "Mesh sequence `mesh.sequence@1`",
+    "rays": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#475"
+    },
+    "final": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#178"
+    },
+    "web": {
+      "answer": "same",
+      "held_by": "document.determinism"
+    }
+  },
+  "plate@1": {
+    "section": "Builder",
+    "rays": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#475"
+    },
+    "final": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#178"
+    },
+    "web": {
+      "answer": "same",
+      "held_by": "document.determinism"
+    },
+    "fields": {
+      "terrain": {
+        "section": "Builder plate: terrain",
+        "rays": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#2772"
+        },
+        "final": {
+          "answer": "refused",
+          "code": "path_undefined",
+          "task": "#2772"
+        },
+        "web": {
+          "answer": "same",
+          "held_by": "document.determinism"
+        }
+      }
+    }
+  },
+  "puff@1": {
+    "section": "Puff `puff@1`",
+    "rays": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#475"
+    },
+    "final": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#178"
+    },
+    "web": {
+      "answer": "same",
+      "held_by": "document.determinism"
+    }
+  },
+  "sky@1": {
+    "section": "Sky `sky@1`",
+    "rays": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#475"
+    },
+    "final": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#2775"
+    },
+    "web": {
+      "answer": "same",
+      "held_by": "document.determinism"
+    }
+  },
+  "slab@1": {
+    "section": "Builder",
+    "rays": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#475"
+    },
+    "final": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#178"
+    },
+    "web": {
+      "answer": "same",
+      "held_by": "document.determinism"
+    }
+  },
+  "surface@1": {
+    "section": "Builder",
+    "rays": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#475"
+    },
+    "final": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#178"
+    },
+    "web": {
+      "answer": "same",
+      "held_by": "document.determinism"
+    }
+  },
+  "tree@1": {
+    "section": "Builder",
+    "rays": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#475"
+    },
+    "final": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#178"
+    },
+    "web": {
+      "answer": "same",
+      "held_by": "document.determinism"
+    }
+  },
+  "tube@1": {
+    "section": "Builder",
+    "rays": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#475"
+    },
+    "final": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#178"
+    },
+    "web": {
+      "answer": "same",
+      "held_by": "document.determinism"
+    }
+  }
+}

@@ -33,6 +33,9 @@ pub(super) struct Args {
     pub(super) occlusion_off: bool,
     /// `(after, to)`: right after frame `after` draws, the session jumps to frame `to` (#484).
     pub(super) seeks: Vec<(u64, u64)>,
+    /// `lose_device_at`: the device is forced lost as this frame draws (#1993), as `frames`
+    /// takes it.
+    pub(super) lose_at: Option<u64>,
     pub(super) window: Option<Window3>,
     pub(super) latency: Vec<u64>,
     pub(super) counts: bool,
@@ -446,6 +449,7 @@ pub(super) fn parse(call: &Value, planted: Option<Planted>) -> Result<Args, Valu
             Some("off") => true,
             Some(_) => return Err(refused("bad_input", "occlusion is \"off\" when it's given")),
         },
+        lose_at: call["lose_device_at"].as_u64(),
         seeks: call["seeks"]
             .as_array()
             .into_iter()
