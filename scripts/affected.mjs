@@ -349,12 +349,12 @@ const live = new Set();
 let stopped = null;
 // A test job whose log and report have both stood still for IDLE minutes is stopped (#2627): a test that starves its
 // worker's event loop defeats vitest's own limit (#2783), and a handle a test leaks keeps its file from exiting (#2804),
-// either for ever. The bound is above the longest stretch a test may write nothing: limits in the tree reach 120 min
-// (#1965's oracle), and #468's 120 min hook runs before a 60 min test with no result between. SIGTERM to the job, and
+// either for ever. The bound is above the longest stretch a test may write nothing: #1781's 120 min build hook runs
+// before its 120 min tests with no result between, and the timed lane's limits reach 240 min (#416, #140). SIGTERM to the job, and
 // 10 s later SIGKILL to every process of its tree, by PID and start, as the throttle does for a grant past its bound
 // (#2744); the job's throttle, then, ends by itself and gives its grant back. The job ends once they have, and reads
 // by what it reported before the stop. DEEP_JOB_IDLE_MIN sets the bound in minutes, for tests.
-const IDLE_MIN = Number(process.env.DEEP_JOB_IDLE_MIN ?? 240);
+const IDLE_MIN = Number(process.env.DEEP_JOB_IDLE_MIN ?? 360);
 const size = (path) => { try { return statSync(path).size; } catch { return 0; } };
 function run(logs, label, command, args, env = {}, cwd = root) {
   if (stopped) return Promise.resolve({ label, log: null, status: null, output: `stopped by ${stopped}` });
