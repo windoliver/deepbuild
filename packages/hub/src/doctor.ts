@@ -128,6 +128,10 @@ export async function doctorItems(env: NodeJS.ProcessEnv, options: { prompt: boo
       });
       for (const f of failing) add('hub.jobs', 'deepbuild', 'job_failing', 'warn', `the hub's job ${f.name} failed ${f.failures} times in a row since ${new Date(f.since).toISOString()}: ${f.error}`, 'Read the error; the job runs again on its own, and its next clean run clears this.');
       if (!failing.length) add('hub.jobs', 'deepbuild', 'healthy', 'ok', `none of the hub's ${Object.keys(jobs).length} jobs has failed ${JOB_FAILURES} times in a row`, 'Nothing to do.');
+      // A hook handler set aside (#2402): one item each, naming its extension, its hook kind and its last failure.
+      for (const a of isObj(reply.result.hooks) && Array.isArray(reply.result.hooks.aside) ? reply.result.hooks.aside.filter(isObj) : []) {
+        add('extensions.hooks', 'deepbuild', 'handler_set_aside', 'warn', `${String(a.extension)}'s ${String(a.hook)} handler is set aside after ${String(a.failures)} failures in a row, so DeepBuild no longer asks it; the last: ${String(a.last)}`, `Install ${String(a.extension)} again, or a fixed version, with \`deep install <its folder>\`, or restart the hub (\`deep hub stop\`, then \`deep hub start\`): either gives its handler a fresh try.`);
+      }
       // The release's packs (#1720): one that failed the canvas core's pack check isn't installed, and is named here.
       const packs = Array.isArray(reply.result.packs) ? reply.result.packs.filter(isObj) : [];
       const named = (p: Obj) => `${typeof p.pack === 'string' ? `${p.pack}@${String(p.version)}` : 'a pack'} (packs/${String(p.folder)})`;
