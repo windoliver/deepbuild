@@ -35,7 +35,9 @@ impl MetalAtlas {
 struct MetalAtlasTextures {
     device: AssertSend<Device>,
     supports_shared_storage: bool,
+    // cache: entries 65_536, bytes 256_000_000 (DeepBuild patch (windoliver/deepbuild#1431): the glyph atlas)
     monochrome_textures: AtlasTextureList<MetalAtlasTexture>,
+    // cache: entries 16_384, bytes 512_000_000 (DeepBuild patch (windoliver/deepbuild#1431): the images retained)
     polychrome_textures: AtlasTextureList<MetalAtlasTexture>,
 }
 
@@ -70,6 +72,7 @@ impl AtlasBackend for MetalAtlasTextures {
             .texture(tile.texture_id)
             .context("allocated tile refers to a missing texture")?;
         texture.upload(tile.bounds, bytes);
+        crate::held::took(crate::held::atlas(kind), 1, 0); // DeepBuild patch (windoliver/deepbuild#1431)
         Ok(tile)
     }
 
@@ -93,6 +96,7 @@ impl AtlasBackend for MetalAtlasTextures {
         if let Some(mut texture) = texture_slot.take() {
             texture.allocator.deallocate(tile.tile_id.into());
             texture.decrement_ref_count();
+            crate::held::freed(crate::held::atlas(id.kind), 1, 0); // DeepBuild patch (windoliver/deepbuild#1431)
             if texture.is_unreferenced() {
                 textures.free_list.push(id.index as usize);
             } else {
@@ -169,6 +173,7 @@ impl MetalAtlasTextures {
             metal::MTLStorageMode::Managed
         });
         let metal_texture = self.device.new_texture(&texture_descriptor);
+        crate::held::took(crate::held::atlas(kind), 0, metal_texture.allocated_size()); // DeepBuild patch (windoliver/deepbuild#1431)
 
         let texture_list = match kind {
             AtlasTextureKind::Monochrome => &mut self.monochrome_textures,
@@ -215,6 +220,13 @@ struct MetalAtlasTexture {
     allocator: BucketedAtlasAllocator,
     metal_texture: AssertSend<metal::Texture>,
     live_atlas_keys: u32,
+}
+
+impl Drop for MetalAtlasTexture { // DeepBuild patch (windoliver/deepbuild#1431)
+    fn drop(&mut self) {
+        let (tiles, bytes) = (u64::from(self.live_atlas_keys), self.metal_texture.allocated_size());
+        crate::held::freed(crate::held::atlas(self.id.kind), tiles, bytes);
+    }
 }
 
 impl MetalAtlasTexture {

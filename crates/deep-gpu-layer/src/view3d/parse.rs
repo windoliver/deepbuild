@@ -95,6 +95,8 @@ pub(super) struct Args {
     /// its band masks (#425).
     pub(super) lod: bool,
     pub(super) light_cut: bool,
+    /// #1634: each captured frame reports every cluster's fill lights as its pixels walk them.
+    pub(super) clusters: bool,
     /// #506: each frame reports where its anchored overlays draw; #468: and where each one's
     /// leader ends.
     pub(super) overlays: bool,
@@ -518,6 +520,7 @@ pub(super) fn parse(call: &Value, planted: Option<Planted>) -> Result<Args, Valu
         shadows: call["shadows"].as_bool().unwrap_or(false),
         lod: call["lod"].as_bool().unwrap_or(false),
         light_cut: call["light_cut"].as_bool().unwrap_or(false),
+        clusters: call["clusters"].as_bool().unwrap_or(false),
         overlays: call["overlays"].as_bool().unwrap_or(false),
         masks: call["masks"].as_bool().unwrap_or(false),
         export,

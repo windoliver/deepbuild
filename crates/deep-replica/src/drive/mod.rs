@@ -21,6 +21,7 @@ mod frames;
 pub mod glyphs;
 mod hubcopy;
 mod locate;
+mod memory;
 mod motion;
 mod plant;
 mod play;
@@ -96,6 +97,8 @@ pub struct Drive {
     plant: Option<Plant>,
     replica: Option<Replica>,
     launches: u64,
+    /// #1431: the planted memory the process holds.
+    memory: memory::Memory,
 }
 
 impl Drive {
@@ -105,13 +108,19 @@ impl Drive {
             plant,
             replica: None,
             launches: 0,
+            memory: memory::Memory::new(plant),
         }
     }
 
     /// One call's reply: `ok`, `t`, and the call's fields or its error.
     pub fn call(&mut self, call: &Value) -> Value {
         let name = call["call"].as_str().unwrap_or_default().to_owned();
+        self.memory.leak();
         let result = match (name.as_str(), self.replica.as_mut()) {
+            // #1431: the process's reading, with or without a replica.
+            ("footprint", _) => Ok(self.memory.footprint()),
+            #[cfg(feature = "env-plants")]
+            ("texture", _) => self.memory.texture(call),
             ("launch", Some(replica)) => Err(fail(
                 "refused",
                 format!(
@@ -125,6 +134,7 @@ impl Drive {
                 let out = self.out.join(format!("{}", self.launches));
                 Replica::launch(id, out, self.plant, &call["launch"]).map(|(replica, reply)| {
                     self.replica = Some(replica);
+                    self.memory.launched();
                     reply
                 })
             }
@@ -144,6 +154,7 @@ impl Drive {
         let t = self.replica.as_ref().map_or(0, |r| r.clock.t);
         if name == "close" && result.is_ok() {
             self.replica = None;
+            self.memory.closed();
         }
         match result {
             Ok(Value::Object(mut fields)) => {
@@ -1819,6 +1830,25 @@ impl Replica {
             .map(|(name, b)| {
                 let bounds = [b.origin.x, b.origin.y, b.size.width, b.size.height].map(device);
                 json!({"name": name, "bounds": bounds})
+            })
+            .collect();
+        // #1592: each icon the frame drew, named as in the kit's set, with its bounds and the size it was laid out at in
+        // points. The brand's artwork and the status marks are SVGs too, and no icons.
+        json["icons"] = frame
+            .svgs
+            .iter()
+            .filter(|svg| svg.visible)
+            .filter_map(|svg| {
+                let icon = match deep_app::icons::drawing(&svg.path) {
+                    Some(deep_app::icons::Drawing::Icon(name, _)) => name.to_owned(),
+                    Some(_) => return None,
+                    None => (svg.path.strip_prefix("icons/"))
+                        .and_then(|file| file.strip_suffix(".svg"))
+                        .unwrap_or(&svg.path)
+                        .to_owned(),
+                };
+                let size = svg.size[0].max(svg.size[1]) as f32 / scale;
+                Some(json!({"icon": icon, "bounds": svg.bounds, "size": size}))
             })
             .collect();
         (json, frame)

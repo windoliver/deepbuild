@@ -1,0 +1,11 @@
+
+ RUN  v5.0.5 <home>/doneright-2365-repair
+
+ ✓ tests/acceptance/2365-redraft-ac5/meter.test.ts (1 test) 663ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  21:43:53
+   Duration  1.79s (tests 45%, transform 40%, import 14%, setup 1%)
+
+EXIT 0
