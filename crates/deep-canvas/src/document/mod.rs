@@ -254,6 +254,9 @@ pub struct Issue {
     /// On `unknown_kind` and `unknown_field`: at most three close names, a rename or retirement
     /// record's first (#412).
     pub close: Vec<Value>,
+    /// On a word its list lacks: `{list, reopens_if, instead}`, written beside the issue's own
+    /// fields (#2777).
+    pub list: Option<Value>,
 }
 
 impl Issue {
@@ -271,6 +274,7 @@ impl Issue {
             fix_ops: None,
             carried: false,
             close: Vec::new(),
+            list: None,
         }
     }
 
@@ -325,6 +329,9 @@ impl Issue {
         }
         if !self.close.is_empty() {
             out.insert("close".into(), json!(self.close));
+        }
+        if let Some(Value::Object(list)) = &self.list {
+            out.extend(list.iter().map(|(k, v)| (k.clone(), v.clone())));
         }
         // An operator's issue at one of its steps names the step (#431: `operator_kind_rule
         // {step, reason}`).

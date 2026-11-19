@@ -1156,6 +1156,8 @@ pub fn dump_value(sealed: &Sealed, planted: Option<Planted>) -> Value {
     let mut out = l.header;
     out["format"] = json!("kinds.dump@1");
     out["registries"] = json!(rows);
+    // #2777: every list of words a document sets that the build seals, with its closure.
+    out["field_lists"] = json!(sealed.lists.iter().map(|l| l.to_json()).collect::<Vec<_>>());
     out
 }
 

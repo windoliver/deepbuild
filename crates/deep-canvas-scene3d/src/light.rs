@@ -12,6 +12,14 @@ use deep_canvas::camera::Vec3;
 
 use crate::scene::{num, Camera, Depth, Refused};
 
+/// The light kinds (Light and the light policy: `kind`), the field list `light.kind` (#2777).
+pub const KINDS: [&str; 4] = [
+    "light.point@1",
+    "light.spot@1",
+    "light.sun@1",
+    "light.area@1",
+];
+
 /// A `material@1`'s numbers at t, its colors linear.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Material {

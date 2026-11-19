@@ -2369,7 +2369,7 @@ pub(crate) fn evaluate_compiled(
                 "sky@1" if sky.is_none() => {
                     sky = Some(crate::sky::parse(id, params, look, assets)?);
                 }
-                "light.sun@1" | "light.point@1" | "light.spot@1" | "light.area@1" => {
+                k if light::KINDS.contains(&k) => {
                     let m = world(&items, id);
                     let dir = normalize(turn(&m, [0.0, 0.0, -1.0]));
                     let flicker = flicker(program, &state, params, &path)?;
