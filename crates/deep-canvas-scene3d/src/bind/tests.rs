@@ -1,6 +1,7 @@
 //! What #1929's Scope states and its acceptance suite leaves out: `moves` left out, `on`, a box
 //! with a side of 0 m, a control mesh that is not manifold, wound inward or too small, a vertex
-//! within 1e-6 m of the control mesh, and the 64 vertices a refusal names at most.
+//! within 1e-6 m of the control mesh, the 64 vertices a refusal names at most, and the bind a host's
+//! memo keeps between its frames.
 
 use super::*;
 use crate::builders::{self, Ctx, CODED};
@@ -151,4 +152,33 @@ fn a_refusal_names_64_vertices_at_most() {
         (code.as_str(), found["vertices"].as_array().unwrap().len()),
         (CODES[0], 64)
     );
+}
+
+#[test]
+fn a_host_that_keeps_a_memo_binds_once_between_its_frames() {
+    let memo = std::cell::RefCell::new(crate::contributed::Memo::default());
+    let fills = crate::contributed::Fills {
+        memo: Some(&memo),
+        ..Default::default()
+    };
+    let frame = |lift: f64| {
+        let moves = [
+            [0.0; 3],
+            [0.0; 3],
+            [0.0, lift, 0.0],
+            [0.0; 3],
+            [0.0; 3],
+            [0.0; 3],
+        ];
+        let deform = json!({"kind": MESH, "params": {"mesh": octahedron(2.0), "moves": moves}});
+        let item = json!({"kind": "slab@1", "params": {"size": [1, 1, 1]}, "modifiers": [deform]});
+        let doc = json!({"items": {"it": item}});
+        let mesh = crate::scene::mesh_of(&doc, "it", &doc["items"]["it"], 0.0, fills).unwrap();
+        let bind = memo.borrow().binds["it"][0].clone().unwrap();
+        (mesh.positions, bind.computed)
+    };
+    let (still, first) = frame(0.0);
+    let (lifted, second) = frame(1.0);
+    assert_eq!((first, second), (true, false));
+    assert_ne!(still, lifted);
 }
