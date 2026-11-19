@@ -1,7 +1,7 @@
 {
   "core": {
     "version": "0.0.0",
-    "digest": "00d8c83e37d02739c365e70e20fef3ba067f1f215ae2e3bd541f48ceb929d553",
+    "digest": "3bf1b6debbfe570d29c9c3f170fcdf8f5be6ecc48f6300cde3e6308f93aabbc0",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -29,7 +29,8 @@
       "schedule": "PASS",
       "repair_loop": "PASS",
       "time_order": "PASS",
-      "catalog": "PASS"
+      "catalog": "PASS",
+      "references": "PASS"
     }
   },
   "cells": {
@@ -45,7 +46,8 @@
       "schedule": "PASS",
       "repair_loop": "PASS",
       "time_order": "PASS",
-      "catalog": "PASS"
+      "catalog": "PASS",
+      "references": "PASS"
     }
   },
   "data": {
@@ -77,7 +79,8 @@
       "schedule": "PASS",
       "repair_loop": "PASS",
       "time_order": "PASS",
-      "catalog": "PASS"
+      "catalog": "PASS",
+      "references": "PASS"
     }
   },
   "export": {
@@ -109,7 +112,8 @@
       "schedule": "PASS",
       "repair_loop": "PASS",
       "time_order": "PASS",
-      "catalog": "PASS"
+      "catalog": "PASS",
+      "references": "PASS"
     }
   },
   "input": {
@@ -143,7 +147,8 @@
       "carried_state": "PASS",
       "late_entry": "PASS",
       "time_order": "PASS",
-      "catalog": "PASS"
+      "catalog": "PASS",
+      "references": "PASS"
     }
   },
   "look": {
@@ -159,7 +164,8 @@
       "schedule": "PASS",
       "repair_loop": "PASS",
       "time_order": "PASS",
-      "catalog": "PASS"
+      "catalog": "PASS",
+      "references": "PASS"
     }
   },
   "loop": {
@@ -227,7 +233,8 @@
       "time_order": "PASS",
       "catalog": "PASS",
       "migration": "PASS",
-      "registries": "PASS"
+      "registries": "PASS",
+      "references": "PASS"
     }
   },
   "net": {
@@ -272,7 +279,8 @@
       "schedule": "PASS",
       "repair_loop": "PASS",
       "time_order": "PASS",
-      "catalog": "PASS"
+      "catalog": "PASS",
+      "references": "PASS"
     }
   },
   "sandbox": {
@@ -300,7 +308,8 @@
       "schedule": "PASS",
       "repair_loop": "PASS",
       "time_order": "PASS",
-      "catalog": "PASS"
+      "catalog": "PASS",
+      "references": "PASS"
     }
   },
   "sheet": {
@@ -316,12 +325,13 @@
       "schedule": "PASS",
       "repair_loop": "PASS",
       "time_order": "PASS",
-      "catalog": "PASS"
+      "catalog": "PASS",
+      "references": "PASS"
     }
   },
   "text": {
     "version": "1.0.0",
-    "digest": "adc297495eb1a9be4918d0a7e9620be4f459deb800ea168ecd3ca5a995d98350",
+    "digest": "99d7fa9d2b19eb54c6aa6e5386c05bed652703ec2b08008dbad34248a1acf51e",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -349,7 +359,8 @@
       "repair_loop": "PASS",
       "time_order": "PASS",
       "contribution": "PASS",
-      "catalog": "PASS"
+      "catalog": "PASS",
+      "references": "PASS"
     }
   }
 }
