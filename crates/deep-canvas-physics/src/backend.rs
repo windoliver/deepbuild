@@ -193,6 +193,21 @@ pub fn about_x(deg: f64) -> [f64; 4] {
     [ops::sin(h), 0.0, 0.0, ops::cos(h)]
 }
 
+/// `v` turned by the quaternion `q` (`[x, y, z, w]`).
+pub fn rotate(q: [f64; 4], v: [f64; 3]) -> [f64; 3] {
+    let (u, w) = ([q[0], q[1], q[2]], q[3]);
+    let cross = |a: [f64; 3], b: [f64; 3]| {
+        [
+            a[1] * b[2] - a[2] * b[1],
+            a[2] * b[0] - a[0] * b[2],
+            a[0] * b[1] - a[1] * b[0],
+        ]
+    };
+    let t = cross(u, v).map(|x| 2.0 * x);
+    let c = cross(u, t);
+    [0, 1, 2].map(|i| v[i] + w * t[i] + c[i])
+}
+
 /// #523: the whole turns a hinge gains over a step from angle `a0` to `a1` (deg, each in
 /// (−180, 180]): ±1 when the step's shortest signed change carries it across the wrap (Joint).
 pub fn turn(a0: f64, a1: f64) -> i32 {
