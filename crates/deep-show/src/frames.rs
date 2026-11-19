@@ -958,7 +958,7 @@ impl<'a> Hub<'a> {
                     .filter(|(_, r)| Arc::ptr_eq(r, &run))
                     .map(|(doc, _)| doc)
                     .collect();
-                json!({"shaped": self.shapings.get(&key).copied().unwrap_or(0), "docs": docs})
+                json!({"shaped": self.shapings.get(key.shape()).copied().unwrap_or(0), "docs": docs})
             })
             .collect();
         json!({ "runs": runs })

@@ -823,8 +823,8 @@ pub struct Hub<'a> {
     /// Who sent each document's last whole revision: a revision that arrives at a frame's latch
     /// comes from them (#856).
     pub vias: BTreeMap<String, Via>,
-    /// The times the shaper shaped each run's key in this process (#856).
-    pub shapings: HashMap<Arc<deep_text::cache::Key>, u32>,
+    /// The times the shaper shaped each paragraph's key in this process (#856, #1430).
+    pub shapings: HashMap<Arc<deep_text::cache::ShapeKey>, u32>,
     /// What answered the card: the option and the release's platform stamp (#327).
     pub card_answer: Option<(String, i64)>,
     /// #507: present mode, while it runs and after Esc ended it.
