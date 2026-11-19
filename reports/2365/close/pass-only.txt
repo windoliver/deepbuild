@@ -1,0 +1,18 @@
+The archive pass of benchmarks/reading.mjs alone (pass-only.mjs), instructions retired by `/usr/bin/time -l`, one run
+each, alternated. base = main at ed03dc60d, change = this branch. Loads 290 to 450 on 18 cores, so readings.
+none = no session; one = one 66 KB session; slice = fifty of 66 KB and one of 450 KB; find = three hundred of 20 KB.
+
+Before (158291c9c: every copy in the worker, and a one-part copy put a second time as a joined copy):
+none base 0.820G   none change 0.811G   none base 0.798G   none change 0.805G
+one base 1.085G   one change 1.326G   one base 1.045G   one change 1.326G
+slice base 3.625G   slice change 4.161G   slice base 3.768G   slice change 4.298G
+find base 7.958G   find change 9.460G   find base 7.749G   find change 9.367G
+
+With a transcript under a part copied on the calling thread:
+one base 1.067G   one change 1.050G   one base 1.021G   one change 1.026G
+slice base 3.668G   slice change 3.921G   slice base 3.829G   slice change 3.865G
+find base 8.017G   find change 8.643G   find base 7.631G   find change 8.634G
+
+And a one-part copy linked as that part:
+slice base 3.766G   slice change 3.497G   slice base 3.742G   slice change 3.843G
+find base 7.960G   find change 7.741G   find base 7.914G   find change 7.840G
