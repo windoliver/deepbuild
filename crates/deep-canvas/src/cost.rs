@@ -336,6 +336,9 @@ pub(crate) struct Facts<'e> {
     named: Vec<(usize, &'e str)>,
     /// Whether each item is `visible: false`, which no pass draws (#1938).
     hidden: Vec<bool>,
+    /// The vertices each item's passes draw every frame (#1801): a builder's as its module
+    /// counts them and a mesh asset's, where its operators' terms keep the item's own counts.
+    drawn: Vec<f64>,
 }
 
 fn facts<'e>(
@@ -351,6 +354,7 @@ fn facts<'e>(
         applies: Vec::with_capacity(run.len() * item_ops.len()),
         named: Vec::new(),
         hidden: Vec::with_capacity(run.len()),
+        drawn: Vec::with_capacity(run.len()),
     };
     for &(i, id, item) in run {
         f.hidden
@@ -361,11 +365,11 @@ fn facts<'e>(
             .and_then(|k| k.split('@').next())
             .unwrap_or("");
         f.fulls.push(full);
-        let mut c = counts(item);
-        // #1801: a kind whose module counts what it builds, such as a builder's mesh.
-        if let Some(n) = sealed.vertices_for(full).and_then(|v| v(doc, id, item)) {
-            c.vertices = n;
-        }
+        let c = counts(item);
+        // #1801: a kind whose module counts what it builds, such as a builder's mesh, is drawn
+        // with those vertices; its build is kept by content key, so its operators keep their terms.
+        let drawn = sealed.vertices_for(full).and_then(|v| v(doc, id, item));
+        f.drawn.push(drawn.unwrap_or(c.vertices));
         f.counts.push(c);
         f.applies.extend(
             item_ops
@@ -461,6 +465,7 @@ pub(crate) fn estimate_by(
         applies: Vec::with_capacity(items.len() * item_ops.len()),
         named: Vec::new(),
         hidden: Vec::with_capacity(items.len()),
+        drawn: Vec::with_capacity(items.len()),
     };
     for part in split(&mut entries, &|run| {
         facts(doc, sealed, items, &item_ops, run)
@@ -470,6 +475,7 @@ pub(crate) fn estimate_by(
         f.applies.extend(part.applies);
         f.named.extend(part.named);
         f.hidden.extend(part.hidden);
+        f.drawn.extend(part.drawn);
     }
     let ids: Vec<&str> = items.keys().map(String::as_str).collect();
     // #1801: the assets each item draws, sized, each held once; a mesh's vertices are its item's.
@@ -496,7 +502,7 @@ pub(crate) fn estimate_by(
                     });
                 }
             }
-            f.counts[i].vertices += size.vertices;
+            f.drawn[i] += size.vertices;
         }
     }
     let evaluated = moving(&item_ops, &f, &ids);
@@ -584,7 +590,7 @@ pub(crate) fn estimate_by(
                 bytes: t.bytes_per_px * px,
             });
             for &i in &drawn {
-                let ns = t.ns_per_vertex * f.counts[i].vertices + t.ns_per_item;
+                let ns = t.ns_per_vertex * f.drawn[i] + t.ns_per_item;
                 gpu_ns += ns;
                 bytes += t.bytes_per_item;
                 by_item[i] += ns;
