@@ -6447,7 +6447,7 @@ export interface DocPatchedV2 {
 
 /** doctor.item@1 */
 export interface DoctorItem {
-  code: "healthy" | "binary_missing" | "version_uncovered" | "hooks_missing" | "hooks_disabled" | "hooks_untrusted" | "mcp_unregistered" | "statusline_missing" | "signed_out" | "nested_session" | "timing_relation_broken" | "telemetry_unreadable" | "not_checked" | "hub_unreachable" | "disk_low" | "ports_taken" | "billing_api_key" | "binary_differs" | "token_expiring" | "prompt_failed" | "deprecated_used" | "gpu_unsupported" | "render_failed" | "job_failing" | "hook_program_missing" | "notifications_off" | "service_unpromoted" | "statusline_shadowed" | "pack_refused" | "not_loaded" | "unknown";
+  code: "healthy" | "binary_missing" | "version_uncovered" | "hooks_missing" | "hooks_disabled" | "hooks_untrusted" | "mcp_unregistered" | "statusline_missing" | "signed_out" | "nested_session" | "timing_relation_broken" | "telemetry_unreadable" | "not_checked" | "hub_unreachable" | "disk_low" | "ports_taken" | "billing_api_key" | "binary_differs" | "token_expiring" | "prompt_failed" | "deprecated_used" | "gpu_unsupported" | "render_failed" | "job_failing" | "hook_program_missing" | "notifications_off" | "service_unpromoted" | "statusline_shadowed" | "pack_refused" | "polkit_action_missing" | "hooks_modified" | "mod_overrides_guard" | "not_loaded" | "unknown";
   level: "ok" | "warn" | "fail" | "skip";
   evidence: string;
   fix: string;
@@ -11211,6 +11211,59 @@ export interface TranscriptArchivedV2 {
       size: number;
       sha256: string;
     };
+  };
+  evidence?: Array<string>;
+}
+
+/** transcript.archived@3 */
+export interface TranscriptArchivedV3 {
+  v: 3;
+  id: string;
+  kind: "transcript.archived";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    session: string;
+    evidence: string;
+    source: {
+      size: number;
+      sha256: string;
+      stamp: string;
+      ended: boolean;
+    };
+    parts: Array<string>;
+  };
+  evidence?: Array<string>;
+}
+
+/** transcript.archived@4 */
+export interface TranscriptArchivedV4 {
+  v: 4;
+  id: string;
+  kind: "transcript.archived";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    session: string;
+    evidence: string;
+    source: {
+      size: number;
+      sha256: string;
+      stamp: string;
+      ended: boolean;
+      continuable: boolean;
+    };
+    parts: Array<string>;
   };
   evidence?: Array<string>;
 }

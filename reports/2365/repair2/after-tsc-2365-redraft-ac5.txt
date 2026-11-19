@@ -1,0 +1,8 @@
+$ PATH=<home>/.local/share/fnm/node-versions/v24.22.0/installation/bin:$PATH node node_modules/typescript/bin/tsc -p tests/acceptance/2365-redraft-ac5/tsconfig.json
+node: v24.22.0 (<home>/.local/share/fnm/node-versions/v24.22.0/installation/bin/node)
+started: 2026-11-18T01:28:55Z; load averages: 69.23 97.42 90.20
+-----
+tests/acceptance/2365-redraft-ac5/meter.test.ts(25,144): error TS2345: Argument of type '(value: unknown) => void' is not assignable to parameter of type '() => void'.
+  Target signature provides too few arguments. Expected 1 or more, but got 0.
+-----
+EXIT 2; ended: 2026-11-18T01:28:57Z; load averages: 69.23 97.42 90.20

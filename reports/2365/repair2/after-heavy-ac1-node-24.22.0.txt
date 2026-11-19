@@ -1,0 +1,92 @@
+$ PATH=<home>/.local/share/fnm/node-versions/v24.22.0/installation/bin:$PATH env NO_COLOR=1 node node_modules/vitest/vitest.mjs run --configLoader runner --config tests/acceptance/2365/heavy.config.ts heavy/ac1
+node: v24.22.0 (<home>/.local/share/fnm/node-versions/v24.22.0/installation/bin/node)
+started: 2026-11-18T01:26:00Z; load averages: 109.68 110.56 91.70
+-----
+
+ RUN  v5.0.5 <home>/doneright-2365-repair/tests/acceptance/2365
+
+stdout | heavy/ac1.heavy.ts
+#2365 AC1 setup: the first copy of 100 MB: 33641 ms, longest unserved stretch 15823 ms, peak 1362.0 MB, evidence +27.5 MB
+
+stdout | heavy/ac1.heavy.ts > #2365 AC1 a 100 MB transcript, already archived, gains 1 MB: the pass that follows costs what was added > #2365 AC1 the pass that follows: under 2 MB of evidence, within 1 s, under 64 MB more resident memory, a 5 ms timer served at least every 50 ms
+#2365 AC1 archive run 0 (warm-up): 17874 ms, longest unserved stretch 14810.9 ms, peak resident memory 1214.4 MB from 71.3 MB (+1143.1 MB), evidence +27.8 MB
+
+stdout | heavy/ac1.heavy.ts > #2365 AC1 a 100 MB transcript, already archived, gains 1 MB: the pass that follows costs what was added > #2365 AC1 the pass that follows: under 2 MB of evidence, within 1 s, under 64 MB more resident memory, a 5 ms timer served at least every 50 ms
+#2365 AC1 archive run 1: 16871 ms, longest unserved stretch 13597.1 ms, peak resident memory 1247.6 MB from 71.3 MB (+1176.3 MB), evidence +27.8 MB
+
+stdout | heavy/ac1.heavy.ts > #2365 AC1 a 100 MB transcript, already archived, gains 1 MB: the pass that follows costs what was added > #2365 AC1 the pass that follows: under 2 MB of evidence, within 1 s, under 64 MB more resident memory, a 5 ms timer served at least every 50 ms
+#2365 AC1 archive run 2: 11770 ms, longest unserved stretch 9510.1 ms, peak resident memory 1231.7 MB from 71.3 MB (+1160.4 MB), evidence +27.8 MB
+
+stdout | heavy/ac1.heavy.ts > #2365 AC1 a 100 MB transcript, already archived, gains 1 MB: the pass that follows costs what was added > #2365 AC1 the pass that follows: under 2 MB of evidence, within 1 s, under 64 MB more resident memory, a 5 ms timer served at least every 50 ms
+#2365 AC1 archive run 3: 12011 ms, longest unserved stretch 9286.9 ms, peak resident memory 1236.5 MB from 71.6 MB (+1164.9 MB), evidence +27.8 MB
+
+stdout | heavy/ac1.heavy.ts > #2365 AC1 a 100 MB transcript, already archived, gains 1 MB: the pass that follows costs what was added > #2365 AC1 the pass that follows: under 2 MB of evidence, within 1 s, under 64 MB more resident memory, a 5 ms timer served at least every 50 ms
+#2365 AC1 archive run 4: 11811 ms, longest unserved stretch 9639.4 ms, peak resident memory 1230.8 MB from 71.4 MB (+1159.5 MB), evidence +27.8 MB
+
+stdout | heavy/ac1.heavy.ts > #2365 AC1 a 100 MB transcript, already archived, gains 1 MB: the pass that follows costs what was added > #2365 AC1 the pass that follows: under 2 MB of evidence, within 1 s, under 64 MB more resident memory, a 5 ms timer served at least every 50 ms
+#2365 AC1 archive run 5: 9125 ms, longest unserved stretch 7623.9 ms, peak resident memory 1197.0 MB from 71.3 MB (+1125.7 MB), evidence +27.8 MB
+
+stdout | heavy/ac1.heavy.ts > #2365 AC1 a 100 MB transcript, already archived, gains 1 MB: the pass that follows costs what was added > #2365 AC1 the pass that follows: under 2 MB of evidence, within 1 s, under 64 MB more resident memory, a 5 ms timer served at least every 50 ms
+#2365 AC1 the pass ends within 1 s: 16871 ms; 11770 ms; 12011 ms; 11811 ms; 9125 ms → INCONCLUSIVE (a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state nominal): thermal state is "fair", not "nominal"; load 110.15234375 at a run's start or end is above the 18 cores)
+
+stdout | heavy/ac1.heavy.ts > #2365 AC1 a 100 MB transcript, already archived, gains 1 MB: the pass that follows costs what was added > #2365 AC1 the pass that follows: under 2 MB of evidence, within 1 s, under 64 MB more resident memory, a 5 ms timer served at least every 50 ms
+#2365 AC1 the 5 ms timer is served at least every 50 ms: longest unserved stretch 13597.1 ms; longest unserved stretch 9510.1 ms; longest unserved stretch 9286.9 ms; longest unserved stretch 9639.4 ms; longest unserved stretch 7623.9 ms → INCONCLUSIVE (a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state nominal): thermal state is "fair", not "nominal"; load 110.15234375 at a run's start or end is above the 18 cores)
+
+stdout | heavy/ac1.heavy.ts > #2365 AC1 a 100 MB transcript, already archived, gains 1 MB: the pass that follows costs what was added > #2365 AC1 the pass that follows: under 2 MB of evidence, within 1 s, under 64 MB more resident memory, a 5 ms timer served at least every 50 ms
+#2365 AC1 resident memory rises by under 64 MB: peak resident memory 1247.6 MB from 71.3 MB: +1176.3 MB; peak resident memory 1231.7 MB from 71.3 MB: +1160.4 MB; peak resident memory 1236.5 MB from 71.6 MB: +1164.9 MB; peak resident memory 1230.8 MB from 71.4 MB: +1159.5 MB; peak resident memory 1197.0 MB from 71.3 MB: +1125.7 MB → INCONCLUSIVE (a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state nominal): thermal state is "fair", not "nominal"; load 110.15234375 at a run's start or end is above the 18 cores)
+
+stdout | heavy/ac1.heavy.ts > #2365 AC1 a 100 MB transcript, already archived, gains 1 MB: the pass that follows costs what was added > #2365 AC1 (wrong program) an archive that reads the file whole fails, naming the peak
+#2365 AC1 twin run 0 (warm-up): 23273 ms, longest unserved stretch 15745.4 ms, peak resident memory 1436.2 MB from 71.5 MB (+1364.8 MB), evidence +27.8 MB
+
+stdout | heavy/ac1.heavy.ts > #2365 AC1 a 100 MB transcript, already archived, gains 1 MB: the pass that follows costs what was added > #2365 AC1 (wrong program) an archive that reads the file whole fails, naming the peak
+#2365 AC1 twin run 1: 12897 ms, longest unserved stretch 6995.6 ms, peak resident memory 1422.2 MB from 72.3 MB (+1349.9 MB), evidence +27.8 MB
+
+stdout | heavy/ac1.heavy.ts > #2365 AC1 a 100 MB transcript, already archived, gains 1 MB: the pass that follows costs what was added > #2365 AC1 (wrong program) an archive that reads the file whole fails, naming the peak
+#2365 AC1 twin run 2: 16079 ms, longest unserved stretch 10560.9 ms, peak resident memory 1423.0 MB from 71.9 MB (+1351.1 MB), evidence +27.8 MB
+
+stdout | heavy/ac1.heavy.ts > #2365 AC1 a 100 MB transcript, already archived, gains 1 MB: the pass that follows costs what was added > #2365 AC1 (wrong program) an archive that reads the file whole fails, naming the peak
+#2365 AC1 twin run 3: 17897 ms, longest unserved stretch 12701.0 ms, peak resident memory 1415.5 MB from 71.8 MB (+1343.7 MB), evidence +27.8 MB
+
+stdout | heavy/ac1.heavy.ts > #2365 AC1 a 100 MB transcript, already archived, gains 1 MB: the pass that follows costs what was added > #2365 AC1 (wrong program) an archive that reads the file whole fails, naming the peak
+#2365 AC1 twin run 4: 12635 ms, longest unserved stretch 10373.2 ms, peak resident memory 1415.3 MB from 71.3 MB (+1344.0 MB), evidence +27.8 MB
+
+stdout | heavy/ac1.heavy.ts > #2365 AC1 a 100 MB transcript, already archived, gains 1 MB: the pass that follows costs what was added > #2365 AC1 (wrong program) an archive that reads the file whole fails, naming the peak
+#2365 AC1 twin run 5: 11746 ms, longest unserved stretch 9100.8 ms, peak resident memory 1425.8 MB from 71.9 MB (+1353.9 MB), evidence +27.8 MB
+
+stdout | heavy/ac1.heavy.ts > #2365 AC1 a 100 MB transcript, already archived, gains 1 MB: the pass that follows costs what was added > #2365 AC1 (wrong program) an archive that reads the file whole fails, naming the peak
+#2365 AC1 the pass ends within 1 s: 12897 ms; 16079 ms; 17897 ms; 12635 ms; 11746 ms → INCONCLUSIVE (a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state nominal): thermal state is "fair", not "nominal"; load 75.41162109375 at a run's start or end is above the 18 cores)
+
+stdout | heavy/ac1.heavy.ts > #2365 AC1 a 100 MB transcript, already archived, gains 1 MB: the pass that follows costs what was added > #2365 AC1 (wrong program) an archive that reads the file whole fails, naming the peak
+#2365 AC1 the 5 ms timer is served at least every 50 ms: longest unserved stretch 6995.6 ms; longest unserved stretch 10560.9 ms; longest unserved stretch 12701.0 ms; longest unserved stretch 10373.2 ms; longest unserved stretch 9100.8 ms → INCONCLUSIVE (a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state nominal): thermal state is "fair", not "nominal"; load 75.41162109375 at a run's start or end is above the 18 cores)
+
+stdout | heavy/ac1.heavy.ts > #2365 AC1 a 100 MB transcript, already archived, gains 1 MB: the pass that follows costs what was added > #2365 AC1 (wrong program) an archive that reads the file whole fails, naming the peak
+#2365 AC1 resident memory rises by under 64 MB: peak resident memory 1422.2 MB from 72.3 MB: +1349.9 MB; peak resident memory 1423.0 MB from 71.9 MB: +1351.1 MB; peak resident memory 1415.5 MB from 71.8 MB: +1343.7 MB; peak resident memory 1415.3 MB from 71.3 MB: +1344.0 MB; peak resident memory 1425.8 MB from 71.9 MB: +1353.9 MB → INCONCLUSIVE (a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state nominal): thermal state is "fair", not "nominal"; load 75.41162109375 at a run's start or end is above the 18 cores)
+
+ ❯ heavy/ac1.heavy.ts (2 tests | 1 failed) 230451ms
+   ❯ #2365 AC1 a 100 MB transcript, already archived, gains 1 MB: the pass that follows costs what was added (2)
+     × #2365 AC1 the pass that follows: under 2 MB of evidence, within 1 s, under 64 MB more resident memory, a 5 ms timer served at least every 50 ms 95477ms
+     ✓ #2365 AC1 (wrong program) an archive that reads the file whole fails, naming the peak 96538ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  heavy/ac1.heavy.ts > #2365 AC1 a 100 MB transcript, already archived, gains 1 MB: the pass that follows costs what was added > #2365 AC1 the pass that follows: under 2 MB of evidence, within 1 s, under 64 MB more resident memory, a 5 ms timer served at least every 50 ms
+AssertionError: FAIL: #2365 AC1 each pass adds under 2 MB to the evidence store; evidence added per run: 27.8 MB, 27.8 MB, 27.8 MB, 27.8 MB, 27.8 MB, 27.8 MB | INCONCLUSIVE: #2365 AC1 the pass ends within 1 s: 16871 ms; 11770 ms; 12011 ms; 11811 ms; 9125 ms → INCONCLUSIVE (a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state nominal): thermal state is "fair", not "nominal"; load 110.15234375 at a run's start or end is above the 18 cores) | #2365 AC1 the 5 ms timer is served at least every 50 ms: longest unserved stretch 13597.1 ms; longest unserved stretch 9510.1 ms; longest unserved stretch 9286.9 ms; longest unserved stretch 9639.4 ms; longest unserved stretch 7623.9 ms → INCONCLUSIVE (a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state nominal): thermal state is "fair", not "nominal"; load 110.15234375 at a run's start or end is above the 18 cores) | #2365 AC1 resident memory rises by under 64 MB: peak resident memory 1247.6 MB from 71.3 MB: +1176.3 MB; peak resident memory 1231.7 MB from 71.3 MB: +1160.4 MB; peak resident memory 1236.5 MB from 71.6 MB: +1164.9 MB; peak resident memory 1230.8 MB from 71.4 MB: +1159.5 MB; peak resident memory 1197.0 MB from 71.3 MB: +1125.7 MB → INCONCLUSIVE (a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state nominal): thermal state is "fair", not "nominal"; load 110.15234375 at a run's start or end is above the 18 cores); this is not a pass
+ ❯ criterion heavy/ac1.heavy.ts:82:31
+     80|     problems.push((error as Error).message);
+     81|   }
+     82|   if (problems.length) expect.fail(problems.join(' | '));
+       |                               ^
+     83| }
+     84|
+ ❯ heavy/ac1.heavy.ts:96:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+   Start at  17:26:01
+   Duration  230.88s (tests 100%)
+
+-----
+EXIT 1; ended: 2026-11-18T01:29:52Z; load averages: 65.95 92.49 88.87

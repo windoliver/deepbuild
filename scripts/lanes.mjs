@@ -914,6 +914,10 @@ timed.push('tests/acceptance/210/ac8-budgets.test.ts');
 // #2031's files build deep-gpu (ac7 also the merge base's binaries) and draw on Metal; ac8 judges the lights' GPU budget.
 alone.push('tests/acceptance/2031/');
 timed.push('tests/acceptance/2031/ac8-budget.test.ts');
+// #2032's files each build deep-gpu or deep-canvas-render and draw on Metal; ac7 also builds both at the merge base,
+// and ac8 judges the shadows' GPU budget on the reference Mac.
+alone.push('tests/acceptance/2032/', 'tests/acceptance/2032-redraft-ac8/');
+timed.push('tests/acceptance/2032/ac8-budget.test.ts', 'tests/acceptance/2032-redraft-ac8/ac8-budget.test.ts');
 // #182's files build deep-physics (shipped, test-backends and release) and deep-show; ac5-course also builds deep-physics
 // for Linux x86_64 in a linux/amd64 container, and ac11-budgets judges its timings on the reference Mac. The oracle's
 // climb port went to a blind redraft (182-oracle/DISPUTE.md): on the owner's word, the redraft runs and the first
@@ -970,6 +974,8 @@ export const redrafted = Object.fromEntries([
     ['1018', 'redraft-ac6/budgets.test.ts'], ['1018', 'redraft-ac6/helpers.ts'],
     ...['166', '268', '465', '968'].flatMap((n) => [[n, 'budgets.test.ts'], [n, 'helpers.ts']])]
     .map(([issue, file]) => [`tests/acceptance/${issue}/${file}`, `tests/acceptance/${issue}-redraft-1830/`]),
+  // #2032's criterion 8 judged through #465's helper too; its blind redraft gives the loads.
+  ['tests/acceptance/2032/ac8-budget.test.ts', 'tests/acceptance/2032-redraft-ac8/'],
 ]);
 byHand.push(...Object.keys(redrafted).filter((path) => /\.test\.m?[jt]s$/.test(path) && !byHand.includes(path)));
 // The redrafts time what their originals timed, so each is timed, and alone where its original was; the two live ones
@@ -1040,6 +1046,9 @@ alone.push('tests/acceptance/1509/');
 
 // #1929's files each build deep-show (full); CPU only, no GPU and no timing.
 alone.push('tests/acceptance/1929/');
+
+// #1826's files each build deep-graph, and its taste call deep-canvas-render; CPU only, no GPU and no timing.
+alone.push('tests/acceptance/1826/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
