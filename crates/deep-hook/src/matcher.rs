@@ -55,8 +55,8 @@
 //! comes from a pipe the line doesn't say or is a value it computes (`curl … | sh`, `eval "$X"`, #1503). Its hit says
 //! what couldn't be read, so a block entry denies it and a watch or warn entry records it with that reason. An unread run never lowers a match.
 //!
-//! deep-hook reads rules.json as unreadable when an entry's `match` isn't one of these, so an entry newer than
-//! deep-hook never fails open.
+//! An entry whose `match` isn't one of these, or with a field deep-hook doesn't know, meets every call, ruled by its
+//! mode (#2219): an entry newer than deep-hook never fails open, and stops no more than its mode would.
 
 use std::fs;
 use std::path::{Path, PathBuf};

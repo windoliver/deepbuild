@@ -7,14 +7,16 @@
 //! line-break opportunities, UAX #29 grapheme ends and UAX #9 levels and visual order, as code point
 //! offsets). `breaks` takes `planted: "space_breaker"` and `bidi` `planted: "logical_arabic"`, the
 //! acceptance suite's wrong programs. `--planted no_cache | reshaping_fit | evicts_oldest` after
-//! the subcommand runs #856's.
+//! the subcommand runs #856's. (#1215) `fit` and `shape` read `line_height` and `flow`: in
+//! vertical flow `box.h` is a column's length, `lines` counts columns, and `width` is their extent
+//! across, which `fits` holds to `box.w`.
 
 use std::io::{self, BufRead, Write};
 
 use serde_json::{json, Map, Value};
 
 use deep_text::cache::{self, Planted};
-use deep_text::{unicode, Align, Dir, Role, Shaper, Spec, FACES};
+use deep_text::{unicode, Align, Columns, Dir, Flow, Role, Shaper, Spec, FACES};
 
 fn bad_input() -> Value {
     json!({"ok": false, "code": "bad_input"})
@@ -99,6 +101,26 @@ fn read_spec(input: &Map<String, Value>) -> Result<(Spec<'_>, Option<f32>, Optio
         Some(Value::String(widest)) => Some(widest.as_str()),
         Some(_) => return Err(bad_input()),
     };
+    // #1215: `line_height`, and `flow`: in vertical flow a column is the box's height long.
+    let line_height = match input.get("line_height") {
+        None | Some(Value::Null) => None,
+        Some(v) => match v
+            .as_f64()
+            .map(|h| h as f32)
+            .filter(|h| h.is_finite() && *h > 0.)
+        {
+            Some(h) => Some(h),
+            None => return Err(bad_input()),
+        },
+    };
+    let flow = match input.get("flow").map(Value::as_str) {
+        None | Some(Some("horizontal")) => Flow::Horizontal,
+        Some(Some(f @ ("vertical_rl" | "vertical_lr"))) => Flow::Vertical(Columns {
+            height,
+            ..Columns::new(f == "vertical_rl")
+        }),
+        Some(_) => return Err(bad_input()),
+    };
     let spec = Spec {
         text,
         family: role.family(),
@@ -106,7 +128,7 @@ fn read_spec(input: &Map<String, Value>) -> Result<(Spec<'_>, Option<f32>, Optio
         lang: None,
         size,
         weight: weight.round() as u16,
-        line_height: None,
+        line_height,
         width,
         max_lines,
         align: Align::Start,
@@ -116,6 +138,7 @@ fn read_spec(input: &Map<String, Value>) -> Result<(Spec<'_>, Option<f32>, Optio
         spans: &[],
         gap: 0.,
         indent: 0.,
+        flow,
     };
     Ok((spec, height, widest))
 }
@@ -125,8 +148,12 @@ fn fit_line(shaper: &mut Shaper, input: &Map<String, Value>) -> Value {
         Ok(read) => read,
         Err(refusal) => return refusal,
     };
+    // The lines' extent across them, a line height each, in the box: its height, or (#1215) a
+    // vertical text's columns in its width.
+    let vertical = matches!(spec.flow, Flow::Vertical(_));
+    let across = if vertical { spec.width } else { height };
     let fits_height =
-        |lines: usize| height.is_none_or(|h| lines as f32 * spec.line_height() <= h + 0.01);
+        |lines: usize| across.is_none_or(|h| lines as f32 * spec.line_height() <= h + 0.01);
     let own = shaper.fit(&spec, None);
     let mut fits = own.fits && fits_height(own.lines);
     if let Some(widest) = widest {
@@ -138,7 +165,7 @@ fn fit_line(shaper: &mut Shaper, input: &Map<String, Value>) -> Value {
         "ok": true,
         "fits": fits,
         "width": shaped.width,
-        "height": shaped.lines as f32 * spec.line_height(),
+        "height": if vertical { shaped.height } else { shaped.lines as f32 * spec.line_height() },
         "lines": shaped.lines,
         "shown": shaped.shown,
         "numerals": own.numerals,

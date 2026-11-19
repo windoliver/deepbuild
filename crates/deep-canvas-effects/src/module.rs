@@ -746,6 +746,8 @@ fn register_with(r: &mut Registrar, rule: deep_canvas::registry::Rule) {
             .described("A GPU operator as data: typed inputs, steps from the closed list, typed outputs, checked, costed and classed before it runs.");
         r.rule(&kind[..kind.len() - 2], rule);
     }
+    // #2776: a GPU operator draws into the 3D frame, and says what each path does with it.
+    r.in_3d(include_str!("paths.json"));
     r.rule("group", group_rule);
     // #449: a particles@1 item's count against its budget class's cap, wherever the check runs.
     r.rule("particles", particles_rule);

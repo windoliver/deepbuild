@@ -32,16 +32,20 @@ struct Pen {
     k: f64,
     /// #1964: the tangent of the glyph's faux-italic slant.
     slant: f64,
+    /// #1215: turned 90° clockwise about the pen position, as a vertical run turns it.
+    turn: bool,
     cmds: Vec<Cmd>,
 }
 
 impl Pen {
     fn p(&self, x: f32, y: f32) -> [f64; 2] {
         let (x, y) = (f64::from(x), f64::from(y));
-        [
-            self.at[0] + (x + y * self.slant) * self.k,
-            self.at[1] - y * self.k,
-        ]
+        let (u, v) = ((x + y * self.slant) * self.k, -y * self.k);
+        if self.turn {
+            [self.at[0] - v, self.at[1] + u]
+        } else {
+            [self.at[0] + u, self.at[1] + v]
+        }
     }
 }
 
@@ -68,8 +72,9 @@ impl OutlinePen for Pen {
 }
 
 /// #496: one glyph's outline in its own frame (pen origin on the baseline, y down), in logical
-/// pixels, at the variation coordinates it was shaped at; empty for a blank glyph (a space), and
-/// `None` (#1479) for one its face holds no outline for, which only the atlas can draw.
+/// pixels, at the variation coordinates it was shaped at, (#1215) turned about its pen position
+/// when a vertical run turns it; empty for a blank glyph (a space), and `None` (#1479) for one its
+/// face holds no outline for, which only the atlas can draw.
 pub fn outline_of(g: &Glyph) -> Option<Vec<Cmd>> {
     let face = skrifa::FontRef::from_index(g.font.data.data(), g.font.index).ok()?;
     let upm = f64::from(
@@ -82,6 +87,7 @@ pub fn outline_of(g: &Glyph) -> Option<Vec<Cmd>> {
         at: [0.0, 0.0],
         k: f64::from(g.size) / upm,
         slant: deep_canvas::ops::tan(f64::from(g.skew).to_radians()),
+        turn: g.turn,
         cmds: Vec::new(),
     };
     let coords: Vec<skrifa::instance::NormalizedCoord> = g

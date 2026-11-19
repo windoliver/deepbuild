@@ -1366,8 +1366,9 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 // #223's in the marks2d module's warp.
                 || deep_canvas_marks::warp::PLANTED.contains(p)
                 || deep_net::Planted::named(p).is_some()
-                // #225's in the data module's integrator.
+                // #225's in the data module's integrator; #2450's in its reading of axis titles.
                 || *p == deep_canvas_marks::vector_field::PLANTED_EULER
+                || *p == deep_canvas_marks::axes3d::TAKES_ANY_KIND
                 // #548's deep_query region map that lays the reads out by name.
                 || *p == logic::MAP_READS_BY_NAME
                 // #466's boil and blur in deep-show's frames.
@@ -2072,6 +2073,7 @@ const TEST_BUILD: bool = cfg!(any(
     feature = "test-scatter",
     feature = "test-tick",
     feature = "test-web-lacks",
+    feature = "test-paths",
     feature = "test-held",
     feature = "test-page-latch",
     feature = "test-frame-cache",
@@ -2347,6 +2349,10 @@ fn modules(set: BuildSet) -> Vec<Module> {
     out.push(deep_canvas_test_modules::tick());
     #[cfg(feature = "test-web-lacks")]
     out.push(deep_canvas_test_modules::native());
+    #[cfg(feature = "test-paths")]
+    out.push(deep_canvas_test_modules::paths(cfg!(
+        feature = "test-paths-no-final"
+    )));
     #[cfg(feature = "test-held")]
     out.push(deep_canvas_test_modules::held());
     #[cfg(feature = "test-page-latch")]
