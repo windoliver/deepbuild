@@ -1,0 +1,95 @@
+Acceptance tests for #2340 on the base 9d02561325430d91e0b8cff3242e11011cc1b8cc ("Merge pull request #2836 …", main,
+no implementation), run on 2026-11-18 by the blind test job in a clean export of that commit (no .git), on macOS
+(arm64), Node v24.22.2, with node_modules linked and nothing built, through the machine's throttle:
+
+  node scripts/throttle.mjs test --wait 30 -- node --test 'tests/acceptance/2340/*.test.mjs'
+
+Exit 1: all six tests fail at the same assertion, in helpers.mjs's run, before any script runs, because the base has
+no scripts/design-issues.mjs. Trimmed: node's own stack frames and the assertion's actual and expected fields are
+dropped. Local paths are redacted as <checkout>. Timings on this shared, loaded machine are not evidence.
+
+✖ #2340.fc02d61b AC1 from two docs and eight issues, alpha-section reads closed with #9801 and #9802, beta-section mixed, gamma-section open, and delta-section, which only the not-planned #9808 links, is listed as unlinked; a planted script that reads the not-planned issue as closed prints delta-section as closed and fails, naming it (471.455584ms)
+✖ #2340.8ccc28b4 AC2 a link to <a id="plan"> (#9804, closed) and a link to six-weeks-to-version-0, the slug of the heading that follows it (#9807, open), land on one row, which reads mixed; a planted script that keys rows by the anchor as written prints two rows and fails, naming both (431.172875ms)
+✖ #2340.7613f30b AC3 #9805, which links foxtrot-section three times, counts once on its row; a planted script that counts links prints 3 and fails, naming the heading and the count (558.861083ms)
+✖ #2340.38f8ebe4 AC4 against a recording stand-in for gh that serves 250 closed issues in pages of 100, the summary counts 250 read; a planted script that reads the first page only counts 100 and fails, naming both counts (557.637583ms)
+✖ #2340.38f8ebe4 AC4 with the stand-in failing on the second page of the closed issues, the script prints BLOCKED naming the fetch, prints no table and exits non-zero; a planted script that prints the first page's table fails (171.723167ms)
+✖ #2340.baf32dff AC5 the JSON of one run holds the same rows and summary as its table; a planted script whose JSON drops the unlinked headings fails, naming the count (530.266458ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 0
+ℹ fail 6
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 890.808209
+
+✖ failing tests:
+
+test at tests/acceptance/2340/ac1-rows.test.mjs:12:1
+✖ #2340.fc02d61b AC1 from two docs and eight issues, alpha-section reads closed with #9801 and #9802, beta-section mixed, gamma-section open, and delta-section, which only the not-planned #9808 links, is listed as unlinked; a planted script that reads the not-planned issue as closed prints delta-section as closed and fails, naming it (471.455584ms)
+  AssertionError [ERR_ASSERTION]: scripts/design-issues.mjs does not exist: the script #2340 asks for, beside scripts/design-links.mjs, isn't in this checkout
+      at run (<checkout>/tests/acceptance/2340/helpers.mjs:206:24)
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/2340/ac1-rows.test.mjs:13:18)
+
+test at tests/acceptance/2340/ac2-one-row.test.mjs:11:1
+✖ #2340.8ccc28b4 AC2 a link to <a id="plan"> (#9804, closed) and a link to six-weeks-to-version-0, the slug of the heading that follows it (#9807, open), land on one row, which reads mixed; a planted script that keys rows by the anchor as written prints two rows and fails, naming both (431.172875ms)
+  AssertionError [ERR_ASSERTION]: scripts/design-issues.mjs does not exist: the script #2340 asks for, beside scripts/design-links.mjs, isn't in this checkout
+      at run (<checkout>/tests/acceptance/2340/helpers.mjs:206:24)
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/2340/ac2-one-row.test.mjs:12:18)
+
+test at tests/acceptance/2340/ac3-counts-once.test.mjs:9:1
+✖ #2340.7613f30b AC3 #9805, which links foxtrot-section three times, counts once on its row; a planted script that counts links prints 3 and fails, naming the heading and the count (558.861083ms)
+  AssertionError [ERR_ASSERTION]: scripts/design-issues.mjs does not exist: the script #2340 asks for, beside scripts/design-links.mjs, isn't in this checkout
+      at run (<checkout>/tests/acceptance/2340/helpers.mjs:206:24)
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/2340/ac3-counts-once.test.mjs:10:18)
+
+test at tests/acceptance/2340/ac4-pages.test.mjs:10:1
+✖ #2340.38f8ebe4 AC4 against a recording stand-in for gh that serves 250 closed issues in pages of 100, the summary counts 250 read; a planted script that reads the first page only counts 100 and fails, naming both counts (557.637583ms)
+  AssertionError [ERR_ASSERTION]: scripts/design-issues.mjs does not exist: the script #2340 asks for, beside scripts/design-links.mjs, isn't in this checkout
+      at run (<checkout>/tests/acceptance/2340/helpers.mjs:206:24)
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/2340/ac4-pages.test.mjs:11:18)
+
+test at tests/acceptance/2340/ac4-pages.test.mjs:24:1
+✖ #2340.38f8ebe4 AC4 with the stand-in failing on the second page of the closed issues, the script prints BLOCKED naming the fetch, prints no table and exits non-zero; a planted script that prints the first page's table fails (171.723167ms)
+  AssertionError [ERR_ASSERTION]: scripts/design-issues.mjs does not exist: the script #2340 asks for, beside scripts/design-links.mjs, isn't in this checkout
+      at run (<checkout>/tests/acceptance/2340/helpers.mjs:206:24)
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/2340/ac4-pages.test.mjs:25:18)
+
+test at tests/acceptance/2340/ac5-json.test.mjs:9:1
+✖ #2340.baf32dff AC5 the JSON of one run holds the same rows and summary as its table; a planted script whose JSON drops the unlinked headings fails, naming the count (530.266458ms)
+  AssertionError [ERR_ASSERTION]: scripts/design-issues.mjs does not exist: the script #2340 asks for, beside scripts/design-links.mjs, isn't in this checkout
+      at run (<checkout>/tests/acceptance/2340/helpers.mjs:206:24)
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/2340/ac5-json.test.mjs:10:18)
+
+
+Self-check, not the base: the same command in a scratch copy of the base (its scripts/, package.json, AGENTS.md,
+.node-version and this folder), where scripts/design-issues.mjs is the blind job's clean twin,
+`import { main } from './design-issues-twin.mjs'; main();`, beside a copy of planted/twin.mjs, run through the
+throttle with the base's scripts/throttle.mjs. Exit 0: all six pass, and each test's diagnostics (ℹ) show its planted
+program failing, naming what the issue says. This shows the tests can pass and that each planted program fails them;
+it is not a run of any implementation.
+
+✔ #2340.fc02d61b AC1 from two docs and eight issues, alpha-section reads closed with #9801 and #9802, beta-section mixed, gamma-section open, and delta-section, which only the not-planned #9808 links, is listed as unlinked; a planted script that reads the not-planned issue as closed prints delta-section as closed and fails, naming it (1006.649917ms)
+ℹ planted not-planned-as-closed.mjs fails: docs/canvas-primitives.md#delta-section reads closed (closed: #9808; open: none), not unlinked: only #9808, closed as not planned, links it, and such an issue is not read; docs/canvas-primitives.md#delta-section lists the closed issues #9808, not none
+✔ #2340.8ccc28b4 AC2 a link to <a id="plan"> (#9804, closed) and a link to six-weeks-to-version-0, the slug of the heading that follows it (#9807, open), land on one row, which reads mixed; a planted script that keys rows by the anchor as written prints two rows and fails, naming both (1005.454417ms)
+ℹ planted anchor-as-written.mjs fails: the heading "Six weeks to version 0" is on 2 rows (docs/technical-design.md#six-weeks-to-version-0, docs/technical-design.md#plan), not one: #9804 links its <a id="plan"> and #9807 its slug six-weeks-to-version-0, and an <a id> and the slug of the heading that follows it are one row
+✔ #2340.7613f30b AC3 #9805, which links foxtrot-section three times, counts once on its row; a planted script that counts links prints 3 and fails, naming the heading and the count (977.499542ms)
+ℹ planted counts-links.mjs fails: docs/canvas-primitives.md#foxtrot-section counts #9805 3 times (closed: #9805 #9805 #9805), not once: #9805 links it three times, and an issue that links a heading more than once counts once; docs/canvas-primitives.md#foxtrot-section lists the closed issues #9805 #9805 #9805, not #9805
+✔ #2340.38f8ebe4 AC4 against a recording stand-in for gh that serves 250 closed issues in pages of 100, the summary counts 250 read; a planted script that reads the first page only counts 100 and fails, naming both counts (1070.187458ms)
+ℹ recorded gh calls: gh issue list --state open --limit 5000 --json number,body; gh api repos/{owner}/{repo}/issues?state=closed&per_page=100&page=1; gh api repos/{owner}/{repo}/issues?state=closed&per_page=100&page=2; gh api repos/{owner}/{repo}/issues?state=closed&per_page=100&page=3
+ℹ summary: 1 headings linked: 1 closed, 0 mixed, 0 open; 9 unlinked; 250 issues read: 250 closed, 0 open
+ℹ planted first-page-only.mjs fails: the summary counts 100 issues read, 100 of them closed, not the 250 closed issues the stand-in served in pages of 100: 1 headings linked: 1 closed, 0 mixed, 0 open; 9 unlinked; 100 issues read: 100 closed, 0 open
+✔ #2340.38f8ebe4 AC4 with the stand-in failing on the second page of the closed issues, the script prints BLOCKED naming the fetch, prints no table and exits non-zero; a planted script that prints the first page's table fails (932.923167ms)
+ℹ recorded gh calls: gh issue list --state open --limit 5000 --json number,body; gh api repos/{owner}/{repo}/issues?state=closed&per_page=100&page=1; gh api repos/{owner}/{repo}/issues?state=closed&per_page=100&page=2
+ℹ BLOCKED line: BLOCKED design issues: could not fetch page 2 of the closed issues: gh: Server Error (HTTP 502) {"message":"Server Error"} (https://api.github.com/repos/windoliver/deepbuild/issues?state=closed&per_page=100&page=2)
+ℹ planted table-on-partial-read.mjs fails: the planted table-on-partial-read.mjs printed a table from a partial read: 12 table lines, 10 of them rows
+✔ #2340.baf32dff AC5 the JSON of one run holds the same rows and summary as its table; a planted script whose JSON drops the unlinked headings fails, naming the count (981.52725ms)
+ℹ planted json-drops-unlinked.mjs fails: the table lists 4 unlinked headings and the JSON 0; a row of the table isn't in the JSON: docs/technical-design.md#technical-design-fixture | closed none | open none | unlinked; a row of the table isn't in the JSON: docs/technical-design.md#week-one | closed none | open none | unlinked; a row of the table isn't in the JSON: docs/canvas-primitives.md#canvas-primitives-fixture | closed none | open none | unlinked; a row of the table isn't in the JSON: docs/canvas-primitives.md#delta-section | closed none | open none | unlinked; the table has 10 rows and the JSON 6
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2110.149667
