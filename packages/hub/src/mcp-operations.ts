@@ -129,9 +129,12 @@ export class McpOperations {
       const args = checkArguments(tool, params.arguments);
       const sent = isObj(params.arguments) ? params.arguments : {};
       // A listing asked while plug-ins load answers not_ready with what loaded, never part of the list (#1415); the
-      // planted hub answers the list as it stands.
+      // planted hub answers the list as it stands once its record, the start's first step, is open.
       const loading = tool === 'deep_kinds' ? this.loading() : undefined;
-      if (loading && this.options.settings.plant === 'kinds-partial-while-loading') return await this.options.services.canvasSide.kinds(args);
+      if (loading && this.options.settings.plant === 'kinds-partial-while-loading') {
+        while (!this.options.services.record && !this.options.kernel.stopping) await new Promise((done) => setTimeout(done, 10));
+        return await this.options.services.canvasSide.kinds(args);
+      }
       if (loading) throw new Refused({ ...refusal('not_ready', '', `The hub is still loading its plug-ins (${loading.loaded} of ${loading.total}); call again after retry_after_ms.`, '', true), ...loading, retry_after_ms: NOT_READY_RETRY_MS });
       // What deep-hook spooled ran before this call, as a hook's does: a replay running goes first, so a claim comes
       // after the call it follows, not before the work it claims.
