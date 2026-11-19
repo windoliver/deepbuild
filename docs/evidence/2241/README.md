@@ -72,12 +72,12 @@ and `pass` on Rapier in the same build.
 
 ## Open
 
-- **#2009's third criterion.** `tests/acceptance/2009/ac3-rolling-and-caps.test.ts` still asserts that
-  `tangent_speed: 1` is refused on Rapier naming the backend, and fails on this change at that case, as the issue
-  says it would: "the line stands until you decide". Its blind redraft, `tests/acceptance/2009-redraft-2241/`,
-  reads 2 of 2 on this change and at the base and carries the criterion's ID as #2009 reads today,
-  `#2009.43ed60cb`; with "or tangent_speed 1 m/s" struck the ID would be `#2009.b8b12d95`. The original is not
-  edited or removed here and #2009's text is not changed: the swap is the owner's ruling.
+- **#2009's third criterion.** Its frozen test asserted that `tangent_speed: 1` is refused on Rapier naming the
+  backend, and failed on this change at that case, as the issue says it would. Its blind redraft,
+  `tests/acceptance/2009-redraft-2241/`, reads 2 of 2 on this change and at the base and carries the criterion's ID
+  as #2009 reads today, `#2009.43ed60cb`. The frozen file is removed in a commit of its own, which waits for an
+  approver's signed tag: that signature is the ruling the issue leaves to the owner. #2009's text is not edited;
+  with "or tangent_speed 1 m/s" struck its ID would be `#2009.b8b12d95`.
 - **`scripts/lanes.mjs`.** The line that runs the two new folders one file at a time is a commit of its own and
   waits for an approver's signed tag.
 - **2D.** The design now states the 2D direction (the contact's tangent, counter-clockwise about the shape). No 2D
