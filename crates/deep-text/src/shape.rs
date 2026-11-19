@@ -22,9 +22,14 @@ use crate::fonts::{self, Role, FACES};
 use crate::unicode::is_default_ignorable;
 use crate::unicode::{grapheme_starts, LineBreaks};
 
-/// The bytes parley's layout of a paragraph holds a character, counted in the shape cache: 54
-/// measured on a 500-character paragraph once broken into lines.
-const LAYOUT_BYTES_PER_CHAR: usize = 54;
+/// The bytes a shaped paragraph counts as in the shape cache, a character: parley's layout of it
+/// (54, measured on a 500-character paragraph once broken into lines) and a glyph of the lines it
+/// keeps (80). Fixed, as the entry's own below, so every platform counts alike; measured on the
+/// reference Macs.
+const BYTES_PER_CHAR: usize = 54 + 80;
+
+/// An entry's own bytes: the paragraph (488), its key (64) and the caches' hold on them.
+const BYTES_PER_PARAGRAPH: usize = 640;
 
 /// #1430: a paragraph shaped once and not yet broken into lines: parley's layout of it, which
 /// each width breaks again, the lines it was last broken into, and its graphemes' first bytes and
@@ -44,12 +49,13 @@ impl Paragraph {
         self.layout.lock().unwrap_or_else(|e| e.into_inner())
     }
 
-    /// The bytes it counts as in the shape cache: its layout, and its lines' glyphs at about one a
-    /// character.
-    pub(crate) fn bytes(&self) -> usize {
-        std::mem::size_of::<Self>()
-            + self.chars * (LAYOUT_BYTES_PER_CHAR + std::mem::size_of::<Glyph>())
-            + (self.starts.len() + self.ends.len()) * std::mem::size_of::<usize>()
+    /// The bytes it counts as in the shape cache, with its key's text: its layout, its lines'
+    /// glyphs at about one a character, and its graphemes' and `\n`s' offsets.
+    pub(crate) fn bytes(&self, text: &str) -> usize {
+        BYTES_PER_PARAGRAPH
+            + text.len()
+            + self.chars * BYTES_PER_CHAR
+            + (self.starts.len() + self.ends.len()) * 8
     }
 }
 

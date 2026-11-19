@@ -218,7 +218,7 @@ struct Lru<K, V> {
 impl<K, V> Default for Lru<K, V> {
     fn default() -> Self {
         Lru {
-            entries: HashMap::new(),
+            entries: Default::default(),
             order: BTreeMap::new(),
             bytes: 0,
             hits: 0,
@@ -416,7 +416,7 @@ pub(crate) fn keep(key: ShapeKey, paragraph: Paragraph) -> Arc<Paragraph> {
     if c.off() {
         return Arc::new(paragraph);
     }
-    let bytes = std::mem::size_of::<ShapeKey>() + key.text.len() + paragraph.bytes();
+    let bytes = paragraph.bytes(&key.text);
     let (tick, _) = c.next();
     c.shapes.put(key, paragraph, bytes, tick)
 }
