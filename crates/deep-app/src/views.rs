@@ -1768,17 +1768,20 @@ impl Render for RowTip {
     }
 }
 
-/// A control's kind (#1458): the page's one main action, a plain action, or a switch, on or off.
+/// A control's kind (#1458): the page's one main action, a plain action, a switch, on or off, or (#1592) a plain action
+/// that shows only an icon of the set, at its place's size.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Control {
     Main,
     Plain,
     Switch(bool),
+    Icon(&'static str, crate::icons::Place),
 }
 
 /// The one control builder (#1458): a button or a switch, one accessibility node named by its label, in the body
 /// role at one height. A switch draws its state as a mark beside its label and carries it as the node's value,
-/// `on` or `off`, never as a word in the label. No view styles a control itself.
+/// `on` or `off`, never as a word in the label. A control that shows only an icon keeps its label as its name in the
+/// tree (#1592; #1453 rule 10). No view styles a control itself.
 pub(crate) fn control(
     id: impl Into<ElementId>,
     kind: Control,
@@ -1811,6 +1814,14 @@ pub(crate) fn control(
             .role(Role::Button)
             .hover(move |style| style.bg(hover))
             .child(words),
+        // A target as wide as it's tall, its icon centred, in the secondary ink.
+        Control::Icon(name, place) => control
+            .role(Role::Button)
+            .px_0()
+            .min_w(s.space(4))
+            .justify_center()
+            .hover(move |style| style.bg(hover))
+            .child(crate::icons::icon(name, place, chrome.ink_secondary)),
         Control::Switch(on) => control
             .role(Role::Switch)
             .aria_value(if on { "on" } else { "off" })
@@ -2053,8 +2064,8 @@ pub fn now() -> u64 {
         .map_or(0, |since| since.as_millis() as u64)
 }
 
-/// A session's status mark and words, one accessibility node named by what it shows: the mark's core, a square of
-/// the look's status color with square corners, then its glyph and the words in the text's color.
+/// A session's status mark and words, one accessibility node named by what it shows: the mark, the look's drawn glyph
+/// for its state tinted in its core (#1592), then the words in the text's color.
 fn status(
     id: impl Into<ElementId>,
     state: &states::State,
@@ -2112,13 +2123,8 @@ fn marked(id: impl Into<ElementId>, entry: &str, text: String) -> ObservedElemen
         .flex()
         .items_center()
         .gap(sizes().space(0))
-        .child(
-            div()
-                .size(sizes().space(1))
-                .flex_none()
-                .bg(rgb(states::color(entry))),
-        )
-        .child(glyph);
+        // The mark in its slot, then 8 before the words, as a row's is (#1461).
+        .child(crate::icons::mark(entry, 0).mr(sizes().space(0)));
     if inline {
         row.children(time).child(words.child(said))
     } else {
@@ -2289,8 +2295,8 @@ fn drawn_width(window: &Window, text: &str, weight: FontWeight) -> Pixels {
         .width
 }
 
-/// Where a working mark's core sits in its slot at each step, in steps of the look's smallest space: it moves one step
-/// for each event its session's hooks send, and holds still while none comes (#2021).
+/// How far a working mark has turned at each step, in quarter turns: it turns one step for each event its session's
+/// hooks send, and holds still while none comes (#2021).
 const MARK_STEPS: [usize; 4] = [0, 1, 2, 1];
 
 /// One row of the list (#1461) at `now`, drawn as `shape` says.
@@ -2575,22 +2581,18 @@ fn row_element(drawn: &RowDrawn, chrome: &chrome::Chrome) -> ObservedElement<Sta
         )
         .tooltip(move |_, cx| cx.new(|_| RowTip(whole.clone())).into())
         .tooltip_show_delay(ROW_TIP_DELAY)
-        // The mark: its core in the status color, in a slot of 16 with 8 after it.
+        // The mark: its state's drawn glyph tinted in its core, in a slot of 16 with 8 after it (#1592). A working
+        // session's turns a quarter for each event its hooks send (#2021).
         .child(
             row_slot(id, "mark", states::glyph(drawn.entry).to_owned())
                 .aria_value(drawn.entry.to_owned())
                 .flex_none()
-                .w(s.space(3))
+                .w(s.mark)
                 .h_full()
                 .mr(s.space(1))
                 .flex()
                 .items_center()
-                .child(
-                    div()
-                        .size(s.space(1))
-                        .ml(s.space(0) * drawn.step as f32)
-                        .bg(rgb(states::color(drawn.entry))),
-                ),
+                .child(crate::icons::mark(drawn.entry, drawn.step)),
         )
         .child(
             // Each slot the row's full height, so the slots read in the row's order, left to right.
@@ -2771,7 +2773,6 @@ fn needs_you_heading(
     chrome: &chrome::Chrome,
 ) -> ObservedElement<Stateful<Div>> {
     let (name, drawn, value) = needs_you_count(count, empty, now);
-    let shown = chrome.ink_secondary;
     list_heading(
         crate::list::HEADING,
         copy::text("views.needs_you"),
@@ -2798,15 +2799,17 @@ fn needs_you_heading(
                     .children(drawn),
             )
             .children((!popped).then(|| {
+                // An icon of the set at a row's size (#1592), drawn on hover and named in the tree at rest.
+                let (icon, place) = crate::icons::POP_OUT;
                 control(
                     "needs-you-pop-out",
-                    Control::Plain,
+                    Control::Icon(icon, place),
                     copy::text("views.pop_out"),
                     chrome,
                 )
                 .aria_label(copy::text("views.pop_out_needs_you"))
-                .text_color(transparent_black())
-                .group_hover("needs-you-heading", move |style| style.text_color(shown))
+                .opacity(0.)
+                .group_hover("needs-you-heading", |style| style.opacity(1.))
                 .on_click(|_, _, cx| {
                     crate::open::pop_out(Address::page("needs-you"), Kind::NeedsYou, cx)
                 })
@@ -2837,15 +2840,16 @@ fn empty_line(
         // In the list it sits in from the edge as a row does; on a page, on the lane's edge.
         .when(id == "list-empty", |line| line.px(s.space(1)))
         .text_color(chrome.ink_secondary)
-        // Its mark in a row's mark slot; nothing here has none, and its words keep the page's left edge.
+        // Its mark, the entry's drawn glyph, in a row's mark slot (#1592); nothing here has none, and its words keep
+        // the page's left edge.
         .children(empty.entry().map(|entry| {
             div()
                 .flex_none()
-                .w(s.space(3))
+                .w(s.mark)
                 .mr(s.space(1))
                 .flex()
                 .items_center()
-                .child(div().size(s.space(1)).bg(rgb(states::color(entry))))
+                .child(crate::icons::mark(entry, 0))
         }))
         .child(div().flex_1().min_w_0().truncate().child(words))
 }
@@ -3637,7 +3641,9 @@ impl Render for Shipped {
                     },
                     chrome,
                 )
-                .when(session.is_empty(), |heading| heading.invisible());
+                .when(session.is_empty(), |heading| heading.invisible())
+                // #1592's planted page chrome draws an icon at a size no role gives.
+                .children(crate::icons::planted_18(chrome.ink_secondary));
                 let content = content
                     .children(doing.map(|doing| label("session-doing", doing.line(now)).h_auto()))
                     .children(why.map(|line| {

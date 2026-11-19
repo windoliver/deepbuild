@@ -281,6 +281,8 @@ export interface ExtensionHost {
   checked(pkg: Installed): boolean;
   load(pkg: Installed): Promise<Load>;
   loaded(): Promise<Loaded[]>;
+  /** The installed packages started, their code run and what it fills registered, of those to start; undefined once none is loading (#1415). */
+  loadProgress(): { loaded: number; total: number } | undefined;
   checks(): Promise<{ kind: string; extension: string }[]>;
   /** Select a live environment by its registered name; absence and revoked trust refuse, never fall back. */
   environment(name: string): Promise<RuntimeEnvironment>;
@@ -610,6 +612,7 @@ class Host implements ExtensionHost {
   /** Conformance runs under way. */
   private readonly checking = new Set<Promise<Conformance>>();
   private isReady = false;
+  private startedAll = false;
   /** What each loaded package's code returned at its load (#139). */
   private readonly loadResults = new Map<string, Record<string, unknown>>();
   /** The published API by method, whose stability each call is held to (#139). */
@@ -3071,6 +3074,11 @@ class Host implements ExtensionHost {
   async loaded(): Promise<Loaded[]> {
     return [...this.exts.values()].map((ext) => this.loadedOf(ext));
   }
+  loadProgress(): { loaded: number; total: number } | undefined {
+    const loaded = [...this.exts.values()].filter((ext) => ext.live).length;
+    const total = Math.max(Object.keys(this.entries).length, loaded + this.loading.size);
+    return (this.startedAll && !this.loading.size) || loaded >= total ? undefined : { loaded, total };
+  }
   async checks(): Promise<{ kind: string; extension: string }[]> {
     return [...this.exts.values()].flatMap((ext) => ext.kinds.map((kind) => ({ kind, extension: ext.entry.id })));
   }
@@ -3242,7 +3250,7 @@ class Host implements ExtensionHost {
       }
       // The rest started; each that didn't is unloaded and named.
       if (failed.length) throw Error(`not every package loaded before ready started: ${failed.join('; ')}`);
-    })();
+    })().finally(() => { this.startedAll = true; });
     return this.starting;
   }
 
