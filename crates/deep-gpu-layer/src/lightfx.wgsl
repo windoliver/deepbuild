@@ -43,7 +43,8 @@ struct U {
 @group(0) @binding(2) var<storage, read> segs: array<vec4<f32>>;
 // Each casting light's 1025 bin offsets, then its bins: per outline a word with RUN set and its
 // winding number round the light plus 32768, then its segments' indices. A bin holds every
-// segment a pixel centred in it can meet at any of its points.
+// segment a pixel centred in it can meet at any of its points, and its offset has RUN set where
+// an outline is seen to turn back or to end.
 @group(0) @binding(3) var<storage, read> words: array<u32>;
 // Each casting light's bins' near and far, px from a point light or along a sun's rays: nearer
 // than near nothing in the bin blocks a pixel, and from far on an outline blocks all of it.
@@ -121,11 +122,53 @@ fn share(i: u32, p: vec2<f32>) -> f32 {
         dx = vec4<f32>(at.x) - x;
         dy = vec4<f32>(at.y) - y;
     }
+    let first = words[bins.x + bin];
+    let end = words[bins.x + bin + 1u] & ~RUN;
+    var k = first & ~RUN;
+    // In a bin with no outline's edge, a pixel no segment's line passes takes its centre's
+    // answer whole.
+    if ((first & RUN) == 0u) {
+        let d = select(at - p, -rays.xy, far);
+        var steady = true;
+        var crossed = false;
+        var one = false;
+        var winding = 0;
+        while (k < end && steady) {
+            let w = words[k];
+            k = k + 1u;
+            if ((w & RUN) != 0u) {
+                one = one || (crossed && (winding == 0 || (u.flags & 8u) != 0u));
+                crossed = false;
+                winding = i32(w & 0xffffu) - 32768;
+                continue;
+            }
+            let s = segs[w];
+            let a = s.xy - p;
+            let b = s.zw - p;
+            let e = s.zw - s.xy;
+            let num = a.x * b.y - a.y * b.x;
+            steady = num * num > FOOT * FOOT * dot(e, e);
+            let sa = d.x * a.y - d.y * a.x;
+            let sb = d.x * b.y - d.y * b.x;
+            let den = sb - sa;
+            var hit = num < 0.0 && (far || num > den);
+            if (den > 0.0) {
+                hit = num > 0.0 && (far || num < den);
+            }
+            if (hit && (sa >= 0.0) != (sb >= 0.0)) {
+                crossed = true;
+                winding = winding + select(-1, 1, den > 0.0);
+            }
+        }
+        if (steady) {
+            one = one || (crossed && (winding == 0 || (u.flags & 8u) != 0u));
+            return select(1.0, 0.0, one);
+        }
+        k = first;
+    }
     let inside_too = vec4<bool>((u.flags & 8u) != 0u);
     let none = vec4<i32>(0);
     let zero = vec4<f32>(0.0);
-    var k = words[bins.x + bin];
-    let end = words[bins.x + bin + 1u];
     var crossings = none;
     var wind = none;
     var blocked = vec4<bool>(false);
