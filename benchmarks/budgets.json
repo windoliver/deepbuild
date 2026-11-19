@@ -1134,6 +1134,24 @@
       ]
     },
     {
+      "id": "canvas-local-tone-map",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "local-tone-map"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "local_1080p_gpu_ms": 0.6,
+        "local_2160p_gpu_ms": 2
+      },
+      "initialReason": "Issue #971 first measurement: the merge base has no local tone map and no such task. A release deep-gpu draws #465's stage under a filmic look at 1920 x 1080 and at 3840 x 2160, with local {strength: 0.5} on the look and without, 300 frames a side, five runs after a warm-up one, each a fresh process; the difference of the sides' median GPU time at each size is what the local tone map adds. canvas.mjs judge holds the times on a reference Mac. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#971.ae60e422"
+      ]
+    },
+    {
       "id": "canvas-ground",
       "command": [
         "node",

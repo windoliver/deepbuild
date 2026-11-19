@@ -238,6 +238,10 @@ pub enum Planted {
     ShoreCalmIgnoresField,
     /// #968: the flow's noise moved in one phase, jumping back at every wrap.
     WaterFlowSinglePhase,
+    /// #971: the local tone map's base brought back up with a range weight of 1 at every tap.
+    LocalBaseIgnoresEdges,
+    /// #971: the local tone map's pyramid has the look's `levels` at every output size.
+    LocalPyramidFixedLevels,
     /// #854's wrong program: the renderer compiles its pipelines in the first frame.
     CompilesOnFirstFrame,
     /// #777's wrong programs (tests/acceptance/777/README.md: Planted programs).
@@ -646,6 +650,8 @@ impl Planted {
             "shore_field_from_centre" => Planted::ShoreFieldFromCentre,
             "shore_calm_ignores_field" => Planted::ShoreCalmIgnoresField,
             "water_flow_single_phase" => Planted::WaterFlowSinglePhase,
+            "local_base_ignores_edges" => Planted::LocalBaseIgnoresEdges,
+            "local_pyramid_fixed_levels" => Planted::LocalPyramidFixedLevels,
             "compiles_on_first_frame" => Planted::CompilesOnFirstFrame,
             "budgets_each_window" => Planted::BudgetsEachWindow,
             "steps_main_window" => Planted::StepsMainWindow,

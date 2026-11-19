@@ -53,6 +53,8 @@ pub const MIRROR_PASS: &str = "scene3d.mirror";
 pub const FLARE_PASS: &str = "scene3d.flare";
 /// #468: depth of field over the linear image, after the geometry and before bloom.
 pub const DOF_PASS: &str = "scene3d.dof";
+/// #971: the look's local tone map over the linear image, just before the output pass reads it.
+pub const LOCAL_TONE_PASS: &str = "scene3d.local_tone";
 /// #166: the water's parts, drawn after the geometry and the mirror's view.
 pub const WATER_PASS: &str = "scene3d.water";
 /// #506: each view inset's own view, drawn whole before the frame's geometry reads its picture: in
@@ -530,6 +532,7 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
     r.pass(INSET_VIEW_PASS, "shadows");
     r.pass(INSET_UNLIT_PASS, "upscale");
     r.pass(FLARE_PASS, "bloom");
+    r.pass(LOCAL_TONE_PASS, "tone_mapping");
     r.pass(OUTPUT_PASS, "tone_mapping");
     // Headless, the kit proves what reaches the check: the figure's kinds and fields pass it
     // with no issue. Its pixels need the GPU, and the acceptance suite draws them there.
