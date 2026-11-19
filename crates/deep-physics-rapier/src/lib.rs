@@ -32,6 +32,7 @@ pub fn leaked_world() -> rapier3d::prelude::PhysicsWorld {
     PhysicsWorld::default()
 }
 
+mod belt;
 pub mod bound;
 pub mod cast;
 pub mod channels;
@@ -154,6 +155,18 @@ pub enum Twin {
     ContactsAtAQuarter,
     StaticContactSame,
     Contact30,
+    /// #2241's wrong belts: a wrapper that leaves the contact hook out; one that applies a
+    /// belt's speed along world +X, however its shape use is turned; and one that takes it
+    /// along level ground, not in the contact's plane.
+    BeltWithoutHook,
+    BeltAlongWorldX,
+    BeltAlongLevel,
+    /// #2243's wrong wrappers: one that leaves each moved character body's pose stale until the
+    /// engine's step, so every character body moves against the last step's poses; and one
+    /// whose walker passes into a character body that wants no move, which its own controller
+    /// then moves out of the way.
+    StalePoses,
+    StandingGivesWay,
 }
 
 /// A Rapier world behind the backend interface.
@@ -211,6 +224,8 @@ pub struct Rapier {
     walked: Vec<Raw>,
     up: Vector,
     fall: f32,
+    /// #2243: within a step's character moves, what the later ones cast against.
+    stage: Option<character::Stage>,
     /// #251: its vehicle bodies, and the wheel contacts this step's places and drives wrote.
     pub(crate) vehicles: vehicle::Vehicles,
     wheel_rows: Vec<Raw>,
@@ -442,6 +457,7 @@ impl Rapier {
                 InteractionTestMode::And,
             ))
             .sensor(u.sensor);
+        c = belt::carrying(c, m.tangent_speed, self.twin);
         // #191: a sensor reports every body that overlaps it, kinematic ones included, which the
         // engine's default pair filter would skip against a static or kinematic sensor.
         if u.sensor && self.twin != Twin::DefaultPairFilter {
@@ -997,6 +1013,10 @@ impl Backend for Rapier {
         self.aim(targets);
         self.push();
         let vehicles = self.vehicles.ids();
+        let belts = belt::Belts {
+            twin: self.twin,
+            up: self.up,
+        };
         // #251: a world never stepped has no broad phase yet, so a wheel's ray would meet nothing
         // on the first step; it is built first, as the world stands.
         if self.step == 0 && !vehicles.is_empty() {
@@ -1005,7 +1025,7 @@ impl Backend for Rapier {
             // the rest in them, which a debug build refuses; so a world with a joint seeds only
             // its broad phase's boxes, and its first step finds its contacts.
             if self.world.impulse_joints.is_empty() {
-                self.world.detect_collisions(&(), &());
+                self.world.detect_collisions(&belts, &());
             } else {
                 let params = self.world.integration_parameters;
                 let enabled = self.world.colliders.iter().filter(|(_, c)| c.is_enabled());
@@ -1029,7 +1049,7 @@ impl Backend for Rapier {
         if std::mem::take(&mut self.cold) {
             self.world.integration_parameters.warmstart_coefficient = 0.0;
         }
-        let torn = self.soft.step(&mut self.world);
+        let torn = self.soft.step(&mut self.world, &belts);
         self.world.integration_parameters.warmstart_coefficient = warm;
         self.step += 1;
         self.last = self.gather(&before);

@@ -1,0 +1,146 @@
+The #2241 suite run once at base commit 9d02561325430d91e0b8cff3242e11011cc1b8cc ("Merge pull request #2836 …"; no
+implementation of #2241), on November 18, 2026, on macOS 27.2 arm64 (shared, 1-minute load about 60 while it ran),
+Node 24.22.2, vitest 5.0.5, TypeScript 5.9.3, cargo and rustc 1.99.1. The type-check first:
+
+  node node_modules/typescript/bin/tsc -p tests/acceptance/2241/tsconfig.json          (exit 0, no error)
+
+then each test file once, one at a time, with
+
+  PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    node node_modules/vitest/vitest.mjs run --root tests/acceptance/2241 --no-file-parallelism --testTimeout=600000 \
+    --reporter=verbose <file>
+
+The three builds the suite reads were in the target folder before the run: this checkout's release deep-physics, its
+debug build with `--features test-backends`, and the merge base's release deep-physics in
+target/acceptance-191-base/9d0256132543. This run started no build of its own; the suite's own cargo calls brought
+each up to date and copied it out (ac1 143 s, ac4 118 s and ac5 36 s, nearly all of it in cargo; ac2 and ac3 under
+2 s). At the base the merge base is 9d0256132 itself.
+
+Result, over the five runs: Test Files 5 failed (5); Tests 12 failed (12). Every test fails at an assertion in its own
+test file, for the reason the README gives: the base refuses a `tangent_speed` other than 0, its kit holds no belt
+fixture, and it knows none of this suite's three planted names or its test backend. None fails in a helper, at an
+import or at a timeout, and none is BLOCKED or INCONCLUSIVE. No file was run twice.
+
+What the base already does inside those failing tests, which they don't credit:
+- ac4, first test: the base refuses `tangent_speed: 1` on the dynamic box's shape use and `rolling_resistance: 0.05`,
+  each at its field, as it refuses a `tangent_speed` on any body:
+    physics.backend_cap at contact_materials/box/tangent_speed, actual 1: "rapier3d 0.36.1 has no tangent speed; it
+    must be 0, so contact_materials/box/tangent_speed is refused"
+    physics.backend_cap at contact_materials/box/rolling_resistance, actual 0.05: "rapier3d 0.36.1 has no rolling
+    resistance; it must be 0, and a ball that should roll to rest takes angular damping, so
+    contact_materials/box/rolling_resistance is refused"
+  The test fails on the base because the same field on the static belt is refused too.
+- ac5, second test: the two worlds with no `tangent_speed` give the merge base's step hashes, since the merge base is
+  the base:
+    the first world with tangent_speed left out: 241 step hashes here, 241 on the merge base 9d0256132543; the last
+    7fe0c469188cbc16 and 7fe0c469188cbc16
+    the same with its box sliding from 2 m/s: 241 and 241; the last b0ea8fb624e87ce4 and b0ea8fb624e87ce4
+  The test fails on the base because nothing there shows the hashes see a belt: the first world isn't baked.
+
+ac1-level-belt.test.ts (#2241.b41ad7e6)
+ × the box reaches 1 m/s along the belt's +X at 0.204 s within 2 steps, has moved 1.898 m at 2 s within 1%, and the
+   belt's body never moves
+   ac1-level-belt.test.ts:29  AssertionError: belt_level: the first world bakes, a state of its box after each of 240
+   steps: expected '…' to be ''
+     the level belt with tangent_speed 1 isn't baked: physics.backend_cap at contact_materials/belt/tangent_speed:
+     rapier3d 0.36.1 has no tangent speed; it must be 0, so contact_materials/belt/tangent_speed is refused
+ × the behavior kit holds the new fixture belt_level once, the criterion's box and belt with 1.898 m and 1%, and
+   rapier3d passes it, measuring what its own world's bake shows
+   ac1-level-belt.test.ts:39  AssertionError: the kit's data holds the new fixture belt_level: expected '…' to be ''
+     behavior_fixtures: the kit's data holds belt_level 0 times, once expected; it holds free_fall, projectile_range,
+     pendulum_period, … , vehicle_slab, vehicle_platform (58 fixtures, none a belt's)
+ × a planted wrapper that leaves the hook out (belt_hook_left_out) leaves the box at rest and fails, naming
+   belt_level, the answer 1.898 m and the 0 m it read
+   ac1-level-belt.test.ts:64  AssertionError: deep-physics --planted belt_hook_left_out answers: the planted wrapper
+   runs: expected '…' to be ''
+     deep-physics --planted belt_hook_left_out exits 2, not 0; stdout: {"ok":false,"code":"bad_input"}; stderr:
+
+ac2-belt-direction.test.ts (#2241.7f1a12a6)
+ × the belt turned 90° about +Y carries the box 1.898 m along world −Z, and tangent_speed −1 on the level belt moves
+   it −1.898 m along x, each within 1%
+   ac2-belt-direction.test.ts:29  AssertionError: the turned and the reversed belt baked 2 s: expected [ …(2) ] to
+   deeply equal []
+     the turned belt: the belt turned 90° about +Y isn't baked: physics.backend_cap at
+     contact_materials/belt/tangent_speed: rapier3d 0.36.1 has no tangent speed; it must be 0, so
+     contact_materials/belt/tangent_speed is refused
+     the reversed belt: the level belt with tangent_speed −1 isn't baked: physics.backend_cap at
+     contact_materials/belt/tangent_speed: rapier3d 0.36.1 has no tangent speed; it must be 0, so
+     contact_materials/belt/tangent_speed is refused
+ × a planted wrapper that applies the speed along world +X (belt_speed_along_world_x) moves the turned belt's box the
+   wrong way and fails, naming the axis world −Z
+   ac2-belt-direction.test.ts:34  AssertionError: deep-physics --planted belt_speed_along_world_x answers: the planted
+   wrapper runs: expected '…' to be ''
+     deep-physics --planted belt_speed_along_world_x exits 2, not 0; stdout: {"ok":false,"code":"bad_input"}; stderr:
+
+ac3-tilted-belt.test.ts (#2241.cd4957bd)
+ × the box reaches 1 m/s up the slope at 0.320 s within 2 steps and then holds that speed within 1%
+   ac3-tilted-belt.test.ts:27  AssertionError: belt_tilted: the tilted belt's world bakes, a state of its box after
+   each of 240 steps: expected '…' to be ''
+     the belt tilted 10° with tangent_speed 1 isn't baked: physics.backend_cap at contact_materials/belt/tangent_speed:
+     rapier3d 0.36.1 has no tangent speed; it must be 0, so contact_materials/belt/tangent_speed is refused
+ × the behavior kit holds the fixture belt_tilted once, the criterion's box and belt with 1 m/s and the 1% bound, and
+   rapier3d passes it
+   ac3-tilted-belt.test.ts:37  AssertionError: the kit's data holds the fixture belt_tilted: expected '…' to be ''
+     behavior_fixtures: the kit's data holds belt_tilted 0 times, once expected; it holds free_fall, projectile_range,
+     pendulum_period, … , vehicle_slab, vehicle_platform
+ × a planted wrapper that takes the speed along level ground (belt_speed_along_level_ground) holds the box at
+   0.985 m/s and fails the 1% bound, naming belt_tilted
+   ac3-tilted-belt.test.ts:53  AssertionError: deep-physics --planted belt_speed_along_level_ground answers: the
+   planted wrapper runs: expected '…' to be ''
+     deep-physics --planted belt_speed_along_level_ground exits 2, not 0; stdout: {"ok":false,"code":"bad_input"};
+     stderr:
+
+ac4-refusals.test.ts (#2241.385c4a4d)
+ × on Rapier, tangent_speed 1 on the dynamic box's shape use is refused naming the field while the static belt's is
+   taken, and rolling_resistance 0.05 is still refused naming the field and rapier3d
+   ac4-refusals.test.ts:25  AssertionError: the checks on rapier3d: expected [ Array(1) ] to deeply equal []
+     the first world, tangent_speed 1 on its static belt, isn't accepted at check: physics.backend_cap at
+     contact_materials/belt/tangent_speed: rapier3d 0.36.1 has no tangent speed; it must be 0, so
+     contact_materials/belt/tangent_speed is refused
+ × the test backend no_belts, Rapier with belts left out of its caps(), reads excluded_by_caps on the belt fixtures,
+   which pass on Rapier, and refuses the first world naming the field
+   ac4-refusals.test.ts:30  AssertionError: deep-physics --backend no_belts answers: the test-backends build holds the
+   test backend no_belts: expected '…' to be ''
+     deep-physics --backend no_belts exits 2, not 0; stdout: {"ok":false,"code":"bad_input"}; stderr:
+
+ac5-seek-and-merge-base.test.ts (#2241.7a6dcc6f)
+ × the first world sought to 1 s and played on to 2 s gives the straight run's step hashes
+   ac5-seek-and-merge-base.test.ts:23  AssertionError: the first world is baked 2 s into a store, a step hash after
+   each step: expected '…' to be ''
+     the first world isn't baked: physics.backend_cap at contact_materials/belt/tangent_speed: rapier3d 0.36.1 has no
+     tangent speed; it must be 0, so contact_materials/belt/tangent_speed is refused
+ × a world with no tangent_speed gives step hashes byte-identical to the merge base's, and the first world's differ
+   from them
+   ac5-seek-and-merge-base.test.ts:64  AssertionError: step hashes against the merge base's: expected [ Array(1) ] to
+   deeply equal []
+     nothing shows these step hashes see a belt: the first world, its belt at tangent_speed 1, isn't baked:
+     physics.backend_cap at contact_materials/belt/tangent_speed: rapier3d 0.36.1 has no tangent speed; it must be 0,
+     so contact_materials/belt/tangent_speed is refused
+
+Probed apart from the suite on the base's release binary, through the suite's own worlds, calls and judges, to see
+that they are well formed where the base runs them (README: The worlds):
+  the belt worlds with tangent_speed left out, checked: no issue; baked 240 steps: 241 states of each body and 241
+  step hashes, the belt's body at its built pose and at rest in every one
+    level:            the box rests: −0.008 mm along x at 2 s, 0.069 mm into the contact
+    turned 90°:       the box rests: −0.007 mm along world −Z
+    tilted 10°:       the box rests, held by friction: −0.025 mm along the slope
+    sliding from 2 m/s on the level surface: stops 0.4056 m along x (v² ÷ (2μg) = 0.4077 m)
+  a seek over the sliding world baked into a store, to step 120 and played 120 steps on: from step 120, 121 step
+  hashes, each the straight run's, no hash repeating the one before; with its last hash swapped for its first the
+  seek's judge fails, naming step 240
+  the base's own planted `caps_allow_tangent_speed` (#2009's: it lets the field through and runs no belt), as a box
+  left at rest for the judges to read. Their failures:
+    belt_level: the box never comes within 1% of 1 m/s along the belt's +X: it ends at 0.000 m/s (its fastest
+    0.000 m/s), where 1 m/s at 0.204 s within 2 steps is due
+    belt_level: at 2 s the box has moved 0.000 m along the belt's +X, not 1.898 m within 1%
+    the turned belt: at 2 s the box has moved 0.000 m along world −Z, not 1.898 m within 1%
+    the reversed belt: at 2 s the box has moved 0.000 m along x, not -1.898 m within 1%
+    belt_tilted: the box never comes within 1% of 1 m/s up the slope: it ends at 0.000 m/s (its fastest 0.000 m/s),
+    where 1 m/s at 0.320 s within 2 steps is due
+  the closed forms as worked: 0.20387 s, 1.89806 m, 0.31980 s, 0.98481 m/s
+  the base's `backend` call: {"backend": "rapier3d", "reference": true, "caps": ["ccd", "soft_bodies",
+  "character_controller", "vehicle_controller"]}
+
+Not run at the base, because the base can't run them: nothing past each test's first failing assertion. No belt was
+baked, no planted wrapper or test backend answered, and no kit row for a belt fixture was read, so the judges' passing
+side and the planted programs' numbers (0 m, +X, 0.985 m/s) are unproven until an implementation runs them.

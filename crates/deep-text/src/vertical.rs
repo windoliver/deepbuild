@@ -316,7 +316,7 @@ impl Shaper {
         } else {
             &upright[..]
         };
-        let layout = self.layout_with(spec, text, vert, false);
+        let layout = self.layout_with(spec, text, true, vert, false);
         // Every glyph, in the order of its grapheme, as the paragraph's one horizontal line
         // placed it.
         let starts: Vec<usize> = graphemes.iter().map(|r| r.start).collect();

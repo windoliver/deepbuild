@@ -4,7 +4,7 @@
 use serde_json::Value;
 
 use crate::caps::Caps;
-use crate::doc::{read, Refusal, World};
+use crate::doc::{read, BodyKind, Refusal, World};
 use crate::roles::{self, Row};
 
 /// The code of a refusal by a backend's caps.
@@ -77,6 +77,7 @@ pub fn check(doc: &Value, caps: &Caps, table: &[Row]) -> Result<World, Vec<Refus
         Ok(w) if out.is_empty() => {
             out.extend(springs(&w));
             out.extend(capacity(&w));
+            out.extend(belts(&w));
             if out.is_empty() {
                 return Ok(w);
             }
@@ -84,6 +85,7 @@ pub fn check(doc: &Value, caps: &Caps, table: &[Row]) -> Result<World, Vec<Refus
         Ok(w) => {
             out.extend(springs(&w));
             out.extend(capacity(&w));
+            out.extend(belts(&w));
         }
         Err(e) => out.extend(e),
     }
@@ -166,13 +168,14 @@ fn refused_by(doc: &Value, caps: &Caps) -> Vec<Refusal> {
                 out.push(cap(format!("contact_materials/{id}/rolling_resistance"), v, caps, "has no rolling resistance; it must be 0, and a ball that should roll to rest takes angular damping"));
             }
         }
-        if !caps.tangent_speed {
+        // #2241: a belt on a backend that claims none.
+        if !caps.claims.contains(&"belts") {
             if let Some(v) = nonzero(m.get("tangent_speed")) {
                 out.push(cap(
                     format!("contact_materials/{id}/tangent_speed"),
                     v,
                     caps,
-                    "has no tangent speed; it must be 0",
+                    "claims no belts; a contact material's tangent_speed must be 0",
                 ));
             }
         }
@@ -286,6 +289,30 @@ fn refused_by(doc: &Value, caps: &Caps) -> Vec<Refusal> {
                 actual: j["kind"].clone(),
                 what: format!("a {k} joint isn't run by this backend interface yet"),
             });
+        }
+    }
+    out
+}
+
+/// #2241: a belt is a surface of a static or kinematic body; a shape use of any other body whose
+/// contact material carries a `tangent_speed` is refused, naming the field.
+fn belts(w: &World) -> Vec<Refusal> {
+    let mut out = Vec::new();
+    for (id, b) in &w.bodies {
+        if matches!(b.kind, BodyKind::Static | BodyKind::Kinematic) {
+            continue;
+        }
+        for (i, u) in b.shapes.iter().enumerate() {
+            let Some(m) = &u.material else { continue };
+            let speed = w.contact_materials.get(m).map_or(0.0, |c| c.tangent_speed);
+            if speed != 0.0 {
+                out.push(Refusal {
+                    code: "out_of_range",
+                    path: format!("contact_materials/{m}/tangent_speed"),
+                    actual: speed.into(),
+                    what: format!("contact material {m} carries tangent_speed {speed} m/s, and shape {i} of body {id}, which is neither static nor kinematic, uses it; only a static or kinematic body's shape use carries a tangent_speed"),
+                });
+            }
         }
     }
     out

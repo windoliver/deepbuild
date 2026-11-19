@@ -1,9 +1,11 @@
-//! The glyph atlas: alpha pages of glyphs rasterized by Vello CPU from their outlines, with its
-//! f32 pipeline at the scalar SIMD level, so the same bytes come out on every platform. A GPUI
+//! The glyph atlas: alpha pages of glyphs rasterized by Vello CPU from their outlines, at the
+//! variation coordinates they were shaped at (#1484), with its f32 pipeline at the scalar SIMD
+//! level, so the same bytes come out on every platform. A GPUI
 //! writer layer draws from these pages through the GPUI patch's tinted mask sprite; it never
 //! asks GPUI's text system for a glyph (canvas primitives: Text `text@1`, Semantics).
 
 use std::collections::{BTreeMap, VecDeque};
+use std::sync::Arc;
 
 use parley::FontData;
 use vello_cpu::color::palette::css::WHITE;
@@ -157,6 +159,9 @@ struct Key {
     skew: u32,
     /// #1215: turned 90° clockwise, as a vertical run turns a glyph.
     turn: bool,
+    /// #1484: the variation coordinates it was shaped at, so two instances of a variable face
+    /// never share a raster.
+    coords: Arc<[i16]>,
 }
 
 /// The atlas: its pages, the glyphs placed on them, and the rasterizer they come from.
@@ -234,11 +239,18 @@ impl Atlas {
         true
     }
 
-    /// The glyph's place on a page, rasterizing it on first sight. `None` for a blank glyph (a
-    /// space), one above [`MAX_DEVICE_SIZE`], or, until [`Atlas::make_room`], one with no room
-    /// left on [`PAGES`] pages; only the first two are remembered.
-    pub fn glyph(&mut self, font: &FontData, glyph: u32, device_size: f32) -> Option<Placed> {
-        self.glyph_at(font, glyph, device_size, [0, 0], 0.)
+    /// The glyph's place on a page, rasterizing it on first sight at the variation coordinates
+    /// `coords` it was shaped at (#1484). `None` for a blank glyph (a space), one above
+    /// [`MAX_DEVICE_SIZE`], or, until [`Atlas::make_room`], one with no room left on [`PAGES`]
+    /// pages; only the first two are remembered.
+    pub fn glyph(
+        &mut self,
+        font: &FontData,
+        glyph: u32,
+        coords: &Arc<[i16]>,
+        device_size: f32,
+    ) -> Option<Placed> {
+        self.glyph_at(font, glyph, coords, device_size, [0, 0], 0.)
     }
 
     /// [`Atlas::glyph`] with its pen position `phase` of a pixel along, in 1/[`PHASES`] px on x
@@ -248,11 +260,12 @@ impl Atlas {
         &mut self,
         font: &FontData,
         glyph: u32,
+        coords: &Arc<[i16]>,
         device_size: f32,
         phase: [u8; 2],
         skew: f32,
     ) -> Option<Placed> {
-        self.glyph_turned(font, glyph, device_size, phase, (skew, false))
+        self.glyph_turned(font, (glyph, coords), device_size, phase, (skew, false))
     }
 
     /// [`Atlas::glyph_at`], turned 90° clockwise about its pen position when `turn` (#1215: a
@@ -260,7 +273,7 @@ impl Atlas {
     pub fn glyph_turned(
         &mut self,
         font: &FontData,
-        glyph: u32,
+        (glyph, coords): (u32, &Arc<[i16]>),
         device_size: f32,
         phase: [u8; 2],
         (skew, turn): (f32, bool),
@@ -274,6 +287,7 @@ impl Atlas {
             phase,
             skew: skew.to_bits(),
             turn,
+            coords: coords.clone(),
         };
         if let Some(placed) = self.placed.get(&key) {
             if let Some(p) = placed {
@@ -285,7 +299,7 @@ impl Atlas {
             self.placed.insert(key, None);
             return None;
         }
-        let placed = self.rasterize(font, glyph, device_size, phase, (skew, turn));
+        let placed = self.rasterize(font, (glyph, coords), device_size, phase, (skew, turn));
         if self.full {
             return None;
         }
@@ -296,7 +310,7 @@ impl Atlas {
     fn rasterize(
         &mut self,
         font: &FontData,
-        glyph: u32,
+        (glyph, coords): (u32, &[i16]),
         device_size: f32,
         phase: [u8; 2],
         (skew, turn): (f32, bool),
@@ -326,6 +340,7 @@ impl Atlas {
             .font_size(device_size)
             .hint(false)
             .glyph_transform(glyph_transform(skew, turn))
+            .normalized_coords(coords)
             .fill_glyphs(std::iter::once(VelloGlyph {
                 id: glyph,
                 x: origin.0 + f32::from(phase[0]) / f32::from(PHASES),

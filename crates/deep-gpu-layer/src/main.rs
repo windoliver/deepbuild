@@ -442,6 +442,13 @@ pub enum Planted {
     LoopCallsCutLights,
     LoopWorldNormal,
     LoopViewAway,
+    // #1634 (tests/acceptance/1634/README.md: Planted programs): fill lights under the key
+    // lights' 32; a cluster pass that appends lights as they arrive; a cluster's cap that keeps
+    // the first of the document's order; an automatic range cut at a fixed 0.05 lx.
+    FillTop32,
+    ClusterArrivalOrder,
+    ClusterCapByListOrder,
+    AutoRangeFixedCut,
     // #483: the structural steps' wrong programs.
     IterateFeedsFirst,
     SortTiesDecreasing,
@@ -454,6 +461,11 @@ pub enum Planted {
     StepsPerFrame,
     RingKeepsEveryCheckpoint,
     CarriedClassExact,
+    // #1993: stepped grids' and fields' wrong programs (tests/acceptance/1993/*/README.md).
+    StepReadsLivePointer,
+    RingCheckpointsTexturesOnAlternateSteps,
+    RestoreStartsFromClearValue,
+    CheckSkipsBound,
     // #464: print and pixel looks' wrong programs (tests/acceptance/464/README.md).
     VignettePixels,
     GrainFromT,
@@ -795,6 +807,10 @@ impl Planted {
             "loop_calls_cut_lights" => Planted::LoopCallsCutLights,
             "loop_world_normal" => Planted::LoopWorldNormal,
             "loop_view_away" => Planted::LoopViewAway,
+            "fill_top_32" => Planted::FillTop32,
+            "cluster_arrival_order" => Planted::ClusterArrivalOrder,
+            "cluster_cap_by_list_order" => Planted::ClusterCapByListOrder,
+            "auto_range_fixed_cut" => Planted::AutoRangeFixedCut,
             "iterate_feeds_first" => Planted::IterateFeedsFirst,
             "sort_ties_decreasing" => Planted::SortTiesDecreasing,
             "compact_by_atomic" => Planted::CompactByAtomic,
@@ -805,6 +821,12 @@ impl Planted {
             "steps_per_frame" => Planted::StepsPerFrame,
             "ring_keeps_every_checkpoint" => Planted::RingKeepsEveryCheckpoint,
             "carried_class_exact" => Planted::CarriedClassExact,
+            "step_reads_live_pointer" => Planted::StepReadsLivePointer,
+            "restore_starts_from_clear_value" => Planted::RestoreStartsFromClearValue,
+            "check_skips_bound" => Planted::CheckSkipsBound,
+            "ring_checkpoints_textures_on_alternate_steps" => {
+                Planted::RingCheckpointsTexturesOnAlternateSteps
+            }
             "vignette_pixels" => Planted::VignettePixels,
             "grain_from_t" => Planted::GrainFromT,
             "partial_coverage" => Planted::PartialCoverage,

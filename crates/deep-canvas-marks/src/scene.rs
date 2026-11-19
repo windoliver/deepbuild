@@ -712,15 +712,13 @@ fn text_runs(
 
 /// #1964: a text's `runs` as styled spans of its one shaped run (`[{from, to, role, font, weight,
 /// style, size, tracking, shift, underline, strike}] ≤ 1,024`), each field held at the run's
-/// path: a run's font names a font of the look, and a run's weight sets its font (the item's
-/// `family` when it names none) as the item's weight does, on its variable twin where no static
-/// face has it. A run's role is resolved where it paints ([`text_runs`]); one naming a status role
+/// path: a run's font names a font of the look, and a run's weight draws exactly, as the item's
+/// does (#1484). A run's role is resolved where it paints ([`text_runs`]); one naming a status role
 /// is the document check's `status_color_unbound`, as any paint's is.
 pub fn text_spans(
     params: &Map<String, Value>,
     path: &str,
     ty: &Type,
-    (item_family, weight): (Option<&'static str>, u16),
 ) -> Result<Vec<deep_text::Span>, Refused> {
     const FIELDS: [&str; 11] = [
         "from",
@@ -779,14 +777,13 @@ pub fn text_spans(
             Some(_) => return refuse("out_of_range", format!("{at}/weight")),
         };
         let family = match fields.get("font") {
-            None => item_family.filter(|_| run_weight.is_some()),
+            None => None,
             Some(Value::String(font)) => match ty.family(font) {
                 Some(f) => Some(f),
                 None => return refuse("ref_unresolved", format!("{at}/font: {font}")),
             },
             Some(_) => return bad("font"),
-        }
-        .map(|f| deep_text::fonts::family_at(f, run_weight.unwrap_or(weight)));
+        };
         let italic = match fields.get("style").map(Value::as_str) {
             None => None,
             Some(Some("normal")) => Some(false),
@@ -968,8 +965,8 @@ fn text_spec_of(
         Some(Value::String(lang)) => Some(lang.clone()),
         Some(_) => return refuse("bad_doc", format!("{path}/params/lang")),
     };
-    // #496: a weight a channel or driver writes arrives as a number, rounded to a whole unit;
-    // a weight no static face of the family has is set on its variable twin.
+    // #496: a weight a channel or driver writes arrives as a number, rounded to a whole unit,
+    // which the shaper draws exactly (#1484).
     let weight = params
         .get("weight")
         .and_then(Value::as_f64)
@@ -992,11 +989,9 @@ fn text_spec_of(
         line_height,
         gap: list.map_or(0.0, |l| l.gap),
         indent: list.map_or(0.0, |l| l.indent),
-        spans: text_spans(params, &path, ty, (ty.family(&font), weight))?,
+        spans: text_spans(params, &path, ty)?,
         text,
-        family: ty
-            .family(&font)
-            .map(|f| deep_text::fonts::family_at(f, weight)),
+        family: ty.family(&font),
         fallback: ty.fallback.clone(),
         lang,
         font,

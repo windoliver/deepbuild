@@ -1,0 +1,97 @@
+# Base run: commit 81c6b9c34 ("Merge pull request #2849 …"), before any implementation, on this Mac (Apple M5 Max, 18
+# cores, macOS 27.2), loaded by other sessions: a 1-minute load average of 52 to 92 during the runs.
+# NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 npx vitest run --root tests/acceptance/1484 --no-file-parallelism --testTimeout=600000
+# After two corrections, only the two files they touched ran again, with the filter `warm outlines` (AGENTS.md: only
+# affected checks after a correction): warm.test.ts now times 100,000 warm lines a process, not 5,000, whose readings
+# start-up jitter swamped (ratios 0.69 to 4.10 of the base with itself); outlines.test.ts names a static face once a run,
+# not once a glyph. Their output below is that second run's; the other five files' is the first run's (99.8 s).
+# Trimmed: vitest's code frames are cut; every assertion message and printed reading is whole. <checkout> is the worktree.
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/1484
+
+AC1 #1484.57659fda (outlines.test.ts, the second run)
+     × AC1 #1484.57659fda the title's outlines equal its face's instance at the opsz maximum and the label's at the minimum, each within one font unit 996ms
+     × AC1 #1484.57659fda a planted shaper that ignores the axis (raster planted shaper_ignores_opsz) fails, naming the run 82ms
+
+ FAIL  outlines.test.ts > … > AC1 #1484.57659fda the title's outlines equal its face's instance at the opsz maximum and the label's at the minimum, each within one font unit
+AssertionError: the runs' outlines against their face's axis instances (2 problems): expected [ …(2) ] to deeply equal []
++   "run title (\"Hamburgefonts\", 64 u, weight 400): 13 glyphs (Hamburgefonts) are set in crates/deep-text/fonts/Inter-Regular.ttf, a face with no opsz and wght axes, so they can't be at the axis maximum instance",
++   "run label (\"Hamburgefonts\", 14 u, weight 400): 13 glyphs (Hamburgefonts) are set in crates/deep-text/fonts/Inter-Regular.ttf, a face with no opsz and wght axes, so they can't be at the axis minimum instance",
+ ❯ outlines.test.ts:91:110
+
+ FAIL  outlines.test.ts > … > AC1 #1484.57659fda a planted shaper that ignores the axis (raster planted shaper_ignores_opsz) fails, naming the run
+AssertionError: raster of the title and the label planted shaper_ignores_opsz answered ok: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+ ❯ drew helpers.ts:150:89
+ ❯ draw outlines.test.ts:84:10
+
+AC2 #1484.2a04de3f (stems.test.ts)
+AC2 #1484.2a04de3f stems of I and l in the window, device px: 400: 4.454, 4.218; 450: 4.454, 4.218; 500: 5.345, 5.155
+     × AC2 #1484.2a04de3f in the window, each bar of Il at weight 450 is thicker than at 400 and thinner than at 500, each by more than 0.02 device px 1639ms
+
+ FAIL  stems.test.ts > … > AC2 #1484.2a04de3f in the window, each bar of Il at weight 450 is thicker than at 400 and thinner than at 500, each by more than 0.02 device px
+AssertionError: weight 450's stems against 400's and 500's in the window (400: 4.454, 4.218; 450: 4.454, 4.218; 500: 5.345, 5.155): expected [ …(2) ] to deeply equal []
++   "run w450 (\"Il\", 24 u, weight 450): I's stem reads 4.454 device px against 4.454 at weight 400: not thicker",
++   "run w450 (\"Il\", 24 u, weight 450): l's stem reads 4.218 device px against 4.218 at weight 400: not thicker",
+ ❯ stems.test.ts:58:96
+
+AC3 #1484.1be2fec6 (atlas.test.ts)
+AC3 #1484.1be2fec6 rasterized: 13 for the 16 u text (13 distinct glyphs), then 0 for the 32 u text (13 distinct glyphs)
+     × AC3 #1484.1be2fec6 after the 16 u text at zoom 2, the 32 u text at zoom 1 (both 32 device px) rasterizes every one of its glyphs, and the window draws it as Vello CPU does 1305ms
+
+ FAIL  atlas.test.ts > … > AC3 #1484.1be2fec6 after the 16 u text at zoom 2, the 32 u text at zoom 1 (both 32 device px) rasterizes every one of its glyphs, and the window draws it as Vello CPU does
+AssertionError: run label ("Hamburgefonts", 32 u, weight 400) at zoom 1 rasterized 0 of its 13 distinct glyphs: the rest came from atlas entries run label ("Hamburgefonts", 16 u, weight 400) at zoom 2 left, at the same 32 device px but other coordinates (opsz 16, not 32): expected 0 to be greater than or equal to 13
+ ❯ atlas.test.ts:45:226
+
+AC4 #1484.f9223910 (fit.test.ts)
+AC4 #1484.f9223910 widths, fit / drawn, px: title 468.281 / 468.281; label 102.437 / 102.437; between 148.467 / 147.393; bold 97.862 / 99.252
+     × AC4 #1484.f9223910 deep-text fit's width equals the drawn run's width within 0.1 px at 64 u, 14 u, 20 u at 450 and 13 u at 700 1861ms
+
+ FAIL  fit.test.ts > … > AC4 #1484.f9223910 deep-text fit's width equals the drawn run's width within 0.1 px at 64 u, 14 u, 20 u at 450 and 13 u at 700
+AssertionError: the fit check against drawing: expected [ …(2) ] to deeply equal []
++   "run between (\"Hamburgefonts\", 20 u, weight 450): the fit check measures 148.467 px and drawing 147.393 px, 1.074 apart, past 0.1",
++   "run bold (\"Hamburgefonts\", 13 u, weight 700): the fit check measures 97.862 px and drawing 99.252 px, 1.390 apart, past 0.1",
+ ❯ fit.test.ts:41:55
+
+AC5 #1484.6f97433d (warm.test.ts, the second run; at the base the change is the merge base, so it can only read PASS or INCONCLUSIVE here)
+AC5 #1484.6f97433d warm shaping, the change against the merge base 81c6b9c34: 0.0096 / 0.0094 µs a glyph = 1.017; 0.0108 / 0.0124 µs a glyph = 0.868; 0.0116 / 0.0098 µs a glyph = 1.182; 0.0107 / 0.0118 µs a glyph = 0.911; 0.0105 / 0.0105 µs a glyph = 0.998 against 1.05 (margin 29.9%), loads 92.0, 92.0, 92.0, 86.5, 86.5, 86.5, 86.5, 86.5, 86.5, 86.5 on 18 cores
+AC5 #1484.6f97433d warm shaping planted no_cache, the change against the merge base 81c6b9c34: 0.2627 / 0.0106 µs a glyph = 24.899; 0.2708 / 0.0093 µs a glyph = 29.183; 0.2476 / 0.0113 µs a glyph = 21.927; 0.2591 / 0.0104 µs a glyph = 24.905; 0.2602 / 0.0097 µs a glyph = 26.863 against 1.05 (margin 691.0%), loads 80.2, 72.6, 72.6, 68.0, 68.0, 62.1, 62.1, 56.2, 56.2, 52.6 on 18 cores
+     × AC5 #1484.6f97433d the 300-glyph label at 20 u and 450, shaped warm, takes at most 1.05 times the merge base's µs a glyph in five rounds out of five 5372ms
+     × AC5 #1484.6f97433d the planted shaper with no cache (deep-text shape --planted no_cache) on the change's side fails the same judge 50694ms
+
+ FAIL  warm.test.ts > … > AC5 #1484.6f97433d the 300-glyph label at 20 u and 450, shaped warm, takes at most 1.05 times the merge base's µs a glyph in five rounds out of five
+AssertionError: INCONCLUSIVE: a loaded run counts neither way (load 92.0 above the 18 cores): warm shaping, the change against the merge base 81c6b9c34: 0.0096 / 0.0094 µs a glyph = 1.017; 0.0108 / 0.0124 µs a glyph = 0.868; 0.0116 / 0.0098 µs a glyph = 1.182; 0.0107 / 0.0118 µs a glyph = 0.911; 0.0105 / 0.0105 µs a glyph = 0.998 against 1.05 (margin 29.9%), loads 92.0, 92.0, 92.0, 86.5, 86.5, 86.5, 86.5, 86.5, 86.5, 86.5 on 18 cores; this is not a pass
+ ❯ inconclusive helpers.ts:62:10
+ ❯ warm.test.ts:135:38
+
+ FAIL  warm.test.ts > … > AC5 #1484.6f97433d the planted shaper with no cache (deep-text shape --planted no_cache) on the change's side fails the same judge
+AssertionError: INCONCLUSIVE: a loaded run counts neither way (load 80.2 above the 18 cores): warm shaping planted no_cache, the change against the merge base 81c6b9c34: 0.2627 / 0.0106 µs a glyph = 24.899; 0.2708 / 0.0093 µs a glyph = 29.183; 0.2476 / 0.0113 µs a glyph = 21.927; 0.2591 / 0.0104 µs a glyph = 24.905; 0.2602 / 0.0097 µs a glyph = 26.863 against 1.05 (margin 691.0%), loads 80.2, 72.6, 72.6, 68.0, 68.0, 62.1, 62.1, 56.2, 56.2, 52.6 on 18 cores; this is not a pass
+ ❯ inconclusive helpers.ts:62:10
+ ❯ warm.test.ts:140:38
+
+AC6 #1484.c44e2788 (taste.test.ts; the pictures this run wrote to docs/evidence/1484/ were deleted, not committed)
+AC6 #1484.c44e2788: the check run's pictures (the window left, Vello CPU's snapshot right):
+  docs/evidence/1484/weight-400.png  34ae85b7c9e0607ff4e05947b9b6f01dbceadd7f03ae4ea135d4414fcf337cde
+  docs/evidence/1484/weight-450.png  ec7cf0d7471e84fb30c7c8ff4214ea887c928e27b5c59b04e5c2315028497f82
+  docs/evidence/1484/weight-500.png  708361edb9888d112a5753d4fce3030d2cfe4e5279fd80230837b0b57b5165c2
+     × AC6 #1484.c44e2788 the check run takes the fixture's rows in the window beside Vello CPU's snapshot, and the recorded call on exactly those pictures says they look right; with none the run is INCONCLUSIVE, never PASS 1772ms
+
+ FAIL  taste.test.ts > … > AC6 #1484.c44e2788 the check run takes the fixture's rows in the window beside Vello CPU's snapshot, and the recorded call on exactly those pictures says they look right; with none the run is INCONCLUSIVE, never PASS
+AssertionError: INCONCLUSIVE: no taste call is recorded (TASTE.json's verdict is null): attach these to the PR, show them in the session
+  docs/evidence/1484/weight-400.png  34ae85b7c9e0607ff4e05947b9b6f01dbceadd7f03ae4ea135d4414fcf337cde
+  docs/evidence/1484/weight-450.png  ec7cf0d7471e84fb30c7c8ff4214ea887c928e27b5c59b04e5c2315028497f82
+  docs/evidence/1484/weight-500.png  708361edb9888d112a5753d4fce3030d2cfe4e5279fd80230837b0b57b5165c2
+and record the call in tests/acceptance/1484/TASTE.json (README: The taste call); this is not a pass
+ ❯ inconclusive helpers.ts:62:10
+ ❯ taste.test.ts:91:62
+
+AC7 #1484.2d4b65dd (window.test.ts)
+     × AC7 #1484.2d4b65dd the window's run of the 13 u label at 700 holds Vello CPU's summed coverage within 2% and its centroid within 0.1 device px, at zoom 2 1422ms
+
+ FAIL  window.test.ts > … > AC7 #1484.2d4b65dd the window's run of the 13 u label at 700 holds Vello CPU's summed coverage within 2% and its centroid within 0.1 device px, at zoom 2
+AssertionError: the window against Vello CPU's snapshot: expected [ …(2) ] to deeply equal []
++   "at zoom 2: run label (\"Hamburgefonts\", 13 u, weight 700): summed coverage 1086.81 in the window against 1635.76 in Vello CPU's snapshot, -33.6% apart, past 2%",
++   "at zoom 2: run label (\"Hamburgefonts\", 13 u, weight 700): coverage centroid (113.759, 26.892) in the window against (114.286, 26.867) in Vello CPU's snapshot, 0.527 device px apart, past 0.1",
+ ❯ window.test.ts:31:66
+
+ Test Files  7 failed (7)
+      Tests  9 failed (9)

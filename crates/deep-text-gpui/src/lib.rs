@@ -467,6 +467,8 @@ struct Text {
     new_glyphs: Option<Vec<(u32, u32)>>,
     /// The planted pre-#1480 path: see [`plant_whole_page_upload`].
     whole_page: bool,
+    /// #1484 AC1's planted shaper: see [`plant_ignores_opsz`].
+    ignores_opsz: bool,
 }
 
 impl Text {
@@ -482,12 +484,16 @@ impl Text {
             uploaded: HashMap::new(),
             new_glyphs: None,
             whole_page: false,
+            ignores_opsz: false,
         }
     }
 
     /// The label's shape, from the cache: a label is shaped once, never per frame. The cache is
     /// emptied whole at 4,096 runs, so a frame of more than that shapes some of them again.
     fn shape(&mut self, label: &Label) -> Arc<Shaped> {
+        if self.ignores_opsz {
+            return Arc::new(self.shaper.shape_ignoring_opsz(&label.spec()));
+        }
         let key = ShapeKey::of(label);
         if let Some(frame) = &mut self.frame {
             if !frame.contains(&key) {
@@ -572,7 +578,7 @@ impl Text {
                     }
                     let k = device / MAX_DEVICE_SIZE;
                     self.atlas
-                        .glyph(&glyph.font, glyph.id, MAX_DEVICE_SIZE)
+                        .glyph(&glyph.font, glyph.id, &glyph.coords, MAX_DEVICE_SIZE)
                         .map(|place| Shown::Sprite {
                             place,
                             at: [at[0] + place.left as f32 * k, at[1] + place.top as f32 * k],
@@ -585,7 +591,7 @@ impl Text {
                     self.atlas
                         .glyph_turned(
                             &glyph.font,
-                            glyph.id,
+                            (glyph.id, &glyph.coords),
                             device,
                             [px, py],
                             (glyph.skew, glyph.turn),
@@ -656,6 +662,12 @@ pub fn take_new_glyphs() -> Vec<(u32, u32)> {
 /// generation, as before the rect path. Only the proof binary turns it on.
 pub fn plant_whole_page_upload(on: bool) {
     TEXT.with(|text| text.borrow_mut().whole_page = on);
+}
+
+/// #1484 AC1's planted shaper: on, every label is shaped with its optical size left at the face's
+/// default, past every cache. Only the proof binary's `shaper_ignores_opsz` turns it on.
+pub fn plant_ignores_opsz(on: bool) {
+    TEXT.with(|text| text.borrow_mut().ignores_opsz = on);
 }
 
 /// The size a label takes, for a layout that sizes to its text.

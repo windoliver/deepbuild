@@ -44,6 +44,12 @@ const NO_VEHICLE_CAPS: Caps = Caps {
     backend: "no_vehicle_controller",
     ..TEST_CAPS
 };
+/// #2241: a test backend that leaves belts out of its caps, under its own name, so a refusal by
+/// its caps names it.
+const NO_BELTS_CAPS: Caps = Caps {
+    backend: "no_belts",
+    ..TEST_CAPS
+};
 
 /// A test backend: Rapier running `twin`, under `caps`, declaring `tolerances` of its own.
 pub struct TestBackend {
@@ -62,8 +68,8 @@ const fn test(name: &'static str, twin: Twin, caps: &'static Caps) -> TestBacken
     }
 }
 
-/// #191's test backends by name, and #251's and #182's.
-pub const TEST_BACKENDS: [TestBackend; 14] = [
+/// #191's test backends by name, and #251's, #182's, #2241's and #2243's.
+pub const TEST_BACKENDS: [TestBackend; 16] = [
     test("friction_average", Twin::FrictionAverage, &TEST_CAPS),
     test("no_joint_limits", Twin::NoJointLimits, &TEST_CAPS),
     test("restitution_min", Twin::RestitutionMin, &TEST_CAPS),
@@ -78,6 +84,7 @@ pub const TEST_BACKENDS: [TestBackend; 14] = [
         tolerances: Some(r#"{"free_fall": {"relative": 0.05}}"#),
     },
     test("no_vehicle_controller", Twin::None, &NO_VEHICLE_CAPS),
+    test("no_belts", Twin::None, &NO_BELTS_CAPS),
     // #182: no character controller in its caps; one climbing steps a quarter higher than its
     // step height; one ignoring snap; one whose ground distance is 0.001 m; and one ignoring a
     // launch off the ground.
@@ -90,6 +97,8 @@ pub const TEST_BACKENDS: [TestBackend; 14] = [
         Twin::LaunchGroundedOnly,
         &CHARACTER_CAPS,
     ),
+    // #2243: one that leaves each moved character body's pose stale until the backend's step.
+    test("stale_character_poses", Twin::StalePoses, &CHARACTER_CAPS),
 ];
 
 /// The test backend named `name`, in a `test-backends` build only.

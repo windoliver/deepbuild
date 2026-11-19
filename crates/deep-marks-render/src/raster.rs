@@ -707,9 +707,9 @@ impl<C: Glyphs> Painter<'_, C> {
             } => {
                 let mut label = label_of(spec)
                     .ok_or_else(|| refused("bad_font", &format!("items/{item}/params/font")))?;
-                // #496's planted build: a driven weight drawn on the nearest static face.
+                // #496's planted build: a driven weight drawn at the nearest static face's.
                 if self.anim.as_ref().is_some_and(|a| a.snaps_weight) {
-                    label.family = deep_text::fonts::static_of(label.family);
+                    label.weight = deep_text::fonts::static_weight(label.family, label.weight);
                 }
                 let shaped = if self.spans_apart && !runs.is_empty() {
                     std::sync::Arc::new(shaped_apart(&label, runs))
@@ -1028,7 +1028,7 @@ pub(crate) fn preshape(req: &Request) {
             }
             if let Some(mut label) = label_of(&spec) {
                 if req.snaps_weight {
-                    label.family = deep_text::fonts::static_of(label.family);
+                    label.weight = deep_text::fonts::static_weight(label.family, label.weight);
                 }
                 deep_text_gpui::shape(&label);
             }
