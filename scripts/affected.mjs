@@ -22,7 +22,7 @@
 // the selection without running it. A test that starts a package's build is selected when the change is in that
 // package or the test is in the changed file's own package; otherwise it is WIDE, and --wide also runs it (select, below). --record, run on main, writes what failed into known-failures.json.
 import { spawn, spawnSync } from 'node:child_process';
-import { closeSync, existsSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync, writeSync } from 'node:fs';
+import { closeSync, constants as modes, existsSync, mkdtempSync, openSync, readFileSync, readSync, rmSync, writeFileSync, writeSync } from 'node:fs';
 import { availableParallelism, constants, loadavg, tmpdir } from 'node:os';
 import { dirname, join, posix, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -347,6 +347,8 @@ const LIGHT = /^lint scripts\/(?:repo-rules|conformance-lint|slots-check|canvas-
 // no job: each reads as run by none.
 const live = new Set();
 let stopped = null;
+// The run's jobserver while its builds share it (jobserver, below); each job's end may fill it again.
+let pool = null;
 function run(logs, label, command, args, env = {}, cwd = root) {
   if (stopped) return Promise.resolve({ label, log: null, status: null, output: `stopped by ${stopped}` });
   const log = join(logs, `${label.replace(/\W+/g, '-')}.log`);
@@ -357,7 +359,7 @@ function run(logs, label, command, args, env = {}, cwd = root) {
     const child = spawn(LIGHT.test(label) ? leased[0] : process.execPath, LIGHT.test(label) ? leased.slice(1) : [join(root, 'scripts/throttle.mjs'), cls, '--wait', '30', '--', ...leased], { cwd, stdio: ['ignore', descriptor, descriptor], env: childEnv(env) });
     live.add(child);
     child.on('error', (error) => { live.delete(child); closeSync(descriptor); done({ label, log, status: null, output: String(error) }); });
-    child.on('close', (status) => { live.delete(child); closeSync(descriptor); done({ label, log, status, output: readFileSync(log, 'utf8') }); });
+    child.on('close', (status) => { live.delete(child); closeSync(descriptor); pool?.refill(); done({ label, log, status, output: readFileSync(log, 'utf8') }); });
   });
 }
 
@@ -374,21 +376,44 @@ const SHARDS = Math.min(Number(process.env.DEEP_SHARDS) || Math.max(1, Math.floo
  * the run's, GNU make's named pipe through CARGO_MAKEFLAGS, and starts each compile past its first on a token read from
  * the pipe. Cargo builds one at a time in a folder's target/ and runs that first compile on no token, so the pipe holds
  * a token per core less one for the worktree and one for each of the `shards` running; `give` hands theirs back once
- * they have ended. `close` ends it, before the timed blocks, which compile as before.
+ * they have ended. `close` ends it, before the timed blocks, which compile as before. A cargo killed while it holds
+ * tokens never writes them back (#2848), so as each job ends the run fills the pipe to its count again, as the hub's
+ * pool does, but only while no process but the run has the pipe open: a live build may hold tokens, and none is added
+ * beside them.
  */
 function jobserver(shards) {
   const dir = mkdtempSync(join(tmpdir(), 'deep-jobserver-')), fifo = join(dir, 'tokens');
   const made = spawnSync('mkfifo', ['-m', '600', fifo], { encoding: 'utf8' });
   if (made.status !== 0) throw Error(`BLOCKED jobserver: mkfifo failed: ${made.error?.message ?? made.stderr.trim()}`);
-  // Held open by the run, so the pipe keeps its tokens while no build has it open.
-  const fd = openSync(fifo, 'r+');
-  const give = (count) => { if (count > 0) writeSync(fd, '+'.repeat(count)); };
+  // Held open by the run, so the pipe keeps its tokens while no build has it open, and never blocking the run.
+  const fd = openSync(fifo, modes.O_RDWR | modes.O_NONBLOCK);
+  let tokens = 0;
+  const give = (count) => { if (count > 0) { tokens += count; writeSync(fd, '+'.repeat(count)); } };
   give(CORES - 1 - shards);
+  // Whether the run alone has the pipe open: fuser names every process that has, the run among them, so a fuser that
+  // can't see it, is missing or hangs on another mount says nothing.
+  const alone = () => {
+    const seen = spawnSync('fuser', [fifo], { encoding: 'utf8', timeout: 10_000 });
+    const pids = seen.status === null ? [] : seen.stdout.split(/\s+/).flatMap((word) => word.match(/^(\d+)\D*$/)?.[1] ?? []);
+    return pids.includes(String(process.pid)) && pids.every((pid) => pid === String(process.pid));
+  };
+  // No build has started yet, so a run that isn't alone here never can be, and the tokens a killed build held stay lost.
+  if (!alone()) console.log(`JOBSERVER fuser can't see the run's pipe, so tokens a killed build held are not given back (#2848)`);
   const before = process.env.CARGO_MAKEFLAGS;
   process.env.CARGO_MAKEFLAGS = `-j --jobserver-auth=fifo:${fifo}`;
   let open = true;
   return {
     give,
+    refill: () => {
+      if (!open || !alone()) return;
+      // The free tokens are read out first, so a build that opens the pipe meanwhile takes none and is seen.
+      const buffer = Buffer.alloc(4096);
+      let free = 0;
+      for (;;) {
+        try { const read = readSync(fd, buffer, 0, buffer.length, null); if (read <= 0) break; free += read; } catch { break; }
+      }
+      writeSync(fd, '+'.repeat(alone() ? tokens : free));
+    },
     close: () => {
       if (!open) return;
       open = false;
@@ -489,7 +514,7 @@ async function main(args) {
   watchBinaries(binRoot);
   const binEnv = (cwd = root) => ({ DEEP_BIN_DIR: binaries.get(cwd) });
   const prepareBinaries = (cwd, selected) => binaries.set(cwd, buildBinaries(cwd, join(binRoot, String(binaries.size), 'bin'), binaryNames(cwd, selected)));
-  let shards = [], pool = null;
+  let shards = [];
   try {
     const vitest = (files, extra, label, cwd, env = {}) => run(logs, label, process.execPath, ['node_modules/vitest/vitest.mjs', 'run', ...extra, '--reporter=dot', '--reporter=./scripts/proof-vitest-reporter.mjs', ...files], { ...env, ...binEnv(cwd), DEEP_PROOF_VITEST_REPORT: join(logs, `${label}.jsonl`) }, cwd);
     const node = (files, extra, label, cwd, env = {}) => run(logs, label, process.execPath, ['--test', ...extra, '--test-reporter=./scripts/proof-reporter.mjs', `--test-reporter-destination=${join(logs, `${label}.jsonl`)}`, '--test-reporter=dot', '--test-reporter-destination=stdout', ...files], { ...env, ...binEnv(cwd) }, cwd);
