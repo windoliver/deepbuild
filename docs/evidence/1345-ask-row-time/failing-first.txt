@@ -1,0 +1,61 @@
+Thu Nov 19 12:31:18 PM PST 2026
+warning: unused variable: `diagnostic_key`
+    --> vendor/quickjs-jit-runtime/src/compiler/optimized.rs:8795:5
+     |
+8795 |     diagnostic_key: Option<crate::runtime::FunctionKey>,
+     |     ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_diagnostic_key`
+     |
+     = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `apply_stress_gc_after_validation` is never used
+    --> vendor/quickjs-jit-runtime/src/lib.rs:1387:4
+     |
+1387 | fn apply_stress_gc_after_validation(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `machine_disassembly` is never read
+    --> vendor/quickjs-jit-runtime/src/compiler/baseline.rs:1985:5
+     |
+1974 | pub struct RelocatableCode {
+     |            --------------- field in this struct
+...
+1985 |     machine_disassembly: Option<String>,
+     |     ^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `RelocatableCode` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+
+warning: `quickjs-jit-runtime` (lib) generated 3 warnings (run `cargo fix --lib -p quickjs-jit-runtime` to apply 1 suggestion)
+warning: unused import: `gpui_kit`
+  --> crates/deep-app/src/gpu_view.rs:12:5
+   |
+12 | use gpui_kit::*;
+   |     ^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: `deep-app` (lib) generated 1 warning
+warning: `deep-app` (lib test) generated 1 warning (1 duplicate)
+    Finished `test` profile [unoptimized] target(s) in 45m 44s
+     Running unittests src/lib.rs (target/debug/deps/deep_app-80ff74784ced3b67)
+
+running 1 test
+test views::tests::an_ask_row_keeps_when_its_default_applies_where_a_session_row_gives_its_time_to_its_title ... FAILED
+
+failures:
+
+---- views::tests::an_ask_row_keeps_when_its_default_applies_where_a_session_row_gives_its_time_to_its_title stdout ----
+
+thread 'views::tests::an_ask_row_keeps_when_its_default_applies_where_a_session_row_gives_its_time_to_its_title' (4024390) panicked at crates/deep-app/src/views.rs:4898:9:
+an ask row shows when its recommended answer applies (#1345, #1458), whatever its title keeps
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    views::tests::an_ask_row_keeps_when_its_default_applies_where_a_session_row_gives_its_time_to_its_title
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 109 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p deep-app --lib`
+[exit 101] Thu Nov 19 01:17:09 PM PST 2026
