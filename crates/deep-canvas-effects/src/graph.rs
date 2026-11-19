@@ -240,6 +240,11 @@ pub enum From {
         op: String,
         output: String,
     },
+    /// A stepped operator's carried texture output as the previous fixed step left it (#1993).
+    Previous {
+        op: String,
+        output: String,
+    },
     /// A 3D texture a compute operator wrote earlier in the frame; `previous` marks a read of
     /// an earlier frame's, which the check refuses (#483).
     Texture3d {
@@ -411,6 +416,9 @@ pub struct TexOut {
     pub size: [u32; 3],
     pub dim3: bool,
     pub mips: bool,
+    /// Carried state (#1993), as a storage output's: a stepped operator's 2D texture kept from
+    /// step to step, with its checkpoint ring.
+    pub carry: Option<Carry>,
 }
 
 impl TexOut {
@@ -464,6 +472,22 @@ pub struct Carry {
     pub budget: u64,
 }
 
+/// A stepped operator's stability bound (#1993): what moves at `speed` m/s over cells of `cell`
+/// m crosses speed × (1 ÷ rate) ÷ cell of a cell a step, which the check holds to `max`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Bound {
+    pub speed: f64,
+    pub cell: f64,
+    pub max: f64,
+}
+
+impl Bound {
+    /// The share of a cell crossed in one step at `rate` steps a second.
+    pub fn ratio(&self, rate: u32) -> f64 {
+        self.speed / f64::from(rate) / self.cell
+    }
+}
+
 /// A compute operator's `instances` output (#484; Operator output): the instancer it draws, and
 /// the compact step whose kept rows are what draws.
 #[derive(Clone, Debug, PartialEq)]
@@ -507,6 +531,8 @@ pub struct Operator {
     /// A compute operator stepped once per fixed step, `rate` steps a second, not once a frame
     /// (#252).
     pub stepped: Option<u32>,
+    /// A stepped operator's stability bound (#1993).
+    pub bound: Option<Bound>,
     pub workgroup: u32,
     /// A WGSL-subset source's asset ID, in place of steps.
     pub source: Option<String>,
@@ -901,6 +927,17 @@ fn input(name: &str, v: &Value, issues: &mut Vec<Issue>) -> Option<Input> {
                     target.get("output").and_then(Value::as_str),
                     target.get("collection").and_then(Value::as_str),
                 ) {
+                    // #1993: a carried texture as the previous step left it.
+                    (Some(Value::String(op)), Some(output), None) if t.get("step").is_some() => {
+                        if t["step"] != "previous" {
+                            bad(issues, "a texture input's step is previous");
+                            return None;
+                        }
+                        From::Previous {
+                            op: op.clone(),
+                            output: output.into(),
+                        }
+                    }
                     // #149: a collection's own target, which the frame draws before its passes.
                     (_, Some(output), Some(collection)) => From::Target {
                         op: format!("{COLLECTION}{collection}"),
