@@ -31,9 +31,10 @@ fn refused(code: &str, path: &str) -> Value {
 
 /// A graph's or a label's refusal code, as the document check raises it.
 pub(crate) fn code(refusal: &Value) -> &'static str {
-    const CODES: [&str; 7] = [
+    const CODES: [&str; 8] = [
         "ref_unresolved",
         "layout.cycle",
+        "layout.not_a_tree",
         "layout.seed_required",
         "layout.algo_unsupported",
         "graph.bad_edge",

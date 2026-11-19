@@ -1,0 +1,34 @@
+#!/bin/bash
+# Throwaway stand-in for `git` (round 2, Defect 2). Not part of the acceptance suite. Put this folder first in
+# PATH and set PLANT: every git command goes to the real git unchanged, except `git archive`, whose tar (the merge
+# base's export, as the AC5 redraft's base.ts asks for it) is unpacked, altered as PLANT says, and packed again. So
+# base.ts sees a planted merge base without anything in the repo or in base.ts changing:
+#   PLANT=fails          packages/evidence/build-patterns.mjs is replaced by a script that exits 3
+#   PLANT=wrote-then-failed  the real build-patterns.mjs with `process.exit(4)` added after it has written its output
+#   PLANT=missing        packages/evidence/build-patterns.mjs is deleted (package.json still names it)
+#   PLANT=unnamed        packages/evidence/package.json's build no longer names the step (its output is still read)
+#   PLANT=not-node       packages/record/package.json's build runs `sh build-versions.sh` before tsc
+#   PLANT=no-steps       no build names a step before tsc, and the two data files are already in the tree (a stand-in
+#                        for a merge base whose sources need nothing built: the files are this checkout's, which is
+#                        the merge base here)
+REAL=/opt/homebrew/bin/git
+REPO=$(cd "$(dirname "$0")/../../.." && pwd)
+if [ "${1:-}" != archive ] || [ -z "${PLANT:-}" ]; then exec "$REAL" "$@"; fi
+tmp=$(mktemp -d /tmp/dh2365-r2-plant-XXXXXX)
+"$REAL" "$@" | tar -x -C "$tmp" || exit 1
+strip_step() { sed -i '' -E 's#"build": "node [a-z-]+\.mjs && tsc#"build": "tsc#' "$1"; }
+case "$PLANT" in
+  fails) printf '%s\n' "process.stderr.write('planted: this build step fails\\n');" 'process.exit(3);' > "$tmp/packages/evidence/build-patterns.mjs" ;;
+  wrote-then-failed) printf '%s\n' "process.stderr.write('planted: this build step wrote its output and then failed\\n');" 'process.exit(4);' >> "$tmp/packages/evidence/build-patterns.mjs" ;;
+  missing) rm "$tmp/packages/evidence/build-patterns.mjs" ;;
+  unnamed) strip_step "$tmp/packages/evidence/package.json" ;;
+  not-node) sed -i '' -E 's#"build": "node build-versions\.mjs && tsc#"build": "sh build-versions.sh \&\& tsc#' "$tmp/packages/record/package.json" ;;
+  no-steps)
+    strip_step "$tmp/packages/evidence/package.json"; strip_step "$tmp/packages/record/package.json"
+    mkdir -p "$tmp/packages/evidence/dist" "$tmp/packages/record/dist"
+    cp "$REPO/packages/evidence/dist/patterns.json" "$tmp/packages/evidence/dist/"; cp "$REPO/packages/record/dist/versions.json" "$tmp/packages/record/dist/" ;;
+  *) echo "unknown PLANT=$PLANT" >&2; rm -rf "$tmp"; exit 2 ;;
+esac
+tar -c -C "$tmp" . ; code=$?
+rm -rf "$tmp"
+exit $code

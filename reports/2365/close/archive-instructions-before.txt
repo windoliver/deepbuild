@@ -1,0 +1,16 @@
+One run a side of each archive budget task, `/usr/bin/time -l node benchmarks/archive.mjs <task>`, repo Node 24.22.0.
+base = f98921218 (the merge base then), change = d8ed75253 (this branch before 27866b487). Loads 34 to 64 on 18 cores.
+These are readings, not judged results.
+
+base    live     exit=0 real=  6.8s instr= 22.72G peak= 355MB
+change  live     exit=0 real=  8.7s instr= 39.57G peak= 231MB
+base    month    exit=0 real=  5.4s instr= 18.00G peak= 378MB
+change  month    exit=0 real=  4.7s instr= 23.98G peak= 270MB
+base    backlog  exit=0 real= 21.4s instr= 71.44G peak= 530MB
+change  backlog  exit=0 real= 18.9s instr=103.12G peak= 498MB
+
+After 27866b487's change, same commands, load about 350:
+
+final     live     exit=0 real= 53.5s instr=  17.82G peak= 197MB
+final     month    exit=0 real= 47.5s instr=  18.49G peak= 174MB
+final     backlog  exit=0 real= 80.2s instr=  71.15G peak= 366MB

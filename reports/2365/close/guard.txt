@@ -1,0 +1,4 @@
+start 13:47:31 at 2710afd87
+PASS guard: 25 commits checked: no guarded edit lacks its own approved proposal
+proof: wall time 1533.9 s
+exit=0 14:13:06

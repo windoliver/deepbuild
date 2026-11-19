@@ -5,6 +5,7 @@ import { availableParallelism, homedir, loadavg, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
+import { readApprovals } from './proof-approvals.mjs';
 
 const metrics = ['p50Ms', 'p95Ms', 'peakBytes'];
 
@@ -155,7 +156,7 @@ export function measureOnce(command, cwd, stream = false, timeoutMs = 300_000, f
     const peakBytes = parsePeakRss(report, process.platform);
     const own = parseInstructions(report, process.platform);
     const { instructions, uncounted, qos } = !follow ? { instructions: own, uncounted: [], qos: null } : build && own !== null ? countChildren(readFileSync(counted, 'utf8'), command) : { instructions: null, uncounted: [], qos: null };
-    return { elapsedMs, loadStart, loadEnd, cpuMs: parseCpuMs(report, process.platform), peakBytes, instructions, uncounted, qos, status: result.status, output: stream ? '' : result.stdout + result.stderr };
+    return { elapsedMs, loadStart, loadEnd, cpuMs: parseCpuMs(report, process.platform), peakBytes, instructions, uncounted, qos, status: result.status, output: stream ? '' : result.stdout + result.stderr, stdout: stream ? '' : result.stdout };
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
@@ -340,16 +341,62 @@ const numbers = ({ limits, changeReason, ...rest } = {}) => rest;
 const movedOnce = (current, established) => typeof current?.changeReason === 'string' && current.changeReason.trim() !== ''
   && !('changeReason' in established) && isDeepStrictEqual(numbers(current), numbers(established));
 const frozen = (current, established) => isDeepStrictEqual(current, established) || movedOnce(current, established);
+// A task's criteria say what it proves, not how it is judged: the budget window reads them as the merge base has them.
+const definition = ({ criteria, ...task } = {}) => task;
 
-export function validateBudgets(current, base) {
+// A count a task's run gives, which a ceiling in its limits may hold on any machine (#2665): `instructions`, the
+// instructions retired of the command and every child it waits for, as measure counts them, or `report.<name>`, the
+// number <name> in its report, the command's last stdout line that is a JSON object.
+const isCount = (metric) => metric === 'instructions' || /^report\.\w+$/.test(metric);
+
+// An approved proposal's item for one loosening of a task (#2665): the manifest, the task, the field, and its value at
+// the merge base and in the change, as JavaScript prints a number, `none` for a limit removed, a command as JSON.
+const shown = (value) => (value === undefined ? 'none' : Array.isArray(value) ? JSON.stringify(value) : String(value));
+const proposal = (id, { field, before, after }) => `benchmarks/budgets.json › ${id} › ${field} ${shown(before)} → ${shown(after)}`;
+
+/**
+ * What a change does to a task main holds (#2665): each limit it lowers, as `{metric, old, new}`, and each loosening,
+ * a limit raised or removed, a wider margin or a changed command, as `{field, before, after}`. A limit added or a margin
+ * narrowed only tightens. `other` is any other field it changes; its criteria are free.
+ */
+function changesOf(current, established) {
+  const lowered = [], loosened = [];
+  for (const [metric, before] of Object.entries(established.limits)) {
+    const after = current.limits?.[metric];
+    if (after === undefined || after > before) loosened.push({ field: metric, before, after });
+    else if (after < before) lowered.push({ metric, old: before, new: after });
+  }
+  if (current.margin > established.margin) loosened.push({ field: 'margin', before: established.margin, after: current.margin });
+  if (!isDeepStrictEqual(current.command, established.command)) loosened.push({ field: 'command', before: established.command, after: current.command });
+  const rest = ({ margin, command, limits, ...task }) => task;
+  return { lowered, loosened, other: !isDeepStrictEqual(rest(definition(current)), rest(definition(established))) };
+}
+
+/**
+ * Checks a manifest against its merge base's, and returns each limit the change lowers, `{id, metric, old, new}`.
+ * Ceilings only move down (#2665): a task main holds may lower a limit or narrow its margin, and a raised or removed
+ * limit, a wider margin or a changed command is refused, naming the task and the field, unless `approved`, the items of
+ * the approvals on the change's commits, holds that loosening's proposal. Any other change to such a task is refused.
+ */
+export function validateBudgets(current, base, approved = []) {
   if (!Array.isArray(current?.tasks)) throw Error('Missing budget tasks');
   if (base?.preflight && !frozen(current.preflight, base.preflight)) throw Error('Budget preflight changed or disappeared; restore its frozen definition');
   if (base?.harness && !frozen(current.harness, base.harness)) throw Error('Budget harness changed or disappeared; restore its frozen definition');
-  // A task's criteria say what it proves, not how it is judged: the budget window reads them as the merge base has them.
-  const definition = ({ criteria, ...task } = {}) => task;
+  const lowered = [], refused = [];
   for (const established of base?.tasks ?? []) {
-    if (!frozen(definition(current.tasks.find(({ id }) => id === established.id)), definition(established)))
-      throw Error(`Budget ${established.id} changed or disappeared; restore its frozen definition`);
+    const task = current.tasks.find(({ id }) => id === established.id);
+    if (task && frozen(definition(task), definition(established))) continue;
+    const change = task && changesOf(task, established);
+    if (!change || change.other) throw Error(`Budget ${established.id} changed or disappeared; restore its frozen definition`);
+    refused.push(...change.loosened.filter((loosening) => !approved.includes(proposal(established.id, loosening))).map((loosening) => ({ id: established.id, ...loosening })));
+    lowered.push(...change.lowered.map((lowering) => ({ id: established.id, ...lowering })));
+  }
+  if (refused.length) {
+    const said = ({ id, field, before, after }) => `Budget ${id}: ${field === 'command' ? `its command changed from ${shown(before)} to ${shown(after)}`
+      : field === 'margin' ? `its margin widened from ${before} to ${after}`
+      : after === undefined ? `its ${field} limit ${before} removed` : `its ${field} limit raised from ${before} to ${after}`}`;
+    const items = refused.map((loosening) => `Approves: ${proposal(loosening.id, loosening)}`).join(', ');
+    throw Error(`${refused.map(said).join('; ')}. A ceiling only moves down: restore ${refused.length === 1 ? 'it' : 'them'}, or have the maintainer approve the commit with a signed tag under deep/approved/ holding ${items}`);
   }
   const ids = new Set();
   for (const task of [...current.tasks, ...(current.preflight ? [{ id: 'preflight', ...current.preflight }] : [])]) {
@@ -358,10 +405,17 @@ export function validateBudgets(current, base) {
     if (task.id !== 'preflight' && (!Array.isArray(task.command) || !task.command.length || task.command.some((part) => typeof part !== 'string' || !part))) throw Error(`${task.id}: invalid command`);
     if (!Number.isFinite(task.margin) || task.margin < 0) throw Error(`${task.id}: invalid margin`);
     if (typeof task.initialReason !== 'string' || !task.initialReason.trim()) throw Error(`${task.id}: first measurement requires a reason`);
-    const allowed = task.id === 'preflight' ? ['elapsedMs', 'peakBytes'] : metrics;
-    if (!task.limits || Object.entries(task.limits).some(([key, value]) => !allowed.includes(key) || !Number.isFinite(value) || value <= 0)) throw Error(`${task.id}: invalid limits`);
+    const allowed = (key) => (task.id === 'preflight' ? ['elapsedMs', 'peakBytes'].includes(key) : metrics.includes(key) || isCount(key));
+    if (!task.limits || Object.entries(task.limits).some(([key, value]) => !allowed(key) || !Number.isFinite(value) || value <= 0)) throw Error(`${task.id}: invalid limits`);
   }
   if (!ids.size) throw Error('No budget task was measured');
+  return lowered;
+}
+
+/** The items of the approvals on the commits from `base` to `head` (#1326), which may hold a budget's proposal. */
+export function approvedItems(root, base, head) {
+  const commits = execFileSync('git', ['rev-list', `${base}..${head}`], { cwd: root, encoding: 'utf8' }).split('\n').filter(Boolean).map((sha) => ({ sha }));
+  return [...readApprovals(root, { base, commits }, null).values()].flat();
 }
 
 // p95 has only absolute caps: between identical binaries on a shared machine, the tail of 20
@@ -379,19 +433,45 @@ export function compare(budget, current, base, keys = metrics) {
   return base ? { status: 'PASS' } : { status: 'INITIAL', reason: budget.initialReason };
 }
 
+// A count's ceiling, judged on any machine (#2665): FAIL when every reading is over it, PASS when every one is within it,
+// and INCONCLUSIVE when they straddle it or any reading is missing, null, which is never read as 0.
+export function judgeCount({ limit, runs }) {
+  const missing = runs.filter((reading) => !Number.isFinite(reading)).length;
+  if (!runs.length || missing) return { status: 'INCONCLUSIVE', limit, runs, reason: `the count can't be read in ${missing} of ${runs.length} runs, and a count that can't be read is missing, never 0` };
+  if (runs.every((reading) => reading > limit)) return { status: 'FAIL', limit, runs, reason: `every reading is over ${limit}: ${runs.join(', ')}` };
+  if (runs.every((reading) => reading <= limit)) return { status: 'PASS', limit, runs };
+  return { status: 'INCONCLUSIVE', limit, runs, reason: `the readings straddle ${limit}: ${runs.join(', ')}` };
+}
+
+/** The number `name` in a run's report, its last stdout line that is a JSON object; null when it can't be read. */
+function reported(stdout, name) {
+  try {
+    const value = JSON.parse(stdout.trim().split('\n').filter((line) => line.trim().startsWith('{')).at(-1))[name];
+    return Number.isFinite(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
 // One task judged against its merge base, as perf and the budget window judge it: 20 alternated rounds a side, its
-// limits on five runs after one untimed warm-up run, instructions retired where both sides ran, and the merge-base
-// regression, whose message is `regression`. A command that won't run throws.
+// limits on five runs after one untimed warm-up run, an instructions ceiling on the rounds' counts (every child
+// counted), instructions retired where both sides ran, and the merge-base regression, whose message is `regression`.
+// Each limit's verdict holds its value and readings. The limits and margin judged are the merge base's, since a change
+// never moves its own budget (#2665), except an estimate moved once with its reason (#12). A command that won't run throws.
 export function judgeTask(budget, established, cwd, baseCwd) {
+  const held = established && !movedOnce(definition(budget), definition(established)) ? established : budget;
   const [now, then = null] = measure(budget.command, cwd, established && { command: established.command, cwd: baseCwd });
   const once = () => {
     const result = measureOnce(budget.command, cwd, false, undefined, false);
     if (result.status !== 0) throw Error(`${budget.command[0]} exited ${result.status}: ${result.output}`);
     return result;
   };
-  const runs = Object.keys(budget.limits).length ? (once(), Array.from({ length: 5 }, once)) : [];
+  const runs = Object.keys(held.limits).some((metric) => metric !== 'instructions') ? (once(), Array.from({ length: 5 }, once)) : [];
   const machine = fingerprint();
-  const limits = Object.fromEntries(Object.entries(budget.limits).map(([metric, limit]) => [metric, judgeLimit({ limit, runs: runs.map((run) => (metric === 'peakBytes' ? run.peakBytes : run.elapsedMs)), fingerprint: machine, loads: runs.map(({ loadStart, loadEnd }) => ({ start: loadStart, end: loadEnd })) })]));
+  const loads = runs.map(({ loadStart, loadEnd }) => ({ start: loadStart, end: loadEnd }));
+  const limits = Object.fromEntries(Object.entries(held.limits).map(([metric, limit]) => [metric, metric === 'instructions' ? judgeCount({ limit, runs: now.instructions })
+    : isCount(metric) ? judgeCount({ limit, runs: runs.map(({ stdout }) => reported(stdout, metric.slice('report.'.length))) })
+    : judgeLimit({ limit, runs: runs.map((run) => (metric === 'peakBytes' ? run.peakBytes : run.elapsedMs)), fingerprint: machine, loads })]));
   // Judged off the reference Macs too, where the limits are only readings; it never changes a limit's verdict. Sides that
   // ran at different QoS don't compare: what waits counts its waiting, so a count moves with how the side was scheduled.
   const judged = then && judgeInstructions(now.instructions.map((current, round) => ({ current, base: then.instructions[round] })), [...new Set([...now.uncounted, ...then.uncounted])]);
@@ -400,7 +480,7 @@ export function judgeTask(budget, established, cwd, baseCwd) {
   let outcome, regression = null;
   try {
     // compare holds only the merge-base regression here; the limits are judged above.
-    outcome = compare({ ...budget, limits: {} }, now, then);
+    outcome = compare({ ...budget, margin: held.margin, limits: {} }, now, then);
   } catch (error) {
     regression = error.message;
   }

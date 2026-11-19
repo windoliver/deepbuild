@@ -1,0 +1,147 @@
+$ PATH=<home>/.local/share/fnm/node-versions/v24.22.0/installation/bin:$PATH env NO_COLOR=1 node node_modules/vitest/vitest.mjs run --configLoader runner tests/acceptance/2365-redraft-ac5/suite.test.ts
+node: v24.22.0 (<home>/.local/share/fnm/node-versions/v24.22.0/installation/bin/node)
+started: 2026-11-18T01:13:53Z; load averages: 21.41 37.89 54.72
+-----
+
+ RUN  v5.0.5 <home>/doneright-2365-repair
+
+ ❯ tests/acceptance/2365-redraft-ac5/suite.test.ts (12 tests | 12 failed) 3954ms
+   ❯ AC5 #2365.c0521de3 for every transcript in #20's suite, the parts joined equal the merge base's one copy, and an unchanged transcript's second pass reads none of it (10)
+     × AC5 #20 AC1 (copies.test.ts): Claude Code and Codex in moved homes, a new adapter in its default home 1210ms
+     × AC5 #20 AC2 (copies.test.ts): two Claude Code sessions, one grown before its first pass, and a Codex rollout 218ms
+     × AC5 #20 AC3 (quiet.test.ts): a session captured hourly for three hours 192ms
+     × AC5 #20 AC3 (quiet.test.ts): a session captured every hour for 28 hours 322ms
+     × AC5 #20 AC4 (secrets.test.ts): a key pasted into a user message 210ms
+     × AC5 #20 AC4 (secrets.test.ts): a key pasted first, the session grown after two passes 173ms
+     × AC5 #20 AC5 (secrets.test.ts): a held value with no pattern pasted into a user message 171ms
+     × AC5 #20 AC8 (readback.test.ts): a plain session, a keyed one and a Codex rollout; and the session whose copy the store bent, here unbent 182ms
+     × AC5 #20 AC9 (retention.test.ts): a session with a deploy token, in Claude Code's default home 147ms
+     × AC5 #20 AC10 (growth.test.ts): a session archived at 10 lines and again at 50 140ms
+   ❯ AC5 #2365.c0521de3 planted wrong archives fail the criterion's check, naming the session (2)
+     × AC5 (wrong program) an archive that rereads each transcript on every pass reads all of an unchanged one: the check fails naming each session and the bytes it read 174ms
+     × AC5 (wrong program) an archive that leaves the newline out of each part: its parts joined differ from the merge base's copy, and the check fails naming the session and the first line that differs 160ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 12 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2365-redraft-ac5/suite.test.ts > AC5 #2365.c0521de3 for every transcript in #20's suite, the parts joined equal the merge base's one copy, and an unchanged transcript's second pass reads none of it > AC5 #20 AC1 (copies.test.ts): Claude Code and Codex in moved homes, a new adapter in its default home
+ FAIL  tests/acceptance/2365-redraft-ac5/suite.test.ts > AC5 #2365.c0521de3 for every transcript in #20's suite, the parts joined equal the merge base's one copy, and an unchanged transcript's second pass reads none of it > AC5 #20 AC2 (copies.test.ts): two Claude Code sessions, one grown before its first pass, and a Codex rollout
+ FAIL  tests/acceptance/2365-redraft-ac5/suite.test.ts > AC5 #2365.c0521de3 for every transcript in #20's suite, the parts joined equal the merge base's one copy, and an unchanged transcript's second pass reads none of it > AC5 #20 AC3 (quiet.test.ts): a session captured hourly for three hours
+ FAIL  tests/acceptance/2365-redraft-ac5/suite.test.ts > AC5 #2365.c0521de3 for every transcript in #20's suite, the parts joined equal the merge base's one copy, and an unchanged transcript's second pass reads none of it > AC5 #20 AC3 (quiet.test.ts): a session captured every hour for 28 hours
+ FAIL  tests/acceptance/2365-redraft-ac5/suite.test.ts > AC5 #2365.c0521de3 for every transcript in #20's suite, the parts joined equal the merge base's one copy, and an unchanged transcript's second pass reads none of it > AC5 #20 AC4 (secrets.test.ts): a key pasted into a user message
+ FAIL  tests/acceptance/2365-redraft-ac5/suite.test.ts > AC5 #2365.c0521de3 for every transcript in #20's suite, the parts joined equal the merge base's one copy, and an unchanged transcript's second pass reads none of it > AC5 #20 AC4 (secrets.test.ts): a key pasted first, the session grown after two passes
+ FAIL  tests/acceptance/2365-redraft-ac5/suite.test.ts > AC5 #2365.c0521de3 for every transcript in #20's suite, the parts joined equal the merge base's one copy, and an unchanged transcript's second pass reads none of it > AC5 #20 AC5 (secrets.test.ts): a held value with no pattern pasted into a user message
+ FAIL  tests/acceptance/2365-redraft-ac5/suite.test.ts > AC5 #2365.c0521de3 for every transcript in #20's suite, the parts joined equal the merge base's one copy, and an unchanged transcript's second pass reads none of it > AC5 #20 AC8 (readback.test.ts): a plain session, a keyed one and a Codex rollout; and the session whose copy the store bent, here unbent
+ FAIL  tests/acceptance/2365-redraft-ac5/suite.test.ts > AC5 #2365.c0521de3 for every transcript in #20's suite, the parts joined equal the merge base's one copy, and an unchanged transcript's second pass reads none of it > AC5 #20 AC9 (retention.test.ts): a session with a deploy token, in Claude Code's default home
+ FAIL  tests/acceptance/2365-redraft-ac5/suite.test.ts > AC5 #2365.c0521de3 for every transcript in #20's suite, the parts joined equal the merge base's one copy, and an unchanged transcript's second pass reads none of it > AC5 #20 AC10 (growth.test.ts): a session archived at 10 lines and again at 50
+Error: BLOCKED: the merge base's archive (ed03dc60d51abe3d96cf61b766ecf92057a780eb) didn't run: exit 1 
+node:fs:483
+    return binding.readFileUtf8(path, stringToFlags(options.flag));
+                   ^
+
+Error: ENOENT: no such file or directory, open '/private/tmp/dh20-base2365-YzIp3i/packages/evidence/dist/patterns.json'
+    at readFileSync (node:fs:483:20)
+    at loadRules (/private/tmp/dh20-base2365-YzIp3i/packages/evidence/src/patterns.ts:16:28)
+    at <anonymous> (/private/tmp/dh20-base2365-YzIp3i/packages/evidence/src/scrub.ts:28:15)
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+    at async node:internal/modules/esm/loader:647:26
+    at async file://<home>/doneright-2365-repair/tests/acceptance/2365-redraft-ac5/base-copy.mjs:25:25 {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/private/tmp/dh20-base2365-YzIp3i/packages/evidence/dist/patterns.json'
+}
+
+Node.js v24.22.0
+
+ ❯ loadRules ../../../private/tmp/dh20-base2365-YzIp3i/packages/evidence/src/patterns.ts:16:28
+ ❯ <anonymous> ../../../private/tmp/dh20-base2365-YzIp3i/packages/evidence/src/scrub.ts:28:15
+ ❯ baseCopies tests/acceptance/2365-redraft-ac5/base.ts:58:54
+     56|   const r = spawnSync(NODE, ['--experimental-transform-types', '--cond…
+     57|   const manifest = join(work, 'out', 'manifest.json');
+     58|   if (r.status !== 0 || !existsSync(manifest)) throw Error(`BLOCKED: t…
+       |                                                      ^
+     59|   const m = JSON.parse(readFileSync(manifest, 'utf8')) as { error: str…
+     60|   const run = { sha, error: m.error, copies: m.copies.map((c) => ({ se…
+ ❯ runScenario tests/acceptance/2365-redraft-ac5/scenarios.ts:129:18
+ ❯ tests/acceptance/2365-redraft-ac5/suite.test.ts:18:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/12]⎯
+
+ FAIL  tests/acceptance/2365-redraft-ac5/suite.test.ts > AC5 #2365.c0521de3 planted wrong archives fail the criterion's check, naming the session > AC5 (wrong program) an archive that rereads each transcript on every pass reads all of an unchanged one: the check fails naming each session and the bytes it read
+Error: BLOCKED: the merge base's archive (ed03dc60d51abe3d96cf61b766ecf92057a780eb) didn't run: exit 1 
+node:fs:483
+    return binding.readFileUtf8(path, stringToFlags(options.flag));
+                   ^
+
+Error: ENOENT: no such file or directory, open '/private/tmp/dh20-base2365-YzIp3i/packages/evidence/dist/patterns.json'
+    at readFileSync (node:fs:483:20)
+    at loadRules (/private/tmp/dh20-base2365-YzIp3i/packages/evidence/src/patterns.ts:16:28)
+    at <anonymous> (/private/tmp/dh20-base2365-YzIp3i/packages/evidence/src/scrub.ts:28:15)
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+    at async node:internal/modules/esm/loader:647:26
+    at async file://<home>/doneright-2365-repair/tests/acceptance/2365-redraft-ac5/base-copy.mjs:25:25 {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/private/tmp/dh20-base2365-YzIp3i/packages/evidence/dist/patterns.json'
+}
+
+Node.js v24.22.0
+
+ ❯ loadRules ../../../private/tmp/dh20-base2365-YzIp3i/packages/evidence/src/patterns.ts:16:28
+ ❯ <anonymous> ../../../private/tmp/dh20-base2365-YzIp3i/packages/evidence/src/scrub.ts:28:15
+ ❯ baseCopies tests/acceptance/2365-redraft-ac5/base.ts:58:54
+     56|   const r = spawnSync(NODE, ['--experimental-transform-types', '--cond…
+     57|   const manifest = join(work, 'out', 'manifest.json');
+     58|   if (r.status !== 0 || !existsSync(manifest)) throw Error(`BLOCKED: t…
+       |                                                      ^
+     59|   const m = JSON.parse(readFileSync(manifest, 'utf8')) as { error: str…
+     60|   const run = { sha, error: m.error, copies: m.copies.map((c) => ({ se…
+ ❯ runScenario tests/acceptance/2365-redraft-ac5/scenarios.ts:129:18
+ ❯ tests/acceptance/2365-redraft-ac5/suite.test.ts:32:50
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/12]⎯
+
+ FAIL  tests/acceptance/2365-redraft-ac5/suite.test.ts > AC5 #2365.c0521de3 planted wrong archives fail the criterion's check, naming the session > AC5 (wrong program) an archive that leaves the newline out of each part: its parts joined differ from the merge base's copy, and the check fails naming the session and the first line that differs
+Error: BLOCKED: the merge base's archive (ed03dc60d51abe3d96cf61b766ecf92057a780eb) didn't run: exit 1 
+node:fs:483
+    return binding.readFileUtf8(path, stringToFlags(options.flag));
+                   ^
+
+Error: ENOENT: no such file or directory, open '/private/tmp/dh20-base2365-YzIp3i/packages/evidence/dist/patterns.json'
+    at readFileSync (node:fs:483:20)
+    at loadRules (/private/tmp/dh20-base2365-YzIp3i/packages/evidence/src/patterns.ts:16:28)
+    at <anonymous> (/private/tmp/dh20-base2365-YzIp3i/packages/evidence/src/scrub.ts:28:15)
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+    at async node:internal/modules/esm/loader:647:26
+    at async file://<home>/doneright-2365-repair/tests/acceptance/2365-redraft-ac5/base-copy.mjs:25:25 {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/private/tmp/dh20-base2365-YzIp3i/packages/evidence/dist/patterns.json'
+}
+
+Node.js v24.22.0
+
+ ❯ loadRules ../../../private/tmp/dh20-base2365-YzIp3i/packages/evidence/src/patterns.ts:16:28
+ ❯ <anonymous> ../../../private/tmp/dh20-base2365-YzIp3i/packages/evidence/src/scrub.ts:28:15
+ ❯ baseCopies tests/acceptance/2365-redraft-ac5/base.ts:58:54
+     56|   const r = spawnSync(NODE, ['--experimental-transform-types', '--cond…
+     57|   const manifest = join(work, 'out', 'manifest.json');
+     58|   if (r.status !== 0 || !existsSync(manifest)) throw Error(`BLOCKED: t…
+       |                                                      ^
+     59|   const m = JSON.parse(readFileSync(manifest, 'utf8')) as { error: str…
+     60|   const run = { sha, error: m.error, copies: m.copies.map((c) => ({ se…
+ ❯ runScenario tests/acceptance/2365-redraft-ac5/scenarios.ts:129:18
+ ❯ tests/acceptance/2365-redraft-ac5/suite.test.ts:44:50
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/12]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  12 failed (12)
+   Start at  17:13:53
+   Duration  4.46s (tests 91%, transform 7%, import 1%)
+
+-----
+EXIT 1; ended: 2026-11-18T01:13:58Z; load averages: 20.50 37.43 54.46

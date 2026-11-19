@@ -1553,6 +1553,9 @@ impl<'a> Hub<'a> {
             Call::Migrate(to) => self.migrate(*to),
             Call::Keys { doc, runs } => self.keys(doc, *runs),
             Call::Fingerprint => self.fingerprint_reply(),
+            Call::Footprint => {
+                json!({"reading": deep_gpu::footprint::read(deep_gpu::footprint::SYSTEM).json()})
+            }
             Call::Draw { doc, t, output } => self.draw_reply(doc, t, output),
             Call::PaddedKey { fields, seeds } => self.padded_key_reply(*fields, *seeds),
             Call::Fixtures => self.fixtures_reply(),
