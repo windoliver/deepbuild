@@ -6,7 +6,7 @@ The canvas's one text shaper (#390): parley over HarfRust and skrifa on the bund
 
 ## Where new code goes
 
-- `src/shape.rs`: shaping and the fit check. `src/atlas.rs`: atlas pages. `src/fonts.rs`: the bundled faces by role. `src/unicode.rs`: breaks, graphemes and bidi. `src/cache.rs`: the shape and run caches; shaping off the UI thread is its host's (deep-show's `src/shaper.rs`), since this crate starts no thread and builds for wasm32 (#140).
+- `src/shape.rs`: shaping and the fit check. `src/vertical.rs`: vertical flow (#1215), columns set top to bottom with UAX #50's upright and turned glyphs, `vert` forms and digits set across. `src/atlas.rs`: atlas pages. `src/fonts.rs`: the bundled faces by role. `src/unicode.rs`: breaks, graphemes and bidi. `src/cache.rs`: the shape and run caches; shaping off the UI thread is its host's (deep-show's `src/shaper.rs`), since this crate starts no thread and builds for wasm32 (#140).
 - `src/main.rs`: the CLI's subcommands (`fit`, `shape`, `fonts`, `breaks`, `graphemes`, `bidi`).
 - A new font goes in `fonts/` with its license file, and in `src/fonts.rs`.
 - Tests: `tests/shape.rs` for the shaper and atlas; the CLI's behavior is proven in tests/acceptance/390, 381, 856 and 1430.

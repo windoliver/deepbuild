@@ -21,6 +21,7 @@ use crate::cache::{self, Key, Planted, ShapeKey};
 use crate::fonts::{self, Role, FACES};
 use crate::unicode::is_default_ignorable;
 use crate::unicode::{grapheme_starts, LineBreaks};
+use crate::vertical::{Flow, Stand};
 
 /// The bytes a shaped paragraph counts as in the shape cache, a character: parley's layout of it
 /// (54, measured on a 500-character paragraph once broken into lines) and a glyph of the lines it
@@ -111,6 +112,15 @@ pub(crate) fn rtl(text: &str) -> bool {
     false
 }
 
+/// The parley alignment of a text's `align`.
+fn alignment(align: Align) -> Alignment {
+    match align {
+        Align::Start => Alignment::Start,
+        Align::Center => Alignment::Center,
+        Align::End => Alignment::End,
+    }
+}
+
 /// #1430: breaks a paragraph's lines at `width` (none: only where they must), its first line's top
 /// at `y`, so its lines land where one layout of the whole text puts them; `within` is the width
 /// each line aligns in, which with no width is otherwise the paragraph's widest line.
@@ -175,6 +185,8 @@ pub struct Spec<'a> {
     /// #1966: how far in every line starts, in logical pixels (a list's `indent`): lines break
     /// at `width` less it, so a wrapped line starts under the text, not at the run's edge.
     pub indent: f32,
+    /// #1215: lines across, or columns top to bottom (`flow`, `upright`, `combine_upright`).
+    pub flow: Flow,
 }
 
 /// #1964: a styled span's shift off the baseline (`shift: sub | super | u`).
@@ -292,6 +304,7 @@ impl<'a> Spec<'a> {
             spans: &[],
             gap: 0.,
             indent: 0.,
+            flow: Flow::Horizontal,
         }
     }
 
@@ -320,6 +333,15 @@ pub struct Glyph {
     /// #1964: the slant in degrees an italic span is drawn at where its face has no italic (0:
     /// upright), leaning forward as y rises.
     pub skew: f32,
+    /// #1215: in a vertical run, how the glyph stands in its column; `None` in a horizontal one.
+    pub stand: Option<Stand>,
+    /// #1215: drawn turned 90° clockwise about (x, y), its baseline running down its column.
+    pub turn: bool,
+    /// #1215: where its advance starts on its line: (x, y) in a horizontal run; its column's axis
+    /// at the top of its cell in a vertical one.
+    pub origin: [f32; 2],
+    /// #1215: how far it advances along its line: down its column in a vertical run.
+    pub along: f32,
 }
 
 /// #1964: an underline or a strike of a styled span: `[x, y, w, h]` in logical pixels from the
@@ -349,6 +371,34 @@ pub struct Shaped {
     pub ellipsized: bool,
     /// The text as drawn: the spec's text, or its cut with an ellipsis.
     pub shown: String,
+    /// #1215: a vertical run's lines are columns: `width` is their extent across (one line
+    /// height each) and `height` the longest column's length.
+    pub flow: Flow,
+}
+
+impl Shaped {
+    /// #1215: where a vertical run draws in its own coordinates, `[x, y, w, h]`: its columns
+    /// across, a line height each about its axis, and down from its first cell to its longest
+    /// column's end; `None` for a horizontal run.
+    pub fn columns_box(&self) -> Option<[f32; 4]> {
+        if !matches!(self.flow, Flow::Vertical(_)) {
+            return None;
+        }
+        let half = self.line_height / 2.;
+        let mut b = [f32::MAX, f32::MAX, f32::MIN, f32::MIN];
+        for g in &self.glyphs {
+            b = [
+                b[0].min(g.origin[0] - half),
+                b[1].min(g.origin[1]),
+                b[2].max(g.origin[0] + half),
+                b[3].max(g.origin[1] + g.along),
+            ];
+        }
+        if b[0] > b[2] {
+            return Some([0., 0., 0., 0.]);
+        }
+        Some([b[0], b[1], b[2] - b[0], b[3] - b[1]])
+    }
 }
 
 /// The fit check's reading for a spec against its widest string.
@@ -406,9 +456,33 @@ impl Shaper {
             .collect()
     }
 
+    /// The layout of `text` in the spec's style, `vert` applied to the byte ranges `vert` names
+    /// (#1215: the graphemes of a vertical run that stand upright), its lines broken at the
+    /// spec's width when `wrap`, else only at hard breaks: one layout of the whole text, which a
+    /// vertical run reads.
+    pub(crate) fn layout_with(
+        &mut self,
+        spec: &Spec<'_>,
+        text: &str,
+        optical: bool,
+        vert: &[std::ops::Range<usize>],
+        wrap: bool,
+    ) -> Layout<()> {
+        let starts = grapheme_starts(text);
+        let mut layout = self.build(spec, text, spec.spans, rtl(text), &starts, (optical, vert));
+        // A bound value is never wrapped: it stays on one line, past its box if it must.
+        let width = spec
+            .width
+            .filter(|_| wrap && !spec.bound)
+            .map(|w| (w - spec.indent).max(0.));
+        layout.break_all_lines(width);
+        layout.align(alignment(spec.align), AlignmentOptions::default());
+        layout
+    }
+
     /// #1430: `text`, one paragraph, shaped in the spec's style with its own `spans` and the
     /// whole text's base direction, not yet broken into lines. #1484: `optical` false leaves the
-    /// optical size at the face's default.
+    /// optical size at the face's default; #1215: `vert` as `layout_with` takes it.
     fn build(
         &mut self,
         spec: &Spec<'_>,
@@ -416,7 +490,7 @@ impl Shaper {
         spans: &[Span],
         rtl: bool,
         starts: &[usize],
-        optical: bool,
+        (optical, vert): (bool, &[std::ops::Range<usize>]),
     ) -> Layout<()> {
         let decide = LineBreaks::new(text).into_override();
         let mut builder = self
@@ -449,6 +523,14 @@ impl Shaper {
         )));
         if spec.tabular {
             builder.push_default(StyleProperty::FontFeatures("\"tnum\" 1".into()));
+        }
+        let features = if spec.tabular {
+            "\"tnum\" 1, \"vert\" 1"
+        } else {
+            "\"vert\" 1"
+        };
+        for range in vert {
+            builder.push(StyleProperty::FontFeatures(features.into()), range.clone());
         }
         // #1964: each span restyles its graphemes' byte range of the one run, so the layout shapes
         // and breaks it with the rest. A span's box adds no height: the item's line height alone
@@ -554,7 +636,10 @@ impl Shaper {
         }
         let starts = starts.unwrap_or_else(|| grapheme_starts(text));
         let paragraph = Paragraph {
-            layout: Mutex::new((self.build(spec, text, &spans, rtl, &starts, optical), None)),
+            layout: Mutex::new((
+                self.build(spec, text, &spans, rtl, &starts, (optical, &[])),
+                None,
+            )),
             starts,
             ends: text.match_indices('\n').map(|(i, _)| i).collect(),
             chars: text.chars().count(),
@@ -603,11 +688,7 @@ impl Shaper {
                     widest.max(layout.width())
                 })
             });
-        let alignment = match spec.align {
-            Align::Start => Alignment::Start,
-            Align::Center => Alignment::Center,
-            Align::End => Alignment::End,
-        };
+        let alignment = alignment(spec.align);
         let mut out = Shaped {
             shown: text.to_owned(),
             line_height: spec.line_height(),
@@ -670,6 +751,7 @@ impl Shaper {
             out.glyphs
                 .extend(piece.glyphs[glyphs..to_glyph].iter().map(|g| Glyph {
                     y: g.y + down,
+                    origin: [g.origin[0], g.origin[1] + down],
                     grapheme: g.grapheme + first,
                     ..g.clone()
                 }));
@@ -767,6 +849,10 @@ impl Shaper {
                         grapheme: grapheme(byte),
                         coords: coords.clone(),
                         skew,
+                        stand: None,
+                        turn: false,
+                        origin: [glyph.x + spec.indent, glyph.y],
+                        along: glyph.advance,
                     });
                 }
             }
@@ -783,14 +869,30 @@ impl Shaper {
     }
 
     /// `text` laid out in the spec's style, whole (no line limit applied): from the run cache, or
-    /// laid out now from its paragraphs and kept there.
+    /// laid out now and kept there: from its paragraphs, or (#1215) set in columns.
     fn run(&mut self, spec: &Spec<'_>, text: &str) -> Arc<Shaped> {
         let key = Key::of(spec, text, false);
         if let Some(run) = cache::get(&key) {
             return run;
         }
-        let run = self.lay_out(spec, text, (false, true));
+        let run = match spec.flow {
+            Flow::Vertical(_) => self.shape_again(spec, text),
+            Flow::Horizontal => self.lay_out(spec, text, (false, true)),
+        };
         cache::put(key, run)
+    }
+
+    /// `text` shaped in the spec's style past the caches, the shaping recorded: each paragraph,
+    /// or (#1215) the whole text set in columns.
+    fn shape_again(&mut self, spec: &Spec<'_>, text: &str) -> Shaped {
+        match spec.flow {
+            Flow::Vertical(cols) => {
+                let run = self.columns(spec, text, cols);
+                cache::shaped(Key::of(spec, text, false).shape(), run.glyphs.len());
+                run
+            }
+            Flow::Horizontal => self.lay_out(spec, text, (true, true)),
+        }
     }
 
     /// #1484 AC1's wrong program, the proof binary's planted `shaper_ignores_opsz`: `spec`'s text
@@ -815,11 +917,7 @@ impl Shaper {
             return run;
         }
         let whole = self.run(spec, spec.text);
-        let overflows = spec.width.is_some_and(|w| whole.width > w + 0.01)
-            || spec
-                .max_lines
-                .is_some_and(|max| whole.lines > usize::from(max));
-        if !overflows || spec.bound || spec.mask {
+        if fits(spec, &whole) || spec.bound || spec.mask {
             return whole;
         }
         let reshaping = cache::planted() == Some(Planted::ReshapingFit);
@@ -831,17 +929,13 @@ impl Shaper {
         let mut best: Option<Arc<Shaped>> = None;
         while low < high {
             if reshaping {
-                self.lay_out(spec, spec.text, (true, true));
+                self.shape_again(spec, spec.text);
             }
             let mid = (low + high).div_ceil(2);
             let end = chars.get(mid).map_or(spec.text.len(), |(i, _)| *i);
             let candidate = format!("{}…", spec.text[..end].trim_end());
             let shaped = self.run(spec, &candidate);
-            let fits = spec.width.is_none_or(|w| shaped.width <= w + 0.01)
-                && spec
-                    .max_lines
-                    .is_none_or(|max| shaped.lines <= usize::from(max));
-            if fits {
+            if fits(spec, &shaped) {
                 best = Some(shaped);
                 low = mid;
             } else {
@@ -897,12 +991,8 @@ impl Shaper {
     /// reads whether it fits the box and the line limit. A bound value's numerals are tabular.
     pub fn fit(&mut self, spec: &Spec<'_>, widest: Option<&str>) -> Fit {
         let shaped = self.run(spec, widest.unwrap_or(spec.text));
-        let fits = spec.width.is_none_or(|w| shaped.width <= w + 0.01)
-            && spec
-                .max_lines
-                .is_none_or(|max| shaped.lines <= usize::from(max));
         Fit {
-            fits,
+            fits: fits(spec, &shaped),
             width: shaped.width,
             lines: shaped.lines,
             numerals: if spec.tabular {
@@ -919,4 +1009,16 @@ impl Shaper {
             },
         }
     }
+}
+
+/// Whether a run fits its spec's line length and line limit: its lines in the box's width, or
+/// (#1215) a vertical run's columns in the box's height, which is their length.
+fn fits(spec: &Spec<'_>, run: &Shaped) -> bool {
+    let long = match spec.flow {
+        Flow::Vertical(cols) => cols.height.is_none_or(|h| run.height <= h + 0.01),
+        Flow::Horizontal => spec.width.is_none_or(|w| run.width <= w + 0.01),
+    };
+    long && spec
+        .max_lines
+        .is_none_or(|max| run.lines <= usize::from(max))
 }
