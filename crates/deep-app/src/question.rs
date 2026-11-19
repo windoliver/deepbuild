@@ -20,7 +20,7 @@ use crate::arming::HOLD_STILL;
 use crate::{
     answer::Answer,
     arming::{Machine, Outcome, Press, Slot, Source, State},
-    confirm,
+    confirm, copy,
     kinds::Model,
     states,
 };
@@ -29,16 +29,16 @@ use crate::{
 /// tall): a slot smaller than this, or than the card as drawn, never arms.
 pub const CARD_SIZE: [i64; 2] = [480, 560];
 /// What a card says before it arms when words or an image are set and no option is chosen: the answer is this
-/// ask's alone, never a decision for the key.
-pub const ANSWERS_THIS_ASK_ONLY: &str = "Answers this ask only";
+/// ask's alone, never a decision for the key. Each line's key in the app's table (#2403).
+pub const ANSWERS_THIS_ASK_ONLY: &str = "question.answers_this_ask_only";
 /// The same on an authority card: words never run the plan.
-pub const WONT_RUN: &str = "Sends your words as the reason; this won't run";
+pub const WONT_RUN: &str = "question.wont_run";
 /// The options a card shows before it folds the rest behind a count: about nine a level (#394, #1808).
 pub const SHOWN_OPTIONS: usize = 9;
 /// What a card says on a press while options folded behind its count were never shown (#1808).
-pub const OPEN_THE_FOLD: &str = "Show every option first";
+pub const OPEN_THE_FOLD: &str = "question.open_the_fold";
 /// What a long card says on a press while its end was never shown (#1808).
-pub const READ_TO_THE_END: &str = "Scroll to the end";
+pub const READ_TO_THE_END: &str = "question.read_to_the_end";
 
 /// Presentations are numbered across the process, so a card presented again after a relaunch gets a new `seq`.
 static NEXT_SEQ: AtomicU64 = AtomicU64::new(0);
@@ -104,7 +104,7 @@ pub struct Input {
 }
 
 /// What the card says when you approve with the ask's own steps switched off.
-pub const SWITCH_FIRST: &str = "Switch on this ask's steps to approve it";
+pub const SWITCH_FIRST: &str = "question.switch_first";
 
 /// What the card did with an input.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -167,9 +167,9 @@ impl Row {
             | Row::Step { label, .. }
             | Row::Call { label, .. }
             | Row::Fold { label, .. } => label,
-            Row::Send => "Send",
-            Row::Undo => "Undo",
-            Row::SignIn => "Sign in",
+            Row::Send => copy::text("question.send"),
+            Row::Undo => copy::text("question.undo"),
+            Row::SignIn => copy::text("question.sign_in"),
         }
     }
 
@@ -371,9 +371,9 @@ impl Controller {
     /// #1808's planted card arms with its fold never opened.
     fn held(&self) -> Option<&'static str> {
         if self.folded() > 0 && !crate::plain::planted("card-arms-folded") {
-            Some(OPEN_THE_FOLD)
+            Some(copy::text(OPEN_THE_FOLD))
         } else if self.end == Some(false) {
-            Some(READ_TO_THE_END)
+            Some(copy::text(READ_TO_THE_END))
         } else {
             None
         }
@@ -499,10 +499,10 @@ impl Controller {
             rows.push(Row::Text(crate::plain::PLANTED_PR_LINE.to_owned()));
         }
         if let Some(receipt) = &self.receipt {
-            rows.push(Row::Text(format!("Answered: {}", receipt.says)));
+            rows.push(Row::Text(copy::fill("question.answered", &[&receipt.says])));
             rows.push(Row::Undo);
             for (_, question) in &receipt.also {
-                rows.push(Row::Text(format!("Also answered: {question}")));
+                rows.push(Row::Text(copy::fill("question.also_answered", &[question])));
             }
             return rows;
         }
@@ -529,13 +529,14 @@ impl Controller {
             if folded > 0 && index >= SHOWN_OPTIONS {
                 break;
             }
-            let mut label = option.label.clone();
-            if option.recommended {
-                label.push_str(" (recommended)");
-            }
-            if let Some(cost) = &option.cost {
-                label.push_str(&format!(" · {cost}"));
-            }
+            let label = match (option.recommended, &option.cost) {
+                (true, Some(cost)) => {
+                    copy::fill("question.recommended_cost", &[&option.label, cost])
+                }
+                (true, None) => copy::fill("question.recommended", &[&option.label]),
+                (false, Some(cost)) => format!("{} · {cost}", option.label),
+                (false, None) => option.label.clone(),
+            };
             rows.push(Row::Option {
                 index,
                 label,
@@ -545,35 +546,35 @@ impl Controller {
         if folded > 0 {
             rows.push(Row::Fold {
                 hidden: folded,
-                label: format!("{folded} more options"),
+                label: copy::count("question.more_options", folded as u64, &[]),
             });
         }
         if !self.faults.no_default {
-            rows.push(Row::Text(format!(
-                "Default: {} · at {}",
-                self.model.default, self.model.applies
+            rows.push(Row::Text(copy::fill(
+                "question.default_at",
+                &[&self.model.default, &self.model.applies],
             )));
         }
         for (name, value) in &self.model.fields {
-            if self.faults.diff_after_answer && (name == "moved" || name.starts_with("checks on")) {
+            if self.faults.diff_after_answer && crate::kinds::is_moved(name) {
                 continue;
             }
-            rows.push(Row::Text(format!("{name}: {value}")));
+            rows.push(Row::Text(copy::fill("question.field", &[name, value])));
         }
         // A step is a switch: its state is the node's value and its mark, never a word in its label (#1458).
         for (index, step) in self.model.steps.iter().enumerate() {
-            let mut label = format!(
-                "{} · {}",
-                step.does,
+            let mut label = copy::fill(
                 if step.undoable {
-                    "can be undone"
+                    "question.step_undoable"
                 } else {
-                    "can't be undone"
-                }
+                    "question.step_not_undoable"
+                },
+                &[&step.does],
             );
             // #1458's planted switch says its state as a word in its label.
             if crate::plain::planted("step-state-in-label") {
-                label.push_str(if step.on { " · on" } else { " · off" });
+                let state = if step.on { " · on" } else { " · off" }; // copy-exception: planted
+                label.push_str(state);
             }
             rows.push(Row::Step {
                 index,
@@ -590,17 +591,26 @@ impl Controller {
         let mut unannounced = crate::plain::planted("card-row-reverts-unannounced");
         let mut timeless = crate::plain::planted("card-row-without-time");
         for call in &self.model.calls {
-            let mut lines = vec![call.question.clone(), format!("{} (recommended)", call.yes)];
+            let mut lines = vec![
+                call.question.clone(),
+                copy::fill("question.recommended", &[&call.yes]),
+            ];
             if unannounced && call.sends == crate::kinds::REVERTS {
                 unannounced = false;
                 lines.push(call.back.clone());
             } else {
-                lines.push(format!("{} · {}", call.back, call.sends));
+                lines.push(copy::fill(
+                    "question.back_sends",
+                    &[&call.back, &copy::text(call.sends)],
+                ));
             }
             if timeless {
                 timeless = false;
             } else {
-                lines.push(format!("{} applies at {}", call.yes, call.applies));
+                lines.push(copy::fill(
+                    "question.applies_at",
+                    &[&call.yes, &call.applies],
+                ));
             }
             rows.push(Row::Call {
                 ask: call.ask.clone(),
@@ -609,36 +619,43 @@ impl Controller {
             });
         }
         for call in &self.model.past {
-            rows.push(Row::Text(format!(
-                "Past call: {} · {}",
-                call.question, call.answer
+            rows.push(Row::Text(copy::fill(
+                "question.past_call",
+                &[&call.question, &call.answer],
             )));
         }
         if let Some(scope) = self.model.scope.as_ref().filter(|_| !self.faults.no_scope) {
             rows.push(Row::Text(scope.words.clone()));
             if scope.also > 0 {
-                rows.push(Row::Text(format!("Answers {} more", scope.also)));
+                rows.push(Row::Text(copy::count(
+                    "question.answers_more",
+                    scope.also as u64,
+                    &[],
+                )));
             }
         }
         if !self.words.is_empty() {
-            rows.push(Row::Text(format!("Your words: {}", self.words)));
+            rows.push(Row::Text(copy::fill("question.your_words", &[&self.words])));
         }
         if let Some(image) = &self.image {
-            rows.push(Row::Text(format!("Your image: {}", &image[..12])));
+            rows.push(Row::Text(copy::fill(
+                "question.your_image",
+                &[&&image[..12]],
+            )));
         }
         if !self.words.is_empty() || self.image.is_some() {
             rows.push(Row::Text(
-                if self.allow_option().is_some() {
+                copy::text(if self.allow_option().is_some() {
                     WONT_RUN
                 } else {
                     ANSWERS_THIS_ASK_ONLY
-                }
+                })
                 .to_owned(),
             ));
         }
         rows.push(Row::Send);
         if self.switch_first && !self.model.own_on() {
-            rows.push(Row::Text(SWITCH_FIRST.to_owned()));
+            rows.push(Row::Text(copy::text(SWITCH_FIRST).to_owned()));
         }
         if let Some(holding) = self.holding {
             rows.push(Row::Text(holding.to_owned()));
@@ -649,14 +666,16 @@ impl Controller {
     /// The card's rows on an ask's page (#1461), where the box under it holds your words, the lines that say what
     /// they do and the send control: every row but those.
     pub fn page_rows(&self) -> Vec<Row> {
+        let words = (!self.words.is_empty())
+            .then(|| visible(&copy::fill("question.your_words", &[&self.words])));
         self.rows()
             .into_iter()
             .filter(|row| match row {
                 Row::Send => false,
                 Row::Text(text) => {
-                    !text.starts_with("Your words: ")
-                        && text != WONT_RUN
-                        && text != ANSWERS_THIS_ASK_ONLY
+                    words.as_ref() != Some(text)
+                        && text != copy::text(WONT_RUN)
+                        && text != copy::text(ANSWERS_THIS_ASK_ONLY)
                 }
                 _ => true,
             })
@@ -671,17 +690,18 @@ impl Controller {
         let scope = self.model.scope.as_ref().filter(|_| !self.faults.no_scope);
         let last: Vec<String> = [
             (!self.faults.no_default).then(|| {
-                format!(
-                    "Default: {} · at {}",
-                    self.model.default, self.model.applies
+                copy::fill(
+                    "question.default_at",
+                    &[&self.model.default, &self.model.applies],
                 )
             }),
             scope.map(|scope| scope.words.clone()),
             scope
                 .filter(|scope| scope.also > 0)
-                .map(|scope| format!("Answers {} more", scope.also)),
+                .map(|scope| copy::count("question.answers_more", scope.also as u64, &[])),
             self.model.approve_label(),
-            self.switch_first.then(|| SWITCH_FIRST.to_owned()),
+            self.switch_first
+                .then(|| copy::text(SWITCH_FIRST).to_owned()),
             self.holding.map(str::to_owned),
         ]
         .into_iter()
@@ -699,12 +719,16 @@ impl Controller {
     /// go as the reason, else Answer; and the lines above it once it holds words.
     pub fn words_send(&self) -> (&'static str, Vec<&'static str>) {
         let approval = self.allow_option().is_some();
-        let label = if approval { "Say no" } else { "Answer" };
+        let label = copy::text(if approval {
+            "question.say_no"
+        } else {
+            "question.answer"
+        });
         let mut lines = Vec::new();
         if !self.words.is_empty() || self.image.is_some() {
-            lines.push(ANSWERS_THIS_ASK_ONLY);
+            lines.push(copy::text(ANSWERS_THIS_ASK_ONLY));
             if approval {
-                lines.push(WONT_RUN);
+                lines.push(copy::text(WONT_RUN));
             }
         }
         (label, lines)
@@ -836,7 +860,10 @@ impl Controller {
                         self.send_waiting = Some(SendWaiting {
                             seq: self.machine.seq(),
                         });
-                        Did::NeedsConfirmation(confirm::reason(&self.model.question, "Send"))
+                        Did::NeedsConfirmation(confirm::reason(
+                            &self.model.question,
+                            copy::text("question.send"),
+                        ))
                     }
                 }
             },
@@ -848,7 +875,10 @@ impl Controller {
                 }
                 if !source.trusted() {
                     self.switch_waiting = Some(SwitchWaiting::Undo);
-                    return Did::NeedsConfirmation(confirm::reason(&self.model.question, "Undo"));
+                    return Did::NeedsConfirmation(confirm::reason(
+                        &self.model.question,
+                        copy::text("question.undo"),
+                    ));
                 }
                 self.undo_answer(t, now)
             }
@@ -1134,9 +1164,9 @@ impl Controller {
         }
         self.record("answered", now);
         let says = match (&answer.words, &answer.image) {
-            (Some(words), _) => format!("your words, “{words}”"),
-            (None, Some(_)) => "your image".to_owned(),
-            (None, None) => "nothing".to_owned(),
+            (Some(words), _) => copy::fill("question.said_words", &[words]),
+            (None, Some(_)) => copy::text("question.said_image").to_owned(),
+            (None, None) => copy::text("question.said_nothing").to_owned(),
         };
         self.receipt = Some(Receipt {
             says,

@@ -12,16 +12,17 @@ use serde_json::{json, Value};
 
 use crate::address::Address;
 use crate::commands::{entries, Entry, Open, Palette, View};
+use crate::copy;
 use crate::views;
 
 /// The pages ⌘K always lists, which View lists too (#1462): Home, Needs you, Agents and Rules, then each view you
 /// installed in the `sidebar` area as a page by its name (#1461); and the preferences it opens the box for (#1998).
 pub fn shipped_pages() -> Vec<Entry> {
     let shipped = [
-        ("Home", "home"),
-        ("Needs you", "needs-you"),
-        ("Agents", "agents"),
-        ("Rules", "rules"),
+        (copy::text("installed.home"), "home"),
+        (copy::text("installed.needs_you"), "needs-you"),
+        (copy::text("installed.agents"), "agents"),
+        (copy::text("installed.rules"), "rules"),
     ]
     .map(|(name, page)| (name.to_owned(), Address::page(page)));
     let installed = views::page_names().into_iter().filter_map(|name| {
@@ -47,8 +48,8 @@ pub fn run_command(name: &str, action: &str, cx: &mut App) {
     });
     cx.spawn(async move |cx| {
         let said = match ran.await {
-            Ok(_) => format!("{name} ran."),
-            Err(error) => format!("{name} didn't run: {}", crate::hub::why(&error)),
+            Ok(_) => copy::fill("installed.ran", &[&name]),
+            Err(error) => copy::fill("installed.didnt_run", &[&name, &crate::hub::why(&error)]),
         };
         if cfg!(feature = "plant-opener-only-logs") {
             eprintln!("deep-app: {said}");
@@ -64,7 +65,7 @@ pub fn run_command(name: &str, action: &str, cx: &mut App) {
 pub fn failed(name: &str, why: &str, cx: &mut App) {
     eprintln!("deep-app: {name} didn't load: {why}");
     if !cfg!(feature = "plant-failed-view-silent") {
-        crate::notice::show(format!("{name} didn't load: {why}"), cx);
+        crate::notice::show(copy::fill("installed.didnt_load", &[&name, &why]), cx);
     }
 }
 
@@ -145,13 +146,17 @@ pub fn load(
     for view in &listed {
         let name = view["name"].as_str().unwrap_or_default();
         if !may_mount(view) {
-            failed(name, &format!("panel@1 reads {}", view["kit"]), cx);
+            failed(
+                name,
+                &copy::fill("installed.kit_reads", &[&view["kit"]]),
+                cx,
+            );
             continue;
         }
         let dir = copy_of(name);
         let copied = view["folder"]
             .as_str()
-            .ok_or_else(|| "it names no folder".to_owned())
+            .ok_or_else(|| copy::text("installed.no_folder").to_owned())
             .and_then(|from| copy_folder(Path::new(from), &dir).map_err(|e| e.to_string()));
         let mounted = copied.and_then(|()| {
             crate::mount_panel(runtime, &dir, window, cx).map_err(|e| format!("{e:#}"))
