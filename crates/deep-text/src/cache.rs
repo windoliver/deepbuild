@@ -38,6 +38,9 @@ pub struct Key {
     indent: u32,
     /// Nonzero only under the planted cache per document.
     scope: u64,
+    /// #1215: the flow (0 across, 1 columns right to left, 2 left to right), `upright: all`,
+    /// `combine_upright`, the column's length, and the planted vertical shaper.
+    flow: (u8, bool, u8, Option<u32>, u8),
 }
 
 /// The hash of a run's styled spans (#1964).
@@ -68,6 +71,16 @@ impl Key {
             mask: spec.mask,
             fitted,
             scope: SCOPE.with(Cell::get),
+            flow: match spec.flow {
+                crate::Flow::Horizontal => (0, false, 0, None, 0),
+                crate::Flow::Vertical(c) => (
+                    if c.rl { 1 } else { 2 },
+                    c.upright,
+                    c.combine,
+                    c.height.filter(|_| !spec.bound).map(f32::to_bits),
+                    crate::vertical::planted().bits(),
+                ),
+            },
         }
     }
 

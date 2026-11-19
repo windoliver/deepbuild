@@ -1426,6 +1426,9 @@ For: every change the panel makes: checked like an agent's, undone by writer, ne
 - `baseline: alphabetic | rule:n` (a ruled-paper line)
 - `numerals: tabular | proportional` (tabular when bound)
 - `dir: auto | ltr | rtl = auto`; `lang: BCP 47`
+- `flow: horizontal | vertical_rl | vertical_lr = horizontal`
+- `upright: auto | all = auto` (vertical flow only)
+- `combine_upright: u8 ≤ 4 = 2` (vertical flow only; 0 turns every digit with Latin text)
 - `fallback: [font name] = the look's fallback list` (a grapheme the run's font lacks is set in the first face that has it)
 - `list: {marker: bullet | number | none = none, indent: u = 1.2 × size, gap: u = 0}` (each line after `\n` an item; `#line:n` anchors as code's)
 - `widest: string | the bound value's range`
@@ -1438,7 +1441,7 @@ For: every change the panel makes: checked like an agent's, undone by writer, ne
 
 **Cost:** Shaping O(chars) on change, about 0.2 µs per char (10,000 chars under 2 ms, the bar the R1 spike measures and the shaper decision reopens on); O(visible glyphs) per frame (50,000 glyphs under 1 ms of CPU); 1 MB per atlas page; glyphs above about 64 px draw as paths
 
-**It can never:** Use a system font; be measured by one engine and drawn by another; ellipsize or wrap a number; show a number with a unit that isn't bound or computed; shape per frame
+**It can never:** Use a system font; be measured by one engine and drawn by another; ellipsize or wrap a number; show a number with a unit that isn't bound or computed; shape per frame; rotate a whole horizontal run to fake a column; mix flows inside one item; set a `combine_upright` run wider than the column
 
 **Lands:** R1 labels and readouts; R2 the rest; R6 reveal and copy tables, runs and code; R6 fallback, `text.glyph_missing` and lists
 

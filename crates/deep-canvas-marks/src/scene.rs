@@ -861,6 +861,11 @@ pub struct TextSpec {
     /// lines start.
     pub gap: f64,
     pub indent: f64,
+    /// #1215: `flow`: lines across, or columns top to bottom with its `upright`,
+    /// `combine_upright` and the box's height as the column's length.
+    pub flow: deep_text::Flow,
+    /// #1215: `line_height`, the space between a vertical text's columns.
+    pub line_height: Option<f64>,
 }
 
 impl TextSpec {
@@ -897,6 +902,13 @@ impl TextSpec {
         }
         if self.gap > 0.0 || self.indent > 0.0 {
             k.text("list").number(self.gap).number(self.indent);
+        }
+        if let deep_text::Flow::Vertical(c) = self.flow {
+            k.text(if c.rl { "vertical_rl" } else { "vertical_lr" })
+                .int(i64::from(c.upright))
+                .int(i64::from(c.combine))
+                .number(c.height.map_or(-1.0, f64::from))
+                .number(self.line_height.unwrap_or(-1.0));
         }
         k.finish()
     }
@@ -967,7 +979,17 @@ fn text_spec_of(
     let size = num(params.get("size")).unwrap_or(13.0);
     // #1966: a list's items start `indent` in from its box's edge, `gap` apart.
     let list = crate::lines::list(params, size, &path)?;
+    let flow = flow_of(params, &path)?;
+    let line_height = match params.get("line_height") {
+        None => None,
+        Some(v) => match v.as_f64().filter(|h| h.is_finite() && *h > 0.0) {
+            Some(h) => Some(h),
+            None => return refuse("bad_doc", format!("{path}/params/line_height")),
+        },
+    };
     Ok(TextSpec {
+        flow,
+        line_height,
         gap: list.map_or(0.0, |l| l.gap),
         indent: list.map_or(0.0, |l| l.indent),
         spans: text_spans(params, &path, ty, (ty.family(&font), weight))?,
@@ -1016,7 +1038,7 @@ impl TextSpec {
             lang: self.lang.as_deref(),
             size: self.size as f32,
             weight: self.weight,
-            line_height: None,
+            line_height: self.columns_line_height(),
             width: self.width.map(|w| w as f32),
             max_lines: self.max_lines,
             align: match self.align {
@@ -1030,8 +1052,51 @@ impl TextSpec {
             spans: &self.spans,
             gap: self.gap as f32,
             indent: self.indent as f32,
+            flow: self.flow,
         })
     }
+
+    /// #1215: the line height a vertical text's columns are spaced by; a horizontal text keeps
+    /// the shaper's default, as it draws today.
+    pub fn columns_line_height(&self) -> Option<f32> {
+        match self.flow {
+            deep_text::Flow::Vertical(_) => self.line_height.map(|h| h as f32),
+            deep_text::Flow::Horizontal => None,
+        }
+    }
+}
+
+/// #1215: a text's `flow`, `upright` and `combine_upright` (canvas primitives: Text `text@1`):
+/// columns are the box's height long; `upright` and `combine_upright` are read in vertical flow
+/// only, and a `combine_upright` above 4, which would set a run wider than its column, is refused.
+fn flow_of(params: &Map<String, Value>, path: &str) -> Result<deep_text::Flow, Refused> {
+    let rl = match params.get("flow") {
+        None => return Ok(deep_text::Flow::Horizontal),
+        Some(Value::String(f)) if f == "horizontal" => return Ok(deep_text::Flow::Horizontal),
+        Some(Value::String(f)) if f == "vertical_rl" => true,
+        Some(Value::String(f)) if f == "vertical_lr" => false,
+        Some(_) => return refuse("bad_doc", format!("{path}/params/flow")),
+    };
+    let upright = match params.get("upright") {
+        None => false,
+        Some(Value::String(u)) if u == "auto" => false,
+        Some(Value::String(u)) if u == "all" => true,
+        Some(_) => return refuse("bad_doc", format!("{path}/params/upright")),
+    };
+    let combine = match params.get("combine_upright") {
+        None => 2,
+        Some(n) => match n.as_u64().filter(|n| *n <= 4) {
+            Some(n) => n as u8,
+            None => return refuse("bad_doc", format!("{path}/params/combine_upright")),
+        },
+    };
+    let height = params.get("box").and_then(|b| num(b.get("h")));
+    Ok(deep_text::Flow::Vertical(deep_text::Columns {
+        rl,
+        upright,
+        combine,
+        height: height.map(|h| h as f32),
+    }))
 }
 
 /// One mark to draw, in logical u at zoom 1.
@@ -2911,10 +2976,17 @@ fn text_boxes(frame: &Frame, items: &Map<String, Value>, out: &mut BTreeMap<Stri
             (Align::End, Some(box_w)) => box_w - w,
             _ => 0.0,
         };
-        out.insert(
-            item.clone(),
-            [origin[0] + at, origin[1], w, f64::from(shaped.height)],
-        );
+        let placed = match shaped.columns_box() {
+            // #1215: a vertical run's columns, where its glyphs draw.
+            Some([x, y, w, h]) => [
+                origin[0] + f64::from(x),
+                origin[1] + f64::from(y),
+                f64::from(w),
+                f64::from(h),
+            ],
+            None => [origin[0] + at, origin[1], w, f64::from(shaped.height)],
+        };
+        out.insert(item.clone(), placed);
         let params = object_or_empty(items.get(item).and_then(|i| i.get("params")));
         for part in parts.get(item.as_str()).into_iter().flatten() {
             if let Some(b) = crate::lines::anchor_box(params, &shaped, part) {
