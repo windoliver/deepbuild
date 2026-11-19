@@ -61,7 +61,7 @@ import { Teardowns } from './teardowns.js';
 import { Agents, type Sync } from './agents.js';
 import { Box } from './box.js';
 import { NEWER_SET, OLDER_SET } from './status.js';
-import { aboutCall, aboutPermission } from './standing.js';
+import { aboutPermission, decide } from './standing.js';
 import { Channels } from './channels.js';
 import type { WorkspacesProvider, WorkspaceService } from './workspaces-port.js';
 import { Devices } from './trusted.js';
@@ -2234,9 +2234,9 @@ export class Core {
       const staged = await this.staging.gate(meta, call, true);
       if (staged.held) return staged;
     }
-    // A dependency or a cloud resource the plan doesn't name: answered by your standing rule, or asked (#23).
-    const about = call.decided?.length && call.command ? aboutCall(call.decided, call.command, homedir()) : undefined;
-    return about ? this.holds.decide(meta, about) : {};
+    // A dependency or a cloud resource the plan doesn't name: answered by your standing rule, or asked (#23); a dependency
+    // with its registry's reading, and a package run straight from one isn't asked once it's a week old (#1509).
+    return decide({ holds: this.holds, covered: (s, a) => this.delivery.covered(s, a), now: () => this.now(), reading: (s, a, t) => this.appendReading(s, a, t), registry: this.options.registry, plant: this.options.plant }, meta, call);
   }
   /** The session is on `display` once its switch ran, if that is a screen it leases. */
   private async switched(session: string, display: string): Promise<void> {
