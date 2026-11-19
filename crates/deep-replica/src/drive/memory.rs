@@ -1,7 +1,7 @@
 //! #1431: the replica's reading of its own process (`{"call": "footprint"}`), and the planted memory and readers the
 //! suites must catch in it (`{"call": "texture"}` and `DEEP_DRIVE_PLANT`, in a build with the env-plants feature only).
 
-use std::time::Instant;
+use std::time::SystemTime;
 
 use deep_canvas::gauge::{Gauge, Place};
 use deep_gpu::footprint::{self, Got, Readers};
@@ -21,7 +21,7 @@ pub struct Memory {
     plant: Option<Plant>,
     textures: Vec<(Planted, Option<u64>)>,
     leaked: Vec<Planted>,
-    since: Option<Instant>,
+    since: Option<SystemTime>,
 }
 
 /// The footprint of a process that doesn't exist: the system call fails, as it does on any error.
@@ -46,10 +46,11 @@ impl Memory {
 
     /// A replica launched: the planted leak counts its minutes from here.
     pub fn launched(&mut self) {
-        self.since.get_or_insert_with(Instant::now);
+        self.since.get_or_insert_with(SystemTime::now);
     }
 
-    /// The planted leak: an ungauged buffer outside the heap for each whole minute since launch.
+    /// The planted leak: an ungauged buffer outside the heap for each whole minute of wall time since launch, the
+    /// minutes a suite's clock counts, a minute the Mac sleeps through included.
     pub fn leak(&mut self) {
         let Some(since) = self
             .since
@@ -57,7 +58,7 @@ impl Memory {
         else {
             return;
         };
-        let minutes = (since.elapsed().as_secs() / 60) as usize;
+        let minutes = (since.elapsed().unwrap_or_default().as_secs() / 60) as usize;
         while self.leaked.len() < minutes {
             let Some((buffer, _)) = memory::planted(LEAK, false) else {
                 return;

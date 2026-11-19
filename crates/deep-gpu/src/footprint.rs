@@ -16,7 +16,8 @@ pub type Got = Result<u64, String>;
 
 /// Where each field is read from, as a report names it.
 pub const FOOTPRINT_READ: &str = "proc_pid_rusage(RUSAGE_INFO_V2).ri_phys_footprint";
-pub const HEAP_READ: &str = "malloc_zone_statistics(all zones).size_in_use";
+pub const HEAP_READ: &str =
+    "mach_vm_region_recurse(malloc regions): resident + compressed - reusable pages";
 pub const DEVICE_READ: &str = "MTLDevice.currentAllocatedSize";
 
 /// The reads a reading takes, so a planted program can stand in for any of them.
@@ -48,7 +49,7 @@ pub struct Row {
 #[derive(Clone, Debug)]
 pub struct Reading {
     pub footprint: Got,
-    /// Every byte the allocator holds, the gauges' included.
+    /// What the allocator holds in the footprint, the gauges' bytes included.
     pub heap: Got,
     pub device: Got,
     pub gauges: Vec<Row>,
@@ -58,18 +59,18 @@ pub struct Reading {
 
 #[cfg(target_os = "macos")]
 mod sys {
-    /// malloc_statistics_t.
-    #[repr(C)]
-    #[derive(Default)]
-    pub struct MallocStatistics {
-        pub blocks_in_use: u32,
-        pub size_in_use: usize,
-        pub max_size_in_use: usize,
-        pub size_allocated: usize,
-    }
     extern "C" {
         pub fn proc_pid_rusage(pid: i32, flavor: i32, out: *mut [u64; 64]) -> i32;
-        pub fn malloc_zone_statistics(zone: *const u8, stats: *mut MallocStatistics);
+        pub static mach_task_self_: u32;
+        pub static vm_page_size: usize;
+        pub fn mach_vm_region_recurse(
+            task: u32,
+            address: *mut u64,
+            size: *mut u64,
+            depth: *mut u32,
+            info: *mut [u32; 21],
+            count: *mut u32,
+        ) -> i32;
     }
 }
 
@@ -100,13 +101,43 @@ pub fn footprint_of(_pid: i32) -> Got {
     Err(format!("{} has no such read", std::env::consts::OS))
 }
 
-/// The bytes the allocator holds for the process, summed over every malloc zone.
+/// What the allocator holds in the footprint: the pages of the regions malloc tags as its own, resident or compressed,
+/// less those it gave back as reusable. Free blocks on pages it keeps are in the footprint, so they're the heap's too;
+/// the bytes in use alone would move `unaccounted` each time the heap frees blocks or reuses them.
 #[cfg(target_os = "macos")]
 pub fn heap() -> Got {
-    let mut stats = sys::MallocStatistics::default();
-    // SAFETY: a null zone sums every zone into `stats`, which the call only writes.
-    unsafe { sys::malloc_zone_statistics(std::ptr::null(), &mut stats) };
-    Ok(stats.size_in_use as u64)
+    // VM_MEMORY_MALLOC to VM_MEMORY_MALLOC_PROB_GUARD (<mach/vm_statistics.h>).
+    const MALLOC: [u32; 10] = [1, 2, 3, 4, 7, 8, 9, 11, 12, 13];
+    // vm_region_submap_info_64's words (<mach/vm_region.h>): the user tag, the resident and swapped-out pages, whether
+    // the region is a submap, and the reusable pages.
+    let [tag, resident, swapped, submap, reusable] = [5, 6, 8, 12, 16];
+    let (mut address, mut pages) = (0u64, 0u64);
+    loop {
+        let (mut size, mut depth, mut info, mut count) = (0u64, 0u32, [0u32; 21], 21u32);
+        // SAFETY: the call writes at most `count` words of `info` and the region's address and size.
+        let status = unsafe {
+            sys::mach_vm_region_recurse(
+                sys::mach_task_self_,
+                &mut address,
+                &mut size,
+                &mut depth,
+                &mut info,
+                &mut count,
+            )
+        };
+        match status {
+            0 => {}
+            // KERN_INVALID_ADDRESS: past the last region.
+            // SAFETY: the system's page size, set before main.
+            1 => return Ok(pages * unsafe { sys::vm_page_size } as u64),
+            e => return Err(format!("returned {e}")),
+        }
+        if info[submap] == 0 && MALLOC.contains(&info[tag]) {
+            let held = u64::from(info[resident]) + u64::from(info[swapped]);
+            pages += held.saturating_sub(u64::from(info[reusable]));
+        }
+        address += size;
+    }
 }
 
 #[cfg(not(target_os = "macos"))]
