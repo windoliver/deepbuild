@@ -1038,6 +1038,10 @@ alone.push('tests/acceptance/1929/');
 
 // #1415's files (blind) build deep-show with test features, start real hubs and time a hub's start.
 alone.push('tests/acceptance/1415/');
+// #806's first AC3 draft reads a refused deep_show as a result with the error flag unset, which #1415's rule that every
+// refusal sets it reverses (tests/acceptance/806-redraft-ac3/DISPUTE.md); its blind redraft runs in its place.
+alone.push('tests/acceptance/806-redraft-ac3/');
+byHand.push('tests/acceptance/806/unbound.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
