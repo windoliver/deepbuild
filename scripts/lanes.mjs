@@ -1067,6 +1067,11 @@ alone.push('tests/acceptance/1929/');
 // #1826's files each build deep-graph, and its taste call deep-canvas-render; CPU only, no GPU and no timing.
 alone.push('tests/acceptance/1826/');
 
+// #1484's files (blind) each build deep-canvas-render or deep-text and draw with GPUI's offscreen renderer, as #1479's
+// do; warm.test.ts builds deep-text for release here and at the merge base and times warm shaping, with each run's loads.
+alone.push('tests/acceptance/1484/');
+timed.push('tests/acceptance/1484/warm.test.ts');
+
 // #1415's files (blind) build deep-show with test features, start real hubs and time a hub's start.
 alone.push('tests/acceptance/1415/');
 // #806's first AC3 draft reads a refused deep_show as a result with the error flag unset, which #1415's rule that every
@@ -1076,6 +1081,11 @@ byHand.push('tests/acceptance/806/unbound.test.ts');
 
 // #2402's files (blind) start two hubs and time each tool call against a control hub's, and time two extension hosts.
 alone.push('tests/acceptance/2402/');
+
+// #2204's first draft is kept as written, by hand only: its AC3 holds a newer entry that isn't fail_closed to refusing the
+// whole rules.json with the hub stopped, which #2219 retires; its blind redraft, 2204-redraft-ac3/, runs in its place, and
+// the file's AC1, AC2, AC4 and AC5 run by hand with it (tests/acceptance/2204-redraft-ac3/DISPUTE.md).
+byHand.push('tests/acceptance/2204/rules-unreadable.test.ts');
 
 // #2776's files build deep-show (full with the test module test.paths) and export 3D scenes to the web.
 alone.push('tests/acceptance/2776/seal.test.ts', 'tests/acceptance/2776/export.test.ts', 'tests/acceptance/2776/listing.test.ts');
@@ -1621,7 +1631,7 @@ export function runLanes(lanes, { cwd = root } = {}) {
               const { binaryNames, buildBinaries, commandFiles, watchBinaries } = require('./proof-binaries.mjs');
               watchBinaries(binaries);
               const files = selected.flatMap((lane) => lane.commands).flatMap((command) => commandFiles(cwd, command));
-              buildBinaries(cwd, join(binaries, 'bin'), binaryNames(cwd, files));
+              buildBinaries(cwd, join(binaries, 'bin'), binaryNames(cwd, files), undefined, { timeout: 0 });
             } catch (error) { binaryError = error; }
           }
           if (reported && binaryError) throw binaryError;

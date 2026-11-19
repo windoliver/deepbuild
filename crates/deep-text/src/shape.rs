@@ -5,10 +5,11 @@
 use std::sync::Arc;
 
 use parley::fontique::{Collection, CollectionOptions, SourceCache};
+use parley::setting::Tag;
 use parley::{
     Alignment, AlignmentOptions, FontContext, FontData, FontFamily, FontFamilyName, FontStyle,
-    FontWeight, Language, Layout, LayoutContext, LineHeight, PositionedLayoutItem, StyleProperty,
-    VerticalAlign,
+    FontVariation, FontVariations, FontWeight, Language, Layout, LayoutContext, LineHeight,
+    PositionedLayoutItem, StyleProperty, VerticalAlign,
 };
 use skrifa::raw::TableProvider;
 
@@ -34,7 +35,8 @@ pub enum Align {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Spec<'a> {
     pub text: &'a str,
-    /// The bundled family the run is set in: a font role's face, as the look names it.
+    /// The bundled family the run is set in: a font role's face, as the look names it (#1484: set
+    /// in its variable twin where one is bundled, `fonts::shaped_in`).
     pub family: &'a str,
     /// #417: bundled families in order; a grapheme the family lacks is set in the first that has it.
     pub fallback: &'a [&'a str],
@@ -42,7 +44,7 @@ pub struct Spec<'a> {
     pub lang: Option<&'a str>,
     /// Font size in logical pixels (`size: f32, u = 13`).
     pub size: f32,
-    /// `weight: u16 = 400`; the shaper picks the nearest bundled face.
+    /// `weight: u16 = 400`: a variable face's `wght` (#1484), else the nearest bundled face's.
     pub weight: u16,
     /// `line_height = 1.3 × size`, rounded to whole pixels, when `None`.
     pub line_height: Option<f32>,
@@ -146,6 +148,18 @@ fn script_metrics(family: &str, shift: Shift) -> Option<[f32; 2]> {
     (size > 0).then(|| [f32::from(size) / em, f32::from(offset) / em])
 }
 
+/// #1484: the axis values a run at `size` u and `weight` is set at: its optical size follows its
+/// size, which a face's own `opsz` range clamps (Inter's 14 to 32), and its weight draws as asked.
+/// A face without an axis ignores its value. `optical` false is AC1's planted shaper, which leaves
+/// the optical size at the face's default.
+fn axes(size: f32, weight: u16, optical: bool) -> StyleProperty<'static, ()> {
+    let mut axes = vec![FontVariation::new(Tag::new(b"wght"), f32::from(weight))];
+    if optical {
+        axes.push(FontVariation::new(Tag::new(b"opsz"), size));
+    }
+    StyleProperty::FontVariations(FontVariations::List(axes.into()))
+}
+
 impl<'a> Spec<'a> {
     /// A label in the body role at the defaults.
     pub fn label(text: &'a str) -> Self {
@@ -188,7 +202,8 @@ pub struct Glyph {
     /// The grapheme cluster (UAX #29) of the shown text the glyph belongs to.
     pub grapheme: usize,
     /// #496: the face's normalized variation coordinates (F2Dot14 bits) the glyph was shaped at,
-    /// empty for a static face; outlines and rasters read the glyph at them.
+    /// empty for a static face or the default instance; outlines and rasters read the glyph at
+    /// them, and (#1484) the atlas keys it by them.
     pub coords: Arc<[i16]>,
     /// #1964: the slant in degrees an italic span is drawn at where its face has no italic (0:
     /// upright), leaning forward as y rises.
@@ -279,7 +294,7 @@ impl Shaper {
             .collect()
     }
 
-    fn layout(&mut self, spec: &Spec<'_>, text: &str) -> Layout<()> {
+    fn layout(&mut self, spec: &Spec<'_>, text: &str, optical: bool) -> Layout<()> {
         let decide = LineBreaks::new(text).into_override();
         let mut builder = self
             .layout
@@ -287,10 +302,10 @@ impl Shaper {
         // Lines break at UAX #14's opportunities at the pinned Unicode version (17.0.0).
         builder.set_line_break_override(Some(&*decide));
         // The family first, then the fallback families in order: parley sets each cluster in the
-        // first family of the list whose face maps it.
+        // first family of the list whose face maps it. #1484: each in its variable twin.
         let families: Vec<FontFamilyName<'_>> = std::iter::once(spec.family)
             .chain(spec.fallback.iter().copied())
-            .map(FontFamilyName::named)
+            .map(|f| FontFamilyName::named(fonts::shaped_in(f)))
             .collect();
         builder.push_default(StyleProperty::FontFamily(FontFamily::List(families.into())));
         if let Some(lang) = spec.lang {
@@ -300,6 +315,7 @@ impl Shaper {
         builder.push_default(StyleProperty::FontWeight(FontWeight::new(f32::from(
             spec.weight,
         ))));
+        builder.push_default(axes(spec.size, spec.weight, optical));
         builder.push_default(StyleProperty::LineHeight(LineHeight::Absolute(
             spec.line_height(),
         )));
@@ -320,7 +336,7 @@ impl Shaper {
             if span.family.is_some() {
                 let families: Vec<FontFamilyName<'_>> = std::iter::once(family)
                     .chain(spec.fallback.iter().copied())
-                    .map(FontFamilyName::named)
+                    .map(|f| FontFamilyName::named(fonts::shaped_in(f)))
                     .collect();
                 builder.push(
                     StyleProperty::FontFamily(FontFamily::List(families.into())),
@@ -347,6 +363,10 @@ impl Shaper {
             };
             if size != spec.size {
                 builder.push(StyleProperty::FontSize(size), range.clone());
+            }
+            let weight = span.weight.unwrap_or(spec.weight);
+            if size != spec.size || weight != spec.weight {
+                builder.push(axes(size, weight, optical), range.clone());
             }
             if rise != 0. {
                 builder.push(VerticalAlign::length(rise), range.clone());
@@ -485,10 +505,18 @@ impl Shaper {
 
     /// `text` shaped in the spec's style, past the cache, the shaping recorded.
     fn shape_now(&mut self, spec: &Spec<'_>, text: &str, key: &Key) -> Shaped {
-        let layout = self.layout(spec, text);
+        let layout = self.layout(spec, text, true);
         let run = Self::collect(&layout, spec, None, text);
         cache::shaped(key, run.glyphs.len());
         run
+    }
+
+    /// #1484 AC1's wrong program, the proof binary's planted `shaper_ignores_opsz`: `spec`'s text
+    /// shaped with its weight set and its optical size left at the face's default, as before
+    /// #1484, past the shaped-run cache so no run it shapes is kept or shared.
+    pub fn shape_ignoring_opsz(&mut self, spec: &Spec<'_>) -> Shaped {
+        let layout = self.layout(spec, spec.text, false);
+        Self::collect(&layout, spec, None, spec.text)
     }
 
     /// Whether `spec`'s run is in the shaped-run cache, so shaping it now costs a lookup.
