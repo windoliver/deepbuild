@@ -391,7 +391,10 @@ export async function readCommand(args: readonly string[]): Promise<number> {
 export async function findCommand(args: readonly string[]): Promise<number> {
   return command('find', args, async (slicer, p) => {
     const found = await slicer.find(p.what, p.cursor, undefined, p.file !== undefined ? { path: p.file, cwd: process.cwd() } : undefined);
-    return p.json ? JSON.stringify(found) : [...found.hits.map((h) => `${h.handle}  ${h.context}`), ...(found.next !== undefined ? [`deep find ${again(p, `--slice ${found.next}`)}`] : [])].join('\n');
+    if (p.json) return JSON.stringify(found);
+    // No hit says so in words, not as an empty line (#1812).
+    if (!found.hits.length && found.next === undefined) return p.file !== undefined ? `No session read or edited ${p.file}${p.what ? ` with ${JSON.stringify(p.what)} in it` : ''}.` : `Nothing in the record holds ${JSON.stringify(p.what)}.`;
+    return [...found.hits.map((h) => `${h.handle}  ${h.context}`), ...(found.next !== undefined ? [`deep find ${again(p, `--slice ${found.next}`)}`] : [])].join('\n');
   });
 }
 async function command(name: string, args: readonly string[], body: (slicer: Slicer, p: Parsed) => Promise<string>): Promise<number> {

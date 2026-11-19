@@ -551,3 +551,4 @@ Each kind of thing a package registers fills a slot: its interface with a frozen
 | `deep.registerJobTool` | - | `job.kind@1` | many per kind | `job.kind@1` | `lowercases-last-letter` | R6 |
 | `deep.registerChannel` | - | `channel@1` | many | `channel@1` | `delivered-without-ack`, `signed-without-signature` | R2 |
 | `deep.registerStateSource` | - | `state-source@1` | many | `state-source@1` | `undo-fails`, `first-read-kept`, `compare-sees-nothing` | R2 |
+| `deep.registerPort` | - | `port@1` | many, at most 8 on a document | `port@1` | `sends-on-seek` | R6 |

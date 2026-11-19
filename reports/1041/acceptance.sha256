@@ -1,0 +1,8 @@
+9dc90e724b33360a6c022ab621fc4be2abfe66bc924e6cad66e095bc9b82c4f2  tests/acceptance/1041/BASE-FAILURE.txt
+35bfe7c3b4c5d38f186fe6f9c4aeae6c4b581fd4da1f8ec865e819727528316a  tests/acceptance/1041/README.md
+7ed3ccca6e4254e08704f99b1e9a8e8f362198f1cf28a14014ebf69572efc63c  tests/acceptance/1041/ac01-saves-in-the-browser.test.ts
+8f0ddae8a4a9e80820416c1ee31bd9c51ee385ed48108712c6a129ae1ac7cb95  tests/acceptance/1041/ac02-kept-per-piece.test.ts
+83123031f238dfec92ee60105a624f89b544359e325b3ddc8f8f89750f010453  tests/acceptance/1041/ac03-persistent.test.ts
+69de5fd15f88b968353bec2874187c16c533355be019bca1ec24cd71667f93dd  tests/acceptance/1041/ac04-taste.test.ts
+4a27778d6123e1cb2d7d9f33802de91ad3417be41239c3a6d757a5618cc09897  tests/acceptance/1041/helpers.ts
+5d625241c741d480e7c662c1af14ea3031735dcb844684145f77ef65167308f1  tests/acceptance/1041/tsconfig.json

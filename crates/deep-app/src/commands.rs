@@ -14,7 +14,7 @@ use gpui_kit::*;
 use serde_json::{json, Value};
 
 use crate::address::{Address, Place};
-use crate::chrome;
+use crate::{chrome, copy};
 
 // The keys that move ⌘K's selection: up and down.
 actions!(deepbuild, [SelectUp, SelectDown]);
@@ -86,8 +86,8 @@ impl View {
                 .iter()
                 .map(|p| {
                     Ok(Page {
-                        name: text(&p["name"], "page name")?,
-                        param: text(&p["param"], "page param")?,
+                        name: text(&p["name"], "page name")?, // copy-exception: a manifest error, for the log
+                        param: text(&p["param"], "page param")?, // copy-exception: a manifest error, for the log
                         values: p["values"]
                             .as_array()
                             .map(|vs| {
@@ -104,8 +104,8 @@ impl View {
                 .iter()
                 .map(|c| {
                     Ok(Command {
-                        name: text(&c["name"], "command name")?,
-                        action: text(&c["action"], "command action")?,
+                        name: text(&c["name"], "command name")?, // copy-exception: a manifest error, for the log
+                        action: text(&c["action"], "command action")?, // copy-exception: a manifest error, for the log
                     })
                 })
                 .collect::<Result<_, String>>()?,
@@ -150,8 +150,9 @@ impl Entry {
             Entry::Command { name, .. }
             | Entry::Page { name, .. }
             | Entry::Open { name, .. }
-            | Entry::Preference { name, .. }
-            | Entry::Action { name } => name,
+            | Entry::Preference { name, .. } => name,
+            // An action's name is its identity; ⌘K shows and matches its words in the language shown (#2403).
+            Entry::Action { name } => crate::actions::label(name),
         }
     }
 
@@ -284,7 +285,7 @@ impl Palette {
         cx: &mut Context<Self>,
     ) -> Self {
         let query =
-            cx.new(|cx| InputState::new(window, cx).placeholder("Search commands and pages"));
+            cx.new(|cx| InputState::new(window, cx).placeholder(copy::text("commands.search")));
         let changed = cx.subscribe(&query, |this: &mut Self, _, event: &InputEvent, cx| {
             if matches!(event, InputEvent::Change) {
                 this.selected = 0;
@@ -378,7 +379,7 @@ impl Palette {
         let projects = projects.into_iter().map(|project| Entry::Open {
             name: project
                 .as_deref()
-                .unwrap_or(crate::list::NO_PROJECT)
+                .unwrap_or(copy::text(crate::list::NO_PROJECT))
                 .to_owned(),
             address: Address::new(Place::Project, &crate::list::project_id(project.as_deref())),
         });
@@ -551,15 +552,15 @@ impl Render for Palette {
                     .children(none.then(|| {
                         crate::views::observed("command-none")
                             .role(Role::Label)
-                            .aria_label("No match")
+                            .aria_label(copy::text("commands.no_match"))
                             .px(sizes().space(1))
                             .text_color(chrome.ink_secondary)
-                            .child("No match")
+                            .child(copy::text("commands.no_match"))
                     }))
                     .child(
                         crate::views::observed("command-list")
                             .role(Role::ListBox)
-                            .aria_label("Commands and pages")
+                            .aria_label(copy::text("commands.commands_and_pages"))
                             .flex_none()
                             // Half the window it opens at, before it scrolls.
                             .max_h(sizes().window.1 / 2.)

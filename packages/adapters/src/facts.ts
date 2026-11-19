@@ -1,7 +1,7 @@
 // What the package's two entries share (#2655): an adapter built from its facts, the facts files, and the shipped
 // adapters loaded one at a time. Nothing here checks a registration, so nothing here loads a validator: index.ts
 // registers in a registry that holds each adapter to the published shapes, unchecked.ts in one that checks nothing.
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import type { JsonValue } from '@deepbuild/contracts';
 import { mapHook as mapByFacts } from '../../../adapters/index.mjs';
 import { claudeParts, codexParts, paseoParts, piParts } from './shipped.js';
@@ -64,6 +64,8 @@ export function readFacts<T = JsonValue>(file: string): T {
   if (!/^[a-z][a-z0-9-]*(?:\.facts)?\.json$/.test(file)) throw Error(`${JSON.stringify(file)} is not a facts file in adapters/`);
   return JSON.parse(readFileSync(new URL(file, FACTS), 'utf8')) as T;
 }
+/** The shipped agents' facts files by name, each one readFacts reads. */
+export const factsFiles = (): string[] => readdirSync(FACTS).filter((f) => f.endsWith('.facts.json')).sort();
 
 /**
  * The shipped adapters over `reg`. A reader of one agent need not parse every other agent's facts: each loads at its

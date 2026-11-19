@@ -17,13 +17,13 @@ use crate::chrome::{self, sizes, Typed as _};
 use crate::plain::planted;
 use crate::setup::{self, Stopped};
 use crate::views::{control, label, observed, Control, Shipped};
-use crate::{brand, notice};
+use crate::{brand, copy, notice};
 
 /// How often the window looks for what setup said while it runs.
 const TICK: Duration = Duration::from_millis(50);
 
-/// What the button reads while setup runs.
-pub const SETTING_UP: &str = "Setting up";
+/// The key of what the button reads while setup runs (#2403): draw it with `copy::t`.
+pub const SETTING_UP: &str = "welcome.setting_up";
 
 /// The first-launch page's state.
 #[derive(Default)]
@@ -61,7 +61,7 @@ fn start(this: &mut Shipped, cx: &mut Context<Shipped>) {
                 continue;
             }
             Err(TryRecvError::Disconnected) => Err(Stopped {
-                line: Some("Set up stopped before it said why. Press Set up to try again.".into()),
+                line: Some(copy::text("welcome.stopped_before_why").into()),
                 output: String::new(),
             }),
         };
@@ -105,7 +105,11 @@ pub(crate) fn page(
         control(
             "set-up",
             Control::Main,
-            if running { SETTING_UP } else { "Set up" },
+            copy::text(if running {
+                SETTING_UP
+            } else {
+                "welcome.set_up"
+            }),
             chrome,
         )
         .on_click(cx.listener(|this, _, _, cx| start(this, cx)))
@@ -115,7 +119,7 @@ pub(crate) fn page(
         control(
             "set-up-without-history",
             Control::Plain,
-            "Set up without history",
+            "Set up without history", // copy-exception: planted wrong program
             chrome,
         )
         .on_click(cx.listener(|this, _, _, cx| start(this, cx)))
@@ -125,7 +129,7 @@ pub(crate) fn page(
         control(
             "install-agent",
             Control::Plain,
-            "Install Claude Code",
+            "Install Claude Code", // copy-exception: planted wrong program
             chrome,
         )
         .on_click(cx.listener(|this, _, _, cx| start(this, cx)))
@@ -177,7 +181,11 @@ pub(crate) fn page(
                         let marks = steps.iter().map(|(step, done)| {
                             observed(ElementId::Name(format!("setup-step:{step}").into()))
                                 .role(Role::Image)
-                                .aria_value(if *done { "done" } else { "not yet" })
+                                .aria_value(copy::text(if *done {
+                                    "welcome.done"
+                                } else {
+                                    "welcome.not_yet"
+                                }))
                                 .size(s.space(1))
                                 .rounded(s.radius)
                                 .border(s.hairline)
@@ -191,7 +199,7 @@ pub(crate) fn page(
                         observed(ElementId::Name(format!("setup-agent:{agent}").into()))
                             .role(Role::Label)
                             .aria_label(name.clone())
-                            .when(done, |row| row.aria_value("done"))
+                            .when(done, |row| row.aria_value(copy::text("welcome.done")))
                             .flex()
                             .items_center()
                             .justify_between()
@@ -207,7 +215,7 @@ pub(crate) fn page(
                                             ElementId::Name(
                                                 format!("setup-installs:{agent}").into(),
                                             ),
-                                            "Set up installs it",
+                                            copy::text("welcome.set_up_installs_it"),
                                         )
                                     }),
                             )
@@ -233,7 +241,9 @@ pub(crate) fn page(
             .children(button)
             .children(second)
             .children(install)
-            .children(hidden.then(|| label("set-up-working", format!("{SETTING_UP}…"))))
+            .children(hidden.then(|| {
+                label("set-up-working", format!("{}…", copy::text(SETTING_UP))) // copy-exception: planted wrong program
+            }))
             // #1461's planted first-launch page draws the box beside Set up.
             .children(
                 planted("box-on-first-launch")
@@ -271,7 +281,11 @@ pub(crate) fn page(
                                 control(
                                     "set-up-show-output",
                                     Control::Plain,
-                                    if open { "Hide output" } else { "Show output" },
+                                    copy::text(if open {
+                                        "welcome.hide_output"
+                                    } else {
+                                        "welcome.show_output"
+                                    }),
                                     chrome,
                                 )
                                 .on_click(cx.listener(

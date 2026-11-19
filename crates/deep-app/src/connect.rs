@@ -6,6 +6,7 @@
 use gpui_kit::*;
 
 use crate::chrome::{self, sizes};
+use crate::copy;
 
 /// What the prompt names: the port as the app holds it (`{port, plugin, hosts, out, in, sound}`).
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -38,41 +39,50 @@ impl Prompt {
         })
     }
 
-    /// The lines it says, in order: each a label and what it names.
-    pub fn lines(&self) -> Vec<(&'static str, String)> {
+    /// The lines it says, in order: each its id (its English label), its label in the language shown, and what it
+    /// names.
+    pub fn lines(&self) -> Vec<(&'static str, &'static str, String)> {
         let names = |l: &[String]| {
             if l.is_empty() {
-                "nothing".to_string()
+                copy::text("connect.nothing").to_string()
             } else {
                 l.join(", ")
             }
         };
         vec![
-            ("Sends out", names(&self.out)),
-            ("Reads in", names(&self.inn)),
-            ("Reaches", names(&self.hosts)),
             (
-                "Makes sound",
-                if self.sound {
-                    "yes: a mute or quiet hours stop it".to_string()
+                // copy-exception: the line's id
+                "Sends out",
+                copy::text("connect.sends_out"),
+                names(&self.out),
+            ),
+            ("Reads in", copy::text("connect.reads_in"), names(&self.inn)), // copy-exception: the line's id
+            ("Reaches", copy::text("connect.reaches"), names(&self.hosts)), // copy-exception: the line's id
+            (
+                "Makes sound", // copy-exception: the line's id
+                copy::text("connect.makes_sound"),
+                copy::text(if self.sound {
+                    "connect.sound_yes"
                 } else {
-                    "no".to_string()
-                },
+                    "connect.sound_no"
+                })
+                .to_string(),
             ),
         ]
     }
 
     /// The question the card asks, and the line it shows once the port is open.
     pub fn title(&self, open: bool) -> String {
-        if open {
-            format!("{} is connected to {}", self.port, self.plugin)
+        let key = if open {
+            "connect.connected"
         } else {
-            format!("Connect {} to {}?", self.port, self.plugin)
-        }
+            "connect.ask"
+        };
+        copy::fill(key, &[&self.port, &self.plugin])
     }
 
     pub fn opened(&self) -> String {
-        "It sends while the piece plays, and stops when you close it.".to_string()
+        copy::text("connect.opened").to_string()
     }
 }
 
@@ -117,7 +127,7 @@ pub fn prompt_card(prompt: &Prompt, open: bool, window: &Window) -> Div {
         .border_color(chrome.divider)
         .text_color(chrome.ink_primary)
         .child(crate::views::title("connect:title", prompt.title(open)));
-    for (label, what) in prompt.lines() {
+    for (id, label, what) in prompt.lines() {
         card = card.child(
             div()
                 .flex()
@@ -126,9 +136,9 @@ pub fn prompt_card(prompt: &Prompt, open: bool, window: &Window) -> Div {
                     div()
                         .w(px(120.))
                         .text_color(chrome.ink_secondary)
-                        .child(line(format!("connect:{label}:label"), label.to_string())),
+                        .child(line(format!("connect:{id}:label"), label.to_string())),
                 )
-                .child(line(format!("connect:{label}"), what)),
+                .child(line(format!("connect:{id}"), what)),
         );
     }
     if open {
@@ -136,7 +146,7 @@ pub fn prompt_card(prompt: &Prompt, open: bool, window: &Window) -> Div {
             .child(line("connect:opened".into(), prompt.opened()))
             .child(div().flex().gap(s.space(2)).child(button(
                 "connect:close",
-                "Disconnect",
+                copy::text("connect.disconnect"),
                 false,
                 window,
             )));
@@ -145,8 +155,18 @@ pub fn prompt_card(prompt: &Prompt, open: bool, window: &Window) -> Div {
             div()
                 .flex()
                 .gap(s.space(2))
-                .child(button("connect:open", "Connect", true, window))
-                .child(button("connect:cancel", "Not now", false, window)),
+                .child(button(
+                    "connect:open",
+                    copy::text("connect.connect"),
+                    true,
+                    window,
+                ))
+                .child(button(
+                    "connect:cancel",
+                    copy::text("connect.not_now"),
+                    false,
+                    window,
+                )),
         );
     }
     card
