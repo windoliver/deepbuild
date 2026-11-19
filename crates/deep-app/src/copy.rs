@@ -310,6 +310,73 @@ fn twice(at: usize, key: &'static str) -> Option<&'static Entry> {
     )
 }
 
+/// A sentence the hub wrote in English (a row's why, an agent's reach), drawn in the language shown: the `hub.` entry
+/// whose English it reads as, each placeholder taking what the hub wrote there, as written (a path, a quote, a count);
+/// parts the hub joined with " · " each on their own. As the hub wrote it in English, or when no entry reads it.
+pub fn hub(said: &str) -> String {
+    if SHOWN.load(Ordering::Relaxed) == 0 {
+        return said.to_owned();
+    }
+    hub_one(said).unwrap_or_else(|| {
+        said.split(" · ")
+            .map(|part| hub_one(part).unwrap_or_else(|| part.to_owned()))
+            .collect::<Vec<_>>()
+            .join(" · ")
+    })
+}
+
+/// One sentence of the hub's read as a `hub.` entry: the entry with the most English of its own first.
+fn hub_one(said: &str) -> Option<String> {
+    static HUB: LazyLock<Vec<(&'static str, &'static str)>> = LazyLock::new(|| {
+        let mut hub: Vec<(&'static str, &'static str)> = LANGUAGES[0]
+            .entries
+            .iter()
+            .filter(|(key, _)| key.starts_with("hub."))
+            .filter_map(|(key, (entry, _))| match entry {
+                Entry::Text(english) => Some((*key, *english)),
+                Entry::Forms(_) => None,
+            })
+            .collect();
+        let own = |english: &str| put(english, &[]).len() - 3 * english.matches('{').count();
+        hub.sort_by(|a, b| own(b.1).cmp(&own(a.1)).then(a.0.cmp(b.0)));
+        hub
+    });
+    HUB.iter().find_map(|(key, english)| {
+        let args = read_as(english, said)?;
+        let args: Vec<&dyn Display> = args.iter().map(|a| a as &dyn Display).collect();
+        Some(put(text(key), &args))
+    })
+}
+
+/// What `said` holds at each placeholder of `english`, when it reads as `english` whole; none otherwise. A
+/// placeholder holds something, and the text after the last one ends the sentence.
+fn read_as(english: &str, said: &str) -> Option<Vec<String>> {
+    let mut pieces = english.split('{');
+    let mut rest = said.strip_prefix(pieces.next().unwrap_or_default())?;
+    let mut held: Vec<(usize, String)> = Vec::new();
+    let mut pieces = pieces.peekable();
+    while let Some(piece) = pieces.next() {
+        let (hole, literal) = piece.split_once('}')?;
+        let hole: usize = hole.parse().ok()?;
+        let at = match (literal.is_empty(), pieces.peek().is_none()) {
+            (true, true) => rest.len(),
+            (false, true) => rest.strip_suffix(literal).map(str::len)?,
+            (true, false) => return None,
+            (false, false) => rest.find(literal)?,
+        };
+        if at == 0 {
+            return None;
+        }
+        held.push((hole, rest[..at].to_owned()));
+        rest = &rest[at + literal.len()..];
+    }
+    if !rest.is_empty() {
+        return None;
+    }
+    held.sort_by_key(|(hole, _)| *hole);
+    Some(held.into_iter().map(|(_, text)| text).collect())
+}
+
 /// The string `key` draws in the language shown.
 pub fn text(key: &'static str) -> &'static str {
     match entry(key) {
@@ -437,6 +504,29 @@ mod tests {
         assert_eq!(put("{1}, {0}", &[&"a", &"b"]), "b, a");
         assert_eq!(put("{{0}} {0}", &[&7]), "{0} 7");
         assert_eq!(put("{2} stays", &[&1]), "{2} stays");
+    }
+
+    #[test]
+    fn a_sentence_reads_as_a_template_only_whole() {
+        assert_eq!(read_as("an ask open", "an ask open"), Some(vec![]));
+        assert_eq!(
+            read_as("{0} asks open", "3 asks open"),
+            Some(vec!["3".into()])
+        );
+        assert_eq!(
+            read_as(
+                "{0}, so those hooks can't run",
+                "a, b, so those hooks can't run"
+            ),
+            Some(vec!["a, b".into()])
+        );
+        assert_eq!(
+            read_as("round {0} of {1}", "round 2 of 3"),
+            Some(vec!["2".into(), "3".into()])
+        );
+        assert_eq!(read_as("{0} asks open", " asks open"), None);
+        assert_eq!(read_as("an ask open", "an ask open now"), None);
+        assert_eq!(read_as("its turn stopped", "its turn ended failed"), None);
     }
 
     #[test]

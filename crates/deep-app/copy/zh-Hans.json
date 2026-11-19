@@ -431,13 +431,69 @@
     "text": "读取中",
     "source": "d70afca615203838da3d858e60dda12f900e83e4a6fb03a63cfadb8576ca8985"
   },
+  "hub.an_ask_open": {
+    "text": "有 1 个请求待处理",
+    "source": "9e74b18ccfdaef83ad493dd00f93f54ff7c44fb111c4af398b20f7fb0bb1cdd1"
+  },
   "hub.app_older": {
     "text": "此应用比中枢旧：它使用契约 {0}，而中枢使用 {1}。\n{2}",
     "source": "fcbbcccf9744a502624a0b1af236bf3e2a014abde81e6c18f4faaa64bba4cc4d"
   },
+  "hub.asks_open": {
+    "text": "有 {0} 个请求待处理",
+    "source": "f57d9fc9c2d64ef3af28dd6e1a1d162e02bb7ea77802c4a2aa151203d831c323"
+  },
+  "hub.at_work": {
+    "text": "正在工作",
+    "source": "7e50d822c8d67616666d3fccb5dbf25a2763bc4e6fb9b321de6c011b8903efab"
+  },
+  "hub.blocked_on": {
+    "text": "卡在只有你或某个服务才能解除的事情上",
+    "source": "3c6de716a08f6828169dc9d12296d9f4d784d22ac68fd01f205fed3a64325798"
+  },
+  "hub.blocked_on_cause": {
+    "text": "卡在只有你或某个服务才能解除的事情上（{0}）",
+    "source": "55d6c89d037a7b5803f1a6cdd24d816db2717d92b196bea6e4ecccb145a85fcf"
+  },
+  "hub.claim_passed": {
+    "text": "它的声明通过了检查",
+    "source": "91083626c0c58376d4bf686981947df833dc4ade8fedee3d359ab30f3754f2cc"
+  },
   "hub.client_fix": {
     "text": "请把此应用或 CLI 更新到与正在运行的中枢匹配的版本。",
     "source": "86beeaff8e8c2ac933ad39cfbd9f5f1a010e3b08c278ada5d78183439454da33"
+  },
+  "hub.hook_entries_missing_fix": {
+    "text": "运行 `deep setup`，它会把它们写回你自己的钩子旁边。",
+    "source": "b6585f76308856b7c7111d6bb95a24e9eb8714827c518e4a9f7e5ad4fb0d88e5"
+  },
+  "hub.hook_program_fix": {
+    "text": "运行 `deep setup`，它会构建 deep-hook，并让这些条目指向它。",
+    "source": "0f210f27cc648ab42d6ef4e7beecf37fca41d5b6aa9a0203147d23a9279dfb5c"
+  },
+  "hub.hooks_cant_run": {
+    "text": "BLOCKED：它的钩子无法运行，所以它的关卡只能旁观；请运行 `deep setup`",
+    "source": "cc6ecc6220da19971170a8f772b05d8c38068e04e2b711dad6232c11c0d7ccb4"
+  },
+  "hub.hooks_cant_run_why": {
+    "text": "{0}，所以这些钩子无法运行",
+    "source": "b73c9d9d7bd232a807c4f6e40e3a84a0c9dc4ae70b9f3e621a4344ea6c5acbd4"
+  },
+  "hub.hooks_missing": {
+    "text": "DeepBuild 的钩子没有安装：还没有哪次设置把它们写进 {0}",
+    "source": "f6af58bcbfac7260de376890d0df30c4da0cbc431736d1517de720613538eec9"
+  },
+  "hub.hooks_missing_fix": {
+    "text": "运行 `deep setup`，它会把它们加在你自己的钩子旁边。",
+    "source": "bea35ddd0306d8885f6bde1976cc0c79b6154ec92d96ca9f46c747775d140d7e"
+  },
+  "hub.hooks_untrusted": {
+    "text": "Codex 的钩子列表报告 {0}：在你批准之前，这些钩子不会运行",
+    "source": "9809406a21fa6bafd19ed5e2e4d63ca288bfa62efcf765b4d7aa148b3b8c7f92"
+  },
+  "hub.hooks_untrusted_fix": {
+    "text": "在一个 Codex 会话里用 /hooks 批准或启用它们一次。",
+    "source": "a497dfcc086cf9b8ee5af2d9b217ba54e389f20d28facfd4688d0c6f13d70d75"
   },
   "hub.hub_fix": {
     "text": "请更新 DeepBuild，让中枢与此应用匹配，然后用 `deep setup` 重新启动中枢。",
@@ -451,9 +507,73 @@
     "text": "中枢比此应用旧：它使用契约 {0}，而此应用需要 {1}。\n{2}",
     "source": "8609c9935c3fcfa9c8f00d56c7b9a63480c839f0cefb47acb1014913342362b5"
   },
+  "hub.moved_commit": {
+    "text": "它的结论所针对的提交之后有了变动",
+    "source": "825dcca2f7c7994aae20f9bf929088f503cbc827cb0f27d94257c04d82982576"
+  },
+  "hub.no_hook_since": {
+    "text": "之后没有收到钩子",
+    "source": "9083af2615434c0f876787bcd4fa1d2646bb1e52c2a8e76a4adaf89da1cb17be"
+  },
   "hub.none": {
     "text": "无",
     "source": "140bedbf9c3f6d56a9846d2ba7088798683f4da0c248231336e6a05679e4fdfe"
+  },
+  "hub.permission_prompt": {
+    "text": "有一个权限提示在等你",
+    "source": "e7c20072cc74041e2ef1e80261dc3f6876723cd608e4d14c66ca608822834211"
+  },
+  "hub.process_gone": {
+    "text": "它的进程在一轮中途消失了",
+    "source": "db44d096ca9dc75d9cb36cab1946cdde37a78acdf0c9d9e1af3adb568b5122e2"
+  },
+  "hub.promised_due": {
+    "text": "一项承诺的检查已到期，等它的下一个提示或停止：“{0}”",
+    "source": "e3d297175e7ccc8c54042dc122c0d7ff0311e46c5868563ddb6734c2b7aef78e"
+  },
+  "hub.says_done": {
+    "text": "它说已完成，而它的检查还没有给出结论",
+    "source": "725a76c9339c3600d582cf94edc52d612a14773cf6298022bca6b0ec0f374080"
+  },
+  "hub.sent_back_round": {
+    "text": "它的检查退回了它的声明，第 {0} 轮，共 {1} 轮",
+    "source": "df500220c7d48e3722c4d0fa84b913864c03bec2bab63311a45a07e2ef05cc9f"
+  },
+  "hub.task_queued": {
+    "text": "它的任务在排队，它的智能体还没有开始",
+    "source": "2bdd453afb1e5e8f8f4656b26955e1482daf9b284a67c324bfdea01be3325437"
+  },
+  "hub.turn_failed": {
+    "text": "这一轮以失败结束，没有声明",
+    "source": "e2986bb7a3738f861e57d12aa4eac7de2f601a257540bef40d14e985396698da"
+  },
+  "hub.turn_failed_cause": {
+    "text": "这一轮以失败结束，没有声明（{0}）",
+    "source": "3830dc266395f6b2dcf11c25f6f050faee365b4baa0e34c6b16f32d64a767bc7"
+  },
+  "hub.turn_interrupted": {
+    "text": "这一轮被中断了",
+    "source": "cac62aee1cb4e2ad55c2e437d911d0582cc436a5ec0c2e40cc4c18dbacbeb641"
+  },
+  "hub.turn_stopped": {
+    "text": "这一轮已停止",
+    "source": "a98e7e404ac7e49bd9c11847e2cb94e8ce3d80c73d2ffcba6baadc8bfdc5799e"
+  },
+  "hub.waits_for": {
+    "text": "等待 {0}：{1}",
+    "source": "76496a2e2c8c9652fec617dda204ca0a9ec041f1a272bb996163016cc3846503"
+  },
+  "hub.waits_for_you": {
+    "text": "等你处理：{0}",
+    "source": "bf1092db167905b8f985b6f28d93fb36444aecc44122ff7fec634ebb6cbdc113"
+  },
+  "hub.words_stalled": {
+    "text": "你的话没有送达：投递卡住了",
+    "source": "cef0efe500f1cb3354998cdc594ee2f818aa3a964b0c8aed59881e0154f66815"
+  },
+  "hub.words_timed_out": {
+    "text": "你的话没有送达：投递超时",
+    "source": "8cc9b2fc1077fe30b69ddb1e30a91ddd190a620f159535ec14b7443e8513af03"
   },
   "installed.agents": {
     "text": "智能体",

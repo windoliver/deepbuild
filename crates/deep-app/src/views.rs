@@ -1716,10 +1716,14 @@ pub(crate) fn title(
     text: impl Into<SharedString>,
 ) -> ObservedElement<Stateful<Div>> {
     let s = sizes();
+    // A title longer than its room ends in an ellipsis, its whole text in its accessible name, as a row's does: a page
+    // at 360 pt wide draws nothing past its frame (#2403).
     label(id, text)
         .typed(s.title)
         .h_auto()
         .min_h(s.title.line + s.space(2))
+        .min_w_0()
+        .truncate()
 }
 
 /// A list's heading: the body role at medium weight (#1458).
@@ -2396,7 +2400,7 @@ impl RowDrawn {
             format!(
                 "{} {title} · {word} · {}",
                 states::glyph(row.entry),
-                row.why
+                copy::hub(&row.why)
             )
         } else if let Some(line) = &line {
             format!("{} {title} · {word} · {line}", states::glyph(row.entry))
@@ -3605,7 +3609,7 @@ impl Render for Shipped {
                 let why = listed
                     .as_ref()
                     .filter(|[_, _, why]| !why.is_empty())
-                    .map(|[word, _, why]| format!("{}: {why}", states::shown(word)));
+                    .map(|[word, _, why]| format!("{}: {}", states::shown(word), copy::hub(why)));
                 // The page fills its lane, so its canvas takes the height left under what's above it (#1498).
                 let content = div()
                     .flex()
@@ -4161,9 +4165,10 @@ fn agents_page(
                     copy::text("views.waits_first_session").to_owned(),
                     String::new(),
                 ],
-                Some("unreachable") => {
-                    [copy::fill("views.cant_reach", &[&text("why")]), text("fix")]
-                }
+                Some("unreachable") => [
+                    copy::fill("views.cant_reach", &[&copy::hub(&text("why"))]),
+                    copy::hub(&text("fix")),
+                ],
                 _ => [copy::text("views.reaches").to_owned(), String::new()],
             };
             let name = r["name"].as_str().unwrap_or(&agent).to_owned();
