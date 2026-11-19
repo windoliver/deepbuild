@@ -5,7 +5,7 @@
 // word and what it waits for, and `deep work pause` stops new starts while running turns finish.
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { call } from './client.js';
+import { call, notAnswered, UNDECIDED_CODES } from './client.js';
 import { hubAddress, installedRoot, rootOf } from './paths.js';
 import { startOf } from './wire.js';
 
@@ -24,13 +24,12 @@ async function send(method: string, params: Record<string, unknown>, print: (r: 
     const reply = await call(hubAddress().path, readFileSync(rootOf(installedRoot()).token, 'utf8').trim(), method, params, { pid: process.pid, start: (await startOf(process.pid)) ?? '' });
     if ('error' in reply) {
       process.stderr.write(`${reply.error.remediation}\n`);
-      return 1;
+      return UNDECIDED_CODES.has(reply.error.code) ? 3 : 1;
     }
     process.stdout.write(`${print(reply.result)}\n`);
     return 0;
   } catch (error) {
-    process.stderr.write(`BLOCKED: ${error instanceof Error ? error.message : String(error)}\n`);
-    return 3;
+    return notAnswered(error);
   }
 }
 

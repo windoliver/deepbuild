@@ -1,0 +1,83 @@
+Base-commit runs of tests/acceptance/2652 (issue #2652), written blind.
+
+Base: 3cf41958f224c3b461255b09d747516bb24570eb (origin/main), nothing of #2652 applied. A Mac with 18 cores and 68.7 GB
+(not a reference Mac), at a 1-minute load of about 250 from other sessions. Node 24.22.0, after npm run build
+--workspaces and cargo build --locked -p deep-hook in this worktree. Each file ran on 2026-11-17 with:
+
+  node node_modules/vitest/vitest.mjs run --root tests/acceptance/2652 <file> --testTimeout=600000
+
+AC1, AC2 and AC5 ran once. AC4's file ran twice: its first run judged #1018's suite by "every test passes", which the
+base itself fails (below); the file was corrected to "every test ends as on the merge base" and ran again. AC3 ran three
+times, the last two after tidy-ups of helpers.ts, each with the same reading.
+
+==== AC1 ac1-output-heap.test.ts: FAILS at its expect, naming the growth (33 s)
+
+ × AC1 #2652.8e8af2a5 five command checks that each print 8 MB, each after one that prints 100 bytes: the hub's
+   retained heap grows by a median under 64 KB a check
+AssertionError: After a command check that prints 8 MB the hub's retained heap must be under 64 KB above its value
+before the run; it grew 15.74 MB (the median of five such checks: run:01M7NV005CS2FJMW8AWNY6QD36: 15.74 MB,
+run:01M7NV036CTK9DSQJZCKGMF4T4: 15.75 MB, run:01M7NV06FEKNP3SCQPEZSNYWRC: 15.78 MB, run:01M7NV09J996W3P9AJT2QZK5XR:
+15.74 MB, run:01M7NV0CXVJP07T0RBBN7110PH: 15.73 MB). Before run:01M7NV005CS2FJMW8AWNY6QD36: main: heap 7.19 MB,
+external 2.92 MB, of it array buffers 340.4 KB; [worker 2] WorkerThread: heap 7.67 MB, external 4.30 MB, of it array
+buffers 277.3 KB; [worker 1] WorkerThread: heap 21.06 MB, external 52.29 MB, of it array buffers 16.93 MB. After it:
+main: heap 7.19 MB, external 2.92 MB, of it array buffers 340.4 KB; [worker 2] WorkerThread: heap 7.67 MB, external
+4.30 MB, of it array buffers 277.3 KB; [worker 1] WorkerThread: heap 21.12 MB, external 75.97 MB, of it array buffers
+24.93 MB: expected 15741424 to be less than 64000
+ ❯ ac1-output-heap.test.ts:65
+
+Over 8 MB above, as the criterion says of the merge base: each run's 7.84 million characters stay in the gate runner's
+map of records as one external string. (The core's array buffers also grew 8.00 MB a run; AC1 doesn't count them:
+README, Open points 1.)
+
+==== AC2 ac2-output-of.test.ts: the criterion's test PASSES; the planted test is BLOCKED (15 s)
+
+ ✓ AC2 #2652.71abd7a1 four commands the final message tells you to run print 100, 2,000, 2,001 and 8,000,000
+   characters and fail: the send-back quotes each with the merge base's 2,000 characters
+ × AC2 #2652.71abd7a1 (wrong program keeps-output-head) a runner that keeps the first 2,000 characters fails, naming
+   the run that printed 8 MB
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=keeps-output-head did not start: .../packages/hub/dist/plant.js:124
+Error: DEEP_HUB_PLANT=keeps-output-head names no planted program
+
+Expected: what the merge base quotes is the oracle, so the base passes; the plant isn't there to start.
+
+==== AC3 ac3-kept-paths.test.ts: FAILS at its expect, naming the size (16 s)
+
+AC3 the gate runner's map of run records retains 145.22 MB over 1526502 heap nodes for 3000 kept runs of 500 paths each
+ × AC3 #2652.a3e2a15d the gate runner's map of run records holds the 3,000 kept runs and retains under 20 MB
+AssertionError: A hub started on a record of 3000 kept runs of one check with 500 paths each must retain under 20 MB
+for them, by the map's own retained size: it retains 145.22 MB over 1526502 heap nodes: expected 145222760 to be less
+than 20000000
+ ❯ ac3-kept-paths.test.ts:38
+
+Over 100 MB, as the criterion says of the merge base. The map held all 3,000 kept runs (the check before the size held).
+helpers.ts was tidied twice after this run (a loop over thread sessions, a redundant field in keepRuns' key); AC3 ran
+again after each, with the same reading, 145.22 MB over 1526502 nodes (26 s each).
+
+==== AC4 ac4-1018-unchanged.test.ts: PASSES (second run, 640 s)
+
+ ✓ AC4 #2652.e46eede4 tests/acceptance/1018/hub.test.ts, run as it is, ends each test as it ends on the merge base
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Duration  639.57s
+
+Expected: behavior that must not change passes on the merge base.
+
+First run (600 s), judged by "every test passes": 9 of #1018's 10 tests passed; #1018's AC1 test failed:
+  AssertionError: claim:01M7NV1MQYSZZ78FG30S6GWKQB's verdict must land as PASS, its base run proving the fix: claims
+  [{"tree":"w1",...,"outcome":"INCONCLUSIVE","verdicts":[{"outcome":"INCONCLUSIVE","reasons":["req:...#R1 is covered at
+  depth unit only by the agent's own checks: approve .deepbuild/checks/cart-discount.sh", ".deepbuild/checks/
+  cart-discount.sh: runs still to come", ".deepbuild/checks/cart-discount.sh counts as the agent's own: the claim
+  changed test/cart.test.ts, which it loads"], ...
+That is the merge base's own result for that test (its carry held: one base run, read as carried), not a load effect
+and not on scripts/known-failures.json (README, Open points 8). The file now accepts exactly that failure for that test.
+
+==== AC5 ac5-shared-read.test.ts: the criterion's clean test PASSES; the planted test is BLOCKED (64 s)
+
+ ✓ AC5 #2652.669feed5 two kept runs of one check with equal read lists each carry their result to the next life's
+   claim in their worktree (about 38 s)
+ × AC5 #2652.669feed5 (wrong program shares-read-across-runs) a runner that gives B the list A's read is and then
+   changes it for A fails, naming B (24 s: the first life ran, then the second hub refused the plant)
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=shares-read-across-runs did not start: .../packages/hub/dist/plant.js:124
+Error: DEEP_HUB_PLANT=shares-read-across-runs names no planted program
+
+Expected: the merge base carries kept runs, so the clean test passes there; the plant isn't there to start.

@@ -37,6 +37,12 @@ pub struct Player {
     draw: Option<crate::draw::Draw>,
     /// Each picture's level file by its source's SHA-256.
     levels: HashMap<String, String>,
+    /// Each texture map the document's materials name, ready for the device, by its SHA-256.
+    maps: crate::draw::Maps,
+    /// #549: the piece's match, when its net item declares a relay; the full set's player alone
+    /// holds the net module.
+    #[cfg(feature = "full")]
+    net: Option<crate::net::Match>,
 }
 
 #[wasm_bindgen]
@@ -60,6 +66,9 @@ impl Player {
             store: std::sync::Arc::new(deep_images::Store::memory()),
             draw: None,
             levels: HashMap::new(),
+            maps: Default::default(),
+            #[cfg(feature = "full")]
+            net: None,
         })
     }
 
@@ -114,14 +123,17 @@ impl Player {
     /// item's rewritten program as the export recorded it (`[{item, sha256}]`), which this
     /// player's own rewrite must equal or the piece doesn't start, naming it.
     pub fn load(&mut self, doc: &str, track: &str, logic: &str) -> Result<(), JsValue> {
+        #[cfg(feature = "full")]
+        let (doc_sha, track_sha) = (doc, track);
         let text = |sha: &str| {
             self.files
                 .get(sha)
                 .ok_or_else(|| fail(format!("the bundle holds no file {sha}")))
         };
         let doc: Value = serde_json::from_slice(text(doc)?).map_err(fail)?;
+        // The track as the app holds it: its entries and its fork (#1040).
         let track: Value = serde_json::from_slice(text(track)?).map_err(fail)?;
-        let track = track.as_array().cloned().unwrap_or_default();
+        let track = track["entries"].as_array().cloned().unwrap_or_default();
         let logic: Value = serde_json::from_str(logic).map_err(fail)?;
         let files = &self.files;
         let read = |sha: &str| files.get(sha).cloned();
@@ -140,6 +152,20 @@ impl Player {
                     "the logic item {item}'s program {recorded} isn't the program this player rewrote ({ours}); it doesn't start"
                 )));
             }
+        }
+        // #549: the match the piece declares, on the logic items this player checked.
+        #[cfg(feature = "full")]
+        {
+            let piece =
+                deep_play::logic::logic_piece(self.sealed, played.document(), &track, &read, false);
+            self.net = crate::net::Match::of(
+                self.sealed,
+                &doc,
+                piece.ok().flatten(),
+                &track,
+                doc_sha,
+                track_sha,
+            );
         }
         self.stages = markers(&doc, Some("stage"));
         self.markers = markers(&doc, None);
@@ -191,9 +217,41 @@ impl Player {
         .to_string()
     }
 
-    /// The canvas's GPU, which every frame draws on from now.
-    pub fn attach(&mut self, gpu: crate::gpu::Gpu) {
+    /// The canvas's GPU, which every frame draws on from now, and each texture map the document's
+    /// materials name made ready for it, at load on this one thread, as the app's decode worker
+    /// makes it (Export: web player): BC where the device has texture-compression-bc, ASTC 4 × 4
+    /// where it has only texture-compression-astc, RGBA8 otherwise.
+    pub fn attach(&mut self, gpu: crate::gpu::Gpu) -> Result<(), JsValue> {
+        #[cfg(feature = "full")]
+        let blocks = gpu.blocks();
         self.gpu = Some(gpu);
+        #[cfg(feature = "full")]
+        self.ready_maps(blocks)?;
+        Ok(())
+    }
+
+    #[cfg(feature = "full")]
+    fn ready_maps(&mut self, blocks: deep_codecs::maps::Blocks) -> Result<(), JsValue> {
+        use deep_canvas_scene3d::light::{material_maps, Texels};
+        use deep_codecs::maps::Role;
+        let Some(p) = self.played.as_ref() else {
+            return Ok(());
+        };
+        for (sha, role) in material_maps(p.document()) {
+            let role = Role::read(role).unwrap_or(Role::Data);
+            let bytes = (self.files.get(&sha))
+                .ok_or_else(|| fail(format!("the bundle holds no map {sha}")))?;
+            let r = deep_codecs::maps::ready(bytes, role, blocks, false)
+                .map_err(|e| fail(format!("the map {sha} doesn't load: {e}")))?;
+            let texels = Texels {
+                format: r.format.into(),
+                size: r.size,
+                mips: r.mips,
+                data: std::sync::Arc::new(r.data),
+            };
+            self.maps.insert(sha, std::sync::Arc::new(texels));
+        }
+        Ok(())
     }
 
     /// Draws the frame the session last evaluated onto the canvas; whether it drew.
@@ -208,7 +266,7 @@ impl Player {
         let Some(gpu) = self.gpu.as_mut() else {
             return false;
         };
-        match draw.frame(p, size) {
+        match draw.frame(p, size, &self.maps) {
             crate::draw::Frame::Pixels(rgba) => gpu.show(&rgba, size),
             #[cfg(feature = "full")]
             crate::draw::Frame::Scene(scene, look, over) => gpu.show3d(&scene, &look, &over, size),
@@ -225,6 +283,42 @@ impl Player {
             p.enter(self.sealed, control, value, &read).map_err(fail)?;
         }
         Ok(())
+    }
+
+    /// The piece's saves as the page keeps them (Logic: saves): `{piece, slots}` as JSON, the
+    /// document's stable ID and the most slots its logic declares, 0 for a piece with no saves.
+    pub fn saves(&self) -> String {
+        let p = self.played.as_ref();
+        json!({"piece": p.map_or("", Played::id), "slots": p.map_or(0, Played::slots)}).to_string()
+    }
+
+    /// The saves asked for by the steps the shown time has reached since the last call, as JSON
+    /// in step order: each `{at, item, slot, step, ended, deep_hash}`.
+    pub fn saves_due(&mut self) -> String {
+        Value::Array(self.played.as_mut().map(Played::due).unwrap_or_default()).to_string()
+    }
+
+    /// The save at `at` of [`Self::saves_due`] as its slot's save number `seq`: the bytes the
+    /// page stores whole under their SHA-256.
+    pub fn save_bytes(&self, at: usize, seq: u32) -> Result<Vec<u8>, JsValue> {
+        self.played
+            .as_ref()
+            .and_then(|p| p.save(at, seq.into()))
+            .ok_or_else(|| fail("the piece asked for no such save"))
+    }
+
+    /// The viewer opens the save `name`, its bytes' SHA-256: `{hash, step, deep_hash}` as JSON
+    /// once every logic item plays on from it, or its refusal as JSON, naming what differs.
+    pub fn open_save(&mut self, name: &str, bytes: Vec<u8>) -> Result<String, JsValue> {
+        let files = &self.files;
+        let read = |sha: &str| files.get(sha).cloned();
+        let p = self
+            .played
+            .as_mut()
+            .ok_or_else(|| fail("no piece is loaded"))?;
+        p.open(name, &bytes, &read)
+            .map(|v| v.to_string())
+            .map_err(fail)
     }
 
     /// #860: the viewer's back. On a piece that declares rewind it is a rewind to the stop before,
@@ -254,7 +348,74 @@ impl Player {
     pub fn probe(&self) -> String {
         let mut out = self.played.as_ref().map(Played::probe).unwrap_or_default();
         out.insert("set_digest".into(), json!(self.sealed.set_digest));
+        // #549: the player's copy of the piece's match; the page writes null where there is none.
+        #[cfg(feature = "full")]
+        if let Some(net) = &self.net {
+            out.insert("match".into(), net.probe());
+        }
         Value::Object(out).to_string()
+    }
+}
+
+/// #549: the piece's match (Net: relay and Join). The page draws the prompt and owns the
+/// connection, the viewer's browser's own; what it says and reads comes from here.
+#[cfg(feature = "full")]
+#[wasm_bindgen]
+impl Player {
+    /// The Join prompt as the page draws it, `{state, relay, players, refused, text}`; `null`
+    /// for a piece that declares no relay.
+    pub fn join_prompt(&self) -> String {
+        self.net
+            .as_ref()
+            .map_or(Value::Null, crate::net::Match::prompt)
+            .to_string()
+    }
+
+    /// A person clicked Join: `link` is the page's link and `drawn` 16 bytes from the browser's
+    /// secure random source. `{url, step_ms}`, the connection to open, or `{}` when refused.
+    pub fn join(&mut self, link: &str, drawn: Vec<u8>) -> String {
+        let drawn: [u8; 16] = drawn.try_into().unwrap_or_default();
+        self.net
+            .as_mut()
+            .map_or(json!({}), |n| n.join(link, drawn))
+            .to_string()
+    }
+
+    /// A control message from the relay: `{send}`, `{close}` or `{}`.
+    pub fn net_control(&mut self, text: &str, now_ms: f64) -> String {
+        self.net
+            .as_mut()
+            .map_or(json!({}), |n| n.control(text, now_ms))
+            .to_string()
+    }
+
+    /// A frame another copy of the match sent.
+    pub fn net_receive(&mut self, frame: Vec<u8>, now_ms: f64) {
+        if let Some(n) = self.net.as_mut() {
+            n.receive(&frame, now_ms);
+        }
+    }
+
+    /// The page's tick: the frame to send, empty when there is none.
+    pub fn net_tick(&mut self, now_ms: f64) -> Vec<u8> {
+        self.net.as_mut().map_or(Vec::new(), |n| n.tick(now_ms))
+    }
+
+    /// The connection ended.
+    pub fn net_disconnected(&mut self) {
+        if let Some(n) = self.net.as_mut() {
+            n.disconnected();
+        }
+    }
+
+    /// The player this copy waits for, once it has waited 0.25 s; 0 when none.
+    pub fn net_waiting(&self, now_ms: f64) -> u8 {
+        self.net.as_ref().map_or(0, |n| n.waiting(now_ms))
+    }
+
+    /// Whether the match ended or its Join was refused, so the page closes its connection.
+    pub fn net_ended(&self) -> bool {
+        self.net.as_ref().is_some_and(crate::net::Match::ended)
     }
 }
 

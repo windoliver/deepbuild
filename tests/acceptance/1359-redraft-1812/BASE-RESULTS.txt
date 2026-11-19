@@ -1,0 +1,84 @@
+The redraft on its base, c0a9de979eae03d05db91248467e488c89f537b8 (main 16dc5eab0 plus #1812's blind suite, #1812's
+design line and the lint lane's entry; no implementation of #1812), detached, with only this folder added.
+Date: 2026-11-18 10:51 PST. Machine: a Mac shared with other sessions, macOS 27.2, 1-minute load 494 when the run
+started and 499 when it ended. Node 24.22.0 (fnm's, .node-version). Built first: npm ci; npm run build --workspaces.
+deep-hook: none of these tests runs setup or a hub, so none needs it (README of the frozen suite: setUp and needHook);
+its build was queued behind the machine's build throttle when the run started (REDRAFT.md, On the base).
+Paths below: <tmp> is a throwaway world, /tmp/dh1359-*.
+
+Commands, from the checkout's root:
+
+  NO_COLOR=1 node scripts/throttle.mjs test --wait 60 -- node node_modules/vitest/vitest.mjs run --root tests/acceptance/1359-redraft-1812 --no-file-parallelism --testTimeout=600000 --reporter=verbose
+  node node_modules/typescript/bin/tsc -p tests/acceptance/1359-redraft-1812/tsconfig.json
+
+Result: exit 1. Test Files 1 failed (1); Tests 1 failed | 11 passed (12). Duration 9.24 s. No test ended BLOCKED, and
+no /tmp/dh1359-* folder was left after the run.
+
+---- Redrafted (each name ends "(redraft 1812)") ----
+
+FAIL  #1359.f0bb482f help after a command's name, in a home where setup finished > deep status help prints status's
+      usage, exits 2 and runs nothing, help being status's argument (redraft 1812)                         124 ms
+      At its exit check, the expectation #1812 changes (help-acts-nothing.test.ts:109):
+        AssertionError: deep status help: help is status's argument, which fits none of its forms, so it is not
+        understood and nothing runs, exit 2: exit 0, stdout "Usage: deep status [--json]   every session with its
+        detail, ending on what needs you\n       deep status <session> --why [--json]   why that session reads as it
+        does: the one sentence, each record fact it was read from, and what each higher state lacked\n", stderr "":
+        expected +0 to be 2
+      The checks before it held: nothing written in the home or the working folder, no call to the login service or a
+      service manager. The base still reads help anywhere, so it printed status's usage as a help and exited 0.
+
+PASS  #1359.f0bb482f deep inbox answer a1 --help runs nothing first, prints its usage and exits 0 (redraft 1812)  264 ms
+PASS  #1359.f0bb482f deep help runs nothing first, prints its usage and exits 0 (redraft 1812)                      77 ms
+PASS  #1359.f0bb482f every command deep --help lists, with --help after it, runs nothing, prints its usage and exits 0
+      (redraft 1812)                                                                     7200 ms, 75 commands
+      These three keep every assertion of the tests they replace; #1812 changes their inputs, not their expectations.
+      The base honours --help anywhere and deep help already, and its deep --help has no exit table yet, so the
+      frozen reading and this one list the same 75 commands. They pass here as guards; their wrong programs are
+      #1359's (REDRAFT.md, Wrong programs they fail).
+
+---- Carried unchanged (names and assertions as in tests/acceptance/1359/help-acts-nothing.test.ts) ----
+
+PASS  #1359.f0bb482f deep status --help leaves the home byte-identical, prints its usage and exits 0               161 ms
+PASS  #1359.f0bb482f deep inbox -h leaves the home byte-identical, prints its usage and exits 0                    109 ms
+PASS  #1359.f0bb482f deep inbox -h answer runs nothing first, prints its usage and exits 0                          73 ms
+PASS  #1359.f0bb482f deep off --help runs nothing first, prints its usage and exits 0                              100 ms
+PASS  #1359.f0bb482f deep on -h runs nothing first, prints its usage and exits 0                                    79 ms
+PASS  #1359.f0bb482f deep env up --help runs nothing first, prints its usage and exits 0                            74 ms
+PASS  #1359.f0bb482f deep guard add -h runs nothing first, prints its usage and exits 0                             83 ms
+PASS  #1359.f0bb482f deep memory --help --json runs nothing first, prints its usage and exits 0                     86 ms
+
+Type check: clean (exit 0, no output). With a planted type error in a scratch file in this folder (finished() given a
+string) it exited 2, naming planted-type-error.ts(2,10); the file was removed. After the runs, one comment line was
+added to help-acts-nothing.test.ts's header; no statement changed, the type check was run again (clean), and the exit
+check above now sits at line 110.
+
+---- Scratch readings on this base, each taken once and not kept ----
+
+1. The base's own behaviour for the cases the redraft names, in the frozen suite's world (a scratch script on its
+   helpers): `deep status help` in a home where setup finished: exit 0, status's usage on stdout, nothing written.
+   `deep status x` there: exit 2, stderr "Usage: deep status [--json] | deep status <session> --why [--json]",
+   nothing written, no call. `deep inbox answer a1 --help` and `deep help` in empty homes: exit 0, their usage on
+   stdout, nothing written, no call. `deep update` in a home where setup finished: exit 2, "Unsupported command. Run
+   deep --help for available commands."
+
+2. The commands deep --help lists: the frozen reading and this folder's both read 75 from the base's deep --help. On
+   the same text with an exit table at its foot, four code lines and "  deep lease and deep mcp-exec end with the code
+   of the program they run.", the frozen reading lists 76, the 76th being "lease and deep mcp-exec end with the code of
+   the program they"; this folder's lists the same 75.
+
+3. A stand-in for #1812 (a front end of the base's built CLI in a scratch folder, pointed at with DEEP1359_CHECKOUT,
+   the frozen helpers' own seam): `help` asks for help only as `deep help`; a later `help` reaches the base's CLI as an
+   argument its parser doesn't read as help, so status gets an argument that fits none of its forms; and deep --help,
+   deep -h and deep help end on the exit table of reading 2.
+   - This folder against it: Tests 12 passed (12), 14.5 s (the table, 75 commands, 11.5 s).
+   - The frozen reading against it (the frozen helpers' functions in a scratch script, not its tests): 76 commands;
+     `deep lease and deep mcp-exec end with the code of the program they --help` exits 0 and prints only deep lease's
+     usage, which lacks "mcp-exec", "end", "with", "the", "code", "of", "program" and "they", so the frozen table would
+     name it: "printed no usage naming deep lease and deep mcp-exec ...".
+   - Two near-misses of the stand-in, the status help test alone (-t "deep status help"):
+     a status answering its stray argument "Unsupported command", exit 2: FAIL at "deep status help must print
+     status's usage, a line that starts Usage: and names deep status: exit 2, stdout "", stderr "Unsupported command.
+     Run deep --help for available commands.\n"";
+     a status that drops the stray help and lists: FAIL at the exit check: exit 3, stderr "deep status: the hub isn't
+     answering (can't reach the hub at <tmp>/h/.deepbuild/hub.sock: connect ENOENT <tmp>/h/.deepbuild/hub.sock), and
+     there is no database to read; start it with deep hub start."

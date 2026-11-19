@@ -1840,6 +1840,10 @@
     {
       "id": "no-block-on-stderr-at-exit-0",
       "rule": "A block the model needs never goes out as stderr on exit 0, which the model never sees."
+    },
+    {
+      "id": "reads-count-as-read",
+      "rule": "A tool the hub serves that changes nothing, such as deep_query, maps to read, never to a kind the guards count as change."
     }
   ]
 }

@@ -420,9 +420,12 @@ function runTests(directory, files, { env = {}, timed = [] } = {}) {
   } catch (error) {
     return { results: new Map(), fileErrors: new Map(), unrunnable: new Map(files.map((file) => [file, error.message])) };
   }
-  // A runner given no file runs every test it finds, so each starts only with files of its own.
-  const run = (some) => [some.filter((file) => !file.endsWith('.ts')), some.filter((file) => file.endsWith('.ts'))]
-    .map((group, at) => group.length && (at ? runVitest : runNode)(directory, group, env)).filter(Boolean);
+  // A runner given no file runs every test it finds, so each starts only with files of its own. Each node file runs
+  // alone under its own TIMEOUT, so a file stopped at the cap, or whose run wrote no report, blocks only itself (#2813).
+  const run = (some) => {
+    const vitestFiles = some.filter((file) => file.endsWith('.ts'));
+    return [...some.filter((file) => !file.endsWith('.ts')).map((file) => runNode(directory, [file], env)), ...(vitestFiles.length ? [runVitest(directory, vitestFiles, env)] : [])];
+  };
   const parts = run(files.filter((file) => !timed.includes(file)));
   // The timed set spawns only once it holds timed, so a wait for the grant never eats into its runner's TIMEOUT.
   const timedFiles = files.filter((file) => timed.includes(file));

@@ -1,0 +1,39 @@
+# node scripts/affected.mjs on the change, 2026-11-17, DEEP_2655_BASE naming the built base.
+# Its summary lines, its lines for tests/acceptance/2655/, and a count of the rest. Lines are cut at 300 characters.
+
+WIDE 535 more see the change only through a process that starts another package (--wide runs them): cargo test -p deep-app packages/cli/test/engines.test.ts packages/conformance/src/gate.test.ts packages/github/test/github.test.ts packages/pi/test/guards.test.ts packages/pi/test/lifecycle.test.ts te …
+INCONCLUSIVE 84 timed files were not run; --timed runs them under a timed grant: tests/acceptance/1018/budgets.test.ts tests/acceptance/103-redraft-1830/budgets.test.ts tests/acceptance/104/budgets.test.ts tests/acceptance/1098-redraft-1830/budgets.test.ts tests/acceptance/111/budgets.test.ts tests/ …
+INCONCLUSIVE 63 selected files were not run, left to a person or to a lane of its own; run each by hand or in its lane: tests/acceptance/1015/own-repo.test.ts (by hand) tests/acceptance/103/budgets.test.ts (by hand) tests/acceptance/1098/budgets.test.ts (by hand) tests/acceptance/1100/shown.test.ts  …
+INCONCLUSIVE 27 slow files were not run; --slow runs them: packages/conformance/src/slots/environment.test.ts packages/hub/test/loop-starters.test.ts packages/hub/test/loop-transcript.test.ts packages/hub/test/reopened-items.test.ts tests/acceptance/1002/cli.test.ts tests/acceptance/1002/screens.tes …
+FAIL affected: 728 new, 43 already failing on main, 615 inconclusive or blocked, 3 listed skips, 3484 passed, in 12444 s at load 129; logs in <tmp>/deep-affected-G9AC6E
+
+# Lines for tests/acceptance/2655/ and for a source file the change touches
+BLOCKED tests/acceptance/2655/history.test.mjs › AC5 #2655 the expected time the history gives for a repeated command is the merge base's: BLOCKED: the run on the merge base failed, so there is nothing to compare with: the hub gave no answer to status.read within 300000 ms
+INCONCLUSIVE tests/acceptance/2655/start.test.mjs › AC3 #2655 the hub's own process retires no more instructions from start to its socket's first answer than the merge base's: INCONCLUSIVE: from start to the socket's first answer the hub retires 5.85% against the merge base (median of 20 pairs; p 0.26 that it is above, p 0.64 that it is under 2% above; seed 2655): the pairs can't tell it from 2% above
+NEW FAIL tests/acceptance/2655/history.test.mjs › AC5 #2655 with 2,000 commands of 100 KB each in the history, the main thread holds under 20 MB for them: the hub gave no answer to status.read within 300000 ms
+NEW FAIL size: packages/hub/src/server.ts: 1523 lines, over 1500 with no ceiling
+
+# The 728 NEW lines by kind
+lint findings: 185
+    62  size
+    50  deps
+    24  code mappings
+    16  vendor/gpui-pre-apple/src/metal_renderer.rs
+    11  canvas-lint
+     8  secrets
+     6  size literal
+     2  slot kit environment@1
+     2  slots
+     1  vendor/gpui-pre/src/arena.rs
+     1  vendor/gpui-pre-apple/src/metal_renderer/ycb
+     1  drift
+     1  record reader
+test cases: 543
+   347  another message
+   168  a timeout
+    17  a hub that did not start in time
+    10  a binary the run had not built
+     1  no grant
+
+# Every line of the run by its first word
+NEW 728, BLOCKED 508, INCONCLUSIVE 111, KNOWN 43, LISTED 3, TIMED 1, FAIL 1

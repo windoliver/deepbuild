@@ -1,0 +1,176 @@
+#549 at the base, 06e231702bb4bf5c2ede8a4c76f40e4255e0e7a3 ("Merge pull request #2735"), run once on 2026-11-17, from
+17:17Z to 17:49Z. The machine line, as the run's log gives it (the three load averages when the run began; the log names
+no model and no core count):
+
+  == base 06e231702 2026-11-17T17:17Z node v24.22.2 load 289.30 167.22 77.05
+
+vitest 5.0.5. No test of this suite reads a time or the load, except to call a live phase that ran out of time
+INCONCLUSIVE; none did.
+
+Every test fails at the base: 21 of 21 in 8 files here, and both tests of the Oracle lane
+(tests/acceptance/549-oracle/README.md). None passes, so none is a guard. Every failure is an assertion these files
+name (an AssertionError with the file's own message); none is a TypeError, a timeout, a BLOCKED or an INCONCLUSIVE.
+
+Run in the blind job's worktree, a detached checkout of the base with only these test files added (untracked), one file
+at a time under the machine's build grant. The commands are the README's (Run them); the log heads each step with a
+line starting `==` and doesn't repeat the command line, so the lines below are the README's form of each step:
+
+  export PATH="$HOME/.rustup/toolchains/1.99.1-aarch64-apple-darwin/bin:$PATH"
+  node node_modules/typescript/bin/tsc -p tests/acceptance/549/tsconfig.json           # "== tsc 549": tsc exit 0
+  node node_modules/typescript/bin/tsc -p tests/acceptance/549-oracle/tsconfig.json    # "== tsc 549-oracle": tsc exit 0
+  node node_modules/vitest/vitest.mjs list --root tests/acceptance/549                 # 21 tests in 8 files
+  node node_modules/vitest/vitest.mjs list --root tests/acceptance/549-oracle          # 2 tests in 1 file
+  CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 NO_COLOR=1 node scripts/throttle.mjs build --wait 120 -- scripts/lease \
+    node node_modules/vitest/vitest.mjs run --root tests/acceptance/549 <file>.test.ts   # once a file, eight times
+  (the same) ... run --root tests/acceptance/549-oracle lockstep.test.ts
+
+What was run, by the log's headings:
+
+- "tsc 549", "tsc 549-oracle": both exit 0.
+- "vitest list 549": 21 tests (3 + 4 + 2 + 3 + 3 + 2 + 2 + 2); "vitest list 549-oracle": 2.
+- "cargo build deep-show, deep-relay at the base": "Finished `dev` profile [unoptimized] target(s) in 2.83s", so each
+  file's own builds found the base's binaries built. ac7-builds.test.ts still took 61 s for its three feature sets.
+- "the base's own schedule against its committed snapshot" and "cargo test the_published_schedule at the base": see
+  "One more thing at the base", below. Not this suite's.
+- "vitest <file> at the base", eight times, and "vitest 549-oracle at the base". "done 2026-11-17T17:49Z", exit 0.
+
+Why they fail, from the run and the base's code:
+
+- net@1 at the base is #540's (crates/deep-show/src/net.rs): `relay`, `players`, `step_rate`, `delay` and `window`, and
+  nothing else. `hash_every` and `timeout`, which the issue's Fields give net@1, are refused by the document check as
+  `unknown_field` ("net@1.0 does not define `hash_every`"). Every piece these tests play carries `hash_every` (the
+  criteria read full-state hashes), so 18 tests here and both in the Oracle lane stop where the piece is first shown,
+  at `presented` (helpers.ts:334): "expected 'refused' to be 'presented'".
+- `relay` at the base is a string with no rule: a net item without one, or with an http one, is presented.
+- The base has no `sockets` call (crates/deep-show/src/main.rs), so a scenario that holds one answers
+  `{"ok":false,"code":"bad_input"}`.
+- The base's web player answers probe() with no `match` member (the run).
+
+What the run got through before each first assertion, so those parts of helpers.ts did run at the base: the builds of
+`deep-show` in the three feature sets and of `deep-relay`; the throwaway certificate, the shipped relay, its planted
+twin `hello_other_digest` and the door, each started and stopped (ac2, ac3, ac6, ac7); a web export of the piece
+without a net item, the server, headless Chrome with WebGPU and the player ready (ac1's second test); each build's
+published plan and what ac7 needs of the fixtures (the physics pins differ, the runtime digests differ with them, the
+logic versions differ, and the logic patch leaves the runtime digest as it was).
+
+What the run doesn't show. Nothing past a first assertion ran. No Join prompt was read, no `play_match` or `match` with
+this suite's members was answered, the door carried no relay@1 message, the third connection never connected, no click
+was made in a page, and neither planted name was sent (the base's main.rs holds neither `net_runs_step_early` nor
+`net_resends_nothing`, so each would answer `bad_input`). So the base run proves these tests fail without the net
+module, each at an assertion on it; it doesn't prove that each later assertion fails on its own wrong program. That is
+the planted twins' part, and it waits for the implementation.
+
+Checked beside the run, by this job's second run, in a scratch script that wrote no file (fixtures.ts imports no
+vitest, so Node runs it as it is): both logic programs are valid WebAssembly and run in Node's own. `army` (311 B),
+fed each step's entries in the read region fixtures.ts lays out (a u32 count and 4 zero bytes at `reads_at` 0, then 16 B
+an entry in player order), holds exactly `armyAfter`'s `pos` and `vel` after criterion 8's 1,200 steps on both players'
+scripts and after criterion 4's 3,600 steps on player 1's; with one entry of player 2 left out its `pos` differs. The
+Oracle lane's stub game holds frame 20 and state 40 after 20 steps with input delays 0, 1, 2 and 3. That checks the
+fixtures against each other, not against the base's logic module.
+
+Per test, the first assertion it meets (the log's first line of each failure; long lines are cut where the log cuts
+them; home paths are `~`).
+
+ac1-no-net.test.ts (3 tests | 3 failed) 12430ms
+- AC1 #549.a86e15ac in the app, a piece without a net item shows no Join and opens no connection over a 10-minute session
+  AssertionError: AC1 the app, ten minutes: deep-show run answers the scenario ok; got {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+  at runShow helpers.ts:281, from ac1-no-net.test.ts:36. The scenario holds the `sockets` call.
+- AC1 #549.a86e15ac in headless Chrome, a piece without a net item shows no Join and opens no connection over a 10-minute session
+  AssertionError: probe() says whether the player holds a match (probe().match, null for a piece with no net item): expected { has: false, match: null } to deeply equal { has: true, match: null }
+  at ac1-no-net.test.ts:61, before the ten minutes begin.
+- AC1 #549.a86e15ac a net item without a relay, with an http relay or with a second host is refused at check, naming the field
+  AssertionError: the three net items:
+    a net item without a relay is presented, not refused at check
+    a net item without a relay: no error names the field relay; the issues: []
+    a net item with an http relay is presented, not refused at check
+    a net item with an http relay: no error names the field relay; the issues: []: expected [ …(4) ] to deeply equal []
+  at none helpers.ts:93, from ac1-no-net.test.ts:107. The third case, a list of two hosts, isn't among the four: the
+  base's check already refuses it with an error this test takes as naming `relay` on `match` (its `relay` is a string
+  field; the issue it raised isn't in the log). The test as a whole fails on the other two.
+
+ac2-join-only.test.ts (4 tests | 4 failed) 8810ms
+- AC2 #549.83ea272a in the app, a tour's entry, the piece's logic and deep_drive's synthetic click leave the prompt unanswered with nothing opened
+  AssertionError: the piece that tries to join by itself is presented: [{"check":"document.validate","code":"unknown_field","severity":"error","ids":["match"],"path":"items/match/params/hash_every","actual":60,"what":"net@1.0 does not define `hash_every`","fix":"Remove the field, or require the kind's minor that defines it."},{"check":"document.validate","code":"unknown_field","severity":"error","ids":["match"],"path":
+  Expected: "presented"  Received: "refused"   at presented helpers.ts:334, from ac2-join-only.test.ts:62
+- AC2 #549.83ea272a in headless Chrome, the piece's tour and logic and a synthetic click dispatched in the page leave the prompt unanswered with nothing opened
+  AssertionError: AC2 the web bundle: the piece is presented: [{"check":"document.validate","code":"unknown_field","severity":"error","ids":["match"],"path":"items/match/params/hash_every","actual":60,"what":"net@1.0 does not define `hash_every`","fix":"Remove the field, or require the kind's minor that defines it."},{"check":"document.validate","code":"unknown_field","severity":"error","ids":["match"],"path":"items/ma
+  Expected: "presented"  Received: "refused"   at presented helpers.ts:334, from exportBundle helpers.ts:841, ac2-join-only.test.ts:101
+- AC2 #549.83ea272a in the app, after a person's click every connection goes to the declared relay or the other copy with no cookie or credential, and a third connection with a guessed match ID receives nothing
+  AssertionError: AC2 two copies: the first copy: the piece is presented: [{"check":"document.validate","code":"unknown_field","severity":"error","ids":["match"],"path":"items/match/params/hash_every","actual":1,"what":"net@1.0 does not define `hash_every`","fix":"Remove the field, or require the kind's minor that defines it."},{"check":"document.validate","code":"unknown_field","severity":"error","ids":["match"],"path
+  Expected: "presented"  Received: "refused"   at presented helpers.ts:334, from liveCopy helpers.ts:771
+- AC2 #549.83ea272a in headless Chrome, after a person's click every connection goes to the declared relay or the other copy, with no cookie or credential
+  AssertionError: AC2 the web bundle: the piece is presented: [{"check":"document.validate","code":"unknown_field","severity":"error","ids":["match"],"path":"items/match/params/hash_every","actual":1,"what":"net@1.0 does not define `hash_every`","fix":"Remove the field, or require the kind's minor that defines it."},{"check":"document.validate","code":"unknown_field","severity":"error","ids":["match"],"path":"items/mat
+  Expected: "presented"  Received: "refused"   at presented helpers.ts:334, from exportBundle helpers.ts:841, ac2-join-only.test.ts:197
+
+ac3-direct-path.test.ts (2 tests | 2 failed) 6491ms
+- AC3 #549.ef287875 on a network that allows a direct path the relay's log shows only the copies' joining, and the relay holds nothing once the match ends
+- AC3 #549.ef287875 with the direct path blocked the messages go through the relay, to the same full-state hash at every confirmed step
+  Both wait on the file's one direct-path run, and the log gives the two one failure:
+  AssertionError: AC3 a direct path allowed: the first copy: the piece is presented: [{"check":"document.validate","code":"unknown_field","severity":"error","ids":["match"],"path":"items/match/params/hash_every","actual":1,"what":"net@1.0 does not define `hash_every`","fix":"Remove the field, or require the kind's minor that defines it."},{"check":"document.validate","code":"unknown_field","severity":"error","ids":["ma
+  Expected: "presented"  Received: "refused"   at presented helpers.ts:334, from liveCopy helpers.ts:771
+
+ac4-lockstep-300.test.ts (3 tests | 3 failed) 6536ms
+- AC4 #549.a6b30a32 the app's copy and headless Chrome's reach the same full-state hash at every hash interval and record the same merged track as the run with no delay, with no rollback
+  AssertionError: AC4 the run with no delay: the lockstep piece is presented: [{"check":"document.validate","code":"unknown_field","severity":"error","ids":["match"],"path":"items/match/params/hash_every","actual":60,"what":"net@1.0 does not define `hash_every`","fix":"Remove the field, or require the kind's minor that defines it."}]: expected 'refused' to be 'presented' // Object.is equality
+  at presented helpers.ts:334, from here ac4-lockstep-300.test.ts:47, :69
+- AC4 #549.a6b30a32 net.budget counts 0 B of rollback snapshots and no rollback
+  AssertionError: AC4 net.budget: the lockstep piece is presented: [{"check":"document.validate","code":"unknown_field","severity":"error","ids":["match"],"path":"items/match/params/hash_every","actual":60,"what":"net@1.0 does not define `hash_every`","fix":"Remove the field, or require the kind's minor that defines it."}]: expected 'refused' to be 'presented' // Object.is equality
+  at presented helpers.ts:334, from here ac4-lockstep-300.test.ts:47, :143
+- AC4 #549.a6b30a32 planted net_runs_step_early fails net.rollback, naming the first step it ran early
+  AssertionError: AC4 every message on time: the lockstep piece is presented: [{"check":"document.validate","code":"unknown_field","severity":"error","ids":["match"],"path":"items/match/params/hash_every","actual":1,"what":"net@1.0 does not define `hash_every`","fix":"Remove the field, or require the kind's minor that defines it."}]: expected 'refused' to be 'presented' // Object.is equality
+  at presented helpers.ts:334, from here ac4-lockstep-300.test.ts:47, :155. The unplanted on-time run comes first; the
+  planted run isn't reached.
+
+ac5-waiting-notice.test.ts (3 tests | 3 failed) 4550ms
+- AC5 #549.6bf6ea62 a 2 s hold of player 2's messages holds copy 1 at its last step with the app's notice from 0.25 s, and the match plays on to the same hashes
+- AC5 #549.6bf6ea62 a render-back of the piece's own layer during the hold shows no notice
+  Both wait on the file's one 2 s hold, and the log gives the two one failure:
+  AssertionError: AC5 a 2 s hold: the lockstep piece is presented: [{"check":"document.validate","code":"unknown_field","severity":"error","ids":["match"],"path":"items/match/params/hash_every","actual":1,"what":"net@1.0 does not define `hash_every`","fix":"Remove the field, or require the kind's minor that defines it."}]: expected 'refused' to be 'presented' // Object.is equality
+  at presented helpers.ts:334, from play ac5-waiting-notice.test.ts:40, :53
+- AC5 #549.6bf6ea62 held for 6 s, the match ends on both copies as timeout
+  AssertionError: AC5 a 6 s hold: the lockstep piece is presented: [{"check":"document.validate","code":"unknown_field","severity":"error","ids":["match"],"path":"items/match/params/hash_every","actual":1,"what":"net@1.0 does not define `hash_every`","fix":"Remove the field, or require the kind's minor that defines it."}]: expected 'refused' to be 'presented' // Object.is equality
+  at presented helpers.ts:334, from play ac5-waiting-notice.test.ts:40, :102
+
+ac6-refused-relays.test.ts (2 tests | 2 failed) 7908ms
+- AC6 #549.28bcfddc in the app, each relay is refused on the prompt, naming its host and what it answered, with no frame in the socket log
+  AssertionError: AC6 the app at a relay that answers relay@1 with another digest: the piece is presented: [{"check":"document.validate","code":"unknown_field","severity":"error","ids":["match"],"path":"items/match/params/hash_every","actual":60,"what":"net@1.0 does not define `hash_every`","fix":"Remove the field, or require the kind's minor that defines it."},{"check":"document.validate","code":"unknown_field","sever
+  Expected: "presented"  Received: "refused"   at presented helpers.ts:334, from liveCopy helpers.ts:771, ac6-refused-relays.test.ts:66
+- AC6 #549.28bcfddc in headless Chrome, each relay is refused on the player's prompt, naming its host and what it answered, with no frame in the socket log
+  AssertionError: AC6 the web bundle for a relay that answers relay@1 with another digest: the piece is presented: [{"check":"document.validate","code":"unknown_field","severity":"error","ids":["match"],"path":"items/match/params/hash_every","actual":60,"what":"net@1.0 does not define `hash_every`","fix":"Remove the field, or require the kind's minor that defines it."},{"check":"document.validate","code":"unknown_field
+  Expected: "presented"  Received: "refused"   at presented helpers.ts:334, from exportBundle helpers.ts:841, ac6-refused-relays.test.ts:86
+
+ac7-builds.test.ts (2 tests | 2 failed) 61282ms
+- AC7 #549.c5f03db3 a second Join from a build with another physics pin is refused, naming physics@1 and both versions
+  AssertionError: AC7 the shipped build's copy: the piece is presented: [{"check":"document.validate","code":"unknown_field","severity":"error","ids":["match"],"path":"items/match/params/hash_every","actual":1,"what":"net@1.0 does not define `hash_every`","fix":"Remove the field, or require the kind's minor that defines it."},{"check":"document.validate","code":"unknown_field","severity":"error","ids":["match"],"path":
+  Expected: "presented"  Received: "refused"   at presented helpers.ts:334, from liveCopy helpers.ts:771. Both builds'
+  plans were read and the three fixture expectations held first.
+- AC7 #549.c5f03db3 two builds that differ only in a bit, canonical logic implementation play to equal hashes, and each record carries the runtime digest
+  AssertionError: AC7 the shipped build and the logic patch: the first copy: the piece is presented: [{"check":"document.validate","code":"unknown_field","severity":"error","ids":["match"],"path":"items/match/params/hash_every","actual":1,"what":"net@1.0 does not define `hash_every`","fix":"Remove the field, or require the kind's minor that defines it."},{"check":"document.validate","code":"unknown_field","severity":"e
+  Expected: "presented"  Received: "refused"   at presented helpers.ts:334, from liveCopy helpers.ts:771. Both builds'
+  plans were read and the two fixture expectations held first.
+
+ac8-resend.test.ts (2 tests | 2 failed) 2883ms
+- AC8 #549.c5b39b72 at 5% frame drops over 1,200 match steps both copies reach equal full-state hashes at every confirmed step
+- AC8 #549.c5b39b72 planted net_resends_nothing stalls and fails, naming the lost step
+  Both wait on the file's one unplanted run under drops, and the log gives the two one failure:
+  AssertionError: AC8 5% drops: the lockstep piece is presented: [{"check":"document.validate","code":"unknown_field","severity":"error","ids":["match"],"path":"items/match/params/hash_every","actual":1,"what":"net@1.0 does not define `hash_every`","fix":"Remove the field, or require the kind's minor that defines it."}]: expected 'refused' to be 'presented' // Object.is equality
+  at presented helpers.ts:334, from play ac8-resend.test.ts:35, :66. The planted run isn't reached.
+
+Where the piece also carries `timeout` (ac2, ac3, ac6, ac7), the issue list goes on with a second `unknown_field` error
+for `match`, which the log cuts off at its path.
+
+One more thing at the base, which isn't this suite's. The log's two steps on the base's own published schedule read:
+
+  == the base's own schedule against its committed snapshot
+  drift at the base: input@1
+  drift at the base: media@1
+  set_digest equal at the base: false
+  == cargo test the_published_schedule at the base
+  test tests::the_published_schedule_matches_its_committed_snapshot ... FAILED
+  assertion `left == right` failed: the full schedule drifted from crates/deep-show/schedule/full.json:
+  test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 49 filtered out; finished in 0.49s
+
+So at this base the build's own schedule and crates/deep-show/schedule/full.json already differ, in input@1 and
+media@1, before the net module adds anything. Criterion 7's tests read each build's plan from the build itself (the
+`schedule` call), never from that file, so they don't depend on it; whoever adds the net module to the schedule meets
+that failing test first.

@@ -198,7 +198,7 @@ struct Env {
     top: vec4<f32>,
     low: vec4<f32>,
     moon: vec4<f32>,
-    // Fog: density (1/m), curve (0 exp, 1 exp2), height fog's top (m) and density (1/m).
+    // Fog: density (1/m), curve (0 exp, 1 exp2, 2 linear), height fog's top (m) and density (1/m).
     fog: vec4<f32>,
     // Its color; w 1 to mix toward what the background shows instead.
     fog_color: vec4<f32>,
@@ -209,6 +209,8 @@ struct Env {
     // disk's radiance.
     sun: vec4<f32>,
     sun_color: vec4<f32>,
+    // The linear fog curve's near and far (m); z: what the background draws, as a scale (#1992).
+    range: vec4<f32>,
 };
 
 @group(1) @binding(3) var env_cube: texture_cube<f32>;
@@ -2528,7 +2530,9 @@ fn shade(in0: MeshOut, front: bool, local_n: vec3<f32>, g: array<vec4<f32>, 2>, 
             sss_keep = 1.0 - sw;
         }
         if (in.flags & UNLIT) != 0u {
-            return targets(see_through(adjusted(s.base + m.emission, in.op.w), alpha, mode), in.pick);
+            // An unlit part takes the sky's fog as a lit one does (#1992).
+            let unlit = fogged(adjusted(s.base + m.emission, in.op.w), in.world);
+            return targets(see_through(unlit, alpha, mode), in.pick);
         }
         let d = direct(in, facing, s, m.spread, curved);
         // A shadow catcher writes black, as opaque as the share of light its shadow removes, at
@@ -2837,7 +2841,11 @@ struct LineOut {
     // the segment's length in m and its ends' clip w, so the dash follows the segment in depth.
     @location(7) @interpolate(flat) dash: vec2<f32>,
     @location(8) @interpolate(flat) metres: vec3<f32>,
+    // Its caps; bit 3: the sky's fog applies to it (#1992).
     @location(9) @interpolate(flat) caps: u32,
+    // Its ends in the world, each with its clip w, which place a fragment for the fog.
+    @location(10) @interpolate(flat) wa: vec4<f32>,
+    @location(11) @interpolate(flat) wb: vec4<f32>,
 };
 
 @vertex
@@ -2858,6 +2866,8 @@ fn line_vs(
     out.pick = pick;
     out.joined = (flags >> 3u) & 1u;
     out.caps = flags >> 6u;
+    out.wa = vec4<f32>(a.xyz, ca.w);
+    out.wb = vec4<f32>(b.xyz, cb.w);
     out.dash = unpack2x16float(dash);
     out.metres = vec3<f32>(0.0);
     if (flags & 16u) != 0u {
@@ -2941,7 +2951,13 @@ fn line_fs(in: LineOut) -> Targets {
         discard;
     }
     let alpha = cov * mix(in.alpha.x, in.alpha.y, t) * unpack4x8unorm(in.color).a;
-    return targets(vec4<f32>(paint(in.color) * alpha, alpha), select(0u, in.pick, cov >= 0.5));
+    var c = paint(in.color);
+    if (in.caps & 8u) != 0u {
+        // Where the fragment lies along the segment in the world, through its ends' depths.
+        let s = (t / in.wb.w) / ((1.0 - t) / in.wa.w + t / in.wb.w);
+        c = fogged(c, mix(in.wa.xyz, in.wb.xyz, s));
+    }
+    return targets(vec4<f32>(c * alpha, alpha), select(0u, in.pick, cov >= 0.5));
 }
 
 // ---- points: a disc, square or diamond in px or m about the point's projection
@@ -2953,6 +2969,8 @@ struct PointOut {
     @location(2) @interpolate(flat) color: u32,
     @location(3) @interpolate(flat) pick: u32,
     @location(4) @interpolate(flat) shape: u32,
+    // Where it is in the world; w 1 when the sky's fog applies to it (#1992).
+    @location(5) @interpolate(flat) world: vec4<f32>,
 };
 
 @vertex
@@ -2968,6 +2986,7 @@ fn point_vs(
     out.color = color;
     out.pick = pick;
     out.shape = (flags >> 1u) & 3u;
+    out.world = vec4<f32>(p.xyz, f32((flags >> 3u) & 1u));
     if c.w <= 0.0 {
         out.pos = OFF;
         return out;
@@ -2996,14 +3015,18 @@ fn point_fs(in: PointOut) -> Targets {
     if cov <= 0.0 {
         discard;
     }
-    return targets(vec4<f32>(paint(in.color) * cov, cov), select(0u, in.pick, cov >= 0.5));
+    var c = paint(in.color);
+    if in.world.w > 0.5 {
+        c = fogged(c, in.world.xyz);
+    }
+    return targets(vec4<f32>(c * cov, cov), select(0u, in.pick, cov >= 0.5));
 }
 
 // ---- labels: a quad per glyph from the core's glyph atlas, in a label that faces the camera,
 // stays upright or keeps its axes
 
-@group(1) @binding(0) var atlas: texture_2d_array<f32>;
-@group(1) @binding(1) var atlas_sampler: sampler;
+@group(2) @binding(0) var atlas: texture_2d_array<f32>;
+@group(2) @binding(1) var atlas_sampler: sampler;
 
 struct TextOut {
     @builtin(position) pos: vec4<f32>,
@@ -3012,11 +3035,16 @@ struct TextOut {
     @location(2) @interpolate(flat) pick: u32,
     @location(3) @interpolate(flat) page: u32,
     @location(4) @interpolate(flat) later: u32,
+    // Where the fragment is in the world, and whether the sky's fog applies to it (#1992).
+    @location(5) world: vec3<f32>,
+    @location(6) @interpolate(flat) fog: u32,
 };
 
 // A glyph whose color the label pass draws after the upscale (#1174): here it writes only the
 // label's depth and pick.
 const LATER: u32 = 256u;
+// A label the sky's fog applies to, which draws here whatever its size space.
+const FOG: u32 = 512u;
 
 @vertex
 fn text_vs(
@@ -3037,6 +3065,8 @@ fn text_vs(
     out.pick = pick;
     out.page = (flags >> 3u) & 31u;
     out.later = flags & LATER;
+    out.fog = flags & FOG;
+    out.world = p.xyz;
     let c = frame.clip * vec4<f32>(p.xyz, 1.0);
     if c.w <= 0.0 {
         out.pos = OFF;
@@ -3060,7 +3090,8 @@ fn text_vs(
         right = ax_r.xyz;
         up = ax_u.xyz;
     }
-    out.pos = frame.clip * vec4<f32>(p.xyz + right * offset.x - up * offset.y, 1.0);
+    out.world = p.xyz + right * offset.x - up * offset.y;
+    out.pos = frame.clip * vec4<f32>(out.world, 1.0);
     return out;
 }
 
@@ -3071,7 +3102,28 @@ fn text_fs(in: TextOut) -> Targets {
         discard;
     }
     let shown = select(a, 0.0, in.later != 0u) * unpack4x8unorm(in.color).a;
-    return targets(vec4<f32>(paint(in.color) * shown, shown), select(0u, in.pick, a >= 0.5));
+    var c = paint(in.color);
+    if in.fog != 0u {
+        c = fogged(c, in.world);
+    }
+    return targets(vec4<f32>(c * shown, shown), select(0u, in.pick, a >= 0.5));
+}
+
+// ---- image marks (#1992): a picture on one quad, placed and turned as a label's glyph is
+
+@group(2) @binding(2) var mark_image: texture_2d<f32>;
+
+@fragment
+fn image_fs(in: TextOut) -> Targets {
+    let t = textureSample(mark_image, atlas_sampler, in.uv);
+    if t.a <= 0.002 {
+        discard;
+    }
+    var c = t.rgb;
+    if in.fog != 0u {
+        c = fogged(c, in.world);
+    }
+    return targets(vec4<f32>(c * t.a, t.a), select(0u, in.pick, t.a >= 0.5));
 }
 
 // ---- the sky (#422): drawn first, behind everything, and what fog mixes toward
@@ -3125,10 +3177,11 @@ fn sky_fields(d: vec3<f32>) -> vec3<f32> {
 }
 
 // What the background shows along `d` from the eye: the environment (on its ground when it has
-// one, at its blur) or the sky's own fields.
+// one, at its blur) or the sky's own fields, at the background's own intensity, which scales
+// nothing the environment lights (#1992).
 fn background(d: vec3<f32>) -> vec3<f32> {
     if env.bg.x < 0.5 {
-        return sky_fields(d);
+        return sky_fields(d) * env.range.z;
     }
     var dir = d;
     if env.bg.w > 0.0 {
@@ -3146,9 +3199,9 @@ fn background(d: vec3<f32>) -> vec3<f32> {
         let e = env_dir(dir);
         let a = textureSampleLevel(env_bg, env_sampler, e, 0.0).rgb;
         let b = textureSampleLevel(env_bg_to, env_sampler, e, 0.0).rgb;
-        return select(a, mix(a, b, env.m.x), env.m.x > 0.0) * env.k.z;
+        return select(a, mix(a, b, env.m.x), env.m.x > 0.0) * env.k.z * env.range.z;
     }
-    return env_radiance(dir, 0.0) * env.k.z;
+    return env_radiance(dir, 0.0) * env.k.z * env.range.z;
 }
 
 @fragment
@@ -3156,17 +3209,22 @@ fn sky_fs(@builtin(position) pos: vec4<f32>) -> Targets {
     return targets(vec4<f32>(background(view_ray(pos.xy)), 1.0), 0u);
 }
 
-// Fog on a lit surface at `world` (#422; Sky `sky@1` and its height fog): the distance fog by
-// its curve, and the mist below the height fog's top along the ray's length beneath it, mixed
-// toward the fog's color or what the background shows along the ray.
+// Fog on a lit surface or a mark at `world` (#422, #1992; Sky `sky@1` and its height fog): the
+// distance fog by its curve, over the distance from the eye whatever the curve, and the mist
+// below the height fog's top along the ray's length beneath it, mixed toward the fog's color or
+// what the background shows along the ray.
 fn fogged(c: vec3<f32>, world: vec3<f32>) -> vec3<f32> {
-    if env.low.w < 0.5 || (env.fog.x <= 0.0 && env.fog.w <= 0.0) {
+    let ramp = env.fog.y > 1.5;
+    if env.low.w < 0.5 || (env.fog.x <= 0.0 && env.fog.w <= 0.0 && !ramp) {
         return c;
     }
     let ray = world - env.eye.xyz;
     let dist = length(ray);
     let a = env.fog.x * dist;
     var keep = select(exp(-a), exp(-a * a), env.fog.y > 0.5);
+    if ramp {
+        keep = 1.0 - clamp((dist - env.range.x) / (env.range.y - env.range.x), 0.0, 1.0);
+    }
     if env.fog.w > 0.0 {
         // The share of the ray below the top, from the eye to the surface.
         let y0 = env.eye.y;

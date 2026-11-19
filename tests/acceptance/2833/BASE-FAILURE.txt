@@ -1,0 +1,115 @@
+# #2833 acceptance tests on the base c26bdb5be (Linux LIMITS.test 4; docs/parallel-proof.md says 4).
+# Run on Linux: node --test 'tests/acceptance/2833/*.test.mjs', in a systemd-run --user unit (MemoryMax=24G).
+# Paths redacted to <checkout>; the unit's own lines dropped. Expected reasons: holder-5 is never granted
+# (the limit is 4, not 6), and both design tables give the Spark 4, not 6. The darwin test is skipped on Linux.
+
+✖ #2833.AC2 section 6's class table gives the Spark 6 test slots and the Mac 2 (1.956454ms)
+✖ #2833.AC2 section 13's capacity table gives the Spark 6 test grants and the Mac 2 (0.383489ms)
+✖ #2833.AC1 on Linux, 6 test grants hold at once on one table and the 7th request waits until a slot frees (30731.370219ms)
+﹣ #2833.AC1 on darwin, the test limit stays 2: the 3rd request waits until a slot frees (6.517204ms) # the darwin limit is checked on macOS; this is linux
+ℹ tests 4
+ℹ suites 0
+ℹ pass 0
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 1
+ℹ todo 0
+ℹ duration_ms 30797.685465
+
+✖ failing tests:
+
+test at tests/acceptance/2833/design.test.mjs:31:1
+✖ #2833.AC2 section 6's class table gives the Spark 6 test slots and the Mac 2 (1.956454ms)
+  AssertionError [ERR_ASSERTION]: section 6's test row: {"Class":"test","Mac":"2","Spark":"4","Holds":"The vitest parallel block and `node --test`"}
+  
+  '4' !== '6'
+  
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/2833/design.test.mjs:33:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: '4',
+    expected: '6',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2833/design.test.mjs:37:1
+✖ #2833.AC2 section 13's capacity table gives the Spark 6 test grants and the Mac 2 (0.383489ms)
+  AssertionError [ERR_ASSERTION]: section 13's test grants row: {"":"test grants","Mac":"2","Spark":"4"}
+  
+  '4' !== '6'
+  
+      at TestContext.<anonymous> (<checkout>/tests/acceptance/2833/design.test.mjs:39:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: '4',
+    expected: '6',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2833/limit.test.mjs:29:1
+✖ #2833.AC1 on Linux, 6 test grants hold at once on one table and the 7th request waits until a slot frees (30731.370219ms)
+  AssertionError [ERR_ASSERTION]: holder-5 never ran its command under the throttle (its throttle.mjs ended first, or 30000 ms passed)
+  events:
+  {"name":"holder-1","t":1795060891693,"throttle":"test:3399b74b12f49c49"}
+  {"name":"holder-2","t":1795060891828,"throttle":"test:c4d9cf8633d8198b"}
+  {"name":"holder-3","t":1795060891982,"throttle":"test:689aab699820395c"}
+  {"name":"holder-4","t":1795060892118,"throttle":"test:6994ba7a339425f8"}
+  holder-5: still running
+  
+  holder-1: still running
+  
+  holder-2: still running
+  
+  holder-3: still running
+  
+  holder-4: still running
+  
+      at started (<checkout>/tests/acceptance/2833/helpers.mjs:88:10)
+      at async fillThenWait (<checkout>/tests/acceptance/2833/limit.test.mjs:15:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+# The same folder on a throwaway tree of c26bdb5be with Linux test: 6 and both Spark test cells 6 (never committed):
+✔ #2833.AC2 section 6's class table gives the Spark 6 test slots and the Mac 2 (1.665925ms)
+✔ #2833.AC2 section 13's capacity table gives the Spark 6 test grants and the Mac 2 (0.44765ms)
+✔ #2833.AC1 on Linux, 6 test grants hold at once on one table and the 7th request waits until a slot frees (4218.978056ms)
+﹣ #2833.AC1 on darwin, the test limit stays 2: the 3rd request waits until a slot frees (0.338161ms) # the darwin limit is checked on macOS; this is linux
+ℹ tests 4
+ℹ pass 3
+ℹ fail 0
+ℹ skipped 1
+
+# Twins of that throwaway (scripts/throttle.mjs Linux test limit only; docs at 6):
+## test: 7
+✖ #2833.AC1 on Linux, 6 test grants hold at once on one table and the 7th request waits until a slot frees (3782.197003ms)
+✔ #2833.AC2 section 13's capacity table gives the Spark 6 test grants and the Mac 2 (0.13512ms)
+✔ #2833.AC2 section 6's class table gives the Spark 6 test slots and the Mac 2 (0.74789ms)
+  AssertionError [ERR_ASSERTION]: request 7 ran while 6 test grants were held: the limit is not 6
+ℹ fail 1
+ℹ pass 2
+## test: 5
+✖ #2833.AC1 on Linux, 6 test grants hold at once on one table and the 7th request waits until a slot frees (30749.3429ms)
+✔ #2833.AC2 section 13's capacity table gives the Spark 6 test grants and the Mac 2 (0.360369ms)
+✔ #2833.AC2 section 6's class table gives the Spark 6 test slots and the Mac 2 (1.380917ms)
+  AssertionError [ERR_ASSERTION]: holder-6 never ran its command under the throttle (its throttle.mjs ended first, or 30000 ms passed)
+ℹ fail 1
+ℹ pass 2

@@ -1,0 +1,231 @@
+#1619 acceptance suite at the base, 16dc5eab (Merge pull request #2771), before any implementation.
+
+One run of the suite as delivered, on an Apple M5 Max (Metal, GPU family apple10), with
+`node scripts/throttle.mjs build --wait 60 -- npx vitest run --root tests/acceptance/1619 --no-file-parallelism
+--testTimeout=600000 --no-color` (deep-gpu built by each file, debug, CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0;
+it had been built once before the run, so the files' builds found it fresh). It is the suite's second run at the
+base: after the first, seek.test.ts's three seeks were moved into a second process, and the ten results were the
+same. 8 of 10 tests fail, each on the surface the base lacks:
+
+- line.test.ts: at `convergence_angle: 90` the base's pass ignores the angle, so red and blue stay in green's row and
+  slide 2 px along it; `--planted convergence_angle_ignored` is refused at startup (`bad_input`, exit 2).
+- seek.test.ts: on the noop backend no frame has a `finish_hash`; on Metal the tracking band and the roll draw
+  nothing, so every played frame is the frame with no finish (the seeked frames do equal the played ones there, which
+  is why the test also asks that the band shows); `--planted tracking_wall_time` is refused at startup on both
+  backends.
+- identity.test.ts: the identity's equalities hold at the base, which ignores `tracking` and `roll`, and
+  `convergence: 2` changes the film; the test fails on its guard, since a tracking band and a roll change no frame.
+- indexed.test.ts: the base draws the indexed look whose screen names `convergence_angle` instead of refusing it.
+
+The 2 that pass are line.test.ts's two tests at `convergence_angle: 0`: the peaks of the vertical line, and its
+frame against the merge base's frame (fixtures/base-frame.png, drawn by this same build on this same GPU). The
+criterion's first half holds the new pass to what #464's horizontal convergence already draws, so both pass before
+and after; they fail on a pass whose angle 0, or whose default angle, moves a pixel of the base's frame (README: What
+the base already does).
+
+`npx tsc -p tests/acceptance/1619/tsconfig.json` exits 0. No test was INCONCLUSIVE here: the machine is a Mac of the
+family that drew the merge base's frame. The suite was not run on the Spark or on a Mac of another GPU family.
+
+ RUN  v5.0.5 <worktree>/tests/acceptance/1619
+
+ ❯ line.test.ts (4 tests | 2 failed) 3413ms
+   ❯ #1619.a63cb7a9 the screen's convergence along its angle: the line fixture (4)
+     ✓ #1619.a63cb7a9 at convergence 2, convergence_angle 0, a 1 px white vertical line over black has its red peak 2 px left and its blue peak 2 px right of green, within 0.5 px 2073ms
+     ✓ #1619.a63cb7a9 at convergence 2, convergence_angle 0, the vertical line's frame is byte-equal to the merge base's frame 222ms
+     × #1619.a63cb7a9 at convergence_angle 90, a 1 px white horizontal line has its red and blue peaks 2 px from green on opposite sides, within 0.5 px 182ms
+     × #1619.a63cb7a9 a planted pass that ignores the angle (planted convergence_angle_ignored) fails, naming it 15ms
+ ❯ seek.test.ts (4 tests | 4 failed) 3288ms
+   ❯ #1619.94959aa8 the screen's tracking band and roll come from the frame, never from playback (4)
+     × #1619.94959aa8 on the noop backend (anywhere, the Spark included), what the finish pass is given for a frame is byte-identical played straight and after a seek 2168ms
+     × #1619.94959aa8 on the noop backend, a planted tracking band seeded from wall time (planted tracking_wall_time) differs after the seek and fails, naming the frame 15ms
+     × #1619.94959aa8 on Metal, the same frame is byte-identical played straight and after a seek 505ms
+     × #1619.94959aa8 on Metal, a planted tracking band seeded from wall time (planted tracking_wall_time) differs after the seek and fails, naming the frame 15ms
+ ❯ identity.test.ts (1 test | 1 failed) 3123ms
+   ❯ #1619.244eda5f the screen's convergence, tracking and roll at their identity (1)
+     × #1619.244eda5f with convergence 0, tracking none and roll none, every frame has the pixel hash of the frame with no finish; off its identity each changes the film 2568ms
+ ❯ indexed.test.ts (1 test | 1 failed) 2755ms
+   ❯ #1619.f0d0fbcf a convergence angle would leave the palette, so an indexed look can't take it (1)
+     × #1619.f0d0fbcf convergence_angle on an indexed look is refused at check, naming the field; the same look without it draws 2060ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 8 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  identity.test.ts > #1619.244eda5f the screen's convergence, tracking and roll at their identity > #1619.244eda5f with convergence 0, tracking none and roll none, every frame has the pixel hash of the frame with no finish; off its identity each changes the film
+AssertionError: each of convergence, tracking and roll off its identity changes some frame, so the screen reads its fields: expected [ 'a tracking band', 'a roll' ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "a tracking band",
++   "a roll",
++ ]
+
+ ❯ identity.test.ts:41:130
+     39|     none(problems, `${AC[3]} the identity`);
+     40|     const unread = OFF.filter((_, i) => hashes[1 + IDENTITY.length + i…
+     41|     expect(unread, 'each of convergence, tracking and roll off its ide…
+       |                                                                                                                                  ^
+     42|   });
+     43| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/8]⎯
+
+ FAIL  indexed.test.ts > #1619.f0d0fbcf a convergence angle would leave the palette, so an indexed look can't take it > #1619.f0d0fbcf convergence_angle on an indexed look is refused at check, naming the field; the same look without it draws
+AssertionError: the look is refused at check, before any frame is drawn: {"size":[320,180],"frames":[{"frame":0,"gpu_ms":5.5771239999999995,"cpu_ms":19.906625,"fills":0,"pixel_hash":"977fdb21aa0c62476507c644bdd82f2dfcaa5a61e52139541c9196b9b7c24683"}],"switches":[],"document":{"opened":"a54177b53b9f17e7f1458fce84fd3cbf83d6781ba57e4bef556b1bc76950853b","played":"a54177b53b9f17e7f1458fce84fd3cbf83d6781ba57e4bef556b1bc76950853b"},"indexed":{"operator":"look.indexed@1","class":"exact","palette":["ground","body","trim"],"size":[80,45],"target_bytes":28800}}: expected 'undefined' to be 'string' // Object.is equality
+
+Expected: "string"
+Received: "undefined"
+
+ ❯ indexed.test.ts:32:113
+     30|     ]);
+     31|     if (angled!['code'] === 'unsupported_platform') inconclusive('film…
+     32|     expect(typeof angled!['code'], `the look is refused at check, befo…
+       |                                                                                                                 ^
+     33|     expect(angled!['frames'], `no frame is drawn: ${shown(angled)}`).t…
+     34|     expect(angled!['reason'], `the refusal names the field by its path…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/8]⎯
+
+ FAIL  line.test.ts > #1619.a63cb7a9 the screen's convergence along its angle: the line fixture > #1619.a63cb7a9 at convergence_angle 90, a 1 px white horizontal line has its red and blue peaks 2 px from green on opposite sides, within 0.5 px
+AssertionError: #1619.a63cb7a9 the horizontal line: at convergence: 2, convergence_angle: 90, the red peak is 0.00 px from green's along y, not 2 either way within 0.5 px; at convergence: 2, convergence_angle: 90, the red peak is -2.00 px from green's along x, where an offset along 90° moves nothing; at convergence: 2, convergence_angle: 90, the blue peak is 0.00 px from green's along y, not 2 either way within 0.5 px; at convergence: 2, convergence_angle: 90, the blue peak is 2.00 px from green's along x, where an offset along 90° moves nothing; at convergence: 2, convergence_angle: 90, the red and blue peaks (0.00 and 0.00 px from green's along y) are not on opposite sides of green: expected [ …(5) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "at convergence: 2, convergence_angle: 90, the red peak is 0.00 px from green's along y, not 2 either way within 0.5 px",
++   "at convergence: 2, convergence_angle: 90, the red peak is -2.00 px from green's along x, where an offset along 90° moves nothing",
++   "at convergence: 2, convergence_angle: 90, the blue peak is 0.00 px from green's along y, not 2 either way within 0.5 px",
++   "at convergence: 2, convergence_angle: 90, the blue peak is 2.00 px from green's along x, where an offset along 90° moves nothing",
++   "at convergence: 2, convergence_angle: 90, the red and blue peaks (0.00 and 0.00 px from green's along y) are not on opposite sides of green",
++ ]
+
+ ❯ none helpers.ts:62:67
+     60| /** No failures. */
+     61| export function none(failures: readonly string[], what: string): void {
+     62|   expect(failures, `${what}: ${failures.slice(0, 8).join('; ')}`).toEq…
+       |                                                                   ^
+     63| }
+     64| /** A planted twin's check: it found failures, and they name what the …
+ ❯ line.test.ts:81:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/8]⎯
+
+ FAIL  line.test.ts > #1619.a63cb7a9 the screen's convergence along its angle: the line fixture > #1619.a63cb7a9 a planted pass that ignores the angle (planted convergence_angle_ignored) fails, naming it
+AssertionError: deep-gpu run --planted convergence_angle_ignored exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ runGpu helpers.ts:148:155
+    146|   if (r.error && (r.error as NodeJS.ErrnoException).code === 'ETIMEDOU…
+    147|   if (r.error) throw Error(`${label}: ${r.error.message}`);
+    148|   expect(r.status, `${label} exits 0 (${r.signal ?? 'no signal'}); std…
+       |                                                                                                                                                           ^
+    149|   const out1 = (r.stdout ?? '').split('\n').filter((l) => l !== '');
+    150|   expect(out1.length, `${label}: one output line for the scenario`).to…
+ ❯ draw line.test.ts:33:15
+ ❯ line.test.ts:85:35
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/8]⎯
+
+ FAIL  seek.test.ts > #1619.94959aa8 the screen's tracking band and roll come from the frame, never from playback > #1619.94959aa8 on the noop backend (anywhere, the Spark included), what the finish pass is given for a frame is byte-identical played straight and after a seek
+AssertionError: played straight: frame 0's finish_hash is a SHA-256, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ sha helpers.ts:51:102
+     49| /** A SHA-256 a reply names something by. */
+     50| export function sha(v: JsonValue | undefined, what: string): string {
+     51|   expect(typeof v === 'string' && /^[0-9a-f]{64}$/.test(v), `${what} i…
+       |                                                                                                      ^
+     52|   return v as string;
+     53| }
+ ❯ finishHash helpers.ts:183:63
+ ❯ hashOf seek.test.ts:46:62
+ ❯ seek.test.ts:54:36
+ ❯ seek seek.test.ts:54:25
+ ❯ seek.test.ts:65:34
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/8]⎯
+
+ FAIL  seek.test.ts > #1619.94959aa8 the screen's tracking band and roll come from the frame, never from playback > #1619.94959aa8 on the noop backend, a planted tracking band seeded from wall time (planted tracking_wall_time) differs after the seek and fails, naming the frame
+AssertionError: deep-gpu run --backend noop --planted tracking_wall_time exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ runGpu helpers.ts:148:155
+    146|   if (r.error && (r.error as NodeJS.ErrnoException).code === 'ETIMEDOU…
+    147|   if (r.error) throw Error(`${label}: ${r.error.message}`);
+    148|   expect(r.status, `${label} exits 0 (${r.signal ?? 'no signal'}); std…
+       |                                                                                                                                                           ^
+    149|   const out1 = (r.stdout ?? '').split('\n').filter((l) => l !== '');
+    150|   expect(out1.length, `${label}: one output line for the scenario`).to…
+ ❯ seek seek.test.ts:47:24
+ ❯ seek.test.ts:71:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/8]⎯
+
+ FAIL  seek.test.ts > #1619.94959aa8 the screen's tracking band and roll come from the frame, never from playback > #1619.94959aa8 on Metal, the same frame is byte-identical played straight and after a seek
+AssertionError: the band and the roll show: some played frame differs from the frame with no finish: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ seek.test.ts:77:132
+     75|     const { problems, played, plain } = seek(undefined);
+     76|     none(problems, `${AC[2]} seeking on Metal`);
+     77|     expect(played.some((h) => h !== plain), 'the band and the roll sho…
+       |                                                                                                                                    ^
+     78|     expect(new Set(played).size, 'the band and the roll move: the 48 p…
+     79|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/8]⎯
+
+ FAIL  seek.test.ts > #1619.94959aa8 the screen's tracking band and roll come from the frame, never from playback > #1619.94959aa8 on Metal, a planted tracking band seeded from wall time (planted tracking_wall_time) differs after the seek and fails, naming the frame
+AssertionError: deep-gpu run --planted tracking_wall_time exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ runGpu helpers.ts:148:155
+    146|   if (r.error && (r.error as NodeJS.ErrnoException).code === 'ETIMEDOU…
+    147|   if (r.error) throw Error(`${label}: ${r.error.message}`);
+    148|   expect(r.status, `${label} exits 0 (${r.signal ?? 'no signal'}); std…
+       |                                                                                                                                                           ^
+    149|   const out1 = (r.stdout ?? '').split('\n').filter((l) => l !== '');
+    150|   expect(out1.length, `${label}: one output line for the scenario`).to…
+ ❯ seek seek.test.ts:47:24
+ ❯ seek.test.ts:82:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/8]⎯
+
+
+ Test Files  4 failed (4)
+      Tests  8 failed | 2 passed (10)
+   Start at  18:21:35
+   Duration  12.89s (tests 99%)
+
+[exited with code 1]

@@ -143,6 +143,12 @@ const SERIES_KINDS: ReadonlySet<string> = new Set(['reading.batch', 'reading.rol
 const NAMES_KIND = 'reading.names';
 /** How often a names file in use is stored again, which keeps it as long as what names it. */
 const NAMES_REPUT_MS = 86_400_000;
+/**
+ * The decoded sets of names kept (#2650): the newest, up to this many sets and this many bytes of names files. One
+ * let go is read again from its file, checked by its hash, when a value needs it, and stored again when used again.
+ */
+const NAMES_KEPT = 64;
+const NAMES_BYTES = 4 * 1024 * 1024;
 /** How often the series' own retention pass runs, on the hub's timer. */
 const RETAIN_EVERY_MS = HOUR_MS;
 const DAY_MS = 86_400_000;
@@ -171,14 +177,17 @@ export class SeriesStore {
   /** Each source's batches by log position, read from the record the first time one is resolved. */
   private readonly landed = new Map<string, Landed[]>();
   private readonly windows = new Map<string, Rollups>();
-  /** Names files read and checked, by hash. */
-  private readonly names = new Map<string, Map<string, number>>();
+  /** Names files read and checked, by hash, with their files' bytes: the newest NAMES_KEPT, within NAMES_BYTES. */
+  private readonly names = new Map<string, { index: Map<string, number>; bytes: number }>();
+  private namesBytes = 0;
+  /** When each set's names file was last stored: a set's note leaves with it. */
   private readonly namesPut = new Map<string, number>();
   private readonly writer: Writer;
   private retained = -Infinity;
   private reopened: Promise<void> | undefined;
 
-  constructor(private readonly o: { record: RecordStore; evidence: EvidenceStore; now: () => number; connection: Connection; timeoutOf?: (source: string) => number | undefined }) {
+  /** `keepsEvery`: #2650's planted store, which keeps every set of names it decoded. */
+  constructor(private readonly o: { record: RecordStore; evidence: EvidenceStore; now: () => number; connection: Connection; timeoutOf?: (source: string) => number | undefined; keepsEvery?: true }) {
     this.writer = o.evidence.connect({ role: 'deepbuild', via: 'job' });
   }
 
@@ -194,9 +203,26 @@ export class SeriesStore {
     if (this.o.now() - (this.namesPut.get(sha) ?? -Infinity) >= NAMES_REPUT_MS) {
       await this.put(bytes, NAMES_KIND, source);
       this.namesPut.set(sha, this.o.now());
-      this.names.set(sha, new Map(names.map((n, i) => [n, i])));
+      this.keepNames(sha, new Map(names.map((n, i) => [n, i])), bytes.length);
     }
     return sha;
+  }
+  /** A set of names kept as the newest, and the oldest let go past the bound with its note (#2650). */
+  private keepNames(sha: string, index: Map<string, number>, bytes: number): void {
+    const was = this.names.get(sha);
+    if (was) {
+      this.names.delete(sha);
+      this.namesBytes -= was.bytes;
+    }
+    this.names.set(sha, { index, bytes });
+    this.namesBytes += bytes;
+    if (this.o.keepsEvery) return;
+    for (const [old, kept] of this.names) {
+      if (old === sha || (this.names.size <= NAMES_KEPT && this.namesBytes <= NAMES_BYTES)) break;
+      this.names.delete(old);
+      this.namesPut.delete(old);
+      this.namesBytes -= kept.bytes;
+    }
   }
 
   /** A series call's values: one batch file, one reading.batch event, its values into their minute and hour. */
@@ -287,11 +313,11 @@ export class SeriesStore {
   }
   private async indexOf(names: string): Promise<Map<string, number> | string> {
     const known = this.names.get(names);
-    if (known) return known;
+    if (known) return known.index;
     const got = await this.bytes(names);
     if (got === 'gone' || 'bad' in got) return `its names file ${names} is ${got === 'gone' ? 'gone' : 'unreadable'}`;
     const index = new Map(readNames(got).map((n, i) => [n, i]));
-    this.names.set(names, index);
+    this.keepNames(names, index, got.length);
     return index;
   }
 

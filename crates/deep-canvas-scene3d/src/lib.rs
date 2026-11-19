@@ -1,7 +1,9 @@
 //! The scene3d canvas module's R2 subset (issue #378): see the crate manifest.
 
 pub mod arrays;
+pub mod attrs;
 pub mod bevel;
+pub mod bind;
 pub mod build;
 pub mod builders;
 pub mod building;
@@ -14,6 +16,8 @@ pub mod deviation;
 pub mod distribute;
 pub mod dof;
 pub mod emitters;
+pub mod faces;
+pub mod field;
 pub mod fixtures;
 pub mod flare;
 pub mod flow;
@@ -69,7 +73,7 @@ pub mod water;
 
 /// The wrong programs #420's, #441's and #440's criteria plant in scene3d's and the building
 /// module's operators, each reachable only through a proof surface's `planted`.
-pub const PLANTED: [&str; 30] = [
+pub const PLANTED: [&str; 54] = [
     "torus_genus_0",
     "vertex_count_off_by_one",
     "cap_left_open",
@@ -109,4 +113,35 @@ pub const PLANTED: [&str; 30] = [
     // #1636: a tree whose children keep their parent's radius, and one framed by curvature.
     "tree_child_keeps_parent_radius",
     "tree_curvature_frames",
+    // #1781: a mesh that keeps its attributes as f32; a subdivide that keeps a corner attribute
+    // by point, gives an edge's point one end's value, averages whole numbers, or builds without
+    // an edge attribute; and a store that ignores `on`, or leaves a non-finite element as it was.
+    attrs::KEPT_AS_F32,
+    "subdivide_corners_per_point",
+    "subdivide_edge_copies_end",
+    "subdivide_averages_whole",
+    "subdivide_drops_edge_attrs",
+    "store_ignores_on",
+    "store_nonfinite_keeps_earlier",
+    // #1928: the offsets and dissolves its criteria plant.
+    faces::PLANTED[0],
+    faces::PLANTED[1],
+    faces::PLANTED[2],
+    faces::PLANTED[3],
+    faces::PLANTED[4],
+    faces::PLANTED[5],
+    faces::PLANTED[6],
+    faces::PLANTED[7],
+    faces::PLANTED[8],
+    // #1929: a box deform over the item's own bounds, by trilinear cells, without its last point
+    // or clamping outside vertices; a mesh deform by inverse distance, binding every frame, keyed
+    // without its control mesh or extrapolating outside vertices.
+    bind::PLANTS[0],
+    bind::PLANTS[1],
+    bind::PLANTS[2],
+    bind::PLANTS[3],
+    bind::PLANTS[4],
+    bind::PLANTS[5],
+    bind::PLANTS[6],
+    bind::PLANTS[7],
 ];

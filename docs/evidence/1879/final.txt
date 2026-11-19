@@ -1,0 +1,49 @@
+#1879 final checks at head f2b32e62e (main 336a0a92b merged), 2026-11-17 to 2026-11-18, Linux Spark (arm64), Node v24.22.0
+
+Every run below ran in a systemd user unit capped at MemoryMax=24G, MemorySwapMax=2G, CARGO_BUILD_JOBS=2, after
+`npm run build --workspaces` and `cargo build -p deep-hook` in each tree. "Base" is a built worktree of main at the commit
+the head merged.
+
+Guard
+  node scripts/proof.mjs guard at f2b32e62e: PASS, 17 commits checked. c12eca1fe (AC2's first-draft retirement) is approved
+  by deep/approved/c12eca1fe024-sk; cc21f8edb by deep/approved/cc21f8edb3e4-sk; 307e9aeb7 by deep/approved/307e9aeb7449-sk.
+
+#1879's own tests at f2b32e62e, one file at a time (vitest, repo config, no flags), load about 70
+  tests/acceptance/1879-redraft-ac1/safe.test.ts   AC1  passed  9.7 s
+  tests/acceptance/1879-redraft-ac2/start.test.ts  AC2  passed  5.5 s
+  tests/acceptance/1879/floor.test.ts              AC3  316 passed (281 s), 317 passed (33 s), unedited
+  tests/acceptance/1879/starts.test.ts                  both first-draft cases skipped (retired, owner-approved)
+  packages/hub/test/install.test.ts                     6/6 passed, including the --safe regression case
+  The same set passed at c12eca1fe (2026-11-17, load about 35).
+
+affected.mjs selection for packages/hub/src/core.ts at f2b32e62e
+  core.ts is the one file both this PR and main's last merge (336a0a92b, #2650) changed. `node scripts/affected.mjs --slow
+  packages/hub/src/core.ts` queued twice for the machine's 4 shared test slots: a 10 h wait timed out with nothing run, and
+  a 48 h wait was still queued behind 4 held slots and 9 requests. On the owner's say-so (2026-11-18), its
+  `--list` selection ran by hand outside the slots:
+    parallel vitest, 126 files, --maxWorkers=4: 430 tests, 396 passed, 30 failed
+    parallel node, 18 files, --test-concurrency=4
+    alone vitest, 1 file
+  37 files had a failure. Each was rerun once at head and once at base 336a0a92b, back to back (load 22 to 91):
+    36 fail the same way at both, or only at base (codex-hub: 0 at head, 2 at base).
+    onboarding.test.ts "deep doctor in a home nobody set up ...": timed out at 5 s at head (its doctor call took 60 s).
+      It runs `deep doctor` in an empty home and starts no hub. Rerun alone three times on each side, alternating: all
+      six passed in 2 s (load 58 to 60). It also failed once at base and passed twice at head in reruns at load 60 to 90.
+      So it fails on load at both sides and is not head-only.
+  Its slow files (loop-starters, loop-transcript, reopened-items) and timed files were not part of the by-hand run.
+  reopened-items passed at head in the comparison below.
+
+Comparison of earlier runs' head-only failures (head c12eca1fe against main d4cef00fb)
+  Full `affected.mjs --slow` at 2a46639b9 (main 3c124dee5): 300 new, 58 known, 271 inconclusive or blocked, 1362 passed.
+  `affected.mjs packages/hub/src/core.ts` at d64d4cb0a (main 212f16d09): 110 new, 55 known, 23 inconclusive, 449 passed.
+  Their new failures span 116 test files: 62 failed on main too in a rerun, and 2 are #1879's own files (above). The other
+  52 were rerun one file at a time, at head and at base, back to back (load 7 to 90). Every one ends the same way on
+  both sides, except reopened-items (passes at head, fails at base) and the onboarding case above.
+  The new lint findings (size, canvas-lint, colour literal, guide, repo-rules, vendor, deps, secrets) are in files this PR
+  doesn't touch. The ones rerun on main fail there too. slots-check failed at head only on `ps` ENOBUFS and passed on main.
+
+Not run
+  affected.mjs on known-failures.json's new skips entry: it selects 3,471 files. The full --slow run at 2a46639b9 covered
+    the same kind of change (AC1's entry); known-failures-check passes; the guard accepts the entry.
+  WIDE (1212 files through another package's process; --wide) and the timed lane: as for every PR, left to the release
+    preflight.

@@ -737,10 +737,11 @@ export class SessionState {
   /**
    * Whose a hook is: a job's, when its session ID is the one the runner read from that job's own output and it was
    * sent inside the job's run; held, when it comes from a running job's folder before that ID is read; otherwise
-   * the session's own, with a reading when it only looks like a job's.
+   * the session's own, with a reading when it only looks like a job's. It reads the jobs the runner holds in memory,
+   * so a hook from an older ended job's folder or session is the session's own with no reading (#2650).
    */
   async whose(meta: HookMeta, seq: string | undefined): Promise<{ job?: string; wait?: string; reading?: { job: string; text: string } }> {
-    const jobs = await this.options.services.runner.list();
+    const jobs = await this.options.services.runner.recent();
     const at = seq ? Number(BigInt(seq) / 1_000_000n) : Date.now();
     const during = (j: JobRecord) => j.ran !== undefined && at >= j.ran.from && (j.ran.to === undefined || at <= j.ran.to);
     const own = jobs.find((j) => meta.session && j.session === meta.session && during(j));

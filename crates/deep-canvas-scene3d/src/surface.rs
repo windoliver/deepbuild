@@ -1310,5 +1310,6 @@ pub fn grid_line(
         cap: Default::default(),
         trail: None,
         points: Vec::new(),
+        fog: true,
     }))
 }

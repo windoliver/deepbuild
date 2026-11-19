@@ -1,0 +1,55 @@
+
+ RUN  v5.0.5 <base checkout>/tests/acceptance/534
+
+ ❯ ac06-fixture-state.test.ts (2 tests | 2 failed) 155582ms
+   ❯ #534.73983bd0 a fixture whose state spans a linear write, world pages, a mirror, a service and a search reopens as it played (2)
+     × #534.73983bd0 saved at 20 seeded steps (one with a move queued, one mid-search), quit and reopened, each gives the never-quit run's full-state hashes at every checkpoint and its frames for the next 600 steps 3094ms
+     × #534.73983bd0 a planted save that drops the linear write's previous values (save_drops_linear_previous) blends from zero on the first frame and fails, naming the array and the frame 32ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac06-fixture-state.test.ts > #534.73983bd0 a fixture whose state spans a linear write, world pages, a mirror, a service and a search reopens as it played > #534.73983bd0 saved at 20 seeded steps (one with a move queued, one mid-search), quit and reopened, each gives the never-quit run's full-state hashes at every checkpoint and its frames for the next 600 steps
+AssertionError: the never-quit run baked the piece (ok: true): {"ok":false,"code":"logic_refused","item":"fixture","refusals":[{"rule":"field","what":"pages isn't built yet in logic@1 (#531 builds the fixed step, its regions, seeds and traps)","field":"pages"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ bakeOf helpers.ts:387:77
+
+ ❯ neverQuit ac06-fixture-state.test.ts:54:42
+ ❯ ac06-fixture-state.test.ts:66:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  ac06-fixture-state.test.ts > #534.73983bd0 a fixture whose state spans a linear write, world pages, a mirror, a service and a search reopens as it played > #534.73983bd0 a planted save that drops the linear write's previous values (save_drops_linear_previous) blends from zero on the first frame and fails, naming the array and the frame
+AssertionError: deep-logic --planted save_drops_linear_previous on darwin/arm64 exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ replies helpers.ts:178:138
+    176| export function replies(s: Started, calls: JsonValue[], what: string):…
+    177|   expect(s.timedOut, `${what} finished within its timeout`).toBe(false…
+    178|   expect(s.status, `${what} exits 0 (${s.signal ?? 'no signal'}); stdo…
+       |                                                                                                                                          ^
+    179|   expect(s.lines.length, `${what}: one reply per call (stdout: ${s.std…
+    180|   return s.lines.map((l, i) => obj(l, `${what}: reply ${i} (to ${show(…
+ ❯ run helpers.ts:205:10
+ ❯ saveAndOpen ac06-fixture-state.test.ts:58:20
+ ❯ ac06-fixture-state.test.ts:79:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  15:40:33
+   Duration  155.95s (tests 100%)
+

@@ -112,6 +112,8 @@ pub struct Media {
     /// #1729: each 3D map the decode worker made ready, by `<sha256>:<role>`.
     pub(crate) maps:
         std::collections::BTreeMap<String, std::sync::Arc<deep_canvas_scene3d::light::Texels>>,
+    /// #1801: each asset's size as its file gave it, by SHA-256; `None` for one with none.
+    pub(crate) sizes: std::collections::BTreeMap<String, Option<deep_canvas::cost::AssetSize>>,
 }
 
 /// #503: a worker's refusal answers with its `code` and what it names at the reply's top level

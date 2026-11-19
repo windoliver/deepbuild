@@ -1,0 +1,9 @@
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/1041
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  19:27:46
+   Duration  113ms (import 54%, transform 24%, tests 13%, worker 10%)
+

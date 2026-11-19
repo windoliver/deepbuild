@@ -13,6 +13,7 @@
 //! Everything is ordinary data over `BTreeMap`s and sorted `Vec`s: no static, no hash-map order,
 //! nothing read from the machine, as the canvas lint requires.
 
+mod bare;
 pub mod core_lists;
 mod implementation;
 pub mod lists;
@@ -24,6 +25,7 @@ use crate::canon::{self, CanonError, NoShape};
 use crate::kinds::Entry;
 use serde_json::{json, Value};
 
+use bare::BARE_MODULE_KINDS;
 pub use implementation::{Equivalence, Implementation, Pin, StateClass};
 pub use semver::{Range, Semver};
 
@@ -138,51 +140,6 @@ impl BuildSet {
         }
     }
 }
-
-/// The module kinds the design names without a family, with the module each is: the cell grid
-/// `cells@1` (#402), scene3d's builders and curve (Builder; Curve `curve@1`; #420; Builder
-/// `hull`, #440; Builder `surface`, #224) and its material (Material `material@1`; #421). Any other bare name is the core's.
-const BARE_MODULE_KINDS: &[(&str, &str)] = &[
-    ("cells", "cells"),
-    // #540: a lockstep match, Net `net@1`.
-    ("net", "net"),
-    ("slab", "scene3d"),
-    ("lathe", "scene3d"),
-    ("extrude", "scene3d"),
-    ("tube", "scene3d"),
-    ("ball", "scene3d"),
-    ("coil", "scene3d"),
-    ("plate", "scene3d"),
-    ("display", "scene3d"),
-    ("hull", "scene3d"),
-    ("surface", "scene3d"),
-    // #1636: trees from a seed.
-    ("tree", "scene3d"),
-    ("curve", "scene3d"),
-    ("material", "scene3d"),
-    ("sky", "scene3d"),
-    ("vector", "vector"),
-    // #494: a graph is the graph module's, so a match morph pairs its nodes by key.
-    ("graph", "graph"),
-    // #533: the logic item keeps the logic module's name, as the cell grid does.
-    ("logic", "logic"),
-    // R1's mark sets, scales and axes are the data module's, which marks2d draws.
-    ("marks", "data"),
-    ("axis", "data"),
-    ("scale", "data"),
-    // #226: 3D axes are the data module's too, beside its scales and axes.
-    ("axes3d", "data"),
-    // #225: a vector field is the data module's, beside its scales and 3D axes.
-    ("vector_field", "data"),
-    ("puff", "scene3d"),
-    ("cutaway", "scene3d"),
-    ("instance", "scene3d"),
-    ("effect", "scene3d"),
-    // #1732: placement by relation in 3D is the motion module's.
-    ("arrange", "motion"),
-    // #222: a cue list is the motion module's, expanded at check.
-    ("cues", "motion"),
-];
 
 /// The canvas modules every build set holds: a status mark needs text's shaper and look's status
 /// map (Registry and seal: `build_set`), so a build that leaves one out is refused at startup.
@@ -348,6 +305,9 @@ pub struct Kind {
     /// The param naming an asset whose probe the check reads (#499): the core has the decode
     /// worker probe it, so a module reads an asset without the media module.
     pub probes: Option<String>,
+    /// The params that name an item, a table row or an asset, each with its kind of reference
+    /// (#1801): what `refs_to` reads, and what the kit holds the module's fixtures to.
+    pub refs: Vec<crate::refs::Decl>,
 }
 
 /// A preview kind's history (#412, #1802): the issue that tracks it, the release it became a
@@ -466,6 +426,10 @@ pub type Rule = fn(&Value, &str, &Value) -> Vec<Raised>;
 
 /// One item's CPU time per frame, in ms, for the budget estimate (`document.budget`).
 pub type Cost = fn(&Value) -> f64;
+
+/// The vertices an item of a kind builds, counted from `(document, item ID, item)` without
+/// building it (#1801: the cost model's per-vertex terms); `None` when its params don't say.
+pub type Vertices = fn(&Value, &str, &Value) -> Option<f64>;
 
 /// The elements of a built item's named part in one domain, in index order, each an object of
 /// `i`, `center`, `normal`, `area`, `size` and the part's attributes, for a recipe's repeat over
@@ -728,7 +692,7 @@ pub struct Report {
 pub type ReportRun = fn(&Value, &Value) -> Report;
 
 /// The core's own document check kinds (canvas primitives: Check input), each reading only the core's arrays and naming no module's kind.
-pub const CORE_CHECK_KINDS: [&str; 12] = [
+pub const CORE_CHECK_KINDS: [&str; 13] = [
     "document.validate",
     "document.budget",
     "document.frame_time",
@@ -736,6 +700,7 @@ pub const CORE_CHECK_KINDS: [&str; 12] = [
     "document.determinism",
     "geometry.audit",
     "geometry.shape",
+    "geometry.attributes",
     "film.audit",
     "film.flicker",
     "film.layout",
@@ -787,6 +752,8 @@ pub struct Registrar {
     pub rules: Vec<(String, Rule)>,
     /// Its kinds' CPU cost per item, by kind (`family.name`).
     pub costs: Vec<(String, Cost)>,
+    /// The vertices its kinds' items build, by kind (`family.name`; #1801).
+    pub vertices: Vec<(String, Vertices)>,
     /// Its builders' elements by part and domain, by kind (`family.name`; #2015).
     pub elements: Vec<(String, Elements)>,
     /// Its kinds expanded at check, by kind (`family.name`; #222).
@@ -821,7 +788,17 @@ impl Registrar {
             preview: None,
             description: None,
             probes: None,
+            refs: Vec::new(),
         });
+        self
+    }
+
+    /// The last kind registered names something in these params (#1801), each with what it
+    /// holds and its kind of reference.
+    pub fn refs(&mut self, decls: &[crate::refs::Decl]) -> &mut Self {
+        if let Some(k) = self.kinds.last_mut() {
+            k.refs.extend_from_slice(decls);
+        }
         self
     }
 
@@ -916,6 +893,12 @@ impl Registrar {
     /// The CPU cost of an item of the kind `family.name`.
     pub fn cost(&mut self, kind: &str, cost: Cost) -> &mut Self {
         self.costs.push((kind.into(), cost));
+        self
+    }
+
+    /// The vertices an item of the kind `family.name` builds, as the estimate charges them (#1801).
+    pub fn vertices(&mut self, kind: &str, vertices: Vertices) -> &mut Self {
+        self.vertices.push((kind.into(), vertices));
         self
     }
 
@@ -1580,6 +1563,18 @@ impl Sealed {
             .map(|k| k.draws_as.as_str())
     }
 
+    /// The params of `kind_text` that name something, as its module declared them (#1801).
+    pub fn refs_of(&self, kind_text: &str) -> &[crate::refs::Decl] {
+        let Some((full, major)) = crate::kinds::parse_kind(kind_text) else {
+            return &[];
+        };
+        self.modules
+            .iter()
+            .flat_map(|m| m.shapes.kinds.iter())
+            .find(|k| k.entry.is(&full) && k.entry.version(major).is_some())
+            .map_or(&[], |k| k.refs.as_slice())
+    }
+
     /// The param of `kind_text` naming an asset the decode worker probes at check (#499).
     pub fn probed_param(&self, kind_text: &str) -> Option<&str> {
         let (full, major) = crate::kinds::parse_kind(kind_text)?;
@@ -1669,6 +1664,15 @@ impl Sealed {
             .flat_map(|m| m.shapes.elements.iter())
             .find(|(k, _)| k == full)
             .map(|(_, e)| *e)
+    }
+
+    /// The vertices an item of the kind `family.name` builds, from the first module that counts them.
+    pub fn vertices_for(&self, full: &str) -> Option<Vertices> {
+        self.modules
+            .iter()
+            .flat_map(|m| m.shapes.vertices.iter())
+            .find(|(k, _)| k == full)
+            .map(|(_, v)| *v)
     }
 
     /// Whether any module registered a cost: the budget estimate then sums the whole document.

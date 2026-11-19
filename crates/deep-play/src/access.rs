@@ -23,7 +23,8 @@ fn text(v: Option<&Value>) -> String {
 /// The 3D module's kinds, which a player set without scene3d (#1490) doesn't know.
 #[cfg(feature = "scene3d")]
 fn scene3d_kind(kind: &str) -> bool {
-    deep_canvas_scene3d::scene::is_3d(kind)
+    // #1781: the fixture builder is a kind only where a test build registers it.
+    (deep_canvas_scene3d::scene::is_3d(kind) && kind != deep_canvas_scene3d::attrs::FIXTURE)
         || kind == deep_canvas_scene3d::scene::OVERLAY
         || kind == deep_canvas_scene3d::inset::KIND
         || kind == deep_canvas_scene3d::views::KIND

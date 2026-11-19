@@ -95,6 +95,20 @@ pub enum Guard {
     WebRequestsAdapterLimits,
     /// #172: the web player writes a fragment `control.<ID>=<value>` as an input entry.
     WebFragmentWritesEntry,
+    /// #1041: the web player keys its saves by the page's origin alone.
+    WebSavesKeyedByOrigin,
+    /// #1041: the web player never asks the browser to keep the origin's storage persistent.
+    WebSavesNeverAskPersistence,
+    /// #1040: the web export leaves out one font it names.
+    WebLeavesOutFont,
+    /// #1040: the page keys each logic item by its step hash alone.
+    PageKeysLogicByStepHash,
+    /// #1040: the page keys each state by its picture and the logic module's carried state alone.
+    PageKeysByPictureAndLogic,
+    /// #1040: the index page starts the player wherever WebGPU is.
+    WebIndexChecksWebgpuOnly,
+    /// #1040: the index page needs every feature of each `any_of` set.
+    WebIndexRequiresEveryAnyOf,
     /// #1490: the web export takes the smallest player set whatever modules the document uses.
     WebPicksSmallestSet,
     /// #1490: the web export takes the full player set whatever modules the document uses.
@@ -177,6 +191,13 @@ pub(crate) fn planted(name: &str) -> Option<Planted> {
         "web_probe_test_variant" => Planted::Export(G::WebProbeTestVariant),
         "web_requests_adapter_limits" => Planted::Export(G::WebRequestsAdapterLimits),
         "web_fragment_writes_entry" => Planted::Export(G::WebFragmentWritesEntry),
+        "web_saves_keyed_by_origin" => Planted::Export(G::WebSavesKeyedByOrigin),
+        "web_saves_never_ask_persistence" => Planted::Export(G::WebSavesNeverAskPersistence),
+        "web_leaves_out_font" => Planted::Export(G::WebLeavesOutFont),
+        "page_keys_logic_by_step_hash" => Planted::Export(G::PageKeysLogicByStepHash),
+        "page_keys_by_picture_and_logic" => Planted::Export(G::PageKeysByPictureAndLogic),
+        "web_index_checks_webgpu_only" => Planted::Export(G::WebIndexChecksWebgpuOnly),
+        "web_index_requires_every_any_of" => Planted::Export(G::WebIndexRequiresEveryAnyOf),
         "web_picks_smallest_set" => Planted::Export(G::WebPicksSmallestSet),
         "web_picks_full_set" => Planted::Export(G::WebPicksFullSet),
         "web_no_tree" => Planted::Export(G::WebNoTree),
