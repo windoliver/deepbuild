@@ -1039,8 +1039,8 @@
     }
   },
   "toolKinds": {
-    "readBy": "a tool call's kind (shell, read, edit, write, search, fetch, mcp or unknown, which guards treat as change), by tool name or name prefix",
-    "conformance": "claude/toolKinds/unknown-otherwise",
+    "readBy": "a tool call's kind (shell, read, edit, write, search, fetch, mcp or unknown, which guards treat as change), by tool name, then by name prefix; deep_query changes nothing, so it is a read (#1801)",
+    "conformance": "facts/reads-count-as-read",
     "tools": {
       "Bash": "shell",
       "Read": "read",
@@ -1051,7 +1051,8 @@
       "Glob": "search",
       "Grep": "search",
       "WebFetch": "fetch",
-      "WebSearch": "fetch"
+      "WebSearch": "fetch",
+      "mcp__deep__deep_query": "read"
     },
     "prefixes": { "mcp__": "mcp" },
     "otherwise": "unknown"
