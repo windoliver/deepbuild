@@ -11,6 +11,7 @@ import { delimiter, dirname, join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFacts } from '@deepbuild/adapters';
 import { canvasItems } from './canvas-doctor.js';
+import { appFootprintItem } from './footprint-doctor.js';
 import { claudeSettings, commands, FORWARDER, installed, readJson, shadowedBy, topLevel } from './claude-settings.js';
 import { call } from './client.js';
 import { deprecatedCalls, rpcTable } from './contracts.js';
@@ -187,6 +188,8 @@ export async function doctorItems(env: NodeJS.ProcessEnv, options: { prompt: boo
   await Promise.all([claudeItems(claude, loginPath, env, options.prompt, add), codexItems(codex, env, add)]);
   // The canvas: its GPU adapter and tier, a fixture rendered headless against its golden, and its verdict (#140).
   items.push(...(await canvasItems(env)));
+  // The app's footprint beside the gauges for what it owns (#1431).
+  items.push(await appFootprintItem(env));
   return items;
 }
 

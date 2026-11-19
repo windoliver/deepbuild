@@ -569,8 +569,15 @@ mod notifications {
                             .accessibilityDisplayShouldReduceMotion(),
                     )
                 });
+                // #1431: the app's own reading, once each minute.
+                deep_app::footprint::each_minute();
                 // A later launch brings the app forward; `deep open` and a link open their address (#1460).
                 for call in held.as_ref().map(Held::calls).unwrap_or_default() {
+                    // #1431: `deep doctor` asks for the app's reading; that brings nothing forward.
+                    if call.address.as_deref() == Some(deep_app::footprint::ASK) {
+                        call.reply(&deep_app::footprint::answer());
+                        continue;
+                    }
                     eprintln!("deep-app: brought forward");
                     cx.update(|cx| {
                         cx.activate(true);

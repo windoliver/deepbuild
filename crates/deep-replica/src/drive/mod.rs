@@ -21,6 +21,7 @@ mod frames;
 pub mod glyphs;
 mod hubcopy;
 mod locate;
+mod memory;
 mod motion;
 mod plant;
 mod play;
@@ -96,6 +97,8 @@ pub struct Drive {
     plant: Option<Plant>,
     replica: Option<Replica>,
     launches: u64,
+    /// #1431: the planted memory the process holds.
+    memory: memory::Memory,
 }
 
 impl Drive {
@@ -105,13 +108,19 @@ impl Drive {
             plant,
             replica: None,
             launches: 0,
+            memory: memory::Memory::new(plant),
         }
     }
 
     /// One call's reply: `ok`, `t`, and the call's fields or its error.
     pub fn call(&mut self, call: &Value) -> Value {
         let name = call["call"].as_str().unwrap_or_default().to_owned();
+        self.memory.leak();
         let result = match (name.as_str(), self.replica.as_mut()) {
+            // #1431: the process's reading, with or without a replica.
+            ("footprint", _) => Ok(self.memory.footprint()),
+            #[cfg(feature = "env-plants")]
+            ("texture", _) => self.memory.texture(call),
             ("launch", Some(replica)) => Err(fail(
                 "refused",
                 format!(
@@ -125,6 +134,7 @@ impl Drive {
                 let out = self.out.join(format!("{}", self.launches));
                 Replica::launch(id, out, self.plant, &call["launch"]).map(|(replica, reply)| {
                     self.replica = Some(replica);
+                    self.memory.launched();
                     reply
                 })
             }
@@ -144,6 +154,7 @@ impl Drive {
         let t = self.replica.as_ref().map_or(0, |r| r.clock.t);
         if name == "close" && result.is_ok() {
             self.replica = None;
+            self.memory.closed();
         }
         match result {
             Ok(Value::Object(mut fields)) => {

@@ -135,6 +135,8 @@ deep-canvas-effects = { path = "../deep-canvas-effects" }
 deep-canvas-cells = { path = "../deep-canvas-cells" }
 # Issue #377: the GPU layer, whose views the window shows in place.
 deep-gpu = { path = "../deep-gpu" }
+# Issue #1431: the gauges the app's long-lived caches keep, for its footprint's reading.
+deep-canvas = { path = "../deep-canvas" }
 # Issue #327: the image you attach is kept by its SHA-256; the click token is one too (the version already in the tree).
 sha2 = "0.10"
 # Issue #1454: the app signs its answers as the device you paired (the version already in the tree).
