@@ -6250,10 +6250,10 @@ For: physics labs (a beam that snaps at its weakest bond, a tower that gives way
 - `restitution: f32 = 0`
 - `density: kg/m³` (kg/m² in 2D; required unless the body sets its mass)
 - `rolling_resistance: f32 = 0`
-- `tangent_speed: m/s = 0`
+- `tangent_speed: m/s = 0` (on a shape use of a static or kinematic body only)
 - `tag: string` (such as "wood")
 
-**Semantics:** The two sides of a contact combine by the world's combine rule. Sounds map from tags in the media module's spawn rules, never from the material. Rapier has no rolling resistance or tangent speed, so on it `caps()` refuses `rolling_resistance` and `tangent_speed` other than 0, naming the field; a ball that should roll to rest takes angular damping (Body).
+**Semantics:** The two sides of a contact combine by the world's combine rule. Sounds map from tags in the media module's spawn rules, never from the material. A `tangent_speed` makes a surface a belt: the speed it carries what rests on it, as a conveyor, a treadmill or a moving walkway does. Each contact of a shape use whose material sets one takes a surface velocity of `tangent_speed` along the belt's direction, taken in the contact's plane, and the belt's own body never moves for it. In 3D the direction is the shape use's local +X, turned by its offset and its body's pose; in 2D it is the contact's tangent, counter-clockwise about the shape. Only a shape use of a static or kinematic body may carry one: on any other body it is refused at check, naming the field. At 0 a surface's contacts are the ones a plain surface gives. Rapier takes a belt's speed through the contact hook its wrapper installs, which the wrapper fills from the material, so no document holds code. Rapier has no rolling resistance, so on it `caps()` refuses a `rolling_resistance` other than 0, naming the field; a ball that should roll to rest takes angular damping (Body). A backend whose `caps()` leave belts out refuses a `tangent_speed` other than 0 the same way.
 
 **Cost:** O(1) per contact
 
@@ -6498,6 +6498,7 @@ For: a second physics backend that must behave like the documented world, not me
 - restitution 0.5 against 0.9, dropped 1 m, under each combine rule: the first bounce's height e²h (max 0.81 m, min 0.25 m, average 0.49 m, geometric 0.45 m, multiply 0.2025 m), within 3%
 - friction 0.2 against 0.8, a box sliding from 5 m/s on flat ground, under each combine rule: the distance v² ÷ 2μg (geometric 3.186 m, average 2.548 m, min 6.371 m, max 1.593 m, multiply 7.964 m), within 3%
 - a box on a 30° slope: friction 0.6 holds it within 1 mm for 2 s, and 0.5 slides it g(sin θ − μ cos θ)t²/2 = 1.314 m in 2 s, within 3%
+- belts, a box of friction 0.5 set at rest on a static belt of friction 0.5 with `tangent_speed: 1`: on a level belt it reaches 1 m/s along the belt's +X at v ÷ (μg) = 0.204 s, within 2 steps, and has moved v·t − v² ÷ (2μg) = 1.898 m at 2 s, within 1%, while the belt's body never moves; the same belt turned 90° about +Y carries it 1.898 m along world −Z, and `tangent_speed: −1` on the level belt carries it −1.898 m along x; on the belt tilted 10° up along its +X it reaches 1 m/s up the slope at 1 ÷ (g × (0.5 cos 10° − sin 10°)) = 0.320 s, within 2 steps, and then holds that speed within 1%
 - joints: a hinge limited to ±30° under gravity never past 30.5°; a slider limited to 0.5 m never past 0.505 m; a hinge motor set to 90°/s with torque to spare within 1% of it after 0.5 s
 - occurrences: a ball whose lowest point falls 1 m writes its first contact at √(2h/g) = 0.4515 s, within one step, with a speed of √(2gh) = 4.429 m/s, within 2%; a sensor 0.5 m below it writes its entry at 0.3193 s, within one step
 - sleep: a box that settles writes `rest` and sleeps within the world's sleep time plus 2 steps of its speed falling under the sleep speed, and with sleep off it never does
