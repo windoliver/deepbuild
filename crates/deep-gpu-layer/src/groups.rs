@@ -77,6 +77,24 @@ pub fn composited<'a>(marks: impl IntoIterator<Item = &'a Drawn>) -> bool {
     marks.into_iter().any(|d| d.scopes.iter().any(wants))
 }
 
+/// `t` from the px (x, y) on, for a copy.
+fn from(t: &wgpu::Texture, x: u32, y: u32) -> wgpu::TexelCopyTextureInfo<'_> {
+    wgpu::TexelCopyTextureInfo {
+        origin: wgpu::Origin3d { x, y, z: 0 },
+        ..t.as_image_copy()
+    }
+}
+
+/// How a pass that writes every pixel of `rect` opens its target: one that writes the whole
+/// target has nothing to keep of it.
+pub(crate) fn load_for(rect: [u32; 4], size: [u32; 2]) -> wgpu::LoadOp<wgpu::Color> {
+    if rect == [0, 0, size[0], size[1]] {
+        wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT)
+    } else {
+        wgpu::LoadOp::Load
+    }
+}
+
 /// The groups these marks need composited: each one that wants the GPU layer and every group
 /// around one, since a Vello layer can't hold what the GPU layer draws.
 fn ids(marks: &[Drawn]) -> BTreeSet<String> {
@@ -664,8 +682,21 @@ impl Groups {
         size: [u32; 2],
         format: wgpu::TextureFormat,
     ) -> wgpu::Texture {
+        self.take_as(device, size, format, true)
+    }
+
+    /// [`Groups::take`]; with `clear` off the target keeps whatever it held, for one that is
+    /// written whole before it is read.
+    fn take_as(
+        &mut self,
+        device: &Device,
+        size: [u32; 2],
+        format: wgpu::TextureFormat,
+        clear: bool,
+    ) -> wgpu::Texture {
         let fits = |t: &wgpu::Texture| t.size() == whole(size) && t.format() == format;
         let t = match self.free.iter().position(fits) {
+            Some(i) if !clear => self.free.swap_remove(i),
             Some(i) => {
                 let t = self.free.swap_remove(i);
                 let mut encoder = device.device.create_command_encoder(&Default::default());
@@ -708,8 +739,9 @@ impl Groups {
         }
         let d = &device.device;
         let mut encoder = d.create_command_encoder(&Default::default());
-        let copy = self.take(device, size, into.format());
-        encoder.copy_texture_to_texture(into.as_image_copy(), copy.as_image_copy(), whole(size));
+        // The pass reads the copy only inside its rect, so only that is copied.
+        let copy = self.take_as(device, size, into.format(), false);
+        encoder.copy_texture_to_texture(from(into, x, y), from(&copy, x, y), whole([w, h]));
         let back = copy.create_view(&Default::default());
         let flags = u32::from(m.decode)
             | (u32::from(m.cover.is_some() && m.matte == 0) << 1)
@@ -734,7 +766,7 @@ impl Groups {
                     resolve_target: None,
                     depth_slice: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
+                        load: load_for([x, y, w, h], size),
                         store: wgpu::StoreOp::Store,
                     },
                 })],
@@ -820,8 +852,12 @@ impl Groups {
         )?;
         x.device.queue.submit([encoder.finish()]);
         deep_gpu::spans::done_with(&view);
+        // Outside the marks' extent the picture is empty and the layer stays as it is.
+        let zoom = x.options.zoom;
+        let grow = (past_marks(marks) + 2.0) * zoom;
         let mix = Mix {
             decode: x.space == Space::Linear,
+            rect: px(union(marks).map(|v| v * zoom), grow, x.size),
             ..Mix::over(&view, x.size)
         };
         self.composite(x.device, into, mix, x.size);
@@ -849,6 +885,74 @@ impl Groups {
         let inside: Vec<Drawn> = run.iter().map(|d| without(d, k)).collect();
         let bounds = union(&inside);
         let d = &x.device.device;
+        // #2032: a lit run of plain marks, laid over an encoded layer at full opacity, is lit
+        // and laid in one pass from the marks as Vello draws them: no target for the children,
+        // none for the lit result, and no composite of either.
+        let alone = effect.as_deref().filter(|e| {
+            let only_light = e.passes.is_empty() && !e.backdrop && !e.dancing;
+            let over = *alpha == 1.0 && *mode == Some(Blend::Normal) && x.space == Space::Encoded;
+            let planted = [Planted::GroupPassReadsEarlier, Planted::GroupPassPastGrow];
+            only_light
+                && e.medium.is_none()
+                && e.paint.is_none()
+                && over
+                && ids(&inside).is_empty()
+                && into.format() == ACC
+                && !x.planted.is_some_and(|p| planted.contains(&p))
+        });
+        if let Some(light) = alone.and_then(|e| e.light.clone()) {
+            let zoom = x.options.zoom;
+            let grow = past_marks(&inside);
+            let [lx, ly, lw, lh] = px(bounds.map(|v| v * zoom), (grow + 1.0) * zoom, x.size);
+            let laid = px(bounds, grow, x.size);
+            if wants(&run[0].scopes[k]) {
+                x.written.push(laid);
+            }
+            // Where the light pass lit and the composite laid, both.
+            let (x0, y0) = (lx.max(laid[0]), ly.max(laid[1]));
+            let x1 = (lx + lw).min(laid[0] + laid[2]).max(x0);
+            let y1 = (ly + lh).min(laid[1] + laid[3]).max(y0);
+            let picture = self.take(x.device, x.size, x.vello.format());
+            let view = picture.create_view(&Default::default());
+            // The pass lays the lit pixels over a copy of the layer, which it reads only there.
+            let lit = [x0, y0, x1 - x0, y1 - y0];
+            let back = self.take_as(x.device, x.size, ACC, false);
+            let mut encoder = d.create_command_encoder(&Default::default());
+            x.vello.draw(
+                d,
+                &x.device.queue,
+                &mut encoder,
+                inside.iter(),
+                x.size,
+                &view,
+                x.options,
+            )?;
+            if lit[2] > 0 && lit[3] > 0 {
+                let (from, to) = (from(into, x0, y0), from(&back, x0, y0));
+                encoder.copy_texture_to_texture(from, to, whole([lit[2], lit[3]]));
+            }
+            x.device.queue.submit([encoder.finish()]);
+            let device = x.device;
+            let behind = back.create_view(&Default::default());
+            self.lightfx
+                .get_or_insert_with(|| crate::lightfx::LightFx::new(device, ACC))
+                .run(
+                    device,
+                    &light,
+                    x.planted,
+                    zoom,
+                    false,
+                    &view,
+                    Some(&behind),
+                    bounds,
+                    lit,
+                    into,
+                );
+            deep_gpu::spans::done_with(&into.create_view(&Default::default()));
+            self.give(&picture);
+            self.give(&back);
+            return Ok(());
+        }
         let children = self.take(x.device, x.size, ACC);
         if x.planted == Some(Planted::GroupPassReadsEarlier) {
             let mut encoder = d.create_command_encoder(&Default::default());
@@ -924,6 +1028,7 @@ impl Groups {
                         zoom,
                         x.space == Space::Linear,
                         &view,
+                        None,
                         bounds,
                         rect,
                         &out,

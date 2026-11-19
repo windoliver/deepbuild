@@ -48,6 +48,8 @@ struct U {
 // Each casting light's bins' near and far, px from a point light or along a sun's rays: nearer
 // than near nothing in the bin blocks a pixel, and from far on an outline blocks all of it.
 @group(0) @binding(4) var<storage, read> bounds: array<vec2<f32>>;
+// What the layer drew before the group, where the pass lays the lit children over it.
+@group(0) @binding(5) var back: texture_2d<f32>;
 
 const BINS: f32 = 1024.0;
 const RUN: u32 = 0x80000000u;
@@ -221,4 +223,27 @@ fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
 @fragment
 fn fs_cast(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     return lit(pos, true);
+}
+
+// The lit pixel `s` over what the layer drew before it, as the group compositor lays a group
+// with no blend mode at full opacity (groups.wgsl).
+fn over(s: vec4<f32>, pos: vec4<f32>) -> vec4<f32> {
+    let b = textureLoad(back, vec2<i32>(pos.xy), 0);
+    if (s.a <= 0.0) {
+        return b;
+    }
+    let ub = select(vec3<f32>(0.0), clamp(b.rgb / b.a, vec3<f32>(0.0), vec3<f32>(1.0)), b.a > 0.0);
+    let us = clamp(s.rgb / s.a, vec3<f32>(0.0), vec3<f32>(1.0));
+    let rgb = s.rgb * (1.0 - b.a) + b.rgb * (1.0 - s.a) + s.a * b.a * us;
+    return vec4<f32>(rgb, s.a + b.a * (1.0 - s.a));
+}
+
+@fragment
+fn fs_over(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
+    return over(lit(pos, false), pos);
+}
+
+@fragment
+fn fs_cast_over(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
+    return over(lit(pos, true), pos);
 }

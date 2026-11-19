@@ -179,9 +179,9 @@ fn boxed(verbs: &[Verb]) -> Vec<Verb> {
 /// The pipelines, made once per device.
 pub struct LightFx {
     layout: wgpu::BindGroupLayout,
-    pipeline: wgpu::RenderPipeline,
-    /// The pipeline for a list with a light that casts shadows.
-    casting: wgpu::RenderPipeline,
+    /// By whether a light of the list casts shadows (1) and whether the pass lays the lit
+    /// children over the layer itself (2).
+    pipelines: [wgpu::RenderPipeline; 4],
     /// What the light drawn last cast, kept while the same lights and occluders draw.
     cast: Option<Cast>,
 }
@@ -204,23 +204,25 @@ impl LightFx {
             count: None,
         };
         let storage = wgpu::BufferBindingType::Storage { read_only: true };
+        let texture = |binding| wgpu::BindGroupLayoutEntry {
+            binding,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Texture {
+                sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                view_dimension: wgpu::TextureViewDimension::D2,
+                multisampled: false,
+            },
+            count: None,
+        };
         let layout = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("light fx"),
             entries: &[
                 buffer(0, wgpu::BufferBindingType::Uniform),
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
-                        sample_type: wgpu::TextureSampleType::Float { filterable: false },
-                        view_dimension: wgpu::TextureViewDimension::D2,
-                        multisampled: false,
-                    },
-                    count: None,
-                },
+                texture(1),
                 buffer(2, storage),
                 buffer(3, storage),
                 buffer(4, storage),
+                texture(5),
             ],
         });
         let pipelines = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -256,17 +258,16 @@ impl LightFx {
             })
         };
         LightFx {
-            pipeline: pipeline("fs"),
-            casting: pipeline("fs_cast"),
+            pipelines: ["fs", "fs_cast", "fs_over", "fs_cast_over"].map(pipeline),
             layout,
             cast: None,
         }
     }
 
     /// `children` lit by `light` at `zoom` px a u over the px crop `rect` (`[x, y, w, h]`),
-    /// written into `into`; `linear`: the layer composites in linear light; `bounds`: the
-    /// children's, u. The light's planted program, if any, runs here too, and so does a
-    /// planted shadow.
+    /// written into `into`, over `back` where it is given: what the layer drew before, a copy
+    /// of `into`. `linear`: the layer composites in linear light; `bounds`: the children's, u.
+    /// The light's planted program, if any, runs here too, and so does a planted shadow.
     #[allow(clippy::too_many_arguments)]
     pub fn run(
         &mut self,
@@ -276,6 +277,7 @@ impl LightFx {
         zoom: f64,
         linear: bool,
         children: &wgpu::TextureView,
+        back: Option<&wgpu::TextureView>,
         bounds: [f64; 4],
         rect: [u32; 4],
         into: &wgpu::Texture,
@@ -366,6 +368,10 @@ impl LightFx {
                     binding: 4,
                     resource: cast.bounds.as_entire_binding(),
                 },
+                wgpu::BindGroupEntry {
+                    binding: 5,
+                    resource: wgpu::BindingResource::TextureView(back.unwrap_or(children)),
+                },
             ],
         });
         let casts = cast.casters.iter().any(Option::is_some);
@@ -380,13 +386,18 @@ impl LightFx {
                     resolve_target: None,
                     depth_slice: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
+                        load: match back {
+                            Some(_) => crate::groups::load_for(rect, [into.width(), into.height()]),
+                            None => wgpu::LoadOp::Load,
+                        },
                         store: wgpu::StoreOp::Store,
                     },
                 })],
                 ..Default::default()
             });
-            pass.set_pipeline(if casts { &self.casting } else { &self.pipeline });
+            pass.set_pipeline(
+                &self.pipelines[usize::from(casts) + 2 * usize::from(back.is_some())],
+            );
             pass.set_bind_group(0, &group, &[]);
             pass.set_scissor_rect(x, y, w, h);
             pass.draw(0..3, 0..1);
