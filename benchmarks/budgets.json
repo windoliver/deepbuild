@@ -2006,6 +2006,27 @@
       "criteria": [
         "#210.91594eec"
       ]
+    },
+    {
+      "id": "canvas-many-lamps",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "many-lamps"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "frame_gpu_p95_ms": 10,
+        "cluster_pass_gpu_p95_ms": 0.5,
+        "scoring_cpu_p95_ms": 1,
+        "light_lists_bytes": 4000000,
+        "estimate_off": 0.25
+      },
+      "initialReason": "Issue #1634 first measurement (#1634.5a35384c): the merge base has no fill lights and no such task. A release deep-gpu plays the night city of tests/acceptance/1634 (1,024 fill point and 1,024 fill spot lamps, ranges 6 to 12 m) at 1920 x 1080 for 300 frames with timings, five runs after a warm-up one, each a fresh process; canvas.mjs judge holds the frame's GPU p95, the cluster pass's, the CPU scoring's and each estimate's distance from its measurement on a reference Mac, and the light lists' bytes anywhere. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#1634.5a35384c"
+      ]
     }
   ]
 }

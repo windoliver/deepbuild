@@ -1325,6 +1325,7 @@ const EFFICIENCY = {
   'canvas-lens-focus': { dof_gpu_ms: (r) => r.dof_gpu_ms },
   'canvas-figure-budgets': Object.fromEntries(['redraw_wall_ms', 'parts_wall_ms', 'inset_lit_gpu_ms', 'inset_unlit_gpu_ms'].map((k) => [k, (r) => r[k]])),
   'canvas-occlusion': { gpu_fall: (r) => r.gpu_fall, pyramid_declared_error: (r) => r.pyramid_declared_error },
+  'canvas-many-lamps': Object.fromEntries(['frame_gpu_p95_ms', 'cluster_pass_gpu_p95_ms', 'scoring_cpu_p95_ms', 'light_lists_bytes', 'estimate_off'].map((k) => [k, (r) => r[k]])),
   'canvas-water-shore': { shore_lake_gpu_ms: (r) => r.shore_lake_gpu_ms },
   'canvas-water-flow': { flow_sheet_gpu_ms: (r) => r.flow_sheet_gpu_ms },
   'canvas-ground': {
@@ -1350,7 +1351,7 @@ const EFFICIENCY = {
   // #556: each reading by its own name (benchmarks/playtest.mjs).
   'playtest-crawler': Object.fromEntries(['crawler_80_runs_s', 'legal_added_s', 'reach_200_floors_s', 'idle_work'].map((k) => [k, (r) => r[k]])),
 };
-const COUNTS = new Set(['summary_tokens', 'page_rows', 'frames', 'upload_bytes_per_item', 'indexed_target_bytes', 'still_steps', 'idle_steps', 'still_maps', 'still_code_steps', 'idle_work', 'frame_expansions', 'forest_draws_per_variant_material']);
+const COUNTS = new Set(['summary_tokens', 'page_rows', 'frames', 'upload_bytes_per_item', 'indexed_target_bytes', 'still_steps', 'idle_steps', 'still_maps', 'still_code_steps', 'idle_work', 'frame_expansions', 'forest_draws_per_variant_material', 'light_lists_bytes']);
 /** Targets that are floors, each reading at or above its limit: judged as the limit on their negations (#184's multiple of real time). */
 const FLOORS = new Set(['fixture_realtime_x']);
 
@@ -1785,6 +1786,72 @@ workloads.occlusion = () => {
         pyramid_measured_ms: measuredMs, pyramid_declared_ms: declaredMs, pyramid_declared_error: Math.abs(declaredMs - measuredMs) / measuredMs };
     });
     console.log(JSON.stringify({ task: 'canvas-occlusion', fingerprint, runs: measured }));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+};
+
+// #1634: many lamps in raster light, at 1920 × 1080 on a release `deep-gpu`. The night city of
+// tests/acceptance/1634/helpers.ts (2,048 lamp posts on a 64 × 32 lattice 12 m apart, a fill point lamp or a fill spot
+// lamp on each by turns, ranges 6 to 12 m, over a ground slab and 128 blocks; a showpiece whose camera orbits it once
+// in 10 s), its 300 frames played with timings; one warm-up run and five, each a fresh process. A run reports the p95
+// over its frames of the frame's GPU time, of the cluster pass's and of the policy's CPU scoring, the bytes its light
+// lists hold, and the farthest any of the cost model's four estimates sits from its measurement, at their medians.
+function manyLampsCity() {
+  const items = {
+    cam: { kind: 'camera@1', params: { projection: 'perspective', target: [0, 0, 0], orbit: { azimuth: 0, elevation: 55, distance: 620 }, fov: 60, near: 350 } },
+    sky: { kind: 'sky@1', params: { top: [0, 0, 0, 1], low: [0, 0, 0, 1], ambient_top: [0, 0, 0], ambient_low: [0, 0, 0] } },
+    ground_mat: { kind: 'material@1', params: { base_color: [0.4, 0.4, 0.4, 1], roughness: 1, specular_level: 0 } },
+    block_mat: { kind: 'material@1', params: { base_color: [0.3, 0.32, 0.36, 1], roughness: 0.7 } },
+    ground: { kind: 'mark.box@1', params: { size: [820, 0.2, 440] }, at: { pos: [0, -0.1, 0] }, material: 'ground_mat' },
+  };
+  const pad = (n, width) => String(n).padStart(width, '0');
+  for (let b = 0; b < 128; b++) {
+    const [i, j] = [b % 16, Math.floor(b / 16)];
+    const h = 6 + 2 * ((5 * i + 3 * j) % 8);
+    items[`block_${pad(b, 3)}`] = { kind: 'mark.box@1', params: { size: [8, h, 8] }, at: { pos: [48 * i - 366, h / 2, 48 * j - 174] }, material: 'block_mat' };
+  }
+  for (let n = 0; n < 2048; n++) {
+    const [i, j] = [n % 64, Math.floor(n / 64)];
+    const params = { power: 1200, color: [1, 1, 1], shadow: false, fill: true, range: 6 + (6 * ((7 * i + 13 * j) % 8)) / 7 };
+    const pos = [12 * i - 378, 4, 12 * j - 186];
+    items[`post_${pad(i, 2)}_${pad(j, 2)}`] = (i + j) % 2 === 1
+      ? { kind: 'light.spot@1', params: { ...params, inner: 30, outer: 50 }, at: { pos, rot: [-90, 0, 0] } }
+      : { kind: 'light.point@1', params, at: { pos } };
+  }
+  let order = 0;
+  for (const [id, item] of Object.entries(items)) Object.assign(item, { id, name: id, order: `a${pad(order++, 5)}`, layer: 'main' });
+  const spin = { target: 'items/cam/params/orbit/azimuth', type: 'f32', keys: { k0: { t: '0s', value: 0, interp: 'linear' }, k1: { t: '10s', value: 360, interp: 'linear' } } };
+  return { format: 1, id: 'night-city-bench', profile: 'scene', title: 'night-city-bench', description: 'The #1634 night city.', size: FLARE_SIZE, camera: 'cam', transport: { span: '20s' },
+    requires: { modules: { scene3d: '^1' } }, budget: { class: 'showpiece' }, layers: { main: { writer: 'agent:bench', title: 'main', order: 'a0' } }, channels: { spin }, items };
+}
+workloads['many-lamps'] = () => {
+  const fingerprint = release('deep-gpu-layer', 'deep-gpu');
+  const look = { id: 'look-1634-filmic', format: 1, basis: 'physical', license: 'Apache-2.0', description: 'A #1634 bench look.',
+    palette: { night: '#101114', graphite: '#1b1d22', slate: '#8b8f97', stone: '#d9dde3', sand: '#e6d3a3' }, roles: { ground: 'night', ink: 'graphite', muted: 'slate', stone: 'stone', sand: 'sand' },
+    themes: { light: {}, dark: {} }, fonts: { body: { family: 'Inter', file: 'Inter-Regular.ttf', license: 'OFL-1.1', embed: true, single_line: false }, mono: { family: 'JetBrains Mono', file: 'JetBrainsMono-Regular.ttf', license: 'OFL-1.1', embed: true, single_line: false } },
+    tone_map: 'filmic', exposure: 2, finish: [], deband: 'none', bloom: 'none', ao: 'none', ground_3d: { kind: 'none' },
+    status: { pass: '#007429', fail: '#bf232b', invalid: '#8645b0', blocked: '#a44700', inconclusive: '#666600', running: '#0063b8', needs_you: '#8a5900', stale: '#326c6f', idle: '#636464' },
+    status_treatment: { core_min_px: 4, glyph: { pass: '✓', fail: '✗', invalid: '⊘', blocked: '■', inconclusive: '?', running: '↻', needs_you: '!', stale: '◇', idle: '○' } }, min_distance: 0.1,
+    attention_treatment: { line: 'dashed', role: 'ink', glyph: '⚠' }, legend: 'auto' };
+  const dir = mkdtempSync(join(tmpdir(), 'deep-canvas-bench-'));
+  try {
+    const doc = join(dir, 'city.json');
+    writeFileSync(doc, JSON.stringify(manyLampsCity()));
+    const PASS = 'scene3d.light_clusters';
+    const mid = (xs) => { const s = [...xs].sort((a, b) => a - b); const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+    const measured = runs(() => {
+      const answer = once('deep-gpu', ['run'], { out: dir, calls: [{ call: 'view3d', doc, look, size: FLARE_SIZE, frames: 300, fps: 30, capture: [], targets: [], timings: true }] });
+      if (answer.ok !== true || answer.replies.some((r) => r.code)) throw Error(`deep-gpu answered ${JSON.stringify(answer).slice(0, 1500)}`);
+      const frames = answer.replies[0].frames;
+      const column = (read) => frames.map(read);
+      const [gpu, pass, scoring, bytes] = [column((f) => f.gpu_ms), column((f) => f.passes_ms[PASS]), column((f) => f.lights.scoring_ms), column((f) => f.lights.lists_bytes)];
+      const off = (estimate, got) => Math.abs(mid(estimate) - mid(got)) / mid(got);
+      const estimates = { gpu: off(column((f) => f.estimate.gpu_ms), gpu), pass: off(column((f) => f.declared_ms[PASS]), pass), scoring: off(column((f) => f.estimate.scoring_ms), scoring), bytes: off(column((f) => f.estimate.lists_bytes), bytes) };
+      return { frame_gpu_p95_ms: p95(gpu), cluster_pass_gpu_p95_ms: p95(pass), scoring_cpu_p95_ms: p95(scoring), light_lists_bytes: Math.max(...bytes), estimates, estimate_off: Math.max(...Object.values(estimates)),
+        medians: { gpu_ms: mid(gpu), pass_ms: mid(pass), scoring_ms: mid(scoring) } };
+    });
+    console.log(JSON.stringify({ task: 'canvas-many-lamps', fingerprint, runs: measured }));
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

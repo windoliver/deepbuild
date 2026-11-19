@@ -280,4 +280,6 @@ export interface CoreOptions {
   github?: string;
   /** A file of runs for the background job `test` (#909), from DEEP_HUB_TEST_FAIL_JOB: a line `fail` throws, `ok` passes; only tests set it. */
   failJob?: string;
+  /** A JSON file of release entries `[{ id, version, digest }]` the extension host loads in the hub, from DEEP_HUB_TEST_RELEASE; only tests set it (#2402). */
+  release?: string;
 }

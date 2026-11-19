@@ -1,0 +1,66 @@
+One run of tests/acceptance/1883 at the base c740dede7 (main, 2026-11-14), Node 24.22.0, Linux arm64, after
+`npm run build --workspaces` and `cargo build --locked -p deep-hook`; the checkout's path is shown as <repo>:
+
+  NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1883 --no-file-parallelism --testTimeout=300000
+
+Why each reads as it does: the base's Starts.trust renames a temporary file over ~/.claude.json, so with a symlink
+there the path became a regular file and the link's target stayed unchanged (AC1 fails, naming the path); with a
+regular file there it wrote the bytes AC2 spells out (AC2 passes); the base lists no plant trust-renames-over-link,
+so its hub refused to start with it (AC3 BLOCKED). Every start was made and said started; the hubs and stand-ins
+stopped by PID, and the test homes were removed.
+
+
+ RUN  v5.0.5 <repo>/tests/acceptance/1883
+
+ ❯ trust.test.ts (3 tests | 2 failed) 10813ms
+   × AC1 #1883.cba928bb with ~/.claude.json a symlink to a file elsewhere, a start that records trust leaves it a symlink and writes the trust key into its target 5083ms
+   × AC3 #1883.dd68075b a planted Starts.trust that renames over the link (trust-renames-over-link) fails the first criterion, naming the path 774ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  trust.test.ts > AC1 #1883.cba928bb with ~/.claude.json a symlink to a file elsewhere, a start that records trust leaves it a symlink and writes the trust key into its target
+AssertionError: AC1 #1883.cba928bb: after the start the config path /tmp/dh1883-FHDP37/.claude.json is still a symlink (/tmp/dh1883-FHDP37/.claude.json is a regular file; its target /tmp/dh1883-FHDP37/dotfiles/claude.json is unchanged): expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ linkedTrust trust.test.ts:31:115
+
+ ❯ trust.test.ts:42:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  trust.test.ts > AC3 #1883.dd68075b a planted Starts.trust that renames over the link (trust-renames-over-link) fails the first criterion, naming the path
+Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=trust-renames-over-link did not start (a hub that doesn't list a plant refuses to start): file://<repo>/packages/hub/dist/plant.js:120
+        throw Error(`DEEP_HUB_PLANT=${value} names no planted program`);
+              ^
+
+Error: DEEP_HUB_PLANT=trust-renames-over-link names no planted program
+    at plantOf (file://<repo>/packages/hub/dist/plant.js:120:15)
+    at Module.runHub (file://<repo>/packages/hub/dist/server.js:1621:19)
+    at hubCommand (file://<repo>/packages/hub/dist/hub-command.js:29:58)
+    at async file://<repo>/packages/cli/dist/main.js:345:24
+
+Node.js v24.22.0
+
+ ❯ runHub helpers.ts:113:11
+    111|   if (ready?.ready !== true) {
+    112|     if (child.pid && alive(child.pid)) try { process.kill(child.pid, '…
+    113|     throw Error(`BLOCKED: the hub${plant ? ` with the plant DEEP_HUB_P…
+       |           ^
+    114|   }
+    115|   return { pid: child.pid!, socket: String(ready.socket), child, exit,…
+ ❯ openWorld helpers.ts:151:15
+ ❯ trust.test.ts:81:13
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 1 passed (3)
+   Start at  00:05:46
+   Duration  11.16s (tests 99%, transform 1%)
+

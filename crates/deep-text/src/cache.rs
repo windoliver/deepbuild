@@ -24,6 +24,8 @@ pub const BOUND: usize = 32 << 20;
 pub const ENTRIES: usize = 1 << 16;
 
 /// What a paragraph's glyphs depend on (#1430): its text, its font, its size and its features.
+/// #1484: the variation coordinates it is set at follow from its faces, size and weight and its
+/// spans', all here.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ShapeKey {
     text: Box<str>,
@@ -123,7 +125,8 @@ impl Key {
 }
 
 /// The hash of the bundled faces a run picks from: its family's by weight, then each fallback
-/// family's in order (#417), with the language it is shaped in.
+/// family's in order (#417), each set in its variable twin where one is bundled (#1484), with the
+/// language it is shaped in.
 fn font_hash(family: &str, fallback: &[&str], lang: Option<&str>) -> u64 {
     // Each face's bytes hashed once per process: the CJK face alone is megabytes.
     static FACE_HASHES: LazyLock<Vec<u64>> = LazyLock::new(|| {
@@ -140,8 +143,9 @@ fn font_hash(family: &str, fallback: &[&str], lang: Option<&str>) -> u64 {
     let mut h = DefaultHasher::new();
     for name in std::iter::once(&family).chain(fallback) {
         name.hash(&mut h);
+        let shaped = crate::fonts::shaped_in(name);
         for (face, hash) in FACES.iter().zip(FACE_HASHES.iter()) {
-            if face.family == *name {
+            if face.family == shaped {
                 hash.hash(&mut h);
             }
         }

@@ -379,6 +379,8 @@ fn run_view(
         // The lights the policy last left out: a change is reported once, by ID (#421).
         let mut left_out: Vec<String> = Vec::new();
         let mut dropped: Vec<String> = Vec::new();
+        // The clusters last reported past their cap (#1634).
+        let mut clusters_over: Vec<deep_scene3d_render::fill::Over> = Vec::new();
         // #1640's wrong programs for mesh-edge lines, by their planted names.
         let edge_plant = match app.planted {
             Some(Planted::CreaseBelowAngle) => Some("crease_below_angle"),
@@ -1942,6 +1944,22 @@ fn run_view(
                     .expect("a list")
                     .push(notice);
             }
+            // #1634: the clusters past `per_cluster` and the fill lights dropped from any of them,
+            // reported once per change.
+            if c.clusters_over != clusters_over {
+                clusters_over.clone_from(&c.clusters_over);
+                let dropped: std::collections::BTreeSet<&String> =
+                    clusters_over.iter().flat_map(|o| &o.dropped).collect();
+                if !clusters_over.is_empty() {
+                    let clusters: Vec<[u32; 3]> = clusters_over.iter().map(|o| o.cluster).collect();
+                    frame
+                        .entry("notices")
+                        .or_insert_with(|| json!([]))
+                        .as_array_mut()
+                        .expect("a list")
+                        .push(json!({"code": "cluster_over_budget", "clusters": clusters, "dropped": dropped}));
+                }
+            }
             if args.counts {
                 let c = &drawn.counts;
                 let encoded: Vec<Value> = c
@@ -2022,6 +2040,19 @@ fn run_view(
             if args.light_cut {
                 frame.insert("light_cut".into(), crate::lod::cut_json(&evaluated, &cut));
             }
+            if args.clusters && capture {
+                let rows: Vec<Value> = session3::clusters(app)
+                    .into_iter()
+                    .map(|(cluster, lights)| {
+                        let lights: Vec<Value> = lights
+                            .into_iter()
+                            .map(|(light, weight)| json!({"light": light, "weight": weight}))
+                            .collect();
+                        json!({"cluster": cluster, "lights": lights})
+                    })
+                    .collect();
+                frame.insert("clusters".into(), json!(rows));
+            }
             if args.masks && capture && !noop {
                 let mut rows = Vec::new();
                 for c in choices.iter().filter(|c| c.bands.len() == 2) {
@@ -2097,6 +2128,16 @@ fn run_view(
                     .chain(op_declared.map(|(k, v)| (k, json!(v))))
                     .collect();
                 frame.insert("declared_ms".into(), Value::Object(declared));
+                // #1634: what the light policy's scoring took and what the fill lights hold, with
+                // the cost model's estimate of the frame, in a scene that holds a fill light.
+                let c = &drawn.counts;
+                if c.lists_bytes > 0 {
+                    let lights = json!({"scoring_ms": c.scoring_ms, "lists_bytes": c.lists_bytes});
+                    frame.insert("lights".into(), lights);
+                    let [gpu_ms, scoring_ms, lists_bytes] = c.light_estimate;
+                    let estimate = json!({"gpu_ms": gpu_ms, "scoring_ms": scoring_ms, "lists_bytes": lists_bytes});
+                    frame.insert("estimate".into(), estimate);
+                }
             }
             if !clicks.is_empty() {
                 let ids = drawn.targets.as_ref().map(|(_, ids)| ids.as_slice());
