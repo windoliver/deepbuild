@@ -1,0 +1,187 @@
+Base commit: 89863843d (origin/main when the work started), before any implementation.
+Machine: macOS (Darwin 27.2.0) on Apple silicon (arm64, Mac17,10, 18 cores), the Metal device. Rust 1.99.1 and Node
+         24.22.0, as rust-toolchain.toml and .node-version pin.
+Date of the runs: 2026-11-18.
+Command, one file at a time, each file once:
+  NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 scripts/lease npx vitest run --root tests/acceptance/2450 --no-file-parallelism --testTimeout=600000 <file>
+  (scripts/lease said it ran unleased: the first line of each output.)
+Type-check, run once after the outputs were saved, under the pinned Node:
+  node node_modules/typescript/bin/tsc -p tests/acceptance/2450/tsconfig.json passes (exit 0, no output).
+
+Result: 3 files, 5 tests, all failed, each at an assertion of its own that reports the base's own refusal; none at a
+load error, a compile error, a TypeError or a crash, and none passed.
+  ac1-vector-title-faces-camera.test.ts (2 tests): view3d refuses the document, bad_axis at
+    items/axes/params/titles/x; deep_show on the full build refuses it with the same code at the same path.
+  ac2-other-kind-refused.test.ts (2 tests): the title naming the vector@1 item is refused bad_axis on x, y and z (the
+    assertions before that one in the test, the text-title control and the twelve other kinds' refusals, held); the
+    scenario with the planted name is answered {"ok":false,"code":"bad_input"}.
+  ac3-taste.test.ts (1 test): view3d refuses the document, bad_axis at items/axes/params/titles/x; the test stops
+    before it makes docs/evidence/2450/, so nothing was drawn or written.
+
+Below, the three saved outputs, in the files' order (the runs' own order is their "Start at" lines). Each is copied
+whole as saved, its last line "exit 1" included, with one thing changed: the checkout's path in the "RUN" line is
+written <checkout> (AGENTS.md: no personal data in evidence).
+
+==== ac1-vector-title-faces-camera.test.ts ====
+scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `npx vitest run --root tests/acceptance/2450 --no-file-parallelism --testTimeout=600000 ac1-vector-title-faces-camera.test.ts` runs unleased
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/2450
+
+ ❯ ac1-vector-title-faces-camera.test.ts (2 tests | 2 failed) 9879ms
+   ❯ AC1 #2450.308e31fa a title naming a vector@1 item draws that vector at the axis's end, facing the camera (2)
+     × AC1 #2450.308e31fa at each of 36 azimuths of a 360° orbit the x title is the vector item's box at the x axis's end, at the title's size, facing the camera within 1° and never mirrored, and the picture in it is that item's graphic 2901ms
+     × AC1 #2450.308e31fa the full build presents the axes whose x title names the vector item, and scene3d's interface digest is the same with the vector module in the build and without it 2523ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac1-vector-title-faces-camera.test.ts > AC1 #2450.308e31fa a title naming a vector@1 item draws that vector at the axis's end, facing the camera > AC1 #2450.308e31fa at each of 36 azimuths of a 360° orbit the x title is the vector item's box at the x axis's end, at the title's size, facing the camera within 1° and never mirrored, and the picture in it is that item's graphic
+AssertionError: the orbit: view3d is answered, not refused: {"code":"bad_axis","reason":"items/axes/params/titles/x"}: expected 'bad_axis' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_axis"
+
+ ❯ framesOf helpers.ts:168:86
+    166| export function framesOf(reply: JsonObject, count: number, what: strin…
+    167|   if (reply['code'] === 'unsupported_platform') inconclusive(`${what}:…
+    168|   expect(reply['code'], `${what}: view3d is answered, not refused: ${b…
+       |                                                                                      ^
+    169|   const frames = arr(reply['frames'], `${what}: frames`).map((f, i) =>…
+    170|   expect(frames.map((f) => f['frame']), `${what}: frames ${from} … ${f…
+ ❯ ac1-vector-title-faces-camera.test.ts:84:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  ac1-vector-title-faces-camera.test.ts > AC1 #2450.308e31fa a title naming a vector@1 item draws that vector at the axis's end, facing the camera > AC1 #2450.308e31fa the full build presents the axes whose x title names the vector item, and scene3d's interface digest is the same with the vector module in the build and without it
+AssertionError: the full build presents the axes with a vector title: expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the axes whose x title names the vector item, on the full build: the check raises an error: {\"check\":\"document.validate\",\"code\":\"bad_axis\",\"severity\":\"error\",\"ids\":[\"axes\"],\"path\":\"items/axes/params/titles/x\",\"actual\":\"xt\",\"what\":\"items/axes/params/titles/x\",\"fix\":\"See the issue.\"}",
++   "the axes whose x title names the vector item, on the full build: the outcome is \"refused\"",
++ ]
+
+ ❯ ac1-vector-title-faces-camera.test.ts:157:157
+    155|     const d = docId(1);
+    156|     const [shown, fullSchedule] = runShow(bin('deep-show'), dir, [d], …
+    157|     expect(notPresented(shown!, 'the axes whose x title names the vect…
+       |                                                                                                                                                             ^
+    158|     const without = sealed(bin('deep-show-no-vector'), 'the build with…
+    159|     expect(['scene3d', 'data'].filter((m) => !without.includes(m)), 't…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  20:53:38
+   Duration  10.01s (tests 100%)
+
+exit 1
+
+==== ac2-other-kind-refused.test.ts ====
+scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `npx vitest run --root tests/acceptance/2450 --no-file-parallelism --testTimeout=600000 ac2-other-kind-refused.test.ts` runs unleased
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/2450
+
+ ❯ ac2-other-kind-refused.test.ts (2 tests | 2 failed) 5743ms
+   ❯ AC2 #2450.880b408d a title naming an item of any other kind is refused at check, naming the field (2)
+     × AC2 #2450.880b408d a title naming an item of each of twelve other kinds is refused with bad_axis at items/axes/params/titles/<axis>, and the same title naming the vector@1 item isn't 2943ms
+     × AC2 #2450.880b408d a planted check that takes a title naming an item of any kind fails, naming items/axes/params/titles/<axis> for each kind 233ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac2-other-kind-refused.test.ts > AC2 #2450.880b408d a title naming an item of any other kind is refused at check, naming the field > AC2 #2450.880b408d a title naming an item of each of twelve other kinds is refused with bad_axis at items/axes/params/titles/<axis>, and the same title naming the vector@1 item isn't
+AssertionError: the same title naming the vector@1 item is presented, with no error: expected [ …(6) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the x title naming the vector@1 item xt: the check raises an error: {\"check\":\"document.validate\",\"code\":\"bad_axis\",\"severity\":\"error\",\"ids\":[\"axes\"],\"path\":\"items/axes/params/titles/x\",\"actual\":\"xt\",\"what\":\"items/axes/params/titles/x\",\"fix\":\"See the issue.\"}",
++   "the x title naming the vector@1 item xt: the outcome is \"refused\"",
++   "the y title naming the vector@1 item xt: the check raises an error: {\"check\":\"document.validate\",\"code\":\"bad_axis\",\"severity\":\"error\",\"ids\":[\"axes\"],\"path\":\"items/axes/params/titles/y\",\"actual\":\"xt\",\"what\":\"items/axes/params/titles/y\",\"fix\":\"See the issue.\"}",
++   "the y title naming the vector@1 item xt: the outcome is \"refused\"",
++   "the z title naming the vector@1 item xt: the check raises an error: {\"check\":\"document.validate\",\"code\":\"bad_axis\",\"severity\":\"error\",\"ids\":[\"axes\"],\"path\":\"items/axes/params/titles/z\",\"actual\":\"xt\",\"what\":\"items/axes/params/titles/z\",\"fix\":\"See the issue.\"}",
++   "the z title naming the vector@1 item xt: the outcome is \"refused\"",
++ ]
+
+ ❯ ac2-other-kind-refused.test.ts:91:193
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  ac2-other-kind-refused.test.ts > AC2 #2450.880b408d a title naming an item of any other kind is refused at check, naming the field > AC2 #2450.880b408d a planted check that takes a title naming an item of any kind fails, naming items/axes/params/titles/<axis> for each kind
+AssertionError: deep-show run (planted: axes_title_takes_any_kind) accepted the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ replies helpers.ts:153:72
+    151|   expect(r.lines.length, `${label}: one output line`).toBe(1);
+    152|   const a = obj(r.lines[0], `${label}: the answer`);
+    153|   expect(a['ok'], `${label} accepted the scenario: ${brief(a, 3000)}`)…
+       |                                                                        ^
+    154|   const out = arr(a['replies'], `${label}: replies`).map((x, i) => obj…
+    155|   expect(out.length, `${label}: one reply per call`).toBe(calls);
+ ❯ runShow helpers.ts:256:10
+ ❯ judged ac2-other-kind-refused.test.ts:67:19
+ ❯ ac2-other-kind-refused.test.ts:95:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  20:53:23
+   Duration  6.07s (tests 96%, transform 3%, import 1%)
+
+exit 1
+
+==== ac3-taste.test.ts ====
+scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `npx vitest run --root tests/acceptance/2450 --no-file-parallelism --testTimeout=600000 ac3-taste.test.ts` runs unleased
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/2450
+
+ ❯ ac3-taste.test.ts (1 test | 1 failed) 3954ms
+   ❯ AC3 #2450.9a0cac61 the pictures of the axes with a vector title and the one taste call on them (1)
+     × AC3 #2450.9a0cac61 the run writes the axes with a vector title at four azimuths from the canvas's own frames, and the recorded call on exactly those says they look right 2762ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac3-taste.test.ts > AC3 #2450.9a0cac61 the pictures of the axes with a vector title and the one taste call on them > AC3 #2450.9a0cac61 the run writes the axes with a vector title at four azimuths from the canvas's own frames, and the recorded call on exactly those says they look right
+AssertionError: the orbit: view3d is answered, not refused: {"code":"bad_axis","reason":"items/axes/params/titles/x"}: expected 'bad_axis' to be undefined
+
+- Expected:
+undefined
+
++ Received:
+"bad_axis"
+
+ ❯ framesOf helpers.ts:168:86
+    166| export function framesOf(reply: JsonObject, count: number, what: strin…
+    167|   if (reply['code'] === 'unsupported_platform') inconclusive(`${what}:…
+    168|   expect(reply['code'], `${what}: view3d is answered, not refused: ${b…
+       |                                                                                      ^
+    169|   const frames = arr(reply['frames'], `${what}: frames`).map((f, i) =>…
+    170|   expect(frames.map((f) => f['frame']), `${what}: frames ${from} … ${f…
+ ❯ ac3-taste.test.ts:39:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  20:54:08
+   Duration  4.09s (tests 99%, transform 1%)
+
+exit 1
