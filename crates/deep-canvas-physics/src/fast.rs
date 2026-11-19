@@ -7,9 +7,10 @@
 //! #2239: the lint says what the backend's sweep holds, read from its caps (`caps::Sweep`). A
 //! body's move is its fastest point's: its centre of mass's move plus its turn times the farthest
 //! its shapes reach from that centre. A fast body no sweep starts from, a kinematic one, raises an
-//! issue of kind `kinematic`; and two bodies whose swept bounds meet where no sweep holds them and
-//! `ccd` on the fast one can't settle it raise one of kind `pair`. Neither names a fix that fixes
-//! nothing, and a body another's sweep holds is never told to turn `ccd` on, which would end it.
+//! issue of kind `kinematic`; and two bodies whose swept bounds meet where neither a sweep nor a
+//! body's own contact prediction holds them and `ccd` on the fast one can't settle it raise one of
+//! kind `pair`. Neither names a fix that fixes nothing, and a body another's sweep holds is never
+//! told to turn `ccd` on, which would end it.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -226,10 +227,12 @@ pub enum Planted {
     OneBody,
 }
 
-/// One body over a step: its ID, whether it came into the step fast, and the bounds it swept.
+/// One body over a step: its ID, whether it came into the step fast, whether its move alone
+/// made it so, and the bounds it swept.
 struct Swept<'a> {
     id: &'a str,
     fast: bool,
+    moves: bool,
     bounds: Bounds,
 }
 
@@ -318,19 +321,21 @@ impl FastBodies {
             // A body a sweep starts from comes into a step as fast as the last one left it; a
             // kinematic one moves as its channel says.
             let entering = if starts { last.speed * self.dt } else { moved };
-            over.push((id, entering > b.half, last));
+            let moves = len(last.linear) * self.dt > b.half;
+            over.push((id, entering > b.half, moves, last));
         }
         // Bounds are read only in a step some body comes into fast, or while a meeting lasts.
-        let fast = over.iter().any(|(_, fast, _)| *fast);
+        let fast = over.iter().any(|(_, fast, ..)| *fast);
         if self.planted == Planted::OneBody || !(fast || !self.meeting.is_empty()) {
             return;
         }
-        let swept = over.iter().filter_map(|(id, fast, last)| {
+        let swept = over.iter().filter_map(|(id, fast, moves, last)| {
             let b = &self.watched[*id];
             let bounds = b.swept(last, b.last.as_ref()?, self.dt);
             Some(Swept {
                 id,
                 fast: *fast,
+                moves: *moves,
                 bounds,
             })
         });
@@ -359,17 +364,23 @@ impl FastBodies {
         self.meeting = meeting;
     }
 
-    /// Whether the sweep holds the meeting of `a` and `b` in `step`, and the pair's issue where it
-    /// doesn't and `ccd` on the fast one can't settle it.
+    /// Whether the sweep, or a body's own contact prediction, holds the meeting of `a` and `b` in
+    /// `step`, and the pair's issue where neither does and `ccd` on the fast one can't settle it.
     fn judge(&mut self, step: u64, sweep: &Sweep, a: &Swept, b: &Swept) {
         let (x, y) = (&self.watched[a.id], &self.watched[b.id]);
         let holds = |f: &Watched, ccd: bool, s: &Watched, s_ccd: bool, s_fast: bool| {
             sweep.holds((f.kind, ccd), (s.kind, s_ccd, s_fast))
         };
+        // A body with `ccd` on predicts its contacts along its own move, never along its turn.
+        let predicts = |f: &Swept, ccd: bool| sweep.predicts && ccd && f.moves;
         let key = (a.id.to_string(), b.id.to_string());
         self.met.extend([a.id.to_string(), b.id.to_string()]);
         if a.fast && b.fast {
-            if !holds(x, x.ccd, y, y.ccd, true) && !holds(y, y.ccd, x, x.ccd, true) {
+            // Each body's prediction reaches its own move only, so two fast bodies need both.
+            let held = holds(x, x.ccd, y, y.ccd, true)
+                || holds(y, y.ccd, x, x.ccd, true)
+                || (predicts(a, x.ccd) && predicts(b, y.ccd));
+            if !held {
                 self.pairs.entry(key).or_insert((step, None));
             }
             return;
@@ -380,8 +391,10 @@ impl FastBodies {
             ((b, y), (a, x))
         };
         self.alone.insert(fast.id.to_string());
-        // Unheld, and held once the fast one has `ccd` on and the other has it off.
-        if !holds(f, f.ccd, s, s.ccd, false) && s.ccd && holds(f, true, s, false, false) {
+        // Unheld, with `ccd` on the fast one settling nothing: its prediction doesn't reach, and
+        // its sweep holds the other only once the other's `ccd` is off.
+        let held = holds(f, f.ccd, s, s.ccd, false) || predicts(fast, f.ccd);
+        if !held && !predicts(fast, true) && s.ccd && holds(f, true, s, false, false) {
             self.pairs
                 .entry(key)
                 .or_insert((step, Some(slow.id.to_string())));
@@ -417,11 +430,11 @@ impl FastBodies {
                 Some(id) => {
                     let fast = if id == a { b } else { a };
                     (format!("bodies/{id}/ccd"),
-                     format!("bodies {a} and {b} meet in step {step}, where {fast} is fast and {id} has ccd on too, and no sweep holds two bodies that both have ccd on, so {fast} can pass through {id}"),
+                     format!("bodies {a} and {b} meet in step {step}, where {fast} is fast by its turn and {id} has ccd on too, and no sweep holds a body that has ccd on, so {fast} can pass through {id}"),
                      format!("Turn {id}'s ccd off."))
                 }
                 None => ("step_rate".to_string(),
-                         format!("bodies {a} and {b} meet in step {step}, both fast, and no sweep holds a body that is itself fast, so they can pass through each other"),
+                         format!("bodies {a} and {b} meet in step {step}, both fast, where one has ccd off or is fast by its turn, and no sweep holds a body that is itself fast, so they can pass through each other"),
                          BOTH_FAST_FIX.to_string()),
             };
             json!({"check": FAST_BODY, "code": FAST_BODY, "kind": "pair", "severity": "error", "ids": [a, b], "path": path,

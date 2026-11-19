@@ -42,6 +42,10 @@ pub struct Sweep {
     /// fast.
     pub holds_ccd: bool,
     pub holds_fast: bool,
+    /// Whether a body with `ccd` on also predicts its contacts along its own move in a step, which
+    /// holds a body in its path whatever that body's `ccd`, and reaches neither its own turn nor
+    /// the other body's move.
+    pub predicts: bool,
 }
 
 impl Sweep {
@@ -90,6 +94,7 @@ pub const RAPIER3D: Caps = Caps {
         "A contact with restitution 1 or more never comes to rest.",
         "A contact is a spring at solver.contact_hz, twice that against a static body, so a resting body sinks g ÷ (2π × f)² under its own weight at the frequency f of its contact, and a stack sinks by its loads.",
         "Only a dynamic body starts a sweep: with ccd off it sweeps fixed shapes only, and with ccd on it also holds a body that moves or rests, but only one that has ccd off and is not itself fast.",
+        "A body with ccd on also predicts its contacts along its own move in a step, which holds a body in its path whatever that body's ccd, and reaches neither its own turn nor the other body's move.",
     ],
     claims: &["ccd", "soft_bodies", "character_controller", "vehicle_controller"],
     sweep: Sweep {
@@ -98,5 +103,6 @@ pub const RAPIER3D: Caps = Caps {
         with_ccd: &["static", "kinematic", "dynamic"],
         holds_ccd: false,
         holds_fast: false,
+        predicts: true,
     },
 };
