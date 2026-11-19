@@ -2788,6 +2788,16 @@ pub(crate) fn evaluate_compiled(
         return refused("out_of_range", "budget/puffs");
     }
     crate::sets::compile(map, &mut lights, &mut layers)?;
+    // #1634: a document holds its class's `fill_shaded` fill lights at most, and a light that
+    // names no range ends where the shot's exposure cuts it.
+    let class = deep_canvas::budget::of(&budget).map(|(class, _)| class);
+    if lights.iter().filter(|l| l.fill).count() > light::fill_shaded(class) {
+        return refused("out_of_range", "budget/fill_shaded");
+    }
+    // The planted wrong program keeps the fixed 0.05 lx.
+    if outlines.planted != Some("auto_range_fixed_cut") {
+        light::follow_exposure(&mut lights, exposure.unwrap_or(look.exposure));
+    }
     let probes = probes(map, probe_items, &lights, &layers, sky.as_ref())?;
     // #149: a drawing look lights its marks from its own light, with no Light item.
     if let (None, true, Some(l)) = (&sun, lights.is_empty(), drawn_light(look)) {
