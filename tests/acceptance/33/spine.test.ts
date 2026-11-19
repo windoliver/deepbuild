@@ -7,7 +7,10 @@ import { describe, it } from 'vitest';
 import { AC8, NODE, REPO, SPINE, must } from './helpers.ts';
 
 describe(`${AC8} the 25 spine tasks, each with its merged commit`, () => {
-  it(`${AC8} node scripts/spine.mjs list names the 25 spine tasks, each with a merged commit of this checkout's history`, () => {
+  // Retired with the owner's approval (their deep/approved/ tag on this commit), by their ruling "Keep GitHub's hash": a
+  // row names the merge GitHub records, which for PRs merged before the 2026-11-09 rewrite is not in this checkout's
+  // history; redraft-ac8/spine.test.ts is AC8's offline test.
+  it.skip(`${AC8} node scripts/spine.mjs list names the 25 spine tasks, each with a merged commit of this checkout's history`, () => {
     const r = spawnSync(NODE, ['scripts/spine.mjs', 'list'], { cwd: REPO, encoding: 'utf8', timeout: 60_000 });
     must(r.status === 0, `${AC8} \`node scripts/spine.mjs list\` must exit 0: exit ${r.status}, ${(r.stderr || r.error?.message || '').slice(0, 600)}`);
     const rows = r.stdout.split('\n').filter(Boolean).map((line) => /^#(\d+) ([0-9a-f]{40})$/.exec(line.trim()));
