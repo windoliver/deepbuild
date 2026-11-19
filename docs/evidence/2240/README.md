@@ -76,8 +76,10 @@ What the pictures don't show: a planted program can't run inside `view3d`, so it
 box that falls over is at its most turned, 90.26°, at step 166, between two frames, and comes to rest at 90.00° in the
 picture's plane, turned 2.4° about the slope's normal; the frames' 90.17° is the box at rest, read 0.17° off.
 
-The files here are from debug binaries built on the tree merged with main (`81c6b9c340f6`). On binaries built from this
-change before the merge, the script wrote the same four files, byte for byte.
+The files here are from debug binaries built on the tree merged with main a second time (`a4d0290b5df7`). On binaries
+built before each merge the script wrote the same `check.json`, byte for byte. The pictures then differed only in
+their labels' glyphs, which main's #1484 draws anew: outside the labels every pixel of the stills and of both films'
+frames is the same.
 
 ## Refusals (check)
 
@@ -94,12 +96,14 @@ change before the merge, the script wrote the same four files, byte for byte.
 The 45° world with the centre written, sought to 1.5 s (restored at step 140) and played on: its 221 step hashes are the
 straight run's, the last `6b96d3719b3d96dd`. Thirteen worlds with no `centre_of_mass` (the box on three slopes, the bar,
 #251's lap and eight drawn worlds of one and two shapes a body): 4,573 step hashes, each the same string as on the merge
-base `9d0256132543`, and again, after main was merged, as on `81c6b9c340f6`.
+base `9d0256132543`, and again, after main was merged, as on `81c6b9c340f6`, and after it was merged a second time, with
+#2241's belts in the same crates, as on `a4d0290b5df7`.
 
 ## Kit
 
 `box_slope_20`, `box_slope_33`, `box_slope_33_centre`, `box_slope_45_centre`, `bar_period` and `bar_period_centre` pass
-natively and on wasm32, with the other 58 fixtures.
+natively and on wasm32, with the other 58 fixtures. After the second merge the kit holds #2241's four belts too, and
+its 68 fixtures pass natively; wasm32 was not run again.
 
 ## A vehicle body
 
