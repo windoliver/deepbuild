@@ -68,8 +68,8 @@ const fn test(name: &'static str, twin: Twin, caps: &'static Caps) -> TestBacken
     }
 }
 
-/// #191's test backends by name, and #251's, #182's and #2241's.
-pub const TEST_BACKENDS: [TestBackend; 15] = [
+/// #191's test backends by name, and #251's, #182's, #2241's and #2243's.
+pub const TEST_BACKENDS: [TestBackend; 16] = [
     test("friction_average", Twin::FrictionAverage, &TEST_CAPS),
     test("no_joint_limits", Twin::NoJointLimits, &TEST_CAPS),
     test("restitution_min", Twin::RestitutionMin, &TEST_CAPS),
@@ -97,6 +97,8 @@ pub const TEST_BACKENDS: [TestBackend; 15] = [
         Twin::LaunchGroundedOnly,
         &CHARACTER_CAPS,
     ),
+    // #2243: one that leaves each moved character body's pose stale until the backend's step.
+    test("stale_character_poses", Twin::StalePoses, &CHARACTER_CAPS),
 ];
 
 /// The test backend named `name`, in a `test-backends` build only.
