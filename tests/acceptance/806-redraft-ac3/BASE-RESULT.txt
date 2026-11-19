@@ -1,0 +1,67 @@
+Base run of tests/acceptance/806-redraft-ac3 at c26bdb5beebe0b3ddc0d55dbe0165fa9b17e76b3, the worktree's HEAD (the brief named
+its ancestor c21400b43; README: Base commit). macOS arm64, Node 24.22.0, cargo 1.99.1; deep-show, deep-hook and
+deep-replica-canvas built with CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0. The throttle granted nothing for over ten minutes
+(a timed request held its queue), so the builds and this run went directly, under nice -n 10.
+
+$ CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 nice -n 10 npx vitest run --root tests/acceptance/806-redraft-ac3 --no-file-parallelism --testTimeout=600000
+
+ RUN  v5.0.5 …/tests/acceptance/806-redraft-ac3
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  20:44:21
+   Duration  47.94s (tests 99%, transform 1%)
+
+vitest exit 0
+
+The file's one test: "AC3 a deep_show call from a deep mcp process bound to no session is refused and draws nothing, and the
+record gains no revision". It PASSES at this base. #806's work has landed here (the issue is closed), so this base is not a
+program without the work, and no wrong program was run (README: Wrong programs it fails on).
+
+----------------------------------------------------------------------------------------------------------------------------------
+An earlier draft of the same test, run once at the same commit before the run above (README: Base result). Its reading of the
+evidence store counted every new object. It failed at its first quiet check, after the call was refused and with the record and
+the app quiet, on 13 objects. Trimmed:
+
+ ❯ ac3-unbound.test.ts (1 test | 1 failed) 14815ms
+   × AC3 a deep_show call from a deep mcp process bound to no session is refused and draws nothing, and the record gains no revision 14396ms
+
+ FAIL  ac3-unbound.test.ts > AC3 a deep_show call from a deep mcp process bound to no session is refused and draws nothing, and the record gains no revision
+AssertionError: it draws nothing (no snapshot stored, nothing drawn in the app), and the record gains no revision: expected { record: [], …(2) } to deeply equal { record: [], evidence: [], app: [] }
+
+  {
+    "app": [],
+-   "evidence": [],
++   "evidence": [
++     "228eaf659d906d488ecdc57bc158d5257ca80cee73f98d46ff82a0879f965ba4: \"\\u0000asm\\u0001\\u0000\\u0000\\u0000\\u00 …
++     "2debaa37a4b66b88257cef2907829e2e8039217c5c4844d03b91713b877b0a9f: \"{\\n  \\\"name\\\": \\\"fall\\\",\\n  \\\"i …
++     "48b0d157ffe30a2adfe7f9409ee27b4b0f0dd2f0ce4df134e247367ca536b823: \"\\u0000asm\\u0001\\u0000\\u0000\\u0000\\u00 …
++     "48cbd7aa9e21a8efbaa3bf8d3ace32c5cc83baf67effbaaeaa9964678d035d68: \"\\u0000asm\\u0001\\u0000\\u0000\\u0000\\u00 …
++     "4b652aafd9afbf8e64179cd4e694c50490484327ac26271f9643f767dadc7c03: \"{\\n  \\\"name\\\": \\\"4-8-2\\\",\\n  \\\" …
++     "5949efe1b2f650769c610606585eb41b9211719fb407bb9555c453c04e34b5fd: \"\\u0000asm\\u0001\\u0000\\u0000\\u0000\\u00 …
++     "62adaf9884955dfc21a35baa81fe3dc11035b2c966de2f509fbc6cd11c44ed64: \"\\u0000asm\\u0001\\u0000\\u0000\\u0000\\u00 …
++     "7843fc844787ff3e7ce3d2384987daa46b660405709f10981e98665e7bd7e53f: \"\\u0002\\u0000\\u0000\\u0000\\u0004\\u0000\ …
++     "78a9686f03da4c840d6fa7e21047af12c3bc99bc977e4486a76e1a3ea190e294: (binary) …
++     "8c161537340dc326bfead35b179933d0d60dc7d89a60896f02802db36497b41b: \"\\u0000asm\\u0001\\u0000\\u0000\\u0000\\u00 …
++     "a6f6e7af9478067f1d0b5996649cc4ccd25a5335b64d462b8ebb99578ee062c0: \"{\\n  \\\"name\\\": \\\"slide\\\",\\n  \\\" …
++     "ada0ca199c8a177c6da253465d7959b4ed74e1ae52720957008c2e8dffe03a59: \"\\u0000asm\\u0001\\u0000\\u0000\\u0000\\u00 …
++     "d22a1c04dda562d0b90fda10e57c793ba80488812069893a8d9b2df96302cb1f: \"{\\n  \\\"name\\\": \\\"door\\\",\\n  \\\"i …
++   ],
+    "record": [],
+  }
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Duration  15.12s (tests 98%, transform 1%)
+vitest exit 1
+
+Two runs of a probe (a temporary test file in this folder, deleted, never committed), at the same commit, through the same
+surfaces:
+- The world opened, then idle for 30 s: 0 objects in the store. Then one deep_show from the deep mcp started by hand, answered
+  {"outcome":"refused","code":"no_session","issues":[],"snapshots":[],"backends":{…},"core":"core@0.0.0","set_digest":"c866974c…"}:
+  13 objects 3 s later, and 0 new events in the record.
+- A fresh world whose first deep_show was the Claude Code session's own (presented, rev 1): 17 new objects, all 13 of the first
+  world's among them.
+So the 13 are the canvas core's own programs (wasm modules importing lib:physics2d.lib@1, lib:nn.mlp@1 and lib:fsm@1; logic@1
+recipes named fall, 4-8-2, slide and door; two binary blobs), stored on a first deep_show whether it binds or not, with no event.
+None is a drawing or the figure, so the committed reading counts only a PNG or an object naming the figure.

@@ -328,7 +328,11 @@ impl<'a> Hub<'a> {
         if !self.doc_visible(&e.doc) {
             return json!({"outcome": "not_presented", "reason": "hidden", "nodes": []});
         }
-        let rev = self.current(&e.doc).map(|r| r.rev);
+        // #1415: a shared document's frame evaluates its current revision in its own session.
+        let rev = match self.load_shared(&e.doc) {
+            Some(rev) => Some(rev),
+            None => self.current(&e.doc).map(|r| r.rev),
+        };
         let t = match self.resolve_time(&e.doc, &e.t) {
             Ok(t) => t,
             Err(code) => return json!({"outcome": "refused", "code": code, "issues": []}),

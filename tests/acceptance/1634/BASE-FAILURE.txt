@@ -1,0 +1,143 @@
+# #1634 acceptance suite at the base, 16dc5eab0 (Merge pull request #2771), before any implementation.
+#
+# Run here, on a reference Mac (Mac17,10) under load (one-minute load 40 to 125 on 18 cores, thermal state fair):
+#   cargo build --locked --bin deep-gpu                                             -> built (dev profile)
+#   node node_modules/typescript/bin/tsc -p tests/acceptance/1634/tsconfig.json     -> exit 0, no errors
+#   node node_modules/vitest/vitest.mjs run --root tests/acceptance/1634 --no-file-parallelism
+#     --testTimeout=3600000 --hookTimeout=3600000 <file>                            -> each file once, below
+# Every file ran to its end (4 to 13 s each: the base refuses or draws 32 lights, so nothing here is slow yet).
+# 19 tests: 17 fail on what the criteria add, 2 are INCONCLUSIVE (the timing, the taste call). None passes.
+# Paths are redacted: <repo> the checkout, <tmp> the temporary folder.
+#
+# Why, in short. `view3d` at the base reads no `fill`, `per_cluster` or `clusters`: a fill lamp is a key light, the
+# policy shades 32, and the reply holds no cluster list, no light_cut.fill and none of the timed readings. The checked
+# calls (`live`, `envelope_counts`) refuse `fill` as unknown_field. No planted name of this suite is in Planted, so
+# `deep-gpu run --planted <name>` prints {"ok":false,"code":"bad_input"} and exits 2.
+
+street-sum.test.ts (AC1 #1634.d5f3a907)   Test Files 1 failed | Tests 2 failed
+  x every lit road pixel's linear radiance is within 1% of the CPU f64 sum ...
+      stdout: 23732 lit road pixels, 23732 more than 1% off the CPU sum
+      AssertionError: the street against the CPU sum:
+        23732 of 23732 lit road pixels (100.00%, over 0.1%) read more than 1% off the CPU sum over every lamp in
+        range; the first dimmed lamp is lamp_208, whose 237 pixels read 0.000 of the sum at their median; the first
+        such pixel: pixel (8, 532), by lamp_208, reads [0.00000, 0.00000, 0.00000] where the sum gives 0.02291
+      (The 98 lamps in view are key lights at the base; from 831 m their scores lie within a few buckets, so the 32
+      it keeps sit inside the cut's margin at weights of 0.08 or less, and the road is dark.)
+  x a planted policy that shades only the top 32 (--planted fill_top_32) ...
+      AssertionError: deep-gpu run --planted fill_top_32 exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+
+view-function.test.ts (AC2 #1634.1412aa03)   Test Files 1 failed | Tests 2 failed
+  x the pose at 1.633 s reached by the orbit, by a seek and with the 512 lamps created in a shuffled order ...
+      AssertionError: the street's frame as a function of its view:
+        the orbit played from frame 0 reports no cluster lists (clusters: true)
+      (The three legs do give one pixel hash at the base, f9129d8cb42c30fb…, with 32 shaded and 56 left out.)
+  x a planted pass that appends lights in atomic arrival order (--planted cluster_arrival_order) ...
+      AssertionError: deep-gpu run --planted cluster_arrival_order exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+
+cluster-cap.test.ts (AC3 #1634.b847690e)   Test Files 1 failed | Tests 2 failed
+  x of 100 lamps whose ranges all reach one cluster each weighs what the CPU reference of the rule gives ...
+      AssertionError: the crowd's cluster:
+        cluster [8, 4, 23]: frame 0 reports no cluster lists (clusters: true)
+  x a planted cap that truncates by list order instead of score (--planted cluster_cap_by_list_order) ...
+      AssertionError: deep-gpu run --planted cluster_cap_by_list_order exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+
+no-pipeline.test.ts (AC4 #1634.919ee285)   Test Files 1 failed | Tests 2 failed
+  x on the noop lane, 2,048 fill lamps switched on one at a time over 10 s and back create no pipeline ...
+      AssertionError: the switches on noop was answered, not refused: {"code":"refused","issues":[
+        {"check":"document.validate","code":"over_budget","severity":"error","ids":["ground","cam","ground_mat"],
+         "path":"budget","actual":{"cpu_ms":23.438…,"operators":{…,"marks2d.frame":22.901…}},"what":"the document's
+         estimate per frame passes its showpiece class: CPU 23.438 ms past 4 ms; the costliest operator is
+         marks2d.frame at 22.901 ms",…},
+        {"check":"document.validate","code":"unknown_field","severity":"error","ids":["sw_0000"],
+         "path":"items/sw_0000/params/fill","actual":true,"what":"light.point@1.0 does not define `fill`",…}, …
+  x on the reference Mac's Metal device, the same switches create no pipeline after frame 0
+      AssertionError: the switches on metal was answered, not refused: the same refusal. (This Mac is on the lane's
+      list, so the test ran; on another machine it is INCONCLUSIVE before it draws.)
+
+receivers.test.ts (AC5 #1634.59464d5c)   Test Files 1 failed | Tests 1 failed
+  x among 2,048 fill lamps, the lamp whose receivers are the hall's collection leaves 20 sampled pixels ... dark ...
+      AssertionError: the keeper's receivers among 2,048 fill lamps:
+        pixel (532, 113) at h_0037's foot reads [0.000e+0, 0.000e+0, 0.000e+0] where the lamps in range give
+        5.438e+0: the lantern isn't lit among the 2,048
+        … the same for all 20 sampled lanterns (h_0037, h_0138, … h_1956)
+      (At the base the keeper is the brightest of 2,048 key lights and is shaded, with its receivers: the 20 pixels
+      beyond the wall are dark, the hall's floor by it reads its light, and the twin with no receivers lights the 20
+      within 2%. What fails is the 2,047 other lamps: the base shades 31 of them.)
+
+key-lights.test.ts (AC6 #1634.41f7525a)   Test Files 1 failed | Tests 2 failed
+  x with 40 key lights the policy shades 32 and raises lights_over_budget for the other 8, and 1,024 fill lamps ...
+      AssertionError: the key policy beside fill lamps:
+        1,024 fill lamps change the lights left out: 1032, [fill_0000, fill_0001, fill_0002, …], where 8 were
+        1,024 fill lamps change lights_over_budget: 1 notices listing 1032 lights, where one listed 8
+        light_cut reports no fill lights (light_cut.fill), so nothing says the 1,024 are shaded
+      (Alone, the 40 key lights give the reference's 32 at weight 1, its 8 left out and one notice: nothing fails.)
+  x a document one fill lamp past its class's fill_shaded ... is refused at check, naming the count and the class ...
+      AssertionError: the check at each class's fill_shaded:
+        33 fill lamps in a figure document is refused, but by no over_budget issue whose actual names fill_lights 33
+        and class figure: [{"check":"document.validate","code":"unknown_field",…,"path":"items/cap_0000/params/fill",
+        "what":"light.point@1.0 does not define `fill`",…}, …]
+        513 fill lamps in a work_product document is refused, but by no over_budget issue … : [{"code":"over_budget",
+        "path":"budget","actual":{"cpu_ms":6.396…},"what":"… CPU 6.396 ms past 4 ms …"}, {"code":"unknown_field",…}]
+        2049 fill lamps in a showpiece document is refused, but by no over_budget issue … (CPU 25.393 ms past 4 ms)
+        2049 fill lamps in a export document is refused, but by no over_budget issue … (unknown_field)
+        32 fill lamps in a figure document, the class's fill_shaded, isn't admitted: {"state":"refused","issues":[
+        {"code":"unknown_field",…,"path":"items/cap_0000/params/fill",…}, …]}
+
+response-sum.test.ts (AC7 #1634.e8a4deec)   Test Files 1 failed | Tests 1 failed
+  x under 200 fill lamps, at a pixel inside all 200 ranges, a three-band response ... reads 2.00 within 0.5%
+      stdout: pixel (240, 160) reads [0.0432, 0.0432, 0.0432]; 200 calls of 0.01 sum to 2.00
+      AssertionError: pixel (240, 160) reads [0.0432, 0.0432, 0.0432], where 200 calls of 0.01 sum to 2.00 within
+      0.5%: expected 0.978424072265625 to be less than or equal to 0.005
+      (The base calls the response for its 32 key lights, most of them dimmed inside the cut's margin.)
+
+budgets.test.ts (AC8 #1634.5a35384c)   Test Files 1 failed | Tests 2 failed (1 of them INCONCLUSIVE)
+  x the night city ... gives the same pixel hash by seeking and by playing at 10 sampled times, its light lists ...
+      AssertionError: the night city's hashes, its lists and the budget's place in the perf lane:
+        benchmarks/budgets.json has no task whose criteria name #1634.5a35384c
+        scripts/lanes.mjs does not list tests/acceptance/1634/budgets.test.ts in timed, the local preflight's perf step
+        at 0.5 s (frame 15) the timed frame doesn't report, above 0: passes_ms.scene3d.light_clusters,
+        declared_ms.scene3d.light_clusters, lights.scoring_ms, lights.lists_bytes, estimate.gpu_ms,
+        estimate.scoring_ms, estimate.lists_bytes
+        … the same at each of the 10 sampled times (frames 15, 45, … 285)
+      (The played and the sought hashes agree at all 10 times at the base, and the lane's validator takes the base's
+      budgets.json against the merge base's.)
+  x on the reference Mac the night city stays within 10 ms of GPU a frame ... five runs each by the lane's rule
+      AssertionError: INCONCLUSIVE: the budgets count only on a reference Mac at rest: a reading, not a budget
+      result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB);
+      mains power, Low Power Mode off, thermal state nominal): thermal state is "fair", not "nominal"; load
+      43.16650390625 at a run's start or end is above the 18 cores; this is not a pass
+      (The machine was asked first: no release build was made and nothing was timed.)
+
+auto-range.test.ts (AC9 #1634.d613f0e8)   Test Files 1 failed | Tests 2 failed
+  x the street with automatic ranges at 800 lm and the fixture's exposure, and at 8 lm with exposure raised ...
+      stdout: 69120 road pixels, 2441 over 1 code apart, 1073 pixels over 2 apart, 0 at 20 codes or more
+      AssertionError: the street at two light levels:
+        a frame's light_cut reports no fill lights, so no lamp's range can be read
+        the 800 lm frame is no picture of the street: 0 of 69120 road pixels read 20 codes or more, fewer than 10,000
+        2441 of 69120 road pixels (3.53%, over 0.1%) differ by more than 1 code value between the two frames; the
+        worst, pixel (929, 537), reads rgb(6, 6, 6) at 800 lm and rgb(0, 0, 0) at 8 lm
+        1073 pixels differ by more than 2 code values between the two frames; the worst, pixel (929, 537), …
+      (The base's fixed 0.05 lx gives the 8 lm lamps 3.57 m, and it shades 32 of the lamps, dimmed.)
+  x a planted automatic range from a fixed 0.05 lx (--planted auto_range_fixed_cut) ...
+      AssertionError: deep-gpu run --planted auto_range_fixed_cut exited 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+
+taste.test.ts (AC10 #1634.186fabe5)   Test Files 1 failed | Tests 1 failed (INCONCLUSIVE)
+  x a still and a 10 s orbit of the 512-lamp street, and of the same street under the 32-light policy ...
+      stdout: for the taste call: <tmp>/deep-1634-evidence/street-512-d902886a….png
+              for the taste call: <tmp>/deep-1634-evidence/street-512-orbit-6aa99a11….apng
+              for the taste call: <tmp>/deep-1634-evidence/street-32-d902886a….png
+              for the taste call: <tmp>/deep-1634-evidence/street-32-orbit-6aa99a11….apng
+      AssertionError: INCONCLUSIVE: no taste call is recorded on these files (screenshots d902886a…, d902886a…;
+      recordings 6aa99a11…, 6aa99a11…); record yours in a file named by DEEPBUILD_TASTE_1634; this is not a pass
+      (At the base the two streets are one picture, byte for byte: it reads no `fill`. The files were deleted.)
+
+# What was not run. budgets.test.ts's timing (no release build: this machine can't judge a timing now). No file was
+# run with an implementation, and no planted program exists, so every "fails, naming …" assertion is unrun: each
+# planted test stops at bad_input. The fixtures' numbers in the README are reference.ts's; the lit pixel counts (AC1
+# 23,732; AC9 69,120 road pixels) are this run's.
+#
+# reference.ts's rules against the base, from a scratch run of the built binary (not kept): 32 key lamps on the
+# street's road, seen as STREET_VIEW sees it, read within 0.26% of the CPU sum on every lit pixel; the base's
+# light_cut for the room's 40 key lights is the reference's order, weights and 8 left out (key-lights.test.ts's first
+# half, above), and for the street's orbit at frame 49 it starts with the reference's lamp_258 and lamp_257 and
+# shades 32 and leaves out 56, as the reference does.
