@@ -8,6 +8,7 @@ import type { EvidenceStore } from '@deepbuild/evidence';
 import type { Statement } from 'better-sqlite3';
 import { compareReplay, type Comparison, type ReplayResult } from './replay.js';
 import type { Db } from './storage.js';
+import { StringDecoder } from 'node:string_decoder';
 
 /** Each connection's statements, prepared once: the layer's reads run several times per learned change. */
 const prepared = new WeakMap<Db, Map<string, Statement<unknown[]>>>();
@@ -100,11 +101,8 @@ function codexFailed(output: string): boolean {
   const code = /Process exited with code (\d+)/.exec(output)?.[1] ?? /"exit_code"\s*:\s*(\d+)/.exec(output)?.[1];
   return code !== undefined ? code !== '0' : /^Script failed/.test(output);
 }
-function readTranscript(bytes: Uint8Array): Map<string, Entry> {
+function readTranscript(bytes: Uint8Array, tools = new Map<string, string>(), calls = new Map<string, string>(), first = 0): Map<string, Entry> {
   const entries = new Map<string, Entry>();
-  const tools = new Map<string, string>();
-  /** The message each Claude Code call is in, by the call's ID; a Codex call's name, by its call ID. */
-  const calls = new Map<string, string>();
   for (const [n, line] of Buffer.from(bytes).toString('utf8').split('\n').entries()) {
     let entry: unknown;
     try { entry = JSON.parse(line); } catch { continue; }
@@ -113,7 +111,7 @@ function readTranscript(bytes: Uint8Array): Map<string, Entry> {
     if (isObj(entry) && entry.type === 'response_item' && isObj(entry.payload) && entry.payload.type === 'message') {
       const p = entry.payload;
       const text = (Array.isArray(p.content) ? p.content : []).flatMap((c) => (isObj(c) && typeof c.text === 'string' ? [c.text] : [])).join('\n');
-      const id = typeof p.id === 'string' && /^[A-Za-z0-9._-]+$/.test(p.id.replace(/^msg_/, '')) ? p.id.replace(/^msg_/, '') : `l${n}`;
+      const id = typeof p.id === 'string' && /^[A-Za-z0-9._-]+$/.test(p.id.replace(/^msg_/, '')) ? p.id.replace(/^msg_/, '') : `l${first + n}`;
       entries.set(id, { text, outside: p.role !== 'user', ...(typeof p.role === 'string' ? { role: p.role } : {}) });
       continue;
     }
@@ -136,7 +134,7 @@ function readTranscript(bytes: Uint8Array): Map<string, Entry> {
     }
     if (!isObj(entry) || !isObj(entry.message)) continue;
     // Claude Code's message has its `uuid`, pi's its entry's `id`; a Cursor line has neither, so its line names it (#111).
-    const id = typeof entry.uuid === 'string' ? entry.uuid : entry.type === 'message' && typeof entry.id === 'string' ? entry.id : typeof entry.role === 'string' ? `l${n}` : undefined;
+    const id = typeof entry.uuid === 'string' ? entry.uuid : entry.type === 'message' && typeof entry.id === 'string' ? entry.id : typeof entry.role === 'string' ? `l${first + n}` : undefined;
     if (id === undefined) continue;
     const role = entry.message.role ?? entry.role;
     const content = entry.message.content;
@@ -451,6 +449,9 @@ async function readStored(store: EvidenceStore | undefined, transcripts: Transcr
     const b = await bytesOf(where.sha);
     return b ? { text: Buffer.from(b).toString('utf8'), outside: false } : undefined;
   }
+  // A large session handle reads bounded pieces and keeps only the requested message, not the whole transcript.
+  const meta = await store?.get(where.sha);
+  if (store && meta && meta.size > TRANSCRIPT_BYTES_KEPT) return (await streamTranscript(store, where.sha, where.message)).get(where.message);
   return (await parsedTranscript(store, transcripts, where.sha))?.get(where.message);
 }
 /** The bytes of transcript files whose parses a cache keeps, at most: the newest one is kept whatever its size. */
@@ -475,8 +476,16 @@ export function placingTranscript(store: EvidenceStore | undefined, placing: Pla
     return kept.messages;
   }
   const entry = { bytes: 0, messages: Promise.resolve<Message[] | undefined>(undefined) };
-  entry.messages = (async () => (store && (await store.get(sha)) ? store.read(sha) : undefined))().then((b) => {
+  entry.messages = (async () => {
+    const meta = await store?.get(sha);
+    if (store && meta && meta.size > TRANSCRIPT_BYTES_KEPT) {
+      placing.delete(sha);
+      return { messages: [...await streamTranscript(store, sha)].filter(([, e]) => e.text !== '').map(([id, e]) => ({ id, ...e })) };
+    }
+    return store && meta ? store.read(sha) : undefined;
+  })().then((b) => {
     if (!b) { placing.delete(sha); return undefined; }
+    if ('messages' in b) return b.messages;
     entry.bytes = b.length;
     let total = 0;
     for (const e of placing.values()) total += e.bytes;
@@ -505,7 +514,12 @@ function parsedTranscript(store: EvidenceStore | undefined, transcripts: Transcr
     if (transcripts.get(sha) === parsed) transcripts.delete(sha);
     known.delete(sha);
   };
-  parsed = (async () => (store && (await store.get(sha)) ? store.read(sha) : undefined))().then((b) => {
+  parsed = (async () => {
+    const meta = await store?.get(sha);
+    if (store && meta && meta.size > TRANSCRIPT_BYTES_KEPT) { forget(); return streamTranscript(store, sha); }
+    return store && meta ? store.read(sha) : undefined;
+  })().then((b) => {
+    if (b instanceof Map) return b;
     if (!b) {
       forget();
       return undefined;
@@ -528,14 +542,36 @@ function parsedTranscript(store: EvidenceStore | undefined, transcripts: Transcr
   return parsed;
 }
 
+/** Parse line-aligned pieces with call/role context carried across parts, and no whole-file string. */
+async function streamTranscript(store: EvidenceStore, sha: string, wanted?: string): Promise<Map<string, Entry>> {
+  const found = new Map<string, Entry>();
+  const tools = new Map<string, string>(), calls = new Map<string, string>();
+  const decoder = new StringDecoder('utf8');
+  let tail = '', first = 0;
+  const parse = (text: string) => {
+    for (const [id, entry] of readTranscript(Buffer.from(text), tools, calls, first)) if (wanted === undefined || id === wanted) found.set(id, entry);
+    for (let at = text.indexOf('\n'); at >= 0; at = text.indexOf('\n', at + 1)) first++;
+  };
+  for await (const bytes of store.chunks(sha)) {
+    const text = tail + decoder.write(Buffer.from(bytes));
+    const end = text.lastIndexOf('\n') + 1;
+    if (end) parse(text.slice(0, end));
+    tail = text.slice(end);
+  }
+  parse(tail + decoder.end());
+  return found;
+}
+
 /** One message of an archived transcript: its ID (`session:<id>#<message>`) and what it holds. */
 export interface Message extends Entry { id: string }
 /** Each message of a transcript copy that holds text, in order. */
 const messagesOf = (bytes: Uint8Array): Message[] => [...readTranscript(bytes)].filter(([, e]) => e.text !== '').map(([id, e]) => ({ id, ...e }));
 /** A copy's messages, read now and kept nowhere: the archive's index reads each copy once (#1515). */
 export async function copyMessages(store: EvidenceStore | undefined, sha: string): Promise<Message[] | undefined> {
-  const bytes = store && (await store.get(sha)) ? await store.read(sha) : undefined;
-  return bytes ? messagesOf(bytes) : undefined;
+  const meta = await store?.get(sha);
+  if (!store || !meta) return undefined;
+  if (meta.size > TRANSCRIPT_BYTES_KEPT) return [...await streamTranscript(store, sha)].filter(([, e]) => e.text !== '').map(([id, e]) => ({ id, ...e }));
+  return messagesOf(await store.read(sha));
 }
 /**
  * A session's archived transcript (design: Reading by reference): the evidence its newest transcript.archived event

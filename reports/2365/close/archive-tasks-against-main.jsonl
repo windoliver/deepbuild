@@ -1,0 +1,11 @@
+{"change":"af9dda088","base":"ed03dc60d","rounds":2,"load":401.85107421875}
+{"task":"archive-live","change":"-37.21%","pairs":["-37.21","-39.15"],"changeG":["15.016","14.431"],"baseG":["23.912","23.716"],"ms":[14102,26765],"peakMB":[281,304],"load":"439.8"}
+{"task":"archive-month","change":"-18.04%","pairs":["-18.04","-19.45"],"changeG":["15.247","15.300"],"baseG":["18.603","18.994"],"ms":[19272,25222],"peakMB":[246,270],"load":"504.2"}
+{"task":"archive-backlog","change":"-0.13%","pairs":["-0.13","-3.30"],"changeG":["75.753","72.112"],"baseG":["75.850","74.570"],"ms":[115558,94798],"peakMB":[351,433],"load":"497.5"}
+{"task":"reading-find","status":"BLOCKED","reason":"base exited 1: modules/esm/loader:687:17)\n    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:607:35)\n    at ModuleJob.syncLink (node:internal/modules/esm/module_job:276:33)\n    at ModuleJob.link (node:internal/modules/esm/module_job:381:17) {\n  code: 'ERR_MODULE_NOT_FOUND',\n  url: 'file://<home>/doneright-2365-repair/node_modules/@deepbuild/wiki/dist/index.js'\n}\n\nNode.js v24.22.0\n"}
+{"task":"reading-slice","status":"BLOCKED","reason":"base exited 1: modules/esm/loader:687:17)\n    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:607:35)\n    at ModuleJob.syncLink (node:internal/modules/esm/module_job:276:33)\n    at ModuleJob.link (node:internal/modules/esm/module_job:381:17) {\n  code: 'ERR_MODULE_NOT_FOUND',\n  url: 'file://<home>/doneright-2365-repair/node_modules/@deepbuild/wiki/dist/index.js'\n}\n\nNode.js v24.22.0\n"}
+{"task":"target-origins","change":"1.85%","pairs":["-1.38","1.85"],"changeG":["1.646","1.617"],"baseG":["1.669","1.587"],"ms":[2080,2304],"peakMB":[108,107],"load":"471.5"}
+{"task":"record-learn-apply-rollback-1k","change":"7.46%","pairs":["-2.91","7.46"],"changeG":["5.633","6.146"],"baseG":["5.802","5.720"],"ms":[17220,19941],"peakMB":[151,151],"load":"482.3"}
+{"task":"record-learn-rebuild-10k","change":"-0.06%","pairs":["-0.06","-0.42"],"changeG":["29.947","29.730"],"baseG":["29.964","29.855"],"ms":[117218,116608],"peakMB":[122,124],"load":"389.2"}
+{"task":"asks-raise-answer","change":"1.78%","pairs":["1.78","1.06"],"changeG":["3.491","3.488"],"baseG":["3.430","3.451"],"ms":[13415,15171],"peakMB":[79,78],"load":"357.5"}
+exit=0

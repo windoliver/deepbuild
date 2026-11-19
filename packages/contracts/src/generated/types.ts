@@ -11215,6 +11215,59 @@ export interface TranscriptArchivedV2 {
   evidence?: Array<string>;
 }
 
+/** transcript.archived@3 */
+export interface TranscriptArchivedV3 {
+  v: 3;
+  id: string;
+  kind: "transcript.archived";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    session: string;
+    evidence: string;
+    source: {
+      size: number;
+      sha256: string;
+      stamp: string;
+      ended: boolean;
+    };
+    parts: Array<string>;
+  };
+  evidence?: Array<string>;
+}
+
+/** transcript.archived@4 */
+export interface TranscriptArchivedV4 {
+  v: 4;
+  id: string;
+  kind: "transcript.archived";
+  subject?: string;
+  writer: string;
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    session: string;
+    evidence: string;
+    source: {
+      size: number;
+      sha256: string;
+      stamp: string;
+      ended: boolean;
+      continuable: boolean;
+    };
+    parts: Array<string>;
+  };
+  evidence?: Array<string>;
+}
+
 /** turn.usage@1 */
 export interface TurnUsage {
   v: 1;
