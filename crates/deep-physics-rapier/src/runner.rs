@@ -464,7 +464,8 @@ impl Run {
             None => {}
             Some("caps_allow_restitution_threshold") => run.caps.restitution_threshold = true,
             Some("caps_allow_rolling_resistance") => run.caps.rolling_resistance = true,
-            Some("caps_allow_tangent_speed") => run.caps.tangent_speed = true,
+            // #2241: Rapier's caps() have belts, so this plants nothing; #2009's suite names it.
+            Some("caps_allow_tangent_speed") => {}
             Some("caps_allow_dynamic_gear") => run.caps.dynamic_couplings = true,
             Some("hash_rounds_1e6") => run.round_hashes = true,
             Some("key_omits_frame_rate") => run.key_without_rate = true,
