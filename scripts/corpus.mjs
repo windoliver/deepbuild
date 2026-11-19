@@ -141,6 +141,27 @@ function retriesFactsCase(claude) {
   return missing.length ? [[`the Claude Code facts' retries entry (claude-code.facts.json) lacks ${missing.join(', ')}`, fix]] : [];
 }
 
+/**
+ * The adapter-facts case for an agent's rule-load entry (#1514): per version, the files it reads, which wins when two sit
+ * together, its caps and how they are spent, its memory index's limits (lines and bytes), what stops a load and the
+ * setting that changes it, each read from that version. The rules page, the doctor and the session facts read it; a file
+ * without it fails, naming the field.
+ */
+const RULE_LOAD = ['versions', 'source', 'home', 'walk', 'sets', 'user', 'setting', 'modes', 'cap', 'memoryIndex', 'stops', 'loadEvent'];
+function ruleLoadFactsCase(file, name, facts) {
+  if (!facts) return [];
+  const fix = `Give adapters/${file} its ruleLoad entry: per version, the files ${name} reads, which wins when two sit together, its caps and how they are spent, its memory index's limits, what stops a load and the setting that changes it, each with the version it was read from.`;
+  const entry = facts.ruleLoad;
+  if (!entry || typeof entry !== 'object') return [[`the ${name} facts (${file}) have no ruleLoad entry, the rule-load entry, so no core rule knows which rule lines reach ${name}`, fix]];
+  const entries = Array.isArray(entry.entries) ? entry.entries : [];
+  const missing = entries.flatMap((e, i) => [
+    ...RULE_LOAD.filter((field) => e?.[field] === undefined).map((field) => `ruleLoad.entries[${i}].${field}`),
+    ...(e?.memoryIndex && !(Number.isInteger(e.memoryIndex.maxLines) && Number.isInteger(e.memoryIndex.maxBytes)) ? [`ruleLoad.entries[${i}].memoryIndex.maxLines and maxBytes`] : []),
+  ]);
+  for (const version of facts.versions ?? []) if (!entries.some((e) => Array.isArray(e?.versions) && e.versions.includes(version))) missing.push(`ruleLoad for ${version}`);
+  return missing.length ? [[`the ${name} facts' rule-load entry (${file}) lacks ${missing.join(', ')}`, fix]] : [];
+}
+
 async function replayCommand(options) {
   const started = performance.now();
   let failed = false;
@@ -169,6 +190,7 @@ async function checkCommand(options) {
   failures.push(...modsFactsCase(facts['claude-code']?.facts));
   failures.push(...contextOutputFactsCase(facts['claude-code']?.facts));
   failures.push(...retriesFactsCase(facts['claude-code']?.facts));
+  failures.push(...ruleLoadFactsCase('claude-code.facts.json', 'Claude Code', facts['claude-code']?.facts), ...ruleLoadFactsCase('codex.facts.json', 'Codex', facts.codex?.facts));
   const bytes = size(options.corpus);
   say({ type: 'size', bytes, limit: LIMIT });
   if (bytes >= LIMIT) failures.push([`the corpus is ${bytes} bytes, over the 200 MB limit (${LIMIT} bytes)`, 'Trim transcripts or drop sessions that add no event, version or tag.']);

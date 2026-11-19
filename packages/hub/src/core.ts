@@ -573,7 +573,9 @@ export class Core {
         if (spec.kind === 'review') {
           const head = this.gate.snapshotOf(run.claim) ?? run.commit;
           const since = of.pr ? await this.reviewRounds.since(of.pr, run.claim) : null;
-          const { round, ...result } = await (await this.checkKinds()).run({ ...spec, head, since } as CheckSpec, { checkout: join(this.root.dir, 'objects'), deadline, now: this.now }, of);
+          // The rules page's text-only rules in scope of the diff go in the run's request from the hub (#1512).
+          const rules = await this.memory.reviewRules(join(this.root.dir, 'objects'), this.judging.claimFolder(run.claim), spec as unknown as { base: string }, since?.commit, head, (cwd) => this.judging.projectTrusted(cwd));
+          const { round, ...result } = await (await this.checkKinds()).run({ ...spec, head, since, rules } as CheckSpec, { checkout: join(this.root.dir, 'objects'), deadline, now: this.now }, of);
           if (round && of.pr && run.commit === head) await this.reviewRounds.read(of.pr, run.claim, head, round);
           return result;
         }
@@ -899,7 +901,7 @@ export class Core {
       // A check runner's reads and plays of a canvas piece (#411, #184): the hub's canvas core, and a replica playing the
       // revision's canonical document, its programs from the evidence store. A job kind's qualification by the core
       // (#518) goes the same way, with the tools it names in the world.
-      canvas: (call) => this.canvasSide.qualifyTool(call), replica: (call) => this.play(call), ...plant,
+      canvas: (call) => this.canvasSide.qualifyTool(call), replica: (call) => this.play(call), ...plant, ...(this.options.safe ? { safe: true } : {}),
       // Nothing in the hub records its source calls, so it keeps no answer (#2650).
       recording: false });
     this.jobKinds = new Jobs({
@@ -922,8 +924,9 @@ export class Core {
     for (const pkg of await extensions.installed()) {
       // One installed by a hub that ran no conformance at install has no kept result: it runs now, once, so the
       // package loads from its result at this start and each later one, as one installed since #785 does. A check
-      // that can't run (an untrusted project) is left to the load's refusal, which names it.
-      if (!extensions.checked(pkg)) await extensions.check(pkg).catch(() => undefined);
+      // that can't run (an untrusted project) is left to the load's refusal, which names it. In safe mode none runs:
+      // a check runs the package's code, and the load is refused anyway (#1879).
+      if (!this.options.safe && !extensions.checked(pkg)) await extensions.check(pkg).catch(() => undefined);
       const load = await extensions.load(pkg);
       if (load.status === 'refused') process.stderr.write(`deep hub: extension ${pkg.id}@${pkg.version} not loaded: ${load.reason}\n`);
       // One installed before panel@1 ran at install has no kept verdict for its views: they run now, once.
@@ -1812,7 +1815,7 @@ export class Core {
       // The lone-command hook retains its #83 reading; joined calls use the branch lookup.
       if (draft.kind === 'tool.after') await this.delivery.prAfter(meta, data.command);
       if (draft.kind === 'session.start') {
-        data.loads = await loadsOf(meta.cwd).catch(() => []);
+        data.loads = await loadsOf(meta.cwd, live.agent ?? meta.agent).catch(() => []);
         if (!foreign) void this.control.enteredProject(meta.session, meta.cwd);
         // Each server's tool list, read off this hook's path: recorded after the start, its changes held for you.
         if (!foreign && session) void this.holds.listed(meta.session, live.agent, meta.cwd).catch((error: unknown) => process.stderr.write(`deep hub: tool lists for ${meta.session} not recorded: ${error instanceof Error ? error.message : String(error)}\n`));

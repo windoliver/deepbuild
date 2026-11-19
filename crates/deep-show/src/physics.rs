@@ -8,6 +8,7 @@
 
 use deep_canvas::document::Issue;
 use deep_canvas::registry::Module;
+use deep_canvas::schedule::CarriedState;
 use deep_canvas_physics::caps::RAPIER3D;
 use deep_canvas_physics::check::check;
 use deep_canvas_physics::doc::World;
@@ -302,6 +303,97 @@ impl Hub<'_> {
         if bodies {
             out["bodies"] = reply["bodies"].clone();
             out["occurrences"] = reply["occurrences"].clone();
+        }
+        out
+    }
+
+    /// #1040: `form` with its worlds and logic items baked on its own track as an export bakes
+    /// them (programs not yet inlined), kept by the form's hash so each played form of a page's
+    /// listing bakes once however many times its rest, key and frame ask.
+    pub(crate) fn baked_once(&self, form: &Value) -> Option<Value> {
+        use std::cell::RefCell;
+        use std::collections::HashMap;
+        thread_local! {
+            static BAKED: RefCell<HashMap<String, Option<Value>>> = RefCell::new(HashMap::new());
+        }
+        let key = deep_canvas::canon::sha256_hex(form.to_string().as_bytes());
+        if let Some(hit) = BAKED.with(|b| b.borrow().get(&key).cloned()) {
+            return hit;
+        }
+        let mut out = form.clone();
+        let track = form["track"].as_array().cloned().unwrap_or_default();
+        let baked = self
+            .inline_occurrences(&mut out, &track)
+            .is_ok()
+            .then_some(out);
+        BAKED.with(|b| b.borrow_mut().insert(key, baked.clone()));
+        baked
+    }
+
+    /// #1040: `form` as its frames move, for a playable page's rest: its worlds and logic items
+    /// baked on its own track as an export bakes them, each world output a channel keyed at every
+    /// frame, with each run of equal keys cut to its two ends and the last run to its first key.
+    /// That draws the same frames, so a body at rest moves nothing and one still moving keeps its
+    /// play from resting.
+    pub(crate) fn settled(&self, form: &Value) -> Value {
+        let Some(mut out) = self.baked_once(form) else {
+            return form.clone();
+        };
+        let channels = out["channels"].as_object_mut().into_iter().flatten();
+        for (_, c) in channels.filter(|(name, _)| name.starts_with("physics-")) {
+            let mut keys: Vec<(i64, Value)> = (c["keys"].as_object().into_iter().flatten())
+                .filter_map(|(_, k)| {
+                    let f = k["t"].as_str()?.strip_suffix('f')?.parse().ok()?;
+                    Some((f, k.clone()))
+                })
+                .collect();
+            keys.sort_by_key(|(f, _)| *f);
+            let value = |i: usize| keys.get(i).map(|(_, k)| &k["value"]);
+            let last_change = (1..keys.len()).rev().find(|&i| value(i) != value(i - 1));
+            let kept: serde_json::Map<String, Value> = (keys.iter().enumerate())
+                .filter(|&(i, _)| {
+                    let (before, after) = (i.checked_sub(1).and_then(value), value(i + 1));
+                    let inside = before == value(i) && after == value(i);
+                    !inside && i <= last_change.unwrap_or(0)
+                })
+                .map(|(_, (f, k))| (format!("f{f}"), k.clone()))
+                .collect();
+            c["keys"] = Value::Object(kept);
+        }
+        out
+    }
+
+    /// #1040: each world of `form` as a play of it on its own track leaves it at `t`, as a row of
+    /// the core's carried-state list (a bake row, which no session holds): the world's step hash
+    /// there, from the bake `physics_bake` runs. A playable page keys its states by these too, so
+    /// two plays that leave a body moving where another rests stay two states.
+    pub(crate) fn world_rows(&self, form: &Value, t: i64) -> Vec<CarriedState> {
+        let rate = (form.pointer("/transport/frame_rate").cloned()).unwrap_or(json!([60, 1]));
+        let track = form.get("track").and_then(Value::as_array);
+        let track = track.cloned().unwrap_or_default();
+        let mut out = Vec::new();
+        for (id, world) in form["worlds"].as_object().into_iter().flatten() {
+            let w = deep_physics_rapier::bound::expand(Some(form), world)
+                .and_then(|d| check(&d, &RAPIER3D, &deep_canvas_physics::roles::TABLE));
+            let Some(kept) = w
+                .ok()
+                .and_then(|w| Some((derive::kept(form, &w, &track).ok()?, w)))
+            else {
+                continue;
+            };
+            let k = t / step_flicks(&kept.1).max(1);
+            let call = json!({"call": "bake", "scene": form, "world": id, "steps": k + 1,
+                              "frame_rate": rate, "track": derive::track_of(&kept.0), "read": []});
+            let run = Run::new(None).expect("the unplanted runner");
+            let reply = run.answer(&call).unwrap_or(Value::Null);
+            if let Some(hash) = reply["step_hashes"].get(k as usize).and_then(Value::as_str) {
+                out.push(CarriedState {
+                    module: "physics".into(),
+                    kind: "bake".into(),
+                    key: id.clone(),
+                    hash: hash.into(),
+                });
+            }
         }
         out
     }
