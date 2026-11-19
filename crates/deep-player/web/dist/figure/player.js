@@ -85,13 +85,26 @@ export class Player {
         wasm.player_add_file(this.__wbg_ptr, ptr0, len0, ptr1, len1);
     }
     /**
-     * The canvas's GPU, which every frame draws on from now.
+     * The canvas's GPU, which every frame draws on from now, and each texture map the document's
+     * materials name made ready for it, at load on this one thread, as the app's decode worker
+     * makes it (Export: web player): BC where the device has texture-compression-bc, ASTC 4 × 4
+     * where it has only texture-compression-astc, RGBA8 otherwise.
      * @param {Gpu} gpu
      */
     attach(gpu) {
-        _assertClass(gpu, Gpu);
-        var ptr0 = gpu.__destroy_into_raw();
-        wasm.player_attach(this.__wbg_ptr, ptr0);
+        try {
+            const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+            _assertClass(gpu, Gpu);
+            var ptr0 = gpu.__destroy_into_raw();
+            wasm.player_attach(retptr, this.__wbg_ptr, ptr0);
+            var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+            var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+            if (r1) {
+                throw takeObject(r0);
+            }
+        } finally {
+            wasm.__wbindgen_add_to_stack_pointer(16);
+        }
     }
     /**
      * #860: the viewer's back. On a piece that declares rewind it is a rewind to the stop before,
