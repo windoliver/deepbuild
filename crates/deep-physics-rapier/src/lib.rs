@@ -155,6 +155,8 @@ pub enum Twin {
     ContactsAtAQuarter,
     StaticContactSame,
     Contact30,
+    /// #2239's: a wrapper that drops each body's `ccd`, so none starts a sweep of another body.
+    DropsBodyCcd,
     /// #2241's wrong belts: a wrapper that leaves the contact hook out; one that applies a
     /// belt's speed along world +X, however its shape use is turned; and one that takes it
     /// along level ground, not in the contact's plane.
@@ -933,6 +935,7 @@ impl Backend for Rapier {
                 }
                 _ => RigidBodyBuilder::kinematic_position_based(),
             };
+            let ccd = b.ccd && !matches!(self.twin, Twin::NoSweep | Twin::DropsBodyCcd);
             let mut rb = builder
                 .pose(pose(&b.pose))
                 .linvel(v3(b.linear))
@@ -940,10 +943,10 @@ impl Backend for Rapier {
                 .linear_damping(b.linear_damping as f32)
                 .angular_damping(b.angular_damping as f32)
                 .gravity_scale(b.gravity_scale as f32)
-                .ccd_enabled(b.ccd && self.twin != Twin::NoSweep)
+                .ccd_enabled(ccd)
                 // #191: a body with ccd is also met by the contacts its next step reaches, so its
                 // contact begins in the step it hits, not the one after.
-                .soft_ccd_prediction(if b.ccd && self.twin != Twin::NoSweep {
+                .soft_ccd_prediction(if ccd {
                     (w.solver.max_speed / w.step_rate) as f32
                 } else {
                     0.0

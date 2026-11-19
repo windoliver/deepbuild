@@ -42,6 +42,7 @@
         "mod_overrides_guard",
         "not_loaded",
         "handler_set_aside",
+        "footprint_unknown",
         "unknown"
       ],
       "description": "What the item found: healthy when the check ran and found nothing wrong; not_checked when nobody ran it, never ok.",

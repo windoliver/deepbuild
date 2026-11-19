@@ -745,6 +745,9 @@ timed.push('tests/acceptance/169/budgets.test.ts');
 // ac7-budgets judges the task's budgets on the reference Mac.
 alone.push('tests/acceptance/226/');
 timed.push('tests/acceptance/226/ac7-budgets.test.ts');
+// #2450's files each build deep-gpu or deep-show (full, and ac1 also without vector); ac1 and ac3 draw on the Metal
+// GPU, and ac3-taste writes docs/evidence/2450/ and waits on your taste call in tests/acceptance/2450/TASTE.json.
+alone.push('tests/acceptance/2450/');
 // #226's first-draft Oracle lane needs a tick at every whole number on [−4, 4], where axis@1's rule ticks every other
 // one (tests/acceptance/226-oracle-redraft/DISPUTE.md); its blind redraft runs in its place.
 alone.push('tests/acceptance/226-oracle-redraft/');
@@ -933,6 +936,9 @@ alone.push('tests/acceptance/2309/', 'tests/acceptance/2243/'); // #2243's build
 // #2241's files build deep-physics (release and test-backends) and the merge base's release build; the blind redraft of
 // #2009's third criterion under it builds deep-physics, as #2009's files do.
 alone.push('tests/acceptance/2241/', 'tests/acceptance/2009-redraft-2241/');
+// #2239's files build deep-physics (release); so do those of its blind redraft, written after the issue's amendment
+// of November 19, 2026: its fourth criterion, rewritten, and the one added last.
+alone.push('tests/acceptance/2239/', 'tests/acceptance/2239-redraft-ac4/');
 
 // #2742's files build deep-gpu; ac1 compares two films' GPU time on any Mac, and ac2 runs #417's suite.
 alone.push('tests/acceptance/2742/');
@@ -1064,6 +1070,15 @@ alone.push('tests/acceptance/1509/');
 // #1929's files each build deep-show (full); CPU only, no GPU and no timing.
 alone.push('tests/acceptance/1929/');
 
+// #2760's files build deep-gpu (spawn.test.ts also deep-show) and #544's assembler, run logic programs and draw on
+// the GPU; budgets.test.ts times 64 rings on a pond at 1080p.
+alone.push('tests/acceptance/2760/');
+timed.push('tests/acceptance/2760/budgets.test.ts');
+// The first draft's timing test asks the rings to change a picture taken from straight above, where a ring changes
+// none (tests/acceptance/2760-redraft-ac8/DISPUTE.md); its blind redraft times a pond on which each ring is drawn.
+alone.push('tests/acceptance/2760-redraft-ac8/');
+timed.push('tests/acceptance/2760-redraft-ac8/budget-timing.test.ts');
+byHand.push('tests/acceptance/2760/budgets.test.ts');
 // #1826's files each build deep-graph, and its taste call deep-canvas-render; CPU only, no GPU and no timing.
 alone.push('tests/acceptance/1826/');
 
@@ -1093,6 +1108,9 @@ alone.push('tests/acceptance/2776/seal.test.ts', 'tests/acceptance/2776/export.t
 // #1215's files each build deep-canvas-render, and AC5 deep-text and AC7 deep-show (full); its taste call draws with the
 // app's frame path on macOS; no timing.
 alone.push('tests/acceptance/1215/');
+
+// #2500's files (blind) each build deep-canvas-render and deep-motion; CPU only, no GPU and no timing.
+alone.push('tests/acceptance/2500/');
 
 // #1489's files build deep-canvas-render (release) and deep-drive (debug, env-plants); ui-thread.test.ts times the UI thread.
 alone.push('tests/acceptance/1489/');
