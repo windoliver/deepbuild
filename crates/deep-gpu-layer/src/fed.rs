@@ -48,7 +48,7 @@ pub(crate) struct Baked {
 /// changes with the ranges the logic module hands over. The planted line reads each array its
 /// points read a step late.
 pub(crate) fn bake(
-    doc: &Value,
+    doc: &mut Value,
     assets: &BTreeMap<String, PathBuf>,
     (frames, fps): (&[u64], u64),
     planted: Option<Planted>,
@@ -91,6 +91,12 @@ pub(crate) fn bake(
         &[cast],
     )
     .map_err(|r| json!({"code": "logic_refused", "refusal": r.0}))?;
+    // #2760: an occurrence list is whole before playback, so a piece that emits steps through
+    // the transport's span, as deep_show's bake does.
+    let span = doc.pointer("/transport/span").cloned().unwrap_or(json!(0));
+    let span = deep_canvas::document::duration(doc, &span).unwrap_or(0);
+    let emits = piece.items.iter().any(|i| !i.emits.is_empty());
+    let until = if emits { until.max(span) } else { until };
     let steps = (piece.items.iter())
         .map(|i| until.max(0) / i.step.max(1) + 1)
         .max()
@@ -115,6 +121,20 @@ pub(crate) fn bake(
         Value::Object(m) => m,
         _ => Map::new(),
     };
+    // #2760: each emitting item's list in the document's `occurrences`, where the readers of a
+    // baked list read it: each row with its declared fields beside `t`, `step`, `kind`, `a` and
+    // `b`, as Spawn and motion read a row (deep-play's `inline_logic` writes the same).
+    for (id, rows) in rec.occurrences(&piece) {
+        let flat = |row: &Value| {
+            let mut out = row.as_object().cloned().unwrap_or_default();
+            if let Some(Value::Object(fields)) = out.remove("fields") {
+                out.extend(fields);
+            }
+            Value::Object(out)
+        };
+        let rows = rows.as_array().into_iter().flatten().map(flat).collect();
+        doc["occurrences"][format!("{id}.occurrences")] = Value::Array(rows);
+    }
     Ok(Baked {
         arrays,
         rows: BTreeMap::new(),

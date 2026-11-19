@@ -1,0 +1,18 @@
+{
+ "criterion": "#2760.3bd24233",
+ "by": "you",
+ "who": "The session's coding agent, delegated by the owner in the session (\"show me screenshot or video and validate for me\")",
+ "when": "2026-11-19T15:08:58Z",
+ "screenshots": [
+  "f793ed98a32284b6baba8e63ce74c7de86087373c079d7cffb32bf0506b92aed",
+  "56b15a5b3d029c102f848ecc95fada6c573dc9596cbc64acef9b14f0fca1c006",
+  "fe217c5aba058ef9e95e6c8c3ffc76dc7bed81ddf41d597885b6337acad4a7dc"
+ ],
+ "named": {
+  "three-rings": "f793ed98a32284b6baba8e63ce74c7de86087373c079d7cffb32bf0506b92aed",
+  "fish-rise": "56b15a5b3d029c102f848ecc95fada6c573dc9596cbc64acef9b14f0fca1c006",
+  "rings-spreading": "fe217c5aba058ef9e95e6c8c3ffc76dc7bed81ddf41d597885b6337acad4a7dc"
+ },
+ "call": "looks_right",
+ "note": "Three rings: three concentric crests about the pond's centre, flattened by the low view, the oldest widest and faintest, each breaking the posts' reflections where it crosses them. Fish rise: three tight crests one inside the other at one place, on water a breeze already bends. Recording: the rings spread from the centre, fade, and are gone by the last frames. They are thin and faint at the default strength of 0.2, as the rain's rings are; at 1280 x 720 they read without zooming, and from straight above over an even sky they would not show at all."
+}

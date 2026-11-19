@@ -1,0 +1,33 @@
+#2760.6dfadd78: the redraft's timing test, tests/acceptance/2760-redraft-ac8/budget-timing.test.ts, at commit
+7d07134dc on a reference Mac (Mac17,10, Apple M5 Max, 64 GB), on mains.
+
+The run that counts, once, under the throttle's timed grant:
+
+$ node scripts/throttle.mjs timed --wait 90 -- node node_modules/vitest/vitest.mjs run \
+    --root tests/acceptance/2760-redraft-ac8 --no-file-parallelism --testTimeout=3600000
+asked   14:12:18  load averages 25.03 42.68 70.81
+granted 14:15:58  load averages 17.90 34.11 61.00
+
+ RUN  v5.0.5 tests/acceptance/2760-redraft-ac8
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  14:15:58
+   Duration  489.64s (tests 100%)
+
+exit 0
+ended   14:24:08  load averages 6.60 12.44 37.80
+
+The runner prints a passing test's console lines nowhere, so this run's five readings are not on record; the test
+passes only when the lane's judgeLimit reads PASS on all five against 0.3 ms.
+
+The readings on record are an earlier run's, at 13:19 with no grant. It read INCONCLUSIVE, never a pass: another
+session's build started during its fifth run.
+
+#2760.6dfadd78: the pixels each cell's ring changes within 0.4 m of its centre, 217 to 1118
+#2760.6dfadd78: the pond is 49.75% of the 1920 × 1080 frame
+#2760.6dfadd78: median gpu_ms a frame, with rings and without: 3.0287 and 2.9429; 3.0367 and 2.9572; 3.0406 and
+2.9547; 3.0350 and 2.9053; 3.0037 and 2.9281
+INCONCLUSIVE 0.0858, 0.0795, 0.0859, 0.1298, 0.0756 against 0.3, the load at each run's start and end 12.98-19.55,
+19.55-14.23, 14.23-16.21, 16.21-15.19, 15.19-45.59 (thermal state is "fair", not "nominal"; load 45.59 at a run's
+start or end is above the 18 cores)
