@@ -1159,6 +1159,13 @@ export const releaseLanes = [
     fix: 'Translate each key a copy release FAIL line names again in crates/deep-app/copy/<language>.json, or confirm the translation there still reads right: node scripts/app-copy-lint.mjs confirm <language> <key> [<text>].',
   },
   {
+    // #2047's: each issue closed as completed keeps a test on main naming each of its criteria; one that doesn't is
+    // reopened, naming them. It reads and writes issues with your gh sign-in, and runs no test and no model.
+    name: 'closed issues',
+    commands: [[process.execPath, 'scripts/closed-sweep.mjs']],
+    fix: 'Each BLOCKED line names an issue or a list gh could not read: check your gh sign-in (gh auth status) and run the lane again. A reopened issue closes again through its own change, with a test naming each criterion its comment names.',
+  },
+  {
     // #41's: every recorded budget task on this commit and on the last release, which per-change margins can't bound.
     name: 'release budgets',
     commands: [[process.execPath, 'scripts/release-budgets.mjs', '--candidate', 'HEAD']],
