@@ -759,6 +759,9 @@ pub struct Hub<'a> {
     /// The GPU 3D revisions draw on (#378): unopened until the first, `None` inside where there
     /// is none.
     pub gpu3: Option<Option<crate::scene3d::Gpu3>>,
+    /// #1561: Vello GPU and the compositor a drawn look's 2D frames draw through, on that GPU.
+    #[cfg(target_os = "macos")]
+    pub frames2: Option<deep_groups_render::frame2::Frames2>,
     /// The GPU pixel hash's pipeline, built on the first canonical render it hashes (#405).
     pub hash_pass: Option<deep_gpu::pixel_hash::PixelHash>,
     /// A 3D revision's snapshot drawn for the call being presented, with its size.
@@ -961,6 +964,8 @@ impl<'a> Hub<'a> {
             background: Vec::new(),
             panels_shown: BTreeMap::new(),
             gpu3: None,
+            #[cfg(target_os = "macos")]
+            frames2: None,
             hash_pass: None,
             pending3d: None,
             pending_light: None,

@@ -1,0 +1,26 @@
+[package]
+name = "deep-groups-render"
+version = "0.0.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+rust-version = "1.95"
+
+# Issue #1561: a 2D writer layer's frame on the GPU layer, as a render crate both `deep-gpu` and
+# `deep-show` draw through: the group compositor (#430), a drawn look's paper, media and relief
+# passes (#149), and the paint and light built from a mark's coverage (#467, #2031). It moved here
+# from deep-gpu-layer, which no crate may depend on, so deep-show's frames of a drawn look are the
+# live window's and `film2d`'s, pixel for pixel on one machine.
+[dependencies]
+deep-canvas = { path = "../deep-canvas" }
+deep-canvas-drawn = { path = "../deep-canvas-drawn" }
+deep-canvas-effects = { path = "../deep-canvas-effects" }
+deep-canvas-marks = { path = "../deep-canvas-marks" }
+deep-canvas-scene3d = { path = "../deep-canvas-scene3d" }
+deep-effects-render = { path = "../deep-effects-render" }
+deep-gpu = { path = "../deep-gpu" }
+deep-marks-render = { path = "../deep-marks-render" }
+deep-scene3d-render = { path = "../deep-scene3d-render" }
+image = { version = "0.25", default-features = false, features = ["png"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+wgpu = { version = "30", default-features = false }

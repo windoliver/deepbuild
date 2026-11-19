@@ -104,8 +104,11 @@ impl Page {
         palette: &BTreeMap<String, [f64; 3]>,
         assets: &Map<String, Value>,
     ) -> Result<Page, Value> {
-        let size = crate::view3d::pair(&doc["size"]).unwrap_or([1, 1]);
-        let size = [f64::from(size[0]), f64::from(size[1])];
+        let side = |i: usize| doc["size"][i].as_u64().and_then(|n| u32::try_from(n).ok());
+        let size = match (doc["size"].as_array().map(Vec::len), side(0), side(1)) {
+            (Some(2), Some(w), Some(h)) => [f64::from(w), f64::from(h)],
+            _ => [1.0, 1.0],
+        };
         let doc_seed = doc.get("seed").and_then(Value::as_u64).unwrap_or(0);
         let paper = look.paper.as_ref();
         let (scale, offset) = match paper.map(|p| p.anchor) {
@@ -234,6 +237,20 @@ impl Page {
 }
 
 impl Page {
+    /// Whether the paper draws more than its role's flat color (#1561): a tooth or an age mark.
+    pub fn textured(&self) -> bool {
+        let aged = self.sheet.as_ref().is_some_and(|s| {
+            s.stain.is_some()
+                || s.tarnish.is_some()
+                || s.foxing > 0.0
+                || s.craquelure.1 > 0.0
+                || s.plate.1 > 0.0
+                || !s.folds.is_empty()
+                || !s.tape.is_empty()
+        });
+        aged || self.tooth.is_some()
+    }
+
     /// The same paper with this frame's camera and lamps.
     pub fn seen_through(&self, view: Option<&View>, lamps: Vec<Lamp>) -> Page {
         let mut page = self.clone();

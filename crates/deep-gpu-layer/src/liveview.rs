@@ -452,6 +452,27 @@ pub enum Content {
     Flat(Box<crate::flat::Flat>),
 }
 
+impl Content {
+    /// A checked document's frames, from its compiled motion program: a document with no camera,
+    /// or (#1561) with a 2D film's, is 2D, as a chart is, and draws by marks2d (#397). The code
+    /// and path of what can't be evaluated.
+    pub fn of(
+        doc: &Value,
+        program: Result<deep_canvas_motion::program::Program, Refused>,
+        look: &Look3,
+        labels: &mut Labels,
+        assets: Option<deep_canvas_scene3d::frames::Reader>,
+        planted: Option<crate::Planted>,
+    ) -> Result<Content, (&'static str, String)> {
+        Ok(if crate::flat::is_flat(doc) {
+            Content::Flat(Box::new(crate::flat::Flat::new(doc, look, planted)?))
+        } else {
+            let frames = program.and_then(|p| Frames::with_program(doc, p, look, labels, assets));
+            Content::Scene(Box::new(frames.map_err(|r| (r.code, r.path))?))
+        })
+    }
+}
+
 pub struct View {
     pub size: [u32; 2],
     slots: Vec<Box<dyn Handoff>>,
@@ -815,6 +836,15 @@ impl View {
         match self.shown {
             Some(s) => self.slots[s].finish(device),
             None => Ok(()),
+        }
+    }
+
+    /// #1561: whether a 2D document's last frame reused an earlier frame's marks; `None` for a
+    /// 3D scene.
+    pub fn reused(&self) -> Option<bool> {
+        match &self.frames {
+            Content::Flat(flat) => Some(flat.reused()),
+            Content::Scene(_) => None,
         }
     }
 
