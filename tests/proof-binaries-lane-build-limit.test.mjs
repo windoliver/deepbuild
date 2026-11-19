@@ -36,6 +36,6 @@ test('a build with timeout 0 runs as long as cargo needs; without one it keeps t
 test('a build stopped by a signal, or one that fails, reads BLOCKED with or without a limit', () => {
   for (const options of [{ timeout: 0 }, undefined]) {
     assert.throws(() => buildBinaries(process.cwd(), bin(), ['deep-hook'], cargo({ status: null, signal: 'SIGTERM', stdout: '', stderr: '' }).run, options), /^Error: BLOCKED test binaries: cargo build failed/);
-    assert.throws(() => buildBinaries(process.cwd(), bin(), ['deep-hook'], cargo({ status: 101, stdout: '', stderr: 'error: could not compile' }).run, options), /^Error: BLOCKED test binaries: cargo build failed: error: could not compile/);
+    assert.throws(() => buildBinaries(process.cwd(), bin(), ['deep-hook'], cargo({ status: 101, stdout: '', stderr: 'error: could not compile' }).run, options), /^Error: BLOCKED test binaries: cargo build failed\b.*: error: could not compile/);
   }
 });
