@@ -749,13 +749,8 @@ fn run_view(
             }
             if args.look.drawn.is_some() {
                 let assets = Map::new();
-                *lock(&opened.drawn) = crate::drawn::frame3(
-                    &args.doc,
-                    &args.look,
-                    &assets,
-                    &scene,
-                    app.planted.and_then(crate::Planted::composed),
-                )?;
+                *lock(&opened.drawn) =
+                    crate::drawn::frame3(&args.doc, &args.look, &assets, &scene, app.composed())?;
             }
             let label_report = if args.labels {
                 Some(labels_json(&scene, out)?)
@@ -1410,13 +1405,8 @@ fn run_view(
                         sc.crop = None;
                     }
                     let kept_fx = std::mem::replace(&mut lock(&fx).settings, settings);
-                    let drawn_k = crate::drawn::frame3(
-                        &args.doc,
-                        &look_k,
-                        &Map::new(),
-                        &sc,
-                        app.planted.and_then(crate::Planted::composed),
-                    )?;
+                    let drawn_k =
+                        crate::drawn::frame3(&args.doc, &look_k, &Map::new(), &sc, app.composed())?;
                     let kept_drawn = std::mem::replace(&mut *lock(&opened.drawn), drawn_k);
                     let mut kept_layer = None;
                     if let (Some(own), Some(stage), Some(status)) = (

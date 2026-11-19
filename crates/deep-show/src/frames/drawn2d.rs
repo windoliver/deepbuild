@@ -70,10 +70,13 @@ impl Hub<'_> {
         drawing: &Painted,
     ) -> Result<String, Unfit> {
         let unfit = |(code, path): (&'static str, String)| Unfit { code, path };
-        let device = (self.gpu3().map(|g| g.device().clone()))
+        // Opened on first use; then the GPU and the look are read side by side.
+        let _ = self.gpu3();
+        let gpu = (self.gpu3.as_mut().and_then(Option::as_mut))
             .ok_or_else(|| unfit(("gpu_unavailable", "frames".into())))?;
+        let device = gpu.device().clone();
         let look = (&self.look.light, ty);
-        let mut rgba = self
+        let mut rgba = gpu
             .frames2
             .get_or_insert_with(|| Frames2::new(&device))
             .rgba(

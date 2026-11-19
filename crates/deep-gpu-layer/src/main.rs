@@ -934,6 +934,11 @@ pub fn refused(code: &str, reason: impl Into<String>) -> Value {
 }
 
 impl App {
+    /// The app's planted program as the compositor's render crate names it (#1561).
+    pub(crate) fn composed(&self) -> Option<deep_groups_render::Planted> {
+        self.planted.and_then(Planted::composed)
+    }
+
     pub fn scene(&mut self, path: &str) -> Result<Arc<Scene>, Value> {
         if let Some(s) = self.scenes.get(path) {
             return Ok(s.clone());
