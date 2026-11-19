@@ -1064,7 +1064,8 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
                     || p == "stops_at_midpoint"
                     || p == "drops_cells_by_corner_signs"
                     || p == "decodes_before_header"
-                    || p == "cap_counts_copies_only" =>
+                    || p == "cap_counts_copies_only"
+                    || vertical_plant(p).is_some() =>
             {
                 (Planted::None, false, false)
             }
@@ -1141,8 +1142,16 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
                 .and_then(Value::as_str)
                 .and_then(asset::Plant::named)
                 .unwrap_or_default(),
+            hit: None,
         };
         let mut request = request;
+        // #1215: the line's planted vertical shaper, for this line alone; its runs are cached apart.
+        let plant = input.get("planted").and_then(Value::as_str);
+        deep_text::vertical::plant(plant.and_then(vertical_plant).unwrap_or_default());
+        request.hit = match input.get("hit") {
+            None => None,
+            Some(v) => Some(point(v)?),
+        };
         // #1484 AC1's planted shaper, for this line alone.
         let ignores_opsz =
             input.get("planted").and_then(Value::as_str) == Some("shaper_ignores_opsz");
@@ -1160,6 +1169,7 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
         );
         request.vectors = vectors;
         let mut answer = refused_by_check(&checked).unwrap_or_else(|| raster::answer(request));
+        deep_text::vertical::plant(deep_text::vertical::Planted::default());
         deep_text_gpui::plant_ignores_opsz(false);
         if answer.get("ok") == Some(&Value::Bool(true)) {
             answer["shaped"] = json!(deep_text::cache::take_log().len());
@@ -1464,3 +1474,31 @@ mod raster;
 mod status;
 #[cfg(target_os = "macos")]
 mod video;
+
+/// #1215's wrong vertical shapers, by their `raster` `planted` names.
+fn vertical_plant(name: &str) -> Option<deep_text::vertical::Planted> {
+    let none = deep_text::vertical::Planted::default();
+    Some(match name {
+        "vertical_laid_horizontal" => deep_text::vertical::Planted {
+            horizontal: true,
+            ..none
+        },
+        "never_turns" => deep_text::vertical::Planted {
+            never_turns: true,
+            ..none
+        },
+        "skips_vert" => deep_text::vertical::Planted {
+            skips_vert: true,
+            ..none
+        },
+        _ => return None,
+    })
+}
+
+/// #1215: a page point `[x, y]` in document u.
+fn point(v: &Value) -> Option<[f64; 2]> {
+    let [x, y] = v.as_array()?.as_slice() else {
+        return None;
+    };
+    Some([x.as_f64()?, y.as_f64()?]).filter(|p| p.iter().all(|n| n.is_finite()))
+}
