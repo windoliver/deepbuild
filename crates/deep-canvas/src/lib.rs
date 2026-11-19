@@ -32,6 +32,7 @@ pub mod kinds;
 pub mod lengths;
 pub mod ops;
 pub mod outline;
+pub mod refs;
 pub mod registry;
 pub mod render;
 pub mod schedule;

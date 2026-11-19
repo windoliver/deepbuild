@@ -149,6 +149,8 @@ pub struct Sizes {
     pub sidebar: Pixels,
     pub band: Pixels,
     pub window: (Pixels, Pixels),
+    /// The window's smallest size: it never gets smaller (#1808).
+    pub window_min: (Pixels, Pixels),
     /// The list's narrowest width, the page's narrowest, and the reading lane's widest (#1461).
     pub list_min: Pixels,
     pub page_min: Pixels,
@@ -202,6 +204,10 @@ pub fn sizes() -> &'static Sizes {
             window: (
                 px(given.shell["window_width"] as f32),
                 px(given.shell["window_height"] as f32),
+            ),
+            window_min: (
+                px(given.shell["window_min_width"] as f32),
+                px(given.shell["window_min_height"] as f32),
             ),
             list_min: px(given.shell["list_min"] as f32),
             page_min: px(given.shell["page_min"] as f32),

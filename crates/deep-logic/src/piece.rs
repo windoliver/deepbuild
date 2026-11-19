@@ -763,11 +763,13 @@ pub const MACHINE: &str = "same_machine.counter@1";
 /// #542: what a control's entries may hold: a text control's commit within `max` bytes, LF line
 /// ends and, with `many` false, none (Control: text); a scroll control's position within its
 /// range, `from` its default clamped there, which its first entry's delta counts from (Control:
-/// scroll).
+/// scroll). #1040: a choice's options in order, an entry of which a read region holds as its
+/// index (Control: a choice reads as the index of its option); a choice may hold any entry.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Limit {
     Text { max: u32, many: bool },
     Scroll { range: [i32; 2], from: i32 },
+    Choice(Vec<String>),
 }
 
 impl Limit {
@@ -808,6 +810,7 @@ impl Limit {
             (Limit::Scroll { range, .. }, Given::Number(n)) => {
                 n.fract() == 0.0 && *n >= f64::from(range[0]) && *n <= f64::from(range[1])
             }
+            (Limit::Choice(_), _) => true,
             _ => false,
         }
     }

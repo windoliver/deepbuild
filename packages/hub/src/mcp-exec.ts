@@ -4,7 +4,7 @@
 // stdio, which is the server's MCP channel, and ends as the server ends. It prints nothing on stdout of its own.
 import { spawn } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { call } from './client.js';
+import { call, notAnswered } from './client.js';
 import { hubAddress, installedRoot, rootOf } from './paths.js';
 
 /** Exit: the server's own, 2 a usage error, 3 when the hub couldn't be reached or refused. */
@@ -23,8 +23,7 @@ export async function mcpExecCommand(args: readonly string[]): Promise<number> {
     }
     result = reply.result;
   } catch (error) {
-    process.stderr.write(`deep mcp-exec: ${error instanceof Error ? error.message : String(error)}; the server ${args[0]} takes its secrets from the hub, so it didn't start\n`);
-    return 3;
+    return notAnswered(error);
   }
   const env = { ...process.env, ...(result.env as Record<string, string>), DEEP_RUN_TOKEN: String(result.token) };
   const child = spawn(String(result.command), (result.args as string[]) ?? [], { stdio: 'inherit', env });

@@ -1,0 +1,186 @@
+{
+  "format": 1,
+  "id": "look-film-417",
+  "profile": "figure",
+  "title": "Area under a curve, the dot riding along",
+  "description": "The look scene as a 5 s film: the dot slides along the top of the bar from x 320 to 440 and back, so every frame moves. Each shipped look plays it as its fixture film.",
+  "size": [
+    480,
+    270
+  ],
+  "transport": {
+    "span": "5s",
+    "loop": "wrap"
+  },
+  "layers": {
+    "main": {
+      "writer": "agent-a",
+      "title": "Main",
+      "order": "a0"
+    }
+  },
+  "items": {
+    "region": {
+      "id": "region",
+      "kind": "path@1",
+      "layer": "main",
+      "name": "Region under the curve",
+      "order": "a0",
+      "params": {
+        "d": "M 40 220 C 120 120 200 200 280 140 L 280 220 Z",
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      }
+    },
+    "curve": {
+      "id": "curve",
+      "kind": "path@1",
+      "layer": "main",
+      "name": "Curve",
+      "order": "a1",
+      "params": {
+        "d": "M 40 220 C 120 120 200 200 280 140 C 320 110 360 100 440 90",
+        "paint": {
+          "stroke": {
+            "role": "ink",
+            "width": 2
+          }
+        }
+      }
+    },
+    "bar": {
+      "id": "bar",
+      "kind": "rect@1",
+      "layer": "main",
+      "name": "Bar",
+      "order": "a2",
+      "params": {
+        "box": [
+          320,
+          150,
+          120,
+          60
+        ],
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      }
+    },
+    "dot": {
+      "id": "dot",
+      "kind": "circle@1",
+      "layer": "main",
+      "name": "Dot",
+      "order": "a3",
+      "params": {
+        "center": [
+          280,
+          140
+        ],
+        "r": 6,
+        "paint": {
+          "fill": {
+            "role": "accent"
+          }
+        }
+      }
+    },
+    "title": {
+      "id": "title",
+      "kind": "text@1",
+      "layer": "main",
+      "name": "Title",
+      "order": "a4",
+      "params": {
+        "text": "Area under the curve",
+        "font": "body",
+        "size": 16,
+        "box": {
+          "w": 300,
+          "h": 24
+        }
+      },
+      "at": {
+        "pos": [
+          40,
+          24,
+          0
+        ]
+      }
+    },
+    "theta": {
+      "id": "theta",
+      "kind": "text@1",
+      "layer": "main",
+      "name": "Angle",
+      "order": "a5",
+      "params": {
+        "text": "θ",
+        "font": "math",
+        "size": 16,
+        "box": {
+          "w": 24,
+          "h": 24
+        }
+      },
+      "at": {
+        "pos": [
+          96,
+          196,
+          0
+        ]
+      }
+    },
+    "code": {
+      "id": "code",
+      "kind": "text@1",
+      "layer": "main",
+      "name": "Code",
+      "order": "a6",
+      "params": {
+        "text": "area = integrate(f, lo, hi)",
+        "font": "mono",
+        "size": 13,
+        "box": {
+          "w": 260,
+          "h": 20
+        }
+      },
+      "at": {
+        "pos": [
+          40,
+          240,
+          0
+        ]
+      }
+    }
+  },
+  "channels": {
+    "dot-x": {
+      "target": "items/dot/at/pos/0",
+      "type": "f32",
+      "keys": {
+        "k0": {
+          "t": "0s",
+          "value": 40,
+          "interp": "linear"
+        },
+        "k1": {
+          "t": "2.5s",
+          "value": 160,
+          "interp": "linear"
+        },
+        "k2": {
+          "t": "5s",
+          "value": 40,
+          "interp": "linear"
+        }
+      }
+    }
+  }
+}

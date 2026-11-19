@@ -6,11 +6,41 @@
 //! `near` or `far`, which the core's camera entry already names as scene3d's.
 
 use deep_canvas::kinds::{Entry, Param, ParamType, Version};
+use deep_canvas::refs::{kind as names, Decl, Holds};
 use deep_canvas::registry::{Dependency, Manifest, Module, Range, Registrar, Semver};
 use deep_canvas::schedule::{Canonical, OpError, Val, View};
 use serde_json::{json, Value};
 
 use crate::light::{self, Tie};
+
+/// The items a builder reads (#1801): a tube's or a sweep's curve, a hull's item.
+const BUILDER_REFS: &[Decl] = &[
+    Decl::new("params/path", Holds::Item, names::TARGET),
+    Decl::new("params/along/curve", Holds::Item, names::TARGET),
+    Decl::new("params/of", Holds::Item, names::TARGET),
+];
+
+/// The vertices a builder's item builds, counted from its params without building it (#1801:
+/// the meter charges its passes' per-vertex terms on them).
+fn built_vertices(doc: &Value, id: &str, item: &Value) -> Option<f64> {
+    let kind = item.get("kind")?.as_str()?;
+    let ctx = crate::builders::Ctx {
+        doc,
+        id,
+        plants: Default::default(),
+        outlines: &[],
+        planted: None,
+        pool: None,
+    };
+    let n = crate::builders::estimate(kind, item.get("params")?, &ctx).ok()?;
+    Some(n as f64)
+}
+
+/// The maps a material samples, each an asset (#1801; Material: texture maps).
+const MATERIAL_REFS: &[Decl] = &[
+    Decl::new("params/maps/*", Holds::Asset, names::MATERIAL),
+    Decl::new("params/normal_map", Holds::Asset, names::MATERIAL),
+];
 
 /// The pass that draws every 3D writer layer's batches into the linear, object-ID and depth
 /// targets.
@@ -118,6 +148,11 @@ fn json_param(name: &'static str, form: &'static str) -> Param {
 
 fn str_param(name: &'static str, default: &str) -> Param {
     param(name, ParamType::Str, json!(default))
+}
+
+/// A mark's `fog` (Marks in 3D; #1992): whether the sky's fog applies to it.
+fn fog(default: bool) -> Param {
+    param("fog", ParamType::Json("bool"), json!(default))
 }
 
 fn kind(name: &'static str, params: Vec<Param>) -> Entry {
@@ -250,12 +285,14 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
                 // A line of a mesh's edges in place of points (Marks in 3D: mesh edges; #420).
                 json_param("edges", crate::spec::EDGES),
                 // Marks in 3D: whether the sky's fog applies to it (#537's live lines set false).
-                json_param("fog", "bool"),
+                fog(true),
             ]),
         ),
         &[],
         "",
-    );
+    )
+    // #1801: a line's points may be items it runs between.
+    .refs(&[Decl::new("params/points", Holds::Item, names::TARGET)]);
     r.kind(
         kind(
             "point",
@@ -267,6 +304,7 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
                     "from",
                     "video {asset, frames, depth: luma | r, near, far, fov: [deg, deg], step}",
                 ),
+                fog(true),
             ]),
         ),
         &[],
@@ -280,11 +318,29 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
                 str_param("font", "body"),
                 json_param("size", "px | m"),
                 str_param("facing", "camera"),
+                fog(false),
             ]),
         ),
         &[],
         "",
     );
+    // A picture on one quad (Marks in 3D; #1992), by hash as Image `image@1` names one.
+    r.kind(
+        kind(
+            "image",
+            common(vec![
+                json_param("asset", "sha256"),
+                str_param("alt", ""),
+                json_param("size", "[w, h]"),
+                str_param("facing", "camera"),
+                fog(true),
+            ]),
+        ),
+        &[],
+        "",
+    )
+    // #1801: the picture it draws, an asset by its hash.
+    .refs(&[Decl::new("params/asset", Holds::Asset, names::ASSET)]);
     // The key light (Light and the light policy): it shines along its local −Z, shades the solids
     // and, with `shadow`, casts the shadow map.
     r.kind(
@@ -338,14 +394,17 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
     for spec in crate::spec::scene3d() {
         if crate::builders::KINDS.contains(&spec.kind) || spec.kind == "curve@1" {
             let name = &spec.kind[..spec.kind.len() - "@1".len()];
-            r.kind(crate::spec::entry(&spec, "", name), &[], "");
+            r.kind(crate::spec::entry(&spec, "", name), &[], "")
+                .refs(BUILDER_REFS)
+                .vertices(name, built_vertices);
             // A recipe repeats over a builder's elements (Recipe: repeat over elements; #2015).
             if spec.kind != "curve@1" {
                 r.elements(name, crate::measures::elements);
             }
         }
         if spec.kind == "mesh.asset@1" {
-            r.kind(crate::spec::entry(&spec, "mesh", "asset"), &[], "");
+            r.kind(crate::spec::entry(&spec, "mesh", "asset"), &[], "")
+                .refs(&[Decl::new("params/sha256", Holds::Asset, names::ASSET)]);
         }
         if spec.kind == "mesh.sequence@1" {
             r.kind(crate::spec::entry(&spec, "mesh", "sequence"), &[], "");
@@ -362,6 +421,9 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
         ] {
             if spec.kind == kind {
                 r.kind(crate::spec::entry(&spec, family, name), &[], "");
+                if kind == "material@1" {
+                    r.refs(MATERIAL_REFS);
+                }
             }
         }
     }
@@ -373,6 +435,17 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
     ] {
         if let Some(spec) = crate::spec::of(kind) {
             r.kind(crate::spec::entry(&spec, "", name), &[], "");
+            if kind == "instance@1" {
+                r.refs(&[
+                    Decl::new("params/of", Holds::Item, names::INSTANCER),
+                    Decl::new("params/from/distribute/on", Holds::Item, names::INSTANCER),
+                    Decl::new(
+                        "params/from/distribute/avoid",
+                        Holds::Item,
+                        names::INSTANCER,
+                    ),
+                ]);
+            }
         }
     }
     // #419's stand-in for the physics module's baked world, which the scene draws body by body

@@ -375,7 +375,12 @@ fn fast_path(map: &Map<String, Value>, program: &Program, scene: &Scene) -> Opti
         || scene
             .layers
             .iter()
-            .any(|l| !l.lines.is_empty() || !l.points.is_empty() || !l.labels.is_empty())
+            .any(|l| {
+                !(l.lines.is_empty()
+                    && l.points.is_empty()
+                    && l.labels.is_empty()
+                    && l.images.is_empty())
+            })
     {
         return None;
     }

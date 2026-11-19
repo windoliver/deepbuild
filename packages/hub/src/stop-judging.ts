@@ -1116,10 +1116,10 @@ export class StopJudging {
         const add = (check: string, spec: CheckSpec | undefined, command: string): void => {
           if (!spec) return;
           while (checks.some((c) => c.check === check)) check = `PR ${check}`;
-          checks.push({ check, approved: null, command, covers: [], depth: 'unit', on_base: 'passes', asserts: [], source: 'spec' });
+          checks.push({ check, approved: null, command, covers: [], depth: 'unit', on_base: 'passes', asserts: [], source: 'spec', review: true });
           kinded.set(check, { spec, of });
         };
-        if (await this.prOf(r.session)) add('review', checkKinds.reviewSpec(r.base, r.commit, this.options.services.root.dir), `review ${r.base}..${r.commit}`);
+        if (await this.prOf(r.session) && this.options.settings.plant !== 'review-without-caller') add('review', checkKinds.reviewSpec(r.base, r.commit, this.options.services.root.dir), `review ${r.base}..${r.commit}`);
         for (const n of await checkKinds.claimChecks(cited, r.cwd, r.base, r.definition === 'locked' ? (await this.options.services.tasks.scopeOf(r.task)).sample : null)) { checks.push(n.check); kinded.set(n.check.check, { spec: n.spec, of }); }
       }
       if (kinded.size) this.kindChecks.set(r.claim, kinded);

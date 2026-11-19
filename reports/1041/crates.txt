@@ -1,0 +1,27 @@
+# cargo clippy --locked --no-deps -p deep-logic -p deep-player -p deep-play --all-targets -- -D warnings
+    Finished `dev` profile [unoptimized] target(s) in 16.96s
+
+# cargo test --locked -p deep-logic -p deep-player -p deep-play
+     Running unittests src/lib.rs (target/debug/deps/deep_logic-e97859ed3948c8c0)
+test result: ok. 25 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+     Running unittests src/main.rs (target/debug/deps/deep_logic-c4b2d10c417f8d8d)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running tests/controls_542.rs (target/debug/deps/controls_542-a2ecf182ca669926)
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+     Running tests/fixture_once.rs (target/debug/deps/fixture_once-24224d574a437191)
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+     Running tests/held_saves.rs (target/debug/deps/held_saves-6ad3e24f68fd1179)
+test held_bytes_that_fail_their_name_are_damaged_and_a_state_that_does_not_decode_is_refused ... ok
+test a_held_save_opens_from_its_bytes_and_plays_on_as_the_run_that_never_stopped ... ok
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+     Running tests/library_trap.rs (target/debug/deps/library_trap-f4e6f865424f664a)
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+     Running tests/play_184.rs (target/debug/deps/play_184-83312f169662fa90)
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.29s
+     Running unittests src/lib.rs (target/debug/deps/deep_play-2cf989787915f0b7)
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+     Running unittests src/lib.rs (target/debug/deps/deep_player-99afb7cdf94f633c)
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.56s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s

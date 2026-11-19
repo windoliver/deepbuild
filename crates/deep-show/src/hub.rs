@@ -17,7 +17,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use deep_canvas::document::{
-    canonical_in, check_costed, check_packed, Expansion, Issue, Notice, PackPlanted, Packs,
+    canonical_in, check_costed, check_sized, Expansion, Issue, Notice, PackPlanted, Packs,
 };
 use deep_canvas::grammar::{Time, TimeContext};
 use deep_canvas::registry::{core_name, Sealed};
@@ -46,6 +46,14 @@ const SETTLE_TIMEOUT: Duration = Duration::from_secs(2);
 /// The criteria's wrong programs, each reachable only through the scenario's `planted`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Planted {
+    /// #1801: a refusal of a removal lists only the first row that names the removed item.
+    RefusalNamesFirstRef,
+    /// #1801: `refs_to` walks only items' parents.
+    RefsParentsOnly,
+    /// #1801: `refs_to` reads the caller's layer alone and answers as if it read the document.
+    RefsReadOneLayer,
+    /// #1801: `cost` leaves out the assets, which items share by their hash.
+    CostWithoutSharedAssets,
     /// #544: a start_on run on a logic item's occurrences starts at the first frame its session
     /// evaluates at or after the occurrence.
     StartOnAtFirstFrame,
@@ -832,7 +840,7 @@ pub enum PressPhase {
 }
 
 /// The planted check's coefficients for `machine` (the hub's, or this one's): the reference
-/// Mac's on a reference Mac, and scaled by its own speed anywhere else.
+/// Mac's on a Mac of `reference-macs.json`, `scripts/benchmark.mjs`'s list, and scaled anywhere else.
 fn machine_factor(machine: Option<&Map<String, Value>>) -> f64 {
     let model = match machine.and_then(|m| m.get("model")).and_then(Value::as_str) {
         Some(m) => m.to_string(),
@@ -842,11 +850,9 @@ fn machine_factor(machine: Option<&Map<String, Value>>) -> f64 {
             .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
             .unwrap_or_default(),
     };
-    if ["Mac15,7", "Mac15,12"].contains(&model.as_str()) {
-        1.0
-    } else {
-        1.6
-    }
+    let macs = include_str!("../reference-macs.json");
+    let macs: Vec<String> = serde_json::from_str(macs).expect("the reference Macs' list parses");
+    [1.6, 1.0][usize::from(macs.contains(&model))]
 }
 
 /// The look render-back draws in: the shipped clean look, light.
@@ -1947,6 +1953,8 @@ impl<'a> Hub<'a> {
                 if self.scenario.planted == Some(Planted::ReadsWasmBytes) {
                     read_programs(&doc, &self.scenario.evidence);
                 }
+                // #1801: the meter holds each asset's bytes on the device and a mesh's vertices.
+                let sizes = self.asset_sizes(&doc);
                 let started = Instant::now();
                 let result = match self.scenario.planted {
                     Some(Planted::EstimatesOnThisMachine) => {
@@ -1957,7 +1965,7 @@ impl<'a> Hub<'a> {
                             .scaled(machine_factor(self.scenario.machine.as_ref()));
                         check_costed(&doc, &self.startup.sealed, &coefficients)
                     }
-                    _ => check_packed(&doc, &self.startup.sealed, &self.packs),
+                    _ => check_sized(&doc, &self.startup.sealed, &self.packs, &sizes),
                 };
                 let check_ms = started.elapsed().as_secs_f64() * 1000.0;
                 let timing = show.include.iter().any(|i| matches!(i, Include::Timing));
@@ -2020,6 +2028,24 @@ impl<'a> Hub<'a> {
                         None
                     }
                 };
+                // #1801: an item the revision leaves out that rows still name: its refusal lists
+                // every one of them.
+                let removed: Vec<&str> = current_doc
+                    .as_ref()
+                    .and_then(|c| c.get("items")?.as_object())
+                    .into_iter()
+                    .flat_map(|items| items.keys())
+                    .filter(|id| doc["items"].get(id.as_str()).is_none())
+                    .map(String::as_str)
+                    .collect();
+                let planted = self.scenario.planted;
+                crate::shared::name_referrers(
+                    &mut issues,
+                    &doc,
+                    &removed,
+                    &self.startup.sealed,
+                    planted,
+                );
                 (Some(doc), issues, diff)
             }
         };

@@ -7,7 +7,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:pat
 import { codeWords } from '@deepbuild/contracts';
 import { billingMode } from '@deepbuild/readings';
 import { shadowedBy, topLevel } from './claude-settings.js';
-import { call } from './client.js';
+import { call, notAnswered } from './client.js';
 import { CAN_RUN, CANT_RUN } from './hook-programs.js';
 import { MODS_GONE, MODS_WATCH } from './mods.js';
 import { rowReadings } from './codex-loops.js';
@@ -17,6 +17,7 @@ import { activePlant } from './plant.js';
 import { clockTime, elapsed } from './promises.js';
 import { startOf } from './wire.js';
 import { claimState } from './verdict-chat.js';
+import { visible } from './visible.js';
 import { watched, watchWords, type Watch } from './watch.js';
 import { ROUNDS, verdictLine } from '@deepbuild/verdicts';
 
@@ -634,12 +635,12 @@ export function repoOf(worktree: string | null): string | undefined {
 export async function numbersCommand(args: readonly string[]): Promise<number> {
   const [sub, arg, extra] = args;
   const asks: [string, Record<string, unknown>] | undefined = !sub || sub === '--json' ? ['numbers.read', {}]
-    : sub === 'refresh' && !arg ? ['numbers.refresh', {}]
+    : sub === 'refresh' && (!arg || (arg === '--json' && !extra)) ? ['numbers.refresh', {}]
     : sub === 'baseline' && arg ? ['numbers.baseline', { manifest: resolve(arg) }]
     : sub === 'sample' && arg && !Number.isNaN(Date.parse(arg)) ? ['numbers.sample', { before: Date.parse(arg), ...(extra ? { manifest: resolve(extra) } : {}) }]
     : undefined;
   if (!asks) {
-    process.stderr.write('Usage: deep numbers [--json] | refresh | baseline <manifest> | sample <before date> [manifest]\n');
+    process.stderr.write('Usage: deep numbers [--json] | refresh [--json] | baseline <manifest> | sample <before date> [manifest]\n');
     return 2;
   }
   try {
@@ -654,10 +655,15 @@ export async function numbersCommand(args: readonly string[]): Promise<number> {
     if (asks[0] === 'numbers.read' && sub !== '--json') {
       const lines = numbersLines(reply.result.rows as Parameters<typeof numbersLines>[0]);
       process.stdout.write(lines.length ? `${lines.join('\n')}\n` : 'No readings yet.\n');
+    } else if (asks[0] === 'numbers.refresh' && arg !== '--json') {
+      // A refresh you run says what it read, in words (#1812); --json prints its result.
+      const { repos, unread } = reply.result as { repos: string[]; unread: string[] };
+      const read = repos.filter((r) => !unread.includes(r));
+      process.stdout.write(`${visible(!repos.length ? 'No repo your sessions worked in, so nothing was read from the forge.'
+        : `Read ${read.length} of ${repos.length} repos from the forge${read.length ? `: ${read.join(', ')}` : ''}${unread.length ? `; ${unread.join(', ')} didn't answer, so their readings keep their age` : ''}.`)}\n`);
     } else process.stdout.write(`${JSON.stringify(reply.result, null, 2)}\n`);
     return 0;
   } catch (error) {
-    process.stderr.write(`deep numbers: ${error instanceof Error ? error.message : String(error)}; start the hub with deep hub start.\n`);
-    return 3;
+    return notAnswered(error);
   }
 }

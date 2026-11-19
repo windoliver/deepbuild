@@ -11,8 +11,6 @@ import { fileURLToPath } from 'node:url';
 
 export const CHECKOUT = realpathSync(fileURLToPath(new URL('../../../', import.meta.url)));
 export const THROTTLE = join(CHECKOUT, 'scripts/throttle.mjs');
-// Section 6's table: the Mac's test limit on macOS, the Spark's elsewhere.
-export const TEST_LIMIT = process.platform === 'darwin' ? 2 : 4;
 
 // A stub command: node stub.mjs <name> [term] [child] [exit]. It appends {name, event: 'start', t, pid, ppid,
 // throttle} to $T2744_EVENTS, then holds until <sandbox>/<name>.stop appears (or exits at once with `exit`).

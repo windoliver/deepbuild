@@ -258,6 +258,11 @@ const configTables = (file: string): Tables | undefined => {
     return 'tables' in read ? read.tables : undefined;
   } catch { return undefined; }
 };
+/** A config file's value at a key's parts (its tables, then its name), as written: a string unquoted, else the raw text. */
+export function tomlValue(file: string, parts: readonly string[]): string | undefined {
+  const raw = configTables(file)?.get(parts.slice(0, -1).join('.'))?.get(parts.at(-1)!);
+  return raw === undefined ? undefined : /^(["']).*\1$/s.test(raw) ? raw.slice(1, -1) : raw;
+}
 /** `text` with our MCP server added at its end, or the same bytes once a server of that name is there. */
 /** DeepBuild's MCP server as setup writes it into Codex's config.toml: the program and its arguments. */
 interface Server { command: string; args: string[] }

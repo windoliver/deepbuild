@@ -5,7 +5,7 @@
 import { shippedIn } from './facts.js';
 import type { Adapter, AdapterRegistry } from './types.js';
 
-export { ADAPTERS, factsAdapter } from './facts.js';
+export { ADAPTERS, factsAdapter, factsFiles, readFacts } from './facts.js';
 export type { Adapter, AdapterRegistry, HookRequestLine, JsonObject } from './types.js';
 
 /** An empty registry that checks nothing at registration. */

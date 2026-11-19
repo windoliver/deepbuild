@@ -1,0 +1,114 @@
+Base run of the #1512 acceptance tests, on base commit f6ddd396 (main), Node 24.22.0, vitest 5.0.5, macOS (arm64),
+after `npm ci`, `npm run build --workspaces` and `cargo build --locked -p deep-hook`, from the worktree root, on
+2026-11-18 from 17:20:53 to 17:22:24 PST, the 1-minute load 357.2 at the start and 292.1 at the end:
+
+  npx vitest run tests/acceptance/1512 --testTimeout=600000 --hookTimeout=180000 --no-file-parallelism
+
+ Test Files  1 failed (1)
+      Tests  8 failed (8)
+   Duration  89.28s
+
+What the base does: the review reads its rubric from the wiki's rubric page alone, so no rule of the rules page reaches
+the second model. Every review request of the story held the wiki rubric's three rules (wrong-comparison,
+unchecked-parse, swallowed-error) and no line of the rules page: not "no default exports" (wiki:rules#821a22f6c745),
+not one of the 60 rules for docs/**, not "never force-push", not the proposed rule. The fake reviewer, given no line
+naming "no default exports", found nothing, and every claim passed: A (src/a.ts with a default export), B (src/b.ts
+with one), C (the clean twin) and D (docs/a.md). Nothing was sent back, so the record holds no count, and the rules page
+reads "no default exports" as text, as #344 left it.
+
+The setup held, and no test was BLOCKED by it: the guard no-force-push installed and the page named it as "never
+force-push"'s enforcer; the other session's deep_propose was recorded as a learn.proposed applied by no one, its ask
+unanswered; the definition locked; the page listed "no default exports" (src/**, text) and the 60 rules for docs/**
+(46 tokens each by the page, 2,760 together); each commit was allowed and left the worktree clean; each stop made its
+claim on its commit; claim A's unit check and R1's drafted check passed. Each round's review job got past the runner's
+plan-window gate (the world reports a window reading of 5%) and finished: one job per round, each given its own
+commit's change (#1862): A's src/a.ts and src/auth.js, B's src/b.ts, C's src/a.ts, D's docs/a.md. The story's steps:
+
+  1s the hub; 3s the proposal; 4s the task; first round: 14s the stop's reply allow, 24s claim PASS, 31s one review
+  job; second round: 43s claim PASS, 49s one review job; clean twin round: 62s claim PASS, 68s one review job; docs
+  round: 81s claim PASS, 87s one review job; 87s the hub planted with review-without-caller
+
+Each test's first failing assertion, all node:assert's except AC8's:
+
+review.test.ts (AC1 #1512.2a53228d), at review.test.ts:30, the send-back
+  x AssertionError: AC1 #1512.2a53228d claim:01M7RP93B7VY9KDFE30NFKD5CE adds a default export at src/a.ts:1 under "no
+    default exports" (wiki:rules#821a22f6c745, .github/instructions/exports.instructions.md, scoped src/**), so it is
+    sent back naming the rule's ID 821a22f6c745, with src/a.ts, line 1 and the line's quote: its review round sent back
+    []. The rule in its requests: run:01M7RP952638YFKCW6Y2AMTB2F: (no line). Its review runs:
+    run:01M7RP94WBFHEFRQWGW5F9GNSR (review) on 2d171ab9decb525f424016daaf5bf3f9ff810b24 passed ["same-family review
+    (claude-sonnet-5-5)"]. ...
+  (The base is the issue's wrong program for AC1, a review that ignores the rules page: the claim passes, and the test
+  fails naming it.)
+
+review.test.ts (AC2 #1512.08d20c73), at helpers.ts:412 (outOfScope, from review.test.ts:39), the control
+  x AssertionError: AC2 #1512.08d20c73 the rubric of claim:01M7RPB1S26NK7ZMEBDJ54JY1Y's review gains the text-only
+    rules whose scope covers docs/a.md (docs/AGENTS.md's, scoped docs/**): the request run:01M7RPB2B5NWNSHT2D2TASZQA4
+    holds none of the 60
+  (Its first assertion, that the docs round's request doesn't name "no default exports", holds on the base, which
+  names no rule of the page; the planted half was not reached.)
+
+review.test.ts (AC3 #1512.eb715105), at review.test.ts:51, the rule in the twin's rubric
+  x AssertionError: AC3 #1512.eb715105 the clean twin claim:01M7RPAF63CXCWX3P24F9N5WRX, whose diff makes src/a.ts's
+    export a named one, is reviewed with "no default exports" (...) in its rubric: the request
+    run:01M7RPAFP9V3BS196BDX8S0JN3 holds no line naming it. ...
+
+review.test.ts (AC4 #1512.efb173ff), at helpers.ts:419 (proposedOut, from review.test.ts:62), the control
+  x AssertionError: AC4 #1512.efb173ff the rubric holds the rules you wrote that cover the diff ("no default exports"
+    (...), in the request of the first round, whose diff adds src/a.ts): the request run:01M7RP952638YFKCW6Y2AMTB2F
+    holds none of them
+  (No request held the proposed rule; the planted half was not reached.)
+
+review.test.ts (AC5 #1512.53c08786), at helpers.ts:426 (guardedOut, from review.test.ts:71), the control
+  x AssertionError: AC5 #1512.53c08786 the rubric holds the text-only rules you wrote that cover the diff ("no default
+    exports" (...), in the request of the first round, whose diff adds src/a.ts): the request
+    run:01M7RP952638YFKCW6Y2AMTB2F holds none of them
+  (No request named "never force-push"; the page and planted halves were not reached.)
+
+review.test.ts (AC6 #1512.30209e04), at review.test.ts:98, the left-out rules named in the run's output
+  x AssertionError: AC6 #1512.30209e04 with 60 rules in scope, 60 of them were left out of
+    run:01M7RPB2B5NWNSHT2D2TASZQA4's request, and the run's output (run:01M7RPB2AAQQXKNVT6H72XPDDW) names 0 of them: 60
+    are dropped unnamed, such as wiki:rules#6f16106d040e "Docs section 1 use…", wiki:rules#93c5c0e9e960 "Docs section 2
+    use…", wiki:rules#06f1d8662fb8 "Docs section 3 use…"
+  (The base is the issue's wrong program for AC6, a run that drops them unnamed, and the failure names the count. The
+  size assertion before it holds: the request gives no rule of the page, 0 tokens.)
+
+review.test.ts (AC7 #1512.0ff8d322), at review.test.ts:109, the two send-backs
+  x AssertionError: AC7 #1512.0ff8d322 the story sends "no default exports" (...) back twice, at src/a.ts:1 (commit A)
+    and at src/b.ts:1 (commit B), each a send-back naming the rule: claim:01M7RP93B7VY9KDFE30NFKD5CE sent back [];
+    claim:01M7RP9X6PR96KD51VCA0VQXJX sent back []
+
+review.test.ts (AC8 #1512.fd4a9a15), BLOCKED at the planted half (helpers.ts:366, tellPlanted, from review.test.ts:123)
+  x Error: BLOCKED: the hub with the plant DEEP_HUB_PLANT=review-without-caller did not start: ... Error:
+    DEEP_HUB_PLANT=review-without-caller names no planted program
+  (Its first half passes on the base: claim A, which opened PR 21, started one review run on its commit, as #1537
+  built it. Its wrong program, a hub with no caller for the review check, doesn't exist at the base, so the planted
+  half is BLOCKED until the implementer builds it. The other plant, rubric-holds-every-rule, wasn't reached.)
+
+Other runs were made while the suite was written.
+
+Three earlier runs on the base, all with the same story. The first, from 17:11:00 to 17:12:29, failed as above except
+for AC2, whose failure message was built from a request that wasn't there, so the test threw a TypeError in the
+suite's own reader before its assertion; the reader was fixed in helpers.ts (outOfScope). The second, from 17:13:28 to
+17:14:51 at a load of 228.6 falling to 84.8, failed exactly as above. The suite's exports and one condition of its
+quiet wait (a round's runs and review jobs ended for 6 s, no longer also no new event at all) changed after it, so it
+ran once more: the third, from 17:18:23, lost target/debug/deep-hook mid-story (this machine clears a worktree's
+target/), and its docs round's prompt was BLOCKED with `spawn …/deep-hook ENOENT`. deep-hook was built again and the
+run above made.
+
+To see the story run past a send-back, one run used a throwaway change to the hub's build output alone
+(packages/hub/dist/kinds.js, not tracked): every review's rubric also held every text-only rule of the rules page, as
+`- <id>: <text>`, whatever its scope and with no size bound. There AC1 and AC3 passed: the fake reviewer cited
+821a22f6c745 at src/a.ts:1, the review check counted it, and claim A's round sent back {rule 821a22f6c745, sites
+[src/a.ts:1]} with claim A BLOCKED as inherited (its review also failed on the merge base); the twin's request held the
+rule and found nothing. AC2 failed naming the rule (its docs request held it); AC4's and AC5's request halves passed and
+their planted halves were BLOCKED; AC5 failed at the page (the rule read {"kind":"text"}); AC6 failed at the size (the
+docs request gave 61 rules of the page, 2,765 tokens); AC7's two send-backs held and it failed at the count (no
+sent_back on the page); AC8's first half passed and its planted half was BLOCKED.
+
+A second story on the same throwaway, told to read its record, first never ended: at a 1-minute load between 95 and
+175 its test timed out after 40 minutes, and the suite then recorded no steps, so where it waited is unknown. The
+suite's bounds on a round (a verdict within 7 minutes of the stop, its runs and review jobs ended within 3 more, else
+BLOCKED naming what is still going) and its trace of steps come from that run. Told again, at a load near 90, it took
+65 s and recorded claims A and B BLOCKED, C and D PASS, and review.settled with src/a.ts:1 fixed by commit C and
+src/b.ts:1 left, as AC7 reads them. The build output was restored byte for byte (SHA-256 2f1ec962…) before the base
+runs, and no tracked file outside this folder was changed.
