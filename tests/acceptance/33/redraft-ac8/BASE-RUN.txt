@@ -1,0 +1,25 @@
+$ node node_modules/vitest/vitest.mjs run tests/acceptance/33/redraft-ac8/ --reporter=verbose   # at f6ddd396f404cd5538ab7c8026b35838c7bd6cdb, 2026-11-19T20:31:04Z
+
+ RUN  v5.0.5 ~/deepbuild/.claude/worktrees/issue-44-extension-host-523727
+
+ ✓ tests/acceptance/33/redraft-ac8/spine.test.ts > AC8 #33.9c912eb7 spine list: each of the 25 spine tasks at its merged commit (offline) > AC8 #33.9c912eb7 every row of `node scripts/spine.mjs list` names a distinct spine task at a commit main merged 534ms
+ ✓ tests/acceptance/33/redraft-ac8/spine.test.ts > AC8 #33.9c912eb7 spine list: each of the 25 spine tasks at its merged commit (offline) > AC8 #33.9c912eb7 planted twins of the list are rejected > AC8 #33.9c912eb7 twin missing-task is rejected 587ms
+ ✓ tests/acceptance/33/redraft-ac8/spine.test.ts > AC8 #33.9c912eb7 spine list: each of the 25 spine tasks at its merged commit (offline) > AC8 #33.9c912eb7 planted twins of the list are rejected > AC8 #33.9c912eb7 twin extra-task is rejected 861ms
+ ✓ tests/acceptance/33/redraft-ac8/spine.test.ts > AC8 #33.9c912eb7 spine list: each of the 25 spine tasks at its merged commit (offline) > AC8 #33.9c912eb7 planted twins of the list are rejected > AC8 #33.9c912eb7 twin repeated-task is rejected 661ms
+ ✓ tests/acceptance/33/redraft-ac8/spine.test.ts > AC8 #33.9c912eb7 spine list: each of the 25 spine tasks at its merged commit (offline) > AC8 #33.9c912eb7 planted twins of the list are rejected > AC8 #33.9c912eb7 twin repeated-commit is rejected 631ms
+ ✓ tests/acceptance/33/redraft-ac8/spine.test.ts > AC8 #33.9c912eb7 spine list: each of the 25 spine tasks at its merged commit (offline) > AC8 #33.9c912eb7 planted twins of the list are rejected > AC8 #33.9c912eb7 twin malformed-line is rejected 552ms
+ ✓ tests/acceptance/33/redraft-ac8/spine.test.ts > AC8 #33.9c912eb7 spine list: each of the 25 spine tasks at its merged commit (offline) > AC8 #33.9c912eb7 planted twins of the list are rejected > AC8 #33.9c912eb7 twin made-up-hash is rejected 542ms
+ ✓ tests/acceptance/33/redraft-ac8/spine.test.ts > AC8 #33.9c912eb7 spine list: each of the 25 spine tasks at its merged commit (offline) > AC8 #33.9c912eb7 planted twins of the list are rejected > AC8 #33.9c912eb7 twin tree-not-commit is rejected 525ms
+ ✓ tests/acceptance/33/redraft-ac8/spine.test.ts > AC8 #33.9c912eb7 spine list: each of the 25 spine tasks at its merged commit (offline) > AC8 #33.9c912eb7 planted twins of the list are rejected > AC8 #33.9c912eb7 twin unmerged-commit is rejected 499ms
+ ✓ tests/acceptance/33/redraft-ac8/spine.test.ts > AC8 #33.9c912eb7 spine list: each of the 25 spine tasks at its merged commit (offline) > AC8 #33.9c912eb7 planted twins of the list are rejected > AC8 #33.9c912eb7 twin copy-made-after-rewrite is rejected 451ms
+ ✓ tests/acceptance/33/redraft-ac8/spine.test.ts > AC8 #33.9c912eb7 spine list: each of the 25 spine tasks at its merged commit (offline) > AC8 #33.9c912eb7 control: a pre-rewrite copy of a merged commit (same tree, author, date, subject; not in main) is accepted 818ms
+
+ Test Files  1 passed (1)
+      Tests  11 passed (11)
+   Start at  12:31:07
+   Duration  8.96s (tests 97%, transform 2%, import 1%)
+
+exit 0
+
+$ node node_modules/typescript/bin/tsc -p tests/acceptance/33/redraft-ac8/tsconfig.json
+exit 0
