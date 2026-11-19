@@ -1134,6 +1134,23 @@
       ]
     },
     {
+      "id": "canvas-water-rings",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "water-rings"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "rings_pond_gpu_ms": 0.3
+      },
+      "initialReason": "Issue #2760 first measurement: the merge base has no rings on water where something touches it and no such task. A release deep-gpu draws a 12 m x 8 m pond of 128 x 128 cells, seen straight down from 16 m so it fills half a 1080p frame, whose water's rings read a logic item's occurrence list (64 touches in one step every 122 steps, so 64 rings are alive at the default span and never more), against the same pond and logic item with plain water, 300 frames a side, five runs after a warm-up one, each a fresh process; the difference of the sides' median GPU time is what the rings add. canvas.mjs judge holds the time on a reference Mac. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#2760.6dfadd78"
+      ]
+    },
+    {
       "id": "canvas-ground",
       "command": [
         "node",

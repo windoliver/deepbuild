@@ -1070,6 +1070,15 @@ alone.push('tests/acceptance/1509/');
 // #1929's files each build deep-show (full); CPU only, no GPU and no timing.
 alone.push('tests/acceptance/1929/');
 
+// #2760's files build deep-gpu (spawn.test.ts also deep-show) and #544's assembler, run logic programs and draw on
+// the GPU; budgets.test.ts times 64 rings on a pond at 1080p.
+alone.push('tests/acceptance/2760/');
+timed.push('tests/acceptance/2760/budgets.test.ts');
+// The first draft's timing test asks the rings to change a picture taken from straight above, where a ring changes
+// none (tests/acceptance/2760-redraft-ac8/DISPUTE.md); its blind redraft times a pond on which each ring is drawn.
+alone.push('tests/acceptance/2760-redraft-ac8/');
+timed.push('tests/acceptance/2760-redraft-ac8/budget-timing.test.ts');
+byHand.push('tests/acceptance/2760/budgets.test.ts');
 // #1826's files each build deep-graph, and its taste call deep-canvas-render; CPU only, no GPU and no timing.
 alone.push('tests/acceptance/1826/');
 
