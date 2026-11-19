@@ -1,0 +1,10 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `node node_modules/vitest/vitest.mjs run --root tests/acceptance/172 lab.test.ts --testTimeout=3600000 --hookTimeout=180000` runs unleased
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/172
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  18:04:49
+   Duration  428.06s (tests 100%)
+

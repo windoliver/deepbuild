@@ -44,6 +44,7 @@ fn features(needs: &Value) -> wgpu::Features {
     {
         out |= match name {
             "depth-clip-control" => wgpu::Features::DEPTH_CLIP_CONTROL,
+            "clip-distances" => wgpu::Features::CLIP_DISTANCES,
             "depth32float-stencil8" => wgpu::Features::DEPTH32FLOAT_STENCIL8,
             "texture-compression-bc" => wgpu::Features::TEXTURE_COMPRESSION_BC,
             "texture-compression-etc2" => wgpu::Features::TEXTURE_COMPRESSION_ETC2,
@@ -129,6 +130,9 @@ pub struct Gpu {
     size: [u32; 2],
     backend: String,
     adapter: String,
+    /// The features the device was asked for and given.
+    #[cfg_attr(not(feature = "full"), allow(dead_code))]
+    features: wgpu::Features,
 }
 
 /// A WebGPU device for `canvas` asking exactly `needs` (the bundle's `gpu_needs`, as JSON).
@@ -305,6 +309,7 @@ pub async fn open_gpu(canvas: web_sys::HtmlCanvasElement, needs: String) -> Resu
         } else {
             adapter_name
         },
+        features: features(&needs),
     })
 }
 
@@ -327,6 +332,26 @@ impl Gpu {
     /// The canvas's size in pixels.
     pub fn size(&self) -> [u32; 2] {
         self.size
+    }
+
+    /// The block formats the device samples (Material: texture maps): BC where it has
+    /// texture-compression-bc, else ASTC 4 × 4 where it has texture-compression-astc, else none.
+    #[cfg(feature = "full")]
+    pub fn blocks(&self) -> deep_codecs::maps::Blocks {
+        use deep_codecs::maps::Blocks;
+        if self
+            .features
+            .contains(wgpu::Features::TEXTURE_COMPRESSION_BC)
+        {
+            Blocks::Bc
+        } else if self
+            .features
+            .contains(wgpu::Features::TEXTURE_COMPRESSION_ASTC)
+        {
+            Blocks::Astc
+        } else {
+            Blocks::None
+        }
     }
 
     /// Draws `rgba` (sRGB-encoded, straight, rows top-down, `size` pixels) onto the canvas.

@@ -243,7 +243,7 @@ fn fault_of(id: &str, item: &Value, path: String) -> OpError {
     }
 }
 
-fn fault(id: &str, path: String) -> OpError {
+pub(crate) fn fault(id: &str, path: String) -> OpError {
     if path == crate::hull::FLAT {
         return OpError::new(crate::hull::FLAT, format!("items/{id}"));
     }
@@ -258,21 +258,28 @@ fn fault(id: &str, path: String) -> OpError {
             format!("items/{id}/{at}")
         };
         let e = OpError::new(code, at);
-        return match serde_json::from_str(found) {
-            Ok(found) => e.with(found),
+        return match serde_json::from_str::<Value>(found) {
+            Ok(mut found) => {
+                // #1928: an offset's refusal names its item too.
+                if code == crate::faces::TOO_WIDE {
+                    found["item"] = json!(id);
+                }
+                e.with(found)
+            }
             Err(_) => e,
         };
     }
     OpError::new("out_of_range", format!("items/{id}/{path}"))
 }
 
-/// A coded fault's code: one an outline source, a module's deform or a box or mesh deform
-/// refuses with, else `out_of_range`.
+/// A coded fault's code: one an outline source, a module's deform, an offset or a box or mesh
+/// deform refuses with, else `out_of_range`.
 pub(crate) fn code_of(code: &str) -> &'static str {
     builders::OUTLINE_CODES
         .into_iter()
         .chain(crate::contributed::CODES)
         .chain(crate::attrs::CODES)
+        .chain([crate::faces::TOO_WIDE])
         .chain(crate::bind::CODES)
         .find(|c| *c == code)
         .unwrap_or("out_of_range")

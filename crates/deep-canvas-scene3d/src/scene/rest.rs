@@ -745,8 +745,7 @@ pub fn mesh_of(
     built.map_err(|path| match path.split_once(crate::builders::CODED) {
         Some((code, at)) => Refused {
             code: crate::build::code_of(code),
-            // A refusal that carries what it found after its path (#1781, #1929) names the path
-            // alone here; the build's issue carries what it found.
+            // What a refusal found follows its path under the item (#1928).
             path: match at.split_once(crate::builders::CODED) {
                 Some((at, _)) => format!("items/{id}/{at}"),
                 None => at.to_string(),

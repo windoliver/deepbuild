@@ -1,0 +1,122 @@
+Base commit: 336a0a92b ("Merge pull request #2800 …"), detached, nothing changed outside tests/acceptance/1928/.
+Machine: an arm64 Mac (18 cores), shared; one-minute load 90 to 530 throughout, so no timing was judged.
+Build: cargo build --locked --bin deep-show --no-default-features --features full, CARGO_INCREMENTAL=0
+       CARGO_PROFILE_DEV_DEBUG=0, the pinned 1.99.1 toolchain, once, through `node scripts/throttle.mjs build
+       --wait 15` (the lease was granted after about 13 minutes; the build took 4 min 53 s, exit 0). npm ci once
+       (node_modules was missing).
+Command: CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node node_modules/vitest/vitest.mjs run --root
+         tests/acceptance/1928 --no-file-parallelism --testTimeout=900000
+Type-check: node node_modules/typescript/bin/tsc -p tests/acceptance/1928/tsconfig.json passes (exit 0, no output).
+
+OBSERVED (one run of the whole suite): Test Files 8 failed (8), Tests 17 failed (17), 472 s, exit 1.
+After that run ac4-too-wide.test.ts was corrected (the too-wide document is shown to a hidden panel, which is how
+the suite reads "at check, with 0 builds"; helpers.ts gained the optional `hidden` argument only that file passes)
+and rerun alone: Test Files 1 failed (1), Tests 2 failed (2), 38 s, exit 1. Its two lines below are the rerun's;
+they are the same assertions the first run failed at. The other seven files are as the whole run had them.
+
+Every test fails at a named assertion in helpers.ts, reached from its own check; none fails at a load error, a
+type error or a missing fixture. There are two reasons, one per kind of test.
+
+(a) The 8 tests of the right program fail in `admitted`, at "<document>: no error issue". The base knows neither
+    `mod.offset_faces@1` nor `mod.dissolve@1`: it refuses the revision (`outcome: "refused"`) with, per item,
+      {"check":"document.validate","code":"out_of_range","severity":"error","ids":["<item>"],
+       "path":"items/<item>/modifiers/<k>/kind","actual":null,"what":"scene3d.build can't evaluate this",
+       "fix":"Give the field a value of its type inside its range."}
+    and a `geometry` call for the document then answers {"code":"no_revision"}.
+
+(b) The 9 planted tests fail in `runShow`, at "deep-show run refused the scenario (planted: <name>)": the base has
+    none of the nine planted names and answers the scenario line {"ok":false,"code":"bad_input"}.
+
+ac1-inset-cube.test.ts
+  × AC1 #1928.ceaee399 the cube builds 12 points, 20 edges and 10 faces, V − E + F = 2, an inner face of 0.64 m² and
+    four ring faces of 0.09 m² in its top plane
+      AssertionError: the inset cube: no error issue: expected [ Array(1) ] to deeply equal []
+      (out_of_range at items/cube/modifiers/0/kind)
+  × AC1 #1928.ceaee399 the planted offset_along_bisector (each corner moved by along its bisector) leaves an inner
+    face of 0.737157 m² and fails, naming the face
+      AssertionError: deep-show run refused the scenario (planted: offset_along_bisector):
+      {"ok":false,"code":"bad_input"}: expected false to be true
+
+ac2-depth.test.ts
+  × AC2 #1928.52811717 depth 0.2 lifts the top's inner face 0.2 m and the cube holds 1.162667 m³, depth −0.2 holds
+    0.837333 m³, and the four sides at depth 0.2 hold 1.650667 m³
+      AssertionError: the panels: no error issue: expected [ …(3) ] to deeply equal []
+      (out_of_range at items/raised/modifiers/0/kind, items/sides/modifiers/0/kind, items/sunk/modifiers/0/kind)
+  × AC2 #1928.52811717 the planted offset_depth_along_y (every inner face moved along the item's +y) passes the top
+    case and fails the side case, naming a side face
+      AssertionError: deep-show run refused the scenario (planted: offset_depth_along_y):
+      {"ok":false,"code":"bad_input"}: expected false to be true
+
+ac3-notch.test.ts
+  × AC3 #1928.a6a07f62 the L builds 18 points, 30 edges and 14 faces, an inner L of 2.24 m², six ring faces of
+    0.76 m² in all, and the inner corner at the notch 0.1 m inside both notch edges
+      AssertionError: the inset L: no error issue: expected [ Array(1) ] to deeply equal []
+      (out_of_range at items/ell/modifiers/0/kind)
+  × AC3 #1928.a6a07f62 the planted offset_corner_along_edges (a corner moved along the sum of its edge directions)
+    puts the notch's corner on the notch side, leaves an inner L of 2.44 m² and fails, naming the corner
+      AssertionError: deep-show run refused the scenario (planted: offset_corner_along_edges):
+      {"ok":false,"code":"bad_input"}: expected false to be true
+
+ac4-too-wide.test.ts (the rerun)
+  × AC4 #1928.7f908e67 by 0.5 on the cube's top is refused with offset_faces.too_wide naming the item, the face,
+    0.5 m and the limit of 0.5 m, with 0 builds, and by 0.49 builds an inner face of 0.0004 m²
+      AssertionError: by 0.49: no error issue: expected [ Array(1) ] to deeply equal []
+      (out_of_range at items/cube/modifiers/0/kind)
+  × AC4 #1928.7f908e67 the planted offset_too_wide_unchecked (a check that lets 0.5 through) builds a face with
+    zero-length edges and fails, naming the face
+      AssertionError: deep-show run refused the scenario (planted: offset_too_wide_unchecked):
+      {"ok":false,"code":"bad_input"}: expected false to be true
+
+ac5-dissolve.test.ts
+  × AC5 #1928.b81c59f3 the 3 × 3 plate becomes 4 points, 4 edges and 1 face of 9 m² with V − E + F = 1, and the
+    subdivided cube 8 points, 12 edges and 6 faces holding 1 m³
+      AssertionError: the plate and the cube: no error issue: expected [ …(2) ] to deeply equal []
+      (out_of_range at items/cube/modifiers/1/kind, items/plate/modifiers/0/kind)
+  × AC5 #1928.b81c59f3 the planted dissolve_keeps_straight_points (the points between two straight edges kept)
+    leaves 12 points on the plate and fails, naming the count
+      AssertionError: deep-show run refused the scenario (planted: dissolve_keeps_straight_points):
+      {"ok":false,"code":"bad_input"}: expected false to be true
+
+ac6-hole.test.ts
+  × AC6 #1928.d0733dd4 offset by 0.3 and dissolve give back the cube's 8 points, 12 edges and 6 faces; with inner:
+    panel the four ring faces stay (12 points, 20 edges, 10 faces) and dissolve.hole names them
+      AssertionError: the two cubes: no error issue: expected [ …(2) ] to deeply equal []
+      (out_of_range at items/flat/modifiers/0/kind, items/framed/modifiers/0/kind)
+  × AC6 #1928.d0733dd4 the planted dissolve_merges_pairs (two faces merged at a time in index order) leaves fewer
+    than four ring faces and fails, naming the part
+      AssertionError: deep-show run refused the scenario (planted: dissolve_merges_pairs):
+      {"ok":false,"code":"bad_input"}: expected false to be true
+
+ac7-counts-order.test.ts
+  × AC7 #1928.b7a3ee7e offset_faces builds exactly the counts it declared and dissolve at most its input's, and the
+    turned L gives the unturned L's welded-position and UV hash at 1 block and at the registered count
+      AssertionError: the raised L: no error issue: expected [ …(2) ] to deeply equal []
+      (out_of_range at items/ell/modifiers/0/kind, items/inset/modifiers/0/kind)
+  × AC7 #1928.b7a3ee7e the planted offset_first_corner (new points numbered from each face's first corner) gives
+    another hash and fails
+      AssertionError: deep-show run refused the scenario (planted: offset_first_corner):
+      {"ok":false,"code":"bad_input"}: expected false to be true
+
+ac8-parts-wear.test.ts
+  × AC8 #1928.415a3836 every output face is in exactly one part and keeps its source face's wear, and the inner
+    face's uv0 spans 0.8 by 0.8 units
+      AssertionError: the wear document: no error issue: expected [ Array(1) ] to deeply equal []
+      (out_of_range at items/out/modifiers/1/kind)
+  × AC8 #1928.415a3836 the planted offset_drops_wear fails, naming the attribute
+      AssertionError: deep-show run refused the scenario (planted: offset_drops_wear):
+      {"ok":false,"code":"bad_input"}: expected false to be true
+  × AC8 #1928.415a3836 the planted offset_inner_unparted fails, naming the face
+      AssertionError: deep-show run refused the scenario (planted: offset_inner_unparted):
+      {"ok":false,"code":"bad_input"}: expected false to be true
+
+What was also observed on the base's binary, outside the suite (scratch files, not kept):
+
+- The references (reference.ts) on what the base already builds, through the suite's own helpers: the plain 1 m
+  slab cube reads 8 welded points, 12 edges, 6 faces, closed, 1 m³; `plate {grid: [3, 3], size: [3, 3]}` reads 16
+  points, 24 edges, 9 faces; the cube under `mod.subdivide@1 {levels: 1, scheme: simple}` reads 26 points, 48 edges,
+  24 faces, closed, 1 m³ (off by 7e-16), with one uv0 per welded point inside each cube face; the L-shaped slab
+  reads 12 points, 18 edges, 8 faces, 3 m³, its top one loop of six corners and 3 m². Each equals the row's own
+  `declared` counts. `rotate_corners: 1` with `blocks: 1` reports 1 block and gives the L its unrotated hash.
+- A revision shown to a hidden panel (`visible: false`) is answered `not_presented`, reason `hidden`, with no
+  issue, whether or not its stack holds a modifier kind the base doesn't know; `geometry` then builds a plain
+  cube's row for it, and answers `out_of_range` at `items/cube/modifiers/0/kind` for the unknown kind.
