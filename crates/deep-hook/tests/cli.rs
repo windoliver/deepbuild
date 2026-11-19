@@ -335,12 +335,12 @@ fn a_call_whose_guard_rules_cannot_be_read_is_denied() {
 /// A hub on `home`'s socket that writes its hello, reads one request, writes what `answer` makes of the request's
 /// id, then holds the connection for `linger`. A deep-hook that never connects, or that hangs up before its request
 /// (on a loaded machine its own budgets can run out first), ends the hub after `GIVE_UP` instead of leaving the test
-/// waiting on it forever; the test's assertions then say what deep-hook did.
+/// waiting on it forever; the test's assertions then say what deep-hook did. It ends with the request it read.
 fn fake_hub(
     home: &std::path::Path,
     answer: impl Fn(&str) -> String + Send + 'static,
     linger: std::time::Duration,
-) -> std::thread::JoinHandle<()> {
+) -> std::thread::JoinHandle<String> {
     use std::io::{BufRead, BufReader, Write};
     const GIVE_UP: std::time::Duration = std::time::Duration::from_secs(30);
     let listener =
@@ -353,7 +353,7 @@ fn fake_hub(
                 Ok((stream, _)) => break stream,
                 Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                     if std::time::Instant::now() >= deadline {
-                        return;
+                        return String::new();
                     }
                     std::thread::sleep(std::time::Duration::from_millis(2));
                 }
@@ -363,25 +363,24 @@ fn fake_hub(
         stream.set_nonblocking(false).unwrap();
         stream.set_read_timeout(Some(GIVE_UP)).unwrap();
         let mut reader = BufReader::new(stream);
+        let mut request = String::new();
         if reader
             .get_mut()
             .write_all(b"{\"v\":1,\"hello\":\"hub\",\"features\":[]}\n")
             .is_err()
+            || reader.read_line(&mut request).is_err()
         {
-            return;
-        }
-        let mut request = String::new();
-        if reader.read_line(&mut request).is_err() {
-            return;
+            return request;
         }
         let Some(at) = request.find("\"id\":\"").map(|at| at + 6) else {
-            return;
+            return request;
         };
-        let Some(id) = request.get(at..at + 26) else {
-            return;
+        let Some(answered) = request.get(at..at + 26).map(&answer) else {
+            return request;
         };
-        let _ = reader.get_mut().write_all(answer(id).as_bytes());
+        let _ = reader.get_mut().write_all(answered.as_bytes());
         std::thread::sleep(linger);
+        request
     })
 }
 
@@ -394,14 +393,15 @@ fn empty_reply(id: &str) -> String {
 
 #[test]
 fn a_call_whose_guard_rules_cannot_be_read_is_denied_with_the_hub_answering_too() {
-    let newer = RULES.replacen(
+    // An entry whose mode deep-hook can't read leaves the whole file unreadable, as before #2219.
+    let stop = RULES.replacen(
         r#""entries":{"#,
-        r#""entries":{"newer":{"match":"effect:not-a-class","scope":"all_repos","mode":"block","reason":"r","next_step":"n","fail_closed":false},"#,
+        r#""entries":{"newer":{"match":"shell:ls*","scope":"all_repos","mode":"stop","reason":"r","next_step":"n","fail_closed":false},"#,
         1,
     );
     for (case, text, why) in [
         ("cut to 40 bytes", &RULES[..40], "isn't JSON"),
-        ("an entry with a match it doesn't know", &newer, "newer"),
+        ("an entry with a mode it doesn't know", &stop, "newer"),
     ] {
         for answering in [true, false] {
             // A try the hub was late for (the call is spooled marked late) is the hub away: it is made again.
@@ -446,6 +446,67 @@ fn a_call_whose_guard_rules_cannot_be_read_is_denied_with_the_hub_answering_too(
                 !answering,
                 "rules.json {case}, the hub {hub}: the spool: {spooled:?}"
             );
+        }
+    }
+}
+
+/// An entry deep-hook can't read whole, by a `match` or a field it doesn't know, meets every PreToolUse (#2219): with the
+/// hub away it denies only when it is fail_closed, saying deep-hook is older than it; a hub that answers rules it.
+#[test]
+fn an_entry_deep_hook_cannot_read_whole_meets_every_call_and_holds_by_its_mode() {
+    for unknown in [
+        r#""match":"effect:not-a-class""#,
+        r#""match":"shell:terraform *","until":"2027-01-01""#,
+    ] {
+        for (mode, fail_closed) in [("watch", false), ("block", true)] {
+            let entry = format!(
+                r#""newer":{{{unknown},"scope":"all_repos","mode":"{mode}","reason":"r","next_step":"n","fail_closed":{fail_closed}}},"#
+            );
+            let text = RULES.replacen(r#""entries":{"#, &format!(r#""entries":{{{entry}"#), 1);
+            for (answering, command) in [
+                (false, "ls"),
+                (false, "pkill -f node"),
+                (true, "ls"),
+                (true, "pkill -f node"),
+            ] {
+                let at =
+                    format!("{unknown}, {mode} mode, the hub answering {answering}, `{command}`");
+                // A try the hub was late for (the call is spooled marked late) is the hub away: it is made again.
+                let (code, stderr, request) = (0..20)
+                    .find_map(|_| {
+                        let home = short_home("older");
+                        std::fs::write(home.join(".deepbuild/rules.json"), &text).unwrap();
+                        let hub = answering.then(|| fake_hub(&home, empty_reply, std::time::Duration::from_millis(50)));
+                        let mut child = hook(&home, "PreToolUse");
+                        feed(&mut child, format!(r#"{{"session_id":"s","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{{"command":"{command}"}}}}"#).as_bytes());
+                        let out = child.wait_with_output().unwrap();
+                        let spooled = std::fs::read_to_string(home.join(".deepbuild/spool/spool.jsonl")).unwrap_or_default();
+                        let request = hub.map(|h| h.join().unwrap()).unwrap_or_default();
+                        std::fs::remove_dir_all(&home).unwrap();
+                        let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
+                        (!answering || !spooled.contains("\"late\":true")).then_some((out.status.code(), stderr, request))
+                    })
+                    .expect("INCONCLUSIVE: the hub was late for 20 tries; rerun alone");
+                if answering {
+                    // deep-hook adds no denial of its own: the hub's reply, here empty, rules the call.
+                    let matched = if command == "ls" {
+                        r#""matched":["newer"]"#
+                    } else {
+                        r#""matched":["newer","no-kill-by-name"]"#
+                    };
+                    assert!(
+                        code == Some(0) && request.contains(matched) && request.contains(r#""notes":{"newer":"This deep-hook is older than the entry newer"#),
+                        "{at}: deep-hook sends the hub the entry, saying it is older than it, and prints the hub's reply: exit {code:?}, {stderr}, {request}"
+                    );
+                } else {
+                    let said = |words: &str| stderr.contains(words);
+                    assert_eq!(
+                        (code, said("guard no-kill-by-name"), said("guard newer"), said("older than the entry newer")),
+                        (Some(if fail_closed || command != "ls" { 2 } else { 0 }), command != "ls", fail_closed, fail_closed),
+                        "{at}: the exit; whether no-kill-by-name denies it; whether the entry does, only when fail_closed, saying deep-hook is older than it: {stderr}"
+                    );
+                }
+            }
         }
     }
 }

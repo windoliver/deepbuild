@@ -1,0 +1,15 @@
+base 74e6e2634001e76820c711bea05fe7bb6a7cf3b6
+Thu Nov 19 07:40:48 PST 2026
+ 7:40  up 5 days, 17:49, 18 users, load averages: 175.78 195.55 169.92
+
+ RUN  v5.0.5 <repo>/tests/acceptance/2204-redraft-ac3
+
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  07:40:52
+   Duration  3.87s (tests 98%, transform 1%, import 1%)
+
+vitest exit 0
+Thu Nov 19 07:40:56 PST 2026
+ 7:40  up 5 days, 17:50, 18 users, load averages: 169.56 193.58 169.52

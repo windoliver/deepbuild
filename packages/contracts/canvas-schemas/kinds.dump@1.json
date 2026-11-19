@@ -148,6 +148,9 @@
           "items": {
             "$ref": "#/$defs/migration"
           }
+        },
+        "paths": {
+          "$ref": "#/$defs/paths"
         }
       },
       "required": [
@@ -193,6 +196,9 @@
         },
         "default": {
           "x-opaque": "a field's default, of the field's own type"
+        },
+        "paths": {
+          "$ref": "#/$defs/paths"
         }
       },
       "required": [
@@ -244,6 +250,67 @@
         "to",
         "renames",
         "retires"
+      ],
+      "additionalProperties": false
+    },
+    "paths": {
+      "$comment": "What each path does with a sealed 3D entry or a field that carries its own answers (#2776; canvas primitives: Paths: rays, finals and the web player).",
+      "type": "object",
+      "properties": {
+        "rays": {
+          "$ref": "#/$defs/answer"
+        },
+        "final": {
+          "$ref": "#/$defs/answer"
+        },
+        "web": {
+          "$ref": "#/$defs/answer"
+        }
+      },
+      "required": [
+        "rays",
+        "final",
+        "web"
+      ],
+      "additionalProperties": false
+    },
+    "answer": {
+      "type": "object",
+      "properties": {
+        "answer": {
+          "enum": [
+            "same",
+            "stand_in",
+            "refused",
+            "not_applicable"
+          ],
+          "x-closure": {
+            "closed": "ring",
+            "reopens_if": "a release adds a renderer, or a path needs an answer the four words cannot say",
+            "mark": "exhaustive"
+          }
+        },
+        "held_by": {
+          "type": "string"
+        },
+        "draws": {
+          "type": "string"
+        },
+        "receipt": {
+          "type": "string"
+        },
+        "code": {
+          "type": "string"
+        },
+        "task": {
+          "type": "string"
+        },
+        "why": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "answer"
       ],
       "additionalProperties": false
     }

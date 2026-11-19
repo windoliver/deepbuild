@@ -1206,6 +1206,7 @@ impl Renderer {
                     .font_size(g.size)
                     .hint(false)
                     .glyph_transform(deep_text::atlas::slant(g.skew))
+                    .normalized_coords(&g.coords)
                     .fill_glyphs(one);
             }
             ctx.set_transform(at);
@@ -1222,6 +1223,7 @@ impl Renderer {
                         && g.font.index == first.font.index
                         && g.size == first.size
                         && g.skew == first.skew
+                        && g.coords == first.coords
                         && paint(g) == paint(first)
                         && alpha_of(g) == alpha_of(first)
                 })
@@ -1239,6 +1241,7 @@ impl Renderer {
                 .font_size(first.size)
                 .hint(false)
                 .glyph_transform(deep_text::atlas::slant(first.skew))
+                .normalized_coords(&first.coords)
                 .fill_glyphs(glyphs);
             start += run;
         }

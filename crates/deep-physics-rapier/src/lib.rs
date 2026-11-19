@@ -161,6 +161,12 @@ pub enum Twin {
     BeltWithoutHook,
     BeltAlongWorldX,
     BeltAlongLevel,
+    /// #2243's wrong wrappers: one that leaves each moved character body's pose stale until the
+    /// engine's step, so every character body moves against the last step's poses; and one
+    /// whose walker passes into a character body that wants no move, which its own controller
+    /// then moves out of the way.
+    StalePoses,
+    StandingGivesWay,
 }
 
 /// A Rapier world behind the backend interface.
@@ -218,6 +224,8 @@ pub struct Rapier {
     walked: Vec<Raw>,
     up: Vector,
     fall: f32,
+    /// #2243: within a step's character moves, what the later ones cast against.
+    stage: Option<character::Stage>,
     /// #251: its vehicle bodies, and the wheel contacts this step's places and drives wrote.
     pub(crate) vehicles: vehicle::Vehicles,
     wheel_rows: Vec<Raw>,
