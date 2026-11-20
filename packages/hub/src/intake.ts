@@ -298,7 +298,7 @@ export class Intake implements IntakeService {
         await this.o.appendCore('brief.made', { step: 'entered', key, title: t.title, number: n }, { subject: f.ask! });
       }
       const started = await this.o.raw(`SELECT 1 FROM events WHERE kind = 'start.approval' AND subject = ? LIMIT 1`, [f.ask!]);
-      // A job that repeats: its first run is its schedule's first, and what it reads now counts as read once that run PASSes.
+      // A job that repeats: its first run is its schedule's first, and what it reads now counts as read once a round ran on it and didn't FAIL.
       if (brief.every && !made.repo && !f.runs.length) {
         if (brief.watch) await this.input(brief.watch).then((now) => this.keep(key, now, 'next'), () => undefined);
         await this.dispatch(key, this.o.now());
