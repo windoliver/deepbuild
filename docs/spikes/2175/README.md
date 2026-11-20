@@ -9,8 +9,8 @@ which of them the forward path really calls, and tries the two cuts that looked 
 ## Files
 
 - `imports.mjs`: the attribution. `node docs/spikes/2175/imports.mjs` builds the release deep-hook, lists its
-  imports (`nm -u`), reads each one's callers from the disassembly (`otool -tV`: every `bl` or `b` to its symbol stub,
-  under the function it sits in), and traces three paths with a dylib inserted by `DYLD_INSERT_LIBRARIES` that
+  imports (`nm -u`), reads each one's callers from the disassembly (`otool -tV`: every `bl` or `b` to its symbol stub, and every load of its
+  address from a literal pool, under the function it sits in), and traces three paths with a dylib inserted by `DYLD_INSERT_LIBRARIES` that
   interposes every imported function and logs the first call to each made from deep-hook's own `__TEXT` (libSystem
   calling itself isn't counted). It prints record.json's `imports`. `node docs/spikes/2175/imports.mjs table` prints
   the table below from record.json.
@@ -38,7 +38,7 @@ interposed even alone (dyld or libSystem calls them where the trampoline can't r
 
 Measured 2026-11-20 on a Mac15,12 (Apple M3, 16 GB, macOS 26B131) on AC power, thermal state "fair", the base
 being the merge base `b4a2049e808c` with origin/main, rustc as `rust-toolchain.toml` pins it. All numbers below are
-in record.json with every reading. The load average was `{ 13.55 22.26 48.04 }` after every one of the 15 rounds:
+in record.json with every reading, except the list of imports cut B removes, whose command is given with it. The load average was `{ 13.55 22.26 48.04 }` after every one of the 15 rounds:
 the whole timed phase took a few seconds, inside one 5 s update of the kernel's load average, so it is one reading,
 not fifteen. The machine was busy with other sessions' builds; instructions retired move far less with load than
 time does, and the variants were interleaved run by run, so load lands on every variant alike.
@@ -55,7 +55,8 @@ a generic function is filed under that function: `freeaddrinfo`'s one caller is 
 the end of std's DNS lookup, and it leaves the binary with the joined-hub route (cut B, below).
 
 Of the 148, the trace saw 26 called on `--version`, 52 when the hub answers a Read, and 71 when the hub is away (the
-hook and its `spool-sync` child). The hub-away count moves between runs: two earlier runs of the same tracer saw 74,
+hook and its `spool-sync` child). The hub-away count moves between runs: two earlier runs of the same tracer saw 74 (the
+record.json committed in `8df402056` and in `21cb897bd`),
 the 3 more being thread teardown (`munmap`, `pthread_mutex_destroy`, `pthread_mutex_trylock`), which either
 happens before the process exits or doesn't. 68 were called on none of the three. That means they were not called
 on these runs, not that they are never called: they serve error paths, panics, the joined route, other commands
@@ -106,9 +107,11 @@ difference from the base's run in the same round, and in how many of the 15 roun
 
 Cut A drops 13 imports net and about 0.66 M a process, about 51 K an import, in line with the audit's 60 K. Cut B drops
 8 imports net (9 go: the 4 above, `freeaddrinfo`, `lseek`, `readv` and the stack guard pair rustls and ring
-use; `execv` comes) and about 0.73 M, about 91 K an import; the binary also halves, and these runs can't say how much of
+use; `execv` comes; this list is not in record.json but from a rebuild of the patch, `git apply
+docs/spikes/2175/cut-b-joined.patch`, `cargo build --release --locked -p deep-hook --no-default-features`, then
+`comm` of the two `nm -u` lists against the base build) and about 0.73 M, about 91 K an import; the binary also halves, and these runs can't say how much of
 the difference that accounts for. Both savings are real (fewer in
-nearly every round) and small: 3.5 % of `--version`, 3 % of a hub-away call. No cut was measured on a Read the
+nearly every round) and small: 3.4 to 3.8 % of `--version`, 3 % of a hub-away call. No cut was measured on a Read the
 hub answers; the same imports are bound at every start, so the saving there is expected to be alike, but it is
 not measured.
 
@@ -122,7 +125,7 @@ not measured.
   machine that has joined a project, every hook call, in every folder, then pays a second program start: +17 M,
   three-quarters of a whole Read, against 0.75 M saved elsewhere. A per-call hand-off (above) would put the +17 M
   only on calls in a joined project and keep the 0.75 M saving everywhere else, at the price of the stdin hand-over
-  code; it would still be a second binary for a 3.5 % saving.
+  code; it would still be a second binary for a 4 % saving.
 
 ### What else the readings show
 
@@ -132,12 +135,12 @@ not try changing that, and the issue doesn't ask it.
 
 ## Recommendation
 
-No cut is worth an issue of its own. Cut A would save about 0.7 M a process (3.5 %) for about 150 lines of unsafe,
-macOS-only spawning code in the binary that holds the guards, replacing std code that does the same thing. Cut B
+No cut is worth an issue of its own. Cut A would save about 0.7 M a process (3.4 %) for a 172-line unsafe,
+macOS-only spawning module in the binary that holds the guards, replacing std code that does the same thing. Cut B
 would save about the same, and needs a second binary to ship and keep in step; as prototyped it also costs +17 M on
 every hook call on a machine that has joined any project, and even a per-call hand-off would cost that on every
-call in a joined project. Together they save 1.4 M a process: the 21 imports both cuts
-remove are 7 % of a 19 M start. If the hub-away call's cost matters, the `spool-sync` child (46 % of it) is the
+call in a joined project. Together they save 1.4 M a process (7 % of a 19 M start), with 21
+fewer imports net and a binary half the size. If the hub-away call's cost matters, the `spool-sync` child (46 % of it) is the
 place to look, as a new question for its own issue, not a cut tried here.
 
 ## Reproducing it by hand
@@ -169,8 +172,8 @@ cut-ab    40.29 M   -2.78 M 15/15                              39.87 M 16.39 M f
 A review then found caller names that had lost their type (`<Vec<T> as FromIterator>::from_iter` read
 `::from_iter`), so `imports.mjs` was fixed (`97637134f`) and run again the same way, 2026-11-20 07:10 UTC at
 `97637134f`, load `{ 9.17 14.38 21.99 }`: exit 0, 0 bytes on stderr. That run is `record.json`'s `imports`; the
-first run above is its `cuts` (`measure.mjs` doesn't read names). The fix moved 13 imports between parts and none
-between the paths, apart from the three teardown calls (Of the 148, above).
+first run above is its `cuts` (`measure.mjs` doesn't read names). The fix moved 12 imports between parts; the re-run's
+trace differed from the first only in the three teardown calls (Of the 148, above).
 
 ## Limits
 
