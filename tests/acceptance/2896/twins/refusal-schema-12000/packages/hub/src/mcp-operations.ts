@@ -64,9 +64,12 @@ class Answered extends Refused {}
  * code of its own but no_match, which answers a search that found nothing.
  */
 function asAnswered(value: Obj): Obj {
-  const coded = typeof value.code === 'string' && value.code !== 'no_match';
-  if (value.outcome === 'refused' || value.outcome === 'conflict' || value.status === 'refused' || coded) throw new Answered(value as unknown as Refusal);
+  if (answersAsRefusal(value)) throw new Answered(value as unknown as Refusal);
   return value;
+}
+function answersAsRefusal(value: Obj): boolean {
+  const coded = typeof value.code === 'string' && value.code !== 'no_match';
+  return value.outcome === 'refused' || value.outcome === 'conflict' || value.status === 'refused' || coded;
 }
 
 export interface McpOperationsOptions {
@@ -127,8 +130,9 @@ export class McpOperations {
     // No MCP call starts a session, whatever it claims (#1330): refused before its arguments are read.
     if (tool === 'deep_start') return this.options.services.sessionStarts.refuseMcp(context.session);
     // What the client deep mcp names keeps of one tool result, which every reply and refusal stays a fifth under (#2896).
-    const limit = this.limitFor(params.client);
+    let limit: Limit | undefined;
     try {
+      limit = this.limitFor(params.client);
       const args = checkArguments(tool, params.arguments);
       const sent = isObj(params.arguments) ? params.arguments : {};
       // A listing asked while plug-ins load answers not_ready with what loaded, never part of the list (#1415); the
@@ -154,7 +158,7 @@ export class McpOperations {
           const call = showCall(args);
           // A call that draws or patches is asked once: asking again would make a second revision.
           const reads = !('document' in call) && !('patch' in call);
-          return asAnswered(await this.fit(limit, reads, (room) => canvas.show(session ? { session } : { session: null }, room === undefined ? call : { ...call, room })));
+          return asAnswered(await this.fit(limit, reads, (room, again) => canvas.show(session ? { session } : { session: null }, room === undefined ? call : { ...call, room, ...(again ? { again } : {}) })));
         }
         case 'deep_query': return asAnswered(await this.fit(limit, true, (room) => canvas.query(session ?? null, room === undefined ? args : { ...args, room })));
         // Asset search and fetch read the hub's libraries, which no room reaches.
@@ -174,7 +178,7 @@ export class McpOperations {
         default: return await this.runCheck(session!, args);
       }
     } catch (error) {
-      const refused = await this.underCap(this.forAgent(error, tool), limit);
+      const refused = limit ? await this.underCap(this.forAgent(error, tool), limit) : this.forAgent(error, tool);
       // The planted hub returns deep_kinds's refusals as ordinary results, the error flag unset (#1415).
       if (tool === 'deep_kinds' && this.options.settings.plant === 'kinds-refusal-as-text') return refused.refusal;
       throw refused;
@@ -209,10 +213,11 @@ export class McpOperations {
    * A canvas reply held to the client's cap (#2896), asked again for a smaller page while it is over. The planted hubs
    * leave every client, or an unknown one, at the canvas core's 64 KB, or drop the row at each page's edge.
    */
-  private async fit(limit: Limit, reads: boolean, ask: (room: number | undefined) => Promise<Obj>): Promise<Obj> {
+  private async fit(limit: Limit, reads: boolean, ask: (room: number | undefined, again: boolean) => Promise<Obj>): Promise<Obj> {
     const plant = this.options.settings.plant;
-    if (plant === 'reply-cap-64kb' || (plant === 'unknown-client-64kb' && limit.from === UNKNOWN)) return ask(undefined);
-    const reply = await fitted(limit.cap, reads, ask);
+    if (plant === 'reply-cap-64kb' || (plant === 'unknown-client-64kb' && limit.from === UNKNOWN)) return ask(undefined, false);
+    // A reply sent as the tool's refusal reaches the client as an error, so it is held to the error cap.
+    const reply = await fitted(limit.cap, (r) => (answersAsRefusal(r) ? limit.error_cap : limit.cap), reads, ask);
     if (plant === 'pager-drops-edge-row' && typeof reply.next === 'string' && /^\d+$/.test(reply.next)) reply.next = String(Number(reply.next) + 1);
     return reply;
   }
