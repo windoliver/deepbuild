@@ -67,9 +67,10 @@ pub const MEMORY_MIB: (u64, u64) = (4, MAX_MEMORY / MIB);
 pub const STACK_KIB: (u64, u64) = (64, 256);
 
 /// The exports a logic program may add to its role's (Logic `logic@1`: Exports), each with when.
-pub const OPTIONAL_EXPORTS: [(&str, &str); 5] = [
+pub const OPTIONAL_EXPORTS: [(&str, &str); 6] = [
     ("assets_at", "with assets"),
     ("emits_at", "with emits"),
+    ("fires_at", "with fires"),
     ("preview", "with preview: preview(k: i64)"),
     ("preview_at", "with preview"),
     (
@@ -101,7 +102,7 @@ pub fn listing() -> Value {
 }
 
 /// One field of a logic item this task doesn't build yet: refused by name, never ignored.
-const LATER: [&str; 3] = ["fires", "pages", "parallel"];
+const LATER: [&str; 2] = ["pages", "parallel"];
 /// A row's own columns: no declared field can take one of these names, so a reader can name each
 /// field beside them.
 const ROW_COLUMNS: [&str; 5] = ["step", "t", "kind", "a", "b"];
@@ -561,6 +562,9 @@ pub struct Item {
     /// The kinds it emits, in declaration order, and where its emit region starts: `emits_at`.
     pub emits: Vec<Emit>,
     pub emits_at: u32,
+    /// The inputs it may fire, in declaration order, and where its fire region starts (#194).
+    pub fires: Vec<fires::Fire>,
+    pub fires_at: u32,
     /// The services it asks between steps, in declaration order, from `services_at`.
     pub services: Vec<crate::services::Asked>,
     pub services_at: u32,
@@ -1021,6 +1025,7 @@ struct Declared {
     links: Vec<(String, String)>,
     saves: Option<Value>,
     emits: Vec<Emit>,
+    fires: Vec<fires::Fire>,
     services: Vec<(String, u32)>,
     mirrors: Vec<(String, String)>,
     preview: Option<(Vec<String>, Vec<Write>)>,
@@ -1114,6 +1119,7 @@ fn emits_of(v: Option<&Value>) -> Result<Vec<Emit>, Vec<Value>> {
 }
 
 mod checks;
+pub mod fires;
 pub use checks::*;
 
 /// The most named values a series source's call holds (Series).

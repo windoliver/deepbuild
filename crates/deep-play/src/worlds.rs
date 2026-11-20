@@ -194,7 +194,7 @@ pub fn inline(
         }
         let fired = (host.fired)(form);
         let kept =
-            crate::derive::kept(form, &w, core, &fired, host.modules_first).map_err(|r| {
+            crate::derive::kept(form, id, &w, core, &fired, host.modules_first).map_err(|r| {
                 refused(
                     id,
                     json!([{"code": r.code, "path": r.path, "what": r.what}]),
