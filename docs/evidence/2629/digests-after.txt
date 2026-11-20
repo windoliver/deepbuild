@@ -1,0 +1,4 @@
+umask 002 packages/jobs/score d1:fd6d8beac98c0b0fb915f2d46f54d62f6917e449d696af32ebf23bd71bd313f8
+umask 002 packages/jobs/import d1:8fb7886bb7379869e52b92cf43fdc0a33c984675ae074a2b8457bb6eeeff8cc9
+umask 022 packages/jobs/score d1:fd6d8beac98c0b0fb915f2d46f54d62f6917e449d696af32ebf23bd71bd313f8
+umask 022 packages/jobs/import d1:8fb7886bb7379869e52b92cf43fdc0a33c984675ae074a2b8457bb6eeeff8cc9

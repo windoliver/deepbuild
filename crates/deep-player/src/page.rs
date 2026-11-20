@@ -396,6 +396,11 @@ impl Player {
         }
     }
 
+    /// #551: a person's key while the match plays; whether it made an entry.
+    pub fn net_key(&mut self, key: &str) -> bool {
+        self.net.as_mut().is_some_and(|n| n.key(key))
+    }
+
     /// The page's tick: the frame to send, empty when there is none.
     pub fn net_tick(&mut self, now_ms: f64) -> Vec<u8> {
         self.net.as_mut().map_or(Vec::new(), |n| n.tick(now_ms))
