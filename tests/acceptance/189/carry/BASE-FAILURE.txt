@@ -1,0 +1,105 @@
+# #189 carry acceptance suite (criteria 7 and 9) at the base: this worktree's HEAD 531da1ef0 (clean but for
+# tests/acceptance/189/carry added), on an Apple-silicon Mac (macOS 27.2, 18 cores, load average about 230 from other
+# sessions), Node 24.22.2, rustup's cargo.
+# Command: NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node node_modules/vitest/vitest.mjs run
+#          --root tests/acceptance/189/carry --testTimeout=600000 --hookTimeout=180000 --no-file-parallelism
+# Also: node node_modules/typescript/bin/tsc -p tests/acceptance/189/carry/tsconfig.json exits 0.
+# Result: 3 of 3 tests fail (2 of 2 files), each at its first call, a layout probe's `check` in deep-logic, which
+# the base refuses: "logic@1 has no field carry_in" (ac07) and "logic@1 has no field carry" (both ac09 tests). So no
+# test reached deep-show's build, an export, a browser, `open_carry`, a record file, `probe().records`, a control or
+# the planted name `web_carry_import_skips_hash`; deep-show (`full`) was not built at the base on this loaded Mac.
+# The harness was checked first against the base's deep-logic in a scratch test (not committed), with the fields
+# the base doesn't build taken out: every program assembles and runs with no trap; chapter 1 writes carry = 1 at step
+# 599 only, with roster [1699,1799,1899,1999,2699,...,3999] and gold 4198 there (rosterAt, goldAt); chapter 2, its
+# carry_in entry stood in at an offset the base never fills, reads 0xa5a5a5a5 in all 14 words at step 0 (what a
+# module that leaves the entry unfilled gives) and takes checkpoints at 0, 60 and 120; the roguelike's hp is 1,200
+# after step 1,799 and 0 after step 2,999, and its bake leaves one save in the saves folder (the ended one; the base
+# already takes `ends`); oneByteChanged turns gold 4198 into 5198 and changes nothing else.
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/189/carry
+
+ ❯ ac09-web-player.test.ts (2 tests | 2 failed) 11978ms
+   ❯ AC9 #189.ddd81069 carry records and ended slots in the web player (2)
+     × AC9 #189.ddd81069 chapter 1's record written in the player is kept, exported and imported into a fresh profile, where it opens chapter 2 with the app's step-0 arrays; a copy with one changed byte is refused, naming the record; and the roguelike's ended slot opens only at its end 808ms
+     × AC9 #189.ddd81069 a planted import that skips the record's hash (web_carry_import_skips_hash) takes a record with one changed byte and fails, naming the record 8ms
+ ❯ ac07-carry-records.test.ts (1 test | 1 failed) 14944ms
+   ❯ AC7 #189.316a5672 carry records: chapter 1's roster and gold carried into chapter 2 at step 0 (1)
+     × AC7 #189.316a5672 chapter 1's record opens chapter 2 with the 3 units and the gold at step 0 and replays by hash; a roster of 16 values and another layout are refused; without a record chapter 2 reads a u32 0 and zeros 1458ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac07-carry-records.test.ts > AC7 #189.316a5672 carry records: chapter 1's roster and gold carried into chapter 2 at step 0 > AC7 #189.316a5672 chapter 1's record opens chapter 2 with the 3 units and the gold at step 0 and replays by hash; a roster of 16 values and another layout are refused; without a record chapter 2 reads a u32 0 and zeros
+AssertionError: check of a layout probe with carry_in admits the piece (ok: true): {"ok":false,"code":"logic_refused","item":"probe","refusals":[{"rule":"field","what":"logic@1 has no field carry_in","field":"carry_in"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ check helpers.ts:180:70
+    178| export function check(p: JsonObject, what: string): Record<string, Che…
+    179|   const r = one({ call: 'check', piece: p }, what);
+    180|   expect(r['ok'], `${what} admits the piece (ok: true): ${show(r)}`).t…
+       |                                                                      ^
+    181|   return Object.fromEntries(Object.entries(obj(r['items'], `${what}.it…
+    182|     const o = obj(v, `${what}.items.${id}`);
+ ❯ regions fixtures.ts:59:64
+ ❯ chapter2Regions fixtures.ts:61:47
+ ❯ ac07-carry-records.test.ts:40:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  ac09-web-player.test.ts > AC9 #189.ddd81069 carry records and ended slots in the web player > AC9 #189.ddd81069 chapter 1's record written in the player is kept, exported and imported into a fresh profile, where it opens chapter 2 with the app's step-0 arrays; a copy with one changed byte is refused, naming the record; and the roguelike's ended slot opens only at its end
+AssertionError: check of a layout probe with carry admits the piece (ok: true): {"ok":false,"code":"logic_refused","item":"probe","refusals":[{"rule":"field","what":"logic@1 has no field carry","field":"carry"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ check helpers.ts:180:70
+    178| export function check(p: JsonObject, what: string): Record<string, Che…
+    179|   const r = one({ call: 'check', piece: p }, what);
+    180|   expect(r['ok'], `${what} admits the piece (ok: true): ${show(r)}`).t…
+       |                                                                      ^
+    181|   return Object.fromEntries(Object.entries(obj(r['items'], `${what}.it…
+    182|     const o = obj(v, `${what}.items.${id}`);
+ ❯ regions fixtures.ts:59:64
+ ❯ chapter1Regions fixtures.ts:60:47
+ ❯ programs fixtures.ts:158:14
+ ❯ ac09-web-player.test.ts:123:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  ac09-web-player.test.ts > AC9 #189.ddd81069 carry records and ended slots in the web player > AC9 #189.ddd81069 a planted import that skips the record's hash (web_carry_import_skips_hash) takes a record with one changed byte and fails, naming the record
+AssertionError: check of a layout probe with carry admits the piece (ok: true): {"ok":false,"code":"logic_refused","item":"probe","refusals":[{"rule":"field","what":"logic@1 has no field carry","field":"carry"}]}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ check helpers.ts:180:70
+    178| export function check(p: JsonObject, what: string): Record<string, Che…
+    179|   const r = one({ call: 'check', piece: p }, what);
+    180|   expect(r['ok'], `${what} admits the piece (ok: true): ${show(r)}`).t…
+       |                                                                      ^
+    181|   return Object.fromEntries(Object.entries(obj(r['items'], `${what}.it…
+    182|     const o = obj(v, `${what}.items.${id}`);
+ ❯ regions fixtures.ts:59:64
+ ❯ chapter1Regions fixtures.ts:60:47
+ ❯ programs fixtures.ts:158:14
+ ❯ ac09-web-player.test.ts:180:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  3 failed (3)
+   Start at  23:44:45
+   Duration  30.90s (tests 94%, import 3%, transform 2%)
+
