@@ -264,7 +264,7 @@ impl Notifier {
         // listing, when its Later ends, open it again.
         if event["kind"] == "row.set" {
             if let Some(key) = listing(&event["data"]) {
-                let handle = key["row ".len()..].to_owned();
+                let handle = key["row ".len()..].to_owned(); // copy-exception: a record key read back, never drawn
                 if event["data"]["listed"] != true {
                     self.read.remove(&key);
                 } else if self.read.insert(key)
@@ -469,7 +469,7 @@ fn listing(row: &Value) -> Option<String> {
     row["id"]
         .as_str()
         .filter(|id| id.starts_with("ask:"))
-        .map(|id| format!("row {id}"))
+        .map(|id| format!("row {id}")) // copy-exception: a record key, never drawn
 }
 
 /// Each ask the event puts in front of you, keyed by the event and the ask: the core showing it, at its batch or at
