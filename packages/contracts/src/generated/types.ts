@@ -6447,7 +6447,7 @@ export interface DocPatchedV2 {
 
 /** doctor.item@1 */
 export interface DoctorItem {
-  code: "healthy" | "binary_missing" | "version_uncovered" | "hooks_missing" | "hooks_disabled" | "hooks_untrusted" | "mcp_unregistered" | "statusline_missing" | "signed_out" | "nested_session" | "timing_relation_broken" | "telemetry_unreadable" | "not_checked" | "hub_unreachable" | "disk_low" | "ports_taken" | "billing_api_key" | "binary_differs" | "token_expiring" | "prompt_failed" | "deprecated_used" | "gpu_unsupported" | "render_failed" | "job_failing" | "hook_program_missing" | "notifications_off" | "service_unpromoted" | "statusline_shadowed" | "pack_refused" | "polkit_action_missing" | "hooks_modified" | "mod_overrides_guard" | "not_loaded" | "unknown";
+  code: "healthy" | "binary_missing" | "version_uncovered" | "hooks_missing" | "hooks_disabled" | "hooks_untrusted" | "mcp_unregistered" | "statusline_missing" | "signed_out" | "nested_session" | "timing_relation_broken" | "telemetry_unreadable" | "not_checked" | "hub_unreachable" | "disk_low" | "ports_taken" | "billing_api_key" | "binary_differs" | "token_expiring" | "prompt_failed" | "deprecated_used" | "gpu_unsupported" | "render_failed" | "job_failing" | "hook_program_missing" | "notifications_off" | "service_unpromoted" | "statusline_shadowed" | "pack_refused" | "polkit_action_missing" | "hooks_modified" | "mod_overrides_guard" | "not_loaded" | "handler_set_aside" | "footprint_unknown" | "unknown";
   level: "ok" | "warn" | "fail" | "skip";
   evidence: string;
   fix: string;
@@ -6491,6 +6491,20 @@ export interface ErrorV4 {
   path: string;
   actual: string;
   evidence: Array<string>;
+}
+
+/** error@5 */
+export interface ErrorV5 {
+  code: "unknown_schema" | "not_json" | "type" | "required" | "unlisted_field" | "enum" | "const" | "pattern" | "format" | "length" | "range" | "union" | "uncatalogued_kind" | "handle_syntax" | "handle_scheme" | "digest_algorithm" | "role" | "credential" | "unknown_method" | "not_found" | "unconfirmed" | "unbound" | "unavailable" | "too_large" | "fell_behind" | "unknown_field" | "missing_field" | "not_ready";
+  retryable: boolean;
+  remediation: string;
+  path: string;
+  actual: string;
+  evidence: Array<string>;
+  schema?: unknown;
+  loaded?: number;
+  total?: number;
+  retry_after_ms?: number;
 }
 
 /** evidence.put@1 */
@@ -6697,6 +6711,47 @@ export interface Guard {
   reason: string;
   next_step: string;
   fail_closed: boolean;
+}
+
+/** handler.failed@1 */
+export interface HandlerFailed {
+  v: 1;
+  id: string;
+  kind: "handler.failed";
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    extension: string;
+    hook: string;
+    call: string;
+    reason: string;
+  };
+  evidence?: Array<string>;
+}
+
+/** handler.set_aside@1 */
+export interface HandlerSetAside {
+  v: 1;
+  id: string;
+  kind: "handler.set_aside";
+  writer: "core";
+  actor: string;
+  scope: string;
+  ts: number;
+  seq?: bigint;
+  log_pos?: number;
+  data: {
+    extension: string;
+    hook: string;
+    call: string;
+    failures: number;
+    last: string;
+  };
+  evidence?: Array<string>;
 }
 
 /** heavy.command@1 */

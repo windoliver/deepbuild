@@ -1,0 +1,156 @@
+#1868 acceptance tests on the unchanged base (origin/main 212f16d09), run when the suite was written, 2026-11-17.
+Nothing of the fix existed. Home and checkout paths are redacted to ~ and <checkout>; Node's stack lines are cut.
+
+Machine: Mac15,12 (Apple M3, 8 cores, 16 GB), macOS 27.2.1, on AC power, Low Power Mode off. A reference Mac, but
+not a quiet one: other sessions loaded it (one-minute load 18 to 41 at the timed runs' starts, against 8 cores), and
+scripts/benchmark.mjs's fingerprint read the thermal state as "fair". So both timings below are readings and their
+tests fail INCONCLUSIVE, naming both times, not as a counted FAIL (README, Open points). Each run's own header gives
+its power source and load; `pmset -g therm` recorded no thermal warning level.
+
+Summary
+- canvas-cells (#1868.f34f3f9c): fails at its assertion, INCONCLUSIVE: 1657.3 ms with 200,000 readings and 5,000 asks,
+  541.9 ms with an empty record, 3.06 times as long; all five runs over the limit by more than the margin.
+- status-runs (#1868.bf84aa8b): fails at its assertion, INCONCLUSIVE: 2031.1 ms with 200,000 run events, 7.19 ms with
+  1,000, 282.67 times as long; all five runs over the limit by more than the margin.
+- world-fresh (#1868.a903f1c6): PASSES on the base, which builds the world again at every canvas call. Its wrong
+  program is the planted `world-built-once`, which the base doesn't have. The last run below is a scratch
+  demonstration, not the twin: the same test against the base's hub with a stale world laid over its built
+  hub-canvas.js in memory (a Node load hook that makes canvasWorld() keep the first build's asks and readings; no
+  source file was touched). It fails at the reading's assertion, naming the reading.
+
+================================================================
+== 2026-11-17T22:53:29Z node --test tests/acceptance/1868/canvas-cells.test.mjs
+machine: Mac15,12, Apple M3, 8 cores, macOS 27.2.1 (26B131)
+power: Now drawing from 'AC Power'
+thermal: 3 of 3 pmset thermal warnings unrecorded
+load before: { 18.48 95.14 174.59 }
+node: v24.22.0
+▶ #1868 a canvas call on a long record
+  ✖ #1868.f34f3f9c with 200,000 reading.recorded events and 5,000 asks in the record, a canvas.user cells call answers within 20% of its time with an empty record (124024.7605ms)
+✖ #1868 a canvas call on a long record (124026.78625ms)
+ℹ tests 1
+ℹ suites 1
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 144063.2115
+
+✖ failing tests:
+
+test at tests/acceptance/1868/canvas-cells.test.mjs:40:3
+✖ #1868.f34f3f9c with 200,000 reading.recorded events and 5,000 asks in the record, a canvas.user cells call answers within 20% of its time with an empty record (124024.7605ms)
+  AssertionError [ERR_ASSERTION]: INCONCLUSIVE: a canvas.user cells call took 1657.3 ms with 200,000 reading.recorded events and 5,000 asks in the record (five runs: 2173.67, 1657.33, 1608.09, 1627.18, 1922.73 ms) and 541.9 ms with an empty record (five runs: 541.32, 541.95, 484.20, 737.40, 546.48 ms): 3.06 times as long, where at most 1.20 times (650.3 ms) is allowed. As a reading, all five runs are over the limit by more than the margin. a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state nominal): thermal state is "fair", not "nominal"; load 14.48876953125 at a run's start or end is above the 8 cores; this is not a pass
+  + actual - expected
+
+  + 'INCONCLUSIVE'
+  - 'PASS'
+
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'INCONCLUSIVE',
+    expected: 'PASS',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+exit: 1
+load after: { 12.66 64.37 150.08 }
+
+================================================================
+== 2026-11-17T22:51:43Z node --test tests/acceptance/1868/status-runs.test.mjs
+machine: Mac15,12, Apple M3, 8 cores, macOS 27.2.1 (26B131)
+power: Now drawing from 'AC Power'
+thermal: 3 of 3 pmset thermal warnings unrecorded
+load before: { 41.46 131.40 196.81 }
+node: v24.22.0
+▶ #1868 deep_status on a long record
+  ✖ #1868.bf84aa8b with 200,000 run events in the record, one deep_status call for a session with 10 claims answers within 20% of its time with 1,000 run events (78717.399959ms)
+✖ #1868 deep_status on a long record (78719.389375ms)
+ℹ tests 1
+ℹ suites 1
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 98715.260834
+
+✖ failing tests:
+
+test at tests/acceptance/1868/status-runs.test.mjs:56:3
+✖ #1868.bf84aa8b with 200,000 run events in the record, one deep_status call for a session with 10 claims answers within 20% of its time with 1,000 run events (78717.399959ms)
+  AssertionError [ERR_ASSERTION]: INCONCLUSIVE: one deep_status call for the session with 10 claims took 2031.1 ms with 200,000 run events in the record (five runs: 1778.43, 1978.67, 2047.60, 2031.11, 2126.78 ms) and 7.19 ms with 1,000 (five runs: 11.01, 7.19, 7.04, 7.21, 7.09 ms): 282.67 times as long, where at most 1.20 times (8.62 ms) is allowed. As a reading, all five runs are over the limit by more than the margin. a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state nominal): thermal state is "fair", not "nominal"; load 29.798828125 at a run's start or end is above the 8 cores; this is not a pass
+  + actual - expected
+
+  + 'INCONCLUSIVE'
+  - 'PASS'
+
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'INCONCLUSIVE',
+    expected: 'PASS',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+exit: 1
+load after: { 19.49 97.94 176.50 }
+
+================================================================
+== 2026-11-17T22:50:05Z node_modules/.bin/vitest run tests/acceptance/1868/world-fresh.test.ts
+machine: Mac15,12, Apple M3, 8 cores, macOS 27.2.1 (26B131)
+power: Now drawing from 'AC Power'
+thermal: 3 of 3 pmset thermal warnings unrecorded
+load before: { 63.21 168.31 216.26 }
+node: v24.22.0
+
+ RUN  v5.0.5 <checkout>
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  14:50:05
+   Duration  33.19s (tests 99%, transform 1%)
+
+exit: 0
+load after: { 44.03 153.61 209.27 }
+
+================================================================
+Scratch demonstration (not the twin): the base's hub with a world built once, NODE_OPTIONS=--import <scratch>/spawn-patch.mjs
+== 2026-11-17T22:50:50Z node_modules/.bin/vitest run tests/acceptance/1868/world-fresh.test.ts
+machine: Mac15,12, Apple M3, 8 cores, macOS 27.2.1 (26B131)
+power: Now drawing from 'AC Power'
+thermal: 3 of 3 pmset thermal warnings unrecorded
+load before: { 36.49 146.58 205.79 }
+node: v24.22.0
+
+ RUN  v5.0.5 <checkout>
+
+ ❯ tests/acceptance/1868/world-fresh.test.ts (1 test | 1 failed) 40058ms
+   ❯ #1868 the world a deep_show reads (1)
+     × #1868.a903f1c6 a reading recorded after the world was built shows in the next deep_show's world, and an ask answered since shows as done 39976ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/1868/world-fresh.test.ts > #1868 the world a deep_show reads > #1868.a903f1c6 a reading recorded after the world was built shows in the next deep_show's world, and an ask answered since shows as done
+AssertionError: the reading reading:01M7NVAEEW5VVCBXF30BGB8DFM (1 runs, "runs saved by carrying across sessions · /private/tmp/dh1018-6VUXtt/repo/.git"), recorded at log_pos 116 after the world was built, is not in the next deep_show's world: the deep_show that binds a value to it was refused, ref_unresolved naming reading:01M7NVAEEW5VVCBXF30BGB8DFM: {"rev":1,"expansions":[],"issues":[{"check":"document.validate","code":"ref_unresolved","severity":"error","ids":["the-reading"],"path":"bound_values/the-reading/source","actual":"reading:01M7NVAEEW5VVCBXF30BGB8DFM","what":"this writer's credential can't read the handle","fix":"Name an ID the document holds, or remove the reference."}],"issues_evidence":"930a2a363533bf64cacd61306e356f80d0e3c38a08cb7e1c59a0c4283f40bc0d","snapshots":[],"outcome":"refused","backends":{"fonts":{"name":"fonts.bundled","version":"1.0.0"},"cpu":{"name":"aarch64","version":"1.0.0"}},"core":"core@0.0.0","set_digest":"ccbcd2914cc304475dd44c1b27270f9c0b393ad8ae0c51f62ce5af99b98844d8"}
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/acceptance/1868/world-fresh.test.ts:127:14
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  14:50:50
+   Duration  40.58s (tests 99%, transform 1%)
+
+exit: 1
+load after: { 45.81 135.27 198.93 }

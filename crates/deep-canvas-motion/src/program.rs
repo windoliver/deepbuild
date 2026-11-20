@@ -154,6 +154,8 @@ pub(crate) struct Compiled {
     /// reach2's lower bone and end, after the owner (its upper bone).
     pub(crate) chain: [usize; 2],
     pub(crate) table: Option<crate::constraint::PathRead>,
+    /// #2500: where a reach aims in its target text's own space, at a line's or token's box.
+    pub(crate) aim: Option<[f64; 2]>,
 }
 
 /// A placement's write: one clip channel into one bound item's slots, after its target's delay.
@@ -908,37 +910,21 @@ impl Program {
             use doc::Kind;
             let path = format!("constraints/{}", c.id);
             let owner = index_of(&program.items, &c.owner, format!("{path}/owner"))?;
-            // An item ID reads its evaluated world pose; `items/<id>/at/<group>` reads that
-            // group as its channels and drivers write it.
-            let read =
-                |x: &str, at: String| -> Result<(usize, Option<usize>), Refused> {
-                    let parts: Vec<&str> = x.split('/').collect();
-                    match parts.as_slice() {
-                        ["items", id, "at", g] => {
-                            let g = ["pos", "rot", "scale"].iter().position(|n| n == g).ok_or(
-                                Refused {
-                                    code: "bad_path",
-                                    path: at.clone(),
-                                    detail: None,
-                                },
-                            )?;
-                            Ok((index_of(&program.items, id, at)?, Some(g)))
-                        }
-                        [id] => Ok((index_of(&program.items, id, at)?, None)),
-                        _ => Err(Refused {
-                            code: "bad_path",
-                            path: at,
-                            detail: None,
-                        }),
-                    }
-                };
+            let read = |x: &str, at: String| crate::anchored::read(&program.items, x, at);
             let other = match &c.kind {
                 Kind::ChildOf { parent: x }
                 | Kind::LookAt { target: x }
                 | Kind::Copy { target: x, .. }
-                | Kind::Distance { target: x, .. }
-                | Kind::Reach2 { target: x, .. } => Some(read(x, format!("{path}/target"))?),
+                | Kind::Distance { target: x, .. } => Some(read(x, format!("{path}/target"))?),
+                // #2500: a reach at a text's line or token reads the text's pose.
+                Kind::Reach2 { target: x, .. } => {
+                    Some(read(crate::anchored::split(x).0, format!("{path}/target"))?)
+                }
                 Kind::FollowTip { item, .. } => Some(read(item, format!("{path}/item"))?),
+                _ => None,
+            };
+            let aim = match &c.kind {
+                Kind::Reach2 { target, .. } => crate::anchored::aim(items_json, target, &path)?,
                 _ => None,
             };
             let chain = match &c.kind {
@@ -985,6 +971,7 @@ impl Program {
                 other,
                 chain,
                 table,
+                aim,
             });
         }
         let mut at = std::collections::BTreeMap::new();

@@ -39,7 +39,7 @@ pub(crate) fn evaluate_sourced(
 ) -> Result<Scene, Value> {
     let mut scene =
         deep_canvas_scene3d::scene::evaluate_sourced(doc, t, look, labels, assets, outlines)
-            .map_err(|r| refused(r.code, r.path))?;
+            .map_err(|r| crate::touches::refusal(refused(r.code, r.path), outlines.memo))?;
     follow_effects(&mut scene, doc)?;
     Ok(scene)
 }
@@ -181,7 +181,7 @@ fn answer(app: &mut App, out: &str, call: &Value) -> Result<Value, Value> {
     if crate::flows2d::any(&doc) {
         return crate::flows2d::answer(&doc, call, app.planted);
     }
-    crate::physics::bake(&mut doc, &Value::Null)?;
+    crate::physics::bake(&mut doc, &Value::Null, &BTreeMap::new())?;
     let (plants, flags, every) = plants(app.planted);
     // The rules that read the document alone refuse it before anything evaluates.
     let early: Vec<_> = rule::issues(&doc, every)

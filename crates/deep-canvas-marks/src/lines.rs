@@ -207,6 +207,25 @@ pub fn anchor_box(
     }
 }
 
+/// #2500: the box of text item `id` from its origin, from its one shaped run, for a module that
+/// shapes no text (a shot framing it, a reach aiming at it): the whole item's as `geometry` gives
+/// it, as wide as `box.w` or else its run and as high as its run, or with `part` that read-only
+/// anchor's ([`anchor_box`]). `None` for any other kind, a text the shaper can't set, or an anchor
+/// the text lacks.
+pub fn text_box(id: &str, item: &Value, part: Option<&str>) -> Option<[f64; 4]> {
+    if item.get("kind").and_then(Value::as_str) != Some("text@1") {
+        return None;
+    }
+    let params = crate::scene::object_or_empty(item.get("params"));
+    let shaped = crate::scene::shaped_text(&crate::scene::text_spec(id, params, None).ok()?)?;
+    if let Some(part) = part {
+        return anchor_box(params, &shaped, part);
+    }
+    let w = params.get("box").and_then(|b| b.get("w"));
+    let w = w.and_then(Value::as_f64).unwrap_or(f64::from(shaped.width));
+    Some([0.0, 0.0, w, f64::from(shaped.height)])
+}
+
 /// What a code item draws beside its text: the highlights' bands under it, its line numbers,
 /// gutter marks and highlight boxes over it, each a part of the item `<id>#…`, and the
 /// graphemes of its text that a highlight dims, with the parts it dims and their opacity.

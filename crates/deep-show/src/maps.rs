@@ -25,8 +25,8 @@ fn unfit(code: &'static str, path: impl Into<String>) -> Unfit {
 }
 
 impl Hub<'_> {
-    /// `doc` at `t` on a frame of `size`, evaluated with its assets and its maps' texels, and the
-    /// look it draws in.
+    /// `doc` at `t` on a frame of `size`, evaluated with its assets, its maps' texels and its
+    /// pictures, and the look it draws in.
     pub(crate) fn evaluate3d(
         &mut self,
         doc: &Value,
@@ -44,6 +44,8 @@ impl Hub<'_> {
             .ok_or_else(|| unfit("unsupported_platform", ""))?;
         let (mut scene, look) = gpu.evaluate(doc, t, &palette, size, &read)?;
         scene.texels = self.texels(doc, &scene)?;
+        // #2450: and its pictures, so every frame drawn from it shows them.
+        self.paint_pictures(&mut scene)?;
         Ok((scene, look))
     }
 

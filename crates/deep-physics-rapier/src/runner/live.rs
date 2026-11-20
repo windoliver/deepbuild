@@ -74,11 +74,14 @@ impl Run {
             all_steps: self.all_steps,
             no_volume: self.no_volume,
             vehicle: self.vehicle,
+            centre: self.centre,
             declared_masses_only: self.declared_masses_only,
             twin: self.twin,
             test: self.test,
             kit_planted: self.kit_planted,
             leave_ccd_off: self.leave_ccd_off,
+            lint: self.lint,
+            ccd_on_kinematic: self.ccd_on_kinematic,
             views: std::cell::RefCell::default(),
         }
     }

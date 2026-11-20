@@ -151,6 +151,8 @@ export interface CanvasWorld {
   sessions: CanvasSession[];
   /** The record's objects a binding can read, each with the session it belongs to. */
   record: Obj;
+  /** Given by a caller that keeps `record` across calls (#1868): it changes whenever `record` does, so the record is told apart by it and never by its text. */
+  recordRev?: number;
   /** The panels, documents, claims, window, card and fault of the world file; empty without one. */
   file: Obj;
   /** The documents shown so far, each on the app's one canvas panel unless the world file places it. */
@@ -210,7 +212,8 @@ export class Canvas {
   call(world: CanvasWorld, call: CanvasCall): Promise<{ reply: Obj; presented?: Obj }> {
     const run = this.chain.then(async () => {
       const shaped = shape(world, this.evidence);
-      const text = JSON.stringify(shaped);
+      // A record kept across calls is compared by its revision: its text grows with history (#1868).
+      const text = JSON.stringify(world.recordRev === undefined ? shaped : { ...shaped, record: world.recordRev });
       if (text !== this.world) {
         const set = await this.send({ world: shaped });
         if (set.ok !== true) throw refuse('unavailable', '', `The canvas core refused the hub's world: ${why(set)}`, 'canvas', true);
@@ -238,7 +241,7 @@ function shape(world: CanvasWorld, evidence: string): Obj {
   const sessions: Obj = {};
   for (const s of world.sessions) sessions[s.id] = { thread: s.thread, name: s.name, process: { pid: 0, start: 0 } };
   const out: Obj = { evidence, sessions, record: world.record, panels: PANELS, docs: Object.fromEntries(world.docs.map((doc) => [doc, { panel: PANEL }])) };
-  for (const key of ['panels', 'docs', 'claims', 'window', 'card', 'fault', 'packs', 'job_tools']) if (world.file[key] !== undefined) out[key] = world.file[key];
+  for (const key of ['panels', 'docs', 'claims', 'window', 'card', 'fault', 'packs', 'job_tools', 'installed']) if (world.file[key] !== undefined) out[key] = world.file[key];
   return out;
 }
 

@@ -128,6 +128,8 @@ pub struct CheckOptions {
     pub wide_fetches: bool,
     /// #252's planted class: a stepped operator's carried state computes as exact.
     pub carried_exact: bool,
+    /// #1993's planted check: a stepped operator's stability bound is never computed.
+    pub skips_bound: bool,
 }
 
 struct Ctx<'a> {
@@ -1549,47 +1551,6 @@ impl Ctx<'_> {
     }
 }
 
-/// Where #252's stepped fields may stand: `stepped` on a compute operator, and `carry`, a read of
-/// the previous step and the step index only in a stepped one.
-fn stepped_rules(op: &Operator, issues: &mut Vec<Issue>) {
-    let rule = |issues: &mut Vec<Issue>, path: &str, what: String| {
-        issues.push(Issue::at_path("operator_kind_rule", path, what));
-    };
-    if op.stepped.is_some() && op.kind != Kind::Compute {
-        rule(
-            issues,
-            "stepped",
-            format!("{} is stepped, and only compute work steps", op.id),
-        );
-    }
-    if op.stepped.is_some() {
-        return;
-    }
-    for (name, s) in &op.storage {
-        if s.carry.is_some() {
-            rule(
-                issues,
-                &format!("outputs/{name}/carry"),
-                format!(
-                    "{} carries {name} between frames, and only a stepped operator carries state",
-                    op.id
-                ),
-            );
-        }
-    }
-    for (name, input) in &op.inputs {
-        match &input.from {
-            From::Storage { op: from, output, previous: true } => rule(
-                issues,
-                &format!("inputs/{name}"),
-                format!("{name} reads {from}.{output} as the previous step left it, and only a stepped operator reads an earlier step"),
-            ),
-            From::Step => rule(issues, &format!("inputs/{name}"), format!("{name} reads the fixed step, and only a stepped operator has one")),
-            _ => {}
-        }
-    }
-}
-
 fn input_class(from: &From) -> Class {
     match from {
         // A target the GPU rasterized is same machine, and so is time.
@@ -1600,6 +1561,7 @@ fn input_class(from: &From) -> Class {
         From::Param(_)
         | From::Channel(_)
         | From::Texture3d { .. }
+        | From::Previous { .. }
         | From::Seed
         | From::Step
         | From::Role(_)

@@ -1,0 +1,78 @@
+The two files of this folder, each run once at base commit 9d0256132 ("Merge pull request #2836 …"; no implementation
+of #2239), on macOS 27.2 arm64 (shared, 1-minute load about 170 while they ran), Node 24.22.2, vitest 5.0.5, with
+
+  PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    node node_modules/vitest/vitest.mjs run --root tests/acceptance/2239-redraft-ac4 --no-file-parallelism \
+    --testTimeout=600000 --reporter=verbose <file>
+
+The checkout's target/ already held this base's release build of deep-physics, which each file's cargo call found
+made. Nothing was run twice, and nothing else was run: no other suite, no probe of the binary apart from these files.
+The type-check (node node_modules/typescript/bin/tsc -p tests/acceptance/2239-redraft-ac4/tsconfig.json) exits 0.
+
+After the runs, helpers.ts lost the `export` on three constants and one function that no test imports. No assertion
+and no test file changed, so neither file was run again; the type-check was, and exits 0.
+
+Result: 6 tests, 5 failed and 1 passed. Every failure is an AssertionError at an assertion in its own file; none is in
+a hook, an import, a helper or a timeout, and none is BLOCKED or INCONCLUSIVE.
+
+ac4-fast-ball-resting-ball.test.ts   #2239.9cc14721   Tests 2 failed | 1 passed (3), 2.03 s
+
+ × with the resting ball's ccd off the moving ball never passes it in any of the ten starts, and the lint raises
+   nothing
+   AssertionError at ac4-fast-ball-resting-ball.test.ts:45: the shot, ccd off on the ball at rest:
+     ccd off on the ball at rest, start 0 (2.5500 m back): physics.fast_body raises {"kind":null,"ids":["resting"],
+     "step":4,"move":0.4166666679084301,"half_extent":0.05,"severity":"warning","fix":"Turn the body's ccd on, or slow
+     it."}, where nothing is expected
+     … the same in each of the ten starts, step 4, moves from 0.417 m (start 0) down to 0.067 m (start 9)
+   The motion holds: in every start `moving never passes`, and both balls end at 50.00 m/s, `resting` 0.1 m ahead.
+   The lint is what fails: the base's rule for one body flags the struck ball, which has ccd off and leaves at
+   50 m/s, with the fix the issue's opening shows fixes nothing here.
+
+ ✓ with ccd: true on the resting ball too the moving ball never passes it in any of the ten starts either, and the
+   lint raises nothing
+   It passes at the base, as it should. The base's wrapper already gives a body that has ccd: true the backend's
+   contact prediction along its own move (#191), which is the reason the criterion gives, so the moving ball is held
+   in every start: `moving never passes`, both end at 50.00 m/s, `resting` 0.1 m ahead. And the base's lint reads
+   only bodies with ccd off, so it raises nothing: physics.fast_body raises [] in each start. The amendment changed
+   the issue to what main holds here. The wrong program this test's judge fails on is the planted
+   lint_reads_sweep_alone, which the base lacks (next test).
+
+ × a planted lint that reads the backend's sweep alone, without that prediction, raises an issue of kind pair for the
+   second world and fails, naming both balls
+   AssertionError at ac4-fast-ball-resting-ball.test.ts:55: the planted lint runs: expected
+     'deep-physics --planted lint_reads_sweep_alone exits 2 with 1 of 10 replies; stdout: {"ok":false,
+     "code":"bad_input"}; stderr: (none)' to be ''
+   The base lacks the planted name.
+
+ac7-turning-bar-resting-ball.test.ts   #2239.2136cd3f   Tests 3 failed (3), 1.64 s
+
+ × with the ball's ccd off the bar strikes it in every one of the ten starts, and the lint raises nothing
+   AssertionError at ac7-turning-bar-resting-ball.test.ts:39: the bar and the ball, ccd off on the ball:
+     ccd off on the ball, start 0 (the ball 15.0° ahead): physics.fast_body raises {"kind":null,"ids":["ball"],
+     "step":4,"move":0.08410582640062664,"half_extent":0.02,"severity":"warning","fix":"Turn the body's ccd on, or
+     slow it."}, where nothing is expected
+     … the same in each of the ten starts, step 4, moves of 0.078 to 0.084 m
+   The motion holds: in every start `the ball is struck in step 4`, and ends about 0.81 m from where it was built at
+   about 11 m/s; the bar turns 61.6° to 66.5° in the run, not its free 72°. The lint is what fails, as in the shot:
+   the base flags the struck ball, which has ccd off.
+
+ × with ccd: true on the ball too the bar passes it and leaves it at rest in at least one of the ten starts, and the
+   lint raises one issue of kind pair naming both, whose fix says to turn ccd off on the ball
+   AssertionError at ac7-turning-bar-resting-ball.test.ts:54: the bar and the ball, ccd on the bar and the ball:
+     ccd on the bar and the ball, start 0 (the ball 15.0° ahead): physics.fast_body raises 0 issues, one of kind pair
+     naming bar and ball expected: []
+     … the same in each of the ten starts
+   The motion holds: the bar passes the ball and leaves it at rest in 5 of the ten starts (0, 1, 2, 3, 4), the
+   issue's five of ten: `the ball is left at rest; the bar turns 72.00° in the run, and is clear past where the ball
+   was built from step 3` (starts 0 and 1) or `from step 4` (starts 2 to 4). In starts 5 to 9 the ball is struck in
+   step 4. The lint is what fails: the base raises nothing for the pair.
+
+ × a planted lint that reads one body at a time raises nothing for the second world and fails
+   AssertionError at ac7-turning-bar-resting-ball.test.ts:59: the planted lint runs: expected
+     'deep-physics --planted lint_one_body_at_a_time exits 2 with 1 of 10 replies; stdout: {"ok":false,
+     "code":"bad_input"}; stderr: (none)' to be ''
+   The base lacks the planted name. The base's own lint is that wrong program for this world: it raises nothing in
+   any of the ten starts (the test above), and the same judge fails on it in each.
+
+The numbers above are the base's, read from this one run for this record. No test asserts any of them: each asserts
+the issue's counts over the ten starts and what the issue says the lint raises.

@@ -31,7 +31,9 @@ use deep_canvas_physics::track::{self, Entry};
 use serde_json::{json, Map, Value};
 
 mod audit;
+pub mod centre;
 pub mod contact;
+pub mod fast;
 mod held;
 pub mod kit;
 #[cfg(not(target_arch = "wasm32"))]
@@ -83,8 +85,13 @@ pub struct Run {
     kit_planted: deep_canvas_physics::kit::Planted,
     /// #191 criterion 12's planted recipe: it leaves a flagged body's ccd off.
     leave_ccd_off: bool,
+    /// #2239's planted lint, and its planted kit: it turns ccd on for a flagged kinematic body too.
+    lint: deep_canvas_physics::fast::Planted,
+    ccd_on_kinematic: bool,
     /// #251's planted vehicle controller or check.
     vehicle: crate::VehiclePlant,
+    /// #2240's planted check or output.
+    centre: centre::Plant,
     /// The views this runner holds open, by session (#522).
     #[cfg(not(target_arch = "wasm32"))]
     views: std::cell::RefCell<BTreeMap<String, live::View>>,
@@ -456,7 +463,10 @@ impl Run {
             test: None,
             kit_planted: deep_canvas_physics::kit::Planted::None,
             leave_ccd_off: false,
+            lint: deep_canvas_physics::fast::Planted::None,
+            ccd_on_kinematic: false,
             vehicle: crate::VehiclePlant::None,
+            centre: centre::Plant::None,
             #[cfg(not(target_arch = "wasm32"))]
             views: std::cell::RefCell::default(),
         };
@@ -464,7 +474,6 @@ impl Run {
             None => {}
             Some("caps_allow_restitution_threshold") => run.caps.restitution_threshold = true,
             Some("caps_allow_rolling_resistance") => run.caps.rolling_resistance = true,
-            Some("caps_allow_tangent_speed") => run.caps.tangent_speed = true,
             Some("caps_allow_dynamic_gear") => run.caps.dynamic_couplings = true,
             Some("hash_rounds_1e6") => run.round_hashes = true,
             Some("key_omits_frame_rate") => run.key_without_rate = true,
@@ -491,7 +500,9 @@ impl Run {
                 if !kit::planted(name, &mut run)
                     && !vehicle::planted(name, &mut run)
                     && !walk::planted(name, &mut run)
-                    && !contact::planted(name, &mut run) =>
+                    && !contact::planted(name, &mut run)
+                    && !centre::planted(name, &mut run)
+                    && !fast::planted(name, &mut run) =>
             {
                 return None
             }
@@ -574,7 +585,7 @@ impl Run {
     /// The world `v` holds, built, or the issues that refuse it.
     fn build(&self, v: &Value) -> Result<(World, Rapier), Value> {
         let refused = |e: Vec<Refusal>| refused(&e);
-        let w = contact::check(v, self).map_err(refused)?;
+        let w = centre::check(v, self).map_err(refused)?;
         let mut b = Rapier {
             restore_any_version: self.restore_any_version,
             reverse_pairs: cfg!(feature = "test-reverse-pairs"),
@@ -597,6 +608,11 @@ impl Run {
             return Some(doc.map(|d| (d, None)).map_err(|e| refused(&e)));
         };
         let id = world.as_str()?;
+        // #2457: with `evidence`, the store its scene's mesh assets are read from (source.rs).
+        let root = call.get("evidence").and_then(Value::as_str).map(Path::new);
+        let kept =
+            root.map(|r| crate::source::sourced(scene, &|sha| crate::source::stored(r, sha)));
+        let scene = kept.as_deref().unwrap_or(scene);
         let doc = scene.get("worlds")?.get(id)?;
         let read = crate::bound::expand(Some(scene), doc).and_then(|doc| {
             let w = check(&doc, &self.caps, self.table)?;
@@ -614,10 +630,9 @@ impl Run {
         let c = b.canonical();
         let joints = b.joints();
         t.step_hashes.push(self.hash(&c, &joints));
-        for x in c.iter().filter(|x| x.values.len() == FIELDS.len()) {
-            t.fast
-                .at(k, &x.id, [0, 1, 2].map(|i| f64::from(x.values[i])));
-        }
+        let bodies = c.iter().filter(|x| x.values.len() == FIELDS.len());
+        t.fast
+            .step(k, bodies.map(|x| (x.id.as_str(), x.values.as_slice())));
         for (id, o) in &w.outputs {
             let (Some(at), Some(x)) = (o.read.vec3_at(), c.iter().find(|x| x.id == o.from)) else {
                 continue;
@@ -637,6 +652,7 @@ impl Run {
             }
         }
         vehicle::take(b, w, t, (k, start, plan.every));
+        centre::take(self, b, w, &c, t);
         if (k - start).is_multiple_of(plan.every) {
             let read = b.read();
             for s in read.bodies {
@@ -732,7 +748,7 @@ impl Run {
         let mut t = Trace {
             bodies,
             particles,
-            fast: deep_canvas_physics::fast::FastBodies::new(&w),
+            fast: deep_canvas_physics::fast::FastBodies::new(&w, self.caps.sweep, self.lint),
             vehicles: vehicle::named(call, &b),
             ..Trace::default()
         };

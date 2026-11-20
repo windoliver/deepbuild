@@ -83,6 +83,8 @@ pub(crate) struct InstanceBuffer {
 impl InstanceBufferPool {
     pub(crate) fn reset(&mut self, buffer_size: usize) {
         self.buffer_size = buffer_size;
+        let bytes = self.buffers.iter().map(|b| b.allocated_size()).sum(); // DeepBuild patch (windoliver/deepbuild#1431)
+        crate::held::freed(crate::held::INSTANCES, self.buffers.len() as u64, bytes);
         self.buffers.clear();
     }
 
@@ -101,7 +103,9 @@ impl InstanceBufferPool {
                 MTLResourceOptions::StorageModeManaged
             };
 
-            device.new_buffer(self.buffer_size as u64, options)
+            let buffer = device.new_buffer(self.buffer_size as u64, options);
+            crate::held::took(crate::held::INSTANCES, 1, buffer.allocated_size()); // DeepBuild patch (windoliver/deepbuild#1431)
+            buffer
         });
         InstanceBuffer {
             metal_buffer: buffer,
@@ -112,7 +116,15 @@ impl InstanceBufferPool {
     pub(crate) fn release(&mut self, buffer: InstanceBuffer) {
         if buffer.size == self.buffer_size {
             self.buffers.push(buffer.metal_buffer)
+        } else { // DeepBuild patch (windoliver/deepbuild#1431)
+            crate::held::freed(crate::held::INSTANCES, 1, buffer.metal_buffer.allocated_size());
         }
+    }
+}
+
+impl Drop for InstanceBufferPool { // DeepBuild patch (windoliver/deepbuild#1431)
+    fn drop(&mut self) {
+        self.reset(self.buffer_size);
     }
 }
 
@@ -161,6 +173,13 @@ pub struct PathRasterizationVertex {
     pub st_position: Point<f32>,
     pub color: Background,
     pub bounds: Bounds<ScaledPixels>,
+}
+
+impl Drop for MetalRenderer { // DeepBuild patch (windoliver/deepbuild#1431)
+    fn drop(&mut self) {
+        self.count_targets(false);
+        self.layer.iter().for_each(|layer| crate::held::resized(layer.as_ptr() as usize));
+    }
 }
 
 impl MetalRenderer {
@@ -475,11 +494,19 @@ impl MetalRenderer {
     pub fn update_drawable_size(&mut self, size: Size<DevicePixels>) {
         if let Some(layer) = &self.layer {
             layer.set_drawable_size(CGSize::new(size.width.0 as f64, size.height.0 as f64));
+            crate::held::resized(layer.as_ptr() as usize); // DeepBuild patch (windoliver/deepbuild#1431)
         }
         self.update_path_intermediate_textures(size);
     }
 
+    fn count_targets(&self, took: bool) { // DeepBuild patch (windoliver/deepbuild#1431)
+        let count = if took { crate::held::took } else { crate::held::freed };
+        let targets = [&self.path_intermediate_texture, &self.path_intermediate_msaa_texture];
+        targets.into_iter().flatten().for_each(|t| count(crate::held::TARGETS, 1, t.allocated_size()));
+    }
+
     fn update_path_intermediate_textures(&mut self, size: Size<DevicePixels>) {
+        self.count_targets(false); // DeepBuild patch (windoliver/deepbuild#1431)
         // We are uncertain when this happens, but sometimes size can be 0 here. Most likely before
         // the layout pass on window creation. Zero-sized texture creation causes SIGABRT.
         // https://github.com/zed-industries/zed/issues/36229
@@ -515,6 +542,7 @@ impl MetalRenderer {
         } else {
             self.path_intermediate_msaa_texture = None;
         }
+        self.count_targets(true); // DeepBuild patch (windoliver/deepbuild#1431)
     }
 
     pub fn update_transparency(&mut self, transparent: bool) {
@@ -553,6 +581,8 @@ impl MetalRenderer {
             );
             return;
         };
+        let t = drawable.texture(); // DeepBuild patch (windoliver/deepbuild#1431)
+        crate::held::drawable(layer.as_ptr() as usize, t.as_ptr() as usize, t.allocated_size());
 
         let command_buffer = match self.render_frame(scene, drawable.texture(), viewport_size) {
             Ok(command_buffer) => command_buffer,

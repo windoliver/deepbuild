@@ -1,0 +1,112 @@
+== commit 8f2e519042071ad273340e99151bdd912d9d7baa
+== command: NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1810 --no-file-parallelism
+
+ RUN  v5.0.5 ~/private/d1810n/tests/acceptance/1810
+
+stdout | redraft-replica/list.test.ts > #1810.eebcb4a2 > #1810.eebcb4a2: with two asks answered and one open, deep and the app's list say 1 at the same log position
+deep status --json at 35 and 35; the app's list at 35: [["session:530fbb2e-f356-41c1-90e9-dc5cf35816b7","Cart totals","needs you"],["ask:01M7RCDCG0Z9Y78ESX9EV7JN6D","Which header colour on the login page?","needs you"]]; its window's counts [1]
+deep:
+shop
+  Cart totals  claude-code  needs you · an ask open, 0s
+Needs you
+  Which header colour on the login page?  needs you  shop, 0s
+1 session
+1 ask needs you
+
+
+ ❯ redraft-replica/list.test.ts (1 test | 1 failed) 305850ms
+   ❯ #1810.eebcb4a2 (1)
+     × #1810.eebcb4a2: with two asks answered and one open, deep and the app's list say 1 at the same log position 305646ms
+stdout | count.test.ts > #1810.eebcb4a2 > #1810.eebcb4a2: two asks answered and one open: "anything for me?" answers "needs you: 1", and deep and the app's folded list say 1 at one log position
+status answer:
+says done · next: DeepBuild (for 10s) · needs you: 1
+work: /private/tmp/dh16-D2KsCO/shop · session 9015f363 (claude-code) · resume: claude --resume 9015f363-be9b-42c5-bb33-816cd4ac3d31 · deep://sessions/9015f363-be9b-42c5-bb33-816cd4ac3d31
+
+stdout | count.test.ts > #1810.eebcb4a2 > #1810.eebcb4a2: two asks answered and one open: "anything for me?" answers "needs you: 1", and deep and the app's folded list say 1 at one log position
+deep:
+shop
+  Cart totals  claude-code  needs you · an ask open, 30m
+Needs you
+  Which header colour on the login page?  needs you  shop, 30m
+1 session
+1 ask needs you
+
+
+ ❯ count.test.ts (2 tests | 1 failed) 26260ms
+   ❯ #1810.eebcb4a2 (2)
+     ✓ #1810.eebcb4a2: two asks answered and one open: "anything for me?" answers "needs you: 1", and deep and the app's folded list say 1 at one log position 15239ms
+     × #1810.eebcb4a2: the replica's list (the app itself, on macOS) says 1 at deep status --json's log position 10935ms
+stdout | defaulted.test.ts > #1810.a646c123 > #1810.a646c123: an ask that took its default and can still be undone isn't counted by the status answer, deep or the app's list
+status answer:
+says done · next: DeepBuild (for 7s) · needs you: 1
+work: /private/tmp/dh16-glW9Zf/shop · session bbefbba0 (claude-code) · resume: claude --resume bbefbba0-43c1-4d0e-afb2-c67c29a157ae · deep://sessions/bbefbba0-43c1-4d0e-afb2-c67c29a157ae
+
+stdout | defaulted.test.ts > #1810.a646c123 > #1810.a646c123: (wrong program) a status answer that counts the undoable default (DEEP_HUB_PLANT=needs-you-counts-defaulted) fails, naming the ask
+planted status answer:
+says done · next: DeepBuild (for 7s) · needs you: 2
+work: /private/tmp/dh16-L3h3Gn/shop · session 3b5efe02 (claude-code) · resume: claude --resume 3b5efe02-2dd5-4885-a5d7-5db50ca0dc43 · deep://sessions/3b5efe02-2dd5-4885-a5d7-5db50ca0dc43
+
+ ✓ defaulted.test.ts (2 tests) 23742ms
+   ✓ #1810.a646c123 (2)
+     ✓ #1810.a646c123: an ask that took its default and can still be undone isn't counted by the status answer, deep or the app's list 13456ms
+     ✓ #1810.a646c123: (wrong program) a status answer that counts the undoable default (DEEP_HUB_PLANT=needs-you-counts-defaulted) fails, naming the ask 10172ms
+ ✓ redraft-replica/judges.test.ts (5 tests) 5ms
+ ✓ judges.test.ts (2 tests) 6ms
+stdout | width.test.ts > #1810.1a3e8cda > #1810.1a3e8cda: a session with a 90-character title and 3 open asks: the status answer's line is at most 80 columns and ends in "needs you: 3"
+status answer:
+says done · next: DeepBuild (for 7s) · needs you: 3
+work: /private/tmp/dh16-DNGnUO/shop · session cbff2b3c (claude-code) · resume: claude --resume cbff2b3c-4b45-47c8-a61c-7dca584a6225 · deep://sessions/cbff2b3c-4b45-47c8-a61c-7dca584a6225
+
+ ✓ width.test.ts (1 test) 11766ms
+   ✓ #1810.1a3e8cda (1)
+     ✓ #1810.1a3e8cda: a session with a 90-character title and 3 open asks: the status answer's line is at most 80 columns and ends in "needs you: 3" 11653ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  count.test.ts > #1810.eebcb4a2 > #1810.eebcb4a2: the replica's list (the app itself, on macOS) says 1 at deep status --json's log position
+AssertionError: the replica's list was read at deep status --json's log_pos: expected 39 to be 35 // Object.is equality
+
+- Expected
++ Received
+
+- 35
++ 39
+
+ ❯ count.test.ts:49:88
+     47|     const at = await statusLogPos(w);
+     48|     const app = await replicaList(w);
+     49|     expect(app.log_pos, "the replica's list was read at deep status --…
+       |                                                                                        ^
+     50|     expect(app.counts, 'the window says "1 ask needs you"').toEqual([1…
+     51|     expect(app.asks, "the replica's list holds the one open ask's row"…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  redraft-replica/list.test.ts > #1810.eebcb4a2 > #1810.eebcb4a2: with two asks answered and one open, deep and the app's list say 1 at the same log position
+AssertionError: deep and the app's list with ask:01M7RCDCG0JY29MDFKKK0GC7ER and ask:01M7RCDCG0YNMRB5N98AZ0NNAJ answered and ask:01M7RCDCG0Z9Y78ESX9EV7JN6D open: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "row ask:01M7RCDCG0Z9Y78ESX9EV7JN6D's node reads \"Which header colour on the login page? needs_you ! needs_you Which header colour on the login page?\", which lacks its word \"needs you\"",
++ ]
+
+ ❯ redraft-replica/list.test.ts:56:92
+     54|       ...drawnFailures(app.snapshot, openRows),
+     55|       ...textRowFailures(d.stdout, openRows, 'deep'),
+     56|     ], `deep and the app's list with ${answered.join(' and ')} answere…
+       |                                                                                            ^
+     57|   }, 1_800_000);
+     58| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed | 4 passed (6)
+      Tests  2 failed | 11 passed (13)
+   Start at  14:13:44
+   Duration  375.30s (tests 99%, transform 1%, import 1%)
+
+exit=1

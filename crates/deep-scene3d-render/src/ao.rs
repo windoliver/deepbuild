@@ -551,7 +551,7 @@ impl crate::Renderer {
             .filter_map(|id| self.batches.get(id))
             .flat_map(|b| &b.solids)
             .filter_map(|((shape, ..), set)| {
-                let (buffer, mesh) = (set.buffer.as_ref()?, self.meshes.get(shape)?);
+                let (buffer, mesh) = (set.buffer.as_ref()?, self.meshes.peek(shape)?);
                 Some((
                     mesh.vertices.clone(),
                     mesh.indices.clone(),

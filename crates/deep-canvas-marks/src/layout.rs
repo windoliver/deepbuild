@@ -437,13 +437,10 @@ impl Tree<'_, '_, '_> {
         }
         // #1964: its runs' styled spans, so it lays out as it draws; a refusal keeps the run's path.
         let ty = crate::scene::Type::default();
-        let item = (Some(role.family()), weight as u16);
         let spans =
-            crate::scene::text_spans(params, &format!("items/{id}"), &ty, item).map_err(|r| {
-                Refusal {
-                    code: r.code,
-                    item: r.path.trim_start_matches("items/").to_string(),
-                }
+            crate::scene::text_spans(params, &format!("items/{id}"), &ty).map_err(|r| Refusal {
+                code: r.code,
+                item: r.path.trim_start_matches("items/").to_string(),
             })?;
         // #1966: a list lays out as it draws, its items `indent` in and `gap` apart.
         let list =

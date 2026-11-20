@@ -1,7 +1,7 @@
 {
   "core": {
     "version": "0.0.0",
-    "digest": "c866974c68986c4af416d66e56d533c9919cab89d2d810c7257df537bead6509",
+    "digest": "e4f8e1e312f40a33c9e1c4de41db57944a57afdf7fcf5477b186406dfc0e6bf0",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -29,7 +29,8 @@
       "schedule": "PASS",
       "repair_loop": "PASS",
       "time_order": "PASS",
-      "catalog": "PASS"
+      "catalog": "PASS",
+      "references": "PASS"
     }
   },
   "cells": {
@@ -45,7 +46,8 @@
       "schedule": "PASS",
       "repair_loop": "PASS",
       "time_order": "PASS",
-      "catalog": "PASS"
+      "catalog": "PASS",
+      "references": "PASS"
     }
   },
   "data": {
@@ -77,12 +79,13 @@
       "schedule": "PASS",
       "repair_loop": "PASS",
       "time_order": "PASS",
-      "catalog": "PASS"
+      "catalog": "PASS",
+      "references": "PASS"
     }
   },
   "export": {
     "version": "1.0.0",
-    "digest": "34526b4e8e03053b5515c9c0ccc3c0151cb2219375ce731e109658532ed51988",
+    "digest": "e752bec0aed97b3658ab3baa60a819865755a62add4d13430761b15a918486b3",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -109,7 +112,8 @@
       "schedule": "PASS",
       "repair_loop": "PASS",
       "time_order": "PASS",
-      "catalog": "PASS"
+      "catalog": "PASS",
+      "references": "PASS"
     }
   },
   "input": {
@@ -143,7 +147,8 @@
       "carried_state": "PASS",
       "late_entry": "PASS",
       "time_order": "PASS",
-      "catalog": "PASS"
+      "catalog": "PASS",
+      "references": "PASS"
     }
   },
   "look": {
@@ -159,7 +164,8 @@
       "schedule": "PASS",
       "repair_loop": "PASS",
       "time_order": "PASS",
-      "catalog": "PASS"
+      "catalog": "PASS",
+      "references": "PASS"
     }
   },
   "loop": {
@@ -227,7 +233,8 @@
       "time_order": "PASS",
       "catalog": "PASS",
       "migration": "PASS",
-      "registries": "PASS"
+      "registries": "PASS",
+      "references": "PASS"
     }
   },
   "net": {
@@ -272,7 +279,8 @@
       "schedule": "PASS",
       "repair_loop": "PASS",
       "time_order": "PASS",
-      "catalog": "PASS"
+      "catalog": "PASS",
+      "references": "PASS"
     }
   },
   "sandbox": {
@@ -289,7 +297,7 @@
   },
   "scene3d": {
     "version": "1.0.0",
-    "digest": "a81e51bd472e69cd02d91247138391d168c783b98c193fcfeacf0fae265b3a66",
+    "digest": "13b657b1cde4a982c0fa2aceb1c15b1ef9b6ed9dcde9b6a0ba945d002e80209b",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -300,7 +308,8 @@
       "schedule": "PASS",
       "repair_loop": "PASS",
       "time_order": "PASS",
-      "catalog": "PASS"
+      "catalog": "PASS",
+      "references": "PASS"
     }
   },
   "sheet": {
@@ -316,7 +325,8 @@
       "schedule": "PASS",
       "repair_loop": "PASS",
       "time_order": "PASS",
-      "catalog": "PASS"
+      "catalog": "PASS",
+      "references": "PASS"
     }
   },
   "text": {
@@ -349,7 +359,8 @@
       "repair_loop": "PASS",
       "time_order": "PASS",
       "contribution": "PASS",
-      "catalog": "PASS"
+      "catalog": "PASS",
+      "references": "PASS"
     }
   }
 }

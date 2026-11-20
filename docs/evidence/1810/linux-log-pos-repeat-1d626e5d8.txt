@@ -1,0 +1,37 @@
+# Product or test? Five fresh worlds of count.test.ts's fixture at 1d626e5d8 on Linux, 2026-11-19. In each, deep status --json's log_pos, then 20 s later the log, the list's ask rows (as the app folds them) at both positions, deep's count and the status answer's count.
+# Result: the log always moves 35 -> 39 by the same 4 events (two delivery.outcome, two session.reading: the fixture's answers never reach an agent, so the hub records the stalled delivery about 10 s after the status question). The ask rows are the same at both positions and every count stays 1. So the count is never wrong; two readers that read at different moments see different log positions, which is the test's timing, not the product.
+## output
+run 1: status answer 1; deep status --json at 35; 20 s later the log is at 39 (deep status --json 39); events after 35: delivery.outcome, session.reading, delivery.outcome, session.reading; ask rows at 35: 1, at 39: 1, same: true; deep counts [1]; status answer then 1
+run 2: status answer 1; deep status --json at 35; 20 s later the log is at 39 (deep status --json 39); events after 35: delivery.outcome, session.reading, delivery.outcome, session.reading; ask rows at 35: 1, at 39: 1, same: true; deep counts [1]; status answer then 1
+run 3: status answer 1; deep status --json at 35; 20 s later the log is at 39 (deep status --json 39); events after 35: delivery.outcome, session.reading, delivery.outcome, session.reading; ask rows at 35: 1, at 39: 1, same: true; deep counts [1]; status answer then 1
+run 4: status answer 1; deep status --json at 35; 20 s later the log is at 39 (deep status --json 39); events after 35: delivery.outcome, session.reading, delivery.outcome, session.reading; ask rows at 35: 1, at 39: 1, same: true; deep counts [1]; status answer then 1
+run 5: status answer 1; deep status --json at 35; 20 s later the log is at 39 (deep status --json 39); events after 35: delivery.outcome, session.reading, delivery.outcome, session.reading; ask rows at 35: 1, at 39: 1, same: true; deep counts [1]; status answer then 1
+
+## the probe (a scratch test file run beside tests/acceptance/1810, then deleted; never committed)
+    // Scratch probe, never committed. Repeats the count test's world 5 times; at deep status --json's log_pos and 20 s later,
+    // compares the list's ask rows (as the app folds them), the status answer's count and deep's count.
+    import { afterAll, test } from 'vitest';
+    import { appendFileSync } from 'node:fs';
+    import { askRows, cleanup, countLine, countsIn, deep, eventsOf, foldedRows, makeWorld, quiet, sleep, statusAnswer, statusLogPos, stopHub } from './helpers.ts';
+    const log = (s: string) => appendFileSync(process.env.PROBE_LOG!, s + '\n');
+    afterAll(cleanup, 60_000);
+    const options: [string, string][] = [['yes', 'Yes'], ['no', 'No']];
+    test('probe2', async () => {
+      for (let i = 1; i <= 5; i++) {
+        const w = await makeWorld({ title: 'Cart totals', asks: [
+          { question: 'Ship the cart page today?', options, default: 'no', then: 'answer' },
+          { question: 'Keep the old checkout button?', options, default: 'no', then: 'answer' },
+          { question: 'Which header colour on the login page?', options: [['blue', 'Blue header'], ['green', 'Green header']], default: 'blue', then: 'open' },
+        ] });
+        await quiet(w.hub); const a1 = countLine(await statusAnswer(w)).count;
+        await quiet(w.hub); const at = await statusLogPos(w);
+        const asksAt = askRows(await foldedRows(w, at)).sort();
+        await sleep(20_000);
+        const evs = await eventsOf(w.hub); const last = evs.at(-1)!.log_pos;
+        const later = evs.filter((e) => e.log_pos > at).map((e) => e.kind);
+        const asksLast = askRows(await foldedRows(w, last)).sort();
+        const at2 = await statusLogPos(w); const d = countsIn((await deep(w, [])).stdout); const a2 = countLine(await statusAnswer(w)).count;
+        log(`run ${i}: status answer ${a1}; deep status --json at ${at}; 20 s later the log is at ${last} (deep status --json ${at2}); events after ${at}: ${later.join(', ') || 'none'}; ask rows at ${at}: ${asksAt.length}, at ${last}: ${asksLast.length}, same: ${JSON.stringify(asksAt) === JSON.stringify(asksLast)}; deep counts ${JSON.stringify(d)}; status answer then ${a2}`);
+        await stopHub(w.hub).catch(() => {});
+      }
+    }, 900_000);

@@ -22,6 +22,7 @@ pub mod expr;
 pub mod film_audit;
 pub mod film_layout;
 pub mod form;
+pub mod gauge;
 pub mod geometry_audit;
 pub mod geometry_shape;
 pub mod grammar;

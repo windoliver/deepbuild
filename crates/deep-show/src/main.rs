@@ -88,6 +88,7 @@ mod sizes;
 mod snapshot;
 mod spatial;
 mod spawn;
+mod states;
 mod stepped;
 mod terminal;
 mod terrain;
@@ -489,6 +490,8 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 set: c.get("set").cloned().filter(Value::is_object),
             })
         }
+        "close" => return Some(Call::Close(doc()?)),
+        "session_table" => return Some(Call::SessionTable),
         "encode_qualify" => return Some(Call::EncodeQualify(c.get("tool")?.as_str()?.to_string())),
         "frame_hash" | "frame_planes" => {
             let frames = c.get("frames")?.as_array()?.iter().map(|f| {
@@ -740,6 +743,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "migrate" => return Some(Call::Migrate(hash_named(c.get("to")?.as_str()?)?)),
         // #1901: the fingerprint kept output is keyed by, a kept draw, and the padded key input.
         "fingerprint" => return Some(Call::Fingerprint),
+        "footprint" => return Some(Call::Footprint),
         "draw" => {
             let output = c.get("output")?.as_str()?;
             return Some(Call::Draw {
@@ -1082,6 +1086,21 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
     }
 }
 
+/// The record's objects by handle, as an input's `record` object gives them.
+fn record_objects(input: &Map<String, Value>) -> Option<BTreeMap<String, RecordObject>> {
+    entries(input, "record", |o| {
+        Some(RecordObject {
+            session: match o.get("session")? {
+                Value::Null => None,
+                v => Some(v.as_str()?.to_string()),
+            },
+            state: optional(o.get("state"), |s| Some(s.as_str()?.to_string()))?,
+            value: optional(o.get("value"), Value::as_f64)?,
+            as_of: optional(o.get("as_of"), Value::as_i64)?,
+        })
+    })
+}
+
 fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
     let sessions = entries(input, "sessions", |s| {
         let p = s.get("process")?.as_object()?;
@@ -1221,20 +1240,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 .map(|e| runs::entry(e).map(|_| e.clone()))
                 .collect::<Option<Vec<_>>>()?,
         ),
-        _ => (
-            entries(input, "record", |o| {
-                Some(RecordObject {
-                    session: match o.get("session")? {
-                        Value::Null => None,
-                        v => Some(v.as_str()?.to_string()),
-                    },
-                    state: optional(o.get("state"), |s| Some(s.as_str()?.to_string()))?,
-                    value: optional(o.get("value"), Value::as_f64)?,
-                    as_of: optional(o.get("as_of"), Value::as_i64)?,
-                })
-            })?,
-            Vec::new(),
-        ),
+        _ => (record_objects(input)?, Vec::new()),
     };
     let claims = entries(input, "claims", |c| {
         let session = c.get("session")?.as_str()?.to_string();
@@ -1362,8 +1368,9 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 // #223's in the marks2d module's warp.
                 || deep_canvas_marks::warp::PLANTED.contains(p)
                 || deep_net::Planted::named(p).is_some()
-                // #225's in the data module's integrator.
+                // #225's in the data module's integrator; #2450's in its reading of axis titles.
                 || *p == deep_canvas_marks::vector_field::PLANTED_EULER
+                || *p == deep_canvas_marks::axes3d::TAKES_ANY_KIND
                 // #548's deep_query region map that lays the reads out by name.
                 || *p == logic::MAP_READS_BY_NAME
                 // #466's boil and blur in deep-show's frames.
@@ -1509,6 +1516,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "store_migrated_params_under_saved_major" => {
                     Planted::StoreMigratedParamsUnderSavedMajor
                 }
+                "loader_drops_moved_instances" => Planted::LoaderDropsMovedInstances,
+                "move_rewrites_kind_only" => Planted::MoveRewritesKindOnly,
                 "checkpoint_nearest_in_distance" => Planted::CheckpointNearestInDistance,
                 "merges_in_finish_order" => Planted::MergesInFinishOrder,
                 "runs_every_node" => Planted::RunsEveryNode,
@@ -1524,6 +1533,8 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "why_names_key_only" => Planted::WhyNamesKeyOnly,
                 "cuts_by_row_order" => Planted::CutsByRowOrder,
                 "refusal_names_first_ref" => Planted::RefusalNamesFirstRef,
+                "no_op_commits" => Planted::NoOpCommits,
+                "create_overwrites" => Planted::CreateOverwrites,
                 "refs_parents_only" => Planted::RefsParentsOnly,
                 "refs_read_one_layer" => Planted::RefsReadOneLayer,
                 "cost_without_shared_assets" => Planted::CostWithoutSharedAssets,
@@ -1780,7 +1791,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         docs,
         docs_for,
         net: net::given(input)?,
-        record,
+        record: std::sync::Arc::new(record),
         runs,
         claims,
         window,
@@ -1857,12 +1868,22 @@ const CANVAS_SPACING: i64 = 10 * (shared::FLICKS / 120);
 /// the same calls in the same order. A fault holds only the call that sends it, not the earlier ones
 /// played again before it.
 struct CanvasSide {
+    /// The world but its record's objects, which `record` holds.
     world: Map<String, Value>,
+    /// The world's record objects (#1868): read once when the hub sends its world, then shared by
+    /// every call's scenario, so a call that draws nothing from the record pays nothing for it.
+    record: std::sync::Arc<BTreeMap<String, RecordObject>>,
     calls: Vec<Value>,
 }
 
 impl CanvasSide {
     fn scenario(&self, fault: bool) -> Option<Scenario> {
+        let mut scenario = self.scenario_of_world(fault)?;
+        scenario.record = self.record.clone();
+        Some(scenario)
+    }
+
+    fn scenario_of_world(&self, fault: bool) -> Option<Scenario> {
         let mut input = self.world.clone();
         if !fault {
             input.remove("fault");
@@ -1899,11 +1920,24 @@ impl CanvasSide {
             return bad_input();
         };
         if let Some(Value::Object(world)) = input.get("world") {
-            let before = std::mem::replace(&mut self.world, world.clone());
+            // The record's objects are read here, once; a replay's run entries (a list) stay in the world.
+            let mut world = world.clone();
+            let record = match world.get("record") {
+                Some(Value::Object(_)) => {
+                    let Some(record) = record_objects(&world) else {
+                        return bad_input();
+                    };
+                    world.remove("record");
+                    record
+                }
+                _ => BTreeMap::new(),
+            };
+            let before = std::mem::replace(&mut self.world, world);
             if self.scenario(false).is_none() {
                 self.world = before;
                 return bad_input();
             }
+            self.record = std::sync::Arc::new(record);
             return json!({"ok": true});
         }
         let Some(Value::Object(call)) = input.get("call") else {
@@ -1941,10 +1975,12 @@ impl CanvasSide {
                     self.calls.pop();
                 }
                 let presented = match doc.as_deref() {
+                    // #1415: a patch that changed nothing made no revision to present.
                     Some(doc)
                         if reply.get("rev").is_some()
                             && reply["outcome"] != "refused"
-                            && reply["outcome"] != "applied" =>
+                            && reply["outcome"] != "applied"
+                            && reply["outcome"] != "no_change" =>
                     {
                         hub.presented_revision(doc)
                     }
@@ -2064,6 +2100,7 @@ const TEST_BUILD: bool = cfg!(any(
     feature = "test-scatter",
     feature = "test-tick",
     feature = "test-web-lacks",
+    feature = "test-paths",
     feature = "test-held",
     feature = "test-page-latch",
     feature = "test-frame-cache",
@@ -2087,6 +2124,7 @@ const TEST_BUILD: bool = cfg!(any(
     feature = "test-threads",
     feature = "test-json",
     feature = "test-debug-digest",
+    feature = "test-boom",
 ));
 
 /// The canvas modules a build of `set` holds (Registry and seal: `build_set`): `core` is text and
@@ -2338,6 +2376,10 @@ fn modules(set: BuildSet) -> Vec<Module> {
     out.push(deep_canvas_test_modules::tick());
     #[cfg(feature = "test-web-lacks")]
     out.push(deep_canvas_test_modules::native());
+    #[cfg(feature = "test-paths")]
+    out.push(deep_canvas_test_modules::paths(cfg!(
+        feature = "test-paths-no-final"
+    )));
     #[cfg(feature = "test-held")]
     out.push(deep_canvas_test_modules::held());
     #[cfg(feature = "test-page-latch")]
@@ -2368,6 +2410,8 @@ fn modules(set: BuildSet) -> Vec<Module> {
     out.push(deep_canvas_test_modules::label());
     #[cfg(feature = "test-export-guards")]
     out.push(deep_canvas_test_modules::guards());
+    #[cfg(feature = "test-boom")]
+    out.push(deep_canvas_test_modules::boom());
     // Issues #185 and #1920: test.sim@1's implementations and their variants, and test module c.
     #[cfg(feature = "test-sim")]
     out.extend(test_sim::modules());
@@ -2517,7 +2561,9 @@ fn declared(held: &[Module]) -> Vec<deep_canvas::registry::Interface> {
 /// The registry of a `set` build holding `held`: every interface it seals against, the seams'
 /// backends and its canvas modules.
 fn assemble(set: BuildSet, held: Vec<Module>) -> Registry {
-    let mut registry = Registry::new(set);
+    // #2777: the lists of words the fields the listing holds past kinds' params offer.
+    let lists = forms::lists(|m| held.iter().any(|h| h.manifest.name == m));
+    let mut registry = Registry::new(set).word_lists(lists);
     for interface in declared(&held) {
         registry = registry.declare(interface);
     }
@@ -2819,6 +2865,7 @@ fn planted_named(twin: &str) -> Result<StartPlanted, ()> {
         "census_accepts" => Ok(StartPlanted::Seal(Fault::CensusAccepted)),
         "census_skipped" => Ok(StartPlanted::Seal(Fault::CensusSkipped)),
         "census_pack_first" => Ok(StartPlanted::Seal(Fault::CensusPackFirst)),
+        "refusal_bad_value_only" => Ok(StartPlanted::Seal(Fault::RefusalBadValueOnly)),
         "pages_capped_at_64mib" => Ok(StartPlanted::Layouts(
             deep_canvas_sandbox::layouts::Planted {
                 pages_pack_cap: true,
@@ -2994,6 +3041,7 @@ fn main() {
     let stdin = io::stdin();
     let mut canvas = CanvasSide {
         world: Map::new(),
+        record: Default::default(),
         calls: Vec::new(),
     };
     canvas.world.insert("evidence".into(), json!(""));

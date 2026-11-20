@@ -1,0 +1,15 @@
+{
+  "#2240.b395689a": [
+    "centre_of_mass_ignored"
+  ],
+  "#2240.07b0552b": [
+    "centre_of_mass_ignored",
+    "centre_of_mass_parallel_axis"
+  ],
+  "#2240.cb44a798": [
+    "check_accepts_centre_outside"
+  ],
+  "#2240.c9639f9f": [
+    "pose_reads_centre_of_mass"
+  ]
+}

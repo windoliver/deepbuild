@@ -233,7 +233,7 @@ impl Glyphs for Gpu<'_> {
         &mut self,
         _: &mut vello_cpu::Resources,
         font: &FontData,
-        (size, skew): (f32, f32),
+        (size, skew, turn): (f32, f32, bool),
         coords: &[i16],
         glyphs: &[vello_cpu::Glyph],
     ) {
@@ -242,7 +242,7 @@ impl Glyphs for Gpu<'_> {
         let _ = run
             .font_size(size)
             .hint(false)
-            .glyph_transform(deep_text::atlas::slant(skew))
+            .glyph_transform(deep_text::atlas::glyph_transform(skew, turn))
             .normalized_coords(coords)
             .fill_glyphs(glyphs.iter().copied());
     }
@@ -251,7 +251,7 @@ impl Glyphs for Gpu<'_> {
         &mut self,
         _: &mut vello_cpu::Resources,
         font: &FontData,
-        (size, skew): (f32, f32),
+        (size, skew, turn): (f32, f32, bool),
         coords: &[i16],
         glyph: vello_cpu::Glyph,
         width: f64,
@@ -262,7 +262,7 @@ impl Glyphs for Gpu<'_> {
         let _ = run
             .font_size(size)
             .hint(false)
-            .glyph_transform(deep_text::atlas::slant(skew))
+            .glyph_transform(deep_text::atlas::glyph_transform(skew, turn))
             .normalized_coords(coords)
             .stroke_glyphs(std::iter::once(glyph));
     }
@@ -382,6 +382,11 @@ impl Vello2d {
             }
             std::mem::replace(painted, false)
         });
+    }
+
+    /// #1489: the frame each animated image item shows in the frames it draws next, by its ID.
+    pub fn frames(&mut self) -> &mut std::collections::HashMap<String, u32> {
+        &mut self.kept.get_mut().frames
     }
 
     /// The pixmaps the renderer has uploaded to Vello GPU's atlas so far.
