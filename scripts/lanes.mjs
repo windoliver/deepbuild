@@ -548,6 +548,8 @@ alone.push('tests/acceptance/1956/');
 alone.push('tests/acceptance/1959/');
 // #1960's files each build deep-show (r1); the lifecycle test restarts a hub twice on the same state folder.
 alone.push('tests/acceptance/1960/');
+// #1962's files each build deep-show (r1) and install the shelf and furniture packs' versions in order.
+alone.push('tests/acceptance/1962/');
 // #1802's ac4 and ac6 files each build deep-show with a test canvas module's features.
 alone.push('tests/acceptance/1802/');
 // #139's preview tests that publish an undated preview entry are redrafted after #1802; the redraft runs as #139's suite does.
@@ -932,6 +934,8 @@ timed.push('tests/acceptance/2032/ac8-budget.test.ts', 'tests/acceptance/2032-re
 alone.push('tests/acceptance/182/', 'tests/acceptance/182-oracle/controllers-py-rapier.test.ts', 'tests/acceptance/182-oracle-redraft-climb/');
 timed.push('tests/acceptance/182/ac11-budgets.test.ts');
 byHand.push('tests/acceptance/182-oracle/character-controller-rapier.test.ts');
+// #2240's files build deep-physics (release), and ac5 the merge base's release build in a second checkout.
+alone.push('tests/acceptance/2240/');
 // #2309's files build deep-physics (shipped and release), its wasm32 library and the merge base's release build.
 alone.push('tests/acceptance/2309/', 'tests/acceptance/2243/'); // #2243's build it too, release and test-backends.
 // #2241's files build deep-physics (release and test-backends) and the merge base's release build; the blind redraft of
@@ -1002,6 +1006,10 @@ timed.push('tests/acceptance/568-redraft-1830/judge.test.mjs', 'tests/acceptance
 // horizon's 0.1 ms at 1080p on the reference Mac.
 alone.push('tests/acceptance/1381/');
 timed.push('tests/acceptance/1381/ac6-budget.test.ts');
+// #971's files build deep-gpu and draw on the Metal GPU; budgets.test.ts judges the local tone map's added GPU time on
+// the reference Mac.
+alone.push('tests/acceptance/971/');
+timed.push('tests/acceptance/971/budgets.test.ts');
 
 // #1992's files each build deep-gpu (kinds.test.ts builds deep-show) and draw on the Metal GPU; cost.test.ts judges the
 // linear curve's frame time against exp's on the reference Mac.
@@ -1101,6 +1109,11 @@ byHand.push('tests/acceptance/806/unbound.test.ts');
 
 // #2402's files (blind) start two hubs and time each tool call against a control hub's, and time two extension hosts.
 alone.push('tests/acceptance/2402/');
+
+// #2456's files (blind) each build deep-show (full); its gap test, a keyed write in deep-show's frames against
+// deep-canvas-render's, builds both. CPU only, no GPU and no timing.
+alone.push('tests/acceptance/2456/');
+alone.push('tests/write-reveal-frames.test.ts');
 
 // #2204's first draft is kept as written, by hand only: its AC3 holds a newer entry that isn't fail_closed to refusing the
 // whole rules.json with the hub stopped, which #2219 retires; its blind redraft, 2204-redraft-ac3/, runs in its place, and

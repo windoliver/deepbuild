@@ -217,6 +217,15 @@ export interface Deep {
             needs?: Array<string>;
         };
     }): Promise<unknown>;
+    registerPort(params: {
+        name: string;
+        port: {
+            entries: Array<string>;
+            rows: Array<string>;
+            sources: Array<string>;
+            sound: boolean;
+        };
+    }): Promise<unknown>;
     registerResolver(params: {
     }): Promise<unknown>;
     registerRoute(params: {

@@ -1115,6 +1115,33 @@ workloads['water-flow'] = () => {
   }
 };
 
+// #971: what the look's local tone map adds to a frame's GPU time on a release `deep-gpu`, at 1920 × 1080 and at
+// 3840 × 2160: the difference of two sides' median `gpu_ms` over 300 frames of #465's stage, with
+// `local: {strength: 0.5}` on the look and without; one warm-up run and five, each a fresh process.
+// tests/acceptance/971/budgets.test.ts holds the issue's numbers on its own fixture.
+workloads['local-tone-map'] = () => {
+  const fingerprint = release('deep-gpu-layer', 'deep-gpu');
+  const look2d = JSON.parse(readFileSync(join(root, 'tests', 'acceptance', '465', 'fixtures', 'look.json'), 'utf8'));
+  const look = { ...look2d, id: 'local-971', basis: 'physical', palette: { ...look2d.palette, night: '#101114', graphite: '#1b1d22', slate: '#8b8f97', white: '#ffffff' },
+    roles: { ...look2d.roles, ground: 'night', ink: 'graphite', muted: 'slate' }, tone_map: 'filmic', exposure: 0, finish: [], deband: 'none', bloom: 'none', ao: 'none', ground_3d: { kind: 'none' } };
+  const dir = mkdtempSync(join(tmpdir(), 'deep-canvas-bench-'));
+  try {
+    const doc = join(dir, 'stage.json');
+    writeFileSync(doc, JSON.stringify(flareStage()));
+    const side = (size, local) => ({ call: 'view3d', doc, look: local ? { ...look, local: { strength: 0.5 } } : look, size, frames: 300, fps: 30, timings: true });
+    const median = (xs) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
+    const measured = runs(() => {
+      const answer = once('deep-gpu', ['run'], { out: dir, calls: [[1920, 1080], [3840, 2160]].flatMap((size) => [side(size, true), side(size, false)]) });
+      if (answer.ok !== true || answer.replies.some((r) => r.code)) throw Error(`deep-gpu answered ${JSON.stringify(answer).slice(0, 1500)}`);
+      const [full, fullPlain, uhd, uhdPlain] = answer.replies.map((r) => median(r.frames.map((f) => f.gpu_ms)));
+      return { local_1080p_gpu_ms: Math.max(0, full - fullPlain), local_2160p_gpu_ms: Math.max(0, uhd - uhdPlain), plain_1080p_gpu_ms: fullPlain, plain_2160p_gpu_ms: uhdPlain };
+    });
+    console.log(JSON.stringify({ task: 'canvas-local-tone-map', fingerprint, runs: measured }));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+};
+
 // #2017: the modeling, scatter, terrain and wind task's budgets (#442) on release builds, one warm-up run and five,
 // each a fresh process per binary. `deep-show`'s `geometry` with `timings` reads a bevel with weighted normals on a
 // 10,000-face prop, two levels of subdivision of a 1,000-face mesh, distributing 100,000 points with pruning, and a
@@ -1334,6 +1361,7 @@ const EFFICIENCY = {
   'canvas-water-shore': { shore_lake_gpu_ms: (r) => r.shore_lake_gpu_ms },
   'canvas-water-flow': { flow_sheet_gpu_ms: (r) => r.flow_sheet_gpu_ms },
   'canvas-water-rings': { rings_pond_gpu_ms: (r) => r.rings_pond_gpu_ms },
+  'canvas-local-tone-map': { local_1080p_gpu_ms: (r) => r.local_1080p_gpu_ms, local_2160p_gpu_ms: (r) => r.local_2160p_gpu_ms },
   'canvas-ground': {
     bevel_ms: (r) => r.bevel_ms, subdivide_ms: (r) => r.subdivide_ms, distribute_ms: (r) => r.distribute_ms, arc_length_ms: (r) => r.arc_length_ms,
     still_steps: (r) => r.still_steps, sway_gpu_ms: (r) => r.sway_gpu_ms,
