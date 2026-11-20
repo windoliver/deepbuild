@@ -475,6 +475,8 @@ alone.push('tests/acceptance/1972/');
 alone.push('tests/acceptance/1973/');
 // #1974's files each build deep-show and run its defaults run over the full build's dump.
 alone.push('tests/acceptance/1974/');
+// #2717's files (blind) each build the full deep-show and start it, as #1974's do; CPU only, no GPU and no timing.
+alone.push('tests/acceptance/2717/');
 // #1957's file builds deep-show and offers it pack graphs.
 alone.push('tests/acceptance/1957/');
 // #1961's files build deep-show and patch an open document to another version of its pack.
@@ -1192,9 +1194,6 @@ slow.push('tests/acceptance/2227/ac2-native-build.test.ts');
 
 // #2109's file (blind) runs #83's AC11 goldens, which start real hubs, in a child vitest; no timing.
 alone.push('tests/acceptance/2109/');
-
-// #2717's files (blind) each build the full deep-show and start it; CPU only, no GPU and no timing.
-alone.push('tests/acceptance/2717/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
