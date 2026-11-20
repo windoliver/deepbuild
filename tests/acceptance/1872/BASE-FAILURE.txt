@@ -1,0 +1,431 @@
+# #1872 acceptance tests: the run on the base
+
+Base: 8bfb6a6330569c96d01342a4c4af6393d02bdb20 (origin/main; no implementation of #1872)
+Date: 2026-11-20 10:03 UTC
+Node: v24.22.0
+Command: node --test 'tests/acceptance/1872/*.test.mjs'   (from the checkout root)
+Load during the run: 11.93 12.42 10.59 (load averages before the run).
+Paths: the checkout reads <checkout>, home paths ~, temporary folders <tmp>.
+
+Summary: 23 tests and subtests; 18 fail, 5 pass. Every failure is an assertion, none an import error or timeout:
+
+- #1872.8d212921 (criterion 1), both files, no tag and unsigned tag: FAIL, 'an edit of <file> ... passed the guard'.
+  The base guard prints 'PASS guard: 1 commit checked' and exits 0: LANES_CODE matches neither file. Expected reason.
+- #1872.aa1738ec (criterion 2), both files: FAIL, 'the guard passed ... without judging it: no PASS line names <file>'.
+  The base guard passes the signed commit, but only because it never looks at the file; the test asks for the guard's
+  PASS line for the approved edit (README: The guard). The bare clause 'passes the guard' holds on the base.
+- #1872.51c82c1d (criterion 3): no tag and unsigned tag FAIL, 'a failures entry ... passed the guard' (the base
+  guard reads only the skips key: 'PASS guard: 2 commits checked'). Expected reason: on main the unsigned commit passes.
+  The signed-tag test FAILs as criterion 2's does: no PASS line names scripts/known-failures.json.
+- #1872.938914d1 (criterion 4): the four loosening subtests (lint count raised, lint finding added, timing ID added,
+  failures date moved later) FAIL, '<edit>, with no tag, passed the guard'. Expected reason.
+  The four tightening subtests (failures entry, timing ID, lint entry removed; lint count lowered) PASS on the base
+  too, as they should: the base guard requires no tag for any of them, and neither does the fixed one.
+- #1872.0de0dcd9 (criterion 5): FAIL, '--record changed scripts/known-failures.json', with the rewrite shown: the base
+  --record writes the fixture's failure into failures (and drops the file's own blank line). Expected reason.
+
+---- output ----
+
+✖ #1872.51c82c1d a planted commit that adds its own failing test's ID to failures, naming an open issue and today's date, fails the guard with no signed approval tag, naming the entry (6172.936417ms)
+✖ #1872.51c82c1d the same commit under an unsigned approval tag naming the entry fails the guard, naming the entry (6914.812542ms)
+✖ #1872.51c82c1d the same commit under a signed approval tag naming the entry passes the guard (9197.869666ms)
+▶ #1872.938914d1 a planted commit that raises a lint count, adds a timing ID, or moves a failures entry's date later fails the guard with no tag, naming the key
+  ✖ a lint count raised (3811.877584ms)
+  ✖ a lint finding added (3091.159042ms)
+  ✖ a timing ID added (2771.889ms)
+  ✖ a failures entry's date moved later (2757.805583ms)
+✖ #1872.938914d1 a planted commit that raises a lint count, adds a timing ID, or moves a failures entry's date later fails the guard with no tag, naming the key (12434.4865ms)
+▶ #1872.938914d1 a planted commit that removes an entry or lowers a count passes the guard with no tag
+  ✔ a failures entry removed (2787.384875ms)
+  ✔ a timing ID removed (2630.808958ms)
+  ✔ a lint entry removed (3260.883542ms)
+  ✔ a lint count lowered (2608.517875ms)
+✔ #1872.938914d1 a planted commit that removes an entry or lowers a count passes the guard with no tag (11288.688708ms)
+▶ #1872.8d212921 a planted commit that edits scripts/main-watch.mjs, and one that edits scripts/known-failures-check.mjs, each fail the proof guard with no signed approval tag, naming the file
+  ✖ scripts/main-watch.mjs (4944.983291ms)
+  ✖ scripts/known-failures-check.mjs (5004.435166ms)
+✖ #1872.8d212921 a planted commit that edits scripts/main-watch.mjs, and one that edits scripts/known-failures-check.mjs, each fail the proof guard with no signed approval tag, naming the file (9951.164959ms)
+▶ #1872.8d212921 the same edits under an unsigned approval tag naming the file fail the guard, naming the file
+  ✖ scripts/main-watch.mjs (4175.823542ms)
+  ✖ scripts/known-failures-check.mjs (4394.748542ms)
+✖ #1872.8d212921 the same edits under an unsigned approval tag naming the file fail the guard, naming the file (8572.110834ms)
+▶ #1872.aa1738ec the same edit, as its own commit under a signed approval tag naming the file, passes the guard
+  ✖ scripts/main-watch.mjs (5146.953667ms)
+  ✖ scripts/known-failures-check.mjs (4140.470833ms)
+✖ #1872.aa1738ec the same edit, as its own commit under a signed approval tag naming the file, passes the guard (9288.6455ms)
+✖ #1872.0de0dcd9 node scripts/affected.mjs --record on a fixture with a failing test leaves scripts/known-failures.json byte for byte as it was (9479.672542ms)
+ℹ tests 23
+ℹ suites 0
+ℹ pass 5
+ℹ fail 18
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 46117.026083
+
+✖ failing tests:
+
+test at tests/acceptance/1872/known-failures.test.mjs:21:1
+✖ #1872.51c82c1d a planted commit that adds its own failing test's ID to failures, naming an open issue and today's date, fails the guard with no signed approval tag, naming the entry (6172.936417ms)
+  AssertionError [ERR_ASSERTION]: a failures entry for the change's own test, with no tag, passed the guard
+  exit 0
+  stdout:
+  PASS guard: 2 commits checked: no guarded edit lacks its own approved proposal
+  proof: wall time 4.1 s
+  
+  stderr:
+  
+      at expectRefused (file://<checkout>/tests/acceptance/1872/helpers.mjs:129:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/1872/known-failures.test.mjs:23:3)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1872/known-failures.test.mjs:26:1
+✖ #1872.51c82c1d the same commit under an unsigned approval tag naming the entry fails the guard, naming the entry (6914.812542ms)
+  AssertionError [ERR_ASSERTION]: a failures entry under an unsigned tag passed the guard
+  exit 0
+  stdout:
+  PASS guard: 2 commits checked: no guarded edit lacks its own approved proposal
+  proof: wall time 3.8 s
+  
+  stderr:
+  
+      at expectRefused (file://<checkout>/tests/acceptance/1872/helpers.mjs:129:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/1872/known-failures.test.mjs:29:3)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1872/known-failures.test.mjs:32:1
+✖ #1872.51c82c1d the same commit under a signed approval tag naming the entry passes the guard (9197.869666ms)
+  AssertionError [ERR_ASSERTION]: the guard passed a failures entry under a signed tag naming it without judging it: no PASS line names scripts/known-failures.json
+  exit 0
+  stdout:
+  PASS guard: 2 commits checked: no guarded edit lacks its own approved proposal
+  proof: wall time 7.3 s
+  
+  stderr:
+  
+      at expectPassed (file://<checkout>/tests/acceptance/1872/helpers.mjs:141:28)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/1872/known-failures.test.mjs:35:3)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1872/known-failures.test.mjs:53:13
+✖ a lint count raised (3811.877584ms)
+  AssertionError [ERR_ASSERTION]: a lint count raised, with no tag, passed the guard
+  exit 0
+  stdout:
+  PASS guard: 1 commit checked: no guarded edit lacks its own approved proposal
+  proof: wall time 2.4 s
+  
+  stderr:
+  
+      at expectRefused (file://<checkout>/tests/acceptance/1872/helpers.mjs:129:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/1872/known-failures.test.mjs:56:7)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async TestContext.<anonymous> (file://<checkout>/tests/acceptance/1872/known-failures.test.mjs:53:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1872/known-failures.test.mjs:53:13
+✖ a lint finding added (3091.159042ms)
+  AssertionError [ERR_ASSERTION]: a lint finding added, with no tag, passed the guard
+  exit 0
+  stdout:
+  PASS guard: 1 commit checked: no guarded edit lacks its own approved proposal
+  proof: wall time 1.7 s
+  
+  stderr:
+  
+      at expectRefused (file://<checkout>/tests/acceptance/1872/helpers.mjs:129:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/1872/known-failures.test.mjs:56:7)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async TestContext.<anonymous> (file://<checkout>/tests/acceptance/1872/known-failures.test.mjs:53:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1872/known-failures.test.mjs:53:13
+✖ a timing ID added (2771.889ms)
+  AssertionError [ERR_ASSERTION]: a timing ID added, with no tag, passed the guard
+  exit 0
+  stdout:
+  PASS guard: 1 commit checked: no guarded edit lacks its own approved proposal
+  proof: wall time 1.8 s
+  
+  stderr:
+  
+      at expectRefused (file://<checkout>/tests/acceptance/1872/helpers.mjs:129:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/1872/known-failures.test.mjs:56:7)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async TestContext.<anonymous> (file://<checkout>/tests/acceptance/1872/known-failures.test.mjs:53:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1872/known-failures.test.mjs:53:13
+✖ a failures entry's date moved later (2757.805583ms)
+  AssertionError [ERR_ASSERTION]: a failures entry's date moved later, with no tag, passed the guard
+  exit 0
+  stdout:
+  PASS guard: 1 commit checked: no guarded edit lacks its own approved proposal
+  proof: wall time 1.8 s
+  
+  stderr:
+  
+      at expectRefused (file://<checkout>/tests/acceptance/1872/helpers.mjs:129:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/1872/known-failures.test.mjs:56:7)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async TestContext.<anonymous> (file://<checkout>/tests/acceptance/1872/known-failures.test.mjs:53:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1872/lanes-code.test.mjs:23:13
+✖ scripts/main-watch.mjs (4944.983291ms)
+  AssertionError [ERR_ASSERTION]: an edit of scripts/main-watch.mjs with no tag passed the guard
+  exit 0
+  stdout:
+  PASS guard: 1 commit checked: no guarded edit lacks its own approved proposal
+  proof: wall time 3.1 s
+  
+  stderr:
+  
+      at expectRefused (file://<checkout>/tests/acceptance/1872/helpers.mjs:129:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/1872/lanes-code.test.mjs:26:7)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async TestContext.<anonymous> (file://<checkout>/tests/acceptance/1872/lanes-code.test.mjs:23:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1872/lanes-code.test.mjs:23:13
+✖ scripts/known-failures-check.mjs (5004.435166ms)
+  AssertionError [ERR_ASSERTION]: an edit of scripts/known-failures-check.mjs with no tag passed the guard
+  exit 0
+  stdout:
+  PASS guard: 1 commit checked: no guarded edit lacks its own approved proposal
+  proof: wall time 3.1 s
+  
+  stderr:
+  
+      at expectRefused (file://<checkout>/tests/acceptance/1872/helpers.mjs:129:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/1872/lanes-code.test.mjs:26:7)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async TestContext.<anonymous> (file://<checkout>/tests/acceptance/1872/lanes-code.test.mjs:23:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1872/lanes-code.test.mjs:33:13
+✖ scripts/main-watch.mjs (4175.823542ms)
+  AssertionError [ERR_ASSERTION]: an edit of scripts/main-watch.mjs under an unsigned tag passed the guard
+  exit 0
+  stdout:
+  PASS guard: 1 commit checked: no guarded edit lacks its own approved proposal
+  proof: wall time 2.0 s
+  
+  stderr:
+  
+      at expectRefused (file://<checkout>/tests/acceptance/1872/helpers.mjs:129:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/1872/lanes-code.test.mjs:36:7)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async TestContext.<anonymous> (file://<checkout>/tests/acceptance/1872/lanes-code.test.mjs:33:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1872/lanes-code.test.mjs:33:13
+✖ scripts/known-failures-check.mjs (4394.748542ms)
+  AssertionError [ERR_ASSERTION]: an edit of scripts/known-failures-check.mjs under an unsigned tag passed the guard
+  exit 0
+  stdout:
+  PASS guard: 1 commit checked: no guarded edit lacks its own approved proposal
+  proof: wall time 2.8 s
+  
+  stderr:
+  
+      at expectRefused (file://<checkout>/tests/acceptance/1872/helpers.mjs:129:10)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/1872/lanes-code.test.mjs:36:7)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async TestContext.<anonymous> (file://<checkout>/tests/acceptance/1872/lanes-code.test.mjs:33:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1872/lanes-code.test.mjs:43:13
+✖ scripts/main-watch.mjs (5146.953667ms)
+  AssertionError [ERR_ASSERTION]: the guard passed an edit of scripts/main-watch.mjs under a signed tag naming it without judging it: no PASS line names scripts/main-watch.mjs
+  exit 0
+  stdout:
+  PASS guard: 1 commit checked: no guarded edit lacks its own approved proposal
+  proof: wall time 2.7 s
+  
+  stderr:
+  
+      at expectPassed (file://<checkout>/tests/acceptance/1872/helpers.mjs:141:28)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/1872/lanes-code.test.mjs:46:7)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async TestContext.<anonymous> (file://<checkout>/tests/acceptance/1872/lanes-code.test.mjs:43:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1872/lanes-code.test.mjs:43:13
+✖ scripts/known-failures-check.mjs (4140.470833ms)
+  AssertionError [ERR_ASSERTION]: the guard passed an edit of scripts/known-failures-check.mjs under a signed tag naming it without judging it: no PASS line names scripts/known-failures-check.mjs
+  exit 0
+  stdout:
+  PASS guard: 1 commit checked: no guarded edit lacks its own approved proposal
+  proof: wall time 2.4 s
+  
+  stderr:
+  
+      at expectPassed (file://<checkout>/tests/acceptance/1872/helpers.mjs:141:28)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/1872/lanes-code.test.mjs:46:7)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async TestContext.<anonymous> (file://<checkout>/tests/acceptance/1872/lanes-code.test.mjs:43:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/1872/record.test.mjs:11:1
+✖ #1872.0de0dcd9 node scripts/affected.mjs --record on a fixture with a failing test leaves scripts/known-failures.json byte for byte as it was (9479.672542ms)
+  AssertionError [ERR_ASSERTION]: --record changed scripts/known-failures.json:
+  --- before
+  {
+    "failures": {
+      "tests/fixture-1872/listed.test.mjs › a listed test": "fails on main (#9872, added 2026-11-20)"
+    },
+    "lint": {
+      "fixture-check: src/a.rs a finding": 1
+    },
+  
+    "timing": [
+      "tests/fixture-1872/listed.test.mjs › a listed test"
+    ]
+  }
+  
+  --- after
+  {
+    "failures": {
+      "tests/fixture-1872/listed.test.mjs › a listed test": "fails on main (#9872, added 2026-11-20)",
+      "tests/fixture-1872/record.test.mjs › the failure --record would write": "Expected values to be strictly equal:"
+    },
+    "lint": {
+      "fixture-check: src/a.rs a finding": 1
+    },
+    "timing": [
+      "tests/fixture-1872/listed.test.mjs › a listed test"
+    ]
+  }
+  
+  exit 1
+  stdout:
+  …tests/acceptance/192/voxel/ac10-budgets.test.ts tests/acceptance/416/layouts/budgets.test.ts tests/acceptance/1015/budgets.test.ts tests/acceptance/1017/budgets.test.ts tests/acceptance/1425/budgets.test.ts tests/acceptance/148/budgets.test.ts tests/acceptance/149/budgets.test.ts tests/acceptance/1515/budgets.test.ts tests/acceptance/160/budgets.test.ts tests/acceptance/167/budgets.test.ts tests/acceptance/222/budgets.test.ts tests/acceptance/308/budgets.test.ts tests/acceptance/405/budgets.test.ts tests/acceptance/45/budgets.test.ts tests/acceptance/67/budgets.test.ts tests/acceptance/1555/budget-load.test.mjs tests/acceptance/408/machines.test.ts tests/acceptance/501/exports.test.ts tests/acceptance/824/sessions/budgets.long.test.ts tests/acceptance/990/access.test.ts tests/acceptance/990/queries.test.ts tests/acceptance/990/taste.test.ts tests/acceptance/103-redraft-1830/budgets.test.ts tests/acceptance/365-redraft-1830/budgets.test.ts tests/acceptance/262-redraft-1830/budgets.test.ts tests/acceptance/761-redraft-1830/budgets.test.ts tests/acceptance/1098-redraft-1830/budgets.test.ts tests/acceptance/148-redraft-1830/budgets.test.ts tests/acceptance/417-redraft-1830/budgets.test.ts tests/acceptance/1425-redraft-1830/budgets.test.ts tests/acceptance/149-redraft-1830/budgets.test.ts tests/acceptance/311-redraft-1830/budgets.test.ts tests/acceptance/1018-redraft-1830/budgets.test.ts tests/acceptance/166-redraft-1830/budgets.test.ts tests/acceptance/268-redraft-1830/budgets.test.ts tests/acceptance/465-redraft-1830/budgets.test.ts tests/acceptance/968-redraft-1830/budgets.test.ts tests/acceptance/124-redraft-1830/ac5-budgets.live.test.ts tests/acceptance/1427-redraft-1830/ac8-budget.live.test.ts tests/acceptance/1830/ac2-timing.test.ts tests/acceptance/568-redraft-1830/judge.test.mjs tests/acceptance/903/ac6-export.test.ts tests/acceptance/508/ac6-effects.test.ts tests/acceptance/1381/ac6-budget.test.ts tests/acceptance/971/budgets.test.ts tests/acceptance/1992/cost.test.ts tests/acceptance/2650/budgets.long.test.ts tests/acceptance/1431/ac5-cost.test.ts tests/acceptance/2760/budgets.test.ts tests/acceptance/2760-redraft-ac8/budget-timing.test.ts tests/acceptance/732/ac10-budgets.test.ts tests/acceptance/1484/warm.test.ts tests/acceptance/1489/ui-thread.test.ts
+  FAIL affected: 1 new, 0 already failing on main, 0 inconclusive or blocked, 0 listed skips, 0 passed, in 2 s at load 17; logs in <tmp>/deep-affected-Eankxa
+  
+  stderr:
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/1872/record.test.mjs:26:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
