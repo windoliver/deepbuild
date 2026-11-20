@@ -248,7 +248,7 @@ pub use heightfield::HEIGHTFIELD_SAMPLES;
 pub use inputs::{resolved, Input, On, INPUTS_LATER};
 pub use reads::{probe_pose, probe_shape, Output, Read, Skin, Solve, READS};
 pub use soft::{sides, Pin, Soft, SoftShape, Stiffness, Tear, OPEN_MESH};
-pub use vehicle::{flat, Vehicle, Wheel, MOST_WHEELS};
+pub use vehicle::{flat, Taken, Vehicle, Wheel, FIELDS as VEHICLE_FIELDS, MOST_WHEELS};
 
 /// The world document's own fields; `kind` names it.
 const WORLD_KEYS: &[&str] = &[

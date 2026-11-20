@@ -4,7 +4,8 @@
 //! check result, built output hash and evaluated values, so a reader that falls back to a value of
 //! its own fails, naming the kind and the field. The run walks the dump field by field and reports,
 //! by kind, the fields it built and compared; a field with a default it didn't build makes the run
-//! INVALID, never PASS.
+//! INVALID, never PASS. #2717: under `lists` it reports the vehicle body the physics module lists,
+//! built with each listed default left out and read back (physics/defaults.rs).
 
 use std::collections::BTreeMap;
 
@@ -366,6 +367,9 @@ pub fn run(sealed: &Sealed, planted: Option<Planted>) -> Value {
             kinds.push(json!({"kind": kind, "fields": fields}));
         }
     }
+    // #2717: what a canvas module lists through its tool entries is built too (physics/defaults.rs).
+    let other = planted == Some(Planted::VehicleReaderOtherDefaults);
+    let (lists, misread) = crate::physics::defaults::lists(sealed, other);
     let first_skipped = skipped.first().map(|s| s["path"].clone());
     let (verdict, reason) = if let Some(f) = failures.first() {
         let reason = format!(
@@ -374,6 +378,8 @@ pub fn run(sealed: &Sealed, planted: Option<Planted>) -> Value {
             f["path"].as_str().unwrap_or_default()
         );
         ("FAIL", reason)
+    } else if let Some(f) = misread.first() {
+        ("FAIL", f["what"].as_str().unwrap_or_default().to_string())
     } else if let Some(first) = &first_skipped {
         let reason = format!(
             "{count} of the dump's {listed} fields with a default were built and compared; the first not built is {}",
@@ -385,6 +391,7 @@ pub fn run(sealed: &Sealed, planted: Option<Planted>) -> Value {
             format!("all {listed} fields with a default give the same build left out as set");
         ("PASS", reason)
     };
+    failures.extend(misread);
     json!({"ok": true, "verdict": verdict, "reason": reason, "count": count, "listed": listed,
-           "first_skipped": first_skipped, "failures": failures, "skipped": skipped, "kinds": kinds})
+           "first_skipped": first_skipped, "failures": failures, "skipped": skipped, "kinds": kinds, "lists": lists})
 }

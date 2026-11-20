@@ -72,6 +72,8 @@ pub enum Planted {
     DefaultsSkipJson,
     /// #548: the bindings generator orders each region's fields by name before laying them out.
     BindingsByName,
+    /// #2717: the world reader takes other values for a vehicle body's fields left out.
+    VehicleReaderOtherDefaults,
 }
 
 impl Planted {
@@ -97,6 +99,7 @@ impl Planted {
             "defaults_compared_with_dump_only" => Planted::DefaultsComparedWithDumpOnly,
             "defaults_skip_json" => Planted::DefaultsSkipJson,
             "bindings_fields_by_name" => Planted::BindingsByName,
+            "vehicle_reader_takes_other_defaults" => Planted::VehicleReaderOtherDefaults,
             _ => return None,
         })
     }
