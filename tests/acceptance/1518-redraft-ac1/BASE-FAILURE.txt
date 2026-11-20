@@ -1,0 +1,38 @@
+Base: 9c916d5a1 ("test(#1518): acceptance tests for cut.words@1, written first and blind"), on the design commit
+d19559622; no cut.words@1 kind, cut.heard row or cut_* planted program exists there.
+
+Set up for the run: npm ci; npm run build -w packages/evidence (its built patterns, which #509's helpers load);
+deep-show built with --features full (CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0). The CLI and deep-hook weren't
+built: the file fails before it starts a hub. `node node_modules/typescript/bin/tsc -p
+tests/acceptance/1518-redraft-ac1/tsconfig.json` exits 0, and `vitest list` collects the one test.
+
+Run there once:
+
+  node node_modules/vitest/vitest.mjs run --root tests/acceptance/1518-redraft-ac1 heard.test.ts --testTimeout=3600000 --no-file-parallelism
+
+   ❯ heard.test.ts (1 test | 1 failed) 79181ms
+     × #1518.1dbfdc9b the strips are heard back as the kept words in order; on the record shifted 150 ms every kept word
+       is still heard; the planted cut_on_raw_times there cuts into kept words and cut.heard FAILs with cut.word_lost
+       naming one 77857ms
+
+   AssertionError: the recording cut on its true times: deep show's `expansions` holds one row for the cut.words@1 item
+   `cut` (design: As built (#1518)); it holds []: expected +0 to be 1 // Object.is equality
+    ❯ cutRowOf helpers.ts:151:258
+    ❯ unheard helpers.ts:179:15
+    ❯ heard.test.ts:42:20
+
+   Test Files  1 failed (1)
+        Tests  1 failed (1)
+
+So at the base the film is presented with its unknown cut.words@1 item and no expansion row, and the test fails at the
+first thing the criterion states, after its reading's own four checks passed and the take was spoken, and before any
+hub, model host or transcriber starts. The transcriber leg was not run. The world under /tmp/dh1518r-* and the build
+folder under $TMPDIR were gone after the file.
+
+Checked by hand at the base, to know the harness pieces this file leans on work there; no expected value was taken from
+these:
+- media_mix answers the first draft's call shape ({doc: {transport: {sample_rate, span}, strips}, segments: [{from: 0,
+  to}]}) with a segment's sha256, two channels at 48 kHz, for a strip of a float WAV in a scratch store.
+- media_heard reads the take's text (its 81 words, brackets dropped) as 81 tokens, each the word itself; with "you"
+  added after the last sentence it answers match false with extra ["you"] and nothing missing. That is the shape of the
+  first draft's BLOCKED fixture check; this redraft's reading sets that "you" aside.
