@@ -192,9 +192,9 @@ async function fromDatabase(ledger: string, detail: boolean, why?: string): Prom
  */
 export async function listCommand(args: readonly string[], detail: boolean, setUp: () => Promise<number> = async () => 0): Promise<number> {
   const name = detail ? 'deep status' : 'deep';
-  const named = args.filter((a) => !a.startsWith('--'));
+  const named = args.filter((a) => !a.startsWith('-'));
   const asked = args.includes('--why');
-  if (args.some((a) => a.startsWith('--') && a !== '--json' && !(detail && a === '--why')) || named.length !== (asked ? 1 : 0)) {
+  if (args.some((a) => a.startsWith('-') && a !== '--json' && !(detail && a === '--why')) || named.length !== (asked ? 1 : 0)) {
     process.stderr.write(detail ? 'Usage: deep status [--json] | deep status <session> --why [--json]\n' : `Usage: ${name} [--json]\n`);
     return 2;
   }

@@ -33,7 +33,7 @@ function typed(prompt: string): Promise<string | undefined> {
 export async function secretCommand(args: string[], setUp: () => Promise<number> = async () => 0): Promise<number> {
   const listing = args[0] === 'list' && args.length <= 2 && (args[1] === undefined || args[1] === '--json');
   const [verb, extension, name] = args;
-  if (!listing && (verb !== 'add' || !extension || !name || args.length !== 3)) {
+  if (!listing && (verb !== 'add' || !extension || !name || args.length !== 3 || extension.startsWith('-') || name.startsWith('-'))) {
     process.stderr.write('Usage: deep secret add <package> <name>\n       deep secret list [--json]\n');
     return 2;
   }

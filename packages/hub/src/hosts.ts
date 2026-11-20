@@ -677,7 +677,7 @@ export async function hostCommand(args: string[]): Promise<number> {
     await say(reply.error?.remediation ?? 'no reply', process.stderr);
     return 1;
   };
-  if (args[0] === 'changes' && args.length === 2) {
+  if (args[0] === 'changes' && args.length === 2 && !args[1]!.startsWith('-')) {
     const reply = await hub('host.changes', { host: args[1] });
     if (!reply.result) return failed(reply);
     const changes = reply.result.changes as { ts: number; change: string; undo: string | null; grant: string; ask: string | null }[];
