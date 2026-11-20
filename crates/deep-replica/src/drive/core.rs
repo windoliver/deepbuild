@@ -268,7 +268,7 @@ impl Core {
             .prepare(
                 document.as_object().expect("a document is an object"),
                 0,
-                &self.look.light,
+                (&self.look.light, &deep_marks_raster::text_type(&self.look)),
                 self.look.status.as_ref(),
                 &Record::default(),
                 &self.evidence,

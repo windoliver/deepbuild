@@ -309,7 +309,7 @@ pub fn show(hub: &mut Hub<'_>) -> Value {
         let Ok(drawn) = hub.renderer.prepare(
             drawable.as_object().expect("a document is an object"),
             0,
-            &palette,
+            (&palette, &crate::snapshot::text_type(&hub.look)),
             hub.look.status.as_ref(),
             &record,
             &hub.scenario.evidence,

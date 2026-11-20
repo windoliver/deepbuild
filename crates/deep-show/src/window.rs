@@ -348,7 +348,7 @@ pub fn draw(hub: &mut Hub<'_>, replies: Vec<Value>, out: &str, t: i64, scale: f6
                 None => match hub.renderer.prepare(
                     &stamped,
                     t,
-                    &palette,
+                    (&palette, &crate::snapshot::text_type(&hub.look)),
                     hub.look.status.as_ref(),
                     &record,
                     &hub.scenario.evidence,

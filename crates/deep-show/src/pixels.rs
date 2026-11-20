@@ -229,7 +229,7 @@ impl Hub<'_> {
                     .prepare(
                         doc.as_object()?,
                         t,
-                        &hub.look.light,
+                        (&hub.look.light, &crate::snapshot::text_type(&hub.look)),
                         hub.look.status.as_ref(),
                         &hub.record(),
                         &hub.scenario.evidence,

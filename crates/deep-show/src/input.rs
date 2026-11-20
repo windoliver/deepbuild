@@ -649,7 +649,7 @@ impl Hub<'_> {
                 .prepare(
                     d,
                     0,
-                    &self.look.light,
+                    (&self.look.light, &crate::snapshot::text_type(&self.look)),
                     self.look.status.as_ref(),
                     &record,
                     &self.scenario.evidence,
@@ -760,7 +760,7 @@ impl Hub<'_> {
             .prepare(
                 doc.as_object().expect("a document is an object"),
                 t,
-                &self.look.light,
+                (&self.look.light, &crate::snapshot::text_type(&self.look)),
                 self.look.status.as_ref(),
                 &self.record(),
                 &self.scenario.evidence,

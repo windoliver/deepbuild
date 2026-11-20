@@ -330,7 +330,7 @@ impl State {
             .prepare(
                 &self.shown.drawable,
                 t,
-                &palette,
+                (&palette, &crate::snapshot::text_type(&self.hub.look)),
                 self.hub.look.status.as_ref(),
                 &record,
                 &self.hub.scenario.evidence,
@@ -405,7 +405,7 @@ impl Shown {
         if let Ok(drawn) = renderer.prepare(
             &self.drawable,
             0,
-            &palette,
+            (&palette, &crate::snapshot::text_type(&hub.look)),
             hub.look.status.as_ref(),
             &hub.record(),
             &hub.scenario.evidence,

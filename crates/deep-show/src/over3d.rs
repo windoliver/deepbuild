@@ -58,7 +58,7 @@ impl Hub<'_> {
                 let drawn = self.renderer.prepare(
                     &map,
                     0,
-                    &self.look.light,
+                    (&self.look.light, &snapshot::text_type(&self.look)),
                     None,
                     &record,
                     &self.scenario.evidence,
@@ -138,7 +138,7 @@ impl Hub<'_> {
             this.renderer.prepare(
                 map,
                 t,
-                &look.light,
+                (&look.light, &snapshot::text_type(look)),
                 look.status.as_ref(),
                 &record,
                 &this.scenario.evidence,
