@@ -18,7 +18,7 @@ import { AskRefused, type Asks, type PlanInput, type Target } from '@deepbuild/a
 import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
 import { ulid, type Connection, type EventInput } from '@deepbuild/record';
 import { execFile } from 'node:child_process';
-import { countMcp, toolLists, type Listed } from './mcp-servers.js';
+import { countMcp, OWN_SERVERS, toolLists, type Listed } from './mcp-servers.js';
 import { namedIn, pushBranches, type Named } from './named.js';
 import { offerPlan, type Effect } from './questions.js';
 import type { About } from './standing.js';
@@ -429,6 +429,8 @@ export class Holds {
    * update's ask that holds it, or, with none (a tool no list shows, or an ask that couldn't be raised), on its own.
    */
   private async heldTool(meta: HookMeta, server: string, tool: string): Promise<string | undefined> {
+    // DeepBuild's own tools are never held; their list is on the record only for the reply limit it names (#2896).
+    if (OWN_SERVERS.includes(server)) return undefined;
     const lists = await this.lists(server);
     const latest = lists.at(-1);
     if (!latest) return undefined;

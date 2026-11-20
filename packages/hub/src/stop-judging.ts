@@ -30,7 +30,7 @@ import { AskTasks } from './ask-tasks.js';
 import { SizeScope } from './scope.js';
 import { codexTrusted } from './codex-settings.js';
 import { Holds } from './holds.js';
-import { countMcp } from './mcp-servers.js';
+import { countMcp, OWN_SERVERS } from './mcp-servers.js';
 import { reachOf, type Reach, type ReachTool } from './could-do.js';
 import { coveredBy } from './hookmap.js';
 import { mergedWithMain, releaseSpec, switchesOff, unreadSpec } from './release.js';
@@ -483,6 +483,8 @@ export class StopJudging {
     const cwd = this.options.state().sessions.get(session)?.cwd ?? '';
     const tools = lists.flatMap((l) => {
       const { server, tools: listed } = JSON.parse(l.data) as { server: string; tools: { name: string }[] };
+      // DeepBuild's own server is on the record only for the reply limit it names (#2896), not as reach.
+      if (OWN_SERVERS.includes(server)) return [];
       return listed.map((t): ReachTool => ({ name: `mcp__${server}__${t.name}`, kind: /computer/.test(server) ? 'computer' : 'mcp', connector: server, read_only: countMcp(server, t.name, cwd).counts === 'read' }));
     });
     const leases = (await this.options.services.leases.leases()).filter((v) => v.lease.holder === `mcp:${session}`);
