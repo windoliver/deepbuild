@@ -384,6 +384,11 @@ impl Vello2d {
         });
     }
 
+    /// #1489: the frame each animated image item shows in the frames it draws next, by its ID.
+    pub fn frames(&mut self) -> &mut std::collections::HashMap<String, u32> {
+        &mut self.kept.get_mut().frames
+    }
+
     /// The pixmaps the renderer has uploaded to Vello GPU's atlas so far.
     pub fn uploads(&self) -> u64 {
         self.uploads
