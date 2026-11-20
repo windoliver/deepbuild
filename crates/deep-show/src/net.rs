@@ -12,10 +12,11 @@ use std::time::{Duration, Instant};
 use deep_canvas::canon::sha256_hex;
 use deep_canvas::scope::Event;
 use deep_logic::piece::Piece;
+use deep_logic::world::rollback::Plant;
 use deep_net::card::{self, Card};
-use deep_net::play::{Ask, Faults, Hold, Play};
+use deep_net::play::{Ask, Deliver, Faults, Held, Hold, Play};
 use deep_net::prompt::{self, State};
-use deep_net::{checks, Config, Copy, End, FLICKS};
+use deep_net::{checks, Change, Config, Copy, Defect, End, Planted, Stepper, FLICKS};
 use deep_play::net::Logic;
 use deep_relay::direct::{random16, Listener, Peer};
 use deep_relay::macos::{check_hello, Connection, Event as Arrived};
@@ -59,23 +60,50 @@ pub fn given(input: &Map<String, Value>) -> Option<Given> {
 
 /// The net module, on logic: a build that leaves logic out leaves it out too.
 pub fn module() -> Option<deep_canvas::registry::Module> {
-    cfg!(not(feature = "test-leave-out-logic")).then(deep_net::kind::module)
+    cfg!(not(feature = "test-leave-out-logic")).then(|| {
+        // #550: its check kinds run copies of a document's logic items.
+        deep_net::kind::bind(deep_play::net::RUNS);
+        deep_net::kind::module()
+    })
 }
 
-/// The net module's calls: `match`, `play_match` and `sockets`.
+/// The net module's calls: `match`, `play_match`, `sockets` and `replay`.
 pub enum NetCall {
     Match(MatchCall),
     Play(PlayCall),
     Sockets,
+    Replay(ReplayCall),
 }
 
 pub fn parse(name: &str, c: &Map<String, Value>) -> Option<Call> {
     let call = match name {
         "match" => NetCall::Match(parse_match(c)?),
         "play_match" => NetCall::Play(parse_play(c)?),
+        "replay" => NetCall::Replay(ReplayCall {
+            doc: c.get("doc")?.as_str()?.to_string(),
+            track: c.get("track")?.as_array()?.clone(),
+            steps: c
+                .get("steps")?
+                .as_i64()
+                .filter(|n| (1..=100_000).contains(n))?,
+            hash_every: c
+                .get("hash_every")
+                .map_or(Some(1), Value::as_i64)
+                .filter(|n| *n >= 1)?,
+        }),
         _ => NetCall::Sockets,
     };
     Some(Call::Net(Box::new(call)))
+}
+
+/// #551: `{"call": "replay", "doc", "track", "steps", "hash_every"}`: the document played alone
+/// from its start on `track`, a record's merged track, with no relay and no peer, every canvas
+/// module stepped as a match's copy steps it; its full-state hash every `hash_every` steps.
+pub struct ReplayCall {
+    doc: String,
+    track: Vec<Value>,
+    steps: i64,
+    hash_every: i64,
 }
 
 /// `{"call": "match", "doc", "steps", "plays"?, "relay"?, "check"?, "render_back"?}`.
@@ -86,8 +114,17 @@ pub struct MatchCall {
     faults: Faults,
     log: bool,
     check: Option<String>,
+    /// net.desync's seed: where its planted change lands (#550).
+    seed: u64,
+    /// #550: a planted change one copy makes, `{player, step, field, add? | flip?, at?}`.
+    plant: Option<(u8, Defect)>,
     /// `(player, seconds)` on the relay's clock.
     renders: Vec<(u8, f64)>,
+    /// #551: net.budget's hosts (`on`), the seeks after the match (`seek: [{player, step}]`) and
+    /// whether logic's rollback ring keeps whole copies (`ring: "full"`).
+    on: Vec<String>,
+    seeks: Vec<(u8, i64)>,
+    full: bool,
 }
 
 fn plays_of(v: &Value) -> Option<Vec<Play>> {
@@ -98,6 +135,16 @@ fn plays_of(v: &Value) -> Option<Vec<Play>> {
                 step: p.get("step")?.as_i64().filter(|s| *s >= 0)?,
                 control: p.get("control")?.as_str()?.to_string(),
                 value: p.get("value")?.clone(),
+                // #550: the players whose copies it goes to, over a direct path.
+                to: match p.get("to") {
+                    None => None,
+                    Some(to) => Some(
+                        to.as_array()?
+                            .iter()
+                            .map(|q| q.as_u64().filter(|q| (1..=8).contains(q)).map(|q| q as u8))
+                            .collect::<Option<_>>()?,
+                    ),
+                },
             })
         })
         .collect()
@@ -166,13 +213,100 @@ fn parse_match(c: &Map<String, Value>) -> Option<MatchCall> {
                 .map_or(Some(0.0), |d| d.as_f64().filter(|d| (0.0..1.0).contains(d)))?,
             holds,
             back: 0,
+            // #551: `{up_to: n}` or `{exactly: n}` match steps.
+            held: match relay.and_then(|r| r.get("back")) {
+                None => None,
+                Some(b) => Some(match (b.get("up_to"), b.get("exactly")) {
+                    (Some(n), None) => Held::UpTo(n.as_i64().filter(|n| *n >= 0)?),
+                    (None, Some(n)) => Held::Exactly(n.as_i64().filter(|n| *n >= 0)?),
+                    _ => return None,
+                }),
+            },
+            deliver: match relay.and_then(|r| r.get("deliver")) {
+                None => Vec::new(),
+                Some(d) => d
+                    .as_array()?
+                    .iter()
+                    .map(|d| {
+                        Some(Deliver {
+                            player: player(d.get("player")?)?,
+                            step: d.get("step")?.as_i64()?,
+                            to: player(d.get("to")?)?,
+                            at: d.get("at")?.as_i64()?,
+                        })
+                    })
+                    .collect::<Option<_>>()?,
+            },
+            // #551: each player's one-way latency to the relay, in ms.
+            latency: match relay.and_then(|r| r.get("latency")) {
+                None => Vec::new(),
+                Some(l) => l
+                    .as_array()?
+                    .iter()
+                    .map(|ms| Some(flicks(ms.as_f64().filter(|m| *m >= 0.0)? / 1000.0)))
+                    .collect::<Option<_>>()?,
+            },
+            direct: relay.and_then(|r| r.get("direct")).and_then(Value::as_bool) == Some(true),
         },
         log: relay.and_then(|r| r.get("log")).and_then(Value::as_bool) == Some(true),
         check: match c.get("check") {
             None => None,
             Some(k) => Some(k.as_str()?.to_string()),
         },
+        seed: c.get("seed").map_or(Some(0), Value::as_u64)?,
+        plant: match c.get("plant") {
+            None => None,
+            Some(p) => Some((
+                player(p.get("player")?)?,
+                Defect {
+                    step: p.get("step")?.as_i64().filter(|s| *s >= 0)?,
+                    field: p.get("field")?.as_str()?.to_string(),
+                    at: match p.get("at") {
+                        None => None,
+                        Some(a) => Some(u32::try_from(a.as_u64()?).ok()?),
+                    },
+                    change: match (p.get("flip"), p.get("add")) {
+                        (Some(b), None) => Change::Flip(b.as_u64().filter(|b| *b < 64)? as u32),
+                        (None, add) => Change::Add(add.map_or(Some(1.0), Value::as_f64)?),
+                        _ => return None,
+                    },
+                },
+            )),
+        },
         renders,
+        on: match c.get("on") {
+            None => vec!["app".to_string()],
+            Some(on) => on
+                .as_array()?
+                .iter()
+                .map(|h| {
+                    h.as_str()
+                        .filter(|h| ["app", "web"].contains(h))
+                        .map(str::to_string)
+                })
+                .collect::<Option<_>>()?,
+        },
+        seeks: match c.get("seek") {
+            None => Vec::new(),
+            Some(s) => s
+                .as_array()?
+                .iter()
+                .map(|s| {
+                    Some((
+                        player(s.get("player")?)?,
+                        s.get("step")?.as_i64().filter(|k| *k >= 0)?,
+                    ))
+                })
+                .collect::<Option<_>>()?,
+        },
+        full: match c.get("ring") {
+            None => false,
+            Some(r) => r
+                .as_str()
+                .filter(|r| *r == "full")
+                .is_some()
+                .then_some(true)?,
+        },
     })
 }
 
@@ -208,6 +342,8 @@ struct Setup {
     card: Card,
     piece: Rc<Piece>,
     track: Vec<Value>,
+    /// #551: the document as presented, whose worlds a copy steps beside its logic items.
+    doc: Value,
 }
 
 /// How long a copy waits for the other's half of a direct path before it plays through the relay.
@@ -237,7 +373,16 @@ impl Hub<'_> {
             let net = deep_net::kind::item(&rev).map(|(_, item)| item);
             return Err(json!({"code": "rewind.in_match", "match": net.and_then(|n| n.get("id"))}));
         }
-        let piece = match self.logic_piece(&form, &track) {
+        // #551: the ring that misses a page `memory.fill` alone wrote is a page tracker that
+        // leaves those pages unmarked.
+        let fill = self.scenario.module_planted.as_deref() == Some("net_ring_misses_fill");
+        let planted = match fill {
+            true => deep_logic::Planted::default()
+                .and("tracker_skips_memory_fill")
+                .unwrap_or_default(),
+            false => deep_logic::Planted::default(),
+        };
+        let piece = match self.logic_piece_with(&form, &track, &planted) {
             Ok(Some(p)) => Rc::new(p),
             Ok(None) => return Err(json!({"code": "no_logic"})),
             Err(i) => return Err(json!({"code": i.code, "issues": [i.to_json()]})),
@@ -253,13 +398,16 @@ impl Hub<'_> {
             &self.startup.sealed,
             &drawn,
             hash(&drawn),
-            hash(&json!(track)),
+            // The track's bytes as a web export writes them, so a web player's copy agrees (#551).
+            crate::track_call::held_bytes(&track)
+                .map_or_else(|| hash(&json!(track)), |b| sha256_hex(&b)),
         );
         Ok(Setup {
             cfg,
             card,
             piece,
             track,
+            doc: rev,
         })
     }
 
@@ -274,9 +422,13 @@ impl Hub<'_> {
         match call {
             NetCall::Match(m) => self.match_call(m),
             NetCall::Play(p) => self.play_match(p),
+            NetCall::Replay(r) => self.match_replay(r),
             // `sockets`: every connection and request a match opened in this run.
             NetCall::Sockets => {
-                let log = self.scopes.values().flat_map(|s| s.join.log.iter().cloned());
+                let log = self
+                    .scopes
+                    .values()
+                    .flat_map(|s| s.join.log.iter().cloned());
                 json!({"log": log.collect::<Vec<_>>()})
             }
         }
@@ -314,21 +466,35 @@ impl Hub<'_> {
             Ok(s) => s,
             Err(e) => return e,
         };
+        let planted = self.net_planted();
         let ask = Ask {
             steps: m.steps,
             plays: m.plays.clone(),
             faults: m.faults.clone(),
-            planted: self.net_planted(),
+            planted,
+            // #550: the planted copy that stamps a peer's entries with its own player is copy 1.
+            planted_on: (planted == Planted::StampsOwnPlayer).then_some(1),
             shows: m.renders.iter().map(|(p, t)| (*p, flicks(*t))).collect(),
+            log: m.log,
+            defect: m.plant.clone(),
         };
-        let (piece, track) = (s.piece.clone(), s.track.clone());
+        let (piece, track, doc) = (s.piece.clone(), s.track.clone(), s.doc.clone());
+        let rounds = planted == Planted::HashRoundsFloats;
+        let name = self.scenario.module_planted.as_deref();
+        let ring = match m.full {
+            true => Plant::Full,
+            false => name.and_then(Plant::named).unwrap_or_default(),
+        };
         // #297: every copy checks each entry to a text control an entry text shows alike.
         let form = self.forms.get(&m.doc).cloned().unwrap_or_default();
         let (ty, lax) = (self.entry_type(&form), self.entry_lax());
         let make = &mut |_: u8| {
-            let mut logic = Logic::new(piece.clone(), &track, true)?;
-            logic.range = deep_play::net::Range::of(&form, ty.clone(), lax);
-            Ok(logic)
+            let mut l = Logic::new(piece.clone(), &track, true)?;
+            l.rounds = rounds;
+            l.plant_ring(ring);
+            l.worlds(&doc)?;
+            l.range = deep_play::net::Range::of(&form, ty.clone(), lax);
+            Ok(l)
         };
         let run = match m.check.as_deref() {
             None => deep_net::play::play(&s.cfg, &s.card, &ask, make).map(|p| (p, None)),
@@ -340,20 +506,29 @@ impl Hub<'_> {
                 let frame_ms = deep_canvas::budget::of(&rev)
                     .and_then(|(_, limits)| limits.cpu_ms)
                     .unwrap_or(deep_logic::budget::FRAME_NS / 1e6);
-                let busiest = |l: &Logic| l.busiest;
-                checks::budget(&s.cfg, &s.card, &ask, make, frame_ms, &busiest)
+                checks::budget(&s.cfg, &s.card, &ask, make, frame_ms, &m.on)
                     .map(|(p, c)| (p, Some(c)))
             }
-            Some("net.desync") => deep_net::play::play(&s.cfg, &s.card, &ask, make).map(|p| {
-                let why = "net.desync's planted change and its locator land with #550";
-                (p, Some(checks::blocked("net.desync", why)))
-            }),
+            Some("net.desync") => {
+                checks::desync(&s.cfg, &s.card, &ask, make, m.seed).map(|(p, c)| (p, Some(c)))
+            }
             Some(_) => return json!({"code": "bad_input", "path": "check"}),
         };
-        let (played, check) = match run {
+        let (mut played, check) = match run {
             Ok(r) => r,
             Err(e) => return e,
         };
+        // #551: each seek after the match, in its copy as the match left it.
+        let seeks: Vec<Value> = m
+            .seeks
+            .iter()
+            .filter_map(|(p, step)| {
+                let c = played.copies.get_mut(*p as usize - 1)?;
+                let mut s = c.seek(*step);
+                s["player"] = json!(p);
+                Some(s)
+            })
+            .collect();
         let copies: Vec<Value> = played
             .copies
             .iter()
@@ -361,12 +536,24 @@ impl Hub<'_> {
                 let mut report = c.report();
                 report.insert("steps".into(), json!(c.sim().rows));
                 report.insert("track".into(), json!(s.track));
-                let refused = c.sim().range.as_ref().map(|r| r.refused.clone());
-                report.insert("refused".into(), json!(refused.unwrap_or_default()));
+                // #297: a refusal of an entry text's range names its reason and grapheme.
+                if let Some(Value::Array(rows)) = report.get_mut("refused") {
+                    for row in rows.iter_mut() {
+                        let why = row["why"].clone();
+                        for k in ["reason", "grapheme", "code_points"] {
+                            if let Some(v) = why.get(k) {
+                                row[k] = v.clone();
+                            }
+                        }
+                    }
+                }
                 Value::Object(report)
             })
             .collect();
         let mut reply = json!({"copies": copies, "relay": played.relay(m.log)});
+        if !m.seeks.is_empty() {
+            reply["seeks"] = json!(seeks);
+        }
         if let Some(check) = check {
             reply["check"] = check;
         }
@@ -410,6 +597,46 @@ impl Hub<'_> {
             reply["renders"] = json!(renders);
         }
         reply
+    }
+
+    /// `replay`: the piece alone on a record's track, as a copy steps it, with no network.
+    fn match_replay(&mut self, r: &ReplayCall) -> Value {
+        let s = match self.match_setup(&r.doc) {
+            Ok(s) => s,
+            Err(e) => return e,
+        };
+        let mut sim = match Logic::new(s.piece.clone(), &s.track, false)
+            .and_then(|mut l| l.worlds(&s.doc).map(|()| l))
+        {
+            Ok(sim) => sim,
+            Err(e) => return e,
+        };
+        let len = s.cfg.step();
+        let key = |e: &Value| {
+            (
+                e["t"].as_i64().unwrap_or(0),
+                e["player"].as_u64().unwrap_or(0),
+                e["seq"].as_u64().unwrap_or(0),
+            )
+        };
+        let mut entries = r.track.clone();
+        entries.sort_by_key(key);
+        let (mut at, mut hashes) = (0, Vec::new());
+        for k in 0..r.steps {
+            while let Some(e) = entries.get(at).filter(|e| key(e).0 < (k + 1) * len) {
+                if let Err(why) = sim.enter(e) {
+                    return json!({"code": "bad_input", "path": "track", "entry": e, "why": why});
+                }
+                at += 1;
+            }
+            if let Err(trap) = sim.run(k, (k + 1) * len) {
+                return json!({"hashes": hashes, "trap": trap, "step": k});
+            }
+            if k % r.hash_every == 0 {
+                hashes.push(json!({"step": k, "hash": format!("{:016x}", sim.hash())}));
+            }
+        }
+        json!({"hashes": hashes})
     }
 
     /// The SHA-256 of `doc`'s own layer as render-back draws its current revision at `t`.
@@ -508,7 +735,11 @@ impl Hub<'_> {
         let Some((doc, _)) = self.join_of(&p.panel) else {
             return json!({"code": "no_match", "what": "the panel's piece declares no relay"});
         };
-        match self.scopes.get(&p.panel).and_then(|s| s.join.state.as_ref()) {
+        match self
+            .scopes
+            .get(&p.panel)
+            .and_then(|s| s.join.state.as_ref())
+        {
             Some(State::Joined) => {}
             Some(State::Refused(refused, why)) => {
                 return json!({"code": "refused", "refused": refused, "why": why})
@@ -525,7 +756,12 @@ impl Hub<'_> {
         let cfg = s.cfg.clone();
         // A copy that joins through the first player's link holds that copy's card: one that
         // differs is refused here, before anything is opened.
-        let through = self.scenario.net.links.get(&doc).and_then(|l| card::parse(l));
+        let through = self
+            .scenario
+            .net
+            .links
+            .get(&doc)
+            .and_then(|l| card::parse(l));
         if let Some(m) = through
             .as_ref()
             .and_then(|(_, theirs)| s.card.differs(theirs))
@@ -667,7 +903,9 @@ impl Hub<'_> {
         drop(listener);
         let all_direct = direct.len() == wanted;
         // The match, on this copy's clock from here.
-        let sim = match Logic::new(s.piece.clone(), &s.track, false) {
+        let sim = match Logic::new(s.piece.clone(), &s.track, false)
+            .and_then(|mut l| l.worlds(&s.doc).map(|()| l))
+        {
             Ok(sim) => sim,
             Err(e) => return e,
         };
@@ -686,7 +924,7 @@ impl Hub<'_> {
         copy.script(
             p.plays
                 .iter()
-                .map(|q| (q.step, q.control.clone(), q.value.clone())),
+                .map(|q| (q.step, q.control.clone(), q.value.clone(), q.to.clone())),
         );
         if ended.is_some() {
             copy.closed(0, "left");

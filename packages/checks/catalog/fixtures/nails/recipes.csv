@@ -1,0 +1,6 @@
+id,inputs,tools,outputs
+saw_log,log,knife,plank;plank;plank;plank
+make_board,plank;plank,knife,board
+split_board,board,,plank;plank
+carve_cudgel,board,knife,cudgel
+nail_crate,board;nails,knife,cudgel

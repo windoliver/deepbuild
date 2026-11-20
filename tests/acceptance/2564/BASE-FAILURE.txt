@@ -1,0 +1,57 @@
+# Base run of tests/acceptance/2564 at 8bfb6a6330569c96d01342a4c4af6393d02bdb20 (nothing of #2564 implemented), 2026-11-20T10:09Z, Node v24.22.0, macOS 27.2.1 (arm64)
+# node node_modules/vitest/vitest.mjs run tests/acceptance/2564
+
+
+ RUN  v5.0.5 <repo>
+
+ ❯ tests/acceptance/2564/stream-flush.test.ts (1 test | 1 failed) 1420ms
+   × #2564.ab15a450 with a subscriber's page read made to fail during a flush, the hub records no unhandled rejection and keeps answering 1360ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2564/stream-flush.test.ts > #2564.ab15a450 with a subscriber's page read made to fail during a flush, the hub records no unhandled rejection and keeps answering
+AssertionError: the failed page read in the flush ended the hub's process: an unhandled rejection
+steps: [{"step":"started"},{"step":"subscribed","after":0,"reply":{},"held":2},{"step":"stream-read-failed","after":0,"frames":0}]
+status 1, signal null
+stderr:
+file://<repo>/tests/acceptance/2564/fixtures/hub-run.mjs:47
+    throw Object.assign(new Error('disk I/O error (planted by tests/acceptance/2564: the subscriber\'s page read in a flush)'), { code: 'SQLITE_IOERR' });
+                        ^
+
+Error: disk I/O error (planted by tests/acceptance/2564: the subscriber's page read in a flush)
+    at Statement.all (file://<repo>/tests/acceptance/2564/fixtures/hub-run.mjs:47:25)
+    at SqliteRecord.raw (file://<repo>/packages/record/dist/index.js:745:34)
+    at Object.raw (file://<repo>/packages/hub/dist/core.js:163:40)
+    at LogReads.turn (file://<repo>/packages/hub/dist/log-reads.js:168:30)
+    at LogReads.flushStream (file://<repo>/packages/hub/dist/log-reads.js:143:43)
+    at Immediate.<anonymous> (file://<repo>/packages/hub/dist/log-reads.js:125:38)
+    at process.processImmediate (node:internal/timers:574:21) {
+  code: 'SQLITE_IOERR'
+}
+
+Node.js v24.22.0
+: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ Statement.all <repo>/tests/acceptance/2564/fixtures/hub-run.mjs:47:25
+ ❯ tests/acceptance/2564/stream-flush.test.ts:70:127
+     68|
+     69|   // No unhandled rejection: Node ends a process at one, and this one …
+     70|   expect(steps.includes('alive'), `the failed page read in the flush e…
+       |                                                                                                                               ^
+     71|
+     72|   // It keeps answering: a page of the log, and its health.
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  02:09:28
+   Duration  1.57s (tests 96%, transform 2%, setup 1%)
+

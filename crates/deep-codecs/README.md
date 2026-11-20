@@ -27,6 +27,7 @@ A binary that links the crate starts each helper as a copy of itself with the ar
 - `src/mov.rs`: the header-first MP4 and QuickTime writer for exports: video, float PCM or AAC, timecode (#501); `head` before streamed samples, `moov` after a part's (#157).
 - `src/surface.rs`: an export's ring of GPU surface slots handed once to an encode tool's process: on macOS, IOSurfaces in one Mach message through a name the export checks in, then read or written in place (#518).
 - `src/export.rs`: the encode tool's export jobs: `export.part`, `export.join`, `export.png` (#501), their frames from files or over the pipe (#157).
+- `src/catalog.rs`: the `catalog` job (#194), a catalog's table files packed into table.layout@1 by `deep-catalog`, the one job that names no single path.
 - `src/apple.rs`: the macOS backend: VideoToolbox decode, AudioToolbox AAC encode, the sandbox.
 - `src/apple/encoder.rs`: the streaming VideoToolbox encoder (H.264, HEVC, ProRes 4444) fed a frame at a time from its own pool (#157).
 - `src/apple/decoder.rs`: the stream op's asynchronous VideoToolbox decoder, pictures in the decoder's own format (#157).
@@ -35,7 +36,7 @@ A binary that links the crate starts each helper as a copy of itself with the ar
 
 ## What it may import
 
-serde_json, sha2 and image; libc on macOS. Platform frameworks are linked by name and called through their C interfaces. Of DeepBuild's crates it links one, `deep-canvas-cells`, whose emulator converts a terminal recording at import (#1967), and no other: the canvas, the media module and the app reach it only through a helper process.
+serde_json, sha2 and image; libc on macOS. Platform frameworks are linked by name and called through their C interfaces. Of DeepBuild's crates it links two: `deep-canvas-cells`, whose emulator converts a terminal recording at import (#1967), and `deep-catalog`, the data module's catalog probe and the CSV reader the table probe shares (#194); no other: the canvas, the media module and the app reach it only through a helper process.
 
 The audio decoders (#503) are pure Rust, so the web player can build the same ones for wasm32: symphonia (only its
 MP3, Vorbis and ALAC decoders), rusty_aac (AAC-LC and HE-AAC v1 and v2) and opus-rs (Opus, a port of the reference
