@@ -5,8 +5,9 @@ Design: [Plan usage, per account and per task](../../docs/technical-design.md#pl
 [Decided](../../docs/technical-design.md#decided).
 
 **Status: BLOCKED.** The 40 runs haven't run, so there is no `record.json`, no reading and no row under Decided.
-Nothing is set meanwhile, as the issue decided. None of the four probe runs below carried a `rate_limit_event` for the 5-hour window, and the account
-is at 97% of its weekly window. The runs are held until you decide how to take them.
+Nothing is set meanwhile, as the issue decided. This account has no 5-hour window to read: no probe's stream carried one,
+and `/usage` lists only weekly windows ([below](#the-account-has-no-5-hour-window)). The issue's rule reads the 5-hour
+window, so waiting for the weekly reset doesn't unblock it. The runs are held until you decide how to take them.
 
 ## The job and the script
 
@@ -91,8 +92,8 @@ What the run carried:
   `rate_limits`.
 
 So far every reading has had two decimals, whole percents, and about 30,000 tokens of this job moved the weekly window less than one of those steps. A
-single ~10,000-token run reads a change of 0 on the weekly window, and the 5-hour window isn't reported at all while
-the weekly one is in its warning band.
+single ~10,000-token run reads a change of 0 on the weekly window, and the 5-hour window isn't reported at all
+([why](#the-account-has-no-5-hour-window)).
 
 ### What this means for the 40 runs
 
@@ -100,9 +101,8 @@ The rule takes each run's change in window percent per million tokens, and it ne
 missing a 5-hour reading on either side is left out. This is what one run shows, and what it leaves open:
 
 1. **No 5-hour `rate_limit_event` in the one run.** If every run carried only the weekly reading, every run would be
-   left out, and the reading would be INCONCLUSIVE. All four probes match that so far. Whether the 5-hour reading is
-   missing because the weekly window is in its warning band is still a guess, and so is the idea that it comes back
-   once the weekly window resets.
+   left out, and the reading would be INCONCLUSIVE. All four probes match that, and so does `/usage`: the account has
+   no 5-hour window (below).
 2. **A run moves less than one step.** All four readings had two decimals (whole percents), and three runs of about
    10,000 tokens each left the weekly reading at 0.97 (above). The 5-hour window's step, once reported, is unknown;
    suppose it is also whole percents and a run moves it less than one point. Then each run reads a change of 0 or 1. Runs of 1 above the own-use ceiling are left out, leaving rates of 0 and an INCONCLUSIVE reading.
@@ -111,18 +111,35 @@ missing a 5-hour reading on either side is left out. This is what one run shows,
 3. **The account is at 97% of its weekly window.** Forty runs and a lead come to about 400,000 tokens, spent from the
    last 3% of the weekly window, which your own work needs until Nov 24.
 
+## The account has no 5-hour window
+
+[`usage.json`](usage.json) holds Claude Code 2.1.308's `/usage`, run through `-p` on Nov 20 2026 at 09:56 UTC. It made
+no model call: 0 tokens, $0. It lists two windows, both weekly: all models at 100% and Fable at 99%, resetting Nov 23 at
+11:59 pm Pacific (Nov 24 07:59 UTC). It lists no current-session (5-hour) window.
+
+The binary says why the streams carried none. Its schema for `rate_limit_event`'s `unifiedWindows` reads the windows
+from the `anthropic-ratelimit-unified-*` response headers and says "Windows absent from the account state are absent
+here". The probes' events held `seven_day` only, so the server sent no 5-hour header. The 5-hour window is missing from
+the account's state, not hidden by the warning band.
+
+So the rule can't be applied on this account:
+
+- AC1 leaves out a run missing a 5-hour reading. Every run here misses one, so every run would be left out and the
+  reading would be INCONCLUSIVE, whatever the spend.
+- Nothing here shows that the weekly reset brings a 5-hour window. Whether it does can be checked at $0 with the
+  same `/usage` after Nov 24 07:59 UTC; no paid probe is needed for that.
+- Weekly use is at 100% now, so no paid run should start before the reset anyway.
+
 ### What you can choose
 
-**Chosen (Nov 20 2026): probe again after the weekly reset on Nov 24 08:00 UTC.** The three probes above answered the
-step on the weekly window. After the reset: two or three probes back to back, then the 40 runs only if the probes
-show a 5-hour reading and a step a run can move.
-
-- **Probe again first.** Run two or three probes back to back to see the step and which windows a run carries. After
-  the weekly reset, also see whether the 5-hour reading comes back. Then run the 40 as the issue gives them, if the
-  probes say a run can be read.
-- **Blocks instead of single runs.** Alternate blocks of runs per label, each block large enough to move the 5-hour
-  window by about 10 points. Three blocks per label is about 60 points of one 5-hour window. This changes the issue's
-  Scope ("run 20 times under each of two labels"), so it needs your approval as an amendment.
+- **Another account that has a 5-hour window.** `/usage` shows a current-session line on such an account. Then run the
+  probes and the 40 runs there, as the issue gives them.
+- **Measure on the weekly window instead.** This changes the issue's rule (it reads the 5-hour window) and AC1's
+  left-out test, so it needs an amendment and the blind job's redraft. At whole-percent steps a run of ~10,000 tokens
+  reads 0, so it also needs blocks of runs per label large enough to move the weekly window several points each: a
+  large share of a week's plan.
+- **Check at $0 after the reset.** Run `/usage` after Nov 24 07:59 UTC. If a current-session line appears, probe and
+  run as planned; if not, take one of the other choices.
 - **Leave it to #1796.** #1796 reads routes from history as history builds up, at no extra spend.
 
 ## What the label changes besides the rate
