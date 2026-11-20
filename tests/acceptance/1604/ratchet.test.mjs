@@ -13,7 +13,7 @@ test('the lint lane runs scripts/wait-ratchet.mjs as a command of its own, besid
   assert.ok(lint.commands.some((candidate) => runsScript(candidate, 'scripts/size-ratchet.mjs')), 'the lint lane no longer runs scripts/size-ratchet.mjs');
 });
 
-test("AC3: a listed file whose count rises by one fails the lint lane, naming it, and raising its ceiling in the same change doesn't help; at its ceiling it passes", (t) => {
+test("#1604.4b29272e AC3: a listed file whose count rises by one fails the lint lane, naming it, and raising its ceiling in the same change doesn't help; at its ceiling it passes", (t) => {
   guardCommand();
   const cwd = base(t);
   assertPasses(guard(cwd), `(${LISTED} at its ceiling of 2)`);
@@ -24,7 +24,7 @@ test("AC3: a listed file whose count rises by one fails the lint lane, naming it
   assertFailsNaming(guard(cwd), LISTED, "(3 fixed waits, with its ceiling raised to 3 in the same change over the merge base's 2)");
 });
 
-test('AC3: a listed file whose count drops fails, naming it, until its ceiling is lowered to its count in the same change', (t) => {
+test('#1604.4b29272e AC3: a listed file whose count drops fails, naming it, until its ceiling is lowered to its count in the same change', (t) => {
   guardCommand();
   const cwd = base(t);
   put(cwd, LISTED, listed(1));

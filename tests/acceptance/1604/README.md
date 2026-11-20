@@ -62,15 +62,17 @@ Scratch repositories live under the system temporary folder, realpathed. Their g
 
 ## Criteria and tests
 
-| Acceptance criterion | Tests (file: name) |
-|---|---|
-| AC1: a planted test that sleeps 200 ms before it asserts fails, naming file and line; a `setTimeout(`-only lane fails this test | waits: *AC1: a planted test that sleeps 200 ms before it asserts fails the lint lane, naming the file and line; the twin that waits for its event passes* (`await sleep(200)`); waits: *AC1: a planted test that awaits setTimeout(resolve, 200) …* |
-| AC2: a planted wait bounded by a deadline that rejects passes | waits: *AC2: a planted wait bounded by a deadline that rejects when it expires passes when marked with its reason; unmarked, or marked with no reason, it fails naming the line* |
-| AC3: a listed file whose count rises by one fails, naming it; one whose count drops lowers its ceiling in the same change | ratchet: *AC3: a listed file whose count rises by one fails the lint lane, naming it, and raising its ceiling in the same change doesn't help; at its ceiling it passes*; ratchet: *AC3: a listed file whose count drops fails, naming it, until its ceiling is lowered to its count in the same change* |
-| AC4: a planted assertion that `Date.now() - start` is under 50 fails, naming the line | waits: *AC4: a planted assertion that Date.now() - start is under 50 fails the lint lane, naming the line, in assert and expect form; the twins that assert the result pass* |
-| AC5: a planted new acceptance suite with one fixed wait fails, naming the suite | waits: *AC5: a planted new acceptance suite with one fixed wait fails the lint lane, naming the suite, even with a ceiling of its own; its twin with no wait passes* |
-| (Scope) the rule covers `thread::sleep` in our own test files | waits: *a planted Rust test that calls thread::sleep fails the lint lane, naming the file and line; the twin passes* |
-| (Scope) a lint-lane rule; today's files listed with their counts | ratchet: *the lint lane runs scripts/wait-ratchet.mjs as a command of its own, beside the size ratchet*; ratchet: *on this checkout the guard passes without changing git status, and the checked-in ceilings are the checkout's own* |
+Each test that proves a criterion starts its name with the criterion's tag, `#1604.<id>`, where `<id>` is the first 8 hex digits of the SHA-256 of the criterion's text from the issue, trimmed with white space collapsed (`criterionId` in `scripts/proof-change.mjs`). The scope-only tests carry no tag.
+
+| Tag | Acceptance criterion | Tests (file: name) |
+|---|---|---|
+| `#1604.e0bddde0` | AC1: a planted test that sleeps 200 ms before it asserts fails, naming file and line; a `setTimeout(`-only lane fails this test | waits: *#1604.e0bddde0 AC1: a planted test that sleeps 200 ms before it asserts fails the lint lane, naming the file and line; the twin that waits for its event passes* (`await sleep(200)`); waits: *#1604.e0bddde0 AC1: a planted test that awaits setTimeout(resolve, 200) …* |
+| `#1604.8009d080` | AC2: a planted wait bounded by a deadline that rejects passes | waits: *#1604.8009d080 AC2: a planted wait bounded by a deadline that rejects when it expires passes when marked with its reason; unmarked, or marked with no reason, it fails naming the line* |
+| `#1604.4b29272e` | AC3: a listed file whose count rises by one fails, naming it; one whose count drops lowers its ceiling in the same change | ratchet: *#1604.4b29272e AC3: a listed file whose count rises by one fails the lint lane, naming it, and raising its ceiling in the same change doesn't help; at its ceiling it passes*; ratchet: *#1604.4b29272e AC3: a listed file whose count drops fails, naming it, until its ceiling is lowered to its count in the same change* |
+| `#1604.713def46` | AC4: a planted assertion that `Date.now() - start` is under 50 fails, naming the line | waits: *#1604.713def46 AC4: a planted assertion that Date.now() - start is under 50 fails the lint lane, naming the line, in assert and expect form; the twins that assert the result pass* |
+| `#1604.e6067c7d` | AC5: a planted new acceptance suite with one fixed wait fails, naming the suite | waits: *#1604.e6067c7d AC5: a planted new acceptance suite with one fixed wait fails the lint lane, naming the suite, even with a ceiling of its own; its twin with no wait passes* |
+| none | (Scope) the rule covers `thread::sleep` in our own test files | waits: *a planted Rust test that calls thread::sleep fails the lint lane, naming the file and line; the twin passes* |
+| none | (Scope) a lint-lane rule; today's files listed with their counts | ratchet: *the lint lane runs scripts/wait-ratchet.mjs as a command of its own, beside the size ratchet*; ratchet: *on this checkout the guard passes without changing git status, and the checked-in ceilings are the checkout's own* |
 
 ## On the base
 

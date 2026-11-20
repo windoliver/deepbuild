@@ -34,7 +34,7 @@ const timed = (wait) => [
   '',
 ].join('\n');
 
-test('AC1: a planted test that sleeps 200 ms before it asserts fails the lint lane, naming the file and line; the twin that waits for its event passes', (t) => {
+test('#1604.e0bddde0 AC1: a planted test that sleeps 200 ms before it asserts fails the lint lane, naming the file and line; the twin that waits for its event passes', (t) => {
   guardCommand();
   const cwd = base(t);
   const SLEEPS = 'packages/fixture/test/sleep.test.ts';
@@ -46,7 +46,7 @@ test('AC1: a planted test that sleeps 200 ms before it asserts fails the lint la
   assertNotNamed(result, LISTED);
 });
 
-test('AC1: a planted test that awaits setTimeout(resolve, 200) before it asserts fails the lint lane, naming the file and line; the twin passes', (t) => {
+test('#1604.e0bddde0 AC1: a planted test that awaits setTimeout(resolve, 200) before it asserts fails the lint lane, naming the file and line; the twin passes', (t) => {
   guardCommand();
   const cwd = base(t);
   const TIMER = 'tests/fixture-timer.test.mjs';
@@ -77,7 +77,7 @@ const bounded = (mark) => [
   '',
 ].join('\n');
 
-test('AC2: a planted wait bounded by a deadline that rejects when it expires passes when marked with its reason; unmarked, or marked with no reason, it fails naming the line', (t) => {
+test('#1604.8009d080 AC2: a planted wait bounded by a deadline that rejects when it expires passes when marked with its reason; unmarked, or marked with no reason, it fails naming the line', (t) => {
   guardCommand();
   const cwd = base(t);
   const DEADLINE = 'packages/fixture/test/deadline.test.ts';
@@ -112,7 +112,7 @@ const expected = (wallClock) => [
   '',
 ].join('\n');
 
-test('AC4: a planted assertion that Date.now() - start is under 50 fails the lint lane, naming the line, in assert and expect form; the twins that assert the result pass', (t) => {
+test('#1604.713def46 AC4: a planted assertion that Date.now() - start is under 50 fails the lint lane, naming the line, in assert and expect form; the twins that assert the result pass', (t) => {
   guardCommand();
   const cwd = base(t);
   const ASSERTS = 'tests/fixture-clock.test.mjs';
@@ -142,7 +142,7 @@ const suite = (wait) => [
   '',
 ].join('\n');
 
-test('AC5: a planted new acceptance suite with one fixed wait fails the lint lane, naming the suite, even with a ceiling of its own; its twin with no wait passes', (t) => {
+test('#1604.e6067c7d AC5: a planted new acceptance suite with one fixed wait fails the lint lane, naming the suite, even with a ceiling of its own; its twin with no wait passes', (t) => {
   guardCommand();
   const cwd = base(t);
   const SUITE = 'tests/acceptance/9001/';
