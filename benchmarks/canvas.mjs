@@ -1382,8 +1382,9 @@ const EFFICIENCY = {
   'playtest-throughput': { fixture_realtime_x: (r) => r.fixture_realtime_x },
   // #556: each reading by its own name (benchmarks/playtest.mjs).
   'playtest-crawler': Object.fromEntries(['crawler_80_runs_s', 'legal_added_s', 'reach_200_floors_s', 'idle_work'].map((k) => [k, (r) => r[k]])),
+  'catalog-checks': Object.fromEntries(['pack_10000x20_s', 'reach_5000_s', 'economy_5000_s', 'frame_work'].map((k) => [k, (r) => r[k]])), // #194 (benchmarks/catalog.mjs)
 };
-const COUNTS = new Set(['summary_tokens', 'page_rows', 'frames', 'upload_bytes_per_item', 'indexed_target_bytes', 'still_steps', 'idle_steps', 'still_maps', 'still_code_steps', 'idle_work', 'frame_expansions', 'forest_draws_per_variant_material', 'light_lists_bytes']);
+const COUNTS = new Set(['summary_tokens', 'page_rows', 'frames', 'upload_bytes_per_item', 'indexed_target_bytes', 'still_steps', 'idle_steps', 'still_maps', 'still_code_steps', 'idle_work', 'frame_work', 'frame_expansions', 'forest_draws_per_variant_material', 'light_lists_bytes']);
 /** Targets that are floors, each reading at or above its limit (#184's multiple of real time). */
 const FLOORS = new Set(['fixture_realtime_x']);
 /**
@@ -2063,6 +2064,7 @@ workloads['water-rings'] = async () => (await import('./water-rings.mjs')).water
 // #184's budgets: the maze's 40 runs and replays on two replicas with no work added to a piece played without the
 // plug-in, and 20 runs of the 2-minute maze on four replicas as a multiple of real time (benchmarks/playtest.mjs).
 for (const task of ['playtest-maze', 'playtest-throughput', 'playtest-crawler']) workloads[task] = async () => (await import('./playtest.mjs')).playtest({ root, release, task, planted: planted() });
+workloads['catalog-checks'] = async () => (await import('./catalog.mjs')).catalogChecks({ root, release, once }); // #194's budgets
 
 const task = process.argv[2];
 if (!workloads[task]) throw Error(`Unknown task ${task}; one of: ${Object.keys(workloads).join(', ')}`);
