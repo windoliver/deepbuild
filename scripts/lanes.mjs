@@ -1095,6 +1095,10 @@ alone.push('tests/acceptance/2776/seal.test.ts', 'tests/acceptance/2776/export.t
 // with ffmpeg and export it; budget.test.ts times the cut expansion.
 alone.push('tests/acceptance/1518/');
 timed.push('tests/acceptance/1518/budget.test.ts');
+// #1518's first AC1 draft needs the pinned transcriber to add no word to its uncut take, and it adds "you" after the
+// take's last sentence (tests/acceptance/1518-redraft-ac1/DISPUTE.md); its blind redraft runs in its place.
+alone.push('tests/acceptance/1518-redraft-ac1/');
+byHand.push('tests/acceptance/1518/heard.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
