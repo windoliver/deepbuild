@@ -31,6 +31,23 @@ pub struct Match {
     next_frame: i64,
 }
 
+/// #552: 64 bits from the browser's secure random source, `crypto.getRandomValues`.
+fn secure_u64() -> u64 {
+    use wasm_bindgen::JsCast as _;
+    let buf = js_sys::Uint8Array::new_with_length(8);
+    let crypto = js_sys::Reflect::get(&js_sys::global(), &"crypto".into()).ok();
+    let fill = crypto
+        .as_ref()
+        .and_then(|c| js_sys::Reflect::get(c, &"getRandomValues".into()).ok())
+        .and_then(|f| f.dyn_into::<js_sys::Function>().ok());
+    if let (Some(c), Some(f)) = (crypto, fill) {
+        let _ = f.call1(&c, &buf);
+    }
+    let mut b = [0u8; 8];
+    buf.copy_to(&mut b);
+    u64::from_le_bytes(b)
+}
+
 /// The page's clock, in ms, as flicks.
 fn flicks(ms: f64) -> i64 {
     (ms * (FLICKS / 1000) as f64).round() as i64
@@ -65,7 +82,12 @@ impl Match {
 
     /// The prompt as the page draws it.
     pub fn prompt(&self) -> Value {
-        prompt::prompt(&self.cfg.host, self.cfg.players, &self.state)
+        prompt::prompt(
+            &self.cfg.host,
+            self.cfg.players,
+            self.cfg.courtesy,
+            &self.state,
+        )
     }
 
     fn refuse(&mut self, refused: Value, why: String) -> Value {
@@ -157,7 +179,7 @@ impl Match {
         };
         match Logic::new(piece, &self.track, false) {
             Ok(sim) => {
-                self.copy = Some(Copy::new(
+                let mut copy = Copy::new(
                     self.cfg.clone(),
                     self.card.clone(),
                     me,
@@ -166,7 +188,10 @@ impl Match {
                     sim,
                     Planted::None,
                     now,
-                ));
+                );
+                // #552: a draw's bits come from the browser's secure random source.
+                copy.draw_source(Box::new(secure_u64), Default::default());
+                self.copy = Some(copy);
                 self.next_frame = now;
             }
             Err(e) => {

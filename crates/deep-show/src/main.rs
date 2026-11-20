@@ -49,6 +49,7 @@ mod kit;
 mod lengths;
 mod logic;
 mod maps;
+mod matched;
 mod math_twins;
 mod media;
 mod mixdown;
@@ -1367,7 +1368,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 || *p == deep_canvas_motion::held::FLIP_HOLDS_LAST
                 // #223's in the marks2d module's warp.
                 || deep_canvas_marks::warp::PLANTED.contains(p)
-                || deep_net::Planted::named(p).is_some()
+                || deep_net::Planted::named(p).is_some() || *p == deep_canvas_effects::particles::bursts::IGNORES_FOG
                 // #225's in the data module's integrator; #2450's in its reading of axis titles.
                 || *p == deep_canvas_marks::vector_field::PLANTED_EULER
                 || *p == deep_canvas_marks::axes3d::TAKES_ANY_KIND

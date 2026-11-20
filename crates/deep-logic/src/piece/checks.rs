@@ -26,6 +26,8 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
             "services",
             "mirrors",
             "preview",
+            // #552: a fog grid, which gates its occurrences' readers on each copy.
+            "fog",
         ]
         .contains(&k.as_str())
         {
@@ -326,7 +328,19 @@ pub(super) fn region_map(
         reads.sort();
     }
     for r in &reads {
-        let (size, ty, read) = if let Some((size, ty)) = controls.get(r) {
+        // #552: this copy's player is a view value, like the camera: logic never reads it, so
+        // every copy's state and hashes stay the same while each draws its own side.
+        if r == "match.me" {
+            refused.push(refusal(
+                "read",
+                "match.me is this copy's player, a view value no logic step reads: every copy's state must stay the same".into(),
+                json!({"read": r}),
+            ));
+            continue;
+        }
+        let (size, ty, read) = if r == crate::draws::READ {
+            (crate::draws::SIZE, "draws".to_string(), Read::Draws)
+        } else if let Some((size, ty)) = controls.get(r) {
             (*size, ty.to_string(), Read::Control)
         } else if let Some(read) = series_read(r, sources) {
             // One series of a series source, read as a scalar (Logic: readings).

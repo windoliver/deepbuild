@@ -283,7 +283,27 @@ pub fn inline_logic(
     {
         all.extend(arrays);
     }
+    gate_fog(doc);
     Ok(())
+}
+
+/// #552: the occurrences this copy's player doesn't see (its `match.me`, 1 for a piece played
+/// alone), taken out of every gated list; the planted burst that ignores the gate still reads
+/// them, from `fogged`.
+#[cfg(feature = "logic")]
+fn gate_fog(doc: &mut serde_json::Map<String, Value>) {
+    let (items, me) = (doc.get("items").cloned(), doc.get("match.me").cloned());
+    let arrays = doc.get("arrays").and_then(Value::as_object).cloned();
+    let (Some(items), Some(arrays)) = (items, arrays) else {
+        return;
+    };
+    let Some(Value::Object(lists)) = doc.get_mut("occurrences") else {
+        return;
+    };
+    let fogged = deep_logic::fog::gate(&items, &arrays, lists, &me.unwrap_or(Value::Null));
+    if !fogged.is_empty() {
+        doc.insert("fogged".into(), Value::Object(fogged));
+    }
 }
 
 /// `form`'s logic items as one piece with its seed and controls, checked by the logic module,

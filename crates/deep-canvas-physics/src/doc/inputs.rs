@@ -369,6 +369,12 @@ impl Reader {
                 .collect();
             for (k, x, path) in given {
                 if let (Some(text), true) = (x.as_str(), path.contains("/data/")) {
+                    // #552: this copy's player is a view value no world input reads.
+                    if text.contains("match.me") {
+                        let what = format!("{path} names match.me, this copy's player: a view value no world input reads, so every copy's world stays the same");
+                        self.refuse("out_of_range", path, &x, what);
+                        continue;
+                    }
                     if !takes_expr(kind, &k) {
                         let what = format!("{path} is not a field of {kind}");
                         self.refuse("unknown_field", path, &x, what);
