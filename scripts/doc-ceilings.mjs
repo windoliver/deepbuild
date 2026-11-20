@@ -8,7 +8,11 @@
 // finding.
 import { execFileSync } from 'node:child_process';
 import { readFileSync, statSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { DOCS, outline } from './doc-links.mjs';
+
+// The docs, the ceilings and git are the repository's, wherever it runs from.
+process.chdir(fileURLToPath(new URL('../', import.meta.url)));
 
 const LIMIT = 16_384;
 const CEILINGS = 'scripts/doc-ceilings.json';
