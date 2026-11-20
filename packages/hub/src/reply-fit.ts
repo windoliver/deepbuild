@@ -79,17 +79,24 @@ export function limitOf(client: unknown): Limit {
 }
 
 let counter: ((text: string) => number) | undefined;
-/** Tokens of `text` in the tokenizer both facts files pin (o200k_base, gpt-tokenizer 4.0.0). */
+/**
+ * Tokens of `text` in the tokenizer both facts files pin (o200k_base, gpt-tokenizer 4.0.0), counted in pieces of 2,048
+ * characters: a long run of letters costs the counter time in the square of its length (17 s at 100,000), and a cut
+ * only ever splits a token in two, so the sum counts a few more, never fewer.
+ */
 async function tokensOf(text: string): Promise<number> {
   counter ??= (await import('gpt-tokenizer/encoding/o200k_base')).countTokens;
-  return counter(text);
+  let n = 0;
+  for (let at = 0; at < text.length; at += 2_048) n += counter(text.slice(at, at + 2_048));
+  return n;
 }
 /** How far `text` passes each figure of `cap`: the largest ratio of size to figure, at most 1 when it fits. */
 async function over(text: string, cap: Figures): Promise<number> {
   let worst = 0;
   if (cap.chars) worst = Math.max(worst, text.length / cap.chars);
   if (cap.bytes) worst = Math.max(worst, Buffer.byteLength(text) / cap.bytes);
-  if (cap.tokens) worst = Math.max(worst, (await tokensOf(text)) / cap.tokens);
+  // A token holds at least one byte, so text of no more bytes than the token figure is under it uncounted.
+  if (cap.tokens && Buffer.byteLength(text) > cap.tokens) worst = Math.max(worst, (await tokensOf(text)) / cap.tokens);
   return worst;
 }
 
@@ -123,7 +130,8 @@ export async function fitted(cap: Figures, capOf: (reply: Obj) => Figures, retry
 const WHOLE = " schema is the tool's input schema.";
 /**
  * A refusal under its client's error cap: one that would pass it keeps the schema of the top-level argument its path
- * fails under and says the rest reads in tools/list, then its value at the path is cut to what fits.
+ * fails under and says the rest reads in tools/list; a canvas refusal's issues are cut from the end, its `truncated`
+ * saying how many it shows; then its value at the path is cut to what fits.
  */
 export async function refusalFits(refusal: Partial<Refusal> & Obj, cap: Figures): Promise<Partial<Refusal> & Obj> {
   if ((await over(JSON.stringify(refusal), cap)) <= 1) return refusal;
@@ -135,6 +143,17 @@ export async function refusalFits(refusal: Partial<Refusal> & Obj, cap: Figures)
     out.schema = first === undefined ? { type: 'object' } : { type: 'object', properties: { [field]: first }, required: [field] };
     const held = first === undefined ? 'schema holds none of the input schema' : `schema holds only ${field}'s part of the input schema`;
     out.remediation = `${String(out.remediation ?? '').replace(WHOLE, '')} ${held}: the tool's whole input schema is its inputSchema in tools/list.`;
+  }
+  if (Array.isArray(out.issues)) {
+    const all = out.issues as unknown[];
+    const was = (typeof out.truncated === 'object' && out.truncated !== null ? out.truncated : {}) as Obj;
+    const total = typeof was.total === 'number' ? was.total : all.length;
+    let shown = all.length;
+    for (let by = await over(JSON.stringify(out), cap); by > 1 && shown > 0; by = await over(JSON.stringify(out), cap)) {
+      shown = Math.min(shown - 1, Math.floor((shown / by) * 0.95));
+      out.issues = all.slice(0, shown);
+      out.truncated = { ...was, shown, total };
+    }
   }
   for (let by = await over(JSON.stringify(out), cap); by > 1 && typeof out.actual === 'string' && out.actual.length; by = await over(JSON.stringify(out), cap)) {
     out.actual = out.actual.slice(0, Math.floor((out.actual.length / by) * 0.9));

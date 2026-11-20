@@ -26,6 +26,15 @@ describe('refusalFits', () => {
     expect(out.remediation).toContain('tools/list');
     expect(JSON.stringify(out).length).toBeLessThanOrEqual(8_800);
   });
+
+  it("cuts a canvas refusal's issues to fit, saying how many it shows", async () => {
+    const issues = Array.from({ length: 150 }, (_, i) => ({ code: 'bad_item', path: `/document/nodes/${i}/params/value`, message: 'y'.repeat(40) }));
+    const out = await refusalFits({ outcome: 'refused', code: 'invalid', issues, truncated: { shown: 150, total: 400, by_code: { bad_item: 400 } } }, { chars: 8_800 });
+    expect(JSON.stringify(out).length).toBeLessThanOrEqual(8_800);
+    const shown = (out.issues as unknown[]).length;
+    expect(shown).toBeGreaterThan(0);
+    expect(out.truncated).toEqual({ shown, total: 400, by_code: { bad_item: 400 } });
+  });
 });
 
 describe('limitOf', () => {

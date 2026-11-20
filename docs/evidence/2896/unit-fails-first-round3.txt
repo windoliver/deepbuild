@@ -1,0 +1,42 @@
+
+ RUN  v5.0.5 /Users/sophiawj/private/deepbuild-core/.claude/worktrees/fix-2896-reply-fits-client-d66389/packages/hub
+
+ ❯ test/reply-fit.test.ts (6 tests | 2 failed) 14536ms
+   ❯ refusalFits (3)
+     × cuts a canvas refusal's issues to fit, saying how many it shows 2ms
+   ❯ fitted (2)
+     × asks a call that may change something once, with a tighter first room 14527ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/reply-fit.test.ts > refusalFits > cuts a canvas refusal's issues to fit, saying how many it shows
+AssertionError: expected 17254 to be less than or equal to 8800
+ ❯ test/reply-fit.test.ts:33:40
+     31|     const issues = Array.from({ length: 150 }, (_, i) => ({ code: 'bad…
+     32|     const out = await refusalFits({ outcome: 'refused', code: 'invalid…
+     33|     expect(JSON.stringify(out).length).toBeLessThanOrEqual(8_800);
+       |                                        ^
+     34|     const shown = (out.issues as unknown[]).length;
+     35|     expect(shown).toBeGreaterThan(0);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  test/reply-fit.test.ts > fitted > asks a call that may change something once, with a tighter first room
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ test/reply-fit.test.ts:49:3
+     47|
+     48| describe('fitted', () => {
+     49|   it('asks a call that may change something once, with a tighter first…
+       |   ^
+     50|     const rooms: number[] = [];
+     51|     await fitted({ tokens: 8_000 }, () => ({ tokens: 8_000 }), false, …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 4 passed (6)
+   Start at  01:21:17
+   Duration  14.70s (tests 100%)
+
