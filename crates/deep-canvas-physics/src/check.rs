@@ -1,7 +1,7 @@
 //! The world check: the reader's refusals and what the backend's caps refuse, each naming its field
 //! and, where the backend can't run it, the backend.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::{json, Value};
 
@@ -329,7 +329,7 @@ fn refused_by(doc: &Value, caps: &Caps) -> Vec<Refusal> {
 /// or slider joint whose second body is a dynamic one; the articulated joints of a world form
 /// trees, so no body is the `b` of two of them and none closes a loop; and it has no lock to
 /// load, so `breaks_at`, `spring`, `active: false` and an output's `joint_force` on one are
-/// refused. Each refusal names the joint and its field.
+/// refused, and so is a velocity written on a body one holds. Each refusal names its field.
 fn articulated(w: &World) -> Vec<Refusal> {
     let mut out = Vec::new();
     // Each body's tree, the world's among them (`None`), and the joint that holds each body as
@@ -393,6 +393,26 @@ fn articulated(w: &World) -> Vec<Refusal> {
             tree.values_mut()
                 .filter(|t| **t == tb)
                 .for_each(|t| *t = ta);
+        }
+    }
+    // A body an articulation holds moves by its joints' coordinates alone, so a velocity written
+    // on one would move nothing.
+    let ends = w.joints.values().filter(|j| j.articulated);
+    let linked: BTreeSet<&str> = ends
+        .flat_map(|j| [j.a.body.as_deref(), j.b.body.as_deref()])
+        .flatten()
+        .collect();
+    for id in linked {
+        let moving = w.bodies.get(id).filter(|b| {
+            b.kind == BodyKind::Dynamic && (b.linear != [0.0; 3] || b.angular != [0.0; 3])
+        });
+        if let Some(b) = moving {
+            out.push(Refusal {
+                code: "out_of_range",
+                path: format!("bodies/{id}/velocity"),
+                actual: json!({"linear": b.linear, "angular": b.angular}),
+                what: format!("body {id} writes a velocity and an articulated joint holds it: a body of an articulation moves by its joints' coordinates alone, so the velocity would move nothing; start it at rest, or leave its joints separate"),
+            });
         }
     }
     for (id, o) in &w.outputs {

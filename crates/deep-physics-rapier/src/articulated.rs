@@ -135,3 +135,56 @@ impl Rapier {
         self.links.iter().filter_map(state).collect()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use deep_canvas_physics::backend::{Backend, Input, Targets};
+    use deep_canvas_physics::caps::RAPIER3D;
+    use deep_canvas_physics::check::check;
+    use deep_canvas_physics::roles::TABLE;
+    use serde_json::{json, Value};
+
+    use crate::Rapier;
+
+    /// A 1 kg ball on an articulated ball joint to the world, `velocity` written on it.
+    fn pendulum(velocity: Value) -> Value {
+        json!({
+            "kind": "physics.world@1", "dimensions": 3, "step_rate": 120, "substeps": 4,
+            "gravity": [0, -9.81, 0], "mode": "dynamic",
+            "capacity": {"bodies": 1, "shapes": 1, "joints": 1, "contacts": 0, "particles": 0},
+            "shapes": {"ball": {"kind": "sphere", "radius": 0.05}},
+            "bodies": {"bob": {"kind": "dynamic", "shapes": [{"shape": "ball"}], "mass": 1,
+                               "pose": {"pos": [0, 1, 0]}, "velocity": velocity}},
+            "joints": {"rod": {"kind": "ball", "a": "world", "b": "bob", "articulated": true,
+                               "frame_a": {"anchor": [0, 2, 0]}, "frame_b": {"anchor": [0, 1, 0]}}}
+        })
+    }
+
+    /// A body of an articulation moves by its joints' coordinates alone: a velocity written on
+    /// it is refused at check, naming the field, and a launch or a poke at its step.
+    #[test]
+    fn what_sets_the_velocity_of_a_body_of_an_articulation_is_refused() {
+        let moving = pendulum(json!({"linear": [1, 0, 0]}));
+        let refused = check(&moving, &RAPIER3D, &TABLE).unwrap_err();
+        let paths: Vec<&str> = refused.iter().map(|r| r.path.as_str()).collect();
+        assert_eq!(paths, ["bodies/bob/velocity"]);
+        let w = check(&pendulum(json!({})), &RAPIER3D, &TABLE).unwrap_or_else(|e| panic!("{e:?}"));
+        let mut b = Rapier::default();
+        b.build(&w).unwrap();
+        b.step(&[], &Targets::default()).unwrap();
+        for kind in ["launch", "poke"] {
+            let data = json!({"linear": [1, 0, 0], "impulse": [1, 0, 0]});
+            let input = Input {
+                kind: kind.into(),
+                target: "bob".into(),
+                data,
+            };
+            let r = b.step(&[input], &Targets::default()).unwrap_err();
+            assert!(
+                r.what.contains(kind) && r.what.contains("bob"),
+                "{}",
+                r.what
+            );
+        }
+    }
+}

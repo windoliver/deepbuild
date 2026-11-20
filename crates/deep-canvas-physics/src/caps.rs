@@ -98,7 +98,7 @@ pub const RAPIER3D: Caps = Caps {
         "Only a dynamic body starts a sweep: with ccd off it sweeps fixed shapes only, and with ccd on it also holds a body that moves or rests, but only one that has ccd off and is not itself fast.",
         "A body with ccd on also predicts its contacts along its own move in a step, which holds a body in its path whatever that body's ccd, and reaches neither its own turn nor the other body's move.",
         "An articulated joint's turning coordinates are damped at 0.1 N·m·s/rad, the engine's own, which no world field sets; a sliding one's aren't.",
-        "A body an articulated joint holds moves by its joints' coordinates alone: a velocity written on it, a launch and a poke move nothing, and a grab's force does.",
+        "A body an articulated joint holds moves by its joints' coordinates alone: a velocity written on it, a launch and a poke are refused, and a grab's force moves it.",
     ],
     claims: &["ccd", "soft_bodies", "character_controller", "vehicle_controller", "belts", "articulations"],
     sweep: Sweep {
