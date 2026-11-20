@@ -74,6 +74,7 @@ impl Run {
             all_steps: self.all_steps,
             no_volume: self.no_volume,
             vehicle: self.vehicle,
+            centre: self.centre,
             declared_masses_only: self.declared_masses_only,
             twin: self.twin,
             test: self.test,
@@ -192,7 +193,7 @@ impl Session {
         let world = call.get("world").ok_or_else(bad)?.clone();
         let span_s = call.get("span").and_then(Value::as_f64).ok_or_else(bad)?;
         let (w, b) = run.build(&world)?;
-        let track = Track::read(&w, call, run.set_applies_both)?;
+        let track = run.track(&w, call)?;
         let span = (span_s * w.step_rate).round() as u64;
         let rate = rate(&json!({}))?;
         let store = call.get("store").and_then(Value::as_str).map(String::from);

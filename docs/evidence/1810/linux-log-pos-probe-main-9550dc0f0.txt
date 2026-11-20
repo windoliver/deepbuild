@@ -1,0 +1,16 @@
+# The log_pos probe (as in linux-log-pos-repeat-1d626e5d8.txt) at main 9550dc0f0 with tests/acceptance/1810 copied in, Linux, 2026-11-19, load 200+.
+# Result: runs 1-4 show what the head shows: the log moves by the same 4 events (two delivery.outcome, two session.reading) about 10 s after the status question, the ask rows are the same at both positions, and every count stays 1. Run 5 is void: at load 228 the prompt hook gave the status question no answer (exit 0, empty stdout).
+## output
+run 1: status answer 1; deep status --json at 35; 20 s later the log is at 39 (deep status --json 39); events after 35: delivery.outcome, session.reading, delivery.outcome, session.reading; ask rows at 35: 1, at 39: 1, same: true; deep counts [1]; status answer then 1
+run 2: status answer 1; deep status --json at 37; 20 s later the log is at 41 (deep status --json 41); events after 37: delivery.outcome, session.reading, delivery.outcome, session.reading; ask rows at 37: 1, at 41: 1, same: true; deep counts [1]; status answer then 1
+run 3: status answer 1; deep status --json at 39; 20 s later the log is at 43 (deep status --json 43); events after 39: delivery.outcome, session.reading, delivery.outcome, session.reading; ask rows at 39: 1, at 43: 1, same: true; deep counts [1]; status answer then 1
+run 4: status answer 1; deep status --json at 37; 20 s later the log is at 41 (deep status --json 41); events after 37: delivery.outcome, session.reading, delivery.outcome, session.reading; ask rows at 37: 1, at 41: 1, same: true; deep counts [1]; status answer then 1
+## vitest
+ ❯ zz-probe2.test.ts (1 test | 1 failed) 209252ms
+   × probe2 205274ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  zz-probe2.test.ts > probe2
+AssertionError: "anything for me?" typed by a person must be answered from the record (the prompt hook's reply blocks it with the answer, or shows it beside what waits for the agent): {"v":1,"exit":0,"stdout":"","stderr":""}
+ ❯ zz-probe2.test.ts:16:46
+ Test Files  1 failed (1)
+      Tests  1 failed (1)

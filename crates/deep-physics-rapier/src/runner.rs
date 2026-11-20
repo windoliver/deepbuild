@@ -31,6 +31,7 @@ use deep_canvas_physics::track::{self, Entry};
 use serde_json::{json, Map, Value};
 
 mod audit;
+pub mod centre;
 pub mod contact;
 pub mod fast;
 mod held;
@@ -89,6 +90,8 @@ pub struct Run {
     ccd_on_kinematic: bool,
     /// #251's planted vehicle controller or check.
     vehicle: crate::VehiclePlant,
+    /// #2240's planted check or output.
+    centre: centre::Plant,
     /// #2371's twin: a track keeps both of two `set`s of one target and path on one step.
     set_applies_both: bool,
     /// The views this runner holds open, by session (#522).
@@ -311,17 +314,6 @@ impl Track {
     fn json(&self) -> Value {
         Value::Array(self.entries.iter().map(Entry::json).collect())
     }
-
-    /// The call's `track` (absent: none), resolved against `w`, or the reply refusing an entry;
-    /// `both`: #2371's planted track, which keeps a `set` the next on its step replaces.
-    fn read(w: &World, call: &Value, both: bool) -> Result<Track, Value> {
-        let t = call.get("track").unwrap_or(&Value::Null);
-        if t.is_null() {
-            return Ok(Track::default());
-        }
-        let read = track::read(w, t, both);
-        read.map(Track::of).map_err(|r| refused(&[*r]))
-    }
 }
 
 /// What one run steps and takes besides its hashes.
@@ -467,6 +459,7 @@ impl Run {
             lint: deep_canvas_physics::fast::Planted::None,
             ccd_on_kinematic: false,
             vehicle: crate::VehiclePlant::None,
+            centre: centre::Plant::None,
             set_applies_both: false,
             #[cfg(not(target_arch = "wasm32"))]
             views: std::cell::RefCell::default(),
@@ -503,6 +496,7 @@ impl Run {
                     && !vehicle::planted(name, &mut run)
                     && !walk::planted(name, &mut run)
                     && !contact::planted(name, &mut run)
+                    && !centre::planted(name, &mut run)
                     && !fast::planted(name, &mut run) =>
             {
                 return None
@@ -586,7 +580,7 @@ impl Run {
     /// The world `v` holds, built, or the issues that refuse it.
     fn build(&self, v: &Value) -> Result<(World, Rapier), Value> {
         let refused = |e: Vec<Refusal>| refused(&e);
-        let w = contact::check(v, self).map_err(refused)?;
+        let w = centre::check(v, self).map_err(refused)?;
         let mut b = Rapier {
             restore_any_version: self.restore_any_version,
             reverse_pairs: cfg!(feature = "test-reverse-pairs"),
@@ -609,6 +603,11 @@ impl Run {
             return Some(doc.map(|d| (d, None)).map_err(|e| refused(&e)));
         };
         let id = world.as_str()?;
+        // #2457: with `evidence`, the store its scene's mesh assets are read from (source.rs).
+        let root = call.get("evidence").and_then(Value::as_str).map(Path::new);
+        let kept =
+            root.map(|r| crate::source::sourced(scene, &|sha| crate::source::stored(r, sha)));
+        let scene = kept.as_deref().unwrap_or(scene);
         let doc = scene.get("worlds")?.get(id)?;
         let read = crate::bound::expand(Some(scene), doc).and_then(|doc| {
             let w = check(&doc, &self.caps, self.table)?;
@@ -648,6 +647,7 @@ impl Run {
             }
         }
         vehicle::take(b, w, t, (k, start, plan.every));
+        centre::take(self, b, w, &c, t);
         if (k - start).is_multiple_of(plan.every) {
             let read = b.read();
             for s in read.bodies {
@@ -805,7 +805,7 @@ impl Run {
                 match self
                     .subject(call)?
                     .and_then(|(world, _)| self.build(&world))
-                    .and_then(|(w, b)| Track::read(&w, call, self.set_applies_both).map(|_| (w, b)))
+                    .and_then(|(w, b)| self.track(&w, call).map(|_| (w, b)))
                 {
                     Ok((w, b)) => {
                         let (soft, backend) = held::held(&w, &b.held());
@@ -829,10 +829,7 @@ impl Run {
                     Ok(x) => x,
                     Err(e) => return Some(e),
                 };
-                let track = match self
-                    .build(&world)
-                    .and_then(|(w, _)| Track::read(&w, call, self.set_applies_both))
-                {
+                let track = match self.build(&world).and_then(|(w, _)| self.track(&w, call)) {
                     Ok(t) => t,
                     Err(e) => return Some(e),
                 };
@@ -908,7 +905,7 @@ impl Run {
                     Ok(x) => x,
                     Err(e) => return Some(e),
                 };
-                let track = match Track::read(&w, call, self.set_applies_both) {
+                let track = match self.track(&w, call) {
                     Ok(t) => t,
                     Err(e) => return Some(e),
                 };
@@ -992,10 +989,7 @@ impl Run {
                     .iter()
                     .map(Value::as_str)
                     .collect::<Option<_>>()?;
-                let track = match self
-                    .build(world)
-                    .and_then(|(w, _)| Track::read(&w, call, self.set_applies_both))
-                {
+                let track = match self.build(world).and_then(|(w, _)| self.track(&w, call)) {
                     Ok(t) => t,
                     Err(e) => return Some(e),
                 };
@@ -1063,7 +1057,7 @@ impl Run {
                     Ok(x) => x,
                     Err(e) => return Some(e),
                 };
-                let track = match Track::read(&w, call, self.set_applies_both) {
+                let track = match self.track(&w, call) {
                     Ok(t) => t,
                     Err(e) => return Some(e),
                 };

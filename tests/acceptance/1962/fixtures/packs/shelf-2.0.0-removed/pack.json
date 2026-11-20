@@ -1,0 +1,13 @@
+{
+  "name": "shelf",
+  "version": "2.0.0",
+  "license": "MIT",
+  "description": "A test pack of the #1962 acceptance suite, by an outside owner: a release that ships no bookcase and lists it as removed.",
+  "requires": {
+    "core": ">=0.0.0"
+  },
+  "removed": {
+    "shelf.bookcase@2": "superseded"
+  },
+  "assets": []
+}

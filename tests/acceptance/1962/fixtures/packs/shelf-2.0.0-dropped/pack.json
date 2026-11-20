@@ -1,0 +1,10 @@
+{
+  "name": "shelf",
+  "version": "2.0.0",
+  "license": "MIT",
+  "description": "A test pack of the #1962 acceptance suite, by an outside owner: planted, a release that ships no bookcase and says nothing of it.",
+  "requires": {
+    "core": ">=0.0.0"
+  },
+  "assets": []
+}

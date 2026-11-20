@@ -106,11 +106,12 @@ export function withoutEntries(root: string, text: string): string {
   return `${JSON.stringify({ ...parsed.value, hooks }, null, 2)}\n`;
 }
 interface Ours { event: string; command: string; entry: Obj }
-function recorded(root: string): Ours[] {
-  const record = readJson(recordFile(root));
+/** The entries setup recorded, from the record as read once by the caller. */
+function recordedIn(record: Obj | undefined): Ours[] {
   if (!record || !isObj(record.hooks)) return [];
   return Object.entries(record.hooks).flatMap(([event, g]) => ((g as Group).hooks ?? []).map((entry) => ({ event, command: String(entry.command), entry })));
 }
+const recorded = (root: string): Ours[] => recordedIn(readJson(recordFile(root)));
 /** The entries setup wrote for Codex, each by its event and command. */
 export const recordedEntries = (root: string): { event: string; command: string }[] => recorded(root).map(({ event, command }) => ({ event, command }));
 
@@ -312,10 +313,11 @@ export function toolTimeoutS(file = codexConfig()): number {
 // ---- Health: what the file holds against what setup wrote, and the timing relations (design: Numbers, timing relations).
 
 /** The home setup wrote in, whatever this process's environment says; before setup, this environment's. */
-export const recordedHome = (root: string): string => { const set = readJson(recordFile(root))?.home; return typeof set === 'string' && set ? set : home(); };
-const entriesFor = (root: string, event: string): Obj[] => {
-  const file = join(recordedHome(root), 'hooks.json');
-  const hooks = existsSync(file) ? readJson(file)?.hooks : undefined;
+const homeIn = (record: Obj | undefined): string => { const set = record?.home; return typeof set === 'string' && set ? set : home(); };
+export const recordedHome = (root: string): string => homeIn(readJson(recordFile(root)));
+/** Codex's hooks file as it holds them, read once for every entry looked up in it (#2647). */
+const hooksIn = (file: string): unknown => (existsSync(file) ? readJson(file)?.hooks : undefined);
+const entriesFor = (hooks: unknown, event: string): Obj[] => {
   const groups = isObj(hooks) && Array.isArray(hooks[event]) ? hooks[event] as unknown[] : [];
   return groups.flatMap((g) => (isObj(g) && Array.isArray(g.hooks) ? g.hooks.filter(isObj) : []));
 };
@@ -323,18 +325,23 @@ const entriesFor = (root: string, event: string): Obj[] => {
 export const installedCodex = (root: string): boolean => recorded(root).length > 0;
 /** Each entry of ours the file no longer holds as setup wrote it: named, with `removed` or `modified`. */
 export function modified(root: string): string[] {
-  const file = join(recordedHome(root), 'hooks.json');
-  return recorded(root).flatMap(({ event, command, entry }) => {
-    const found = entriesFor(root, event).find((h) => h.command === command);
+  const record = readJson(recordFile(root));
+  const ours = recordedIn(record);
+  if (!ours.length) return [];
+  const file = join(homeIn(record), 'hooks.json');
+  const hooks = hooksIn(file);
+  return ours.flatMap(({ event, command, entry }) => {
+    const found = entriesFor(hooks, event).find((h) => h.command === command);
     if (!found) return [`Codex's ${event} entry was removed from ${file}, so that hook doesn't reach the hub`];
     return JSON.stringify(found) === JSON.stringify(entry) ? [] : [`Codex's ${event} entry was modified in ${file}: it isn't what setup wrote, so Codex asks for trust again and holds may not fit`];
   });
 }
 /** The Stop entry's timeout as the file holds it, in seconds; undefined before setup. */
 export function stopTimeoutS(root: string): number | undefined {
-  const stop = recorded(root).find((e) => e.event === 'Stop');
+  const record = readJson(recordFile(root));
+  const stop = recordedIn(record).find((e) => e.event === 'Stop');
   if (!stop) return undefined;
-  const found = entriesFor(root, 'Stop').find((h) => h.command === stop.command);
+  const found = entriesFor(hooksIn(join(homeIn(record), 'hooks.json')), 'Stop').find((h) => h.command === stop.command);
   if (!found) return undefined;
   // Codex's own default where an entry sets none.
   return typeof found.timeout === 'number' ? found.timeout : 600;

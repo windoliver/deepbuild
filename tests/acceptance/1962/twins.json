@@ -1,0 +1,16 @@
+{
+  "#1962.6edffdaf": [
+    "loader_drops_moved_instances"
+  ],
+  "#1962.248e8322": [
+    "shelf-2.0.0-chain",
+    "shelf-2.0.0-loop",
+    "shelf-2.0.0-undeclared"
+  ],
+  "#1962.1c118241": [
+    "shelf-2.0.0-dropped"
+  ],
+  "#1962.f5eb6b43": [
+    "move_rewrites_kind_only"
+  ]
+}
