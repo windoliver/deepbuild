@@ -232,6 +232,9 @@ timed.push('tests/acceptance/1427/ac8-budget.live.test.ts');
 alone.push('tests/acceptance/1550/');
 // #533's files build deep-logic, a wat assembler and four deep-show feature sets, and run the logic kit.
 alone.push('tests/acceptance/533/');
+// #194's suites build cargo binaries and open hubs; its budgets are a timed file.
+alone.push('tests/acceptance/194/', 'tests/acceptance/194-oracle/');
+timed.push('tests/acceptance/194/ac11-budgets.test.ts');
 // #1434's files build deep-replica and start a replica each, and ac5 runs #377's handoff suite; its live window files
 // run by hand on the reference Mac, the budgets as a timed file.
 alone.push('tests/acceptance/1434/');
