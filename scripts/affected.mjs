@@ -10,7 +10,7 @@
 // (known-failures.json) read apart from new ones, and a timing budget missed at a load above the core count reads INCONCLUSIVE. So does a
 // skip, or BLOCKED by its note, unless the same file's `skips` list covers it, which is printed.
 //
-//   node scripts/affected.mjs [--list] [--wide] [--record] [--timed] [--slow] [path ...]
+//   node scripts/affected.mjs [--list] [--wide] [--timed] [--slow] [path ...]
 //
 // The alone block's folders run side by side, each in a shard of its own (scripts/shards.mjs), so no sibling's cargo
 // build rewrites a binary under it; those lanes.mjs names exclusive run after, one at a time, with nothing beside them.
@@ -20,7 +20,7 @@
 //
 // Paths stand for the change, which is otherwise the worktree against its merge base with origin/main. --list prints
 // the selection without running it. A test that starts a package's build is selected when the change is in that
-// package or the test is in the changed file's own package; otherwise it is WIDE, and --wide also runs it (select, below). --record, run on main, writes what failed into known-failures.json.
+// package or the test is in the changed file's own package; otherwise it is WIDE, and --wide also runs it (select, below).
 import { spawn, spawnSync } from 'node:child_process';
 import { closeSync, existsSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync, writeSync } from 'node:fs';
 import { availableParallelism, constants, loadavg, tmpdir } from 'node:os';
@@ -573,14 +573,6 @@ async function main(args) {
     const baseline = JSON.parse(readFileSync(join(root, BASELINE), 'utf8'));
     const { covered, open } = readSkips(skips, baseline.skips, timed);
     const { known, fresh, unsure } = classify([...failures, ...open], findings, baseline);
-    if (args.includes('--record')) {
-      for (const id of passed) delete baseline.failures[id];
-      for (const { id, message } of fresh.filter(({ message }) => message !== 'lint')) baseline.failures[id] = message || 'fails on main';
-      const counts = new Map();
-      for (const { state, key } of findings) if (state === 'FAIL') counts.set(key, (counts.get(key) ?? 0) + 1);
-      for (const [key, count] of counts) baseline.lint[key] = Math.max(count, baseline.lint[key] ?? 0);
-      writeFileSync(join(root, BASELINE), `${JSON.stringify(baseline, null, 2)}\n`);
-    }
     for (const { id, message } of known) console.log(`KNOWN ${id}${message === 'lint' ? '' : `: ${message}`}`);
     for (const { id, state, message } of unsure) console.log(`${state} ${id}${message ? `: ${message}` : ''}`);
     for (const { id, note, reason } of covered) console.log(`LISTED ${id}${note ? `: ${note}` : ''} (${reason})`);
