@@ -122,21 +122,21 @@ it('#2078 a read-only stop\'s claim whose tree read overlaps the same session\'s
   try {
     // Behavior that must hold, proven with no run on the merge base: one requirement, one drafted check.
     const check = { check: CHECK, approved: null, command: `sh ${CHECK}`, covers: [REQ], depth: 'unit' as const, on_base: 'passes' as const, asserts: [] };
-    const stop = (claim: string, same: boolean) => gate.stop({ session: 'sib', claim, task: 'task:t1', cwd: repo, base: head, requirements: [{ req: REQ, depth: 'unit', oracle: 'code', on_base: 'passes' }], checks: [check], stopAt: Date.now(), definition: 'locked', same });
+    const stop = (claim: string) => gate.stop({ session: 'sib', claim, task: 'task:t1', cwd: repo, base: head, requirements: [{ req: REQ, depth: 'unit', oracle: 'code', on_base: 'passes' }], checks: [check], stopAt: Date.now(), definition: 'locked' });
 
     // 1. The preceding claim, after work the hooks saw: its check really runs in a checkout of its snapshot and passes.
-    const a = await stop('claim:A', false);
+    const a = await stop('claim:A');
     const ranA = started.filter((s) => s.claim === 'claim:A');
     if (gate.verdictOf('claim:A')?.outcome !== 'PASS' || a.snapshot === head || ranA.length !== 1 || ranA[0]!.outcome !== 'passed' || fileAt(a.snapshot) !== FIXED || existsSync(join(seam, 'entered'))) {
       throw Error(`BLOCKED: the first claim must pass on one real run in a checkout of a snapshot holding ${FILE}, with the seam not yet armed: its stop ${JSON.stringify(a)} on HEAD ${head}; its verdict ${JSON.stringify(gate.verdictOf('claim:A')?.reasons)}; runs ${JSON.stringify(started)}; ${FILE} there ${JSON.stringify(fileAt(a.snapshot))}`);
     }
 
-    // 2. The next stop, with only reads in its turn (`same`), and nothing changed. Its claim for the task is handed to
+    // 2. The next stop, with nothing changed (the hooks' only-reads hint no longer reaches the gate). Its claim for the task is handed to
     // the gate first; the test goes on at whichever comes first: its tree read entering git, or the claim settling
     // with no read through git, as a hub that reuses on the hooks' word does.
     writeFileSync(join(seam, 'armed'), '');
     let settled = false;
-    const second = stop('claim:B', true).finally(() => { settled = true; });
+    const second = stop('claim:B').finally(() => { settled = true; });
     second.catch(() => undefined);
     while (!settled && !existsSync(join(seam, 'entered'))) await new Promise((done) => setTimeout(done, 5));
     const reading = !settled && existsSync(join(seam, 'entered'));
@@ -144,7 +144,7 @@ it('#2078 a read-only stop\'s claim whose tree read overlaps the same session\'s
 
     // 3. The same stop's early claim for another task: no check, its definition still to come. It is awaited, so it has
     // landed in the gate before the read is released.
-    const sibling = await gate.stop({ session: 'sib', claim: 'claim:C', task: 'task:t2', cwd: repo, base: head, requirements: [], checks: [], stopAt: Date.now(), definition: 'pending', same: true });
+    const sibling = await gate.stop({ session: 'sib', claim: 'claim:C', task: 'task:t2', cwd: repo, base: head, requirements: [], checks: [], stopAt: Date.now(), definition: 'pending' });
     const landed = { known: gate.verdictOf('claim:C')?.outcome, during: reading && !settled };
     writeFileSync(join(seam, 'release'), '');
     const b = await second;
