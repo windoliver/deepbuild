@@ -1,0 +1,154 @@
+Base: b4a2049e8 (origin/main), detached, a fresh GitHub clone; npm ci, no workspace build.
+Platform: darwin arm64, 8 cores (StrykerJS concurrency 4); Node v24.22.0; StrykerJS 10.0.0 and TypeScript 5.9.3 from the lock.
+Load at the runs: 1-minute load 6-7. Paths redacted: <checkout>, <sandbox> (the test's temporary HOME and logs).
+
+== 1. The tests on the base ==
+COMMAND: node --test 'tests/acceptance/1120/*.test.mjs'
+EXIT: 1 (1 test, 1 failing at its assertion: AssertionError ERR_ASSERTION thrown at scope.test.mjs:32)
+
+✖ #1120.1f2e20de per mutant StrykerJS builds only the mutated package and its dependents, and the killed and survived sets equal the unscoped reference run's (24157.604167ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 24208.569958
+
+✖ failing tests:
+
+test at tests/acceptance/1120/scope.test.mjs:22:1
+✖ #1120.1f2e20de per mutant StrykerJS builds only the mutated package and its dependents, and the killed and survived sets equal the unscoped reference run's (24157.604167ms)
+  AssertionError [ERR_ASSERTION]: packages/c (neither the mutated package nor a dependent) was built under these mutants
+  exit 0
+  stdout:
+  BAY claim {"index":1,"role":"base","use":"before","bay":"<sandbox-home>/deepbuild-bays/1/base","base":"95e7f5dcdb23b79044462ba7e529a15e7eafdd87","tree":"e0ec42a21a65796d6e91e3fd66848eb3d75d3b45","bundle":null,"untracked":null,"overlay":{"files":3,"hash":"06abf57f986f238167913088bf956381b78567ae0ea09ded3a50a7337aba87c2"},"sealedTree":null,"seal":"none","cold":true,"stopped":false,"installed":true,"written":151,"deleted":0,"crates":[]}
+  BAY claim {"index":1,"role":"change","use":"before","bay":"<sandbox-home>/deepbuild-bays/1/change","tree":"20797f22a2a08a57e714130a0fd462f95dcacfa8","bundle":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untracked":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untrackedFiles":[],"overlay":null,"sealedTree":null,"seal":"none","cold":true,"stopped":false,"installed":true,"written":154,"deleted":0,"crates":[]}
+  BAY claim {"index":1,"role":"change","use":"mutation","bay":"<sandbox-home>/deepbuild-bays/1/change","tree":"20797f22a2a08a57e714130a0fd462f95dcacfa8","bundle":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untracked":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untrackedFiles":[],"overlay":null,"sealedTree":null,"seal":"none","cold":false,"stopped":false,"installed":false,"written":0,"deleted":4,"crates":[]}
+  SURVIVED packages/a/src/f.ts:2 (EqualityOperator)
+      -  if (n > 10) return 'big';
+      +  if (n >= 10) return 'big';
+  PASS mutation: 5 mutants of the added lines, 1 surviving on a line a tagged test executes
+  BAY release {"index":1,"role":"base","bay":"<sandbox-home>/deepbuild-bays/1/base","status":null,"targetBytes":0,"touched":0}
+  BAY release {"index":1,"role":"change","bay":"<sandbox-home>/deepbuild-bays/1/change","status":null,"targetBytes":0,"touched":127}
+  proof: wall time 22.7 s
+  
+  stderr:
+  
+  builds under a mutant: [{"package":"a","mutant":"0"},{"package":"a","mutant":"2"},{"package":"a","mutant":"1"},{"package":"a","mutant":"3"},{"package":"b","mutant":"3"},{"package":"b","mutant":"1"},{"package":"b","mutant":"2"},{"package":"b","mutant":"0"},{"package":"c","mutant":"2"},{"package":"c","mutant":"3"},{"package":"c","mutant":"1"},{"package":"c","mutant":"0"},{"package":"d","mutant":"1"},{"package":"d","mutant":"2"},{"package":"d","mutant":"3"},{"package":"d","mutant":"0"},{"package":"a","mutant":"4"},{"package":"b","mutant":"4"},{"package":"c","mutant":"4"},{"package":"d","mutant":"4"}]
+  tagged test runs: 16, under a mutant: 10
+  + actual - expected
+  
+  + [
+  +   '2',
+  +   '3',
+  +   '1',
+  +   '0',
+  +   '4'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/1120/scope.test.mjs:32:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ '2', '3', '1', '0', '4' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+The base's lane output above is the unscoped reference run on this fixture: 5 mutants of the added line, 1 survivor
+(EqualityOperator, n >= 10), which is what REFERENCE in scope.test.mjs holds. The test fails before it compares
+them, at the scope assertion: packages/c was built under every mutant (0-4).
+
+== 2. Planted implementation, checked against the tests (not delivered) ==
+The base's proof-runs.mjs with the per-mutant 'npm run build --workspaces --if-present' replaced by
+'npm run build --if-present -w <folder> ...' over the mutated files' packages and every package depending on one
+of them (package.json dependencies, closed over the reverse graph). Run twice with the same result; the second run:
+
+✔ #1120.1f2e20de per mutant StrykerJS builds only the mutated package and its dependents, and the killed and survived sets equal the unscoped reference run's (12586.108666ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 12627.767375
+dependents exit 0
+
+== 3. The twin without-dependents (twins/without-dependents/scripts/proof-runs.mjs) ==
+The same, building the mutated package alone. It passes the scope assertion and fails at the kill-set assertion:
+all 5 mutants survive, since b's and d's dist never carry the instrumented a. Run twice with the same result; the second run:
+
+✖ #1120.1f2e20de per mutant StrykerJS builds only the mutated package and its dependents, and the killed and survived sets equal the unscoped reference run's (10456.712667ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 10500.547542
+
+✖ failing tests:
+
+test at tests/acceptance/1120/scope.test.mjs:22:1
+✖ #1120.1f2e20de per mutant StrykerJS builds only the mutated package and its dependents, and the killed and survived sets equal the unscoped reference run's (10456.712667ms)
+  AssertionError [ERR_ASSERTION]: the lane's mutant count or state differs from the unscoped reference run's
+  exit 0
+  stdout:
+  BAY claim {"index":1,"role":"base","use":"before","bay":"<sandbox-home>/deepbuild-bays/1/base","base":"b0bf803fb73f7017621c4759f64f7c193719dcf8","tree":"94959d51be234d3dc61692d610721c58555e41ba","bundle":null,"untracked":null,"overlay":{"files":3,"hash":"06abf57f986f238167913088bf956381b78567ae0ea09ded3a50a7337aba87c2"},"sealedTree":null,"seal":"none","cold":true,"stopped":false,"installed":true,"written":151,"deleted":0,"crates":[]}
+  BAY claim {"index":1,"role":"change","use":"before","bay":"<sandbox-home>/deepbuild-bays/1/change","tree":"11e383bdfdee61abd2cfa3d41460c884f781f698","bundle":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untracked":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untrackedFiles":[],"overlay":null,"sealedTree":null,"seal":"none","cold":true,"stopped":false,"installed":true,"written":154,"deleted":0,"crates":[]}
+  BAY claim {"index":1,"role":"change","use":"mutation","bay":"<sandbox-home>/deepbuild-bays/1/change","tree":"11e383bdfdee61abd2cfa3d41460c884f781f698","bundle":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untracked":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","untrackedFiles":[],"overlay":null,"sealedTree":null,"seal":"none","cold":false,"stopped":false,"installed":false,"written":0,"deleted":4,"crates":[]}
+  SURVIVED packages/a/src/f.ts:2 (EqualityOperator)
+      -  if (n > 10) return 'big';
+      +  if (n <= 10) return 'big';
+  SURVIVED packages/a/src/f.ts:2 (ConditionalExpression)
+      -  if (n > 10) return 'big';
+      +  if (false) return 'big';
+  SURVIVED packages/a/src/f.ts:2 (ConditionalExpression)
+      -  if (n > 10) return 'big';
+      +  if (true) return 'big';
+  SURVIVED packages/a/src/f.ts:2 (EqualityOperator)
+      -  if (n > 10) return 'big';
+      +  if (n >= 10) return 'big';
+  SURVIVED packages/a/src/f.ts:2 (StringLiteral)
+      -  if (n > 10) return 'big';
+      +  if (n > 10) return "";
+  PASS mutation: 5 mutants of the added lines, 5 surviving on a line a tagged test executes
+  BAY release {"index":1,"role":"base","bay":"<sandbox-home>/deepbuild-bays/1/base","status":null,"targetBytes":0,"touched":0}
+  BAY release {"index":1,"role":"change","bay":"<sandbox-home>/deepbuild-bays/1/change","status":null,"targetBytes":0,"touched":127}
+  proof: wall time 9.5 s
+  
+  stderr:
+  
+  builds under a mutant: [{"package":"a","mutant":"1"},{"package":"a","mutant":"0"},{"package":"a","mutant":"3"},{"package":"a","mutant":"2"},{"package":"a","mutant":"4"}]
+  tagged test runs: 16, under a mutant: 10
+  + actual - expected
+  
+    [
+  +   'PASS mutation: 5 mutants of the added lines, 5 surviving on a line a tagged test executes'
+  -   'PASS mutation: 5 mutants of the added lines, 1 surviving on a line a tagged test executes'
+    ]
+  
+      at TestContext.<anonymous> (file://<planted checkout>/tests/acceptance/1120/scope.test.mjs:36:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'PASS mutation: 5 mutants of the added lines, 5 surviving on a line a tagged test executes' ],
+    expected: [ 'PASS mutation: 5 mutants of the added lines, 1 surviving on a line a tagged test executes' ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+alone exit 1
+
+== 4. A scope missing one dependent (d), checked once (not delivered) ==
+The planted correct scope with packages/d left out: the test fails at the kill-set assertion,
+  PASS mutation: 5 mutants of the added lines, 2 surviving on a line a tagged test executes
+(expected 1 surviving): if (true) is killed only through d's dist.

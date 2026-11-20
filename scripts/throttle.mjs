@@ -248,7 +248,13 @@ function grantable(table, procs, request, seen) {
   const outside = table.grants.filter((grant) => !mine.includes(grant.pid));
   // timed is exclusive of every class outside its own chain.
   if (outside.some((grant) => grant.class === 'timed')) return false;
-  const first = table.requests.filter((other) => other.class === request.class).sort(order)[0];
+  // A request is served in order only while the limit it was made under has room, so the largest limit among the
+  // live waiters is the machine's (#2902). One that records none comes from a checkout older than that and counts as
+  // allowing one grant: its own code still takes a slot when it is first in its own view and below its own limit.
+  // timed counts no grants: its chain and its blockers decide it.
+  const held = table.grants.filter((grant) => grant.class === request.class).length;
+  const room = (other) => other.class === 'timed' || held < (other.limit ?? 1);
+  const first = table.requests.filter((other) => other.class === request.class && room(other)).sort(order)[0];
   if (first?.id !== request.id) return false;
   if (request.class !== 'timed') {
     // A pending timed request drains: no new top-level grant starts, unless a held grant blocked a drain to its bound
@@ -256,8 +262,7 @@ function grantable(table, procs, request, seen) {
     // on. A window drains whatever is held (section 12a).
     const marked = table.grants.some((grant) => grant.blocked);
     if (!request.nested && table.requests.some((other) => other.class === 'timed' && (other.window || !marked))) return false;
-    const held = table.grants.filter((grant) => grant.class === request.class);
-    return request.class === 'test' ? roomForTest(held, seen) : held.length < LIMITS[request.class];
+    return request.class === 'test' ? roomForTest(table.grants.filter((grant) => grant.class === 'test'), seen) : held < LIMITS[request.class];
   }
   if (blockers(table, procs, request).length) return false;
   // A top-level request waits for load below the cores, as the log shows. A nested one, in a chain that holds a grant
@@ -286,7 +291,7 @@ export function acquire(cls, { wait = 30, window = false } = {}) {
       log({ event: 'passed', class: cls, pid, through: process.env.DEEP_THROTTLE });
       return { pass: true };
     }
-    const entry = { id: randomBytes(8).toString('hex'), class: cls, pid, start: procs.get(pid).start, nested: held.length > 0, window, seq: (table.seq = (table.seq ?? 0) + 1) };
+    const entry = { id: randomBytes(8).toString('hex'), class: cls, pid, start: procs.get(pid).start, nested: held.length > 0, window, limit: LIMITS[cls], seq: (table.seq = (table.seq ?? 0) + 1) };
     table.requests.push(entry);
     return entry;
   });
