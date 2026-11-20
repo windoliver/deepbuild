@@ -18,6 +18,7 @@ use crate::roles::TABLE;
 use crate::track;
 
 mod centres;
+mod chains;
 mod fixtures;
 pub mod scan;
 mod sensors;
@@ -160,6 +161,22 @@ pub enum Measure {
     /// #2243: how far apart the axes of two character bodies that meet stand after the last
     /// step, m; it fails wherever one breaks the rule of their meeting.
     Meet(walks::Meet),
+    /// #2307: how far `body` moves from the end of step `from` to the end of step `to`, m.
+    Parked {
+        body: &'static str,
+        from: usize,
+        to: usize,
+    },
+    /// #2310: `body`'s distance from the point `from` after each step, m: the one farthest from
+    /// the answer; it fails wherever a joint of the world opens.
+    Reach { body: &'static str, from: [f64; 3] },
+    /// #2310: `body`'s speed where it passes its lowest point, m/s: let go along `along` from
+    /// `from`, square to gravity; it fails wherever a joint of the world opens.
+    Lowest {
+        body: &'static str,
+        from: [f64; 3],
+        along: [f64; 3],
+    },
 }
 
 /// One fixture of the behavior part.
@@ -773,6 +790,13 @@ fn read(m: &Measure, t: &Trace, b: &dyn Backend, w: &World, f: &Fixture) -> Read
             )
         }
         Measure::Meet(m) => met(t, m),
+        Measure::Parked { body, from, to } => {
+            let p = path(t, body);
+            let moved = p.get(*from).zip(p.get(*to)).map(|(a, z)| dist(*a, *z));
+            reading(moved, json!({"body": body}))
+        }
+        Measure::Reach { body, from } => chains::reach(w, t, body, *from, f.answer),
+        Measure::Lowest { body, from, along } => chains::lowest(w, t, body, (*from, *along)),
     }
 }
 
@@ -857,6 +881,13 @@ fn named_measure(m: &Measure) -> String {
             "distance between the axes of {} and {} after the last step, m",
             m.walker, m.other
         ),
+        Measure::Parked { body, from, to } => {
+            format!("distance {body} moves from step {from} to step {to}, m")
+        }
+        Measure::Reach { body, .. } => {
+            format!("distance of {body}'s centre from the fixed point at every step, m")
+        }
+        Measure::Lowest { body, .. } => format!("speed of {body} at its lowest point, m/s"),
     }
 }
 

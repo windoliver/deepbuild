@@ -64,10 +64,19 @@ pub fn values(sched: &Scheduler<'_>, s: &Session, paths: &[String]) -> Value {
             let (v, _) = item_value(sched, s, id, "params")?;
             v.get("d").or_else(|| v.pointer("/outline/d")).cloned()
         };
+        // #2248: a readout's text as the frame shows it: its template, each slot filled from the
+        // frame's document, the value a world's output writes there included.
+        let shown = || {
+            let doc = s.document()?;
+            let template = doc.get("items")?.get(id)?.pointer("/params/template")?;
+            let text = deep_canvas::template::expand_in(doc, id, template.as_str()?);
+            text.ok().map(Value::String)
+        };
         item_value(sched, s, id, field)
             .map(|(v, _)| v)
             .or_else(drawn)
             .or_else(|| (field == "path").then(outline).flatten())
+            .or_else(|| (field == "params/text").then(shown).flatten())
     };
     Value::Object(
         paths

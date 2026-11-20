@@ -1,0 +1,24 @@
+== BASE (eb027b613 + tests only): repo <repo> at 538c4c23f, dir /private/tmp/claude-501/e2584-hT9x, node v24.22.0
+-- lsof for a free port now:
+lsof: WARNING: can't stat() hfs file system /private/tmp/claude-501/e2584-hT9x/locked/mnt
+      Output information may be incomplete.
+      assuming "dev=1000016" from mount table
+   (lsof exit 1)
+blocker listening on 3000 pid 34274
+-- lsof for 3000 (taken):
+lsof: WARNING: can't stat() hfs file system /private/tmp/claude-501/e2584-hT9x/locked/mnt
+      Output information may be incomplete.
+      assuming "dev=1000016" from mount table
+p34274
+f12
+   (lsof exit 0)
+-- hub (pid 35053): {"v":1,"ready":true,"pid":35053,"socket":"/private/tmp/claude-501/e2584-hT9x/root/hub.sock","start":"01M7W92ZQ3QHGF4V8FXMEJXZV5"}
+-- deep env up --json in the worktree:
+{"status":"BLOCKED","worktree":"/private/tmp/claude-501/e2584-hT9x/wt","cause":"no port is free to lease"}
+   (deep env up exit 3)
+-- deep env down --json:
+No stack runs for /private/tmp/claude-501/e2584-hT9x/wt; start one with deep env up.
+   (deep env down exit 3)
+-- after cleanup, lsof for a free port:
+   (lsof exit 1)
+-- hub stderr tail:

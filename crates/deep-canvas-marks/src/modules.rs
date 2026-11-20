@@ -884,27 +884,35 @@ pub fn look_tokens(look: &crate::look::Look) -> BTreeMap<String, Value> {
             (bundled.family(role) != Some(family)).then(|| (role.clone(), json!(family)))
         })
         .collect();
-    if !fonts.is_empty() {
-        out.insert(TYPE_TOKEN.into(), json!({ "fonts": fonts }));
+    // #297: and its fallback faces, so a grapheme the run's face lacks is set in the first that
+    // has it, as an entry text's range assumes.
+    let fallback = &look.light_type.fallback;
+    if !fonts.is_empty() || !fallback.is_empty() {
+        out.insert(TYPE_TOKEN.into(), json!({ "fonts": fonts, "fallback": fallback }));
     }
     out
 }
 
-/// The type a session's tokens set text in: [`TYPE_TOKEN`]'s font roles over the bundled ones.
+/// The type a session's tokens set text in: [`TYPE_TOKEN`]'s font roles over the bundled ones,
+/// and its fallback faces.
 fn type_of(tokens: &BTreeMap<String, Value>) -> scene::Type {
     let mut ty = scene::Type::default();
     let fonts = tokens
         .get(TYPE_TOKEN)
         .and_then(|t| t.get("fonts"))
         .and_then(Value::as_object);
+    let face = |f: &Value| {
+        let f = f.as_str()?;
+        deep_text::FACES.iter().find(|face| face.family == f)
+    };
     for (role, family) in fonts.into_iter().flatten() {
-        let face = family
-            .as_str()
-            .and_then(|f| deep_text::FACES.iter().find(|face| face.family == f));
-        if let Some(face) = face {
+        if let Some(face) = face(family) {
             ty.fonts.insert(role.clone(), face.family);
         }
     }
+    let fallback = tokens.get(TYPE_TOKEN).and_then(|t| t.get("fallback"));
+    let fallback = fallback.and_then(Value::as_array).into_iter().flatten();
+    ty.fallback = fallback.filter_map(|f| face(f).map(|face| face.family)).collect();
     ty
 }
 

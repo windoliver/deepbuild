@@ -1,0 +1,75 @@
+#2645's acceptance tests on the base, 1a4b7d065b1ed115a54d6b506f9bdd516ca4a8c0, 2026-11-19, Node 24.22.0, on a
+Mac17,10 (M5 Max, 64 GB) shared with other sessions: thermal state "fair", one-minute load 106 to 307 on 18 cores.
+After `npm ci --ignore-scripts` and `npm run build --workspaces`. Trimmed: paths, code frames and separators left out.
+
+"At its assertion" below is the before lane's reading of the proof reporter's record
+(scripts/proof-vitest-reporter.mjs, DEEP_PROOF_VITEST_REPORT), judged by scripts/proof-runs.mjs's own `asserted` and
+`frames` rules: the framework's assertion failure, its innermost frame outside node_modules under the test paths.
+
+== The redraft (form only), on the base ==
+
+big.test.ts, run with the proof reporter:
+  npx vitest run --root tests/acceptance/2645 --no-file-parallelism --testTimeout=1800000 --reporter=verbose \
+    --reporter=$PWD/scripts/proof-vitest-reporter.mjs big.test.ts
+
+  FAIL  AC1 #2645.b383ad27 the claim reads at most 2,000,000 bytes of the transcript, counted in the process that makes it, and returns the merge base's list
+        AssertionError [ERR_ASSERTION] at tests/acceptance/2645/big.test.ts: at its assertion
+        AC1 #2645.b383ad27 the claim read 100,026,455 bytes of the 100,026,455-byte transcript (1 fs/promises.readFile of 100,026,455 bytes), whose newest TodoWrite call starts 920,182 bytes from its end: at most 2,000,000 may be read
+  FAIL  AC2 #2645.027eeba7 the same claim raises the resident memory of the process that makes it by under 16,000,000 bytes, five claims judged by the perf lane's judge
+        Error at tests/acceptance/2645/big.test.ts: before its assertion (INCONCLUSIVE, not counted)
+        INCONCLUSIVE: AC2 #2645.027eeba7 five claims on the 100,026,455-byte transcript, each in a process of its own, raised its resident memory by 312,967,168 (72,941,568 to 385,908,736 in 1,363 ms), 313,688,064 (72,810,496 to 386,498,560 in 1,987 ms), 311,705,600 (72,810,496 to 384,516,096 in 1,769 ms), 315,637,760 (72,974,336 to 388,612,096 in 1,025 ms), 309,182,464 (72,761,344 to 381,943,808 in 1,266 ms) bytes; a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state nominal): thermal state is "fair", not "nominal"; load 307.32568359375 at a run's start or end is above the 18 cores. This is not a pass
+   Test Files  1 failed (1)
+        Tests  2 failed (2)
+     Duration  28.72s
+
+  AC2's FAIL judgement goes through `must`, an assertion; the judge gives FAIL only on a fit, quiet reference Mac, so on
+  this Mac its failure is INCONCLUSIVE, which the before lane doesn't count as failing at its assertion.
+
+Each twin laid over this worktree's file at the base, the hub type-checked with it
+(tsc -p packages/hub/tsconfig.json --noEmit, exit 0, the two AC3 twins together and the two AC4 twins together), its
+criterion's file run once with the proof reporter, and the file restored with `git checkout --` after:
+
+  list-drops-cut-line (packages/hub/src/open-items.ts), same.test.ts:
+  FAIL  AC3 #2645.b55ba6ee every transcript of #20's fixtures and the corpus's recorded sessions, read whole and as it is written: the hub's list and readings equal the merge base's
+        AssertionError [ERR_ASSERTION] at tests/acceptance/2645/same.test.ts: at its assertion
+        AC3 #2645.b55ba6ee 120 of 897 reads of 60 transcripts differ from the merge base's:
+        #20's budget session 0x207000 (3 MB), newest call in the across a block's edge, read whole: the list is not the merge base's: the merge base's list is the TodoWrite call on line 1283 (toolu_dh2645_newest, bytes 3,000,773–5,301,787 of 5,303,177, 2,301,014 bytes long). The merge base's: ["the agent's task list leaves \"Read the checkout total — café receipts\" completed", …]; the hub's: []
+        … each of the 120 is a list of an "across" placement, read whole or written whole
+  PASS  the check names the line a planted reader drops › … (untagged)
+     Duration  385.15s
+
+  readings-drops-cut-line (packages/hub/src/codex-loops.ts), same.test.ts:
+  FAIL  AC3 #2645.b55ba6ee every transcript of #20's fixtures and the corpus's recorded sessions, read whole and as it is written: the hub's list and readings equal the merge base's
+        AssertionError [ERR_ASSERTION] at tests/acceptance/2645/same.test.ts: at its assertion
+        AC3 #2645.b55ba6ee 51 of 897 reads of 60 transcripts differ from the merge base's:
+        #20's Codex rollout, newest call in the across a block's edge, read whole, turn none: the readings are not the merge base's: its newest goal record is line 5 (goal output, bytes 904–2,301,274 of 4,602,523, 2,300,370 bytes long), its newest token count is line 6 (token_count, bytes 2,301,275–2,301,602 of 4,602,523). The merge base's: {"version":"0.160.0","readings":["Codex 5-hour window: 88% left, …
+        … each of the 51 is the readings of a covered Codex version's "across" placement: read whole, and written up to the middle of the newest call and whole (17 rollouts × 3)
+  PASS  the check names the line a planted reader drops › … (untagged)
+     Duration  272.72s
+
+  list-reads-twice (packages/hub/src/open-items.ts), passes.test.ts:
+  FAIL  AC4 #2645.a875ed8b a Claude Code transcript with no task-list call, in which lines name TodoWrite and assign nothing, returns nothing after one pass: no item, and no byte read twice
+        AssertionError [ERR_ASSERTION] at tests/acceptance/2645/passes.test.ts: at its assertion
+        AC4 #2645.a875ed8b the claim on a 6,302,077-byte transcript with no TodoWrite call read 12,604,154 bytes of it (2 fs/promises.readFile of 12,604,154 bytes): one pass reads no byte twice, so at most 6,302,077
+  PASS  AC4 #2645.a875ed8b a Codex rollout whose first megabyte was rewritten since the last read, and which then grew, is read again from its start: …
+     Duration  8.84s
+
+  readings-from-last-end (packages/hub/src/codex-loops.ts), passes.test.ts:
+  PASS  AC4 #2645.a875ed8b a Claude Code transcript with no task-list call, …
+  FAIL  AC4 #2645.a875ed8b a Codex rollout whose first megabyte was rewritten since the last read, and which then grew, is read again from its start: the list and the readings after it are the merge base's for the rewritten file
+        AssertionError [ERR_ASSERTION] at tests/acceptance/2645/passes.test.ts: at its assertion
+        AC4 #2645.a875ed8b after the rollout's first megabyte was rewritten and turn 3 appended, codexReadings is not the merge base's for the rewritten file: the merge base's {"version":"0.144.0","readings":["Codex 5-hour window: 65% left, …","Codex weekly window: 10% left, …","Codex billing: your plus plan, from the session's logs","Codex goal: paused, a loop with no automatic prompt left"],"loop":{"state":"none_left"}}; the hub's {"version":"0.160.0","readings":["Codex 5-hour window: 65% left, …","Codex weekly window: 60% left, …","Codex billing: your team plan, from the session's logs","Codex goal: active, looping"],"loop":{"state":"looping","due":null}}
+     Duration  5.17s
+
+  Not run again on the clean base after the redraft: same.test.ts and passes.test.ts, which passed there in run 1
+  below. The redraft changed how their checks fail, not when, and moved the planted-reader test out of AC3's describe.
+  In the twin runs above, the untagged test passed in both AC3 runs, AC4's first test passed on readings-from-last-end
+  and its second on list-reads-twice.
+
+== Before the redraft (142feaf51), on the base ==
+
+Run 1, the whole suite: big.test.ts 2 failed (AC1 naming 100,026,455 bytes read; AC2, then one claim with a plain
+limit, a rise of 316,391,424 bytes); same.test.ts 2 passed; passes.test.ts 2 passed. Duration 21.73s.
+Run 2, big.test.ts with AC2 judged on five claims: AC1 as above; AC2 INCONCLUSIVE, rises of 316,260,352 to
+316,391,424 bytes, thermal state "fair", load 106 on 18 cores. Duration 4.78s.
+Those failures were plain errors from `must`, which the before lane read as failing before their assertions.

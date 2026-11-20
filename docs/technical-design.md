@@ -1636,9 +1636,9 @@ A canvas module (see [Canvas modules](#canvas-modules)).
 
 #### Vehicle body
 
-**What it is, and its shape:** A body of kind vehicle, the character body's sibling and likewise a feature of the physics module, nothing in the core: a dynamic chassis on up to 8 ray-cast wheels that the backend's vehicle controller (Rapier's today) drives, behind the backend interface, to the behavior the physics behavior kit defines. Each wheel's suspension is a spring in hertz with a damping ratio. Drive, steer and brake are inputs that a piece's logic fires or a control's entries derive, each held until the next, and the steering wheels turn by Ackermann's rule. It steps at the world's rate, and each wheel that starts or stops touching a shape writes a contact occurrence naming it, so a skid sound or a dust puff can follow. Its wheels' spin and its held inputs join every checkpoint and hash beside the world's, so seeking equals playing. Built items, a rig or a skinned asset draw on it and its wheels; the body only moves.
+**What it is, and its shape:** A body of kind vehicle, the character body's sibling and likewise a feature of the physics module, nothing in the core: a dynamic chassis on up to 8 ray-cast wheels that the backend's vehicle controller (Rapier's today) drives, behind the backend interface, to the behavior the physics behavior kit defines. Each wheel's suspension is a spring in hertz with a damping ratio. Drive, steer and brake are inputs that a piece's logic fires or a control's entries derive, each held until the next, and the steering wheels turn by Ackermann's rule. It steps at the world's rate, and each wheel that starts or stops touching a shape writes a contact occurrence naming it, so a skid sound or a dust puff can follow. Parked, it stays parked: its brakes and grip hold it on a slope up to what they give and no more, it sleeps there as any dynamic body does with its controller at rest, and it wakes when it is driven, placed or touched, or when the body under one of its wheels moves or wakes. Its wheels' spin and its held inputs join every checkpoint and hash beside the world's, so seeking equals playing. Built items, a rig or a skinned asset draw on it and its wheels; the body only moves.
 
-**It can never:** Move except by its wheels, its inputs, its contacts, gravity and the world's forces and joints, steer past its limit, brake a wheel backwards, or run in a 2D world
+**It can never:** Move except by its wheels, its inputs, its contacts, gravity and the world's forces and joints, steer past its limit, brake a wheel backwards, creep on a slope its brakes and grip can hold, or run in a 2D world
 
 **Lands:** R6
 
@@ -1646,7 +1646,7 @@ A canvas module (see [Canvas modules](#canvas-modules)).
 
 **What it is, and its shape:**
 
-- **Joints:** fixed, ball, hinge, slider, distance with a spring (in hertz, with a damping ratio), rope, gear, rack and pinion, pulley, and path. Gear, rack and pinion, pulley and path work in kinematic mode only. Each joint can have limits, a motor and a break threshold.
+- **Joints:** fixed, ball, hinge, slider, distance with a spring (in hertz, with a damping ratio), rope, gear, rack and pinion, pulley, and path. Gear, rack and pinion, pulley and path work in kinematic mode only. Each joint can have limits, a motor and a break threshold. A fixed, ball, hinge or slider joint can be `articulated`: the backend places its second body from the joint's own coordinates, so the joints of one tree hold as one articulation and never open, whatever the masses they carry; a loop is closed by a joint left separate.
 - **Forces:** wind, drag, a spring to a point, buoyancy.
 
 **It can never:** Hide a broken joint: a break is an event
@@ -1683,7 +1683,7 @@ A canvas module (see [Canvas modules](#canvas-modules)).
 
 #### Behavior kit
 
-**What it is, and its shape:** Fixtures with analytic answers and tolerances that every physics backend passes, for what its caps allow, before a build can choose it: free fall, projectile range, a pendulum's period, bounces and slides under each combine rule, a slide on a slope, a box a belt carries, a tall box's tipping and a hinged bar's period with and without a written centre of mass, joint limits and motors, occurrences, sleep, the character body's slope, step, snap and jump and two character bodies that meet, and the vehicle body's sag, braking, drive, turn and wheel contacts. Goldens prove one backend repeats itself; these prove backends agree with the documented world. The answers and tolerances are the physics interface's, never a backend's, and the character and vehicle bodies' controllers are defined by them, so a second backend's controllers must behave as the first's do. The rope's sag, the balloon's and the soft volume's volume ratios, the tear, buoyancy, linear drag and the spring to a point also run on the reference implementation, each measured by the kit from particle positions and body states, never reported by a backend.
+**What it is, and its shape:** Fixtures with analytic answers and tolerances that every physics backend passes, for what its caps allow, before a build can choose it: free fall, projectile range, a pendulum's period, bounces and slides under each combine rule, a slide on a slope, a box a belt carries, a tall box's tipping and a hinged bar's period with and without a written centre of mass, joint limits and motors, a loaded chain and a swing on articulated joints, occurrences, sleep, the character body's slope, step, snap and jump and two character bodies that meet, and the vehicle body's sag, braking, drive, turn, wheel contacts, hold on a slope and drive from sleep. Goldens prove one backend repeats itself; these prove backends agree with the documented world. The answers and tolerances are the physics interface's, never a backend's, and the character and vehicle bodies' controllers are defined by them, so a second backend's controllers must behave as the first's do. The rope's sag, the balloon's and the soft volume's volume ratios, the tear, buoyancy, linear drag and the spring to a point also run on the reference implementation, each measured by the kit from particle positions and body states, never reported by a backend.
 
 **It can never:** Take a tolerance from a backend, or pass a fixture its caps exclude
 
@@ -2524,7 +2524,7 @@ No agent is refused outright, since every provider allows its own API key there.
 
 ## Numbers version 0 has to hold
 
-Every number says whether it is measured, with its date, machine and method, a target, or an estimate. The Target column below holds targets, and a figure given as a reason says which it is.
+Every number says whether it is measured, with its date, machine and method, a target, or an estimate. The Target column below holds targets, and a figure given as a reason says which it is. Where each row stands on main, with the reading behind it, is the numbers table the budget windows keep, [benchmarks/windows/numbers.md](../benchmarks/windows/numbers.md) (#2674).
 
 | Budget | Target | Why |
 |---|---|---|

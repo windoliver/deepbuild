@@ -55,6 +55,8 @@ export interface KindsOptions {
   plant?: string | undefined;
   /** The extension host a first-party plug-in's kind runs in (#184), once the hub opened it. */
   extensions(): ExtensionHost | undefined;
+  /** The evidence store's root, whose catalogs a catalog kind's spec carries (#194). */
+  evidence?: string;
 }
 export interface CheckKinds {
   list(): { kind: string; routes: string[] }[];
