@@ -754,7 +754,8 @@ class LocalSupervisor implements Supervisor {
       const live = this.scanned();
       if (!live.length) return;
       const bytes = new Map<number, number>();
-      const found = await scan(live.map((r) => markerOf(r.run)), bytes);
+      const starts = new Map<number, string>();
+      const found = await scan(live.map((r) => markerOf(r.run)), bytes, starts);
       // A run past its memory is stopped: the sum over every process its sandbox holds, the scan's own reading.
       for (const r of live) {
         const cap = r.limits?.memory_mb;
@@ -764,11 +765,11 @@ class LocalSupervisor implements Supervisor {
       }
       const held = live.flatMap((r) => (found.get(markerOf(r.run)) ?? []).map((pid) => ({ r, pid })));
       if (!held.length) return;
-      // By ID and start time: an ID the run used before may name a new process of its own.
-      const procs = await table(held.map((f) => f.pid));
+      // By ID and start time: an ID the run used before may name a new process of its own. The scan read each
+      // start time as it found the process (#2649 cut A).
       for (const { r, pid } of held) {
-        const p = procs.get(pid);
-        if (p && r.tracked.get(pid)?.start !== p.start) await this.track(r, pid, p.start, (await tokenOf(pid)) ?? null);
+        const start = starts.get(pid);
+        if (start && r.tracked.get(pid)?.start !== start) await this.track(r, pid, start, (await tokenOf(pid)) ?? null);
       }
     });
     this.scanning = next.catch(() => undefined);

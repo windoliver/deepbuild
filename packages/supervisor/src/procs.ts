@@ -105,12 +105,13 @@ export async function tokenOf(pid: number): Promise<string | null | undefined> {
  * The processes each marker's sandbox holds, by marker; `bytes` gets each one's memory (#1409): its physical footprint
  * on macOS, its resident set on Linux.
  */
-export async function scan(markers: readonly string[], bytes?: Map<number, number>): Promise<Map<string, number[]>> {
+export async function scan(markers: readonly string[], bytes?: Map<number, number>, starts?: Map<number, string>): Promise<Map<string, number[]>> {
   const found = new Map<string, number[]>();
   if (!markers.length) return found;
   for (const line of (await run(HELPER, ['scan', ...markers])).split('\n')) {
-    const [marker, pid, , , memory] = line.split(' ');
+    const [marker, pid, , , memory, ...start] = line.split(' ');
     if (!marker || !pid) continue;
+    starts?.set(Number(pid), start.join(' ').trim());
     (found.get(marker) ?? found.set(marker, []).get(marker)!).push(Number(pid));
     bytes?.set(Number(pid), Number(memory ?? 0));
   }

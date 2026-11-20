@@ -48,6 +48,7 @@
 #include <sys/time.h>
 #include <sys/un.h>
 #include <sys/wait.h>
+#include <time.h>
 #include <unistd.h>
 #include <util.h>
 
@@ -75,7 +76,11 @@ static int scan(int count, char **markers) {
       if (proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, sizeof info) != (int)sizeof info) continue;
       struct rusage_info_v0 usage;
       unsigned long long bytes = proc_pid_rusage(pid, RUSAGE_INFO_V0, (rusage_info_t *)&usage) == 0 ? usage.ri_phys_footprint : 0;
-      printf("%s %d %u %u %llu\n", markers[m], pid, info.pbi_ppid, info.pbi_pgid, bytes);
+      // Its start time as `ps -o lstart=` prints it under LC_ALL=C (#2649 cut A): ps formats it with %c.
+      char start[64];
+      time_t at = (time_t)info.pbi_start_tvsec;
+      strftime(start, sizeof start, "%c", localtime(&at));
+      printf("%s %d %u %u %llu %s\n", markers[m], pid, info.pbi_ppid, info.pbi_pgid, bytes, start);
     }
   }
   free(pids);
