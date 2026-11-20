@@ -160,7 +160,7 @@ fn run_view(
         return Err(json!({"code": "refused", "issues": broken}));
     }
     deep_canvas_effects::effect::lower(&mut args.doc);
-    crate::physics::bake(&mut args.doc, &call["tracks"])?;
+    crate::physics::bake(&mut args.doc, &call["tracks"], &args.assets)?;
     crate::particles::refuse(&args.doc, app.planted)?;
     // The frames the call draws and how each is reached (#173), the ones logic runs at first.
     let reached = history::order(args.from, args.frames, &args.seeks, &args.history, args.fps);

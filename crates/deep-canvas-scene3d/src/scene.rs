@@ -1967,7 +1967,7 @@ pub(crate) fn evaluate_compiled(
                 {
                     let read = assets.expect("matched above");
                     let model = world(&items, id);
-                    let (solids, file_lights) = asset_scene(read, id, params, &model, look)?;
+                    let (solids, file_lights) = asset_scene(read, id, params, item, &model, look)?;
                     for s in solids {
                         bounds.extend(corners_of(&s));
                         layer.solids.push(s);
@@ -2060,7 +2060,7 @@ pub(crate) fn evaluate_compiled(
                     || k == "fixture.skin@1" =>
                 {
                     let (mesh, shared) = match (k, assets) {
-                        ("mesh.asset@1", Some(read)) => asset_mesh(read, id, params)?,
+                        ("mesh.asset@1", Some(read)) => asset_mesh(read, id, params, item)?,
                         // #419's stand-ins: a pre-skin per time, and a sequence's frame at t.
                         ("fixture.skin@1", _) => (crate::fixtures::skin(params, &path)?, None),
                         ("mesh.sequence@1", Some(read)) => {
