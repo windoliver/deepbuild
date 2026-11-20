@@ -1137,6 +1137,10 @@ timed.push('tests/acceptance/1489/ui-thread.test.ts');
 
 // #2777's files each build deep-show (full, and with the test.tone module), and its preflight file times the lane.
 alone.push('tests/acceptance/2777/');
+// #211's files build deep-logic and deep-show, start Chrome and hold page stores of hundreds of MiB;
+// ac8-budgets times release builds.
+alone.push('tests/acceptance/211/');
+timed.push('tests/acceptance/211/ac8-budgets.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
