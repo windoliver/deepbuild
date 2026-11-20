@@ -262,13 +262,24 @@ function published(): Readonly<Record<string, Schema>> {
   return { ...SCHEMAS, deep_kinds: { ...kinds, properties: { ...(kinds.properties as Obj), op: { ...op, type: ['string', 'null'], enum: [...(op.enum as string[]), null] } } } };
 }
 
+let given: { upFront: string[]; servers: Record<string, string> } | undefined;
+/** Each server's instructions and the tools that load up front, as scripts/skill.mjs generated them (#2897). */
+function generated(): { upFront: string[]; servers: Record<string, string> } {
+  return (given ??= JSON.parse(readFileSync(new URL('../instructions.json', import.meta.url), 'utf8')) as { upFront: string[]; servers: Record<string, string> });
+}
+/** The `instructions` a server answers initialize with: the same bytes at every start. */
+export const instructionsFor = (server: 'deep' | 'deep-actions'): string => generated().servers[server]!;
+
 /**
  * The tools as deep mcp lists them. A tool tools.json doesn't describe isn't listed: only what the table generates
- * reaches an agent.
+ * reaches an agent. The tool a task starts with carries Claude Code's mark to load up front (#2897); every other stays
+ * behind a client's search.
  */
-export function toolList(): { name: string; description: string; inputSchema: Schema }[] {
+export function toolList(): { name: string; description: string; inputSchema: Schema; _meta?: Obj }[] {
   const text = descriptions();
-  return Object.entries(published()).filter(([name]) => text[name]).map(([name, inputSchema]) => ({ name, description: text[name]!, inputSchema }));
+  const upFront = new Set(generated().upFront);
+  return Object.entries(published()).filter(([name]) => text[name])
+    .map(([name, inputSchema]) => ({ name, description: text[name]!, inputSchema, ...(upFront.has(name) ? { _meta: { 'anthropic/alwaysLoad': true } } : {}) }));
 }
 
 /**

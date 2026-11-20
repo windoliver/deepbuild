@@ -147,6 +147,44 @@
             ],
             "additionalProperties": false
           }
+        },
+        "toolLoad": {
+          "type": "object",
+          "description": "What the session holds of DeepBuild's own MCP servers at its start, both ways (#2897): by search, the tools' names, the servers' instructions, the tools marked to load up front and the skill's description; whole, every tool's schema and the skill. The way is its client's, from its agent's facts, and a reader charges that count; unread charges neither. Both counts are of the pair deep setup writes, deepbuild and deep-actions, recorded when the session's config loads deepbuild.",
+          "properties": {
+            "way": {
+              "type": "string",
+              "enum": [
+                "whole",
+                "search",
+                "unread"
+              ],
+              "description": "How its client loads an MCP server's tools.",
+              "x-closure": {
+                "closed": "the two ways a client is known to load a server's tools, and not read",
+                "reopens": "a new major of this schema",
+                "mark": "exhaustive"
+              }
+            },
+            "startTokens": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Tokens a client that loads by search holds at the start, by the pinned tokenizer."
+            },
+            "wholeTokens": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Tokens a client that loads the whole list holds at the start, by the pinned tokenizer."
+            }
+          },
+          "required": [
+            "way",
+            "startTokens",
+            "wholeTokens"
+          ],
+          "additionalProperties": false
         }
       },
       "required": [

@@ -2849,6 +2849,21 @@ export interface AdapterFactsV7 {
     conformance: AdapterFactsV7Text;
     entries: Array<AdapterFactsV7RuleLoadEntry>;
   };
+  toolLoading?: {
+    readBy: AdapterFactsV7Text;
+    conformance: AdapterFactsV7Text;
+    entries: Array<{
+      versions: Array<AdapterFactsV7Version>;
+      way: "whole" | "search" | "unread";
+      instructionsCutChars: number | null;
+      mark: {
+        field: AdapterFactsV7Text;
+        key: AdapterFactsV7Text;
+        value: boolean;
+      } | null;
+      source: AdapterFactsV7Text;
+    }>;
+  };
 }
 
 /** adapter.unsupported@1 */
@@ -9644,6 +9659,11 @@ export interface SessionStartV3 {
       digest: string;
       tools?: Array<string>;
     }>;
+    toolLoad?: {
+      way: "whole" | "search" | "unread";
+      startTokens: number;
+      wholeTokens: number;
+    };
   };
   evidence?: Array<string>;
 }
@@ -9674,6 +9694,11 @@ export interface SessionStartV4 {
       tools?: Array<string>;
     }>;
     parent?: string;
+    toolLoad?: {
+      way: "whole" | "search" | "unread";
+      startTokens: number;
+      wholeTokens: number;
+    };
   };
   evidence?: Array<string>;
 }

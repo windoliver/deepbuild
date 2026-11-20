@@ -1001,6 +1001,23 @@
       }
     ]
   },
+  "toolLoading": {
+    "readBy": "what a session holds of DeepBuild's MCP servers at its start is counted the way its client loads them (#2897): by search, the tools' names, the servers' instructions and the tools marked to load up front; whole, every tool's schema. The session's start records both counts and the way",
+    "conformance": "claude/toolLoading/by-search",
+    "entries": [
+      {
+        "versions": ["2.1.299", "2.1.304", "2.1.308"],
+        "way": "search",
+        "instructionsCutChars": 4096,
+        "mark": {
+          "field": "_meta",
+          "key": "anthropic/alwaysLoad",
+          "value": true
+        },
+        "source": "code.claude.com/docs/en/mcp, read Nov 19, 2026: \"Tool search is enabled by default\", \"Only tool names and server instructions load at session start\"; instructions and an up-front tool's description cut at 4,096 characters since 2.1.296 (2,048 before), a tool a search loads at 16,384; `_meta` \"anthropic/alwaysLoad\": true loads one tool up front, and a server entry's own \"alwaysLoad\" overrides it. The corpus agrees: 2.1.299, 2.1.304 and 2.1.308 sessions call ToolSearch before an MCP tool (2.1.308 elicitation-answered selects mcp__corpus__ask_name first)"
+      }
+    ]
+  },
   "retries": {
     "readBy": "a row reads retrying from these records alone (#2019): each entry the match names is the agent retrying a model call the provider refused, one model.call event by its own uuid and timestamp, with its attempt, its most and the cause its error names; the next assistant entry is the model's reply, which ends them",
     "conformance": "claude/retries/records",
