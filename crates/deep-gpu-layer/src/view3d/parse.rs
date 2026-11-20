@@ -281,6 +281,7 @@ pub(super) fn parse(call: &Value, planted: Option<Planted>) -> Result<Args, Valu
                 | "linear"
                 | "ids"
                 | "pre_tone"
+                | "pre_curve"
                 | "dirt"
                 | "scene"
                 | "backdrop"
@@ -296,7 +297,7 @@ pub(super) fn parse(call: &Value, planted: Option<Planted>) -> Result<Args, Valu
         )
     }) {
         return Err(bad(
-            "targets are final, linear, ids, pre_tone, dirt, scene, backdrop, depth, reflection, foam, normal, coc, surface, window_linear, velocity and checks",
+            "targets are final, linear, ids, pre_tone, pre_curve, dirt, scene, backdrop, depth, reflection, foam, normal, coc, surface, window_linear, velocity and checks",
         ));
     }
     // A render-back draws as an export does, through the view your hand turned (#173).

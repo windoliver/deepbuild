@@ -2542,7 +2542,10 @@ name = "deep-images"
 version = "0.0.0"
 dependencies = [
  "deep-canvas",
+ "gif 0.14.2",
  "image",
+ "image-webp",
+ "png 0.18.1",
  "sha2 0.10.9",
  "web-time",
 ]
@@ -2692,6 +2695,7 @@ version = "0.0.0"
 dependencies = [
  "base64 0.22.1",
  "bincode",
+ "deep-canvas",
  "deep-canvas-motion",
  "deep-canvas-physics",
  "deep-canvas-scene3d",
@@ -2758,6 +2762,14 @@ dependencies = [
  "wasm-bindgen-futures",
  "web-sys",
  "wgpu 30.0.1",
+]
+
+[[package]]
+name = "deep-pptx-reader"
+version = "0.0.0"
+dependencies = [
+ "roxmltree 0.21.1",
+ "zune-inflate",
 ]
 
 [[package]]
@@ -2865,6 +2877,7 @@ dependencies = [
  "deep-net",
  "deep-physics-rapier",
  "deep-play",
+ "deep-pptx-reader",
  "deep-relay",
  "deep-replica",
  "deep-sandbox-wasmtime",
