@@ -10,4 +10,4 @@ Fix: `keeps_time` in `crates/deep-app/src/views.rs`. An ask row keeps its time, 
 
 - `failing-first.txt`: the new unit test fails at 8005f72fb on its ask assertion, before the fix.
 - `passing.txt`: deep-app's unit tests 110/110 after the fix, rustfmt clean. Clippy's one deep-app warning (views.rs:836, `Iterator::last`) is in main's code.
-- `mac-1345a/`, the Mac at the fix cba9ad36f: 1345 batch 3/3 pass, AC8 included. #1808 failed the same 4 tests at the fix and at main 8005f72fb (window-server drags, the taste call). #1458 failed 6 at the fix; main's 1458 run was cut off when the Mac's disk fell under 20 GB, and round 1345b is owed. Read the raw files: `exits.txt`'s AC lines say "not found" because colour codes were left in.
+- `mac-1345a/`, the Mac at the fix cba9ad36f: 1345 batch 3/3 pass, AC8 included. #1808 failed the same 4 tests at the fix and at main 8005f72fb (window-server drags, the taste call). #1458 failed 6 at the fix, and round 1345b (`mac-1345b/`) failed the same 6 at main 8005f72fb, so those are main's too. Read the raw files: `exits.txt`'s AC lines say "not found" because colour codes were left in.

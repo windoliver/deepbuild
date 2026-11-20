@@ -1,0 +1,6 @@
+× redraft-ac13/shown.test.ts > #1458 shown to you > AC13 the check run takes each shipped page from the real app at 960 × 640 and 1512 × 
+× replica.test.ts > #1458 what the shipped pages draw > AC7 #1458.0c2959d0: every chrome string draws in the chrome face, named in the clea
+× replica.test.ts > #1458 what the shipped pages draw > AC8 #1458.52c35293: a time ticking from 9 s to 10 s moves no other glyph in its row
+× replica.test.ts > #1458 what the shipped pages draw > AC11 #1458.5350b8ad: no row reads "… ago" or "in …", a planted one fails naming
+× guard.test.ts > #1458 the guard on bare sizes and distances > AC2 #1458.6aab01b3: a planted px(37.) in a view fails the guard, naming the
+× guard.test.ts > #1458 the guard on bare sizes and distances > AC5 #1458.c735b2b1: the guard passes on main's three lines, and the merge b

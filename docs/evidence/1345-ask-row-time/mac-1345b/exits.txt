@@ -1,0 +1,9 @@
+start; cc --version exit 0; screen-lock flag 0; Now drawing from 'AC Power' 21:16:21 load { 144.98 143.80 108.31 } thermal 1 free KB 416147856
+head 8005f72fb7e36cdb1b275f9abe43a53a48ef8da9; origin/main b4a2049e808c05a4ad0f727bb09c422b545cbb36 21:17:19 load { 195.54 153.17 113.90 } thermal 1 free KB 411674084
+setup at 8005f72fb (npm ci, workspace build, deep-hook) exit=0 21:21:24 load { 77.20 134.40 117.62 } thermal 1 free KB 403699196
+8005f72fb 1458: vitest exit=1;  Tests 6 failed | 7 passed (13) 21:34:03 load { 48.88 64.36 85.69 } thermal 0 free KB 388883540
+failing tests listed: 6 (failing.txt) 21:34:03 load { 48.88 64.36 85.69 } thermal 0 free KB 388882700
+git status --porcelain lines after: 0 21:34:04 load { 45.68 63.44 85.24 } thermal 0 free KB 388870596
+clone ~/private/d1345b removed 21:34:07 load { 45.68 63.44 85.24 } thermal 0 free KB 397419296
+login-name hits after redaction: 0 21:34:07 load { 45.68 63.44 85.24 } thermal 0 free KB 397419248
+secret scan hits=0 21:34:07 load { 45.68 63.44 85.24 } thermal 0 free KB 397419232
