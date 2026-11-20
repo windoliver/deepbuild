@@ -20,7 +20,8 @@ export async function hubCommand(args: readonly string[], cli: string): Promise<
   const safe = command === 'run' && given.includes('--safe');
   const rest = given.filter((a) => !(safe && a === '--safe'));
   let root: string | undefined;
-  if (rest.length === 2 && rest[0] === '--root' && rest[1]) root = rest[1];
+  // A flag where the folder goes is a usage error, not a folder named for it (#2581).
+  if (rest.length === 2 && rest[0] === '--root' && rest[1] && !rest[1].startsWith('-')) root = rest[1];
   else if (rest.length) {
     process.stderr.write(`${USAGE}\n`);
     return 2;

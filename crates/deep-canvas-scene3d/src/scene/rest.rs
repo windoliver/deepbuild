@@ -836,7 +836,8 @@ pub(super) fn edge_line(
     let mut mesh = match (item.get("kind").and_then(Value::as_str), assets) {
         // A glTF asset's mesh, read as its solid is (#1640).
         (Some("mesh.asset@1"), Some(read)) => {
-            asset_mesh(read, target, item.get("params").unwrap_or(&Value::Null))?.0
+            let params = item.get("params").unwrap_or(&Value::Null);
+            asset_mesh(read, target, params, item)?.0
         }
         _ => mesh_of(doc, target, item, seconds, outlines)?,
     };

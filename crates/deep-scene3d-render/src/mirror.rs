@@ -149,6 +149,7 @@ impl Mirrorer {
     ) {
         let size = half(scene.size);
         let view = deep_canvas_scene3d::mirror::view(scene, mirror, size);
+        self.view.pictured = true;
         self.view.prepare(device, &view, look);
         let mut ids: Vec<u32> = mirror
             .parts

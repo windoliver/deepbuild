@@ -11,6 +11,8 @@ pub mod cast;
 #[cfg(feature = "physics")]
 pub mod derive;
 pub mod drawing;
+#[cfg(feature = "logic")]
+pub mod fires;
 pub mod form;
 pub mod logic;
 #[cfg(feature = "net")]

@@ -152,12 +152,21 @@ impl Hub<'_> {
         form: &mut Value,
         track: &[Value],
     ) -> Result<(), Box<Issue>> {
+        let root = &self.scenario.evidence;
         let host = deep_play::worlds::Host {
             fired: &derive::fired,
             modules_first: derive::MODULES_FIRST,
             whole_transform: self.planted(crate::hub::Planted::Physics(Planted::WholeTransform)),
+            assets: Some(&|sha| crate::evidence::read(root, sha)),
         };
         deep_play::worlds::inline(&self.startup.sealed, form, track, &host)
+    }
+
+    /// #2457: `form` as the physics module reads it, which reads no store: with the mesh assets
+    /// its worlds' soft volumes are built from, read from the evidence store.
+    fn sourced<'a>(&self, form: &'a Value) -> std::borrow::Cow<'a, Value> {
+        let root = &self.scenario.evidence;
+        deep_physics_rapier::source::sourced(form, &|sha| crate::evidence::read(root, sha))
     }
 
     /// #182: the values a logic item's reads of a world's character readings take,
@@ -171,6 +180,8 @@ impl Hub<'_> {
         core: &[Value],
         names: &[String],
     ) -> Result<Vec<Value>, Box<Issue>> {
+        let sourced = self.sourced(form);
+        let form = &*sourced;
         let mut out = Vec::new();
         let span = deep_canvas_media::doc::time(form, form.pointer("/transport/span"))
             .unwrap_or(0)
@@ -199,7 +210,7 @@ impl Hub<'_> {
                             .collect::<Vec<_>>()),
                     )
                 })?;
-            let kept = derive::kept(form, &w, core).map_err(|r| {
+            let kept = derive::kept(form, id, &w, core).map_err(|r| {
                 refused(
                     id,
                     json!([{"code": r.code, "path": r.path, "what": r.what}]),
@@ -243,13 +254,10 @@ impl Hub<'_> {
     /// The bake `physics_bake` answers; with `bodies`, also every body's state after each step
     /// and the occurrences (#540's `world`).
     pub(crate) fn physics_bake_read(&self, b: &Bake, bodies: bool) -> Value {
-        let Some(doc) = self
-            .sessions
-            .get(&b.doc)
-            .and_then(|s| s.document().cloned())
-        else {
+        let Some(doc) = self.sessions.get(&b.doc).and_then(|s| s.document()) else {
             return json!({"ok": false, "code": "no_revision"});
         };
+        let doc = self.sourced(doc).into_owned();
         let Some(world) = doc.pointer(&format!("/worlds/{}", b.world)) else {
             return json!({"ok": false, "code": "ref_unresolved", "path": format!("worlds/{}", b.world)});
         };
@@ -282,7 +290,7 @@ impl Hub<'_> {
         } else {
             &b.track[..]
         };
-        let kept = match derive::kept(&doc, &w, core) {
+        let kept = match derive::kept(&doc, &b.world, &w, core) {
             Ok(k) => k,
             Err(r) => return json!({"ok": false, "code": r.code, "path": r.path, "what": r.what}),
         };
@@ -368,6 +376,8 @@ impl Hub<'_> {
     /// there, from the bake `physics_bake` runs. A playable page keys its states by these too, so
     /// two plays that leave a body moving where another rests stay two states.
     pub(crate) fn world_rows(&self, form: &Value, t: i64) -> Vec<CarriedState> {
+        let sourced = self.sourced(form);
+        let form = &*sourced;
         let rate = (form.pointer("/transport/frame_rate").cloned()).unwrap_or(json!([60, 1]));
         let track = form.get("track").and_then(Value::as_array);
         let track = track.cloned().unwrap_or_default();
@@ -377,7 +387,7 @@ impl Hub<'_> {
                 .and_then(|d| check(&d, &RAPIER3D, &deep_canvas_physics::roles::TABLE));
             let Some(kept) = w
                 .ok()
-                .and_then(|w| Some((derive::kept(form, &w, &track).ok()?, w)))
+                .and_then(|w| Some((derive::kept(form, id, &w, &track).ok()?, w)))
             else {
                 continue;
             };

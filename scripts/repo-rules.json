@@ -1315,6 +1315,10 @@
           "spec": "* path=../deep-lottie-reader",
           "why": "Issue #162: `deep-show lottie-reader`, the reference renderer served as its own process for the export's read-back."
         },
+        "deep-pptx-reader": {
+          "spec": "* path=../deep-pptx-reader",
+          "why": "Issue #732: the pptx export's fidelity reader, an Office Open XML reader apart from the writer and the pinned LibreOffice that draws each slide."
+        },
         "unicode-normalization": {
           "spec": "^0.1",
           "why": "Issue #542: the planted field text_normalizes_nfc, whose commit normalizes the text to NFC and which the text tests must refuse; the real field keeps the text's own code points."
@@ -1959,6 +1963,14 @@
         }
       }
     },
+    "packages/pi/package.json": {
+      "devDependencies": {
+        "@deepbuild/hub": {
+          "spec": "0.0.0",
+          "why": "tools.mjs reads the hub's dist at build time, so the workspace graph names the hub and the mutation lane rebuilds pi after it (#1120); never installed with the published package."
+        }
+      }
+    },
     "packages/conformance/package.json": {
       "dependencies": {
         "@deepbuild/adapters": {
@@ -2188,6 +2200,10 @@
         "deep-canvas-motion": {
           "spec": "* path=../deep-canvas-motion",
           "why": "Issue #1918: a world inside a scene reads the paths the scene's channels and drivers write, evaluated by the motion module at each step's time."
+        },
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #2457: the SHA-256 a mesh asset's bytes are checked against, as every store read is, when deep-physics reads the assets its scene's soft volumes are built from. Already in the workspace tree."
         },
         "rapier3d": {
           "spec": "=0.36.1",
@@ -2606,6 +2622,18 @@
         "thorvg": {
           "spec": "=0.6.0",
           "why": "Issue #162: the pinned reference Lottie renderer the export's read-back runs as its own process, built from its vendored source with the system's C++ compiler."
+        }
+      }
+    },
+    "crates/deep-pptx-reader/Cargo.toml": {
+      "dependencies": {
+        "roxmltree": {
+          "spec": "=0.21.1",
+          "why": "Issue #732: parses each part of a written deck in the pptx export's fidelity reader, a library the writer never uses (it writes its XML by hand); already in the workspace tree."
+        },
+        "zune-inflate": {
+          "spec": "=0.2.54",
+          "why": "Issue #732: inflates a deck's deflated zip entries in the pptx export's fidelity reader, apart from the writer's packing; already in the workspace tree."
         }
       }
     },
