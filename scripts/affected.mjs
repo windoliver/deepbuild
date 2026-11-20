@@ -347,6 +347,9 @@ const LIGHT = /^lint scripts\/(?:repo-rules|conformance-lint|slots-check|canvas-
 // no job: each reads as run by none.
 const live = new Set();
 let stopped = null;
+// The run's own temporary folder, each job's TMPDIR (#2857): what a job leaves there, a test's sandbox a stop kept from
+// its clean-up included, is removed with the folder once the run ends, even when the run is killed.
+let scratch = null;
 function run(logs, label, command, args, env = {}, cwd = root) {
   if (stopped) return Promise.resolve({ label, log: null, status: null, output: `stopped by ${stopped}` });
   const log = join(logs, `${label.replace(/\W+/g, '-')}.log`);
@@ -354,7 +357,7 @@ function run(logs, label, command, args, env = {}, cwd = root) {
   const cls = label.endsWith('timed') ? 'timed' : /^(?:vitest|node)/.test(label) ? 'test' : 'build';
   const leased = [join(root, 'scripts/lease'), command, ...args];
   return new Promise((done) => {
-    const child = spawn(LIGHT.test(label) ? leased[0] : process.execPath, LIGHT.test(label) ? leased.slice(1) : [join(root, 'scripts/throttle.mjs'), cls, '--wait', '30', '--', ...leased], { cwd, stdio: ['ignore', descriptor, descriptor], env: childEnv(env) });
+    const child = spawn(LIGHT.test(label) ? leased[0] : process.execPath, LIGHT.test(label) ? leased.slice(1) : [join(root, 'scripts/throttle.mjs'), cls, '--wait', '30', '--', ...leased], { cwd, stdio: ['ignore', descriptor, descriptor], env: childEnv({ TMPDIR: scratch, ...env }) });
     live.add(child);
     child.on('error', (error) => { live.delete(child); closeSync(descriptor); done({ label, log, status: null, output: String(error) }); });
     child.on('close', (status) => { live.delete(child); closeSync(descriptor); done({ label, log, status, output: readFileSync(log, 'utf8') }); });
@@ -485,6 +488,9 @@ async function main(args) {
   });
 
   const logs = mkdtempSync(join(tmpdir(), 'deep-affected-'));
+  // Short, beside the logs, so a test's Unix socket under its TMPDIR still fits sun_path.
+  scratch = mkdtempSync(join(tmpdir(), 'deep-t-'));
+  watchBinaries(scratch);
   const binaries = new Map(), binRoot = join(logs, 'binaries');
   watchBinaries(binRoot);
   const binEnv = (cwd = root) => ({ DEEP_BIN_DIR: binaries.get(cwd) });
@@ -602,6 +608,7 @@ async function main(args) {
     for (const shard of shards) shard.release();
     pool?.close();
     rmSync(binRoot, { recursive: true, force: true });
+    rmSync(scratch, { recursive: true, force: true });
   }
 }
 
