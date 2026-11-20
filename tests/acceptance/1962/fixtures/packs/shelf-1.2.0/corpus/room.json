@@ -1,0 +1,564 @@
+{
+  "document": {
+    "format": 1,
+    "profile": "board",
+    "title": "A reading room saved with three bookcases",
+    "description": "Three bookcases as the shelf pack's release that shipped them saved them: a corpus document of the #1962 acceptance suite.",
+    "size": [
+      480,
+      280
+    ],
+    "packs": [
+      "acme/shelf@1.2.0"
+    ],
+    "items": {
+      "b1": {
+        "id": "b1",
+        "kind": "shelf.bookcase@2",
+        "name": "Bookcase 1",
+        "order": "a0",
+        "params": {
+          "width": 1.2,
+          "shelves": 3,
+          "depth": 0.3
+        },
+        "at": {
+          "pos": [
+            20,
+            20,
+            0
+          ]
+        }
+      },
+      "b2": {
+        "id": "b2",
+        "kind": "shelf.bookcase@2",
+        "name": "Bookcase 2",
+        "order": "a1",
+        "params": {
+          "width": 0.8,
+          "shelves": 4,
+          "depth": 0.5
+        },
+        "at": {
+          "pos": [
+            180,
+            20,
+            0
+          ]
+        }
+      },
+      "b3": {
+        "id": "b3",
+        "kind": "shelf.bookcase@2",
+        "name": "Bookcase 3",
+        "order": "a2",
+        "params": {
+          "width": 1.6,
+          "shelves": 2,
+          "depth": 0.4
+        },
+        "at": {
+          "pos": [
+            300,
+            20,
+            0
+          ]
+        }
+      }
+    }
+  },
+  "values": {
+    "b1.sides.0": {
+      "kind": "rect@1",
+      "params": {
+        "box": [
+          0,
+          0,
+          2,
+          120
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          20,
+          20,
+          0
+        ]
+      }
+    },
+    "b1.sides.1": {
+      "kind": "rect@1",
+      "params": {
+        "box": [
+          0,
+          0,
+          2,
+          120
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          138,
+          20,
+          0
+        ]
+      }
+    },
+    "b1.boards.0": {
+      "kind": "rect@1",
+      "params": {
+        "box": [
+          0,
+          0,
+          120,
+          2
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          20,
+          20,
+          0
+        ]
+      }
+    },
+    "b1.boards.1": {
+      "kind": "rect@1",
+      "params": {
+        "box": [
+          0,
+          0,
+          120,
+          2
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          20,
+          50,
+          0
+        ]
+      }
+    },
+    "b1.boards.2": {
+      "kind": "rect@1",
+      "params": {
+        "box": [
+          0,
+          0,
+          120,
+          2
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          20,
+          80,
+          0
+        ]
+      }
+    },
+    "b1.boards.3": {
+      "kind": "rect@1",
+      "params": {
+        "box": [
+          0,
+          0,
+          120,
+          2
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          20,
+          110,
+          0
+        ]
+      }
+    },
+    "b1.plan": {
+      "kind": "rect@1",
+      "params": {
+        "box": [
+          0,
+          0,
+          120,
+          30
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          20,
+          150,
+          0
+        ]
+      }
+    },
+    "b2.sides.0": {
+      "kind": "rect@1",
+      "params": {
+        "box": [
+          0,
+          0,
+          2,
+          160
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          180,
+          20,
+          0
+        ]
+      }
+    },
+    "b2.sides.1": {
+      "kind": "rect@1",
+      "params": {
+        "box": [
+          0,
+          0,
+          2,
+          160
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          258,
+          20,
+          0
+        ]
+      }
+    },
+    "b2.boards.0": {
+      "kind": "rect@1",
+      "params": {
+        "box": [
+          0,
+          0,
+          80,
+          2
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          180,
+          20,
+          0
+        ]
+      }
+    },
+    "b2.boards.1": {
+      "kind": "rect@1",
+      "params": {
+        "box": [
+          0,
+          0,
+          80,
+          2
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          180,
+          60,
+          0
+        ]
+      }
+    },
+    "b2.boards.2": {
+      "kind": "rect@1",
+      "params": {
+        "box": [
+          0,
+          0,
+          80,
+          2
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          180,
+          100,
+          0
+        ]
+      }
+    },
+    "b2.boards.3": {
+      "kind": "rect@1",
+      "params": {
+        "box": [
+          0,
+          0,
+          80,
+          2
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          180,
+          140,
+          0
+        ]
+      }
+    },
+    "b2.plan": {
+      "kind": "rect@1",
+      "params": {
+        "box": [
+          0,
+          0,
+          80,
+          50
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          180,
+          190,
+          0
+        ]
+      }
+    },
+    "b3.sides.0": {
+      "kind": "rect@1",
+      "params": {
+        "box": [
+          0,
+          0,
+          2,
+          80
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          300,
+          20,
+          0
+        ]
+      }
+    },
+    "b3.sides.1": {
+      "kind": "rect@1",
+      "params": {
+        "box": [
+          0,
+          0,
+          2,
+          80
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          458,
+          20,
+          0
+        ]
+      }
+    },
+    "b3.boards.0": {
+      "kind": "rect@1",
+      "params": {
+        "box": [
+          0,
+          0,
+          160,
+          2
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          300,
+          20,
+          0
+        ]
+      }
+    },
+    "b3.boards.1": {
+      "kind": "rect@1",
+      "params": {
+        "box": [
+          0,
+          0,
+          160,
+          2
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          300,
+          40,
+          0
+        ]
+      }
+    },
+    "b3.boards.2": {
+      "kind": "rect@1",
+      "params": {
+        "box": [
+          0,
+          0,
+          160,
+          2
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          300,
+          60,
+          0
+        ]
+      }
+    },
+    "b3.boards.3": {
+      "kind": "rect@1",
+      "params": {
+        "box": [
+          0,
+          0,
+          160,
+          2
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          300,
+          80,
+          0
+        ]
+      }
+    },
+    "b3.plan": {
+      "kind": "rect@1",
+      "params": {
+        "box": [
+          0,
+          0,
+          160,
+          40
+        ],
+        "paint": {
+          "fill": {
+            "role": "muted"
+          }
+        }
+      },
+      "at": {
+        "pos": [
+          300,
+          110,
+          0
+        ]
+      }
+    }
+  },
+  "snapshot": {
+    "t": "0s",
+    "size": [
+      480,
+      280
+    ],
+    "sha256": "e006448eb0577cbe4984fcda28b4dd91a238530ee5382fd3ca4b129deec5c016"
+  }
+}
