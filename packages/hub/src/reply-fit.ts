@@ -2,9 +2,11 @@
 // under it: Claude Code files a result past 50,000 characters or 25,000 tokens and Codex cuts one past 10,000 tokens, so a
 // reply past either never reaches the agent whole. `deep mcp` names its client from its initialize; a known agent takes
 // its version's entry (or, at a version its facts don't list, the smallest of its entries), and any other client the
-// smallest figure any facts file holds. A paged reply is asked again for a smaller page until it fits; the rest comes by
-// `next`, as before. A refusal over its client's error limit keeps its first failing path whole and drops the rest of
-// the schema, which tools/list gives. DeepBuild never raises a client's limit: a reply is paged, never made larger.
+// smallest figure any facts file holds. What is held: the paging canvas replies (deep_show, deep_query, deep_kinds),
+// each given a room to page into, a read asked again for a smaller page until it fits, the rest by `next` as before; and
+// every refusal, which over its client's error limit keeps the top-level argument its path fails under and drops the
+// rest of the schema, which tools/list gives. Other deep_* replies are not sized. DeepBuild never raises a client's
+// limit: a reply is paged, never made larger.
 import { factsFiles, readFacts } from '@deepbuild/adapters';
 import type { Refusal } from './wire.js';
 
@@ -62,9 +64,13 @@ export function limitOf(client: unknown): Limit {
     if (chosen.length) {
       from = exact ? `${agent[1]} ${version} (adapters/${agent[2]} toolResult)` : `the smallest of ${agent[1]}'s entries (adapters/${agent[2]} toolResult), since it lists no version ${version ?? '(none given)'}`;
       result = smallest(chosen.map((e) => e.result));
-      // An agent whose facts give an error no character figure is held to the smallest any facts file holds.
+      // An agent whose facts give an error no character figure is held to the smallest any facts file holds, and says whose.
       const own = smallest(chosen.map((e) => e.error));
-      error = own.chars === undefined && error.chars !== undefined ? { ...own, chars: error.chars } : own;
+      if (own.chars === undefined && error.chars !== undefined) {
+        const file = factsFiles().find((f) => entriesOf(f).some((e) => e.error.chars === error.chars));
+        from += `; its error's chars, which ${agent[2]} doesn't give, the smallest any facts file holds (adapters/${file} toolResult)`;
+        error = { ...own, chars: error.chars };
+      } else error = own;
     }
   }
   // With no figure at all a reply would go uncapped: refused, never sent as if every client kept everything.
@@ -87,21 +93,24 @@ async function over(text: string, cap: Figures): Promise<number> {
   return worst;
 }
 
-/** The bytes the canvas core is given for a reply first: JSON rows run about two characters a token, rarely fewer. */
-const roomOf = (cap: Figures): number => Math.min(cap.chars ?? Infinity, cap.bytes ?? Infinity, (cap.tokens ?? Infinity) * 2);
+/**
+ * The bytes the canvas core is given for a reply first: JSON rows run about two characters a token, rarely fewer, so a
+ * read, which can be asked again, starts there; a call asked once starts at one and a half, where dense numeric rows
+ * still fit.
+ */
+const roomOf = (cap: Figures, retry: boolean): number => Math.min(cap.chars ?? Infinity, cap.bytes ?? Infinity, (cap.tokens ?? Infinity) * (retry ? 2 : 1.5));
 
 /**
  * A reply that fits its cap as its client receives it (the value's JSON, the text deep mcp sends): `capOf` names the cap
  * the reply is held to (a reply sent as a refusal is held to the error cap). Asked with the room `roomOf` gives the
- * result cap, then, while it is over, again with less in proportion to how far it passed, with `again` set so the
- * canvas core keeps only the last ask for replay. A call that may change something (`retry` false) is asked once, and
- * the asking stops once a reply stops getting shorter: it doesn't page.
+ * result cap, then, while it is over, again with less in proportion to how far it passed. A call that isn't a pure read
+ * (`retry` false) is asked once, and the asking stops once a reply stops getting shorter: it doesn't page.
  */
-export async function fitted(cap: Figures, capOf: (reply: Obj) => Figures, retry: boolean, ask: (room: number, again: boolean) => Promise<Obj>): Promise<Obj> {
-  let room = Math.floor(roomOf(cap));
+export async function fitted(cap: Figures, capOf: (reply: Obj) => Figures, retry: boolean, ask: (room: number) => Promise<Obj>): Promise<Obj> {
+  let room = Math.floor(roomOf(cap, retry));
   let last = Infinity;
   for (let tries = 0; ; tries++) {
-    const reply = await ask(room, tries > 0);
+    const reply = await ask(room);
     const text = JSON.stringify(reply);
     const by = await over(text, capOf(reply));
     if (by <= 1 || !retry || tries >= 6 || room <= 1024 || text.length >= last) return reply;
@@ -110,19 +119,22 @@ export async function fitted(cap: Figures, capOf: (reply: Obj) => Figures, retry
   }
 }
 
+/** The sentence a missing_field remediation ends with when its schema is the tool's whole input schema (tools.ts). */
+const WHOLE = " schema is the tool's input schema.";
 /**
- * A refusal under its client's error cap: one that would pass it keeps its first failing path's schema whole and says
- * the rest reads in tools/list, then its value at the path is cut to what fits.
+ * A refusal under its client's error cap: one that would pass it keeps the schema of the top-level argument its path
+ * fails under and says the rest reads in tools/list, then its value at the path is cut to what fits.
  */
 export async function refusalFits(refusal: Partial<Refusal> & Obj, cap: Figures): Promise<Partial<Refusal> & Obj> {
   if ((await over(JSON.stringify(refusal), cap)) <= 1) return refusal;
   const out: Obj = { ...refusal };
   const schema = out.schema as { properties?: Obj } | undefined;
   if (schema && typeof schema === 'object') {
-    const field = String(out.path ?? '').split('/').filter(Boolean).at(-1) ?? '';
+    const field = String(out.path ?? '').replace(/^\/params\/arguments/, '').split('/').filter(Boolean)[0] ?? '';
     const first = schema.properties?.[field];
     out.schema = first === undefined ? { type: 'object' } : { type: 'object', properties: { [field]: first }, required: [field] };
-    out.remediation = `${String(out.remediation ?? '')} schema holds only ${field || 'the failing path'}: the tool's whole input schema is its inputSchema in tools/list.`;
+    const held = first === undefined ? 'schema holds none of the input schema' : `schema holds only ${field}'s part of the input schema`;
+    out.remediation = `${String(out.remediation ?? '').replace(WHOLE, '')} ${held}: the tool's whole input schema is its inputSchema in tools/list.`;
   }
   for (let by = await over(JSON.stringify(out), cap); by > 1 && typeof out.actual === 'string' && out.actual.length; by = await over(JSON.stringify(out), cap)) {
     out.actual = out.actual.slice(0, Math.floor((out.actual.length / by) * 0.9));

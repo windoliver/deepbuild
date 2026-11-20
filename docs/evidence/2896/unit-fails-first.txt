@@ -1,0 +1,94 @@
+
+ RUN  v5.0.5 /Users/sophiawj/private/deepbuild-core/.claude/worktrees/fix-2896-reply-fits-client-d66389/packages/hub
+
+ ❯ test/reply-fit.test.ts (5 tests | 4 failed) 3567ms
+   ❯ refusalFits (2)
+     × keeps the top-level argument a nested path fails under 4ms
+     × replaces the whole-schema sentence rather than contradicting it 1ms
+   ❯ limitOf (1)
+     × names where Codex's error characters came from 2ms
+   ❯ fitted (2)
+     × asks a call that may change something once, with a tighter first room 3559ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  test/reply-fit.test.ts > refusalFits > keeps the top-level argument a nested path fails under
+AssertionError: expected [ 'kind' ] to deeply equal [ 'document' ]
+
+- Expected
++ Received
+
+  [
+-   "document",
++   "kind",
+  ]
+
+ ❯ test/reply-fit.test.ts:19:76
+     17|   it('keeps the top-level argument a nested path fails under', async (…
+     18|     const out = await refusalFits(refusal, { chars: 8_800 });
+     19|     expect(Object.keys((out.schema as { properties: object }).properti…
+       |                                                                            ^
+     20|   });
+     21|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  test/reply-fit.test.ts > refusalFits > replaces the whole-schema sentence rather than contradicting it
+AssertionError: expected 'Give kind: the call leaves it out, an…' not to contain 'schema is the tool\'s input schema'
+
+Expected: "schema is the tool's input schema"
+Received: "Give kind: the call leaves it out, and the tool requires it. schema is the tool's input schema. schema holds only kind: the tool's whole input schema is its inputSchema in tools/list."
+
+ ❯ test/reply-fit.test.ts:24:33
+     22|   it('replaces the whole-schema sentence rather than contradicting it'…
+     23|     const out = await refusalFits(refusal, { chars: 8_800 });
+     24|     expect(out.remediation).not.toContain("schema is the tool's input …
+       |                                 ^
+     25|     expect(out.remediation).toContain('Give kind: the call leaves it o…
+     26|     expect(out.remediation).toContain('tools/list');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  test/reply-fit.test.ts > limitOf > names where Codex's error characters came from
+AssertionError: expected 'codex 0.160.0 (adapters/codex.facts.j…' to contain 'claude-code.facts.json'
+
+Expected: "claude-code.facts.json"
+Received: "codex 0.160.0 (adapters/codex.facts.json toolResult)"
+
+ ❯ test/reply-fit.test.ts:35:24
+     33|     const limit = limitOf({ name: 'codex-mcp-client', version: '0.160.…
+     34|     expect(limit.error.chars).toBe(11_000);
+     35|     expect(limit.from).toContain('claude-code.facts.json');
+       |                        ^
+     36|   });
+     37| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+ FAIL  test/reply-fit.test.ts > fitted > asks a call that may change something once, with a tighter first room
+AssertionError: expected [ 16000 ] to deeply equal [ 12000 ]
+
+- Expected
++ Received
+
+  [
+-   12000,
++   16000,
+  ]
+
+ ❯ test/reply-fit.test.ts:46:19
+     44|       return { rows: 'y'.repeat(100_000) };
+     45|     });
+     46|     expect(rooms).toEqual([12_000]);
+       |                   ^
+     47|   });
+     48|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed | 1 passed (5)
+   Start at  01:03:13
+   Duration  3.74s (tests 97%, transform 2%, import 1%)
+

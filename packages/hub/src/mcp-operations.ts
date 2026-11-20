@@ -156,13 +156,12 @@ export class McpOperations {
         case 'call_action': return await this.callPluginAction(session!, args);
         case 'deep_show': {
           const call = showCall(args);
-          // A call that draws or patches is asked once: asking again would make a second revision.
-          const reads = !('document' in call) && !('patch' in call);
-          return asAnswered(await this.fit(limit, reads, (room, again) => canvas.show(session ? { session } : { session: null }, room === undefined ? call : { ...call, room, ...(again ? { again } : {}) })));
+          // Asked once: a draw or patch asked again would make a second revision, and even a read records the one it shows.
+          return asAnswered(await this.fit(limit, false, (room) => canvas.show(session ? { session } : { session: null }, room === undefined ? call : { ...call, room })));
         }
         case 'deep_query': return asAnswered(await this.fit(limit, true, (room) => canvas.query(session ?? null, room === undefined ? args : { ...args, room })));
-        // Asset search and fetch read the hub's libraries, which no room reaches.
-        case 'deep_kinds': return asAnswered(await this.fit(limit, true, (room) => canvas.kinds(room === undefined || args.op === 'assets' || args.op === 'fetch' ? args : { ...args, room })));
+        // Asset search and fetch read the hub's libraries, which no room reaches, and a fetch is not asked twice.
+        case 'deep_kinds': return asAnswered(args.op === 'assets' || args.op === 'fetch' ? await canvas.kinds(args) : await this.fit(limit, true, (room) => canvas.kinds(room === undefined ? args : { ...args, room })));
         case 'deep_job': return asAnswered(await this.options.control().job(args, context.call));
         case 'deep_root_plan': return await this.options.services.hosts.proposeRoot(args);
         case 'deep_status': return await this.status(session);
@@ -213,9 +212,9 @@ export class McpOperations {
    * A canvas reply held to the client's cap (#2896), asked again for a smaller page while it is over. The planted hubs
    * leave every client, or an unknown one, at the canvas core's 64 KB, or drop the row at each page's edge.
    */
-  private async fit(limit: Limit, reads: boolean, ask: (room: number | undefined, again: boolean) => Promise<Obj>): Promise<Obj> {
+  private async fit(limit: Limit, reads: boolean, ask: (room: number | undefined) => Promise<Obj>): Promise<Obj> {
     const plant = this.options.settings.plant;
-    if (plant === 'reply-cap-64kb' || (plant === 'unknown-client-64kb' && limit.from === UNKNOWN)) return ask(undefined, false);
+    if (plant === 'reply-cap-64kb' || (plant === 'unknown-client-64kb' && limit.from === UNKNOWN)) return ask(undefined);
     // A reply sent as the tool's refusal reaches the client as an error, so it is held to the error cap.
     const reply = await fitted(limit.cap, (r) => (answersAsRefusal(r) ? limit.error_cap : limit.cap), reads, ask);
     if (plant === 'pager-drops-edge-row' && typeof reply.next === 'string' && /^\d+$/.test(reply.next)) reply.next = String(Number(reply.next) + 1);

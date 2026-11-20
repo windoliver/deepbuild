@@ -1951,14 +1951,8 @@ impl CanvasSide {
             .remove("room")
             .and_then(|r| r.as_u64())
             .map(|r| r as usize);
-        // A read the hub asks again with less room replaces its first ask, so replay keeps one.
-        let again = call.remove("again").is_some();
         let doc = call.get("doc").and_then(Value::as_str).map(str::to_string);
-        let call = Value::Object(call);
-        if again && self.calls.last() == Some(&call) {
-            self.calls.pop();
-        }
-        self.calls.push(call);
+        self.calls.push(Value::Object(call));
         let Some(scenario) = self.scenario(true) else {
             self.calls.pop();
             return bad_input();
