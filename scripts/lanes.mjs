@@ -336,6 +336,11 @@ alone.push('tests/acceptance/416/interfaces/');
 // #1477's suite opens real windows and times them against the lane's rule: one file at a time, both files timed.
 alone.push('tests/acceptance/1477/');
 timed.push('tests/acceptance/1477/record.test.ts', 'tests/acceptance/1477/built.test.ts', 'tests/acceptance/1477/redraft/record.test.ts');
+// #1477.e66d9bdb runs as its blind redraft, redraft/record.test.ts, on the owner's ruling ("Yes, swap it", Nov 20): the
+// first draft knows no `missed` arm, which the amended criterion gives a table that can't show its rows, so it fails on
+// the committed record (1477/redraft/DISPUTE.md). The lanes work by file, so record.test.ts is kept by hand, and its
+// four other tests run by hand with it.
+byHand.push('tests/acceptance/1477/record.test.ts');
 // #2569's files run #1477's bench in real windows, cover one and hold it to wall-clock deadlines; main.test.ts runs
 // #1477's three timed files through affected.mjs, well over two minutes.
 alone.push('tests/acceptance/2569/');
