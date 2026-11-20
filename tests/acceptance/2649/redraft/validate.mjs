@@ -63,22 +63,26 @@ export function parseCounter(text) {
     const instructions = rec.reap ? rec.reap.instructions : rec.unread ? null : rec.exit ? rec.exit.instructions : null;
     rec.instructions = Number.isFinite(instructions) ? instructions : null;
   }
-  // benchmark.mjs countChildren: a process's child time is the sum of what it reaped, to the tick; a start with no
-  // end, an unread child, or a parent whose child time is above what the log accounts for, leaves starts unlogged.
+  // benchmark.mjs countChildren: a process's child time is the sum of what it reaped, to the tick; a parent whose
+  // child time differs from what the log accounts for started children the counter could not log (a platform binary
+  // it can't enter, a child leaving by _exit). Those are gaps: one per parent program and caller, observers exempt.
+  // An unread or still-running start is logged; it is a start with no count (a row's unread), not a gap.
   const accounted = new Map();
   for (const { parent, parentRec, time } of accruals) {
     const owner = parentRec ?? roots.get(parent);
     if (owner) accounted.set(owner, (accounted.get(owner) ?? 0n) + time);
   }
-  const uncounted = new Set();
-  const nameOf = (r) => (r.isRoot ? ROOT_CALLER : r.path);
-  for (const r of recs) if (r.unread || (!r.reap && !r.exit)) uncounted.add(r.path);
+  const gaps = new Map();
   for (const r of [...roots.values(), ...recs.filter((s) => s.reap || (s.exit && !s.unread))]) {
     const own = r.reap ? r.reap.childElapsed : r.exit.childElapsed;
-    if ((accounted.get(r) ?? 0n) !== own) uncounted.add(OBSERVERS.has(nameOf(r)) ? nameOf(r) : `a child of ${nameOf(r)}`);
+    if ((accounted.get(r) ?? 0n) === own || (!r.isRoot && OBSERVERS.has(r.path))) continue;
+    const gap = r.isRoot ? { parent: ROOT_CALLER, caller: null } : { parent: r.program, caller: r.caller };
+    gaps.set(gapKey(gap), gap);
   }
-  return { starts: recs, roots: [...roots.values()], uncounted: [...uncounted].filter((n) => !OBSERVERS.has(n)), problems };
+  return { starts: recs, roots: [...roots.values()], gaps: [...gaps.values()], problems };
 }
+
+const gapKey = ({ parent, caller }) => `${parent}\u0000${caller ?? ''}`;
 
 // One group per caller and program: the table's rows for one subject.
 export function groupStarts(starts) {
@@ -99,6 +103,32 @@ const cells = (line) => line.split('|').slice(1, -1).map((c) => {
   return /^\d[\d,_'   ]*$/.test(t) ? t.replace(SEPARATORS, '') : t;
 });
 
+// The user's ruling (2026-11-20, "Logged starts, gaps named"): where the accounting shows a parent started children
+// the counter could not log, subjects[name].unlogged names it as { parent, caller }: the parent's program and its
+// caller as the table gives them, or { parent: '<root>', caller: null } for the measured command. Every gap must be
+// named, once, every name must be a gap, and README.md must name it on a line that says "unlogged".
+function unloggedProblems(name, unlogged, gaps, readme) {
+  if (!Array.isArray(unlogged)) return [`subject ${name}: unlogged (the parents whose starts the counter could not log, [] if none) is not a list`];
+  const problems = [], named = new Set(), found = new Set(gaps.map(gapKey));
+  const show = (g) => `${g.parent}${g.caller ? ` (caller ${g.caller})` : ''}`;
+  for (const entry of unlogged) {
+    if (!nonEmpty(entry?.parent) || !(entry.caller === null || nonEmpty(entry.caller)) || (entry.parent === ROOT_CALLER) !== (entry.caller === null)) {
+      problems.push(`subject ${name}: unlogged entry ${JSON.stringify(entry)} is not { parent, caller } (caller null only for parent <root>)`);
+      continue;
+    }
+    const key = gapKey(entry);
+    if (named.has(key)) problems.push(`subject ${name}: unlogged names ${show(entry)} twice`);
+    named.add(key);
+    if (!found.has(key)) problems.push(`subject ${name}: unlogged names ${show(entry)}, but the counter's accounting shows no start it could not log under it`);
+    else if (readme !== null && !readme.split('\n').some((l) => /unlogged/i.test(l) && cellText(l).includes(entry.parent) && (entry.caller === null || cellText(l).includes(entry.caller)))) {
+      problems.push(`subject ${name}: README.md has no line saying unlogged that names ${show(entry)}`);
+    }
+  }
+  for (const g of gaps) if (!named.has(gapKey(g))) problems.push(`subject ${name}: the counter's own accounting shows ${show(g)} started children it could not log, and unlogged does not name it`);
+  return problems;
+}
+const cellText = (line) => line.replace(/[`\\]/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+
 export function tableProblems(record, dir = root) {
   const problems = [];
   if (!record || typeof record !== 'object') return ['the record is not an object'];
@@ -108,6 +138,8 @@ export function tableProblems(record, dir = root) {
   const rows = Array.isArray(record.rows) ? record.rows : [];
   if (!rows.length) problems.push('the table has no rows');
   const logs = {};
+  const readmePath = join(dir, SPIKE, 'README.md');
+  const readme = existsSync(readmePath) ? readFileSync(readmePath, 'utf8') : null;
   for (const name of SUBJECTS) {
     const subject = record.subjects?.[name];
     if (!subject) { problems.push(`subject ${name}: missing`); continue; }
@@ -119,15 +151,13 @@ export function tableProblems(record, dir = root) {
     const log = logs[name] = parseCounter(text);
     problems.push(...log.problems.map((p) => `subject ${name}: ${p}`));
     if (!log.starts.length) problems.push(`subject ${name}: ${file} holds no process start`);
-    if (log.uncounted.length) problems.push(`subject ${name}: the counter's own accounting shows starts it did not log (${log.uncounted.join(', ')}), so no table can list every start`);
+    problems.push(...unloggedProblems(name, subject.unlogged, log.gaps, readme));
     if (name === 'idle-hour') {
       if (!TIMEBASES.some(([n, d]) => tb?.numer === n && tb?.denom === d)) problems.push('counter.timebase must be the mach timebase of the host: {numer, denom} 1/1 or 125/3');
       else if (!log.roots.some((r) => (r.reap.elapsed * BigInt(tb.numer)) / BigInt(tb.denom) >= HOUR_NS)) problems.push('subject idle-hour: no measured command in the counter output ran for an hour (its reap elapsed, read at the timebase)');
     }
   }
   const seen = new Set(), totals = Object.fromEntries(SUBJECTS.map((n) => [n, 0]));
-  const readmePath = join(dir, SPIKE, 'README.md');
-  const readme = existsSync(readmePath) ? readFileSync(readmePath, 'utf8') : null;
   if (readme === null) problems.push(`${SPIKE}/README.md (the table to read) is missing`);
   const tableRows = (readme ?? '').split('\n').filter((l) => l.trim().startsWith('|')).map(cells);
   rows.forEach((row, index) => {

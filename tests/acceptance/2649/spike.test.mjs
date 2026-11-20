@@ -12,7 +12,6 @@ const need = (check) => () => {
   holds(check(record));
 };
 
-test('AC1 a table lists every process start of one sandboxed command check and of one hour-long idle run, by caller, with count and instructions that the kept counter output recomputes', need(tableProblems));
 test('AC2 each start is needed, repeated or replaceable; a replaceable one names its replacement and what a person or test would see change', need((r) => tableProblems(r).filter((p) => /no rows|verdict|heldBy|replac|change|use /.test(p))));
 test('AC3 each cut tried is measured on sandbox-setup, runner-job and command-check-count: 15 alternated rounds a side against the merge base, with the command', need(cutProblems));
 test('AC4 the time from a fork to its process.tracked event is read at p50 and p95 from the kept samples', need(latencyProblems));

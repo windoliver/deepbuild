@@ -1,18 +1,103 @@
-$ node --test tests/acceptance/2649/redraft/ac1.test.mjs  (base b4a2049e8, Node 24)
-✖ AC1 a table lists every process start of one sandboxed command check and of one hour-long idle run, by caller, with count and instructions that the kept counter output recomputes (2.05225ms)
-ℹ tests 1
+$ node --version
+v24.22.0
+$ node --test tests/acceptance/2649/*.test.mjs tests/acceptance/2649/redraft/*.test.mjs
+✖ AC1 a table lists every process start of one sandboxed command check and of one hour-long idle run, by caller, with count and instructions that the kept counter output recomputes (1.099292ms)
+✔ a well-formed spike passes (12.556584ms)
+✔ a missing record fails (0.2535ms)
+✔ the parse follows a reused pid and each kind of end (0.202084ms)
+✔ the parse finds the parent whose child time the log does not account for (0.115875ms)
+✔ a spike that names the gap the accounting shows passes (1.694542ms)
+✔ a gap under the measured command named as <root> passes (1.590083ms)
+✔ a start still running at the end is a logged start with no count, listed as unread, not a gap (1.710333ms)
+✔ a gap the accounting shows that unlogged does not name fails (1.622708ms)
+✔ an unlogged name where the accounting shows no gap fails (1.681542ms)
+✔ a gap named under the wrong caller fails (1.658667ms)
+✔ a gap named twice fails (1.742042ms)
+✔ a gap named in the record that README.md does not name fails (1.456958ms)
+✔ no unlogged list fails (2.037333ms)
+✔ an unlogged entry that is not { parent, caller } fails (1.487417ms)
+✔ a missing counter output fails (1.355708ms)
+✔ a counter output changed after the record pinned it fails (1.646708ms)
+✔ a count the log does not bear fails (1.386125ms)
+✔ instructions the log does not sum to fails (1.310958ms)
+✔ instructions of a reused pid taken from the last reap only fails (1.462375ms)
+✔ a start counted as read that has no count fails (1.618334ms)
+✔ an unread start counted as 0 instructions with no unread fails (1.522333ms)
+✔ an exit-only child dropped from the table fails (1.692625ms)
+✔ a start no row lists fails (1.592084ms)
+✔ a row for starts the log does not hold fails (2.546917ms)
+✔ a start under the wrong caller fails (1.45325ms)
+✔ a row listed twice fails (1.386792ms)
+✔ a row with no count fails (1.772541ms)
+✔ a row with no instructions fails (1.360667ms)
+✔ totalStarts the log does not bear fails (1.349292ms)
+✔ a subject missing fails (1.217583ms)
+✔ no counter command fails (1.437208ms)
+✔ main not a full hash fails (1.689333ms)
+✔ an idle run under an hour fails (1.306542ms)
+✔ an unknown timebase that would make a short run an hour fails (1.139292ms)
+✔ a start of a parent the log never shows fails (1.23775ms)
+✔ a line the counter does not write fails (1.273917ms)
+✔ a reap line cut short fails (1.291375ms)
+✔ a start the library never saw (a parent spent child time the log does not account for) fails (1.209417ms)
+✔ no README fails (1.037625ms)
+✔ a README table missing a program fails (1.100916ms)
+✔ a README table with other instructions fails (1.140125ms)
+✔ a README table with other counts fails (1.095ms)
+✔ a README that names them but is not a table fails (1.078625ms)
+✔ the changed counter output fails on the sha alone when the record is not re-pinned (1.263709ms)
+✔ a README number written with separators or in backticks still reads (1.152084ms)
+✖ AC2 each start is needed, repeated or replaceable; a replaceable one names its replacement and what a person or test would see change (1.0675ms)
+✖ AC3 each cut tried is measured on sandbox-setup, runner-job and command-check-count: 15 alternated rounds a side against the merge base, with the command (0.157834ms)
+✖ AC4 the time from a fork to its process.tracked event is read at p50 and p95 from the kept samples (0.1005ms)
+✖ AC5 the recommendation names cuts, each with a drafted criterion, or says none is worth one (0.093125ms)
+✔ a well-formed spike passes every check (7.093167ms)
+✔ a missing record fails (0.252ms)
+✔ nearest-rank percentile (0.06075ms)
+✔ table: a missing counter output fails (1.214958ms)
+✔ table: a changed counter output fails (1.480417ms)
+✔ table: a count the log does not bear fails (1.482ms)
+✔ table: instructions the log does not sum to fails (1.378708ms)
+✔ table: a start no row lists fails (1.557083ms)
+✔ table: a row with no count fails (1.804292ms)
+✔ table: a row with no verdict fails (1.597833ms)
+✔ table: a repeated row not saying what holds it fails (1.638042ms)
+✔ table: a replaceable row with no replacement fails (1.737708ms)
+✔ table: a replaceable row with no visible change fails (1.537667ms)
+✔ table: an idle run under an hour fails (1.838666ms)
+✔ table: no human-readable table fails (1.339709ms)
+✔ table: a table not naming a program fails (1.373208ms)
+✔ table: a row with no use fails (1.525709ms)
+✔ cuts: a task not measured fails (1.681791ms)
+✔ cuts: 14 rounds fails (1.492125ms)
+✔ cuts: sides not alternated fails (1.424167ms)
+✔ cuts: a round with no reading fails (1.429542ms)
+✔ cuts: no command fails (1.603333ms)
+✔ cuts: no merge base fails (1.915292ms)
+✔ latency: a missing samples file fails (1.36775ms)
+✔ latency: a p50 the samples do not give fails (1.629875ms)
+✔ latency: a p95 the samples do not give fails (1.8095ms)
+✔ latency: a changed samples file fails (2.459083ms)
+✔ latency: no command fails (1.441084ms)
+✔ recommendation: no recommendation fails (1.435458ms)
+✔ recommendation: a cut with no criterion fails (1.288ms)
+✔ recommendation: none without a reason fails (1.317583ms)
+✔ recommendation: cuts and none together fails (1.331625ms)
+✔ recommendation: none with a reason passes (1.514166ms)
+✔ cuts: an empty list of cuts tried passes (none was tried) (1.496208ms)
+ℹ tests 84
 ℹ suites 0
-ℹ pass 0
-ℹ fail 1
+ℹ pass 79
+ℹ fail 5
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 85.677
+ℹ duration_ms 128.379917
 
 ✖ failing tests:
 
 test at tests/acceptance/2649/redraft/ac1.test.mjs:6:1
-✖ AC1 a table lists every process start of one sandboxed command check and of one hour-long idle run, by caller, with count and instructions that the kept counter output recomputes (2.05225ms)
+✖ AC1 a table lists every process start of one sandboxed command check and of one hour-long idle run, by caller, with count and instructions that the kept counter output recomputes (1.099292ms)
   AssertionError [ERR_ASSERTION]: 
   no spike record at docs/spikes/2649/record.json: the spike hasn't been recorded
   + actual - expected
@@ -22,10 +107,121 @@ test at tests/acceptance/2649/redraft/ac1.test.mjs:6:1
   + ]
   - []
   
-      at TestContext.<anonymous> (file://<scratchpad>/redraft-base/tests/acceptance/2649/redraft/ac1.test.mjs:8:10)
+      at TestContext.<anonymous> (file://<export>/tests/acceptance/2649/redraft/ac1.test.mjs:8:10)
       at Test.runInAsyncScope (node:async_hooks:227:14)
       at Test.run (node:internal/test_runner/test:1402:25)
       at Test.start (node:internal/test_runner/test:1262:17)
       at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
     generatedMessage: false,
     code: 'ERR_ASSERTION',
+    actual: [ "no spike record at docs/spikes/2649/record.json: the spike hasn't been recorded" ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2649/spike.test.mjs:15:1
+✖ AC2 each start is needed, repeated or replaceable; a replaceable one names its replacement and what a person or test would see change (1.0675ms)
+  AssertionError [ERR_ASSERTION]: 
+  no spike record at docs/spikes/2649/record.json: the spike hasn't been recorded
+  + actual - expected
+  
+  + [
+  +   "no spike record at docs/spikes/2649/record.json: the spike hasn't been recorded"
+  + ]
+  - []
+  
+      at holds (file://<export>/tests/acceptance/2649/spike.test.mjs:8:36)
+      at TestContext.<anonymous> (file://<export>/tests/acceptance/2649/spike.test.mjs:11:3)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ "no spike record at docs/spikes/2649/record.json: the spike hasn't been recorded" ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2649/spike.test.mjs:16:1
+✖ AC3 each cut tried is measured on sandbox-setup, runner-job and command-check-count: 15 alternated rounds a side against the merge base, with the command (0.157834ms)
+  AssertionError [ERR_ASSERTION]: 
+  no spike record at docs/spikes/2649/record.json: the spike hasn't been recorded
+  + actual - expected
+  
+  + [
+  +   "no spike record at docs/spikes/2649/record.json: the spike hasn't been recorded"
+  + ]
+  - []
+  
+      at holds (file://<export>/tests/acceptance/2649/spike.test.mjs:8:36)
+      at TestContext.<anonymous> (file://<export>/tests/acceptance/2649/spike.test.mjs:11:3)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ "no spike record at docs/spikes/2649/record.json: the spike hasn't been recorded" ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2649/spike.test.mjs:17:1
+✖ AC4 the time from a fork to its process.tracked event is read at p50 and p95 from the kept samples (0.1005ms)
+  AssertionError [ERR_ASSERTION]: 
+  no spike record at docs/spikes/2649/record.json: the spike hasn't been recorded
+  + actual - expected
+  
+  + [
+  +   "no spike record at docs/spikes/2649/record.json: the spike hasn't been recorded"
+  + ]
+  - []
+  
+      at holds (file://<export>/tests/acceptance/2649/spike.test.mjs:8:36)
+      at TestContext.<anonymous> (file://<export>/tests/acceptance/2649/spike.test.mjs:11:3)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ "no spike record at docs/spikes/2649/record.json: the spike hasn't been recorded" ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2649/spike.test.mjs:18:1
+✖ AC5 the recommendation names cuts, each with a drafted criterion, or says none is worth one (0.093125ms)
+  AssertionError [ERR_ASSERTION]: 
+  no spike record at docs/spikes/2649/record.json: the spike hasn't been recorded
+  + actual - expected
+  
+  + [
+  +   "no spike record at docs/spikes/2649/record.json: the spike hasn't been recorded"
+  + ]
+  - []
+  
+      at holds (file://<export>/tests/acceptance/2649/spike.test.mjs:8:36)
+      at TestContext.<anonymous> (file://<export>/tests/acceptance/2649/spike.test.mjs:11:3)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ "no spike record at docs/spikes/2649/record.json: the spike hasn't been recorded" ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }

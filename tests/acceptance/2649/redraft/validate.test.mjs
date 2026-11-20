@@ -37,8 +37,8 @@ const good = () => {
   return {
     main: H, counter: { command: 'node scripts/benchmark.mjs', timebase: { numer: 125, denom: 3 } },
     subjects: {
-      'command-check': { log: 'evidence/command-check.log', sha256: sha256(checkLog), totalStarts: 4 },
-      'idle-hour': { log: 'evidence/idle-hour.log', sha256: sha256(idleLog), totalStarts: 3 },
+      'command-check': { log: 'evidence/command-check.log', sha256: sha256(checkLog), totalStarts: 4, unlogged: [] },
+      'idle-hour': { log: 'evidence/idle-hour.log', sha256: sha256(idleLog), totalStarts: 3, unlogged: [] },
     },
     rows,
   };
@@ -67,12 +67,47 @@ test('a missing record fails', () => {
 test('the parse follows a reused pid and each kind of end', () => {
   const idle = parseCounter(idleLog);
   assert.deepEqual(idle.starts.map((s) => [s.program, s.instructions]), [['ps', null], ['helper', 30], ['helper', 40]]);
-  assert.deepEqual(idle.uncounted, []);
+  assert.deepEqual(idle.gaps, []);
   const c = parseCounter(checkLog);
   assert.deepEqual(c.starts.map((s) => [s.caller, s.program, s.instructions]), [['<root>', 'sandbox-exec', 100], ['sandbox-exec', 'helper', 70], ['sandbox-exec', 'daemon', 9], ['<root>', 'ps', null]]);
 });
 
+// The ruling: sandbox-exec spent 2 ticks more child time than the log accounts for (a child it could not log).
+const gapLog = checkLog.replace(`exit 2 100 4 ${Q}`, `exit 2 100 6 ${Q}`).replace(`reap 1 2 100 10 4 ${Q}`, `reap 1 2 100 10 6 ${Q}`).replace(`reap 0 1 500 100 17 ${Q}`, `reap 0 1 500 100 19 ${Q}`);
+const SANDBOX_GAP = { parent: 'sandbox-exec', caller: '<root>' };
+const withGap = (unlogged, note = '| command-check | `<root>` | sandbox-exec | unlogged children |') => (r, f) => {
+  f['evidence/command-check.log'] = gapLog;
+  r.subjects['command-check'].unlogged = unlogged;
+  f['README.md'] = `${readmeOf(r.rows)}\n${note}\n`;
+};
+test('the parse finds the parent whose child time the log does not account for', () => {
+  assert.deepEqual(parseCounter(gapLog).gaps, [SANDBOX_GAP]);
+  assert.deepEqual(parseCounter(checkLog).gaps, []);
+});
+test('a spike that names the gap the accounting shows passes', () => assert.deepEqual(check(withGap([SANDBOX_GAP])), []));
+test('a gap under the measured command named as <root> passes', () => {
+  assert.deepEqual(check((r, f) => {
+    f['evidence/command-check.log'] = checkLog.replace(`reap 0 1 500 100 17 ${Q}`, `reap 0 1 500 100 40 ${Q}`);
+    r.subjects['command-check'].unlogged = [{ parent: '<root>', caller: null }];
+    f['README.md'] = `${readmeOf(r.rows)}\nThe measured command (\`<root>\`) started unlogged children.\n`;
+  }), []);
+});
+test('a start still running at the end is a logged start with no count, listed as unread, not a gap', () => {
+  assert.deepEqual(check((r, f) => {
+    f['evidence/command-check.log'] += 'start 2 6 /opt/h/late\n';
+    r.rows.push({ subject: 'command-check', caller: 'sandbox-exec', program: 'late', count: 1, instructions: 0, unread: 1 });
+    r.subjects['command-check'].totalStarts = 5;
+  }), []);
+});
+
 const mutants = {
+  'a gap the accounting shows that unlogged does not name': withGap([]),
+  'an unlogged name where the accounting shows no gap': (r, f) => { r.subjects['command-check'].unlogged = [SANDBOX_GAP]; f['README.md'] = `${readmeOf(r.rows)}\n| sandbox-exec | <root> | unlogged |\n`; },
+  'a gap named under the wrong caller': withGap([{ parent: 'sandbox-exec', caller: 'helper' }], '| sandbox-exec | helper | unlogged |'),
+  'a gap named twice': withGap([SANDBOX_GAP, SANDBOX_GAP]),
+  'a gap named in the record that README.md does not name': withGap([SANDBOX_GAP], ''),
+  'no unlogged list': (r) => { delete r.subjects['idle-hour'].unlogged; },
+  'an unlogged entry that is not { parent, caller }': (r) => { r.subjects['idle-hour'].unlogged = ['sandbox-exec']; },
   'a missing counter output': (r, f) => { f['evidence/command-check.log'] = null; },
   'a counter output changed after the record pinned it': (r, f) => { f['evidence/command-check.log'] += 'start 1 99 /bin/ps\nunread 1 99 0\n'; },
   'a count the log does not bear': (r) => { r.rows[2].count = 2; },
@@ -96,7 +131,6 @@ const mutants = {
   'a start of a parent the log never shows': (r, f) => { f['evidence/command-check.log'] = checkLog.replace('start 1 4 /bin/ps', 'start 77 4 /bin/ps'); },
   'a line the counter does not write': (r, f) => { f['evidence/command-check.log'] += 'started 1 4 /bin/ps\n'; },
   'a reap line cut short': (r, f) => { f['evidence/command-check.log'] = checkLog.replace(`reap 2 3 70 4 0 ${Q}`, 'reap 2 3 70'); },
-  'a start the counter never ended or saw end (still running)': (r, f) => { f['evidence/command-check.log'] += 'start 2 6 /opt/h/late\n'; r.rows.push({ subject: 'command-check', caller: 'sandbox-exec', program: 'late', count: 1, instructions: 0, unread: 1 }); r.subjects['command-check'].totalStarts = 5; },
   'a start the library never saw (a parent spent child time the log does not account for)': (r, f) => { f['evidence/command-check.log'] = checkLog.replace(`reap 0 1 500 100 17 ${Q}`, `reap 0 1 500 100 40 ${Q}`); },
   'no README': (r, f) => { f['README.md'] = null; r.__noreadme = true; },
   'a README table missing a program': (r, f) => { f['README.md'] = readmeOf(r.rows.filter((x) => x.program !== 'daemon')); },

@@ -14,6 +14,12 @@
  "subjects": {
   "command-check": {
    "log": "out/command-check.counter.log",
+   "unlogged": [
+    {
+     "parent": "sandbox-exec",
+     "caller": "<root>"
+    }
+   ],
    "sha256": "bcdce24e4874b8901f606eabdfedaec309ace126baa114d937c802ab47fb3c75",
    "totalStarts": 73,
    "sites": "out/command-check.sites.jsonl",
@@ -35,6 +41,7 @@
   },
   "idle-hour": {
    "log": "out/idle-hour.counter.log",
+   "unlogged": [],
    "sha256": "7f7391e12b9aaaae68f8dfaf1fc47627fcc7fca7dcb22728ce3536bde294db7f",
    "totalStarts": 70017,
    "sites": "out/idle-hour.sites.jsonl.gz",

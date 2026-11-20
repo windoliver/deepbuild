@@ -109,6 +109,8 @@ answer as the last" counts the starts whose answer was the one the previous star
 | idle-hour | `<root>` | `ps` | 34987 | 0 | 34987 | `scanOnce` → `table(held)`: `ps -p <held pids> -o pid=,ppid=,pgid=,lstart=` | 34985 | 34983 | replaceable |
 |  |  |  |  |  |  | `launch` → `table([pid])`: `ps -p <pid> -o lstart=` | 1 | – | needed |
 |  |  |  |  |  |  | `scanOnce` → `tokenOf`: `ps -E -ww -o command= -p <pid>` | 1 | – | needed |
+
+- command-check: unlogged starts under `sandbox-exec`, started by `<root>` (its reap counts children's time that no line logs).
 <!-- /table -->
 
 ### Per site
@@ -239,8 +241,8 @@ What they show:
 - **What `ps` costs in instructions.** `/bin/ps` is setuid root, so neither the counter nor `/usr/bin/time` can read
   it; `out/ps.json` gives CPU time per start instead, so cut A's gain is in milliseconds, not instructions.
 - **Starts inside the sandbox.** `sandbox-exec` is a platform binary, so the counter sees none of its children (the
-  sandboxed program's own forks), nor the leash's watcher, which exits by `_exit`: these are the starts the redrafted
-  acceptance test asks for and main can't log (Acceptance tests, below).
+  sandboxed program's own forks): the table names that gap (`unlogged`, the command check's `sandbox-exec`) instead of
+  listing them, by the user's ruling (Acceptance tests, below).
 - **Cut B with two empty scans**, as its drafted criterion asks, and the kernel-event fork following: neither was
   built or measured. The fork-to-`process.tracked` time was read on main only.
 - **Full suites.** The cuts ran the supervisor's tests, `tests/acceptance/236/` and `tests/acceptance/30/sandbox` only
@@ -250,19 +252,15 @@ What they show:
 
 ## Acceptance tests
 
-`node --test tests/acceptance/2649/*.test.mjs tests/acceptance/2649/redraft/*.test.mjs` (Node 24): 73 of 75 pass. The two that fail are
-both drafts of AC1's test, so AC1 is **BLOCKED**, for a person to settle:
+`node --test tests/acceptance/2649/*.test.mjs tests/acceptance/2649/redraft/*.test.mjs` (Node 24): 84 of 84 pass.
 
-- **The first draft** (`tests/acceptance/2649/spike.test.mjs`) keys the counter's `reap` and `exit` lines by PID. Over
-  the idle hour's 70,017 starts PIDs come round again, so it gives a reused PID's every start the last one's count,
-  and asks the table for sums no log-order reading gives (`idle-hour/<root>/ps`: 0 instructions, all unread, where its
-  PID-keyed sum gives 322,593,621,216, other programs' reaps landing on `ps` starts whose PIDs they reused).
-- **The blind redraft** (`tests/acceptance/2649/redraft/`, `REDRAFT.md`), written from the criterion and the counter
-  alone, reads in log order and agrees with this table's every row. It fails on its own rule that the counter's
-  accounting shows no unlogged start: on main, a sandboxed `helper` forks inside `sandbox-exec`, a platform binary
-  the counter can't enter, and the leash's watcher leaves by `_exit`, so main can't log those starts and no table
-  read from its counter lists them. A first redraft attempt ran against the wrong checkout and was discarded. The
-  first draft's committed `BASE-FAILURE.txt` carries a home-folder path; it is a test file and is left as committed.
-
-Both readings of "every process start" can't be met on main as written; the choice (accept the logged starts with
-the unloggable ones named, as this table does, or change the counter) is the user's.
+AC1's test is `tests/acceptance/2649/redraft/ac1.test.mjs`, by the user's ruling of 2026-11-20 ("Logged starts, gaps
+named"). The first draft keyed the counter's lines by PID and mis-joined PIDs reused over the idle hour; a blind
+redraft read the log in order but asked that the counter log every start, which main's counter can't (children of
+`sandbox-exec`, a platform binary it can't enter). Given both, the user ruled that the table lists every start the
+counter logs and names the parents under which its own accounting (as `benchmark.mjs` reads it) shows starts it
+could not log; the blind job then amended the redraft to that and removed the first draft's AC1 test
+(`redraft/REDRAFT.md`, Ruling). `record.json` names those parents in each subject's `unlogged`, and the table's
+foot names them: in the command check, `sandbox-exec`'s; none in the idle hour. A first redraft attempt ran against
+the wrong checkout and was discarded. The first draft's committed `BASE-FAILURE.txt` carries a home-folder path; it is
+a test file and is left as committed.

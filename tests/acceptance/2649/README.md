@@ -25,4 +25,6 @@ Not asserted, since the issue gives no number: any saving a cut must show, any s
 
 ## Criteria to tests (`spike.test.mjs`)
 
-AC1 table of every start, recomputed from the kept counter output; AC2 verdicts and what replaces and changes; AC3 cuts; AC4 latency; AC5 recommendation. Missing record, missing file, or a row with no count fails.
+AC1 table of every start, recomputed from the kept counter output (superseded, below); AC2 verdicts and what replaces and changes; AC3 cuts; AC4 latency; AC5 recommendation. Missing record, missing file, or a row with no count fails.
+
+AC1's test is `redraft/ac1.test.mjs` by the user's ruling of 2026-11-20 ("Logged starts, gaps named"); the AC1 test is removed from `spike.test.mjs`.

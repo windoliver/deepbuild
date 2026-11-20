@@ -100,20 +100,32 @@ function subject(name) {
   const open = new Map();
   const early = new Map();
   const procs = [];
+  // The counter's own accounting, as benchmark.mjs's countChildren reads it: a process's children's elapsed time
+  // (its reap or exit line) is the sum of what it reaped, to the tick, so a parent whose sum falls short started
+  // children the counter could not log. The measured command is the one the runner reaped with no start.
+  const rootAccounted = new Map();
+  const roots = [];
+  const accrue = (parentPid, time) => {
+    const owner = open.get(parentPid);
+    if (owner) owner.accounted += time; else rootAccounted.set(parentPid, (rootAccounted.get(parentPid) ?? 0n) + time);
+  };
   for (const [kind, ...f] of logText.split('\n').map((l) => l.split(' '))) {
     if (kind === 'start') {
       const [parent, child, ...path] = f;
-      const p = { parent: open.get(parent), child, path: path.join(' '), reap: null, exit: early.get(child) ?? null };
+      const p = { parent: open.get(parent), child, path: path.join(' '), reap: null, exit: early.get(child)?.instr ?? null, own: early.get(child)?.own ?? null, accounted: 0n };
       early.delete(child);
       open.set(child, p);
       procs.push(p);
     } else if (kind === 'reap' || kind === 'unread') {
       const p = open.get(f[1]);
-      if (p && kind === 'reap') p.reap = Number(f[2]);
+      accrue(f[0], kind === 'reap' ? BigInt(f[3]) + BigInt(f[4]) : BigInt(f[2])); // a reap's time is the child's and its own children's
+      if (p && kind === 'reap') { p.reap = Number(f[2]); p.own = BigInt(f[4]); }
+      if (p && kind === 'unread') p.own = null;
+      if (!p && kind === 'reap') roots.push({ pid: f[1], own: BigInt(f[4]) });
       open.delete(f[1]);
     } else if (kind === 'exit') {
       const p = open.get(f[0]);
-      if (p) p.exit = Number(f[1]); else early.set(f[0], Number(f[1]));
+      if (p) { p.exit = Number(f[1]); p.own ??= BigInt(f[2]); } else early.set(f[0], { instr: Number(f[1]), own: BigInt(f[2]) });
     }
   }
   const siteFor = (p) => siteQueue.get(p.child)?.shift();
@@ -149,7 +161,15 @@ function subject(name) {
       }
     }
   }
-  return { run, logFile: `out/${name}.counter.log`, sitesFile, groups };
+  const OBSERVERS = new Set(['/bin/ps', '/usr/sbin/lsof', '/usr/bin/log']);
+  const unlogged = new Map();
+  for (const r of roots) if ((rootAccounted.get(r.pid) ?? 0n) !== r.own) unlogged.set(ROOT, { parent: ROOT, caller: null });
+  for (const p of procs) {
+    if (p.own === null || p.accounted === p.own || OBSERVERS.has(p.path)) continue;
+    const gap = { parent: basename(p.path), caller: p.parent ? basename(p.parent.path) : ROOT };
+    unlogged.set(`${gap.parent}\0${gap.caller}`, gap);
+  }
+  return { run, logFile: `out/${name}.counter.log`, sitesFile, groups, unlogged: [...unlogged.values()] };
 }
 
 const sides = { 'command-check': subject('command-check'), 'idle-hour': subject('idle-hour') };
@@ -210,8 +230,8 @@ const record = {
   checkout: sides['command-check'].run.main,
   // The Mach timebase the counter's elapsed times are in: 1e9 / hw.tbfrequency ns a tick, 125/3 on Apple silicon.
   counter: { timebase: TIMEBASE, command: sides['command-check'].run.command, source: 'scripts/count-children.c', note: 'ps is setuid, so the kernel denies its count to the counter: its starts are listed as unread, and psCopy gives a non-setuid copy\'s reading for scale.' },
-  subjects: Object.fromEntries(Object.entries(sides).map(([name, { run, logFile, sitesFile }]) => [name, {
-    log: logFile, sha256: run.sha256, totalStarts: run.starts, sites: sitesFile, sitesSha256: sha256(read(sitesFile)),
+  subjects: Object.fromEntries(Object.entries(sides).map(([name, { run, logFile, sitesFile, unlogged }]) => [name, {
+    log: logFile, unlogged, sha256: run.sha256, totalStarts: run.starts, sites: sitesFile, sitesSha256: sha256(read(sitesFile)),
     measured: run.date, load: run.load, wallSeconds: run.wallSeconds, ...(run.durationSeconds ? { durationSeconds: run.durationSeconds } : {}),
     ...(name === 'idle-hour' ? { startsPerSecond: Number((run.starts / run.durationSeconds).toFixed(2)) } : {}),
   }])),
@@ -230,6 +250,12 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   for (const row of rows) {
     const exact = (n) => n.toLocaleString('en-US');
     row.sites.forEach((s, i) => table.push(`| ${i ? '' : row.subject} | ${i ? '' : `\`${row.caller}\``} | ${i ? '' : `\`${row.program}\``} | ${i ? '' : row.count} | ${i ? '' : exact(row.instructions)} | ${i ? '' : row.unread} | ${SITES[s.site].label} | ${s.count} | ${['scan-beat', 'scan-cleanup', 'beat-ps'].includes(s.site) ? s.sameAnswer : '–'} | ${s.verdict} |`));
+  }
+  // The parents whose children's time the counter's own accounting can't fully account for: starts it could not log.
+  for (const [name, { unlogged }] of Object.entries(record.subjects)) for (const g of unlogged) {
+    table.push(g.caller === null
+      ? `\n- ${name}: unlogged starts under the measured command \`${g.parent}\` (children whose time its reap counts but no line logs).`
+      : `${table.at(-1).startsWith('|') ? '\n' : ''}- ${name}: unlogged starts under \`${g.parent}\`, started by \`${g.caller}\` (its reap counts children's time that no line logs).`);
   }
   const cutTable = ['| Cut | Task | Median instructions, main | Median, cut | Median of the 15 rounds\' cut ÷ main | Starts in one task run, median, main → cut |', '|---|---|---|---|---|---|'];
   for (const c of cuts) for (const [task, m] of Object.entries(c.measurements)) {
