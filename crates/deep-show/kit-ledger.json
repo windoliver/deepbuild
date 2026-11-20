@@ -1,7 +1,7 @@
 {
   "core": {
     "version": "0.0.0",
-    "digest": "116ca68a38ecbb80dd54e8630a3bbd773ae147009c3483bc29c7026007be4a70",
+    "digest": "d7ddca506aefb38de043045901f4adb38f0f37556140cd91545da6379a4456a8",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -202,7 +202,7 @@
   },
   "media": {
     "version": "1.0.0",
-    "digest": "7e7b4de7eba523bc00538f0b4a154109908c50c84013b5670dfeba40af0caee5",
+    "digest": "d7a4fcd91d4d26d7bec14c48e27a80d6679c2904cd79b4fdf36484037f7c4eb3",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -239,12 +239,19 @@
   },
   "net": {
     "version": "1.0.0",
-    "digest": "e6cd239f3af4f987176c9c47388c26b34886e1610f8126c2df071ec893e4de8e",
+    "digest": "82ba89449ac621bea477655210882f25bb5b694382d98db0246e052d5ae51677",
     "verdict": "PASS",
     "parts": {
+      "fixtures": "PASS",
       "clean_rebuild": "PASS",
       "patch_fuzz": "PASS",
-      "schedule": "PASS"
+      "read_set": "PASS",
+      "order": "PASS",
+      "schedule": "PASS",
+      "repair_loop": "PASS",
+      "time_order": "PASS",
+      "catalog": "PASS",
+      "references": "PASS"
     }
   },
   "physics": {

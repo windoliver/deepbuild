@@ -1,0 +1,29 @@
+#33 AC8 offline redraft (redraft-ac8/spine-list.test.ts) at base f6ddd396f404cd5538ab7c8026b35838c7bd6cdb (main, origin/main), no new #33 code.
+Run: 2026-11-20T09:10Z (UTC), Linux, Node v24.22.0. Paths: <base> is the blind checkout under the session scratchpad; home shown as ~.
+
+$ NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/33/redraft-ac8/ --reporter=verbose
+
+ RUN  v5.0.5 <base>
+
+ ✓ tests/acceptance/33/redraft-ac8/spine-list.test.ts > AC8 #33.9c912eb7 spine.mjs list names each of the 25 spine tasks once, with its merged commit (offline) > AC8 #33.9c912eb7 the real list: 25 rows, exactly the spine tasks, each commit a commit main merged 1843ms
+ ✓ tests/acceptance/33/redraft-ac8/spine-list.test.ts > AC8 #33.9c912eb7 spine.mjs list names each of the 25 spine tasks once, with its merged commit (offline) > AC8 #33.9c912eb7 control: the same rows in another order are accepted 1883ms
+ ✓ tests/acceptance/33/redraft-ac8/spine-list.test.ts > AC8 #33.9c912eb7 spine.mjs list names each of the 25 spine tasks once, with its merged commit (offline) > AC8 #33.9c912eb7 planted wrong list rejected: a spine task left out (#44) 1557ms
+ ✓ tests/acceptance/33/redraft-ac8/spine-list.test.ts > AC8 #33.9c912eb7 spine.mjs list names each of the 25 spine tasks once, with its merged commit (offline) > AC8 #33.9c912eb7 planted wrong list rejected: a task that isn't on the spine (#33) added 2168ms
+ ✓ tests/acceptance/33/redraft-ac8/spine-list.test.ts > AC8 #33.9c912eb7 spine.mjs list names each of the 25 spine tasks once, with its merged commit (offline) > AC8 #33.9c912eb7 planted wrong list rejected: a task named twice (#13) 2076ms
+ ✓ tests/acceptance/33/redraft-ac8/spine-list.test.ts > AC8 #33.9c912eb7 spine.mjs list names each of the 25 spine tasks once, with its merged commit (offline) > AC8 #33.9c912eb7 planted wrong list rejected: a short hash for #13 1613ms
+ ✓ tests/acceptance/33/redraft-ac8/spine-list.test.ts > AC8 #33.9c912eb7 spine.mjs list names each of the 25 spine tasks once, with its merged commit (offline) > AC8 #33.9c912eb7 planted wrong list rejected: a hash with no object behind it for #13 1704ms
+ ✓ tests/acceptance/33/redraft-ac8/spine-list.test.ts > AC8 #33.9c912eb7 spine.mjs list names each of the 25 spine tasks once, with its merged commit (offline) > AC8 #33.9c912eb7 planted wrong list rejected: the merged commit's tree, not a commit, for #13 1763ms
+ ✓ tests/acceptance/33/redraft-ac8/spine-list.test.ts > AC8 #33.9c912eb7 spine.mjs list names each of the 25 spine tasks once, with its merged commit (offline) > AC8 #33.9c912eb7 planted wrong list rejected: the pull request's head, never merged itself, for #13 2015ms
+ ✓ tests/acceptance/33/redraft-ac8/spine-list.test.ts > AC8 #33.9c912eb7 spine.mjs list names each of the 25 spine tasks once, with its merged commit (offline) > AC8 #33.9c912eb7 planted wrong list rejected: the right rows from a list that exits 1 1744ms
+ ✓ tests/acceptance/33/redraft-ac8/spine-list.test.ts > AC8 #33.9c912eb7 spine.mjs list names each of the 25 spine tasks once, with its merged commit (offline) > AC8 #33.9c912eb7 planted wrong list rejected: no rows at all 0ms
+
+ Test Files  1 passed (1)
+      Tests  11 passed (11)
+   Start at  01:10:12
+   Duration  19.88s (tests 95%, transform 3%, import 2%)
+
+exit code: 0
+
+$ node node_modules/typescript/bin/tsc -p tests/acceptance/33/redraft-ac8/tsconfig.json
+(no output)
+exit code: 0
