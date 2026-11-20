@@ -1,0 +1,37 @@
+## tests/acceptance/377
+base:  Test Files 10 passed (10); Tests 30 passed | 7 skipped (37);  Duration 1035.41s (tests 100%)
+change:  Test Files 10 passed (10); Tests 30 passed | 7 skipped (37);  Duration 619.35s (tests 100%)
+failing on both:
+failing only on the change:
+failing only on the base:
+
+## tests/acceptance/379
+base:  Test Files 6 failed | 5 passed (11); Tests 9 failed | 38 passed (47);  Duration 544.32s (tests 100%)
+change:  Test Files 6 failed | 5 passed (11); Tests 9 failed | 38 passed (47);  Duration 448.18s (tests 100%)
+failing on both:
+  #379.1e889bee after 60 warm-up frames, every one of frames 61–300 of two moving writers allocates nothing, a camera move included
+  #379.2299cd3b on the reference Mac, no frame of the switch exceeds the work product's frame time (2 ms GPU, 4 ms CPU), five runs
+  #379.57ab116a the full build's registry gives every operator and every render pass a cost model whose coefficients carry a reference Mac's fingerprint
+  #379.6d4d0202 with two writers on the reference Mac where only one is over its share, only that one steps down
+  #379.7cc48ffe a change whose cold and authoring-loop readings are ten times the merge base's passes when its warm frames are within the class, the rea
+  #379.7cc48ffe a planted lane that records warm frames only fails, naming the class
+  #379.7cc48ffe each class's fixture records three timings on this reference Mac with its fingerprint: cold, warm against the class, and both authoring 
+  #379.7cc48ffe warm frames over the class fail, naming the class; the class decides (3 ms of CPU fails a data view and passes a figure)
+  #379.d5e81f8a a full-screen live 3D view with frame history stays under 256 MB on the device, at the internal scale and history window that fit
+failing only on the change:
+failing only on the base:
+
+## tests/acceptance/806
+base:  Test Files 3 failed | 3 passed (6); Tests 7 failed | 20 passed (27);  Duration 297.72s (tests 99%)
+change:  Test Files 3 failed | 3 passed (6); Tests 7 failed | 20 passed (27);  Duration 494.57s (tests 100%)
+failing on both:
+  AC1 #393 AC1: a frame held by asset_decode is waited for 1.5 s, and when it can't settle deep_show is not presented within 2 s and the check is BLOCKE
+  AC1 #393 AC1: a frame held by fallback_pipeline is waited for 1.5 s, and when it can't settle deep_show is not presented within 2 s and the check is B
+  AC1 #393 AC1: a frame held by rebuild_queue is waited for 1.5 s, and when it can't settle deep_show is not presented within 2 s and the check is BLOCK
+  AC1 #393 AC3: a settled snapshot never proves a claim that names another deliverable: the same results as the stand-in
+  AC2 live: a real `claude -p` session, with deep mcp registered, shows the figure: presented at revision 1, drawn in its layer outlined with the sessio
+  AC2 live: a real `codex exec` session, with deep mcp registered, shows the figure: presented at revision 1, drawn in its layer outlined with the sessi
+  AC3 the call is refused with no_session and no snapshot, and the record and the evidence store gain nothing
+failing only on the change:
+failing only on the base:
+
