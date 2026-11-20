@@ -27,6 +27,25 @@ export const ownRead = (path: string): boolean => path.split('/').slice(0, -1).s
 /** A test runner's config, or pytest's conftest.py: the tool finds and loads it by its own rules, wherever it lies. */
 const LOADED_BY_TOOL = /(^|\/)((vitest|vite|jest)\.config\.[cm]?[jt]s|vitest\.workspace\.[cm]?[jt]s|pytest\.ini|conftest\.py)$/;
 export type ChangesPlant = 'edited-check-approved' | 'own-files-test-folders-only';
+type Changes = { changed: readonly string[]; configs: ReadonlyMap<string, string>; scripts: boolean };
+/**
+ * Of a claim's changed files, those the test tool loads whatever a run read: a runner's config, or a file one names.
+ * They depend only on the claim's changes, so they are worked out once per claim (#2647), keyed by its changes.
+ */
+const loadedOf = new WeakMap<Changes, ReadonlySet<string>>();
+function loadedByTool(changes: Changes): ReadonlySet<string> {
+  const known = loadedOf.get(changes);
+  if (known) return known;
+  const named = (path: string): boolean => [...changes.configs].some(([config, text]) => {
+    const dir = config.includes('/') ? config.slice(0, config.lastIndexOf('/') + 1) : '';
+    if (!path.startsWith(dir)) return false;
+    const rel = path.slice(dir.length);
+    return [rel, rel.replace(/\.[cm]?[jt]s$/, '')].some((name) => new RegExp(`['"\`](\\./)?${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}['"\`]`).test(text));
+  });
+  const loaded = new Set(changes.changed.filter((path) => LOADED_BY_TOOL.test(path) || named(path)));
+  loadedOf.set(changes, loaded);
+  return loaded;
+}
 /**
  * The files a claim changed that are its check's own (#33; design: Whose checks count): among the files its runs read,
  * those under the repo's test, fixture and script folders; and, wherever they lie, the files the test tool loads by its
@@ -34,19 +53,13 @@ export type ChangesPlant = 'edited-check-approved' | 'own-files-test-folders-onl
  * file; and the root package.json when its scripts changed and the run read it. `configs` holds each runner config
  * the claim's tree has, by path, with its text; `scripts`, whether the claim changed package.json's scripts.
  */
-export function ownChanges(changes: { changed: readonly string[]; configs: ReadonlyMap<string, string>; scripts: boolean }, read: readonly string[], plant?: ChangesPlant): string[] {
+export function ownChanges(changes: Changes, read: readonly string[], plant?: ChangesPlant): string[] {
   if (plant === 'edited-check-approved') return [];
-  const { changed, configs } = changes;
   const reads = new Set(read);
-  const named = (path: string): boolean => [...configs].some(([config, text]) => {
-    const dir = config.includes('/') ? config.slice(0, config.lastIndexOf('/') + 1) : '';
-    if (!path.startsWith(dir)) return false;
-    const rel = path.slice(dir.length);
-    return [rel, rel.replace(/\.[cm]?[jt]s$/, '')].some((name) => new RegExp(`['"\`](\\./)?${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}['"\`]`).test(text));
-  });
   // A package.json whose scripts changed, which the run read: the script target it runs is the check's own.
   const script = (path: string): boolean => path === 'package.json' && changes.scripts && reads.has(path);
-  return changed.filter((path) => (reads.has(path) && ownRead(path)) || (plant !== 'own-files-test-folders-only' && (LOADED_BY_TOOL.test(path) || named(path) || script(path))));
+  const loaded = plant === 'own-files-test-folders-only' ? undefined : loadedByTool(changes);
+  return changes.changed.filter((path) => (reads.has(path) && ownRead(path)) || (loaded !== undefined && (loaded.has(path) || script(path))));
 }
 /** Whether a path is a test runner's config, whose text names the files the tool loads. */
 export const runnerConfig = (path: string): boolean => LOADED_BY_TOOL.test(path) && !path.endsWith('conftest.py');
