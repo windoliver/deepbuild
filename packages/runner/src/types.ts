@@ -47,7 +47,7 @@ export interface JobSpec {
   inputs?: JobInput[];
   /** An acceptance job's one folder it writes, in its checkout: `tests/acceptance/<issue>`. */
   writes?: string;
-  /** A work job's folder (#1527): a clone of the job's workspace that the hub made, an absolute path to a git repo, and the one folder it writes. */
+  /** A work job's folder (#1527): a folder the hub made for it, an absolute path: a copy of the job's workspace, or its dry run's empty folder, and the one folder it writes. */
   workspace?: string;
   /** The only MCP servers it gets; their tools are allowed without asking. */
   mcp?: Record<string, McpServer>;

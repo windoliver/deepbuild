@@ -18,7 +18,7 @@ import { execFile, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { basename, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import type { Delivery } from '@deepbuild/asks';
 import { briefOf, cardOf, headingOf, heldWords, linksOf, pageOf, pageText, repoLink, WORDS, type Brief, type Cost, type Held } from '@deepbuild/briefs';
 import { ulid } from '@deepbuild/record';
@@ -212,7 +212,6 @@ export class Intake implements IntakeService {
     const dry = join(this.jobDir(key), 'dry');
     rmSync(dry, { recursive: true, force: true });
     mkdirSync(dry, { recursive: true });
-    await git(dry, ['init', '-q']);
     const runner = this.o.runner();
     const job = await runner.submit({ kind: 'work', agent: RESEARCHER, workspace: realpathSync(dry), prompt: dryPrompt(words, brief), deadline_ms: JOB_MS });
     const rec = job.state === 'finished' || job.state === 'refused' ? job : await runner.wait(job.job);
@@ -448,7 +447,7 @@ export class Intake implements IntakeService {
   private async go(f: Fold, run: Run, first: boolean): Promise<void> {
     const folder = f.made!.folder;
     const finish = async (how: { verdict?: string; noop?: true; cause: string }): Promise<void> => {
-      if (how.verdict !== 'FAIL' && !how.noop) this.commit(f.key);
+      if (how.verdict !== 'FAIL' && how.verdict !== 'BLOCKED' && !how.noop) this.commit(f.key);
       await this.end(f.key, run, how);
       await this.stopped(f, [...f.runs, { ...run, ended: how.verdict ? { verdict: how.verdict } : {} }], how.cause);
     };
@@ -473,8 +472,9 @@ export class Intake implements IntakeService {
       }
     }
     if (input !== undefined) this.keep(f.key, input, 'next');
-    // The run works in a clone of the workspace under the job's own folder, since no run writes the hub's root, where
-    // workspaces are; what it made lands in the workspace only when it didn't FAIL.
+    // The run works in a copy of the workspace under the job's own folder, since no run writes the hub's root, where
+    // workspaces are; what it made lands in the workspace only when it didn't FAIL. The copy's git folder is beside it,
+    // where nothing of the run writes, so no config a run left runs when the hub's own git reads the copy.
     const work = await this.clone(f.key, folder);
     let woke = 'it has no script of its own yet';
     if (input !== undefined && existsSync(join(work, JOB_SCRIPT))) {
@@ -503,21 +503,32 @@ export class Intake implements IntakeService {
     await charge();
     return finish(await this.landed(work, folder, `a model turn per task (${woke}), spending ${dollars(spent)}`));
   }
-  /** A fresh clone of the workspace for one run, under the job's own folder. */
+  /**
+   * A fresh copy of the workspace for one run, under the job's own folder: its files in `work`, the one folder the run
+   * writes, and its git folder in `git` beside it, which the run can't write, with no link to it in `work`.
+   */
   private async clone(key: string, folder: string): Promise<string> {
     const dir = this.jobDir(key);
     mkdirSync(dir, { recursive: true });
-    rmSync(join(dir, 'work'), { recursive: true, force: true });
-    await git(dir, ['clone', '-q', '--no-hardlinks', folder, 'work']);
+    for (const name of ['work', 'git']) rmSync(join(dir, name), { recursive: true, force: true });
+    await git(dir, ['clone', '-q', '--no-hardlinks', '--separate-git-dir', join(dir, 'git'), folder, 'work']);
+    rmSync(join(dir, 'work', '.git'));
     return realpathSync(join(dir, 'work'));
   }
-  /** The run's checks' verdict on its clone; unless they FAIL, what it made is committed there and lands in the workspace. */
+  /**
+   * The run's checks' verdict on its copy; unless they FAIL, what it made is committed in the copy's own git folder,
+   * named outright so no `.git` the run left is read, and lands in the workspace.
+   */
   private async landed(work: string, folder: string, how: string): Promise<{ verdict: string; cause: string }> {
     const verdict = await this.checks(work);
-    if (verdict.verdict !== 'FAIL' && await git(work, ['status', '--porcelain'])) {
-      await git(work, ['add', '-A']);
-      await git(work, ['commit', '-q', '-m', `A run of this job: ${how}. ${verdict.verdict}`]);
-      await git(folder, ['pull', '-q', '--ff-only', work, 'HEAD']);
+    if (verdict.verdict !== 'FAIL') {
+      const repo = join(dirname(work), 'git');
+      const own = ['--git-dir', repo, '--work-tree', work];
+      if (await git(work, [...own, 'status', '--porcelain'])) {
+        await git(work, [...own, 'add', '-A']);
+        await git(work, [...own, 'commit', '-q', '-m', `A run of this job: ${how}. ${verdict.verdict}`]);
+      }
+      await git(folder, ['pull', '-q', '--ff-only', repo, 'HEAD']);
     }
     return { verdict: verdict.verdict, cause: `${how[0]!.toUpperCase()}${how.slice(1)}; ${verdict.cause}` };
   }

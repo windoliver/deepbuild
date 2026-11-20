@@ -260,7 +260,7 @@ export function pageOf(brief: Brief, heading: string): string {
   out.push('');
   if (brief.every) out.push(`**It repeats:** ${EVERY[brief.every]}, under this same approval.`, '');
   if (brief.cost) {
-    out.push(`**What it costs:** up to ${usd(brief.cost.run_usd)} a run and up to ${usd(brief.cost.month_usd)} a month, from a dry run that cost ${usd(brief.cost.dry_usd)}. A run that spends past ${usd(brief.cost.run_usd)} stops before its next model turn.`, '');
+    out.push(`**What it costs:** a line of ${usd(brief.cost.run_usd)} a run, so about ${usd(brief.cost.month_usd)} a month, from a dry run that cost ${usd(brief.cost.dry_usd)}. A run that has spent past ${usd(brief.cost.run_usd)} starts no next model turn; the turn that crossed it is already spent.`, '');
   }
   if (brief.wake) {
     out.push(`**When it wakes a model:** only when its wake test, run on each fire with no model, finds something new in ${brief.watch}. It woke on ${brief.wake.planted.name} and stayed quiet on ${brief.wake.twin.name}. Your yes fixes this test; a changed one needs a new yes:`, '');

@@ -58,7 +58,7 @@ function badWrites(spec: JobSpec): string | undefined {
   if (spec.kind === 'work') {
     if (spec.writes !== undefined || spec.inputs !== undefined || spec.checkout) return 'work job writes only its workspace, and names no inputs or checkout';
     const folder = spec.workspace ?? '';
-    return isAbsolute(folder) && existsSync(join(folder, '.git')) && statSync(folder).isDirectory() ? undefined : `work job runs in a workspace, a git repo's folder, not ${JSON.stringify(folder)}`;
+    return isAbsolute(folder) && existsSync(folder) && statSync(folder).isDirectory() ? undefined : `work job runs in a folder the hub made for it, an absolute path, not ${JSON.stringify(folder)}`;
   }
   if (spec.workspace !== undefined) return `${spec.kind} job has no workspace`;
   if (spec.kind !== 'acceptance') return spec.writes === undefined && spec.inputs === undefined ? undefined : `${spec.kind} job is read-only and names no inputs`;
@@ -1000,7 +1000,7 @@ class LocalRunner implements Runner {
     };
     // A launch that ends in `-`, the prompt on stdin, keeps it last.
     const stdin = args.at(-1) === '-' ? args.splice(-1) : [];
-    const argv = [binary.path, ...args, ...parts.confine(job.spec.mcp ?? {}, job.spec.subagents ?? {}, job.spec.writes ?? job.spec.workspace), ...stdin];
+    const argv = [binary.path, ...args, ...parts.confine(job.spec.mcp ?? {}, job.spec.subagents ?? {}, job.spec.writes ?? (job.spec.workspace ? '.' : undefined)), ...stdin];
     // The bytes it verified, or none: a file changed since is refused here and checked again next time.
     if (!this.unchanged(binary)) {
       this.verified.delete(job.spec.agent);
