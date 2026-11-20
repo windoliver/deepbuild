@@ -215,7 +215,16 @@ fn context(
     default: &Value,
 ) -> Option<Context> {
     let example = example.map(stamped);
-    if let Some((left, set)) = example.as_ref().and_then(|d| twins(d, "x1", name, default)) {
+    // A kind whose example is a gallery document (#550's net@1) holds its item under its own ID.
+    let own = |d: &Value| {
+        let of_kind = |(_, i): &(&String, &Value)| i["kind"] == kind;
+        let items = d["items"]
+            .as_object()
+            .filter(|_| d["items"]["x1"].is_null())?;
+        items.iter().find(of_kind).map(|(id, _)| id.clone())
+    };
+    let id = example.as_ref().and_then(own).unwrap_or("x1".into());
+    if let Some((left, set)) = example.as_ref().and_then(|d| twins(d, &id, name, default)) {
         return Some(("example".into(), BTreeMap::new(), left, set));
     }
     let context = example.and_then(|d| nested(kind, d));
