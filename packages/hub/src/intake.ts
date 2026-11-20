@@ -20,7 +20,7 @@ import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSyn
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import type { Delivery } from '@deepbuild/asks';
-import { briefOf, cardOf, headingOf, heldWords, linksOf, pageOf, pageText, repoLink, WORDS, type Brief, type Held } from '@deepbuild/briefs';
+import { briefOf, cardOf, headingOf, heldWords, linksOf, pageOf, pageText, repoLink, WORDS, type Brief, type Cost, type Held } from '@deepbuild/briefs';
 import { ulid } from '@deepbuild/record';
 import { bubblewrap, seatbelt } from '@deepbuild/supervisor';
 import type { IntakeDeps, IntakeService } from './intake-port.js';
@@ -166,11 +166,17 @@ export class Intake implements IntakeService {
         await this.signIn(key, f.heading, lapsed);
         answer = await this.ask(f.words, sources, projects);
       }
-      const brief = briefOf(answer, new Map(sources.map((s) => [s.at, s.text] as const)), projects.map((p) => p.id), f.words);
-      if ('refused' in brief) return await this.refuse(key, f.heading, brief.refused);
+      const drafted = briefOf(answer, new Map(sources.map((s) => [s.at, s.text] as const)), projects.map((p) => p.id), f.words);
+      if ('refused' in drafted) return await this.refuse(key, f.heading, drafted.refused);
+      let brief = drafted;
       if (!brief.tasks.length) return await this.refuse(key, f.heading, 'The brief holds no task to start.');
       const wakeless = await this.wakeProblem(f.heading, brief);
       if (wakeless) return await this.refuse(key, f.heading, wakeless);
+      if (brief.every) {
+        const cost = await this.dryRun(key, f.words, f.heading, brief);
+        if (typeof cost === 'string') return await this.refuse(key, f.heading, cost);
+        brief = { ...brief, cost };
+      }
       const page = pageOf(brief, f.heading);
       const pinned = await this.o.keep(Buffer.from(page), `the brief of ${f.heading}`);
       if (this.o.plant === 'creates-before-approval') await this.home(key, { ...f, brief, page }, 'allow');
@@ -186,7 +192,7 @@ export class Intake implements IntakeService {
         fallback: 'you', default: 'deny', provisional: false, owner: 'you', key, pinned_to: { kind: 'evidence', ref: pinned },
       }, { steps: card.steps, diff: key });
       this.cards.set(ask, key);
-      await this.o.appendCore('brief.drafted', { key, ask, heading: f.heading, brief: brief as unknown as Obj }, { subject: ask, v: 2 });
+      await this.o.appendCore('brief.drafted', { key, ask, heading: f.heading, brief: brief as unknown as Obj }, { subject: ask, v: 3 });
       // The card is the row now: the asks core lists it as needing you.
       await this.o.row(rowId(key), null);
     } catch (error) {
@@ -194,6 +200,27 @@ export class Intake implements IntakeService {
     } finally {
       this.busy.delete(key);
     }
+  }
+  /**
+   * A repeat job's dry run before its card (#1527): one model turn on the runner, your words and its tasks with the
+   * words "dry run", in an empty folder of its own under the job's folder that is no workspace and the one folder it
+   * writes; the next dry run of the same words starts it empty again. From what it reports it cost, one run may spend
+   * twice that (a dry run is a run's guess), and a month comes to that line times the most runs a month holds. One that
+   * reports no cost leaves the card without what a run or a month costs: why, as the refusal.
+   */
+  private async dryRun(key: string, words: string, heading: string, brief: Brief): Promise<Cost | string> {
+    const dry = join(this.jobDir(key), 'dry');
+    rmSync(dry, { recursive: true, force: true });
+    mkdirSync(dry, { recursive: true });
+    await git(dry, ['init', '-q']);
+    const runner = this.o.runner();
+    const job = await runner.submit({ kind: 'work', agent: RESEARCHER, workspace: realpathSync(dry), prompt: dryPrompt(words, brief), deadline_ms: JOB_MS });
+    const rec = job.state === 'finished' || job.state === 'refused' ? job : await runner.wait(job.job);
+    if (rec.state !== 'finished' || typeof rec.cost_usd !== 'number') {
+      return `The card of "${heading}" can't say what a run or a month costs: its dry run ${rec.job} ${rec.state !== 'finished' ? `ended ${rec.state}${rec.refused ? ` (${rec.refused})` : ''}` : 'reported no cost'}, and a job that repeats needs its cost per run and per month on its card.`;
+    }
+    const run = Math.max(0.01, Math.ceil(rec.cost_usd * 200) / 100);
+    return { dry_usd: rec.cost_usd, run_usd: run, month_usd: Math.round(run * Math.max(1, Math.floor((30 * DAY) / PERIOD[brief.every!])) * 100) / 100 };
   }
   /**
    * Why a repeat job's card can't be raised, if it can't: one that fires more than once a day with no wake test, or a
@@ -456,14 +483,25 @@ export class Intake implements IntakeService {
       if (ran.code !== SHAPE_CHANGED) return finish({ verdict: 'FAIL', cause: `Its script ${JOB_SCRIPT} ${ran.said}` });
       woke = `its script ${JOB_SCRIPT} said its input's shape changed${ran.err ? `: ${ran.err.slice(0, 300)}` : ''}`;
     }
-    for (const t of f.brief!.tasks) {
+    // Each turn's reported cost is the run's spend, charged against it; past its line, it starts no next turn.
+    const line = f.brief!.cost?.run_usd;
+    let spent = 0;
+    const charge = (): Promise<void> => (spent > 0 ? this.o.appendCore('spend.charged', { run: run.run, usd: Math.round(spent * 1e6) / 1e6 }, { subject: run.run }) : Promise.resolve());
+    for (const [i, t] of f.brief!.tasks.entries()) {
+      if (i > 0 && line !== undefined && spent > line) {
+        await charge();
+        return finish({ verdict: 'FAIL', cause: `It spent ${dollars(spent)} on its model turns, past the ${dollars(line)} a run may spend, so it stopped before its next model turn.` });
+      }
       const rec = await this.o.runner().submit({ kind: 'work', agent: RESEARCHER, workspace: work, grant: { read: [this.jobDir(f.key)] }, prompt: turnPrompt(f, t.title, t.criteria, input !== undefined ? join(this.jobDir(f.key), 'next') : undefined, woke), deadline_ms: TURN_MS })
         .then((job) => (job.state === 'finished' || job.state === 'refused' ? job : this.o.runner().wait(job.job)));
+      spent += rec.cost_usd ?? 0;
       if (rec.state !== 'finished') {
+        await charge();
         return finish({ verdict: 'FAIL', cause: `Its model turn ${rec.job} for "${t.title}" ended ${rec.state}${rec.refused ? `: ${rec.refused}` : rec.stop ? `: ${rec.stop.cause}` : ''}.` });
       }
     }
-    return finish(await this.landed(work, folder, `a model turn per task (${woke})`));
+    await charge();
+    return finish(await this.landed(work, folder, `a model turn per task (${woke}), spending ${dollars(spent)}`));
   }
   /** A fresh clone of the workspace for one run, under the job's own folder. */
   private async clone(key: string, folder: string): Promise<string> {
@@ -645,6 +683,17 @@ function turnPrompt(f: Fold, task: string, criteria: readonly string[], input: s
     input ? `This run's input, as it read it: ${input} (read it; never write it).` : 'This job reads no input of its own.',
     `The model was woken because ${woke}.`,
     `Leave ${JOB_SCRIPT}, a POSIX sh script run as \`sh ${JOB_SCRIPT} <input>\` in this folder with no model and no network, that does the whole job on a new input and exits ${SHAPE_CHANGED} when the input's shape is not one it knows; and at least one check in ${CHECKS}/*.sh, run here the same way, that exits 0 only when the result is right. Never change ${WAKE_FILE}.`,
+  ].join('\n');
+}
+/** Dollars as a card says them: whole dollars bare, else to the cent. */
+const dollars = (n: number): string => `$${Number.isInteger(n) ? n : n.toFixed(2)}`;
+/** The dry run's prompt: your words and the brief's tasks, done once as a dry run in a folder of its own, to learn what a run costs. */
+function dryPrompt(words: string, brief: Brief): string {
+  return [
+    'DeepBuild dry run of a job that repeats: do one run of it as a dry run, in this empty folder of its own, and change nothing outside it.',
+    `Your words: ${words}`,
+    `Its tasks, in order: ${brief.tasks.map((t) => t.title).join('; ')}.`,
+    'Say in a line what a run would make.',
   ].join('\n');
 }
 /** The run's scope in #1332's words: the tasks by number, Claude Code, one at a time. */
