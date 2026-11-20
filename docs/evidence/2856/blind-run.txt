@@ -1,0 +1,144 @@
+#2856: the blind suite (tests/acceptance/2856) run on this change after one merge of main; one run per file.
+
+Each file as the suite README says, from the checkout with the pinned toolchain first on PATH:
+  NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 scripts/lease \
+    node node_modules/vitest/vitest.mjs run --root tests/acceptance/2856 <file> --testTimeout=3600000 --hookTimeout=180000 --silent=false
+deep-show (full) and deep-logic were built beforehand, as was the merge base's deep-show (1a4b7d065b1e, main when
+merged) in target/acceptance-2856-base/1a4b7d065b1e from git archive, as the suite builds it. The Mac is shared
+(18 cores); each run gives its start and end times and load averages. Local paths are redacted. The suite's AC1
+reading prints probe()'s answer cut at 400 characters; the test checks its stopped field in full.
+
+== stopped.test.ts (AC1), first run: both tests
+
+Thu Nov 19 18:03:47 PST 2026
+18:03  up 6 days,  4:12, 19 users, load averages: 148.39 154.58 157.71
+scripts/lease: no hub here, so the run went unleased.
+ RUN  v5.0.5 <checkout>/tests/acceptance/2856
+the lab (planted web_plays_on_failure): the frame call asked for 5.0117 s threw at step 300; at the next display frame paused false, notices []; 300 animation callbacks asked for in the 5.1 s after, ended 1; probe() {"step":600,"step_hash":{"field":"84c77cfefd43d6e7","scorer":"a7ca1349517e14c0"},"checkpoint_hashes":{"field":[{"step":60,"hash":"4ae18a1fad0c2311"},{"step":120,"hash":"e54647d19c18c568"},{"step":180,"hash":"050f2eaf92ec36b5"},{"step":240,"hash":"29e212e1a4a83b48"},{"step":300,"hash":"68b266b6fff0a20f"},{"step":360,"hash":"36899070d07de753"},{"step":420,"hash":"8c4b0c42897a0881"},{"step":480,"hash
+AC1 #2856.4a55999e the planted player's failures:
+  the lab (planted web_plays_on_failure): after the core's frame call threw at step 300, paused reads false at the next display frame, not true
+  the lab (planted web_plays_on_failure): after the throw at step 300, the page shows 0 notices of kind stopped at the next display frame, not one; its notices: []
+  the lab (planted web_plays_on_failure): in the 5.1 s after the throw at step 300, the page asked for 300 animation callbacks, not 0
+  the lab (planted web_plays_on_failure): ended fired 1 time(s) after the throw at step 300
+  the lab (planted web_plays_on_failure): after the throw at step 300, probe() answers stopped = null, not one naming step 300 ({step: 300, …})
+ ❯ stopped.test.ts (2 tests | 1 failed) 1535326ms
+   ❯ AC1 #2856.4a55999e a throw from the core while the lab plays stops the play, with a notice naming the step and the failure (2)
+     × AC1 #2856.4a55999e the core's frame call thrown at step 300: paused by the next display frame with one stopped notice naming step 300 and the shim's message, no animation callback asked for in the 5 s after, no ended, probe().stopped at step 300 1029193ms
+ FAIL  stopped.test.ts > AC1 #2856.4a55999e a throw from the core while the lab plays stops the play, with a notice naming the step and the failure > AC1 #2856.4a55999e the core's frame call thrown at step 300: paused by the next display frame with one stopped notice naming step 300 and the shim's message, no animation callback asked for in the 5 s after, no ended, probe().stopped at step 300
+Error: ENOTEMPTY, Directory not empty: '$TMPDIR/deep-172-chrome-1o501C'
+ ❯ stop ../172/helpers.ts:728:3
+ ❯ Chrome.close ../172/helpers.ts:723:5
+ ❯ closePage helpers.ts:145:3
+ ❯ stoppedFailures helpers.ts:362:3
+ ❯ stopped.test.ts:41:10
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+   Start at  18:03:48
+   Duration  1536.57s (tests 100%)
+[vitest-pool]: Timeout terminating forks worker for test files <checkout>/tests/acceptance/2856/stopped.test.ts.
+exit 1
+Thu Nov 19 22:48:19 PST 2026
+22:48  up 6 days,  8:57, 19 users, load averages: 126.48 98.87 76.45
+
+== stopped.test.ts (AC1), the right-program test run again once (-t "the core's frame call thrown at step 300"), after the first run's Chrome cleanup failed before any reading
+
+Thu Nov 19 23:43:34 PST 2026
+23:43  up 6 days,  9:52, 19 users, load averages: 294.15 281.05 263.80
+scripts/lease: no hub here, so the run went unleased.
+ RUN  v5.0.5 <checkout>/tests/acceptance/2856
+the lab: the frame call asked for 5.0124 s threw at step 300; at the next display frame paused true, notices [{"kind":"stopped","text":"The piece stopped at step 300: deep test shim: the frame call failed on purpose","shown":true}]; 0 animation callbacks asked for in the 5.2 s after, ended 0; probe() {"step":300,"step_hash":{"field":"0773e37a19848cb2","scorer":"161f4c0b1a18a050"},"checkpoint_hashes":{"field":[{"step":60,"hash":"4ae18a1fad0c2311"},{"step":120,"hash":"e54647d19c18c568"},{"step":180,"hash":"050f2eaf92ec36b5"},{"step":240,"hash":"29e212e1a4a83b48"},{"step":300,"hash":"68b266b6fff0a20f"}],"scorer":[{"step":0,"hash":"1947f5a443527a5c"},{"step":60,"hash":"66f0651136ff7c88"},{"step":1
+ Test Files  1 passed (1)
+      Tests  1 passed | 1 skipped (2)
+   Start at  23:43:36
+   Duration  1985.77s (tests 100%)
+exit 0
+Fri Nov 20 00:16:42 PST 2026
+ 0:16  up 6 days, 10:25, 19 users, load averages: 228.07 207.33 201.11
+
+== refused.test.ts (AC2)
+
+Thu Nov 19 18:03:47 PST 2026
+18:03  up 6 days,  4:12, 19 users, load averages: 148.39 154.58 157.71
+scripts/lease: no hub here, so the run went unleased.
+ RUN  v5.0.5 <checkout>/tests/acceptance/2856
+the page whose element script was served as text/plain: <deep-player> shows "The player hasn't started: the host may have changed its script or served it under the wrong type. Open the fallback page" in 1 line(s), links [{"href":"http://127.0.0.1:60777/942d4548d3662d37a1181fc25272dd10b86c6ceb8c1c69ff11c9e7e4bf35bbae.html","text":"Open the fallback page","shown":true}]
+the page whose element script was served as text/plain: the link, clicked, led to /942d4548d3662d37a1181fc25272dd10b86c6ceb8c1c69ff11c9e7e4bf35bbae.html, in a page of its own
+the page whose element script was served with one byte changed (byte 27002, 0x0a to 0x20): <deep-player> shows "The player hasn't started: the host may have changed its script or served it under the wrong type. Open the fallback page" in 1 line(s), links [{"href":"http://127.0.0.1:60823/942d4548d3662d37a1181fc25272dd10b86c6ceb8c1c69ff11c9e7e4bf35bbae.html","text":"Open the fallback page","shown":true}]
+the page whose element script was served with one byte changed (byte 27002, 0x0a to 0x20): the link, clicked, led to /942d4548d3662d37a1181fc25272dd10b86c6ceb8c1c69ff11c9e7e4bf35bbae.html, in a page of its own
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  18:03:49
+   Duration  1029.55s (tests 100%)
+exit 0
+Thu Nov 19 18:20:59 PST 2026
+18:20  up 6 days,  4:30, 19 users, load averages: 131.99 117.57 129.24
+
+== untouched.test.ts (AC3)
+
+Thu Nov 19 18:03:48 PST 2026
+18:03  up 6 days,  4:12, 19 users, load averages: 148.39 154.58 157.71
+scripts/lease: no hub here, so the run went unleased.
+ RUN  v5.0.5 <checkout>/tests/acceptance/2856
+the lab, served untouched: the index page's line "The player hasn't started: the host may have changed its script or served it under the wrong type. Open the fallback page"; the page's text at the first view "", at ready ""
+the lab, served untouched (planted web_element_leaves_line): the index page's line "The player hasn't started: the host may have changed its script or served it under the wrong type. Open the fallback page"; the page's text at the first view "The player hasn't started: the host may have changed its script or served it under the wrong type. Open the fallback page", at ready "The player hasn't started: the host may have changed its script or served it under the wrong type. Open the fallback page"
+AC3 #2856.168ff773 the planted element's failures:
+  the lab, served untouched (planted web_element_leaves_line): at the first view the page's text holds the line "The player hasn't started: the host may have changed its script or served it under the wrong type. Open the fallback page"
+  the lab, served untouched (planted web_element_leaves_line): at ready the page's text holds the line "The player hasn't started: the host may have changed its script or served it under the wrong type. Open the fallback page"
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  18:03:49
+   Duration  1515.05s (tests 100%)
+exit 0
+Thu Nov 19 18:29:04 PST 2026
+18:29  up 6 days,  4:38, 19 users, load averages: 321.63 243.55 186.26
+
+== unchanged.test.ts (AC4), against the merge base built from git archive
+
+Thu Nov 19 18:09:16 PST 2026
+18:09  up 6 days,  4:18, 19 users, load averages: 117.64 134.20 147.54
+scripts/lease: no hub here, so the run went unleased.
+ RUN  v5.0.5 <checkout>/tests/acceptance/2856
+AC4 #2856.f84ce6b9 comparing with the merge base 1a4b7d065b1e
+AC4 #2856.f84ce6b9 content-security policies: this checkout ["default-src 'none'; script-src 'self' 'wasm-unsafe-eval' 'sha256-R4c+aLhHUcfMscUk4BaCrx5uaVmH/NhcYr+zikISOnQ='; connect-src 'self'; img-src 'self'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"]; the merge base 1a4b7d065b1e ["default-src 'none'; script-src 'self' 'wasm-unsafe-eval' 'sha256-R4c+aLhHUcfMscUk4BaCrx5uaVmH/NhcYr+zikISOnQ='; connect-src 'self'; img-src 'self'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"]
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  18:09:17
+   Duration  1271.54s (tests 100%)
+exit 0
+Thu Nov 19 18:30:28 PST 2026
+18:30  up 6 days,  4:39, 19 users, load averages: 403.56 288.77 209.01
+
+== taste.test.ts (AC5)
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/2856
+ ❯ taste.test.ts (1 test | 1 failed) 72ms
+   ❯ AC5 #2856.a9fe9384 the stopped notice over the held frame, the page whose script was refused, and the one taste call on them (1)
+     × AC5 #2856.a9fe9384 the recorded call on exactly the check run's pictures says they read right; with none the run is INCONCLUSIVE, never PASS 56ms
+ FAIL  taste.test.ts > AC5 #2856.a9fe9384 the stopped notice over the held frame, the page whose script was refused, and the one taste call on them > AC5 #2856.a9fe9384 the recorded call on exactly the check run's pictures says they read right; with none the run is INCONCLUSIVE, never PASS
+AssertionError: INCONCLUSIVE: no taste call is recorded: show the owner
+  docs/evidence/2856/player-stopped.png  c252b3e3c380303cf2075571f7708f8a5fcb31b33c5fbc853c6e69cd33e62848
+  docs/evidence/2856/player-script-refused.png  de1573e611efe642bf4eb9e80e4206d89f713519c15e05cc4da1e8b9ab6b5366
+and record the answer in tests/acceptance/2856/TASTE.json (README: The taste call); this is not a pass
+ ❯ inconclusive ../169/helpers.ts:87:17
+ ❯ taste.test.ts:25:29
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  22:49:09
+   Duration  2.08s (transform 62%, import 28%, tests 10%, worker 1%)
+exit 1
+
+== docs/evidence/2856/shoot.test.mjs (the AC5 pictures)
+
+Thu Nov 19 18:03:49 PST 2026
+18:03  up 6 days,  4:12, 19 users, load averages: 148.39 154.58 157.71
+scripts/lease: no hub here, so the run went unleased.
+ RUN  v5.0.5 <checkout>/docs/evidence/2856
+player-stopped.png  c252b3e3c380303cf2075571f7708f8a5fcb31b33c5fbc853c6e69cd33e62848
+player-script-refused.png  de1573e611efe642bf4eb9e80e4206d89f713519c15e05cc4da1e8b9ab6b5366
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  18:03:50
+   Duration  1034.05s (tests 100%)
+exit 0
+Thu Nov 19 18:21:04 PST 2026
+18:21  up 6 days,  4:30, 19 users, load averages: 136.08 118.66 129.56

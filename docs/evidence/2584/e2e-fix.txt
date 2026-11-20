@@ -1,0 +1,24 @@
+== FIX at committed HEAD: repo <repo> at 45a251f47, dir /tmp/e2584-7tnf, node v24.22.0
+-- lsof for a free port now:
+lsof: WARNING: can't stat() hfs file system /private/tmp/e2584-7tnf/locked/mnt
+      Output information may be incomplete.
+      assuming "dev=1000016" from mount table
+   (lsof exit 1)
+blocker listening on 3000 pid 96771
+-- lsof for 3000 (taken):
+lsof: WARNING: can't stat() hfs file system /private/tmp/e2584-7tnf/locked/mnt
+      Output information may be incomplete.
+      assuming "dev=1000016" from mount table
+p96771
+f12
+   (lsof exit 0)
+-- hub (pid 97368): {"v":1,"ready":true,"pid":97368,"socket":"/tmp/e2584-7tnf/root/hub.sock","start":"01M7WARB0X5JTRVMTJ6H0JWJMC"}
+-- deep env up --json in the worktree:
+{"status":"ready","run":"run:01M7WARBRA29E16KR5N9K3B0T9","worktree":"/private/tmp/e2584-7tnf/wt","ports":{"web":3001}}
+   (deep env up exit 0)
+-- deep env down --json:
+{"run":"run:01M7WARBRA29E16KR5N9K3B0T9","stopped":[3044],"left":[]}
+   (deep env down exit 0)
+-- after cleanup, lsof for a free port:
+   (lsof exit 1)
+-- hub stderr tail:

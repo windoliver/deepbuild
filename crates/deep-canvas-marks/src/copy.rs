@@ -335,6 +335,33 @@ pub fn missing_steps(
     out
 }
 
+/// #194: the missing span an array path's key is in at step `k`, as the step the span began and
+/// the key the step shows; none when the table holds that key in `locale`.
+pub fn missing_at(
+    doc: &Map<String, Value>,
+    locale: &str,
+    name: &str,
+    path: &str,
+    k: i64,
+) -> Option<(i64, f64)> {
+    let (form, index) = element_path(path)?;
+    let array = doc.get("arrays")?.get(form)?;
+    let t = table(doc, locale_for(doc, locale, name), name);
+    let has = |v: f64| {
+        v.fract() == 0.0
+            && v.is_finite()
+            && t.is_some_and(|t| pick(t, v as i64, || "other").is_some())
+    };
+    let mut span = None;
+    for (step, v) in element_steps(array, index)
+        .into_iter()
+        .take_while(|(s, _)| *s <= k)
+    {
+        span = (!has(v)).then(|| (span.map_or(step, |(began, _)| began), v));
+    }
+    span
+}
+
 /// The code the fit check fails a key with, and the one it refuses an argument with no widest.
 pub const FIT: &str = "copy.fit";
 pub const NO_WIDEST: &str = "copy.widest_missing";
@@ -704,8 +731,9 @@ impl Frame<'_> {
     }
 }
 
-/// Each keyed text's `copy.missing` a frame at `t` in `locale` raises: each lookup whose key
-/// begins to be missing at the frame's step; every one at check (`t` none).
+/// Each keyed text's `copy.missing` a frame at `t` in `locale` raises: each lookup whose key is
+/// missing at the frame's step, naming the step its span began (#194); every span at check (`t`
+/// none).
 pub fn raised_at(doc: &Map<String, Value>, t: Option<i64>, locale: &str) -> Vec<Issue> {
     let mut out = Vec::new();
     let items = doc
@@ -726,21 +754,26 @@ pub fn raised_at(doc: &Map<String, Value>, t: Option<i64>, locale: &str) -> Vec<
                     .and_then(|(form, _)| doc.get("arrays")?.get(form)?["every"].as_i64())
                     .unwrap_or(1)
                     .max(1);
-                for (step, value) in missing_steps(doc, locale, name, key) {
-                    if t.is_none_or(|t| t.div_euclid(every) == step) {
-                        let m = Missing {
-                            table: name.into(),
-                            key: value as i64,
-                            array: key.into(),
-                            step,
-                        };
-                        out.push(missing_issue(
-                            id,
-                            &format!("items/{id}/params/{field}"),
-                            &m,
-                            None,
-                        ));
-                    }
+                // At check every span a key is missing; a frame its own key's span, if it's in one.
+                let spans = match t {
+                    None => missing_steps(doc, locale, name, key),
+                    Some(t) => missing_at(doc, locale, name, key, t.div_euclid(every))
+                        .into_iter()
+                        .collect(),
+                };
+                for (step, value) in spans {
+                    let m = Missing {
+                        table: name.into(),
+                        key: value as i64,
+                        array: key.into(),
+                        step,
+                    };
+                    out.push(missing_issue(
+                        id,
+                        &format!("items/{id}/params/{field}"),
+                        &m,
+                        None,
+                    ));
                 }
             }
         }
@@ -967,6 +1000,16 @@ mod tests {
         .clone()
     }
 
+    /// `d` with a caption that shows `loot[rules.item]`.
+    fn caption(d: &Map<String, Value>) -> Map<String, Value> {
+        let mut c = d.clone();
+        c.insert(
+            "items".into(),
+            json!({"cap": {"kind": "text@1", "params": {"text": {"copy": "loot[rules.item]"}}}}),
+        );
+        c
+    }
+
     #[test]
     fn a_key_shows_its_plural_form_by_value_in_each_locale_and_a_missing_one_raises() {
         let en = json!({"4": "four", "17": {"one": "You found {0} gold coin", "other": "You found {0} gold coins"}, "9": "nine"});
@@ -1000,6 +1043,18 @@ mod tests {
             }]
         );
         assert_eq!(missing_steps(&d, "en", "loot", "rules.item"), [(2, 99.0)]);
+        // #194: a frame inside the span raises it too, naming the step it began.
+        assert_eq!(missing_at(&d, "en", "loot", "rules.item", 1), None);
+        assert_eq!(
+            missing_at(&d, "en", "loot", "rules.item", 2),
+            Some((2, 99.0))
+        );
+        assert_eq!(
+            missing_at(&d, "en", "loot", "rules.item", 7),
+            Some((2, 99.0))
+        );
+        let raised = |k: i64| raised_at(&caption(&d), Some(k * every), "en").len();
+        assert_eq!([raised(1), raised(2), raised(7)], [0, 1, 1]);
         // Sorting the table again changes nothing: a key is found by its value.
         let sorted = doc(json!({"4": "four", "9": "nine", "17": "seventeen"}));
         let f = Frame {

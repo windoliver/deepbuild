@@ -1,0 +1,376 @@
+{
+  "name": "merge",
+  "items": {
+    "a": {
+      "kind": "path@1",
+      "params": {
+        "verbs": [
+          "M",
+          "L"
+        ],
+        "pts": [
+          -20,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    "b": {
+      "kind": "path@1",
+      "params": {
+        "verbs": [
+          "M",
+          "L"
+        ],
+        "pts": [
+          0,
+          -20,
+          0,
+          0
+        ]
+      }
+    },
+    "c1": {
+      "kind": "path@1",
+      "params": {
+        "verbs": [
+          "M",
+          "L"
+        ],
+        "pts": [
+          0,
+          0,
+          6.25,
+          0
+        ]
+      }
+    },
+    "c2": {
+      "kind": "path@1",
+      "params": {
+        "verbs": [
+          "M",
+          "L"
+        ],
+        "pts": [
+          6.25,
+          0,
+          16.25,
+          0
+        ]
+      }
+    }
+  },
+  "item": {
+    "kind": "logic@1",
+    "params": {
+      "program": "9352f4c8368b9734c8e1c479a3b55d384d5901d189bbdd72bfde713d43da95a0",
+      "step_rate": 10,
+      "writes": {
+        "pos": {
+          "type": "vec2",
+          "count": 2
+        },
+        "heading": {
+          "type": "f64",
+          "count": 2
+        },
+        "speed": {
+          "type": "f64",
+          "count": 2
+        },
+        "state": {
+          "type": "i32",
+          "count": 2
+        },
+        "fork": {
+          "type": "f64",
+          "count": 2
+        },
+        "load": {
+          "type": "vec3",
+          "count": 2
+        }
+      },
+      "lanes": {
+        "graph": {
+          "paths": [
+            "a",
+            "b",
+            "c1",
+            "c2"
+          ],
+          "two_way": [
+            "a",
+            "b",
+            "c1",
+            "c2"
+          ],
+          "speed": {
+            "a": 2,
+            "b": 2,
+            "c1": 2,
+            "c2": 2
+          },
+          "bays": {
+            "dock.e": [
+              16.25,
+              0
+            ],
+            "park.s": [
+              0,
+              -20
+            ],
+            "park.w": [
+              -20,
+              0
+            ],
+            "rack.m": [
+              6.25,
+              0
+            ]
+          }
+        },
+        "vehicle": {
+          "length": 2,
+          "width": 1,
+          "gap": 0.5,
+          "speed": 2,
+          "accel": 1,
+          "decel": 1
+        }
+      }
+    }
+  },
+  "track": [],
+  "steps": 220,
+  "expect": {
+    "arrays": {
+      "0": {
+        "pos": [
+          [
+            -19.995,
+            0
+          ],
+          [
+            0,
+            -19.995
+          ]
+        ]
+      },
+      "20": {
+        "pos": [
+          [
+            -17.8,
+            0
+          ],
+          [
+            0,
+            -17.8
+          ]
+        ]
+      },
+      "40": {
+        "pos": [
+          [
+            -13.8,
+            0
+          ],
+          [
+            0,
+            -13.8
+          ]
+        ]
+      },
+      "60": {
+        "pos": [
+          [
+            -9.8,
+            0
+          ],
+          [
+            0,
+            -9.8
+          ]
+        ]
+      },
+      "80": {
+        "pos": [
+          [
+            -5.8,
+            0
+          ],
+          [
+            0,
+            -5.8
+          ]
+        ]
+      },
+      "87": {
+        "pos": [
+          [
+            -4.4,
+            0
+          ],
+          [
+            0,
+            -4.4
+          ]
+        ]
+      },
+      "109": {
+        "pos": [
+          [
+            0,
+            0
+          ],
+          [
+            0,
+            -2.25
+          ]
+        ],
+        "state": [
+          1,
+          2
+        ]
+      },
+      "115": {
+        "pos": [
+          [
+            1.2,
+            0
+          ],
+          [
+            0,
+            -2.25
+          ]
+        ]
+      },
+      "120": {
+        "pos": [
+          [
+            2.2,
+            0
+          ],
+          [
+            0,
+            -2.25
+          ]
+        ],
+        "state": [
+          1,
+          2
+        ]
+      },
+      "125": {
+        "pos": [
+          [
+            3.2,
+            0
+          ],
+          [
+            0,
+            -2.25
+          ]
+        ]
+      },
+      "132": {
+        "pos": [
+          [
+            4.6,
+            0
+          ],
+          [
+            0,
+            -2.25
+          ]
+        ],
+        "state": [
+          1,
+          2
+        ]
+      },
+      "133": {
+        "pos": [
+          [
+            4.8,
+            0
+          ],
+          [
+            0,
+            -2.245
+          ]
+        ],
+        "state": [
+          1,
+          1
+        ]
+      },
+      "140": {
+        "pos": [
+          [
+            6.2,
+            0
+          ],
+          [
+            0,
+            -1.93
+          ]
+        ]
+      },
+      "160": {
+        "pos": [
+          [
+            10.2,
+            0
+          ],
+          [
+            1.35,
+            0
+          ]
+        ]
+      },
+      "180": {
+        "pos": [
+          [
+            14.2,
+            0
+          ],
+          [
+            5.19875,
+            0
+          ]
+        ]
+      },
+      "200": {
+        "pos": [
+          [
+            16.2496875,
+            0
+          ],
+          [
+            6.25,
+            0
+          ]
+        ]
+      },
+      "219": {
+        "pos": [
+          [
+            16.25,
+            0
+          ],
+          [
+            6.25,
+            0
+          ]
+        ]
+      }
+    },
+    "tolerance": {
+      "abs": 0.000001
+    }
+  },
+  "answer": "Lanes a (from park.w, 20 m west) and b (from park.s, 20 m south) meet c1 at the junction J (0, 0), whose zone reaches (2 + 0.5)/2 = 1.25 m along each; c1.0 is [1.25, 3.75] along c1. Both vehicles start at rest, 2 m/s, 1 m/s² each way, horizon 2 × 0.1 + 2²/2 = 2.2 m, so both ask for J with c1.0 at step 88; vehicle 0 asks first and takes them, vehicle 1 waits with its front at J's zone, centre (0, −2.25), from 10.875 s. Vehicle 0 runs on unchecked to dock.e (36.25 m); its rear passes the end of c1.0 at 13.375 s, inside step 133, and vehicle 1 goes in that step, on to rack.m from rest at 13.3 s."
+}
