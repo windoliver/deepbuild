@@ -959,6 +959,10 @@ alone.push('tests/acceptance/192/packs/', 'tests/acceptance/192/packs-redraft-ac
 // in its own kept folder and judges a 16 MiB asset's validation on the reference Mac.
 alone.push('tests/acceptance/416/layouts/');
 timed.push('tests/acceptance/416/layouts/budgets.test.ts');
+// #981's files (blind) each build deep-logic and #416's wat assembler; ac7-hosts starts headless Chrome, and
+// ac8-budget judges a step and a route search on the reference Mac.
+alone.push('tests/acceptance/981/');
+timed.push('tests/acceptance/981/ac8-budget.test.ts');
 
 // #1624: this live session spends plan usage and is explicitly run by hand, not as a skipped unit test.
 byHand.push('tests/acceptance/1330/start.live.test.ts');
