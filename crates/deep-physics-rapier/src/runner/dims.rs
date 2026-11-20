@@ -8,13 +8,31 @@ use deep_canvas_physics::caps::asked;
 
 use super::*;
 
-/// The reply refusing `call` on `w`, a 2D world, which only its check, its bakes and its seeks
-/// read yet; none for a 3D world.
-pub(super) fn unread(w: &World, call: &str) -> Option<Value> {
-    let what = format!("{call} isn't run on a 2D world yet; #2098's follow-up brings it");
-    let issue = json!({"check": call, "code": "physics.unsupported", "severity": "error",
-                       "path": "dimensions", "actual": 2, "what": what});
-    (w.dimensions == 2).then(|| json!({"ok": false, "issues": [issue]}))
+/// A built world passed on when it is 3D; the reply refusing `call` on a 2D one, which only its
+/// check, its bakes and its seeks read yet.
+pub(super) fn solid(
+    call: &'static str,
+) -> impl Fn((World, Rapier)) -> Result<(World, Rapier), Value> {
+    move |built| {
+        if built.0.dimensions != 2 {
+            return Ok(built);
+        }
+        let what = format!("{call} isn't run on a 2D world yet; #2098's follow-up brings it");
+        let issue = json!({"check": call, "code": "physics.unsupported", "severity": "error",
+                           "path": "dimensions", "actual": 2, "what": what});
+        Err(json!({"ok": false, "issues": [issue]}))
+    }
+}
+
+/// Plants `name`, one of #2098's three wrong programs, in `run`; false for another name.
+pub(super) fn planted(name: &str, run: &mut Run) -> bool {
+    run.twin = match name {
+        "world_2d_built_on_rapier3d" => Twin::FlatOnRapier3d,
+        "wind_noise_from_platform_sin" => Twin::WindNoiseFromSin,
+        "inertia_ignored" => Twin::InertiaIgnored,
+        _ => return false,
+    };
+    true
 }
 
 impl Run {

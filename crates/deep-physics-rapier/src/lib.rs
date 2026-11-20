@@ -13,8 +13,8 @@ use deep_canvas_physics::backend::{
 use deep_canvas_physics::bake::{Build, Pin};
 use deep_canvas_physics::caps::{Caps, RAPIER2D, RAPIER3D};
 use deep_canvas_physics::doc::{
-    BodyKind, Breaks, End, Force, ForceKind, Joint, JointKind, Material, Mode, Motor,
-    Pose as DocPose, Read, Refusal, Region, Rot, Rule, Shape, World,
+    BodyKind, Breaks, End, Force, Joint, JointKind, Material, Mode, Motor, Pose as DocPose, Read,
+    Refusal, Rot, Rule, Shape, World,
 };
 use deep_canvas_physics::occurrence::Raw;
 use rapier3d::control::KinematicCharacterController;
@@ -38,6 +38,7 @@ pub mod cast;
 pub mod channels;
 mod character;
 mod dim2;
+mod forces;
 pub mod fp;
 mod inputs;
 mod joints;
@@ -165,6 +166,11 @@ pub enum Twin {
     ContactsAtAQuarter,
     StaticContactSame,
     Contact30,
+    /// #2240's wrong wrappers: one that reads `centre_of_mass` and leaves the weight where the
+    /// shapes put it; and one that moves the weight and adds a parallel-axis term to the shapes'
+    /// inertia.
+    CentreIgnored,
+    CentreParallelAxis,
     /// #2239's: a wrapper that drops each body's `ccd`, so none starts a sweep of another body.
     DropsBodyCcd,
     /// #2241's wrong belts: a wrapper that leaves the contact hook out; one that applies a
@@ -302,6 +308,28 @@ fn refusal(code: &'static str, path: String, actual: Value, what: String) -> Ref
 fn spring(hz: f64, zeta: f64) -> (f32, f32) {
     let w = 2.0 * PI * hz as f32;
     (w * w, 2.0 * zeta as f32 * w)
+}
+
+/// #2240: a body's mass properties with its weight at the written point `at`: its shapes' mass,
+/// and their inertia about their own centre, now taken about `at`. The planted wrapper also adds
+/// a parallel-axis term for the move, as if the shapes' inertia were being read about another
+/// point.
+fn centred(shapes: MassProperties, at: Vector, twin: Twin) -> MassProperties {
+    if twin != Twin::CentreParallelAxis {
+        return MassProperties {
+            local_com: at,
+            ..shapes
+        };
+    }
+    let d = at - shapes.local_com;
+    let term = (Matrix::from_diagonal(Vector::splat(d.length_squared()))
+        - Matrix::from_cols(d * d.x, d * d.y, d * d.z))
+        * shapes.mass();
+    MassProperties::with_inertia_matrix(
+        at,
+        shapes.mass(),
+        shapes.reconstruct_inertia_matrix() + term,
+    )
 }
 
 /// `shape` as Rapier's, a compound's children read from the world's `shapes`, or `None` when it
@@ -673,8 +701,16 @@ impl Rapier {
             .iter()
             .map(|c| self.world.colliders[*c].mass())
             .sum();
-        // #2098: a body with a written inertia carries its shapes' mass itself.
-        Some(f64::from(if m > 0.0 { m } else { rb.mass() }))
+        // #2240, #2098: a body with a written centre of mass or inertia carries its shapes' mass
+        // itself.
+        Some(f64::from(if m == 0.0 { rb.mass() } else { m }))
+    }
+
+    /// #2240: where body `id`'s weight acts, in the world, m: what its `pose` never reads.
+    pub(crate) fn centre_of_mass(&self, id: &str) -> Option<[f64; 3]> {
+        Some(back(
+            self.world.bodies[self.handle_of(id)?].center_of_mass(),
+        ))
     }
 
     /// Sets what a step reads of its scene (#1918): each kinematic body's next position, keeping
@@ -722,88 +758,6 @@ impl Rapier {
             }
         }
         self.jams = self.solve_step(t).into_iter().collect();
-    }
-
-    /// Each force's push on each body it applies to, from the state at t(k), held over the step.
-    fn push(&mut self) {
-        for (id, h) in &self.bodies {
-            self.world.bodies[*h].reset_forces(false);
-            // #2098: a wind's torque is this step's alone.
-            if self.aero.contains_key(id) {
-                self.world.bodies[*h].reset_torques(false);
-            }
-        }
-        let t = deep_canvas_physics::wind::seconds(self.step, self.step_flicks);
-        let noise = match self.twin {
-            Twin::WindNoiseFromSin => planted::noise_from_sin,
-            _ => deep_canvas_physics::wind::NOISE,
-        };
-        let ids: BTreeMap<&str, RigidBodyHandle> = self
-            .bodies
-            .iter()
-            .map(|(id, h)| (id.as_str(), *h))
-            .collect();
-        for f in &self.forces {
-            for id in &f.applies_to {
-                let rb = &mut self.world.bodies[ids[id.as_str()]];
-                let p = rb.translation();
-                let inside = match &f.region {
-                    None => true,
-                    Some(Region::Box { center, half }) => {
-                        let d = (p - v3(*center)).abs();
-                        let h = v3(*half);
-                        d.x <= h.x && d.y <= h.y && d.z <= h.z
-                    }
-                    Some(Region::Sphere { center, radius }) => {
-                        (p - v3(*center)).length() <= *radius as f32
-                    }
-                };
-                if !rb.is_dynamic() || !inside {
-                    continue;
-                }
-                let (m, v) = (rb.mass(), rb.linvel());
-                let force = match &f.kind {
-                    ForceKind::Wind(_) => {
-                        let q = rb.rotation();
-                        let seen = deep_canvas_physics::wind::Seen {
-                            pos: back(p),
-                            rot: [q.x, q.y, q.z, q.w].map(f64::from),
-                            com: back(rb.center_of_mass()),
-                            linear: back(v),
-                            angular: back(rb.angvel()),
-                        };
-                        let on = self.aero.get(id).map_or(&[][..], Vec::as_slice);
-                        let (force, torque) =
-                            deep_canvas_physics::wind::push(f, t, &seen, on, noise);
-                        rb.add_torque(v3(torque) * f.strength as f32, true);
-                        v3(force)
-                    }
-                    ForceKind::Uniform { accel } => v3(*accel) * m,
-                    ForceKind::Drag {
-                        linear,
-                        quadratic,
-                        medium,
-                    } => {
-                        let rel = v - v3(*medium);
-                        -rel * (m * *linear as f32) - rel * (rel.length() * *quadratic as f32)
-                    }
-                    ForceKind::SpringToPoint {
-                        point,
-                        hz,
-                        damping_ratio,
-                        max_force,
-                    } => {
-                        let (k, c) = spring(*hz, *damping_ratio);
-                        let f = ((v3(*point) - p) * k - v * c) * m;
-                        match max_force {
-                            Some(max) if f.length() > *max as f32 => f * (*max as f32 / f.length()),
-                            _ => f,
-                        }
-                    }
-                };
-                rb.add_force(force * f.strength as f32, true);
-            }
-        }
     }
 }
 
@@ -1042,14 +996,18 @@ impl Backend for Rapier {
                 .map(|(_, c)| c.shape.mass_properties(1.0).mass())
                 .collect();
             let total: f32 = volumes.iter().sum();
-            // #2098: a written inertia stands in place of the shapes' at their mass and centre of
-            // mass, so the shapes weigh nothing and the body carries all three itself.
+            // #2240: a written centre of mass, which the body carries in its shapes' place.
+            let centre = b
+                .centre_of_mass
+                .filter(|_| self.world.bodies[h].is_dynamic() && self.twin != Twin::CentreIgnored);
+            // #2098: a written inertia stands in place of the shapes' at their mass, about their
+            // centre of mass or the written one, so the body carries it in their place too.
             let written = b.inertia.filter(|_| {
                 b.kind == BodyKind::Dynamic
                     && w.mode != Mode::Kinematic
                     && self.twin != Twin::InertiaIgnored
             });
-            let mut weighed = MassProperties::default();
+            let mut weight = MassProperties::default();
             for ((index, c), vol) in colliders.into_iter().zip(volumes) {
                 let mut c = match b.mass {
                     Some(m) if b.kind == BodyKind::Dynamic && total > 0.0 => {
@@ -1057,8 +1015,8 @@ impl Backend for Rapier {
                     }
                     _ => c,
                 };
-                if written.is_some() {
-                    weighed += c
+                if centre.is_some() || written.is_some() {
+                    weight += c
                         .mass_properties
                         .mass_properties(&*c.shape)
                         .transform_by(&c.position);
@@ -1073,35 +1031,19 @@ impl Backend for Rapier {
                     },
                 );
             }
-            if let Some(i) = written {
-                let whole = MassProperties::new(weighed.local_com, weighed.mass(), v3(i));
-                let world = &mut self.world;
-                world.bodies[h].set_additional_mass_properties(whole, false);
-                world.bodies[h].recompute_mass_properties_from_colliders(&world.colliders);
+            if centre.is_some() || written.is_some() {
+                let whole = centre.map_or(weight, |at| centred(weight, v3(at), self.twin));
+                let whole = written.map_or(whole, |i| {
+                    MassProperties::new(whole.local_com, whole.mass(), v3(i))
+                });
+                let rb = &mut self.world.bodies[h];
+                rb.set_additional_mass_properties(whole, false);
+                rb.recompute_mass_properties_from_colliders(&self.world.colliders);
             }
             handles.insert(id.clone(), h);
             self.bodies.push((id.clone(), h));
         }
-        self.aero = w
-            .forces
-            .values()
-            .filter(|f| matches!(f.kind, ForceKind::Wind(_)))
-            .flat_map(|f| &f.applies_to)
-            .map(|id| {
-                // Each box's faces where its collider sits on the body.
-                let solid = w.bodies[id].shapes.iter().filter(|u| !u.sensor);
-                let on = solid.flat_map(|u| {
-                    let (at, half) = (pose(&u.offset), &w.shapes[&u.shape]);
-                    let Shape::Box { half } = half else {
-                        return Vec::new();
-                    };
-                    let q = at.rotation;
-                    let rot = [q.x, q.y, q.z, q.w].map(f64::from);
-                    deep_canvas_physics::wind::faces(*half, back(at.translation), rot)
-                });
-                (id.clone(), on.collect())
-            })
-            .collect();
+        self.aero = forces::aero(w);
         for (id, j) in &w.joints {
             self.joint(&handles, id, j, &mut out);
         }
@@ -1472,5 +1414,83 @@ mod tests {
         assert!((2.0 - k - 0.5).abs() < 1e-6, "{k}");
         assert!((2.0 - b.ray([-0.5, 2.0, 0.5], down, 10.0).unwrap()).abs() < 1e-6);
         assert_eq!(b.ray([5.0, 2.0, 0.0], down, 10.0), None);
+    }
+
+    /// #2240: a body that leaves its mass to its shapes still reads that mass, density × volume,
+    /// with its centre of mass written, so #523's mass-ratio check reads it as before.
+    #[test]
+    fn a_written_centre_of_mass_keeps_the_mass_the_shapes_give() {
+        let body = |centre: Option<[f64; 3]>| {
+            let mut b =
+                json!({"kind": "dynamic", "shapes": [{"shape": "box", "contact_material": "m"}]});
+            if let Some(c) = centre {
+                b["centre_of_mass"] = json!(c);
+            }
+            b
+        };
+        let doc = json!({
+            "kind": "physics.world@1", "dimensions": 3, "step_rate": 60, "substeps": 1,
+            "gravity": [0, 0, 0], "mode": "dynamic",
+            "capacity": {"bodies": 2, "shapes": 2, "joints": 0, "contacts": 0, "particles": 0},
+            "backend": {"name": "rapier3d", "version": "=0.36.1"},
+            "contact_materials": {"m": {"friction": 0.5, "restitution": 0, "density": 250}},
+            "shapes": {"box": {"kind": "box", "half": [0.5, 1.0, 0.5]}},
+            "bodies": {"bare": body(None), "low": body(Some([0.0, -0.75, 0.0]))}
+        });
+        let w =
+            deep_canvas_physics::check::check(&doc, &RAPIER3D, &deep_canvas_physics::roles::TABLE)
+                .unwrap_or_else(|e| panic!("{e:?}"));
+        let mut b = Rapier::default();
+        b.build(&w).unwrap();
+        // 250 kg/m³ × 1 × 2 × 1 m, as f32 holds it.
+        let bare = b.shapes_mass("bare").unwrap();
+        assert!((bare - 500.0).abs() < 1e-3, "{bare}");
+        assert_eq!(b.shapes_mass("low"), Some(bare));
+    }
+
+    /// #2240: the bounds the check holds a centre of mass to are those of the shapes as built: a
+    /// box turned by degrees about three axes, a capsule turned by a quaternion, a rounded hull
+    /// and a compound of a turned box and a turned cylinder, each at an offset.
+    #[test]
+    fn the_bounds_a_centre_of_mass_is_held_to_are_the_built_shapes() {
+        let turned = [0.1, 0.2, 0.3, 0.9];
+        let child = |shape: &str, pos: [f64; 3], rot: Value| json!({"shape": shape, "pose": {"pos": pos, "rot": rot}});
+        let body = |shape: &str, pos: [f64; 3], rot: Value| json!({"kind": "dynamic", "shapes": [{"shape": shape, "contact_material": "m", "offset": {"pos": pos, "rot": rot}}]});
+        let doc = json!({
+            "kind": "physics.world@1", "dimensions": 3, "step_rate": 60, "substeps": 1,
+            "gravity": [0, 0, 0], "mode": "dynamic",
+            "capacity": {"bodies": 4, "shapes": 8, "joints": 0, "contacts": 0, "particles": 0},
+            "backend": {"name": "rapier3d", "version": "=0.36.1"},
+            "contact_materials": {"m": {"friction": 0.5, "restitution": 0, "density": 1000}},
+            "shapes": {"box": {"kind": "box", "half": [0.5, 1.0, 0.25]},
+                       "pill": {"kind": "capsule", "half_height": 0.6, "radius": 0.2},
+                       "can": {"kind": "cylinder", "half_height": 0.7, "radius": 0.3},
+                       "hull": {"kind": "convex", "points": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]], "radius": 0.05},
+                       "pair": {"kind": "compound", "children": [child("box", [1.0, 0.0, 0.0], json!([10, 20, 30])),
+                                                                 child("can", [0.0, 2.0, 0.0], json!(turned))]}},
+            "bodies": {"a": body("box", [0.1, 0.2, 0.3], json!([30, 40, 50])),
+                       "b": body("pill", [-0.3, 0.0, 0.2], json!(turned)),
+                       "c": body("hull", [0.0, 0.5, 0.0], json!([0, 0, 75])),
+                       "d": body("pair", [0.4, -0.1, 0.0], json!([0, 0, 0]))}
+        });
+        let w =
+            deep_canvas_physics::check::check(&doc, &RAPIER3D, &deep_canvas_physics::roles::TABLE)
+                .unwrap_or_else(|e| panic!("{e:?}"));
+        let mut b = Rapier::default();
+        b.build(&w).unwrap();
+        for (id, h) in &b.bodies {
+            let built = b.world.bodies[*h]
+                .colliders()
+                .iter()
+                .map(|c| b.world.colliders[*c].compute_aabb())
+                .reduce(|x, y| x.merged(&y))
+                .unwrap();
+            let (lo, hi) =
+                deep_canvas_physics::doc::bounds(&w.shapes, &w.bodies[id].shapes).unwrap();
+            for (read, built) in [(lo, built.mins), (hi, built.maxs)] {
+                let off = (v3(read) - built).abs().max_element();
+                assert!(off < 1e-5, "{id}: {read:?} at check, {built:?} built");
+            }
+        }
     }
 }

@@ -14,6 +14,9 @@ deep-canvas-physics = { path = "../deep-canvas-physics" }
 # Issue #1918: a world inside the scene that lists it reads the paths its scene's channels and
 # drivers write, evaluated by the motion module at each step's time.
 deep-canvas-motion = { path = "../deep-canvas-motion" }
+# Issue #2457: the SHA-256 a mesh asset's bytes are checked against, as every store read is, when
+# deep-physics reads the assets its scene's soft volumes are built from.
+deep-canvas = { path = "../deep-canvas" }
 rapier3d = { version = "=0.36.1", default-features = false, features = ["dim3", "f32", "std", "enhanced-determinism", "serde-serialize"] }
 # Issue #2098: a `dimensions: 2` world's backend, at the same pin and features as rapier3d, beside
 # it behind the one backend interface (src/dim2.rs).

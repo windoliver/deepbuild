@@ -1,0 +1,42 @@
+{
+  "name": "furniture",
+  "version": "3.0.0",
+  "license": "MIT",
+  "description": "A test pack of the #1962 acceptance suite, by an outside owner: a furniture release that moves its case to a cabinet of the same pack.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "marks2d": ">=0.0.0"
+    }
+  },
+  "recipes": {
+    "furniture.cabinet@1": "furniture.cabinet@1.json"
+  },
+  "kinds": {
+    "furniture.cabinet@1": {
+      "minor": 0,
+      "recipe": "furniture.cabinet@1",
+      "children": [],
+      "capabilities": {
+        "pickable": true,
+        "snap": false
+      },
+      "rules": [],
+      "twins": [],
+      "migrate": {},
+      "examples": [],
+      "cost": {
+        "class": "figure",
+        "at_defaults": {
+          "cpu_ms": 0.5,
+          "gpu_ms": 0.2,
+          "items": 7
+        }
+      }
+    }
+  },
+  "moved": {
+    "furniture.case@1": "furniture/cabinet@1"
+  },
+  "assets": []
+}

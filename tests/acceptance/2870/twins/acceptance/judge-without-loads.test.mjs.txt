@@ -1,0 +1,11 @@
+// #2870 AC2's planted suite under tests/acceptance. A test lays this file, without its .txt, as
+// tests/acceptance/9870/judge-without-loads.test.mjs in a scratch checkout beside the planted judge under benchmarks/:
+// a timing suite that gives judgeLimit no loads, which the loads lint must still list. Never run.
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { judgeLimit } from '../../../scripts/benchmark.mjs';
+
+test('a time read without its loads', () => {
+  const verdict = judgeLimit({ limit: 2, runs: [1.2, 1.2, 1.2, 1.2, 1.2], fingerprint: null }); // finding
+  assert.equal(verdict.status, 'INCONCLUSIVE');
+});

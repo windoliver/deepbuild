@@ -51,7 +51,7 @@ export const alone = ['tests/acceptance/149/', 'tests/acceptance/1523/', 'tests/
   ...['wake', 'repeat', 'waits', 'budgets'].map((f) => `tests/acceptance/27/${f}.test.ts`), 'tests/acceptance/27/outcomes-redraft/', 'tests/acceptance/27/desktop-redraft-2/', 'tests/acceptance/124/', 'tests/acceptance/906/', 'packages/hub/test/drive.test.ts',
   'tests/acceptance/990/',
   'tests/acceptance/140/gpu/', 'tests/acceptance/140/view/', 'tests/acceptance/140/platform/', 'tests/acceptance/309/', 'tests/acceptance/385/', 'tests/acceptance/874/redraft/',
-  ...['cycles', 'planted', 'leftovers', 'sessions/readings', 'sessions/planted'].map((f) => `tests/acceptance/824/${f}.test.ts`), 'tests/acceptance/1285/', 'tests/acceptance/1294/', 'tests/acceptance/1507/', 'tests/acceptance/1998/', 'tests/acceptance/1999/', 'tests/acceptance/1848/', 'tests/acceptance/2653/'];
+  ...['cycles', 'planted', 'leftovers', 'sessions/readings', 'sessions/planted'].map((f) => `tests/acceptance/824/${f}.test.ts`), 'tests/acceptance/1285/', 'tests/acceptance/1294/', 'tests/acceptance/1507/', 'tests/acceptance/1998/', 'tests/acceptance/1999/', 'tests/acceptance/1848/', 'tests/acceptance/2653/', 'tests/acceptance/1868/', 'tests/acceptance/1868-redraft-ac2/'];
 /**
  * Files whose recorded run takes over two minutes on this machine, by the fastest run each that vitest's results caches
  * in the worktrees and affected.mjs's node --test reports held on 2026-11-07. affected.mjs runs them with --slow and for
@@ -218,7 +218,8 @@ export const timed = [
   'tests/acceptance/880/touch-id.test.ts', 'tests/acceptance/881/latency.test.ts',
   'tests/acceptance/896/dirty.test.ts', 'tests/acceptance/896/settled.test.ts',
   'tests/acceptance/906/prompt.test.ts', 'tests/acceptance/906/stop.test.ts', 'tests/acceptance/96/budgets.test.ts',
-  'tests/benchmark.test.mjs', 'tests/acceptance/1432/budgets.test.mjs'
+  'tests/benchmark.test.mjs', 'tests/acceptance/1432/budgets.test.mjs',
+  'tests/acceptance/1868/canvas-cells.test.mjs', 'tests/acceptance/1868/status-runs.test.mjs'
 ];
 
 // #33's suite runs one file at a time, its live files by hand, and its budget as a timed file.
@@ -547,6 +548,8 @@ alone.push('tests/acceptance/1956/');
 alone.push('tests/acceptance/1959/');
 // #1960's files each build deep-show (r1); the lifecycle test restarts a hub twice on the same state folder.
 alone.push('tests/acceptance/1960/');
+// #1962's files each build deep-show (r1) and install the shelf and furniture packs' versions in order.
+alone.push('tests/acceptance/1962/');
 // #1802's ac4 and ac6 files each build deep-show with a test canvas module's features.
 alone.push('tests/acceptance/1802/');
 // #139's preview tests that publish an undated preview entry are redrafted after #1802; the redraft runs as #139's suite does.
@@ -931,6 +934,8 @@ timed.push('tests/acceptance/2032/ac8-budget.test.ts', 'tests/acceptance/2032-re
 alone.push('tests/acceptance/182/', 'tests/acceptance/182-oracle/controllers-py-rapier.test.ts', 'tests/acceptance/182-oracle-redraft-climb/');
 timed.push('tests/acceptance/182/ac11-budgets.test.ts');
 byHand.push('tests/acceptance/182-oracle/character-controller-rapier.test.ts');
+// #2240's files build deep-physics (release), and ac5 the merge base's release build in a second checkout.
+alone.push('tests/acceptance/2240/');
 // #2309's files build deep-physics (shipped and release), its wasm32 library and the merge base's release build.
 alone.push('tests/acceptance/2309/', 'tests/acceptance/2243/'); // #2243's build it too, release and test-backends.
 // #2241's files build deep-physics (release and test-backends) and the merge base's release build; the blind redraft of
@@ -1004,6 +1009,10 @@ timed.push('tests/acceptance/568-redraft-1830/judge.test.mjs', 'tests/acceptance
 // horizon's 0.1 ms at 1080p on the reference Mac.
 alone.push('tests/acceptance/1381/');
 timed.push('tests/acceptance/1381/ac6-budget.test.ts');
+// #971's files build deep-gpu and draw on the Metal GPU; budgets.test.ts judges the local tone map's added GPU time on
+// the reference Mac.
+alone.push('tests/acceptance/971/');
+timed.push('tests/acceptance/971/budgets.test.ts');
 
 // #1992's files each build deep-gpu (kinds.test.ts builds deep-show) and draw on the Metal GPU; cost.test.ts judges the
 // linear curve's frame time against exp's on the reference Mac.
@@ -1073,8 +1082,21 @@ alone.push('tests/acceptance/1509/');
 // #1929's files each build deep-show (full); CPU only, no GPU and no timing.
 alone.push('tests/acceptance/1929/');
 
+// #2760's files build deep-gpu (spawn.test.ts also deep-show) and #544's assembler, run logic programs and draw on
+// the GPU; budgets.test.ts times 64 rings on a pond at 1080p.
+alone.push('tests/acceptance/2760/');
+timed.push('tests/acceptance/2760/budgets.test.ts');
+// The first draft's timing test asks the rings to change a picture taken from straight above, where a ring changes
+// none (tests/acceptance/2760-redraft-ac8/DISPUTE.md); its blind redraft times a pond on which each ring is drawn.
+alone.push('tests/acceptance/2760-redraft-ac8/');
+timed.push('tests/acceptance/2760-redraft-ac8/budget-timing.test.ts');
+byHand.push('tests/acceptance/2760/budgets.test.ts');
 // #1826's files each build deep-graph, and its taste call deep-canvas-render; CPU only, no GPU and no timing.
 alone.push('tests/acceptance/1826/');
+// #732's files each build deep-show (ac9-atomic.test.ts also with test-export-guards), export decks through the GPU and
+// render slides with LibreOffice; ac10-budgets.test.ts times exports and reads the machine's load.
+alone.push('tests/acceptance/732/');
+timed.push('tests/acceptance/732/ac10-budgets.test.ts');
 
 // #1484's files (blind) each build deep-canvas-render or deep-text and draw with GPUI's offscreen renderer, as #1479's
 // do; warm.test.ts builds deep-text for release here and at the merge base and times warm shaping, with each run's loads.
@@ -1091,6 +1113,11 @@ byHand.push('tests/acceptance/806/unbound.test.ts');
 // #2402's files (blind) start two hubs and time each tool call against a control hub's, and time two extension hosts.
 alone.push('tests/acceptance/2402/');
 
+// #2456's files (blind) each build deep-show (full); its gap test, a keyed write in deep-show's frames against
+// deep-canvas-render's, builds both. CPU only, no GPU and no timing.
+alone.push('tests/acceptance/2456/');
+alone.push('tests/write-reveal-frames.test.ts');
+
 // #2204's first draft is kept as written, by hand only: its AC3 holds a newer entry that isn't fail_closed to refusing the
 // whole rules.json with the hub stopped, which #2219 retires; its blind redraft, 2204-redraft-ac3/, runs in its place, and
 // the file's AC1, AC2, AC4 and AC5 run by hand with it (tests/acceptance/2204-redraft-ac3/DISPUTE.md).
@@ -1102,6 +1129,19 @@ alone.push('tests/acceptance/2776/seal.test.ts', 'tests/acceptance/2776/export.t
 // #1215's files each build deep-canvas-render, and AC5 deep-text and AC7 deep-show (full); its taste call draws with the
 // app's frame path on macOS; no timing.
 alone.push('tests/acceptance/1215/');
+
+// #2457's files build deep-physics and deep-show.
+alone.push('tests/acceptance/2457/');
+
+// #2500's files (blind) each build deep-canvas-render and deep-motion; CPU only, no GPU and no timing.
+alone.push('tests/acceptance/2500/');
+
+// #1489's files build deep-canvas-render (release) and deep-drive (debug, env-plants); ui-thread.test.ts times the UI thread.
+alone.push('tests/acceptance/1489/');
+timed.push('tests/acceptance/1489/ui-thread.test.ts');
+
+// #2777's files each build deep-show (full, and with the test.tone module), and its preflight file times the lane.
+alone.push('tests/acceptance/2777/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
@@ -1161,6 +1201,10 @@ export const checks = [
   // #1427: the motion check on the shipped journeys for Needs you, a session page and the project page.
   { name: 'motion', commands: [['cargo', 'build', '--locked', '-p', 'deep-replica', '--bin', 'deep-drive'], [process.execPath, 'scripts/motion.mjs']], fix: 'Make the motion each finding above names settle, fade or fly as declared,.' },
   { name: 'canvas kit', commands: [[process.execPath, 'scripts/canvas-kit.mjs']], fix: 'Repair the canvas module and part each line above names; run the kit call alone to replay a failing seed.' },
+  // #2777: every field list of the sealed listing carries its closure, read from the deep-show built here, and the
+  // reference's generated table says what that listing holds. The lane prints its reading of lists saying instead:
+  // nothing; the reading is never a verdict.
+  { name: 'field lists', commands: [['cargo', 'build', '--locked', '--bin', 'deep-show'], [process.execPath, 'scripts/canvas-closures.mjs', 'fields'], [process.execPath, 'scripts/canvas-closures.mjs', 'drift', '--built']], fix: 'Give each field list a FAIL fields line names its closure in crates/deep-canvas/src/registry/fields.json (or beside its kind), and regenerate the reference\'s field-list table with node scripts/canvas-closures.mjs table where a drift FAIL line says it differs from the listing.' },
   // #458: the parity suite's quick lane, the kit's fixtures and their planted-fault twins on Vello CPU and the noop
   // backend, no GPU, after the fixture scan over every canvas fixture and its evidence. What can't run reads BLOCKED
   // in its row, for the release bar to weigh; the lane fails on what ran and didn't hold.

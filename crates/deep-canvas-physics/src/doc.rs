@@ -95,6 +95,8 @@ pub struct Body {
     pub mass: Option<f64>,
     /// #2098: kg·m², its moments about its own axes through its centre of mass, when written.
     pub inertia: Option<[f64; 3]>,
+    /// #2240: the local point its weight acts at, m; `None` leaves it where its shapes put it.
+    pub centre_of_mass: Option<[f64; 3]>,
     pub linear_damping: f64,
     pub angular_damping: f64,
     pub gravity_scale: f64,
@@ -242,6 +244,7 @@ pub struct World {
     pub solve: Option<Solve>,
 }
 
+mod centre;
 mod character;
 pub mod data;
 mod dims;
@@ -251,6 +254,7 @@ mod reads;
 mod soft;
 mod vehicle;
 mod wind;
+pub use centre::bounds;
 pub use character::{Character, FIELDS as CHARACTER_FIELDS};
 pub use dims::Flat;
 pub use heightfield::HEIGHTFIELD_SAMPLES;
@@ -1028,6 +1032,7 @@ impl Reader {
                 "velocity",
                 "mass",
                 "inertia",
+                "centre_of_mass",
                 "damping",
                 "gravity_scale",
                 "ccd",
@@ -1142,6 +1147,7 @@ impl Reader {
             );
         }
         let character = self.character(b, p, kind, &uses, shapes);
+        let centre_of_mass = self.centre_of_mass(b, p, kind, &uses, shapes);
         Body {
             kind,
             follow,
@@ -1159,6 +1165,7 @@ impl Reader {
             angular: self.spin(vel, &join(p, "velocity")),
             mass: self.opt_num(b, "mass", p, f64::MIN_POSITIVE),
             inertia: self.inertia(b, p),
+            centre_of_mass,
             linear_damping: self.num(damp, "linear", &join(p, "damping"), damping, 0.0, f64::MAX),
             angular_damping: self.num(damp, "angular", &join(p, "damping"), damping, 0.0, f64::MAX),
             gravity_scale: self.num(b, "gravity_scale", p, 1.0, f64::MIN, f64::MAX),
