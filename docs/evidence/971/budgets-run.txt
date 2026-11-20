@@ -1,0 +1,16 @@
+#971's AC8 tests on the change, 2026-11-19, under a timed grant, on tree fd2b2495e8b1 (commit 422c1fa8b, the branch merged with main at 8db4b0bfe), debug deep-gpu.
+Machine as the lane's fingerprint reads it: Mac17,10, Apple M5 Max, 64 GB, mains power, Low Power Mode off, thermal state nominal, macOS 26B8119. The grant came at a load of 6.6 on 18 cores.
+This is the suite's judge of a local run: 3 passed, the two timings among them. The issue's criterion is the scheduled budget window's at the merged commit, and no window has measured it.
+
+node scripts/throttle.mjs timed --wait 45 -- node node_modules/vitest/vitest.mjs run --root tests/acceptance/971 --no-file-parallelism --testTimeout=900000 --silent=false budgets
+
+stdout | budgets.test.ts > AC8 #971.ae60e422 the local tone map's budgets > AC8 #971.ae60e422 local {strength: 0.5} adds under 0.6 ms of GPU at 1920 × 1080, in five runs
+AC8 #971.ae60e422 local at 1920 × 1080, added GPU (ms a frame): PASS 0.1115, 0.0607, 0.0522, 0.1813, 0.0456 against 0.6, the load at each run's start and end 6.74-6.92, 6.92-7.01, 7.01-7.01, 7.01-7.17, 7.17-6.83
+
+stdout | budgets.test.ts > AC8 #971.ae60e422 the local tone map's budgets > AC8 #971.ae60e422 local {strength: 0.5} adds under 2 ms of GPU at 3840 × 2160, in five runs
+AC8 #971.ae60e422 local at 3840 × 2160, added GPU (ms a frame): PASS 0.0009, 0.0663, 0.1684, 0.0000, 0.0060 against 2, the load at each run's start and end 7.18-6.39, 6.39-6.17, 6.17-6.19, 6.19-5.92, 5.92-5.64
+
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Start at  14:24:08
+   Duration  97.80s (tests 100%)

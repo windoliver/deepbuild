@@ -1,10 +1,10 @@
 //! The GPU-layer adapter and its declared pass costs. Public entry remains the crate root.
 
 use crate::{
-    ao, clouds, cull, dof, fill, hdr, history, inset, local, lock, read_texture, texture2d, After,
-    Planted, Post, Renderer, CASCADE_PASS, CULL_PASS, FLARE_PASS, GEOMETRY_PASS, LABEL_PASS,
-    MIRROR_PASS, MSAA, OUTLINE_PASS, OUTPUT_PASS, SHADOW_PASS, SHARPEN_PASS, UPSCALE_PASS,
-    WATER_PASS,
+    ao, clouds, cull, dof, fill, hdr, history, inset, local, local_tone, lock, read_texture,
+    texture2d, After, Planted, Post, Renderer, CASCADE_PASS, CULL_PASS, FLARE_PASS, GEOMETRY_PASS,
+    LABEL_PASS, MIRROR_PASS, MSAA, OUTLINE_PASS, OUTPUT_PASS, SHADOW_PASS, SHARPEN_PASS,
+    UPSCALE_PASS, WATER_PASS,
 };
 use deep_canvas_scene3d::look::Look3;
 use deep_canvas_scene3d::scene::Scene;
@@ -502,6 +502,18 @@ impl Module3 {
                 writes: vec!["linear"],
                 resolution: Resolution::Full,
                 ns_per_px: 0.1,
+                determinism: Determinism::SameMachine,
+            },
+            // #971: the look's local tone map, before the output (which its name follows), drawn
+            // only while the look has one off its identity.
+            Pass {
+                name: local_tone::LOCAL_TONE_PASS.into(),
+                place: "tone_mapping",
+                order: 0,
+                reads: vec!["linear"],
+                writes: vec!["linear"],
+                resolution: Resolution::Full,
+                ns_per_px: 0.15,
                 determinism: Determinism::SameMachine,
             },
             Pass {
