@@ -485,6 +485,12 @@
       "note": "",
       "reason": "retired by #1879's owner: 1879-redraft-ac2/start.test.ts is AC2's test (this draft sets no timeout of its own, so the lanes' vitest default of 5 s cuts its wait of up to 60 s short)",
       "approval": "#1879, its owner (the owner's touch-key tag on this commit)"
+    },
+    {
+      "id": "tests/acceptance/1887/slots-parity.test.mjs › #1887.4a851c74 The slot count the check prints is unchanged",
+      "note": "",
+      "reason": "retired by #1887's owner: tests/acceptance/1887/redraft-ac3/slot-count.test.mjs is AC3's test (this draft fixes the count at 16; #210's deep.registerPort made the base's own count 17)",
+      "approval": "#1887, the owner on PR #2537, 2026-11-18 (this commit lands only with the owner's touch-key tag)"
     }
   ]
 }
