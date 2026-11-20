@@ -414,15 +414,19 @@ fn index_html(
     let stamp = stamp
         .map(|s| format!("<meta name=\"exported\" content=\"{s}\">\n"))
         .unwrap_or_default();
+    // #2856: a line the player's element removes as its first act, so only a page whose script never ran shows it;
+    // the script blocks rendering until it has run, so an untouched page never paints the line.
+    let fallback = escape(manifest["fallback"]["index"].as_str().unwrap_or_default());
     format!(
         "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n\
 <meta http-equiv=\"Content-Security-Policy\" content=\"{policy}\">\n<meta name=\"referrer\" content=\"no-referrer\">\n{stamp}<title>{}</title>\n\
-<style>html,body{{margin:0;background:#101012;color:#e8e8ec;font:14px system-ui,sans-serif}}deep-player{{display:block}}\
-deep-player canvas{{display:block;width:100%;height:auto;max-height:100vh;object-fit:contain}}[data-deep-notice]{{margin:8px 12px}}\
+<style>html,body{{margin:0;background:#101012;color:#e8e8ec;font:14px system-ui,sans-serif}}deep-player{{display:block;position:relative}}\
+deep-player canvas{{display:block;width:100%;height:auto;max-height:100vh;object-fit:contain}}[data-deep-notice],[data-deep-unstarted]{{margin:8px 12px}}\
+[data-deep-notice=stopped]{{position:absolute;top:12px;left:12px;max-width:560px;margin:0;padding:8px 12px;background:#1b1b20;border:1px solid #55555f;border-radius:6px}}deep-player a{{color:#9db4ff}}\
 [data-deep-saves]{{display:flex;gap:8px;margin:8px 12px}}[data-deep-saves] button,[data-deep-saves] select{{font:inherit;color:inherit;background:#232329;border:1px solid #4a4a55;border-radius:6px;padding:4px 10px}}</style>\n\
-<script type=\"importmap\">{map}</script>\n</head>\n<body>\n<deep-player></deep-player>\n\
-<script type=\"application/json\" id=\"deep-bundle\">{data}</script>\n\
-<script type=\"module\" src=\"./{}\" integrity=\"{}\"></script>\n</body>\n</html>\n",
+<script type=\"importmap\">{map}</script>\n<script type=\"module\" src=\"./{}\" integrity=\"{}\" blocking=\"render\"></script>\n</head>\n<body>\n\
+<deep-player><p data-deep-unstarted>The player hasn't started: the host may have changed its script or served it under the wrong type. <a href=\"./{fallback}\">Open the fallback page</a></p></deep-player>\n\
+<script type=\"application/json\" id=\"deep-bundle\">{data}</script>\n</body>\n</html>\n",
         escape(title),
         element.0,
         integrity(element.1),
@@ -468,6 +472,15 @@ fn element(guard: Option<Guard>) -> String {
         Some(Guard::WebAnnouncesEveryFrame) => ELEMENT.replace(
             "      if (was !== undefined && was !== text) said.push(text);",
             "      said.push(text);",
+        ),
+        // Planted (#2856 AC1): a throw from the core while the piece plays is caught, and the play goes on.
+        Some(Guard::WebPlaysOnFailure) => {
+            ELEMENT.replace("      this.#stop(e);\n      return;\n", "")
+        }
+        // Planted (#2856 AC3): the index page's line that the player hasn't started stays in place.
+        Some(Guard::WebElementLeavesLine) => ELEMENT.replace(
+            "    this.querySelector('[data-deep-unstarted]')?.remove();\n",
+            "",
         ),
         _ => ELEMENT.to_string(),
     }
@@ -604,6 +617,8 @@ impl Hub<'_> {
             Guard::WebIndexRequiresEveryAnyOf,
             Guard::WebNoTree,
             Guard::WebAnnouncesEveryFrame,
+            Guard::WebPlaysOnFailure,
+            Guard::WebElementLeavesLine,
         ]
         .into_iter()
         .find(|g| self.planted(Planted::Export(*g)))
