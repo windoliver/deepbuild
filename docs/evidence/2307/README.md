@@ -5,6 +5,21 @@ Readings from this change's `deep-physics` (Rapier 0.36.1, macOS arm64, release 
 base, `85203f458`, 10 failed at their own assertions and 4 passed, each of those held by its planted program
 (`tests/acceptance/2307/BASE-FAILURE.txt`).
 
+## Pictures
+
+Each world is the blind suite's own, baked by this change's `deep-physics` and, beside it, by the planted program its
+criterion names. The frames are `deep-gpu` `view3d` frames (640 × 360) of scene3d marks posed from each bake's body
+states and wheel pose outputs: the chassis in sand, the wheels dark. Nothing is drawn on them, nothing in them is
+judged and no test reads them. In every picture and clip **the left half is this change and the right half the planted
+program**. `pictures.json` holds the car's position at each clip's first and last step.
+
+| File | Left: this change | Right: the planted program |
+|---|---|---|
+| `slope.mp4`, `slope.png` (12 s) | braked at 4,000 N facing up the 20° slope, the car stays at the post that marks where it was set down, its wheels unturned | `controller_without_hold`: it creeps 0.43 m down the slope, its wheels turning |
+| `sleeping-drive.mp4`, `sleeping-drive.png` (to 2 s after the drive) | asleep on level ground and driven at 2,000 N from step 480, it is 4.00 m from the post at step 720 | `controller_runs_asleep`: 3.32 m from the post |
+| `hop.mp4`, `hop.png` (steps 470 to 520) | the same car close up as the drive wakes it: it stays on its springs | `controller_runs_asleep`: the velocity stored while it slept lifts it 0.08 m, its wheels hanging |
+| `platform.mp4`, `platform.png` (steps 560 to 960) | asleep on the platform that moves after step 600, it wakes and rides the platform's dark band 4.99 m | `leaves_asleep_on_moving_ground`: the band leaves from under it and it stays where it slept |
+
 ## Wrong programs, failing first
 
 | Wrong program | World | Reading |
