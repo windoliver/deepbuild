@@ -126,7 +126,7 @@ function findings(path, text) {
   let comments; // read only where a marker could count
   const used = new Set(); // lines whose marker has bounded a finding
   const marked = (...indexes) => indexes.some((index) => {
-    comments ??= strip(text, { keepComments: true }).split('\n');
+    comments ??= strip(text, { keepComments: true }).replace(/\/\*[\s\S]*?\*\//g, (block) => block.replace(/[^\n]/g, ' ')).split('\n');
     let at = index;
     if (!DEADLINE.test(comments[at])) for (at = index - 1; at >= 0 && /^\s*\/\//.test(comments[at]) && !DEADLINE.test(comments[at]); at--);
     // A marker ending the line above marks that line's finding, not this one.
@@ -138,7 +138,7 @@ function findings(path, text) {
   const add = (index, column, why) => found.push({ line: index + 1, column: column + 1, why });
 
   // Names a timer is imported or promisified as, and names bound to a clock difference.
-  const aliases = !/setTimeout\s+as|promisify/.test(joined) ? [] : [...joined.matchAll(/\bsetTimeout\s+as\s+([\w$]+)|([\w$]+)\s*=\s*(?:\w+\s*\.\s*)?promisify\s*\(\s*setTimeout\s*\)/g)].map((m) => m[1] ?? m[2]);
+  const aliases = !/setTimeout\s+as|promisify/.test(joined) ? [] : [...joined.matchAll(/[{,]\s*setTimeout\s+as\s+([\w$]+)|([\w$]+)\s*=\s*(?:\w+\s*\.\s*)?promisify\s*\(\s*setTimeout\s*\)/g)].map((m) => m[1] ?? m[2]);
   // Most files read no clock and wait on nothing: skip their scans.
   const timed = /now|elapsed|hrtime|duration_since/.test(joined);
   const waits = aliases.length || /sleep|park_timeout|Atomics|set(?:Timeout|Interval)/.test(joined);
@@ -147,30 +147,39 @@ function findings(path, text) {
     const bound = line.includes('=') && /\b(?:const|let(?:\s+mut)?|var)\s+([\w$]+)\s*(?::[^=]*)?=(?!=)(.*)$/.exec(line);
     if (bound && new RegExp(CLOCK.source).test(bound[2])) clocks.push(bound[1]);
   }
-  const alias = aliases.length ? [new RegExp(`(?<![.\\w$])(?:${aliases.join('|')})\\s*\\(`, 'g'), 'a call through a timer is a fixed wait'] : null;
-  const clocked = new RegExp(`${CLOCK.source}${clocks.length ? `|(?<![.\\w$])(?:${[...new Set(clocks)].join('|')})(?![\\w$])` : ''}`, 'g');
+  const names = (list) => [...new Set(list)].map((name) => name.replaceAll('$', '\\$')).join('|');
+  const alias = aliases.length ? [new RegExp(`(?<![.\\w$])(?:${names(aliases)})\\s*\\(`, 'g'), 'a call through a timer is a fixed wait'] : null;
+  const clocked = new RegExp(`${CLOCK.source}${clocks.length ? `|(?<![.\\w$])(?:${names(clocks)})(?![\\w$])` : ''}`, 'g');
 
   // Where each assertion's parentheses run, as [line, from column, to column) spans.
   const spans = [];
   if (timed) code.forEach((line, index) => {
     if (!/assert|expect|ok\s*\(/.test(line)) return;
     for (const match of line.matchAll(ASSERT)) {
-      let depth = 0;
-      for (let at = index, from = match.index + match[0].length - 1; at < code.length; at++, from = 0) {
-        let to = from;
-        for (; to < code[at].length; to++) {
-          depth += code[at][to] === '(' ? 1 : code[at][to] === ')' ? -1 : 0;
-          if (!depth) break;
+      let open = match.index + match[0].length - 1;
+      for (let at = index; open !== -1;) {
+        let depth = 0;
+        for (let from = open; at < code.length; at++, from = 0) {
+          let to = from;
+          for (; to < code[at].length; to++) {
+            depth += code[at][to] === '(' ? 1 : code[at][to] === ')' ? -1 : 0;
+            if (!depth) break;
+          }
+          spans.push([at, from, to, index]);
+          if (!depth) { open = to; break; }
         }
-        spans.push([at, from, to, index]);
-        if (!depth) break;
+        // An expect's matcher takes the other side of the comparison: `expect(50).toBeGreaterThan(Date.now() - start)`.
+        const chain = depth || !match[0].startsWith('expect') ? null : /^\s*(?:\.\s*(?:not|resolves|rejects)\s*)*\.\s*\w+\s*\(/.exec(code[at].slice(open + 1));
+        open = chain ? open + chain[0].length : -1;
       }
     }
   });
 
   const counted = new Set(); // line:column of each clock finding, as spans overlap
   if (waits) code.forEach((line, index) => {
-    for (const [pattern, why] of [SLEEP, ATOMICS, ...(alias ? [alias] : [])]) for (const match of line.matchAll(pattern)) add(index, match.index, why);
+    const at = new Set(); // a call through an alias named sleep matches twice
+    for (const [pattern, why] of [SLEEP, ATOMICS, ...(alias ? [alias] : [])])
+      for (const match of line.matchAll(pattern)) if (!at.has(match.index)) { at.add(match.index); add(index, match.index, why); }
     for (const match of line.matchAll(TIMER[0])) if (!marked(index)) add(index, match.index, TIMER[1]);
   });
   for (const [index, from, to, start] of spans) {
