@@ -1824,7 +1824,7 @@ export class Core {
         // What it holds of DeepBuild's servers, both ways, and the way its client loads them (#2897): the loads read
         // Claude Code's MCP configs, so a Claude Code session whose config loads the deepbuild server.
         const agent = live.agent ?? meta.agent;
-        const load = agent === 'claude-code' && (data.loads as { kind: string; name: string }[]).some((l) => l.kind === 'mcp' && l.name === 'deepbuild') ? toolLoad(agent, meta.version) : undefined;
+        const load = (agent === 'claude-code' || agent === 'claude') && (data.loads as { kind: string; name: string }[]).some((l) => l.kind === 'mcp' && l.name === 'deepbuild') ? toolLoad('claude-code', meta.version) : undefined;
         if (load) data.toolLoad = load;
         if (!foreign) void this.control.enteredProject(meta.session, meta.cwd);
         // Each server's tool list, read off this hook's path: recorded after the start, its changes held for you.
