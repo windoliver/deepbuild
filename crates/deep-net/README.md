@@ -12,7 +12,8 @@ The net module (#549, #550, #551; canvas primitives: Shared play over a relay; t
 - `src/message.rs`: one player's message for one match step: its entries, the full-state and track hashes in 20 bytes, how its copy ended, and its locator's parts.
 - `src/locate.rs`: what a copy's locator finds and sends once a desync stopped its match, and where two copies parted.
 - `src/card.rs`: the start card every copy must share, and the first player's link, whose fragment carries the match ID and the opener's card.
-- `src/prompt.rs`: the Join prompt's words, the same in the app and the web player.
+- `src/prompt.rs`: the Join prompt's words, the same in the app and the web player, with the courtesy line for a piece that reads `match.me` (#552).
+- `src/draw.rs`: random draws after commit (#552): a copy's commitment once it confirms a drawn step, its bits once it holds every commitment, the check of each player's bits against their commitment, and the seeded test source a check plays with in place of the platform's secure one.
 - `src/play.rs`: the test relay, which runs every copy of a match in one process on its own clock and drops, holds or holds back frames by its seed, holds a chosen message from one copy until it has run a step, and gives each player a one-way latency.
 - `src/checks.rs`: net.rollback, net.desync and net.budget; `kind.rs` registers them, run through what the build binds (`deep-play`'s runs over a document's logic items and worlds).
 - `src/window.rs`: net.rollback's schedules for a window and net.budget's five runs, each frame the live step and the full window restored and stepped again (#551).
@@ -31,3 +32,5 @@ The piece a copy steps is a `Stepper`; `deep-play` gives the one over a document
 - A match's module-set digest covers the canvas modules the piece names and its items' kinds need, not the whole build's set: the app's set and the web player's differ by modules no piece in a match reads, and both must play one match.
 - The first player's link carries the opener's start card beside the match ID, both in its fragment: a copy that differs is refused from the link alone, before it opens a connection, since relay@1 forwards only frames and a direct path's signaling, and no frame may cross before every copy shares one start.
 - Physics keeps no checkpoint ring of its own in a match beyond its rollback ring, so a seek after the match steps a world again from its start, while logic restores its own ring's nearest checkpoint.
+- #552: a `draw.reveal` entry carries the match's ID beside its step and bits, so a record's track alone replays its draws (the design's draw hashes the match ID, and a replay is given only the track).
+- #552: a copy's `match.me` reaches a 3D frame as the drawn document's `match.me` (scene3d evaluates a document, not a session's view inputs); a 2D mark set's `seen` column reads it as the scheduler's `view(match.me)`. `match`'s `views` draw 3D pieces only.
