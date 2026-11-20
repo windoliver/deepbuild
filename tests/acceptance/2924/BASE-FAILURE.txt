@@ -1,0 +1,552 @@
+# #2924 acceptance tests on the base 58d3e19ee (Linux, the Spark, 1-minute load about 130-190 on 20 cores).
+# Run: node --test 'tests/acceptance/2924/*.test.mjs', in a systemd-run --user unit (MemoryMax=24G), detached.
+# Paths redacted: the checkout to <checkout>, the home to <home>. Expected reasons: the base grants a second test grant
+# regardless of readings, never reads DEEP_THROTTLE_READINGS (so is never BLOCKED for it and its command starts), logs
+# no readings, and its design states no rule. Passing on the base: the unchanged behaviour (AC1, AC2's at-once case,
+# AC4 and AC5's ceiling, AC7, AC8's tables).
+
+✖ #2924.AC5 a readings file that is missing, read for a second test request, is BLOCKED throttle naming DEEP_THROTTLE_READINGS, exit 2 (2419.257062ms)
+✖ #2924.AC5 a readings file that is not JSON, read for a second test request, is BLOCKED throttle naming DEEP_THROTTLE_READINGS, exit 2 (5110.69183ms)
+✖ #2924.AC5 a readings file that is missing cores, read for a second test request, is BLOCKED throttle naming DEEP_THROTTLE_READINGS, exit 2 (3426.32574ms)
+✖ #2924.AC5 a readings file that is non-numeric memory, read for a second test request, is BLOCKED throttle naming DEEP_THROTTLE_READINGS, exit 2 (6710.218001ms)
+✖ #2924.AC5 a readings file that is cores 0, read for a second test request, is BLOCKED throttle naming DEEP_THROTTLE_READINGS, exit 2 (7640.958831ms)
+✖ #2924.AC5 a readings file rewritten to not-JSON while a request waits is BLOCKED throttle at the next read, exit 2 (8589.303403ms)
+✖ #2924.AC5 inside a test run, on the machine's table (HOME is the user's own, no DEEP_THROTTLE_TABLE), a set DEEP_THROTTLE_READINGS is BLOCKED throttle, exit 2 (3518.617998ms)
+✖ #2924.AC5 outside a test run (no node --test in the process table), a set DEEP_THROTTLE_READINGS is BLOCKED throttle, exit 2 (360.200755ms)
+✔ #2924.AC4 readings with room for many runs still hold at most 6 test grants (linux); the next waits until a slot frees (17264.894618ms)
+✔ #2924.AC5 a test's own table without DEEP_THROTTLE_READINGS grants up to the ceiling, 6 (linux), as before (19491.892373ms)
+✖ #2924.AC8 section 6 states that test grants past the first are decided by memory and load up to the ceiling, with 24 GiB a run and 5 min settling (2.578439ms)
+✔ #2924.AC8 section 6's table keeps 6 (Spark) and 2 (Mac) for test (0.755378ms)
+✖ #2924.AC8 section 13 states that test grants past the first are decided by memory and load up to the ceiling, with 24 GiB a run and 5 min settling (0.363345ms)
+✔ #2924.AC8 section 13's table keeps 6 (Spark) and 2 (Mac) for test (0.149825ms)
+✖ #2924.AC6 each test grant's granted entry carries the readings it was decided on, the rewritten ones for a request that waited (9138.847967ms)
+✖ #2924.AC6 on a test's own table without DEEP_THROTTLE_READINGS, a test grant's granted entry carries readings null (2187.888854ms)
+✔ #2924.AC7 build grants its fixed 2 at once under readings of load 1000 on 1 core and 0 bytes, and the next waits for a slot (linux) (11130.524353ms)
+✔ #2924.AC7 bay-pair grants its fixed 3 at once under readings of load 1000 on 1 core and 0 bytes, and the next waits for a slot (linux) (17475.813379ms)
+✔ #2924.AC7 a top-level timed request follows the machine's load against its cores, not DEEP_THROTTLE_READINGS (8014.534789ms)
+✔ #2924.AC1 with no test grant held, a test request is granted at once under a load above the cores and 0 bytes of memory (558.086635ms)
+✖ #2924.AC2 with one test grant held, a second request waits while the readings show load equal to the cores (8762.444178ms)
+✖ #2924.AC2 with one settling test grant held, a second request waits while the readings show memory 1 byte below 48 GiB (9985.120319ms)
+✔ #2924.AC2 with one test grant held, a second request is granted at once under load below the cores and exactly 48 GiB (6225.125942ms)
+✖ #2924.AC3 a request waiting on load is granted without a restart once its readings file is rewritten to allow it (8635.252948ms)
+✖ #2924.AC3 a request waiting on memory is granted without a restart once its readings file is rewritten to allow it (11343.007967ms)
+ℹ tests 25
+ℹ suites 0
+ℹ pass 9
+ℹ fail 16
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 45809.224234
+
+✖ failing tests:
+
+test at tests/acceptance/2924/blocked.test.mjs:34:3
+✖ #2924.AC5 a readings file that is missing, read for a second test request, is BLOCKED throttle naming DEEP_THROTTLE_READINGS, exit 2 (2419.257062ms)
+  AssertionError [ERR_ASSERTION]: second's command started
+  events:
+  {"name":"holder","throttle":"test:c8f7cf8a95a00c36"}
+  {"name":"second","throttle":"test:8f80036a3d42919e"}
+  log:
+  {"at":"2026-11-20T09:57:01.364Z","event":"granted","class":"test","grant":"top-level","id":"c8f7cf8a95a00c36","pid":3330951,"index":1,"load":142.6,"cores":20,"wait":1}
+  {"at":"2026-11-20T09:57:02.713Z","event":"granted","class":"test","grant":"top-level","id":"8f80036a3d42919e","pid":3331243,"index":2,"load":142.6,"cores":20,"wait":1}
+  {"at":"2026-11-20T09:57:02.805Z","event":"released","class":"test","id":"8f80036a3d42919e","pid":3331243}
+  second: exit 0
+  
+  holder: still running
+  
+  + actual - expected
+  
+  + {
+  +   name: 'second',
+  +   throttle: 'test:8f80036a3d42919e'
+  + }
+  - undefined
+  
+      at blocked (file://<checkout>/tests/acceptance/2924/blocked.test.mjs:20:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file://<checkout>/tests/acceptance/2924/blocked.test.mjs:39:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: { name: 'second', throttle: 'test:8f80036a3d42919e' },
+    expected: undefined,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2924/blocked.test.mjs:34:3
+✖ #2924.AC5 a readings file that is not JSON, read for a second test request, is BLOCKED throttle naming DEEP_THROTTLE_READINGS, exit 2 (5110.69183ms)
+  AssertionError [ERR_ASSERTION]: second's command started
+  events:
+  {"name":"holder","throttle":"test:7b53e5bf0e0dd8d4"}
+  {"name":"second","throttle":"test:772f63cde77a1e12"}
+  log:
+  {"at":"2026-11-20T09:57:03.586Z","event":"granted","class":"test","grant":"top-level","id":"7b53e5bf0e0dd8d4","pid":3331609,"index":1,"load":142.6,"cores":20,"wait":1}
+  {"at":"2026-11-20T09:57:07.823Z","event":"granted","class":"test","grant":"top-level","id":"772f63cde77a1e12","pid":3331813,"index":2,"load":142.95,"cores":20,"wait":1}
+  {"at":"2026-11-20T09:57:07.933Z","event":"released","class":"test","id":"772f63cde77a1e12","pid":3331813}
+  second: exit 0
+  
+  holder: still running
+  
+  + actual - expected
+  
+  + {
+  +   name: 'second',
+  +   throttle: 'test:772f63cde77a1e12'
+  + }
+  - undefined
+  
+      at blocked (file://<checkout>/tests/acceptance/2924/blocked.test.mjs:20:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file://<checkout>/tests/acceptance/2924/blocked.test.mjs:39:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: { name: 'second', throttle: 'test:772f63cde77a1e12' },
+    expected: undefined,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2924/blocked.test.mjs:34:3
+✖ #2924.AC5 a readings file that is missing cores, read for a second test request, is BLOCKED throttle naming DEEP_THROTTLE_READINGS, exit 2 (3426.32574ms)
+  AssertionError [ERR_ASSERTION]: second's command started
+  events:
+  {"name":"holder","throttle":"test:2dd5c1ea15a03f56"}
+  {"name":"second","throttle":"test:fb7beea1a38642fa"}
+  log:
+  {"at":"2026-11-20T09:57:08.576Z","event":"granted","class":"test","grant":"top-level","id":"2dd5c1ea15a03f56","pid":3332842,"index":1,"load":142.95,"cores":20,"wait":1}
+  {"at":"2026-11-20T09:57:11.271Z","event":"granted","class":"test","grant":"top-level","id":"fb7beea1a38642fa","pid":3333020,"index":2,"load":143.28,"cores":20,"wait":1}
+  {"at":"2026-11-20T09:57:11.360Z","event":"released","class":"test","id":"fb7beea1a38642fa","pid":3333020}
+  second: exit 0
+  
+  holder: still running
+  
+  + actual - expected
+  
+  + {
+  +   name: 'second',
+  +   throttle: 'test:fb7beea1a38642fa'
+  + }
+  - undefined
+  
+      at blocked (file://<checkout>/tests/acceptance/2924/blocked.test.mjs:20:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file://<checkout>/tests/acceptance/2924/blocked.test.mjs:39:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: { name: 'second', throttle: 'test:fb7beea1a38642fa' },
+    expected: undefined,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2924/blocked.test.mjs:34:3
+✖ #2924.AC5 a readings file that is non-numeric memory, read for a second test request, is BLOCKED throttle naming DEEP_THROTTLE_READINGS, exit 2 (6710.218001ms)
+  AssertionError [ERR_ASSERTION]: second's command started
+  events:
+  {"name":"holder","throttle":"test:1b536966221cc173"}
+  {"name":"second","throttle":"test:ff59008722ae8baf"}
+  log:
+  {"at":"2026-11-20T09:57:17.446Z","event":"granted","class":"test","grant":"top-level","id":"1b536966221cc173","pid":3333681,"index":1,"load":144.62,"cores":20,"wait":1}
+  {"at":"2026-11-20T09:57:17.958Z","event":"granted","class":"test","grant":"top-level","id":"ff59008722ae8baf","pid":3335214,"index":2,"load":144.62,"cores":20,"wait":1}
+  {"at":"2026-11-20T09:57:18.061Z","event":"released","class":"test","id":"ff59008722ae8baf","pid":3335214}
+  second: exit 0
+  
+  holder: still running
+  
+  + actual - expected
+  
+  + {
+  +   name: 'second',
+  +   throttle: 'test:ff59008722ae8baf'
+  + }
+  - undefined
+  
+      at blocked (file://<checkout>/tests/acceptance/2924/blocked.test.mjs:20:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file://<checkout>/tests/acceptance/2924/blocked.test.mjs:39:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: { name: 'second', throttle: 'test:ff59008722ae8baf' },
+    expected: undefined,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2924/blocked.test.mjs:34:3
+✖ #2924.AC5 a readings file that is cores 0, read for a second test request, is BLOCKED throttle naming DEEP_THROTTLE_READINGS, exit 2 (7640.958831ms)
+  AssertionError [ERR_ASSERTION]: second's command started
+  events:
+  {"name":"holder","throttle":"test:746ae90e78b43a32"}
+  {"name":"second","throttle":"test:6bbb8ab41c9b49ae"}
+  log:
+  {"at":"2026-11-20T09:57:20.321Z","event":"granted","class":"test","grant":"top-level","id":"746ae90e78b43a32","pid":3335338,"index":1,"load":145.13,"cores":20,"wait":1}
+  {"at":"2026-11-20T09:57:25.640Z","event":"granted","class":"test","grant":"top-level","id":"6bbb8ab41c9b49ae","pid":3335820,"index":2,"load":145.84,"cores":20,"wait":1}
+  {"at":"2026-11-20T09:57:25.730Z","event":"released","class":"test","id":"6bbb8ab41c9b49ae","pid":3335820}
+  second: exit 0
+  
+  holder: still running
+  
+  + actual - expected
+  
+  + {
+  +   name: 'second',
+  +   throttle: 'test:6bbb8ab41c9b49ae'
+  + }
+  - undefined
+  
+      at blocked (file://<checkout>/tests/acceptance/2924/blocked.test.mjs:20:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file://<checkout>/tests/acceptance/2924/blocked.test.mjs:39:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: { name: 'second', throttle: 'test:6bbb8ab41c9b49ae' },
+    expected: undefined,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2924/blocked.test.mjs:43:1
+✖ #2924.AC5 a readings file rewritten to not-JSON while a request waits is BLOCKED throttle at the next read, exit 2 (8589.303403ms)
+  AssertionError [ERR_ASSERTION]: second's command started while the readings show load 100 on 8 cores
+  events:
+  {"name":"holder","throttle":"test:dda3391eb8dc20cd"}
+  {"name":"second","throttle":"test:c65297ebeb0bde23"}
+  log:
+  {"at":"2026-11-20T09:57:26.187Z","event":"granted","class":"test","grant":"top-level","id":"dda3391eb8dc20cd","pid":3336947,"index":1,"load":145.84,"cores":20,"wait":1}
+  {"at":"2026-11-20T09:57:26.656Z","event":"granted","class":"test","grant":"top-level","id":"c65297ebeb0bde23","pid":3337135,"index":2,"load":145.84,"cores":20,"wait":1}
+  {"at":"2026-11-20T09:57:26.768Z","event":"released","class":"test","id":"c65297ebeb0bde23","pid":3337135}
+  second: exit 0
+  
+  holder: still running
+  
+  + actual - expected
+  
+  + {
+  +   name: 'second',
+  +   throttle: 'test:c65297ebeb0bde23'
+  + }
+  - undefined
+  
+      at waits (file://<checkout>/tests/acceptance/2924/helpers.mjs:119:10)
+      at async TestContext.<anonymous> (file://<checkout>/tests/acceptance/2924/blocked.test.mjs:49:3)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: { name: 'second', throttle: 'test:c65297ebeb0bde23' },
+    expected: undefined,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2924/blocked.test.mjs:75:1
+✖ #2924.AC5 inside a test run, on the machine's table (HOME is the user's own, no DEEP_THROTTLE_TABLE), a set DEEP_THROTTLE_READINGS is BLOCKED throttle, exit 2 (3518.617998ms)
+  AssertionError [ERR_ASSERTION]: machine's command started
+  events:
+  {"name":"machine","throttle":"test:0fad79683162d949"}
+  log:
+  
+  machine: exit 0
+  
+  + actual - expected
+  
+  + {
+  +   name: 'machine',
+  +   throttle: 'test:0fad79683162d949'
+  + }
+  - undefined
+  
+      at blocked (file://<checkout>/tests/acceptance/2924/blocked.test.mjs:20:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async onMachineTable (file://<checkout>/tests/acceptance/2924/blocked.test.mjs:71:3)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: { name: 'machine', throttle: 'test:0fad79683162d949' },
+    expected: undefined,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2924/blocked.test.mjs:78:1
+✖ #2924.AC5 outside a test run (no node --test in the process table), a set DEEP_THROTTLE_READINGS is BLOCKED throttle, exit 2 (360.200755ms)
+  AssertionError [ERR_ASSERTION]: machine's command started
+  events:
+  {"name":"machine","throttle":"test:39a473f192f1161b"}
+  log:
+  
+  machine: exit 0
+  
+  + actual - expected
+  
+  + {
+  +   name: 'machine',
+  +   throttle: 'test:39a473f192f1161b'
+  + }
+  - undefined
+  
+      at blocked (file://<checkout>/tests/acceptance/2924/blocked.test.mjs:20:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async onMachineTable (file://<checkout>/tests/acceptance/2924/blocked.test.mjs:71:3)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: { name: 'machine', throttle: 'test:39a473f192f1161b' },
+    expected: undefined,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2924/design.test.mjs:39:3
+✖ #2924.AC8 section 6 states that test grants past the first are decided by memory and load up to the ceiling, with 24 GiB a run and 5 min settling (2.578439ms)
+  AssertionError [ERR_ASSERTION]: section 6 doesn't state: memory, the ceiling, 24 GiB per run, the 5-minute settling
+  + actual - expected
+  
+  + [
+  +   'memory',
+  +   'the ceiling',
+  +   '24 GiB per run',
+  +   'the 5-minute settling'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2924/design.test.mjs:42:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'memory', 'the ceiling', '24 GiB per run', 'the 5-minute settling' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2924/design.test.mjs:39:3
+✖ #2924.AC8 section 13 states that test grants past the first are decided by memory and load up to the ceiling, with 24 GiB a run and 5 min settling (0.363345ms)
+  AssertionError [ERR_ASSERTION]: section 13 doesn't state: the first test grant, memory, load, the ceiling, 24 GiB per run, the 5-minute settling
+  + actual - expected
+  
+  + [
+  +   'the first test grant',
+  +   'memory',
+  +   'load',
+  +   'the ceiling',
+  +   '24 GiB per run',
+  +   'the 5-minute settling'
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2924/design.test.mjs:42:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: [ 'the first test grant', 'memory', 'load', 'the ceiling', '24 GiB per run', 'the 5-minute settling' ],
+    expected: [],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2924/log.test.mjs:10:1
+✖ #2924.AC6 each test grant's granted entry carries the readings it was decided on, the rewritten ones for a request that waited (9138.847967ms)
+  AssertionError [ERR_ASSERTION]: second's command started while the readings show load 9 on 8 cores
+  events:
+  {"name":"holder","throttle":"test:066b0c137f6a0377"}
+  {"name":"second","throttle":"test:a05cb0cdc76d37e9"}
+  log:
+  {"at":"2026-11-20T09:57:01.255Z","event":"granted","class":"test","grant":"top-level","id":"066b0c137f6a0377","pid":3330883,"index":1,"load":142.6,"cores":20,"wait":1}
+  {"at":"2026-11-20T09:57:01.860Z","event":"granted","class":"test","grant":"top-level","id":"a05cb0cdc76d37e9","pid":3331190,"index":2,"load":142.6,"cores":20,"wait":1}
+  {"at":"2026-11-20T09:57:01.963Z","event":"released","class":"test","id":"a05cb0cdc76d37e9","pid":3331190}
+  second: exit 0
+  
+  holder: still running
+  
+  + actual - expected
+  
+  + {
+  +   name: 'second',
+  +   throttle: 'test:a05cb0cdc76d37e9'
+  + }
+  - undefined
+  
+      at waits (file://<checkout>/tests/acceptance/2924/helpers.mjs:119:10)
+      at async TestContext.<anonymous> (file://<checkout>/tests/acceptance/2924/log.test.mjs:18:3)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: { name: 'second', throttle: 'test:a05cb0cdc76d37e9' },
+    expected: undefined,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2924/log.test.mjs:26:1
+✖ #2924.AC6 on a test's own table without DEEP_THROTTLE_READINGS, a test grant's granted entry carries readings null (2187.888854ms)
+  AssertionError [ERR_ASSERTION]: the granted entry has no readings field: {"at":"2026-11-20T09:57:11.387Z","event":"granted","class":"test","grant":"top-level","id":"28d93239639879de","pid":3333196,"index":1,"load":143.28,"cores":20,"wait":1}
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2924/log.test.mjs:33:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2924/test-grants.test.mjs:32:1
+✖ #2924.AC2 with one test grant held, a second request waits while the readings show load equal to the cores (8762.444178ms)
+  AssertionError [ERR_ASSERTION]: second's command started while the readings show load 8 on 8 cores
+  events:
+  {"name":"holder","throttle":"test:b3b5e71157bf8098"}
+  {"name":"second","throttle":"test:533a976ec5e4a582"}
+  log:
+  {"at":"2026-11-20T09:57:01.376Z","event":"granted","class":"test","grant":"top-level","id":"b3b5e71157bf8098","pid":3331049,"index":1,"load":142.6,"cores":20,"wait":1}
+  {"at":"2026-11-20T09:57:02.783Z","event":"granted","class":"test","grant":"top-level","id":"533a976ec5e4a582","pid":3331230,"index":2,"load":142.6,"cores":20,"wait":1}
+  {"at":"2026-11-20T09:57:02.910Z","event":"released","class":"test","id":"533a976ec5e4a582","pid":3331230}
+  second: exit 0
+  
+  holder: still running
+  
+  + actual - expected
+  
+  + {
+  +   name: 'second',
+  +   throttle: 'test:533a976ec5e4a582'
+  + }
+  - undefined
+  
+      at waits (file://<checkout>/tests/acceptance/2924/helpers.mjs:119:10)
+      at async TestContext.<anonymous> (file://<checkout>/tests/acceptance/2924/test-grants.test.mjs:34:3)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: { name: 'second', throttle: 'test:533a976ec5e4a582' },
+    expected: undefined,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2924/test-grants.test.mjs:37:1
+✖ #2924.AC2 with one settling test grant held, a second request waits while the readings show memory 1 byte below 48 GiB (9985.120319ms)
+  AssertionError [ERR_ASSERTION]: second's command started while the readings show memory below 48 GiB and the held grant is under 5 min old
+  events:
+  {"name":"holder","throttle":"test:335c224a82cf180b"}
+  {"name":"second","throttle":"test:1b5b031a38ad069c"}
+  log:
+  {"at":"2026-11-20T09:57:11.445Z","event":"granted","class":"test","grant":"top-level","id":"335c224a82cf180b","pid":3333228,"index":1,"load":143.28,"cores":20,"wait":1}
+  {"at":"2026-11-20T09:57:17.451Z","event":"granted","class":"test","grant":"top-level","id":"1b5b031a38ad069c","pid":3333726,"index":2,"load":144.62,"cores":20,"wait":1}
+  {"at":"2026-11-20T09:57:17.515Z","event":"released","class":"test","id":"1b5b031a38ad069c","pid":3333726}
+  second: exit 0
+  
+  holder: still running
+  
+  + actual - expected
+  
+  + {
+  +   name: 'second',
+  +   throttle: 'test:1b5b031a38ad069c'
+  + }
+  - undefined
+  
+      at waits (file://<checkout>/tests/acceptance/2924/helpers.mjs:119:10)
+      at async TestContext.<anonymous> (file://<checkout>/tests/acceptance/2924/test-grants.test.mjs:39:3)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: { name: 'second', throttle: 'test:1b5b031a38ad069c' },
+    expected: undefined,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2924/test-grants.test.mjs:49:1
+✖ #2924.AC3 a request waiting on load is granted without a restart once its readings file is rewritten to allow it (8635.252948ms)
+  AssertionError [ERR_ASSERTION]: second's command started while the readings show load 100 on 8 cores
+  events:
+  {"name":"holder","throttle":"test:75ca5cb19ec711a4"}
+  {"name":"second","throttle":"test:ab17c73df0168d51"}
+  log:
+  {"at":"2026-11-20T09:57:26.270Z","event":"granted","class":"test","grant":"top-level","id":"75ca5cb19ec711a4","pid":3336951,"index":1,"load":145.84,"cores":20,"wait":1}
+  {"at":"2026-11-20T09:57:26.760Z","event":"granted","class":"test","grant":"top-level","id":"ab17c73df0168d51","pid":3337169,"index":2,"load":145.84,"cores":20,"wait":1}
+  {"at":"2026-11-20T09:57:26.836Z","event":"released","class":"test","id":"ab17c73df0168d51","pid":3337169}
+  second: exit 0
+  
+  holder: still running
+  
+  + actual - expected
+  
+  + {
+  +   name: 'second',
+  +   throttle: 'test:ab17c73df0168d51'
+  + }
+  - undefined
+  
+      at waits (file://<checkout>/tests/acceptance/2924/helpers.mjs:119:10)
+      at async TestContext.<anonymous> (file://<checkout>/tests/acceptance/2924/test-grants.test.mjs:51:3)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: { name: 'second', throttle: 'test:ab17c73df0168d51' },
+    expected: undefined,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2924/test-grants.test.mjs:58:1
+✖ #2924.AC3 a request waiting on memory is granted without a restart once its readings file is rewritten to allow it (11343.007967ms)
+  AssertionError [ERR_ASSERTION]: second's command started while the readings show 10 GiB of memory
+  events:
+  {"name":"holder","throttle":"test:a1771fe9fe87c3a9"}
+  {"name":"second","throttle":"test:be935dca5e3c2741"}
+  log:
+  {"at":"2026-11-20T09:57:37.677Z","event":"granted","class":"test","grant":"top-level","id":"a1771fe9fe87c3a9","pid":3339123,"index":1,"load":138.27,"cores":20,"wait":1}
+  {"at":"2026-11-20T09:57:38.847Z","event":"granted","class":"test","grant":"top-level","id":"be935dca5e3c2741","pid":3339800,"index":2,"load":138.27,"cores":20,"wait":1}
+  {"at":"2026-11-20T09:57:38.923Z","event":"released","class":"test","id":"be935dca5e3c2741","pid":3339800}
+  second: exit 0
+  
+  holder: still running
+  
+  + actual - expected
+  
+  + {
+  +   name: 'second',
+  +   throttle: 'test:be935dca5e3c2741'
+  + }
+  - undefined
+  
+      at waits (file://<checkout>/tests/acceptance/2924/helpers.mjs:119:10)
+      at async TestContext.<anonymous> (file://<checkout>/tests/acceptance/2924/test-grants.test.mjs:60:3)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: { name: 'second', throttle: 'test:be935dca5e3c2741' },
+    expected: undefined,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
