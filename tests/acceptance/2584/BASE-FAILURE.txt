@@ -1,0 +1,38 @@
+# Base run of tests/acceptance/2584 at eb027b613c7f372ea097d3912a38aac1e7ed43fe (nothing of #2584 implemented), 2026-11-20T10:43Z, Node v24.22.0, macOS 27.2.1 (arm64)
+# node node_modules/vitest/vitest.mjs run tests/acceptance/2584 --reporter=verbose
+
+
+ RUN  v5.0.5 <repo>
+
+ × tests/acceptance/2584/listening.test.ts > #2584.ae5eab8b with lsof warning that it can't stat a mount, listening answers a port nothing listens on as empty 259ms
+   → promise rejected "Error: lsof can't list port 55065's liste…" instead of resolving
+ ✓ tests/acceptance/2584/listening.test.ts > #2584.ae5eab8b with the mount warning, a port a process listens on still yields that process 88ms
+ ✓ tests/acceptance/2584/listening.test.ts > #2584.6f1bcc3c an lsof that exits 1 with a real error (and the mount warning) still rejects 44ms
+ ✓ tests/acceptance/2584/listening.test.ts > #2584.6f1bcc3c an lsof that is missing still rejects 1ms
+ ✓ tests/acceptance/2584/listening.test.ts > #2584.6f1bcc3c an lsof killed by a signal after printing only the mount warning still rejects 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2584/listening.test.ts > #2584.ae5eab8b with lsof warning that it can't stat a mount, listening answers a port nothing listens on as empty
+AssertionError: promise rejected "Error: lsof can't list port 55065's liste…" instead of resolving
+ ❯ tests/acceptance/2584/listening.test.ts:63:32
+     61|   await expect(listening(port), 'the port was taken before the warning…
+     62|   stand.mode = 'mount-warning';
+     63|   await expect(listening(port)).resolves.toEqual({ pids: [], empty: tr…
+       |                                ^
+     64|   expect(stand.calls.length, 'listening never ran lsof').toBeGreaterTh…
+     65| });
+
+Caused by: Error: lsof can't list port 55065's listeners: lsof: WARNING: can't stat() tracefs file system /sys/kernel/debug/tracing
+      Output information may be incomplete.
+ ❯ packages/supervisor/src/procs.ts:28:123
+ ❯ tests/acceptance/2584/listening.test.ts:36:114
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 4 passed (5)
+   Start at  02:43:11
+   Duration  917ms (tests 56%, transform 33%, import 10%, setup 1%)
+
