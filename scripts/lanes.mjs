@@ -1110,6 +1110,9 @@ alone.push('tests/acceptance/2776/seal.test.ts', 'tests/acceptance/2776/export.t
 // app's frame path on macOS; no timing.
 alone.push('tests/acceptance/1215/');
 
+// #2457's files build deep-physics and deep-show.
+alone.push('tests/acceptance/2457/');
+
 // #2500's files (blind) each build deep-canvas-render and deep-motion; CPU only, no GPU and no timing.
 alone.push('tests/acceptance/2500/');
 

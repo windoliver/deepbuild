@@ -2189,6 +2189,10 @@
           "spec": "* path=../deep-canvas-motion",
           "why": "Issue #1918: a world inside a scene reads the paths the scene's channels and drivers write, evaluated by the motion module at each step's time."
         },
+        "deep-canvas": {
+          "spec": "* path=../deep-canvas",
+          "why": "Issue #2457: the SHA-256 a mesh asset's bytes are checked against, as every store read is, when deep-physics reads the assets its scene's soft volumes are built from. Already in the workspace tree."
+        },
         "rapier3d": {
           "spec": "=0.36.1",
           "why": "Issue #2009: physics.world@1's backend, the version the design pins (World and backend), with enhanced-determinism and serde-serialize and without simd8 or parallel."
