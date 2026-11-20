@@ -245,7 +245,8 @@ impl Rapier {
 
     /// Every joint's state and readings, by ID.
     pub(crate) fn joint_states(&self) -> Vec<JointState> {
-        self.joints
+        let mut all: Vec<JointState> = self
+            .joints
             .iter()
             .map(|(id, h, kind)| {
                 let u = self
@@ -263,6 +264,12 @@ impl Rapier {
                     torque: f64::from(torque),
                 }
             })
-            .collect()
+            .collect();
+        // #2310: the articulated joints among them, each at its place by ID.
+        if !self.links.is_empty() {
+            all.extend(self.link_states());
+            all.sort_by(|a, b| a.id.cmp(&b.id));
+        }
+        all
     }
 }

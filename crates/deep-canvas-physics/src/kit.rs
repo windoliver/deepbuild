@@ -17,6 +17,7 @@ use crate::occurrence::{self, Row, KINDS};
 use crate::roles::TABLE;
 use crate::track;
 
+mod chains;
 mod fixtures;
 pub mod scan;
 mod sensors;
@@ -157,6 +158,16 @@ pub enum Measure {
     /// #2243: how far apart the axes of two character bodies that meet stand after the last
     /// step, m; it fails wherever one breaks the rule of their meeting.
     Meet(walks::Meet),
+    /// #2310: `body`'s distance from the point `from` after each step, m: the one farthest from
+    /// the answer; it fails wherever a joint of the world opens.
+    Reach { body: &'static str, from: [f64; 3] },
+    /// #2310: `body`'s speed where it passes its lowest point, m/s: let go along `along` from
+    /// `from`, square to gravity; it fails wherever a joint of the world opens.
+    Lowest {
+        body: &'static str,
+        from: [f64; 3],
+        along: [f64; 3],
+    },
 }
 
 /// One fixture of the behavior part.
@@ -753,6 +764,8 @@ fn read(m: &Measure, t: &Trace, b: &dyn Backend, w: &World, f: &Fixture) -> Read
             )
         }
         Measure::Meet(m) => met(t, m),
+        Measure::Reach { body, from } => chains::reach(w, t, body, *from, f.answer),
+        Measure::Lowest { body, from, along } => chains::lowest(w, t, body, (*from, *along)),
     }
 }
 
@@ -836,6 +849,10 @@ fn named_measure(m: &Measure) -> String {
             "distance between the axes of {} and {} after the last step, m",
             m.walker, m.other
         ),
+        Measure::Reach { body, .. } => {
+            format!("distance of {body}'s centre from the fixed point at every step, m")
+        }
+        Measure::Lowest { body, .. } => format!("speed of {body} at its lowest point, m/s"),
     }
 }
 
