@@ -33,11 +33,13 @@ use serde_json::{json, Map, Value};
 mod audit;
 pub mod centre;
 pub mod contact;
+mod dims;
 pub mod fast;
 mod held;
 pub mod kit;
 #[cfg(not(target_arch = "wasm32"))]
 mod live;
+pub mod net;
 mod replay;
 mod timeline;
 pub mod vehicle;
@@ -502,7 +504,8 @@ impl Run {
                     && !walk::planted(name, &mut run)
                     && !contact::planted(name, &mut run)
                     && !centre::planted(name, &mut run)
-                    && !fast::planted(name, &mut run) =>
+                    && !fast::planted(name, &mut run)
+                    && !dims::planted(name, &mut run) =>
             {
                 return None
             }
@@ -579,7 +582,7 @@ impl Run {
             frame_rate: if self.key_without_rate { "" } else { rate },
             steps,
         };
-        bake::key(&parts, &self.build, target)
+        bake::key(&parts, &self.build_of(world), target)
     }
 
     /// The world `v` holds, built, or the issues that refuse it.
@@ -615,7 +618,7 @@ impl Run {
         let scene = kept.as_deref().unwrap_or(scene);
         let doc = scene.get("worlds")?.get(id)?;
         let read = crate::bound::expand(Some(scene), doc).and_then(|doc| {
-            let w = check(&doc, &self.caps, self.table)?;
+            let w = check(&doc, &self.caps_of(&doc), self.table)?;
             let skins = deep_canvas_physics::skin::check(&w, scene);
             if !skins.is_empty() {
                 return Err(skins);
@@ -1021,7 +1024,7 @@ impl Run {
                         .collect();
                     json!({"ok": true, "golden": {
                         "bake_key": self.key(world, &reads, &track.json(), &rate, plan.steps, None),
-                        "runtime_digest": self.build.runtime_digest(), "machine": replay::machine(&self.build.target),
+                        "runtime_digest": self.build_of(world).runtime_digest(), "machine": replay::machine(&self.build.target),
                         "step_hashes": t.step_hashes, "checkpoint_hashes": hashes,
                         "occurrences_hash": record["occurrences_hash"],
                         "record_on": self.build.target, "verify_on": verify_on}})
@@ -1149,7 +1152,7 @@ impl Run {
             Ok(r) => r,
             Err(e) => return Some(e),
         };
-        let (w, mut b) = match self.build(world) {
+        let (w, mut b) = match self.build(world).and_then(dims::solid("physics.query")) {
             Ok(x) => x,
             Err(e) => return Some(e),
         };

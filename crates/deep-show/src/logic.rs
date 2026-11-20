@@ -166,16 +166,27 @@ impl Hub<'_> {
         form: &Value,
         track: &[Value],
     ) -> Result<Option<Piece>, Box<Issue>> {
+        self.logic_piece_with(form, track, &Default::default())
+    }
+
+    /// As `logic_piece`, checked with `planted`'s twins (#551).
+    pub(crate) fn logic_piece_with(
+        &self,
+        form: &Value,
+        track: &[Value],
+        planted: &deep_logic::Planted,
+    ) -> Result<Option<Piece>, Box<Issue>> {
         let root = &self.scenario.evidence;
         let late = self.planted(crate::hub::Planted::Physics(
             crate::physics::Planted::CastAnswersLate,
         ));
-        deep_play::logic::logic_piece(
+        deep_play::logic::logic_piece_with(
             &self.startup.sealed,
             form,
             track,
             &|sha| crate::evidence::read(root, sha),
             late,
+            planted,
         )
     }
 

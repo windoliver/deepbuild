@@ -141,5 +141,14 @@ opt-level = 3
 # step and its sandboxed calls.
 [profile.dev.package.deep-logic]
 opt-level = 3
+# Issue #551: net.budget times a match's frames (the live step, and the window restored and stepped
+# again, each with its checkpoints) on the dev deep-show the acceptance tests run, so a world's live
+# steps and its whole-world checkpoints build at release speed there.
+[profile.dev.package.deep-physics-rapier]
+opt-level = 3
+[profile.dev.package.deep-canvas-physics]
+opt-level = 3
+[profile.dev.package.bincode]
+opt-level = 3
 [profile.dev.package.deep-sandbox-wasmtime]
 opt-level = 3

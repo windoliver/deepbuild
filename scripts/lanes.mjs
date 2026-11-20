@@ -802,6 +802,13 @@ alone.push('tests/acceptance/549/', 'tests/acceptance/549-oracle/');
 // as a match of their own and sends each its start (tests/acceptance/549/DISPUTE.md); on the owner's ruling its blind
 // redraft runs in its place, and the first draft's file, with its other three tests, runs by hand.
 alone.push('tests/acceptance/549-redraft-ac2/');
+// #550's files each build deep-show (ac6 in two feature sets; ac10 also the shipped relay and the merge base) and
+// play matches in process; ac10 also plays two live matches through the shipped relay. The Oracle lane builds
+// deep-show alone.
+alone.push('tests/acceptance/550/', 'tests/acceptance/550-oracle/');
+// #551's files each build deep-show (ac1 and the Oracle lane also the shipped relay) and play matches in process; ac1 and
+// the Oracle lane also play a live match between the app and headless Chrome's web player through the shipped relay.
+alone.push('tests/acceptance/551/', 'tests/acceptance/551-oracle/');
 byHand.push('tests/acceptance/549/ac2-join-only.test.ts');
 timed.push('tests/acceptance/172/budgets.test.ts', 'tests/acceptance/172/images.test.ts');
 // #172's first-draft refusal test shows a device control without the role the document check requires, so that piece is
@@ -963,6 +970,9 @@ alone.push('tests/acceptance/2241/', 'tests/acceptance/2009-redraft-2241/');
 // #2239's files build deep-physics (release); so do those of its blind redraft, written after the issue's amendment
 // of November 19, 2026: its fourth criterion, rewritten, and the one added last.
 alone.push('tests/acceptance/2239/', 'tests/acceptance/2239-redraft-ac4/');
+// #2098's files build deep-physics (release); so do those of its second blind run, which holds its second criterion's
+// closed-form time and gusts to the Force section as the owner's answer of November 19, 2026 amended it.
+alone.push('tests/acceptance/2098/', 'tests/acceptance/2098-redraft-ac2/');
 // #2307's files build deep-physics (release and test-backends).
 alone.push('tests/acceptance/2307/');
 
@@ -1174,6 +1184,11 @@ timed.push('tests/acceptance/1489/ui-thread.test.ts');
 // #2777's files each build deep-show (full, and with the test.tone module), and its preflight file times the lane.
 alone.push('tests/acceptance/2777/');
 
+// #981's files (blind) each build deep-logic and #416's assembler; ac7 starts headless Chrome, ac5 runs eight simulated
+// hours, and ac8 judges a step's and a route search's time on the reference Mac.
+alone.push('tests/acceptance/981/');
+timed.push('tests/acceptance/981/ac8-budget.test.ts');
+
 // #2898's files (blind) each start real hubs, plug-ins and jobs and hold 40 s deep_wait calls; no timing.
 alone.push('tests/acceptance/2898/');
 
@@ -1181,6 +1196,9 @@ alone.push('tests/acceptance/2898/');
 // 485 s on the base) and a child Vitest of #1409's limit stop (AC3).
 alone.push('tests/acceptance/2227/');
 slow.push('tests/acceptance/2227/ac2-native-build.test.ts');
+
+// #2109's file (blind) runs #83's AC11 goldens, which start real hubs, in a child vitest; no timing.
+alone.push('tests/acceptance/2109/');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
