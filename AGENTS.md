@@ -1,6 +1,6 @@
 # Rules for agents working in this repo
 
-Read [docs/technical-design.md](docs/technical-design.md) before edits. Keep this file under one page. Delegates follow these rules. Before delivery, review requirement → change → proof mappings; disclose deviations and unrun checks.
+Read the design sections your issue links before edits. `node scripts/design-section.mjs --issue <n>` prints them. Keep this file under one page. Delegates follow these rules. Before delivery, review requirement → change → proof mappings; disclose deviations and unrun checks.
 
 ## The four invariants
 

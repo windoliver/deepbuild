@@ -1,5 +1,6 @@
-//! The build's first-party packs (#416, #953; canvas primitives: Logic: library interfaces):
-//! `packs/interfaces-1.0.0`, which declares physics2d.lib@1, fsm@1 and nn.mlp@1, and
+//! The build's first-party packs (#416, #981, #953; canvas primitives: Logic: library interfaces):
+//! `packs/interfaces-1.0.0`, which declares physics2d.lib@1, fsm@1 and nn.mlp@1,
+//! `packs/lanes-1.0.0`, which declares lanes@1 with its reference library, and
 //! `packs/modslib-1.0.0`, which declares mods.lib@1 with its reference library mods.tree, held in
 //! the binary so every piece's links resolve against them, as the release's packs are installed for
 //! every document.
@@ -41,6 +42,21 @@ const PACKS: &[(&str, Files)] = &[
             pack_file!("interfaces-1.0.0", "objects/net.wasm"),
             pack_file!("interfaces-1.0.0", "fixtures/4-8-2.json"),
             pack_file!("interfaces-1.0.0", "objects/mlp_fused.wasm"),
+        ],
+    ),
+    (
+        include_str!("../../../packs/lanes-1.0.0/pack.json"),
+        &[
+            pack_file!("lanes-1.0.0", "objects/lanes_ref.wasm"),
+            pack_file!("lanes-1.0.0", "objects/lanes_planted.wasm"),
+            pack_file!("lanes-1.0.0", "objects/straight.wasm"),
+            pack_file!("lanes-1.0.0", "fixtures/straight.json"),
+            pack_file!("lanes-1.0.0", "objects/merge.wasm"),
+            pack_file!("lanes-1.0.0", "fixtures/merge.json"),
+            pack_file!("lanes-1.0.0", "objects/lift.wasm"),
+            pack_file!("lanes-1.0.0", "fixtures/lift.json"),
+            pack_file!("lanes-1.0.0", "objects/straight_own.wasm"),
+            pack_file!("lanes-1.0.0", "fixtures/straight_own.json"),
         ],
     ),
     (

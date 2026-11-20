@@ -61,7 +61,7 @@ pub(crate) fn bake(
                 json!({"code": "physics_refused", "reason": format!("worlds/{id}"), "bake": reply}),
             );
         }
-        arrays.extend(written::arrays(id, &w, doc, &reply["bodies"]));
+        arrays.extend(written::arrays(id, &w, doc, &reply));
         // #524: an output to an item path draws as the channels deep_show writes for it.
         let frame = deep_canvas_physics::bake::frame_rate(&rate).map_or(step, |(_, f)| f);
         let frames: Vec<i64> = (0..)
@@ -71,7 +71,7 @@ pub(crate) fn bake(
         deep_physics_rapier::channels::output_channels(
             id,
             &w,
-            &deep_physics_rapier::channels::states(&reply),
+            &reply,
             &frames,
             false,
             &mut channels,
