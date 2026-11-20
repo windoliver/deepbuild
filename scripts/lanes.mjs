@@ -548,6 +548,8 @@ alone.push('tests/acceptance/1956/');
 alone.push('tests/acceptance/1959/');
 // #1960's files each build deep-show (r1); the lifecycle test restarts a hub twice on the same state folder.
 alone.push('tests/acceptance/1960/');
+// #1962's files each build deep-show (r1) and install the shelf and furniture packs' versions in order.
+alone.push('tests/acceptance/1962/');
 // #1802's ac4 and ac6 files each build deep-show with a test canvas module's features.
 alone.push('tests/acceptance/1802/');
 // #139's preview tests that publish an undated preview entry are redrafted after #1802; the redraft runs as #139's suite does.

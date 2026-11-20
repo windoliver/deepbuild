@@ -1,0 +1,676 @@
+{
+ "date": "2026-11-20T06:35:40.625Z",
+ "main": "72ed0f03eb9726ee149a99479a96f0a7df4cea37",
+ "machine": {
+  "cpu": "Apple M3",
+  "cores": 8,
+  "macos": "27.2.1",
+  "node": "v24.22.0"
+ },
+ "id": "B",
+ "measurements": {
+  "sandbox-setup": {
+   "command": "node docs/spikes/2649/measure.mjs cut B <copy with the cut>  (each side: node benchmarks/sandbox.mjs, under scripts/count-children.c)",
+   "rounds": [
+    {
+     "first": "base",
+     "base": 14194299686,
+     "change": 12243385522,
+     "baseStarts": 174,
+     "changeStarts": 125,
+     "uncounted": [
+      "(forked)",
+      "helper"
+     ],
+     "load": [
+      14.80859375,
+      13.94091796875
+     ]
+    },
+    {
+     "first": "change",
+     "base": 13894611251,
+     "change": 12261188671,
+     "baseStarts": 170,
+     "changeStarts": 125,
+     "uncounted": [
+      "(forked)",
+      "helper"
+     ],
+     "load": [
+      13.33447265625,
+      13.25732421875
+     ]
+    },
+    {
+     "first": "base",
+     "base": 13863490798,
+     "change": 12241255725,
+     "baseStarts": 168,
+     "changeStarts": 124,
+     "uncounted": [
+      "(forked)",
+      "helper"
+     ],
+     "load": [
+      12.2080078125,
+      11.14599609375
+     ]
+    },
+    {
+     "first": "change",
+     "base": 13996984643,
+     "change": 12220727448,
+     "baseStarts": 171,
+     "changeStarts": 124,
+     "uncounted": [
+      "(forked)",
+      "helper"
+     ],
+     "load": [
+      10.74853515625,
+      10.11083984375
+     ]
+    },
+    {
+     "first": "base",
+     "base": 14018259655,
+     "change": 12448092195,
+     "baseStarts": 170,
+     "changeStarts": 131,
+     "uncounted": [
+      "(forked)",
+      "helper"
+     ],
+     "load": [
+      9.48876953125,
+      9.2529296875
+     ]
+    },
+    {
+     "first": "change",
+     "base": 14369305451,
+     "change": 12442325474,
+     "baseStarts": 173,
+     "changeStarts": 126,
+     "uncounted": [
+      "(forked)",
+      "helper"
+     ],
+     "load": [
+      9.52099609375,
+      9.12646484375
+     ]
+    },
+    {
+     "first": "base",
+     "base": 14363024259,
+     "change": 12531695807,
+     "baseStarts": 172,
+     "changeStarts": 129,
+     "uncounted": [
+      "(forked)",
+      "helper"
+     ],
+     "load": [
+      9.19140625,
+      8.86669921875
+     ]
+    },
+    {
+     "first": "change",
+     "base": 14336849271,
+     "change": 12456456403,
+     "baseStarts": 172,
+     "changeStarts": 126,
+     "uncounted": [
+      "(forked)",
+      "helper"
+     ],
+     "load": [
+      9.72900390625,
+      9.22265625
+     ]
+    },
+    {
+     "first": "base",
+     "base": 14387122922,
+     "change": 12553842876,
+     "baseStarts": 174,
+     "changeStarts": 129,
+     "uncounted": [
+      "(forked)",
+      "helper"
+     ],
+     "load": [
+      9.17529296875,
+      8.84033203125
+     ]
+    },
+    {
+     "first": "change",
+     "base": 14375576979,
+     "change": 12462330357,
+     "baseStarts": 174,
+     "changeStarts": 126,
+     "uncounted": [
+      "(forked)",
+      "helper"
+     ],
+     "load": [
+      8.4833984375,
+      8.46142578125
+     ]
+    },
+    {
+     "first": "base",
+     "base": 14476627935,
+     "change": 12598967670,
+     "baseStarts": 171,
+     "changeStarts": 127,
+     "uncounted": [
+      "(forked)",
+      "helper"
+     ],
+     "load": [
+      8.5439453125,
+      9.0361328125
+     ]
+    },
+    {
+     "first": "change",
+     "base": 15067173108,
+     "change": 12648825896,
+     "baseStarts": 176,
+     "changeStarts": 130,
+     "uncounted": [
+      "(forked)",
+      "helper"
+     ],
+     "load": [
+      8.72900390625,
+      20.58642578125
+     ]
+    },
+    {
+     "first": "base",
+     "base": 14293399384,
+     "change": 12469786408,
+     "baseStarts": 171,
+     "changeStarts": 127,
+     "uncounted": [
+      "(forked)",
+      "helper"
+     ],
+     "load": [
+      18.509765625,
+      16.52587890625
+     ]
+    },
+    {
+     "first": "change",
+     "base": 14447472221,
+     "change": 12504583205,
+     "baseStarts": 175,
+     "changeStarts": 126,
+     "uncounted": [
+      "(forked)",
+      "helper"
+     ],
+     "load": [
+      14.89404296875,
+      13.53271484375
+     ]
+    },
+    {
+     "first": "base",
+     "base": 14218908284,
+     "change": 12431660912,
+     "baseStarts": 174,
+     "changeStarts": 125,
+     "uncounted": [
+      "(forked)",
+      "helper"
+     ],
+     "load": [
+      14.77978515625,
+      27.9521484375
+     ]
+    }
+   ]
+  },
+  "runner-job": {
+   "command": "node docs/spikes/2649/measure.mjs cut B <copy with the cut>  (each side: node benchmarks/runner.mjs, under scripts/count-children.c)",
+   "rounds": [
+    {
+     "first": "base",
+     "base": 12204633724,
+     "change": 11332543188,
+     "baseStarts": 126,
+     "changeStarts": 99,
+     "uncounted": [
+      "(forked)"
+     ],
+     "load": [
+      20.259765625,
+      20.2353515625
+     ]
+    },
+    {
+     "first": "change",
+     "base": 11427690730,
+     "change": 10815424941,
+     "baseStarts": 121,
+     "changeStarts": 96,
+     "uncounted": [
+      "(forked)",
+      "helper"
+     ],
+     "load": [
+      19.0888671875,
+      21.65966796875
+     ]
+    },
+    {
+     "first": "base",
+     "base": 12295778792,
+     "change": 10314404376,
+     "baseStarts": 122,
+     "changeStarts": 95,
+     "uncounted": [
+      "(forked)",
+      "helper"
+     ],
+     "load": [
+      19.853515625,
+      18.9404296875
+     ]
+    },
+    {
+     "first": "change",
+     "base": 12076156578,
+     "change": 10979729645,
+     "baseStarts": 120,
+     "changeStarts": 93,
+     "uncounted": [
+      "(forked)"
+     ],
+     "load": [
+      17.55224609375,
+      16.14404296875
+     ]
+    },
+    {
+     "first": "base",
+     "base": 12167600042,
+     "change": 10793517612,
+     "baseStarts": 122,
+     "changeStarts": 90,
+     "uncounted": [
+      "(forked)"
+     ],
+     "load": [
+      15.34619140625,
+      34.28564453125
+     ]
+    },
+    {
+     "first": "change",
+     "base": 11929557078,
+     "change": 10994708716,
+     "baseStarts": 126,
+     "changeStarts": 99,
+     "uncounted": [
+      "(forked)"
+     ],
+     "load": [
+      33.1552734375,
+      31.99462890625
+     ]
+    },
+    {
+     "first": "base",
+     "base": 11629060040,
+     "change": 11040150795,
+     "baseStarts": 121,
+     "changeStarts": 93,
+     "uncounted": [
+      "(forked)"
+     ],
+     "load": [
+      29.775390625,
+      28.416015625
+     ]
+    },
+    {
+     "first": "change",
+     "base": 12164589410,
+     "change": 11054791823,
+     "baseStarts": 126,
+     "changeStarts": 98,
+     "uncounted": [
+      "(forked)",
+      "helper"
+     ],
+     "load": [
+      25.412109375,
+      22.97509765625
+     ]
+    },
+    {
+     "first": "base",
+     "base": 12181668022,
+     "change": 10880048225,
+     "baseStarts": 125,
+     "changeStarts": 92,
+     "uncounted": [
+      "(forked)"
+     ],
+     "load": [
+      20.9736328125,
+      21.11328125
+     ]
+    },
+    {
+     "first": "change",
+     "base": 12574284332,
+     "change": 10505955941,
+     "baseStarts": 141,
+     "changeStarts": 90,
+     "uncounted": [
+      "(forked)"
+     ],
+     "load": [
+      19.77880859375,
+      22.19482421875
+     ]
+    },
+    {
+     "first": "base",
+     "base": 11854822588,
+     "change": 11213685354,
+     "baseStarts": 115,
+     "changeStarts": 103,
+     "uncounted": [
+      "(forked)"
+     ],
+     "load": [
+      20.28759765625,
+      19.14208984375
+     ]
+    },
+    {
+     "first": "change",
+     "base": 12192339217,
+     "change": 10984732262,
+     "baseStarts": 121,
+     "changeStarts": 90,
+     "uncounted": [
+      "(forked)"
+     ],
+     "load": [
+      17.49560546875,
+      16.47705078125
+     ]
+    },
+    {
+     "first": "base",
+     "base": 12487935818,
+     "change": 11189587098,
+     "baseStarts": 126,
+     "changeStarts": 95,
+     "uncounted": [
+      "(forked)"
+     ],
+     "load": [
+      14.98046875,
+      13.90673828125
+     ]
+    },
+    {
+     "first": "change",
+     "base": 11714229844,
+     "change": 10844107509,
+     "baseStarts": 123,
+     "changeStarts": 93,
+     "uncounted": [
+      "(forked)"
+     ],
+     "load": [
+      12.9248046875,
+      14.4599609375
+     ]
+    },
+    {
+     "first": "base",
+     "base": 11956671000,
+     "change": 11196424066,
+     "baseStarts": 118,
+     "changeStarts": 91,
+     "uncounted": [
+      "(forked)"
+     ],
+     "load": [
+      13.54638671875,
+      12.60009765625
+     ]
+    }
+   ]
+  },
+  "command-check-count": {
+   "command": "node docs/spikes/2649/measure.mjs cut B <copy with the cut>  (each side: node benchmarks/command-check.mjs, under scripts/count-children.c)",
+   "rounds": [
+    {
+     "first": "base",
+     "base": 128798526508,
+     "change": 127566185714,
+     "baseStarts": 437,
+     "changeStarts": 380,
+     "uncounted": [
+      "(forked)"
+     ],
+     "load": [
+      9.9111328125,
+      9.82568359375
+     ]
+    },
+    {
+     "first": "change",
+     "base": 128818597074,
+     "change": 127367993663,
+     "baseStarts": 454,
+     "changeStarts": 385,
+     "uncounted": [
+      "(forked)"
+     ],
+     "load": [
+      9.72705078125,
+      9.10595703125
+     ]
+    },
+    {
+     "first": "base",
+     "base": 128932754556,
+     "change": 128151261924,
+     "baseStarts": 454,
+     "changeStarts": 413,
+     "uncounted": [
+      "(forked)"
+     ],
+     "load": [
+      8.9072265625,
+      11.2333984375
+     ]
+    },
+    {
+     "first": "change",
+     "base": 128409696470,
+     "change": 127352574589,
+     "baseStarts": 414,
+     "changeStarts": 354,
+     "uncounted": [
+      "(forked)"
+     ],
+     "load": [
+      30.0986328125,
+      22.52734375
+     ]
+    },
+    {
+     "first": "base",
+     "base": 128430762564,
+     "change": 127161832550,
+     "baseStarts": 414,
+     "changeStarts": 349,
+     "uncounted": [
+      "(forked)"
+     ],
+     "load": [
+      17.80908203125,
+      14.060546875
+     ]
+    },
+    {
+     "first": "change",
+     "base": 128608941361,
+     "change": 127041889896,
+     "baseStarts": 422,
+     "changeStarts": 350,
+     "uncounted": [
+      "(forked)"
+     ],
+     "load": [
+      11.43896484375,
+      9.73779296875
+     ]
+    },
+    {
+     "first": "base",
+     "base": 128402030651,
+     "change": 127847404347,
+     "baseStarts": 416,
+     "changeStarts": 355,
+     "uncounted": [
+      "(forked)"
+     ],
+     "load": [
+      8.94189453125,
+      8.953125
+     ]
+    },
+    {
+     "first": "change",
+     "base": 128573347780,
+     "change": 127027720447,
+     "baseStarts": 418,
+     "changeStarts": 352,
+     "uncounted": [
+      "(forked)"
+     ],
+     "load": [
+      9.38916015625,
+      9.93994140625
+     ]
+    },
+    {
+     "first": "base",
+     "base": 130121875358,
+     "change": 129535351448,
+     "baseStarts": 472,
+     "changeStarts": 467,
+     "uncounted": [
+      "(forked)"
+     ],
+     "load": [
+      12.23828125,
+      13.03857421875
+     ]
+    },
+    {
+     "first": "change",
+     "base": 130408240854,
+     "change": 128706295717,
+     "baseStarts": 508,
+     "changeStarts": 437,
+     "uncounted": [
+      "(forked)"
+     ],
+     "load": [
+      13.90625,
+      27.49365234375
+     ]
+    },
+    {
+     "first": "base",
+     "base": 131578784476,
+     "change": 128492894008,
+     "baseStarts": 550,
+     "changeStarts": 405,
+     "uncounted": [
+      "(forked)"
+     ],
+     "load": [
+      25.71826171875,
+      21.0400390625
+     ]
+    },
+    {
+     "first": "change",
+     "base": 127652581220,
+     "change": 126763520607,
+     "baseStarts": 392,
+     "changeStarts": 326,
+     "uncounted": [
+      "(forked)"
+     ],
+     "load": [
+      32.275390625,
+      23.38525390625
+     ]
+    },
+    {
+     "first": "base",
+     "base": 128326043210,
+     "change": 128065007695,
+     "baseStarts": 396,
+     "changeStarts": 360,
+     "uncounted": [
+      "(forked)"
+     ],
+     "load": [
+      17.73681640625,
+      14.06689453125
+     ]
+    },
+    {
+     "first": "change",
+     "base": 130062923801,
+     "change": 127159459626,
+     "baseStarts": 453,
+     "changeStarts": 368,
+     "uncounted": [
+      "(forked)"
+     ],
+     "load": [
+      11.9384765625,
+      10.990234375
+     ]
+    },
+    {
+     "first": "base",
+     "base": 127577366679,
+     "change": 127928166041,
+     "baseStarts": 408,
+     "changeStarts": 382,
+     "uncounted": [
+      "(forked)"
+     ],
+     "load": [
+      28.35595703125,
+      22.1962890625
+     ]
+    }
+   ]
+  }
+ }
+}
