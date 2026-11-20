@@ -73,7 +73,7 @@ export const slow = [
   'tests/acceptance/139/apisurface.test.ts', 'tests/acceptance/140/gpu/features.test.ts',
   'tests/acceptance/149/taste.test.ts', 'tests/acceptance/16/address.test.ts',
   'tests/acceptance/16/hotpath-ac18-redraft.test.ts', 'tests/acceptance/185/kit.test.ts',
-  'tests/acceptance/185/redraft/kit-behavior-redraft.test.ts', 'tests/acceptance/19/doctor/contract.test.ts',
+  'tests/acceptance/185/redraft/kit-behavior-redraft.test.ts', 'tests/acceptance/19/doctor/redraft-ac16/contract.test.ts',
   'tests/acceptance/200/fillers.test.ts', 'tests/acceptance/200/gpu.test.ts', 'tests/acceptance/200/listing.test.ts',
   'tests/acceptance/200/module.test.ts', 'tests/acceptance/200/opening.test.ts',
   'tests/acceptance/262/retention.test.ts', 'tests/acceptance/27/desktop-redraft-2/desktop.test.ts',
@@ -135,6 +135,9 @@ export const exclusive = ['tests/acceptance/16/', 'tests/acceptance/315/', 'test
  * redraft/own-repo.test.ts, runs in its place.
  * #1632's first AC2 draft, answers.test.ts, is kept as written, by hand only: it also counts the answer's delivery along
  * the thread joined across /clear, which the design keeps (the owner's call); its blind redraft, redraft-ac2/, runs in its place.
+ * #19's first AC16 contract draft, doctor/contract.test.ts, is kept as written, by hand only: it reads the 127 `deep lease`
+ * passes on from a command that isn't there as unmapped, and lease keeps passing its command's status on (the owner's call
+ * on #2200); its blind redraft, doctor/redraft-ac16/, runs in its place.
  */
 export const byHand = ['tests/acceptance/46/live.test.ts', 'tests/acceptance/685/', 'tests/acceptance/70/', 'tests/proof/70/', 'tests/acceptance/1202/session.live.test.ts', 'tests/acceptance/666/session.live.test.ts', 'tests/acceptance/668/session.live.test.ts', 'tests/acceptance/567/session.live.test.ts', 'tests/acceptance/669/session.live.test.ts', 'tests/acceptance/1156/session.live.test.ts', 'tests/acceptance/1156/linux/', 'tests/acceptance/668/linux/', 'tests/acceptance/669/linux/', 'tests/acceptance/18/mapping/record.live.test.ts', 'tests/acceptance/18/install/tamper.live.test.ts', 'tests/acceptance/21/sessions.live.test.ts',
   'tests/acceptance/25/live/routes.live.test.ts', 'tests/acceptance/25/live-redraft/ac2.live.test.ts', 'tests/acceptance/112/live.test.ts', 'tests/acceptance/27/session.live.test.ts', 'tests/acceptance/27/desktop.test.ts', 'tests/acceptance/27/desktop-redraft/', 'tests/acceptance/27/outcomes.test.ts', 'tests/acceptance/806/live.test.ts',
@@ -144,7 +147,7 @@ export const byHand = ['tests/acceptance/46/live.test.ts', 'tests/acceptance/685
   'tests/acceptance/824/sessions/redraft-readings/', 'tests/acceptance/14/ac6-redraft.test.ts', 'tests/acceptance/37/assertions.test.ts',
   'tests/acceptance/37/budgets.test.ts', 'tests/acceptance/37/receipt-first-draft.test.ts', 'tests/acceptance/1015/own-repo.test.ts', 'tests/acceptance/1016/',
   // #994: real windows that take focus, a real hub, and 100 s of the retry schedule by the clock.
-  'tests/acceptance/994/app.test.ts', 'tests/acceptance/994/taste.test.ts', 'tests/acceptance/1632/answers.test.ts'];
+  'tests/acceptance/994/app.test.ts', 'tests/acceptance/994/taste.test.ts', 'tests/acceptance/1632/answers.test.ts', 'tests/acceptance/19/doctor/contract.test.ts'];
 
 /**
  * Test files whose verdict reads the machine's load or timing (docs/parallel-proof.md, section 7), which run only under
@@ -205,7 +208,8 @@ export const timed = [
   'tests/acceptance/246/lanes.test.mjs', 'tests/acceptance/568/', 'tests/acceptance/583/perf-added-tests.test.mjs',
   'tests/acceptance/724/', 'tests/preflight.test.mjs',
   'tests/acceptance/572/budgets.test.ts', 'tests/acceptance/62/budgets.test.ts',
-  'tests/acceptance/63/budgets.test.ts', 'tests/acceptance/667/redraft-1463/raised.test.ts', 'tests/acceptance/669/fast.test.ts', 'tests/acceptance/1156/fast.test.ts',
+  'tests/acceptance/63/budgets.test.ts', 'tests/acceptance/667/redraft-1463/raised.test.ts',
+  'tests/acceptance/667/redraft-2047/criteria.test.ts', 'tests/acceptance/667/redraft-2047/plants.test.ts', 'tests/acceptance/669/fast.test.ts', 'tests/acceptance/1156/fast.test.ts',
   'tests/acceptance/68/budgets.test.ts', 'tests/acceptance/69/budgets.test.ts',
   'tests/acceptance/761/budgets.test.ts', 'tests/acceptance/823/run.test.ts', 'tests/acceptance/823/wait.test.ts',
   'tests/acceptance/824/budgets.long.test.ts', 'tests/acceptance/824/redraft-ac1/budgets.long.test.ts',
@@ -232,6 +236,11 @@ timed.push('tests/acceptance/1427/ac8-budget.live.test.ts');
 alone.push('tests/acceptance/1550/');
 // #533's files build deep-logic, a wat assembler and four deep-show feature sets, and run the logic kit.
 alone.push('tests/acceptance/533/');
+// #194's suites build cargo binaries and open hubs; its budgets are a timed file. The first draft of criterion 11 is
+// disputed (194-redraft-ac11/DISPUTE.md): its redraft runs in its place, the first by hand until the ruling.
+alone.push('tests/acceptance/194/', 'tests/acceptance/194-oracle/', 'tests/acceptance/194-redraft-ac11/');
+timed.push('tests/acceptance/194-redraft-ac11/ac11-budgets.test.ts');
+byHand.push('tests/acceptance/194/ac11-budgets.test.ts');
 // #1434's files build deep-replica and start a replica each, and ac5 runs #377's handoff suite; its live window files
 // run by hand on the reference Mac, the budgets as a timed file.
 alone.push('tests/acceptance/1434/');
@@ -804,6 +813,9 @@ byHand.push('tests/acceptance/172/refusals.test.ts');
 alone.push('tests/acceptance/1041/');
 // #1045's files each build deep-show (full) and drive headless Chrome with WebGPU on.
 alone.push('tests/acceptance/1045/');
+// #2856's files each build deep-show (full) and drive headless Chrome with WebGPU on; unchanged.test.ts also builds
+// the merge base's deep-show when this checkout's code differs from it.
+alone.push('tests/acceptance/2856/');
 // #1490's files each build deep-show (full) and export bundles, and its parity file drives headless Chrome with WebGPU on.
 alone.push('tests/acceptance/1490/');
 // #1969's files each build deep-canvas-render or deep-show and draw typed text through them.
@@ -944,6 +956,8 @@ alone.push('tests/acceptance/2241/', 'tests/acceptance/2009-redraft-2241/');
 // #2239's files build deep-physics (release); so do those of its blind redraft, written after the issue's amendment
 // of November 19, 2026: its fourth criterion, rewritten, and the one added last.
 alone.push('tests/acceptance/2239/', 'tests/acceptance/2239-redraft-ac4/');
+// #2307's files build deep-physics (release and test-backends).
+alone.push('tests/acceptance/2307/');
 
 // #2742's files build deep-gpu; ac1 compares two films' GPU time on any Mac, and ac2 runs #417's suite.
 alone.push('tests/acceptance/2742/');
@@ -1106,6 +1120,13 @@ alone.push('tests/acceptance/1415/');
 // refusal sets it reverses (tests/acceptance/806-redraft-ac3/DISPUTE.md); its blind redraft runs in its place.
 alone.push('tests/acceptance/806-redraft-ac3/');
 byHand.push('tests/acceptance/806/unbound.test.ts');
+// #1430's files build deep-text in release; ac4-budgets judges the text-reflow budgets on the reference Mac.
+alone.push('tests/acceptance/1430/');
+timed.push('tests/acceptance/1430/ac4-budgets.test.ts');
+// #1430's first draft holds AC2's body text to the role's static family, which #1484 retired; its blind redraft,
+// 1430-redraft-ac2/, runs in its place, and the first draft's file runs by hand (tests/acceptance/1430-redraft-ac2/DISPUTE.md).
+alone.push('tests/acceptance/1430-redraft-ac2/');
+byHand.push('tests/acceptance/1430/ac2-property.test.ts');
 
 // #2402's files (blind) start two hubs and time each tool call against a control hub's, and time two extension hosts.
 alone.push('tests/acceptance/2402/');
@@ -1130,6 +1151,12 @@ alone.push('tests/acceptance/1215/');
 // #2457's files build deep-physics and deep-show.
 alone.push('tests/acceptance/2457/');
 
+// #2645's files write a 100 MB transcript and measure the resident memory of the process that makes a claim on it, and
+// write and read every corpus transcript with lines of 2.3 MB placed in it: one file at a time, nothing beside them.
+// The memory rise is judged by judgeLimit, so that file is timed.
+alone.push('tests/acceptance/2645/');
+timed.push('tests/acceptance/2645/big.test.ts');
+
 // #2500's files (blind) each build deep-canvas-render and deep-motion; CPU only, no GPU and no timing.
 alone.push('tests/acceptance/2500/');
 
@@ -1139,6 +1166,14 @@ timed.push('tests/acceptance/1489/ui-thread.test.ts');
 
 // #2777's files each build deep-show (full, and with the test.tone module), and its preflight file times the lane.
 alone.push('tests/acceptance/2777/');
+
+// #2898's files (blind) each start real hubs, plug-ins and jobs and hold 40 s deep_wait calls; no timing.
+alone.push('tests/acceptance/2898/');
+
+// #2227's files type-check the hub and the CLI (AC1), run the whole workspace build in a copy of the checkout (AC2,
+// 485 s on the base) and a child Vitest of #1409's limit stop (AC3).
+alone.push('tests/acceptance/2227/');
+slow.push('tests/acceptance/2227/ac2-native-build.test.ts');
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },

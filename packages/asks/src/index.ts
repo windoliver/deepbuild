@@ -148,6 +148,8 @@ export interface InboxRow {
   missing: Missing | null;
   /** What you typed beside an ask that typed text can't close, as its card shows it. */
   words: string[];
+  /** The exception "this session keeps asking" that holds it, while it shows only there (#667); null otherwise. */
+  folded: string | null;
 }
 export interface Asks {
   raise(connection: Connection, source: string, ask: unknown, plan?: PlanInput): Promise<string>;
@@ -893,6 +895,7 @@ class AsksCore implements Asks {
         ask: a.handle, kind: a.data.kind as AskKind, session: a.session, status: this.status(a),
         outcome: a.closed?.outcome ?? 'unanswered', owner: String(a.data.owner), age: now - a.created,
         request: a.request ? { ...a.request } : null, decision: a.closed?.decision ?? null, missing: a.closed ? null : a.missing ?? null, words: [...a.words],
+        folded: !a.closed && this.inFold(a) ? a.folded! : null,
       }));
     });
   }

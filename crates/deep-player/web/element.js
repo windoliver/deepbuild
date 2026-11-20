@@ -19,6 +19,11 @@
 // carries the title and the description; each part, label and readout is one element marked data-deep-id with its
 // name and role, in reading order, and each control is a Tab stop. A readout whose text changes in a frame is
 // announced once through a polite live region, as the app's `see` announces it.
+//
+// It says why it stopped (issue #2856): a throw from the core while a piece plays stops the play where it is, paused
+// with the canvas's last frame, and one notice names the step it held and the failure's first line. The index page's
+// line that the player hasn't started, with its link to the fallback page, is for a page whose script never ran:
+// removing it is the element's first act.
 
 const bundle = JSON.parse(document.getElementById('deep-bundle').textContent);
 const hex = (buf) => Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, '0')).join('');
@@ -83,6 +88,7 @@ class DeepPlayer extends HTMLElement {
   #ready = false;
   #paused = true;
   #t = 0;
+  #step = 0;
   #duration = NaN;
   #stages = [];
   #markers = [];
@@ -107,8 +113,13 @@ class DeepPlayer extends HTMLElement {
   #join = null;
   #socket = null;
   #waiting = null;
+  // #2856: where a failure the player can't recover from stopped the play, `{step, message}`, or null.
+  #stopped = null;
 
   connectedCallback() {
+    // #2856: the index page's line saying the player hasn't started goes first, so only a page whose script never ran
+    // shows it.
+    this.querySelector('[data-deep-unstarted]')?.remove();
     if (this.#started) return;
     this.#started = true;
     this.#canvas = document.createElement('canvas');
@@ -130,7 +141,7 @@ class DeepPlayer extends HTMLElement {
   }
 
   play() {
-    if (!this.#ready) return;
+    if (!this.#ready || this.#stopped) return;
     if (this.#t >= this.#duration) this.#seek(0);
     this.#paused = false;
     this.#last = performance.now();
@@ -155,7 +166,15 @@ class DeepPlayer extends HTMLElement {
   /** What the player holds: its step, step and full-state hashes, backend, adapter and evaluated data. It reads only. */
   async probe() {
     if (!this.#player) return null;
-    const p = JSON.parse(this.#player.probe());
+    let p;
+    try {
+      p = JSON.parse(this.#player.probe());
+    } catch (e) {
+      // #2856: a core that failed while the piece played may answer nothing more; the player still says where it stopped.
+      if (!this.#stopped) throw e;
+      p = { step: this.#stopped.step };
+    }
+    p.stopped = this.#stopped;
     p.backend = this.#backend;
     p.adapter = this.#adapter;
     p.frames = this.#frames;
@@ -390,6 +409,7 @@ class DeepPlayer extends HTMLElement {
     this.#player = player;
     this.#keepTree();
     this.#duration = player.duration();
+    this.#step = player.step();
     this.#stages = JSON.parse(player.stages());
     this.#markers = JSON.parse(player.markers());
     const saves = JSON.parse(player.saves());
@@ -518,7 +538,12 @@ class DeepPlayer extends HTMLElement {
     const dt = (now - this.#last) / 1000;
     this.#last = now;
     this.#t = Math.min(this.#t + dt, this.#duration);
-    this.#draw();
+    try {
+      this.#draw();
+    } catch (e) {
+      this.#stop(e);
+      return;
+    }
     this.dispatchEvent(new Event('timeupdate'));
     if (this.#t >= this.#duration) {
       this.#paused = true;
@@ -526,6 +551,25 @@ class DeepPlayer extends HTMLElement {
       return;
     }
     requestAnimationFrame((n) => this.#tick(n));
+  }
+
+  /** A throw from the core while the piece plays (#2856), which the player can't recover from: the play stops there,
+   * paused, asking for no further frame and firing no `ended`, and the canvas keeps its last frame. One notice names
+   * the step the player held and the failure's first line, and probe() reads them as `stopped`. */
+  #stop(e) {
+    this.#paused = true;
+    this.#stopped = { step: this.#held(), message: String(e?.message ?? e).split('\n')[0] };
+    this.#notice(`The piece stopped at step ${this.#stopped.step}: ${this.#stopped.message}`, 'stopped');
+  }
+
+  /** The step the player holds: the core's own count, or, from a core that no longer answers, the step of the time
+   * the player last asked it for. */
+  #held() {
+    try {
+      return JSON.parse(this.#player.probe()).step;
+    } catch {
+      return Math.floor(this.#t / this.#step + 1e-9);
+    }
   }
 }
 

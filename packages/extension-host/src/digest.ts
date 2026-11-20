@@ -1,6 +1,8 @@
 // A package folder's digest (#348), computed by the parent: every file's relative path, mode and SHA-256, in
-// path order, refusing symlinks. deepbuild.json counts as its manifest without the `digest` and `signature` fields
-// (#351), so a build can write the digest, and a publisher the signature over it, without changing it.
+// path order, refusing symlinks. The mode is the one git records, 755 when the owner may execute the file and 644
+// otherwise, so a checkout's umask doesn't change the digest (#2629). deepbuild.json counts as its manifest without
+// the `digest` and `signature` fields (#351), so a build can write the digest, and a publisher the signature over
+// it, without changing it.
 import { createHash } from 'node:crypto';
 import { lstatSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -30,7 +32,7 @@ export function packageDigest(folder: string): string {
       const stat = lstatSync(path);
       if (stat.isSymbolicLink()) throw Error(`${relative} is a symbolic link; a package holds files only`);
       if (stat.isDirectory()) walk(path, `${relative}/`);
-      else if (stat.isFile()) lines.push(`${(stat.mode & 0o7777).toString(8)} ${sha256(relative === 'deepbuild.json' ? manifestBytes(path) : readFileSync(path))} ${relative}`);
+      else if (stat.isFile()) lines.push(`${stat.mode & 0o100 ? '755' : '644'} ${sha256(relative === 'deepbuild.json' ? manifestBytes(path) : readFileSync(path))} ${relative}`);
       else throw Error(`${relative} is neither a file nor a folder`);
     }
   };
