@@ -1516,6 +1516,7 @@ Every field list of the sealed listing, generated from it: each place where a se
 | `material@1.water.flow` | `none` | closed: determinism | never: none leaves the water still | `{along, speed, cycle}` |
 | `material@1.water.flow.along` | `field` | closed: interval_forms | a flow needs to follow something other than a curve or a field | a curve's ID |
 | `material@1.water.foam.speed` | `none` | closed: determinism | never: none lets foam ignore the flow's speed | a speed in m/s |
+| `material@1.water.rings` | `none` | closed: determinism | never: none leaves the water without touch rings | `{on, speed, span, strength}` |
 | `material@1.water.wake` | `none` | closed: determinism | never: none leaves the water without a wake | `{item, span}` |
 | `material@1.water.waves` | `wind` | closed: interval_forms | water needs waves neither the wind's table nor up to four trochoidal waves give | a list of up to four waves, each with its direction, length, amplitude and steepness |
 | `media.strip@1.align.onset` | `strongest`, `first` | closed: determinism | a strip needs aligning to an onset other than its strongest or its first | set `at` to the onset's time |
