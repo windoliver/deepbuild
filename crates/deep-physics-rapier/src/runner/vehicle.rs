@@ -2,16 +2,16 @@
 //! `bake` and `restore` replies carry `vehicles`, each vehicle body's own state beside `bodies`,
 //! for the bodies `read` names; an output on a wheel's address `<body>#<wheel>` samples its `pose`
 //! (`{pos, rot}`, positions lerped and rotations nlerped between steps) or its `contact_count`
-//! (held from the step at or before the frame) into `outputs.series`; and #251's and #2306's
-//! planted names.
+//! (held from the step at or before the frame) into `outputs.series`; and #251's, #2306's and
+//! #2307's planted names.
 
 use super::*;
 use crate::VehiclePlant;
 use deep_canvas_physics::backend::VehicleState;
 use deep_canvas_physics::kit::Planted;
 
-/// #251's and #2306's planted wrong programs, by name.
-pub const PLANTED: [&str; 12] = [
+/// #251's, #2306's and #2307's planted wrong programs, by name.
+pub const PLANTED: [&str; 17] = [
     "spring_on_whole_mass",
     "brake_whole_force_each_wheel",
     "steer_clamps_angle",
@@ -24,6 +24,11 @@ pub const PLANTED: [&str; 12] = [
     "place_keeps_angular_velocity",
     "controller_as_is",
     "grip_reads_chassis_only",
+    "controller_without_hold",
+    "hold_ignores_brake_limit",
+    "hold_takes_out_side_slip",
+    "controller_runs_asleep",
+    "leaves_asleep_on_moving_ground",
 ];
 
 /// Plants `name`, one of [`PLANTED`], in `run`; false for another name.
@@ -40,6 +45,11 @@ pub fn planted(name: &str, run: &mut Run) -> bool {
         "place_keeps_angular_velocity" => VehiclePlant::PlaceKeepsAngular,
         "controller_as_is" => VehiclePlant::GroundTakesNothing,
         "grip_reads_chassis_only" => VehiclePlant::GripChassisOnly,
+        "controller_without_hold" => VehiclePlant::NoHold,
+        "hold_ignores_brake_limit" => VehiclePlant::HoldPastBrake,
+        "hold_takes_out_side_slip" => VehiclePlant::HoldTakesSlip,
+        "controller_runs_asleep" => VehiclePlant::RunsAsleep,
+        "leaves_asleep_on_moving_ground" => VehiclePlant::StaysAsleep,
         "kit_counts_excluded_passed" => {
             run.kit_planted = Planted::CountsExcludedPassed;
             return true;
