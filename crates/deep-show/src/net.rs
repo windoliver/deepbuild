@@ -15,7 +15,7 @@ use deep_logic::piece::Piece;
 use deep_net::card::{self, Card};
 use deep_net::play::{Ask, Faults, Hold, Play};
 use deep_net::prompt::{self, State};
-use deep_net::{checks, Config, Copy, End, FLICKS};
+use deep_net::{checks, Change, Config, Copy, Defect, End, Planted, FLICKS};
 use deep_play::net::Logic;
 use deep_relay::direct::{random16, Listener, Peer};
 use deep_relay::macos::{check_hello, Connection, Event as Arrived};
@@ -59,7 +59,11 @@ pub fn given(input: &Map<String, Value>) -> Option<Given> {
 
 /// The net module, on logic: a build that leaves logic out leaves it out too.
 pub fn module() -> Option<deep_canvas::registry::Module> {
-    cfg!(not(feature = "test-leave-out-logic")).then(deep_net::kind::module)
+    cfg!(not(feature = "test-leave-out-logic")).then(|| {
+        // #550: its check kinds run copies of a document's logic items.
+        deep_net::kind::bind(deep_play::net::RUNS);
+        deep_net::kind::module()
+    })
 }
 
 /// The net module's calls: `match`, `play_match` and `sockets`.
@@ -86,6 +90,10 @@ pub struct MatchCall {
     faults: Faults,
     log: bool,
     check: Option<String>,
+    /// net.desync's seed: where its planted change lands (#550).
+    seed: u64,
+    /// #550: a planted change one copy makes, `{player, step, field, add? | flip?, at?}`.
+    plant: Option<(u8, Defect)>,
     /// `(player, seconds)` on the relay's clock.
     renders: Vec<(u8, f64)>,
 }
@@ -98,6 +106,16 @@ fn plays_of(v: &Value) -> Option<Vec<Play>> {
                 step: p.get("step")?.as_i64().filter(|s| *s >= 0)?,
                 control: p.get("control")?.as_str()?.to_string(),
                 value: p.get("value")?.clone(),
+                // #550: the players whose copies it goes to, over a direct path.
+                to: match p.get("to") {
+                    None => None,
+                    Some(to) => Some(
+                        to.as_array()?
+                            .iter()
+                            .map(|q| q.as_u64().filter(|q| (1..=8).contains(q)).map(|q| q as u8))
+                            .collect::<Option<_>>()?,
+                    ),
+                },
             })
         })
         .collect()
@@ -166,11 +184,32 @@ fn parse_match(c: &Map<String, Value>) -> Option<MatchCall> {
                 .map_or(Some(0.0), |d| d.as_f64().filter(|d| (0.0..1.0).contains(d)))?,
             holds,
             back: 0,
+            direct: relay.and_then(|r| r.get("direct")).and_then(Value::as_bool) == Some(true),
         },
         log: relay.and_then(|r| r.get("log")).and_then(Value::as_bool) == Some(true),
         check: match c.get("check") {
             None => None,
             Some(k) => Some(k.as_str()?.to_string()),
+        },
+        seed: c.get("seed").map_or(Some(0), Value::as_u64)?,
+        plant: match c.get("plant") {
+            None => None,
+            Some(p) => Some((
+                player(p.get("player")?)?,
+                Defect {
+                    step: p.get("step")?.as_i64().filter(|s| *s >= 0)?,
+                    field: p.get("field")?.as_str()?.to_string(),
+                    at: match p.get("at") {
+                        None => None,
+                        Some(a) => Some(u32::try_from(a.as_u64()?).ok()?),
+                    },
+                    change: match (p.get("flip"), p.get("add")) {
+                        (Some(b), None) => Change::Flip(b.as_u64().filter(|b| *b < 64)? as u32),
+                        (None, add) => Change::Add(add.map_or(Some(1.0), Value::as_f64)?),
+                        _ => return None,
+                    },
+                },
+            )),
         },
         renders,
     })
@@ -276,7 +315,10 @@ impl Hub<'_> {
             NetCall::Play(p) => self.play_match(p),
             // `sockets`: every connection and request a match opened in this run.
             NetCall::Sockets => {
-                let log = self.scopes.values().flat_map(|s| s.join.log.iter().cloned());
+                let log = self
+                    .scopes
+                    .values()
+                    .flat_map(|s| s.join.log.iter().cloned());
                 json!({"log": log.collect::<Vec<_>>()})
             }
         }
@@ -314,15 +356,26 @@ impl Hub<'_> {
             Ok(s) => s,
             Err(e) => return e,
         };
+        let planted = self.net_planted();
         let ask = Ask {
             steps: m.steps,
             plays: m.plays.clone(),
             faults: m.faults.clone(),
-            planted: self.net_planted(),
+            planted,
+            // #550: the planted copy that stamps a peer's entries with its own player is copy 1.
+            planted_on: (planted == Planted::StampsOwnPlayer).then_some(1),
             shows: m.renders.iter().map(|(p, t)| (*p, flicks(*t))).collect(),
+            log: m.log,
+            defect: m.plant.clone(),
         };
         let (piece, track) = (s.piece.clone(), s.track.clone());
-        let make = &mut |_: u8| Logic::new(piece.clone(), &track, true);
+        let rounds = planted == Planted::HashRoundsFloats;
+        let make = &mut |_: u8| {
+            Logic::new(piece.clone(), &track, true).map(|mut l| {
+                l.rounds = rounds;
+                l
+            })
+        };
         let run = match m.check.as_deref() {
             None => deep_net::play::play(&s.cfg, &s.card, &ask, make).map(|p| (p, None)),
             Some("net.rollback") => {
@@ -337,10 +390,9 @@ impl Hub<'_> {
                 checks::budget(&s.cfg, &s.card, &ask, make, frame_ms, &busiest)
                     .map(|(p, c)| (p, Some(c)))
             }
-            Some("net.desync") => deep_net::play::play(&s.cfg, &s.card, &ask, make).map(|p| {
-                let why = "net.desync's planted change and its locator land with #550";
-                (p, Some(checks::blocked("net.desync", why)))
-            }),
+            Some("net.desync") => {
+                checks::desync(&s.cfg, &s.card, &ask, make, m.seed).map(|(p, c)| (p, Some(c)))
+            }
             Some(_) => return json!({"code": "bad_input", "path": "check"}),
         };
         let (played, check) = match run {
@@ -480,7 +532,11 @@ impl Hub<'_> {
         let Some((doc, _)) = self.join_of(&p.panel) else {
             return json!({"code": "no_match", "what": "the panel's piece declares no relay"});
         };
-        match self.scopes.get(&p.panel).and_then(|s| s.join.state.as_ref()) {
+        match self
+            .scopes
+            .get(&p.panel)
+            .and_then(|s| s.join.state.as_ref())
+        {
             Some(State::Joined) => {}
             Some(State::Refused(refused, why)) => {
                 return json!({"code": "refused", "refused": refused, "why": why})
@@ -497,7 +553,12 @@ impl Hub<'_> {
         let cfg = s.cfg.clone();
         // A copy that joins through the first player's link holds that copy's card: one that
         // differs is refused here, before anything is opened.
-        let through = self.scenario.net.links.get(&doc).and_then(|l| card::parse(l));
+        let through = self
+            .scenario
+            .net
+            .links
+            .get(&doc)
+            .and_then(|l| card::parse(l));
         if let Some(m) = through
             .as_ref()
             .and_then(|(_, theirs)| s.card.differs(theirs))
@@ -658,7 +719,7 @@ impl Hub<'_> {
         copy.script(
             p.plays
                 .iter()
-                .map(|q| (q.step, q.control.clone(), q.value.clone())),
+                .map(|q| (q.step, q.control.clone(), q.value.clone(), q.to.clone())),
         );
         if ended.is_some() {
             copy.closed(0, "left");

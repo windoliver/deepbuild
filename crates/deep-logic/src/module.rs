@@ -628,8 +628,9 @@ fn issues(report: Report) -> Vec<(String, Raised)> {
 }
 
 /// The lowered document's logic items as one checked piece, its input track, and the steps its
-/// transport's span covers; or why it can't be read, as a blocked row.
-fn baked(doc: &Value, input: &Value) -> Result<(Rc<Piece>, Vec<Entry>, i64), Value> {
+/// transport's span covers; or why it can't be read, as a blocked row. #550's net check kinds
+/// read a document's match from it too.
+pub fn baked(doc: &Value, input: &Value) -> Result<(Rc<Piece>, Vec<Entry>, i64), Value> {
     let items: serde_json::Map<String, Value> = doc
         .get("items")
         .and_then(Value::as_object)
