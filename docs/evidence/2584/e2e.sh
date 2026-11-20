@@ -7,7 +7,7 @@ REPO=$1; LABEL=$2
 source ~/.nvm/nvm.sh >/dev/null; nvm use 24 >/dev/null
 NODE=$(command -v node)
 CLI=$REPO/packages/cli/dist/main.js
-D=$(mktemp -d /private/tmp/claude-501/e2584-XXXX)
+D=$(mktemp -d /tmp/e2584-XXXX)  # short: the hub socket path must fit 104 bytes
 export HOME=$D/home LC_ALL=C; mkdir -p $HOME
 G="/usr/bin/git -c user.name=e2584 -c user.email=e2584@example.invalid -c commit.gpgsign=false"
 echo "== $LABEL: repo $REPO at $(/usr/bin/git -C $REPO rev-parse --short HEAD), dir $D, node $($NODE -v)"
