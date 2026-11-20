@@ -9,8 +9,8 @@ let counts: { startTokens: number; wholeTokens: number } | undefined;
 
 /**
  * The two counts for a Claude Code session on `version` whose config loads the deepbuild server, with the way its
- * facts give for that version: `unread` for a version no entry covers. The loads read Claude Code's MCP configs, so
- * any other agent's session holds none here. Before the session's version is read, the facts' newest version stands
+ * facts give for that version: `unread` for a version no entry covers. The loads are Claude Code's MCP configs
+ * whatever the agent, so only a Claude Code session is counted. Before the session's version is read, the facts' newest version stands
  * for it, as the hook mapping's does.
  */
 export function toolLoad(agent: string, loads: readonly { kind: string; name: string }[], version: string | undefined): { way: 'whole' | 'search' | 'unread'; startTokens: number; wholeTokens: number } | undefined {
