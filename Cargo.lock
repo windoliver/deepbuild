@@ -2741,6 +2741,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "deep-pptx-reader"
+version = "0.0.0"
+dependencies = [
+ "roxmltree 0.21.1",
+ "zune-inflate",
+]
+
+[[package]]
 name = "deep-relay"
 version = "0.0.0"
 dependencies = [
@@ -2844,6 +2852,7 @@ dependencies = [
  "deep-net",
  "deep-physics-rapier",
  "deep-play",
+ "deep-pptx-reader",
  "deep-relay",
  "deep-replica",
  "deep-sandbox-wasmtime",

@@ -64,7 +64,7 @@ fn refusal(r: &Refusal) -> Value {
 }
 
 /// A stored (uncompressed) zip of `files`, at a fixed time, so the same bytes go in each time.
-fn zip(files: &[(&str, &[u8])]) -> Vec<u8> {
+pub(super) fn zip(files: &[(&str, &[u8])]) -> Vec<u8> {
     fn crc32(data: &[u8]) -> u32 {
         let mut c = !0u32;
         for &b in data {
@@ -158,7 +158,7 @@ fn luma(px: &[u8], ground: [u8; 3]) -> f64 {
 /// over 8 × 8 windows 4 apart whose centre is compared (two renderers draw sub-pixel edges apart,
 /// which export.fidelity's floor allows for: PSNR-Y ≥ 40 dB or SSIM ≥ 0.98), and how many pixels
 /// it read.
-fn compare(
+pub(super) fn compare(
     a: &[u8],
     b: &[u8],
     size: [u16; 2],

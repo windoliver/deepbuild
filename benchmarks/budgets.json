@@ -1571,6 +1571,20 @@
       ]
     },
     {
+      "id": "pptx-export",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "pptx-export"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #732 first measurement (#732.bbcc6582): the merge base has no pptx target. One `deep-show run` exports a 20-stage piece to a deck at 1920 x 1080, two of its stages showing a 3D display whose screen carries an inset, its fidelity check reading the file back and drawing each slide with the pinned LibreOffice; it prints the receipt's timing.wall (under 5 s), which tests/acceptance/732/ac10-budgets.test.ts judges on a reference Mac. p50 and peak memory get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#732.bbcc6582"
+      ]
+    },
+    {
       "id": "narration-transcript",
       "command": [
         "node",

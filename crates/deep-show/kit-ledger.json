@@ -85,7 +85,7 @@
   },
   "export": {
     "version": "1.0.0",
-    "digest": "34526b4e8e03053b5515c9c0ccc3c0151cb2219375ce731e109658532ed51988",
+    "digest": "e752bec0aed97b3658ab3baa60a819865755a62add4d13430761b15a918486b3",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",

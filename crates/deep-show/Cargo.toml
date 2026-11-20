@@ -332,6 +332,7 @@ deep-canvas-scene3d = { path = "../deep-canvas-scene3d" }
 deep-canvas-media = { path = "../deep-canvas-media" }
 deep-canvas-export = { path = "../deep-canvas-export" }
 deep-lottie-reader = { path = "../deep-lottie-reader" }
+deep-pptx-reader = { path = "../deep-pptx-reader" }
 deep-logic = { path = "../deep-logic" }
 deep-play = { path = "../deep-play" }
 # Issue #1918: the physics module, physics@1, and the Rapier backend a scene's worlds bake on.
