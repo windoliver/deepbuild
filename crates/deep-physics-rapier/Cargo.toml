@@ -24,7 +24,7 @@ serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
 
 # Issue #524: a soft volume's source item's welded mesh and a balloon's geodesic ball, built by the
 # scene3d builders its skin draws, so the particles are the drawn lattice's vertices. Native builds
-# only: scene3d links meshopt, whose C++ doesn't build for wasm32 (#2466).
+# only: the wasm32 runner still refuses balloons and volumes (#2466). scene3d links no C++ (#2738).
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 deep-canvas-scene3d = { path = "../deep-canvas-scene3d" }
 
