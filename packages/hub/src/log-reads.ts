@@ -145,7 +145,9 @@ export class LogReads {
       return;
     }
     this.streaming = true;
-    setImmediate(() => void this.flushStream().finally(() => {
+    // A subscriber's read that fails, as a disk's can or as when the core stops before the flush, ends this flush
+    // only (#2564): each subscriber keeps the log_pos it was sent up to, so the next append's flush sends what it missed.
+    setImmediate(() => void this.flushStream().catch(() => undefined).finally(() => {
       this.streaming = false;
       if (this.restream) {
         this.restream = false;
