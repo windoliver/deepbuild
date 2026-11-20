@@ -208,7 +208,8 @@ export const timed = [
   'tests/acceptance/246/lanes.test.mjs', 'tests/acceptance/568/', 'tests/acceptance/583/perf-added-tests.test.mjs',
   'tests/acceptance/724/', 'tests/preflight.test.mjs',
   'tests/acceptance/572/budgets.test.ts', 'tests/acceptance/62/budgets.test.ts',
-  'tests/acceptance/63/budgets.test.ts', 'tests/acceptance/667/redraft-1463/raised.test.ts', 'tests/acceptance/669/fast.test.ts', 'tests/acceptance/1156/fast.test.ts',
+  'tests/acceptance/63/budgets.test.ts', 'tests/acceptance/667/redraft-1463/raised.test.ts',
+  'tests/acceptance/667/redraft-2047/criteria.test.ts', 'tests/acceptance/667/redraft-2047/plants.test.ts', 'tests/acceptance/669/fast.test.ts', 'tests/acceptance/1156/fast.test.ts',
   'tests/acceptance/68/budgets.test.ts', 'tests/acceptance/69/budgets.test.ts',
   'tests/acceptance/761/budgets.test.ts', 'tests/acceptance/823/run.test.ts', 'tests/acceptance/823/wait.test.ts',
   'tests/acceptance/824/budgets.long.test.ts', 'tests/acceptance/824/redraft-ac1/budgets.long.test.ts',
@@ -1109,6 +1110,13 @@ alone.push('tests/acceptance/1415/');
 // refusal sets it reverses (tests/acceptance/806-redraft-ac3/DISPUTE.md); its blind redraft runs in its place.
 alone.push('tests/acceptance/806-redraft-ac3/');
 byHand.push('tests/acceptance/806/unbound.test.ts');
+// #1430's files build deep-text in release; ac4-budgets judges the text-reflow budgets on the reference Mac.
+alone.push('tests/acceptance/1430/');
+timed.push('tests/acceptance/1430/ac4-budgets.test.ts');
+// #1430's first draft holds AC2's body text to the role's static family, which #1484 retired; its blind redraft,
+// 1430-redraft-ac2/, runs in its place, and the first draft's file runs by hand (tests/acceptance/1430-redraft-ac2/DISPUTE.md).
+alone.push('tests/acceptance/1430-redraft-ac2/');
+byHand.push('tests/acceptance/1430/ac2-property.test.ts');
 
 // #2402's files (blind) start two hubs and time each tool call against a control hub's, and time two extension hosts.
 alone.push('tests/acceptance/2402/');

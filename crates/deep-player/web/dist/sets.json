@@ -13,13 +13,13 @@
       "module_set_digest": "e0d535adac31c58c7a65fae890f5575ca14ffaa5a44cc71d4a5fd148fe14ea47",
       "wasm": {
         "path": "crates/deep-player/web/dist/figure/player_bg.wasm",
-        "sha256": "9605383eab157a33cf3e06901d8ee376a359a1af15bad8486a49ffb13c09af0f"
+        "sha256": "70a59cf182394fd6a120ebcdae2d98c269ab2917a2f5c9d69d0f8204a3742c29"
       },
       "glue": {
         "path": "crates/deep-player/web/dist/figure/player.js",
         "sha256": "18c934580a1341b3d972fcdd24a318f6d7e34a4a431790b32b394600726e907b"
       },
-      "compressed": 2468518
+      "compressed": 2469295
     },
     "game2d": {
       "modules": [
@@ -36,13 +36,13 @@
       "module_set_digest": "763f43a21f41872a9294310d7e7013aa8b3e31d0da6c61b5169d46366efa94cd",
       "wasm": {
         "path": "crates/deep-player/web/dist/game2d/player_bg.wasm",
-        "sha256": "50afaf98a6b91b91047abb20b947e4810a5d5355d247cdf2d5f407f79cf635cc"
+        "sha256": "5a0b9af0be828410c7b8e0d7151f762e9d338f3822e49af15c786dcd50be4f1c"
       },
       "glue": {
         "path": "crates/deep-player/web/dist/game2d/player.js",
         "sha256": "5f401925bf25c9603c457bcf4eaa11021413eca878beb774e4a99128d752d012"
       },
-      "compressed": 4210532
+      "compressed": 4213733
     },
     "full": {
       "modules": [
@@ -70,13 +70,13 @@
       "module_set_digest": "a626b1873e52db121d52c8bfab753f5b05d311055a6a79ad266496704a394523",
       "wasm": {
         "path": "crates/deep-player/web/dist/full/player_bg.wasm",
-        "sha256": "4033df6cae158a6041b1800152162099514a9c824bdb9e51765c43a6e8f5ebd2"
+        "sha256": "f22df1fe131fcab84c9e8769e1c226b07c30ac4f0597c8f9b9111c8dd7c040b5"
       },
       "glue": {
         "path": "crates/deep-player/web/dist/full/player.js",
-        "sha256": "e24f5f6e4e3e2504f8f029d376e6c8f047dfd4374e872b0e3d584865d3b9978b"
+        "sha256": "3d0a86d90ab17d648379d11cf8b5fea1d1c0217996f4edbcc7faf68100a87c71"
       },
-      "compressed": 6796168
+      "compressed": 6799005
     }
   }
 }
