@@ -96,6 +96,9 @@ missing a 5-hour reading on either side is left out. This is what one run shows,
 
 ### What you can choose
 
+**Chosen (Nov 20 2026): probe again after the weekly reset on Nov 24 08:00 UTC.** Two or three probes back to back,
+then the 40 runs only if the probes show a 5-hour reading and a step a run can move.
+
 - **Probe again first.** Run two or three probes back to back to see the step and which windows a run carries. After
   the weekly reset, also see whether the 5-hour reading comes back. Then run the 40 as the issue gives them, if the
   probes say a run can be read.
