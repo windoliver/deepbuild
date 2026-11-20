@@ -1,7 +1,8 @@
-//! The build's first-party packs of library interfaces (#416; canvas primitives: Logic: library
-//! interfaces): `packs/interfaces-1.0.0`, which declares physics2d.lib@1, fsm@1 and nn.mlp@1, held in
-//! the binary so every piece's links resolve against them, as the release's packs are installed for
-//! every document.
+//! The build's first-party packs (#416, #981; canvas primitives: Logic: library interfaces):
+//! `packs/interfaces-1.0.0`, which declares physics2d.lib@1, fsm@1 and nn.mlp@1, and
+//! `packs/lanes-1.0.0`, which declares lanes@1 with its reference library, held in the binary so
+//! every piece's links resolve against them, as the release's packs are installed for every
+//! document.
 
 use std::sync::OnceLock;
 
@@ -11,40 +12,67 @@ use serde_json::{json, Map, Value};
 use crate::links::Pack;
 
 macro_rules! pack_file {
-    ($path:literal) => {
+    ($dir:literal, $path:literal) => {
         (
             $path,
-            include_bytes!(concat!("../../../packs/interfaces-1.0.0/", $path)) as &[u8],
+            include_bytes!(concat!("../../../packs/", $dir, "/", $path)) as &[u8],
         )
     };
 }
 
-/// `pack.json`, and each asset it lists by its path.
-const MANIFEST: &str = include_str!("../../../packs/interfaces-1.0.0/pack.json");
-const FILES: &[(&str, &[u8])] = &[
-    pack_file!("objects/slide.wasm"),
-    pack_file!("fixtures/slide.json"),
-    pack_file!("objects/fall.wasm"),
-    pack_file!("fixtures/fall.json"),
-    pack_file!("objects/physics2d_average.wasm"),
-    pack_file!("objects/door.wasm"),
-    pack_file!("fixtures/door.json"),
-    pack_file!("objects/fsm_lazy.wasm"),
-    pack_file!("data/net-4-8-2.bin"),
-    pack_file!("data/input-4.bin"),
-    pack_file!("objects/net.wasm"),
-    pack_file!("fixtures/4-8-2.json"),
-    pack_file!("objects/mlp_fused.wasm"),
+/// A pack's assets, each by its path.
+type Files = &'static [(&'static str, &'static [u8])];
+
+/// Each first-party pack's `pack.json`, and each asset it lists by its path.
+const PACKS: &[(&str, Files)] = &[
+    (
+        include_str!("../../../packs/interfaces-1.0.0/pack.json"),
+        &[
+            pack_file!("interfaces-1.0.0", "objects/slide.wasm"),
+            pack_file!("interfaces-1.0.0", "fixtures/slide.json"),
+            pack_file!("interfaces-1.0.0", "objects/fall.wasm"),
+            pack_file!("interfaces-1.0.0", "fixtures/fall.json"),
+            pack_file!("interfaces-1.0.0", "objects/physics2d_average.wasm"),
+            pack_file!("interfaces-1.0.0", "objects/door.wasm"),
+            pack_file!("interfaces-1.0.0", "fixtures/door.json"),
+            pack_file!("interfaces-1.0.0", "objects/fsm_lazy.wasm"),
+            pack_file!("interfaces-1.0.0", "data/net-4-8-2.bin"),
+            pack_file!("interfaces-1.0.0", "data/input-4.bin"),
+            pack_file!("interfaces-1.0.0", "objects/net.wasm"),
+            pack_file!("interfaces-1.0.0", "fixtures/4-8-2.json"),
+            pack_file!("interfaces-1.0.0", "objects/mlp_fused.wasm"),
+        ],
+    ),
+    (
+        include_str!("../../../packs/lanes-1.0.0/pack.json"),
+        &[
+            pack_file!("lanes-1.0.0", "objects/lanes_ref.wasm"),
+            pack_file!("lanes-1.0.0", "objects/lanes_planted.wasm"),
+            pack_file!("lanes-1.0.0", "objects/straight.wasm"),
+            pack_file!("lanes-1.0.0", "fixtures/straight.json"),
+            pack_file!("lanes-1.0.0", "objects/merge.wasm"),
+            pack_file!("lanes-1.0.0", "fixtures/merge.json"),
+            pack_file!("lanes-1.0.0", "objects/lift.wasm"),
+            pack_file!("lanes-1.0.0", "fixtures/lift.json"),
+            pack_file!("lanes-1.0.0", "objects/straight_own.wasm"),
+            pack_file!("lanes-1.0.0", "fixtures/straight_own.json"),
+        ],
+    ),
 ];
 
 /// The first-party packs as a piece's `packs` hold them: name, version, origin `first_party`, and
 /// the interfaces each declares.
 pub fn packs() -> &'static [Value] {
-    static PACKS: OnceLock<Vec<Value>> = OnceLock::new();
-    PACKS.get_or_init(|| {
-        let m: Value = serde_json::from_str(MANIFEST).expect("the first-party pack's manifest");
-        vec![json!({"name": m["name"], "version": m["version"], "origin": "first_party",
-                    "libs": m.get("libs").cloned().unwrap_or(json!({})), "interfaces": m["interfaces"]})]
+    static LISTED: OnceLock<Vec<Value>> = OnceLock::new();
+    LISTED.get_or_init(|| {
+        PACKS
+            .iter()
+            .map(|(manifest, _)| {
+                let m: Value = serde_json::from_str(manifest).expect("a first-party pack's manifest");
+                json!({"name": m["name"], "version": m["version"], "origin": "first_party",
+                    "libs": m.get("libs").cloned().unwrap_or(json!({})), "interfaces": m["interfaces"]})
+            })
+            .collect()
     })
 }
 
@@ -63,8 +91,9 @@ pub fn parsed() -> &'static [Pack] {
 pub fn assets() -> &'static Map<String, Value> {
     static ASSETS: OnceLock<Map<String, Value>> = OnceLock::new();
     ASSETS.get_or_init(|| {
-        FILES
+        PACKS
             .iter()
+            .flat_map(|(_, files)| files.iter())
             .map(|(_, b)| (deep_canvas_sandbox::rewrite::hash(b), json!(B64.encode(b))))
             .collect()
     })
@@ -77,25 +106,27 @@ pub fn reply() -> Value {
 
 #[cfg(test)]
 mod tests {
-    /// Each asset the manifest lists is held here, at its sha256, and nothing else is.
+    /// Each asset a first-party pack's manifest lists is held here, at its sha256, and nothing else is.
     #[test]
-    fn the_binary_holds_every_asset_the_first_party_pack_lists() {
-        let m: serde_json::Value = serde_json::from_str(super::MANIFEST).unwrap();
-        let listed: Vec<(String, String)> = m["assets"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|a| {
-                (
-                    a["path"].as_str().unwrap().into(),
-                    a["sha256"].as_str().unwrap().into(),
-                )
-            })
-            .collect();
-        let held: Vec<(String, String)> = super::FILES
-            .iter()
-            .map(|(p, b)| (p.to_string(), deep_canvas_sandbox::rewrite::hash(b)))
-            .collect();
-        assert_eq!(held, listed);
+    fn the_binary_holds_every_asset_the_first_party_packs_list() {
+        for (manifest, files) in super::PACKS {
+            let m: serde_json::Value = serde_json::from_str(manifest).unwrap();
+            let listed: Vec<(String, String)> = m["assets"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|a| {
+                    (
+                        a["path"].as_str().unwrap().into(),
+                        a["sha256"].as_str().unwrap().into(),
+                    )
+                })
+                .collect();
+            let held: Vec<(String, String)> = files
+                .iter()
+                .map(|(p, b)| (p.to_string(), deep_canvas_sandbox::rewrite::hash(b)))
+                .collect();
+            assert_eq!(held, listed, "{}", m["name"]);
+        }
     }
 }
