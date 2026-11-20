@@ -472,8 +472,8 @@ export async function rulesCommand(args: readonly string[]): Promise<number> {
   let params: Record<string, unknown>;
   if (rest[0] === 'sync' && rest.length === 1) [method, params] = ['rules.sync', {}];
   else if (rest[0] === 'reach' && rest.length === 5 && flag('--repo') && flag('--scope')) [method, params] = ['rules.reach', { repo: resolve(flag('--repo')!), scope: flag('--scope') }];
-  else if (rest[0] === 'credit' && rest.length === 2) [method, params] = ['rules.credit', { rule: rest[1] }];
-  else if (rest[0] === 'session' && rest.length === 2) [method, params] = ['session.rules', { session: rest[1] }];
+  else if (rest[0] === 'credit' && rest.length === 2 && !rest[1]!.startsWith('-')) [method, params] = ['rules.credit', { rule: rest[1] }];
+  else if (rest[0] === 'session' && rest.length === 2 && !rest[1]!.startsWith('-')) [method, params] = ['session.rules', { session: rest[1] }];
   else { process.stderr.write(`${USAGE}\n`); return 2; }
   const result = await callAsYou(method, params);
   if (typeof result === 'number') return result;

@@ -2415,11 +2415,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "deep-catalog"
+version = "0.0.0"
+dependencies = [
+ "serde_json",
+ "sha2 0.10.9",
+]
+
+[[package]]
 name = "deep-codecs"
 version = "0.0.0"
 dependencies = [
  "basisu_c_sys",
  "deep-canvas-cells",
+ "deep-catalog",
  "image",
  "libc",
  "libm",
@@ -2546,6 +2555,7 @@ dependencies = [
  "base64 0.22.1",
  "deep-canvas",
  "deep-canvas-sandbox",
+ "deep-catalog",
  "deep-sandbox-wasmtime",
  "gimli 0.33.0",
  "libc",
