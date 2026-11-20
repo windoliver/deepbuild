@@ -18,6 +18,8 @@ use serde_json::{json, Value};
 
 pub struct Match {
     cfg: Config,
+    /// #551: the document, whose worlds the copy steps beside its logic items.
+    source: Value,
     card: Card,
     piece: Option<Rc<Piece>>,
     track: Vec<Value>,
@@ -50,6 +52,7 @@ impl Match {
     ) -> Option<Match> {
         let cfg = Config::of(source).filter(|c| !c.host.is_empty())?;
         Some(Match {
+            source: source.clone(),
             card: Card::of(sealed, source, document.to_string(), recorded.to_string()),
             cfg,
             piece: piece.map(Rc::new),
@@ -155,7 +158,9 @@ impl Match {
         else {
             return;
         };
-        match Logic::new(piece, &self.track, false) {
+        match Logic::new(piece, &self.track, false)
+            .and_then(|mut l| l.worlds(&self.source).map(|()| l))
+        {
             Ok(sim) => {
                 self.copy = Some(Copy::new(
                     self.cfg.clone(),
@@ -183,6 +188,24 @@ impl Match {
         if let Some(copy) = self.copy.as_mut() {
             copy.receive(frame, flicks(now_ms));
         }
+    }
+
+    /// #551: a person's key on the page while the match plays: an entry of this copy's player on
+    /// each control whose `keys` name it (Control: `keys: {key → value}`), as a person's input in
+    /// the app is. Whether it made one.
+    pub fn key(&mut self, key: &str) -> bool {
+        let Some(copy) = self.copy.as_mut().filter(|c| c.end().is_none()) else {
+            return false;
+        };
+        let controls = self.source.get("controls").and_then(Value::as_object);
+        let mut made = false;
+        for (id, c) in controls.into_iter().flatten() {
+            if let Some(value) = c.get("keys").and_then(|k| k.get(key)) {
+                copy.make(id, value.clone());
+                made = true;
+            }
+        }
+        made
     }
 
     /// The page's tick: runs what is due and gives the frame to send, one a match step at most;

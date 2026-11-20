@@ -120,6 +120,9 @@ pub struct Record {
     pub(crate) restarts: BTreeMap<String, BTreeMap<i64, Vec<u8>>>,
     /// #860: the steps that ran on a branch a rewind closed, whose rows hold the arrays they left.
     pub(crate) frozen: BTreeSet<i64>,
+    /// #551: checkpoints record no deep hash, which costs a pass over the whole memory in the
+    /// step; a reader restores the checkpoint for one (a match's copy, whose frames are timed).
+    pub deferred: bool,
 }
 
 impl Record {
@@ -258,6 +261,8 @@ pub(crate) struct Live {
     dirty: BTreeSet<u32>,
     /// The pages written since the last keyframe stored (crate::keyframes).
     pub(crate) kdirty: BTreeSet<u32>,
+    /// #551: the pages written since the rollback ring's last match step.
+    pub(crate) rdirty: BTreeSet<u32>,
     stored: Vec<Stored>,
     /// The last step a checkpoint was taken at.
     pub(crate) checked: Option<i64>,
@@ -420,8 +425,14 @@ impl Live {
     /// #550: writes `bytes` into the program's memory at `at`, marking the page written.
     pub(crate) fn poke(&mut self, at: usize, bytes: &[u8]) -> Option<()> {
         self.runner.write("memory", at, bytes).ok()?;
-        self.dirty.insert((at / PAGE as usize) as u32);
+        self.mark([(at / PAGE as usize) as u32]);
         Some(())
+    }
+    /// Marks `pages` written, for the checkpoint ring, the keyframes and the rollback ring.
+    pub(crate) fn mark(&mut self, pages: impl IntoIterator<Item = u32> + Clone) {
+        self.dirty.extend(pages.clone());
+        self.kdirty.extend(pages.clone());
+        self.rdirty.extend(pages);
     }
     /// The step hash: the program's globals, the arrays it wrote and the rows it emitted, each
     /// after its kind's index (none for a step that emitted none, so an item's hash is as before).
@@ -479,6 +490,7 @@ pub type Failed = Value;
 
 mod net;
 mod rewind;
+pub mod rollback;
 mod world_impl;
 
 /// The planted replay's change: the first value of the item's first array, an i32 plus one, an

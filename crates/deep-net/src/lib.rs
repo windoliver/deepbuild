@@ -13,6 +13,16 @@ pub mod locate;
 mod message;
 pub mod play;
 pub mod prompt;
+pub mod window;
 
 pub use copy::{Change, Copy, Defect, End, Hashed, Planted, Stepper};
+
+/// #551's planted names that aren't a copy's: logic's rollback ring and page tracker, and the
+/// rate rule.
+pub const PLANTED: [&str; 4] = [
+    "net_ring_misses_fill",
+    "net_ring_keeps_after",
+    "net_keeps_replaced_checkpoint",
+    "net_rate_faster_only",
+];
 pub use kind::{Config, FLICKS};

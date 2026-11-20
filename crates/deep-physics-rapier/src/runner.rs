@@ -38,6 +38,7 @@ mod held;
 pub mod kit;
 #[cfg(not(target_arch = "wasm32"))]
 mod live;
+pub mod net;
 mod replay;
 mod timeline;
 pub mod vehicle;

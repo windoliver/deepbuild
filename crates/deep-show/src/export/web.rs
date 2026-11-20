@@ -711,14 +711,10 @@ impl Hub<'_> {
         // it (#1164's `track` call), its bytes the ones its hash is of, so it is the app's by hash.
         let doc_bytes = serde_json::to_vec(doc).map_err(|_| json!({"code": "bad_input"}))?;
         let (doc_path, doc_sha) = files.put(doc_bytes, Some("json"), Map::new());
-        let mut held = deep_canvas_input::track::Track::default();
-        for e in &job.track {
-            let e = crate::track_call::entry_of(e).ok_or_else(
-                || json!({"code": "bad_input", "what": "track: each entry is {t, control, value, writer}"}),
-            )?;
-            held.append(e);
-        }
-        let (_, track_sha) = files.put(held.bytes(), Some("json"), Map::new());
+        let held = crate::track_call::held_bytes(&job.track).ok_or_else(
+            || json!({"code": "bad_input", "what": "track: each entry is {t, control, value, writer}"}),
+        )?;
+        let (_, track_sha) = files.put(held, Some("json"), Map::new());
         // Everything the document names by hash.
         for (_, path, sha) in crate::extended::hashes(doc, true) {
             let bytes = crate::evidence::read(&root, &sha).ok_or_else(|| {

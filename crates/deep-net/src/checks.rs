@@ -5,8 +5,8 @@
 //! single match step against the class's frame time and counts no rollback ring; net.desync
 //! (#550) plants a one-ulp change in one field of one copy's state at a seeded step, made again
 //! whenever that copy runs the step, and passes only when the match stops within one hash
-//! interval of it, every copy naming that step and field. A window above 0 (rollback, #551)
-//! answers BLOCKED, never PASS.
+//! interval of it, every copy naming that step and field. A window above 0 runs net.rollback and
+//! net.budget as crate::window does (#551).
 
 use serde_json::{json, Value};
 
@@ -43,9 +43,6 @@ fn report(kind: &str, failures: Vec<Value>) -> Value {
     json!({"kind": kind, "verdict": verdict, "failures": failures})
 }
 
-const ROLLBACK_WINDOW: &str =
-    "this match declares a rollback window; rolling back lands with #551, and until then a copy plays in lockstep";
-
 /// net.rollback with `window` 0: the match once with every message on time and once with each
 /// frame held back by up to the delay plus a seeded jitter. It gives the held-back run and its
 /// report.
@@ -56,10 +53,7 @@ pub fn rollback<S: Stepper>(
     make: &mut dyn FnMut(u8) -> Result<S, Value>,
 ) -> Result<(Played<S>, Value), Value> {
     if cfg.window > 0 {
-        return Ok((
-            play(cfg, card, ask, make)?,
-            blocked("net.rollback", ROLLBACK_WINDOW),
-        ));
+        return crate::window::rollback(cfg, card, ask, make);
     }
     let on_time = play(
         cfg,
@@ -230,45 +224,18 @@ pub fn desync<S: Stepper>(
     Ok((played, r))
 }
 
-/// net.budget with `window` 0: the busiest single match step any copy ran, against the class's
-/// frame time `frame_ms`, with no rollback ring to count.
+/// net.budget, as crate::window measures it: in lockstep the busiest single match step against the
+/// class's frame time `frame_ms`, with no rollback ring to count; with a window, the live step and
+/// the full window restored and stepped again each frame (#551).
 pub fn budget<S: Stepper>(
     cfg: &Config,
     card: &Card,
     ask: &Ask,
     make: &mut dyn FnMut(u8) -> Result<S, Value>,
     frame_ms: f64,
-    busiest: &dyn Fn(&S) -> Option<(i64, f64)>,
+    on: &[String],
 ) -> Result<(Played<S>, Value), Value> {
-    let played = play(cfg, card, ask, make)?;
-    if cfg.window > 0 {
-        return Ok((played, blocked("net.budget", ROLLBACK_WINDOW)));
-    }
-    let worst = played
-        .copies
-        .iter()
-        .filter_map(|c| busiest(c.sim()).map(|(step, ms)| (c.me, step, ms)))
-        .max_by(|a, b| a.2.total_cmp(&b.2));
-    let mut out = match worst {
-        // A step nobody timed is no measurement.
-        None => json!({"kind": "net.budget", "verdict": "INCONCLUSIVE", "failures": [],
-                       "blocked": [{"what": "no match step was timed"}]}),
-        Some((copy, step, ms)) => {
-            let mut failures = faulted(&played);
-            if ms > frame_ms {
-                failures.push(json!({"copy": copy, "step": step, "ms": ms, "module": "logic",
-                    "what": format!("match step {step} took {ms:.3} ms on copy {copy}, past the class's {frame_ms} ms frame time")}));
-            }
-            let mut r = report("net.budget", failures);
-            r["busiest"] = json!({"copy": copy, "step": step, "ms": ms});
-            r
-        }
-    };
-    out["frame_ms"] = json!(frame_ms);
-    out["window"] = json!(0);
-    // Lockstep keeps no rollback ring.
-    out["rollback_snapshot_bytes"] = json!(0);
-    Ok((played, out))
+    crate::window::budget(cfg, card, ask, make, frame_ms, on)
 }
 
 #[cfg(test)]
@@ -345,50 +312,25 @@ mod tests {
     }
 
     #[test]
-    fn a_window_above_zero_is_blocked_and_net_budget_counts_no_rollback_ring() {
+    fn a_window_above_zero_rolls_back_and_a_late_entry_applied_where_it_arrived_fails() {
         let make = &mut |_: u8| -> Result<Word, Value> { Ok(Word::default()) };
         let window = Config {
             window: 8,
             ..cfg(4, 1)
         };
-        let (_, r) = rollback(&window, &Card::default(), &ask(Planted::None), make).unwrap();
-        assert_eq!(r["verdict"], json!("BLOCKED"));
-        let timed = |_: &Word| Some((7, 0.5));
-        let (_, r) = budget(
-            &cfg(4, 1),
-            &Card::default(),
-            &ask(Planted::None),
-            make,
-            4.0,
-            &timed,
-        )
-        .unwrap();
+        let (held, r) = rollback(&window, &Card::default(), &ask(Planted::None), make).unwrap();
         assert_eq!(
-            (&r["verdict"], &r["rollback_snapshot_bytes"]),
-            (&json!("PASS"), &json!(0))
+            (&r["verdict"], &r["failures"]),
+            (&json!("PASS"), &json!([]))
         );
-        let (_, r) = budget(
-            &cfg(4, 1),
+        assert!(held.copies.iter().all(|c| !c.rolled().is_empty()));
+        let (_, r) = rollback(
+            &window,
             &Card::default(),
-            &ask(Planted::None),
+            &ask(Planted::AppliesLateAtArrival),
             make,
-            0.25,
-            &timed,
         )
         .unwrap();
-        assert_eq!(
-            (&r["verdict"], &r["failures"][0]["step"]),
-            (&json!("FAIL"), &json!(7))
-        );
-        let (_, r) = budget(
-            &cfg(4, 1),
-            &Card::default(),
-            &ask(Planted::None),
-            make,
-            4.0,
-            &|_| None,
-        )
-        .unwrap();
-        assert_eq!(r["verdict"], json!("INCONCLUSIVE"));
+        assert_eq!(r["verdict"], json!("FAIL"));
     }
 }

@@ -64,6 +64,7 @@ fn register(r: &mut Registrar) {
     };
     r.kind(net, &[], "");
     r.rule("net", relay_rule);
+    r.rule("net", rate_rule);
     // #550: deep_run's net kinds (Check input: net kinds), each running copies of the document's
     // match in one process over the test relay, through what the build binds.
     r.check("net.rollback", "any", &["net.rollback"], |d, i| {
@@ -225,6 +226,86 @@ fn relay_rule(_: &Value, id: &str, item: &Value) -> Vec<Raised> {
             fix_ops: None,
         }],
     }
+}
+
+/// #551: the planted rate rule, which accepts only items that step faster than the match.
+static FASTER_ONLY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Plants the rate rule that accepts only items whose step divides the match step's
+/// (`net_rate_faster_only`).
+pub fn plant_rate_rule(on: bool) {
+    FASTER_ONLY.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// A step length in seconds as a refusal names it: `1/20 s`, or `2 s`.
+fn seconds(len: i64) -> String {
+    match FLICKS % len {
+        0 => format!("1/{} s", FLICKS / len),
+        _ if len % FLICKS == 0 => format!("{} s", len / FLICKS),
+        _ => format!("{:.6} s", len as f64 / FLICKS as f64),
+    }
+}
+
+/// #551, the rate rule (Net `net@1`): each stepping item's step length divides the match step's
+/// or is a whole multiple of it, so a 120 Hz world and a 1 Hz economy both line up with match
+/// steps; any other is refused, naming both step lengths.
+fn rate_rule(doc: &Value, id: &str, item: &Value) -> Vec<Raised> {
+    let hz = item["params"]["step_rate"].as_f64().unwrap_or(60.0);
+    let Ok(step) = deep_canvas::time::step_length(hz) else {
+        return Vec::new();
+    };
+    let faster_only = FASTER_ONLY.load(std::sync::atomic::Ordering::Relaxed);
+    let mut out = Vec::new();
+    let items = doc
+        .get("items")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten();
+    let worlds = doc
+        .get("worlds")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten();
+    let stepping = items
+        .filter(|(other, i)| other.as_str() != id && i["kind"] == "logic@1")
+        .map(|(other, i)| {
+            (
+                format!("items/{other}/params/step_rate"),
+                other,
+                i["params"]["step_rate"].as_f64().unwrap_or(60.0),
+            )
+        })
+        .chain(worlds.map(|(w, world)| {
+            (
+                format!("worlds/{w}/step_rate"),
+                w,
+                world["step_rate"].as_f64().unwrap_or(120.0),
+            )
+        }));
+    for (path, other, rate) in stepping {
+        let Ok(len) = deep_canvas::time::step_length(rate) else {
+            continue;
+        };
+        let lines_up = if faster_only {
+            step % len == 0
+        } else {
+            step % len == 0 || len % step == 0
+        };
+        if !lines_up {
+            out.push(Raised {
+                code: "out_of_range",
+                severity: "error",
+                path,
+                what: format!(
+                    "{other} steps every {len} flicks ({}, {rate} Hz), which neither divides match {id}'s step of {step} flicks ({}, {hz} Hz) nor is a whole multiple of it",
+                    seconds(len),
+                    seconds(step)
+                ),
+                fix_ops: None,
+            });
+        }
+    }
+    out
 }
 
 /// The net module, holding `net@1`; it depends on logic.

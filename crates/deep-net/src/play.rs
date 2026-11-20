@@ -24,6 +24,24 @@ pub struct Play {
     pub to: Option<Vec<u8>>,
 }
 
+/// #551: how the relay holds every frame back, in match steps.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Held {
+    /// A seeded whole number of steps from 0 to n, so frames may arrive in another order.
+    UpTo(i64),
+    Exactly(i64),
+}
+
+/// #551: player `player`'s message for match step `step` reaches copy `to` only once that copy
+/// has run step `at`: every frame of that player's to that copy carrying it waits till then.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Deliver {
+    pub player: u8,
+    pub step: i64,
+    pub to: u8,
+    pub at: i64,
+}
+
 /// Every frame `player` sends from `at` for `len` waits at the relay until `at + len`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Hold {
@@ -40,6 +58,13 @@ pub struct Faults {
     pub holds: Vec<Hold>,
     /// Each frame is held back by up to this long, by the seed.
     pub back: i64,
+    /// #551: each frame held back a seeded whole number of match steps up to n, or exactly n.
+    pub held: Option<Held>,
+    /// #551: a player's message for a step that reaches one copy only once it has run a step.
+    pub deliver: Vec<Deliver>,
+    /// #551: each player's one-way latency to the relay, in flicks: a frame from player i to
+    /// player j takes both players', and a copy starts when the relay's start reaches it.
+    pub latency: Vec<i64>,
     /// #550: frames go straight between copies, as on a direct path, each copy's to each other.
     pub direct: bool,
 }
@@ -139,6 +164,7 @@ pub fn play<S: Stepper>(
     make: &mut dyn FnMut(u8) -> Result<S, Value>,
 ) -> Result<Played<S>, Value> {
     let step = cfg.step();
+    let lat = |p: usize| ask.faults.latency.get(p).copied().unwrap_or(0);
     let mut copies = Vec::new();
     for me in 1..=cfg.players {
         let planted = match ask.planted_on {
@@ -153,7 +179,7 @@ pub fn play<S: Stepper>(
             [0x54; 16],
             make(me)?,
             planted,
-            0,
+            lat(me as usize - 1),
         );
         copy.limit(ask.steps);
         if let Some((_, d)) = ask.defect.as_ref().filter(|(on, _)| *on == me) {
@@ -171,7 +197,7 @@ pub fn play<S: Stepper>(
         queue.insert((at, seq), e);
     };
     for i in 0..copies.len() {
-        push(&mut queue, 0, Event::Tick(i));
+        push(&mut queue, lat(i), Event::Tick(i));
     }
     for (i, (_, t)) in ask.shows.iter().enumerate() {
         push(&mut queue, *t, Event::Show(i));
@@ -202,6 +228,8 @@ pub fn play<S: Stepper>(
         .max()
         .unwrap_or(0);
     let stop = longest + 2 * cfg.timeout + ask.steps * step * 10 + 60 * FLICKS;
+    // #551: frames `deliver` holds, each with its copy and the step it waits for that copy to run.
+    let mut pending: Vec<(usize, i64, Vec<u8>)> = Vec::new();
     while let Some(((now, _), event)) = queue.pop_first() {
         if now > stop {
             break;
@@ -210,6 +238,18 @@ pub fn play<S: Stepper>(
             Event::Show(i) => played.shown.push(show(&played.copies, i, now)),
             Event::Deliver(to, frame) => played.copies[to].receive(&frame, now),
             Event::Tick(i) => {
+                // Held frames reach their copy, in the order sent, right after it ran their step.
+                let ready: Vec<Vec<u8>> = {
+                    let ran = played.copies[i].ran();
+                    let (go, wait): (Vec<_>, Vec<_>) = std::mem::take(&mut pending)
+                        .into_iter()
+                        .partition(|(to, at, _)| *to == i && ran > *at);
+                    pending = wait;
+                    go.into_iter().map(|(_, _, f)| f).collect()
+                };
+                for f in ready {
+                    played.copies[i].receive(&f, now);
+                }
                 push(&mut queue, now + step, Event::Tick(i));
                 let Some(frame) = played.copies[i].tick(now) else {
                     continue;
@@ -226,25 +266,45 @@ pub fn play<S: Stepper>(
                 if ask.faults.back > 0 {
                     at += (rng.next() % (ask.faults.back as u64 + 1)) as i64;
                 }
+                match ask.faults.held {
+                    Some(Held::UpTo(n)) => at += (rng.next() % (n.max(0) as u64 + 1)) as i64 * step,
+                    Some(Held::Exactly(n)) => at += n * step,
+                    None => {}
+                }
+                let from = at;
                 for to in (0..played.copies.len()).filter(|to| *to != i) {
+                    let at = from + lat(i) + lat(to);
                     // Through the relay every copy gets the one frame; on a direct path each
                     // gets its own.
                     let sent = match ask.faults.direct {
                         true => played.copies[i].frame_for(&frame, to as u8 + 1),
                         false => frame.clone(),
                     };
+                    // #551: a frame carrying a message `deliver` names waits for its copy's step.
+                    let carries = |d: &&Deliver| {
+                        d.player == player
+                            && d.to as usize == to + 1
+                            && read.as_ref().is_some_and(|f| {
+                                (f.first as i64..f.first as i64 + f.steps.len() as i64)
+                                    .contains(&d.step)
+                            })
+                    };
+                    let waits = ask.faults.deliver.iter().find(carries).copied();
+                    let waits = waits.filter(|d| played.copies[to].ran() <= d.at);
                     played.log.push(Carried {
                         player,
                         first: read.as_ref().map_or(0, |f| f.first as i64),
                         count: read.as_ref().map_or(0, |f| f.steps.len() as i64),
                         confirmed: read.as_ref().map_or(0, |f| f.confirmed as i64),
                         at: now,
-                        delivered: (!dropped).then_some(at),
+                        delivered: (!dropped && waits.is_none()).then_some(at),
                         to: to as u8 + 1,
                         bytes: ask.log.then(|| deep_relay::wire::hex(&sent)),
                     });
-                    if !dropped {
-                        push(&mut queue, at, Event::Deliver(to, sent));
+                    match waits {
+                        _ if dropped => {}
+                        Some(d) => pending.push((to, d.at, sent)),
+                        None => push(&mut queue, at, Event::Deliver(to, sent)),
                     }
                 }
             }
