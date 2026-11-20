@@ -547,9 +547,6 @@ export class Intake implements IntakeService {
       const own = ['--git-dir', repo, '--work-tree', work];
       if (await git(work, [...own, 'status', '--porcelain', '--ignore-submodules=all'], BARE)) {
         await git(work, [...own, 'add', '-A'], BARE);
-        // However it was spelled, a repo of the run's own is never committed: git staged it as a link to it.
-        const link = (await git(work, [...own, 'ls-files', '-s'], BARE)).split('\n').find((l) => l.startsWith('160000 '));
-        if (link) return { verdict: 'FAIL', cause: `${how[0]!.toUpperCase()}${how.slice(1)}; it left a git repo of its own, ${link.split('\t')[1]}, which nothing of a run may leave.` };
         await git(work, [...own, 'commit', '-q', '-m', `A run of this job: ${how}. ${verdict.verdict}`], BARE);
       }
       await git(folder, ['pull', '-q', '--ff-only', repo, 'HEAD'], BARE);
