@@ -48427,6 +48427,7 @@ pub enum DoctorItemCode {
     ModOverridesGuard,
     NotLoaded,
     HandlerSetAside,
+    FootprintUnknown,
     Unknown,
 }
 
@@ -48467,6 +48468,7 @@ impl Contract for DoctorItemCode {
             "mod_overrides_guard" => Ok(Self::ModOverridesGuard),
             "not_loaded" => Ok(Self::NotLoaded),
             "handler_set_aside" => Ok(Self::HandlerSetAside),
+            "footprint_unknown" => Ok(Self::FootprintUnknown),
             "unknown" => Ok(Self::Unknown),
             other => Err(format!("{at}: {other:?} is not one of the listed values")),
         }
@@ -48507,6 +48509,7 @@ impl Contract for DoctorItemCode {
             Self::ModOverridesGuard => "mod_overrides_guard",
             Self::NotLoaded => "not_loaded",
             Self::HandlerSetAside => "handler_set_aside",
+            Self::FootprintUnknown => "footprint_unknown",
             Self::Unknown => "unknown",
         }.to_string())
     }
