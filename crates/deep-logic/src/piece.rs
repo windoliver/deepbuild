@@ -275,6 +275,8 @@ pub enum Read {
     Mirror(usize),
     /// #552: `net.draws`, the draws the input track's reveals complete by the step.
     Draws,
+    /// #189: the carry record's entry (Logic: carry records).
+    Carry,
     /// A write entry.
     None,
 }
@@ -580,6 +582,9 @@ pub struct Item {
     /// its assets' hashes (Logic: checkpoints and bake).
     pub content: String,
     pub saves: Option<Saves>,
+    /// #189: the record it gives and the record it takes (Logic: carry records).
+    pub carry: Option<crate::carry::Carry>,
+    pub carry_in: Option<crate::carry::CarryIn>,
 }
 
 /// A logic item's saves (Logic: saves): its slots, where its `request` and `ends` arrays sit in
@@ -1026,6 +1031,8 @@ struct Declared {
     assets: Vec<String>,
     links: Vec<(String, String)>,
     saves: Option<Value>,
+    carry: Option<Value>,
+    carry_in: Option<crate::carry::CarryIn>,
     emits: Vec<Emit>,
     fires: Vec<fires::Fire>,
     services: Vec<(String, u32)>,

@@ -98,6 +98,7 @@ impl World {
             planted,
             saves_dir: None,
             held: None,
+            saves_ns: 0,
             saved: Vec::new(),
             seen: 0,
             adapter: String::new(),
@@ -691,6 +692,12 @@ impl World {
                 Read::Draws => self
                     .draw
                     .fill(&self.track, (t - item.step, t), &mut region[at..]),
+                Read::Carry => crate::carry::fill(
+                    item,
+                    self.track.get(crate::carry::CARRY),
+                    k,
+                    &mut region[at..at + e.size as usize],
+                ),
                 Read::Mirror(_) | Read::None => {}
             }
         }
@@ -1217,6 +1224,7 @@ impl World {
             planted,
             saves_dir: None,
             held: None,
+            saves_ns: 0,
             saved: Vec::new(),
             seen: 0,
             adapter: String::new(),
@@ -1380,6 +1388,7 @@ impl World {
             planted,
             saves_dir: None,
             held: None,
+            saves_ns: 0,
             saved: Vec::new(),
             seen,
             adapter: String::new(),
@@ -1490,6 +1499,7 @@ impl World {
             planted: self.planted,
             saves_dir: None,
             held: None,
+            saves_ns: 0,
             saved: Vec::new(),
             seen: self.seen,
             adapter: self.adapter.clone(),

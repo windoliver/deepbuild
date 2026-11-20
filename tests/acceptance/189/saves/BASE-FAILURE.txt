@@ -1,0 +1,51 @@
+# #189 logic-saves acceptance suite at the base: this worktree's HEAD 531da1ef0 ("Merge pull request #2910 …"; no
+# implementation of #189), on macOS 27.2 arm64 (shared, loaded: load average about 290), rustc 1.99.1, vitest 5.0.5.
+#
+# The full suite was NOT run at the base. Its run under the machine's throttle,
+#   PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+#     node scripts/throttle.mjs test --wait 120 -- sh scripts/lease \
+#     npx vitest run --root tests/acceptance/189/saves --testTimeout=600000 --no-file-parallelism
+# answered, after a few minutes in the queue:
+#   INCONCLUSIVE no grant: no test grant came within 120 min
+#     Fix: Wait for the other sessions' builds and proofs on this machine, then run again.
+# and a second request was stopped by its own PID while still queued, as the coordinator asked: the surfaces plainly
+# don't exist at the base (the brief allows a short run then). So no test file's own output is recorded here.
+#
+# What did run at the base:
+# - `npx tsc -p tests/acceptance/189/saves/tsconfig.json` exits 0 (so does the Oracle lane's).
+# - The assembler (wat/, its Cargo.lock regenerated offline at this base) builds with --locked, and
+#   `cargo build --locked --bin deep-logic` builds.
+# - A scratch harness check (a temporary file in this folder, deleted, not committed), through this suite's own
+#   helpers, pieces and programs against the base's deep-logic, 4 of 4 passed:
+#   - `check` admits all ten dungeon programs (old, fix, inserted, shifted, extra, table, v3, m48, bare, bare_nop):
+#     the base accepts the `layout_at` export and the data segments at 6,144, 8,176 and 8,192.
+#   - The old dungeon saves slot 1 at step 1,800 (one 66,373-byte save: page 0 only); step 1,799's roster is
+#     [1299,7,3,24, 1413,8,4,21, 1478,9,5,16], gold 270, floor 4, bag [11,12,13,14,0,0,0,0]. Its header binds
+#     `layout` to the program hash (b8f48fa1…), not sha256(V1), and holds no `deep_hash`.
+#   - With the migration declared from the header's own binding (the base's), the 48 MiB program opens the save
+#     `via: migration` as a new save beside the old one; step 1,800's roster equals the old run's and the bag reads
+#     [211,212,213,14,0,0,0,0]: the migration fixture is right.
+#   - Opened through an identity migration (scratch only), `shifted` first differs from the old program at step 1,800,
+#     roster, element 0 (criterion 2's expected values); `fix` keeps roster, gold, floor and bag equal and its foe
+#     first differs at step 1,801; `table` doesn't differ (the base writes no changed program's segments on open).
+#   - The scribe's save at step 1,800 is 3,146,666 bytes (48.01 pages) and opens at its SaveWritten's full-state
+#     hashes (scribe and counter); the base's Opened has no `refused`, `open_ns` or `migration` field.
+#   - The roguelike's 3,000-step run (5.2 s) saves at 1,800 and an ended save at 3,000, after which the folder holds
+#     the ended save alone, and the slot opens it: #534's ended slots already do what ac06's first two tests ask.
+#   - A live view of the dungeon without `saves` steps 120 times in 120 `play` frames; its frame replies carry no
+#     `saves_ns`.
+#
+# What each file is expected to fail on at the base, from the above and the base's code (not a recorded run):
+# - ac01: the header's `layout` is the program hash, not sha256(V1).
+# - ac02: `{"call": "layout"}` answers {"ok":false,"code":"bad_input"} (no such call), in all three tests.
+# - ac03: test 1 (no layout, program hashes) should pass at the base, which keeps #171's binding; test 2 fails: the
+#   refusal names the layout (program hash), no `globals` Differ naming global 5.
+# - ac04: the old save's header `layout` isn't sha256(V1); the planted test's twin is unknown (bad_input, exit 2).
+# - ac05: the header holds no `deep_hash`; the planted test's twin is unknown (bad_input, exit 2).
+# - ac06: tests 1 and 2 should pass at the base (#534 built `ends`); test 3's twin is unknown (bad_input, exit 2).
+# - ac11: on a Mac each leg measures; the open leg finds no `open_ns`, the layout leg `bad_input`, the migration leg a
+#   refusal (the base binds the program hash, so no migration from sha256(V1) applies), the frame leg no `saves_ns`.
+#   Off a Mac each is BLOCKED (pinned to the reference Mac).
+# - ac12: refused with a `layout` Differ (program hash), no `segment` Differ {2, 8192}; the planted twin is unknown.
+# - ac13: the `layout` Differ names program hashes, not sha256(V1) and sha256(V3), and has no `fields`; the planted
+#   twin is unknown.

@@ -285,11 +285,45 @@ impl Player {
         Ok(())
     }
 
-    /// The piece's saves as the page keeps them (Logic: saves): `{piece, slots}` as JSON, the
-    /// document's stable ID and the most slots its logic declares, 0 for a piece with no saves.
+    /// The piece's saves as the page keeps them (Logic: saves): `{piece, slots, gives, takes}` as
+    /// JSON, the document's stable ID, the most slots its logic declares (0 for a piece with no
+    /// saves), and whether its logic gives a carry record (`carry`) or takes one (`carry_in`).
     pub fn saves(&self) -> String {
         let p = self.played.as_ref();
-        json!({"piece": p.map_or("", Played::id), "slots": p.map_or(0, Played::slots)}).to_string()
+        let declares = |f: &str| p.is_some_and(|p| p.declares(f));
+        json!({"piece": p.map_or("", Played::id), "slots": p.map_or(0, Played::slots),
+               "gives": declares("carry"), "takes": declares("carry_in")})
+        .to_string()
+    }
+
+    /// #189: the carry records the steps the shown time has reached since the last call wrote, as
+    /// JSON in step order: each `{at, item, step, hash, layout}`.
+    pub fn records_due(&mut self) -> String {
+        Value::Array(self.played.as_mut().map(Played::records_due).unwrap_or_default()).to_string()
+    }
+
+    /// The record at `at` of [`Self::records_due`]: the bytes the page stores whole under their
+    /// SHA-256, as the app's record file holds them.
+    pub fn record_bytes(&self, at: usize) -> Result<Vec<u8>, JsValue> {
+        self.played
+            .as_ref()
+            .and_then(|p| p.record(at))
+            .ok_or_else(|| fail("the piece wrote no such record"))
+    }
+
+    /// The viewer opens the carry record `name`, its bytes' SHA-256, into the piece: `{record}` as
+    /// JSON once the piece is made again with its entry at step 0, or its refusal as JSON, naming
+    /// what differs.
+    pub fn open_record(&mut self, name: &str, bytes: Vec<u8>) -> Result<String, JsValue> {
+        let files = &self.files;
+        let read = |sha: &str| files.get(sha).cloned();
+        let p = self
+            .played
+            .as_mut()
+            .ok_or_else(|| fail("no piece is loaded"))?;
+        p.take_record(self.sealed, name, &bytes, &read)
+            .map(|v| v.to_string())
+            .map_err(fail)
     }
 
     /// The saves asked for by the steps the shown time has reached since the last call, as JSON

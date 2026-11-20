@@ -27,6 +27,10 @@ use crate::piece::{memory_bytes, migration_fuel, segments, Piece, MAX_MEMORY, PA
 use crate::world::{arrays_json, names, track_of, Entry, Failed, Live, Record, World};
 use crate::{Planted, VERSION};
 
+mod across;
+pub mod host;
+mod layout;
+
 /// One item's carried state, as a save holds it.
 struct State {
     failed: bool,
@@ -62,10 +66,15 @@ fn binding(piece: &Piece) -> [String; 3] {
         modules.push_str(&format!("{}\n", crate::piece::MACHINE));
     }
     [
-        joined(&|i| i.program.clone()),
+        joined(&layout::of),
         hash(content.as_bytes()),
         hash(modules.as_bytes()),
     ]
+}
+
+/// An item's state layout (Logic: saves across changes), as saves and carry records bind it.
+pub(crate) fn layout_of(item: &crate::piece::Item) -> String {
+    layout::of(item)
 }
 
 /// The rewritten program, which a save names but isn't bound to.
@@ -126,11 +135,14 @@ fn encode(w: &mut World) -> Vec<u8> {
         out.extend(l.ran.to_le_bytes());
         let memory = l.memory().to_vec();
         out.extend((memory.len() as u32).to_le_bytes());
-        let pages: Vec<(usize, &[u8])> = memory
+        let mut pages: Vec<(usize, &[u8])> = memory
             .chunks(PAGE as usize)
             .enumerate()
             .filter(|(_, p)| p.iter().any(|b| *b != 0))
             .collect();
+        if planted.save_drops_a_page {
+            pages.pop();
+        }
         out.extend((pages.len() as u32).to_le_bytes());
         for (i, p) in pages {
             out.extend((i as u32).to_le_bytes());
@@ -347,7 +359,17 @@ fn made(w: &mut World, k: i64, slot: i32, ended: bool) -> (Value, Vec<u8>) {
     );
     let mut input_at = serde_json::Map::new();
     let mut changed = Vec::new();
+    let (mut ranges, mut layouts) = (serde_json::Map::new(), serde_json::Map::new());
+    let (mut globals, mut programs) = (serde_json::Map::new(), serde_json::Map::new());
     for (item, l) in piece.items.iter().zip(w.lives.iter_mut()) {
+        ranges.insert(item.id.clone(), across::ranges(&item.given));
+        globals.insert(item.id.clone(), across::globals(&item.bytes));
+        programs.insert(item.id.clone(), json!(item.program));
+        if let Some(b) = layout::bytes(&item.given) {
+            use base64::Engine as _;
+            let b64 = base64::engine::general_purpose::STANDARD.encode(b);
+            layouts.insert(item.id.clone(), json!(b64));
+        }
         let read: serde_json::Map<String, Value> = l
             .cursor
             .iter()
@@ -375,7 +397,8 @@ fn made(w: &mut World, k: i64, slot: i32, ended: bool) -> (Value, Vec<u8>) {
         "slot": slot, "layout": layout, "content": content, "modules": modules,
         "runtime": hash(format!("{VERSION}\nwasmtime {}\n", deep_sandbox_wasmtime::WASMTIME).as_bytes()),
         "document": piece.document, "program": program(&piece), "step": k, "input_at": input_at, "track": track,
-        "ended": ended, "fingerprint": fingerprint(w), "segments": changed, "seq": 0,
+        "ended": ended, "fingerprint": fingerprint(w), "segments": changed, "ranges": ranges, "layouts": layouts,
+        "globals": globals, "programs": programs, "deep_hash": w.deep_hashes(), "seq": 0,
     });
     // #860: a piece with rewind keeps its current branch, its closed branches within depth and
     // the seen values it carries, so a loaded save rewinds as the run did.
@@ -419,7 +442,7 @@ fn write(w: &mut World, k: i64, slot: i32, ended: bool) -> Result<(String, PathB
         .join()
         .map_err(|_| "the save writer panicked".to_string())?
     })?;
-    let good = if ended {
+    let good = if ended && !w.planted.ended_keeps_earlier_save {
         None
     } else {
         ours.iter().position(|s| s.whole().is_some())
@@ -443,6 +466,13 @@ fn fingerprint(w: &World) -> Value {
 /// held for the host where no folder keeps them. A slot whose newest save is ended opens only at
 /// that end, so it takes no later save.
 pub(crate) fn due(w: &mut World, k: i64, ended_at: Instant) {
+    let started = Instant::now();
+    asked(w, k, ended_at);
+    w.saves_ns += started.elapsed().as_nanos() as u64;
+}
+
+fn asked(w: &mut World, k: i64, ended_at: Instant) {
+    crate::carry::due(w, k);
     let asked: Vec<(usize, i32, bool)> = w
         .lives
         .iter_mut()
@@ -578,32 +608,39 @@ pub fn open(
     adapter: &str,
     frames: Option<&Value>,
 ) -> Result<Value, Value> {
+    let started = Instant::now();
     let all = listed(dir, slot);
     let mut damaged = headless(dir);
+    // Each newer save that reads back whole but opens to another full-state hash than it recorded.
+    let mut refused = Vec::new();
     let mut chosen = None;
     for s in &all {
-        if let Some(bytes) = s.whole() {
-            chosen = Some((s, bytes));
-            break;
+        let Some(bytes) = s.whole() else {
+            damaged.push(json!({"hash": s.hash, "file": s.path}));
+            continue;
+        };
+        let mut rec = Record::default();
+        let file = Some((dir, s.path.as_path()));
+        match whole(
+            &piece, file, &s.hash, &s.header, &bytes, &damaged, track, planted, adapter, &mut rec,
+        ) {
+            Ok((w, via)) => {
+                chosen = Some((w, via, rec));
+                break;
+            }
+            Err(e) if e["code"] == "state_differs" => {
+                refused.push(json!({"hash": s.hash, "file": s.path, "differs": e["differs"]}));
+            }
+            Err(e) => return Err(e),
         }
-        damaged.push(json!({"hash": s.hash, "file": s.path}));
     }
-    let Some((save, bytes)) = chosen else {
-        return Err(json!({"ok": false, "code": "no_save", "slot": slot, "damaged": damaged}));
+    let open_ns = started.elapsed().as_nanos() as u64;
+    let Some((mut w, mut via, mut rec)) = chosen else {
+        return Err(
+            json!({"ok": false, "code": "no_save", "slot": slot, "damaged": damaged, "refused": refused}),
+        );
     };
-    let mut rec = Record::default();
-    let (mut w, via) = whole(
-        &piece,
-        Some((dir, save.path.as_path())),
-        &save.hash,
-        &save.header,
-        &bytes,
-        &damaged,
-        track,
-        planted,
-        adapter,
-        &mut rec,
-    )?;
+    let migration = via.as_object_mut().and_then(|v| v.remove("migration"));
     let k = via["step"].as_i64().unwrap_or(0);
     // The closed branches the save holds, before the run plays on.
     let closed = w.branches.closed_json();
@@ -618,7 +655,7 @@ pub fn open(
     let saves = written(&mut w)?;
     let frames = crate::frames(&piece, frames, &rec, Some((k, &at_open)))?;
     Ok(json!({
-        "ok": true, "opened": via, "damaged": damaged, "deep_hash": deep, "steps": rec.steps_json(&piece, None),
+        "ok": true, "opened": via, "damaged": damaged, "refused": refused, "open_ns": open_ns, "migration": migration, "deep_hash": deep, "steps": rec.steps_json(&piece, None),
         "checkpoints": rec.checkpoints, "traps": crate::libraries_in(&piece, rec.traps), "saves": saves, "frames": frames,
         "closed": closed,
     }))
@@ -747,15 +784,34 @@ fn whole(
                 json!({"differs": [{"what": "state"}]}),
             ));
         };
-        opened(
-            piece,
-            track,
-            planted,
-            k,
-            state.into_iter().map(|(_, s)| s).collect(),
-            seen(&machine),
-        )
-        .map_err(fits)?
+        let mut states: Vec<State> = state.into_iter().map(|(_, s)| s).collect();
+        // The program's mutable globals match the save's in count and type, or it's refused.
+        let globals: Vec<Value> = piece
+            .items
+            .iter()
+            .zip(&states)
+            .filter(|_| !planted.save_drops_globals)
+            .filter_map(|(item, s)| across::globals_differ(item, h, s.globals.len()))
+            .collect();
+        if !globals.is_empty() {
+            return Err(refused("save_refused", json!({"differs": globals})));
+        }
+        // Under a changed program with the same layout, its segments follow the save's pages.
+        if h["program"].as_str() != Some(program(piece).as_str()) {
+            let differs: Vec<Value> = piece
+                .items
+                .iter()
+                .zip(states.iter_mut())
+                .filter_map(|(item, s)| {
+                    across::onto(item, h, &mut s.memory, planted.open_writes_new_segments).err()
+                })
+                .flatten()
+                .collect();
+            if !differs.is_empty() {
+                return Err(refused("save_refused", json!({"differs": differs})));
+            }
+        }
+        opened(piece, track, planted, k, states, seen(&machine)).map_err(fits)?
     } else {
         let from = [&h["layout"], &h["content"], &h["modules"]];
         let migration = piece
@@ -769,6 +825,25 @@ fn whole(
             let mut differs = differs;
             if differs.iter().any(|d| d["what"] == "layout") {
                 differs.extend(h["segments"].as_array().into_iter().flatten().map(|s| json!({"what": "segment", "item": s["item"], "segment": s["segment"], "offset": s["offset"]})));
+                // When both layouts carry a field table, every field that differs, with its class.
+                if let (Some(d), [item]) = (
+                    differs.iter_mut().find(|d| d["what"] == "layout"),
+                    piece.items.as_slice(),
+                ) {
+                    use base64::Engine as _;
+                    let theirs = h["layouts"][&item.id]
+                        .as_str()
+                        .and_then(|b| base64::engine::general_purpose::STANDARD.decode(b).ok());
+                    if let (Some(old), Some(new)) = (theirs, layout::bytes(&item.given)) {
+                        let mut fields = layout::field_changes(&old, &new);
+                        if planted.refusal_names_first_field {
+                            fields.truncate(1);
+                        }
+                        if !fields.is_empty() {
+                            d["fields"] = json!(fields);
+                        }
+                    }
+                }
             }
             return Err(refused("save_refused", json!({"differs": differs})));
         };
@@ -785,14 +860,15 @@ fn whole(
                 Value::Null,
             ));
         };
-        let new = migrate(m, old, item).map_err(|(what, trap)| failed(&what, trap))?;
+        let (new, run) =
+            migrate(m, old, item, planted).map_err(|(what, trap)| failed(&what, trap))?;
         let mut w = opened(piece, track, planted, k, vec![new], seen(&machine)).map_err(fits)?;
         w.saves_dir = Some(dir.to_path_buf());
         w.adapter = adapter.to_string();
         let slot = h["slot"].as_i64().unwrap_or(0) as i32;
         let (new, file, _) = write(&mut w, k, slot, ended)
             .map_err(|e| refused("save_failed", json!({"what": e})))?;
-        via = json!({"hash": new, "file": file, "step": k, "via": "migration", "from": hash});
+        via = json!({"hash": new, "file": file, "step": k, "via": "migration", "from": hash, "migration": run});
         w
     };
     match dir {
@@ -803,13 +879,45 @@ fn whole(
     if let Some((b, _)) = branch {
         w.branches = b;
     }
+    // A save opened under the program that wrote it opens at the full-state hashes it recorded.
+    // #534's planted saves and opens are wrong programs from before that check, so they skip it.
+    let unchecked = planted.save_drops_globals
+        || planted.save_drops_input_position
+        || planted.open_reapplies_segments;
+    // Each item's full-state hash, taken once: checked, then the opened checkpoint's.
+    let deep = w.deep_hashes();
+    if via["via"] == "straight"
+        && !unchecked
+        && h["program"].as_str() == Some(program(piece).as_str())
+    {
+        let theirs = h["deep_hash"].as_object().cloned().unwrap_or_default();
+        let differs: Vec<Value> = deep
+            .clone()
+            .into_iter()
+            .filter(|(id, mine)| theirs.get(id).is_some_and(|t| t != mine))
+            .map(|(id, mine)| {
+                let module = if piece.machine.contains(&id) { crate::piece::MACHINE } else { "logic" };
+                json!({"what": "state", "module": module, "item": id, "save": theirs[&id], "piece": mine})
+            })
+            .collect();
+        if !differs.is_empty() {
+            return Err(
+                json!({"ok": false, "code": "state_differs", "save": hash, "differs": differs}),
+            );
+        }
+    }
+    let of = |id: &str| {
+        deep.get(id)
+            .and_then(Value::as_str)
+            .and_then(|h| u64::from_str_radix(h, 16).ok())
+            .unwrap_or_default()
+    };
     for (item, l) in piece.items.iter().zip(w.lives.iter_mut()) {
-        let deep = l.deep_hash();
-        rec.checkpoint(&item.id, k, deep, &l.arrays);
+        rec.checkpoint(&item.id, k, of(&item.id), &l.arrays);
         l.checked = Some(k);
     }
     for m in &piece.machine {
-        rec.checkpoint(m, k, w.seen_hash(), &[]);
+        rec.checkpoint(m, k, of(m), &[]);
     }
     Ok((w, via))
 }
@@ -821,7 +929,8 @@ fn migrate(
     m: &crate::piece::Migration,
     old: &State,
     item: &crate::piece::Item,
-) -> Result<State, (String, Value)> {
+    planted: Planted,
+) -> Result<(State, Value), (String, Value)> {
     let fail = |e: String| (e, Value::Null);
     let mut block = (old.memory.len() as u32).to_le_bytes().to_vec();
     block.extend(&old.memory);
@@ -839,6 +948,7 @@ fn migrate(
         at(&mut r, "remap_at"),
         at(&mut r, "new_at"),
     );
+    let started = Instant::now();
     r.write("memory", old_at, &block).map_err(fail)?;
     if let Some(table) = &m.remap {
         r.write("memory", remap_at, table).map_err(fail)?;
@@ -848,7 +958,12 @@ fn migrate(
     if memory_bytes(&m.bytes) > allowed {
         return Err(fail(format!("the migration {} declares {} bytes of memory; its budget is the new memory plus the old plus 4 MiB, {allowed}", m.by, memory_bytes(&m.bytes))));
     }
-    let fuel = migration_fuel((old.memory.len() + size) as u64);
+    let fuel = if planted.migration_runs_under_step_budget {
+        item.fuel
+    } else {
+        migration_fuel((old.memory.len() + size) as u64)
+    };
+    let mut used = 0;
     let starts = r.exports(START);
     for export in [START, "migrate"]
         .into_iter()
@@ -863,6 +978,9 @@ fn migrate(
                 deadline: None,
             })
             .map_err(fail)?;
+        if let Some(Val::I64(left)) = r.global(deep_canvas_sandbox::rewrite::FUEL) {
+            used += (fuel - left).clamp(0, fuel);
+        }
         if out.trap.is_some() {
             return Err((
                 format!("the migration {} trapped", m.by),
@@ -886,7 +1004,7 @@ fn migrate(
     ) else {
         return Err(fail(format!("the migration's new state holds {n} bytes of memory and {g} globals; the program has {size} and {globals}")));
     };
-    Ok(State {
+    let state = State {
         failed: old.failed,
         ran: old.ran,
         memory: new_memory.to_vec(),
@@ -897,5 +1015,8 @@ fn migrate(
         arrays: old.arrays.clone(),
         prev: old.prev.clone(),
         pending: old.pending.clone(),
-    })
+    };
+    let budget = json!({"fuel": fuel, "memory": allowed, "stack": 262_144});
+    let run = json!({"by": m.by, "fuel": used, "ns": started.elapsed().as_nanos() as u64, "budget": budget});
+    Ok((state, run))
 }
