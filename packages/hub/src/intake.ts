@@ -16,7 +16,7 @@
 // A run passes only when the checks it left in the workspace pass.
 import { execFile, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import type { Delivery } from '@deepbuild/asks';
@@ -82,6 +82,19 @@ interface Fold {
 const git = (cwd: string, args: string[], env: NodeJS.ProcessEnv = {}): Promise<string> => new Promise((done, fail) => {
   execFile('git', ['-C', cwd, ...IDENTITY, ...args], { encoding: 'utf8', timeout: 120_000, env: { ...process.env, GIT_TERMINAL_PROMPT: '0', ...env } }, (error, out, err) => (error ? fail(Error(`git ${args[0]}: ${String(err || error.message).trim()}`)) : done(String(out).trim())));
 });
+/** The hub's git on what a run made reads no config but the repo's own, so no filter or hook of yours runs on it. */
+const BARE = { GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null' };
+/** Removes a run's folder, first making writable what the run left read-only. */
+function scrap(path: string): void {
+  try { rmSync(path, { recursive: true, force: true }); return; } catch { /* made read-only by the run */ }
+  const writable = (p: string): void => {
+    if (!lstatSync(p).isDirectory()) return;
+    chmodSync(p, 0o700);
+    for (const name of readdirSync(p)) writable(join(p, name));
+  };
+  writable(path);
+  rmSync(path, { recursive: true, force: true });
+}
 const slug = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'project';
 const rowId = (key: string): string => `job:brief-${key.slice(0, 12)}`;
 
@@ -434,7 +447,11 @@ export class Intake implements IntakeService {
     const run = await this.dispatch(f.key, now);
     this.running.add(run.run);
     void this.go(f, run, first)
-      .catch((error: unknown) => this.end(f.key, run, { verdict: 'INVALID', cause: `The run stopped: ${error instanceof Error ? error.message : String(error)}` }))
+      .catch(async (error: unknown) => {
+        const cause = `The run stopped: ${error instanceof Error ? error.message : String(error)}`;
+        await this.end(f.key, run, { verdict: 'FAIL', cause });
+        await this.stopped(f, [...f.runs, { ...run, ended: { verdict: 'FAIL' } }], cause);
+      })
       .catch(() => undefined)
       .finally(() => this.running.delete(run.run));
   }
@@ -510,7 +527,7 @@ export class Intake implements IntakeService {
   private async clone(key: string, folder: string): Promise<string> {
     const dir = this.jobDir(key);
     mkdirSync(dir, { recursive: true });
-    for (const name of ['work', 'git']) rmSync(join(dir, name), { recursive: true, force: true });
+    for (const name of ['work', 'git']) scrap(join(dir, name));
     await git(dir, ['clone', '-q', '--no-hardlinks', '--separate-git-dir', join(dir, 'git'), folder, 'work']);
     rmSync(join(dir, 'work', '.git'));
     return realpathSync(join(dir, 'work'));
@@ -520,15 +537,18 @@ export class Intake implements IntakeService {
    * named outright so no `.git` the run left is read, and lands in the workspace.
    */
   private async landed(work: string, folder: string, how: string): Promise<{ verdict: string; cause: string }> {
-    const verdict = await this.checks(work);
+    const checked = await this.checks(work);
+    // A `.git` a run left, at any depth, is a repo whose config the hub's git would read: nothing of such a run lands.
+    const nested = readdirSync(work, { recursive: true }).map(String).find((p) => basename(p) === '.git');
+    const verdict = nested !== undefined ? { verdict: 'FAIL', cause: `it left a git folder of its own, ${nested}, which nothing of a run may leave.` } : checked;
     if (verdict.verdict !== 'FAIL') {
       const repo = join(dirname(work), 'git');
       const own = ['--git-dir', repo, '--work-tree', work];
-      if (await git(work, [...own, 'status', '--porcelain'])) {
-        await git(work, [...own, 'add', '-A']);
-        await git(work, [...own, 'commit', '-q', '-m', `A run of this job: ${how}. ${verdict.verdict}`]);
+      if (await git(work, [...own, 'status', '--porcelain', '--ignore-submodules=all'], BARE)) {
+        await git(work, [...own, 'add', '-A'], BARE);
+        await git(work, [...own, 'commit', '-q', '-m', `A run of this job: ${how}. ${verdict.verdict}`], BARE);
       }
-      await git(folder, ['pull', '-q', '--ff-only', repo, 'HEAD']);
+      await git(folder, ['pull', '-q', '--ff-only', repo, 'HEAD'], BARE);
     }
     return { verdict: verdict.verdict, cause: `${how[0]!.toUpperCase()}${how.slice(1)}; ${verdict.cause}` };
   }
