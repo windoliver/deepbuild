@@ -17,6 +17,8 @@ pub mod form;
 pub mod logic;
 #[cfg(feature = "net")]
 pub mod net;
+#[cfg(feature = "net")]
+pub mod net_worlds;
 pub mod read;
 #[cfg(feature = "scene3d")]
 pub mod scene;
