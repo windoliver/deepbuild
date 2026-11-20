@@ -1,0 +1,122 @@
+# #2760's tests run against the base, commit 9550dc0f0, before any implementation
+#
+# Run in this checkout at the base (no crate edited), deep-gpu and deep-show built by cargo build --locked --bin
+# deep-gpu and --bin deep-show (toolchain 1.99.1, CARGO_INCREMENTAL=0, CARGO_PROFILE_DEV_DEBUG=0), #544's assembler built
+# into target/acceptance-2760-wat, with
+#   npx vitest run --root tests/acceptance/2760 --no-file-parallelism --testTimeout=3600000 rings.test.ts spawn.test.ts
+# on an Apple Silicon Mac. Every test fails, each at its own assertion, none at load:
+# - rings.test.ts: the base reads no water.rings, so frame 45's rings rows list no ring for the three touches; the planted
+#   name water_rings_at_rain_hash doesn't exist (bad_input, exit 2).
+# - spawn.test.ts: media_mix at the base starts the Spawn's three voices on the touches' flicks and the mix sounds at
+#   their samples (those assertions pass); the same document's frame at 2.2 s lists no ring to fall on them.
+# The other files weren't run at the base: their surface (water.rings, the rings rows of an occurrence, the check's
+# refusals, the second planted name, the budgets.json task) isn't there. The type-check passes:
+#   npx tsc -p tests/acceptance/2760/tsconfig.json
+#
+# Probes at the base, not kept (README: What the base already does):
+# - the pond with rain at 0.4 drops per m² per s, 240 frames at 60 fps at 480 × 270, against the dry pond: each frame
+#   that lists exactly one rain ring inside the camera's view differs from the dry frame, e.g.
+#     frame 64: one ring at (2.70, -0.76), age 0.248 s, 29% of its strength, radius 0.074 m: 137 pixels differ, worst 12 codes
+#     frame 87: one ring at (-0.66, 0.10), age 0.220 s, 37%, radius 0.066 m: 48 pixels differ, worst 7 codes
+#     frame 96: one ring at (0.73, -0.60), age 0.121 s, 66%, radius 0.036 m: 80 pixels differ, worst 16 codes
+#     frame 152: one ring at (1.37, 0.33), age 0.219 s, 37%, radius 0.066 m: 243 pixels differ, worst 8 codes
+#     frame 162: one ring at (2.12, 1.16), age 0.165 s, 53%, radius 0.050 m: 343 pixels differ, worst 6 codes
+#   (14 to 343 pixels over the 23 such frames), and the one ring that changed one pixel or none (frames 118 and 119, at
+#   (-0.63, 1.03)) lies left of the frame.
+# - every program run in Node, its emit region equal to its table; media_mix's voices on each list carry this suite's
+#   row indices and flicks (deer: lap 0@60 2@96, step 1@75 3@111; crowd of 65: 0@60 1@60 2@61 ... 63@91 64@92).
+# - view3d draws every document of the suite at the base and answers rings: [] for each.
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/2760
+
+ ❯ spawn.test.ts (1 test | 1 failed) 11593ms
+   ❯ #2760.9c74b517 a touch's ring and its splash start on one flick (1)
+     × #2760.9c74b517 a Spawn on the same list starts each voice on its ring's flick: for all three touches the voice's first sample and the ring's age 0 fall on one flick 6499ms
+stdout | rings.test.ts > #2760.a4531c1e three touches at the plate's centre start three rings, each a closed form of its occurrence's point, its flick and t > #2760.a4531c1e at 2.25 s the three rings' radii are 0.375, 0.225 and 0.075 m, each within 1 mm of speed × age and centred within 1 mm of its occurrence's point
+#2760.a4531c1e: at 2.25 s no ring is listed
+
+ ❯ rings.test.ts (2 tests | 2 failed) 8462ms
+   ❯ #2760.a4531c1e three touches at the plate's centre start three rings, each a closed form of its occurrence's point, its flick and t (2)
+     × #2760.a4531c1e at 2.25 s the three rings' radii are 0.375, 0.225 and 0.075 m, each within 1 mm of speed × age and centred within 1 mm of its occurrence's point 5715ms
+     × #2760.a4531c1e a planted material that places rings by the rain's hash (--planted water_rings_at_rain_hash) puts them elsewhere and fails, naming the occurrence 23ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  rings.test.ts > #2760.a4531c1e three touches at the plate's centre start three rings, each a closed form of its occurrence's point, its flick and t > #2760.a4531c1e at 2.25 s the three rings' radii are 0.375, 0.225 and 0.075 m, each within 1 mm of speed × age and centred within 1 mm of its occurrence's point
+AssertionError: each touch's ring at its occurrence's point, with radius speed × age: occurrence 0 of taps.occurrences (touch at 1.0000 s): 0 rings are listed for it at 2.2500 s, not one; occurrence 1 of taps.occurrences (touch at 1.5000 s): 0 rings are listed for it at 2.2500 s, not one; occurrence 2 of taps.occurrences (touch at 2.0000 s): 0 rings are listed for it at 2.2500 s, not one: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "occurrence 0 of taps.occurrences (touch at 1.0000 s): 0 rings are listed for it at 2.2500 s, not one",
++   "occurrence 1 of taps.occurrences (touch at 1.5000 s): 0 rings are listed for it at 2.2500 s, not one",
++   "occurrence 2 of taps.occurrences (touch at 2.0000 s): 0 rings are listed for it at 2.2500 s, not one",
++ ]
+
+ ❯ none helpers.ts:91:67
+     89| /** No failures. */
+     90| export function none(failures: readonly string[], what: string): void {
+     91|   expect(failures, `${what}: ${failures.slice(0, 8).join('; ')}`).toEq…
+       |                                                                   ^
+     92| }
+     93| /** A planted twin's check: it found failures, and they name what the …
+ ❯ rings.test.ts:56:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  rings.test.ts > #2760.a4531c1e three touches at the plate's centre start three rings, each a closed form of its occurrence's point, its flick and t > #2760.a4531c1e a planted material that places rings by the rain's hash (--planted water_rings_at_rain_hash) puts them elsewhere and fails, naming the occurrence
+AssertionError: deep-gpu run --planted water_rings_at_rain_hash exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ runGpu helpers.ts:332:155
+    330|   // A process that exits before reading its input (an unknown --plant…
+    331|   if (r.error && (r.error as NodeJS.ErrnoException).code !== 'EPIPE') …
+    332|   expect(r.status, `${label} exits 0 (${r.signal ?? 'no signal'}); std…
+       |                                                                                                                                                           ^
+    333|   const lines = (r.stdout ?? '').split('\n').filter((l) => l !== '');
+    334|   expect(lines.length, `${label}: one output line`).toBe(1);
+ ❯ at225 rings.test.ts:42:30
+ ❯ rings.test.ts:69:26
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  spawn.test.ts > #2760.9c74b517 a touch's ring and its splash start on one flick > #2760.9c74b517 a Spawn on the same list starts each voice on its ring's flick: for all three touches the voice's first sample and the ring's age 0 fall on one flick
+AssertionError: each touch's ring at 2.2 s, its radius speed × the time since its flick: occurrence 0 of taps.occurrences (touch at 1.0000 s): 0 rings are listed for it at 2.2000 s, not one; occurrence 1 of taps.occurrences (touch at 1.5000 s): 0 rings are listed for it at 2.2000 s, not one; occurrence 2 of taps.occurrences (touch at 2.0000 s): 0 rings are listed for it at 2.2000 s, not one: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "occurrence 0 of taps.occurrences (touch at 1.0000 s): 0 rings are listed for it at 2.2000 s, not one",
++   "occurrence 1 of taps.occurrences (touch at 1.5000 s): 0 rings are listed for it at 2.2000 s, not one",
++   "occurrence 2 of taps.occurrences (touch at 2.0000 s): 0 rings are listed for it at 2.2000 s, not one",
++ ]
+
+ ❯ none helpers.ts:91:67
+     89| /** No failures. */
+     90| export function none(failures: readonly string[], what: string): void {
+     91|   expect(failures, `${what}: ${failures.slice(0, 8).join('; ')}`).toEq…
+       |                                                                   ^
+     92| }
+     93| /** A planted twin's check: it found failures, and they name what the …
+ ❯ spawn.test.ts:68:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  3 failed (3)
+   Start at  23:49:09
+   Duration  20.38s (tests 100%)
+
+exit 1

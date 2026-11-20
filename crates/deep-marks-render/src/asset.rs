@@ -10,6 +10,7 @@ use std::sync::Arc;
 use deep_canvas_marks::key::sha256_hex;
 use deep_canvas_marks::paint::Adjust;
 use deep_canvas_marks::scene::{AtlasCell, ImageFit};
+use deep_images::animated::Animation;
 use deep_images::{Images, Key, Refused, Store};
 use serde_json::{Map, Value};
 use vello_cpu::Pixmap;
@@ -178,6 +179,7 @@ pub fn ask(
         crop: cut,
         flip,
         level: 0,
+        frame: 0,
     };
     let shown = key.shown();
     let to = fit.fitted(bounds, shown);
@@ -195,6 +197,77 @@ pub fn store_of(store: Option<&Path>) -> Arc<Store> {
     Arc::new(Store::flat(store.unwrap_or(Path::new("/dev/null"))))
 }
 
+/// #1489: an image item's `frames` over an animation, read as a video's are (Image `image@1`:
+/// video frames): start, in and rate on the document's clock, and whether it loops or, past its
+/// end, holds its first frame.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Timing {
+    start: i64,
+    r#in: i64,
+    rate: (i64, i64),
+    looped: bool,
+    hold_first: bool,
+}
+
+impl Timing {
+    pub fn of(doc: &Value, frames: &Value) -> Timing {
+        use deep_canvas_media::doc::{rate, time};
+        Timing {
+            start: time(doc, frames.get("start")).unwrap_or(0),
+            r#in: time(doc, frames.get("in")).unwrap_or(0),
+            rate: rate(frames.get("rate")).unwrap_or((1, 1)),
+            looped: frames.get("loop").and_then(Value::as_bool).unwrap_or(false),
+            hold_first: frames.get("hold").and_then(Value::as_str) == Some("first"),
+        }
+    }
+
+    /// The frame `animation` shows at `t`, the one its delays put at source time in + (t − start)
+    /// × rate (the first before start), and the document time the next frame starts at, if one
+    /// ever does.
+    pub fn frame(&self, animation: &Animation, t: i64) -> (u32, Option<i64>) {
+        let (start, r#in, (p, q)) = (self.start, self.r#in, self.rate);
+        let src = deep_canvas_media::frames::source_time(t.max(start), start, r#in, (p, q));
+        let k = animation.frame_at(src, self.looped, self.hold_first);
+        // Back in document time: start + (src − in) ÷ rate, rounded up.
+        let next = (animation.next_change(src, self.looped, self.hold_first)).map(|n| {
+            let rel = i128::from(n - r#in) * i128::from(q);
+            let p = i128::from(p.max(1));
+            (i128::from(start) + (rel + p - 1).div_euclid(p)) as i64
+        });
+        (k as u32, next)
+    }
+}
+
+/// #1489: an animated image item: its asset's hash, the animation's probe and the item's timing.
+pub type Animated = ([u8; 32], Arc<Animation>, Timing);
+
+/// #1489: each image item of `doc` with `frames` whose asset is an animation, by its ID. An asset
+/// the service can't read or decode is refused, naming it.
+pub fn animated_items(doc: &Value, store: &Store) -> Result<BTreeMap<String, Animated>, Value> {
+    let mut out = BTreeMap::new();
+    for (id, item) in doc
+        .get("items")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+    {
+        let (Some(frames), Some(asset)) = (
+            item.pointer("/params/frames"),
+            item.pointer("/params/asset").and_then(Value::as_str),
+        ) else {
+            continue;
+        };
+        let Some(hash) = deep_images::hash_of(asset).filter(|_| item["kind"] == "image@1") else {
+            continue;
+        };
+        let probed = images().animation(store, &hash);
+        if let Some(animation) = probed.map_err(|r| refusal(r, asset, id, false))? {
+            out.insert(id.clone(), (hash, animation, Timing::of(doc, frames)));
+        }
+    }
+    Ok(out)
+}
+
 /// What one painter draws of the service's levels: each level's premultiplied pixmap at an
 /// opacity and adjust, made once and kept while frames draw it, and the bytes of the levels a
 /// frame draws, held within [`CAP`].
@@ -206,6 +279,8 @@ pub struct Kept {
     store: Option<(Option<PathBuf>, Arc<Store>)>,
     /// #1486: the level each image item this frame drew was drawn at.
     pub levels: BTreeMap<String, u8>,
+    /// #1489: the frame each animated image item shows in the frame drawn, by its ID.
+    pub frames: HashMap<String, u32>,
     /// #1485's wrong program on the decode or the cap, if planted.
     pub plant: Plant,
 }
@@ -237,7 +312,8 @@ impl Kept {
         item: &str,
     ) -> Result<Drawn, Value> {
         let store = self.store(store);
-        let ask = ask(&store, asset, (crop, tile), (bounds, fit), scale, item)?;
+        let mut ask = ask(&store, asset, (crop, tile), (bounds, fit), scale, item)?;
+        ask.key.frame = self.frames.get(item).copied().unwrap_or(0);
         self.levels.insert(item.to_string(), ask.key.level);
         if self.drawn.insert(ask.key) {
             if self.plant != Plant::CapCountsCopiesOnly && self.drawn_bytes + ask.bytes > CAP {
@@ -276,6 +352,22 @@ impl Kept {
         self.made
             .insert(ask.key, (opacity, adjust.clone(), pixmap.clone()));
         Ok((pixmap, level.size, ask.to))
+    }
+
+    /// A frame starts: the request's wrong program, and (#1489) the frame each animated image item
+    /// of `doc` shows at `t` (none when an asset can't be read: drawing it refuses it).
+    pub fn start(
+        &mut self,
+        plant: Plant,
+        (doc, store, t): (&Map<String, Value>, Option<&Path>, i64),
+    ) {
+        self.plant = plant;
+        self.frames.clear();
+        let store = self.store(store);
+        let animated = animated_items(&Value::Object(doc.clone()), &store).unwrap_or_default();
+        for (id, (_, animation, timing)) in animated {
+            self.frames.insert(id, timing.frame(&animation, t).0);
+        }
     }
 
     /// A frame is drawn: every pixmap it didn't draw is let go, and the next frame's budget starts

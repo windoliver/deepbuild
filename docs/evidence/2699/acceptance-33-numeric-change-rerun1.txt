@@ -1,0 +1,7 @@
+22:12  up  2:38, 3 users, load averages: 81.43 72.16 91.99
+ × tests/acceptance/33/numeric.test.ts > AC12 #33.75c6e9ae the numeric fakes, each refused while its clean twin passes > AC12 #33.75c6e9ae the corpus holds the five numeric fakes with their marks, and the kit refuses each claim and passes each twin 56110ms
+   → AC12 #33.75c6e9ae on the shipped gate, numeric-fp16-accumulation's twin meets its expectation: FAIL numeric-fp16-accumulation twin: INVALID — .deepbuild/checks/kernel.sh: passes on the merge base, so it can't prove the fix
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+exit 1

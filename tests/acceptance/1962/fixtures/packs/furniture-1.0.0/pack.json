@@ -1,0 +1,39 @@
+{
+  "name": "furniture",
+  "version": "1.0.0",
+  "license": "MIT",
+  "description": "A test pack of the #1962 acceptance suite, by an outside owner: a furniture pack whose case takes the bookcase's params.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "marks2d": ">=0.0.0"
+    }
+  },
+  "recipes": {
+    "furniture.case@1": "furniture.case@1.json"
+  },
+  "kinds": {
+    "furniture.case@1": {
+      "minor": 0,
+      "recipe": "furniture.case@1",
+      "children": [],
+      "capabilities": {
+        "pickable": true,
+        "snap": false
+      },
+      "rules": [],
+      "twins": [],
+      "migrate": {},
+      "examples": [],
+      "cost": {
+        "class": "figure",
+        "at_defaults": {
+          "cpu_ms": 0.5,
+          "gpu_ms": 0.2,
+          "items": 7
+        }
+      }
+    }
+  },
+  "assets": []
+}
