@@ -395,6 +395,20 @@ impl Live {
     pub(crate) fn memory(&mut self) -> &[u8] {
         self.runner.memory("memory").unwrap_or(&[])
     }
+    /// #194: whether this state equals `other`'s, the bytes `skip` holds in memory left out
+    /// (logic.tuning: the copies of an item's data assets).
+    pub(crate) fn same_but(&mut self, other: &mut Live, skip: std::ops::Range<usize>) -> bool {
+        if self.last != other.last
+            || self.arrays != other.arrays
+            || self.encoded() != other.encoded()
+        {
+            return false;
+        }
+        let (m, n) = (self.memory(), other.memory());
+        let cut = |x: &[u8]| skip.start.min(x.len())..skip.end.min(x.len());
+        let (a, b) = (cut(m), cut(n));
+        m[..a.start] == n[..b.start] && m[a.end..] == n[b.end..]
+    }
     /// The step hash: the program's globals, the arrays it wrote and the rows it emitted, each
     /// after its kind's index (none for a step that emitted none, so an item's hash is as before).
     fn step_hash(&mut self, rows: &Rows) -> u64 {

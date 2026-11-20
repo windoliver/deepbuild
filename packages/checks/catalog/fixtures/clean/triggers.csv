@@ -1,0 +1,4 @@
+id,trigger,n,side,kind,shows,allow,deny
+start,time,0,,,,,extractor
+open_mines,time,60,,,,extractor,
+victory,built,3,self,extractor,won,,

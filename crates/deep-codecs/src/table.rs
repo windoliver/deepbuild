@@ -3,56 +3,12 @@
 //! cell keeps its raw bytes and their range in the file, untouched by line ends or Unicode
 //! normalization. A label draws a cell's display form, NFC, which its reader makes.
 
+// The rows of a CSV, each a list of cells: the one CSV reader the catalog probe uses too (#194).
+use deep_catalog::cells::{rows, Cell};
 use serde_json::{json, Value};
 
 /// The largest table a probe reads (Asset: tables: `≤ 16 MB*`).
 pub const MAX_BYTES: usize = 16 * 1024 * 1024;
-
-/// One cell: its byte range in the file, without its delimiter, quotes or row end.
-struct Cell {
-    start: usize,
-    end: usize,
-}
-
-/// The rows of a CSV, each a list of cells. A row ends at LF, a CR before it outside the cell; a
-/// quoted cell's range is inside its quotes.
-fn rows(data: &[u8]) -> Vec<Vec<Cell>> {
-    let mut out = Vec::new();
-    let (mut row, mut i) = (Vec::new(), 0);
-    while i <= data.len() {
-        let quoted = data.get(i) == Some(&b'"');
-        let start = if quoted { i + 1 } else { i };
-        let mut j = start;
-        if quoted {
-            while j < data.len() && !(data[j] == b'"' && data.get(j + 1) != Some(&b'"')) {
-                j += if data[j] == b'"' { 2 } else { 1 };
-            }
-        } else {
-            while j < data.len() && !matches!(data[j], b',' | b'\n') {
-                j += 1;
-            }
-        }
-        let mut end = j;
-        let mut next = if quoted { j + 1 } else { j };
-        while next < data.len() && !matches!(data[next], b',' | b'\n') {
-            next += 1;
-        }
-        let row_end = next >= data.len() || data[next] == b'\n';
-        if !quoted && row_end && end > start && data[end - 1] == b'\r' {
-            end -= 1;
-        }
-        row.push(Cell { start, end });
-        i = next + 1;
-        if row_end {
-            let blank = row.len() == 1 && row[0].start == row[0].end;
-            if !blank {
-                out.push(std::mem::take(&mut row));
-            }
-            row.clear();
-        }
-    }
-    out
-}
 
 /// The narrowest type every cell of a column reads as: `i64`, `f64` or `str`.
 fn dtype(texts: &[String]) -> &'static str {
