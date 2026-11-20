@@ -43,10 +43,12 @@ describe('refusalFits', () => {
     expect(out.truncated).toEqual({ shown: (out.issues as unknown[]).length, total: 150, by_code: { bad_item: 100, unknown_kind: 50 } });
   });
 
-  it('never counts fewer tokens than the whole text has', async () => {
-    // Pieces of this text cut where they are count one token fewer than the whole: a cap one under the whole count must still hold.
-    const unit = '}1} the}}{.b';
-    const text = (unit + 'z'.repeat(2_048 - unit.length)).repeat(4);
+  // Texts whose pieces, cut where the count cuts them, count one and two tokens fewer than the whole: a cap one under
+  // the whole count must still be passed.
+  it.each([
+    ['one', ('}1} the}}{.b' + 'z'.repeat(2_036)).repeat(4)],
+    ['two', 'z'.repeat(2_020) + 'r=redstxtionerssqrt' + 'ionaun reres'],
+  ])('counts no fewer tokens than the whole where a cut loses %s', async (_, text) => {
     const { countTokens } = await import('gpt-tokenizer/encoding/o200k_base');
     const whole = countTokens(JSON.stringify({ text }));
     const rooms: number[] = [];

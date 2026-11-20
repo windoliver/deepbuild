@@ -82,12 +82,13 @@ let counter: ((text: string) => number) | undefined;
 /**
  * Tokens of `text` in the tokenizer both facts files pin (o200k_base, gpt-tokenizer 4.0.0), counted in pieces of 2,048
  * characters: a long run of letters costs the counter time in the square of its length (17 s at 100,000). A cut can
- * count one token fewer than the whole text does (the most 3,300 random texts showed), so each cut adds one.
+ * count a token or two fewer than the whole text does (two is the most random searches found, not a bound the
+ * tokenizer gives), so each cut adds two; the fifth spare under each figure holds anything past that.
  */
 async function tokensOf(text: string): Promise<number> {
   counter ??= (await import('gpt-tokenizer/encoding/o200k_base')).countTokens;
   let n = 0;
-  for (let at = 0; at < text.length; at += 2_048) n += counter(text.slice(at, at + 2_048)) + (at > 0 ? 1 : 0);
+  for (let at = 0; at < text.length; at += 2_048) n += counter(text.slice(at, at + 2_048)) + (at > 0 ? 2 : 0);
   return n;
 }
 /** How far `text` passes each figure of `cap`: the largest ratio of size to figure, at most 1 when it fits. */
