@@ -1,0 +1,45 @@
+Acceptance tests for #1604 on the base b4a2049e8 (no wait guard), run on 2026-11-19 with Node v24.22.0:
+
+  node --test --test-reporter=tap 'tests/acceptance/1604/*.test.mjs'
+
+Trimmed to one failure reason per test; the lane's command list is given in full once and shortened with … after.
+Stack traces are left out, so no local path appears below.
+
+# tests 10
+# pass 0
+# fail 10
+# cancelled 0
+# skipped 0
+# todo 0
+
+not ok 1 - the lint lane runs scripts/wait-ratchet.mjs as a command of its own, beside the size ratchet
+    the lint lane runs no scripts/wait-ratchet.mjs; its node commands are ["scripts/repo-rules.mjs","scripts/vendor-rebase.mjs check","scripts/canvas-lint.mjs","scripts/size-ratchet.mjs","scripts/conformance-lint.mjs","scripts/slots-check.mjs","scripts/canvas-closures.mjs closures","scripts/canvas-closures.mjs drift","scripts/canvas-closures.mjs paths","scripts/record-reader-guard.mjs","scripts/render-lint.mjs","scripts/plant-lint.mjs","scripts/loads-lint.mjs","scripts/cache-lint.mjs","scripts/blocking-call-guard.mjs","scripts/ask-sources-guard.mjs","scripts/keymap-guard.mjs","scripts/color-literal-guard.mjs","scripts/guide.mjs --check","scripts/panel-catalog.mjs","scripts/known-failures-check.mjs","scripts/fetch-lock.mjs lint","scripts/exit-lint.mjs","scripts/app-copy-lint.mjs"]
+not ok 2 - AC3: a listed file whose count rises by one fails the lint lane, naming it, and raising its ceiling in the same change doesn't help; at its ceiling it passes
+    the lint lane runs no scripts/wait-ratchet.mjs; its node commands are ["scripts/repo-rules.mjs", … ,"scripts/app-copy-lint.mjs"]
+not ok 3 - AC3: a listed file whose count drops fails, naming it, until its ceiling is lowered to its count in the same change
+    the lint lane runs no scripts/wait-ratchet.mjs; its node commands are ["scripts/repo-rules.mjs", … ,"scripts/app-copy-lint.mjs"]
+not ok 4 - on this checkout the guard passes without changing git status, and the checked-in ceilings are the checkout's own
+    the lint lane runs no scripts/wait-ratchet.mjs; its node commands are ["scripts/repo-rules.mjs", … ,"scripts/app-copy-lint.mjs"]
+not ok 5 - AC1: a planted test that sleeps 200 ms before it asserts fails the lint lane, naming the file and line; the twin that waits for its event passes
+    the lint lane runs no scripts/wait-ratchet.mjs; its node commands are ["scripts/repo-rules.mjs", … ,"scripts/app-copy-lint.mjs"]
+not ok 6 - AC1: a planted test that awaits setTimeout(resolve, 200) before it asserts fails the lint lane, naming the file and line; the twin passes
+    the lint lane runs no scripts/wait-ratchet.mjs; its node commands are ["scripts/repo-rules.mjs", … ,"scripts/app-copy-lint.mjs"]
+not ok 7 - AC2: a planted wait bounded by a deadline that rejects when it expires passes when marked with its reason; unmarked, or marked with no reason, it fails naming the line
+    the lint lane runs no scripts/wait-ratchet.mjs; its node commands are ["scripts/repo-rules.mjs", … ,"scripts/app-copy-lint.mjs"]
+not ok 8 - AC4: a planted assertion that Date.now() - start is under 50 fails the lint lane, naming the line, in assert and expect form; the twins that assert the result pass
+    the lint lane runs no scripts/wait-ratchet.mjs; its node commands are ["scripts/repo-rules.mjs", … ,"scripts/app-copy-lint.mjs"]
+not ok 9 - AC5: a planted new acceptance suite with one fixed wait fails the lint lane, naming the suite, even with a ceiling of its own; its twin with no wait passes
+    the lint lane runs no scripts/wait-ratchet.mjs; its node commands are ["scripts/repo-rules.mjs", … ,"scripts/app-copy-lint.mjs"]
+not ok 10 - a planted Rust test that calls thread::sleep fails the lint lane, naming the file and line; the twin passes
+    the lint lane runs no scripts/wait-ratchet.mjs; its node commands are ["scripts/repo-rules.mjs", … ,"scripts/app-copy-lint.mjs"]
+
+Checked before handing over, in a throwaway copy of the base outside this checkout (git archive into the session's
+scratch folder, deleted after): a reference guard in the lint lane, with counts it wrote for that copy (1,126 files,
+993 of them under tests/acceptance/), passes all 10 tests. Each of four wrong guards fails the test that names its
+fault:
+  - only setTimeout( counted: AC1's sleep test fails, as the issue requires (and AC3, AC4, AC5 and Rust with it,
+    since the listed fixture's sleeps go uncounted);
+  - every setTimeout( counted, the // deadline: marker ignored: AC2 fails (the marked deadline is a FAIL);
+  - only setTimeout(resolve …), sleep( and Atomics.wait( counted, so an unmarked rejecting timer passes: AC2 fails;
+  - ceilings read only from the work tree, never the merge base: AC3's raised-ceiling half and AC5's own-ceiling half
+    fail.
