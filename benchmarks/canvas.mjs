@@ -1973,6 +1973,49 @@ workloads['lottie-export'] = () => {
     rmSync(evidence, { recursive: true, force: true });
   }
 };
+
+// #732: the pptx deck of a 20-stage piece with two 3D stages (a display whose screen carries an inset, in view at stages
+// 7 and 14), its fidelity check included; prints the receipt's timing.wall (under 5 s, which
+// tests/acceptance/732/ac10-budgets.test.ts judges on a reference Mac).
+workloads['pptx-export'] = () => {
+  const evidence = mkdtempSync(join(tmpdir(), 'deep-canvas-bench-'));
+  try {
+    const step = 0.5;
+    const holds = (target, value) => ({ target, type: 'f32', keys: Object.fromEntries(Array.from({ length: 20 }, (_, i) => [`k${i}`, { t: `${i * step}s`, value: value(i + 1), interp: 'hold' }])) });
+    const item = (id, kind, order, params, extra = {}) => ({ id, kind, name: id, order, params, ...extra });
+    const markers = {};
+    for (let k = 1; k <= 20; k++) markers[`s${k}`] = { kind: 'stage', name: `Stop ${String.fromCharCode(64 + k)}`, t: `${(k - 1) * step}s`, notes: `Talk through stop ${String.fromCharCode(64 + k)}.` };
+    const items = [
+      item('cam', 'camera@1', 'a00', { projection: 'perspective', position: [0, 0, 3], target: [0, 0, 0], fov: 40 }),
+      item('sky', 'sky@1', 'a01', { top: [0.9, 0.92, 0.95, 1], low: [0.9, 0.92, 0.95, 1], ambient_top: [0.6, 0.6, 0.6], ambient_low: [0.6, 0.6, 0.6] }),
+      item('mat', 'material@1', 'a02', { base_color: [0.8, 0.8, 0.8, 1], unlit: true, double_sided: true }),
+      item('screen', 'display@1', 'a03', { size: [1.6, 1.0], bezel: 0.04 }, { at: { pos: [0, 20, 0] }, material: 'mat' }),
+      item('screen-inset', 'inset@1', 'a04', {
+        face: 'screen#screen', size: [1.52, 0.92], px_per_unit: 400, overflow: 'mask',
+        content: { ground: { kind: 'rect@1', order: 'a0', params: { box: [0, 0, 608, 368], paint: { fill: { role: 'accent' } } } } },
+      }),
+      item('card', 'rect@1', 'a05', { box: [0, 760, 360, 200], radius: 24, paint: { fill: { role: 'muted' } } }),
+      item('heading', 'text@1', 'a06', { text: 'Field walk', font: 'body', size: 72, weight: 700, box: { w: 900, h: 110 }, autosize: 'none', paint: { fill: { role: 'ink' } } }, { at: { pos: [120, 80, 0] } }),
+    ];
+    const document = {
+      format: 1, id: 'bench-732', profile: 'film', title: 'Twenty stages', description: 'A 20-stage piece with two 3D stages, exported as a deck.', size: [1920, 1080], camera: 'cam',
+      requires: { modules: { scene3d: '^1', marks2d: '^1', effects: '^1' } }, transport: { span: '10s', frame_rate: [30, 1] }, markers,
+      items: Object.fromEntries(items.map((i) => [i.id, i])),
+      channels: { card_x: holds('items/card/at/pos/0', (k) => 80 + 70 * (k - 1)), screen_y: holds('items/screen/at/pos/1', (k) => (k === 7 || k === 14 ? 0 : 20)) },
+    };
+    const out = join(evidence, 'deck.pptx');
+    const peer = { pid: 3002, start: 3_000 };
+    const processes = [{ pid: 1, ppid: 0, start: 0 }, { pid: 3000, ppid: 1, start: 100 }, { pid: 3001, ppid: 3000, start: 110 }, { pid: 3002, ppid: 3001, start: 3_000 }];
+    const calls = [{ call: 'deep show', peer, doc: DOC, document }, { call: 'export', doc: DOC, out, range: 'stages', video: { codec: 'pptx' }, pptx: { slide: [1920, 1080] } }];
+    const sc = { evidence, sessions: {}, processes, panels: { main: { rect: [0, 0, 1280, 720] } }, docs: { [DOC]: { panel: 'main' } }, calls };
+    const [answer] = run('deep-show', 'run', [JSON.stringify(sc)]);
+    const reply = answer.replies?.[1];
+    if (reply?.outcome !== 'exported') throw Error(`the export wasn't delivered: ${JSON.stringify(reply ?? answer).slice(0, 2000)}`);
+    console.log(JSON.stringify({ task: 'pptx-export', wall_seconds: reply.receipt.timing?.wall }));
+  } finally {
+    rmSync(evidence, { recursive: true, force: true });
+  }
+};
 // #538's budgets: live game state's compares, remaps, uploads and fit check (benchmarks/game-state.mjs).
 workloads['game-state'] = async () => (await import('./game-state.mjs')).gameState({ root, release, once, runs });
 // #548's budgets: the logic module's occurrence rows, linear writes, previews and checkpoints of pages
