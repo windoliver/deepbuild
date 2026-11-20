@@ -1190,6 +1190,9 @@ alone.push('tests/acceptance/2898/');
 alone.push('tests/acceptance/2227/');
 slow.push('tests/acceptance/2227/ac2-native-build.test.ts');
 
+// #2109's file (blind) runs #83's AC11 goldens, which start real hubs, in a child vitest; no timing.
+alone.push('tests/acceptance/2109/');
+
 // #2717's files (blind) each build the full deep-show and start it; CPU only, no GPU and no timing.
 alone.push('tests/acceptance/2717/');
 
