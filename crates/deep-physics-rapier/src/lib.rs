@@ -1185,6 +1185,7 @@ impl Backend for Rapier {
                     angular: back(rb.angvel() * (180.0 / PI)),
                     contact_impulse: f64::from(impulse.length()),
                     sleeping: rb.is_sleeping(),
+                    ..self.measured(rb)
                 }
             })
             .collect();

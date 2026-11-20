@@ -15,6 +15,7 @@ pub mod module;
 pub mod occurrence;
 pub mod pairs;
 pub mod query;
+pub mod reading;
 pub mod ring;
 pub mod roles;
 pub mod skin;
