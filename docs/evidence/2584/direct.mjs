@@ -1,0 +1,10 @@
+import net from 'node:net';
+import { listening } from '../../../packages/supervisor/dist/index.js';
+const show = async (what, p) => { try { console.log(what, '->', JSON.stringify(await p)); } catch (e) { console.log(what, '-> REJECTS:', e.message.split('\n')[0]); } };
+const s = net.createServer(); await new Promise((r) => s.listen(0, '127.0.0.1', r)); const used = s.address().port;
+const f = net.createServer(); await new Promise((r) => f.listen(0, '127.0.0.1', r)); const free = f.address().port; await new Promise((r) => f.close(r));
+await show('free port ' + free, listening(free));
+await show('used port ' + used + ' (this pid ' + process.pid + ')', listening(used));
+await show('port NaN (real lsof error: unknown service)', listening(NaN));
+await show('port 1.5 (real lsof error: unacceptable port)', listening(1.5));
+s.close();

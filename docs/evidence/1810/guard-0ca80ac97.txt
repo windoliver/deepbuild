@@ -1,0 +1,4 @@
+# node scripts/proof.mjs guard at 0ca80ac97 on Linux, 2026-11-16, after fetching the signed tag deep/approved/0ca80ac97636-sk
+PASS guard: 15 commits checked: no guarded edit lacks its own approved proposal
+proof: wall time 461.9 s
+exit 0

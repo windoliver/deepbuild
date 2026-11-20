@@ -15,6 +15,7 @@ use std::time::Instant;
 use deep_canvas::cost::counts;
 use deep_canvas::schedule::{default_view, Options, Scheduler, Session as DocSession};
 use deep_canvas::show::{stamp, Writer, WriterKind};
+use deep_text::cache::Stats;
 use serde_json::{json, Map, Value};
 
 use crate::hub::Startup;
@@ -173,6 +174,7 @@ pub fn build() -> Value {
 
 /// The `costs` call: each operator's fitted terms, by key.
 pub fn measure(startup: &Startup) -> Value {
+    let before = deep_text::cache::stats();
     let writer = Writer {
         kind: WriterKind::Agent,
         id: "cost-bench".into(),
@@ -276,5 +278,9 @@ pub fn measure(startup: &Startup) -> Value {
         }
         terms.insert(op.key.clone(), Value::Object(t));
     }
-    json!({"terms": terms, "runs": RUNS, "items": ITEMS * 5, "build": build()})
+    // #1430: the lookups the bench made in the text's run cache and shape cache, found and not.
+    let after = deep_text::cache::stats();
+    let found = |b: Stats, a: Stats| json!({"hits": a.hits - b.hits, "misses": a.misses - b.misses, "entries": a.entries, "bytes": a.bytes, "bound": a.bound});
+    let caches = json!({"runs": found(before.0, after.0), "shapes": found(before.1, after.1)});
+    json!({"terms": terms, "runs": RUNS, "items": ITEMS * 5, "build": build(), "caches": caches})
 }

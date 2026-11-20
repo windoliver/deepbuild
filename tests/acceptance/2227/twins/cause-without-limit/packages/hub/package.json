@@ -1,0 +1,67 @@
+{
+  "name": "@deepbuild/hub",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "engines": { "node": ">=24.22.0" },
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "development": "./src/index.ts",
+      "default": "./dist/index.js"
+    },
+    "./hub": {
+      "types": "./src/hub-command.ts",
+      "development": "./src/hub-command.ts",
+      "default": "./dist/hub-command.js"
+    },
+    "./lease": {
+      "types": "./src/heavy.ts",
+      "development": "./src/heavy.ts",
+      "default": "./dist/heavy.js"
+    },
+    "./mcp": {
+      "types": "./src/mcp.ts",
+      "development": "./src/mcp.ts",
+      "default": "./dist/mcp.js"
+    },
+    "./mcp-exec": {
+      "types": "./src/mcp-exec.ts",
+      "development": "./src/mcp-exec.ts",
+      "default": "./dist/mcp-exec.js"
+    }
+  },
+  "scripts": { "build": "tsc -p tsconfig.json && node native/build.mjs || true" },
+  "dependencies": {
+    "@deepbuild/adapters": "0.0.0",
+    "@deepbuild/archive": "0.0.0",
+    "@deepbuild/asks": "0.0.0",
+    "@deepbuild/briefs": "0.0.0",
+    "@deepbuild/budget": "0.0.0",
+    "@deepbuild/checks-command": "0.0.0",
+    "@deepbuild/checks-numbers": "0.0.0",
+    "@deepbuild/checks-review": "0.0.0",
+    "@deepbuild/checks-work": "0.0.0",
+    "@deepbuild/config-eval": "0.0.0",
+    "@deepbuild/conformance": "0.0.0",
+    "@deepbuild/contracts": "0.0.0",
+    "@deepbuild/env-local": "0.0.0",
+    "@deepbuild/evidence": "0.0.0",
+    "@deepbuild/extension-host": "0.0.0",
+    "@deepbuild/gate": "0.0.0",
+    "@deepbuild/github": "0.0.0",
+    "@deepbuild/leases": "0.0.0",
+    "@deepbuild/reading": "0.0.0",
+    "@deepbuild/readings": "0.0.0",
+    "@deepbuild/record": "0.0.0",
+    "@deepbuild/resolver-decisions": "0.0.0",
+    "@deepbuild/runner": "0.0.0",
+    "@deepbuild/supervisor": "0.0.0",
+    "@deepbuild/verdicts": "0.0.0",
+    "@deepbuild/wiki": "0.0.0",
+    "@deepbuild/workspaces": "0.0.0",
+    "better-sqlite3": "13.0.3",
+    "yaml": "2.9.1"
+  }
+}

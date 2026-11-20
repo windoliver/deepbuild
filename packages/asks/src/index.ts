@@ -148,6 +148,8 @@ export interface InboxRow {
   missing: Missing | null;
   /** What you typed beside an ask that typed text can't close, as its card shows it. */
   words: string[];
+  /** The exception "this session keeps asking" that holds it, while it shows only there (#667); null otherwise. */
+  folded: string | null;
 }
 export interface Asks {
   raise(connection: Connection, source: string, ask: unknown, plan?: PlanInput): Promise<string>;
@@ -396,6 +398,8 @@ const AWAY = 10_000;
 const ENDED_KEPT = 64;
 
 const git = promisify(execFile);
+/** What git said to each command in a worktree, by the command: shared by the cards of one Needs you load. */
+type GitSaid = Map<string, Promise<string>>;
 
 /** One stop of a session's own turn, as agent.stop@4 and @5 record it (#85): the structure the core raises a task or a continue from. */
 interface Stop { id: string; session: string; ts: number; pos: number; cause: string; owner: string; signature: string; resets: number | null; finished: boolean; who: Ask['who'] }
@@ -809,7 +813,9 @@ class AsksCore implements Asks {
       await this.sync();
       // The same question from another thread shows through the older one's card.
       const shown = this.open().filter((a) => this.status(a) === 'shown' && !this.rides(a));
-      return Promise.all(shown.map((a) => this.cardOf(a, true)));
+      // One load runs each git command once per worktree and commit (#2647): its cards share what git said.
+      const said: GitSaid = new Map();
+      return Promise.all(shown.map((a) => this.cardOf(a, true, said)));
     });
   }
 
@@ -885,6 +891,7 @@ class AsksCore implements Asks {
         ask: a.handle, kind: a.data.kind as AskKind, session: a.session, status: this.status(a),
         outcome: a.closed?.outcome ?? 'unanswered', owner: String(a.data.owner), age: now - a.created,
         request: a.request ? { ...a.request } : null, decision: a.closed?.decision ?? null, missing: a.closed ? null : a.missing ?? null, words: [...a.words],
+        folded: !a.closed && this.inFold(a) ? a.folded! : null,
       }));
     });
   }
@@ -1300,7 +1307,7 @@ class AsksCore implements Asks {
    * What the card shows. `presented` is a read through the card surface (`card`, `needsYou`): the first such read
    * fixes what the card says it saves; a resolver's read never presents it.
    */
-  private async cardOf(ask: Ask, presented = false): Promise<Card> {
+  private async cardOf(ask: Ask, presented = false, said?: GitSaid): Promise<Card> {
     if (presented && ask.saves === undefined && !ask.closed) {
       ask.saves = this.savesOf(ask);
       if (this.notificationsOff !== undefined) {
@@ -1314,7 +1321,7 @@ class AsksCore implements Asks {
       options: ask.options.map((o) => ({ id: o.id, label: o.label, decision: o.decision })),
       plan: ask.plan ? structuredClone(ask.plan) : null,
       words: [...ask.words],
-      changed: await this.changed(ask),
+      changed: await this.changed(ask, said),
       folded: ask.fold ? this.openIn(ask.thread).filter((a) => a.folded === ask.handle && (a.shown || !a.unread)).map((a) => a.handle) : [],
       undo: ask.closed?.outcome === 'defaulted',
       cost_usd: typeof ask.data.cost_usd === 'number' ? ask.data.cost_usd : null,
@@ -1341,14 +1348,24 @@ class AsksCore implements Asks {
     return { scope: words, also };
   }
 
-  /** What changed since the commit an ask showed, when its session's worktree has moved on from it. */
-  private async changed(ask: Ask): Promise<Card['changed']> {
+  /**
+   * What changed since the commit an ask showed, when its session's worktree has moved on from it. `said` holds what
+   * git said to each command in a worktree, for one read of several cards; by default, this card's own.
+   */
+  private async changed(ask: Ask, said: GitSaid = new Map()): Promise<Card['changed']> {
     const pin = ask.data.pinned_to as Obj;
     const worktree = this.sessions.get(ask.session)?.worktree;
     if (pin.kind !== 'commit' || worktree === undefined) return null;
     const from = pin.ref as string;
     try {
-      const run = async (...args: string[]) => (await git('git', ['-C', worktree, ...args], { maxBuffer: 1 << 24 })).stdout;
+      const run = (...args: string[]): Promise<string> => {
+        const key = JSON.stringify([worktree, ...args]);
+        const known = said.get(key);
+        if (known) return known;
+        const out = git('git', ['-C', worktree, ...args], { maxBuffer: 1 << 24 }).then((r) => r.stdout);
+        said.set(key, out);
+        return out;
+      };
       const to = (await run('rev-parse', 'HEAD')).trim();
       if (to === from) return null;
       const files = (await run('diff', '--name-only', from, to)).split('\n').filter(Boolean);
