@@ -1,0 +1,75 @@
+diff --git a/packages/supervisor/native/helper.c b/packages/supervisor/native/helper.c
+index 09c4e7d83..275dc9d98 100644
+--- a/packages/supervisor/native/helper.c
++++ b/packages/supervisor/native/helper.c
+@@ -48,6 +48,7 @@
+ #include <sys/time.h>
+ #include <sys/un.h>
+ #include <sys/wait.h>
++#include <time.h>
+ #include <unistd.h>
+ #include <util.h>
+ 
+@@ -75,7 +76,11 @@ static int scan(int count, char **markers) {
+       if (proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, sizeof info) != (int)sizeof info) continue;
+       struct rusage_info_v0 usage;
+       unsigned long long bytes = proc_pid_rusage(pid, RUSAGE_INFO_V0, (rusage_info_t *)&usage) == 0 ? usage.ri_phys_footprint : 0;
+-      printf("%s %d %u %u %llu\n", markers[m], pid, info.pbi_ppid, info.pbi_pgid, bytes);
++      // Its start time as `ps -o lstart=` prints it under LC_ALL=C (#2649 cut A): ps formats it with %c.
++      char start[64];
++      time_t at = (time_t)info.pbi_start_tvsec;
++      strftime(start, sizeof start, "%c", localtime(&at));
++      printf("%s %d %u %u %llu %s\n", markers[m], pid, info.pbi_ppid, info.pbi_pgid, bytes, start);
+     }
+   }
+   free(pids);
+diff --git a/packages/supervisor/src/procs.ts b/packages/supervisor/src/procs.ts
+index 8b64cf67b..5acc0366f 100644
+--- a/packages/supervisor/src/procs.ts
++++ b/packages/supervisor/src/procs.ts
+@@ -105,12 +105,13 @@ export async function tokenOf(pid: number): Promise<string | null | undefined> {
+  * The processes each marker's sandbox holds, by marker; `bytes` gets each one's memory (#1409): its physical footprint
+  * on macOS, its resident set on Linux.
+  */
+-export async function scan(markers: readonly string[], bytes?: Map<number, number>): Promise<Map<string, number[]>> {
++export async function scan(markers: readonly string[], bytes?: Map<number, number>, starts?: Map<number, string>): Promise<Map<string, number[]>> {
+   const found = new Map<string, number[]>();
+   if (!markers.length) return found;
+   for (const line of (await run(HELPER, ['scan', ...markers])).split('\n')) {
+-    const [marker, pid, , , memory] = line.split(' ');
++    const [marker, pid, , , memory, ...start] = line.split(' ');
+     if (!marker || !pid) continue;
++    starts?.set(Number(pid), start.join(' ').trim());
+     (found.get(marker) ?? found.set(marker, []).get(marker)!).push(Number(pid));
+     bytes?.set(Number(pid), Number(memory ?? 0));
+   }
+diff --git a/packages/supervisor/src/supervisor.ts b/packages/supervisor/src/supervisor.ts
+index 8dd8efd27..80e6f804c 100644
+--- a/packages/supervisor/src/supervisor.ts
++++ b/packages/supervisor/src/supervisor.ts
+@@ -754,7 +754,8 @@ class LocalSupervisor implements Supervisor {
+       const live = this.scanned();
+       if (!live.length) return;
+       const bytes = new Map<number, number>();
+-      const found = await scan(live.map((r) => markerOf(r.run)), bytes);
++      const starts = new Map<number, string>();
++      const found = await scan(live.map((r) => markerOf(r.run)), bytes, starts);
+       // A run past its memory is stopped: the sum over every process its sandbox holds, the scan's own reading.
+       for (const r of live) {
+         const cap = r.limits?.memory_mb;
+@@ -764,11 +765,11 @@ class LocalSupervisor implements Supervisor {
+       }
+       const held = live.flatMap((r) => (found.get(markerOf(r.run)) ?? []).map((pid) => ({ r, pid })));
+       if (!held.length) return;
+-      // By ID and start time: an ID the run used before may name a new process of its own.
+-      const procs = await table(held.map((f) => f.pid));
++      // By ID and start time: an ID the run used before may name a new process of its own. The scan read each
++      // start time as it found the process (#2649 cut A).
+       for (const { r, pid } of held) {
+-        const p = procs.get(pid);
+-        if (p && r.tracked.get(pid)?.start !== p.start) await this.track(r, pid, p.start, (await tokenOf(pid)) ?? null);
++        const start = starts.get(pid);
++        if (start && r.tracked.get(pid)?.start !== start) await this.track(r, pid, start, (await tokenOf(pid)) ?? null);
+       }
+     });
+     this.scanning = next.catch(() => undefined);
