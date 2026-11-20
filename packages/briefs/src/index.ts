@@ -255,7 +255,10 @@ export function pageOf(brief: Brief, heading: string): string {
   for (const t of brief.left_out) out.push(`- Left out: ${t.title}, because ${t.why}.`);
   out.push('');
   if (brief.every) out.push(`**It repeats:** ${EVERY[brief.every]}, under this same approval.`, '');
-  if (brief.wake) out.push(`**When it wakes a model:** only when its wake test, run on each fire with no model, finds something new in ${brief.watch}. Your yes fixes that test; a changed one needs a new yes.`, '');
+  if (brief.wake) {
+    out.push(`**When it wakes a model:** only when its wake test, run on each fire with no model, finds something new in ${brief.watch}. It woke on ${brief.wake.planted.name} and stayed quiet on ${brief.wake.twin.name}. Your yes fixes this test; a changed one needs a new yes:`, '');
+    out.push('```sh', brief.wake.test.trimEnd(), '```', '');
+  }
   out.push('**Held for you, asked when it is due:**');
   out.push(...(brief.held.length ? brief.held.map((h) => `- ${heldWords(h)}`) : ['- Nothing to buy, book, post or send.']));
   out.push('', '**What it may spend:** up to your plan window, and no money: anything that costs money is held above.', '');

@@ -791,8 +791,9 @@ export class Work {
       if (other) { row('queued', `PR #${other.pr} from ${other.login || 'another account'}`, 'an open PR from another account links it'); continue; }
       const machine = unserved(i.body);
       if (machine) { row('queued', `a host that can serve ${machine}`, `its Runs on: line names ${machine}, which this host can't serve`); continue; }
-      if (repeats && last?.ended) {
-        const word = /^(BLOCKED|INCONCLUSIVE|INVALID)\b/.exec(last.ended.verdict ?? '')?.[1] ?? 'sent back';
+      // One that gave up its slot to wait on you goes on once you answered, as any attempt does; one whose process died is INVALID.
+      if (repeats && last?.ended && last.ended.cause !== 'gave up its slot') {
+        const word = last.ended.cause === 'crashed or interrupted' ? 'INVALID' : /^(BLOCKED|INCONCLUSIVE|INVALID)\b/.exec(last.ended.verdict ?? '')?.[1] ?? 'sent back';
         row(word, null, `a round of a job that repeats makes one attempt, and its attempt ended: ${last.ended.cause}${last.ended.verdict ? ` (${last.ended.verdict})` : ''}`);
         continue;
       }
