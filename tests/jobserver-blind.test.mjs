@@ -22,7 +22,9 @@ test('#2848 a run whose fuser cannot see the jobserver pipe reads INCONCLUSIVE o
     const run = spawnSync(process.execPath, ['--test', 'tests/acceptance/2848/refill.test.mjs'], { cwd: CHECKOUT, encoding: 'utf8', env: { ...env, PATH: `${bin}${delimiter}${env.PATH}` } });
     const out = `${run.stdout}\n${run.stderr}`;
     assert.equal(run.status, 0, `the #2848 scenario failed with a blind fuser\n${out}`);
-    assert.match(out, /the run's summary: INCONCLUSIVE affected/, `the run didn't read INCONCLUSIVE\n${out}`);
+    // The scenario's planted tests all pass, so its one inconclusive result is the jobserver's: a run INCONCLUSIVE only
+    // for files it left unrun counts none.
+    assert.match(out, /the run's summary: INCONCLUSIVE affected: 0 new, 0 already failing on main, 1 inconclusive or blocked,/, `the run didn't read INCONCLUSIVE for its jobserver\n${out}`);
     const [, found, share] = out.match(/the later job found (\d+); the share is (\d+)/) ?? [];
     assert.ok(Number(found) < Number(share), `the killed build's tokens weren't lost, so the INCONCLUSIVE proves nothing (found ${found} of ${share})\n${out}`);
   } finally {
