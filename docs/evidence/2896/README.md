@@ -1,15 +1,52 @@
 # Evidence for #2896: a reply reaches the agent whole
 
-Recorded 2026-11-19 on the Mac (load averages noted in each run file; other sessions were busy). Paths are redacted (`~`, `<scratch>`).
+Recorded on the Mac (MacBook Pro), 2026-11-19 and 2026-11-20, while other sessions were busy (the load noted in each run file).
+Paths are redacted (`~`, `<scratch>`).
 
-- `pages-run.txt`, `walk-run.txt`: the blind acceptance suite's `pages.test.ts` and `walk.test.ts` on the change. Every paging reply's page fits both stand-ins; the Codex walk takes 115 pages and the Claude Code walk 46, each with 10,000 rows, and the Codex walk's rows hash to the base's (`9913f78e…`). The other files (`facts`, `refusals`, `unknown`) passed in an earlier run (6 of 6).
-- `e2e-pages.json`, from `e2e.test.ts.txt`: a manual drive through `deep mcp` over stdio on a fixture hub. Three clients (Claude Code 2.1.308, Codex 0.166.0-alpha.5.1, and an unknown client) each page a 3,000-row document's rows by cursor and `deep_kinds`' sheet by offset. Every page is kept whole by its stand-in.
+## On the current code (merge of origin/main, after review round 5)
 
-| Client | Rows pages | Largest rows page | Sheet pages | Largest sheet page |
-|---|---|---|---|---|
-| claude-code 2.1.308 | 14 | 35,137 characters, 13,416 tokens | 2 | 33,415 characters, 11,983 tokens |
-| codex-mcp-client 0.166.0-alpha.5.1 | 35 | 14,147 characters, 5,408 tokens | 3 | 14,376 characters, 5,503 tokens |
-| acceptance-2896-client 1.0.0 (unknown) | 70 | 7,151 characters, 2,763 tokens | 6 | 7,342 characters, 2,829 tokens |
+- `suite-run.txt`: the blind acceptance suite, `tests/acceptance/2896`, run serially on the merged branch: **11 of 11 pass**,
+  each criterion's planted wrong program among them (`reply-cap-64kb`, `pager-drops-edge-row`, `refusal-schema-12000`,
+  `unknown-client-64kb`, and AC1's planted facts file).
+  - The Codex walk takes 115 pages (largest 14,148 characters, about 5,400 tokens of 8,000). The Claude Code walk takes 46
+    pages (about 35,131 characters and 13,400 tokens of 40,000 and 20,000). Each walk returns all 10,000 rows, and the Codex
+    walk's rows hash to the base's (`9913f78e…`).
+  - The unknown client's full page is 7,113 characters and 2,717 tokens.
+  - deep_drive's `missing_field` (7,907 characters) is the largest refusal. Every refusal is under 9,000 characters as each
+    stand-in receives it.
+- `unit-fails-first*.txt`: `packages/hub/test/reply-fit.test.ts` run on the code before each review round's fix, failing for
+  the reasons the tests name:
+  - round 2: a nested path's argument, the whole-schema sentence, Codex's error source, and a call asked once;
+  - round 3: a canvas refusal's issues, and the tokenizer's square-time count (5 s timeout);
+  - round 4: `by_code` on a first cut, and one token lost at a cut;
+  - round 5: two tokens lost at a cut.
 
-  The unknown client is held to the smallest figure in each unit any facts file holds: 50,000 characters, 10,000 tokens, and 10,000 bytes (Codex 0.144.0's gpt-5.2), each a fifth under.
-- `live-claude-attempt.json`, from `live.test.ts.txt`: a real Claude Code (bundled 2.1.326, haiku, `claude -p`, $0.0035) with `deep mcp` as its MCP server and deep-hook as its hooks, on the same fixture hub. The call reached `deep mcp`, and every hook exited 0, but the canvas core refused it with `no_session`: the fixture hub doesn't bind a real Claude Code session's MCP call to a session it knows. A real session receiving a full page whole is therefore **not shown**; the stand-ins above keep a result exactly as the facts say Claude Code does.
+  On the current code all 9 tests pass. The hub's MCP neighbours pass too (`canvas-hub-failure`, `mcp-rebind`,
+  `mcp-tool-name`, `tools`): 18 of 18 tests in all.
+- `cargo-deep-show.txt`: `cargo test -p deep-show` on the merged branch ran 18 test binaries: 85 tests passed and 3 failed.
+  - The failures: `the_published_schedule_matches_its_committed_snapshot` (the module set digest differs from
+    `schedule/core.json`), `recipe_frames` (`film.blank`), and `render_back_pipeline` (216 pixels off the base's draw).
+  - With this branch's four `deep-show` sources put back to the merge base, the same three fail the same way. They come from
+    this Mac or main, not from this change. None of them is in `scripts/known-failures.json`.
+- `ab-deep-mcp-30d.tsv`: AC7's `deep-mcp-30d` budget command (`node benchmarks/mcp.mjs` under `/usr/bin/time -l`), 5 interleaved
+  rounds per side. The base is a fresh GitHub clone at the merge base `4bf2fc7ad`.
+  - Instructions retired, median: 4,233.6 M on the change against 4,243.4 M on the base.
+  - Peak memory footprint, median: 94.57 MB against 93.50 MB. Max: 94.81 MB against 94.94 MB.
+  - This Mac is not the reference Mac, so this is an indication only (AC7 below).
+
+## Earlier runs, on earlier code (kept for what they show)
+
+- `pages-run.txt`, `walk-run.txt`: the same suite's AC2 and AC3/AC4 files at cfb1a94b9, before the review fixes.
+- `e2e-pages.json`, from `e2e.test.ts.txt`: a manual drive at cfb1a94b9 through `deep mcp` over stdio on a fixture hub. Three
+  clients each page a 3,000-row document's rows by cursor and `deep_kinds`' sheet by offset: Claude Code 2.1.308, Codex
+  0.166.0-alpha.5.1, and an unknown client. Their stand-ins keep every page whole.
+- `live-claude-attempt.json`, from `live.test.ts.txt`: a real Claude Code (bundled 2.1.326) with `deep mcp` as its MCP server.
+  The call reached `deep mcp`, but the fixture hub refused it with `no_session`. So a real session receiving a full page whole is
+  **not shown**.
+
+## Not proven here
+
+- **AC7** (budgets on the reference Mac in the local preflight): open. The walk's whole cost is in `suite-run.txt` (115 and 46
+  calls, and each page's tokens), but no preflight on the reference Mac has run. The A/B above is this Mac's only.
+- **`node scripts/affected.mjs` on the final tree**: not completed. A run on c08aa56d4 was stopped after 2.5 h, when the disk
+  fell under its floor and it began building in this worktree. The checks above were chosen by hand instead.

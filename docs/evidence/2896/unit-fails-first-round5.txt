@@ -1,5 +1,5 @@
 
- RUN  v5.0.5 /Users/sophiawj/private/deepbuild-core/.claude/worktrees/fix-2896-reply-fits-client-d66389/packages/hub
+ RUN  v5.0.5 ~/private/deepbuild-core/.claude/worktrees/fix-2896-reply-fits-client-d66389/packages/hub
 
  ❯ test/reply-fit.test.ts (9 tests | 1 failed) 162ms
    ❯ refusalFits (6)
