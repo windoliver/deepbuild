@@ -9,7 +9,7 @@
 // closed it, such as a thread unresolved after a reviewer resolved it, an item opens again citing that closing (#1633);
 // one your answer closed stays closed.
 import { exec as childRun } from './children.js';
-import { readFile } from 'node:fs/promises';
+import { open, readFile, type FileHandle } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Asks } from '@deepbuild/asks';
 import { isRecord as isObj, sha256Hex } from '@deepbuild/contracts';
@@ -289,25 +289,63 @@ export class OpenItems {
 
 const waiverKey = (item: string): string => sha256Hex(new TextEncoder().encode(`open item waiver\n${item}`));
 
-/** The agent's newest task list in its transcript: the last call of the facts' tool, its input (a Codex call's arguments). */
+/** A transcript is read for the task list a block at a time, from its end (#2645). */
+const BLOCK = 64 * 1024;
+
+/**
+ * The agent's newest task list in its transcript: the last call of the facts' tool, its input (a Codex call's
+ * arguments). Read from the file's end a block at a time (#2645): a line a block's edge cuts is joined first, only a
+ * line naming the tool is decoded, and the first line that assigns the list ends the read.
+ */
 async function newestList(facts: TaskListFacts, transcript: string): Promise<unknown> {
-  let text: string;
-  try { text = await readFile(transcript, 'utf8'); } catch { return undefined; }
-  let newest: unknown;
-  for (const raw of text.split('\n')) {
-    if (!raw.includes(facts.tool)) continue;
-    let line: unknown;
-    try { line = JSON.parse(raw); } catch { continue; }
-    if (!isObj(line)) continue;
-    // Claude Code: an assistant entry's tool_use part.
-    if (isObj(line.message) && Array.isArray(line.message.content)) {
-      for (const part of line.message.content) if (isObj(part) && part.type === 'tool_use' && part.name === facts.tool) newest = part.input;
+  const tool = Buffer.from(facts.tool);
+  let file: FileHandle;
+  try { file = await open(transcript, 'r'); } catch { return undefined; }
+  try {
+    const block = Buffer.allocUnsafe(BLOCK);
+    // The later parts of the line the last block's start edge cut, in file order.
+    let cut: Buffer[] = [];
+    for (let pos = (await file.stat()).size; pos > 0;) {
+      const from = Math.max(0, pos - BLOCK);
+      // A transcript cut shorter since the stat is read again at the next claim.
+      if ((await file.read(block, 0, pos - from, from)).bytesRead !== pos - from) return undefined;
+      for (let end = pos - from; ;) {
+        const nl = end ? block.lastIndexOf(0x0a, end - 1) : -1;
+        if (nl < 0 && from > 0) {
+          if (end) cut.unshift(Buffer.from(block.subarray(0, end)));
+          break;
+        }
+        const line = cut.length ? Buffer.concat([block.subarray(nl + 1, end), ...cut]) : block.subarray(nl + 1, end);
+        cut = [];
+        const said = line.includes(tool) ? listIn(facts, line.toString('utf8')) : undefined;
+        if (said) return said.list;
+        if (nl < 0) break;
+        end = nl;
+      }
+      pos = from;
     }
-    // Codex: a rollout response_item's function_call, its arguments as JSON text.
-    const p = line.payload;
-    if (line.type === 'response_item' && isObj(p) && p.type === 'function_call' && p.name === facts.tool && typeof p.arguments === 'string') {
-      try { newest = JSON.parse(p.arguments); } catch { /* a call that doesn't parse lists nothing */ }
-    }
+    return undefined;
+  } catch {
+    return undefined;
+  } finally {
+    await file.close();
   }
-  return newest;
+}
+
+/** The list one transcript line assigns, if it assigns one: its last call of the facts' tool. */
+function listIn(facts: TaskListFacts, raw: string): { list: unknown } | undefined {
+  let line: unknown;
+  try { line = JSON.parse(raw); } catch { return undefined; }
+  if (!isObj(line)) return undefined;
+  let said: { list: unknown } | undefined;
+  // Claude Code: an assistant entry's tool_use part.
+  if (isObj(line.message) && Array.isArray(line.message.content)) {
+    for (const part of line.message.content) if (isObj(part) && part.type === 'tool_use' && part.name === facts.tool) said = { list: part.input };
+  }
+  // Codex: a rollout response_item's function_call, its arguments as JSON text.
+  const p = line.payload;
+  if (line.type === 'response_item' && isObj(p) && p.type === 'function_call' && p.name === facts.tool && typeof p.arguments === 'string') {
+    try { said = { list: JSON.parse(p.arguments) }; } catch { /* a call that doesn't parse lists nothing */ }
+  }
+  return said;
 }
