@@ -1571,6 +1571,20 @@
       ]
     },
     {
+      "id": "pptx-export",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "pptx-export"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #732 first measurement (#732.bbcc6582): the merge base has no pptx target. One `deep-show run` exports a 20-stage piece to a deck at 1920 x 1080, two of its stages showing a 3D display whose screen carries an inset, its fidelity check reading the file back and drawing each slide with the pinned LibreOffice; it prints the receipt's timing.wall (under 5 s), which tests/acceptance/732/ac10-budgets.test.ts judges on a reference Mac. p50 and peak memory get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#732.bbcc6582"
+      ]
+    },
+    {
       "id": "narration-transcript",
       "command": [
         "node",
@@ -2025,6 +2039,40 @@
       "initialReason": "Issue #1634 first measurement (#1634.5a35384c): the merge base has no fill lights and no such task. A release deep-gpu plays the night city of tests/acceptance/1634 (1,024 fill point and 1,024 fill spot lamps, ranges 6 to 12 m) at 1920 x 1080 for 300 frames with timings, five runs after a warm-up one, each a fresh process; canvas.mjs judge holds the frame's GPU p95, the cluster pass's, the CPU scoring's and each estimate's distance from its measurement on a reference Mac, and the light lists' bytes anywhere. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task.",
       "criteria": [
         "#1634.5a35384c"
+      ]
+    },
+    {
+      "id": "canvas-cells-long-record",
+      "command": [
+        "node",
+        "benchmarks/canvas-world.mjs",
+        "tests/acceptance/1868/canvas-cells.test.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "ratio": 1.2
+      },
+      "initialReason": "Issue #1868 first measurement (#1868.f34f3f9c): the merge base has no such task. A canvas.user cells call, the call the app's open Terminal tab sends every 250 ms, on a record of 200,000 reading.recorded events and 5,000 asks, against the same call on an empty record; the issue's limit is 1.20 times the empty record's time. node --test runs the blind acceptance test itself, which seeds both records, starts a hub of this checkout on each, times five runs of each side after a warm-up, sides alternating, and judges them by scripts/benchmark.mjs's judgeLimit (PASS only on a reference Mac on mains power, Low Power Mode off, thermal state nominal, load within the cores); the benchmark prints that verdict and exits 0, and its judge gives it as the target. Once main has this task, p50 and peak memory get a 50% merge-base margin, and instructions retired are judged as for every task: over a whole acceptance run (seeding, two hubs) that count may read INCONCLUSIVE, or FAIL on an unrelated change to hub start-up. The blind job read the merge base at 3.06 times, all five runs over (tests/acceptance/1868/BASE-FAILURE.txt).",
+      "criteria": [
+        "#1868.f34f3f9c"
+      ]
+    },
+    {
+      "id": "deep-status-run-events",
+      "command": [
+        "node",
+        "benchmarks/canvas-world.mjs",
+        "tests/acceptance/1868/status-runs.test.mjs"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "ratio": 1.2
+      },
+      "initialReason": "Issue #1868 first measurement (#1868.bf84aa8b): the merge base has no such task (deep-status-30 seeds no runs). One deep_status call for a session with 10 claims on a record of 200,000 run events, against the same call on 1,000; the issue's limit is 1.20 times the shorter record's time. node --test runs the blind acceptance test itself, which seeds both records, starts a hub of this checkout on each, times five runs of each side after a warm-up, sides alternating, and judges them by scripts/benchmark.mjs's judgeLimit (PASS only on a reference Mac on mains power, Low Power Mode off, thermal state nominal, load within the cores); the benchmark prints that verdict and exits 0, and its judge gives it as the target. Once main has this task, p50 and peak memory get a 50% merge-base margin, and instructions retired are judged as for every task: over a whole acceptance run (seeding, two hubs) that count may read INCONCLUSIVE, or FAIL on an unrelated change to hub start-up. The blind job read the merge base at 282.67 times, all five runs over (tests/acceptance/1868/BASE-FAILURE.txt).",
+      "criteria": [
+        "#1868.bf84aa8b"
       ]
     }
   ]

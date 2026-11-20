@@ -267,6 +267,21 @@ fn lit_by_order(v: &mut View<'_>) -> Result<(), OpError> {
 /// scene3d's registration with its light policy breaking ties by `tie`: by ID in the shipped
 /// module, by registration order in #421's planted implementation of scene3d@1.
 pub fn register_with(r: &mut Registrar, tie: Tie) {
+    // #2777: the lists of words a document sets outside the kinds' params that this module reads,
+    // each with the words its reader takes.
+    let gpu: Vec<&str> = crate::stack::KINDS
+        .iter()
+        .filter(|k| k.2)
+        .map(|k| k.0)
+        .collect();
+    r.word_list(
+        "emitter.distance.model",
+        "emitter",
+        "distance",
+        &crate::emitters::DISTANCE_MODELS,
+    )
+    .word_list("light.kind", "light", "kind", &crate::light::KINDS)
+    .word_list("modifier.gpu", "modifier", "kind", &gpu);
     for solid in ["box", "cylinder", "sphere"] {
         r.kind(
             kind(solid, common(vec![json_param("size", crate::spec::SIZE)])),

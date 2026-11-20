@@ -1967,7 +1967,7 @@ pub(crate) fn evaluate_compiled(
                 {
                     let read = assets.expect("matched above");
                     let model = world(&items, id);
-                    let (solids, file_lights) = asset_scene(read, id, params, &model, look)?;
+                    let (solids, file_lights) = asset_scene(read, id, params, item, &model, look)?;
                     for s in solids {
                         bounds.extend(corners_of(&s));
                         layer.solids.push(s);
@@ -2060,7 +2060,7 @@ pub(crate) fn evaluate_compiled(
                     || k == "fixture.skin@1" =>
                 {
                     let (mesh, shared) = match (k, assets) {
-                        ("mesh.asset@1", Some(read)) => asset_mesh(read, id, params)?,
+                        ("mesh.asset@1", Some(read)) => asset_mesh(read, id, params, item)?,
                         // #419's stand-ins: a pre-skin per time, and a sequence's frame at t.
                         ("fixture.skin@1", _) => (crate::fixtures::skin(params, &path)?, None),
                         ("mesh.sequence@1", Some(read)) => {
@@ -2371,7 +2371,7 @@ pub(crate) fn evaluate_compiled(
                 "sky@1" if sky.is_none() => {
                     sky = Some(crate::sky::parse(id, params, look, assets)?);
                 }
-                "light.sun@1" | "light.point@1" | "light.spot@1" | "light.area@1" => {
+                k if light::KINDS.contains(&k) => {
                     let m = world(&items, id);
                     let dir = normalize(turn(&m, [0.0, 0.0, -1.0]));
                     let flicker = flicker(program, &state, params, &path)?;
