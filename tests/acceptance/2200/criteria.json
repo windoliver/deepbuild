@@ -1,0 +1,27 @@
+[
+  {
+    "n": 1,
+    "id": "#2200.3594285f",
+    "text": "**A usage error sets nothing up.** Given a home with no `.deepbuild` and stand-ins for the service manager, when `deep status --typo` runs, then it exits 2, the home holds no new file and the stand-ins log no call. Today, with a launcher stand-in that refuses, it exits 3 after writing nine files under the home and calling the stand-in."
+  },
+  {
+    "n": 2,
+    "id": "#2200.3e626bd2",
+    "text": "**The same for the other eight:** `deep inbox`, `deep secret`, `deep off`, `deep on`, `deep env`, `deep install`, `deep guard` and `deep memory` with an unknown flag, and `deep env` with no arguments."
+  },
+  {
+    "n": 3,
+    "id": "#2200.b9e90749",
+    "text": "**The first command still sets up.** Given the same home, when `deep status` runs, then setup runs as on the merge base."
+  },
+  {
+    "n": 4,
+    "id": "#2200.0122400d",
+    "text": "**A flag isn't an argument.** `deep open --typo`, `deep backup --typo`, `deep run follow --typo` and `deep session rules --typo` each exit 2. Today they exit 1, 1, 1 and 3."
+  },
+  {
+    "n": 5,
+    "id": "#2200.5fb61214",
+    "text": "**#19 AC16's contract test passes on main, unchanged,** once #2176 is in, or with `deep lease` settled by its blind redraft."
+  }
+]
