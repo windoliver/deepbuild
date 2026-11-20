@@ -49,14 +49,15 @@ async function setupLeases(t, variant) {
     await hub.exited;
     // A check still running can show in `ps` without its arguments, so without the marker, and
     // start a marked grandchild after a pass. Keep stopping marked processes for a second after the
-    // hub is gone and until a pass finds none, 5 s at most. A `ps` that fails counts as finding none.
-    for (const since = Date.now(); Date.now() - since < 5000;) {
+    // hub is gone and until a pass finds none, 5 s at most, polling through waitFor. A `ps` that
+    // fails counts as finding none, and running out of time ends the sweep without throwing.
+    const since = Date.now();
+    await waitFor(() => {
       let left;
       try { left = living(fx.run); } catch { left = []; }
       for (const pid of left) try { process.kill(pid, 'SIGKILL'); } catch {}
-      if (!left.length && Date.now() - since >= 1000) break;
-      await sleep(50);
-    }
+      return !left.length && Date.now() - since >= 1000;
+    }, 5000, 'no marked process left').catch(() => {});
   };
   t.after(end);
   started = await setup(t, variant);

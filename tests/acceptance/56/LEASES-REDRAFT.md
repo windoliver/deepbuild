@@ -28,7 +28,7 @@ Each test now gets its hub, fixture and sampler from `setupLeases(t, variant)`, 
 
 1. stops the sampler, the loop #2804 found still running;
 2. kills the hub with SIGKILL, as `startHub`'s own end step does, and waits for it to exit;
-3. SIGKILLs every process whose command line carries the test's random marker (`living(fx.run)`), every 50 ms or so. It stops once 1 s has passed since the hub exited **and** a pass finds none, and after 5 s at most.
+3. SIGKILLs every process whose command line carries the test's random marker (`living(fx.run)`), polling through the helpers' `waitFor` (a pass every 25 ms or so). It stops once 1 s has passed since the hub exited **and** a pass finds none, and after 5 s at most. Running out of time ends the sweep without throwing (`waitFor`'s timeout is caught).
 
 If the test has already timed out when `setup()` returns (`t.signal.aborted`), node may have run this step already, before `setup()` set `started`, or may be about to run it. So `setupLeases` runs the step itself and throws instead of starting the sampler. Running the step twice, even at once, is harmless: each part checks first or ignores a process that's already gone.
 
@@ -42,9 +42,10 @@ Why each part is there, from what the wrong programs showed:
   - Before exiting, such a check can start its marked `sh` grandchild after a sweep pass. In `diag3-bothhold-09.txt`, the effect test's first look at about +45 ms found nothing, and 7 grandchildren appeared at +126 ms. A loop that stops at the first empty pass misses them, and that is the leak above.
   - Nothing ever matched the hub's state folder, so the previous draft's `living(state)` is dropped.
   - With the window, `redraft/round3/final/diag6-bothhold-{01..15}.txt` logs every pass of the step's loop (code from before the `try`/`catch` edit). Of 30 test ends, 18 caught 1 to 4 more processes after the first pass (41 in all), the last at +114 ms. No first pass came back empty in these runs, at load 6 to 8, so the late-start case wasn't hit again. All 15 runs left 0. The 1 s window is a margin over the latest late start seen (+136 ms in `diag3`) and isn't proven enough under heavy load. A check slower than that to start its grandchild would still leak one.
+- **Polling through `waitFor`, not a `sleep` of its own.** `scripts/wait-ratchet.mjs` counts every `sleep(…)` in a test file as a fixed wait, and this file's ceiling is 4. An earlier version of the step looped with its own `sleep(50)`, a fifth, so the lint lane failed. What the sweep waits for is an event: no marked process left. It polls for that the way the suite's other event waits do, through `helpers.mjs`'s `waitFor`, whose sleep the ratchet already counts once for the whole suite. The 5 s cap is `waitFor`'s limit. The 1 s floor is part of the condition, so the sweep doesn't end sooner, and it is still a fixed margin: it waits out checks that may start a grandchild late, which no event announces (`(node)` above). That margin is named here rather than hidden; no `// deadline:` marker could excuse it, and none is used. `waitFor`'s timeout failure is caught so it can't throw out of the end step and skip the helpers' steps after it.
 - **A timeout inside `setup()`.** node aborts the test's signal and runs its end steps without waiting for the test's function. End steps registered after node has finished running them never run, so `startHub`'s own kill can be lost. Without the check, the sampler and hub would start after the test was over.
 
-Not changed: what each test asserts and in what order, `HOLD_MS`, `SESSIONS`, `POOL`, `RANDOMIZED_RUNS`, the 120 s and 300 s test timeouts, and `helpers.mjs`. On a pass, the end step kills only the hub, as `startHub`'s own end step would. Its sweep finds nothing but still costs about 1 s per test (some 20 `ps` runs). A `ps` that fails counts as an empty pass, so the step never throws from the sweep and node still runs the helpers' end steps after it.
+Not changed: what each test asserts and in what order, `HOLD_MS`, `SESSIONS`, `POOL`, `RANDOMIZED_RUNS`, the 120 s and 300 s test timeouts, and `helpers.mjs`. On a pass, the end step kills only the hub, as `startHub`'s own end step would. Its sweep finds nothing but still costs about 1 s per test (a `ps` run every 25 ms or so). A `ps` that fails counts as an empty pass, so the step never throws from the sweep and node still runs the helpers' end steps after it.
 
 ## Behavior → source → wrong program
 
@@ -64,7 +65,19 @@ The wrong programs were throwaway copies (`zz-wrong-*.test.mjs`) of the redraft 
 
 ### The delivered code
 
+`node scripts/wait-ratchet.mjs` (`redraft/round6/wait-ratchet.log`) prints no finding for any `tests/acceptance/56/` file. It still exits 1, on findings in other issues' files (1120, 1558, 2647, 2699, 594) that this change doesn't touch.
+
 These runs used the file as delivered:
+
+```
+redraft/round6/p1a  [plain] 50 sessions forced, alone (load 9.51)           → fail 1 | exited code 1 at +2 s; 0 s after first failure | left 0
+redraft/round6/p2a  both 50-session tests forced, '50 sessions' (load 9.23) → fail 2 | exited code 1 at +3 s; 1 s after first failure | left 0
+redraft/round6/p3   unmodified, whole file (load 8.80)                       → pass 4, fail 0, duration_ms 50591 | exited code 0 at +50 s | left 0
+```
+
+### Before the sweep polled through `waitFor` (`redraft/round4/`, `redraft/round5/`)
+
+These runs used the step with its own `sleep(50)` between passes, otherwise as delivered. The timeout cases weren't rerun after the change.
 
 ```
 redraft/round4/p1a  [plain] 50 sessions forced, alone (load 9.56)           → fail 1 | exited code 1 at +2 s; 0 s after first failure | left 0
@@ -73,9 +86,9 @@ redraft/round5/p2c8 randomized timeout cut to 8 s, both (load 95.39)         →
 redraft/round5/p2f  randomized timeout cut to 300 ms (inside setup()), both (load 214.66) → cancelled 2 | exited code 1 at +6 s; 3 s after first failure | left 0
 ```
 
-### Just before the last edit (`redraft/round3/final/`), load 6 to 9
+### Before the `try`/`catch` edit (`redraft/round3/final/`), load 6 to 9
 
-These runs predate the last change, which made a failing `ps` in the sweep count as an empty pass (the `try`/`catch` around `living()`). Whenever `ps` succeeds, the step behaves the same as it does now.
+These runs predate the change that made a failing `ps` in the sweep count as an empty pass (the `try`/`catch` around `living()`). Whenever `ps` succeeds, the step behaved the same as in `round4`/`round5`; it polled every 50 ms rather than through `waitFor`.
 
 ```
 p1a  new, [plain] 50 sessions forced, alone        → fail 1 | exited code 1 at +2 s; 0 s after first failure | left 0
@@ -91,7 +104,7 @@ In `p1c`, the four tests' durations add up to 44.7 s and the file exited at +45 
 
 The previous draft (marker or state folder, until the first empty pass) passed these as well, at load 14 to 64 (`redraft/round2/final/`). Its randomized forced-failure case exited 12 of 12 times, 3 to 4 s after the failure. Its both-50 forced case left 0 in 12 of 12 (`redraft/round2/p2a2-new-bothhold-{01..12}.log`). Its unmodified whole file passed 4 of 4 at load 59. The hangs in earlier drafts came at load 100 or more, and this round ran at much lower load. So the counts say less than they would under that load, and the proof rests as much on the mechanisms above.
 
-**Timeout cases: time spent in end steps.** A timed-out test is reported only once its end steps finish, so its duration minus its timeout is roughly that time. In the delivered code's `p2c8` (`round5`, load 95), the tests timed out at 8,000 ms and were reported at 27.9 s and 25.7 s, so the end steps took about 20 s and 18 s. The file exited at +56 s, right after its last test. In `round3/final`'s `p2c8` (load 7), they were reported at 10.6 s and 10.7 s: about 2.6 s. The previous draft's `p2c8` (`redraft/round2/final/`, load 45) reported at 14.2 s and 13.4 s: about 6 s and 5 s. An earlier draft's run (`redraft/p2c-new-timeout-randomized.log`, load 111 at its start) timed out at 20,000 ms and reported at 49.0 s and 60.2 s: about 29 s and 40 s. Most of that is likely `fixture()`'s cleanup, which spawns `ps -p` once for every check PID recorded (hundreds in the randomized test). That is unchanged helper behavior, and this job didn't measure the split. So the sub-30 s figures above apply to the 50-session case. A timed-out randomized test can take tens of seconds under heavy load before it is reported, and the file then exits about 1 s after its last test.
+**Timeout cases: time spent in end steps.** A timed-out test is reported only once its end steps finish, so its duration minus its timeout is roughly that time. In `round5`'s `p2c8` (the `sleep(50)` step, load 95), the tests timed out at 8,000 ms and were reported at 27.9 s and 25.7 s, so the end steps took about 20 s and 18 s. The file exited at +56 s, right after its last test. In `round3/final`'s `p2c8` (load 7), they were reported at 10.6 s and 10.7 s: about 2.6 s. The previous draft's `p2c8` (`redraft/round2/final/`, load 45) reported at 14.2 s and 13.4 s: about 6 s and 5 s. An earlier draft's run (`redraft/p2c-new-timeout-randomized.log`, load 111 at its start) timed out at 20,000 ms and reported at 49.0 s and 60.2 s: about 29 s and 40 s. Most of that is likely `fixture()`'s cleanup, which spawns `ps -p` once for every check PID recorded (hundreds in the randomized test). That is unchanged helper behavior, and this job didn't measure the split. So the sub-30 s figures above apply to the 50-session case. A timed-out randomized test can take tens of seconds under heavy load before it is reported, and the file then exits about 1 s after its last test.
 
 ### The old file at `8bfb6a633`
 
