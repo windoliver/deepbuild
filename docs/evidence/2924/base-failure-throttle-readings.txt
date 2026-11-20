@@ -1,0 +1,35 @@
+# tests/throttle-readings.test.mjs at the merge base 58d3e19ee's scripts/throttle.mjs (scratch copy), 2026-11-20
+✖ the rule: the first test grant always starts; past it, the readings and the ceiling decide (33.561656ms)
+✖ through the CLI, a second test request waits while its readings leave no room, and starts once they do (12501.131605ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 0
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 13130.8811
+
+✖ failing tests:
+
+test at tests/throttle-readings.test.mjs:19:1
+✖ the rule: the first test grant always starts; past it, the readings and the ceiling decide (33.561656ms)
+  TypeError [Error]: roomForTest is not a function
+      at TestContext.<anonymous> (file://<base-copy>/tests/throttle-readings.test.mjs:21:16)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)
+
+test at tests/throttle-readings.test.mjs:39:1
+✖ through the CLI, a second test request waits while its readings leave no room, and starts once they do (12501.131605ms)
+  AssertionError [ERR_ASSERTION]: a second test grant started at a load of 64 on 16 cores:
+  
+      at TestContext.<anonymous> (file://<base-copy>/tests/throttle-readings.test.mjs:74:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
