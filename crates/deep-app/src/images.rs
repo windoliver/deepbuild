@@ -62,9 +62,10 @@ impl Thumbnails {
             crop: [0, 0, size[0], size[1]],
             flip: 0,
             level: deep_images::level_for(size, drawn),
+            frame: 0,
         };
         let level = match images.show(&store, key, Queue::Visible, [0.0; 4]) {
-            Shown::Exact(l) | Shown::Nearest(l, _) => l,
+            Shown::Exact(l) | Shown::Nearest(l, _) | Shown::Frame(l, _) => l,
             Shown::Nothing => return images.failed(&key).and_then(|r| fail(r.code)),
         };
         self.made.turn();

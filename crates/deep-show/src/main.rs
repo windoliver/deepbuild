@@ -1086,6 +1086,21 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
     }
 }
 
+/// The record's objects by handle, as an input's `record` object gives them.
+fn record_objects(input: &Map<String, Value>) -> Option<BTreeMap<String, RecordObject>> {
+    entries(input, "record", |o| {
+        Some(RecordObject {
+            session: match o.get("session")? {
+                Value::Null => None,
+                v => Some(v.as_str()?.to_string()),
+            },
+            state: optional(o.get("state"), |s| Some(s.as_str()?.to_string()))?,
+            value: optional(o.get("value"), Value::as_f64)?,
+            as_of: optional(o.get("as_of"), Value::as_i64)?,
+        })
+    })
+}
+
 fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
     let sessions = entries(input, "sessions", |s| {
         let p = s.get("process")?.as_object()?;
@@ -1225,20 +1240,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 .map(|e| runs::entry(e).map(|_| e.clone()))
                 .collect::<Option<Vec<_>>>()?,
         ),
-        _ => (
-            entries(input, "record", |o| {
-                Some(RecordObject {
-                    session: match o.get("session")? {
-                        Value::Null => None,
-                        v => Some(v.as_str()?.to_string()),
-                    },
-                    state: optional(o.get("state"), |s| Some(s.as_str()?.to_string()))?,
-                    value: optional(o.get("value"), Value::as_f64)?,
-                    as_of: optional(o.get("as_of"), Value::as_i64)?,
-                })
-            })?,
-            Vec::new(),
-        ),
+        _ => (record_objects(input)?, Vec::new()),
     };
     let claims = entries(input, "claims", |c| {
         let session = c.get("session")?.as_str()?.to_string();
@@ -1787,7 +1789,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
         docs,
         docs_for,
         net: net::given(input)?,
-        record,
+        record: std::sync::Arc::new(record),
         runs,
         claims,
         window,
@@ -1864,12 +1866,22 @@ const CANVAS_SPACING: i64 = 10 * (shared::FLICKS / 120);
 /// the same calls in the same order. A fault holds only the call that sends it, not the earlier ones
 /// played again before it.
 struct CanvasSide {
+    /// The world but its record's objects, which `record` holds.
     world: Map<String, Value>,
+    /// The world's record objects (#1868): read once when the hub sends its world, then shared by
+    /// every call's scenario, so a call that draws nothing from the record pays nothing for it.
+    record: std::sync::Arc<BTreeMap<String, RecordObject>>,
     calls: Vec<Value>,
 }
 
 impl CanvasSide {
     fn scenario(&self, fault: bool) -> Option<Scenario> {
+        let mut scenario = self.scenario_of_world(fault)?;
+        scenario.record = self.record.clone();
+        Some(scenario)
+    }
+
+    fn scenario_of_world(&self, fault: bool) -> Option<Scenario> {
         let mut input = self.world.clone();
         if !fault {
             input.remove("fault");
@@ -1906,11 +1918,24 @@ impl CanvasSide {
             return bad_input();
         };
         if let Some(Value::Object(world)) = input.get("world") {
-            let before = std::mem::replace(&mut self.world, world.clone());
+            // The record's objects are read here, once; a replay's run entries (a list) stay in the world.
+            let mut world = world.clone();
+            let record = match world.get("record") {
+                Some(Value::Object(_)) => {
+                    let Some(record) = record_objects(&world) else {
+                        return bad_input();
+                    };
+                    world.remove("record");
+                    record
+                }
+                _ => BTreeMap::new(),
+            };
+            let before = std::mem::replace(&mut self.world, world);
             if self.scenario(false).is_none() {
                 self.world = before;
                 return bad_input();
             }
+            self.record = std::sync::Arc::new(record);
             return json!({"ok": true});
         }
         let Some(Value::Object(call)) = input.get("call") else {
@@ -2534,7 +2559,9 @@ fn declared(held: &[Module]) -> Vec<deep_canvas::registry::Interface> {
 /// The registry of a `set` build holding `held`: every interface it seals against, the seams'
 /// backends and its canvas modules.
 fn assemble(set: BuildSet, held: Vec<Module>) -> Registry {
-    let mut registry = Registry::new(set);
+    // #2777: the lists of words the fields the listing holds past kinds' params offer.
+    let lists = forms::lists(|m| held.iter().any(|h| h.manifest.name == m));
+    let mut registry = Registry::new(set).word_lists(lists);
     for interface in declared(&held) {
         registry = registry.declare(interface);
     }
@@ -2836,6 +2863,7 @@ fn planted_named(twin: &str) -> Result<StartPlanted, ()> {
         "census_accepts" => Ok(StartPlanted::Seal(Fault::CensusAccepted)),
         "census_skipped" => Ok(StartPlanted::Seal(Fault::CensusSkipped)),
         "census_pack_first" => Ok(StartPlanted::Seal(Fault::CensusPackFirst)),
+        "refusal_bad_value_only" => Ok(StartPlanted::Seal(Fault::RefusalBadValueOnly)),
         "pages_capped_at_64mib" => Ok(StartPlanted::Layouts(
             deep_canvas_sandbox::layouts::Planted {
                 pages_pack_cap: true,
@@ -3011,6 +3039,7 @@ fn main() {
     let stdin = io::stdin();
     let mut canvas = CanvasSide {
         world: Map::new(),
+        record: Default::default(),
         calls: Vec::new(),
     };
     canvas.world.insert("evidence".into(), json!(""));
