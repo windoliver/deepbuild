@@ -1,0 +1,181 @@
+# #2818 acceptance tests: the run on the base, and the wrong programs
+
+## The base, 86b99ac36cfbbf5d806aaa5566bd8486f671920c
+
+$ node --test --test-concurrency=1 tests/acceptance/2818/record.test.mjs tests/acceptance/2818/flaky.test.mjs tests/acceptance/2818/guard.test.mjs
+
+Run once in this worktree at the base, with node_modules from npm ci and no build, on 2026-11-20 at 23:16 UTC, on an
+18-core Mac at a load of 184 to 205; 81 s. Each test fails on node:assert AssertionError [ERR_ASSERTION], thrown from
+its own file in this folder, which is its innermost frame:
+
+- record.test.mjs:40, the second check: the base's record lists the three failures but writes each failure's message
+  as its note, with no issue, date or head, and keeps the entry of the test whose file is gone. This checkout's own
+  file, checked last, would fail as well: its #2844 entry ("FAIL 2.8468, ...") names no head.
+- flaky.test.mjs:50, the second check: the base's record runs the flaky test once, prints NEW FAIL for it, files
+  nothing and lists it with its message. Its first check, that the flaky test failed in the run, holds.
+- guard.test.mjs:20, the first check: the base's guard passes the refresh with no approval tag
+  ("PASS guard: 1 commit checked").
+
+Paths are written <checkout> (this worktree) and <tmp> (the OS temp folder). The output, unedited but for those:
+
+✖ #2818.1e81ba0c a failure that passes when run alone is flaky: node scripts/affected.mjs --record reads it INCONCLUSIVE, files it the way scripts/main-watch.mjs files one, and doesn't list it, while a failure that fails alone too is listed (26366.122167ms)
+✖ #2818.5656e229 the proof guard passes on a refresh of scripts/known-failures.json made as its own commit under a signed approval tag naming the file and each entry it adds, and fails the same refresh with no tag, naming the file: the file is guarded (#1872) (7346.71175ms)
+✖ #2818.7301b617 node scripts/affected.mjs --record, run on main over every test file and crate, lists the tests that fail there at the named head, each entry ending "(#<open issue>, added <date>)" with an open issue for its cause, and node scripts/known-failures-check.mjs passes; this checkout's scripts/known-failures.json holds that shape (44372.297041ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 0
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 80786.485541
+
+✖ failing tests:
+
+test at tests/acceptance/2818/flaky.test.mjs:37:1
+✖ #2818.1e81ba0c a failure that passes when run alone is flaky: node scripts/affected.mjs --record reads it INCONCLUSIVE, files it the way scripts/main-watch.mjs files one, and doesn't list it, while a failure that fails alone too is listed (26366.122167ms)
+  AssertionError [ERR_ASSERTION]: no line of the record reads INCONCLUSIVE for tests/fixture-2818-flaky.test.mjs › settles when run alone, which failed once and passes alone
+  exit 1
+  stdout:
+  parallel node: tests/fixture-2818-flaky.test.mjs tests/fixture-2818-held.test.mjs
+  NEW FAIL tests/fixture-2818-flaky.test.mjs › settles when run alone: failed once, as armed
+  NEW FAIL tests/fixture-2818-held.test.mjs › fails on every run: Expected values to be strictly equal:
+  TIMED the timed list, from scripts/lanes.mjs (285): …
+  FAIL affected: 2 new, 0 already failing on main, 0 inconclusive or blocked, 0 listed skips, 0 passed, in 10 s at load 192; logs in <tmp>/deep-2818-snzB4o/tmp/deep-affected-ixiQ2E
+  
+  stderr:
+  
+  the flaky test's runs, in order: FAIL
+  scripts/known-failures.json after the record:
+  {
+    "failures": {
+      "tests/fixture-2818-flaky.test.mjs › settles when run alone": "failed once, as armed",
+      "tests/fixture-2818-held.test.mjs › fails on every run": "Expected values to be strictly equal:"
+    },
+    "lint": {},
+    "timing": [],
+    "skips": []
+  }
+  
+  issues the record filed:
+  (none)
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2818/flaky.test.mjs:50:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2818/guard.test.mjs:11:1
+✖ #2818.5656e229 the proof guard passes on a refresh of scripts/known-failures.json made as its own commit under a signed approval tag naming the file and each entry it adds, and fails the same refresh with no tag, naming the file: the file is guarded (#1872) (7346.71175ms)
+  AssertionError [ERR_ASSERTION]: a refresh of scripts/known-failures.json with no approval tag passed the proof guard, so the file isn't guarded (#1872)
+  exit 0
+  stdout:
+  PASS guard: 1 commit checked: no guarded edit lacks its own approved proposal
+  proof: wall time 3.0 s
+  
+  stderr:
+  
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2818/guard.test.mjs:20:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/acceptance/2818/record.test.mjs:23:1
+✖ #2818.7301b617 node scripts/affected.mjs --record, run on main over every test file and crate, lists the tests that fail there at the named head, each entry ending "(#<open issue>, added <date>)" with an open issue for its cause, and node scripts/known-failures-check.mjs passes; this checkout's scripts/known-failures.json holds that shape (44372.297041ms)
+  AssertionError [ERR_ASSERTION]: tests/fixture-2818/held.test.ts › fails on main's entry doesn't end "(#<open issue>, added <date>)"
+  exit 1
+  stdout:
+  parallel vitest: tests/fixture-2818/held.test.ts
+  parallel node: tests/fixture-2818-held.test.mjs
+  parallel cargo test: fixture-2818
+  NEW FAIL tests/fixture-2818/held.test.ts › fails on main: expected 1 to be 2 // Object.is equality
+  NEW FAIL tests/fixture-2818-held.test.mjs › fails on main: Expected values to be strictly equal:
+  NEW FAIL cargo -p fixture-2818 --lib › tests::fails_on_main
+  TIMED the timed list, from scripts/lanes.mjs (285): …
+  FAIL affected: 3 new, 0 already failing on main, 0 inconclusive or blocked, 0 listed skips, 3 passed, in 24 s at load 184; logs in <tmp>/deep-2818-F4xrjq/tmp/deep-affected-LfemTK
+  
+  stderr:
+  
+  scripts/known-failures.json after the record:
+  {
+    "failures": {
+      "tests/fixture-2818-gone.test.mjs › was deleted": "fails on main 0a1b2c3d4e: a test since deleted (#9802, added 2026-11-18)",
+      "tests/fixture-2818/held.test.ts › fails on main": "expected 1 to be 2 // Object.is equality",
+      "tests/fixture-2818-held.test.mjs › fails on main": "Expected values to be strictly equal:",
+      "cargo -p fixture-2818 --lib › tests::fails_on_main": "fails on main"
+    },
+    "lint": {},
+    "timing": [],
+    "skips": []
+  }
+  
+  issues on the stand-in's GitHub:
+  #9801 OPEN Fixture issue 9801
+  An issue of an earlier record.
+  ---
+  #9802 OPEN Fixture issue 9802
+  An issue of an earlier record.
+      at TestContext.<anonymous> (file://<checkout>/tests/acceptance/2818/record.test.mjs:40:36)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'expected 1 to be 2 // Object.is equality',
+    expected: /\(#(\d+), added (\d{4}-\d{2}-\d{2})\)$/,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+## The twin skips-only-guard (criterion 3)
+
+The twin is the base's scripts/proof-guard.mjs byte for byte (cmp finds no difference), so on the base it is the program
+the run above judged: guard.test.mjs fails at guard.test.mjs:20, as above.
+
+## The throwaway implementation and its mutants (README: Wrong programs; not kept)
+
+Applied to this worktree's scripts/affected.mjs, scripts/proof-guard.mjs and scripts/known-failures.json, uncommitted,
+on 2026-11-20 from 21:53 UTC at a load of 186, then restored with git checkout before this suite was committed.
+
+$ node --test --test-concurrency=1 tests/acceptance/2818/record.test.mjs tests/acceptance/2818/flaky.test.mjs tests/acceptance/2818/guard.test.mjs
+✔ #2818.1e81ba0c a failure that passes when run alone is flaky: node scripts/affected.mjs --record reads it INCONCLUSIVE, files it the way scripts/main-watch.mjs files one, and doesn't list it, while a failure that fails alone too is listed (41213.328458ms)
+✔ #2818.5656e229 the proof guard passes on a refresh of scripts/known-failures.json made as its own commit under a signed approval tag naming the file and each entry it adds, and fails the same refresh with no tag, naming the file: the file is guarded (#1872) (22286.606792ms)
+✔ #2818.7301b617 node scripts/affected.mjs --record, run on main over every test file and crate, lists the tests that fail there at the named head, each entry ending "(#<open issue>, added <date>)" with an open issue for its cause, and node scripts/known-failures-check.mjs passes; this checkout's scripts/known-failures.json holds that shape (70459.31925ms)
+ℹ tests 3
+ℹ pass 3
+ℹ fail 0
+
+The twin laid over the throwaway guard (cp twins/skips-only-guard/scripts/proof-guard.mjs scripts/):
+$ node --test tests/acceptance/2818/guard.test.mjs
+✖ #2818.5656e229 the proof guard passes on a refresh of scripts/known-failures.json made as its own commit under a signed approval tag naming the file and each entry it adds, and fails the same refresh with no tag, naming the file: the file is guarded (#1872) (7755.487708ms)
+✖ #2818.5656e229 the proof guard passes on a refresh of scripts/known-failures.json made as its own commit under a signed approval tag naming the file and each entry it adds, and fails the same refresh with no tag, naming the file: the file is guarded (#1872) (7755.487708ms)
+  AssertionError [ERR_ASSERTION]: a refresh of scripts/known-failures.json with no approval tag passed the proof guard, so the file isn't guarded (#1872)
+  PASS guard: 1 commit checked: no guarded edit lacks its own approved proposal
+
+Mutant 1, a record that files the flaky test and lists it too:
+$ node --test tests/acceptance/2818/flaky.test.mjs
+✖ #2818.1e81ba0c a failure that passes when run alone is flaky: node scripts/affected.mjs --record reads it INCONCLUSIVE, files it the way scripts/main-watch.mjs files one, and doesn't list it, while a failure that fails alone too is listed (35209.369708ms)
+✖ #2818.1e81ba0c a failure that passes when run alone is flaky: node scripts/affected.mjs --record reads it INCONCLUSIVE, files it the way scripts/main-watch.mjs files one, and doesn't list it, while a failure that fails alone too is listed (35209.369708ms)
+  AssertionError [ERR_ASSERTION]: the flaky test is listed in scripts/known-failures.json
+
+Mutant 2, a record whose notes name no head:
+$ node --test tests/acceptance/2818/record.test.mjs
+✖ #2818.7301b617 node scripts/affected.mjs --record, run on main over every test file and crate, lists the tests that fail there at the named head, each entry ending "(#<open issue>, added <date>)" with an open issue for its cause, and node scripts/known-failures-check.mjs passes; this checkout's scripts/known-failures.json holds that shape (54306.232167ms)
+✖ #2818.7301b617 node scripts/affected.mjs --record, run on main over every test file and crate, lists the tests that fail there at the named head, each entry ending "(#<open issue>, added <date>)" with an open issue for its cause, and node scripts/known-failures-check.mjs passes; this checkout's scripts/known-failures.json holds that shape (54306.232167ms)
+  AssertionError [ERR_ASSERTION]: tests/fixture-2818/held.test.ts › fails on main's entry doesn't name the head it was recorded at, 548122bf10, by seven or more hex digits
+
+Mutant 3, a record that keeps an earlier record's entries but the one whose test passed, as the base does:
+$ node --test tests/acceptance/2818/record.test.mjs
+✖ #2818.7301b617 node scripts/affected.mjs --record, run on main over every test file and crate, lists the tests that fail there at the named head, each entry ending "(#<open issue>, added <date>)" with an open issue for its cause, and node scripts/known-failures-check.mjs passes; this checkout's scripts/known-failures.json holds that shape (40888.504416ms)
+✖ #2818.7301b617 node scripts/affected.mjs --record, run on main over every test file and crate, lists the tests that fail there at the named head, each entry ending "(#<open issue>, added <date>)" with an open issue for its cause, and node scripts/known-failures-check.mjs passes; this checkout's scripts/known-failures.json holds that shape (40888.504416ms)
+  AssertionError [ERR_ASSERTION]: the record lists other tests than those that fail on main at its head: tests/fixture-2818-held.test.mjs › passes on main passes there and tests/fixture-2818-gone.test.mjs › was deleted is in no test file
