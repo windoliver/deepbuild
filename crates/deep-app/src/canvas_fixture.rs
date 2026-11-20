@@ -42,13 +42,14 @@ pub(crate) fn planted_decode() {
     }
 }
 
-/// What a run draws: the evidence store, the window in points, the planted decode, how long it runs and each revision
-/// with the time it's handed over from.
+/// What a run draws: the evidence store, the window in points, the planted decode, how long it runs, how often it reads
+/// the app's footprint (#1431) and each revision with the time it's handed over from.
 pub struct Scenario {
     evidence: PathBuf,
     window: [f32; 2],
     decode_ms: u64,
     run_ms: f64,
+    read_every_ms: Option<f64>,
     revisions: Vec<(f64, Presented)>,
     /// #2494: the times frames are captured from, and the folder their files go under.
     capture_ms: Vec<f64>,
@@ -74,6 +75,15 @@ impl Scenario {
                 .map_err(|_| "window is [w, h]")?,
             decode_ms: v["decode_ms"].as_u64().ok_or("decode_ms is ms")?,
             run_ms: v["run_ms"].as_f64().ok_or("run_ms is ms")?,
+            read_every_ms: match &v["read_every_ms"] {
+                Value::Null => None,
+                every => Some(
+                    every
+                        .as_f64()
+                        .filter(|ms| *ms > 0.0)
+                        .ok_or("read_every_ms is ms")?,
+                ),
+            },
             revisions,
             capture_ms: (v["capture_ms"].as_array().into_iter().flatten())
                 .filter_map(Value::as_f64)
@@ -122,6 +132,10 @@ mod live {
         last: (f64, f64, u64),
         frames: Vec<Value>,
         handed: Vec<Value>,
+        /// #1431: how often the app's footprint is read, when the next reading is due, and the readings.
+        read_every: Option<f64>,
+        read_next: f64,
+        readings: Vec<Value>,
         captures: VecDeque<f64>,
         out: PathBuf,
         capturing: bool,
@@ -167,6 +181,7 @@ mod live {
             run_ms,
             capture_ms,
             out,
+            read_every_ms,
             ..
         } = scenario;
         open_window(options, cx, move |window, cx| {
@@ -188,6 +203,9 @@ mod live {
                 captures: capture_ms.into(),
                 out,
                 capturing: false,
+                read_every: read_every_ms,
+                read_next: 0.0,
+                readings: Vec::new(),
             };
             visible(window, 0, move |window, cx| {
                 let mut run = Run {
@@ -249,10 +267,11 @@ mod live {
                 thread_cpu_ms(),
                 crate::scene_view::readback_buffers(),
             );
-            let painted = run.panel.read(cx).painted.clone();
-            // #2494: the slots frame `k - 1` painted; captured, each with its own bytes, and the window's drawable.
             let captured = std::mem::take(&mut run.capturing);
-            let slots: Vec<Value> = (run.panel.read(cx).slots().into_iter())
+            let panel = run.panel.read(cx);
+            let (painted, held) = (panel.painted.clone(), panel.held());
+            // #2494: the slots frame `k - 1` painted; captured, each with its own bytes, and the window's drawable.
+            let slots: Vec<Value> = (panel.slots().into_iter())
                 .map(|(layer, frame, view)| {
                     let mut slot = json!({"layer": layer, "frame_seq": frame, "path": crate::scene_view::PATH.name()});
                     let pixels = captured.then(|| view.borrow().read(frame)).flatten();
@@ -269,7 +288,7 @@ mod live {
                 })
                 .collect();
             let mut frame = json!({"frame": k - 1, "at_ms": at, "cpu_ms": now.1 - cpu, "pictures": painted,
-                                   "slots": slots, "readback_buffers": readbacks});
+                                   "held": held, "slots": slots, "readback_buffers": readbacks});
             let window_file = run.out.join(format!("window-{}.png", k - 1));
             let drawable = captured.then(layer_colorspace::take_frame).flatten();
             if drawable.is_some_and(|image| image.save(&window_file).is_ok()) {
@@ -277,12 +296,19 @@ mod live {
             }
             run.frames.push(frame);
             run.last = now;
+            // #1431: the app's footprint after the first frame starting at or after each whole `read_every_ms`.
+            if let Some(every) = run.read_every.filter(|_| at >= run.read_next) {
+                let reading = crate::footprint::read(window);
+                run.readings.push(json!({"at_ms": at, "frame": k - 1, "reading": reading}));
+                run.read_next = ((at / every).floor() + 1.0) * every;
+            }
             if now.0 >= run.run_ms {
                 let scale = window.scale_factor();
-                println!(
-                    "{}",
-                    json!({"canvas": 1485, "scale": scale, "frames": run.frames, "handed": run.handed})
-                );
+                let mut report = json!({"canvas": 1485, "scale": scale, "frames": run.frames, "handed": run.handed});
+                if run.read_every.is_some() {
+                    report["readings"] = Value::Array(run.readings);
+                }
+                println!("{report}");
                 cx.quit();
             } else {
                 run.arm(now.0);

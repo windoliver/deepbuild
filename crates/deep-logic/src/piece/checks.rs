@@ -22,6 +22,7 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
             "links",
             "saves",
             "emits",
+            "fires",
             "services",
             "mirrors",
             "preview",
@@ -215,6 +216,7 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
     };
     let links = links::declared(params.get("links"))
         .ok_or_else(|| bad("links", "links is a list of {name, asset}".into()))?;
+    let fires = super::fires::declared(params.get("fires")).map_err(|e| bad("fires", e))?;
     let services =
         crate::services::declared(params.get("services")).map_err(|e| bad("services", e))?;
     let mirrors = crate::mirrors::declared(params.get("mirrors")).map_err(|e| bad("mirrors", e))?;
@@ -235,6 +237,7 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
         assets,
         saves: params.get("saves").cloned(),
         emits,
+        fires,
         services,
         mirrors,
         preview,
@@ -476,6 +479,19 @@ pub(super) fn region_map(
             read: Read::None,
         });
         at += e.size();
+    }
+    // Then each input it fires: its i32 count and its number fields, end to end from fires_at.
+    let mut at = 0u32;
+    for f in &d.fires {
+        entries.push(Region {
+            region: "fires",
+            name: format!("{}.{}", f.world, f.input),
+            offset: at,
+            size: f.size(),
+            ty: "fire".into(),
+            read: Read::None,
+        });
+        at += f.size();
     }
     let text: String = entries
         .iter()
@@ -793,6 +809,28 @@ pub fn check_in(
                 }
             }
         }
+        // #194: the fire region, each input's count and fields, in declaration order.
+        let fires_at = global_at(&given, "fires_at");
+        if !d.fires.is_empty() {
+            let size = u64::from(super::fires::size(&d.fires));
+            match fires_at {
+                None => refused.push(refusal(
+                    "region",
+                    "an item that fires exports fires_at, an immutable i32 global holding an address".into(),
+                    json!({"field": "fires"}),
+                )),
+                Some(at) => {
+                    if let Some(why) = clash(u64::from(at), u64::from(at) + size, memory, &regions, &[]) {
+                        refused.push(refusal(
+                            "region",
+                            format!("the fire region, {size} bytes at {at}, {why}"),
+                            json!({"region": "fires"}),
+                        ));
+                    }
+                    regions.push(("the fire region", at, size as u32));
+                }
+            }
+        }
         let services_at = global_at(&given, "services_at");
         let asked =
             crate::services::asked(&d.services, services, services_at, memory, &mut regions)
@@ -914,6 +952,8 @@ pub fn check_in(
             saves,
             emits: d.emits.clone(),
             emits_at: emits_at.unwrap_or(0),
+            fires: d.fires.clone(),
+            fires_at: fires_at.unwrap_or(0),
             services: asked,
             services_at: services_at.unwrap_or(0),
             mirrors,

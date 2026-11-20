@@ -3,8 +3,9 @@
 // Codex's home that targets the thread. Read off the hook's path, read-only, and never from a continuation prompt's
 // words: the turn that completes a goal looks like the turns before it. The record keeps each as a session.reading,
 // and the session's row shows the newest of each, a window with its age.
+import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
+import { open, type FileHandle } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -105,49 +106,145 @@ function heartbeats(f: CodexFacts, home: string, session: string): { active: { i
   return out;
 }
 
+/** A rollout is read a block at a time, from where the last read of it ended (#2645). */
+const BLOCK = 64 * 1024;
+/** The spans at a rollout's start and before where its last read ended that must read the same for that read to stand. */
+const HEAD = 1024 * 1024, TAIL = 4 * 1024;
+/** The rollouts whose last reads are kept: the newest. */
+const KEPT = 64;
+/** The words of the only lines a rollout is read for. */
+const WORDS = ['session_meta', 'token_count', 'goal', 'task_started'].map((w) => Buffer.from(w));
+
+/** What a rollout's records say up to a place in it. */
+interface Fold {
+  version?: string; goal?: string; goalAt: number; goalCalls: Set<unknown>; plan?: string; tokens: boolean;
+  seen: Map<string, { used: number; at: string }>; newest?: Obj;
+  /** Each turn's start in order, by its ID: a stop's records end where the turn after its own starts. */
+  turns: unknown[];
+}
+/** A rollout's last read: where it ended, what it had read, and what says the file read since is the same one, grown. */
+interface LastRead { session: string; dev: number; ino: number; offset: number; head: string; tail: string; fold: Fold }
+const lastReads = new Map<string, LastRead>();
+
+const copyOf = (fold: Fold): Fold => ({ ...fold, goalCalls: new Set(fold.goalCalls), seen: new Map(fold.seen), turns: [...fold.turns] });
+
+/** One record into what the rollout says. */
+function step(f: CodexFacts, fold: Fold, entry: Obj, payload: Obj, session: string): void {
+  if (entry.type === 'event_msg' && payload.type === 'task_started') fold.turns.push(payload.turn_id);
+  if (entry.type === 'session_meta' && typeof payload.cli_version === 'string') fold.version = payload.cli_version;
+  if (entry.type === 'event_msg' && payload.type === 'token_count') {
+    fold.tokens = true;
+    if (!isObj(payload.rate_limits)) return;
+    const limits = payload.rate_limits;
+    for (const key of f.billing.plan) if (typeof limits[key] === 'string') fold.plan = limits[key] as string;
+    // Another limit's snapshot, such as image_gen's, says nothing of the account's codex windows.
+    if ((limits.limit_id ?? f.windows.limit) !== f.windows.limit) return;
+    fold.newest = limits;
+    for (const w of [limits.primary, limits.secondary]) {
+      if (!isObj(w) || typeof w.used_percent !== 'number') continue;
+      fold.seen.set(typeof w.window_minutes === 'number' && w.window_minutes >= f.windows.weeklyMinutes ? 'weekly' : '5-hour', { used: w.used_percent, at: String(entry.timestamp ?? '') });
+    }
+  }
+  if (goalCall(f, payload)) fold.goalCalls.add(payload.call_id);
+  const said = goalIn(f, entry, session, fold.goalCalls);
+  if (said) { fold.goal = said; fold.goalAt = Date.parse(String(entry.timestamp ?? '')) || -Infinity; }
+}
+
+/** The SHA-256 of a span of the file, read through `block`; empty when the file ends before it. */
+async function digest(file: FileHandle, block: Buffer, from: number, to: number): Promise<string> {
+  const hash = createHash('sha256');
+  for (let pos = from; pos < to; pos += BLOCK) {
+    const length = Math.min(BLOCK, to - pos);
+    if ((await file.read(block, 0, length, pos)).bytesRead !== length) return '';
+    hash.update(block.subarray(0, length));
+  }
+  return hash.digest('hex');
+}
+
+/**
+ * What a rollout's records say up to the stop's turn (#2645): read a block at a time from where its last read ended,
+ * a line a block's edge cuts joined first. A rollout this hub hasn't read, or one rewritten since, is read whole once.
+ */
+async function readRollout(f: CodexFacts, session: string, transcript: string, turn: string | undefined): Promise<Fold | undefined> {
+  let file: FileHandle;
+  try { file = await open(transcript, 'r'); } catch { return undefined; }
+  try {
+    const { dev, ino, size } = await file.stat();
+    const block = Buffer.allocUnsafe(BLOCK);
+    let last = lastReads.get(transcript);
+    if (last && (last.session !== session || last.dev !== dev || last.ino !== ino || size < last.offset
+      || await digest(file, block, 0, Math.min(last.offset, HEAD)) !== last.head
+      || await digest(file, block, Math.max(0, last.offset - TAIL), last.offset) !== last.tail)) last = undefined;
+    // The stop's records end where the turn after its own starts: a last read past that start is read again.
+    const at = turn && last ? last.fold.turns.indexOf(turn) : -1;
+    if (at >= 0 && last!.fold.turns.slice(at + 1).some((t) => t !== turn)) last = undefined;
+    const fold: Fold = last ? copyOf(last.fold) : { goalAt: -Infinity, goalCalls: new Set(), tokens: false, seen: new Map(), turns: [] };
+    let reached = at >= 0 && last !== undefined;
+    /** Reads one line into `into`; false at the start of the turn after the stop's, where its records end. */
+    const take = (into: Fold, line: Buffer): boolean => {
+      if (!WORDS.some((w) => line.includes(w))) return true;
+      let entry: unknown;
+      try { entry = JSON.parse(line.toString('utf8')); } catch { return true; }
+      if (!isObj(entry) || !isObj(entry.payload)) return true;
+      const payload = entry.payload;
+      // Only what stands at this stop: the records end with its turn, as the facts' stop.turn reads a turn.
+      if (entry.type === 'event_msg' && payload.type === 'task_started' && turn) {
+        if (reached && payload.turn_id !== turn) return false;
+        if (payload.turn_id === turn) reached = true;
+      }
+      step(f, into, entry, payload, session);
+      return true;
+    };
+    let offset = last?.offset ?? 0;
+    // The start of the line the last block's end cut, and where that line starts.
+    let cut: Buffer[] = [];
+    let cutAt = offset;
+    let ended = false;
+    for (let pos = offset; pos < size && !ended; pos += BLOCK) {
+      const length = Math.min(BLOCK, size - pos);
+      // A rollout cut shorter since the stat is read again at the next stop.
+      if ((await file.read(block, 0, length, pos)).bytesRead !== length) return undefined;
+      const read = block.subarray(0, length);
+      let start = 0;
+      for (let nl = read.indexOf(0x0a); nl >= 0; nl = read.indexOf(0x0a, start)) {
+        const line = cut.length ? Buffer.concat([...cut, read.subarray(start, nl)]) : read.subarray(start, nl);
+        const lineAt = cut.length ? cutAt : pos + start;
+        cut = [];
+        if (!take(fold, line)) { ended = true; offset = lineAt; break; }
+        start = nl + 1;
+        offset = pos + start;
+      }
+      if (!ended && start < length) {
+        if (!cut.length) cutAt = pos + start;
+        cut.push(Buffer.from(read.subarray(start)));
+      }
+    }
+    // A span read the same as at the last read keeps its digest.
+    const head = last && Math.min(offset, HEAD) === Math.min(last.offset, HEAD) ? last.head : await digest(file, block, 0, Math.min(offset, HEAD));
+    const tail = last && offset === last.offset ? last.tail : await digest(file, block, Math.max(0, offset - TAIL), offset);
+    lastReads.delete(transcript);
+    lastReads.set(transcript, { session, dev, ino, offset, head, tail, fold });
+    if (lastReads.size > KEPT) lastReads.delete(lastReads.keys().next().value!);
+    // A last line still being written says what it says now and is read again, whole, at the next stop.
+    if (ended || !cut.length) return fold;
+    const now = copyOf(fold);
+    take(now, Buffer.concat(cut));
+    return now;
+  } catch {
+    return undefined;
+  } finally {
+    await file.close();
+  }
+}
+
 /** What a thread's records say now; `continuation` says the turn came from no person, so a loop with nothing left reads as one. */
 export async function codexReadings(session: string, transcript: string, turn: string | undefined, continuation: boolean): Promise<CodexReadings> {
   const f = facts();
-  let text: string;
-  try { text = await readFile(transcript, 'utf8'); } catch { return { readings: [] }; }
-  let version: string | undefined;
-  let goal: string | undefined;
-  let goalAt = -Infinity;
-  const goalCalls = new Set<unknown>();
-  let plan: string | undefined;
-  let tokens = false;
-  const seen = new Map<string, { used: number; at: string }>();
-  let reached = false;
-  let newest: Obj | undefined;
-  for (const raw of text.split('\n')) {
-    if (!raw.includes('session_meta') && !raw.includes('token_count') && !raw.includes('goal') && !raw.includes('task_started')) continue;
-    let entry: unknown;
-    try { entry = JSON.parse(raw); } catch { continue; }
-    if (!isObj(entry) || !isObj(entry.payload)) continue;
-    const payload = entry.payload;
-    // Only what stands at this stop: the records end with its turn, as the facts' stop.turn reads a turn.
-    if (entry.type === 'event_msg' && payload.type === 'task_started' && turn) {
-      if (reached && payload.turn_id !== turn) break;
-      if (payload.turn_id === turn) reached = true;
-    }
-    if (entry.type === 'session_meta' && typeof payload.cli_version === 'string') version = payload.cli_version;
-    if (entry.type === 'event_msg' && payload.type === 'token_count') {
-      tokens = true;
-      if (!isObj(payload.rate_limits)) continue;
-      const limits = payload.rate_limits;
-      for (const key of f.billing.plan) if (typeof limits[key] === 'string') plan = limits[key] as string;
-      // Another limit's snapshot, such as image_gen's, says nothing of the account's codex windows.
-      if ((limits.limit_id ?? f.windows.limit) !== f.windows.limit) continue;
-      newest = limits;
-      for (const w of [limits.primary, limits.secondary]) {
-        if (!isObj(w) || typeof w.used_percent !== 'number') continue;
-        seen.set(typeof w.window_minutes === 'number' && w.window_minutes >= f.windows.weeklyMinutes ? 'weekly' : '5-hour', { used: w.used_percent, at: String(entry.timestamp ?? '') });
-      }
-    }
-    if (goalCall(f, payload)) goalCalls.add(payload.call_id);
-    const said = goalIn(f, entry, session, goalCalls);
-    if (said) { goal = said; goalAt = Date.parse(String(entry.timestamp ?? '')) || -Infinity; }
-  }
+  const read = await readRollout(f, session, transcript, turn);
+  if (!read) return { readings: [] };
+  const { version, plan, tokens, seen, newest } = read;
+  let { goal } = read;
+  const { goalAt } = read;
   if (version !== undefined && !f.versions.includes(version)) return { version, readings: [] };
   const readings = [...seen].map(([name, w]) => windowLine(name, w.used, w.at));
   if (tokens) readings.push(plan ? `Codex billing: your ${plan} plan, from the session's logs` : 'Codex billing: no plan in the session\'s logs, so an API account');

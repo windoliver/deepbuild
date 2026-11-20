@@ -1,0 +1,124 @@
+{
+ "room": {
+  "px": 1,
+  "size": 1.5,
+  "deg": 0.5
+ },
+ "runs": [
+  {
+   "run": "box-20",
+   "fixture": "box_slope_20",
+   "frames": 91,
+   "a px, mm": 14.6,
+   "off the bake, most (px, deg)": {
+    "place": 0.02,
+    "turn": 0.01,
+    "size": 0.04,
+    "disc": 0.06
+   },
+   "measure": "most box turned from how it was built, deg",
+   "answer": 0,
+   "from the frames": 0.01,
+   "from the bake": 0.003
+  },
+  {
+   "run": "box-33",
+   "fixture": "box_slope_33",
+   "frames": 91,
+   "a px, mm": 14.6,
+   "off the bake, most (px, deg)": {
+    "place": 0.17,
+    "turn": 0.16,
+    "size": 0.59,
+    "disc": 0.19
+   },
+   "measure": "most box turned from how it was built, deg",
+   "answer": 45,
+   "from the frames": 90.17,
+   "from the bake": 90.261
+  },
+  {
+   "run": "box-33-centre",
+   "fixture": "box_slope_33_centre",
+   "frames": 91,
+   "a px, mm": 14.6,
+   "off the bake, most (px, deg)": {
+    "place": 0.01,
+    "turn": 0.03,
+    "size": 0.2,
+    "disc": 0.08
+   },
+   "measure": "most box turned from how it was built, deg",
+   "answer": 0,
+   "from the frames": 0.04,
+   "from the bake": 0.0012
+  },
+  {
+   "run": "box-45-centre",
+   "fixture": "box_slope_45_centre",
+   "frames": 91,
+   "a px, mm": 14.6,
+   "off the bake, most (px, deg)": {
+    "place": 0.03,
+    "turn": 0,
+    "size": 0.69,
+    "disc": 0.13
+   },
+   "measure": "most box turned from how it was built, deg",
+   "answer": 0,
+   "from the frames": 0,
+   "from the bake": 0.0015
+  },
+  {
+   "run": "bar",
+   "fixture": "bar_period",
+   "frames": 241,
+   "a px, mm": 3.8,
+   "off the bake, most (px, deg)": {
+    "place": 0.41,
+    "turn": 0.17,
+    "size": 0.66,
+    "disc": 0.32
+   },
+   "measure": "period of bar, s",
+   "answer": 1.6411,
+   "from the frames": 1.6448,
+   "from the bake": 1.6414
+  },
+  {
+   "run": "bar-centre",
+   "fixture": "bar_period_centre",
+   "frames": 241,
+   "a px, mm": 3.8,
+   "off the bake, most (px, deg)": {
+    "place": 0.4,
+    "turn": 0.14,
+    "size": 0.66,
+    "disc": 0.32
+   },
+   "measure": "period of bar, s",
+   "answer": 1.8651,
+   "from the frames": 1.8663,
+   "from the bake": 1.8653
+  }
+ ],
+ "held to a wrong bake, most (px, deg)": {
+  "box-33-centre held to the planted centre_of_mass_ignored bake": {
+   "place": 130.03,
+   "turn": 89.99,
+   "size": 2.97,
+   "disc": 78.3
+  },
+  "bar-centre held to the bake with no centre_of_mass": {
+   "place": 36.46,
+   "turn": 15.7,
+   "size": 0.66,
+   "disc": 54.69
+  }
+ },
+ "planted": {
+  "centre_of_mass_ignored: the most the box turned, deg": 90.26,
+  "pose_reads_centre_of_mass: the output wrote the box this far from its origin, m": 0.75
+ },
+ "failures": []
+}

@@ -1,0 +1,254 @@
+Base commit: 55fd5b84a ("Merge pull request #2877 from windoliver/worktree-inherited-watching-flute"), also origin/main when run
+Run: CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 NO_COLOR=1 npx vitest run --root tests/acceptance/1962 --no-file-parallelism --testTimeout=600000
+     (vitest 5.0.5; cargo 1.99.1 on PATH; deep-show built with --features r1 in this checkout's target/, warm from one
+     prior build of the same command, whose binary also wrote fixtures/ through the fixture script)
+Result: Test Files 4 failed (4); Tests 6 failed (6); exit 1. Duration 62.04 s.
+Type check: npx tsc --noEmit -p tests/acceptance/1962, exit 0.
+Date: 2026-11-19  darwin-arm64
+
+What holds at the base: acme/shelf@1.2.0 (shelf.bookcase@2 at major 2, with its step from 1 and its corpus),
+acme/furniture@1.0.0 and acme/furniture@2.0.0 install, and so does the dropped 2.0.0. Each fixture check passes: the
+room under acme/shelf@1.2.0 is presented with no error, expands b1, b2 and b3 to its record's values with no `migrated`
+and draws to the recorded snapshot e006448e…; the lift under acme/shelf@1.2.0 raises no error and gives its record's
+values at the 100 sampled times. No test passes: each criterion's own check needs behaviour the base lacks, and each
+planted test needs a planted name.
+
+Why each test fails at the base:
+
+- `moved` and `removed` are not pack fields (crates/deep-canvas/src/document/packs.rs: not in PACK_KEYS, and
+  packs/module_fields.rs refuses a field no canvas module reads as unknown_field), so every version that declares
+  either is refused with unknown_field at `moved` or `removed`: acme/shelf@2.0.0 in every variant but the dropped one,
+  and acme/furniture@3.0.0. Nothing names an entry or a reason.
+- The pack check never compares a version with the earlier versions of its pack, so the dropped 2.0.0 installs.
+- A document pinned to a refused 2.0.0 names a version the store lacks, so it opens as #1958 left it: presented, the
+  bookcases kept and skipped with pack_missing, no expansion, no `migrated`, a snapshot of the empty board (779879db…);
+  the lift's b1 is skipped the same way, its channel left on items/b1/params/shelves in `opened`, and `deep_query`
+  gives nothing at items/b1/params/tiers.
+- Neither `loader_drops_moved_instances` nor `move_rewrites_kind_only` is a planted name (crates/deep-show/src/main.rs,
+  the `planted` match ends `_ => return None`), so those scenarios answer {"ok": false, "code": "bad_input"}.
+
+moved.test.ts
+  x #1962.6edffdaf ... opens its 3 bookcases as furniture.case@1 ...  at moved.test.ts:51, "the corpus document upgraded
+      from shelf@1.2.0 to shelf@2.0.0": 11 failures (acme/shelf@2.0.0 refused, unknown_field at moved; b1, b2 and b3
+      open as nothing, expand to no recorded value, 0 migrated each; the snapshot 779879db…, not e006448e…)
+  x #1962.6edffdaf a planted loader ...  at "deep-show run refused the scenario": bad_input (unknown planted value)
+refusals.test.ts
+  x #1962.248e8322 ...  at refusals.test.ts:46, "each planted moved entry, at its pack check": 4 failures
+      (acme/furniture@3.0.0 refused, unknown_field at moved; the chain, the loop and the undeclared 2.0.0 each refused
+      only with unknown_field at moved, no error at moved/shelf.bookcase@2 with its code and reason)
+removed.test.ts
+  x #1962.1c118241 ...  at removed.test.ts:85, "the 2.0.0 that drops the bookcase, and the one that lists it as
+      removed": 6 failures (the dropped 2.0.0 installs; the removed 2.0.0 refused, unknown_field at removed; the
+      upgraded room presented with pack_missing, not refused; no unknown_kind error names b1, b2 or b3). The room on
+      acme/shelf@1.2.0 draws to the same hash before and after.
+channel.test.ts
+  x #1962.f5eb6b43 ... keeps its evaluated values ...  at channel.test.ts:59, "the lift upgraded ...": 7 failures (the
+      tiers 2.0.0 refused, unknown_field at moved; b1 opens as nothing; the channel still on items/b1/params/shelves;
+      nothing at items/b1/params/tiers at the 100 times)
+  x #1962.f5eb6b43 a planted migrator ...  at "deep-show run refused the scenario": bad_input (unknown planted value)
+
+The run's output, as vitest printed it:
+
+
+ RUN  v5.0.5 <checkout>/tests/acceptance/1962
+
+ ❯ removed.test.ts (1 test | 1 failed) 17386ms
+   × #1962.1c118241 shelf@2.0.0 without shelf.bookcase, with no moved entry and no removed entry, is refused at pack check, naming the kind; with removed {shelf.bookcase@2: "superseded"} it installs, upgrading the corpus document is refused with a fix naming the 3 items, and the document on shelf@1.2.0 still draws to the same snapshot hash 5507ms
+ ❯ channel.test.ts (2 tests | 2 failed) 15420ms
+   × #1962.f5eb6b43 a channel keyed on a moved item's param keeps its evaluated values at 100 sampled times after the upgrade 4249ms
+   × #1962.f5eb6b43 a planted migrator that rewrites the kind but not the paths (move_rewrites_kind_only) leaves the channel ref_unresolved and fails, naming the channel 893ms
+ ❯ refusals.test.ts (1 test | 1 failed) 13491ms
+   × #1962.248e8322 a moved entry whose target is itself moved, one that loops back to its source, and one whose target pack isn't in requires.packs are each refused at pack check, naming the entry and the reason 5197ms
+ ❯ moved.test.ts (2 tests | 2 failed) 12487ms
+   × #1962.6edffdaf shelf@2.0.0 declares moved {shelf.bookcase@2: furniture/case@1} with requires.packs [furniture@1.0.0]: the corpus document upgraded from shelf@1.2.0 opens its 3 bookcases as furniture.case@1 with the values recorded for them, raises one migrated notice per item, and draws to the snapshot hash recorded for it 3560ms
+   × #1962.6edffdaf a planted loader that drops instances of the old name (loader_drops_moved_instances) fails, naming the items 1084ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  channel.test.ts > #1962.f5eb6b43 a channel keyed on a moved item's param keeps its evaluated values at 100 sampled times after the upgrade
+AssertionError: the lift upgraded from shelf@1.2.0 to the 2.0.0 that moves its bookcase to furniture.case@1 of furniture@2.0.0:
+  acme/shelf@2.0.0 (fixtures/packs/shelf-2.0.0-tiers) is refused, not installed: [{"check":"document.validate","code":"unknown_field","severity":"error","ids":[],"path":"moved","actual":{"shelf.bookcase@2":"furniture/case@1"},"what":"not a field of a pack in this slice","fix":"Remove the field, or require the kind's minor that defines it."}]
+  b1 opens as null, not furniture.case@2
+  the channel lift is on "items/b1/params/shelves" after the upgrade, not items/b1/params/tiers
+  the channel lift, read at items/b1/params/tiers against the values recorded for it, gives null at 0.05s, not 4
+  the channel lift, read at items/b1/params/tiers against the values recorded for it, gives null at 0.15s, not 4
+  the channel lift, read at items/b1/params/tiers against the values recorded for it, gives null at 0.25s, not 4
+  the channel lift, read at items/b1/params/tiers against the values recorded for it, differs at 100 of the 100 times: expected [ …(7) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "acme/shelf@2.0.0 (fixtures/packs/shelf-2.0.0-tiers) is refused, not installed: [{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[],\"path\":\"moved\",\"actual\":{\"shelf.bookcase@2\":\"furniture/case@1\"},\"what\":\"not a field of a pack in this slice\",\"fix\":\"Remove the field, or require the kind's minor that defines it.\"}]",
++   "b1 opens as null, not furniture.case@2",
++   "the channel lift is on \"items/b1/params/shelves\" after the upgrade, not items/b1/params/tiers",
++   "the channel lift, read at items/b1/params/tiers against the values recorded for it, gives null at 0.05s, not 4",
++   "the channel lift, read at items/b1/params/tiers against the values recorded for it, gives null at 0.15s, not 4",
++   "the channel lift, read at items/b1/params/tiers against the values recorded for it, gives null at 0.25s, not 4",
++   "the channel lift, read at items/b1/params/tiers against the values recorded for it, differs at 100 of the 100 times",
++ ]
+
+ ❯ none helpers.ts:61:60
+     59| /** No failures; the message lists them. */
+     60| export function none(failures: readonly string[], what: string): void {
+     61|   expect(failures, `${what}:\n  ${failures.join('\n  ')}`).toEqual([]);
+       |                                                            ^
+     62| }
+     63|
+ ❯ channel.test.ts:59:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+ FAIL  channel.test.ts > #1962.f5eb6b43 a planted migrator that rewrites the kind but not the paths (move_rewrites_kind_only) leaves the channel ref_unresolved and fails, naming the channel
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:125:82
+    123|   expect(lines.length, `${SHOW_NAME} run: one output line per input li…
+    124|   const out = obj(JSON.parse(lines[0]!) as JsonValue, `${SHOW_NAME} ru…
+    125|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${show(out…
+       |                                                                                  ^
+    126|   const replies = arr(out['replies'], 'run: replies').map((v, i) => ob…
+    127|   expect(replies.length, 'run: one reply per call').toBe(arr(sc['calls…
+ ❯ channel.test.ts:64:32
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+
+ FAIL  moved.test.ts > #1962.6edffdaf shelf@2.0.0 declares moved {shelf.bookcase@2: furniture/case@1} with requires.packs [furniture@1.0.0]: the corpus document upgraded from shelf@1.2.0 opens its 3 bookcases as furniture.case@1 with the values recorded for them, raises one migrated notice per item, and draws to the snapshot hash recorded for it
+AssertionError: the corpus document upgraded from shelf@1.2.0 to shelf@2.0.0:
+  acme/shelf@2.0.0 (fixtures/packs/shelf-2.0.0) is refused, not installed: [{"check":"document.validate","code":"unknown_field","severity":"error","ids":[],"path":"moved","actual":{"shelf.bookcase@2":"furniture/case@1"},"what":"not a field of a pack in this slice","fix":"Remove the field, or require the kind's minor that defines it."}]
+  b1 opens as nothing (no expansion), not furniture.case@1
+  b1 expands to none of the values recorded for it
+  0 migrated notices name b1, not 1: []
+  b2 opens as nothing (no expansion), not furniture.case@1
+  b2 expands to none of the values recorded for it
+  0 migrated notices name b2, not 1: []
+  b3 opens as nothing (no expansion), not furniture.case@1
+  b3 expands to none of the values recorded for it
+  0 migrated notices name b3, not 1: []
+  the room upgraded to acme/shelf@2.0.0 draws to 779879db0bfa47a101a3f216defb501910c56b273c510bce7b190397474d2ebc, not the snapshot hash recorded for it, e006448eb0577cbe4984fcda28b4dd91a238530ee5382fd3ca4b129deec5c016: expected [ …(11) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "acme/shelf@2.0.0 (fixtures/packs/shelf-2.0.0) is refused, not installed: [{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[],\"path\":\"moved\",\"actual\":{\"shelf.bookcase@2\":\"furniture/case@1\"},\"what\":\"not a field of a pack in this slice\",\"fix\":\"Remove the field, or require the kind's minor that defines it.\"}]",
++   "b1 opens as nothing (no expansion), not furniture.case@1",
++   "b1 expands to none of the values recorded for it",
++   "0 migrated notices name b1, not 1: []",
++   "b2 opens as nothing (no expansion), not furniture.case@1",
++   "b2 expands to none of the values recorded for it",
++   "0 migrated notices name b2, not 1: []",
++   "b3 opens as nothing (no expansion), not furniture.case@1",
++   "b3 expands to none of the values recorded for it",
++   "0 migrated notices name b3, not 1: []",
++   "the room upgraded to acme/shelf@2.0.0 draws to 779879db0bfa47a101a3f216defb501910c56b273c510bce7b190397474d2ebc, not the snapshot hash recorded for it, e006448eb0577cbe4984fcda28b4dd91a238530ee5382fd3ca4b129deec5c016",
++ ]
+
+ ❯ none helpers.ts:61:60
+     59| /** No failures; the message lists them. */
+     60| export function none(failures: readonly string[], what: string): void {
+     61|   expect(failures, `${what}:\n  ${failures.join('\n  ')}`).toEqual([]);
+       |                                                            ^
+     62| }
+     63|
+ ❯ moved.test.ts:51:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯
+
+ FAIL  moved.test.ts > #1962.6edffdaf a planted loader that drops instances of the old name (loader_drops_moved_instances) fails, naming the items
+AssertionError: deep-show run refused the scenario: {"ok":false,"code":"bad_input"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ run helpers.ts:125:82
+    123|   expect(lines.length, `${SHOW_NAME} run: one output line per input li…
+    124|   const out = obj(JSON.parse(lines[0]!) as JsonValue, `${SHOW_NAME} ru…
+    125|   expect(out['ok'], `${SHOW_NAME} run refused the scenario: ${show(out…
+       |                                                                                  ^
+    126|   const replies = arr(out['replies'], 'run: replies').map((v, i) => ob…
+    127|   expect(replies.length, 'run: one reply per call').toBe(arr(sc['calls…
+ ❯ moved.test.ts:56:29
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯
+
+ FAIL  refusals.test.ts > #1962.248e8322 a moved entry whose target is itself moved, one that loops back to its source, and one whose target pack isn't in requires.packs are each refused at pack check, naming the entry and the reason
+AssertionError: each planted moved entry, at its pack check:
+  acme/furniture@3.0.0 (fixtures/packs/furniture-3.0.0) is refused, not installed: [{"check":"document.validate","code":"unknown_field","severity":"error","ids":[],"path":"moved","actual":{"furniture.case@1":"furniture/cabinet@1"},"what":"not a field of a pack in this slice","fix":"Remove the field, or require the kind's minor that defines it."}]
+  acme/shelf@2.0.0 (fixtures/packs/shelf-2.0.0-chain) is refused without an error out_of_range at moved/shelf.bookcase@2 with the reason target_moved: [{"check":"document.validate","code":"unknown_field","severity":"error","ids":[],"path":"moved","actual":{"shelf.bookcase@2":"furniture/case@1"},"what":"not a field of a pack in this slice","fix":"Remove the field, or require the kind's minor that defines it."}]
+  acme/shelf@2.0.0 (fixtures/packs/shelf-2.0.0-loop) is refused without an error cycle at moved/shelf.bookcase@2 with the reason loop: [{"check":"document.validate","code":"unknown_field","severity":"error","ids":[],"path":"moved","actual":{"shelf.bookcase@2":"shelf/bookcase@2"},"what":"not a field of a pack in this slice","fix":"Remove the field, or require the kind's minor that defines it."}]
+  acme/shelf@2.0.0 (fixtures/packs/shelf-2.0.0-undeclared) is refused without an error ref_unresolved at moved/shelf.bookcase@2 with the reason undeclared_pack: [{"check":"document.validate","code":"unknown_field","severity":"error","ids":[],"path":"moved","actual":{"shelf.bookcase@2":"furniture/case@1"},"what":"not a field of a pack in this slice","fix":"Remove the field, or require the kind's minor that defines it."}]: expected [ …(4) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "acme/furniture@3.0.0 (fixtures/packs/furniture-3.0.0) is refused, not installed: [{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[],\"path\":\"moved\",\"actual\":{\"furniture.case@1\":\"furniture/cabinet@1\"},\"what\":\"not a field of a pack in this slice\",\"fix\":\"Remove the field, or require the kind's minor that defines it.\"}]",
++   "acme/shelf@2.0.0 (fixtures/packs/shelf-2.0.0-chain) is refused without an error out_of_range at moved/shelf.bookcase@2 with the reason target_moved: [{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[],\"path\":\"moved\",\"actual\":{\"shelf.bookcase@2\":\"furniture/case@1\"},\"what\":\"not a field of a pack in this slice\",\"fix\":\"Remove the field, or require the kind's minor that defines it.\"}]",
++   "acme/shelf@2.0.0 (fixtures/packs/shelf-2.0.0-loop) is refused without an error cycle at moved/shelf.bookcase@2 with the reason loop: [{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[],\"path\":\"moved\",\"actual\":{\"shelf.bookcase@2\":\"shelf/bookcase@2\"},\"what\":\"not a field of a pack in this slice\",\"fix\":\"Remove the field, or require the kind's minor that defines it.\"}]",
++   "acme/shelf@2.0.0 (fixtures/packs/shelf-2.0.0-undeclared) is refused without an error ref_unresolved at moved/shelf.bookcase@2 with the reason undeclared_pack: [{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[],\"path\":\"moved\",\"actual\":{\"shelf.bookcase@2\":\"furniture/case@1\"},\"what\":\"not a field of a pack in this slice\",\"fix\":\"Remove the field, or require the kind's minor that defines it.\"}]",
++ ]
+
+ ❯ none helpers.ts:61:60
+     59| /** No failures; the message lists them. */
+     60| export function none(failures: readonly string[], what: string): void {
+     61|   expect(failures, `${what}:\n  ${failures.join('\n  ')}`).toEqual([]);
+       |                                                            ^
+     62| }
+     63|
+ ❯ refusals.test.ts:46:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/6]⎯
+
+ FAIL  removed.test.ts > #1962.1c118241 shelf@2.0.0 without shelf.bookcase, with no moved entry and no removed entry, is refused at pack check, naming the kind; with removed {shelf.bookcase@2: "superseded"} it installs, upgrading the corpus document is refused with a fix naming the 3 items, and the document on shelf@1.2.0 still draws to the same snapshot hash
+AssertionError: the 2.0.0 that drops the bookcase, and the one that lists it as removed:
+  acme/shelf@2.0.0 (fixtures/packs/shelf-2.0.0-dropped) is installed at its pack check: it ships no shelf.bookcase@2 and lists it under neither moved nor removed, so it must be refused, naming shelf.bookcase@2
+  acme/shelf@2.0.0 (fixtures/packs/shelf-2.0.0-removed) is refused, not installed: [{"check":"document.validate","code":"unknown_field","severity":"error","ids":[],"path":"removed","actual":{"shelf.bookcase@2":"superseded"},"what":"not a field of a pack in this slice","fix":"Remove the field, or require the kind's minor that defines it."}]
+  the room upgraded to acme/shelf@2.0.0 (fixtures/packs/shelf-2.0.0-removed) is presented, not refused: []; notices [{"code":"pack_missing","severity":"notice","ids":["b1","b2","b3"],"path":"packs/0","actual":{"pack":"acme/shelf","version":"2.0.0"},"what":"pack `acme/shelf` at version 2.0.0 is not in this build: its instances are kept as written and skipped when drawing, never drawn with another version","pack":"acme/shelf","version":"2.0.0"}]
+  no error unknown_kind of the room upgraded to acme/shelf@2.0.0 (fixtures/packs/shelf-2.0.0-removed) names b1 in its ids and its fix: []
+  no error unknown_kind of the room upgraded to acme/shelf@2.0.0 (fixtures/packs/shelf-2.0.0-removed) names b2 in its ids and its fix: []
+  no error unknown_kind of the room upgraded to acme/shelf@2.0.0 (fixtures/packs/shelf-2.0.0-removed) names b3 in its ids and its fix: []: expected [ …(6) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "acme/shelf@2.0.0 (fixtures/packs/shelf-2.0.0-dropped) is installed at its pack check: it ships no shelf.bookcase@2 and lists it under neither moved nor removed, so it must be refused, naming shelf.bookcase@2",
++   "acme/shelf@2.0.0 (fixtures/packs/shelf-2.0.0-removed) is refused, not installed: [{\"check\":\"document.validate\",\"code\":\"unknown_field\",\"severity\":\"error\",\"ids\":[],\"path\":\"removed\",\"actual\":{\"shelf.bookcase@2\":\"superseded\"},\"what\":\"not a field of a pack in this slice\",\"fix\":\"Remove the field, or require the kind's minor that defines it.\"}]",
++   "the room upgraded to acme/shelf@2.0.0 (fixtures/packs/shelf-2.0.0-removed) is presented, not refused: []; notices [{\"code\":\"pack_missing\",\"severity\":\"notice\",\"ids\":[\"b1\",\"b2\",\"b3\"],\"path\":\"packs/0\",\"actual\":{\"pack\":\"acme/shelf\",\"version\":\"2.0.0\"},\"what\":\"pack `acme/shelf` at version 2.0.0 is not in this build: its instances are kept as written and skipped when drawing, never drawn with another version\",\"pack\":\"acme/shelf\",\"version\":\"2.0.0\"}]",
++   "no error unknown_kind of the room upgraded to acme/shelf@2.0.0 (fixtures/packs/shelf-2.0.0-removed) names b1 in its ids and its fix: []",
++   "no error unknown_kind of the room upgraded to acme/shelf@2.0.0 (fixtures/packs/shelf-2.0.0-removed) names b2 in its ids and its fix: []",
++   "no error unknown_kind of the room upgraded to acme/shelf@2.0.0 (fixtures/packs/shelf-2.0.0-removed) names b3 in its ids and its fix: []",
++ ]
+
+ ❯ none helpers.ts:61:60
+     59| /** No failures; the message lists them. */
+     60| export function none(failures: readonly string[], what: string): void {
+     61|   expect(failures, `${what}:\n  ${failures.join('\n  ')}`).toEqual([]);
+       |                                                            ^
+     62| }
+     63|
+ ❯ removed.test.ts:85:3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/6]⎯
+
+
+ Test Files  4 failed (4)
+      Tests  6 failed (6)
+   Start at  16:58:13
+   Duration  62.04s (tests 98%, import 1%, transform 1%)
+
+exit 1

@@ -1,0 +1,119 @@
+The #2240 suite's one run at the base commit 9d0256132543, from base-run.log: each test's failing assertion, without stack frames, code frames or diffs. 14 tests, 14 failing.
+
+The log's first lines:
+scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `npx vitest run --root tests/acceptance/2240 --testTimeout=3600000 --no-file-parallelism --reporter=verbose` runs unleased
+ RUN  v5.0.5 tests/acceptance/2240
+
+Why the base fails, by kind of failure:
+  A. Unknown field (tests 1, 4, 8, 9, 11, 13, 14). The base's reader has no `centre_of_mass` on a body: document.validate
+     answers `unknown_field` at bodies/<ID>/centre_of_mass and lists the body's fields. So a world that writes the field
+     isn't baked (1, 4, 11, 13, 14), a dynamic body that writes it isn't taken at check (8, 9), and the refusal of
+     (0, 3, 0) names the body's fields, not the box's bounds (9). In 14 the 13 worlds with no field do match the merge
+     base, which is the base itself; the test fails at its own check that the 33° world with the field runs otherwise.
+  B. No such fixture (tests 2, 5). The base's behavior kit holds none of box_slope_20, box_slope_33, box_slope_33_centre,
+     box_slope_45_centre, bar_period and bar_period_centre, in its data or in its report on rapier3d.
+  C. Unknown planted name (tests 3, 6, 7, 10, 12). The base knows none of centre_of_mass_ignored,
+     centre_of_mass_parallel_axis, check_accepts_centre_outside and pose_reads_centre_of_mass: `deep-physics --planted
+     <name>` exits 2 with {"ok":false,"code":"bad_input"}.
+
+[1/14] kind A
+ac1-box-on-slope.test.ts > #2240.b395689a a tall box tips where its weight is: at 26.57° with no centre_of_mass, at 63.43° with it 0.25 m above its base > #2240.b395689a with no centre_of_mass the box turns less than 1° in 3 s on the 20° slope and past 45° on the 33° slope; with centre_of_mass (0, −0.75, 0) it turns less than 1° on the 33° slope and on the 45° slope
+stdout:
+the box on the 20° slope with no centre_of_mass turns 0.002965° at most, at step 33
+the box on the 33° slope with no centre_of_mass turns 90.26° at most, at step 166
+AssertionError: the box's turn on each slope:
+  box: on the 33° slope with centre_of_mass (0, −0.75, 0) its world isn't baked: {"ok":false,"issues":[{"check":"document.validate","code":"unknown_field","severity":"error","ids":["box"],"path":"bodies/box/centre_of_mass","actual":[0,-0.75,0],"t":null,"what":"bodies/box/centre_of_mass is not a field here; the fields are kind, shapes, pose, velocity, mass, inertia, damping, gravity_scale, ccd, sleep, locks, follow, active, anchors, priority, character, vehicle","fix":"Remove the field, or require the kind's minor that defines it."}]}
+  box: on the 45° slope with centre_of_mass (0, −0.75, 0) its world isn't baked: {"ok":false,"issues":[{"check":"document.validate","code":"unknown_field","severity":"error","ids":["box"],"path":"bodies/box/centre_of_mass","actual":[0,-0.75,0],"t":null,"what":"bodies/box/centre_of_mass is not a field here; the fields are kind, shapes, pose, velocity, mass, inertia, damping, gravity_scale, ccd, sleep, locks, follow, active, anchors, priority, character, vehicle","fix":"Remove the field, or require the kind's minor that defines it."}]}: expected [ …(2) ] to deeply equal []
+
+[2/14] kind B
+ac1-box-on-slope.test.ts > #2240.b395689a a tall box tips where its weight is: at 26.57° with no centre_of_mass, at 63.43° with it 0.25 m above its base > #2240.b395689a the fixture's four runs are in the behavior kit's data once each, and the reference backend passes them
+AssertionError: the box on a slope in the kit's data and on the reference backend:
+  box_slope_20: the kit's data holds it 0 times, not once
+  box_slope_20: the kit's report on rapier3d holds it 0 times, not once
+  box_slope_33: the kit's data holds it 0 times, not once
+  box_slope_33: the kit's report on rapier3d holds it 0 times, not once
+  box_slope_33_centre: the kit's data holds it 0 times, not once
+  box_slope_33_centre: the kit's report on rapier3d holds it 0 times, not once
+  box_slope_45_centre: the kit's data holds it 0 times, not once
+  box_slope_45_centre: the kit's report on rapier3d holds it 0 times, not once: expected [ …(8) ] to deeply equal []
+
+[3/14] kind C
+ac1-box-on-slope.test.ts > #2240.b395689a a tall box tips where its weight is: at 26.57° with no centre_of_mass, at 63.43° with it 0.25 m above its base > #2240.b395689a (twin: centre_of_mass_ignored) a wrapper that reads the field and leaves the weight where the shapes put it topples on the 33° slope and fails, naming the body and the angle it turned
+AssertionError: deep-physics --planted centre_of_mass_ignored exits 0; stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+[4/14] kind A
+ac2-bar-period.test.ts > #2240.07b0552b a hinged bar swings slower with its weight lower: 1.641 s with no centre_of_mass, 1.865 s with it 0.75 m from the hinge > #2240.07b0552b the bar swings with a period of 1.641 s within 1%, and with centre_of_mass 0.75 m from the hinge along the bar 1.865 s within 1%
+stdout:
+the bar with no centre_of_mass swings between -9.99841° and 10° with a period of 1.6413932968186837 s; the worked answer is 1.64107 s
+AssertionError: the bar's two periods beside their answers:
+  bar: the bar with centre_of_mass 0.75 m from the hinge isn't baked: {"ok":false,"issues":[{"check":"document.validate","code":"unknown_field","severity":"error","ids":["bar"],"path":"bodies/bar/centre_of_mass","actual":[0,-0.25,0],"t":null,"what":"bodies/bar/centre_of_mass is not a field here; the fields are kind, shapes, pose, velocity, mass, inertia, damping, gravity_scale, ccd, sleep, locks, follow, active, anchors, priority, character, vehicle","fix":"Remove the field, or require the kind's minor that defines it."}]}: expected [ Array(1) ] to deeply equal []
+
+[5/14] kind B
+ac2-bar-period.test.ts > #2240.07b0552b a hinged bar swings slower with its weight lower: 1.641 s with no centre_of_mass, 1.865 s with it 0.75 m from the hinge > #2240.07b0552b the two bars are in the behavior kit's data once each, and the reference backend passes them
+AssertionError: the bar in the kit's data and on the reference backend:
+  bar_period: the kit's data holds it 0 times, not once
+  bar_period: the kit's report on rapier3d holds it 0 times, not once
+  bar_period_centre: the kit's data holds it 0 times, not once
+  bar_period_centre: the kit's report on rapier3d holds it 0 times, not once: expected [ …(4) ] to deeply equal []
+
+[6/14] kind C
+ac2-bar-period.test.ts > #2240.07b0552b a hinged bar swings slower with its weight lower: 1.641 s with no centre_of_mass, 1.865 s with it 0.75 m from the hinge > #2240.07b0552b (twin: centre_of_mass_ignored) a wrapper that ignores the field reads 1.641 s and fails, naming the fixture, the answer and what it read
+AssertionError: deep-physics --planted centre_of_mass_ignored exits 0; stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+[7/14] kind C
+ac2-bar-period.test.ts > #2240.07b0552b a hinged bar swings slower with its weight lower: 1.641 s with no centre_of_mass, 1.865 s with it 0.75 m from the hinge > #2240.07b0552b (twin: centre_of_mass_parallel_axis) a wrapper that also adds a parallel-axis term to the shapes' inertia reads 1.953 s and fails, naming the fixture, the answer and what it read
+AssertionError: deep-physics --planted centre_of_mass_parallel_axis exits 0; stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+[8/14] kind A
+ac3-refusals.test.ts > #2240.cb44a798 centre_of_mass is a dynamic body's: another kind's is refused at check, and so is a point outside the body's shapes > #2240.cb44a798 centre_of_mass on a static body, on a kinematic body and on a character body is each refused at check, naming the field, where the same body without it and a dynamic body with it are taken
+AssertionError: the three refusals by kind:
+  centre_of_mass [0,-0.75,0] on a dynamic body of the static body's shape isn't taken at check: {"check":"document.validate","code":"unknown_field","severity":"error","ids":["box"],"path":"bodies/box/centre_of_mass","actual":[0,-0.75,0],"t":null,"what":"bodies/box/centre_of_mass is not a field here; the fields are kind, shapes, pose, velocity, mass, inertia, damping, gravity_scale, ccd, sleep, locks, follow, active, anchors, priority, character, vehicle","fix":"Remove the field, or require the kind's minor that defines it."}
+  centre_of_mass [0,-0.75,0] on a dynamic body of the kinematic body's shape isn't taken at check: {"check":"document.validate","code":"unknown_field","severity":"error","ids":["box"],"path":"bodies/box/centre_of_mass","actual":[0,-0.75,0],"t":null,"what":"bodies/box/centre_of_mass is not a field here; the fields are kind, shapes, pose, velocity, mass, inertia, damping, gravity_scale, ccd, sleep, locks, follow, active, anchors, priority, character, vehicle","fix":"Remove the field, or require the kind's minor that defines it."}
+  centre_of_mass [0,-0.25,0] on a dynamic body of the character body's shape isn't taken at check: {"check":"document.validate","code":"unknown_field","severity":"error","ids":["box"],"path":"bodies/box/centre_of_mass","actual":[0,-0.25,0],"t":null,"what":"bodies/box/centre_of_mass is not a field here; the fields are kind, shapes, pose, velocity, mass, inertia, damping, gravity_scale, ccd, sleep, locks, follow, active, anchors, priority, character, vehicle","fix":"Remove the field, or require the kind's minor that defines it."}: expected [ …(3) ] to deeply equal []
+
+[9/14] kind A
+ac3-refusals.test.ts > #2240.cb44a798 centre_of_mass is a dynamic body's: another kind's is refused at check, and so is a point outside the body's shapes > #2240.cb44a798 the point (0, 3, 0) on the 2 m box is refused at check, naming the field and the box's bounds, where the point (0, −0.75, 0) is taken
+stdout:
+the point (0, 3, 0) on the 2 m box: [{"check":"document.validate","code":"unknown_field","severity":"error","ids":["box"],"path":"bodies/box/centre_of_mass","actual":[0,3,0],"t":null,"what":"bodies/box/centre_of_mass is not a field here; the fields are kind, shapes, pose, velocity, mass, inertia, damping, gravity_scale, ccd, sleep, locks, follow, active, anchors, priority, character, vehicle","fix":"Remove the field, or require the kind's minor that defines it."}]
+AssertionError: the refusal of a point outside the box:
+  bodies/box/centre_of_mass: the point (0, 3, 0) on the 2 m box is refused, but no issue's sentence names the box's bounds (-0.5, 0.5, -1, 1): [{"check":"document.validate","code":"unknown_field","severity":"error","ids":["box"],"path":"bodies/box/centre_of_mass","actual":[0,3,0],"t":null,"what":"bodies/box/centre_of_mass is not a field here; the fields are kind, shapes, pose, velocity, mass, inertia, damping, gravity_scale, ccd, sleep, locks, follow, active, anchors, priority, character, vehicle","fix":"Remove the field, or require the kind's minor that defines it."}]
+  the point (0, −0.75, 0) on the 2 m box isn't taken at check: {"check":"document.validate","code":"unknown_field","severity":"error","ids":["box"],"path":"bodies/box/centre_of_mass","actual":[0,-0.75,0],"t":null,"what":"bodies/box/centre_of_mass is not a field here; the fields are kind, shapes, pose, velocity, mass, inertia, damping, gravity_scale, ccd, sleep, locks, follow, active, anchors, priority, character, vehicle","fix":"Remove the field, or require the kind's minor that defines it."}: expected [ …(2) ] to deeply equal []
+
+[10/14] kind C
+ac3-refusals.test.ts > #2240.cb44a798 centre_of_mass is a dynamic body's: another kind's is refused at check, and so is a point outside the body's shapes > #2240.cb44a798 (twin: check_accepts_centre_outside) a check that accepts the point (0, 3, 0) builds the body and fails, naming the field
+AssertionError: deep-physics --planted check_accepts_centre_outside exits 0; stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+[11/14] kind A
+ac4-pose-origin.test.ts > #2240.c9639f9f a pose output reads the body's own origin, with centre_of_mass written or not > #2240.c9639f9f the box at rest on level ground reads the same pose position with and without centre_of_mass, within 1 mm
+AssertionError: the box at rest with centre_of_mass (0, −0.75, 0) is baked, not refused: {"ok":false,"issues":[{"check":"document.validate","code":"unknown_field","severity":"error","ids":["box"],"path":"bodies/box/centre_of_mass","actual":[0,-0.75,0],"t":null,"what":"bodies/box/centre_of_mass is not a field here; the fields are kind, shapes, pose, velocity, mass, inertia, damping, gravity_scale, ccd, sleep, locks, follow, active, anchors, priority, character, vehicle","fix":"Remove the field, or require the kind's minor that defines it."}]}: expected false to be true // Object.is equality
+
+[12/14] kind C
+ac4-pose-origin.test.ts > #2240.c9639f9f a pose output reads the body's own origin, with centre_of_mass written or not > #2240.c9639f9f (twin: pose_reads_centre_of_mass) an output that reads the centre of mass reads a position 0.75 m lower and fails, naming the output
+AssertionError: deep-physics --planted pose_reads_centre_of_mass exits 0; stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+[13/14] kind A
+ac5-seek-and-merge-base.test.ts > #2240.e07f41f3 seeking equals playing with a centre_of_mass written, and worlds without one run as they did on the merge base > #2240.e07f41f3 the 45° world sought to 1.5 s and played on gives the same step hashes as a straight run
+AssertionError: the 45° world's straight run answers ok: {"ok":false,"issues":[{"check":"document.validate","code":"unknown_field","severity":"error","ids":["box"],"path":"bodies/box/centre_of_mass","actual":[0,-0.75,0],"t":null,"what":"bodies/box/centre_of_mass is not a field here; the fields are kind, shapes, pose, velocity, mass, inertia, damping, gravity_scale, ccd, sleep, locks, follow, active, anchors, priority, character, vehicle","fix":"Remove the field, or require the kind's minor that defines it."}]}: expected false to be true // Object.is equality
+
+[14/14] kind A
+ac5-seek-and-merge-base.test.ts > #2240.e07f41f3 seeking equals playing with a centre_of_mass written, and worlds without one run as they did on the merge base > #2240.e07f41f3 every world with no centre_of_mass gives step hashes byte-identical to the merge base's
+stdout:
+13 worlds with no centre_of_mass, 4573 step hashes here: each the same string as on the merge base 9d0256132543
+AssertionError: the box on the 33° slope with centre_of_mass (0, −0.75, 0) answers ok: {"ok":false,"issues":[{"check":"document.validate","code":"unknown_field","severity":"error","ids":["box"],"path":"bodies/box/centre_of_mass","actual":[0,-0.75,0],"t":null,"what":"bodies/box/centre_of_mass is not a field here; the fields are kind, shapes, pose, velocity, mass, inertia, damping, gravity_scale, ccd, sleep, locks, follow, active, anchors, priority, character, vehicle","fix":"Remove the field, or require the kind's minor that defines it."}]}: expected false to be true // Object.is equality
+
+Totals:
+ Test Files  5 failed (5)
+      Tests  14 failed (14)
+   Start at  23:52:55
+   Duration  169.44s (tests 100%)
+exit: 1
+
+Note on the log: its stack frames put ac1's test bodies at lines 124 to 134 and ac2's at lines 132 to 146, but
+ac1-box-on-slope.test.ts now ends at line 105 and ac2-bar-period.test.ts at line 114. Both files were shortened after
+this run. The frames for ac3, ac4, ac5 and helpers.ts match the files as they stand. The titles above are the files'
+titles as they stand and the messages have their wording, but the suite was not run again after that change.

@@ -8,7 +8,7 @@ import { availableParallelism, tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { claimPair, isBay } from './bays.mjs';
-import { binaryNames, buildBinaries } from './proof-binaries.mjs';
+import { buildBinaries, placeHubBinaries, selectBinaries } from './proof-binaries.mjs';
 import { acquire, release } from './throttle.mjs';
 import { addedLines, git, isTestFile, listFiles, named, outsideTests, RUNNER_CONFIG, show, spans, tagsIn, tagsWithImports, TEST_DATA, testImports, testPattern, underTestPaths } from './proof-change.mjs';
 
@@ -168,6 +168,36 @@ function prepare(root, change, directory) {
 }
 
 const workspaces = (directory) => existsSync(join(directory, 'package.json')) && Boolean(JSON.parse(readFileSync(join(directory, 'package.json'), 'utf8')).workspaces);
+
+/**
+ * The workspace packages a mutant of `paths` reaches through a build (#1120): the packages holding them and every
+ * package that depends on one of those, directly or through others, read from the reverse workspace graph of the
+ * packages/* folders in `directory`. A dependent comes after what it depends on, as its build reads their output.
+ */
+function mutantScope(directory, paths) {
+  const folders = readdirSync(join(directory, 'packages')).filter((folder) => existsSync(join(directory, 'packages', folder, 'package.json')));
+  const manifests = new Map(folders.map((folder) => [folder, JSON.parse(readFileSync(join(directory, 'packages', folder, 'package.json'), 'utf8'))]));
+  const folderOf = new Map([...manifests].map(([folder, { name }]) => [name, folder]));
+  const needs = new Map([...manifests].map(([folder, manifest]) => [folder, new Set(['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies'].flatMap((field) => Object.keys(manifest[field] ?? {})).map((name) => folderOf.get(name)).filter((other) => other && other !== folder))]));
+  const scope = new Set(paths.map((path) => path.split('/')[1]).filter((folder) => manifests.has(folder)));
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const [folder, wants] of needs) {
+      if (scope.has(folder) || ![...wants].some((other) => scope.has(other))) continue;
+      scope.add(folder);
+      grew = true;
+    }
+  }
+  const ordered = [], seen = new Set();
+  const visit = (folder) => {
+    if (seen.has(folder)) return; // also ends a cycle in the graph
+    seen.add(folder);
+    for (const other of needs.get(folder)) if (scope.has(other)) visit(other);
+    ordered.push(folder);
+  };
+  for (const folder of [...scope].sort()) visit(folder);
+  return ordered;
+}
 
 /**
  * The change in a prepared copy: its directory, where its packages are installed, and why it can't
@@ -413,19 +443,31 @@ function runVitest(directory, files, env) {
  * fileErrors holds files that failed outside every test, unrunnable those whose runner couldn't run.
  */
 function runTests(directory, files, { env = {}, timed = [] } = {}) {
+  let bin, target, hub;
   try {
-    // A bay can be replaced by a twin later in this proof: every use snapshots its own build outside the bay.
-    const bin = buildBinaries(directory, join(temporary('deep-proof-binaries-'), 'bin'), binaryNames(directory, [...files]), (command, args, options) => spawnIn(directory, command, args, options));
+    // A bay can be replaced by a twin later in this proof: every use snapshots its own build outside the bay. A test
+    // that can start the copy's hub gets this side's hub binaries in the copy's target/, where that hub looks (#2817).
+    let names;
+    ({ bin: names, target, hub } = selectBinaries(directory, [...files]));
+    bin = buildBinaries(directory, join(temporary('deep-proof-binaries-'), 'bin'), [...new Set([...names, ...target])], (command, args, options) => spawnIn(directory, command, args, options), { timeout: 0 });
     env = { ...env, DEEP_BIN_DIR: bin };
   } catch (error) {
     return { results: new Map(), fileErrors: new Map(), unrunnable: new Map(files.map((file) => [file, error.message])) };
   }
   // A runner given no file runs every test it finds, so each starts only with files of its own. Each node file runs
   // alone under its own TIMEOUT, so a file stopped at the cap, or whose run wrote no report, blocks only itself (#2813).
-  const run = (some) => {
-    const vitestFiles = some.filter((file) => file.endsWith('.ts'));
-    return [...some.filter((file) => !file.endsWith('.ts')).map((file) => runNode(directory, [file], env)), ...(vitestFiles.length ? [runVitest(directory, vitestFiles, env)] : [])];
-  };
+  // Tests that name neither the hub's nor the CLI's package run first, with no hub binary in the copy; then the hub's
+  // tests, with them (#2817).
+  const run = (some) => [some.filter((file) => !hub.includes(file)), some.filter((file) => hub.includes(file))].flatMap((own, withHub) => {
+    if (!own.length) return [];
+    try {
+      placeHubBinaries(directory, bin, withHub ? target : []);
+    } catch (error) {
+      return [{ results: new Map(), fileErrors: new Map(), unrunnable: new Map(own.map((file) => [file, `BLOCKED test binaries: ${error.message}`])) }];
+    }
+    const vitestFiles = own.filter((file) => file.endsWith('.ts'));
+    return [...own.filter((file) => !file.endsWith('.ts')).map((file) => runNode(directory, [file], env)), ...(vitestFiles.length ? [runVitest(directory, vitestFiles, env)] : [])];
+  });
   const parts = run(files.filter((file) => !timed.includes(file)));
   // The timed set spawns only once it holds timed, so a wait for the grant never eats into its runner's TIMEOUT.
   const timedFiles = files.filter((file) => timed.includes(file));
@@ -794,6 +836,7 @@ export function mutation({ root, change }, runs, say, print) {
       say('BLOCKED', 'mutation', `${outside.map(({ path }) => path).join(', ')}: links out of the checkout or to nothing, so the lines added there were not mutated`, MUTATION_FIX);
       return kills;
     }
+    const scope = workspaces(directory) ? mutantScope(directory, typescript.map(({ path }) => path)) : [];
     // A test alone: each runner matches a pattern against its full name, its suites' names and its
     // own joined by a space for node --test and by " > " for vitest.
     // A test alone kills a mutant only by failing at an assertion, judged from its runner's report: a
@@ -807,16 +850,41 @@ export function mutation({ root, change }, runs, say, print) {
         vitest.length && [...test ? ['DEEP_PROOF_VITEST_REPORT="$R"'] : [], quote(process.execPath), 'node_modules/vitest/vitest.mjs', 'run', ...test ? [`--reporter=${quote(VITEST_REPORTER)}`, '-t', pattern(' > ')] : [], ...vitest.map(quote)].join(' ') + (test ? judge : ''),
       ].filter(Boolean).map((run) => (test ? `R=$(mktemp ${quote(reports)}/report.XXXXXX) && { ${run}; }` : run));
       // Mutants reach a package that tests read through its build only once it is rebuilt, and the
-      // rebuild is undone as the first build was, keeping the mutants.
+      // rebuild is undone as the first build was, keeping the mutants. Only the mutated packages and
+      // their dependents are rebuilt: a package's build reads only what it declares it depends on (#1120).
       const undo = `import { undoBuild } from ${JSON.stringify(import.meta.url)}; undoBuild(${JSON.stringify(root)}, process.cwd(), ${JSON.stringify(typescript.map(({ path }) => path))}, ${JSON.stringify(runs.modules ?? root)});`;
-      return [...workspaces(directory) ? ['npm run build --workspaces --if-present >/dev/null', `${quote(process.execPath)} --input-type=module -e ${quote(undo)}`] : [], ...runs].join(' && ');
+      const builds = scope.map((folder) => `npm run build --if-present --workspace=${quote(`packages/${folder}`)} >/dev/null`);
+      return [...workspaces(directory) ? [...builds, `${quote(process.execPath)} --input-type=module -e ${quote(undo)}`] : [], ...runs].join(' && ');
     };
     const reports = temporary('deep-proof-report-');
-    const groups = unproven.map((test) => [test, command([test.path], test)]);
-    if (unproven.length < tests.length) groups.push([null, command([...new Set(tests.filter((test) => !unproven.includes(test)).map(({ path }) => path))])]);
+    const groups = unproven.map((test) => [test, [test.path]]);
+    const proven = [...new Set(tests.filter((test) => !unproven.includes(test)).map(({ path }) => path))];
+    // A test that can start the copy's hub runs it from the copy's own target/, which a fresh copy lacks and a bay
+    // keeps from an earlier use, a twin's, say: each StrykerJS run gets this copy's own hub binaries, or none (#2835).
+    let hub, bin;
+    try {
+      // The proven tests run together, but those that start the hub apart from those that name neither package, so
+      // these never find the hub's binaries.
+      const starts = proven.length ? selectBinaries(directory, proven).hub : [];
+      for (const files of [proven.filter((path) => !starts.includes(path)), proven.filter((path) => starts.includes(path))]) if (files.length) groups.push([null, files]);
+      hub = groups.map(([, files]) => selectBinaries(directory, files).target);
+      bin = buildBinaries(directory, join(temporary('deep-proof-binaries-'), 'bin'), [...new Set(hub.flat())], (command, args, options) => spawnIn(directory, command, args, options), { timeout: 0 });
+    } catch (error) {
+      // buildBinaries and selectBinaries name their verdict first: `BLOCKED test binaries: …`, `INCONCLUSIVE no grant: …`.
+      const [, level, why] = /^(BLOCKED|INCONCLUSIVE) (.*)$/s.exec(error.message) ?? [, 'BLOCKED', error.message];
+      say(level, 'mutation', `cannot build the hub's binaries for the mutants' copy, so the lines added to ${typescript.map(({ path }) => path).join(', ')} were not mutated: ${why}`, MUTATION_FIX);
+      return kills;
+    }
     const killed = new Set(), seen = new Map();
-    for (const [test, line] of groups) {
-      const run = strykerRun(root, directory, mutate, line);
+    for (const [index, [test, files]] of groups.entries()) {
+      try {
+        placeHubBinaries(directory, bin, hub[index]);
+      } catch (error) {
+        blocked = true;
+        say('BLOCKED', 'mutation', `cannot put the hub's binaries in the mutants' copy for ${test ? test.key : 'the tagged tests'}: ${error.message}`, MUTATION_FIX);
+        break;
+      }
+      const run = strykerRun(root, directory, mutate, command(files, test));
       if (run.error) {
         blocked = true;
         say('BLOCKED', 'mutation', `StrykerJS could not run ${test ? test.key : 'the tagged tests'}: ${run.error}`, MUTATION_FIX);

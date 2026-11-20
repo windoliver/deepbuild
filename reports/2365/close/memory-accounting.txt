@@ -1,0 +1,64 @@
+One pass over the issue's 100 MB transcript after it gained 1 MB, in a fresh process, by a copy of
+tests/acceptance/2365/probe/pass.mjs that also prints the process's lifetime maximum before the pass and samples the
+resident size every millisecond. A diagnostic, not the acceptance probe. Tree 2710afd87, load about 300 on 18 cores.
+
+The probe takes the pass's start from the resident size now and, when the pass raised the lifetime maximum, its peak
+from that maximum. On Node 24.22.0 the two counters agree. On 24.22.2 a process that has finished loading reads 31 to
+38 MB under its own lifetime maximum (an idle `node -e 0` reads 14.7 MB resident, 46.1 MB maximum), so the probe's
+rise is the pass's own plus that difference.
+
+Node 24.22.2 (Homebrew, the login shell's), run 1: 1068 ms
+  resident at the pass's start 28.8 MB; lifetime maximum before the pass 67.2 MB
+  highest sample during the pass 57.1 MB; lifetime maximum after 97.9 MB
+  the probe's rise (lifetime maximum after, less resident at start): 69.0 MB
+  by samples alone: 28.3 MB; by the lifetime maximum alone: 30.7 MB
+
+Node 24.22.2, run 2: 783 ms
+  resident at the pass's start 28.9 MB; lifetime maximum before the pass 67.4 MB
+  highest sample during the pass 56.6 MB; lifetime maximum after 97.4 MB
+  the probe's rise (lifetime maximum after, less resident at start): 68.4 MB
+  by samples alone: 27.7 MB; by the lifetime maximum alone: 30.0 MB
+
+Node 24.22.0 (the repo's .node-version), run 1: 859 ms
+  resident at the pass's start 72.5 MB; lifetime maximum before the pass 72.5 MB
+  highest sample during the pass 102.2 MB; lifetime maximum after 102.3 MB
+  the probe's rise (lifetime maximum after, less resident at start): 29.8 MB
+  by samples alone: 29.7 MB; by the lifetime maximum alone: 29.8 MB
+
+Node 24.22.0, run 2: 764 ms
+  resident at the pass's start 72.4 MB; lifetime maximum before the pass 72.5 MB
+  highest sample during the pass 103.2 MB; lifetime maximum after 103.3 MB
+  the probe's rise (lifetime maximum after, less resident at start): 30.8 MB
+  by samples alone: 30.8 MB; by the lifetime maximum alone: 30.8 MB
+
+Node 24.22.2, run 1, as the pass ran:
+    t=   75 ms  resident  31.2  lifetime maximum  69.7
+    t=  135 ms  resident  34.9  lifetime maximum  73.1
+    t=  152 ms  resident  38.3  lifetime maximum  77.2
+    t=  163 ms  resident  38.8  lifetime maximum  78.4
+    t=  176 ms  resident  39.9  lifetime maximum  80.1
+    t=  244 ms  resident  41.4  lifetime maximum  81.8
+    t=  257 ms  resident  41.8  lifetime maximum  82.3
+    t=  305 ms  resident  42.2  lifetime maximum  82.7
+    t=  318 ms  resident  42.9  lifetime maximum  83.4
+    t=  380 ms  resident  43.0  lifetime maximum  83.5
+    t=  406 ms  resident  48.4  lifetime maximum  88.7
+    t=  493 ms  resident  50.2  lifetime maximum  90.7
+    t=  557 ms  resident  50.6  lifetime maximum  91.0
+    t=  923 ms  resident  52.7  lifetime maximum  93.1
+    t=  935 ms  resident  54.4  lifetime maximum  94.9
+    t=  946 ms  resident  55.2  lifetime maximum  95.7
+    t=  960 ms  resident  56.3  lifetime maximum  96.9
+    t=  972 ms  resident  56.9  lifetime maximum  97.5
+    t=  986 ms  resident  52.6  lifetime maximum  97.6
+    t= 1012 ms  resident  53.5  lifetime maximum  97.6
+    t= 1037 ms  resident  56.5  lifetime maximum  97.6
+
+Tried and not kept: the worker cutting what a transcript gained a quarter part at a time (four parts for the megabyte,
+not one). Three runs a Node:
+  Node 24.22.2: resident at start 28.4 MB, lifetime maximum before 66.8 MB and after 94.9 MB; the probe's rise 66.5 MB; by samples 25.9 MB; by the maximum 28.1 MB
+  Node 24.22.0: resident at start 72.5 MB, lifetime maximum before 72.5 MB and after 100.8 MB; the probe's rise 28.3 MB; by samples 28.2 MB; by the maximum 28.3 MB
+  Node 24.22.2: resident at start 29.1 MB, lifetime maximum before 67.5 MB and after 95.7 MB; the probe's rise 66.6 MB; by samples 26.2 MB; by the maximum 28.2 MB
+  Node 24.22.0: resident at start 72.6 MB, lifetime maximum before 72.6 MB and after 100.5 MB; the probe's rise 27.9 MB; by samples 27.8 MB; by the maximum 27.9 MB
+  Node 24.22.2: resident at start 28.0 MB, lifetime maximum before 66.4 MB and after 94.0 MB; the probe's rise 66.0 MB; by samples 25.4 MB; by the maximum 27.5 MB
+  Node 24.22.0: resident at start 72.7 MB, lifetime maximum before 72.7 MB and after 99.4 MB; the probe's rise 26.7 MB; by samples 26.6 MB; by the maximum 26.7 MB

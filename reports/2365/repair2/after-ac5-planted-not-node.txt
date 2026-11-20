@@ -1,0 +1,51 @@
+$ PLANT=not-node PATH=repair-evidence/round2/planted-base:<node 24.22.0's bin>:$PATH NO_COLOR=1 node node_modules/vitest/vitest.mjs run --configLoader runner tests/acceptance/2365-redraft-ac5/suite.test.ts -t AC10
+node: v24.22.0 (<home>/.local/share/fnm/node-versions/v24.22.0/installation/bin/node)
+the planted merge base: see repair-evidence/round2/planted-base/git (PLANT=not-node)
+-----
+
+ RUN  v5.0.5 <home>/doneright-2365-repair
+
+ ❯ tests/acceptance/2365-redraft-ac5/suite.test.ts (12 tests | 1 failed | 11 skipped) 8976ms
+   ❯ AC5 #2365.c0521de3 for every transcript in #20's suite, the parts joined equal the merge base's one copy, and an unchanged transcript's second pass reads none of it (10)
+     ↓ AC5 #20 AC1 (copies.test.ts): Claude Code and Codex in moved homes, a new adapter in its default home
+     ↓ AC5 #20 AC2 (copies.test.ts): two Claude Code sessions, one grown before its first pass, and a Codex rollout
+     ↓ AC5 #20 AC3 (quiet.test.ts): a session captured hourly for three hours
+     ↓ AC5 #20 AC3 (quiet.test.ts): a session captured every hour for 28 hours
+     ↓ AC5 #20 AC4 (secrets.test.ts): a key pasted into a user message
+     ↓ AC5 #20 AC4 (secrets.test.ts): a key pasted first, the session grown after two passes
+     ↓ AC5 #20 AC5 (secrets.test.ts): a held value with no pattern pasted into a user message
+     ↓ AC5 #20 AC8 (readback.test.ts): a plain session, a keyed one and a Codex rollout; and the session whose copy the store bent, here unbent
+     ↓ AC5 #20 AC9 (retention.test.ts): a session with a deploy token, in Claude Code's default home
+     × AC5 #20 AC10 (growth.test.ts): a session archived at 10 lines and again at 50 8089ms
+   ↓ AC5 #2365.c0521de3 planted wrong archives fail the criterion's check, naming the session (2)
+     ↓ AC5 (wrong program) an archive that rereads each transcript on every pass reads all of an unchanged one: the check fails naming each session and the bytes it read
+     ↓ AC5 (wrong program) an archive that leaves the newline out of each part: its parts joined differ from the merge base's copy, and the check fails naming the session and the first line that differs
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2365-redraft-ac5/suite.test.ts > AC5 #2365.c0521de3 for every transcript in #20's suite, the parts joined equal the merge base's one copy, and an unchanged transcript's second pass reads none of it > AC5 #20 AC10 (growth.test.ts): a session archived at 10 lines and again at 50
+Error: BLOCKED: the merge base's build step `sh build-versions.sh` (@deepbuild/record, ed03dc60d51abe3d96cf61b766ecf92057a780eb) isn't a node script, so its build data can't be made in the export
+ ❯ buildData tests/acceptance/2365-redraft-ac5/base.ts:37:31
+     35|   for (const step of steps.slice(0, Math.max(0, steps.findIndex((s) =>…
+     36|     const [cmd, ...args] = step.split(/\s+/);
+     37|     if (cmd !== 'node') throw Error(`BLOCKED: the merge base's build s…
+       |                               ^
+     38|     const r = spawnSync(NODE, [...FROM_SOURCE, '--import', RESOLVE, ..…
+     39|     if (r.status !== 0) throw Error(`BLOCKED: the merge base's build s…
+ ❯ buildData tests/acceptance/2365-redraft-ac5/base.ts:33:32
+ ❯ buildData tests/acceptance/2365-redraft-ac5/base.ts:33:32
+ ❯ baseTree tests/acceptance/2365-redraft-ac5/base.ts:72:3
+ ❯ baseCopies tests/acceptance/2365-redraft-ac5/base.ts:82:24
+ ❯ runScenario tests/acceptance/2365-redraft-ac5/scenarios.ts:129:18
+ ❯ tests/acceptance/2365-redraft-ac5/suite.test.ts:18:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 11 skipped (12)
+   Start at  17:23:59
+   Duration  9.45s (tests 96%, transform 3%, import 1%)
+
+-----
+EXIT 1

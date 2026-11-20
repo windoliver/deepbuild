@@ -1,0 +1,17 @@
+{
+  "format": 1,
+  "id": "text-1484",
+  "profile": "figure",
+  "title": "Text at the size it's set",
+  "description": "The text fixture document of #1484's check run: a display title at 64 u and a text label at 14 u in the body role, at weights 400, 450 and 500, one row a weight, each row 140 u tall.",
+  "size": [640, 420],
+  "layers": { "main": { "writer": "agent-a", "title": "Main", "order": "a1" } },
+  "items": {
+    "title-400": { "id": "title-400", "kind": "text@1", "layer": "main", "name": "title-400", "order": "a0", "at": { "pos": [24, 12, 0] }, "params": { "text": "Hamburgefonts", "font": "body", "size": 64, "weight": 400, "paint": { "fill": { "role": "ink" } } } },
+    "label-400": { "id": "label-400", "kind": "text@1", "layer": "main", "name": "label-400", "order": "a1", "at": { "pos": [24, 104, 0] }, "params": { "text": "The quick brown fox jumps over the lazy dog", "font": "body", "size": 14, "weight": 400, "paint": { "fill": { "role": "ink" } } } },
+    "title-450": { "id": "title-450", "kind": "text@1", "layer": "main", "name": "title-450", "order": "a2", "at": { "pos": [24, 152, 0] }, "params": { "text": "Hamburgefonts", "font": "body", "size": 64, "weight": 450, "paint": { "fill": { "role": "ink" } } } },
+    "label-450": { "id": "label-450", "kind": "text@1", "layer": "main", "name": "label-450", "order": "a3", "at": { "pos": [24, 244, 0] }, "params": { "text": "The quick brown fox jumps over the lazy dog", "font": "body", "size": 14, "weight": 450, "paint": { "fill": { "role": "ink" } } } },
+    "title-500": { "id": "title-500", "kind": "text@1", "layer": "main", "name": "title-500", "order": "a4", "at": { "pos": [24, 292, 0] }, "params": { "text": "Hamburgefonts", "font": "body", "size": 64, "weight": 500, "paint": { "fill": { "role": "ink" } } } },
+    "label-500": { "id": "label-500", "kind": "text@1", "layer": "main", "name": "label-500", "order": "a5", "at": { "pos": [24, 384, 0] }, "params": { "text": "The quick brown fox jumps over the lazy dog", "font": "body", "size": 14, "weight": 500, "paint": { "fill": { "role": "ink" } } } }
+  }
+}

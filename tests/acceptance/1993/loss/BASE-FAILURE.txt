@@ -1,0 +1,44 @@
+Base 9550dc0f04d45844b5d7bb9ce74d89926c681724, on a Mac17,10 (Metal), heavily loaded by other sessions (one-minute
+load over 10 a core), with node_modules installed and the base's deep-gpu already built.
+
+Ran once each:
+
+  node node_modules/typescript/bin/tsc -p tests/acceptance/1993/loss/tsconfig.json
+    passes, no error (run again after the last edit to helpers.ts and loss.test.ts: passes).
+
+  CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1993/loss --no-file-parallelism --testTimeout=600000 loss.test.ts
+
+loss.test.ts: 1 test, FAILS at its own assertion (14 s), because the base doesn't carry a texture.
+  #1993.e693a7be the run that loses its device at step 900 has the unbroken run's state hash at step 1,800 and every
+  frame before the state is rebuilt reports settling; a planted restore that starts from the clear value (--planted
+  restore_starts_from_clear_value) differs at 1,800 and fails the hash line
+    loss.test.ts:54  AssertionError: unbroken, every frame holds water.height and water.rate at its own step; the
+      frames that don't: expected 'frame 0 (no carried water.height, no …' to be 'none'
+      Received: "frame 0 (no carried water.height, no carried water.rate); frame 1 (no carried water.height, no
+      carried water.rate); frame 2 (no carried water.height, no carried water.rate); frame 3 (no carried
+      water.height, no carried water.rate); … 1801 in all"
+  Before that line the base passes: the binary builds; the check accepts both operators (it reads past a texture
+  output's `carry`, a texture input's `step: previous` and `stepped.bound`; class same_machine); the unbroken play
+  answers frames 0 to 1,800. But a stepped operator that writes a texture doesn't run at the base, so no frame has a
+  `carried` row for water.height or water.rate: the 128 × 128 run has no state to lose.
+
+Not reached at the base, and not runnable there:
+  - Play 2 (the forced loss). `view3d` at the base reads past `lose_device_at`: a short play with it (4 frames,
+    `lose_device_at: 2`) answered all four frames, no `device_losses` on the reply (its keys: frames, passes, status,
+    surface, render_targets, layers) and no `settling` on a frame (a frame has `settled` and `samples.settling`).
+  - Play 3 (the planted restore). `deep-gpu run --planted restore_starts_from_clear_value` exits 2 with
+    {"ok":false,"code":"bad_input"}: no planted program has that name.
+  So the settling line, the hash line and the planted program's failure have not run against any program. What was
+  checked instead, in a scratch test file since deleted:
+  - The lines themselves (helpers.ts: orderProblems, behind, settlingProblems, stateAt, hashProblems) on made-up
+    frames and files: a play with frame 5 lost, frames 6 and 7 behind and settling and 8 on at their step gives no
+    problem; a behind frame that doesn't report settling and an at-step frame that does are each named; equal files
+    pass the hash line; a state of zeros fails it with "the state hash at step 10 differs from the unbroken run's:
+    water.height is <sha256> after the loss, <sha256> unbroken"; a frame that didn't read the state, or wasn't
+    drawn, fails it as having no hash.
+  - The base's `read` of the two textures on a captured frame: {"format": "r32float", "size": [128, 128], "file":
+    <sha256>, "class": "same_machine"}, the file `<sha256>.f32` holding 65,536 f32 words (RGBA; all 0, 0, 0, 1 at the
+    base, where the operator doesn't run). stateAt reads a cell's height from its texel's first lane.
+
+Not run: scripts/affected.mjs, preflight, any other suite. The test file was run once; it was not run again after the
+later edit to the lines below line 54 (the height's lane), which the base never reaches.

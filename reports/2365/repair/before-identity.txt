@@ -1,0 +1,38 @@
+
+ RUN  v5.0.5 <home>/doneright-2365-repair
+
+ ❯ tests/acceptance/2365/identity.test.ts (4 tests | 1 failed) 50675ms
+   ❯ #2365 AC5 the parts joined are byte-identical to the base's one copy, and an unchanged transcript is read no more (4)
+     ✓ #2365 AC5 #20's suite's transcripts: Claude Code, Codex and a new adapter's, grown, with a pasted key, a held value and non-ASCII text 535ms
+     ✓ #2365 AC5 #20's budget sessions (generate.ts): live ones gaining 12 lines a minute, and a heavy day's 5 MB ones at half and whole 13129ms
+     ✓ #2365 AC5 the perf tasks' transcripts (benchmarks/archive.mjs): live, month and backlog, with their passes 36522ms
+     × #2365 AC5 (planted re-reading archive) the read instrument sees a source read through fs/promises' readFile, a read stream and a FileHandle, so "reads none" can fail 230ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2365/identity.test.ts > #2365 AC5 the parts joined are byte-identical to the base's one copy, and an unchanged transcript is read no more > #2365 AC5 (planted re-reading archive) the read instrument sees a source read through fs/promises' readFile, a read stream and a FileHandle, so "reads none" can fail
+AssertionError: the check fails on an archive that reads unchanged sources, naming each: expected [Function] to throw error matching /reread 0[\s\S]*reread 1[\s\S]*reread 2/ but got '#2365 AC5 a second pass over unchange…'
+
+- Expected:
+/reread 0[\s\S]*reread 1[\s\S]*reread 2/
+
++ Received:
+"#2365 AC5 a second pass over unchanged transcripts reads none of them: expected [ …(3) ] to deeply equal []"
+
+ ❯ tests/acceptance/2365/identity.test.ts:199:128
+    197|       };
+    198|       const sources = ts.map((t, i) => ({ id: t.id, path: t.path, what…
+    199|       await expect(readsNone(w, rereading, sources), 'the check fails …
+       |                                                                                                                                ^
+    200|     } finally {
+    201|       await w.close();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 3 passed (4)
+   Start at  21:44:11
+   Duration  51.75s (tests 99%, transform 1%)
+
+EXIT 1

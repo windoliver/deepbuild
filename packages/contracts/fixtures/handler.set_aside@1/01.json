@@ -1,0 +1,16 @@
+{
+  "v": 1,
+  "id": "01K74FKZVK8Q2X5R7M3N9P4T6Y",
+  "kind": "handler.set_aside",
+  "writer": "core",
+  "actor": "you",
+  "scope": "you",
+  "ts": 1760013451123,
+  "data": {
+    "extension": "acme/slow-guard",
+    "hook": "tool.before",
+    "call": "toolu_01A2B3C4D5E6F7G8H9J0K1M3",
+    "failures": 3,
+    "last": "acme/slow-guard missed the hook's deadline of 500 ms"
+  }
+}

@@ -1,0 +1,46 @@
+#971's suite on the base, 16dc5eab0, run by the blind job in its own checkout (2026-11-17), before any implementation existed.
+Each test's line and its assertion; the suite's own BASE-FAILURE.txt was not written by the time of this change.
+
+     × AC3 #971.fc809ae0 under local {strength: 0.5}, with the walls moved to +2 and −2 stops, no pixel within 32 px of the edge passes its wall's own level by more than 0.05 stop 8460ms
+     × AC3 #971.fc809ae0 planted local_base_ignores_edges (the base blurred without regard to edges) overshoots the bright wall beside the edge and fails, naming the edge and the overshoot 31ms
+     × AC8 #971.ae60e422 budgets.json holds the task canvas-local-tone-map with the issue's numbers, compared with the merge base at the lane's margin, and passes the lane's validator 139ms
+     × AC8 #971.ae60e422 local {strength: 0.5} adds under 0.6 ms of GPU at 1920 × 1080, in five runs 3279ms
+     × AC8 #971.ae60e422 local {strength: 0.5} adds under 2 ms of GPU at 3840 × 2160, in five runs 554ms
+     × AC4 #971.0e27b835 at 64 sampled pixels of the coloured patches, with the luminance moved by local {strength: 0.5} divided out, OKLab hue differs by under 1° and chroma by under 1% from the render without local 2887ms
+     × AC9 #971.573c2449 the run writes the temple with and without local tone mapping and the two-wall edge fixture from the renderer's own output, and the recorded call on exactly those says they look right; with none the run is INCONCLUSIVE, never PASS 3519ms
+     × AC6 #971.a3ad5af8 with local {strength: 0.5} changing the frame, the 3840 × 2160 render downsampled 2 × 2 by box filter matches the 1920 × 1080 render within 0.02 in OKLab at 99% of pixels 5854ms
+     × AC6 #971.a3ad5af8 planted local_pyramid_fixed_levels (the pyramid's levels don't follow the output size) misses at 4K and fails, naming the share of pixels off 49ms
+     × AC5 #971.8fcd3c09 the frame at 12 s reached by a seek has the pixel hash of the one played to, and frames drawn alone have the hashes they have in the sequence 8981ms
+     × AC2 #971.5cd62ea3 with no tone curve and local {strength: 0.5}, the walls' mean log2 luminance 64 px or more from the edge is +2 and −2 stops within 0.1, and each checker's amplitude ±0.25 stop within 0.02 3559ms
+     × AC1 #971.09d7d9af the two walls: under none, filmic, agx and neutral, local {strength: 0, detail: 1} draws the pixel hash of the same scene without local, and local {strength: 0.5} draws another 4133ms
+     × AC1 #971.09d7d9af the coloured patches: under none, filmic, agx and neutral, local {strength: 0, detail: 1} draws the pixel hash of the same scene without local, and local {strength: 0.5} draws another 1160ms
+     × AC1 #971.09d7d9af the temple: under none, filmic, agx and neutral, local {strength: 0, detail: 1} draws the pixel hash of the same scene without local, and local {strength: 0.5} draws another 991ms
+     × AC1 #971.09d7d9af the film with a status mark: under none, filmic, agx and neutral, local {strength: 0, detail: 1} draws the pixel hash of the same scene without local, and local {strength: 0.5} draws another 1050ms
+     × AC7 #971.f19031be under none, filmic, agx and neutral, with local {strength: 1, detail: 2} changing the scene, the film's fail mark and legend draw the fail color exactly 3252ms
+⎯⎯⎯⎯⎯⎯ Failed Tests 16 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: the guard: a local off its identity changes the two walls's frame, so the look's local is read:
+AssertionError: the guard: a local off its identity changes the coloured patches's frame, so the look's local is read:
+AssertionError: the guard: a local off its identity changes the temple's frame, so the look's local is read:
+AssertionError: the guard: a local off its identity changes the film with a status mark's frame, so the look's local is read:
+AssertionError: local {strength: 0.5} moves the walls, so its frame is not the one drawn without local: expected '033e6183d0b20b29165a532ee633028ae95d5…' not to be '033e6183d0b20b29165a532ee633028ae95d5…' // Object.is equality
+AssertionError: the guard: local {strength: 0.5} moves the walls, so its frame is not the one drawn without local: expected '033e6183d0b20b29165a532ee633028ae95d5…' not to be '033e6183d0b20b29165a532ee633028ae95d5…' // Object.is equality
+AssertionError: deep-gpu run --planted local_base_ignores_edges exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+AssertionError: the guard: local {strength: 0.5} moves the patches' luminance, so its frame is not the one drawn without local: expected 'ace407b6bb85e6de96b5bbb081f8e8d24d4ba…' not to be 'ace407b6bb85e6de96b5bbb081f8e8d24d4ba…' // Object.is equality
+AssertionError: the guard: local {strength: 0.5} draws at 12 s, so its frame is not the one drawn without local: expected '21d06cae1f1d3dac0ae131102377a289231f2…' not to be '21d06cae1f1d3dac0ae131102377a289231f2…' // Object.is equality
+AssertionError: the guard: local {strength: 0.5} changes the 1080p frame by more than 0.02 in OKLab at more than 1% of pixels (it does at 0.00%), so two sizes that agree are not two frames left alone: expected 0 to be greater than 0.010000000000000009
+AssertionError: the guard: local {strength: 1, detail: 2} changes the scene, so status colors kept are not a frame left alone:
+AssertionError: budgets.json has the task canvas-local-tone-map: expected undefined to be defined
+AssertionError: the two sides draw different pixels, so the measure sees what it times: expected 'd5a7eb48c26c76ecc016efea4a9224ba570a8…' not to be 'd5a7eb48c26c76ecc016efea4a9224ba570a8…' // Object.is equality
+AssertionError: the two sides draw different pixels, so the measure sees what it times: expected 'da6cdce783faa8e0892910e1b70e6a125bad3…' not to be 'da6cdce783faa8e0892910e1b70e6a125bad3…' // Object.is equality
+AssertionError: the temple with local tone mapping is another picture than the temple without it: expected 'aa25aca3b9001bf75f2e0c288f5bb07eedf20…' not to be 'aa25aca3b9001bf75f2e0c288f5bb07eedf20…' // Object.is equality
+ Test Files  9 failed (9)
+      Tests  16 failed (16)
+
+ac6-sizes.test.ts, run again alone:
+     × AC6 #971.a3ad5af8 with local {strength: 0.5} changing the frame, the 3840 × 2160 render downsampled 2 × 2 by box filter matches the 1920 × 1080 render within 0.02 in OKLab at 99% of pixels 11512ms
+     × AC6 #971.a3ad5af8 planted local_pyramid_fixed_levels (the pyramid's levels don't follow the output size) misses at 4K and fails, naming the share of pixels off 52ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: the guard: local {strength: 0.5} changes the 1080p frame by more than 0.02 in OKLab at more than 1% of pixels (it does at 0.00%), so two sizes that agree are not two frames left alone: expected 0 to be greater than 0.010000000000000009
+AssertionError: deep-gpu run --planted local_pyramid_fixed_levels exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+ Test Files  1 failed (1)
+      Tests  2 failed (2)

@@ -1,0 +1,38 @@
+{
+  "checks": ["document.validate", "geometry.audit"],
+  "fixtures": ["test.paths/glow"],
+  "entries": [
+    {
+      "entry": "test.paths.glow@1", "registry": "kind@1", "module": "test.paths", "section": "Test glow",
+      "paths": {
+        "rays": {"answer": "same", "held_by": "test.paths/glow"},
+        "final": {"answer": "not_applicable", "why": "drawn after lighting, as in the real-time export"},
+        "web": {"answer": "refused", "code": "test.paths.no_web"}
+      }
+    },
+    {
+      "entry": "test.paths.halo@1", "registry": "kind@1", "module": "test.paths", "section": "Test halo",
+      "paths": {
+        "rays": {"answer": "refused", "code": "path_undefined", "task": "#2759"},
+        "final": {"answer": "refused", "code": "path_undefined", "task": "#2759"},
+        "web": {"answer": "stand_in", "draws": "nothing, the web player leaves the halo out", "receipt": "halo left out"}
+      }
+    },
+    {
+      "entry": "test.paths.mist@1", "registry": "kind@1", "module": "test.paths", "section": "Test mist",
+      "paths": {
+        "rays": {"answer": "refused", "code": "path_undefined", "task": "#2759"},
+        "final": {"answer": "refused", "code": "path_undefined", "task": "#2759"},
+        "web": {"answer": "refused", "code": "path_undefined", "task": "#2759"}
+      }
+    },
+    {
+      "entry": "test.paths.mist@1", "field": "depth", "registry": "kind@1", "module": "test.paths", "section": "Test mist: depth",
+      "paths": {
+        "rays": {"answer": "same", "held_by": "geometry.audit"},
+        "final": {"answer": "refused", "code": "path_undefined", "task": "#2761"},
+        "web": {"answer": "not_applicable", "why": "the web player draws no depth fog"}
+      }
+    }
+  ]
+}

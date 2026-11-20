@@ -1,0 +1,59 @@
+{
+  "name": "furniture",
+  "version": "2.0.0",
+  "license": "MIT",
+  "description": "A test pack of the #1962 acceptance suite, by an outside owner: the furniture pack's next major of its case, which renames shelves to tiers.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "marks2d": ">=0.0.0"
+    }
+  },
+  "recipes": {
+    "furniture.case@2": "furniture.case@2.json"
+  },
+  "kinds": {
+    "furniture.case@2": {
+      "minor": 0,
+      "recipe": "furniture.case@2",
+      "children": [],
+      "capabilities": {
+        "pickable": true,
+        "snap": false
+      },
+      "rules": [],
+      "twins": [],
+      "migrate": {
+        "1": {
+          "rename": {
+            "shelves": "tiers"
+          },
+          "set": {},
+          "drop": []
+        }
+      },
+      "examples": [],
+      "cost": {
+        "class": "figure",
+        "at_defaults": {
+          "cpu_ms": 0.5,
+          "gpu_ms": 0.2,
+          "items": 7
+        }
+      }
+    }
+  },
+  "corpus": {
+    "1": [
+      "707f2d89517cfaa5e5dca4c9706a91090f99b5147c94ae942fa16289e477c499"
+    ]
+  },
+  "assets": [
+    {
+      "path": "corpus/case-1.json",
+      "sha256": "707f2d89517cfaa5e5dca4c9706a91090f99b5147c94ae942fa16289e477c499",
+      "size": 2940,
+      "license": "MIT"
+    }
+  ]
+}

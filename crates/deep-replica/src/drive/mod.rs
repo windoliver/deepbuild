@@ -21,6 +21,7 @@ mod frames;
 pub mod glyphs;
 mod hubcopy;
 mod locate;
+mod memory;
 mod motion;
 mod plant;
 mod play;
@@ -96,6 +97,8 @@ pub struct Drive {
     plant: Option<Plant>,
     replica: Option<Replica>,
     launches: u64,
+    /// #1431: the planted memory the process holds.
+    memory: memory::Memory,
 }
 
 impl Drive {
@@ -105,13 +108,19 @@ impl Drive {
             plant,
             replica: None,
             launches: 0,
+            memory: memory::Memory::new(plant),
         }
     }
 
     /// One call's reply: `ok`, `t`, and the call's fields or its error.
     pub fn call(&mut self, call: &Value) -> Value {
         let name = call["call"].as_str().unwrap_or_default().to_owned();
+        self.memory.leak();
         let result = match (name.as_str(), self.replica.as_mut()) {
+            // #1431: the process's reading, with or without a replica.
+            ("footprint", _) => Ok(self.memory.footprint()),
+            #[cfg(feature = "env-plants")]
+            ("texture", _) => self.memory.texture(call),
             ("launch", Some(replica)) => Err(fail(
                 "refused",
                 format!(
@@ -125,6 +134,7 @@ impl Drive {
                 let out = self.out.join(format!("{}", self.launches));
                 Replica::launch(id, out, self.plant, &call["launch"]).map(|(replica, reply)| {
                     self.replica = Some(replica);
+                    self.memory.launched();
                     reply
                 })
             }
@@ -144,6 +154,7 @@ impl Drive {
         let t = self.replica.as_ref().map_or(0, |r| r.clock.t);
         if name == "close" && result.is_ok() {
             self.replica = None;
+            self.memory.closed();
         }
         match result {
             Ok(Value::Object(mut fields)) => {
@@ -297,7 +308,19 @@ impl Replica {
         let dirty = frames == "dirty";
         // #1482: which window, whether each drawn frame is read back, and whether accessibility is active: each needs the
         // mode that draws only the frames GPUI says the window needs.
-        let arm = word("arm", &["app", "blank", "lists"], "app")?;
+        let arm = word("arm", &["app", "blank", "lists", "picture"], "app")?;
+        // #1489: the picture the `picture` arm's image element shows, by its path.
+        let picture = match (&args["picture"], arm.as_str()) {
+            (Value::String(path), "picture") => Some(PathBuf::from(path)),
+            (Value::Null, "picture") => {
+                return Err(fail(
+                    "refused",
+                    "launch.arm \"picture\" names a picture by its path",
+                ))
+            }
+            (Value::Null, _) => None,
+            (_, _) => return Err(fail("refused", "launch.picture goes with arm \"picture\"")),
+        };
         let read_back = word("read_back", &["tiles", "off"], "tiles")?;
         let accessibility = match &args["accessibility"] {
             Value::Null => false,
@@ -343,7 +366,8 @@ impl Replica {
                 ))
             }
         };
-        // Nothing the app draws is localized yet, so every locale draws the same; the reply says which one ran.
+        // #2403: the locale stands for the system's preferred language: the app draws in the first table it has for it,
+        // English when it has none, and the reply says which ran.
         let locale = match &args["locale"] {
             Value::Null => "en-US".to_owned(),
             Value::String(tag)
@@ -437,6 +461,7 @@ impl Replica {
         };
         std::fs::create_dir_all(&out)
             .map_err(|e| fail("refused", format!("{}: {e}", out.display())))?;
+        deep_app::copy::show(deep_app::copy::choose([locale.as_str()]));
 
         // Your record is read once, before the replica exists; the connection closes when the reader drops.
         let mut hub = None;
@@ -548,6 +573,13 @@ impl Replica {
         deep_app::hub::set_local(Some(Arc::new(move |method, params| {
             taker.take(method, params)
         })));
+        // #1498: the app's canvas panel on a session's page, as the app makes it at launch, set before the window's first
+        // frame reads it: a replica launched after another in one process (ui_check's renders) would read the last one's.
+        let canvas = cx.update(|cx| {
+            let panel = cx.new(|_| deep_app::show::CanvasPanel::new(evidence));
+            deep_app::views::set_canvas(panel.clone());
+            panel
+        });
         let reduced = args["reduced_motion"].as_bool().unwrap_or(false);
         let window = cx.update(|cx| {
             gpui_kit::init(cx);
@@ -589,7 +621,16 @@ impl Replica {
                 ..crate::shell::window_options()
             };
             if arm != "app" {
-                return arms::open(&arm, options, plant == Some(Plant::WheelNotifiesEveryEvent), cx);
+                return arms::open(
+                    &arm,
+                    options,
+                    (
+                        plant == Some(Plant::WheelNotifiesEveryEvent),
+                        plant == Some(Plant::PictureFrameEachVsync),
+                    ),
+                    picture.clone(),
+                    cx,
+                );
             }
             // The window opens where the app opens, unless the launch names a page (#1461). A panel with no area goes in
             // the list's slot, as before; one registered to an area goes there; one replacing Needs you fills the list's
@@ -736,12 +777,6 @@ impl Replica {
         if let Some(setting) = NotificationSetting::parse(&notifications) {
             notifier.set_setting(setting, now);
         }
-        // #1498: the app's canvas panel on a session's page, as the app makes it at launch.
-        let canvas = cx.update(|cx| {
-            let panel = cx.new(|_| deep_app::show::CanvasPanel::new(evidence));
-            deep_app::views::set_canvas(panel.clone());
-            panel
-        });
         let mut replica = Replica {
             id,
             cx,
@@ -1075,8 +1110,12 @@ impl Replica {
         // In the dirty mode the window draws what the input changed at its next frame, as a real one does (#1546).
         let forced = self.dirty.is_none();
         // #1482's planted replica notifies the window's root with each pointer move it delivers.
-        if self.plant == Some(Plant::NotifiesRootPerMove) && matches!(event, PlatformInput::MouseMove(_)) {
-            let _ = self.cx.update_window(self.window, |root, _, cx| cx.notify(root.entity_id()));
+        if self.plant == Some(Plant::NotifiesRootPerMove)
+            && matches!(event, PlatformInput::MouseMove(_))
+        {
+            let _ = self
+                .cx
+                .update_window(self.window, |root, _, cx| cx.notify(root.entity_id()));
         }
         let mark = clocks::Mark::now();
         let _ = self.cx.update_window(self.window, |_, window, cx| {
@@ -1205,21 +1244,40 @@ impl Replica {
         // `events` wheel events of `dy` points each at the target's centre, one a frame (#1482): the list under the
         // centre takes them, whichever of its rows is there.
         if kind == "wheel" {
-            let (dy, events) = (act["dy"].as_f64().unwrap_or(0.) as f32, act["events"].as_u64().unwrap_or(1));
+            let (dy, events) = (
+                act["dy"].as_f64().unwrap_or(0.) as f32,
+                act["events"].as_u64().unwrap_or(1),
+            );
             let position = at(center);
             self.input_at(self.clock.t);
             if self.pointer.get() != position {
-                self.input(MouseMoveEvent { position, pressed_button: None, modifiers: Modifiers::default() }.to_platform_input());
+                self.input(
+                    MouseMoveEvent {
+                        position,
+                        pressed_button: None,
+                        modifiers: Modifiers::default(),
+                    }
+                    .to_platform_input(),
+                );
             }
             for _ in 0..events {
                 let delta = ScrollDelta::Pixels(point(px(0.), px(-dy)));
-                self.input(ScrollWheelEvent { position, delta, ..Default::default() }.to_platform_input());
+                self.input(
+                    ScrollWheelEvent {
+                        position,
+                        delta,
+                        ..Default::default()
+                    }
+                    .to_platform_input(),
+                );
                 self.tick();
             }
             self.focus = Some(target.clone());
             self.tick();
             self.tick();
-            return Ok(json!({"point": center, "box": target.bounds, "waited_ms": waited * 1000 / FLICKS, "result": "delivered"}));
+            return Ok(
+                json!({"point": center, "box": target.bounds, "waited_ms": waited * 1000 / FLICKS, "result": "delivered"}),
+            );
         }
         // A pointer action asks the frame what the event would reach before anything is sent.
         let pointer = kind != "press" && !locator.is_null();
@@ -1788,6 +1846,25 @@ impl Replica {
             .map(|(name, b)| {
                 let bounds = [b.origin.x, b.origin.y, b.size.width, b.size.height].map(device);
                 json!({"name": name, "bounds": bounds})
+            })
+            .collect();
+        // #1592: each icon the frame drew, named as in the kit's set, with its bounds and the size it was laid out at in
+        // points. The brand's artwork and the status marks are SVGs too, and no icons.
+        json["icons"] = frame
+            .svgs
+            .iter()
+            .filter(|svg| svg.visible)
+            .filter_map(|svg| {
+                let icon = match deep_app::icons::drawing(&svg.path) {
+                    Some(deep_app::icons::Drawing::Icon(name, _)) => name.to_owned(),
+                    Some(_) => return None,
+                    None => (svg.path.strip_prefix("icons/"))
+                        .and_then(|file| file.strip_suffix(".svg"))
+                        .unwrap_or(&svg.path)
+                        .to_owned(),
+                };
+                let size = svg.size[0].max(svg.size[1]) as f32 / scale;
+                Some(json!({"icon": icon, "bounds": svg.bounds, "size": size}))
             })
             .collect();
         (json, frame)

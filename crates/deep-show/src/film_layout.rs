@@ -579,7 +579,7 @@ fn circle(c: [f64; 2], r: f64) -> Vec<[f64; 2]> {
 }
 
 /// Each glyph's outline box in its own frame, by face, glyph and size: read once per check.
-pub(crate) type Outlines = BTreeMap<(u64, u32, u32, u32), Option<[f64; 4]>>;
+pub(crate) type Outlines = BTreeMap<(u64, u32, u32, u32, bool), Option<[f64; 4]>>;
 
 /// A shaped run's glyph boxes at `origin`, from each glyph's outline: `[x0, y0, x1, y1]`.
 fn glyph_boxes(
@@ -602,7 +602,13 @@ pub(crate) fn each_glyph_box(
     use deep_text::outlines::Cmd;
     let mut out = Vec::new();
     for g in &shaped.glyphs {
-        let key = (g.font.data.id(), g.font.index, g.id, g.size.to_bits());
+        let key = (
+            g.font.data.id(),
+            g.font.index,
+            g.id,
+            g.size.to_bits(),
+            g.turn,
+        );
         let own = *outlines.entry(key).or_insert_with(|| {
             let cmds = deep_text::outlines::outline_of(g)?;
             let mut b = [

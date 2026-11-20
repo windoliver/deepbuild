@@ -1,0 +1,115 @@
+{
+  "title": "handler.set_aside@1",
+  "description": "An extension's hook handler set aside (#2402): its failures in a row, each a missed deadline or a throw, reached three, so the host stops asking it, and a hook it would have answered takes the policy a failure takes, at once. It stays aside until its extension is restarted, updated or turned on again, or the hub starts.",
+  "x-since": "R2",
+  "x-stability": "stable",
+  "x-feeds": [],
+  "type": "object",
+  "properties": {
+    "v": {
+      "const": 1,
+      "description": "The kind's schema version."
+    },
+    "id": {
+      "type": "string",
+      "format": "ulid",
+      "description": "The event's ULID, its identity."
+    },
+    "kind": {
+      "const": "handler.set_aside"
+    },
+    "writer": {
+      "const": "core",
+      "description": "Only the core appends this kind."
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person behind it, from the credential."
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Who may see it."
+    },
+    "ts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "Milliseconds since the Unix epoch."
+    },
+    "seq": {
+      "type": "string",
+      "format": "seq",
+      "description": "Order within the session: ns since the epoch when the hook started."
+    },
+    "log_pos": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Its position in the event log, assigned by the hub at append."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "extension": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_-]*/[a-z0-9][a-z0-9_-]*$",
+          "maxLength": 8192,
+          "description": "The extension's ID, owner/name."
+        },
+        "hook": {
+          "type": "string",
+          "pattern": "^[a-z][a-z_]*\\.[a-z][a-z_]*$",
+          "maxLength": 8192,
+          "description": "The hook kind its handler handles, such as tool.before."
+        },
+        "call": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The call whose failure set it aside."
+        },
+        "failures": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991,
+          "description": "Its failures in a row when it was set aside."
+        },
+        "last": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192,
+          "description": "The last of those failures, in the host's words."
+        }
+      },
+      "required": [
+        "extension",
+        "hook",
+        "call",
+        "failures",
+        "last"
+      ],
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$",
+        "description": "A SHA-256, in lower-case hex."
+      }
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "kind",
+    "writer",
+    "actor",
+    "scope",
+    "ts",
+    "data"
+  ],
+  "additionalProperties": false
+}

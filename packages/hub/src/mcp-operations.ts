@@ -11,7 +11,7 @@ import { AskRefused, duration, type Asks } from '@deepbuild/asks';
 
 import { canonicalize, registry as schemas, sha256Hex, type JsonValue, type Schema } from '@deepbuild/contracts';
 import { scrubText } from '@deepbuild/evidence';
-import { type ExtensionHost } from '@deepbuild/extension-host';
+import { installedIds, type ExtensionHost } from '@deepbuild/extension-host';
 import type { Checkouts } from '@deepbuild/gate';
 import { RecordError, type Connection, type RecordStore } from '@deepbuild/record';
 
@@ -52,6 +52,21 @@ import { HubCanvas } from './hub-canvas.js';
 import { docCommand, docSpec } from './doc-checks.js';
 
 import { sql, letters, noWake, unseenTools, type Obj, isObj, isUnder, asRefused } from "./hub-shared.js";
+
+/** How long deep_kinds asks an agent to wait before it asks again while plug-ins load (#1415). */
+const NOT_READY_RETRY_MS = 250;
+
+/** A canvas tool's own refusal, which reaches the agent as the tool answered it, with the protocol's error flag set (#1415). */
+class Answered extends Refused {}
+/**
+ * A canvas tool's answer, thrown as its refusal when it refuses: an outcome refused or conflict, a status refused, or a
+ * code of its own but no_match, which answers a search that found nothing.
+ */
+function asAnswered(value: Obj): Obj {
+  const coded = typeof value.code === 'string' && value.code !== 'no_match';
+  if (value.outcome === 'refused' || value.outcome === 'conflict' || value.status === 'refused' || coded) throw new Answered(value as unknown as Refusal);
+  return value;
+}
 
 export interface McpOperationsOptions {
   settings: CoreOptions;
@@ -113,6 +128,14 @@ export class McpOperations {
     try {
       const args = checkArguments(tool, params.arguments);
       const sent = isObj(params.arguments) ? params.arguments : {};
+      // A listing asked while plug-ins load answers not_ready with what loaded, never part of the list (#1415); the
+      // planted hub answers the list as it stands once its record, the start's first step, is open.
+      const loading = tool === 'deep_kinds' ? this.loading() : undefined;
+      if (loading && this.options.settings.plant === 'kinds-partial-while-loading') {
+        while (!this.options.services.record && !this.options.kernel.stopping) await new Promise((done) => setTimeout(done, 10));
+        return await this.options.services.canvasSide.kinds(args);
+      }
+      if (loading) throw new Refused({ ...refusal('not_ready', '', `The hub is still loading its plug-ins (${loading.loaded} of ${loading.total}); call again after retry_after_ms.`, '', true), ...loading, retry_after_ms: NOT_READY_RETRY_MS });
       // What deep-hook spooled ran before this call, as a hook's does: a replay running goes first, so a claim comes
       // after the call it follows, not before the work it claims.
       await (this.options.schedule.replaying ?? Promise.resolve());
@@ -122,10 +145,10 @@ export class McpOperations {
       switch (tool) {
         case 'find_actions': return await this.findActions(args.query as string | null);
         case 'call_action': return await this.callPluginAction(session!, args);
-        case 'deep_show': return await this.options.services.canvasSide.show(session ? { session } : { session: null }, showCall(args));
-        case 'deep_query': return await this.options.services.canvasSide.query(session ?? null, args);
-        case 'deep_kinds': return await this.options.services.canvasSide.kinds(args);
-        case 'deep_job': return await this.options.control().job(args, context.call);
+        case 'deep_show': return asAnswered(await this.options.services.canvasSide.show(session ? { session } : { session: null }, showCall(args)));
+        case 'deep_query': return asAnswered(await this.options.services.canvasSide.query(session ?? null, args));
+        case 'deep_kinds': return asAnswered(await this.options.services.canvasSide.kinds(args));
+        case 'deep_job': return asAnswered(await this.options.control().job(args, context.call));
         case 'deep_root_plan': return await this.options.services.hosts.proposeRoot(args);
         case 'deep_status': return await this.status(session);
         case 'deep_search': return await this.find(String(args.query), session, context, typeof args.file === 'string' ? args.file : undefined, typeof args.cursor === 'string' ? args.cursor : undefined);
@@ -140,11 +163,23 @@ export class McpOperations {
         default: return await this.runCheck(session!, args);
       }
     } catch (error) {
-      throw this.forAgent(error, tool);
+      const refused = this.forAgent(error, tool);
+      // The planted hub returns deep_kinds's refusals as ordinary results, the error flag unset (#1415).
+      if (tool === 'deep_kinds' && this.options.settings.plant === 'kinds-refusal-as-text') return refused.refusal;
+      throw refused;
     }
   }
 
+  /** The plug-ins the hub has yet to load, as deep_kinds counts them while it can't list them all (#1415). */
+  private loading(): { loaded: number; total: number } | undefined {
+    const host = this.options.services.extensions;
+    if (host) return host.loadProgress();
+    const total = installedIds(this.options.services.root.dir).length;
+    return total ? { loaded: 0, total } : undefined;
+  }
+
   private forAgent(error: unknown, tool: string): Refused {
+    if (error instanceof Answered) return error;
     const refused = error instanceof Refused ? error : error instanceof AskRefused ? (asRefused(error) as Refused)
       : new Refused(refusal('unavailable', '', `${tool} failed in the hub: ${error instanceof Error ? error.message : String(error)}; nothing was recorded.`, tool, true));
     const plant = this.options.settings.plant;
@@ -297,22 +332,15 @@ export class McpOperations {
     const claims: Obj[] = [];
     for (const row of made) {
       const claim = JSON.parse(row.data) as { task_ref: string; commit: string; predictions?: Prediction[] };
-      const runs = (await this.options.services.record.raw(`SELECT kind, ts, data FROM events WHERE kind IN ('run.started', 'run.finished') AND subject IN
-        (SELECT subject FROM events WHERE kind = 'run.started' AND json_extract(data, '$.claim') = 'claim:${row.id}') ORDER BY log_pos`)) as { kind: string; ts: number; data: string }[];
-      const byRun = new Map<string, { run: string; check: string; started?: number; ended?: number; outcome?: RunOutcome }>();
-      for (const r of runs) {
-        const d = JSON.parse(r.data) as { run: string; check?: string; outcome?: RunOutcome };
-        const one = byRun.get(d.run) ?? { run: d.run, check: String(d.check) };
-        if (r.kind === 'run.started') Object.assign(one, { check: String(d.check), started: r.ts });
-        else Object.assign(one, { ended: r.ts, outcome: d.outcome });
-        byRun.set(d.run, one);
-      }
-      const finished = [...byRun.values()].flatMap((r) => (r.outcome !== undefined && r.ended !== undefined ? [{ ...r, outcome: r.outcome, ended: r.ended }] : []));
+      // The claim's runs, from the runs table by claim, in the order the record met them: no run event is read (#1868).
+      const runs = ((await this.options.services.record.raw(`SELECT id, check_id, started, ended, outcome FROM runs WHERE claim_id = ? ORDER BY rowid`, [row.id])) as { id: string; check_id: string | null; started: number | null; ended: number | null; outcome: RunOutcome | null }[])
+        .map((r) => ({ run: `run:${r.id}`, check: String(r.check_id), ...(r.started !== null ? { started: r.started } : {}), ...(r.ended !== null && r.outcome !== null ? { ended: r.ended, outcome: r.outcome } : {}) }));
+      const finished = runs.flatMap((r) => (r.outcome !== undefined && r.ended !== undefined ? [{ ...r, outcome: r.outcome, ended: r.ended }] : []));
       const checks = [...new Set(finished.map((r) => r.check))].map((check) => ({ check, runs: finished.filter((r) => r.check === check) }));
       const [verdict] = (await this.options.services.record.raw(`SELECT handle, outcome, smallest, points_to FROM verdicts WHERE claim_id = ? AND stale = 0 ORDER BY created DESC LIMIT 1`, [row.id])) as Obj[];
       claims.push({
         claim: `claim:${row.id}`, task_ref: claim.task_ref, commit: claim.commit,
-        runs: [...byRun.values()].map((r) => ({ run: r.run, check: r.check, outcome: r.outcome ?? 'running' })),
+        runs: runs.map((r) => ({ run: r.run, check: r.check, outcome: r.outcome ?? 'running' })),
         verdict: verdict ?? null,
         contradictions: predictionContradictions(claim.predictions ?? [], checks),
       });
@@ -611,9 +639,11 @@ export class McpOperations {
     // An agent paseo runs with no hooks of its own shows no work but this claim: its turn's end is judged on it (#55).
     if (live && unseenTools(this.options.state().sessions.get(session)?.agent)) live.judged = true;
     // An answer to an ended session of another thread waits on its task: the next session that works the task reads it.
+    // The task's sessions come from the claims table by task, and each one's end from its own start and end events:
+    // no other task's claim and no other session's end is read (#1868).
     const task = sql(String(args.task_ref));
-    const answers = await this.options.schedule.queue(async () => this.options.delivery().deliver(await this.options.delivery().answers.waitingFor(session, `a.session_id IN (SELECT session_id FROM events WHERE kind = 'claim.made' AND json_extract(data, '$.task_ref') = '${task}')
-      AND a.session_id IN (SELECT session_id FROM events WHERE kind = 'session.end')`), 'next_prompt'));
+    const answers = await this.options.schedule.queue(async () => this.options.delivery().deliver(await this.options.delivery().answers.waitingFor(session, `a.session_id IN (SELECT session_id FROM claims WHERE subject_ref = '${task}')
+      AND EXISTS (SELECT 1 FROM events e INDEXED BY events_session_bounds WHERE e.session_id = a.session_id AND e.kind IN ('session.start', 'session.end') AND e.kind = 'session.end')`), 'next_prompt'));
     return { session, claim: `claim:${id}`, event: id, ...(answers ? { answers } : {}) };
   }
 
