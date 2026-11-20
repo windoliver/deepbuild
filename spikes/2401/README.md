@@ -5,8 +5,8 @@ Design: [Plan usage, per account and per task](../../docs/technical-design.md#pl
 [Decided](../../docs/technical-design.md#decided).
 
 **Status: BLOCKED.** The 40 runs haven't run, so there is no `record.json`, no reading and no row under Decided.
-Nothing is set meanwhile, as the issue decided. The one probe run, below, carried no `rate_limit_event` for the 5-hour window, and the account
-is at 95% of its weekly window. The runs are held until you decide how to take them.
+Nothing is set meanwhile, as the issue decided. None of the four probe runs below carried a `rate_limit_event` for the 5-hour window, and the account
+is at 97% of its weekly window. The runs are held until you decide how to take them.
 
 ## The job and the script
 
@@ -78,26 +78,44 @@ What the run carried:
   - The run carried no `rate_limit_event` for `five_hour`.
 - **The tools:** Glob, Grep and Read, the three names `--tools` gives.
 
+### Three probes back to back
+
+[`probe-step.json`](probe-step.json) holds three `--probe` runs from Nov 20 2026, 06:17:45 to 06:18:08 UTC, at load
+136 to 147, with other sessions working on the account. Their output is as the script printed it.
+
+- **Tokens:** 10,025, 9,724 and 9,743, so 29,492 in all and $0.0055 at API prices. All three succeeded.
+- **The window:** each run carried one `rate_limit_event`, for `seven_day` (`allowed_warning`), and every one read
+  0.97. Weekly use rose from the first probe's 0.95 to 0.97 in the 45 minutes between them, while other sessions were
+  working. Across these three runs it didn't move at all.
+- **No 5-hour reading:** none of the three carried a `rate_limit_event` for `five_hour`. No entry carried a top-level
+  `rate_limits`.
+
+So far every reading has had two decimals, whole percents, and about 30,000 tokens of this job moved the weekly window less than one of those steps. A
+single ~10,000-token run reads a change of 0 on the weekly window, and the 5-hour window isn't reported at all while
+the weekly one is in its warning band.
+
 ### What this means for the 40 runs
 
 The rule takes each run's change in window percent per million tokens, and it needs 15 kept runs per label. A run
 missing a 5-hour reading on either side is left out. This is what one run shows, and what it leaves open:
 
 1. **No 5-hour `rate_limit_event` in the one run.** If every run carried only the weekly reading, every run would be
-   left out, and the reading would be INCONCLUSIVE. The probe can't say whether the 5-hour reading is missing because the weekly
-   window is in its warning band. That is a guess, and so is the idea that it comes back once the weekly window resets.
-2. **The step size is unknown.** One reading, 0.95, can't show how finely utilization moves. Suppose it moves in
-   whole percents and a run of about 10,000 tokens moves a window by less than one point. Then each run reads a change
-   of 0 or 1. Runs of 1 above the own-use ceiling are left out, leaving rates of 0 and an INCONCLUSIVE reading.
+   left out, and the reading would be INCONCLUSIVE. All four probes match that so far. Whether the 5-hour reading is
+   missing because the weekly window is in its warning band is still a guess, and so is the idea that it comes back
+   once the weekly window resets.
+2. **A run moves less than one step.** All four readings had two decimals (whole percents), and three runs of about
+   10,000 tokens each left the weekly reading at 0.97 (above). The 5-hour window's step, once reported, is unknown;
+   suppose it is also whole percents and a run moves it less than one point. Then each run reads a change of 0 or 1. Runs of 1 above the own-use ceiling are left out, leaving rates of 0 and an INCONCLUSIVE reading.
    Otherwise the per-run ranges overlap under both labels. Either way the rule gives "not set" without measuring a
-   rate. Two or three probes in a row would show the step.
-3. **The account is at 95% of its weekly window.** Forty runs and a lead come to about 400,000 tokens, spent from the
-   last 5% of the weekly window, which your own work needs until Nov 24.
+   rate.
+3. **The account is at 97% of its weekly window.** Forty runs and a lead come to about 400,000 tokens, spent from the
+   last 3% of the weekly window, which your own work needs until Nov 24.
 
 ### What you can choose
 
-**Chosen (Nov 20 2026): probe again after the weekly reset on Nov 24 08:00 UTC.** Two or three probes back to back,
-then the 40 runs only if the probes show a 5-hour reading and a step a run can move.
+**Chosen (Nov 20 2026): probe again after the weekly reset on Nov 24 08:00 UTC.** The three probes above answered the
+step on the weekly window. After the reset: two or three probes back to back, then the 40 runs only if the probes
+show a 5-hour reading and a step a run can move.
 
 - **Probe again first.** Run two or three probes back to back to see the step and which windows a run carries. After
   the weekly reset, also see whether the 5-hour reading comes back. Then run the 40 as the issue gives them, if the
