@@ -298,9 +298,9 @@ export class Intake implements IntakeService {
         await this.o.appendCore('brief.made', { step: 'entered', key, title: t.title, number: n }, { subject: f.ask! });
       }
       const started = await this.o.raw(`SELECT 1 FROM events WHERE kind = 'start.approval' AND subject = ? LIMIT 1`, [f.ask!]);
-      // A job that repeats: its first run is its schedule's first, and what its wake test reads now is where it starts.
+      // A job that repeats: its first run is its schedule's first, and what it reads now counts as read once that run PASSes.
       if (brief.every && !made.repo && !f.runs.length) {
-        if (brief.watch) await this.input(brief.watch).then((now) => this.keep(key, now, 'last'), () => undefined);
+        if (brief.watch) await this.input(brief.watch).then((now) => this.keep(key, now, 'next'), () => undefined);
         await this.dispatch(key, this.o.now());
       }
       if (!started.length) await this.o.start(f.ask!, made.folder, scope([...numbers.values()]));
@@ -387,8 +387,9 @@ export class Intake implements IntakeService {
       const settled = last.tasks ? await this.settled(f.ask!, last.tasks) : { verdict: 'INVALID', cause: 'Its round never started: the hub stopped between its fire and its round.' };
       if (!settled) return;
       await this.end(f.key, last, settled);
-      // The input that woke it counts as read unless the round FAILed: a FAIL wakes the model again at its next fire.
-      if (settled.verdict !== 'FAIL') this.commit(f.key);
+      // The input that woke it counts as read once a round ran on it and didn't FAIL: a FAIL, or a round that never
+      // started, wakes the model again at its next fire.
+      if (last.tasks && settled.verdict !== 'FAIL') this.commit(f.key);
       return this.stopped(f, [...f.runs.slice(0, -1), { ...last, ended: { verdict: settled.verdict } }], settled.cause);
     }
     if (last?.ended?.verdict === 'BLOCKED' && !last.tasks) return;
