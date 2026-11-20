@@ -34,9 +34,15 @@ export function demangleAll(names) {
   return names.map((n, i) => simplify(out[i] ?? n));
 }
 function simplify(name) {
-  let s = name.replace(/^<([^<>]*?)(?: as [^<>]*)?>::/, '$1::');
-  for (let before = ''; before !== s;) { before = s; s = s.replace(/<[^<>]*>/g, ''); }
-  return s;
+  // Innermost first: `<Vec<T> as FromIterator<X>>::from_iter` loses `<T>` and `<X>`, then reads
+  // `alloc::vec::Vec::from_iter`. A `<` that opens a qualified path follows no identifier character; generic
+  // arguments always do.
+  let s = name.replaceAll('->', '='); // `fn() -> T` in generic arguments
+  for (let before = ''; before !== s;) {
+    before = s;
+    s = s.replace(/::<[^<>]*>/g, '').replace(/(^|[^\w:])<([^<>]*?)(?: as [^<>]*)?>::/g, '$1$2::').replace(/(\w)<[^<>]*>/g, '$1');
+  }
+  return s.replace(/<[^<>]*>/g, '');
 }
 
 /** The part of the program one calling function belongs to, by the first rule its path matches. */
