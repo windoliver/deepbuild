@@ -13,9 +13,9 @@
 // only the fields below, never a session ID, account ID or path.
 import { spawn, execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, realpathSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, realpathSync } from 'node:fs';
 import { tmpdir, homedir, loadavg } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join, relative, resolve as absolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = realpathSync(fileURLToPath(new URL('../../', import.meta.url)));
@@ -47,7 +47,7 @@ const ARGS = [...facts.launch.readOnlyJob.args, '--mcp-config', JSON.stringify({
 const sha256 = (b) => createHash('sha256').update(b).digest('hex');
 const arg = (name) => { const i = process.argv.indexOf(name); return i < 0 ? undefined : process.argv[i + 1]; };
 const has = (name) => process.argv.includes(name);
-// A run that hasn't ended by then is stopped; with no result entry it is left out.
+// A run that hasn't ended by then is stopped; with no result entry, no record is written (below).
 const DEADLINE_MS = 300_000;
 
 /** One run of the job under `label`: its raw stream and when it ran. */
@@ -70,34 +70,43 @@ function run(claude, label, { home = homedir(), token } = {}) {
     child.stdin.on('error', () => {});
     child.on('error', reject);
     const timer = setTimeout(() => child.kill('SIGKILL'), DEADLINE_MS);
-    child.on('close', (code) => {
+    child.on('close', () => {
       clearTimeout(timer);
       rmSync(work, { recursive: true, force: true });
       const bytes = Buffer.concat(out);
       const rows = bytes.toString('utf8').split('\n').filter(Boolean).flatMap((l) => { try { return [JSON.parse(l)]; } catch { return []; } });
-      // A key in its environment, or one Claude Code found itself (an apiKeyHelper in your settings), bills a key.
-      const keySource = rows.find((v) => v?.type === 'system' && v.subtype === 'init')?.apiKeySource;
-      const apiKeySet = Object.keys(env).some((k) => facts.billing.apiKeyVariables.includes(k)) || keySource !== 'none';
-      resolve({ label, code, started, ended: new Date(), bytes, rows, apiKeySet });
+      // The environment above holds no billing variable, so a key is one Claude Code found itself, such as an
+      // apiKeyHelper in your settings.
+      const apiKeySet = rows.find((v) => v?.type === 'system' && v.subtype === 'init')?.apiKeySource !== 'none';
+      resolve({ label, started, ended: new Date(), bytes, rows, apiKeySet });
     });
     child.stdin.end(PROMPT);
   });
 }
 
-/** The window readings a stream carries, in order, as the runner reads them: rate_limit_event's utilization. */
+/** The window readings a stream carries, in order, in both shapes the runner reads from an eval job's stream: an
+ *  entry's rate_limit_info (utilization, a fraction) and its rate_limits (used_percentage), runner.ts and agents.ts. */
 const readings = (rows) => rows.flatMap((v) => {
+  const out = [];
   const l = v?.rate_limit_info;
-  if (!l || !WINDOWS.includes(l.rateLimitType) || typeof l.utilization !== 'number') return [];
-  return [{ window: l.rateLimitType, used_percent: l.utilization * 100, resets_at: typeof l.resetsAt === 'number' ? l.resetsAt : null, status: l.status ?? null }];
+  if (l && WINDOWS.includes(l.rateLimitType) && typeof l.utilization === 'number') {
+    out.push({ window: l.rateLimitType, used_percent: l.utilization * 100, resets_at: typeof l.resetsAt === 'number' ? l.resetsAt : null, status: l.status ?? null });
+  }
+  for (const w of WINDOWS) {
+    const x = v?.rate_limits?.[w];
+    if (x && typeof x.used_percentage === 'number') out.push({ window: w, used_percent: x.used_percentage, resets_at: typeof x.resets_at === 'number' ? x.resets_at : null, status: null });
+  }
+  return out;
 });
 const lastOf = (rs, w) => { const x = rs.filter((r) => r.window === w).at(-1); return x ? { used_percent: x.used_percent, resets_at: x.resets_at } : null; };
 
 /** The fields of a run's first and result entries the record keeps: nothing that names a session, account or path. */
 // The first entry is the stream's system init: your user settings' SessionStart hooks, which a job's
 // --setting-sources user keeps, write their hook_started and hook_response entries before it.
-const firstEntry = (rows) => {
+// Agents only from a throwaway home: under yours they name your plugins.
+const firstEntry = (rows, { agents = false } = {}) => {
   const f = rows.find((v) => v?.type === 'system' && v.subtype === 'init') ?? {};
-  return { type: f.type, subtype: f.subtype, model: f.model, claude_code_version: f.claude_code_version, tools: f.tools, agents: f.agents, apiKeySource: f.apiKeySource };
+  return { type: f.type, subtype: f.subtype, model: f.model, claude_code_version: f.claude_code_version, tools: f.tools, ...(agents ? { agents: f.agents } : {}), apiKeySource: f.apiKeySource };
 };
 const resultEntry = (rows) => {
   const r = rows.findLast((v) => v?.type === 'result') ?? {};
@@ -158,7 +167,7 @@ if (has('--dry')) {
   const out = {};
   for (const label of LABELS) {
     const r = await run(claude, label, { home, token: 'invalid' });
-    out[label] = { first_entry: firstEntry(r.rows), result: resultEntry(r.rows) };
+    out[label] = { first_entry: firstEntry(r.rows, { agents: true }), result: resultEntry(r.rows) };
   }
   rmSync(home, { recursive: true, force: true });
   console.log(JSON.stringify(out, null, 2));
@@ -171,7 +180,9 @@ if (has('--probe')) {
     ran_at: r.started.toISOString(), host_model: hostModel(), load_1m: loadavg()[0],
     first_entry: firstEntry(r.rows), result_entry: resultEntry(r.rows),
     kinds: r.rows.map((v) => `${v.type}${v.subtype ? `:${v.subtype}` : ''}`),
-    rate_limit_events: r.rows.filter((v) => v?.type === 'rate_limit_event').map((v) => v.rate_limit_info),
+    // Each window entry's reading, without the account's overage fields.
+    rate_limit_events: r.rows.filter((v) => v?.type === 'rate_limit_event').map(({ rate_limit_info: l = {} }) => ({ status: l.status, rateLimitType: l.rateLimitType, utilization: l.utilization, resetsAt: l.resetsAt, surpassedThreshold: l.surpassedThreshold, unifiedWindows: l.unifiedWindows })),
+    rate_limits: r.rows.filter((v) => v?.rate_limits).map((v) => ({ type: v.type, rate_limits: v.rate_limits })),
   }, null, 2));
   process.exit(0);
 }
@@ -180,10 +191,13 @@ const ceiling = Number(arg('--own-use'));
 const basis = arg('--basis');
 if (!(ceiling > 0) || !basis) { console.error('--own-use <window percent per million tokens> and --basis "<words>" fix the ceiling before the runs'); process.exit(2); }
 const own_use = { max_pct_per_mtok: ceiling, basis, fixed_at: new Date().toISOString() };
-const streams = arg('--streams') ?? mkdtempSync(join(realpathSync(tmpdir()), 'spike-2401-streams-'));
+// Raw streams hold session IDs and paths: never inside the checkout, checked before anything is made.
+const streams = absolute(arg('--streams') ?? mkdtempSync(join(realpathSync(tmpdir()), 'spike-2401-streams-')));
+let up = streams;
+while (!existsSync(up)) up = dirname(up);
+const real = join(realpathSync(up), relative(up, streams));
+if (real === root || real.startsWith(`${root}/`)) { console.error('--streams must be outside the checkout'); process.exit(2); }
 mkdirSync(streams, { recursive: true });
-// Raw streams hold session IDs and paths: never inside the checkout.
-if (realpathSync(streams).startsWith(`${root}/`)) { console.error('--streams must be outside the checkout'); process.exit(2); }
 
 // Each run's account by its place among the accounts seen, read right after it.
 const accounts = [account()];
@@ -217,10 +231,13 @@ const runs = done.map((r, i) => {
     started_at: r.started.toISOString(), ended_at: r.ended.toISOString(),
     first_entry: firstEntry(r.rows), result_entry: res, stream_sha256: sha256(r.bytes),
     tokens: { input: u.input_tokens, output: u.output_tokens, cache_creation: u.cache_creation_input_tokens, cache_read: u.cache_read_input_tokens },
-    readings: rs.map(({ window: w, used_percent, resets_at, status }) => ({ window: w, used_percent, resets_at, status })),
+    readings: rs,
     window,
   };
 });
+// A run with no init or result entry, or no tokens, isn't a run the rule can leave out: the record can't hold it.
+const broken = runs.filter((r) => r.first_entry.type !== 'system' || r.result_entry.type !== 'result' || !Object.values(r.tokens).every(Number.isInteger) || !(total(r.tokens) > 0));
+if (broken.length) { console.error(`no record: runs ${broken.map((r) => r.n).join(', ')} have no init or result entry or no tokens; streams in ${streams}`); process.exit(1); }
 for (const r of runs) { const why = whyLeftOut(r, ceiling); r.kept = why === null; r.left_out_because = why; }
 
 const tools = {};

@@ -12,14 +12,6 @@
       "Grep",
       "Read"
     ],
-    "agents": [
-      "claude",
-      "Explore",
-      "general-purpose",
-      "Plan",
-      "statusline-setup",
-      "superpowers:code-reviewer"
-    ],
     "apiKeySource": "none"
   },
   "result_entry": {
@@ -54,20 +46,16 @@
   "rate_limit_events": [
     {
       "status": "allowed_warning",
-      "resetsAt": 1795507200,
       "rateLimitType": "seven_day",
       "utilization": 0.95,
-      "overageStatus": "rejected",
-      "overageDisabledReason": "org_level_disabled",
-      "isUsingOverage": false,
+      "resetsAt": 1795507200,
       "surpassedThreshold": 0.75,
       "unifiedWindows": {
         "seven_day": {
           "utilization": 0.95,
           "resetsAt": 1795507200
         }
-      },
-      "overageEnabled": false
+      }
     }
   ]
 }

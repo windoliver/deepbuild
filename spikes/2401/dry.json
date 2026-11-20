@@ -24,7 +24,7 @@
       "subtype": "success",
       "is_error": true,
       "num_turns": 1,
-      "duration_ms": 2130,
+      "duration_ms": 1987,
       "total_cost_usd": 0,
       "usage": {
         "input_tokens": 0,
@@ -60,7 +60,7 @@
       "subtype": "success",
       "is_error": true,
       "num_turns": 1,
-      "duration_ms": 2180,
+      "duration_ms": 1892,
       "total_cost_usd": 0,
       "usage": {
         "input_tokens": 0,
