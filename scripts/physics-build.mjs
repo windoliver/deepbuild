@@ -12,12 +12,15 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
-const PINS = { rapier3d: '0.36.1', parry3d: '0.31.1' };
-const REQUIRED = { rapier3d: ['enhanced-determinism'] };
+// #2098: rapier2d, a 2D world's backend, is held to the same pin, feature and refusals as rapier3d.
+const PINS = { rapier3d: '0.36.1', parry3d: '0.31.1', rapier2d: '0.36.1', parry2d: '0.31.1' };
+const REQUIRED = { rapier3d: ['enhanced-determinism'], rapier2d: ['enhanced-determinism'] };
 // Features that change results or the cross-platform promise, by crate.
 const REFUSED = {
   rapier3d: ['simd8', 'parallel', 'block-solver', 'fem', 'unsync-callbacks'],
   parry3d: ['simd8', 'parallel'],
+  rapier2d: ['simd8', 'parallel', 'block-solver', 'fem', 'unsync-callbacks'],
+  parry2d: ['simd8', 'parallel'],
   glam: ['fast-math'],
 };
 const FLAGS = [
@@ -76,5 +79,5 @@ if (fails.length) {
   console.log(fails.join('\n'));
   process.exit(1);
 }
-const rapier = of('rapier3d')[0];
-console.log(`PASS physics-build: rapier3d ${rapier.version} [${rapier.features.join(', ')}], parry3d ${of('parry3d')[0].version}, none of ${[...new Set(Object.values(REFUSED).flat())].join(', ')}, and no rustflags with target-cpu=native or +fma`);
+const [rapier, flat] = [of('rapier3d')[0], of('rapier2d')[0]];
+console.log(`PASS physics-build: rapier3d ${rapier.version} [${rapier.features.join(', ')}], parry3d ${of('parry3d')[0].version}, rapier2d ${flat.version} [${flat.features.join(', ')}], parry2d ${of('parry2d')[0].version}, none of ${[...new Set(Object.values(REFUSED).flat())].join(', ')}, and no rustflags with target-cpu=native or +fma`);
