@@ -52,6 +52,7 @@ pub mod shore;
 pub mod skin;
 pub mod sky;
 pub mod slots;
+pub mod spans;
 pub mod spatial;
 pub mod spec;
 pub mod stack;

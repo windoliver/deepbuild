@@ -249,6 +249,8 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
                 json_param("join", "miter | round | bevel"),
                 // A line of a mesh's edges in place of points (Marks in 3D: mesh edges; #420).
                 json_param("edges", crate::spec::EDGES),
+                // The style a mesh-edge line's spans behind opaque geometry draw in (#1782).
+                json_param("hidden", crate::spec::HIDDEN),
                 // Marks in 3D: whether the sky's fog applies to it (#537's live lines set false).
                 json_param("fog", "bool"),
             ]),

@@ -1295,6 +1295,8 @@ pub fn grid_line(
         width,
         list: Arc::new(list),
         derived: true,
+        materials: None,
+        hidden: None,
     };
     Ok(Some(Line {
         id: format!("{id}#grid"),

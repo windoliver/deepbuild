@@ -391,6 +391,25 @@ impl Hub<'_> {
         } else {
             Default::default()
         };
+        // #1782: a mesh-edge line with a hidden style answers its edges' spans in the view at t.
+        let hides = |id: &String| {
+            items.get(id).is_some_and(|i| {
+                i.get("kind").and_then(Value::as_str) == Some("mark.line@1")
+                    && i.pointer("/params/hidden").is_some_and(|h| !h.is_null())
+            })
+        };
+        let viewed = if ids.iter().any(hides) {
+            let sealed = &self.startup.sealed;
+            match crate::scene3d::scene_at(&doc, t, &self.look.light, sealed, planted.as_deref()) {
+                Ok(mut scene) => {
+                    scene.plant_edges(false, false, planted.as_deref());
+                    Some(scene)
+                }
+                Err(u) => return json!({"code": u.code, "path": u.path}),
+            }
+        } else {
+            None
+        };
         let mut out = Vec::new();
         let node_of = |id: &str| {
             nodes
@@ -417,13 +436,30 @@ impl Hub<'_> {
                 let (Some(mesh), Some(kind)) = (mesh, EdgeKind::read(edges).ok()) else {
                     return json!({"code": "ref_unresolved", "path": format!("items/{id}/params/edges/of")});
                 };
-                let place = placement(items.get(target).unwrap_or(&Value::Null));
+                let of = items.get(target).unwrap_or(&Value::Null);
+                let place = placement(of);
+                // #1782: each triangle's material on the item, where the crease kind picks by it.
+                let materials = match kind {
+                    EdgeKind::Crease { material: true, .. } => mesh.material_ids(of),
+                    _ => None,
+                };
                 let segments: Vec<[[f64; 3]; 2]> = mesh
-                    .edge_list(kind, planted.as_deref())
+                    .edge_list(kind, materials.as_deref(), planted.as_deref())
                     .into_iter()
                     .map(|[a, b]| [place(a), place(b)])
                     .collect();
-                out.push(json!({"id": id, "kind": "mark.line@1", "segments": segments}));
+                let mut row = json!({"id": id, "kind": "mark.line@1", "segments": segments});
+                let spans = viewed.as_ref().and_then(|scene| {
+                    let mut lines = scene.layers.iter().flat_map(|l| &l.lines);
+                    let line = lines.find(|l| l.id == *id)?;
+                    deep_canvas_scene3d::spans::report(scene, line, &mut Default::default())
+                });
+                if let Some(r) = spans {
+                    row["spans"] = (r.spans.iter())
+                        .map(|s| json!({"edge": s.edge, "from": s.from, "to": s.to, "hidden": s.hidden}))
+                        .collect();
+                }
+                out.push(row);
                 continue;
             }
             // #2013: an instancer's row is its elements as its scatter (or its written columns)
