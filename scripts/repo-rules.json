@@ -1819,6 +1819,10 @@
           "spec": "0.0.0",
           "why": "Issue #20: each copy is stored as evidence by hash, scrubbed by the store's own text scrub, and read back."
         },
+        "@deepbuild/github": {
+          "spec": "0.0.0",
+          "why": "Issue #1904: CI runs are read through the one GitHub REST client, which bounds redirects to the forge's origin."
+        },
         "@deepbuild/record": {
           "spec": "0.0.0",
           "why": "Issue #20: each copy is linked by a transcript.archived event, and what was already copied is read back from the record."
