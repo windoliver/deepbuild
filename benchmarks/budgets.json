@@ -1151,6 +1151,24 @@
       ]
     },
     {
+      "id": "canvas-local-tone-map",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "local-tone-map"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "local_1080p_gpu_ms": 0.6,
+        "local_2160p_gpu_ms": 2
+      },
+      "initialReason": "Issue #971 first measurement: the merge base has no local tone map and no such task. A release deep-gpu draws #465's stage under a filmic look at 1920 x 1080 and at 3840 x 2160, with local {strength: 0.5} on the look and without, 300 frames a side, five runs after a warm-up one, each a fresh process; the difference of the sides' median GPU time at each size is what the local tone map adds. canvas.mjs judge holds the times on a reference Mac. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#971.ae60e422"
+      ]
+    },
+    {
       "id": "canvas-ground",
       "command": [
         "node",
@@ -1568,6 +1586,20 @@
       "initialReason": "Issue #162 first measurement (#162.30ea626f): the merge base has no Lottie target. One `deep-show run` exports a 200-item title with 2,000 Bézier keys (ten on each rect's x over 4 s, 30 fps) to Lottie, its fidelity check reading 20 sampled frames back through the pinned reference renderer; it prints the receipt's timing.wall (under 1 s), which tests/acceptance/162/budgets.test.ts judges on a reference Mac with the 1 MB import's time and memory. p50 and peak memory get a 50% margin against the merge base once main has this task.",
       "criteria": [
         "#162.30ea626f"
+      ]
+    },
+    {
+      "id": "pptx-export",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "pptx-export"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "initialReason": "Issue #732 first measurement (#732.bbcc6582): the merge base has no pptx target. One `deep-show run` exports a 20-stage piece to a deck at 1920 x 1080, two of its stages showing a 3D display whose screen carries an inset, its fidelity check reading the file back and drawing each slide with the pinned LibreOffice; it prints the receipt's timing.wall (under 5 s), which tests/acceptance/732/ac10-budgets.test.ts judges on a reference Mac. p50 and peak memory get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#732.bbcc6582"
       ]
     },
     {

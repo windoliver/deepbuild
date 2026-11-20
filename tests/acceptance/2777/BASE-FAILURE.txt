@@ -1,0 +1,327 @@
+Base run of the #2777 acceptance tests at 81c6b9c34 ("Merge pull request #2849 …"), November 19, 2026, on the shared
+Mac (Mac17,10, Apple M5 Max, 18 cores: not a reference Mac; 1-minute load about 20, 5-minute about 40, at the start).
+
+Built first, in the checkout's own target/:
+  cargo build --locked --bin deep-show --no-default-features --features full     (2 min 10 s, cold)
+  npm ci --no-audit --no-fund                                                     (vitest and typescript)
+(cargo from the rustup toolchain 1.99.1 first on PATH, CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0; each file's own
+full build was then a no-op, and cargo refused each test feature at once.)
+
+Command:
+  CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 node node_modules/vitest/vitest.mjs run --root tests/acceptance/2777 --no-file-parallelism --testTimeout=600000 --reporter=verbose
+
+Result: 7 files, 11 tests, 11 failed, each at an assertion in this folder (none at load), in 17.78 s. Per test:
+table.test.ts AC3 8 ms, AC4 (drop) 2,824 ms, AC4 (reason) 192 ms; lane.test.ts 2,229 ms; preflight.test.ts 45 ms;
+refusal.test.ts 2,377 ms and 19 ms; reading.test.ts 2,167 ms; seal.test.ts 4 ms and 0 ms; deep-kinds.test.ts 2,306 ms;
+the rest of the 17.78 s is the files' no-op builds and binary clones.
+
+Summary, per criterion:
+- AC1, seal.test.ts (2): FAIL at "the binary builds": cargo refuses `--features full,test-tone-unclosed` and
+  `full,test-tone-closed` ("none of the selected packages contains this feature"); the base has neither feature, and
+  no module test.tone.
+- AC2, lane.test.ts (1): FAIL at the lane's exit: `node scripts/canvas-closures.mjs fields --listing <dump>` prints
+  "BLOCKED closures: usage: canvas-closures.mjs closures|drift [--root <tree>]" and exits 3.
+- AC3, table.test.ts (1): FAIL: the section "### Registries and closed lists" holds no generated block after its
+  hand-written table.
+- AC4, table.test.ts (2): the drop leg: the base's `drift --root <copy> --listing <dump>` passes on the committed
+  reference (it ignores --listing), then the plant can't be made, since there is no generated block to drop
+  camera@1.projection's row from. The reason leg fails first at the listing: the full build's dump has no field_lists
+  (its top-level keys are core_version, format, interfaces, module_set, modules, registries).
+- AC5, refusal.test.ts (2): the document with projection fisheye is refused with one error, out_of_range at
+  items/cam/params/projection, carrying actual, what, fix and forms and no list, reopens_if or instead (printed
+  below); the control, projection perspective, passes the document check; the test then fails reading the listing's
+  closure of camera@1.projection, since the dump has no field_lists. The plant leg fails at its start:
+  `deep-show run --planted refusal_bad_value_only` answers {"ok":false,"code":"bad_input"} and exits 2.
+- AC6, deep-kinds.test.ts (1): deep_kinds {op: "closure", list: "camera@1.projection"} is refused with enum at /op
+  (printed below); the test fails at the listing's field_lists.
+- AC7, reading.test.ts (1): the full build's dump is read; then FAIL at the build of full,test-tone-closed.
+- AC8, preflight.test.ts (1): FAIL: no lane of scripts/lanes.mjs `checks` runs scripts/canvas-closures.mjs fields.
+
+After this run, and before the commit, helpers.ts lost the `export` keyword on 36 declarations no test imports and one
+unused constant (TONE_MODULE), and the README's run notes were reworded; no assertion, expected value or call changed,
+and `tsc -p tests/acceptance/2777/tsconfig.json` passes. The run was not repeated.
+
+The output below is the run's, with the absolute checkout path written <repo>.
+
+date: Thu Nov 19 08:17:55 PST 2026
+machine: Mac17,10 / Apple M5 Max / 18 cores;  8:17  up 5 days, 18:27, 18 users, load averages: 20.41 39.97 61.40
+node: v24.22.2
+
+
+ RUN  v5.0.5 <repo>/tests/acceptance/2777
+
+ × table.test.ts > AC3 #2777.728bbb54 the ten lists in the generated table > AC3 #2777.728bbb54 the ten lists named above each have a row in the generated table: the camera's projection, translucency kinds, a material's shadow modes, the water material's terms, foley's materials and actions, an emitter's distance models, tone maps, GPU deforms, light kinds and the lens's fields 8ms
+   → docs/canvas-primitives.md holds the generated table: expected 'the section ### Registries and closed…' to be '' // Object.is equality
+ × table.test.ts > AC4 #2777.c186d624 the drift lane holds the generated table to the listing > AC4 #2777.c186d624 a planted reference whose generated table drops the row of camera@1.projection fails the drift lane, naming the list 2824ms
+   → the copy of docs/canvas-primitives.md holds the generated table: expected 'the section ### Registries and closed…' to be '' // Object.is equality
+ × table.test.ts > AC4 #2777.c186d624 the drift lane holds the generated table to the listing > AC4 #2777.c186d624 a planted reference whose row of material@1.translucency.kind names another reason than the data fails the drift lane, naming the list 192ms
+   → the sealed listing (deep-show kinds --dump) carries its field lists under field_lists; its top-level keys are core_version, format, interfaces, module_set, modules, registries: expected false to be true // Object.is equality
+stdout | lane.test.ts > AC2 #2777.45abf58c the lane on main's sealed listing > AC2 #2777.45abf58c on main after the first fill, the lane passes on every field list of the sealed listing and prints their count, the count by closure, and the closed lists whose instead is nothing
+the closure lane on the full build's sealed listing:
+BLOCKED closures: usage: canvas-closures.mjs closures|drift [--root <tree>]
+
+
+ × lane.test.ts > AC2 #2777.45abf58c the lane on main's sealed listing > AC2 #2777.45abf58c on main after the first fill, the lane passes on every field list of the sealed listing and prints their count, the count by closure, and the closed lists whose instead is nothing 2229ms
+   → the closure lane on the full build's sealed listing: exit 0
+exit 3
+BLOCKED closures: usage: canvas-closures.mjs closures|drift [--root <tree>]
+: expected 3 to be +0 // Object.is equality
+ × preflight.test.ts > AC8 #2777.a05e43e4 the lane in the local preflight > AC8 #2777.a05e43e4 the lane runs in the local preflight in under 5 s and reads no network 45ms
+   → a lane of the local preflight (scripts/lanes.mjs checks) runs scripts/canvas-closures.mjs fields: expected [] to not deeply equal []
+stdout | refusal.test.ts > AC5 #2777.5fe304dc a value outside a closed list is refused, naming the list > AC5 #2777.5fe304dc a document that sets a camera's projection to a word its list lacks is refused, and the refusal names the list, what would reopen it and instead
+the refusal of projection fisheye: [{"check":"document.validate","code":"out_of_range","severity":"error","ids":["cam"],"path":"items/cam/params/projection","actual":"fisheye","what":"projection takes `perspective` or `orthographic` or `isometric`; got the string \"fisheye\"","fix":"Write projection as perspective or orthographic or isometric: `perspective` or `orthographic` or `isometric`.","forms":["perspective","orthographic","isometric"]}]
+
+ × refusal.test.ts > AC5 #2777.5fe304dc a value outside a closed list is refused, naming the list > AC5 #2777.5fe304dc a document that sets a camera's projection to a word its list lacks is refused, and the refusal names the list, what would reopen it and instead 2377ms
+   → the sealed listing (deep-show kinds --dump) carries its field lists under field_lists; its top-level keys are core_version, format, interfaces, module_set, modules, registries: expected false to be true // Object.is equality
+ × refusal.test.ts > AC5 #2777.5fe304dc a value outside a closed list is refused, naming the list > AC5 #2777.5fe304dc a planted refusal with only the bad value fails, naming the code 19ms
+   → deep-show run --planted refusal_bad_value_only starts and exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+ × reading.test.ts > AC7 #2777.71fec45e the lane's reading of a change that adds a list saying instead: nothing > AC7 #2777.71fec45e a planted change that adds a closed list with instead: nothing shows in the lane's reading as one more, naming the list, and the lane still passes 2167ms
+   → the binary builds: deep-show with features full,test-tone-closed: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+ × seal.test.ts > AC1 #2777.d820cdcc a field list with no closure is refused at the seal > AC1 #2777.d820cdcc a planted kind with a field of three words and no closure is refused at the seal, naming the kind and the field 4ms
+   → the binary builds: deep-show with features full,test-tone-unclosed: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+ × seal.test.ts > AC1 #2777.d820cdcc a field list with no closure is refused at the seal > AC1 #2777.d820cdcc its twin closed with a reason, reopens_if and instead seals 0ms
+   → the binary builds: deep-show with features full,test-tone-closed: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+stdout | deep-kinds.test.ts > AC6 #2777.af753bc6 deep_kinds answers a closed list's closure > AC6 #2777.af753bc6 deep_kinds on a closed list returns its reason, reopens_if and instead
+deep_kinds on camera@1.projection: {"error":{"code":"enum","retryable":false,"remediation":"Give op as one of list, word, search, read, gallery, sheet, step_ceilings, field or bindings.","path":"/op","actual":"closure","evidence":[]},"core":"core@0.0.0","set_digest":"c866974c68986c4af416d66e56d533c9919cab89d2d810c7257df537bead6509"}
+
+ × deep-kinds.test.ts > AC6 #2777.af753bc6 deep_kinds answers a closed list's closure > AC6 #2777.af753bc6 deep_kinds on a closed list returns its reason, reopens_if and instead 2306ms
+   → the sealed listing (deep-show kinds --dump) carries its field lists under field_lists; its top-level keys are core_version, format, interfaces, module_set, modules, registries: expected false to be true // Object.is equality
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 11 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  deep-kinds.test.ts > AC6 #2777.af753bc6 deep_kinds answers a closed list's closure > AC6 #2777.af753bc6 deep_kinds on a closed list returns its reason, reopens_if and instead
+AssertionError: the sealed listing (deep-show kinds --dump) carries its field lists under field_lists; its top-level keys are core_version, format, interfaces, module_set, modules, registries: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ fieldListsOf helpers.ts:274:178
+    272| export function fieldListsOf(dump: JsonObject): FieldList[] {
+    273|   const lists = dump[LISTS_KEY];
+    274|   expect(Array.isArray(lists), `the sealed listing (deep-show kinds --…
+       |                                                                                                                                                                                  ^
+    275|   return (lists as JsonValue[]).map((v, i) => {
+    276|     const o = isObject(v) ? v : {};
+ ❯ deep-kinds.test.ts:18:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/11]⎯
+
+ FAIL  lane.test.ts > AC2 #2777.45abf58c the lane on main's sealed listing > AC2 #2777.45abf58c on main after the first fill, the lane passes on every field list of the sealed listing and prints their count, the count by closure, and the closed lists whose instead is nothing
+AssertionError: the closure lane on the full build's sealed listing: exit 0
+exit 3
+BLOCKED closures: usage: canvas-closures.mjs closures|drift [--root <tree>]
+: expected 3 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 3
+
+ ❯ passes helpers.ts:606:50
+    604| export function passes(r: ScriptRun, sub: string, what: string): void {
+    605|   expect(linesStarting(r, `FAIL ${sub}:`), `${what}: no FAIL ${sub} li…
+    606|   expect(r.code, `${what}: exit 0\n${shown(r)}`).toBe(0);
+       |                                                  ^
+    607|   expect(linesStarting(r, `PASS ${sub}:`).length, `${what}: a PASS ${s…
+    608| }
+ ❯ lane.test.ts:29:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/11]⎯
+
+ FAIL  preflight.test.ts > AC8 #2777.a05e43e4 the lane in the local preflight > AC8 #2777.a05e43e4 the lane runs in the local preflight in under 5 s and reads no network
+AssertionError: a lane of the local preflight (scripts/lanes.mjs checks) runs scripts/canvas-closures.mjs fields: expected [] to not deeply equal []
+
+Compared values have no visual difference.
+
+ ❯ preflight.test.ts:27:174
+     25|     builds.bin(FULL);
+     26|     const commands = await laneCommands();
+     27|     expect(commands.map((c) => `${c.lane}: ${c.command.join(' ')}`), '…
+       |                                                                                                                                                                              ^
+     28|     const runAll = (sandbox: boolean): ScriptRun[] => commands.map((c)…
+     29|     const plain = runAll(false);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/11]⎯
+
+ FAIL  reading.test.ts > AC7 #2777.71fec45e the lane's reading of a change that adds a list saying instead: nothing > AC7 #2777.71fec45e a planted change that adds a closed list with instead: nothing shows in the lane's reading as one more, naming the list, and the lane still passes
+AssertionError: the binary builds: deep-show with features full,test-tone-closed: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features full,test-tone-closed failed:
++ error: none of the selected packages contains this feature: test-tone-closed
++ selected packages: deep-contracts, deep-canvas-seams, deep-canvas, deep-relay, deep-net, deep-codecs, deep-canvas-cells, deep-hook, deep-app, deep-canvas-effects, deep-canvas-scene3d, deep-canvas-drawn, deep-canvas-marks, deep-text, deep-canvas-motion, deep-gpu, deep-images, deep-marks-gpui, deep-text-gpui, deep-effects-render, deep-scene3d-render, deep-panel-host, deep-gpu-layer, deep-canvas-graph, deep-canvas-input, deep-canvas-media, deep-canvas-physics, deep-canvas-record, deep-canvas-sheet, deep-canvas-test-modules, deep-canvas-sandbox, deep-canvas-vector, deep-logic, deep-sandbox-wasmtime, deep-marks-render, deep-marks-vello, deep-replica, deep-marks-raster, deep-physics-rapier, deep-canvas-export, deep-lottie-reader, deep-motion, deep-input, deep-canvas-loop, deep-player, deep-play, deep-show, deep-text-render, deep-typeset, deep-lottie, deep-synth-job
++ help: there is a similarly named feature: test-mode-closed
++
+
+ ❯ Object.bin helpers.ts:162:98
+    160|       const entry = done.get(buildName(b));
+    161|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    162|       expect(entry.error, `the binary builds: ${SHOW} with features ${…
+       |                                                                                                  ^
+    163|       return entry.bin;
+    164|     },
+ ❯ reading.test.ts:28:34
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/11]⎯
+
+ FAIL  refusal.test.ts > AC5 #2777.5fe304dc a value outside a closed list is refused, naming the list > AC5 #2777.5fe304dc a document that sets a camera's projection to a word its list lacks is refused, and the refusal names the list, what would reopen it and instead
+AssertionError: the sealed listing (deep-show kinds --dump) carries its field lists under field_lists; its top-level keys are core_version, format, interfaces, module_set, modules, registries: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ fieldListsOf helpers.ts:274:178
+    272| export function fieldListsOf(dump: JsonObject): FieldList[] {
+    273|   const lists = dump[LISTS_KEY];
+    274|   expect(Array.isArray(lists), `the sealed listing (deep-show kinds --…
+       |                                                                                                                                                                                  ^
+    275|   return (lists as JsonValue[]).map((v, i) => {
+    276|     const o = isObject(v) ? v : {};
+ ❯ wanted refusal.test.ts:24:30
+ ❯ refusal.test.ts:35:40
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/11]⎯
+
+ FAIL  refusal.test.ts > AC5 #2777.5fe304dc a value outside a closed list is refused, naming the list > AC5 #2777.5fe304dc a planted refusal with only the bad value fails, naming the code
+AssertionError: deep-show run --planted refusal_bad_value_only starts and exits 0 (no signal); stdout: {"ok":false,"code":"bad_input"}
+; stderr: : expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ run helpers.ts:189:169
+    187|   const s = start(bin, args, [{ evidence: tempDir('ev'), ...options.wo…
+    188|   expect(s.timedOut, `deep-show ${args.join(' ')} finished within its …
+    189|   expect(s.status, `deep-show ${args.join(' ')} starts and exits 0 (${…
+       |                                                                                                                                                                         ^
+    190|   expect(s.lines.length, `deep-show ${args.join(' ')}: one output line…
+    191|   const out = s.lines[0];
+ ❯ refusal.test.ts:40:23
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/11]⎯
+
+ FAIL  seal.test.ts > AC1 #2777.d820cdcc a field list with no closure is refused at the seal > AC1 #2777.d820cdcc a planted kind with a field of three words and no closure is refused at the seal, naming the kind and the field
+AssertionError: the binary builds: deep-show with features full,test-tone-unclosed: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features full,test-tone-unclosed failed:
++ error: none of the selected packages contains this feature: test-tone-unclosed
++ selected packages: deep-contracts, deep-canvas-seams, deep-canvas, deep-relay, deep-net, deep-codecs, deep-canvas-cells, deep-hook, deep-app, deep-canvas-effects, deep-canvas-scene3d, deep-canvas-drawn, deep-canvas-marks, deep-text, deep-canvas-motion, deep-gpu, deep-images, deep-marks-gpui, deep-text-gpui, deep-effects-render, deep-scene3d-render, deep-panel-host, deep-gpu-layer, deep-canvas-graph, deep-canvas-input, deep-canvas-media, deep-canvas-physics, deep-canvas-record, deep-canvas-sheet, deep-canvas-test-modules, deep-canvas-sandbox, deep-canvas-vector, deep-logic, deep-sandbox-wasmtime, deep-marks-render, deep-marks-vello, deep-replica, deep-marks-raster, deep-physics-rapier, deep-canvas-export, deep-lottie-reader, deep-motion, deep-input, deep-canvas-loop, deep-player, deep-play, deep-show, deep-text-render, deep-typeset, deep-lottie, deep-synth-job
++
+
+ ❯ Object.bin helpers.ts:162:98
+    160|       const entry = done.get(buildName(b));
+    161|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    162|       expect(entry.error, `the binary builds: ${SHOW} with features ${…
+       |                                                                                                  ^
+    163|       return entry.bin;
+    164|     },
+ ❯ seal.test.ts:21:30
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/11]⎯
+
+ FAIL  seal.test.ts > AC1 #2777.d820cdcc a field list with no closure is refused at the seal > AC1 #2777.d820cdcc its twin closed with a reason, reopens_if and instead seals
+AssertionError: the binary builds: deep-show with features full,test-tone-closed: expected 'cargo build --locked --bin deep-show …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked --bin deep-show --no-default-features --features full,test-tone-closed failed:
++ error: none of the selected packages contains this feature: test-tone-closed
++ selected packages: deep-contracts, deep-canvas-seams, deep-canvas, deep-relay, deep-net, deep-codecs, deep-canvas-cells, deep-hook, deep-app, deep-canvas-effects, deep-canvas-scene3d, deep-canvas-drawn, deep-canvas-marks, deep-text, deep-canvas-motion, deep-gpu, deep-images, deep-marks-gpui, deep-text-gpui, deep-effects-render, deep-scene3d-render, deep-panel-host, deep-gpu-layer, deep-canvas-graph, deep-canvas-input, deep-canvas-media, deep-canvas-physics, deep-canvas-record, deep-canvas-sheet, deep-canvas-test-modules, deep-canvas-sandbox, deep-canvas-vector, deep-logic, deep-sandbox-wasmtime, deep-marks-render, deep-marks-vello, deep-replica, deep-marks-raster, deep-physics-rapier, deep-canvas-export, deep-lottie-reader, deep-motion, deep-input, deep-canvas-loop, deep-player, deep-play, deep-show, deep-text-render, deep-typeset, deep-lottie, deep-synth-job
++ help: there is a similarly named feature: test-mode-closed
++
+
+ ❯ Object.bin helpers.ts:162:98
+    160|       const entry = done.get(buildName(b));
+    161|       if (!entry) throw Error(`the file didn't list the build ${buildN…
+    162|       expect(entry.error, `the binary builds: ${SHOW} with features ${…
+       |                                                                                                  ^
+    163|       return entry.bin;
+    164|     },
+ ❯ seal.test.ts:26:24
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/11]⎯
+
+ FAIL  table.test.ts > AC3 #2777.728bbb54 the ten lists in the generated table > AC3 #2777.728bbb54 the ten lists named above each have a row in the generated table: the camera's projection, translucency kinds, a material's shadow modes, the water material's terms, foley's materials and actions, an emitter's distance models, tone maps, GPU deforms, light kinds and the lens's fields
+AssertionError: docs/canvas-primitives.md holds the generated table: expected 'the section ### Registries and closed…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ the section ### Registries and closed lists holds no generated block after its hand-written table (a line starting <!-- field lists:)
+
+ ❯ table table.test.ts:33:79
+     31| function table(text: string, what: string): Table {
+     32|   const t = tableOf(text);
+     33|   expect(typeof t === 'string' ? t : '', `${what} holds the generated …
+       |                                                                               ^
+     34|   return t as Table;
+     35| }
+ ❯ table.test.ts:39:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/11]⎯
+
+ FAIL  table.test.ts > AC4 #2777.c186d624 the drift lane holds the generated table to the listing > AC4 #2777.c186d624 a planted reference whose generated table drops the row of camera@1.projection fails the drift lane, naming the list
+AssertionError: the copy of docs/canvas-primitives.md holds the generated table: expected 'the section ### Registries and closed…' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ the section ### Registries and closed lists holds no generated block after its hand-written table (a line starting <!-- field lists:)
+
+ ❯ table table.test.ts:33:79
+     31| function table(text: string, what: string): Table {
+     32|   const t = tableOf(text);
+     33|   expect(typeof t === 'string' ? t : '', `${what} holds the generated …
+       |                                                                               ^
+     34|   return t as Table;
+     35| }
+ ❯ driftOn table.test.ts:51:17
+ ❯ table.test.ts:61:15
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/11]⎯
+
+ FAIL  table.test.ts > AC4 #2777.c186d624 the drift lane holds the generated table to the listing > AC4 #2777.c186d624 a planted reference whose row of material@1.translucency.kind names another reason than the data fails the drift lane, naming the list
+AssertionError: the sealed listing (deep-show kinds --dump) carries its field lists under field_lists; its top-level keys are core_version, format, interfaces, module_set, modules, registries: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ fieldListsOf helpers.ts:274:178
+    272| export function fieldListsOf(dump: JsonObject): FieldList[] {
+    273|   const lists = dump[LISTS_KEY];
+    274|   expect(Array.isArray(lists), `the sealed listing (deep-show kinds --…
+       |                                                                                                                                                                                  ^
+    275|   return (lists as JsonValue[]).map((v, i) => {
+    276|     const o = isObject(v) ? v : {};
+ ❯ table.test.ts:67:35
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/11]⎯
+
+
+ Test Files  7 failed (7)
+      Tests  11 failed (11)
+   Start at  08:17:56
+   Duration  17.78s (tests 99%)
+
+vitest exit 1
+date: Thu Nov 19 08:18:14 PST 2026

@@ -160,7 +160,7 @@ fn run_view(
         return Err(json!({"code": "refused", "issues": broken}));
     }
     deep_canvas_effects::effect::lower(&mut args.doc);
-    crate::physics::bake(&mut args.doc, &call["tracks"])?;
+    crate::physics::bake(&mut args.doc, &call["tracks"], &args.assets)?;
     crate::particles::refuse(&args.doc, app.planted)?;
     // The frames the call draws and how each is reached (#173), the ones logic runs at first.
     let reached = history::order(args.from, args.frames, &args.seeks, &args.history, args.fps);
@@ -269,6 +269,7 @@ fn run_view(
         "linear",
         "ids",
         "pre_tone",
+        "pre_curve",
         "backdrop",
         "depth",
         "reflection",
@@ -1770,6 +1771,29 @@ fn run_view(
                 }
                 if let (Some(pre), true) = (&drawn.pre_tone, args.targets.contains("pre_tone")) {
                     frame.insert("pre_tone".into(), json!(write_named(out, pre, "f32")?));
+                }
+                // #971: the linear values the tone curve reads: that image after the look's
+                // local tone map, the exposure and the grade's white balance.
+                if let (Some(pre), true) = (
+                    drawn.toned.as_ref().or(drawn.pre_tone.as_ref()),
+                    args.targets.contains("pre_curve"),
+                ) {
+                    let scale = scene.exposure.unwrap_or(args.look.exposure);
+                    let balance = args.look.grade.white_balance();
+                    let read: Vec<u8> = pre
+                        .as_chunks::<16>()
+                        .0
+                        .iter()
+                        .flat_map(|p| {
+                            let c =
+                                |k: usize| f32::from_le_bytes([p[k], p[k + 1], p[k + 2], p[k + 3]]);
+                            let lit = [0, 4, 8].map(|k| f64::from(c(k)) * scale);
+                            let rgb = deep_canvas_marks::finish::mul(&balance, lit);
+                            let e = |x: f64| (x as f32).to_le_bytes();
+                            [e(rgb[0]), e(rgb[1]), e(rgb[2]), c(12).to_le_bytes()].concat()
+                        })
+                        .collect();
+                    frame.insert("pre_curve".into(), json!(write_named(out, &read, "f32")?));
                 }
                 if let Some(name) = &dirt_file {
                     frame.insert("dirt".into(), json!(name));

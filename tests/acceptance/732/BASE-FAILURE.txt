@@ -1,0 +1,85 @@
+At base a0d3713a7 (main, "Merge pull request #2847 …"), on 2026-11-19, on a reference Mac (Mac17,10, on mains power,
+thermal state nominal; LibreOffice not installed), with deep-show built once (`cargo build --locked --bin deep-show
+--no-default-features --features full`, CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0, toolchain 1.99.1):
+
+  scripts/lease node node_modules/vitest/vitest.mjs run --root tests/acceptance/732 --testTimeout=600000 \
+    --no-file-parallelism ac1-text-boxes.test.ts ac2-renders.test.ts ac3-draw-order.test.ts ac4-receipt.test.ts \
+    ac5-status-chip.test.ts ac6-notes.test.ts ac7-edit.test.ts ac8-fonts.test.ts ac10-budgets.test.ts ac11-taste.test.ts
+
+  Test Files  10 failed (10)
+       Tests  16 failed (16)
+    Duration  66.99s
+
+Each test failed at its own assertion, for missing behaviour; none failed to load or crashed. Every fixture document was
+presented (`showRun` asserts it before any call's reply is read), and the tests that evaluate first got the texts they
+expect: each stage of the four-stage piece draws the title, the lede and the bound value's text, and that text holds 42.
+
+What the base has: no `pptx` target. The export module registers only `lottie` in export.target@1, so an export with
+`video.codec: pptx` finds no sealed entry and no encode tool registering the codec, and answers
+{"outcome": "blocked", "state": "BLOCKED", "code": "no_encode_tool", "codec": "pptx", "frames_drawn": 0, …}
+(crates/deep-show/src/export/run.rs, export/tools.rs `no_tool`); the tests read that answer as missing behaviour, not as
+BLOCKED. An unknown `planted` name makes the scenario answer {"ok": false, "code": "bad_input"}.
+
+Per test:
+
+- ac1-text-boxes.test.ts
+  - "the four-stage piece exports to four slides in stage order …": the evaluations pass; it fails at `deliveredOf`:
+    "the four-stage piece's deck: the export doesn't write pptx: no export.target@1 entry names it, so it answers
+    {"outcome":"blocked","state":"BLOCKED","code":"no_encode_tool","codec":"pptx",…}".
+  - "a planted writer that turns the title into a picture fails …": "the four-stage piece (planted
+    pptx_title_as_picture): deep-show run answers the scenario ok; got {"ok":false,"code":"bad_input"}".
+
+- ac2-renders.test.ts
+  - "each of the four slides, rendered at 1920 × 1080, meets the export.fidelity floor …": fails at `deliveredOf`, as
+    above ("the four-stage piece's deck: the export doesn't write pptx …"), before LibreOffice is looked for.
+  - "a planted writer that drops the noise panel's picture fails, naming slide 2 …": "… (planted pptx_drops_picture):
+    deep-show run answers the scenario ok; got {"ok":false,"code":"bad_input"}".
+
+- ac3-draw-order.test.ts
+  - "the stage exports as a picture, the caption's text box and a picture over it …": the inset piece is presented; it
+    fails at `deliveredOf`: "the inset piece's deck: the export doesn't write pptx …".
+  - "a planted writer that flattens every non-native item …": "the inset piece (planted pptx_flattens_behind_text):
+    deep-show run answers the scenario ok; got {"ok":false,"code":"bad_input"}".
+
+- ac4-receipt.test.ts
+  - "on each slide the receipt lists the image …": fails at `deliveredOf`: "the four-stage piece's deck: the export
+    doesn't write pptx …".
+  - "an export whose receipt lists fewer items …": "… (planted pptx_receipt_lists_fewer): deep-show run answers the
+    scenario ok; got {"ok":false,"code":"bad_input"}".
+
+- ac5-status-chip.test.ts
+  - "the chip is a picture with why, showing its glyph …": the status piece is presented from the agent's tree; it fails
+    at `deliveredOf`: "the status piece's deck: the export doesn't write pptx …".
+  - "a planted writer that writes the chip as a native shape …": "the status piece (planted pptx_chip_as_shape):
+    deep-show run answers the scenario ok; got {"ok":false,"code":"bad_input"}".
+
+- ac6-notes.test.ts
+  - "each slide's notes are its stage's …": every stage draws the bound value's text holding 42; it fails at
+    `deliveredOf`: "the four-stage piece's deck: the export doesn't write pptx …".
+
+- ac7-edit.test.ts
+  - "slide 1 with its title's string edited renders the new string …": the piece and its twin are presented; it fails at
+    `deliveredOf`: "the four-stage piece's deck: the export doesn't write pptx …".
+
+- ac8-fonts.test.ts
+  - "Inter, recorded as not embeddable, …": the named-font piece is presented (at the base its look, refused by the look
+    check for `embed: false`, is left for the shipped one: hub.rs, the document's look); it fails at `deliveredOf`: "the
+    named-font piece's deck: the export doesn't write pptx …".
+
+- ac10-budgets.test.ts
+  - "the perf lane has a task whose reason names #732.bbcc6582 …": "benchmarks/budgets.json has a task whose reason
+    names #732.bbcc6582: expected false to be true".
+  - "on the reference Mac, the twenty-stage piece … exports in under 5 s …": this Mac passes the reference gate, so the
+    warm-up export runs; it fails at `deliveredOf`: "the twenty-stage piece's deck: the export doesn't write pptx …".
+
+- ac11-taste.test.ts
+  - "the check run takes the pictures from the exported file …": fails at `deliveredOf`: "the four-stage piece's deck:
+    the export doesn't write pptx …", before any picture is written (docs/evidence/732/ was not made).
+
+- ac9-atomic.test.ts: not run at the base, to spare this shared Mac the second build its first test needs
+  (`full,test-export-guards`); type-checked only. From the base's code: "… stops there and leaves nothing beside out"
+  would present the device-loss copy and fail at "the export stops": the answer is the `no_encode_tool` BLOCKED
+  above, not `stopped`; "… gives three byte-identical files" would fail at `deliveredOf` for export 1, as the others
+  do.
+
+The type-check passes: node node_modules/typescript/bin/tsc -p tests/acceptance/732/tsconfig.json (exit 0).

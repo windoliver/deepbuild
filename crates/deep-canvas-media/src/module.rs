@@ -87,6 +87,14 @@ pub fn png_reads_itself() -> Module {
 const READER: &str = "decode_worker";
 
 fn register(r: &mut Registrar, restore: fn(&Value) -> Value, png_reader: &str) {
+    // #2777: foley's tables, the lists of words a film sets for its sounds.
+    r.word_list(
+        "foley.material",
+        "foley",
+        "material",
+        &crate::foley::MATERIALS,
+    )
+    .word_list("foley.action", "foley", "action", &crate::foley::ACTIONS);
     // #204: the synth presets packs fill, read from a pack's `presets`.
     r.registry(crate::synth::registry());
     r.pack_field("presets", crate::synth::presets_field);

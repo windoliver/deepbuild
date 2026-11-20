@@ -14,6 +14,7 @@ use std::collections::BTreeMap;
 
 use deep_canvas::document::Issue;
 use deep_canvas::film_audit::{self as audit, Count, Flicker, Hold, Readable, Seen};
+use deep_canvas_marks::animated;
 use deep_canvas_marks::scene::{Fill, Mark, Scope};
 use deep_text::unicode::Reading;
 use serde_json::{json, Map, Value};
@@ -1104,7 +1105,11 @@ fn frame_of(
                 // Glyphs with no outline (spaces) draw nothing and aren't read.
                 for (k, b) in own.iter().enumerate() {
                     let Some(b) = b else { continue };
-                    let [lift, o] = units.and_then(|u| u.get(k)).copied().unwrap_or([0.0, 1.0]);
+                    let unit = units
+                        .and_then(|u| u.get(k))
+                        .copied()
+                        .unwrap_or(animated::UNIT);
+                    let (lift, o) = (unit[0], animated::faded(unit));
                     let r = revealed
                         .as_ref()
                         .and_then(|r| r.get(k))

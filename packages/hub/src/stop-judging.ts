@@ -1040,7 +1040,7 @@ export class StopJudging {
     this.claimRequirements.set(r.claim, new Map(r.requirements.map((q) => [q.req, { id: q.id, text: q.text }])));
     this.claimScopes.set(r.claim, { task: r.task, base: r.base, cwd: r.cwd });
     this.paidChecks.set(r.claim, new Map(r.checks.flatMap((c) => (c.paid ? [[c.check, { paid: c.paid, task: r.task }] as const] : []))));
-    // Only reads seen by hooks: a reuse hint (#82), never proof that outside work left the tree unchanged (#2078).
+    // Only reads seen by hooks: what open items may skip reading again (#82), never proof the tree is unchanged (#2078).
     const same = this.options.state().live.get(r.session)?.workedSinceClaim === false && this.options.state().live.get(r.session)?.claim !== undefined;
     const lane = (async () => {
       const message = this.lastMessage.get(r.session) ?? '';
@@ -1127,7 +1127,7 @@ export class StopJudging {
       // with its output; passing, it proves nothing, as the agent's own checks never pass a claim.
       for (const command of told) checks.push({ check: command, approved: null, command, covers: [], depth: 'unit', on_base: 'passes', asserts: [], source: 'own' });
       if (told.length) this.told.set(r.claim, new Set(told));
-      const ran = await this.options.services.gate.stop({ session: r.session, claim: r.claim, task: r.task, cwd: r.cwd, base: r.base, requirements, checks, stopAt: at, definition: r.definition, same, ...(r.joins ? { joins: true } : {}), ...(r.state ? { state: r.state } : {}) });
+      const ran = await this.options.services.gate.stop({ session: r.session, claim: r.claim, task: r.task, cwd: r.cwd, base: r.base, requirements, checks, stopAt: at, definition: r.definition, ...(r.joins ? { joins: true } : {}), ...(r.state ? { state: r.state } : {}) });
       // The verdict is written beside the stop's reply, which waits for it only where it reads the record (#82).
       const written = this.judged(r.claim);
       this.verdictWrites.set(r.claim, written);

@@ -210,6 +210,7 @@ fn check_by(
                 }
             }
             super::pack_kinds::migrate::at_load(items, &resolved, packs.planted, &mut notices);
+            issues.extend(packs::removals(items, &resolved));
             // Expansion at check, never per frame (Recipe): the derived items join the lowered
             // items before any item is checked, so they meet the item contract, the module
             // checks and the budget as any item does.
@@ -1460,8 +1461,8 @@ struct KindFacts<'a> {
     deprecation: Option<&'a (String, String)>,
     /// The close names an unknown kind's notice names (#412).
     close: Vec<Value>,
-    /// Of a pack the document names and this build lacks: kept as written, skipped (#1958).
-    pack_missing: bool,
+    /// Of a pack this build lacks (#1958) or a kind its version removed (#1962): kept, skipped.
+    skipped: bool,
 }
 
 impl<'a> KindFacts<'a> {
@@ -1491,7 +1492,7 @@ impl<'a> KindFacts<'a> {
                 }
                 _ => Vec::new(),
             },
-            pack_missing: packs::retired::skipped(text, resolved),
+            skipped: packs::retired::skipped(text, resolved) || packs::removed(text, resolved),
         }
     }
 }
@@ -1539,9 +1540,9 @@ fn check_item(
     let Some(facts) = ctx.facts.get(text) else {
         return false;
     };
-    // An instance of a pack this build lacks: its pack's notice names it, and nothing of it is
-    // read past its kind (#1958).
-    if facts.pack_missing {
+    // An instance of a pack this build lacks, or of a kind its version removed: its pack's notice
+    // or the removal's error names it, and nothing of it is read past its kind (#1958, #1962).
+    if facts.skipped {
         return false;
     }
     let instance = facts.instance;
@@ -2128,7 +2129,10 @@ fn check_params(
             // The forms the kind's reader declares (#1973): a value none takes is refused here,
             // naming the form it expected and the one it got; the reader checks the rest.
             ParamType::Json(declared) => {
-                if let Some(issue) = form_issue(key, name, param.unit, declared, value) {
+                if let Some((mut issue, form)) = form_issue(key, name, param.unit, declared, value)
+                {
+                    let field = format!("{}@{}.{name}", entry.full_name(), version.major);
+                    registry::fields::name_list(&mut issue, sealed, &field, &form, value);
                     issues.push(issue);
                 }
             }
@@ -2211,12 +2215,18 @@ fn check_params(
 /// A structured value no declared form takes, as `out_of_range` at its path: `size takes 3
 /// numbers in m; got 2 numbers`, with the forms it takes. A declaration the form language can't
 /// read refuses nothing here; the kit refuses it (#1973).
-fn form_issue(key: &str, name: &str, unit: &str, declared: &str, value: &Value) -> Option<Issue> {
+fn form_issue(
+    key: &str,
+    name: &str,
+    unit: &str,
+    declared: &str,
+    value: &Value,
+) -> Option<(Issue, crate::form::Form)> {
     let form = crate::form::parse(declared).ok()?;
     let got = form.miss(value)?;
     let gist = form.gist(unit);
     let forms: Vec<String> = form.alternatives().iter().map(|f| f.print()).collect();
-    Some(Issue {
+    let issue = Issue {
         fix: format!("Write {name} as {}: {gist}.", forms.join(" or ")),
         forms,
         ..Issue::error(
@@ -2226,7 +2236,8 @@ fn form_issue(key: &str, name: &str, unit: &str, declared: &str, value: &Value) 
             value.clone(),
             &format!("{name} takes {gist}; got {got}"),
         )
-    })
+    };
+    Some((issue, form))
 }
 
 /// A document's design size, as `fw` and `fh` read it.
