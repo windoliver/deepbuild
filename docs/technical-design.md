@@ -2524,7 +2524,7 @@ No agent is refused outright, since every provider allows its own API key there.
 
 ## Numbers version 0 has to hold
 
-Every number says whether it is measured, with its date, machine and method, a target, or an estimate. The Target column below holds targets, and a figure given as a reason says which it is.
+Every number says whether it is measured, with its date, machine and method, a target, or an estimate. The Target column below holds targets, and a figure given as a reason says which it is. Where each row stands on main, with the reading behind it, is the numbers table the budget windows keep, [benchmarks/windows/numbers.md](../benchmarks/windows/numbers.md) (#2674).
 
 | Budget | Target | Why |
 |---|---|---|
