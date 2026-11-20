@@ -10,10 +10,13 @@
 // A job that repeats (#1527; design: Schedule) runs as a schedule of its own: each fire is a `schedule.run`, and runs
 // never overlap. Its wake test, fixed by your yes, runs on each fire with no model: nothing new is a declared no-op,
 // new wakes the model for one round, and a failing test is a FAIL spaced as #365's schedules are. A wake test whose
-// copy in the job's folders no longer matches its approved digest makes the fire BLOCKED, naming the file.
+// copy in the job's workspace no longer matches its approved digest makes the fire BLOCKED, naming the file. A round's
+// model turns are work jobs on the runner in the job's workspace, one per task; once a finished round left the job's
+// own script there, later runs run it with no model and wake the model only when it says its input's shape changed.
+// A run passes only when the checks it left in the workspace pass.
 import { execFile, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import type { Delivery } from '@deepbuild/asks';
@@ -35,11 +38,16 @@ const WAKE_CAP = 8192;
 const FAIL_CAP_MS = 6 * HOUR;
 const PAUSE_AFTER = 5;
 const PLUGIN = 'deepbuild/briefs';
-/** The words a round's task ends on (work.state): it passed, or its one attempt ended. */
-const FINAL = new Set(['PASS', 'sent back', 'BLOCKED', 'INVALID', 'INCONCLUSIVE']);
+/** The job's own script and checks in its workspace (#1527 contract 9), how long each may run, and a model turn's deadline. */
+const JOB_SCRIPT = '.deepbuild/job.sh';
+const CHECKS = '.deepbuild/checks';
+/** The script's exit that says its input's shape changed: the model wakes for that run. */
+const SHAPE_CHANGED = 3;
+const SCRIPT_MS = 10 * 60_000;
+const TURN_MS = 30 * 60_000;
 const scheduleOf = (key: string): string => `ext.briefs.job_${key.slice(0, 12)}`;
-/** A run of a repeat job, folded from its `schedule.run` events, with the tasks of the round it woke, if it woke one. */
-interface Run { run: string; due: number; tasks?: number[]; ended?: { verdict?: string } }
+/** A run of a repeat job, folded from its `schedule.run` events. */
+interface Run { run: string; due: number; ended?: { verdict?: string } }
 /** FAILs in a row at the end of a schedule's runs. */
 function failsOf(runs: readonly Run[]): number {
   let n = 0;
@@ -66,7 +74,7 @@ interface Made { project: string; folder: string; repo?: string; clone?: string;
 interface Fold {
   key: string; heading: string; words: string; links: string[]; files: string[];
   ask?: string; page?: string; brief?: Brief; refused?: string;
-  made?: Made; entered: Map<string, number>; applied: boolean; held: Set<number>; rounds: number; last: number;
+  made?: Made; entered: Map<string, number>; applied: boolean; held: Set<number>; last: number;
   /** Its schedule's runs. */
   runs: Run[];
 }
@@ -81,6 +89,8 @@ export class Intake implements IntakeService {
   /** Each card's brief, by its ask. */
   private readonly cards = new Map<string, string>();
   private readonly busy = new Set<string>();
+  /** The runs this hub is going through now: a run open on the record and not here died with the hub that started it. */
+  private readonly running = new Set<string>();
   private restored = false;
   constructor(private readonly o: IntakeDeps) {}
 
@@ -297,14 +307,13 @@ export class Intake implements IntakeService {
         numbers.set(t.title, n);
         await this.o.appendCore('brief.made', { step: 'entered', key, title: t.title, number: n }, { subject: f.ask! });
       }
+      // A job that repeats outside a repo runs as its schedule, its first run at once: model turns in its workspace,
+      // never a session of the work run.
+      const repeats = brief.every && !made.repo;
       const started = await this.o.raw(`SELECT 1 FROM events WHERE kind = 'start.approval' AND subject = ? LIMIT 1`, [f.ask!]);
-      // A job that repeats: its first run is its schedule's first, and what it reads now counts as read once a round ran on it and didn't FAIL.
-      if (brief.every && !made.repo && !f.runs.length) {
-        if (brief.watch) await this.input(brief.watch).then((now) => this.keep(key, now, 'next'), () => undefined);
-        await this.dispatch(key, this.o.now());
-      }
-      if (!started.length) await this.o.start(f.ask!, made.folder, scope([...numbers.values()]));
+      if (!repeats && !started.length) await this.o.start(f.ask!, made.folder, scope([...numbers.values()]));
       await this.o.appendCore('brief.made', { step: 'applied', key, project: made.project, folder: made.folder, tasks: [...numbers.values()] }, { subject: f.ask! });
+      if (repeats && !f.runs.length) await this.fire({ ...f, made, applied: true }, this.o.now(), true);
     } catch (error) {
       const why = error instanceof Error ? error.message : String(error);
       process.stderr.write(`deep hub: the brief ${key.slice(0, 12)} was not applied: ${why}\n`);
@@ -375,55 +384,123 @@ export class Intake implements IntakeService {
     }
   }
   /**
-   * A repeat job's schedule on this pass (the passes never overlap): a run still going ends once its round's tasks
-   * have, else the next fire comes a period after the last, or after a FAIL twice the last gap up to 6 h, and the
-   * fifth FAIL in a row pauses it. A wake test that drifted from its approval stops it until a new approval. Either
-   * stop is a row of the list that waits on you.
+   * A repeat job's schedule on this pass (the passes never overlap): a run open on the record that this hub isn't
+   * going through died with the hub that started it; else the next fire comes a period after the last, or after a FAIL
+   * twice the last gap up to 6 h, and the fifth FAIL in a row pauses it. A wake test that drifted from its approval
+   * stops it until a new approval. Either stop is a row of the list that waits on you.
    */
   private async tick(f: Fold, now: number): Promise<void> {
     const last = f.runs.at(-1);
     if (last && !last.ended) {
-      // A run whose round never started (a restart between its fire and its round) died with the hub: INVALID.
-      const settled = last.tasks ? await this.settled(f.ask!, last.tasks) : { verdict: 'INVALID', cause: 'Its round never started: the hub stopped between its fire and its round.' };
-      if (!settled) return;
-      await this.end(f.key, last, settled);
-      // The input that woke it counts as read once a round ran on it and didn't FAIL: a FAIL, or a round that never
-      // started, wakes the model again at its next fire.
-      if (last.tasks && settled.verdict !== 'FAIL') this.commit(f.key);
-      return this.stopped(f, [...f.runs.slice(0, -1), { ...last, ended: { verdict: settled.verdict } }], settled.cause);
+      if (this.running.has(last.run)) return;
+      // Its input is read again at the next fire, since no run finished on it.
+      return this.end(f.key, last, { verdict: 'INVALID', cause: 'The hub stopped while this run was going, so it never finished.' });
     }
-    if (last?.ended?.verdict === 'BLOCKED' && !last.tasks) return;
+    if (last?.ended?.verdict === 'BLOCKED') return;
     const fails = failsOf(f.runs);
     if (fails >= PAUSE_AFTER) return;
     const period = PERIOD[f.brief!.every!];
     if (now < (last?.due ?? f.last) + (fails ? Math.min(period * 2 ** fails, FAIL_CAP_MS) : period)) return;
+    await this.fire(f, now, false);
+  }
+  /** One run of the job, dispatched now and gone through in the background: its schedule's next pass sees it end. */
+  private async fire(f: Fold, now: number, first: boolean): Promise<void> {
     const run = await this.dispatch(f.key, now);
-    const wake = f.brief!.wake;
-    if (!wake || !f.brief!.watch) return this.round(f);
-    const end = async (how: { verdict?: string; noop?: true; cause: string }): Promise<void> => {
+    this.running.add(run.run);
+    void this.go(f, run, first)
+      .catch((error: unknown) => this.end(f.key, run, { verdict: 'INVALID', cause: `The run stopped: ${error instanceof Error ? error.message : String(error)}` }))
+      .catch(() => undefined)
+      .finally(() => this.running.delete(run.run));
+  }
+  /**
+   * A run: the wake test, with no model, unless this is the job's first run; then the job's own script with no model
+   * where a finished run left one, else (or when the script says its input's shape changed) one model turn per task in
+   * the workspace; then the checks the job keeps there. Its input counts as read once a run went through it and didn't
+   * FAIL, so a FAIL wakes it again at the next fire.
+   */
+  private async go(f: Fold, run: Run, first: boolean): Promise<void> {
+    const folder = f.made!.folder;
+    const finish = async (how: { verdict?: string; noop?: true; cause: string }): Promise<void> => {
+      if (how.verdict !== 'FAIL' && !how.noop) this.commit(f.key);
       await this.end(f.key, run, how);
-      await this.stopped(f, [...f.runs, { ...run, ended: { ...(how.verdict ? { verdict: how.verdict } : {}) } }], how.cause);
+      await this.stopped(f, [...f.runs, { ...run, ended: how.verdict ? { verdict: how.verdict } : {} }], how.cause);
     };
-    const drifted = this.drifted(f, wake.test, await this.worktrees(f.ask!));
-    if (drifted) return end({ verdict: 'BLOCKED', cause: drifted });
-    let input: string;
-    try { input = await this.input(f.brief!.watch); } catch (error) {
-      return end({ verdict: 'FAIL', cause: `The wake test's input ${f.brief!.watch} couldn't be read: ${error instanceof Error ? error.message : String(error)}` });
+    const { wake, watch } = f.brief!;
+    if (wake) {
+      const drifted = this.drifted(folder, wake.test);
+      if (drifted) return finish({ verdict: 'BLOCKED', cause: drifted });
     }
-    const lastFile = join(this.o.root, 'jobs', f.key.slice(0, 12), 'last');
-    const said = await wakeTest(wake.test, existsSync(lastFile) ? readFileSync(lastFile, 'utf8') : '', input);
-    if (!said.answer) return end({ verdict: 'FAIL', cause: `The wake test ${WAKE_FILE} failed: ${said.said}` });
-    if (said.answer === 'nothing new') {
-      this.keep(f.key, input, 'last');
-      return end({ noop: true, cause: 'Its wake test found nothing new, so no model was woken.' });
+    let input: string | undefined;
+    if (watch) {
+      try { input = await this.input(watch); } catch (error) {
+        return finish({ verdict: 'FAIL', cause: `Its input ${watch} couldn't be read: ${error instanceof Error ? error.message : String(error)}` });
+      }
     }
-    this.keep(f.key, input, 'next');
-    await this.round(f);
+    if (wake && input !== undefined && !first) {
+      const lastFile = join(this.jobDir(f.key), 'last');
+      const said = await wakeTest(wake.test, existsSync(lastFile) ? readFileSync(lastFile, 'utf8') : '', input);
+      if (!said.answer) return finish({ verdict: 'FAIL', cause: `The wake test ${WAKE_FILE} failed: ${said.said}` });
+      if (said.answer === 'nothing new') {
+        this.keep(f.key, input, 'last');
+        return finish({ noop: true, cause: 'Its wake test found nothing new, so no model was woken.' });
+      }
+    }
+    if (input !== undefined) this.keep(f.key, input, 'next');
+    // The run works in a clone of the workspace under the job's own folder, since no run writes the hub's root, where
+    // workspaces are; what it made lands in the workspace only when it didn't FAIL.
+    const work = await this.clone(f.key, folder);
+    let woke = 'it has no script of its own yet';
+    if (input !== undefined && existsSync(join(work, JOB_SCRIPT))) {
+      const ran = await confined(['/bin/sh', JOB_SCRIPT, join(this.jobDir(f.key), 'next')], work, { read: [this.jobDir(f.key)], write: [work] }, SCRIPT_MS);
+      if (ran.code === 0) return finish(await this.landed(work, folder, `${JOB_SCRIPT} ran with no model`));
+      if (ran.code !== SHAPE_CHANGED) return finish({ verdict: 'FAIL', cause: `Its script ${JOB_SCRIPT} ${ran.said}` });
+      woke = `its script ${JOB_SCRIPT} said its input's shape changed${ran.err ? `: ${ran.err.slice(0, 300)}` : ''}`;
+    }
+    for (const t of f.brief!.tasks) {
+      const rec = await this.o.runner().submit({ kind: 'work', agent: RESEARCHER, workspace: work, grant: { read: [this.jobDir(f.key)] }, prompt: turnPrompt(f, t.title, t.criteria, input !== undefined ? join(this.jobDir(f.key), 'next') : undefined, woke), deadline_ms: TURN_MS })
+        .then((job) => (job.state === 'finished' || job.state === 'refused' ? job : this.o.runner().wait(job.job)));
+      if (rec.state !== 'finished') {
+        return finish({ verdict: 'FAIL', cause: `Its model turn ${rec.job} for "${t.title}" ended ${rec.state}${rec.refused ? `: ${rec.refused}` : rec.stop ? `: ${rec.stop.cause}` : ''}.` });
+      }
+    }
+    return finish(await this.landed(work, folder, `a model turn per task (${woke})`));
+  }
+  /** A fresh clone of the workspace for one run, under the job's own folder. */
+  private async clone(key: string, folder: string): Promise<string> {
+    const dir = this.jobDir(key);
+    mkdirSync(dir, { recursive: true });
+    rmSync(join(dir, 'work'), { recursive: true, force: true });
+    await git(dir, ['clone', '-q', '--no-hardlinks', folder, 'work']);
+    return realpathSync(join(dir, 'work'));
+  }
+  /** The run's checks' verdict on its clone; unless they FAIL, what it made is committed there and lands in the workspace. */
+  private async landed(work: string, folder: string, how: string): Promise<{ verdict: string; cause: string }> {
+    const verdict = await this.checks(work);
+    if (verdict.verdict !== 'FAIL' && await git(work, ['status', '--porcelain'])) {
+      await git(work, ['add', '-A']);
+      await git(work, ['commit', '-q', '-m', `A run of this job: ${how}. ${verdict.verdict}`]);
+      await git(folder, ['pull', '-q', '--ff-only', work, 'HEAD']);
+    }
+    return { verdict: verdict.verdict, cause: `${how[0]!.toUpperCase()}${how.slice(1)}; ${verdict.cause}` };
+  }
+  /**
+   * The job's own checks, each `.deepbuild/checks/*.sh` in its workspace run in turn with no model and no network: PASS
+   * only when there is one and each exits 0. None is INCONCLUSIVE, since nothing then says the run did its job.
+   */
+  private async checks(folder: string): Promise<{ verdict: string; cause: string }> {
+    const dir = join(folder, CHECKS);
+    const names = existsSync(dir) ? readdirSync(dir).filter((n) => n.endsWith('.sh')).sort() : [];
+    if (!names.length) return { verdict: 'INCONCLUSIVE', cause: `it left no check of its own in ${CHECKS}, so nothing says it did its job.` };
+    for (const name of names) {
+      const ran = await confined(['/bin/sh', `${CHECKS}/${name}`], folder, { write: [folder] }, SCRIPT_MS);
+      if (ran.code !== 0) return { verdict: 'FAIL', cause: `its check ${CHECKS}/${name} ${ran.said}.` };
+    }
+    return { verdict: 'PASS', cause: `its checks passed: ${names.map((n) => `${CHECKS}/${n}`).join(', ')}.` };
   }
   /** After a run ends: a job its wake test's drift stopped, or its fifth FAIL in a row paused, is a row that waits on you. */
   private async stopped(f: Fold, runs: readonly Run[], cause: string): Promise<void> {
     const last = runs.at(-1)!;
-    const drift = last.ended?.verdict === 'BLOCKED' && !last.tasks;
+    const drift = last.ended?.verdict === 'BLOCKED';
     if (!drift && failsOf(runs) < PAUSE_AFTER) return;
     await this.o.row(rowId(f.key), {
       id: rowId(f.key), title: f.heading, project: f.made!.project, session: '', agent: null,
@@ -432,38 +509,15 @@ export class Intake implements IntakeService {
     });
   }
   /**
-   * A run's round is over once each of its tasks reads a final word (one attempt each, #1527): its verdict is PASS when
-   * every task passed, else the first other one's (a task sent back is a FAIL), or undefined while one is going.
+   * Why the wake test in the job's workspace isn't the one you approved, naming the file, or undefined when it matches
+   * its digest. Only a regular file of at most the test's cap is read: a FIFO or device a turn left can't hold the pass.
    */
-  private async settled(ask: string, tasks: readonly number[]): Promise<{ verdict: string; cause: string } | undefined> {
-    const rows = (await this.o.raw(`SELECT data FROM events WHERE kind = 'work.state' AND subject = ? ORDER BY log_pos`, [ask])) as { data: string }[];
-    const word = new Map<number, { word: string; why: string }>();
-    for (const r of rows) { const d = JSON.parse(r.data) as Obj; word.set(Number(d.issue), { word: String(d.word), why: String(d.why) }); }
-    const ended = tasks.map((n) => ({ n, ...word.get(n) })).filter((t) => t.word && FINAL.has(t.word));
-    if (ended.length < tasks.length) return undefined;
-    const other = ended.find((t) => t.word !== 'PASS');
-    if (!other) return { verdict: 'PASS', cause: 'Each task of its round passed.' };
-    return { verdict: other.word === 'sent back' ? 'FAIL' : other.word!, cause: ended.map((t) => `task ${t.n}: ${t.word}, ${t.why}`).join('; ').slice(0, 8000) };
-  }
-  /** The worktrees the job's sessions worked in: a session's copy of the wake test is the job's too. */
-  private async worktrees(ask: string): Promise<string[]> {
-    const rows = (await this.o.raw(`SELECT json_extract(data, '$.worktree') AS worktree FROM events WHERE kind = 'work.attempt' AND subject = ?`, [ask])) as { worktree: string | null }[];
-    return [...new Set(rows.flatMap((r) => (r.worktree ? [r.worktree] : [])))];
-  }
-  /**
-   * Why the wake test on disk isn't the one you approved, naming the file, or undefined when every copy matches its
-   * digest. Only a regular file of at most the test's cap is read: a session's FIFO or device can't hold the pass.
-   */
-  private drifted(f: Fold, approved: string, worktrees: readonly string[]): string | undefined {
+  private drifted(folder: string, approved: string): string | undefined {
     const digest = sha256(approved);
-    for (const folder of [f.made!.folder, ...worktrees]) {
-      const path = join(folder, WAKE_FILE);
-      const stat = lstatSync(path, { throwIfNoEntry: false });
-      if (!stat && folder !== f.made!.folder) continue;
-      const now = !stat ? 'none' : stat.isFile() && stat.size <= WAKE_CAP * 4 ? sha256(readFileSync(path)) : 'not a file it reads';
-      if (now !== digest) return `The wake test ${WAKE_FILE} in ${folder} isn't the one you approved: its digest is ${now}, and your approval fixed ${digest}. Nothing runs until a new approval.`;
-    }
-    return undefined;
+    const path = join(folder, WAKE_FILE);
+    const stat = lstatSync(path, { throwIfNoEntry: false });
+    const now = !stat ? 'none' : stat.isFile() && stat.size <= WAKE_CAP * 4 ? sha256(readFileSync(path)) : 'not a file it reads';
+    return now === digest ? undefined : `The wake test ${WAKE_FILE} in ${folder} isn't the one you approved: its digest is ${now}, and your approval fixed ${digest}. Nothing runs until a new approval.`;
   }
   /** What a repeat job watches, as it is now: a link you typed, or a file you gave, capped as the research reads it. */
   private async input(watch: string): Promise<string> {
@@ -471,15 +525,17 @@ export class Intake implements IntakeService {
   }
   /** The job's input as the run going read it (`next`), or as its wake test compares against (`last`). */
   private keep(key: string, input: string, as: 'next' | 'last'): void {
-    const dir = join(this.o.root, 'jobs', key.slice(0, 12));
+    const dir = this.jobDir(key);
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, as), input);
   }
   /** The input a run woke on is read: what the next fire compares against. */
   private commit(key: string): void {
-    const dir = join(this.o.root, 'jobs', key.slice(0, 12));
+    const dir = this.jobDir(key);
     if (existsSync(join(dir, 'next'))) renameSync(join(dir, 'next'), join(dir, 'last'));
   }
+  /** Where the hub keeps a repeat job's input as runs read it, outside its workspace. */
+  private jobDir(key: string): string { return join(this.o.root, 'jobs', `brief-${key.slice(0, 12)}`); }
   private async dispatch(key: string, due: number): Promise<Run> {
     const run = { run: `run:${ulid(due)}`, due };
     await this.o.appendCore('schedule.run', { ...run, schedule: scheduleOf(key), plugin: PLUGIN, phase: 'dispatched' }, { subject: run.run });
@@ -499,16 +555,6 @@ export class Intake implements IntakeService {
     }, { steps: [step], diff: sha256(`held:${f.key}:${i}`) });
     await this.o.appendCore('brief.made', { step: 'held', key: f.key, index: i, ask }, { subject: f.ask! });
   }
-  /** A job that repeats: its tasks entered again for the new period, under the same approval. */
-  private async round(f: Fold): Promise<void> {
-    if (!f.made || f.made.repo || this.busy.has(f.key)) return;
-    const n = f.rounds + 1;
-    const numbers: number[] = [];
-    for (const t of f.brief!.tasks) numbers.push((await this.o.spaces().task(f.made.project, { title: `${t.title} (round ${n + 1})`, criteria: t.criteria, blocked_by: [] })).task);
-    await this.o.start(f.ask!, f.made.folder, scope(numbers));
-    await this.o.appendCore('brief.made', { step: 'repeated', key: f.key, round: n, tasks: numbers }, { subject: f.ask! });
-  }
-
   /** Every brief on the record, folded by key. */
   private async folds(): Promise<Map<string, Fold>> {
     const rows = (await this.o.raw(`SELECT kind, ts, data FROM events WHERE kind IN ('brief.made', 'brief.drafted')
@@ -525,7 +571,7 @@ export class Intake implements IntakeService {
       }
       const key = String(d.key);
       if (row.kind === 'brief.made' && d.step === 'asked') {
-        out.set(key, { key, heading: String(d.heading), words: String(d.words), links: d.links as string[], files: d.files as string[], entered: new Map(), applied: false, held: new Set(), rounds: 0, last: row.ts, runs: [] });
+        out.set(key, { key, heading: String(d.heading), words: String(d.words), links: d.links as string[], files: d.files as string[], entered: new Map(), applied: false, held: new Set(), last: row.ts, runs: [] });
         continue;
       }
       const f = out.get(key);
@@ -535,55 +581,71 @@ export class Intake implements IntakeService {
       else if (d.step === 'refused') f.refused = String(d.reason);
       else if (d.step === 'made') f.made = { project: String(d.project), folder: String(d.folder), ...(d.repo ? { repo: String(d.repo), clone: String(d.clone) } : {}), ...(d.there ? { there: true as const } : {}) };
       else if (d.step === 'entered') f.entered.set(String(d.title), Number(d.number));
-      else if (d.step === 'applied') { f.applied = true; f.last = row.ts; woke(f, d.tasks); }
+      else if (d.step === 'applied') { f.applied = true; f.last = row.ts; }
       else if (d.step === 'held') f.held.add(Number(d.index));
-      else if (d.step === 'repeated') { f.rounds = Number(d.round); f.last = row.ts; woke(f, d.tasks); }
     }
     return out;
   }
 }
 
-/** A round entered while a run of its schedule is going is that run's. */
-function woke(f: Fold, tasks: unknown): void {
-  const run = f.runs.at(-1);
-  if (run && !run.ended && Array.isArray(tasks)) run.tasks = tasks as number[];
-}
 const headers = (token: string | undefined): Record<string, string> => ({ accept: 'application/vnd.github+json', 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) });
 /**
+ * A program a model drafted, run with no model: confined by the supervisor's sandbox to the system's programs, its
+ * folder and what `grant` names, with no network; its whole process group is killed after `ms` and once it exits.
+ */
+async function confined(argv: string[], cwd: string, grant: { read?: string[]; write?: string[] }, ms: number): Promise<{ code: number | null; out: string; err: string; said: string }> {
+  const sandbox = process.platform === 'darwin' ? seatbelt : process.platform === 'linux' ? bubblewrap : undefined;
+  if (!sandbox) return { code: null, out: '', err: '', said: `can't run: no sandbox runs it on ${process.platform}` };
+  const launch = await sandbox.confine({ argv, cwd, env: { PATH: '/usr/bin:/bin', LANG: 'C', HOME: cwd } }, grant);
+  const child = spawn(launch.argv[0]!, launch.argv.slice(1), { cwd: launch.cwd, env: launch.env, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+  let out = '';
+  let err = '';
+  child.stdout.setEncoding('utf8').on('data', (d: string) => { if (out.length < WAKE_CAP) out += d; });
+  child.stderr.setEncoding('utf8').on('data', (d: string) => { if (err.length < WAKE_CAP) err += d; });
+  const kill = (): void => { try { process.kill(-child.pid!, 'SIGKILL'); } catch { /* gone */ } };
+  const timer = setTimeout(kill, ms);
+  const [code, signal] = await new Promise<[number | null, string | null]>((done) => {
+    child.on('error', () => done([null, 'error']));
+    child.on('exit', (c, sig) => done([c, sig]));
+  });
+  clearTimeout(timer);
+  // Anything it left behind holding its pipes goes with its group.
+  kill();
+  err = err.trim();
+  return { code, out, err, said: `exited ${code ?? signal ?? 'with an error'}${signal === 'SIGKILL' ? ' (past its time)' : ''}${err ? `: ${err.slice(0, 500)}` : ''}` };
+}
+/**
  * A wake test run once, with no model: `sh <test> <before> <after>` in a folder of its own, the approved text (never a
- * copy on disk) as the test, confined by the supervisor's sandbox to reading that folder and the system's programs, with
- * no network and no writes, since a model drafted it. Its first line answers `new` or `nothing new`; a non-zero exit, a
- * run past its minute (its whole process group is killed) or any other answer is a failure, never nothing new.
+ * copy on disk) as the test, reading only that folder and writing nothing, since a model drafted it. Its first line
+ * answers `new` or `nothing new`; a non-zero exit, a run past its minute or any other answer is a failure.
  */
 async function wakeTest(test: string, before: string, after: string): Promise<{ answer?: 'new' | 'nothing new'; said: string }> {
-  const sandbox = process.platform === 'darwin' ? seatbelt : process.platform === 'linux' ? bubblewrap : undefined;
-  if (!sandbox) return { said: `no sandbox runs a wake test on ${process.platform}` };
   const dir = realpathSync(mkdtempSync(join(tmpdir(), 'deep-wake-')));
   try {
     writeFileSync(join(dir, 'wake.sh'), test);
     writeFileSync(join(dir, 'before'), before);
     writeFileSync(join(dir, 'after'), after);
-    const launch = await sandbox.confine({ argv: ['/bin/sh', join(dir, 'wake.sh'), join(dir, 'before'), join(dir, 'after')], cwd: dir, env: { PATH: '/usr/bin:/bin', LANG: 'C', HOME: dir } }, {});
-    const child = spawn(launch.argv[0]!, launch.argv.slice(1), { cwd: launch.cwd, env: launch.env, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
-    let out = '';
-    let err = '';
-    child.stdout.setEncoding('utf8').on('data', (d: string) => { if (out.length < WAKE_CAP) out += d; });
-    child.stderr.setEncoding('utf8').on('data', (d: string) => { if (err.length < WAKE_CAP) err += d; });
-    const kill = (): void => { try { process.kill(-child.pid!, 'SIGKILL'); } catch { /* gone */ } };
-    const timer = setTimeout(kill, WAKE_MS);
-    const [code, signal] = await new Promise<[number | null, string | null]>((done) => {
-      child.on('error', () => done([null, 'error']));
-      child.on('exit', (c, s) => done([c, s]));
-    });
-    clearTimeout(timer);
-    // Anything it left behind holding its pipes goes with its group.
-    kill();
-    const first = out.split('\n')[0]!.trim().toLowerCase();
-    if (code !== 0) return { said: `it exited ${code ?? signal ?? 'with an error'}${signal === 'SIGKILL' ? ' (past its minute)' : ''}${err.trim() ? `: ${err.trim().slice(0, 500)}` : ''}` };
+    const ran = await confined(['/bin/sh', join(dir, 'wake.sh'), join(dir, 'before'), join(dir, 'after')], dir, {}, WAKE_MS);
+    if (ran.code !== 0) return { said: `it ${ran.said}` };
+    const first = ran.out.split('\n')[0]!.trim().toLowerCase();
     return first === 'new' || first === 'nothing new' ? { answer: first, said: `it answered ${first}` } : { said: `it answered "${first.slice(0, 200)}", which is neither new nor nothing new` };
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+}
+/**
+ * A model turn of a job that repeats: your words, its task, where this run's input is, and what to leave so later
+ * runs need no model: the job's own script and its checks.
+ */
+function turnPrompt(f: Fold, task: string, criteria: readonly string[], input: string | undefined, woke: string): string {
+  return [
+    `DeepBuild: a run of a job that repeats, "${f.heading}". You work in this folder, its workspace, and write only here.`,
+    `Your words: ${f.words}`,
+    `This turn's task: ${task}.${criteria.length ? ` Done means: ${criteria.join('; ')}.` : ''}`,
+    input ? `This run's input, as it read it: ${input} (read it; never write it).` : 'This job reads no input of its own.',
+    `The model was woken because ${woke}.`,
+    `Leave ${JOB_SCRIPT}, a POSIX sh script run as \`sh ${JOB_SCRIPT} <input>\` in this folder with no model and no network, that does the whole job on a new input and exits ${SHAPE_CHANGED} when the input's shape is not one it knows; and at least one check in ${CHECKS}/*.sh, run here the same way, that exits 0 only when the result is right. Never change ${WAKE_FILE}.`,
+  ].join('\n');
 }
 /** The run's scope in #1332's words: the tasks by number, Claude Code, one at a time. */
 const scope = (numbers: readonly number[]): string => `work through ${numbers.map((n) => `#${n}`).join(', ')} with Claude Code, one at a time`;

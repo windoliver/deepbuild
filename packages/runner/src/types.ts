@@ -8,8 +8,9 @@ import type { Grant, Launch, Supervisor } from '@deepbuild/supervisor';
 export type Agent = 'claude-code' | 'codex' | 'pi';
 /** draft: the drafting job; review: the review check's second model; read: wiki reads and reading by reference;
  *  smoke: an agent release's live smoke test, the one kind that may run a version its facts don't cover yet;
- *  acceptance: the blind acceptance job (#1328), the one kind that writes, and only its issue's test folder. */
-export type JobKind = 'draft' | 'review' | 'read' | 'smoke' | 'acceptance' | 'eval';
+ *  acceptance: the blind acceptance job (#1328), which writes only its issue's test folder;
+ *  work: a model turn of a job that repeats (#1527), run in that job's workspace, the one folder it writes. */
+export type JobKind = 'draft' | 'review' | 'read' | 'smoke' | 'acceptance' | 'eval' | 'work';
 /** A trusted eval orchestrates sandboxed replays, not an agent asked to judge itself. Never accepted over RPC. */
 export type EvaluationWork = (context: {
   job: string; folder: string; env: Record<string, string>; signal: AbortSignal;
@@ -46,6 +47,8 @@ export interface JobSpec {
   inputs?: JobInput[];
   /** An acceptance job's one folder it writes, in its checkout: `tests/acceptance/<issue>`. */
   writes?: string;
+  /** A work job's folder (#1527): a clone of the job's workspace that the hub made, an absolute path to a git repo, and the one folder it writes. */
+  workspace?: string;
   /** The only MCP servers it gets; their tools are allowed without asking. */
   mcp?: Record<string, McpServer>;
   /** Sub-agents it may hand work to, by name, each on its own model: Claude Code's `--agents`, with its Task tool. */
