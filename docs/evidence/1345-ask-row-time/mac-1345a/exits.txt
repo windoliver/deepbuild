@@ -1,0 +1,18 @@
+start; cc --version exit 0; screen-lock flag 0; Now drawing from 'AC Power' 15:29:39 load { 8.91 24.82 39.44 } thermal 1 free KB 55427388
+origin/claude/1345-ask-row-time cba9ad36f12520985550fbbd9150ad41c9dc9d5a; head cba9ad36f12520985550fbbd9150ad41c9dc9d5a; before 8005f72fb7e36cdb1b275f9abe43a53a48ef8da9; origin/main a0d3713a74ce38caf4fdb4219cd34a0b971ade0e 15:30:01 load { 8.08 23.35 38.48 } thermal 1 free KB 54878784
+head cba9ad36f start: Now drawing from 'AC Power'; front app [Windows App] 15:30:04 load { 8.08 23.35 38.48 } thermal 1 free KB 54204236
+setup at cba9ad36f (npm ci, workspace build, deep-hook) exit=0 15:31:51 load { 8.68 18.88 34.88 } thermal 1 free KB 52747900
+cba9ad36f 1345-batch: vitest exit=0;  Tests 3 passed (3) 15:40:28 load { 21.35 47.34 46.24 } thermal 1 free KB 48342920
+cba9ad36f AC3: not found 15:40:28 load { 21.35 47.34 46.24 } thermal 1 free KB 48342912
+cba9ad36f AC7: not found 15:40:28 load { 21.35 47.34 46.24 } thermal 1 free KB 48342912
+cba9ad36f AC8: not found 15:40:28 load { 21.35 47.34 46.24 } thermal 1 free KB 48342912
+cba9ad36f 1808: vitest exit=1;  Tests 4 failed | 13 passed (17) 15:51:05 load { 11.73 46.80 52.27 } thermal 1 free KB 43502988
+cba9ad36f 1458: vitest exit=1;  Tests 6 failed | 7 passed (13) 16:06:53 load { 139.77 134.18 100.90 } thermal 1 free KB 25589408
+git status --porcelain lines after at cba9ad36f: 0 16:06:55 load { 139.77 134.18 100.90 } thermal 1 free KB 25600940
+before 8005f72fb start (failing at head: 1808=1 1458=1) 16:06:56 load { 139.77 134.18 100.90 } thermal 1 free KB 25597884
+setup at 8005f72fb (npm ci, workspace build, deep-hook) exit=0 16:09:49 load { 58.69 107.42 96.47 } thermal 1 free KB 22870540
+8005f72fb 1808: vitest exit=1;  Tests 4 failed | 13 passed (17) 16:19:56 load { 362.58 152.00 108.20 } thermal 1 free KB 18840792
+STOPPED: free space dropped under 20 GB 16:19:56 load { 362.58 152.00 108.20 } thermal 1 free KB 18836912
+clone ~/private/d1345a removed 16:20:10 load { 476.18 187.49 121.63 } thermal 1 free KB 21186556
+login-name hits after redaction: 0 16:20:10 load { 476.18 187.49 121.63 } thermal 1 free KB 21185900
+secret scan hits=0 16:20:11 load { 476.18 187.49 121.63 } thermal 1 free KB 21146028
