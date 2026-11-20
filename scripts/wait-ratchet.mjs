@@ -118,6 +118,25 @@ function stripScript(source, { keepComments = false } = {}) {
   return out;
 }
 
+/** Code with its strings blanked and comments kept, with its block comments blanked too (nested, as Rust's nest), so
+ * a marker counts only from a `//` comment. With the strings gone, a `//` or `/*` can only start a comment. */
+function lineComments(source) {
+  let out = '';
+  for (let i = 0; i < source.length;) {
+    if (source.startsWith('//', i)) {
+      const end = source.indexOf('\n', i);
+      out += source.slice(i, end < 0 ? source.length : end);
+      i = end < 0 ? source.length : end;
+    } else if (source.startsWith('/*', i)) {
+      let depth = 0;
+      do {
+        if (source.startsWith('/*', i)) { depth++; out += '  '; i += 2; } else if (source.startsWith('*/', i)) { depth--; out += '  '; i += 2; } else { out += source[i] === '\n' ? '\n' : ' '; i++; }
+      } while (depth > 0 && i < source.length);
+    } else out += source[i++];
+  }
+  return out;
+}
+
 /** Each finding in one file's text: its 1-based line, column and what it is. */
 function findings(path, text) {
   const strip = path.endsWith('.rs') ? stripRust : stripScript;
@@ -126,7 +145,7 @@ function findings(path, text) {
   let comments; // read only where a marker could count
   const used = new Set(); // lines whose marker has bounded a finding
   const marked = (...indexes) => indexes.some((index) => {
-    comments ??= strip(text, { keepComments: true }).replace(/\/\*[\s\S]*?\*\//g, (block) => block.replace(/[^\n]/g, ' ')).split('\n');
+    comments ??= lineComments(strip(text, { keepComments: true })).split('\n');
     let at = index;
     if (!DEADLINE.test(comments[at])) for (at = index - 1; at >= 0 && /^\s*\/\//.test(comments[at]) && !DEADLINE.test(comments[at]); at--);
     // A marker ending the line above marks that line's finding, not this one.
@@ -138,7 +157,7 @@ function findings(path, text) {
   const add = (index, column, why) => found.push({ line: index + 1, column: column + 1, why });
 
   // Names a timer is imported or promisified as, and names bound to a clock difference.
-  const aliases = !/setTimeout\s+as|promisify/.test(joined) ? [] : [...joined.matchAll(/[{,]\s*setTimeout\s+as\s+([\w$]+)|([\w$]+)\s*=\s*(?:\w+\s*\.\s*)?promisify\s*\(\s*setTimeout\s*\)/g)].map((m) => m[1] ?? m[2]);
+  const aliases = !/import\s*\{[^}]*\bsetTimeout\s+as|promisify/.test(joined) ? [] : [...joined.matchAll(/\bimport\s*\{[^}]*?\bsetTimeout\s+as\s+([\w$]+)|([\w$]+)\s*=\s*(?:\w+\s*\.\s*)?promisify\s*\(\s*setTimeout\s*\)/g)].map((m) => m[1] ?? m[2]);
   // Most files read no clock and wait on nothing: skip their scans.
   const timed = /now|elapsed|hrtime|duration_since/.test(joined);
   const waits = aliases.length || /sleep|park_timeout|Atomics|set(?:Timeout|Interval)/.test(joined);
@@ -177,9 +196,9 @@ function findings(path, text) {
 
   const counted = new Set(); // line:column of each clock finding, as spans overlap
   if (waits) code.forEach((line, index) => {
-    const at = new Set(); // a call through an alias named sleep matches twice
+    const at = new Set(); // where each call's `(` is: a call through an alias named sleep matches twice
     for (const [pattern, why] of [SLEEP, ATOMICS, ...(alias ? [alias] : [])])
-      for (const match of line.matchAll(pattern)) if (!at.has(match.index)) { at.add(match.index); add(index, match.index, why); }
+      for (const match of line.matchAll(pattern)) if (!at.has(match.index + match[0].length)) { at.add(match.index + match[0].length); add(index, match.index, why); }
     for (const match of line.matchAll(TIMER[0])) if (!marked(index)) add(index, match.index, TIMER[1]);
   });
   for (const [index, from, to, start] of spans) {
