@@ -21,8 +21,10 @@ pub mod fog;
 pub mod grid_bot;
 pub mod interfaces;
 pub mod judder;
+mod judge;
 pub mod keyframes;
 pub mod lane;
+pub mod lanes;
 pub mod lines;
 pub mod links;
 pub mod live;
@@ -643,6 +645,7 @@ impl Logic {
             Some("pack_check") => self.pack_check(line).unwrap_or_else(|e| e),
             Some("first_party") => first_party::reply(),
             Some("claim") => self.claim(line).unwrap_or_else(|e| e),
+            Some("judge") => self.judge(line).unwrap_or_else(|e| e),
             Some("append") => self.append(line).unwrap_or_else(|e| e),
             Some("open_save") => self.open_save(line).unwrap_or_else(|e| e),
             _ => json!({"ok": false, "code": "bad_input"}),

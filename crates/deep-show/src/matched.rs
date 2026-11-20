@@ -223,16 +223,17 @@ fn copy_tree(form: &Value, t: i64) -> Vec<Value> {
     tree
 }
 
-/// #552: the full-state hash every `hash_every` match steps a copy of `form`'s match takes, of
-/// its logic items stepped on `track` through `steps` match steps, as `logic` replays a record:
-/// the copies' own stepper, so a replay compares with the match.
+/// #552: the full-state hash every `hash_every` match steps a copy of `doc`'s match takes, of its
+/// logic items (and, #551, its worlds) stepped on `track` through `steps` match steps, as `logic`
+/// replays a record: the copies' own stepper, so a replay compares with the match.
 pub(crate) fn replay_hashes(
     piece: Rc<deep_logic::piece::Piece>,
-    track: &[Value],
+    (doc, track): (&Value, &[Value]),
     cfg: &deep_net::Config,
     steps: i64,
 ) -> Result<Vec<Value>, Value> {
     let mut sim = deep_play::net::Logic::new(piece, track, false)?;
+    sim.worlds(doc)?;
     let len = cfg.step();
     let mut out = Vec::new();
     for k in 0..steps {

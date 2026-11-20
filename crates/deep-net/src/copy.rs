@@ -23,6 +23,9 @@ use crate::locate::{self, entries_hash, track_after, Found, FNV_START};
 pub use crate::message::Hashed;
 use crate::message::{hex, Message};
 
+mod draws;
+mod rollback;
+
 /// What a copy steps: the piece's canvas modules with carried state.
 pub trait Stepper {
     /// An entry joins the input track at its step, before that step runs.
@@ -44,10 +47,46 @@ pub trait Stepper {
         Self: Sized;
     /// A planted defect's change to one field of its state (#550).
     fn plant(&mut self, defect: &Defect) -> Result<(), Value>;
+    /// #551: each canvas module keeps a rollback checkpoint at each of the last `size` match
+    /// steps.
+    fn hold(&mut self, _size: usize) {}
+    /// #551: each canvas module's rollback checkpoint at match step `step`, about to run.
+    fn keep(&mut self, _step: i64) {}
+    /// #551: every canvas module back at its rollback checkpoint at match step `step`, which
+    /// starts at `t` flicks: what the steps since made, and the entries stamped from `t` on, which
+    /// join again as their steps run again, are dropped; an error where a module's ring holds no
+    /// checkpoint there.
+    fn back(&mut self, step: i64, t: i64) -> Result<(), Value> {
+        Err(json!({"code": "no_ring", "step": step, "t": t}))
+    }
+    /// #551: the CPU time each canvas module took since the last call, `(module, ns)`.
+    fn timed(&mut self) -> Vec<(String, u64)> {
+        Vec::new()
+    }
+    /// #551: the snapshot bytes each canvas module's rollback ring has written, `(module, bytes)`.
+    fn written(&self) -> Vec<(String, u64)> {
+        Vec::new()
+    }
+    /// #551: what the canvas modules made at each step they ran: occurrences, step hashes and
+    /// checkpoints, by step, which a replaced step's never stay in.
+    fn made(&mut self) -> BTreeMap<i64, Value> {
+        BTreeMap::new()
+    }
+    /// #551: every occurrence row its canvas modules hold, each `{step, item, …}` with the match
+    /// step that made it.
+    fn occurrences(&self) -> Vec<Value> {
+        Vec::new()
+    }
+    /// #551: a seek after the match to match step `step` (of `len` flicks): each module restores
+    /// its own checkpoint at or before it and steps through it; the checkpoint's step and the
+    /// full-state hash there.
+    fn seek(&mut self, step: i64, _len: i64) -> Result<(i64, u64), Value> {
+        Err(json!({"code": "no_ring", "step": step}))
+    }
     /// #552: the match whose draws its logic derives, by its ID.
     fn matched(&mut self, _game: &[u8; 16]) {}
     /// #552: this copy's own draw entry, made now, before it reaches the track at its step.
-    fn made(&mut self, _entry: &Value) {}
+    fn early(&mut self, _entry: &Value) {}
     /// #552's planted guesser: the six-sided roll it guesses for an action at `step` from the
     /// document's seed and the step alone.
     fn guess(&mut self, _step: i64) -> Option<i64> {
@@ -93,6 +132,14 @@ pub enum Planted {
     LocatesStateOnly,
     /// #550: its full-state hash rounds every float to 1e-6 first (the stepper's).
     HashRoundsFloats,
+    /// #551: it applies a late entry at the step it arrived at instead of rolling back.
+    AppliesLateAtArrival,
+    /// #551: it records each prediction as an entry on its track.
+    RecordsPredicted,
+    /// #551: a frame's late entries roll it back to the step of the last one it read.
+    RewindsToLastRead,
+    /// #551: it never holds its clock, whatever its lead.
+    IgnoresLeadRule,
     /// #552: its messages carry its copy's `match.me`.
     SendsMatchMe,
     /// #552: it guesses each roll from the document's seed and the step before the action is
@@ -116,6 +163,10 @@ impl Planted {
             "net_locates_by_step_hashes" => Planted::LocatesByStepHashes,
             "net_locates_by_state_alone" => Planted::LocatesStateOnly,
             "net_hash_rounds_floats" => Planted::HashRoundsFloats,
+            "net_applies_at_arrival" => Planted::AppliesLateAtArrival,
+            "net_records_predicted" => Planted::RecordsPredicted,
+            "net_rewinds_to_last_read" => Planted::RewindsToLastRead,
+            "net_ignores_lead_rule" => Planted::IgnoresLeadRule,
             "net_sends_match_me" => Planted::SendsMatchMe,
             "net_guesses_from_seed" => Planted::GuessesFromSeed,
             "net_reveals_other_bits" => Planted::RevealsOtherBits,
@@ -269,6 +320,8 @@ pub struct Copy<S> {
     ran_at: Vec<i64>,
     ran_early: Vec<i64>,
     end: Option<(End, Value)>,
+    /// #551: where it stands in rolling back (crate::copy::rollback).
+    roll: rollback::Roll,
 }
 
 impl<S: Stepper> Copy<S> {
@@ -285,6 +338,10 @@ impl<S: Stepper> Copy<S> {
         now: i64,
     ) -> Copy<S> {
         let n = players as usize;
+        let mut sim = sim;
+        if cfg.window > 0 {
+            sim.hold(cfg.window as usize + 1);
+        }
         let mut copy = Copy {
             card,
             me,
@@ -327,12 +384,18 @@ impl<S: Stepper> Copy<S> {
             ran_at: Vec::new(),
             ran_early: Vec::new(),
             end: None,
+            roll: rollback::Roll::new(players),
             cfg,
         };
         copy.sim.matched(&game);
         // No entry can be stamped before step `delay`: those steps' messages are empty.
         for _ in 0..copy.cfg.delay {
             copy.send(Message::default());
+        }
+        // #551: with a window, a copy counts its peers' first `delay` messages held too, since
+        // every copy knows they are empty, so it doesn't wait at its window for them.
+        if copy.cfg.window > 0 {
+            copy.through = vec![copy.cfg.delay; n];
         }
         copy
     }
@@ -384,7 +447,9 @@ impl<S: Stepper> Copy<S> {
     /// Whether it has nothing more to do: it steps no more, and a desync that stopped its match
     /// is located, or the locator gave up waiting for a peer.
     pub fn done(&self) -> bool {
-        self.stopped() && self.locating.as_ref().is_none_or(|l| l.report.is_some())
+        self.stopped()
+            && self.locating.as_ref().is_none_or(|l| l.report.is_some())
+            && (self.cfg.window == 0 || self.end.is_some() || self.roll.settled >= self.next)
     }
 
     pub fn end(&self) -> Option<End> {
@@ -393,6 +458,10 @@ impl<S: Stepper> Copy<S> {
 
     pub fn sim(&self) -> &S {
         &self.sim
+    }
+
+    pub fn sim_mut(&mut self) -> &mut S {
+        &mut self.sim
     }
 
     /// The steps it ran before it held every player's message for them.
@@ -523,7 +592,7 @@ impl<S: Stepper> Copy<S> {
                 self.send(m);
                 self.reached += 1;
             }
-            if let Some(player) = self.missing(self.next) {
+            if let Some(player) = self.blocked() {
                 if self.planted != Planted::RunsStepEarly {
                     self.wait(player, now);
                     return;
@@ -531,6 +600,11 @@ impl<S: Stepper> Copy<S> {
                 self.ran_early.push(self.next);
             }
             let waited = self.resume(now);
+            // #551: a copy that leads its peers holds its clock one step in every 10.
+            if self.leads() {
+                self.due += step;
+                continue;
+            }
             self.run(now);
             self.due = if waited { now + step } else { self.due + step };
         }
@@ -629,42 +703,29 @@ impl<S: Stepper> Copy<S> {
     /// and the kind.
     fn run(&mut self, now: i64) {
         let (k, len) = (self.next, self.cfg.step());
-        let mut drawn = false;
-        let mut fault = None;
+        if self.cfg.window > 0 {
+            self.sim.keep(k);
+            self.roll.trail.insert(k, self.track_hash);
+        }
         for p in 0..self.players as usize {
-            let Some(m) = self.held[p].remove(&k) else {
-                continue;
-            };
-            if m.entries.is_empty() {
-                continue;
+            if let Some(m) = self.held[p].remove(&k) {
+                self.logged(k, p as u8 + 1, m.entries);
             }
-            let player = p as u8 + 1;
-            self.track_hash = track_after(self.track_hash, entries_hash(k, player, &m.entries));
-            for (seq, (control, value)) in m.entries.iter().enumerate() {
+        }
+        self.predicted(k);
+        for (player, entries) in self.log.get(&k).cloned().unwrap_or_default() {
+            self.track_hash = track_after(self.track_hash, entries_hash(k, player, &entries));
+            for (seq, (control, value)) in entries.iter().enumerate() {
                 let entry = self.stamped(k, player, seq, control, value);
                 let entered = kind::admit(&self.cfg.controls, control, value)
                     .and_then(|()| self.sim.enter(&entry));
                 match entered {
-                    Ok(()) => {
-                        self.track.push(entry);
-                        drawn |= self.cfg.draw_after.iter().any(|c| c == control);
-
-                        if control == draw::COMMIT || control == draw::REVEAL {
-                            let f = self.draws.entered(k, player, control, value, &self.game);
-                            fault = fault.or(f);
-                        }
-                    }
+                    Ok(()) => self.track.push(entry),
                     Err(why) => self.refused.push(json!({"step": k, "player": player,
                         "control": control, "value": value, "code": why.get("code").cloned().unwrap_or(json!("refused")),
                         "why": why})),
                 }
             }
-            self.log.entry(k).or_default().push((player, m.entries));
-        }
-        // #552: bits that differ from their commitment end the match as faulted.
-        if let Some((end, detail)) = fault {
-            self.finish(end, detail);
-            return;
         }
         let ran = self.sim.run(k, (k + 1) * len);
         if let Some(d) = self.defect.as_ref().filter(|d| d.step == k && ran.is_ok()) {
@@ -674,26 +735,24 @@ impl<S: Stepper> Copy<S> {
             if self.planted != Planted::PlaysOnPastTrap {
                 let fault = json!({"step": k, "item": trap.get("item").cloned().unwrap_or(Value::Null),
                                    "kind": trap.get("kind").cloned().unwrap_or(Value::Null)});
-                self.finish(End::Faulted, fault);
-                return;
+                // #551: a trap in a step past confirmed holds the copy there until it is.
+                if self.cfg.window == 0 {
+                    self.finish(End::Faulted, fault);
+                    return;
+                }
+                self.roll.trapped = Some((k, fault));
             }
         }
-        self.ran_at.push(now);
-        self.next += 1;
-        // #552: step k is confirmed: it commits to a draw for it, and reveals the bits of each
-        // draw whose commitments it holds.
-        let timeout = (self.cfg.timeout / len).max(1);
-        let due = self
-            .draws
-            .ran(k, drawn, (self.players, self.me), &self.game, timeout);
-        for (control, value) in due.send {
-            let entry = self.stamped(k + 1, self.me, 0, &control, &value);
-            self.sim.made(&entry);
-            self.made.push((control, value, None));
+        if self.ran_at.len() as i64 == k {
+            self.ran_at.push(now);
         }
-        if let Some((end, detail)) = due.end {
-            self.finish(end, detail);
-            return;
+        self.next += 1;
+        // #552: in lockstep a step runs confirmed: its draws now (with a window, `settle`).
+        if self.cfg.window == 0 {
+            self.drawn(k);
+            if self.end.is_some() {
+                return;
+            }
         }
         if k % self.cfg.hash_every == 0 {
             let h = Hashed {
@@ -702,13 +761,19 @@ impl<S: Stepper> Copy<S> {
                 track: self.track_hash,
             };
             self.hashes.push(h);
-            self.owed.push_back(h);
-            self.compare(k);
+            // With a window, a hash goes out once its step is confirmed (`settle`).
+            if self.cfg.window == 0 {
+                self.owed.push_back(h);
+                self.compare(k);
+            }
         }
     }
 
     /// A full-state hash, or a track hash, a peer doesn't share stops the match.
     fn compare(&mut self, step: i64) {
+        if self.cfg.window > 0 && step >= self.roll.settled {
+            return;
+        }
         let Ok(at) = self.hashes.binary_search_by_key(&step, |h| h.step) else {
             return;
         };
@@ -775,9 +840,12 @@ impl<S: Stepper> Copy<S> {
                 l.their_fields.insert((who, *at), list.clone());
             }
         }
-        // A step already run keeps what it ran with: only a copy that ran early gets here.
+        // A step already run keeps what it ran with, but for a rollback (#551): only a copy
+        // that ran early gets here in lockstep.
         if step >= self.next {
             self.held[player].insert(step, m);
+        } else if self.cfg.window > 0 {
+            self.late(player as u8 + 1, step, m.entries);
         }
     }
 
@@ -978,7 +1046,12 @@ impl<S: Stepper> Copy<S> {
             self.through[p] = step + 1;
             self.take(p, step, m);
         }
-        self.advance(now);
+        self.heard(p, &frame);
+        // With a window, the late entries one frame of the host brings roll the copy back once,
+        // at its tick (#551).
+        if self.cfg.window == 0 {
+            self.advance(now);
+        }
         self.watch(now);
         self.locate();
     }
@@ -988,7 +1061,9 @@ impl<S: Stepper> Copy<S> {
     /// confirmed, oldest first.
     pub fn tick(&mut self, now: i64) -> Option<Vec<u8>> {
         self.now = self.now.max(now);
+        self.rewind();
         self.advance(now);
+        self.settle();
         self.watch(now);
         // A copy that ran every step it was given still sends the hashes it owes.
         if self.next >= self.limit && self.end.is_none() {
@@ -1059,6 +1134,9 @@ impl<S: Stepper> Copy<S> {
 
     /// The merged input track up to the last step it confirmed, in step, player and seq order.
     fn merged(&self) -> Vec<Value> {
+        if self.cfg.window > 0 {
+            return self.settled_track();
+        }
         let confirmed = self.confirmed();
         let mut track = self.track.clone();
         // A stopped match's steps past its last run aren't confirmed.
@@ -1094,7 +1172,7 @@ impl<S: Stepper> Copy<S> {
             // #552: the match's ID, which every draw on its track hashes.
             "match": wire::hex(&self.game),
             "track": self.merged(),
-            "confirmed": if self.end.is_some() { self.next.min(self.confirmed()) } else { self.confirmed() } - 1,
+            "confirmed": self.last_confirmed(),
             "end": self.end().map(End::name),
         })
     }
@@ -1102,9 +1180,12 @@ impl<S: Stepper> Copy<S> {
     /// What the copy did: every time in seconds since the match's start.
     pub fn report(&self) -> Map<String, Value> {
         let s = |t: i64| (t - self.start) as f64 / FLICKS as f64;
+        // With a window, only the hashes of steps it confirmed (#551).
+        let settled = self.settled();
         let hashes: Vec<Value> = self
             .hashes
             .iter()
+            .filter(|h| self.cfg.window == 0 || h.step < settled)
             .map(|h| json!({"step": h.step, "hash": hex(h.state), "track": hex(h.track)}))
             .collect();
         let waits: Vec<Value> = self
@@ -1120,7 +1201,8 @@ impl<S: Stepper> Copy<S> {
         let mut out = Map::new();
         out.insert("player".into(), json!(self.me));
         out.insert("ran".into(), json!(self.next));
-        out.insert("rollbacks".into(), json!(0));
+        out.insert("rollbacks".into(), json!(self.roll.rollbacks.len()));
+        self.roll_report(&mut out);
         out.insert("hashes".into(), json!(hashes));
         out.insert("waits".into(), json!(waits));
         out.insert("notices".into(), json!(notices));
@@ -1166,6 +1248,8 @@ pub(crate) mod tests {
         /// A planted defect: at this step, add 1 to `word` (true) or to `hidden` (false), each
         /// time the step runs.
         pub plant: Option<(i64, bool)>,
+        /// #551: its rollback checkpoints, by match step.
+        pub ring: BTreeMap<i64, (u64, u64)>,
     }
 
     impl Stepper for Word {
@@ -1214,6 +1298,17 @@ pub(crate) mod tests {
                 "word" => self.word += 1,
                 _ => self.hidden += 1,
             }
+            Ok(())
+        }
+        fn hold(&mut self, _: usize) {}
+        fn keep(&mut self, step: i64) {
+            self.ring.insert(step, (self.word, self.hidden));
+            self.ring = self.ring.split_off(&(step - 16));
+        }
+        fn back(&mut self, step: i64, _: i64) -> Result<(), Value> {
+            let (word, hidden) = *self.ring.get(&step).ok_or_else(|| json!({"step": step}))?;
+            (self.word, self.hidden, self.steps) = (word, hidden, step);
+            self.ring.split_off(&step);
             Ok(())
         }
     }

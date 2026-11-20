@@ -26,6 +26,7 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
             "services",
             "mirrors",
             "preview",
+            "lanes",
             // #552: a fog grid, which gates its occurrences' readers on each copy.
             "fog",
         ]
@@ -243,6 +244,7 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
         services,
         mirrors,
         preview,
+        lanes: params.get("lanes").cloned(),
         given: Value::Object(params.clone()).to_string(),
     })
 }
@@ -544,6 +546,10 @@ pub(super) fn declarations(piece: &Value) -> Result<Declarations, Refused> {
                 .is_none_or(|p| p.as_object().is_some_and(Map::is_empty))
         {
             machine.push(id.clone());
+            continue;
+        }
+        // A floor path steps nothing: a lane graph is built from it (#981).
+        if item.get("kind").and_then(Value::as_str) == Some("path@1") {
             continue;
         }
         if item.get("kind").and_then(Value::as_str) != Some("logic@1") {
@@ -866,6 +872,19 @@ pub fn check_in(
         }
         let assets_at = global_at(&given, "assets_at");
         let mut assets = Vec::new();
+        // #981: the lane graph `lanes` names, built from the piece's floor paths, is asset 0.
+        let lanes = match &d.lanes {
+            None => None,
+            Some(l) => {
+                let items = piece
+                    .get("items")
+                    .and_then(Value::as_object)
+                    .ok_or_else(bad)?;
+                let g = crate::lanes::build(l, items).map_err(|r| logic_refused(id, r))?;
+                assets.push((rewrite::hash(&g.bytes), g.bytes.clone()));
+                Some(std::sync::Arc::new(g))
+            }
+        };
         for sha in &d.assets {
             assets.push((sha.clone(), asset(sha).ok_or_else(|| missing("data", sha))?));
         }
@@ -972,6 +991,7 @@ pub fn check_in(
             services_at: services_at.unwrap_or(0),
             mirrors,
             preview,
+            lanes,
         });
     }
     // A save holds every item at one instant, so a piece with saves steps at one rate.

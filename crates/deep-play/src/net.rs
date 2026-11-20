@@ -10,11 +10,70 @@ use deep_canvas::registry::{Raised, Report};
 use deep_logic::budget::cpu_ns;
 use deep_logic::piece::Piece;
 use deep_logic::piece::Ty;
+use deep_logic::world::rollback::{Plant, Ring};
 use deep_logic::world::{track_of, Entry, Record, World};
+use deep_net::play::Play;
 use deep_net::{Change, Defect, Stepper};
 use serde_json::{json, Map, Value};
+use std::collections::BTreeMap;
+
+/// #297 (Text `text@1`: entries): what each entry to a text control an entry text shows may
+/// hold, checked alike on every copy: a value out of its range is refused before it joins the
+/// track, naming the player, and the copy lists it in its `refused`.
+pub struct Range {
+    form: Map<String, Value>,
+    ty: deep_canvas_marks::scene::Type,
+    lax: deep_canvas_marks::entries::Lax,
+    shaper: Option<deep_text::Shaper>,
+}
+
+impl Range {
+    /// The range of `form`'s text controls entry texts show, in the type `ty` draws them in, with
+    /// a planted laxness; `None` where no entry text shows one.
+    pub fn of(
+        form: &Value,
+        ty: deep_canvas_marks::scene::Type,
+        lax: deep_canvas_marks::entries::Lax,
+    ) -> Option<Range> {
+        let form = form.as_object()?;
+        let items = form.get("items").and_then(Value::as_object)?;
+        let shows = items.values().any(|i| {
+            deep_canvas_marks::entries::is_entry_text(i)
+                || deep_canvas_marks::entries::has_entry_column(i)
+        });
+        shows.then(|| Range {
+            form: form.clone(),
+            ty,
+            lax,
+            shaper: None,
+        })
+    }
+
+    /// The refusal of `entry`, a value out of its control's range, naming the control, the
+    /// player, the step and why; `None` where it is in range.
+    pub fn check(&mut self, entry: &Value) -> Option<Value> {
+        use deep_canvas_marks::entries;
+        let control = entry["control"].as_str()?;
+        let value = entry["value"].as_str()?;
+        if !entries::shown_control(&self.form, control) {
+            return None;
+        }
+        let shaper = self.shaper.get_or_insert_with(deep_text::Shaper::new);
+        let r = entries::refused(&self.form, control, value, &self.ty, shaper, self.lax)?;
+        let t = entry["t"].as_i64().unwrap_or(0);
+        let mut out = json!({"code": "out_of_range", "control": control, "reason": r.reason(),
+                             "player": entry.get("player").cloned().unwrap_or(json!(1)),
+                             "t": t, "step": t.div_euclid(entries::step_len(&self.form))});
+        for (k, v) in r.named().as_object().into_iter().flatten() {
+            out[k] = v.clone();
+        }
+        Some(out)
+    }
+}
 
 pub struct Logic {
+    /// #297: the range entry texts give their controls, checked before an entry joins the track.
+    pub range: Option<Range>,
     piece: Rc<Piece>,
     /// The input track recorded before the match, which a run again starts from.
     start: Vec<Value>,
@@ -24,10 +83,17 @@ pub struct Logic {
     /// per item.
     keep: bool,
     pub rows: Vec<Value>,
-    /// The match step that took the most CPU time, and that time in ms.
-    pub busiest: Option<(i64, f64)>,
     /// #550's planted full-state hash, which rounds every float to 1e-6 first.
     pub rounds: bool,
+    /// #551: logic's rollback ring and its size (`window + 1`), once a match keeps one, and its
+    /// plant.
+    ring: Option<(usize, Ring)>,
+    plant: deep_logic::world::rollback::Plant,
+    /// The CPU time logic took since the timing was last read, in ns.
+    ns: u64,
+    /// #551: the document's worlds, stepped beside the logic items, and the match step's length.
+    worlds: Option<crate::net_worlds::Worlds>,
+    len: i64,
     /// #552: the entries the planted draw module took before their step.
     early: Vec<Value>,
 }
@@ -43,26 +109,45 @@ impl Logic {
     /// `piece` at its start on `track`, the input track recorded before the match.
     pub fn new(piece: Rc<Piece>, track: &[Value], rows: bool) -> Result<Logic, Value> {
         let entries: Vec<Entry> = track.iter().filter_map(Entry::parse).collect();
+        // A copy's frames are timed: its checkpoints' deep hashes are read by restoring them.
         let mut rec = Record::default();
+        rec.deferred = true;
+        // A match keeps logic's own ring, which a seek after it restores from (#551).
         let world = World::new(
             piece.clone(),
             track_of(&entries),
-            false,
+            true,
             Default::default(),
             &mut rec,
             None,
         )?;
         Ok(Logic {
+            range: None,
             piece,
             start: track.to_vec(),
             world,
             rec,
             keep: rows,
             rows: Vec::new(),
-            busiest: None,
             rounds: false,
             early: Vec::new(),
+            ring: None,
+            plant: Default::default(),
+            ns: 0,
+            worlds: None,
+            len: 1,
         })
+    }
+
+    /// #551: steps `doc`'s worlds beside the logic items, each its own canvas module.
+    pub fn worlds(&mut self, doc: &Value) -> Result<(), Value> {
+        self.worlds = crate::net_worlds::Worlds::of(doc, &self.start)?;
+        Ok(())
+    }
+
+    /// #551: the planted ring this stepper's rollback ring is, once it keeps one.
+    pub fn plant_ring(&mut self, plant: deep_logic::world::rollback::Plant) {
+        self.plant = plant;
     }
 
     fn row(&self, step: i64, t: i64) -> Value {
@@ -88,21 +173,30 @@ impl Logic {
 
 impl Stepper for Logic {
     fn enter(&mut self, entry: &Value) -> Result<(), Value> {
+        if let Some(refused) = self.range.as_mut().and_then(|r| r.check(entry)) {
+            return Err(refused);
+        }
+        let entry_json = entry;
         let entry = Entry::parse(entry).ok_or_else(
             || json!({"code": "bad_input", "what": "an entry is {t, control, value}"}),
         )?;
-        self.world.append(entry).map(|_| ())
+        self.world.append(entry)?;
+        if let Some(w) = self.worlds.as_mut() {
+            w.enter(entry_json);
+        }
+        Ok(())
     }
 
     fn run(&mut self, step: i64, until: i64) -> Result<(), Value> {
         let before = cpu_ns();
         self.world.run_through(until - 1, &mut self.rec);
-        let ms = (cpu_ns() - before) as f64 / 1e6;
-        if self.busiest.is_none_or(|(_, worst)| ms > worst) {
-            self.busiest = Some((step, ms));
-        }
+        self.ns += cpu_ns() - before;
         if let Some(trap) = self.rec.traps.first() {
             return Err(trap.clone());
+        }
+        self.len = until / (step + 1).max(1);
+        if let Some(w) = self.worlds.as_mut() {
+            w.run(until)?;
         }
         if self.keep {
             let len = self.piece.items.first().map_or(1, |i| i.step);
@@ -115,12 +209,14 @@ impl Stepper for Logic {
         if self.rounds {
             return self.rounded();
         }
-        // FNV-1a over each item's ID and deep hash, in the piece's order.
+        // FNV-1a over each item's ID and deep hash, in the piece's order, then each world's.
         let hashes = self.world.deep_hashes();
+        let worlds = self.worlds.as_ref().map(|w| w.hashes()).unwrap_or_default();
         fold(
             hashes
                 .iter()
-                .map(|(id, h)| (id.as_str(), h.as_str().unwrap_or(""))),
+                .map(|(id, h)| (id.as_str(), h.as_str().unwrap_or("")))
+                .chain(worlds.iter().map(|(id, h)| (id.as_str(), h.as_str()))),
         )
     }
 
@@ -136,9 +232,14 @@ impl Stepper for Logic {
 
     fn fields(&mut self) -> Vec<(String, String, u64)> {
         let fields = self.world.field_hashes();
+        let worlds = self.worlds.as_ref().map(|w| w.hashes()).unwrap_or_default();
         fields
             .into_iter()
             .map(|(f, h)| ("logic".to_string(), f, h))
+            .chain(worlds.into_iter().map(|(id, h)| {
+                let h = u64::from_str_radix(h.get(..16).unwrap_or("0"), 16).unwrap_or(0);
+                ("physics".to_string(), format!("{id}.state"), h)
+            }))
             .collect()
     }
 
@@ -148,8 +249,146 @@ impl Stepper for Logic {
         let start: Vec<Value> = self.start.iter().chain(&self.early).cloned().collect();
         let mut again = Logic::new(self.piece.clone(), &start, false)?;
         again.rounds = self.rounds;
+        again.range = self.range.as_ref().map(|r| Range {
+            form: r.form.clone(),
+            ty: r.ty.clone(),
+            lax: r.lax,
+            shaper: None,
+        });
+        again.plant = self.plant;
+        if let Some(w) = self.worlds.as_ref() {
+            again.worlds = w.again(&self.start)?;
+        }
+        if let Some((size, _)) = self.ring.as_ref() {
+            again.hold(*size);
+        }
         again.world.draw = self.world.draw;
         Ok(again)
+    }
+
+    fn hold(&mut self, size: usize) {
+        self.ring = Some((size, Ring::new(&mut self.world, size, self.plant)));
+        if let Some(w) = self.worlds.as_mut() {
+            w.hold(size);
+        }
+    }
+
+    fn keep(&mut self, step: i64) {
+        let before = cpu_ns();
+        if let Some((_, ring)) = self.ring.as_mut() {
+            ring.snap(&mut self.world, step);
+        }
+        self.ns += cpu_ns() - before;
+        if let Some(w) = self.worlds.as_mut() {
+            w.keep(step);
+        }
+    }
+
+    fn back(&mut self, step: i64, t: i64) -> Result<(), Value> {
+        let before = cpu_ns();
+        let (_, ring) = self
+            .ring
+            .as_mut()
+            .ok_or_else(|| json!({"code": "no_ring", "step": step}))?;
+        ring.roll_back(&mut self.world, step, t, &mut self.rec)?;
+        self.ns += cpu_ns() - before;
+        self.rows
+            .retain(|r| r["step"].as_i64().is_some_and(|k| k < step));
+        if let Some(w) = self.worlds.as_mut() {
+            w.back(step, t)?;
+        }
+        Ok(())
+    }
+
+    fn occurrences(&self) -> Vec<Value> {
+        let len = self.len.max(1);
+        let mut out = Vec::new();
+        for (id, rows) in self.rec.occurrences(&self.piece) {
+            for r in rows.as_array().into_iter().flatten() {
+                let mut r = r.clone();
+                let t = r["t"].as_i64().unwrap_or(0);
+                r["item"] = json!(id);
+                r["step"] = json!(t / len);
+                out.push(r);
+            }
+        }
+        if let Some(w) = self.worlds.as_ref() {
+            out.extend(w.occurrences(len));
+        }
+        out
+    }
+
+    fn seek(&mut self, step: i64, len: i64) -> Result<(i64, u64), Value> {
+        let from = self
+            .world
+            .nearest(step)
+            .ok_or_else(|| json!({"code": "no_checkpoint", "step": step}))?;
+        self.world.seek(from)?;
+        let mut rec = Record::default();
+        self.world.run_through((step + 1) * len - 1, &mut rec);
+        if let Some(w) = self.worlds.as_ref() {
+            self.worlds = w.replayed((step + 1) * len)?;
+        }
+        Ok((from, self.hash()))
+    }
+
+    fn timed(&mut self) -> Vec<(String, u64)> {
+        let mut out = vec![("logic".to_string(), std::mem::take(&mut self.ns))];
+        if let Some(w) = self.worlds.as_mut() {
+            out.push(("physics".to_string(), std::mem::take(&mut w.ns)));
+        }
+        out
+    }
+
+    fn written(&self) -> Vec<(String, u64)> {
+        let logic = self.ring.as_ref().map_or(0, |(_, r)| r.written());
+        let mut out = vec![("logic".to_string(), logic)];
+        if let Some(w) = self.worlds.as_ref() {
+            out.push(("physics".to_string(), w.written));
+        }
+        out
+    }
+
+    fn made(&mut self) -> std::collections::BTreeMap<i64, Value> {
+        let mut out = std::collections::BTreeMap::<i64, Value>::new();
+        // Each item's step hash and each emitting item's occurrences, as the step left them.
+        for (k, (items, arrays)) in self.rec.rows() {
+            let hashes: Map<String, Value> = items
+                .iter()
+                .map(|(id, r)| (id.clone(), r["hash"].clone()))
+                .collect();
+            let occurrences: Map<String, Value> = arrays
+                .iter()
+                .filter(|(name, _)| name.ends_with(".occurrences"))
+                .map(|(n, v)| (n.clone(), v.clone()))
+                .collect();
+            out.insert(
+                *k,
+                json!({"step_hashes": hashes, "occurrences": occurrences}),
+            );
+        }
+        if let Some(w) = self.worlds.as_ref() {
+            for (k, v) in w.made(self.len) {
+                out.entry(k).or_insert_with(|| json!({}))["physics"] = v["physics"].clone();
+            }
+        }
+        // Each checkpoint its items' own rings hold, by the deep hash of its state, read by
+        // restoring it (the copy's record defers them).
+        let labels: std::collections::BTreeSet<i64> = self
+            .rec
+            .checkpoints
+            .values()
+            .flat_map(|list| list.as_array().into_iter().flatten())
+            .filter_map(|c| c["step"].as_i64())
+            .collect();
+        for k in labels {
+            let at = out.entry(k).or_insert_with(|| json!({}));
+            at["checkpoints"] = match self.world.restore(k, None) {
+                Ok(mut w) => Value::Object(w.deep_hashes()),
+                Err(why) => json!({"restored": false, "why": why}),
+            };
+        }
+        out
     }
 
     /// The planted guesser's roll: 1 + the step's seed as a u64, mod 6, from the document's
@@ -166,7 +405,7 @@ impl Stepper for Logic {
 
     /// The planted module that delivers a draw from the bits that reached it first takes this
     /// copy's own bits the moment it makes them, before they reach the track at their step.
-    fn made(&mut self, entry: &Value) {
+    fn early(&mut self, entry: &Value) {
         if self.world.draw.wrong == deep_logic::draws::Wrong::FirstBits
             && entry["control"] == deep_logic::draws::REVEAL
         {
@@ -290,12 +529,76 @@ struct Setup {
     track: Vec<Value>,
     steps: i64,
     planted: deep_net::Planted,
+    /// #551: the planted rollback ring, and what each player does (`plays`, else seeded).
+    ring: Plant,
+    plays: BTreeMap<u8, Vec<Play>>,
+}
+
+/// #551: a check input's planted name as each part takes it: the copy's, the rollback ring's,
+/// and the logic module's (the ring that misses a page `memory.fill` alone wrote is a page
+/// tracker that leaves those pages unmarked).
+pub fn planted(name: Option<&str>) -> (deep_net::Planted, Plant, deep_logic::Planted) {
+    let name = name.unwrap_or_default();
+    let logic = match name {
+        "net_ring_misses_fill" => "tracker_skips_memory_fill",
+        n => n,
+    };
+    (
+        deep_net::Planted::named(name).unwrap_or_default(),
+        Plant::named(name).unwrap_or_default(),
+        deep_logic::Planted::default()
+            .and(logic)
+            .unwrap_or_default(),
+    )
+}
+
+/// #551: what each player does when the check names no plays: from step `delay` on, every few
+/// steps, an entry on one of the piece's controls with a value it can take, by the seed.
+pub fn seeded(doc: &Value, players: u8, steps: i64, seed: u64) -> BTreeMap<u8, Vec<Play>> {
+    let controls: Vec<(&String, &Value)> = doc
+        .get("controls")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+        .filter(|(_, c)| c.get("range").is_some())
+        .collect();
+    let mut z = seed ^ 0x6e65_7435_3531;
+    let mut next = || {
+        z = z.wrapping_add(0x9e37_79b9_7f4a_7c15);
+        let mut x = z;
+        x = (x ^ (x >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+        x = (x ^ (x >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+        x ^ (x >> 31)
+    };
+    let mut out = BTreeMap::new();
+    for p in 1..=players {
+        let mut list = Vec::new();
+        let mut step = (next() % 4) as i64;
+        while step < steps && !controls.is_empty() {
+            let (name, c) = controls[(next() % controls.len() as u64) as usize];
+            let lo = c["range"][0].as_f64().unwrap_or(0.0);
+            let hi = c["range"][1].as_f64().unwrap_or(1.0);
+            let by = c["increment"].as_f64().filter(|i| *i > 0.0).unwrap_or(1.0);
+            let n = ((hi - lo) / by).floor().max(0.0) as u64 + 1;
+            let value = lo + (next() % n) as f64 * by;
+            list.push(Play {
+                step,
+                control: name.clone(),
+                value: json!(value),
+                to: None,
+            });
+            step += 1 + (next() % 6) as i64;
+        }
+        out.insert(p, list);
+    }
+    out
 }
 
 fn setup(doc: &Value, input: &Value) -> Result<Setup, Value> {
     let cfg = deep_net::Config::of(doc)
         .ok_or_else(|| json!({"what": "the document has no net@1 item to play a match of"}))?;
-    let (piece, entries, _) = deep_logic::module::baked(doc, input)?;
+    let (planted, ring, logic) = planted(input.get("planted").and_then(Value::as_str));
+    let (piece, entries, _) = deep_logic::module::baked_with(doc, input, &logic)?;
     let span = doc
         .pointer("/transport/span")
         .map_or(Ok(0), |v| deep_canvas::document::duration(doc, v))
@@ -305,18 +608,44 @@ fn setup(doc: &Value, input: &Value) -> Result<Setup, Value> {
         .and_then(Value::as_i64)
         .unwrap_or((span / cfg.step()).min(3600))
         .max(1);
-    let planted = input
-        .get("planted")
-        .and_then(Value::as_str)
-        .and_then(deep_net::Planted::named)
-        .unwrap_or_default();
+    let seed = input.get("seed").and_then(Value::as_u64).unwrap_or(0);
+    let plays = match input.get("plays") {
+        Some(p) => plays_of(p).ok_or_else(
+            || json!({"what": "a check's plays are {player: [{step, control, value}]}"}),
+        )?,
+        None => seeded(doc, cfg.players, steps - cfg.delay, seed),
+    };
     Ok(Setup {
         cfg,
         piece,
         track: entries.iter().map(Entry::to_json).collect(),
         steps,
         planted,
+        ring,
+        plays,
     })
+}
+
+/// A check input's `plays`: `{player: [{step, control, value}]}`.
+fn plays_of(v: &Value) -> Option<BTreeMap<u8, Vec<Play>>> {
+    v.as_object()?
+        .iter()
+        .map(|(who, list)| {
+            let list = list
+                .as_array()?
+                .iter()
+                .map(|p| {
+                    Some(Play {
+                        step: p.get("step")?.as_i64()?,
+                        control: p.get("control")?.as_str()?.to_string(),
+                        value: p.get("value")?.clone(),
+                        to: None,
+                    })
+                })
+                .collect::<Option<Vec<_>>>()?;
+            Some((who.parse().ok()?, list))
+        })
+        .collect()
 }
 
 /// A check's report as a requirement's row carries it: each failure raised on the net item, its
@@ -337,7 +666,9 @@ fn row(cfg: &deep_net::Config, kind: &'static str, report: Value, result: Value)
         out.raised.push((cfg.item.clone(), r, f.clone()));
     }
     if matches!(report["verdict"].as_str(), Some("BLOCKED" | "INCONCLUSIVE")) {
-        for b in report["blocked"].as_array().into_iter().flatten() {
+        let why =
+            ["blocked", "inconclusive"].map(|k| report[k].as_array().cloned().unwrap_or_default());
+        for b in why.iter().flatten() {
             out.blocked.push(json!({"kind": kind, "what": b["what"]}));
         }
     }
@@ -369,15 +700,21 @@ fn run_check(
     let ask = deep_net::play::Ask {
         steps: s.steps,
         planted: s.planted,
+        plays: s.plays.clone(),
+        faults: deep_net::play::Faults {
+            seed: input.get("seed").and_then(Value::as_u64).unwrap_or(0),
+            ..Default::default()
+        },
         ..deep_net::play::Ask::default()
     };
-    let (piece, track) = (s.piece.clone(), s.track.clone());
+    let (piece, track, ring) = (s.piece.clone(), s.track.clone(), s.ring);
     let rounds = s.planted == deep_net::Planted::HashRoundsFloats;
     let make = &mut |_: u8| {
-        Logic::new(piece.clone(), &track, false).map(|mut l| {
-            l.rounds = rounds;
-            l
-        })
+        let mut l = Logic::new(piece.clone(), &track, false)?;
+        l.rounds = rounds;
+        l.plant_ring(ring);
+        l.worlds(doc)?;
+        Ok(l)
     };
     match check(&s, &ask, make) {
         Ok(report) => {
@@ -420,8 +757,24 @@ fn budget_report(doc: &Value, input: &Value) -> Report {
         .and_then(|(_, limits)| limits.cpu_ms)
         .unwrap_or(deep_logic::budget::FRAME_NS / 1e6);
     run_check(doc, input, "net.budget", |s, ask, make| {
-        let busiest = |l: &Logic| l.busiest;
-        deep_net::checks::budget(&s.cfg, &Default::default(), ask, make, frame_ms, &busiest)
+        let on = hosts(input);
+        deep_net::checks::budget(&s.cfg, &Default::default(), ask, make, frame_ms, &on)
             .map(|(_, r)| r)
     })
+}
+
+/// #551: the hosts net.budget measures for, its input's `on` (`app` by default).
+pub fn hosts(input: &Value) -> Vec<String> {
+    let on: Vec<String> = input
+        .get("on")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|h| h.as_str().map(str::to_string))
+        .collect();
+    if on.is_empty() {
+        vec!["app".to_string()]
+    } else {
+        on
+    }
 }
