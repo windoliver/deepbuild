@@ -1,0 +1,233 @@
+#1489's acceptance suite at the base, 8db4b0bfe (origin/main), in this worktree with only tests/acceptance/1489 added.
+Apple M5 Max, 64 GiB, 18 cores, macOS; the machine was loaded by other sessions: the one-minute load was 206.8 at the
+run's start and 194.7 at its end, which no test here judges but AC2's time, which never ran. The binaries were built
+before the run (release deep-canvas-render; debug deep-drive with env-plants), so each file's build step only checked
+them.
+
+Command (cargo 1.99.1 first on PATH; scripts/lease found no `deep` and ran it unleased):
+  PATH="$HOME/.rustup/toolchains/1.99.1-aarch64-apple-darwin/bin:/opt/homebrew/opt/rustup/bin:$PATH" \
+    CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    scripts/lease npx vitest run --root tests/acceptance/1489 --no-file-parallelism --testTimeout=600000
+
+Result: 4 files, 7 tests, 7 failed, each at an assertion, none at an import. Wall time 60 s (vitest: 56.1 s).
+
+  file               test                              first failing assertion                                      time
+  memory.test.ts     AC1 honest                        frames: vsyncs[0].animations is an object, got undefined     8.6 s
+  memory.test.ts     AC1 planted                       frames: vsyncs[0].animations is an object, got undefined     1.2 s
+                                                       (the honest run's, read first; the planted request itself
+                                                       answers {"ok":false,"code":"bad_input"} at the base)
+  ui-thread.test.ts  AC2                               the warm-up: frames[0].animations is an object, got          21.0 s
+                                                       undefined (live answered ok, the GIFs drawn as stills)
+  chrome.test.ts     AC3 honest                        launch …: {"ok":false,…,"error":{"code":"refused","message":  2.0 s
+                                                       "launch.arm is one of [\"app\", \"blank\", \"lists\"], not
+                                                       \"picture\""}}
+  chrome.test.ts     AC3 planted                       deep-drive didn't say {"ready": true} with                   0.05 s
+                                                       DEEP_DRIVE_PLANT=picture-frame-each-vsync:
+                                                       {"ready":false,"error":"no planted replica
+                                                       picture-frame-each-vsync"}
+  chrome.test.ts     AC4 chrome                        launch …: the same refusal of arm "picture"                  0.04 s
+  seek.test.ts       AC4 canvas                        the GIF plays: at each time, the frame its delays give:      2.6 s
+                                                       playing to vsyncs 10, 25, 43, 56, 67 and 80 shows frame 0
+                                                       each time, not frames 2, 5, 8, 11, 13 and 15
+
+What the base does underneath (probed with the suite's own pictures and the same binary, beside the run): a GIF asset
+is decoded as one still picture, its first frame, on every path. `render`, `raster`, `frames` and `live` all draw frame
+0 of the cells GIF at t = 1 s, where its delays give frame 12, with or without `frames` on the item; `live` holds it as
+one level-0 entry (16,384 B) and reports `levels` but nothing of an animation; `check` refuses nothing (it skips every
+`image@1` with a notice, unknown_kind). `view.reduced_motion` is ignored (`frames` with it answers as without), and
+`frames` answers bad_input to `planted: "decoder_holds_all_frames"`.
+
+After this run, and before the commit, the test names were rewritten from template expressions (`${AC[1]} …`) to
+plain literals with the same text, so the trace lane and `vitest list` read them unrun; the two constants that had held
+the IDs, and exports no test uses, were removed from helpers.ts. Nothing a test does changed, and the files weren't
+run again. So the traces below cite helpers.ts lines 15 below the committed file's (550 is now 535) and test-file
+lines 1 above (chrome.test.ts 43 is now 44). `npx tsc -p tests/acceptance/1489/tsconfig.json` passes on the committed
+files, and `vitest list` names all seven tests with their IDs.
+
+Paths below are redacted: <worktree> is this checkout, <tmp> the OS temp folder.
+
+---- vitest output ----
+start: 2026-11-19T20:17:29Z load: 12:17  up 5 days, 22:26, 18 users, load averages: 206.82 139.05 95.88
+scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `npx vitest run --root tests/acceptance/1489 --no-file-parallelism --testTimeout=600000` runs unleased
+
+ RUN  v5.0.5 <worktree>/tests/acceptance/1489
+
+ ❯ memory.test.ts (2 tests | 2 failed) 13369ms
+   ❯ AC1 #1489.c22ffe3a A 200-frame 512 × 512 GIF holds under 3 frames of pixels, under 4 MB. A planted decoder that holds all frames takes 200 MB and fails (2)
+     × AC1 #1489.c22ffe3a the 200-frame 512 × 512 GIF drawn 1:1 and played through all its frames by frames at 60 Hz: every vsync shows the frame its delays give at t, and at every vsync the GIF holds at most 3 frames of pixels (3,145,728 B), under 4 MB 8611ms
+     × AC1 #1489.c22ffe3a planted decoder_holds_all_frames: a decoder that holds all 200 frames takes 200 MB, by its own reading and by its processes' resident memory above the honest run's, and the same check fails on it, naming the vsync 1175ms
+ ❯ ui-thread.test.ts (1 test | 1 failed) 26267ms
+   ❯ AC2 #1489.17043bb4 200 animations at 60 px keep UI-thread p99 under 3 ms (1)
+     × AC2 #1489.17043bb4 200 looping GIFs of 60 × 60, 40 to 100 ms a frame, drawn 1:1 as 60 px tiles in a 1280 × 640 view and played 6 s by live, a frame each vsync of the real clock at 60 Hz: every frame draws all 200 and each plays; in five runs after a warm-up on a reference Mac the UI thread's time per frame is under 3 ms at p99 20992ms
+ ❯ chrome.test.ts (3 tests | 3 failed) 6582ms
+   ❯ AC3 #1489.2f43c62d A 100 ms GIF in chrome causes 10 frames a second, not 120 (2)
+     × AC3 #1489.2f43c62d a 10-frame GIF of 100 ms a frame in the replica's picture window (GPUI's img element, the window active, a frame drawn only when GPUI says the window is dirty): over 3 s of the clock it draws 30 frames, 10 a second, each showing a new frame of the GIF 2027ms
+     × AC3 #1489.2f43c62d planted picture-frame-each-vsync: the image element as the base has it, asking for a frame at every vsync, draws at every frame of the clock, and the check fails naming the frames a second it caused 48ms
+   ❯ AC4 #1489.f265e8f8 Reduced motion holds the frame, and a seek to t shows the same frame as playing to t (1)
+     × AC4 #1489.f265e8f8 chrome: with reduced motion on, the picture window shows the GIF's first frame and holds it: no frame drawn over 3 s of the clock changes a tile 43ms
+ ❯ seek.test.ts (1 test | 1 failed) 7068ms
+   ❯ AC4 #1489.f265e8f8 Reduced motion holds the frame, and a seek to t shows the same frame as playing to t (1)
+     × AC4 #1489.f265e8f8 canvas: a 16-frame GIF whose every frame but the first is drawn over the ones before it, played by frames at 60 Hz from 0, shows at six times the frame its delays give; a seek to each time (render, the latest first, in one process) shows that same frame; and with the view's reduced motion on, every vsync of the play shows the first frame 2616ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  chrome.test.ts > AC3 #1489.2f43c62d A 100 ms GIF in chrome causes 10 frames a second, not 120 > AC3 #1489.2f43c62d a 10-frame GIF of 100 ms a frame in the replica's picture window (GPUI's img element, the window active, a frame drawn only when GPUI says the window is dirty): over 3 s of the clock it draws 30 frames, 10 a second, each showing a new frame of the GIF
+AssertionError: launch {"frames":"dirty","arm":"picture","picture":"<tmp>/deep-1489-chrome-8RAEO3/ten-frames.gif","size":[128,128],"scale":1}: {"ok":false,"t":0,"error":{"code":"refused","message":"launch.arm is one of [\"app\", \"blank\", \"lists\"], not \"picture\""}}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ Replica.must helpers.ts:550:76
+    548|     this.child.stdin!.write(`${JSON.stringify(args)}\n`);
+    549|     const reply = await answer;
+    550|     expect(reply['ok'], `${what}: ${JSON.stringify(reply).slice(0, 800…
+       |                                                                            ^
+    551|     return reply;
+    552|   }
+ ❯ pictureRun helpers.ts:581:22
+ ❯ chrome.test.ts:43:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯
+
+ FAIL  chrome.test.ts > AC3 #1489.2f43c62d A 100 ms GIF in chrome causes 10 frames a second, not 120 > AC3 #1489.2f43c62d planted picture-frame-each-vsync: the image element as the base has it, asking for a frame at every vsync, draws at every frame of the clock, and the check fails naming the frames a second it caused
+AssertionError: deep-drive didn't say {"ready": true} with DEEP_DRIVE_PLANT=picture-frame-each-vsync: {"ready":false,"error":"no planted replica picture-frame-each-vsync"}
+ ❯ Replica.start helpers.ts:534:14
+    532|     if (first['ready'] !== true) {
+    533|       await replica.stop();
+    534|       expect.fail(`deep-drive didn't say {"ready": true}${plant === un…
+       |              ^
+    535|     }
+    536|     return replica;
+ ❯ pictureRun helpers.ts:577:19
+ ❯ chrome.test.ts:49:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
+
+ FAIL  chrome.test.ts > AC4 #1489.f265e8f8 Reduced motion holds the frame, and a seek to t shows the same frame as playing to t > AC4 #1489.f265e8f8 chrome: with reduced motion on, the picture window shows the GIF's first frame and holds it: no frame drawn over 3 s of the clock changes a tile
+AssertionError: launch {"frames":"dirty","arm":"picture","picture":"<tmp>/deep-1489-chrome-8RAEO3/ten-frames.gif","size":[128,128],"scale":1,"reduced_motion":true}: {"ok":false,"t":0,"error":{"code":"refused","message":"launch.arm is one of [\"app\", \"blank\", \"lists\"], not \"picture\""}}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ Replica.must helpers.ts:550:76
+    548|     this.child.stdin!.write(`${JSON.stringify(args)}\n`);
+    549|     const reply = await answer;
+    550|     expect(reply['ok'], `${what}: ${JSON.stringify(reply).slice(0, 800…
+       |                                                                            ^
+    551|     return reply;
+    552|   }
+ ❯ pictureRun helpers.ts:581:22
+ ❯ chrome.test.ts:60:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯
+
+ FAIL  memory.test.ts > AC1 #1489.c22ffe3a A 200-frame 512 × 512 GIF holds under 3 frames of pixels, under 4 MB. A planted decoder that holds all frames takes 200 MB and fails > AC1 #1489.c22ffe3a the 200-frame 512 × 512 GIF drawn 1:1 and played through all its frames by frames at 60 Hz: every vsync shows the frame its delays give at t, and at every vsync the GIF holds at most 3 frames of pixels (3,145,728 B), under 4 MB
+AssertionError: frames: vsyncs[0].animations is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj ../1486/helpers.ts:44:72
+     42| }
+     43| export function obj(value: JsonValue | undefined, what: string): JsonO…
+     44|   expect(isObject(value), `${what} is an object, got ${short(value)}`)…
+       |                                                                        ^
+     45|   return value as JsonObject;
+     46| }
+ ❯ animations helpers.ts:345:13
+ ❯ helpers.ts:362:88
+ ❯ vsyncsOf helpers.ts:358:15
+ ❯ memory.test.ts:73:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/7]⎯
+
+ FAIL  memory.test.ts > AC1 #1489.c22ffe3a A 200-frame 512 × 512 GIF holds under 3 frames of pixels, under 4 MB. A planted decoder that holds all frames takes 200 MB and fails > AC1 #1489.c22ffe3a planted decoder_holds_all_frames: a decoder that holds all 200 frames takes 200 MB, by its own reading and by its processes' resident memory above the honest run's, and the same check fails on it, naming the vsync
+AssertionError: frames: vsyncs[0].animations is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj ../1486/helpers.ts:44:72
+     42| }
+     43| export function obj(value: JsonValue | undefined, what: string): JsonO…
+     44|   expect(isObject(value), `${what} is an object, got ${short(value)}`)…
+       |                                                                        ^
+     45|   return value as JsonObject;
+     46| }
+ ❯ animations helpers.ts:345:13
+ ❯ helpers.ts:362:88
+ ❯ vsyncsOf helpers.ts:358:15
+ ❯ memory.test.ts:84:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/7]⎯
+
+ FAIL  seek.test.ts > AC4 #1489.f265e8f8 Reduced motion holds the frame, and a seek to t shows the same frame as playing to t > AC4 #1489.f265e8f8 canvas: a 16-frame GIF whose every frame but the first is drawn over the ones before it, played by frames at 60 Hz from 0, shows at six times the frame its delays give; a seek to each time (render, the latest first, in one process) shows that same frame; and with the view's reduced motion on, every vsync of the play shows the first frame
+AssertionError: the GIF plays: at each time, the frame its delays give: expected [ …(6) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "playing to vsync 10 (t 117600000) shows frame 0, not frame 2, the one the delays give at t",
++   "playing to vsync 25 (t 294000000) shows frame 0, not frame 5, the one the delays give at t",
++   "playing to vsync 43 (t 505680000) shows frame 0, not frame 8, the one the delays give at t",
++   "playing to vsync 56 (t 658560000) shows frame 0, not frame 11, the one the delays give at t",
++   "playing to vsync 67 (t 787920000) shows frame 0, not frame 13, the one the delays give at t",
++   "playing to vsync 80 (t 940800000) shows frame 0, not frame 15, the one the delays give at t",
++ ]
+
+ ❯ seek.test.ts:56:79
+     54|       if (s !== p) seeking.push(`a seek to vsync ${k}'s t shows ${name…
+     55|     }
+     56|     expect(playing, 'the GIF plays: at each time, the frame its delays…
+       |                                                                               ^
+     57|     expect(seeking, 'a seek to t shows the same frame as playing to t'…
+     58|     const moved = [0, ...VSYNCS_SEEN].flatMap((k) => {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/7]⎯
+
+ FAIL  ui-thread.test.ts > AC2 #1489.17043bb4 200 animations at 60 px keep UI-thread p99 under 3 ms > AC2 #1489.17043bb4 200 looping GIFs of 60 × 60, 40 to 100 ms a frame, drawn 1:1 as 60 px tiles in a 1280 × 640 view and played 6 s by live, a frame each vsync of the real clock at 60 Hz: every frame draws all 200 and each plays; in five runs after a warm-up on a reference Mac the UI thread's time per frame is under 3 ms at p99
+AssertionError: the warm-up: frames[0].animations is an object, got undefined: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ obj ../1486/helpers.ts:44:72
+     42| }
+     43| export function obj(value: JsonValue | undefined, what: string): JsonO…
+     44|   expect(isObject(value), `${what} is an object, got ${short(value)}`)…
+       |                                                                        ^
+     45|   return value as JsonObject;
+     46| }
+ ❯ animations helpers.ts:345:13
+ ❯ helpers.ts:379:19
+ ❯ liveOf helpers.ts:372:59
+ ❯ ui-thread.test.ts:58:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/7]⎯
+
+
+ Test Files  4 failed (4)
+      Tests  7 failed (7)
+   Start at  12:17:33
+   Duration  56.11s (tests 99%, transform 1%, import 1%)
+
+vitest exit: 1
+end: 2026-11-19T20:18:29Z load: 12:18  up 5 days, 22:27, 18 users, load averages: 194.66 146.29 101.43
+wall: 60 s

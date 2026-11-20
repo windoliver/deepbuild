@@ -431,7 +431,8 @@ pub struct Scenario {
     pub docs_for: BTreeMap<String, String>,
     /// #549: what the scenario gives a match: each document's link and the relay's authority.
     pub net: crate::net::Given,
-    pub record: BTreeMap<String, RecordObject>,
+    /// Shared (#1868): `canvas` reads its world's record once and plays every call on it.
+    pub record: std::sync::Arc<BTreeMap<String, RecordObject>>,
     /// #629: a replay's run record entries, each as a `run` call's reply gave it (`record` as a
     /// list).
     pub runs: Vec<Value>,
