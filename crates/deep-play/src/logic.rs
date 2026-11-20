@@ -298,6 +298,19 @@ pub fn logic_piece(
     read: &dyn Fn(&str) -> Option<Vec<u8>>,
     cast_late: bool,
 ) -> Result<Option<Piece>, Box<Issue>> {
+    logic_piece_with(sealed, form, track, read, cast_late, &Default::default())
+}
+
+/// As `logic_piece`, checked with `planted`'s twins (#551: a page tracker a match's ring plants).
+#[cfg(feature = "logic")]
+pub fn logic_piece_with(
+    sealed: &Sealed,
+    form: &Value,
+    track: &[Value],
+    read: &dyn Fn(&str) -> Option<Vec<u8>>,
+    cast_late: bool,
+    planted: &deep_logic::Planted,
+) -> Result<Option<Piece>, Box<Issue>> {
     let Some(mut piece) = piece_json(form) else {
         return Ok(None);
     };
@@ -305,7 +318,7 @@ pub fn logic_piece(
     crate::fires::expand(form, &mut piece)?;
     let piece = check_in(
         &piece,
-        &Default::default(),
+        planted,
         &mut History::new(),
         read,
         &crate::cast::services(sealed, form, track, cast_late),
