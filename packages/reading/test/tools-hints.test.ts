@@ -1,7 +1,7 @@
 // The reading tools write out each tool's title and hints, since the job's sandbox grants tools.mjs alone (#2898):
 // what they list must stay what scripts/skill.mjs generates in packages/hub/annotations.json.
 import { spawn } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { expect, it } from 'vitest';
 
@@ -21,7 +21,7 @@ it('the reading tools list the title and hints the generated table gives each', 
   child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} })}\n`);
   const got = await listed;
   child.kill();
-  const table = existsSync(generated) ? JSON.parse(readFileSync(generated, 'utf8')) as Record<string, unknown> : {};
+  const table = JSON.parse(readFileSync(generated, 'utf8')) as Record<string, unknown>;
   expect(Object.fromEntries(got.map((t) => [t.name, t.annotations]))).toEqual({ read: table.read, find: table.find });
   expect(got.map((t) => t.annotations)).not.toContain(undefined);
 });

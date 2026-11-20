@@ -248,8 +248,7 @@ type Listed = { name: string; description: string; inputSchema: Schema; annotati
 
 /** The tools as deep mcp actions lists them. */
 export function actionToolList(): Listed[] {
-  const hints = annotations();
-  return Object.entries(ACTION_SCHEMAS).map(([name, inputSchema]) => ({ name, description: ACTION_DESCRIPTIONS[name]!, inputSchema, annotations: hints[name]! }));
+  return Object.entries(ACTION_SCHEMAS).map(([name, inputSchema]) => ({ name, description: ACTION_DESCRIPTIONS[name]!, inputSchema, annotations: annotations(name) }));
 }
 
 let described: Record<string, string> | undefined;
@@ -258,9 +257,15 @@ function descriptions(): Record<string, string> {
   return (described ??= JSON.parse(readFileSync(new URL('../tools.json', import.meta.url), 'utf8')) as Record<string, string>);
 }
 let annotated: Record<string, Obj> | undefined;
-/** Each tool's title and hints, as scripts/skill.mjs generated them: the server's word to a client, never read by the hub. */
-function annotations(): Record<string, Obj> {
-  return (annotated ??= JSON.parse(readFileSync(new URL('../annotations.json', import.meta.url), 'utf8')) as Record<string, Obj>);
+/**
+ * A tool's title and hints, as scripts/skill.mjs generated them: the server's word to a client, never read by the hub.
+ * A tool the table misses is an error, never a listing left to the protocol's cautious defaults.
+ */
+function annotations(name: string): Obj {
+  annotated ??= JSON.parse(readFileSync(new URL('../annotations.json', import.meta.url), 'utf8')) as Record<string, Obj>;
+  const hints = annotated[name];
+  if (!hints) throw Error(`packages/hub/annotations.json gives ${name} no title or hints; add it to HINTS in scripts/skill.mjs and run it`);
+  return hints;
 }
 
 /** The schemas this hub publishes and holds calls to: #1415's planted hub marks deep_kinds's op optional though its handler needs one. */
@@ -277,8 +282,7 @@ function published(): Readonly<Record<string, Schema>> {
  */
 export function toolList(): Listed[] {
   const text = descriptions();
-  const hints = annotations();
-  return Object.entries(published()).filter(([name]) => text[name]).map(([name, inputSchema]) => ({ name, description: text[name]!, inputSchema, annotations: hints[name]! }));
+  return Object.entries(published()).filter(([name]) => text[name]).map(([name, inputSchema]) => ({ name, description: text[name]!, inputSchema, annotations: annotations(name) }));
 }
 
 /**
