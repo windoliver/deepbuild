@@ -9,8 +9,10 @@ pub mod card;
 pub mod checks;
 pub mod copy;
 pub mod kind;
+pub mod locate;
+mod message;
 pub mod play;
 pub mod prompt;
 
-pub use copy::{Copy, End, Planted, Stepper};
+pub use copy::{Change, Copy, Defect, End, Hashed, Planted, Stepper};
 pub use kind::{Config, FLICKS};

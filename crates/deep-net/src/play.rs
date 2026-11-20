@@ -10,7 +10,7 @@ use deep_relay::wire::Frame;
 use serde_json::{json, Value};
 
 use crate::card::Card;
-use crate::copy::{Copy, Planted, Stepper};
+use crate::copy::{Copy, Defect, Planted, Stepper};
 use crate::kind::{Config, FLICKS};
 
 /// What a player does: an entry on `control` made when match step `step` is the first its copy
@@ -20,6 +20,8 @@ pub struct Play {
     pub step: i64,
     pub control: String,
     pub value: Value,
+    /// #550: the players whose copies it goes to, over a direct path; every copy where none.
+    pub to: Option<Vec<u8>>,
 }
 
 /// Every frame `player` sends from `at` for `len` waits at the relay until `at + len`.
@@ -38,6 +40,8 @@ pub struct Faults {
     pub holds: Vec<Hold>,
     /// Each frame is held back by up to this long, by the seed.
     pub back: i64,
+    /// #550: frames go straight between copies, as on a direct path, each copy's to each other.
+    pub direct: bool,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -46,8 +50,14 @@ pub struct Ask {
     pub plays: BTreeMap<u8, Vec<Play>>,
     pub faults: Faults,
     pub planted: Planted,
+    /// #550: the one copy `planted` applies to, or every copy.
+    pub planted_on: Option<u8>,
     /// What each named copy shows at a time: `(player, t)`.
     pub shows: Vec<(u8, i64)>,
+    /// Whether the relay's log keeps each frame's messages.
+    pub log: bool,
+    /// #550: a planted defect one copy makes.
+    pub defect: Option<(u8, Defect)>,
 }
 
 /// One frame the relay carried to one copy.
@@ -60,6 +70,9 @@ pub struct Carried {
     pub at: i64,
     /// None when the relay dropped it.
     pub delivered: Option<i64>,
+    /// The copy it went to, and the frame's bytes, as hex, when the log keeps them.
+    pub to: u8,
+    pub bytes: Option<String>,
 }
 
 /// What a copy showed at a time: its last step, and the app's notice then.
@@ -90,8 +103,8 @@ impl<S> Played<S> {
             .iter()
             .filter(|_| log)
             .map(|c| {
-                json!({"player": c.player, "first": c.first, "count": c.count, "confirmed": c.confirmed,
-                       "at": s(c.at), "delivered": c.delivered.map(s)})
+                json!({"player": c.player, "to": c.to, "first": c.first, "count": c.count, "confirmed": c.confirmed,
+                       "at": s(c.at), "delivered": c.delivered.map(s), "bytes": c.bytes})
             })
             .collect();
         json!({"frames": self.log.len(), "dropped": self.dropped(), "log": rows})
@@ -128,6 +141,10 @@ pub fn play<S: Stepper>(
     let step = cfg.step();
     let mut copies = Vec::new();
     for me in 1..=cfg.players {
+        let planted = match ask.planted_on {
+            Some(on) if on != me => Planted::None,
+            _ => ask.planted,
+        };
         let mut copy = Copy::new(
             cfg.clone(),
             card.clone(),
@@ -135,12 +152,15 @@ pub fn play<S: Stepper>(
             cfg.players,
             [0x54; 16],
             make(me)?,
-            ask.planted,
+            planted,
             0,
         );
         copy.limit(ask.steps);
+        if let Some((_, d)) = ask.defect.as_ref().filter(|(on, _)| *on == me) {
+            copy.plant(d.clone());
+        }
         let plays = ask.plays.get(&me).into_iter().flatten();
-        copy.script(plays.map(|p| (p.step, p.control.clone(), p.value.clone())));
+        copy.script(plays.map(|p| (p.step, p.control.clone(), p.value.clone(), p.to.clone())));
         copies.push(copy);
     }
     let mut rng = Rng(ask.faults.seed ^ 0x006e_6574_4035_3439);
@@ -207,6 +227,12 @@ pub fn play<S: Stepper>(
                     at += (rng.next() % (ask.faults.back as u64 + 1)) as i64;
                 }
                 for to in (0..played.copies.len()).filter(|to| *to != i) {
+                    // Through the relay every copy gets the one frame; on a direct path each
+                    // gets its own.
+                    let sent = match ask.faults.direct {
+                        true => played.copies[i].frame_for(&frame, to as u8 + 1),
+                        false => frame.clone(),
+                    };
                     played.log.push(Carried {
                         player,
                         first: read.as_ref().map_or(0, |f| f.first as i64),
@@ -214,9 +240,11 @@ pub fn play<S: Stepper>(
                         confirmed: read.as_ref().map_or(0, |f| f.confirmed as i64),
                         at: now,
                         delivered: (!dropped).then_some(at),
+                        to: to as u8 + 1,
+                        bytes: ask.log.then(|| deep_relay::wire::hex(&sent)),
                     });
                     if !dropped {
-                        push(&mut queue, at, Event::Deliver(to, frame.clone()));
+                        push(&mut queue, at, Event::Deliver(to, sent));
                     }
                 }
             }
@@ -248,6 +276,7 @@ mod tests {
                         step: g,
                         control: "push".into(),
                         value: json!((g * 7 + p as i64 * 3) % 17 - 8),
+                        to: None,
                     })
                     .collect();
                 (p, list)
@@ -262,6 +291,7 @@ mod tests {
             faults,
             planted,
             shows: vec![(1, 10 * FLICKS + FLICKS * 4 / 5)],
+            ..Ask::default()
         };
         play(&cfg(delay, 1), &Card::default(), &ask, &mut |_| {
             Ok(Word::default())
@@ -338,6 +368,47 @@ mod tests {
         assert_eq!(six.copies[0].ran(), 204);
         for c in &six.copies {
             assert_eq!(c.end(), Some(End::Timeout));
+        }
+    }
+
+    #[test]
+    fn a_copy_that_sends_its_peers_other_entries_is_named_by_its_entries_not_a_field() {
+        let three = Config {
+            players: 3,
+            ..cfg(2, 8)
+        };
+        let to = |value: f64, player: u8| Play {
+            step: 10,
+            control: "push".into(),
+            value: json!(value),
+            to: Some(vec![player]),
+        };
+        for (planted, cause) in [
+            (Planted::None, "entries"),
+            (Planted::LocatesStateOnly, "state"),
+        ] {
+            let ask = Ask {
+                steps: 60,
+                plays: [(3u8, vec![to(3.0, 1), to(-8.0, 2)])].into_iter().collect(),
+                faults: Faults {
+                    direct: true,
+                    ..Faults::default()
+                },
+                planted,
+                ..Ask::default()
+            };
+            let played =
+                play(&three, &Card::default(), &ask, &mut |_| Ok(Word::default())).unwrap();
+            for (c, held) in played.copies[..2].iter().zip([3.0, -8.0]) {
+                let d = c.desync().unwrap();
+                assert_eq!(d["cause"], json!(cause));
+                if planted == Planted::None {
+                    assert_eq!((&d["player"], &d["step"]), (&json!(3), &json!(12)));
+                    assert!(d.get("module").is_none() && d.get("field").is_none());
+                }
+                // Each record keeps the entry it held for player 3 at step 12.
+                assert_eq!(c.record()["track"][0]["value"], json!(held));
+            }
         }
     }
 
