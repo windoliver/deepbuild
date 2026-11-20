@@ -970,6 +970,9 @@ alone.push('tests/acceptance/2248/');
 alone.push('tests/acceptance/2098/', 'tests/acceptance/2098-redraft-ac2/');
 // #2307's files build deep-physics (release and test-backends).
 alone.push('tests/acceptance/2307/');
+// #2310's files build deep-physics (release and test-backends), its wasm32 library, the lane's linux/amd64 build
+// and the merge base's release build.
+alone.push('tests/acceptance/2310/');
 
 // #2742's files build deep-gpu; ac1 compares two films' GPU time on any Mac, and ac2 runs #417's suite.
 alone.push('tests/acceptance/2742/');

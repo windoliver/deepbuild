@@ -164,6 +164,7 @@ pub struct Joint {
     pub breaks_at: Option<Breaks>,
     pub collide_connected: bool,
     pub active: bool,
+    pub articulated: bool,
     pub coupling: reads::Coupling,
 }
 
@@ -1262,6 +1263,7 @@ impl Reader {
                 "path",
                 "active",
                 "collide_connected",
+                "articulated",
                 "swing",
                 "twist",
             ],
@@ -1352,6 +1354,7 @@ impl Reader {
             breaks_at: self.breaks(j, p),
             collide_connected: self.flag(j, "collide_connected", p, false),
             active: self.flag(j, "active", p, true),
+            articulated: self.flag(j, "articulated", p, false),
             coupling: self.coupling(j, p, kind),
         })
     }
