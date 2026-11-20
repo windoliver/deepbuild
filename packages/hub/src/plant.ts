@@ -171,6 +171,8 @@ export type Plant =
   | 'churn-keeps-every-answer' | 'churn-keeps-every-result' | 'churn-keeps-every-output' | 'churn-keeps-every-name-set'
   // #2402's: a host that counts a hook handler's failures and never clears them.
   | 'failures-never-cleared'
+  // #2651's: a hub that answers whose a hook is from the sessions of running jobs alone, no folder and no ended job.
+  | 'whose-running-sessions-only'
   // #824's per-session reading: deep mcp loading the whole hub package, a waiter keeping its session's transcript, and
   // a platform that reads no process's memory.
   | 'mcp-loads-hub' | 'waiter-keeps-transcript' | 'sessions-no-memory-read'
@@ -371,6 +373,7 @@ const PLANTS: readonly string[] = [
   'churn-no-full-collection', 'churn-no-resident-read',
   'churn-keeps-every-answer', 'churn-keeps-every-result', 'churn-keeps-every-output', 'churn-keeps-every-name-set',
   'failures-never-cleared',
+  'whose-running-sessions-only',
   'mcp-loads-hub', 'waiter-keeps-transcript', 'sessions-no-memory-read',
   'repeat-reaches-you',
   'deep-wait-polls', 'stop-answers-waiting',
