@@ -32,10 +32,11 @@ use crate::{refused, App, Planted};
 const FLICKS_PER_SECOND: i64 = 705_600_000;
 const RUNS: usize = 5;
 /// The reference Macs and their conditions, as scripts/benchmark.mjs lists them.
-const REFERENCES: [(&str, &str, u64); 3] = [
+const REFERENCES: [(&str, &str, u64); 4] = [
     ("Mac15,7", "Apple M3 Pro", 36 << 30),
     ("Mac15,12", "Apple M3", 16 << 30),
     ("Mac17,10", "Apple M5 Max", 64 << 30),
+    ("Mac18,1", "Apple M6", 32 << 30),
 ];
 
 /// The stub meter's readings for frames `from..=to` of every run.

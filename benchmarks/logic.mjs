@@ -93,7 +93,7 @@ const record = {
 };
 console.log(JSON.stringify(record, null, 2));
 if (process.argv.includes('--write')) {
-  if (!['Mac15,7', 'Mac15,12', 'Mac17,10'].includes(machine.model)) throw Error(`the readings come from a reference Mac; this is ${machine.model}`);
+  if (!['Mac15,7', 'Mac15,12', 'Mac17,10', 'Mac18,1'].includes(machine.model)) throw Error(`the readings come from a reference Mac; this is ${machine.model}`);
   writeFileSync(RECORD, `${JSON.stringify(record, null, 2)}\n`);
   console.log(`wrote ${RECORD}`);
 }
