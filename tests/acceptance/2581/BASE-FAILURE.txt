@@ -1,0 +1,402 @@
+Issue: #2581 (a deep flag is still read as a value in six forms; deep hub start --root --typo starts a dev hub in --typo)
+Base: 9e98f86de (head of PR #2557 for #2200; a clean worktree, built with npm ci, npm run build --workspaces and
+cargo build -p deep-hook, no implementation).
+Acceptance tests: tests/acceptance/2581, a blind draft from the issue, the design and the base.
+Machine: macOS (Darwin 27.2, Apple silicon), Node 24, load average 55-70 from other runs (first and last lines).
+<checkout> is the worktree, <tmp> a test's temporary folder (<tmp>/h the home, <tmp>/e the working folder, <tmp>/bin
+the stand-ins). Timings are cut: the machine was loaded.
+
+The suite on the base.
+Command: NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/2581 --reporter=verbose
+Exit 1. 11 tests, 11 failed, each at its one expect (11 AssertionErrors; no import, type or load error):
+- root.test.ts (criterion 1): hub start exit 0 (the dev hub came up in <tmp>/e/--typo; 61 paths written there),
+  hub status 3, hub stop 3, hub use 3, hub run started a server (its hub.sock appeared; stopped by the test's PID).
+- dash.test.ts (criterion 2): status -x --why exit 3 after setup (written and called), env up --root -x exit 3 (nothing
+  written), install -x with a manifest at ./-x exit 3 after setup (written and called).
+- others.test.ts (criterion 3): secret add --typo x exit 3 (after setup), rules credit --typo 3, host changes --typo 3.
+After the run no process with <tmp> in its command line was left, and no /tmp/dh19d-* folder.
+The type check (node node_modules/typescript/bin/tsc -p tests/acceptance/2581/tsconfig.json) exits 0.
+
+ 2:10  up  6:37, 3 users, load averages: 56.56 69.16 62.81
+v24.22.0
+
+ RUN  v5.0.5 <checkout>
+
+ × tests/acceptance/2581/others.test.ts > #2581.995b5ffd the other three > #2581.995b5ffd deep secret add --typo x is a usage error: exit 2 678ms
+   → deep secret add --typo x has a flag where a value goes, so it must exit 2: exit 3, stdout "", stderr "deep hub start: <tmp>/bin/launcher exited 1: \nDeepBuild's hooks are in Claude Code's and Codex's settings; deep setup --undo removes it all. 30 of DeepBuild's guard entries block commands that could break other work on this machine from now, each saying why; everything else is in watch-only mode until you approve a project's checks.\ndeep setup: the hub didn't start through its login service; deep doctor names what is missing.\ndeep secret add reads the value at your terminal, and this has none, so nothing was saved\n": expected 3 to be 2 // Object.is equality
+ × tests/acceptance/2581/dash.test.ts > #2581.43938b6c a single dash is a flag too > #2581.43938b6c deep status -x --why in a fresh home exits 2 with nothing set up 800ms
+   → deep status -x --why has a flag where a value goes, so it must exit 2, write nothing and call no stand-in: exit 3, stdout "", stderr "deep hub start: <tmp>/bin/launcher exited 1: \nDeepBuild's hooks are in Claude Code's and Codex's settings; deep setup --undo removes it all. 30 of DeepBuild's guard entries block commands that could break other work on this machine from now, each saying why; everything else is in watch-only mode until you approve a project's checks.\ndeep setup: the hub didn't start through its login service; deep doctor names what is missing.\nThe hub isn't answering; set this home up with deep setup.\n": expected { exit: 3, written: [ …(23) ], …(1) } to deeply equal { exit: 2, written: [], called: [] }
+ × tests/acceptance/2581/others.test.ts > #2581.995b5ffd the other three > #2581.995b5ffd deep rules credit --typo is a usage error: exit 2 137ms
+   → deep rules credit --typo has a flag where a value goes, so it must exit 2: exit 3, stdout "", stderr "The hub isn't answering; set this home up with deep setup.\n": expected 3 to be 2 // Object.is equality
+ × tests/acceptance/2581/others.test.ts > #2581.995b5ffd the other three > #2581.995b5ffd deep host changes --typo is a usage error: exit 2 131ms
+   → deep host changes --typo has a flag where a value goes, so it must exit 2: exit 3, stdout "", stderr "The hub isn't answering; set this home up with deep setup.\n": expected 3 to be 2 // Object.is equality
+ × tests/acceptance/2581/dash.test.ts > #2581.43938b6c a single dash is a flag too > #2581.43938b6c deep env up --root -x in a fresh home exits 2 with nothing set up 151ms
+   → deep env up --root -x has a flag where a value goes, so it must exit 2, write nothing and call no stand-in: exit 3, stdout "", stderr "The hub isn't answering; set this home up with deep setup.\n": expected { exit: 3, written: [], called: [] } to deeply equal { exit: 2, written: [], called: [] }
+ × tests/acceptance/2581/root.test.ts > #2581.df46b19b a flag isn't a root > #2581.df46b19b deep hub start --root --typo in an empty working folder exits 2 and writes nothing 1513ms
+   → deep hub start --root --typo has a flag where the folder goes, so it must exit 2 and write nothing: exit 0, stdout "The hub is up.\n", stderr "": expected { exit: +0, written: [ …(61) ] } to deeply equal { exit: 2, written: [] }
+ × tests/acceptance/2581/dash.test.ts > #2581.43938b6c a single dash is a flag too > #2581.43938b6c deep install -x in a fresh home, a package folder named -x beside it, exits 2 with nothing set up 629ms
+   → deep install -x has a flag where a value goes, so it must exit 2, write nothing and call no stand-in: exit 3, stdout "Source: <tmp>/e/-x\n  dash-x@0.0.1, digest undefined, unsigned\nPermissions:\n  access: none\n  notices: none\n  actions: none\n  check kinds: none\n  provides: none\n  uses: none\n  replaces: none\n  conflicts with: none\n  runs on: none\n  hosts: none\n", stderr "deep hub start: <tmp>/bin/launcher exited 1: \nDeepBuild's hooks are in Claude Code's and Codex's settings; deep setup --undo removes it all. 30 of DeepBuild's guard entries block commands that could break other work on this machine from now, each saying why; everything else is in watch-only mode until you approve a project's checks.\ndeep setup: the hub didn't start through its login service; deep doctor names what is missing.\nThe hub isn't answering; set this home up with deep setup.\n": expected { exit: 3, written: [ …(23) ], …(1) } to deeply equal { exit: 2, written: [], called: [] }
+ × tests/acceptance/2581/root.test.ts > #2581.df46b19b a flag isn't a root > #2581.df46b19b deep hub status --root --typo exits 2 135ms
+   → deep hub status --root --typo has a flag where the folder goes, so it must exit 2: exit 3, stdout "", stderr "The hub isn't answering; set this home up with deep setup.\n": expected 3 to be 2 // Object.is equality
+ × tests/acceptance/2581/root.test.ts > #2581.df46b19b a flag isn't a root > #2581.df46b19b deep hub stop --root --typo exits 2 131ms
+   → deep hub stop --root --typo has a flag where the folder goes, so it must exit 2: exit 3, stdout "", stderr "deep hub stop: no hub could be stopped at unix:<tmp>/e/--typo/hub.sock: connect ENOENT <tmp>/e/--typo/hub.sock\n": expected 3 to be 2 // Object.is equality
+ × tests/acceptance/2581/root.test.ts > #2581.df46b19b a flag isn't a root > #2581.df46b19b deep hub use --root --typo exits 2 253ms
+   → deep hub use --root --typo has a flag where the folder goes, so it must exit 2: exit 3, stdout "", stderr "The hub isn't answering; set this home up with deep setup.\n": expected 3 to be 2 // Object.is equality
+ × tests/acceptance/2581/root.test.ts > #2581.df46b19b a flag isn't a root > #2581.df46b19b deep hub run --root --typo exits 2 and starts no server 1134ms
+   → deep hub run --root --typo has a flag where the folder goes, so it must exit 2 and start no server: it started one, stopped by this test; exit 0, stdout "", stderr "": expected { exit: null, server: true } to deeply equal { exit: 2, server: false }
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 11 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2581/dash.test.ts > #2581.43938b6c a single dash is a flag too > #2581.43938b6c deep status -x --why in a fresh home exits 2 with nothing set up
+AssertionError: deep status -x --why has a flag where a value goes, so it must exit 2, write nothing and call no stand-in: exit 3, stdout "", stderr "deep hub start: <tmp>/bin/launcher exited 1: \nDeepBuild's hooks are in Claude Code's and Codex's settings; deep setup --undo removes it all. 30 of DeepBuild's guard entries block commands that could break other work on this machine from now, each saying why; everything else is in watch-only mode until you approve a project's checks.\ndeep setup: the hub didn't start through its login service; deep doctor names what is missing.\nThe hub isn't answering; set this home up with deep setup.\n": expected { exit: 3, written: [ …(23) ], …(1) } to deeply equal { exit: 2, written: [], called: [] }
+
+- Expected
++ Received
+
+  {
+-   "called": [],
+-   "exit": 2,
+-   "written": [],
++   "called": [
++     "launcher <tmp>/h/Library/LaunchAgents/com.deepbuild.hub.plist",
++   ],
++   "exit": 3,
++   "written": [
++     "bin/calls.log",
++     "h/.claude/settings.json",
++     "h/.claude/skills",
++     "h/.claude/skills/deepbuild",
++     "h/.claude/skills/deepbuild/SKILL.md",
++     "h/.claude.json",
++     "h/.codex/config.toml",
++     "h/.codex/hooks.json",
++     "h/.deepbuild",
++     "h/.deepbuild/bin",
++     "h/.deepbuild/bin/deep-hook",
++     "h/.deepbuild/claude-hooks.json",
++     "h/.deepbuild/codex-hooks.json",
++     "h/.deepbuild/config.json",
++     "h/.deepbuild/logs",
++     "h/.deepbuild/originals",
++     "h/.deepbuild/originals/7905214a0c570990006b4e2a71b3778020d8cf62a9ff6bad5a8f80bbb230978d",
++     "h/.deepbuild/rules.json",
++     "h/.deepbuild/setup-stopped.json",
++     "h/.deepbuild/setup.json",
++     "h/Library",
++     "h/Library/LaunchAgents",
++     "h/Library/LaunchAgents/com.deepbuild.hub.plist",
++   ],
+  }
+
+ ❯ setsNothingUp tests/acceptance/2581/dash.test.ts:18:163
+     16| async function setsNothingUp(p: Place, args: readonly string[]): Promi…
+     17|   const { ran, exit, written, called } = await outcome(p, args);
+     18|   expect({ exit, written, called }, `deep ${args.join(' ')} has a flag…
+       |                                                                                                                                                                   ^
+     19| }
+     20|
+ ❯ tests/acceptance/2581/dash.test.ts:23:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/11]⎯
+
+ FAIL  tests/acceptance/2581/dash.test.ts > #2581.43938b6c a single dash is a flag too > #2581.43938b6c deep env up --root -x in a fresh home exits 2 with nothing set up
+AssertionError: deep env up --root -x has a flag where a value goes, so it must exit 2, write nothing and call no stand-in: exit 3, stdout "", stderr "The hub isn't answering; set this home up with deep setup.\n": expected { exit: 3, written: [], called: [] } to deeply equal { exit: 2, written: [], called: [] }
+
+- Expected
++ Received
+
+  {
+    "called": [],
+-   "exit": 2,
++   "exit": 3,
+    "written": [],
+  }
+
+ ❯ setsNothingUp tests/acceptance/2581/dash.test.ts:18:163
+     16| async function setsNothingUp(p: Place, args: readonly string[]): Promi…
+     17|   const { ran, exit, written, called } = await outcome(p, args);
+     18|   expect({ exit, written, called }, `deep ${args.join(' ')} has a flag…
+       |                                                                                                                                                                   ^
+     19| }
+     20|
+ ❯ tests/acceptance/2581/dash.test.ts:27:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/11]⎯
+
+ FAIL  tests/acceptance/2581/dash.test.ts > #2581.43938b6c a single dash is a flag too > #2581.43938b6c deep install -x in a fresh home, a package folder named -x beside it, exits 2 with nothing set up
+AssertionError: deep install -x has a flag where a value goes, so it must exit 2, write nothing and call no stand-in: exit 3, stdout "Source: <tmp>/e/-x\n  dash-x@0.0.1, digest undefined, unsigned\nPermissions:\n  access: none\n  notices: none\n  actions: none\n  check kinds: none\n  provides: none\n  uses: none\n  replaces: none\n  conflicts with: none\n  runs on: none\n  hosts: none\n", stderr "deep hub start: <tmp>/bin/launcher exited 1: \nDeepBuild's hooks are in Claude Code's and Codex's settings; deep setup --undo removes it all. 30 of DeepBuild's guard entries block commands that could break other work on this machine from now, each saying why; everything else is in watch-only mode until you approve a project's checks.\ndeep setup: the hub didn't start through its login service; deep doctor names what is missing.\nThe hub isn't answering; set this home up with deep setup.\n": expected { exit: 3, written: [ …(23) ], …(1) } to deeply equal { exit: 2, written: [], called: [] }
+
+- Expected
++ Received
+
+  {
+-   "called": [],
+-   "exit": 2,
+-   "written": [],
++   "called": [
++     "launcher <tmp>/h/Library/LaunchAgents/com.deepbuild.hub.plist",
++   ],
++   "exit": 3,
++   "written": [
++     "bin/calls.log",
++     "h/.claude/settings.json",
++     "h/.claude/skills",
++     "h/.claude/skills/deepbuild",
++     "h/.claude/skills/deepbuild/SKILL.md",
++     "h/.claude.json",
++     "h/.codex/config.toml",
++     "h/.codex/hooks.json",
++     "h/.deepbuild",
++     "h/.deepbuild/bin",
++     "h/.deepbuild/bin/deep-hook",
++     "h/.deepbuild/claude-hooks.json",
++     "h/.deepbuild/codex-hooks.json",
++     "h/.deepbuild/config.json",
++     "h/.deepbuild/logs",
++     "h/.deepbuild/originals",
++     "h/.deepbuild/originals/7905214a0c570990006b4e2a71b3778020d8cf62a9ff6bad5a8f80bbb230978d",
++     "h/.deepbuild/rules.json",
++     "h/.deepbuild/setup-stopped.json",
++     "h/.deepbuild/setup.json",
++     "h/Library",
++     "h/Library/LaunchAgents",
++     "h/Library/LaunchAgents/com.deepbuild.hub.plist",
++   ],
+  }
+
+ ❯ setsNothingUp tests/acceptance/2581/dash.test.ts:18:163
+     16| async function setsNothingUp(p: Place, args: readonly string[]): Promi…
+     17|   const { ran, exit, written, called } = await outcome(p, args);
+     18|   expect({ exit, written, called }, `deep ${args.join(' ')} has a flag…
+       |                                                                                                                                                                   ^
+     19| }
+     20|
+ ❯ tests/acceptance/2581/dash.test.ts:33:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/11]⎯
+
+ FAIL  tests/acceptance/2581/others.test.ts > #2581.995b5ffd the other three > #2581.995b5ffd deep secret add --typo x is a usage error: exit 2
+AssertionError: deep secret add --typo x has a flag where a value goes, so it must exit 2: exit 3, stdout "", stderr "deep hub start: <tmp>/bin/launcher exited 1: \nDeepBuild's hooks are in Claude Code's and Codex's settings; deep setup --undo removes it all. 30 of DeepBuild's guard entries block commands that could break other work on this machine from now, each saying why; everything else is in watch-only mode until you approve a project's checks.\ndeep setup: the hub didn't start through its login service; deep doctor names what is missing.\ndeep secret add reads the value at your terminal, and this has none, so nothing was saved\n": expected 3 to be 2 // Object.is equality
+
+- Expected
++ Received
+
+- 2
++ 3
+
+ ❯ tests/acceptance/2581/others.test.ts:15:108
+     13|   it.each(FORMS.map((args) => [args.join(' '), args] as const))('#2581…
+     14|     const { ran, exit } = await outcome(freshPlace(), args);
+     15|     expect(exit, `deep ${args.join(' ')} has a flag where a value goes…
+       |                                                                                                            ^
+     16|   }, TEST_MS);
+     17| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/11]⎯
+
+ FAIL  tests/acceptance/2581/others.test.ts > #2581.995b5ffd the other three > #2581.995b5ffd deep rules credit --typo is a usage error: exit 2
+AssertionError: deep rules credit --typo has a flag where a value goes, so it must exit 2: exit 3, stdout "", stderr "The hub isn't answering; set this home up with deep setup.\n": expected 3 to be 2 // Object.is equality
+
+- Expected
++ Received
+
+- 2
++ 3
+
+ ❯ tests/acceptance/2581/others.test.ts:15:108
+     13|   it.each(FORMS.map((args) => [args.join(' '), args] as const))('#2581…
+     14|     const { ran, exit } = await outcome(freshPlace(), args);
+     15|     expect(exit, `deep ${args.join(' ')} has a flag where a value goes…
+       |                                                                                                            ^
+     16|   }, TEST_MS);
+     17| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/11]⎯
+
+ FAIL  tests/acceptance/2581/others.test.ts > #2581.995b5ffd the other three > #2581.995b5ffd deep host changes --typo is a usage error: exit 2
+AssertionError: deep host changes --typo has a flag where a value goes, so it must exit 2: exit 3, stdout "", stderr "The hub isn't answering; set this home up with deep setup.\n": expected 3 to be 2 // Object.is equality
+
+- Expected
++ Received
+
+- 2
++ 3
+
+ ❯ tests/acceptance/2581/others.test.ts:15:108
+     13|   it.each(FORMS.map((args) => [args.join(' '), args] as const))('#2581…
+     14|     const { ran, exit } = await outcome(freshPlace(), args);
+     15|     expect(exit, `deep ${args.join(' ')} has a flag where a value goes…
+       |                                                                                                            ^
+     16|   }, TEST_MS);
+     17| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/11]⎯
+
+ FAIL  tests/acceptance/2581/root.test.ts > #2581.df46b19b a flag isn't a root > #2581.df46b19b deep hub start --root --typo in an empty working folder exits 2 and writes nothing
+AssertionError: deep hub start --root --typo has a flag where the folder goes, so it must exit 2 and write nothing: exit 0, stdout "The hub is up.\n", stderr "": expected { exit: +0, written: [ …(61) ] } to deeply equal { exit: 2, written: [] }
+
+- Expected
++ Received
+
+  {
+-   "exit": 2,
+-   "written": [],
++   "exit": 0,
++   "written": [
++     "e/--typo",
++     "e/--typo/agents",
++     "e/--typo/agents/syncs",
++     "e/--typo/checkouts",
++     "e/--typo/compose",
++     "e/--typo/compose/docker",
++     "e/--typo/compose/docker/cli-plugins",
++     "e/--typo/compose/docker/config.json",
++     "e/--typo/compose/home",
++     "e/--typo/compose/steps",
++     "e/--typo/control.token",
++     "e/--typo/downloads",
++     "e/--typo/evidence",
++     "e/--typo/extensions",
++     "e/--typo/extensions/first-party.json",
++     "e/--typo/github.json",
++     "e/--typo/hub-lock.sqlite",
++     "e/--typo/hub-lock.sqlite-journal",
++     "e/--typo/hub.key",
++     "e/--typo/hub.key.cert",
++     "e/--typo/hub.sock",
++     "e/--typo/hub.state",
++     "e/--typo/jobserver",
++     "e/--typo/ledger.db",
++     "e/--typo/ledger.db-shm",
++     "e/--typo/ledger.db-wal",
++     "e/--typo/logs",
++     "e/--typo/logs/hub.log",
++     "e/--typo/objects",
++     "e/--typo/objects/HEAD",
++     "e/--typo/objects/config",
++     "e/--typo/objects/description",
++     "e/--typo/objects/hooks",
++     "e/--typo/objects/hooks/applypatch-msg.sample",
++     "e/--typo/objects/hooks/commit-msg.sample",
++     "e/--typo/objects/hooks/fsmonitor-watchman.sample",
++     "e/--typo/objects/hooks/post-update.sample",
++     "e/--typo/objects/hooks/pre-applypatch.sample",
++     "e/--typo/objects/hooks/pre-commit.sample",
++     "e/--typo/objects/hooks/pre-merge-commit.sample",
++     "e/--typo/objects/hooks/pre-push.sample",
++     "e/--typo/objects/hooks/pre-rebase.sample",
++     "e/--typo/objects/hooks/pre-receive.sample",
++     "e/--typo/objects/hooks/prepare-commit-msg.sample",
++     "e/--typo/objects/hooks/push-to-checkout.sample",
++     "e/--typo/objects/hooks/sendemail-validate.sample",
++     "e/--typo/objects/hooks/update.sample",
++     "e/--typo/objects/info",
++     "e/--typo/objects/info/exclude",
++     "e/--typo/objects/objects",
++     "e/--typo/objects/objects/info",
++     "e/--typo/objects/objects/pack",
++     "e/--typo/objects/refs",
++     "e/--typo/objects/refs/heads",
++     "e/--typo/objects/refs/tags",
++     "e/--typo/packs",
++     "e/--typo/packs/refused",
++     "e/--typo/products",
++     "e/--typo/products/.building",
++     "e/--typo/rules.json",
++     "e/--typo/tickers",
++   ],
+  }
+
+ ❯ tests/acceptance/2581/root.test.ts:15:148
+     13|   it('#2581.df46b19b deep hub start --root --typo in an empty working …
+     14|     const { ran, exit, written } = await outcome(freshPlace(), ['hub',…
+     15|     expect({ exit, written }, `deep hub start --root --typo has a flag…
+       |                                                                                                                                                    ^
+     16|   }, TEST_MS);
+     17|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/11]⎯
+
+ FAIL  tests/acceptance/2581/root.test.ts > #2581.df46b19b a flag isn't a root > #2581.df46b19b deep hub status --root --typo exits 2
+AssertionError: deep hub status --root --typo has a flag where the folder goes, so it must exit 2: exit 3, stdout "", stderr "The hub isn't answering; set this home up with deep setup.\n": expected 3 to be 2 // Object.is equality
+
+- Expected
++ Received
+
+- 2
++ 3
+
+ ❯ tests/acceptance/2581/root.test.ts:20:122
+     18|   it.each(['status', 'stop', 'use'])('#2581.df46b19b deep hub %s --roo…
+     19|     const { ran, exit } = await outcome(freshPlace(), ['hub', command,…
+     20|     expect(exit, `deep hub ${command} --root --typo has a flag where t…
+       |                                                                                                                          ^
+     21|   }, TEST_MS);
+     22|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/11]⎯
+
+ FAIL  tests/acceptance/2581/root.test.ts > #2581.df46b19b a flag isn't a root > #2581.df46b19b deep hub stop --root --typo exits 2
+AssertionError: deep hub stop --root --typo has a flag where the folder goes, so it must exit 2: exit 3, stdout "", stderr "deep hub stop: no hub could be stopped at unix:<tmp>/e/--typo/hub.sock: connect ENOENT <tmp>/e/--typo/hub.sock\n": expected 3 to be 2 // Object.is equality
+
+- Expected
++ Received
+
+- 2
++ 3
+
+ ❯ tests/acceptance/2581/root.test.ts:20:122
+     18|   it.each(['status', 'stop', 'use'])('#2581.df46b19b deep hub %s --roo…
+     19|     const { ran, exit } = await outcome(freshPlace(), ['hub', command,…
+     20|     expect(exit, `deep hub ${command} --root --typo has a flag where t…
+       |                                                                                                                          ^
+     21|   }, TEST_MS);
+     22|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/11]⎯
+
+ FAIL  tests/acceptance/2581/root.test.ts > #2581.df46b19b a flag isn't a root > #2581.df46b19b deep hub use --root --typo exits 2
+AssertionError: deep hub use --root --typo has a flag where the folder goes, so it must exit 2: exit 3, stdout "", stderr "The hub isn't answering; set this home up with deep setup.\n": expected 3 to be 2 // Object.is equality
+
+- Expected
++ Received
+
+- 2
++ 3
+
+ ❯ tests/acceptance/2581/root.test.ts:20:122
+     18|   it.each(['status', 'stop', 'use'])('#2581.df46b19b deep hub %s --roo…
+     19|     const { ran, exit } = await outcome(freshPlace(), ['hub', command,…
+     20|     expect(exit, `deep hub ${command} --root --typo has a flag where t…
+       |                                                                                                                          ^
+     21|   }, TEST_MS);
+     22|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/11]⎯
+
+ FAIL  tests/acceptance/2581/root.test.ts > #2581.df46b19b a flag isn't a root > #2581.df46b19b deep hub run --root --typo exits 2 and starts no server
+AssertionError: deep hub run --root --typo has a flag where the folder goes, so it must exit 2 and start no server: it started one, stopped by this test; exit 0, stdout "", stderr "": expected { exit: null, server: true } to deeply equal { exit: 2, server: false }
+
+- Expected
++ Received
+
+  {
+-   "exit": 2,
+-   "server": false,
++   "exit": null,
++   "server": true,
+  }
+
+ ❯ tests/acceptance/2581/root.test.ts:25:204
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/11]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  11 failed (11)
+   Start at  02:10:29
+   Duration  3.56s (tests 93%, transform 5%, import 2%, setup 1%)
+
+vitest exit 1
+ 2:10  up  6:37, 3 users, load averages: 56.44 68.92 62.77

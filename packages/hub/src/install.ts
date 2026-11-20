@@ -24,7 +24,7 @@ const list = (values: readonly string[] | undefined): string => (values?.length 
 export async function installCommand(args: readonly string[], setUp: () => Promise<number> = async () => 0): Promise<number> {
   const trustKey = args[0] === '--trust-key';
   const folders = trustKey ? args.slice(1) : args;
-  if (folders.length !== 1 || folders[0]!.startsWith('--')) {
+  if (folders.length !== 1 || folders[0]!.startsWith('-')) {
     process.stderr.write(`${USAGE}\n`);
     return 2;
   }
