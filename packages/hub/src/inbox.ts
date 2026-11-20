@@ -2,9 +2,8 @@
 // undo of a default, through the hub's socket as the cli role. An answer or an undo counts only once the OS confirms
 // you, which the hub asks for; run inside an agent's process tree, the command acts as that agent's session, and no
 // agent answers.
-import { readFileSync } from 'node:fs';
 import { call, notAnswered, UNDECIDED_CODES, withPrompt, type Reply } from './client.js';
-import { hubAddress, installedRoot, rootOf } from './paths.js';
+import { hubAddress, hubControl } from './paths.js';
 import { asksNeedYou, databaseRead, hubDown, when } from './list.js';
 import { elapsed } from './promises.js';
 import { activePlant } from './plant.js';
@@ -41,19 +40,18 @@ export async function inboxCommand(args: readonly string[], setUp: () => Promise
   }
   const stopped = await setUp();
   if (stopped) return stopped;
-  const at = rootOf(installedRoot());
   let reply: Reply;
   /** When the hub stopped answering, for a list read from its database. */
   let down: number | undefined;
   try {
-    const token = readFileSync(at.token, 'utf8').trim();
+    const { path: socket, token } = hubControl();
     // Only an answer or an undo is judged by the peer check, so only they pay for the `ps` that names this process.
     const peer = answering || undoing || saving ? { pid: process.pid, start: (await startOf(process.pid)) ?? '' } : undefined;
     reply = answering
-      ? await withPrompt(() => call(hubAddress().path, token, 'ask.answer', { ask: args[1], option: args[2] }, peer))
-      : undoing ? await withPrompt(() => call(hubAddress().path, token, 'ask.undo', { ask: args[1] }, peer))
-      : saving ? await withPrompt(() => call(hubAddress().path, token, 'offer.save', { offer: args[1] }, peer))
-      : await call(hubAddress().path, token, 'inbox.read', {});
+      ? await withPrompt(() => call(socket, token, 'ask.answer', { ask: args[1], option: args[2] }, peer))
+      : undoing ? await withPrompt(() => call(socket, token, 'ask.undo', { ask: args[1] }, peer))
+      : saving ? await withPrompt(() => call(socket, token, 'offer.save', { offer: args[1] }, peer))
+      : await call(socket, token, 'inbox.read', {});
   } catch (error) {
     // With the hub down the list reads its database, as deep does, and says so and since when (#2026).
     const read = answering || undoing || saving ? undefined : await databaseRead(hubAddress().path, false).catch(() => undefined);
@@ -124,7 +122,8 @@ export async function inboxCommand(args: readonly string[], setUp: () => Promise
 
 /** The list's unread rows as deep status reads them, for #2028's planted count. */
 async function unreadRows(): Promise<number> {
-  const reply = await call(hubAddress().path, readFileSync(rootOf(installedRoot()).token, 'utf8').trim(), 'rows.read', {});
+  const { path: socket, token } = hubControl();
+  const reply = await call(socket, token, 'rows.read', {});
   return 'error' in reply ? 0 : ((reply.result.rows ?? []) as ListRow[]).filter((r) => r.unread).length;
 }
 
@@ -136,8 +135,8 @@ export async function raceCommand(args: readonly string[]): Promise<number> {
   }
   let reply: Reply;
   try {
-    const token = readFileSync(rootOf(installedRoot()).token, 'utf8').trim();
-    reply = await call(hubAddress().path, token, 'race.start', { issue: Number(args[0]) }, { pid: process.pid, start: (await startOf(process.pid)) ?? '' });
+    const { path: socket, token } = hubControl();
+    reply = await call(socket, token, 'race.start', { issue: Number(args[0]) }, { pid: process.pid, start: (await startOf(process.pid)) ?? '' });
   } catch (error) {
     return notAnswered(error);
   }

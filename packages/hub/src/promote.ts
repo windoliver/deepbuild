@@ -8,7 +8,7 @@
 import { spawnSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, readlinkSync, renameSync, rmSync, statSync, symlinkSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { installedPrograms, installedRoot, rootOf, type Root } from './paths.js';
+import { installedPrograms, installedRoot, type Root, rootOf, rootToken } from './paths.js';
 import { control, helloAt, startService } from './service.js';
 
 const USAGE = 'Usage: deep hub promote <build folder>';
@@ -56,7 +56,7 @@ export async function promoteCommand(args: readonly string[]): Promise<number> {
     // The drain: no session starts, and the running turns finish while the hub keeps serving them.
     if (await helloAt(root.socket)) {
       for (let told = false; ;) {
-        const { turns } = await control(root.socket, root.token, 'hub.drain', {}, 10_000);
+        const { turns } = await control(root.socket, rootToken(root), 'hub.drain', {}, 10_000);
         if (!turns) break;
         if (!told) process.stdout.write(`deep hub promote: waiting for ${String(turns)} running turn(s) to finish before the hub restarts on ${commit}\n`);
         told = true;
@@ -84,7 +84,7 @@ export async function promoteCommand(args: readonly string[]): Promise<number> {
   const back = await up(root, SLOW_UP_MS, false);
   if (back) return refused(`${commit} was rolled back (${why}), but ${previous} didn't come back: ${back}`, 3);
   try {
-    await control(root.socket, root.token, 'build.rolled_back', { commit, restored: previous, why }, 30_000);
+    await control(root.socket, rootToken(root), 'build.rolled_back', { commit, restored: previous, why }, 30_000);
   } catch (error) {
     return refused(`${commit} was rolled back (${why}) and ${previous} is back, but its notice wasn't recorded: ${message(error)}`, 3);
   }
@@ -109,8 +109,8 @@ function switchTo(versions: string, name: string): void {
 async function stop(root: Root): Promise<void> {
   if (!(await helloAt(root.socket))) return;
   let pid: unknown;
-  try { pid = (await control(root.socket, root.token, 'hub.health', {}, 10_000)).pid; } catch { /* read below by its socket */ }
-  try { await control(root.socket, root.token, 'hub.stop'); } catch { /* gone already */ }
+  try { pid = (await control(root.socket, rootToken(root), 'hub.health', {}, 10_000)).pid; } catch { /* read below by its socket */ }
+  try { await control(root.socket, rootToken(root), 'hub.stop'); } catch { /* gone already */ }
   // Signal 0 only asks whether the hub's process still runs.
   const runs = () => { try { process.kill(Number(pid), 0); return true; } catch { return false; } };
   for (const deadline = Date.now() + 30_000; Date.now() < deadline && (typeof pid === 'number' ? runs() : await helloAt(root.socket));) await sleep(250);
@@ -127,7 +127,7 @@ async function up(root: Root, ms: number, judge: boolean): Promise<string | unde
   if (!hello) return `its hub didn't answer within ${ms / 1000} s`;
   if (!judge) return undefined;
   let check: Record<string, unknown>;
-  try { check = await control(root.socket, root.token, 'hub.check', {}, 30_000); } catch (error) { return `its hub didn't judge the health check's fixture claim: ${message(error)}`; }
+  try { check = await control(root.socket, rootToken(root), 'hub.check', {}, 30_000); } catch (error) { return `its hub didn't judge the health check's fixture claim: ${message(error)}`; }
   if (check.outcome !== EXPECTED) return `its hub judged the health check's fixture claim ${String(check.claim)} ${String(check.outcome)}, where a good build reads ${EXPECTED}`;
   await sleep(STAY_MS);
   const still = await helloAt(root.socket);

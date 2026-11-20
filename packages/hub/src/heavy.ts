@@ -18,7 +18,7 @@ import { availableParallelism, homedir, loadavg, totalmem } from 'node:os';
 import type { Caller, Lease, LeaseTable, Mode, Resource } from '@deepbuild/leases';
 import { call, failure, type Reply } from './client.js';
 import { DISK_FLOOR, freeBytes } from './disk.js';
-import { deepHook, hubAddress, installedRoot, rootOf } from './paths.js';
+import { controlToken, deepHook, hubAddress } from './paths.js';
 import { startOf } from './wire.js';
 
 type Obj = Record<string, unknown>;
@@ -577,9 +577,9 @@ export async function leaseCommand(args: readonly string[]): Promise<number> {
     return 2;
   }
   if (process.env.DEEP_LEASED) return runGroup(argv, {}, () => undefined);
-  let token: string;
-  try { token = readFileSync(rootOf(installedRoot()).token, 'utf8').trim(); } catch (error) { return unleased(argv, await failure(error)); }
   const socket = hubAddress().path;
+  let token: string;
+  try { token = controlToken(socket); } catch (error) { return unleased(argv, await failure(error)); }
   // Its own start is read while deep-hook heavy finds the command's entry: neither needs the other's result (#2328).
   const start = startOf(process.pid);
   const { jobs, flag } = jobsFor(argv);

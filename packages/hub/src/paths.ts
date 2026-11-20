@@ -190,6 +190,25 @@ export function hubAddress(cwd: string | null = process.cwd()): { address: strin
   return { address: configured, path: configured.slice(5) };
 }
 
+/**
+ * The control token that belongs to the hub at `socket` (#1885), the one place a deep command reads a token: the one
+ * that hub wrote beside its socket, as a dev hub run with `--root` does; else, for a socket forwarded here, the
+ * installed hub's. With neither, it throws ENOENT naming control.token, which `failure` tells as a hub not answering.
+ */
+export function controlToken(socket: string): string {
+  const beside = rootOf(dirname(socket));
+  return rootToken(existsSync(beside.token) ? beside : rootOf(installedRoot()));
+}
+
+/** The control token the hub at `root` wrote at its launch, for a command that names that hub by its root (`--root`). */
+export const rootToken = (root: Root): string => readFileSync(root.token, 'utf8').trim();
+
+/** The hub a command calls, as `hubAddress` finds it, with the control token that belongs to it (#1885). */
+export function hubControl(cwd: string | null = process.cwd()): { address: string; path: string; token: string } {
+  const at = hubAddress(cwd);
+  return { ...at, token: controlToken(at.path) };
+}
+
 /** The dev hub a worktree holding `cwd` was sent to, the longest such worktree winning. */
 function worktreeHub(uses: Record<string, unknown>, cwd: string): string | undefined {
   let real = cwd;
