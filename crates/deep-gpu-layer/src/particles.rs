@@ -39,7 +39,7 @@ pub(crate) fn evaluate_sourced(
 ) -> Result<Scene, Value> {
     let mut scene =
         deep_canvas_scene3d::scene::evaluate_sourced(doc, t, look, labels, assets, outlines)
-            .map_err(|r| refused(r.code, r.path))?;
+            .map_err(|r| crate::touches::refusal(refused(r.code, r.path), outlines.memo))?;
     follow_effects(&mut scene, doc)?;
     Ok(scene)
 }
