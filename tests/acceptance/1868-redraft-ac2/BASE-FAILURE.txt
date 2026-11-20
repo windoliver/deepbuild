@@ -1,0 +1,98 @@
+#1868.a903f1c6 on the unchanged base, 9d0256132 (origin/main, "Merge pull request #2836"), a fresh clone already
+built (npm and cargo) before these runs. <checkout> is that clone. Node v24.22.0.
+
+The base does not fail this test, and is not meant to: it builds the world the canvas core reads on every canvas call
+(packages/hub/src/hub-canvas.ts, canvasWorld), which is what the criterion asks for. The base has no plant
+canvas-world-built-once, so the twin, laid over the base, builds (exit 0) and changes nothing the hub does: the test
+passes there as well. The twin's failure can only be shown against an implementation that reads the plant (README,
+The planted program).
+
+One earlier run of a draft of this test failed on the base because the draft put both boards on one document, so the
+last revision left out the other board's items (unintended_removal). That was a defect in the draft, not in the base;
+each board now has its own document, and the two runs below are of the test as delivered.
+
+==================================================================================================================
+Run 1: the test on the base
+==================================================================================================================
+
+Machine, before:
+date: 2026-11-19T07:28:37Z
+hw.model: Mac15,12
+vm.loadavg: { 6.64 11.32 30.59 }
+pmset -g batt:
+Now drawing from 'AC Power'
+ -InternalBattery-0	100%; charged; 0:00 remaining present: true
+pmset -g therm:
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+
+$ npx vitest run tests/acceptance/1868/ --no-file-parallelism --reporter=verbose
+
+ RUN  v5.0.5 <checkout>
+
+ ✓ tests/acceptance/1868/world.test.ts > #1868.a903f1c6 a reading recorded after the world was built shows in the next deep_show's world, and an ask answered since shows as done; a planted world built once at start reads the old values and fails, naming the reading > #1868.a903f1c6 after the board's first deep_show, a carried check's reading the hub records and an ask answered through the hub both show in the next deep_show 22736ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  23:28:38
+   Duration  23.03s (tests 99%)
+
+exit 0
+
+Machine, after:
+date: 2026-11-19T07:29:01Z
+vm.loadavg: { 6.95 11.09 30.06 }
+power and thermal as before (AC Power, 100% charged; no thermal, performance or CPU power warning recorded)
+
+==================================================================================================================
+Run 2: the twin world-built-once laid over the base, the hub rebuilt, the test
+==================================================================================================================
+
+Machine, before:
+date: 2026-11-19T07:33:25Z
+hw.model: Mac15,12
+vm.loadavg: { 10.00 10.62 24.73 }
+pmset -g batt:
+Now drawing from 'AC Power'
+ -InternalBattery-0	100%; charged; 0:00 remaining present: true
+pmset -g therm:
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+
+$ cp tests/acceptance/1868/twins/world-built-once/packages/hub/src/plant.ts packages/hub/src/plant.ts
+$ npm run build -w @deepbuild/hub
+
+> @deepbuild/hub@0.0.0 build
+> tsc -p tsconfig.json && node native/build.mjs
+
+npm run build -w @deepbuild/hub exit 0
+
+$ npm run build --workspaces
+(every workspace's build; 75 lines, no error)
+npm run build --workspaces exit 0
+
+$ npx vitest run tests/acceptance/1868/ --no-file-parallelism --reporter=verbose
+
+ RUN  v5.0.5 <checkout>
+
+ ✓ tests/acceptance/1868/world.test.ts > #1868.a903f1c6 a reading recorded after the world was built shows in the next deep_show's world, and an ask answered since shows as done; a planted world built once at start reads the old values and fails, naming the reading > #1868.a903f1c6 after the board's first deep_show, a carried check's reading the hub records and an ask answered through the hub both show in the next deep_show 27907ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  23:34:23
+   Duration  28.29s (tests 99%)
+
+exit 0
+
+Machine, after:
+date: 2026-11-19T07:34:51Z
+vm.loadavg: { 7.73 9.77 22.99 }
+power and thermal as before (AC Power, 100% charged; no thermal, performance or CPU power warning recorded)
+
+Then the checkout's own packages/hub/src/plant.ts was put back and rebuilt:
+$ npm run build --workspaces
+restore npm run build --workspaces exit 0
+$ git status --short
+?? tests/acceptance/1868/

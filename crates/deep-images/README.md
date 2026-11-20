@@ -9,11 +9,12 @@ The one image service every image path draws through (#1486; canvas primitives: 
 - `src/lib.rs`: requests, the queue, the cache and its eviction, the workers, the counts and the planted wrong programs.
 - `src/level.rs`: how a level is made and chosen, and its stored form.
 - `src/source.rs`: the content store, a picture's header and its decode inside the caps.
+- `src/animated.rs` (#1489): an animated GIF, WebP or APNG as a frame source: its delays probed from its blocks, the frame at a source time, and its frames composited one at a time onto one canvas, which a seek restarts from the top.
 - `src/tests.rs`: the crate's own tests. The acceptance tests are in `tests/acceptance/1485`, `1486` and `1653`.
 
 ## What it may import
 
-`deep-canvas` for the pinned sRGB transfer the levels average through, `image` for PNG and JPEG decoding, and `sha2` for the hashes that name sources and levels. No other DeepBuild crate: the crates that draw pictures import this one.
+`deep-canvas` for the pinned sRGB transfer the levels average through, `image` for PNG and JPEG decoding, `gif`, `image-webp` and `png` (the `image` crate's own decoders) for an animation's frames, and `sha2` for the hashes that name sources and levels. No other DeepBuild crate: the crates that draw pictures import this one.
 
 ## Deviations
 
