@@ -467,4 +467,30 @@ describe('an answer that saves a decision (#319.43d13eb3, #22)', () => {
     await asks.answer(card, handle, { option: 'green', words: 'w'.repeat(8192) });
     expect((await events('decision.created')).map((e) => (e.data as Obj).answer), 'words at the limit answer as before').toEqual(['green']);
   });
+
+  it('settles only once the decision it saves is written, even when the record refuses the answer itself', async () => {
+    await start('S1', 'T1');
+    const handle = await asks.raise(agent('S1'), 'deep_ask.taste', taste('header'));
+    let letGo!: () => void;
+    const held = new Promise<void>((done) => { letGo = done; });
+    const real = record;
+    // The record refuses the answer at once and takes the decision only when let go.
+    const refusing = new Proxy(real, {
+      get(target, key) {
+        if (key === 'append') {
+          return (c: Parameters<typeof real.append>[0], e: Parameters<typeof real.append>[1]) => e.kind === 'ask.answered' ? Promise.reject(Error('refused')) : e.kind === 'decision.created' ? held.then(() => real.append(c, e)) : real.append(c, e);
+        }
+        const value = Reflect.get(target, key) as unknown;
+        return typeof value === 'function' ? (value as (...a: unknown[]) => unknown).bind(target) : value;
+      },
+    });
+    asks = await openAsks({ record: refusing, now: () => now, deliver: () => undefined });
+    let settled = false;
+    const answering = asks.answer(card, handle, { option: 'green' }).finally(() => { settled = true; });
+    answering.catch(() => undefined);
+    await new Promise((done) => setTimeout(done, 50));
+    expect(settled, 'the answer holds the asks until the decision it saves is through').toBe(false);
+    letGo();
+    await expect(answering).rejects.toThrow('refused');
+  });
 });

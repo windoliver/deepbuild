@@ -267,6 +267,12 @@ export async function draftAskSettings(home: string): Promise<void> {
   renameSync(next, file);
 }
 
+/** Waits for every write to settle, then throws the first refusal: a write still under way never outlives the asks' lock. */
+async function allThrough(writes: readonly unknown[]): Promise<void> {
+  const refused = (await Promise.allSettled(writes)).find((w): w is PromiseRejectedResult => w.status === 'rejected');
+  if (refused) throw refused.reason;
+}
+
 /** b over a, key by key, one level into each map: how a repo's done.yaml overrides your settings. */
 function over(a: Obj, b: Obj): Obj {
   const out: Obj = { ...a };
@@ -751,7 +757,7 @@ class AsksCore implements Asks {
       // block's task saves none: "I did it" answers this block, and the next one of its kind needs doing again (#85).
       // A card with a target only the agent read saves your answer for this ask only (#1098).
       const scope = chosen && via !== 'channel' && !ask.fold && !ask.block && !this.unplaced(ask).length ? this.scopeOf(ask) : null;
-      await Promise.all([this.options.record.append(asCore(connection), {
+      await allThrough([this.options.record.append(asCore(connection), {
         v, id: ulid(now), kind: 'ask.answered', subject: ask.handle, ts: now,
         data: {
           answer: option ?? (words as string | undefined) ?? (image as string), option: chosen?.id ?? null, plan_hash: decision === 'allow' ? ask.plan?.hash ?? null : null, decision,

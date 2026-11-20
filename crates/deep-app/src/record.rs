@@ -295,12 +295,12 @@ impl View {
                 );
                 let exception = event["writer"] == "core" && event["data"]["kind"] == "exception";
                 let holder = exception && event["data"]["key"] == key.as_str();
-                // A record with no such exception, a fixture's (#338), folds by the count the core raises it at; an
-                // exception of the core's is never folded here. As in the core, a fold is one person's: the thread's asks
-                // raised under this actor and scope count (a row from an older hub names neither); a block someone else
-                // owns neither counts nor folds, and an agent's sign-in task, which shows at once, never folds. The core
-                // folds a live ask only into an exception it already raised, so the count is a fixture's alone: a record
-                // with no list and no showing of the core's.
+                // A record with no such exception, a fixture's (#338), folds by the count the core raises it at; only
+                // the "keeps asking" exception itself never folds, as in the core. As in the core, a fold is one
+                // person's: the thread's asks raised under this actor and scope count (a row from an older hub names
+                // neither); a block someone else owns neither counts nor folds, and an agent's sign-in task, which shows
+                // at once, never folds. The core folds a live ask only into an exception it already raised, so the count
+                // is a fixture's alone: a record with no list and no showing of the core's.
                 let theirs = |row: &Value, owner: &Value, actor: &Value| {
                     row["kind"] == "unblock" && owner != actor
                 };
@@ -323,7 +323,7 @@ impl View {
                     .find(|row| holds(row))
                     .map(|row| row["ask"].clone());
                 let counts = !self.batched && !self.table.listed();
-                let held = !exception
+                let held = !holder
                     && !sign_in
                     && !theirs(&event["data"], &event["data"]["owner"], &event["actor"])
                     && ((counts && mine.count() >= FOLD_AFTER) || into.is_some());
@@ -1218,6 +1218,23 @@ mod tests {
         view.apply(fold("x1", "s1"));
         view.apply(json!({"kind": "ask.created", "id": "a2", "session": "s1", "writer": "mcp:agent", "data": {"kind": "taste"}}));
         assert_eq!(row(&view, "ask:a2").0, "folded");
+    }
+
+    #[test]
+    fn another_exception_of_the_cores_folds_into_an_open_keeps_asking_as_in_the_core() {
+        // The core folds any ask but the "keeps asking" exception itself, a guard's exception among them, into that
+        // exception while it is open: a panel gets it as folded with its exception, never as a row of its own.
+        let mut view = View::default();
+        view.apply(fold("x1", "s1"));
+        view.apply(
+            json!({"kind": "ask.created", "id": "g1", "session": "s1", "writer": "core",
+                          "data": {"kind": "exception", "key": "guard.overridden:s1"}}),
+        );
+        let g1 = view.inbox.iter().find(|r| r["ask"] == "ask:g1").unwrap();
+        assert_eq!(
+            (&g1["status"], &g1["folded"]),
+            (&json!("folded"), &json!("ask:x1"))
+        );
     }
 
     #[test]
