@@ -105,12 +105,12 @@ difference from the base's run in the same round, and in how many of the 15 roun
 | cut B | 41.32 M | −1.41 M, 15/15 | 41.00 M | +17.38 M, fewer in 0/15 |
 | cut A+B | 40.29 M | −2.78 M, 15/15 | 39.87 M | +16.39 M, fewer in 0/15 |
 
-Cut A drops 13 imports net and about 0.66 M a process, about 51 K an import, in line with the audit's 60 K. Cut B drops
-8 imports net (9 go: the 4 above, `freeaddrinfo`, `lseek`, `readv` and the stack guard pair rustls and ring
-use; `execv` comes; this list is not in record.json but from a rebuild of the patch, `git apply
-docs/spikes/2175/cut-b-joined.patch`, `cargo build --release --locked -p deep-hook --no-default-features`, then
-`comm` of the two `nm -u` lists against the base build) and about 0.73 M, about 91 K an import; the binary also halves, and these runs can't say how much of
-the difference that accounts for. Both savings are real (fewer in
+Cut A drops 13 imports net and about 0.66 M a process, about 51 K an import, in line with the audit's 60 K.
+Cut B drops 8 imports net and about 0.73 M, about 91 K an import; the binary also halves, and these runs can't say
+how much of the difference that accounts for. Its 9 imports gone are the 4 above, `freeaddrinfo`, `lseek`,
+`readv` and the stack guard pair rustls and ring use, and `execv` comes. That list is not in record.json: it is
+from a rebuild of the patch (`git apply docs/spikes/2175/cut-b-joined.patch`, then `cargo build --release --locked
+-p deep-hook --no-default-features`) and `comm` of its `nm -u` list against the base build's. Both savings are real (fewer in
 nearly every round) and small: 3.4 to 3.8 % of `--version`, 3 % of a hub-away call. No cut was measured on a Read the
 hub answers; the same imports are bound at every start, so the saving there is expected to be alike, but it is
 not measured.
@@ -125,7 +125,7 @@ not measured.
   machine that has joined a project, every hook call, in every folder, then pays a second program start: +17 M,
   three-quarters of a whole Read, against 0.75 M saved elsewhere. A per-call hand-off (above) would put the +17 M
   only on calls in a joined project and keep the 0.75 M saving everywhere else, at the price of the stdin hand-over
-  code; it would still be a second binary for a 4 % saving.
+  code; it would still be a second binary for a 3.8 % saving.
 
 ### What else the readings show
 
@@ -135,8 +135,8 @@ not try changing that, and the issue doesn't ask it.
 
 ## Recommendation
 
-No cut is worth an issue of its own. Cut A would save about 0.7 M a process (3.4 %) for a 172-line unsafe,
-macOS-only spawning module in the binary that holds the guards, replacing std code that does the same thing. Cut B
+No cut is worth an issue of its own. Cut A would save about 0.7 M a process (3.4 %) for a 172-line, macOS-only
+module of unsafe FFI in the binary that holds the guards, replacing std code that does the same thing. Cut B
 would save about the same, and needs a second binary to ship and keep in step; as prototyped it also costs +17 M on
 every hook call on a machine that has joined any project, and even a per-call hand-off would cost that on every
 call in a joined project. Together they save 1.4 M a process (7 % of a 19 M start), with 21
