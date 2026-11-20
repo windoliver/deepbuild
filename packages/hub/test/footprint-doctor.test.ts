@@ -5,6 +5,7 @@ import { createServer } from 'node:net';
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { validate } from '@deepbuild/contracts';
 import { expect, it } from 'vitest';
 import { appFootprintItem, footprintItem } from '../src/footprint-doctor.ts';
 
@@ -26,6 +27,14 @@ it('a footprint that couldn\'t be read is unknown, naming its read, never 0, and
   expect(item.evidence).toContain(`footprint unknown (${READ}) = heap 60000 B`);
   expect(item.evidence).toContain(`unaccounted unknown (${READ})`);
   expect(item.evidence).not.toMatch(/footprint 0 B/);
+});
+
+it('the warning is a doctor.item@1 whose code the doctor family lists (#2858)', () => {
+  const reading = { ...known, footprint: null, unaccounted: null, unknown: [{ field: 'footprint', read: READ, error: 'returned -1' }] };
+  const { item: _item, agent: _agent, ...record } = footprintItem({ reading, minutes: [] });
+  expect(record.code).toBe('footprint_unknown');
+  const held = validate('doctor.item@1', record);
+  expect(held.ok ? [] : held.issues).toEqual([]);
 });
 
 it('asks the app on its socket, and with no app answering the item isn\'t checked', async () => {

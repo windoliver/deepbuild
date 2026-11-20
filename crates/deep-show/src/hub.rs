@@ -1352,7 +1352,7 @@ impl<'a> Hub<'a> {
     /// The record as one frame reads it: every object's state and reading.
     pub fn record(&self) -> Record {
         let mut record = Record::default();
-        for (handle, o) in &self.scenario.record {
+        for (handle, o) in self.scenario.record.iter() {
             if let Some(state) = &o.state {
                 record.states.insert(handle.clone(), state.clone());
             }
@@ -2005,6 +2005,7 @@ impl<'a> Hub<'a> {
                 blocked = self.blocked_in_claim(show, &result.notices);
                 let mut issues = crate::mixdown::score_plan::library_issues(&doc, result.issues);
                 issues.append(&mut probe_issues);
+                self.plant_axis_titles(&doc, &mut issues);
                 blocked.extend(self.missing_in_claim(show, &mut issues, &mut skipped));
                 // #488's planted check takes every sample rate from 8 to 192 kHz and refuses
                 // the rest.
