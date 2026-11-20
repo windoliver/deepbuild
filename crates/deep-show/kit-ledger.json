@@ -1,7 +1,7 @@
 {
   "core": {
     "version": "0.0.0",
-    "digest": "390e5c938f1abf2033793c281fe5940263016f8bf6e526627d2cf5e8e27b88f7",
+    "digest": "116ca68a38ecbb80dd54e8630a3bbd773ae147009c3483bc29c7026007be4a70",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -134,8 +134,8 @@
   },
   "logic": {
     "version": "1.0.0",
-    "digest": "1d115c4a4e4c1759d89afdad4757c100e6537a076aa4e0a651f5e0643339cff4",
-    "verdict": "PASS",
+    "digest": "26571a47e334c1502a749d7acd1d841a12d2e22c74b5b52102d90994b178735b",
+    "verdict": "FAIL",
     "parts": {
       "fixtures": "PASS",
       "clean_rebuild": "PASS",
@@ -147,7 +147,7 @@
       "carried_state": "PASS",
       "late_entry": "PASS",
       "time_order": "PASS",
-      "catalog": "PASS",
+      "catalog": "FAIL",
       "references": "PASS"
     }
   },
