@@ -1,21 +1,30 @@
 //! Issue #1482: the two windows a launch's `arm` names besides the app's: `blank`, an empty window in the same
 //! harness, for what the harness itself costs, and `lists`, GPUI's two list elements side by side, each its own view,
-//! each 1,000 rows of 32 points, for wheel events at a list's end.
+//! each 1,000 rows of 32 points, for wheel events at a list's end. Issue #1489: `picture`, GPUI's image element
+//! showing the picture at a path, for what an animated picture costs in chrome.
 
-use std::{cell::RefCell, collections::HashMap};
+use std::{cell::RefCell, collections::HashMap, path::PathBuf};
 
 use gpui_kit::base::ObservedElement;
 use gpui_kit::{prelude::FluentBuilder as _, test::TestSupportExt as _, *};
 
-/// The window opens with what the arm names; `wheel_notifies` is the planted program's.
+/// The window opens with what the arm names; `wheel_notifies` and (#1489) `each_vsync` are the planted programs'.
 pub(super) fn open(
     arm: &str,
     options: WindowOptions,
-    wheel_notifies: bool,
+    (wheel_notifies, each_vsync): (bool, bool),
+    picture: Option<PathBuf>,
     cx: &mut App,
 ) -> AnyWindowHandle {
     let window = if arm == "blank" {
         gpui_kit::open_window(options, cx, |_, cx| cx.new(|_| Blank)).map(|(window, _)| window)
+    } else if let Some(path) = picture.filter(|_| arm == "picture") {
+        // The window is the active one, as the window you look at is: GPUI animates a picture only there.
+        gpui_kit::open_window(options, cx, move |window, cx| {
+            window.activate_window();
+            cx.new(|_| Picture { path, each_vsync })
+        })
+        .map(|(window, _)| window)
     } else {
         gpui_kit::open_window(options, cx, move |_, cx| {
             let uniform = cx.new(|_| Host::new(Kind::Uniform, wheel_notifies));
@@ -48,6 +57,25 @@ struct Blank;
 impl Render for Blank {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
         div().size_full().bg(rgb(0xffffff))
+    }
+}
+
+/// #1489: GPUI's image element, at the picture's own size at the window's top-left corner. The planted one asks GPUI for
+/// a frame at every vsync while the picture animates, as the element did before it waited out each frame's delay.
+struct Picture {
+    path: PathBuf,
+    each_vsync: bool,
+}
+
+impl Render for Picture {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if self.each_vsync && !cx.reduce_motion() {
+            window.request_animation_frame();
+        }
+        div()
+            .size_full()
+            .bg(rgb(0xffffff))
+            .child(img(self.path.clone()).id("picture"))
     }
 }
 
