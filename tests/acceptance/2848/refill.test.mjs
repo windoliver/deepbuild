@@ -145,7 +145,7 @@ test('#2848 AC: a later build in an affected.mjs run gets the run\'s full compil
   const child = start(box, { cwd: fixture.cwd, env: { ...fixture.env, TMPDIR: tmp, DEEP_SHARDS: '1', T2848_RECORD: record } }, Object.keys(files));
   let run, timer;
   try {
-    run = await Promise.race([child.done, new Promise((done) => { timer = setTimeout(() => done(null), RUN_MS); })]);
+    run = await Promise.race([child.done, new Promise((done) => { timer = setTimeout(() => done(null), RUN_MS); })]); // deadline: bounds the run so a hang fails the test instead of hanging it
   } finally {
     clearTimeout(timer);
   }
