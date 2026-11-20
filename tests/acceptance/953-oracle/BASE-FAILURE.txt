@@ -1,0 +1,25 @@
+Base run, the Oracle lane, at the base 86b99ac36 with only this job's files added (no implementation of #953 exists).
+Run on macOS arm64 (the reference Mac) under a test grant, 2026-11-20:
+
+  node scripts/throttle.mjs test --wait 360 -- sh scripts/lease npx vitest run --root tests/acceptance --testTimeout=600000 --no-file-parallelism --reporter=verbose 953/ 953-oracle/
+
+One vitest run covered ../953/ and ../953-oracle/ (and two temporary check files, since deleted: ../953/README.md,
+Checked before the base run). Home paths are redacted. Every test fails at its first step: `first_party` lists only
+interfaces@1.0.0, so no first-party pack modslib@1, no mods.lib@1 and no mods.tree exist at the base.
+
+Results:
+
+ × 953-oracle/bonus-system.test.ts > #953.ab5c01d3 #953.e5d20c0f the upstream engine's bonus-system cases run on mods.lib@1 > #953.ab5c01d3 #953.e5d20c0f the upstream engine's bonus-system tests at c53e0e85d4, test/bonus/BonusSystemTest.cpp lines 116-140, 171-206, 208-220 and 222-267: every value they assert, read from mods.lib@1's reference library 421ms
+
+ FAIL  953-oracle/bonus-system.test.ts > #953.ab5c01d3 #953.e5d20c0f the upstream engine's bonus-system cases run on mods.lib@1 > #953.ab5c01d3 #953.e5d20c0f the upstream engine's bonus-system tests at c53e0e85d4, test/bonus/BonusSystemTest.cpp lines 116-140, 171-206, 208-220 and 222-267: every value they assert, read from mods.lib@1's reference library
+AssertionError: a first-party pack modslib@1 (name modslib, version 1.x) ships mods.lib@1; the packs are interfaces@1.0.0: expected undefined to be defined
+ ❯ modsPack 953/helpers.ts:63:172
+     61|   const packs = arr(reply!['packs'], 'first_party.packs').map((p, i) =…
+     62|   const found = packs.find((p) => p['name'] === 'modslib' && typeof p[…
+     63|   expect(found, `a first-party pack modslib@1 (name modslib, version 1…
+       |                                                                                                                                                                            ^
+     64|   const p = found!;
+     65|   expect(p['origin'], 'modslib is first party').toBe('first_party');
+ ❯ linkOf 953/helpers.ts:148:61
+ ❯ 953-oracle/bonus-system.test.ts:105:30
+
