@@ -243,15 +243,24 @@ const ACTION_DESCRIPTIONS: Readonly<Record<string, string>> = {
   find_actions: 'Finds the actions the installed plug-ins offer agents, each with its plug-in, whether it reads, changes your data or sends, and its input schema. A listed action proves nothing about what calling it will do.',
   call_action: 'Calls a plug-in action by name with a request ID. A read runs; a change needs your standing rule or an ask, and a send always asks: until you answer, it returns held with the ask, and you call again with the same request ID. A change or send returns the plug-in\'s report and what the hub recorded it changed; the report is the plug-in\'s statement, never a check result.',
 };
+/** A tool as an MCP server lists it: its name, description and input schema, then its title and four hints (#2898). */
+type Listed = { name: string; description: string; inputSchema: Schema; annotations: Obj };
+
 /** The tools as deep mcp actions lists them. */
-export function actionToolList(): { name: string; description: string; inputSchema: Schema }[] {
-  return Object.entries(ACTION_SCHEMAS).map(([name, inputSchema]) => ({ name, description: ACTION_DESCRIPTIONS[name]!, inputSchema }));
+export function actionToolList(): Listed[] {
+  const hints = annotations();
+  return Object.entries(ACTION_SCHEMAS).map(([name, inputSchema]) => ({ name, description: ACTION_DESCRIPTIONS[name]!, inputSchema, annotations: hints[name]! }));
 }
 
 let described: Record<string, string> | undefined;
 /** Each tool's description, as scripts/skill.mjs generated it from the Building blocks table. */
 function descriptions(): Record<string, string> {
   return (described ??= JSON.parse(readFileSync(new URL('../tools.json', import.meta.url), 'utf8')) as Record<string, string>);
+}
+let annotated: Record<string, Obj> | undefined;
+/** Each tool's title and hints, as scripts/skill.mjs generated them: the server's word to a client, never read by the hub. */
+function annotations(): Record<string, Obj> {
+  return (annotated ??= JSON.parse(readFileSync(new URL('../annotations.json', import.meta.url), 'utf8')) as Record<string, Obj>);
 }
 
 /** The schemas this hub publishes and holds calls to: #1415's planted hub marks deep_kinds's op optional though its handler needs one. */
@@ -266,9 +275,10 @@ function published(): Readonly<Record<string, Schema>> {
  * The tools as deep mcp lists them. A tool tools.json doesn't describe isn't listed: only what the table generates
  * reaches an agent.
  */
-export function toolList(): { name: string; description: string; inputSchema: Schema }[] {
+export function toolList(): Listed[] {
   const text = descriptions();
-  return Object.entries(published()).filter(([name]) => text[name]).map(([name, inputSchema]) => ({ name, description: text[name]!, inputSchema }));
+  const hints = annotations();
+  return Object.entries(published()).filter(([name]) => text[name]).map(([name, inputSchema]) => ({ name, description: text[name]!, inputSchema, annotations: hints[name]! }));
 }
 
 /**

@@ -1,0 +1,142 @@
+{
+  "deep_ask": {
+    "title": "Ask the person",
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "openWorldHint": false
+  },
+  "deep_wait": {
+    "title": "Wait on an ask",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+  },
+  "deep_open_item": {
+    "title": "Record an open item",
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "openWorldHint": false
+  },
+  "deep_status": {
+    "title": "Read where the session stands",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+  },
+  "deep_search": {
+    "title": "Search the wiki, decisions and spec",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+  },
+  "deep_claim": {
+    "title": "Claim the task done",
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "openWorldHint": false
+  },
+  "deep_evidence": {
+    "title": "Attach a file as evidence",
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "openWorldHint": false
+  },
+  "deep_propose": {
+    "title": "Propose a change",
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "openWorldHint": false
+  },
+  "deep_run": {
+    "title": "Run a check",
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "openWorldHint": true
+  },
+  "deep_show": {
+    "title": "Draw a canvas document",
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "openWorldHint": false
+  },
+  "deep_drive": {
+    "title": "Drive a replica",
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "openWorldHint": false
+  },
+  "deep_kinds": {
+    "title": "Look up what the canvas can draw",
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "openWorldHint": true
+  },
+  "deep_query": {
+    "title": "Read a document as data",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+  },
+  "deep_job": {
+    "title": "List or run a job",
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": true
+  },
+  "deep_env": {
+    "title": "Bring the worktree's stack up or down",
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "openWorldHint": false
+  },
+  "deep_root_plan": {
+    "title": "Propose a root plan",
+    "readOnlyHint": false,
+    "destructiveHint": false,
+    "idempotentHint": false,
+    "openWorldHint": false
+  },
+  "find_actions": {
+    "title": "Find plug-in actions",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+  },
+  "call_action": {
+    "title": "Call a plug-in action",
+    "readOnlyHint": false,
+    "destructiveHint": true,
+    "idempotentHint": true,
+    "openWorldHint": true
+  },
+  "read": {
+    "title": "Read a slice of a handle",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+  },
+  "find": {
+    "title": "Find messages in the given sessions",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+  }
+}
