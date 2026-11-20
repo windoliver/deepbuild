@@ -1813,7 +1813,7 @@ impl<'a> Hub<'a> {
                         .prepare(
                             doc,
                             0,
-                            &self.look.light,
+                            (&self.look.light, &snapshot::text_type(&self.look)),
                             self.look.status.as_ref(),
                             &record,
                             &self.scenario.evidence,

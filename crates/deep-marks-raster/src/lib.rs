@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use deep_canvas_marks::animated;
+use deep_canvas_marks::look::Look;
 use deep_canvas_marks::modules::{self as modules, Run, StatusDrawing};
 use deep_canvas_marks::noise_fill::{self, NoiseFill};
 use deep_canvas_marks::path;
@@ -280,6 +281,18 @@ pub fn visible(boxes: Vec<(String, [f64; 4])>, scale: f64, size: [u16; 2]) -> Va
             .map(|(id, b)| json!({"id": id, "box": b}))
             .collect(),
     )
+}
+
+/// The type `look`'s light theme sets text in, as the scheduled frames take it from the look's
+/// tokens (#297): its fonts and font roles, and its fallback faces in order, so a grapheme the
+/// run's face lacks is set in the first that has it (Text `text@1`: `fallback`). Like those frames,
+/// it leaves out the look's code and diff roles.
+pub fn text_type(look: &Look) -> scene::Type {
+    scene::Type {
+        fonts: look.light_type.fonts.clone(),
+        fallback: look.light_type.fallback.clone(),
+        ..scene::Type::default()
+    }
 }
 
 pub struct Renderer {
@@ -640,12 +653,13 @@ impl Renderer {
         Renderer { corner, ..self }
     }
 
-    /// `doc` evaluated at `t` and its draw list, with every image decoded.
+    /// `doc` evaluated at `t` and its draw list in a look's palette and type, with every image
+    /// decoded.
     pub fn prepare(
         &mut self,
         doc: &Map<String, Value>,
         t: i64,
-        palette: &Palette,
+        (palette, ty): (&Palette, &scene::Type),
         status: Option<&deep_canvas_marks::look::Status>,
         record: &Record,
         evidence: &(impl Source + ?Sized),
@@ -654,8 +668,15 @@ impl Renderer {
         let mut state = program.state();
         program.evaluate(t, eval::Validity::Full, &mut state);
         let items = eval::items(doc, &program, &state);
-        let frame =
-            scene::frame(doc, &items, palette, record, 1.0).or_else(|r| unfit(r.code, r.path))?;
+        let frame = scene::frame_planted(
+            doc,
+            &items,
+            (palette, ty),
+            record,
+            1.0,
+            scene::Planted::None,
+        )
+        .or_else(|r| unfit(r.code, r.path))?;
         let marks = scene::status_marks(doc, &items, record, status, palette)
             .or_else(|r| unfit(r.code, r.path))?;
         let status = Arc::new(modules::status_drawing(
@@ -1040,13 +1061,15 @@ impl Renderer {
                     scene::Align::Center => Align::Center,
                     scene::Align::End => Align::End,
                 };
-                let Some(role) = Role::parse(&spec.font) else {
+                // In the look's type (#297): the family its font sets it in, then its fallback
+                // faces, as the scheduler's run is set.
+                let (Some(_), Some(family)) = (Role::parse(&spec.font), spec.family) else {
                     return;
                 };
                 let shaped = self.shaper.shape(&Spec {
                     text: &spec.text,
-                    family: role.family(),
-                    fallback: &[],
+                    family,
+                    fallback: &spec.fallback,
                     lang: None,
                     size: spec.size as f32,
                     weight: spec.weight,
@@ -1383,7 +1406,7 @@ mod tests {
             .prepare(
                 doc.as_object().unwrap(),
                 0,
-                &palette,
+                (&palette, &scene::Type::default()),
                 None,
                 &Record::default(),
                 Path::new("."),

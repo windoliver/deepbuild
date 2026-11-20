@@ -1031,7 +1031,7 @@ impl Hub<'_> {
             match self.renderer.prepare(
                 shown.as_object().expect("a document is an object"),
                 show.t,
-                &self.look.light,
+                (&self.look.light, &crate::snapshot::text_type(&self.look)),
                 self.look.status.as_ref(),
                 &self.record(),
                 &self.scenario.evidence,
