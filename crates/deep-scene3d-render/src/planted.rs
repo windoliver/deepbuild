@@ -1,6 +1,6 @@
 //! Wrong-program switches used only by the proof binary. Public entry remains the crate root.
 
-use crate::{ao, cull, dof, fill, flare, local, mirror, surface, water};
+use crate::{ao, cull, dof, fill, flare, local, local_tone, mirror, surface, water};
 
 /// The wrong programs, each reachable only through the binary's `--planted`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -59,6 +59,8 @@ pub struct Planted {
     pub mirror: mirror::Planted,
     /// #468: the depth of field's wrong programs.
     pub dof: dof::Planted,
+    /// #971: the local tone map's wrong programs.
+    pub local_tone: local_tone::Planted,
     /// #166: the water's wrong program.
     pub water: water::Planted,
     /// #421: opaque solids submitted in an order that turns over each frame, ties left to the

@@ -115,11 +115,12 @@ impl Hub<'_> {
                 "gallery" => &["cursor"],
                 "sheet" | "step_ceilings" => &[],
                 "field" => &["path"],
+                "closure" => &["list"],
                 "bindings" => &["doc", "item", "language"],
                 _ => return refused(
                     "enum",
                     "/op",
-                    "Give op as one of list, word, search, read, gallery, sheet, step_ceilings, field or bindings.",
+                    "Give op as one of list, word, search, read, gallery, sheet, step_ceilings, field, closure or bindings.",
                     op,
                 ),
             };
@@ -180,6 +181,24 @@ impl Hub<'_> {
                     "required",
                     "/path",
                     "Give path, <kind>@<major>.<field> for one field, <kind>@<major> for all of them, or patch or patch.<op> for a patch's fields.",
+                    "",
+                ),
+            },
+            // #2777: one field list as the sealed listing carries it, with its closure.
+            "closure" => match text("list") {
+                Some(name) => match self.startup.sealed.field_list(name) {
+                    Some(l) => l.to_json(),
+                    None => refused(
+                        "not_found",
+                        "/list",
+                        "Give a field list's name as the sealed listing's field_lists names it, such as camera@1.projection.",
+                        name,
+                    ),
+                },
+                None => refused(
+                    "required",
+                    "/list",
+                    "Give list, a field list's name, such as camera@1.projection.",
                     "",
                 ),
             },

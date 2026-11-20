@@ -72,6 +72,10 @@ pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
         dof: deep_scene3d_render::dof::Planted {
             linear_coc: p == Some(Planted::CocLinearInDistance),
         },
+        local_tone: deep_scene3d_render::local_tone::Planted {
+            edge_blind: p == Some(Planted::LocalBaseIgnoresEdges),
+            fixed_levels: p == Some(Planted::LocalPyramidFixedLevels),
+        },
         ties_by_submission: p == Some(Planted::TiesBySubmission),
         spot_counts_cone: p == Some(Planted::SpotCountsCone),
         status_before_tone_map: p == Some(Planted::StatusBeforeToneMap),
@@ -597,6 +601,8 @@ pub struct Drawn {
     pub targets: Option<(Vec<u8>, Vec<u8>)>,
     /// The linear image the output pass read, f32 RGBA, read with the targets (#418).
     pub pre_tone: Option<Vec<u8>>,
+    /// #971: that image as the look's local tone map left it, in a frame that has one.
+    pub toned: Option<Vec<u8>>,
     /// The frame's GPU time and each pass's share, ms.
     pub timing: Option<(f64, std::collections::BTreeMap<String, f64>)>,
     /// What the passes' declared costs price this frame at, ms (#1637).
@@ -786,6 +792,11 @@ pub fn draw_on(
                 },
                 pre_tone: if read_targets && !noop {
                     r.read_pre_tone(&device)
+                } else {
+                    None
+                },
+                toned: if read_targets && !noop {
+                    r.read_toned(&device)
                 } else {
                     None
                 },

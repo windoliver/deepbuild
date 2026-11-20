@@ -511,7 +511,7 @@ fn animate(v: &mut View<'_>) -> Result<(), OpError> {
     let reduced = v.reduced_motion()?;
     let t = 0;
     let id = v.id().unwrap_or_default().to_string();
-    let mut out: Vec<[f64; 2]> = vec![[0.0, 1.0]; run.shaped.glyphs.len()];
+    let mut out = vec![crate::animated::UNIT; run.shaped.glyphs.len()];
     let animators = fields
         .get("params")
         .and_then(|p| p.get("animators"))
@@ -542,15 +542,9 @@ fn animate(v: &mut View<'_>) -> Result<(), OpError> {
             }
         }
     }
-    // #466 (#2456): a reveal at the progress this frame evaluated, each glyph by its unit's share.
+    // #466 (#2456): a reveal at the progress this frame evaluated, as a fade or a write draws it.
     if let Some(Value::Object(params)) = fields.get("params") {
-        if let Some(shares) =
-            crate::animator::reveal_opacity(params, &run.shaped, &id).map_err(refused)?
-        {
-            for (unit, share) in out.iter_mut().zip(shares) {
-                unit[1] *= share;
-            }
-        }
+        crate::animated::reveal(&mut out, params, &run.shaped, &id).map_err(refused)?;
     }
     v.write("text.animated", Val::typed(out))
 }
@@ -1254,13 +1248,13 @@ pub fn marks2d_planted(planted: relations::Planted) -> Module {
     }
 }
 
-/// What the frame draws: the draw list, each text's shaped run and each animated text's units as
-/// `[lift, opacity]`. The status marks are the text module's (`text.status`).
+/// What the frame draws: the draw list, each text's shaped run and each animated text's units
+/// ([`crate::animated::Unit`]). The status marks are the text module's (`text.status`).
 #[derive(Debug)]
 pub struct Drawing {
     pub frame: Frame,
     pub runs: BTreeMap<String, Arc<Run>>,
-    pub animated: BTreeMap<String, Vec<[f64; 2]>>,
+    pub animated: BTreeMap<String, Vec<crate::animated::Unit>>,
     /// The marks this frame put into its draw list: every mark when it built the list, the
     /// changed items' when it replaced them in the last one (#896).
     pub built: usize,
@@ -1957,7 +1951,7 @@ fn frame(v: &mut View<'_>) -> Result<(), OpError> {
     }
     let mut animated = BTreeMap::new();
     for (id, a) in v.every("text.animated")? {
-        if let Some(units) = a.as_typed::<Vec<[f64; 2]>>() {
+        if let Some(units) = a.as_typed::<Vec<crate::animated::Unit>>() {
             animated.insert(id.to_string(), (*units).clone());
         }
     }

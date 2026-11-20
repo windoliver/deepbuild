@@ -20,6 +20,7 @@ mod page;
 mod paths;
 mod pdf;
 mod planes;
+mod pptx;
 mod program;
 mod qualify;
 #[cfg(feature = "test-export-guards")]
@@ -70,6 +71,16 @@ pub enum Guard {
     WrapAgainstSecond,
     /// #507: the pdf handout's writer leaves stage 4's page out.
     PdfSkipsStage4,
+    /// #732: the pptx writer draws each slide's first text item as a picture.
+    PptxTitleAsPicture,
+    /// #732: the pptx writer leaves the deck's first picture out.
+    PptxDropsPicture,
+    /// #732: the pptx writer draws every picture of a slide as one, under its native parts.
+    PptxFlattens,
+    /// #732: the pptx writer writes a status-bound item and its chip as native shapes.
+    PptxChipAsShape,
+    /// #732: the pptx receipt leaves an item of a picture out.
+    PptxReceiptFewer,
     /// #169: the page keys each state by its picture and its controls alone.
     PageKeysByPicture,
     /// #169: the page draws its targets only as boxes on each still.
@@ -120,6 +131,10 @@ pub enum Guard {
     WebAnnouncesEveryFrame,
     /// #2776: the web export reads no refused web answer, so it carries an entry its answer refuses.
     WebCarriesRefused,
+    /// #2856: the web player catches a throw from the core while a piece plays and plays on.
+    WebPlaysOnFailure,
+    /// #2856: the web player leaves the index page's line that it hasn't started in place.
+    WebElementLeavesLine,
     /// A wrong encoder, muxer or reader in the helper processes, by its name there.
     Codec(&'static str),
 }
@@ -181,6 +196,11 @@ pub(crate) fn planted(name: &str) -> Option<Planted> {
         "blank_counts_dark_only" => Planted::Export(G::BlankDarkOnly),
         "wrap_compares_second_frame" => Planted::Export(G::WrapAgainstSecond),
         "pdf_writer_skips_stage_4" => Planted::Export(G::PdfSkipsStage4),
+        "pptx_title_as_picture" => Planted::Export(G::PptxTitleAsPicture),
+        "pptx_drops_picture" => Planted::Export(G::PptxDropsPicture),
+        "pptx_flattens_behind_text" => Planted::Export(G::PptxFlattens),
+        "pptx_chip_as_shape" => Planted::Export(G::PptxChipAsShape),
+        "pptx_receipt_lists_fewer" => Planted::Export(G::PptxReceiptFewer),
         "page_keys_by_picture" => Planted::Export(G::PageKeysByPicture),
         "page_targets_on_image" => Planted::Export(G::PageTargetsOnImage),
         "gltf_drops_shift" => Planted::Export(G::GltfDropsShift),
@@ -206,6 +226,8 @@ pub(crate) fn planted(name: &str) -> Option<Planted> {
         "web_no_tree" => Planted::Export(G::WebNoTree),
         "web_announces_every_frame" => Planted::Export(G::WebAnnouncesEveryFrame),
         "web_export_carries_refused" => Planted::Export(G::WebCarriesRefused),
+        "web_plays_on_failure" => Planted::Export(G::WebPlaysOnFailure),
+        "web_element_leaves_line" => Planted::Export(G::WebElementLeavesLine),
         other => Planted::Export(G::Codec(CODEC_PLANTS.iter().find(|p| **p == other)?)),
     })
 }
@@ -404,6 +426,8 @@ pub struct Job {
     pub lottie: Value,
     /// #507: `pdf {notes}`: the handout prints each stage's notes under its still.
     pub notes: bool,
+    /// #732: `pptx: {slide, notes, fonts}` (or `video.pptx`), the pptx target's options.
+    pub pptx: Value,
     /// #169: `page: {sample, orbit, still}` (or `video.page`), the playable page's options.
     pub page: Value,
     /// #169: the page's own clips are tagged with their pixels' transfer, sRGB, so a browser
@@ -442,6 +466,7 @@ impl Default for Job {
             session: None,
             lottie: Value::Null,
             notes: false,
+            pptx: Value::Null,
             page: Value::Null,
             srgb: false,
             tool: None,
@@ -597,6 +622,11 @@ pub fn parse(c: &Map<String, Value>) -> Option<Job> {
             .and_then(|p| p.get("notes"))
             .and_then(Value::as_bool)
             .unwrap_or(false),
+        pptx: c
+            .get("pptx")
+            .or_else(|| video.and_then(|v| v.get("pptx")))
+            .cloned()
+            .unwrap_or(Value::Null),
         page: c
             .get("page")
             .or_else(|| video.and_then(|v| v.get("page")))

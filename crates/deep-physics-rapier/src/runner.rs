@@ -31,12 +31,15 @@ use deep_canvas_physics::track::{self, Entry};
 use serde_json::{json, Map, Value};
 
 mod audit;
+pub mod centre;
 pub mod contact;
+mod dims;
 pub mod fast;
 mod held;
 pub mod kit;
 #[cfg(not(target_arch = "wasm32"))]
 mod live;
+pub mod net;
 mod replay;
 mod timeline;
 pub mod vehicle;
@@ -89,6 +92,8 @@ pub struct Run {
     ccd_on_kinematic: bool,
     /// #251's planted vehicle controller or check.
     vehicle: crate::VehiclePlant,
+    /// #2240's planted check or output.
+    centre: centre::Plant,
     /// The views this runner holds open, by session (#522).
     #[cfg(not(target_arch = "wasm32"))]
     views: std::cell::RefCell<BTreeMap<String, live::View>>,
@@ -463,6 +468,7 @@ impl Run {
             lint: deep_canvas_physics::fast::Planted::None,
             ccd_on_kinematic: false,
             vehicle: crate::VehiclePlant::None,
+            centre: centre::Plant::None,
             #[cfg(not(target_arch = "wasm32"))]
             views: std::cell::RefCell::default(),
         };
@@ -497,7 +503,9 @@ impl Run {
                     && !vehicle::planted(name, &mut run)
                     && !walk::planted(name, &mut run)
                     && !contact::planted(name, &mut run)
-                    && !fast::planted(name, &mut run) =>
+                    && !centre::planted(name, &mut run)
+                    && !fast::planted(name, &mut run)
+                    && !dims::planted(name, &mut run) =>
             {
                 return None
             }
@@ -574,13 +582,13 @@ impl Run {
             frame_rate: if self.key_without_rate { "" } else { rate },
             steps,
         };
-        bake::key(&parts, &self.build, target)
+        bake::key(&parts, &self.build_of(world), target)
     }
 
     /// The world `v` holds, built, or the issues that refuse it.
     fn build(&self, v: &Value) -> Result<(World, Rapier), Value> {
         let refused = |e: Vec<Refusal>| refused(&e);
-        let w = contact::check(v, self).map_err(refused)?;
+        let w = centre::check(v, self).map_err(refused)?;
         let mut b = Rapier {
             restore_any_version: self.restore_any_version,
             reverse_pairs: cfg!(feature = "test-reverse-pairs"),
@@ -603,9 +611,14 @@ impl Run {
             return Some(doc.map(|d| (d, None)).map_err(|e| refused(&e)));
         };
         let id = world.as_str()?;
+        // #2457: with `evidence`, the store its scene's mesh assets are read from (source.rs).
+        let root = call.get("evidence").and_then(Value::as_str).map(Path::new);
+        let kept =
+            root.map(|r| crate::source::sourced(scene, &|sha| crate::source::stored(r, sha)));
+        let scene = kept.as_deref().unwrap_or(scene);
         let doc = scene.get("worlds")?.get(id)?;
         let read = crate::bound::expand(Some(scene), doc).and_then(|doc| {
-            let w = check(&doc, &self.caps, self.table)?;
+            let w = check(&doc, &self.caps_of(&doc), self.table)?;
             let skins = deep_canvas_physics::skin::check(&w, scene);
             if !skins.is_empty() {
                 return Err(skins);
@@ -642,6 +655,7 @@ impl Run {
             }
         }
         vehicle::take(b, w, t, (k, start, plan.every));
+        centre::take(self, b, w, &c, t);
         if (k - start).is_multiple_of(plan.every) {
             let read = b.read();
             for s in read.bodies {
@@ -1010,7 +1024,7 @@ impl Run {
                         .collect();
                     json!({"ok": true, "golden": {
                         "bake_key": self.key(world, &reads, &track.json(), &rate, plan.steps, None),
-                        "runtime_digest": self.build.runtime_digest(), "machine": replay::machine(&self.build.target),
+                        "runtime_digest": self.build_of(world).runtime_digest(), "machine": replay::machine(&self.build.target),
                         "step_hashes": t.step_hashes, "checkpoint_hashes": hashes,
                         "occurrences_hash": record["occurrences_hash"],
                         "record_on": self.build.target, "verify_on": verify_on}})
@@ -1138,7 +1152,7 @@ impl Run {
             Ok(r) => r,
             Err(e) => return Some(e),
         };
-        let (w, mut b) = match self.build(world) {
+        let (w, mut b) = match self.build(world).and_then(dims::solid("physics.query")) {
             Ok(x) => x,
             Err(e) => return Some(e),
         };

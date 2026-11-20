@@ -18,6 +18,13 @@
      "query"
     ],
     "additionalProperties": false
+   },
+   "annotations": {
+    "title": "Find plug-in actions",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
    }
   },
   {
@@ -45,6 +52,13 @@
      "input"
     ],
     "additionalProperties": false
+   },
+   "annotations": {
+    "title": "Call a plug-in action",
+    "readOnlyHint": false,
+    "destructiveHint": true,
+    "idempotentHint": true,
+    "openWorldHint": true
    }
   }
  ],
@@ -70,10 +84,12 @@
   },
   {
    "code": "required",
-   "meaning": "A field the schema requires is missing or null.",
+   "meaning": "A field the schema requires is null. One left out is missing_field, which carries the tool's input schema.",
    "planted": {
     "tool": "deep_search",
-    "arguments": {},
+    "arguments": {
+     "query": null
+    },
     "from": "session",
     "hub": "running"
    },

@@ -8,6 +8,7 @@ The played form (issue #172), as the app and the web player both make it, so the
 
 - `src/worlds.rs`, `src/derive.rs`, `src/cast.rs`: the world bake, its input entries and `physics.cast@1`.
 - `src/logic.rs`: the logic bake, programs and the column view.
+- `src/fires.rs`: what logic items fire into the worlds (#194): checked against each world's inputs, baked before the worlds, kept as `logic_fires`, which `derive.rs` turns into each world's entries.
 - `src/form.rs`: a bundle's document as the player plays it.
 - `src/net.rs`: what a copy of a match steps (#549): a document's logic items, one match step at a time, with the full-state hash over their whole carried state.
 - `src/drawing.rs`, `src/scene.rs`, `src/read.rs`: what a frame draws and holds.

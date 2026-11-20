@@ -1,0 +1,22 @@
+# Scratch probe on Linux at 8f2e51904 (not committed): the count test's world, then its reads, then 60 s more, listing what the hub writes after deep status --json's log_pos
+1.6s quiet 1: last log_pos 35
+1.9s after status answer: last log_pos 37
+3.7s statusLogPos 37: last log_pos 37
+3.7s after deep: last log_pos 37
+5.5s quiet 2, statusLogPos 37: last log_pos 37
+65.5s 60 s later: last log_pos 41
+  after 37: 38 delivery.outcome {"delivery":"ask:01M7RAF2DSSJ23B5XH4712GPXG","via":"next_prompt","outcome":"stalled"}
+  after 37: 39 session.reading {"reading":"DeepBuild's prompt reply carrying your answer to ask:01M7RAF2DSSJ23B5XH4712GPXG didn't reach the agent: deep-hook had given up on it. The answer goe
+  after 37: 40 delivery.outcome {"delivery":"ask:01M7RAF2DSYKMSQAFE61T0JGHD","via":"next_prompt","outcome":"stalled"}
+  after 37: 41 session.reading {"reading":"DeepBuild's prompt reply carrying your answer to ask:01M7RAF2DSYKMSQAFE61T0JGHD didn't reach the agent: deep-hook had given up on it. The answer goe
+  all>30: 31 row.set ts=1795040676817
+  all>30: 32 ask.answered ts=1795040677171
+  all>30: 33 decision.created ts=1795040677177
+  all>30: 34 row.set ts=1795040677379
+  all>30: 35 row.set ts=1795040677379
+  all>30: 36 user.ask ts=1795040680840
+  all>30: 37 session.rules_delivered ts=1795040681111
+  all>30: 38 delivery.outcome ts=1795040691101
+  all>30: 39 session.reading ts=1795040691101
+  all>30: 40 delivery.outcome ts=1795040691102
+  all>30: 41 session.reading ts=1795040691103
