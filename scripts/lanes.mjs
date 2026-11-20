@@ -1109,6 +1109,13 @@ alone.push('tests/acceptance/1415/');
 // refusal sets it reverses (tests/acceptance/806-redraft-ac3/DISPUTE.md); its blind redraft runs in its place.
 alone.push('tests/acceptance/806-redraft-ac3/');
 byHand.push('tests/acceptance/806/unbound.test.ts');
+// #1430's files build deep-text in release; ac4-budgets judges the text-reflow budgets on the reference Mac.
+alone.push('tests/acceptance/1430/');
+timed.push('tests/acceptance/1430/ac4-budgets.test.ts');
+// #1430's first draft holds AC2's body text to the role's static family, which #1484 retired; its blind redraft,
+// 1430-redraft-ac2/, runs in its place, and the first draft's file runs by hand (tests/acceptance/1430-redraft-ac2/DISPUTE.md).
+alone.push('tests/acceptance/1430-redraft-ac2/');
+byHand.push('tests/acceptance/1430/ac2-property.test.ts');
 
 // #2402's files (blind) start two hubs and time each tool call against a control hub's, and time two extension hosts.
 alone.push('tests/acceptance/2402/');
