@@ -2,7 +2,7 @@ diff --git a/src/window.ts b/src/window.ts
 index 3f2c1a0..9b7e4d2 100644
 --- a/src/window.ts
 +++ b/src/window.ts
-@@ -1,18 +1,34 @@
+@@ -1,11 +1,30 @@
  import { readFileSync } from 'node:fs';
  
  export interface Reading { at: number; used: number }

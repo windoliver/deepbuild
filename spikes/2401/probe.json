@@ -1,4 +1,7 @@
 {
+  "ran_at": "2026-11-20T05:32:07Z",
+  "host_model": "Mac15,12",
+  "load_1m": 14.93,
   "first_entry": {
     "type": "system",
     "subtype": "init",
@@ -17,7 +20,6 @@
       "statusline-setup",
       "superpowers:code-reviewer"
     ],
-    "permissionMode": "dontAsk",
     "apiKeySource": "none"
   },
   "result_entry": {
@@ -32,10 +34,7 @@
       "output_tokens": 1407,
       "cache_creation_input_tokens": 5421,
       "cache_read_input_tokens": 3001
-    },
-    "models": [
-      "claude-haiku-5-5"
-    ]
+    }
   },
   "kinds": [
     "system:hook_started",
@@ -70,7 +69,5 @@
       },
       "overageEnabled": false
     }
-  ],
-  "ran_at": "2026-11-20T05:32:07Z",
-  "host_load_1m": 14.93
+  ]
 }

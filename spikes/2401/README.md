@@ -4,10 +4,9 @@ Design: [Plan usage, per account and per task](../../docs/technical-design.md#pl
 [What each agent gives us, and the limits we design around](../../docs/technical-design.md#what-each-agent-gives-us-and-the-limits-we-design-around),
 [Decided](../../docs/technical-design.md#decided).
 
-**Status: BLOCKED.** The 40 runs have not run, so there is no `record.json`, no reading and no row under Decided. One
-probe run, below, showed that the runs as the issue specifies them can't give a reading on this account: the stream
-reports one window per run, in whole percents, and a run is about ten thousand tokens. The issue needs an amendment
-you approve before the runs are worth their plan usage. Nothing is set meanwhile, as the issue decided.
+**Status: BLOCKED.** The 40 runs haven't run, so there is no `record.json`, no reading and no row under Decided.
+Nothing is set meanwhile, as the issue decided. The one probe run, below, carried no 5-hour reading, and the account
+is at 95% of its weekly window. The runs are held until you decide how to take them.
 
 ## The job and the script
 
@@ -17,74 +16,87 @@ node spikes/2401/record.mjs --claude <path> --probe    # one real run: what its 
 node spikes/2401/record.mjs --claude <path> --own-use <pct/Mtok> --basis "<words>" [--streams <dir>]
 ```
 
-The last form spends plan usage. It runs one opening run (`lead`, counted under neither label), then 40 runs
-alternating between the two labels, and writes `record.json` in the shape `tests/acceptance/2401/README.md` gives. Raw
-streams stay in `--streams`, outside the repo; the record pins each by SHA-256.
+The last form spends plan usage. It makes one opening run (`lead`, under neither label), then 40 runs alternating
+between the labels. It writes `record.json` in the shape `tests/acceptance/2401/README.md` gives. Raw streams go to
+`--streams`, which must be outside the checkout, and the record pins each one by SHA-256.
 
-- **The job** is the review check's: the prompt `packages/hub/src/kinds.ts` builds, over its default rubric and the
-  fixed diff in [`job/diff.patch`](job/diff.patch).
-- **The launch** is the runner's. It uses the facts' `launch.readOnlyJob` args, then the `--mcp-config` and `--tools Read,Grep,Glob` that
-  `AGENTS['claude-code'].confine` adds for a job with no MCP server and no sub-agent. The prompt goes on stdin, and the
-  working folder is an empty temp folder.
-- **The environment** is the runner's `ALLOWED_ENV` plus the `TMPDIR`, `CLAUDE_CODE_TMPDIR` and
-  `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` its `reach` sets. Under the default label `CLAUDE_CODE_ENTRYPOINT` is unset;
-  under the other it is `deepbuild`. `CLAUDECODE` and the caller's own entrypoint are never passed on. Two differences
-  from the runner: Claude Code reads its own keychain login (it needs `USER` for that) where the runner hands it the
-  access token in `CLAUDE_CODE_OAUTH_TOKEN`, and there is no HTTPS forwarder.
-- **The window** is read as the runner reads it (`packages/runner/src/runner.ts`): `rate_limit_event` entries whose
-  `rateLimitType` is `five_hour` or `seven_day`, at `utilization × 100`. A run's `after` is its own last reading of a
-  window and its `before` the previous run's. That a reading already counts the request it came with is an
-  assumption: the probe saw one reading a run, which can't show it.
+- **The job** is the review check's. Its prompt is the one `packages/hub/src/kinds.ts` builds, over that file's
+  default rubric and the fixed diff in [`job/diff.patch`](job/diff.patch).
+- **The launch** is the runner's. It uses the facts' `launch.readOnlyJob` args, then the `--mcp-config` and
+  `--tools Read,Grep,Glob` that `AGENTS['claude-code'].confine` adds for a job with no MCP server and no sub-agent. The
+  prompt goes on stdin, the working folder is an empty temp folder, and a run still going after 5 minutes is stopped.
+- **The environment** is the runner's `ALLOWED_ENV` and `CLAUDE_CONFIG_DIR`, plus the `TMPDIR`, `CLAUDE_CODE_TMPDIR`
+  and `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` its `reach` sets. Under the default label `CLAUDE_CODE_ENTRYPOINT` is
+  unset; under the other it is `deepbuild`. `CLAUDECODE` and the caller's own entrypoint are never passed on.
+
+  It differs from the runner's job in four ways:
+  - Claude Code reads its own keychain login, for which it needs `USER`. The runner hands it the access token in
+    `CLAUDE_CODE_OAUTH_TOKEN` instead.
+  - `PATH` is the system's, not your login `PATH`.
+  - There is no HTTPS forwarder.
+  - There is no supervisor sandbox.
+- **The window** is read the way the runner reads an eval job's stream (`evaluationProcess` in
+  `packages/runner/src/runner.ts`): from `rate_limit_event` entries whose `rateLimitType` is `five_hour` or `seven_day`,
+  at `utilization × 100`. The runner's path for a review job reads no window from its stream at all; Claude Code's
+  windows reach the hub from the status line.
+
+  A run's `after` is its own last reading of a window, and its `before` is the previous run's last reading of it.
+  Whether a reading already counts the request it came with is assumed, not shown.
 - **The first entry** is the stream's `system` `init` entry. Your user settings' SessionStart hooks, which
   `--setting-sources user` keeps, write `hook_started` and `hook_response` entries before it.
+- **A key** counts as set when one of the facts' billing variables is in the run's environment, or when the init entry's
+  `apiKeySource` isn't `none`.
 
 ## What the probe found
 
-One run under the default label on Claude Code 2.1.308 (the facts' newest covered version), on Nov 20 2026 at
-05:32 UTC, on Mac15,12 at load 14.9 with other sessions on the account: [`probe.json`](probe.json).
+[`probe.json`](probe.json) records one run under the default label:
 
-- **Tokens:** 2 input, 1,407 output, 5,421 cache creation and 3,001 cache read, 9,831 in all, and $0.0018 at API
-  prices. The answer took 5.8 s and one turn on `claude-haiku-5-5`.
-- **The window:** the stream held one `rate_limit_event`, for `seven_day` only. It read status `allowed_warning`,
-  utilization 0.95 and `surpassedThreshold` 0.75, resetting Tue Nov 24 08:00 UTC. Its `unifiedWindows` held only
-  `seven_day` too. There was no `five_hour` reading at all, so the runner reads no 5-hour window from this account's
-  jobs today.
-- **The tools:** Glob, Grep and Read, the three `--tools` names.
+- Claude Code 2.1.308, the newest version the facts cover.
+- Nov 20 2026 at 05:32 UTC, on Mac15,12 at load 14.9.
+- The diff's hunk header was corrected afterwards, so later runs' prompt differs from the probe's by that one line.
+- The run predates `--probe` writing `ran_at`, `host_model` and `load_1m`. Those three fields come from the shell
+  that ran it.
 
-### Why the 40 runs would read INCONCLUSIVE
+What the run carried:
 
-The rule takes each run's change in window percent per million tokens and needs 15 kept runs per label. Three things
-make that unreadable here:
+- **Tokens:** 9,831 in all: 2 input, 1,407 output, 5,421 cache creation and 3,001 cache read. At API prices that is
+  $0.0018. The run took 5.8 s and one turn on `claude-haiku-5-5`.
+- **The window:** one `rate_limit_event`, for `seven_day` only.
+  - It read status `allowed_warning`, utilization 0.95 and `surpassedThreshold` 0.75.
+  - It resets Tue Nov 24 08:00 UTC.
+  - Its `unifiedWindows` also held only `seven_day`.
+  - The run carried no `five_hour` reading.
+- **The tools:** Glob, Grep and Read, the three names `--tools` gives.
 
-1. **No 5-hour reading.** While the weekly window is in its warning band, the one reading a run gets is the weekly
-   one. Every run would be left out ("its 5-hour window was not read on both sides"), and with none kept the reading is
-   INCONCLUSIVE.
-2. **Whole percents.** The probe's utilization was 0.95, two decimals. The probe moved neither window by a readable
-   step, so a run of about 10,000 tokens reads a change of 0 or 1 point. Per-run rates would be 0 or about 100 points
-   per million tokens. Their ranges would overlap under both labels whatever the true rates are, and the rule gives
-   "not set" without having measured anything.
-3. **The account is at 95% of its weekly window.** Forty more runs spend part of the last 5% your own work needs
-   until Nov 24.
+### What this means for the 40 runs
 
-Running them now would spend about 400,000 tokens to record a reading the rule already gives. So they have not run, and 0 runs
-were left out because none ran.
+The rule takes each run's change in window percent per million tokens, and it needs 15 kept runs per label. A run
+missing a 5-hour reading on either side is left out. This is what one run shows, and what it leaves open:
 
-### What an amendment could take, for you to choose
+1. **No 5-hour reading in the one run.** If every run carried only the weekly reading, every run would be left out,
+   and the reading would be INCONCLUSIVE. The probe can't say whether the 5-hour reading is missing because the weekly
+   window is in its warning band. That is a guess, and so is the idea that it comes back once the weekly window resets.
+2. **The step size is unknown.** One reading, 0.95, can't show how finely utilization moves. Say it moves in whole
+   percents. A run of about 10,000 tokens would then read 0 or 1 point, the per-run ranges would overlap under both
+   labels, and the rule would give "not set" without measuring a rate. Two or three probes in a row would show the
+   step.
+3. **The account is at 95% of its weekly window.** Forty runs and a lead come to about 400,000 tokens, spent from the
+   last 5% of the weekly window, which your own work needs until Nov 24.
 
+### What you can choose
+
+- **Probe again first.** Run two or three probes back to back to see the step and which windows a run carries. After
+  the weekly reset, also see whether the 5-hour reading comes back. Then run the 40 as the issue gives them, if the
+  probes say a run can be read.
 - **Blocks instead of single runs.** Alternate blocks of runs per label, each block large enough to move the 5-hour
-  window by about 10 points, so a whole-percent step is a tenth of the change. Three blocks per label is about 60
-  points of one 5-hour window. It would need a week whose weekly window is out of its warning band, so the stream reports
-  the 5-hour window. One block's size comes from a first block's reading.
-- **Leave it to #1796.** #1796 reads routes from history as history builds up, at no extra spend. This spike's script
-  and tool lists stay for when a reading is taken.
-
-Either changes the issue's Scope ("run 20 times under each of two labels", per-run readings), which only you can
-approve.
+  window by about 10 points. Three blocks per label is about 60 points of one 5-hour window. This changes the issue's
+  Scope ("run 20 times under each of two labels"), so it needs your approval as an amendment.
+- **Leave it to #1796.** #1796 reads routes from history as history builds up, at no extra spend.
 
 ## What the label changes besides the rate
 
-Measured at $0 with `--dry` on 2.1.308 ([`dry.json`](dry.json)), using the throwaway home and an invalid token. Every turn fails
-before a model call, after the init entry. The same launch by hand on 2.1.326 gave the same lists.
+[`dry.json`](dry.json) holds this, measured at $0 on 2.1.308 with `--dry`. That run used a throwaway home with no user
+settings or plugins, and an invalid token that fails every turn before a model call, after the init entry.
 
 | | Default (`CLAUDE_CODE_ENTRYPOINT` unset) | `CLAUDE_CODE_ENTRYPOINT=deepbuild` |
 |---|---|---|
@@ -92,10 +104,9 @@ before a model call, after the init entry. The same launch by hand on 2.1.326 ga
 | Agents | claude, Explore, general-purpose, Plan, statusline-setup | the same and `claude-code-guide` |
 
 The tool lists are the same. The `deepbuild` label adds the built-in `claude-code-guide` agent. A job can't reach it,
-since `--tools` doesn't offer Task. The real runs read the tool lists again from every run's init entry.
+because `--tools` doesn't offer Task. Under your own home, the probe's agents also list your plugins' agents. The real
+runs read the tool lists again from every run's init entry.
 
 ## Checks
 
-`node --test --test-concurrency=1 'tests/acceptance/2401/*.test.mjs'` stays BLOCKED until the record exists. The
-script was run end to end against a stand-in binary that writes the stream shapes above with a counter for a window.
-Its record passed the suite's record, reading and tool tests, and was not kept.
+`node --test --test-concurrency=1 'tests/acceptance/2401/*.test.mjs'` stays BLOCKED until the record exists.

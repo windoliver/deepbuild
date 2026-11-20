@@ -1,7 +1,8 @@
 // Spike #2401: what one headless Claude Code job costs a plan window under its default label and under
 // CLAUDE_CODE_ENTRYPOINT=deepbuild. One fixed read-only job, the review check's shape, run 20 times under each label,
 // interleaved, on one account and model; each run's tokens from its stream, both windows before and after as the
-// runner reads them (rate_limit_event in the stream), and the reading by the rule written before the runs.
+// runner reads them from an eval job's stream (rate_limit_event, packages/runner/src/runner.ts evaluationProcess; a
+// review job's own path reads no window), and the reading by the rule written before the runs.
 //
 //   node spikes/2401/record.mjs --claude <path> --dry                 # $0: invalid token, tool lists only
 //   node spikes/2401/record.mjs --claude <path> --probe               # one real run: what its stream carries
@@ -13,7 +14,7 @@
 import { spawn, execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, realpathSync } from 'node:fs';
-import { tmpdir, homedir } from 'node:os';
+import { tmpdir, homedir, loadavg } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -46,6 +47,8 @@ const ARGS = [...facts.launch.readOnlyJob.args, '--mcp-config', JSON.stringify({
 const sha256 = (b) => createHash('sha256').update(b).digest('hex');
 const arg = (name) => { const i = process.argv.indexOf(name); return i < 0 ? undefined : process.argv[i + 1]; };
 const has = (name) => process.argv.includes(name);
+// A run that hasn't ended by then is stopped; with no result entry it is left out.
+const DEADLINE_MS = 300_000;
 
 /** One run of the job under `label`: its raw stream and when it ran. */
 function run(claude, label, { home = homedir(), token } = {}) {
@@ -54,8 +57,9 @@ function run(claude, label, { home = homedir(), token } = {}) {
   // finds its keychain login, where the runner hands the token itself), never the caller's
   // CLAUDECODE or CLAUDE_CODE_ENTRYPOINT: under default the variable is unset, as in a job the runner starts.
   const env = { PATH: '/usr/bin:/bin:/usr/sbin:/sbin' };
-  for (const name of ['USER', 'LOGNAME', 'SHELL', 'LANG', 'LC_ALL', 'LC_CTYPE', 'TZ', 'TERM']) if (process.env[name]) env[name] = process.env[name];
+  for (const name of ['USER', 'LOGNAME', 'SHELL', 'LANG', 'LC_ALL', 'LC_CTYPE', 'TZ', 'TERM', 'CLAUDE_CONFIG_DIR']) if (process.env[name]) env[name] = process.env[name];
   Object.assign(env, { HOME: home, TMPDIR: work, CLAUDE_CODE_TMPDIR: work, CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1' });
+  if (home !== homedir()) delete env.CLAUDE_CONFIG_DIR;
   if (ENTRYPOINT[label]) env.CLAUDE_CODE_ENTRYPOINT = ENTRYPOINT[label];
   if (token) env.CLAUDE_CODE_OAUTH_TOKEN = token;
   return new Promise((resolve, reject) => {
@@ -63,12 +67,18 @@ function run(claude, label, { home = homedir(), token } = {}) {
     const child = spawn(claude, ARGS, { cwd: work, env, stdio: ['pipe', 'pipe', 'ignore'] });
     const out = [];
     child.stdout.on('data', (c) => out.push(c));
+    child.stdin.on('error', () => {});
     child.on('error', reject);
+    const timer = setTimeout(() => child.kill('SIGKILL'), DEADLINE_MS);
     child.on('close', (code) => {
+      clearTimeout(timer);
       rmSync(work, { recursive: true, force: true });
       const bytes = Buffer.concat(out);
       const rows = bytes.toString('utf8').split('\n').filter(Boolean).flatMap((l) => { try { return [JSON.parse(l)]; } catch { return []; } });
-      resolve({ label, code, started, ended: new Date(), bytes, rows, apiKeySet: Object.keys(env).some((k) => facts.billing.apiKeyVariables.includes(k)) });
+      // A key in its environment, or one Claude Code found itself (an apiKeyHelper in your settings), bills a key.
+      const keySource = rows.find((v) => v?.type === 'system' && v.subtype === 'init')?.apiKeySource;
+      const apiKeySet = Object.keys(env).some((k) => facts.billing.apiKeyVariables.includes(k)) || keySource !== 'none';
+      resolve({ label, code, started, ended: new Date(), bytes, rows, apiKeySet });
     });
     child.stdin.end(PROMPT);
   });
@@ -87,7 +97,7 @@ const lastOf = (rs, w) => { const x = rs.filter((r) => r.window === w).at(-1); r
 // --setting-sources user keeps, write their hook_started and hook_response entries before it.
 const firstEntry = (rows) => {
   const f = rows.find((v) => v?.type === 'system' && v.subtype === 'init') ?? {};
-  return { type: f.type, subtype: f.subtype, model: f.model, claude_code_version: f.claude_code_version, tools: f.tools, agents: f.agents, permissionMode: f.permissionMode, apiKeySource: f.apiKeySource };
+  return { type: f.type, subtype: f.subtype, model: f.model, claude_code_version: f.claude_code_version, tools: f.tools, agents: f.agents, apiKeySource: f.apiKeySource };
 };
 const resultEntry = (rows) => {
   const r = rows.findLast((v) => v?.type === 'result') ?? {};
@@ -95,15 +105,15 @@ const resultEntry = (rows) => {
   return {
     type: r.type, subtype: r.subtype, is_error: r.is_error, num_turns: r.num_turns, duration_ms: r.duration_ms, total_cost_usd: r.total_cost_usd,
     usage: { input_tokens: u.input_tokens, output_tokens: u.output_tokens, cache_creation_input_tokens: u.cache_creation_input_tokens, cache_read_input_tokens: u.cache_read_input_tokens },
-    models: Object.keys(r.modelUsage ?? {}),
   };
 };
 
 /** The account a run's home is signed into, compared and never kept. */
 const account = () => {
-  try { return JSON.parse(readFileSync(join(homedir(), '.claude.json'), 'utf8')).oauthAccount?.accountUuid ?? null; } catch { return null; }
+  try { return JSON.parse(readFileSync(join(process.env.CLAUDE_CONFIG_DIR || homedir(), '.claude.json'), 'utf8')).oauthAccount?.accountUuid ?? null; } catch { return null; }
 };
 
+const hostModel = () => execFileSync('/usr/sbin/sysctl', ['-n', 'hw.model'], { encoding: 'utf8' }).trim();
 const total = (t) => t.input + t.output + t.cache_creation + t.cache_read;
 const change = (run, w) => {
   const { before, after } = run.window[w];
@@ -147,7 +157,7 @@ if (has('--dry')) {
   const home = mkdtempSync(join(realpathSync(tmpdir()), 'spike-2401-home-'));
   const out = {};
   for (const label of LABELS) {
-    const r = await run(claude, label, { home, token: 'sk-ant-oat01-invalid' });
+    const r = await run(claude, label, { home, token: 'invalid' });
     out[label] = { first_entry: firstEntry(r.rows), result: resultEntry(r.rows) };
   }
   rmSync(home, { recursive: true, force: true });
@@ -158,9 +168,9 @@ if (has('--dry')) {
 if (has('--probe')) {
   const r = await run(claude, 'default');
   console.log(JSON.stringify({
+    ran_at: r.started.toISOString(), host_model: hostModel(), load_1m: loadavg()[0],
     first_entry: firstEntry(r.rows), result_entry: resultEntry(r.rows),
     kinds: r.rows.map((v) => `${v.type}${v.subtype ? `:${v.subtype}` : ''}`),
-    tokens: resultEntry(r.rows).usage,
     rate_limit_events: r.rows.filter((v) => v?.type === 'rate_limit_event').map((v) => v.rate_limit_info),
   }, null, 2));
   process.exit(0);
@@ -172,8 +182,12 @@ if (!(ceiling > 0) || !basis) { console.error('--own-use <window percent per mil
 const own_use = { max_pct_per_mtok: ceiling, basis, fixed_at: new Date().toISOString() };
 const streams = arg('--streams') ?? mkdtempSync(join(realpathSync(tmpdir()), 'spike-2401-streams-'));
 mkdirSync(streams, { recursive: true });
+// Raw streams hold session IDs and paths: never inside the checkout.
+if (realpathSync(streams).startsWith(`${root}/`)) { console.error('--streams must be outside the checkout'); process.exit(2); }
 
-const accounts = new Set([account()]);
+// Each run's account by its place among the accounts seen, read right after it.
+const accounts = [account()];
+const accountOf = () => { const a = account(); if (!accounts.includes(a)) accounts.push(a); return accounts.indexOf(a) + 1; };
 // One opening run reads the window before run 1; it is on the record as `lead` and counts under neither label.
 const lead = await run(claude, 'default');
 writeFileSync(join(streams, 'lead.jsonl'), lead.bytes);
@@ -181,7 +195,7 @@ const done = [];
 for (let i = 0; i < 2 * PER_LABEL; i++) {
   const label = LABELS[i % 2];
   const r = await run(claude, label);
-  accounts.add(account());
+  r.account = accountOf();
   writeFileSync(join(streams, `run-${String(i + 1).padStart(2, '0')}-${label}.jsonl`), r.bytes);
   done.push(r);
   const rs = readings(r.rows);
@@ -199,7 +213,7 @@ const runs = done.map((r, i) => {
   const res = resultEntry(r.rows);
   const u = res.usage;
   return {
-    n: i + 1, label: r.label, entrypoint: ENTRYPOINT[r.label], account: 1, api_key_set: r.apiKeySet,
+    n: i + 1, label: r.label, entrypoint: ENTRYPOINT[r.label], account: r.account, api_key_set: r.apiKeySet,
     started_at: r.started.toISOString(), ended_at: r.ended.toISOString(),
     first_entry: firstEntry(r.rows), result_entry: res, stream_sha256: sha256(r.bytes),
     tokens: { input: u.input_tokens, output: u.output_tokens, cache_creation: u.cache_creation_input_tokens, cache_read: u.cache_read_input_tokens },
@@ -210,7 +224,7 @@ const runs = done.map((r, i) => {
 for (const r of runs) { const why = whyLeftOut(r, ceiling); r.kept = why === null; r.left_out_because = why; }
 
 const tools = {};
-for (const label of LABELS) tools[label] = [...(runs.find((r) => r.label === label).first_entry.tools ?? [])].sort();
+for (const label of LABELS) tools[label] = [...(runs.find((r) => r.label === label && Array.isArray(r.first_entry.tools))?.first_entry.tools ?? [])].sort();
 const differences = LABELS.flatMap((label) => {
   const other = LABELS.find((l) => l !== label);
   return tools[label].filter((t) => !tools[other].includes(t)).map((tool) => ({ tool, under: label, flag: `--disallowedTools ${tool}` }));
@@ -218,8 +232,8 @@ const differences = LABELS.flatMap((label) => {
 const five = reading(runs, 'five_hour');
 const record = {
   issue: 2401,
-  host: { model: execFileSync('/usr/sbin/sysctl', ['-n', 'hw.model'], { encoding: 'utf8' }).trim(), os: 'macOS', os_build: execFileSync('/usr/bin/sw_vers', ['-buildVersion'], { encoding: 'utf8' }).trim() },
-  accounts: accounts.has(null) ? 0 : accounts.size,
+  host: { model: hostModel(), os: 'macOS', os_build: execFileSync('/usr/bin/sw_vers', ['-buildVersion'], { encoding: 'utf8' }).trim() },
+  accounts: accounts.includes(null) ? 0 : accounts.length,
   claude_code_version: runs[0].first_entry.claude_code_version,
   job: { args: ARGS, prompt_sha256: sha256(PROMPT) },
   own_use,
