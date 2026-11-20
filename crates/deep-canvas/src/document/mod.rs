@@ -40,8 +40,9 @@ pub use apply::{
     Patched, Refused, Writing,
 };
 pub use check::{
-    check, check_costed, check_in, check_packed, check_with, duration, frame_of, frame_rate_of,
-    literal_forms, recheck, recheck_skipping_referrers, recheck_with, CheckResult, Referrers,
+    check, check_costed, check_in, check_packed, check_sized, check_with, duration, frame_of,
+    frame_rate_of, literal_forms, recheck, recheck_skipping_referrers, recheck_with, CheckResult,
+    Referrers,
 };
 pub use close::{field_names, kind_names, owners, undeclared};
 pub use merge::{merge, Merged};
@@ -523,6 +524,9 @@ pub fn fix_for(code: &str) -> String {
         "bad_path" => "Write the path as <section>/<id>[#<sub>]/<field>[/<field>...].",
         "bad_handle" => "Write the handle as <scheme>:<id>[#<fragment>].",
         "bad_id" => "Write the ID as 1 to 8 segments of [a-z0-9][a-z0-9_-]{0,47} joined by `.`.",
+        "id_taken" => "Give the new item an ID the document doesn't hold, or set the fields of the one it holds.",
+        "session_frozen" => "Send a whole revision that doesn't panic to replace the frozen one, or close the session.",
+        "session_closed" => "Nothing reaches a closed session: draw the document in a new one.",
         "bad_time" => "Write the time as a span such as 2s or 120f.",
         "bad_rate" => "Use a rate whose frame or sample is a whole number of flicks: 60/1, 30000/1001 or 8/1 fps, 48000 or 44100 Hz.",
         "bound_typed_over" => "Leave a bound value's text empty; its reading shows there.",

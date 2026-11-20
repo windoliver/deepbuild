@@ -32,15 +32,17 @@ function typed(prompt: string): Promise<string | undefined> {
 
 export async function secretCommand(args: string[]): Promise<number> {
   if (args[0] === 'list' && args.length <= 2 && (args[1] === undefined || args[1] === '--json')) {
-    const result = await callAsYou('secret.list', {}, 'no secret was read');
+    const result = await callAsYou('secret.list', {});
     if (typeof result === 'number') return result;
     const held = result.held as { secret: string; provider: string }[];
+    // An empty list says so in words (#1812); --json prints a line per secret, and none for none.
+    if (!held.length && !args[1]) process.stdout.write('No secret is kept for any package.\n');
     for (const one of held) process.stdout.write(args[1] ? `${JSON.stringify(one)}\n` : `${one.provider} ${one.secret}\n`);
     return 0;
   }
   const [verb, extension, name] = args;
   if (verb !== 'add' || !extension || !name || args.length !== 3) {
-    process.stderr.write('usage: deep secret add <package> <name> | deep secret list [--json]\n');
+    process.stderr.write('Usage: deep secret add <package> <name>\n       deep secret list [--json]\n');
     return 2;
   }
   if (!process.stdin.isTTY) {
@@ -52,7 +54,7 @@ export async function secretCommand(args: string[]): Promise<number> {
     process.stderr.write('nothing was saved\n');
     return 3;
   }
-  const result = await callAsYou('secret.enter', { extension, name, value }, 'nothing was saved');
+  const result = await callAsYou('secret.enter', { extension, name, value });
   if (typeof result === 'number') return result;
   process.stdout.write(result.saved ? `Saved ${name} for ${extension} in the OS secret store.\n` : `${name} wasn't saved: its key test didn't pass.\n`);
   return result.saved ? 0 : 3;

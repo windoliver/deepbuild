@@ -19,7 +19,7 @@ use sha2::{Digest as _, Sha256};
 
 use crate::hub::{HubClient, HubError};
 
-const NAME: &str = "DeepBuild on this Mac";
+const NAME: &str = "DeepBuild on this Mac"; // copy-exception: the device's name the hub keeps, never drawn by the app
 const KEY_BYTES: usize = 32;
 /// A once-only ID's random bytes: 22 base64url characters.
 const ONCE_BYTES: usize = 16;

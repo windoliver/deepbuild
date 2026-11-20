@@ -1,0 +1,212 @@
+deep lease: DeepBuild isn't set up here (no hub token), so `/opt/homebrew/Cellar/node@24/24.22.2_2/bin/node node_modules/vitest/vitest.mjs run --reporter=dot --reporter=./scripts/proof-vitest-reporter.mjs packages/record/test/archive.test.ts packages/record/test/learned.test.ts tests/acceptance/2365-redraft-ac4/rewritten.test.ts tests/acceptance/2365-redraft-ac5/suite.test.ts tests/acceptance/2365/identity.test.ts tests/acceptance/2365/rewrite.test.ts` runs unleased
+
+ RUN  v5.0.5 <checkout>
+
+····························stderr | packages/record/test/learned.test.ts
+vitest-setup: stopping 3 process(es) this file left running:
+  67047 (node)
+  67048 (node)
+  67177 (node)
+
+·xxxxstderr | tests/acceptance/2365-redraft-ac4/rewritten.test.ts
+vitest-setup: stopping 22 process(es) this file left running:
+  67352 (node)
+  67354 (node)
+  67461 (node)
+  67463 (node)
+  67465 (node)
+  67607 (node)
+  67756 (node)
+  67764 (node)
+  68104 (node)
+  68267 (node)
+  68272 (node)
+  68373 (node)
+  68377 (node)
+  68378 (node)
+  68468 (node)
+  68589 (node)
+  68818 (node)
+  68951 (node)
+  68958 (node)
+  69241 (node)
+  69250 (node)
+  69533 (node)
+
+xxxxxxxxxstderr | tests/acceptance/2365-redraft-ac5/suite.test.ts
+vitest-setup: stopping 2 process(es) this file left running:
+  75600 (node)
+  75602 (node)
+
+x··x
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 15 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/acceptance/2365/identity.test.ts > #2365 AC5 the parts joined are byte-identical to the base's one copy, and an unchanged transcript is read no more > #2365 AC5 (planted re-reading archive) the read instrument sees a source read through fs/promises' readFile, a read stream and a FileHandle, so "reads none" can fail
+AssertionError: the check fails on an archive that reads unchanged sources, naming each: expected [Function] to throw error matching /reread 0[\s\S]*reread 1[\s\S]*reread 2/ but got '#2365 AC5 a second pass over unchange…'
+
+- Expected:
+/reread 0[\s\S]*reread 1[\s\S]*reread 2/
+
++ Received:
+"#2365 AC5 a second pass over unchanged transcripts reads none of them: expected [ …(3) ] to deeply equal []"
+
+ ❯ tests/acceptance/2365/identity.test.ts:199:128
+    197|       };
+    198|       const sources = ts.map((t, i) => ({ id: t.id, path: t.path, what…
+    199|       await expect(readsNone(w, rereading, sources), 'the check fails …
+       |                                                                                                                                ^
+    200|     } finally {
+    201|       await w.close();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/15]⎯
+
+ FAIL  tests/acceptance/2365/rewrite.test.ts > #2365 AC4 a transcript whose first megabyte was rewritten after its last copy is copied again from its start > #2365 AC4 (wrong program) an archive that appends the rewritten file's tail to the old parts fails, naming line 6, the first line that differs
+AssertionError: the check fails on the twin, naming the first line that differs: expected [Function] to throw error including 'first differs at line 6 (message 935f…' but got '#2365 AC4 (twin): no reading of sessi…'
+
+Expected: "first differs at line 6 (message 935f60f9-f5e5-4eaa-a9eb-44b04547b2ad)"
+Received: "#2365 AC4 (twin): no reading of session:b97911e110544660a4007e9544b39c50's 3 copy event(s) joins to the transcript scrubbed. The closest, parts 4d1841fe9309, 22948ca7dab1, 9ae8f4182b3c (3 parts: the evidence of events 1…3 of 3), first differs at line 6, byte 7282: the transcript has «{"parentUuid":"5dc49bd1-53d6-4c3b-a3d6-f617b63d0421","isSidechain":false,"userType":"external","cwd":"<fixture>/src/this-69","sessionId":"b97911e1-1054-4660-a4… (277 chars)» and the parts have «{"parentUuid":"5dc49bd1-53d6-4c3b-a3d6-f617b63d0421","isSidechain":false,"userType":"external","cwd":"<fixture>/src/this-69","sessionId":"b97911e1-1054-4660-a4… (241 chars)»"
+
+ ❯ tests/acceptance/2365/rewrite.test.ts:117:148
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/15]⎯
+
+ FAIL  tests/acceptance/2365-redraft-ac4/rewritten.test.ts > AC4 #2365.1e24d52d a transcript whose first megabyte was rewritten after its last copy is copied again from its start, and its handles resolve through the new parts > AC4 (wrong program) an archive that appends the rewritten file's tail to the old parts fails, naming line 3, the first line that differs
+AssertionError: expected [Function] to throw error matching /line 3 \(session:487949004916448f8c14…/ but got 'session:487949004916448f8c1462fe18f2c…'
+
+- Expected:
+/line 3 \(session:487949004916448f8c1462fe18f2c4f7#m3\) differs/
+
++ Received:
+"session:487949004916448f8c1462fe18f2c4f7: after its first megabyte was rewritten, the archived transcript reads as the rewritten file, line for line: expected 'line 3 (session:487949004916448f8c146…' to be undefined"
+
+ ❯ tests/acceptance/2365-redraft-ac4/rewritten.test.ts:38:45
+     36|       expect(r.reading?.[TOTAL - 1]?.text, 'the twin appended the gain…
+     37|       expect(r.reading?.[LINES - 1]?.text, 'past the rewrite, the twin…
+     38|       expect(() => copiedAgainFromStart(r)).toThrow(new RegExp(`line 3…
+       |                                             ^
+     39|     } finally {
+     40|       await w.close();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/15]⎯
+
+ FAIL  tests/acceptance/2365-redraft-ac5/suite.test.ts > AC5 #2365.c0521de3 for every transcript in #20's suite, the parts joined equal the merge base's one copy, and an unchanged transcript's second pass reads none of it > AC5 #20 AC1 (copies.test.ts): Claude Code and Codex in moved homes, a new adapter in its default home
+ FAIL  tests/acceptance/2365-redraft-ac5/suite.test.ts > AC5 #2365.c0521de3 for every transcript in #20's suite, the parts joined equal the merge base's one copy, and an unchanged transcript's second pass reads none of it > AC5 #20 AC2 (copies.test.ts): two Claude Code sessions, one grown before its first pass, and a Codex rollout
+ FAIL  tests/acceptance/2365-redraft-ac5/suite.test.ts > AC5 #2365.c0521de3 for every transcript in #20's suite, the parts joined equal the merge base's one copy, and an unchanged transcript's second pass reads none of it > AC5 #20 AC3 (quiet.test.ts): a session captured hourly for three hours
+ FAIL  tests/acceptance/2365-redraft-ac5/suite.test.ts > AC5 #2365.c0521de3 for every transcript in #20's suite, the parts joined equal the merge base's one copy, and an unchanged transcript's second pass reads none of it > AC5 #20 AC3 (quiet.test.ts): a session captured every hour for 28 hours
+ FAIL  tests/acceptance/2365-redraft-ac5/suite.test.ts > AC5 #2365.c0521de3 for every transcript in #20's suite, the parts joined equal the merge base's one copy, and an unchanged transcript's second pass reads none of it > AC5 #20 AC4 (secrets.test.ts): a key pasted into a user message
+ FAIL  tests/acceptance/2365-redraft-ac5/suite.test.ts > AC5 #2365.c0521de3 for every transcript in #20's suite, the parts joined equal the merge base's one copy, and an unchanged transcript's second pass reads none of it > AC5 #20 AC4 (secrets.test.ts): a key pasted first, the session grown after two passes
+ FAIL  tests/acceptance/2365-redraft-ac5/suite.test.ts > AC5 #2365.c0521de3 for every transcript in #20's suite, the parts joined equal the merge base's one copy, and an unchanged transcript's second pass reads none of it > AC5 #20 AC5 (secrets.test.ts): a held value with no pattern pasted into a user message
+ FAIL  tests/acceptance/2365-redraft-ac5/suite.test.ts > AC5 #2365.c0521de3 for every transcript in #20's suite, the parts joined equal the merge base's one copy, and an unchanged transcript's second pass reads none of it > AC5 #20 AC8 (readback.test.ts): a plain session, a keyed one and a Codex rollout; and the session whose copy the store bent, here unbent
+ FAIL  tests/acceptance/2365-redraft-ac5/suite.test.ts > AC5 #2365.c0521de3 for every transcript in #20's suite, the parts joined equal the merge base's one copy, and an unchanged transcript's second pass reads none of it > AC5 #20 AC9 (retention.test.ts): a session with a deploy token, in Claude Code's default home
+ FAIL  tests/acceptance/2365-redraft-ac5/suite.test.ts > AC5 #2365.c0521de3 for every transcript in #20's suite, the parts joined equal the merge base's one copy, and an unchanged transcript's second pass reads none of it > AC5 #20 AC10 (growth.test.ts): a session archived at 10 lines and again at 50
+Error: BLOCKED: the merge base's archive (f989212187f28d65ab7e80c3a22545d5edaee37e) didn't run: exit 1
+node:internal/modules/esm/resolve:272
+    throw new ERR_MODULE_NOT_FOUND(
+          ^
+
+Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/private/tmp/dh20-base2365-LK7ZIp/packages/evidence/src/intake.js' imported from /private/tmp/dh20-base2365-LK7ZIp/packages/evidence/src/index.ts
+    at finalizeResolution (node:internal/modules/esm/resolve:272:11)
+    at moduleResolve (node:internal/modules/esm/resolve:879:10)
+    at defaultResolve (node:internal/modules/esm/resolve:1006:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:705:20)
+    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:725:38)
+    at ModuleLoader.resolveSync (node:internal/modules/esm/loader:763:56)
+    at #resolve (node:internal/modules/esm/loader:687:17)
+    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:607:35)
+    at ModuleJob.syncLink (node:internal/modules/esm/module_job:276:33)
+    at ModuleJob.link (node:internal/modules/esm/module_job:381:17) {
+  code: 'ERR_MODULE_NOT_FOUND',
+  url: 'file:///private/tmp/dh20-base2365-LK7ZIp/packages/evidence/src/intake.js'
+}
+
+Node.js v24.22.2
+
+ ❯ baseCopies tests/acceptance/2365-redraft-ac5/base.ts:58:54
+     56|   const r = spawnSync(NODE, ['--experimental-transform-types', '--cond…
+     57|   const manifest = join(work, 'out', 'manifest.json');
+     58|   if (r.status !== 0 || !existsSync(manifest)) throw Error(`BLOCKED: t…
+       |                                                      ^
+     59|   const m = JSON.parse(readFileSync(manifest, 'utf8')) as { error: str…
+     60|   const run = { sha, error: m.error, copies: m.copies.map((c) => ({ se…
+ ❯ runScenario tests/acceptance/2365-redraft-ac5/scenarios.ts:129:18
+ ❯ tests/acceptance/2365-redraft-ac5/suite.test.ts:18:19
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/15]⎯
+
+ FAIL  tests/acceptance/2365-redraft-ac5/suite.test.ts > AC5 #2365.c0521de3 planted wrong archives fail the criterion's check, naming the session > AC5 (wrong program) an archive that rereads each transcript on every pass reads all of an unchanged one: the check fails naming each session and the bytes it read
+Error: BLOCKED: the merge base's archive (f989212187f28d65ab7e80c3a22545d5edaee37e) didn't run: exit 1
+node:internal/modules/esm/resolve:272
+    throw new ERR_MODULE_NOT_FOUND(
+          ^
+
+Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/private/tmp/dh20-base2365-LK7ZIp/packages/evidence/src/intake.js' imported from /private/tmp/dh20-base2365-LK7ZIp/packages/evidence/src/index.ts
+    at finalizeResolution (node:internal/modules/esm/resolve:272:11)
+    at moduleResolve (node:internal/modules/esm/resolve:879:10)
+    at defaultResolve (node:internal/modules/esm/resolve:1006:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:705:20)
+    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:725:38)
+    at ModuleLoader.resolveSync (node:internal/modules/esm/loader:763:56)
+    at #resolve (node:internal/modules/esm/loader:687:17)
+    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:607:35)
+    at ModuleJob.syncLink (node:internal/modules/esm/module_job:276:33)
+    at ModuleJob.link (node:internal/modules/esm/module_job:381:17) {
+  code: 'ERR_MODULE_NOT_FOUND',
+  url: 'file:///private/tmp/dh20-base2365-LK7ZIp/packages/evidence/src/intake.js'
+}
+
+Node.js v24.22.2
+
+ ❯ baseCopies tests/acceptance/2365-redraft-ac5/base.ts:58:54
+     56|   const r = spawnSync(NODE, ['--experimental-transform-types', '--cond…
+     57|   const manifest = join(work, 'out', 'manifest.json');
+     58|   if (r.status !== 0 || !existsSync(manifest)) throw Error(`BLOCKED: t…
+       |                                                      ^
+     59|   const m = JSON.parse(readFileSync(manifest, 'utf8')) as { error: str…
+     60|   const run = { sha, error: m.error, copies: m.copies.map((c) => ({ se…
+ ❯ runScenario tests/acceptance/2365-redraft-ac5/scenarios.ts:129:18
+ ❯ tests/acceptance/2365-redraft-ac5/suite.test.ts:32:50
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/15]⎯
+
+ FAIL  tests/acceptance/2365-redraft-ac5/suite.test.ts > AC5 #2365.c0521de3 planted wrong archives fail the criterion's check, naming the session > AC5 (wrong program) an archive that leaves the newline out of each part: its parts joined differ from the merge base's copy, and the check fails naming the session and the first line that differs
+Error: BLOCKED: the merge base's archive (f989212187f28d65ab7e80c3a22545d5edaee37e) didn't run: exit 1
+node:internal/modules/esm/resolve:272
+    throw new ERR_MODULE_NOT_FOUND(
+          ^
+
+Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/private/tmp/dh20-base2365-LK7ZIp/packages/evidence/src/intake.js' imported from /private/tmp/dh20-base2365-LK7ZIp/packages/evidence/src/index.ts
+    at finalizeResolution (node:internal/modules/esm/resolve:272:11)
+    at moduleResolve (node:internal/modules/esm/resolve:879:10)
+    at defaultResolve (node:internal/modules/esm/resolve:1006:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:705:20)
+    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:725:38)
+    at ModuleLoader.resolveSync (node:internal/modules/esm/loader:763:56)
+    at #resolve (node:internal/modules/esm/loader:687:17)
+    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:607:35)
+    at ModuleJob.syncLink (node:internal/modules/esm/module_job:276:33)
+    at ModuleJob.link (node:internal/modules/esm/module_job:381:17) {
+  code: 'ERR_MODULE_NOT_FOUND',
+  url: 'file:///private/tmp/dh20-base2365-LK7ZIp/packages/evidence/src/intake.js'
+}
+
+Node.js v24.22.2
+
+ ❯ baseCopies tests/acceptance/2365-redraft-ac5/base.ts:58:54
+     56|   const r = spawnSync(NODE, ['--experimental-transform-types', '--cond…
+     57|   const manifest = join(work, 'out', 'manifest.json');
+     58|   if (r.status !== 0 || !existsSync(manifest)) throw Error(`BLOCKED: t…
+       |                                                      ^
+     59|   const m = JSON.parse(readFileSync(manifest, 'utf8')) as { error: str…
+     60|   const run = { sha, error: m.error, copies: m.copies.map((c) => ({ se…
+ ❯ runScenario tests/acceptance/2365-redraft-ac5/scenarios.ts:129:18
+ ❯ tests/acceptance/2365-redraft-ac5/suite.test.ts:44:50
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/15]⎯
+
+
+ Test Files  4 failed | 2 passed (6)
+      Tests  15 failed | 31 passed (46)
+   Start at  14:00:40
+   Duration  80.59s (tests 97%, transform 2%, import 1%)

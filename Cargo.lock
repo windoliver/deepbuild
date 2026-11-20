@@ -2189,6 +2189,7 @@ dependencies = [
  "block2 0.6.2",
  "chrono",
  "deep-app",
+ "deep-canvas",
  "deep-canvas-cells",
  "deep-canvas-effects",
  "deep-canvas-marks",
@@ -2719,6 +2720,7 @@ dependencies = [
  "deep-canvas-seams",
  "deep-canvas-sheet",
  "deep-canvas-vector",
+ "deep-codecs",
  "deep-gpu",
  "deep-images",
  "deep-logic",
@@ -2761,6 +2763,7 @@ dependencies = [
  "deep-canvas-cells",
  "deep-canvas-input",
  "deep-canvas-marks",
+ "deep-gpu",
  "deep-logic",
  "deep-marks-raster",
  "deep-text",
@@ -2892,6 +2895,7 @@ dependencies = [
 name = "deep-text-gpui"
 version = "0.0.0"
 dependencies = [
+ "deep-canvas",
  "deep-canvas-marks",
  "deep-text",
  "gpui-kit",

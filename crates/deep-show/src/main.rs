@@ -84,9 +84,11 @@ mod seams;
 mod serve;
 mod shaper;
 mod shared;
+mod sizes;
 mod snapshot;
 mod spatial;
 mod spawn;
+mod states;
 mod stepped;
 mod terminal;
 mod terrain;
@@ -372,7 +374,15 @@ fn query_call(c: &Map<String, Value>) -> Option<query::Query> {
         Some(Some("summary")) => query::What::Summary,
         Some(Some("why")) => query::What::Why,
         Some(Some("logic")) => query::What::Logic,
+        Some(Some("refs_to")) => query::What::RefsTo,
+        Some(Some("cost")) => query::What::Cost,
         _ => return None,
+    };
+    // #1801: what `refs_to` names: an asset by its SHA-256, a keyed copy's table row as
+    // `<table>[<key>]`, a pack entry as `name@major`, else an item by its ID.
+    let named = match c.get("target") {
+        None => None,
+        Some(t) => Some(deep_canvas::refs::Name::of_target(t.as_str()?)),
     };
     let items = match c.get("items") {
         None => None,
@@ -423,6 +433,8 @@ fn query_call(c: &Map<String, Value>) -> Option<query::Query> {
             None => 0,
             Some(t) => flicks(t.as_str()?)?,
         },
+        named,
+        by: optional(c.get("by"), |b| Some(b.as_str()?.to_string()))?,
     })
 }
 
@@ -478,6 +490,8 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
                 set: c.get("set").cloned().filter(Value::is_object),
             })
         }
+        "close" => return Some(Call::Close(doc()?)),
+        "session_table" => return Some(Call::SessionTable),
         "encode_qualify" => return Some(Call::EncodeQualify(c.get("tool")?.as_str()?.to_string())),
         "frame_hash" | "frame_planes" => {
             let frames = c.get("frames")?.as_array()?.iter().map(|f| {
@@ -729,6 +743,7 @@ fn call(c: &Map<String, Value>) -> Option<Call> {
         "migrate" => return Some(Call::Migrate(hash_named(c.get("to")?.as_str()?)?)),
         // #1901: the fingerprint kept output is keyed by, a kept draw, and the padded key input.
         "fingerprint" => return Some(Call::Fingerprint),
+        "footprint" => return Some(Call::Footprint),
         "draw" => {
             let output = c.get("output")?.as_str()?;
             return Some(Call::Draw {
@@ -1351,8 +1366,9 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 // #223's in the marks2d module's warp.
                 || deep_canvas_marks::warp::PLANTED.contains(p)
                 || deep_net::Planted::named(p).is_some()
-                // #225's in the data module's integrator.
+                // #225's in the data module's integrator; #2450's in its reading of axis titles.
                 || *p == deep_canvas_marks::vector_field::PLANTED_EULER
+                || *p == deep_canvas_marks::axes3d::TAKES_ANY_KIND
                 // #548's deep_query region map that lays the reads out by name.
                 || *p == logic::MAP_READS_BY_NAME
                 // #466's boil and blur in deep-show's frames.
@@ -1512,6 +1528,12 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 "why_names_operator_only" => Planted::WhyNamesOperatorOnly,
                 "why_names_key_only" => Planted::WhyNamesKeyOnly,
                 "cuts_by_row_order" => Planted::CutsByRowOrder,
+                "refusal_names_first_ref" => Planted::RefusalNamesFirstRef,
+                "no_op_commits" => Planted::NoOpCommits,
+                "create_overwrites" => Planted::CreateOverwrites,
+                "refs_parents_only" => Planted::RefsParentsOnly,
+                "refs_read_one_layer" => Planted::RefsReadOneLayer,
+                "cost_without_shared_assets" => Planted::CostWithoutSharedAssets,
                 "frame_index_i64_product" => Planted::FrameIndexI64Product,
                 "frame_index_truncating_division" => Planted::FrameIndexTruncatingDivision,
                 "panel_policy_open" => Planted::PanelPolicyOpen,
@@ -1926,10 +1948,12 @@ impl CanvasSide {
                     self.calls.pop();
                 }
                 let presented = match doc.as_deref() {
+                    // #1415: a patch that changed nothing made no revision to present.
                     Some(doc)
                         if reply.get("rev").is_some()
                             && reply["outcome"] != "refused"
-                            && reply["outcome"] != "applied" =>
+                            && reply["outcome"] != "applied"
+                            && reply["outcome"] != "no_change" =>
                     {
                         hub.presented_revision(doc)
                     }
@@ -2049,6 +2073,7 @@ const TEST_BUILD: bool = cfg!(any(
     feature = "test-scatter",
     feature = "test-tick",
     feature = "test-web-lacks",
+    feature = "test-paths",
     feature = "test-held",
     feature = "test-page-latch",
     feature = "test-frame-cache",
@@ -2072,6 +2097,7 @@ const TEST_BUILD: bool = cfg!(any(
     feature = "test-threads",
     feature = "test-json",
     feature = "test-debug-digest",
+    feature = "test-boom",
 ));
 
 /// The canvas modules a build of `set` holds (Registry and seal: `build_set`): `core` is text and
@@ -2323,6 +2349,10 @@ fn modules(set: BuildSet) -> Vec<Module> {
     out.push(deep_canvas_test_modules::tick());
     #[cfg(feature = "test-web-lacks")]
     out.push(deep_canvas_test_modules::native());
+    #[cfg(feature = "test-paths")]
+    out.push(deep_canvas_test_modules::paths(cfg!(
+        feature = "test-paths-no-final"
+    )));
     #[cfg(feature = "test-held")]
     out.push(deep_canvas_test_modules::held());
     #[cfg(feature = "test-page-latch")]
@@ -2353,6 +2383,8 @@ fn modules(set: BuildSet) -> Vec<Module> {
     out.push(deep_canvas_test_modules::label());
     #[cfg(feature = "test-export-guards")]
     out.push(deep_canvas_test_modules::guards());
+    #[cfg(feature = "test-boom")]
+    out.push(deep_canvas_test_modules::boom());
     // Issues #185 and #1920: test.sim@1's implementations and their variants, and test module c.
     #[cfg(feature = "test-sim")]
     out.extend(test_sim::modules());

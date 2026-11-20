@@ -1106,6 +1106,7 @@ pub fn operator_plants(p: Option<Planted>) -> (Options, check::CheckOptions) {
             no_divergence_rule: p == Some(Planted::NoDivergenceRule),
             wide_fetches: false,
             carried_exact: p == Some(Planted::CarriedClassExact),
+            skips_bound: p == Some(Planted::CheckSkipsBound),
         },
     )
 }
@@ -1124,6 +1125,9 @@ pub fn operator_hooks(p: Option<Planted>) -> deep_effects_render::docops::Hooks 
         dispatch_without_guard: p == Some(Planted::DispatchWithoutGuard),
         steps_per_frame: p == Some(Planted::StepsPerFrame),
         keeps_every_checkpoint: p == Some(Planted::RingKeepsEveryCheckpoint),
+        live_inputs: p == Some(Planted::StepReadsLivePointer),
+        alternate_checkpoints: p == Some(Planted::RingCheckpointsTexturesOnAlternateSteps),
+        restore_from_clear: p == Some(Planted::RestoreStartsFromClearValue),
     }
 }
 

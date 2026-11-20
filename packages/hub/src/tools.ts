@@ -3,7 +3,7 @@
 // ranges), and the hub's strict check of a call's arguments against it. Their descriptions come from tools.json,
 // which scripts/skill.mjs generates from the design's Building blocks table with the skill.
 import { readFileSync } from 'node:fs';
-import { refuse } from './wire.js';
+import { activePlant, refuse, Refused } from './wire.js';
 
 type Obj = Record<string, unknown>;
 type Schema = Obj;
@@ -97,7 +97,7 @@ const SCHEMAS: Readonly<Record<string, Schema>> = {
   }),
   deep_query: object({
     doc: str('The document, by its doc ID.', '^[0-9A-Za-z]{26}$'),
-    what: oneOf(['rows', 'summary', 'why'], 'rows for evaluated rows by stable ID with a coverage block; summary for counts by kind, writer layer and canvas module; why for the canvas module, operator and document paths behind the value at path. null for rows.'),
+    what: oneOf(['rows', 'summary', 'why', 'refs_to', 'cost'], 'rows for evaluated rows by stable ID with a coverage block; summary for counts by kind, writer layer and canvas module; why for the canvas module, operator and document paths behind the value at path; refs_to for the rows that name an item, a table row, a pack entry or an asset, each with the naming field\'s path and its kind of reference, before you remove or rename it; cost for the items, assets and passes ranked by the meter\'s CPU time, GPU time, GPU memory and decoded asset MB per frame, each with its share of the total. null for rows.'),
     rev: maybe({ type: 'integer', description: 'The revision read; null for the current one.' }),
     items: maybe({ type: 'array', items: str(), description: 'rows: only these items, by ID; null for every item.' }),
     paths: maybe({ type: 'array', items: str(), description: 'rows: values read at items/<id>/<field>, such as items/door/params/open or items/<id>/modifiers/<k>#out; null for none.' }),
@@ -106,7 +106,9 @@ const SCHEMAS: Readonly<Record<string, Schema>> = {
     cursor: maybe(str('Where an earlier answer cut left off, as its next gave it.')),
     expect: maybe(object({ none: object({ kind: str('The kind no row should be of.') }) })),
     path: maybe(str('why: the value, items/<id>/<field>.')),
-    t: maybe(str('why: the time, in the time grammar; null for 0s.')),
+    t: maybe(str('why and cost: the time, in the time grammar; null for 0s.')),
+    target: maybe(str('refs_to: what the rows name: an item by its ID, a keyed copy\'s table row as <table>[<key>], a pack entry as name@major, or an asset by its SHA-256.')),
+    by: oneOf(['cpu_ms', 'gpu_ms', 'gpu_mb', 'decoded_mb'], 'cost: the column the rows are ranked by, the costliest first. null for gpu_ms.'),
   }),
   deep_drive: object({
     call: { type: 'string', enum: ['launch', 'act', 'open', 'notification', 'wait_for', 'see', 'probe', 'screenshot', 'record', 'expect', 'close'] },
@@ -251,26 +253,40 @@ function descriptions(): Record<string, string> {
   return (described ??= JSON.parse(readFileSync(new URL('../tools.json', import.meta.url), 'utf8')) as Record<string, string>);
 }
 
+/** The schemas this hub publishes and holds calls to: #1415's planted hub marks deep_kinds's op optional though its handler needs one. */
+function published(): Readonly<Record<string, Schema>> {
+  if (activePlant() !== 'kinds-op-optional') return SCHEMAS;
+  const kinds = SCHEMAS.deep_kinds!;
+  const op = (kinds.properties as Record<string, Schema>).op!;
+  return { ...SCHEMAS, deep_kinds: { ...kinds, properties: { ...(kinds.properties as Obj), op: { ...op, type: ['string', 'null'], enum: [...(op.enum as string[]), null] } } } };
+}
+
 /**
  * The tools as deep mcp lists them. A tool tools.json doesn't describe isn't listed: only what the table generates
  * reaches an agent.
  */
 export function toolList(): { name: string; description: string; inputSchema: Schema }[] {
   const text = descriptions();
-  return Object.entries(SCHEMAS).filter(([name]) => text[name]).map(([name, inputSchema]) => ({ name, description: text[name]!, inputSchema }));
+  return Object.entries(published()).filter(([name]) => text[name]).map(([name, inputSchema]) => ({ name, description: text[name]!, inputSchema }));
 }
 
 /**
  * A call's arguments held to its tool's schema, as strictly as the hub holds any request: a field it doesn't list, a
- * missing required one or a wrong type is refused at its path. A nullable field left out reads as null.
+ * missing required one or a wrong type is refused at its path. A nullable field left out reads as null. A required
+ * field left out is `missing_field`, carrying the tool's input schema so the agent reads every field it takes (#1415).
  */
 export function checkArguments(tool: string, args: unknown): Obj {
-  const schema = SCHEMAS[tool] ?? ACTION_SCHEMAS[tool];
+  const schema = published()[tool] ?? ACTION_SCHEMAS[tool];
   if (!schema) {
     const near = nearest(tool, Object.keys(SCHEMAS));
     throw refuse('not_found', '/params/tool', near ? `Call ${near} in place of ${tool}.` : `Call one of the deep_* tools: ${Object.keys(SCHEMAS).join(', ')}.`, tool);
   }
-  return check(schema, args ?? {}, '/params/arguments') as Obj;
+  try {
+    return check(schema, args ?? {}, '/params/arguments') as Obj;
+  } catch (error) {
+    if (error instanceof Refused && error.refusal.code === 'missing_field') error.refusal.schema = schema;
+    throw error;
+  }
 }
 
 /** The edit distance between `a` and `b`, a swap of two neighbours counting as one edit, as the canvas's close names count it (#412). */
@@ -302,7 +318,9 @@ function check(schema: Schema, value: unknown, at: string): unknown {
   const types = Array.isArray(schema.type) ? (schema.type as string[]) : [schema.type as string];
   if (value === null || value === undefined) {
     if (types.includes('null')) return null;
-    throw refuse('required', at, `Give ${at.split('/').pop()}; it is required.`, value);
+    const field = at.split('/').pop();
+    if (value === undefined) throw refuse('missing_field', at, `Give ${field}: the call leaves it out, and the tool requires it. schema is the tool's input schema.`, '');
+    throw refuse('required', at, `Give ${field}; it is required.`, value);
   }
   const type = types.find((t) => t !== 'null')!;
   const wrong = () => refuse('type', at, `Give ${at.split('/').pop()} as ${type === 'array' ? 'a list' : type === 'object' ? 'an object' : `a ${type}`}.`, value);

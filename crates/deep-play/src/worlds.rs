@@ -184,14 +184,14 @@ pub fn inline(
         if let Some(i) = crate::derive::missing(id, &w, held) {
             return Err(Box::new(i));
         }
-        let kept = crate::derive::kept(&w, core, &(host.fired)(form), host.modules_first).map_err(
-            |r| {
+        let fired = (host.fired)(form);
+        let kept =
+            crate::derive::kept(form, &w, core, &fired, host.modules_first).map_err(|r| {
                 refused(
                     id,
                     json!([{"code": r.code, "path": r.path, "what": r.what}]),
                 )
-            },
-        )?;
+            })?;
         let step = step_flicks(&w);
         // #525: over its own span; its inputs the ones the core input track derives (#522).
         let steps = steps_of(form, doc, span, step);

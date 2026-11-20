@@ -6,6 +6,7 @@
 //! while leaving application lifecycle, windowing, and input to each platform backend.
 
 mod dispatcher;
+pub mod held; // DeepBuild patch (windoliver/deepbuild#1431)
 pub mod keychain;
 mod metal_atlas;
 pub mod metal_renderer;

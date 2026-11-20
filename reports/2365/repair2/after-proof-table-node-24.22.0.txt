@@ -1,0 +1,11 @@
+$ PATH=<home>/.local/share/fnm/node-versions/v24.22.0/installation/bin:$PATH node tests/acceptance/2365/probe/proof.mjs --archive repair-evidence/round2/alloc-nothing.mjs
+node: v24.22.0 (<home>/.local/share/fnm/node-versions/v24.22.0/installation/bin/node)
+started: 2026-11-18T01:37:13Z; load averages: 59.02 49.65 66.31
+-----
+pass | time | longest unserved stretch | peak resident memory | evidence added | outcome
+80 MB, first copy | 0.30 s | 13 ms | 72 MB (from 71 MB) | 0.00 MB | ok
+90 MB | 0.30 s | 24 ms | 71 MB (from 71 MB) | 0.00 MB | ok
+100 MB | 0.30 s | 9 ms | 71 MB (from 71 MB) | 0.00 MB | ok
+540 MB, never archived | 0.30 s | 11 ms | 71 MB (from 71 MB) | 0.00 MB | ok
+-----
+EXIT 0; ended: 2026-11-18T01:37:48Z; load averages: 78.16 55.56 67.80

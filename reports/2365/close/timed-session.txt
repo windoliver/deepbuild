@@ -1,0 +1,24 @@
+node scripts/throttle.mjs timed --wait 120 -- (the runs below), on e1d6fd4f9 against its merge base f08004899.
+The grant came after 57 minutes. Builds outside the throttle kept the load above the 18 cores, so every limit still reads INCONCLUSIVE.
+
+granted 20:25:46 at e1d6fd4f9: fair ac 17.5
+measuring from 20:36:06: fair ac 69.8
+heavy/ac1, node 24.22.0: exit=1 20:36:32 fair ac 49.1
+growth targets, node 24.22.2: exit=0 20:36:44 fair ac 42.9
+heavy/budgets: exit=0 20:37:10 fair ac 55.1
+judge exit=0 20:48:06 nominal ac 68.3
+heavy/ac1, node 24.22.2: exit=1 20:48:34 nominal ac 85.3
+heavy/ac2: exit=0 20:51:06 nominal ac 48.9
+released 20:51:06
+
+archive-growth's targets, Node 24.22.2 (limits 1000 ms, 50 ms, 64.0 MB, 2,000,000 bytes):
+archive-growth targets INCONCLUSIVE
+    ms INCONCLUSIVE [220.3, 302.3, 295.6, 285.0, 274.1]
+    maxGapMs INCONCLUSIVE [12.7, 11.4, 12.4, 10.7, 12.0]
+    rise INCONCLUSIVE [30.3, 30.4, 30.3, 29.7, 29.7]
+    added PASS [293019, 293019, 293019, 293019, 293019, 293019]
+
+The perf lane's judge, 20 alternated rounds a side, Node 24.22.2:
+archive-live                     instructions PASS         change -42.68% | outcome {'status': 'PASS'} regression None | p50 ms 914 vs 1470 
+archive-month                    instructions PASS         change -14.23% | outcome {'status': 'PASS'} regression None | p50 ms 913 vs 1016 
+archive-backlog                  instructions PASS         change -4.01% | outcome {'status': 'PASS'} regression None | p50 ms 7942 vs 10248

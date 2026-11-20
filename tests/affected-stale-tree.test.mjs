@@ -8,7 +8,8 @@ import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { evidence, finalState, fixture, prints, record, sandbox, selfBuilding, start, TEST, throttleLog, until, workspace } from './acceptance/2820/helpers.mjs';
-import { fill, stop } from './acceptance/2574/helpers.mjs';
+import { stop } from './acceptance/2574/helpers.mjs';
+import { fill } from './acceptance/2574-redraft-2833/helpers.mjs';
 
 const FILE = 'tests/fixture-2820/self-build.test.mjs';
 

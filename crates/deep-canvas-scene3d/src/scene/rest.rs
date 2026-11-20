@@ -344,6 +344,23 @@ fn facing(params: &Value, path: &str) -> Result<Facing, Refused> {
     }
 }
 
+/// A label's or an image's quad axes on screen, as `facing` turns it from its `own`.
+pub fn quad_axes(facing: Facing, own: [Vec3; 2], camera: &Camera) -> [Vec3; 2] {
+    match facing {
+        Facing::Camera => [camera.right, camera.up],
+        Facing::Upright => {
+            let r = [camera.right[0], 0.0, camera.right[2]];
+            let r = if dot(r, r) > 1e-12 {
+                normalize(r)
+            } else {
+                [1.0, 0.0, 0.0]
+            };
+            [r, [0.0, 1.0, 0.0]]
+        }
+        Facing::Fixed => own,
+    }
+}
+
 /// A `mark.image@1` at the world `m` (#1992; Marks in 3D): its picture by hash, on one quad of
 /// `size` centred on the item.
 pub(super) fn image(id: &str, params: &Value, path: &str, m: &Affine3) -> Result<Image, Refused> {
@@ -351,6 +368,19 @@ pub(super) fn image(id: &str, params: &Value, path: &str, m: &Affine3) -> Result
         Some(s) if s.len() == 64 && s.bytes().all(|b| b.is_ascii_hexdigit()) => s,
         _ => return refused("out_of_range", format!("{path}/asset")),
     };
+    quad(id, asset, params, path, m)
+}
+
+/// One quad of `size` centred on the world `m`, placed and turned as a label is, for the picture
+/// `asset` names: an image mark's by hash, or a module's mark's by the key its picture takes
+/// once the camera is known (#2450).
+pub(crate) fn quad(
+    id: &str,
+    asset: &str,
+    params: &Value,
+    path: &str,
+    m: &Affine3,
+) -> Result<Image, Refused> {
     let size = match params
         .get("size")
         .and_then(Value::as_array)
@@ -723,18 +753,33 @@ pub fn mesh_of(
     let built = if crate::building::KINDS.contains(&kind) {
         crate::building::build(doc, id, item)
     } else {
+        // #1929: a host that keeps a memo between its frames keeps each deform's bind there.
+        let memo = outlines.memo;
         let run = crate::stack::Run {
             outlines: outlines.outlines.to_vec(),
             fills: outlines.module.to_vec(),
             planted: outlines.planted.map(str::to_string),
+            kept: memo
+                .and_then(|m| m.borrow().binds.get(id).cloned())
+                .unwrap_or_default(),
             ..Default::default()
         };
-        crate::build::built(doc, id, item, &run, t).map(|b| b.mesh.unwrap_or_default())
+        crate::build::built(doc, id, item, &run, t).map(|b| {
+            if let Some(m) = memo.filter(|_| b.rows.iter().any(|r| r.bind.is_some())) {
+                let binds = b.rows.iter().map(|r| r.bind.clone()).collect();
+                m.borrow_mut().binds.insert(id.to_string(), binds);
+            }
+            b.mesh.unwrap_or_default()
+        })
     };
     built.map_err(|path| match path.split_once(crate::builders::CODED) {
         Some((code, at)) => Refused {
             code: crate::build::code_of(code),
-            path: at.to_string(),
+            // What a refusal found follows its path under the item (#1928).
+            path: match at.split_once(crate::builders::CODED) {
+                Some((at, _)) => format!("items/{id}/{at}"),
+                None => at.to_string(),
+            },
         },
         None => Refused {
             code: "out_of_range",

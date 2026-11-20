@@ -1,0 +1,14 @@
+{
+  "criterion": "#1634.186fabe5",
+  "by": "you",
+  "screenshots": [
+    "58a893fe351c31befc83500f1e09540a968ab098f77099d3df92d9f946d8e47c",
+    "d902886a14521f9d715388ec63434a977650ba75c615b146e953b5fd8f4f084a"
+  ],
+  "recordings": [
+    "11ab0d63ceab3ecf8827522e36055b2b505c916840d346d970ca1839bb3fbe13",
+    "6aa99a117545aa967a2ccaa74ac298256a228ca8bc36c94d36b4ec8a24eac187"
+  ],
+  "call": "looks_right",
+  "note": "Delegated. Asked in the session whether these four files look right, the owner answered \"validte for me\" and did not look. The agent looked in their place: both stills at full size, eight frames across each orbit and two runs of three consecutive frames. Each lamp gives one soft pool on the road with no tile or slice edge in it; the 512-lamp street is lit to its vanishing point and the 32-light street stops short of it; from frame to frame of either orbit the picture changes smoothly (the mean change a frame moves by at most 0.45 of 255 between neighbouring frames, the same in both streets). The owner can strike this call by recording their own."
+}

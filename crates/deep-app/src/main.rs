@@ -76,6 +76,9 @@ mod chrome;
 #[cfg(target_os = "macos")]
 #[path = "probes/color_check.rs"]
 mod color_check;
+#[cfg(all(feature = "contact-sheet", target_os = "macos"))]
+#[path = "probes/contact_sheet.rs"]
+mod contact_sheet;
 #[cfg(all(feature = "hdr-fixture", target_os = "macos"))]
 #[path = "probes/hdr.rs"]
 mod hdr;
@@ -117,6 +120,12 @@ fn main() {
         hdr::run(std::env::args().nth(2));
         return;
     }
+    // Issue #1592: `--contact-sheet [<png>]`, in a contact-sheet build.
+    #[cfg(all(feature = "contact-sheet", target_os = "macos"))]
+    if std::env::args().nth(1).as_deref() == Some("--contact-sheet") {
+        contact_sheet::run(std::env::args().nth(2));
+        return;
+    }
     // Issue #1485: `--canvas <scenario.json>`, in a canvas-fixture build.
     #[cfg(all(feature = "canvas-fixture", target_os = "macos"))]
     if std::env::args().nth(1).as_deref() == Some("--canvas") {
@@ -135,6 +144,10 @@ fn main() {
     }
     let started = Instant::now();
     let (panel_dir, view, mode) = args();
+    // #2403: the language the app draws in, read once at launch: `language` in config.json (the box sets it), else the
+    // first of the system's preferred languages the app has. The Window menu is handed to macOS by the title it draws.
+    deep_app::copy::read_at_launch();
+    let _ = deep_app::actions::MENUS_SET.set(menu_bar::windows_menu);
     if mode == Mode::NotificationCenter {
         notification_center::print();
         return;
@@ -367,7 +380,7 @@ fn main() {
         // SAFETY: gpui registered its window class when it opened the window above, and this executable is never
         // unloaded, so the method added to the class stays valid.
         unsafe {
-            accesskit_macos::add_focus_forwarder_to_window_class("GPUIWindow")
+            accesskit_macos::add_focus_forwarder_to_window_class("GPUIWindow") // copy-exception: a window class's name
         };
         cx.activate(true);
     });
@@ -445,6 +458,13 @@ fn args() -> (Option<PathBuf>, Option<String>, Mode) {
                     Mode::ColorCheck { planted } => *planted = Some(twin),
                     _ => panic!("--planted follows --color-check"),
                 }
+            }
+            // #2403: macOS's own defaults for one launch, such as `-AppleLanguages "(zh-Hans, en)"`, which the system
+            // reads and the app's language follows; each takes the value after it.
+            defaults
+                if defaults.starts_with('-') && defaults[1..].starts_with(char::is_alphabetic) =>
+            {
+                args.next();
             }
             other => panic!("unknown argument {other}"),
         }
@@ -569,8 +589,19 @@ mod notifications {
                             .accessibilityDisplayShouldReduceMotion(),
                     )
                 });
+                // #1431: the app's own reading, once each minute, off the UI thread: walking the heap takes milliseconds.
+                let background = cx.background_executor();
+                background
+                    .spawn(async { deep_app::footprint::each_minute() })
+                    .detach();
                 // A later launch brings the app forward; `deep open` and a link open their address (#1460).
                 for call in held.as_ref().map(Held::calls).unwrap_or_default() {
+                    // #1431: `deep doctor` asks for the app's reading; that brings nothing forward.
+                    if call.address.as_deref() == Some(deep_app::footprint::ASK) {
+                        let answer = async move { call.reply(&deep_app::footprint::answer()) };
+                        background.spawn(answer).detach();
+                        continue;
+                    }
                     eprintln!("deep-app: brought forward");
                     cx.update(|cx| {
                         cx.activate(true);
@@ -662,7 +693,7 @@ mod notifications {
     /// What `deep open` prints: the address it opened, or what became of it.
     fn reply(said: Result<String, String>) -> String {
         match said {
-            Ok(address) => format!("opened {address}"),
+            Ok(address) => format!("opened {address}"), // copy-exception: what `deep open` prints, never drawn
             Err(words) => words,
         }
     }
@@ -809,8 +840,25 @@ mod menu_bar {
     }
 
     /// A question sounds like a question: gpui's post carries no sound, so the app plays it.
+    /// Hands macOS the Window menu by the title it draws (#2403): gpui hands it over only when the title is "Window",
+    /// so in another language the OS would list no windows there.
+    pub fn windows_menu(title: &str) {
+        let Some(mtm) = MainThreadMarker::new() else {
+            return;
+        };
+        let app = NSApplication::sharedApplication(mtm);
+        let menu = app
+            .mainMenu()
+            .and_then(|main| main.itemWithTitle(&NSString::from_str(title)))
+            .and_then(|item| item.submenu());
+        if let Some(menu) = menu {
+            app.setWindowsMenu(Some(&menu));
+        }
+    }
+
     pub fn play_question() {
         if let Some(sound) = NSSound::soundNamed(&NSString::from_str("Ping")) {
+            // copy-exception: a system sound's name
             sound.play();
         }
     }
@@ -825,4 +873,5 @@ mod menu_bar {
         false
     }
     pub fn play_question() {}
+    pub fn windows_menu(_: &str) {}
 }

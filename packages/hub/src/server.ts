@@ -30,6 +30,7 @@ import { Waits, type HookSeen, type OpenCall, type Restored } from './waits.js';
 import { People } from './people.js';
 import { identityAt, idOf, type Identity } from './identity.js';
 import { plantedStart } from './plant.js';
+import { toolList } from './tools.js';
 import { gatesOff } from './watch.js';
 import { AUTHORITY, CONTRACT, EXTENSION_HOLD_MS, FEATURES, line, plantOf, refuse, refusal, Refused, STAGE_HOLD_MS, ulid, VERSION, type CoreOptions, type Draft, type ExtensionReply, type Gated, type HookMeta, type Parsed, type Plant, type Refusal, type Scope, type Scoped, SCREEN_TOOLS, type StageReach, type VfsSettings } from './wire.js';
 import { isRecord as isObj } from '@deepbuild/contracts/json';
@@ -79,8 +80,8 @@ const ALLOWED = new Map<string, readonly Role[]>([
   // A one-time invite to a project, and a person's credentials revoked (#1338).
   ['person.invite', ['cli']], ['person.revoke', ['cli']],
   // `deep lease` (#1015): a heavy command's place in the queue, its process group once it starts, and its first process's exit.
-  ['lease.wait', ['cli']], ['lease.started', ['cli']], ['lease.exited', ['cli']], ['extension.install', ['cli']], ['guard.add', ['cli']], ['record.backup', ['cli']], ['test.verdict', ['cli']],
-  ['mcp.call', ['mcp']], ['mcp.cancel', ['mcp']], ['evidence.paste', ['app']], ['eval.report', ['cli']],
+  ['lease.wait', ['cli']], ['lease.started', ['cli']], ['lease.exited', ['cli']], ['extension.install', ['cli']], ['extension.restart', ['cli']], ['guard.add', ['cli']], ['record.backup', ['cli']], ['test.verdict', ['cli']],
+  ['mcp.call', ['mcp']], ['mcp.cancel', ['mcp']], ['mcp.tools', ['mcp']], ['evidence.paste', ['app']], ['eval.report', ['cli']],
   // Setup reads your history into the wiki (#356), and records the steps it took (#1100).
   ['wiki.build', ['cli']], ['setup.report', ['cli']],
   // Every agent's memory: the ranked list, and your keep or remove of a lesson (#111).
@@ -349,6 +350,8 @@ class Hub {
   private lost = false;
   /** The hook kinds some extension handles: only such a hook is held for the extensions' reply. */
   private hooks = new Set<string>();
+  /** Whether the core has started: until then a deep mcp's hello is answered at once and bound once it has (#1415). */
+  private coreUp = false;
   /** The sessions with an ask still to deliver, as the core last said: only their stops are held (#18, #19). */
   private asking = new Set<string>();
   /** The sessions whose cut-off turn started a send with no recorded end (#85), as the core tells it: their shell and MCP calls are checked at the gate first. */
@@ -388,7 +391,7 @@ class Hub {
   private identity!: Identity;
   /** The network listener (#1338), open only while a project here has a member. */
   private network: tls.Server | undefined;
-  constructor(private readonly root: Root, private readonly token: string, private readonly lock: Lock, private readonly plant: Plant | undefined, private readonly vfs: VfsSettings | undefined) {
+  constructor(private readonly root: Root, private readonly token: string, private readonly lock: Lock, private readonly plant: Plant | undefined, private readonly vfs: VfsSettings | undefined, private readonly safe: boolean) {
     this.people = new People(root.dir);
     this.waits = new Waits({ rewrites: (agent) => this.rewrites(agent), ...(plant ? { plant } : {}) });
   }
@@ -397,7 +400,7 @@ class Hub {
     this.now = () => clock.start + (Date.now() - clock.real);
     const held = [this.token, ...testHeld()];
     this.off = gatesOff(this.root.dir);
-    const options: CoreOptions = { root: this.root.dir, clock, held, ...(this.plant ? { plant: this.plant } : {}), ...(this.vfs ? { vfs: this.vfs } : {}),
+    const options: CoreOptions = { root: this.root.dir, clock, held, ...(this.plant ? { plant: this.plant } : {}), ...(this.vfs ? { vfs: this.vfs } : {}), ...(this.safe ? { safe: true } : {}),
       ...(process.env.DEEP_HUB_TEST_HOST ? { host: process.env.DEEP_HUB_TEST_HOST } : {}),
       ...(Number(process.env.DEEP_HUB_TEST_LEASE_MS) > 0 ? { leaseMs: Number(process.env.DEEP_HUB_TEST_LEASE_MS) } : {}),
       ...(process.env.DEEP_HUB_TEST_CRASH === 'start-recorded' || process.env.DEEP_HUB_TEST_CRASH === 'spawned' ? { crash: process.env.DEEP_HUB_TEST_CRASH } : {}),
@@ -405,13 +408,15 @@ class Hub {
       ...(process.env.DEEP_HUB_TEST_POLKIT ? { polkit: process.env.DEEP_HUB_TEST_POLKIT } : {}),
       ...(process.env.DEEP_HUB_TEST_INDEX ? { index: process.env.DEEP_HUB_TEST_INDEX } : {}),
       ...(process.env.DEEP_HUB_TEST_FORGE ? { forge: process.env.DEEP_HUB_TEST_FORGE } : {}),
+      ...(process.env.DEEP_HUB_TEST_REGISTRY ? { registry: process.env.DEEP_HUB_TEST_REGISTRY } : {}),
       ...(process.env.DEEP_HUB_TEST_SORTER ? { sorter: process.env.DEEP_HUB_TEST_SORTER } : {}),
       ...(process.env.DEEP_HUB_TEST_DRAFTS ? { drafts: process.env.DEEP_HUB_TEST_DRAFTS } : {}),
       ...(process.env.DEEP_HUB_TEST_ACCEPTED ? { accepted: process.env.DEEP_HUB_TEST_ACCEPTED } : {}),
       ...(process.env.DEEP_HUB_TEST_WORK ? { work: process.env.DEEP_HUB_TEST_WORK } : {}),
       ...(process.env.DEEP_HUB_TEST_PRICES ? { prices: process.env.DEEP_HUB_TEST_PRICES } : {}),
       ...(process.env.DEEP_HUB_TEST_GITHUB ? { github: process.env.DEEP_HUB_TEST_GITHUB } : {}),
-      ...(process.env.DEEP_HUB_TEST_FAIL_JOB ? { failJob: process.env.DEEP_HUB_TEST_FAIL_JOB } : {}) };
+      ...(process.env.DEEP_HUB_TEST_FAIL_JOB ? { failJob: process.env.DEEP_HUB_TEST_FAIL_JOB } : {}),
+      ...(process.env.DEEP_HUB_TEST_RELEASE ? { release: process.env.DEEP_HUB_TEST_RELEASE } : {}) };
     const frame = (sub: string, event: string, caught?: boolean) => {
       const s = this.subs.get(sub);
       if (!s || s.conn.done) return;
@@ -458,6 +463,7 @@ class Hub {
     await this.syncNetwork();
     // Hooks are acknowledged from the moment the socket exists; the hub reports ready once its core has started.
     this.hooks = new Set((await this.core.started).hooks);
+    this.coreUp = true;
     // Once lost, the lock stays lost: every gate turns watch-only, BLOCKED, and deep-hook spools what this hub won't take.
     const checking = setInterval(() => {
       // An entry installed since the last hook is in the copy a later rewrite of rules.json is made from (#2204).
@@ -1030,7 +1036,7 @@ class Hub {
   private async extensionReply(conn: Conn, meta: HookMeta, data: unknown, hold: number, ruled: string, allowed?: { allow: string; past: boolean }): Promise<void> {
     let timer: NodeJS.Timeout | undefined;
     const late = new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), Math.max(0, hold - Date.now() - HOLD_MARGIN)); });
-    const asked = this.core.request({ op: 'extension-hook', data }).catch(() => null) as Promise<ExtensionReply | null>;
+    const asked = this.core.request({ op: 'extension-hook', data, meta: { id: meta.id, session: meta.session, agent: meta.agent } }).catch(() => null) as Promise<ExtensionReply | null>;
     const reply = await Promise.race([asked, late]).finally(() => clearTimeout(timer));
     await this.lateReply(hold);
     // Past the agent's cap, the core keeps what doesn't fit and names where to continue (#1296).
@@ -1239,12 +1245,14 @@ class Hub {
       const proved = isObj(parent) && Number.isSafeInteger(parent.pid) && typeof parent.start === 'string' ? { pid: parent.pid as number, start: parent.start } : undefined;
       // One paseo's plugin added binds by its token (#55); any other by the socket's peer process, as the OS reports it (#2070).
       const paseo = typeof value.paseo === 'string' && value.paseo ? value.paseo : undefined;
-      const hello = (await this.core.request({ op: 'mcp-hello', fd: (conn.sock as unknown as { _handle?: { fd?: number } })._handle?.fd, parent: proved, ...(paseo ? { paseo } : {}) }).catch(() => undefined)) as { session: string | null; parent?: { pid: number; start: string } } | undefined;
+      const asked = this.core.request({ op: 'mcp-hello', fd: (conn.sock as unknown as { _handle?: { fd?: number } })._handle?.fd, parent: proved, ...(paseo ? { paseo } : {}) }).catch(() => undefined) as Promise<{ session: string | null; parent?: { pid: number; start: string } } | undefined>;
+      const bind = (hello: Awaited<typeof asked>) => { conn.session = hello?.session ?? null; conn.parent = hello?.parent; conn.name = conn.session ? `mcp:${conn.session}` : 'mcp'; };
       conn.role = 'mcp';
-      conn.session = hello?.session ?? null;
-      conn.parent = hello?.parent;
       if (typeof value.cwd === 'string') conn.cwd = value.cwd;
-      conn.name = conn.session ? `mcp:${conn.session}` : 'mcp';
+      // While the core starts, the hello is answered at once, bound to no session until the start is done, so a listing
+      // asked then reaches the hub and hears what it has loaded (#1415).
+      bind(this.coreUp ? await asked : undefined);
+      if (!this.coreUp) void asked.then(bind);
       return conn.write({ role: conn.name });
     }
     conn.write({ id: null, error: refusal('enum', '/hello', 'Say hello as app, cli or mcp.', value.hello) });
@@ -1276,6 +1284,8 @@ class Hub {
     );
     const params = isObj(value.params) ? value.params : {};
     switch (method) {
+      // The tools as this hub publishes them and holds calls to: deep mcp lists these while it reaches the hub (#1415).
+      case 'mcp.tools': return conn.write({ id, result: { tools: toolList() } });
       case 'hub.stop':
         conn.write({ id, result: { stopping: true } });
         return void this.stop('requested', conn.sock);
@@ -1426,10 +1436,10 @@ function writeToken(root: Root): string {
   return token;
 }
 
-/** `deep hub run [--root <folder>]`: the hub itself, in this process. Resolves only if it couldn't start. */
 /**
- * Runs the hub. In safe mode (`safe`) it loads no extension; the hub loads none yet in either mode, and the
- * floor (the fail_closed entries and the `.deepbuild/` guard) is deep-hook's, so it holds the same in both.
+ * `deep hub run [--root <folder>] [--safe]`: the hub itself, in this process. Resolves only if it couldn't start.
+ * In safe mode (`--safe`) the extension host loads no extension: each installed one is refused with the safe-mode
+ * reason. The floor (the fail_closed entries and the `.deepbuild/` guard) is deep-hook's, so it holds the same in both.
  */
 export async function runHub(options: { root?: string; safe?: boolean }): Promise<number> {
   dropTestSettings(options.root ?? installedRoot());
@@ -1471,7 +1481,7 @@ export async function runHub(options: { root?: string; safe?: boolean }): Promis
   process.on('SIGHUP', () => undefined);
   process.stdout.on('error', () => undefined);
   process.stderr.on('error', () => undefined);
-  const hub = new Hub(root, writeToken(root), lock, plant, vfs);
+  const hub = new Hub(root, writeToken(root), lock, plant, vfs, options.safe === true);
   for (const signal of ['SIGTERM', 'SIGINT'] as const) process.on(signal, () => void hub.stop(`signal:${signal}`));
   await hub.open(clock);
   process.stdout.write(`${JSON.stringify({ v: 1, ready: true, pid: process.pid, socket: root.socket, start: hub.start, ...(options.safe ? { safe: true } : {}) })}\n`);

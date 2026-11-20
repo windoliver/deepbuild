@@ -33,6 +33,9 @@ pub(super) struct Args {
     pub(super) occlusion_off: bool,
     /// `(after, to)`: right after frame `after` draws, the session jumps to frame `to` (#484).
     pub(super) seeks: Vec<(u64, u64)>,
+    /// `lose_device_at`: the device is forced lost as this frame draws (#1993), as `frames`
+    /// takes it.
+    pub(super) lose_at: Option<u64>,
     pub(super) window: Option<Window3>,
     pub(super) latency: Vec<u64>,
     pub(super) counts: bool,
@@ -95,6 +98,8 @@ pub(super) struct Args {
     /// its band masks (#425).
     pub(super) lod: bool,
     pub(super) light_cut: bool,
+    /// #1634: each captured frame reports every cluster's fill lights as its pixels walk them.
+    pub(super) clusters: bool,
     /// #506: each frame reports where its anchored overlays draw; #468: and where each one's
     /// leader ends.
     pub(super) overlays: bool,
@@ -444,6 +449,7 @@ pub(super) fn parse(call: &Value, planted: Option<Planted>) -> Result<Args, Valu
             Some("off") => true,
             Some(_) => return Err(refused("bad_input", "occlusion is \"off\" when it's given")),
         },
+        lose_at: call["lose_device_at"].as_u64(),
         seeks: call["seeks"]
             .as_array()
             .into_iter()
@@ -518,6 +524,7 @@ pub(super) fn parse(call: &Value, planted: Option<Planted>) -> Result<Args, Valu
         shadows: call["shadows"].as_bool().unwrap_or(false),
         lod: call["lod"].as_bool().unwrap_or(false),
         light_cut: call["light_cut"].as_bool().unwrap_or(false),
+        clusters: call["clusters"].as_bool().unwrap_or(false),
         overlays: call["overlays"].as_bool().unwrap_or(false),
         masks: call["masks"].as_bool().unwrap_or(false),
         export,

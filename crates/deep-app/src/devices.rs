@@ -272,18 +272,18 @@ fn writer(k: &Kept, sample: &CMSampleBuffer, pts: f64) -> Result<(Object, Object
             (
                 "com.apple.quicktime-movie",
                 settings(&[
-                    ("AVVideoCodecKey", Ok("avc1")),
-                    ("AVVideoWidthKey", Err(w as i32)),
-                    ("AVVideoHeightKey", Err(h as i32)),
+                    ("AVVideoCodecKey", Ok("avc1")),     // copy-exception: a platform key
+                    ("AVVideoWidthKey", Err(w as i32)),  // copy-exception: a platform key
+                    ("AVVideoHeightKey", Err(h as i32)), // copy-exception: a platform key
                 ]),
             )
         }
         Kind::Microphone => (
             "com.apple.m4a-audio",
             settings(&[
-                ("AVFormatIDKey", Err(i32::from_be_bytes(*b"aac "))),
-                ("AVSampleRateKey", Err(48_000)),
-                ("AVNumberOfChannelsKey", Err(1)),
+                ("AVFormatIDKey", Err(i32::from_be_bytes(*b"aac "))), // copy-exception: a platform key
+                ("AVSampleRateKey", Err(48_000)), // copy-exception: a platform key
+                ("AVNumberOfChannelsKey", Err(1)), // copy-exception: a platform key
             ]),
         ),
     };

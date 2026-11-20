@@ -6,11 +6,13 @@
 //! discrete solution); and the rules of grounded and sliding: a capsule held 0.04 m above a floor
 //! reads grounded and one 0.07 m above doesn't, and one walking up a 30° ramp under a 45° limit
 //! reads sliding false where one standing on a 50° slope reads it true. Each walks a capsule of
-//! radius 0.3 m and half height 0.6 m, offset 0.01 m, along +x.
+//! radius 0.3 m and half height 0.6 m, offset 0.01 m, along +x. #2243: two that meet, walking
+//! head-on and one walking into one that stands, rest with their axes 0.61 m apart and never end
+//! a step under 0.609 m apart, the one that stands where it was built.
 
 use serde_json::{json, Map, Value};
 
-use super::fixtures::{fixture, material, world, G, HZ};
+use super::fixtures::{fixture, floor, material, world, G, HZ};
 use super::{Fixture, Measure, Tolerance};
 use deep_canvas::ops;
 
@@ -43,6 +45,31 @@ pub struct Walk {
     pub meets: &'static str,
     pub rule: Rule,
 }
+
+/// #2243: two character bodies built [`APART`] m apart along x that meet: `walker` walks at
+/// [`SPEED`] m/s into `other`, which walks into it too or, where it `stands`, wants no move.
+/// Neither ever ends a step with their axes under [`LEAST`] m apart. One that stands is never
+/// more than [`STILL`] m from where it was built. Two that walk rest from 1 s on, neither more
+/// than [`RESTS`] m from where it stood then, and each one's controller first touches the other,
+/// writing `contact_begin`, within [`WITHIN_STEPS`] steps of [`MEETS`] s.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Meet {
+    pub walker: &'static str,
+    pub other: &'static str,
+    pub stands: bool,
+}
+
+/// m: how far apart two capsules' axes rest when one stops at the other, their radii and one
+/// offset.
+const REST: f64 = 2.0 * R + OFFSET;
+const APART: f64 = 4.0;
+const SPEED: f64 = 2.0;
+pub(super) const LEAST: f64 = 0.609;
+pub(super) const STILL: f64 = 1.0e-6;
+pub(super) const RESTS: f64 = 0.001;
+/// s: when two walkers closing on each other are [`REST`] m apart, (4 − 0.61) ÷ 4.
+pub(super) const MEETS: f64 = (APART - REST) / (2.0 * SPEED);
+pub(super) const WITHIN_STEPS: f64 = 4.0;
 
 /// The highest a jump of `h` m rises at `hz` under `g`, as the steps take it: the jump's step
 /// moves it by √(2gh) × the step's length, and each later step first lowers its vertical speed
@@ -338,12 +365,39 @@ fn sliding() -> [Fixture; 2] {
     [up, steep]
 }
 
-/// Every character fixture: the four of the character body's controller, then the rules of
-/// grounded and sliding.
+/// #2243: `guard` and `hero` on a floor, their axes 4 m apart along x, for 3 s: `guard` walks at
+/// 2 m/s into `hero`, which walks into it too or, where it `stands`, wants no move. They rest
+/// with their axes 0.61 m apart, within 1 mm.
+fn meeting(name: &str, stands: bool) -> Fixture {
+    let body = |x: f64| walker(x, 0.0, OFFSET, 0, json!({"offset": OFFSET}));
+    let w = world(json!({"contact_materials": {"m": material(0.5, 0.0)},
+                         "shapes": {"capsule": {"kind": "capsule", "half_height": HALF, "radius": R},
+                                    "floor": {"kind": "box", "half": [60, 0.1, 60]}},
+                         "bodies": {"floor": floor("m"), "guard": body(-APART / 2.0), "hero": body(APART / 2.0)},
+                         "inputs": {"walk": {"kind": "move", "targets": ["guard", "hero"]}}}));
+    let walk = |id: &str, v: f64| json!({"step": 0, "kind": "move", "target": id, "data": {"velocity": [v, 0, 0]}});
+    let meet = Meet {
+        walker: "guard",
+        other: "hero",
+        stands,
+    };
+    let mut f = fixture(name, w, 360, Measure::Meet(meet), REST, Tolerance::M(0.001));
+    f.track = json!([walk("guard", SPEED)]);
+    if !stands {
+        f.track = json!([walk("guard", SPEED), walk("hero", -SPEED)]);
+    }
+    f.caps = vec!["character_controller"];
+    f
+}
+
+/// Every character fixture: the four of the character body's controller, the rules of grounded
+/// and sliding, then #2243's two character bodies that meet.
 pub fn all() -> Vec<Fixture> {
     let mut out = vec![slope(), steps(), snap(), jump()];
     out.push(grounded("character/grounded_0.04", 0.04, true));
     out.push(grounded("character/grounded_0.07", 0.07, false));
     out.extend(sliding());
+    out.push(meeting("character/head_on", false));
+    out.push(meeting("character/into_standing", true));
     out
 }
