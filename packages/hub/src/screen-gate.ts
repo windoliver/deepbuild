@@ -20,7 +20,7 @@ export function offScreen(leases: LeaseView[], session: string, current: string 
   if (action.startsWith(CHROME)) return why('acts in your own Chrome, which no lease covers');
   if (/(^|_)switch_display$/.test(action)) {
     const display = String(input.display ?? '');
-    // The screen counts as the session's once the switch has run (`switched`), never on the asking alone.
+    // The screen counts as the session's once the switch has run (`leasesScreen`, at its PostToolUse), never on the asking alone.
     return screens.includes(display) ? undefined : why(`switches to ${display || 'a screen it doesn\'t name'}`);
   }
   if (current === undefined || !screens.includes(current)) return why('acts on the screen the session is on, which it hasn\'t switched to a leased one');
