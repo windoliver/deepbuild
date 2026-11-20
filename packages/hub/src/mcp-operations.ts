@@ -332,22 +332,15 @@ export class McpOperations {
     const claims: Obj[] = [];
     for (const row of made) {
       const claim = JSON.parse(row.data) as { task_ref: string; commit: string; predictions?: Prediction[] };
-      const runs = (await this.options.services.record.raw(`SELECT kind, ts, data FROM events WHERE kind IN ('run.started', 'run.finished') AND subject IN
-        (SELECT subject FROM events WHERE kind = 'run.started' AND json_extract(data, '$.claim') = 'claim:${row.id}') ORDER BY log_pos`)) as { kind: string; ts: number; data: string }[];
-      const byRun = new Map<string, { run: string; check: string; started?: number; ended?: number; outcome?: RunOutcome }>();
-      for (const r of runs) {
-        const d = JSON.parse(r.data) as { run: string; check?: string; outcome?: RunOutcome };
-        const one = byRun.get(d.run) ?? { run: d.run, check: String(d.check) };
-        if (r.kind === 'run.started') Object.assign(one, { check: String(d.check), started: r.ts });
-        else Object.assign(one, { ended: r.ts, outcome: d.outcome });
-        byRun.set(d.run, one);
-      }
-      const finished = [...byRun.values()].flatMap((r) => (r.outcome !== undefined && r.ended !== undefined ? [{ ...r, outcome: r.outcome, ended: r.ended }] : []));
+      // The claim's runs, from the runs table by claim, in the order the record met them: no run event is read (#1868).
+      const runs = ((await this.options.services.record.raw(`SELECT id, check_id, started, ended, outcome FROM runs WHERE claim_id = ? ORDER BY rowid`, [row.id])) as { id: string; check_id: string | null; started: number | null; ended: number | null; outcome: RunOutcome | null }[])
+        .map((r) => ({ run: `run:${r.id}`, check: String(r.check_id), ...(r.started !== null ? { started: r.started } : {}), ...(r.ended !== null && r.outcome !== null ? { ended: r.ended, outcome: r.outcome } : {}) }));
+      const finished = runs.flatMap((r) => (r.outcome !== undefined && r.ended !== undefined ? [{ ...r, outcome: r.outcome, ended: r.ended }] : []));
       const checks = [...new Set(finished.map((r) => r.check))].map((check) => ({ check, runs: finished.filter((r) => r.check === check) }));
       const [verdict] = (await this.options.services.record.raw(`SELECT handle, outcome, smallest, points_to FROM verdicts WHERE claim_id = ? AND stale = 0 ORDER BY created DESC LIMIT 1`, [row.id])) as Obj[];
       claims.push({
         claim: `claim:${row.id}`, task_ref: claim.task_ref, commit: claim.commit,
-        runs: [...byRun.values()].map((r) => ({ run: r.run, check: r.check, outcome: r.outcome ?? 'running' })),
+        runs: runs.map((r) => ({ run: r.run, check: r.check, outcome: r.outcome ?? 'running' })),
         verdict: verdict ?? null,
         contradictions: predictionContradictions(claim.predictions ?? [], checks),
       });
@@ -646,9 +639,11 @@ export class McpOperations {
     // An agent paseo runs with no hooks of its own shows no work but this claim: its turn's end is judged on it (#55).
     if (live && unseenTools(this.options.state().sessions.get(session)?.agent)) live.judged = true;
     // An answer to an ended session of another thread waits on its task: the next session that works the task reads it.
+    // The task's sessions come from the claims table by task, and each one's end from its own start and end events:
+    // no other task's claim and no other session's end is read (#1868).
     const task = sql(String(args.task_ref));
-    const answers = await this.options.schedule.queue(async () => this.options.delivery().deliver(await this.options.delivery().answers.waitingFor(session, `a.session_id IN (SELECT session_id FROM events WHERE kind = 'claim.made' AND json_extract(data, '$.task_ref') = '${task}')
-      AND a.session_id IN (SELECT session_id FROM events WHERE kind = 'session.end')`), 'next_prompt'));
+    const answers = await this.options.schedule.queue(async () => this.options.delivery().deliver(await this.options.delivery().answers.waitingFor(session, `a.session_id IN (SELECT session_id FROM claims WHERE subject_ref = '${task}')
+      AND EXISTS (SELECT 1 FROM events e INDEXED BY events_session_bounds WHERE e.session_id = a.session_id AND e.kind IN ('session.start', 'session.end') AND e.kind = 'session.end')`), 'next_prompt'));
     return { session, claim: `claim:${id}`, event: id, ...(answers ? { answers } : {}) };
   }
 
