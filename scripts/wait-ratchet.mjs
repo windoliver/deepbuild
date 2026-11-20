@@ -157,7 +157,7 @@ function findings(path, text) {
   const add = (index, column, why) => found.push({ line: index + 1, column: column + 1, why });
 
   // Names a timer is imported or promisified as, and names bound to a clock difference.
-  const aliases = !/import\s*(?:[\w$]+\s*,\s*)?\{[^}]*\bsetTimeout\s+as|promisify/.test(joined) ? [] : [...joined.matchAll(/\bimport\s*(?:[\w$]+\s*,\s*)?\{[^}]*?\bsetTimeout\s+as\s+([\w$]+)|([\w$]+)\s*=\s*(?:\w+\s*\.\s*)?promisify\s*\(\s*setTimeout\s*\)/g)].map((m) => m[1] ?? m[2]);
+  const aliases = !/\bimport\b\s*(?:[\w$]+\s*,\s*)?\{[^}]*\bsetTimeout\s+as|promisify/.test(joined) ? [] : [...joined.matchAll(/\bimport\b\s*(?:[\w$]+\s*,\s*)?\{[^}]*?\bsetTimeout\s+as\s+([\w$]+)|([\w$]+)\s*=\s*(?:\w+\s*\.\s*)?promisify\s*\(\s*setTimeout\s*\)/g)].map((m) => m[1] ?? m[2]);
   // Most files read no clock and wait on nothing: skip their scans.
   const timed = /now|elapsed|hrtime|duration_since/.test(joined);
   const waits = aliases.length || /sleep|park_timeout|Atomics|set(?:Timeout|Interval)/.test(joined);
