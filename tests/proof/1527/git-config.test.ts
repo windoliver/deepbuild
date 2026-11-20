@@ -39,7 +39,8 @@ test('a run\'s own git config never runs in the hub', async () => {
   expect(run!.cause, `${runLine(run!)}: naming it`).toMatch(/\.git\b/);
 }, 30 * MIN);
 
-test('a run that leaves a git folder of its own lands nothing', async () => {
+// `.GIT` too: a Mac's disk reads it as `.git`, and so does git.
+test.each(['sub/.git', 'sub/.GIT'])('a run that leaves a git folder of its own, %s, lands nothing', async (repo) => {
   const marker = join(mkdtempSync(join(tmpdir(), 'deep-1527-')), 'ran');
   const j = await Job.open();
   const csv = j.w.file('sales.csv', fixture('report-1.csv'));
@@ -54,10 +55,10 @@ test('a run that leaves a git folder of its own lands nothing', async () => {
         'input.csv': fixture('report-1.csv'),
         'report.md': '# Monthly report\n\nTotal: 250\n',
         [DATA_CHECK]: fixture('data.sh'),
-        'sub/.git/HEAD': 'ref: refs/heads/main\n',
-        'sub/.git/config': `[core]\n\trepositoryformatversion = 0\n\tbare = false\n\tfsmonitor = touch ${marker}; false\n`,
-        'sub/.git/objects/.keep': '',
-        'sub/.git/refs/heads/.keep': '',
+        [`${repo}/HEAD`]: 'ref: refs/heads/main\n',
+        [`${repo}/config`]: `[core]\n\trepositoryformatversion = 0\n\tbare = false\n\tfsmonitor = touch ${marker}; false\n`,
+        [`${repo}/objects/.keep`]: '',
+        [`${repo}/refs/heads/.keep`]: '',
       },
     }],
   });
@@ -69,7 +70,7 @@ test('a run that leaves a git folder of its own lands nothing', async () => {
   const run = await j.firstRun(String(card!.drafted.data.key), pos);
   expect(run?.ended, 'its first run ends').toBeDefined();
   expect(run!.verdict, `${runLine(run!)}: a run that leaves a git folder of its own FAILs`).toBe('FAIL');
-  expect(run!.cause, `${runLine(run!)}: naming it`).toContain('sub/.git');
+  expect(run!.cause, `${runLine(run!)}: naming it`).toContain(repo);
   expect(existsSync(join(workspace!.folder, 'report.md')), `${runLine(run!)}: nothing of it lands in the workspace`).toBe(false);
   expect(existsSync(marker), `${runLine(run!)}: the command in its git config ran in the hub`).toBe(false);
 }, 30 * MIN);

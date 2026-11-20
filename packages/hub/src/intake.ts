@@ -223,7 +223,7 @@ export class Intake implements IntakeService {
    */
   private async dryRun(key: string, words: string, heading: string, brief: Brief): Promise<Cost | string> {
     const dry = join(this.jobDir(key), 'dry');
-    rmSync(dry, { recursive: true, force: true });
+    scrap(dry);
     mkdirSync(dry, { recursive: true });
     const runner = this.o.runner();
     const job = await runner.submit({ kind: 'work', agent: RESEARCHER, workspace: realpathSync(dry), prompt: dryPrompt(words, brief), deadline_ms: JOB_MS });
@@ -528,7 +528,7 @@ export class Intake implements IntakeService {
     const dir = this.jobDir(key);
     mkdirSync(dir, { recursive: true });
     for (const name of ['work', 'git']) scrap(join(dir, name));
-    await git(dir, ['clone', '-q', '--no-hardlinks', '--separate-git-dir', join(dir, 'git'), folder, 'work']);
+    await git(dir, ['clone', '-q', '--no-hardlinks', '--separate-git-dir', join(dir, 'git'), folder, 'work'], BARE);
     rmSync(join(dir, 'work', '.git'));
     return realpathSync(join(dir, 'work'));
   }
@@ -539,13 +539,17 @@ export class Intake implements IntakeService {
   private async landed(work: string, folder: string, how: string): Promise<{ verdict: string; cause: string }> {
     const checked = await this.checks(work);
     // A `.git` a run left, at any depth, is a repo whose config the hub's git would read: nothing of such a run lands.
-    const nested = readdirSync(work, { recursive: true }).map(String).find((p) => basename(p) === '.git');
+    // Spelled in any case, since a Mac's disk reads `.GIT` as `.git`.
+    const nested = readdirSync(work, { recursive: true }).map(String).find((p) => basename(p).toLowerCase() === '.git');
     const verdict = nested !== undefined ? { verdict: 'FAIL', cause: `it left a git folder of its own, ${nested}, which nothing of a run may leave.` } : checked;
     if (verdict.verdict !== 'FAIL') {
       const repo = join(dirname(work), 'git');
       const own = ['--git-dir', repo, '--work-tree', work];
       if (await git(work, [...own, 'status', '--porcelain', '--ignore-submodules=all'], BARE)) {
         await git(work, [...own, 'add', '-A'], BARE);
+        // However it was spelled, a repo of the run's own is never committed: git staged it as a link to it.
+        const link = (await git(work, [...own, 'ls-files', '-s'], BARE)).split('\n').find((l) => l.startsWith('160000 '));
+        if (link) return { verdict: 'FAIL', cause: `${how[0]!.toUpperCase()}${how.slice(1)}; it left a git repo of its own, ${link.split('\t')[1]}, which nothing of a run may leave.` };
         await git(work, [...own, 'commit', '-q', '-m', `A run of this job: ${how}. ${verdict.verdict}`], BARE);
       }
       await git(folder, ['pull', '-q', '--ff-only', repo, 'HEAD'], BARE);
