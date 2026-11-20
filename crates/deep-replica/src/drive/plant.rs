@@ -67,6 +67,8 @@ pub enum Plant {
     /// A 1,000,000 B buffer outside the heap that no gauge counts, made at each whole minute since launch (#1431
     /// criterion 3).
     LeaksUngaugedBuffer,
+    /// The picture arm's image element asks for a frame at every vsync while it animates (#1489 criterion 3).
+    PictureFrameEachVsync,
 }
 
 impl Plant {
@@ -98,6 +100,7 @@ impl Plant {
             "footprint-read-fails" => Some(Plant::FootprintReadFails),
             "footprint-reads-zero" => Some(Plant::FootprintReadsZero),
             "leaks-ungauged-buffer" => Some(Plant::LeaksUngaugedBuffer),
+            "picture-frame-each-vsync" => Some(Plant::PictureFrameEachVsync),
             _ => None,
         }
     }
