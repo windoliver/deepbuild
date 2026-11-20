@@ -343,7 +343,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     process.exit(3);
   }
   if (window) log({ event: 'window-open', id: grant.id, pid: process.pid });
-  const child = spawn(command[0], command.slice(1), { stdio: 'inherit', env: { ...process.env, DEEP_THROTTLE: grant.token } });
+  // A window's record names its grant, as the log's window-open and window-close lines do (#2674).
+  const child = spawn(command[0], command.slice(1), { stdio: 'inherit', env: { ...process.env, DEEP_THROTTLE: grant.token, ...window && { DEEP_WINDOW: grant.id } } });
   // A terminal's SIGINT reaches the whole group, the command too, so it isn't sent again; a SIGTERM or SIGHUP sent to
   // this process alone is passed on.
   process.on('SIGINT', () => {});
