@@ -1,0 +1,67 @@
+The redraft of criterion 11 (#194.60b4ab87) run once at the base 6f225f46d ("design(#194): name the catalog probe's, the
+catalog plug-in's and logic.tuning's surface as built"; no implementation of #194), on macOS (Mac17,10, load average
+about 100 on 18 cores), with deep-show's debug build already in the target folder. Paths redacted as <repo>.
+
+It fails in part 1, before any timing, with four gaps in one list: deep-catalog doesn't build (no bin target), the
+catalog plug-in isn't at packages/checks/catalog, benchmarks/budgets.json has no task catalog-budgets, and
+scripts/lanes.mjs doesn't time this file. The lane's validator accepted the base's budgets.json. With nothing packed, the
+pack, the two checks and the piece didn't run; the gate and the timings weren't reached. No budget leg ran on the base.
+(The only edit to the test after this run names the pack's output files by a counter instead of a random suffix.)
+
+Checked before this run, at the base, by a scratch copy of the per-frame leg (deleted, not committed): with the
+workshop's items table packed by hand to the base's table.layout@1 doc (75,076 bytes), the piece naming it as a catalog
+asset and its twin naming the same bytes as a plain data asset were each presented in a deep-show process of their own;
+qm read 6256 at every step in both; both ran 13 operators at frame 0 and 3 at every frame after, remapped strip's 4 rows
+a frame, wrote no JSON values, spent 86 fuel a step and left the sandbox's counts unchanged over their 40 frames. The leg
+found no gap; its one finding was that the base's deep-show refuses the planted catalog_validated_per_frame
+({"ok":false,"code":"bad_input"}). An earlier scratch probe showed why the two documents run in separate processes and why
+`allocs` isn't compared (README: Readings).
+
+$ PATH=$HOME/.local/share/fnm/node-versions/v24.22.0/installation/bin:/opt/homebrew/opt/rustup/bin:$PATH \
+    CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 NO_COLOR=1 node node_modules/vitest/vitest.mjs run \
+    --root tests/acceptance/194-redraft-ac11 ac11-budgets.test.ts --testTimeout=10800000 --no-file-parallelism --reporter=verbose
+
+ RUN  v5.0.5 <repo>/tests/acceptance/194-redraft-ac11
+
+ × ac11-budgets.test.ts > AC11 #194.60b4ab87 the budgets: packing, catalog.reach and catalog.economy, and no work per frame > AC11 #194.60b4ab87 what each budget times, no work per frame for a piece that names a catalog, the record; on a reference Mac at rest, packing 10,000 rows of 20 columns under 1 s and catalog.reach and catalog.economy over 5,000 recipes each under 200 ms 1294ms
+   → #194.60b4ab87: what the budgets time, no work per frame, and the record:
+  deep-catalog doesn't build, so nothing is packed: `cargo build --locked --bin deep-catalog` failed: error: no bin target named `deep-catalog` in default-run packages help: available bin targets:     deep-app     deep-canvas     deep-canvas-render     deep-contracts     deep-drive     deep-gpu     deep-graph     deep-hook     deep-input     deep-layout     deep-live     deep-logic     deep-motion     deep-panel-host     deep-panel-host-jit-control     deep-physics     deep-plain-words     deep-relay     deep-relay-suite     deep-replica     deep-replica-canvas     deep-salience     deep-sandbox     deep-sheet     deep-show     deep-text     deep-text-render
+  the catalog plug-in deepbuild/catalog isn't at packages/checks/catalog (no deepbuild.json), so catalog.reach and catalog.economy can't run
+  benchmarks/budgets.json has no task catalog-budgets for the perf lane and the budget window to compare with the merge base
+  scripts/lanes.mjs doesn't run tests/acceptance/194-redraft-ac11/ac11-budgets.test.ts as a timed file: expected [ …(4) ] to deeply equal []
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ac11-budgets.test.ts > AC11 #194.60b4ab87 the budgets: packing, catalog.reach and catalog.economy, and no work per frame > AC11 #194.60b4ab87 what each budget times, no work per frame for a piece that names a catalog, the record; on a reference Mac at rest, packing 10,000 rows of 20 columns under 1 s and catalog.reach and catalog.economy over 5,000 recipes each under 200 ms
+AssertionError: #194.60b4ab87: what the budgets time, no work per frame, and the record:
+  deep-catalog doesn't build, so nothing is packed: `cargo build --locked --bin deep-catalog` failed: error: no bin target named `deep-catalog` in default-run packages help: available bin targets:     deep-app     deep-canvas     deep-canvas-render     deep-contracts     deep-drive     deep-gpu     deep-graph     deep-hook     deep-input     deep-layout     deep-live     deep-logic     deep-motion     deep-panel-host     deep-panel-host-jit-control     deep-physics     deep-plain-words     deep-relay     deep-relay-suite     deep-replica     deep-replica-canvas     deep-salience     deep-sandbox     deep-sheet     deep-show     deep-text     deep-text-render
+  the catalog plug-in deepbuild/catalog isn't at packages/checks/catalog (no deepbuild.json), so catalog.reach and catalog.economy can't run
+  benchmarks/budgets.json has no task catalog-budgets for the perf lane and the budget window to compare with the merge base
+  scripts/lanes.mjs doesn't run tests/acceptance/194-redraft-ac11/ac11-budgets.test.ts as a timed file: expected [ …(4) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deep-catalog doesn't build, so nothing is packed: `cargo build --locked --bin deep-catalog` failed: error: no bin target named `deep-catalog` in default-run packages help: available bin targets:     deep-app     deep-canvas     deep-canvas-render     deep-contracts     deep-drive     deep-gpu     deep-graph     deep-hook     deep-input     deep-layout     deep-live     deep-logic     deep-motion     deep-panel-host     deep-panel-host-jit-control     deep-physics     deep-plain-words     deep-relay     deep-relay-suite     deep-replica     deep-replica-canvas     deep-salience     deep-sandbox     deep-sheet     deep-show     deep-text     deep-text-render",
++   "the catalog plug-in deepbuild/catalog isn't at packages/checks/catalog (no deepbuild.json), so catalog.reach and catalog.economy can't run",
++   "benchmarks/budgets.json has no task catalog-budgets for the perf lane and the budget window to compare with the merge base",
++   "scripts/lanes.mjs doesn't run tests/acceptance/194-redraft-ac11/ac11-budgets.test.ts as a timed file",
++ ]
+
+ ❯ none ../538/helpers.ts:89:73
+     87| /** No failures; the message lists them. */
+     88| export function none(failures: readonly string[], what: string): void {
+     89|   expect(failures, `${what}:\n  ${failures.slice(0, 30).join('\n  ')}`…
+       |                                                                         ^
+     90| }
+     91| /** A planted program's run: this suite's own judgement must fail it, …
+ ❯ ac11-budgets.test.ts:543:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  01:48:57
+   Duration  1.59s (tests 90%, transform 8%, import 2%)

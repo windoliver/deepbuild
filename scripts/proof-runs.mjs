@@ -170,6 +170,36 @@ function prepare(root, change, directory) {
 const workspaces = (directory) => existsSync(join(directory, 'package.json')) && Boolean(JSON.parse(readFileSync(join(directory, 'package.json'), 'utf8')).workspaces);
 
 /**
+ * The workspace packages a mutant of `paths` reaches through a build (#1120): the packages holding them and every
+ * package that depends on one of those, directly or through others, read from the reverse workspace graph of the
+ * packages/* folders in `directory`. A dependent comes after what it depends on, as its build reads their output.
+ */
+function mutantScope(directory, paths) {
+  const folders = readdirSync(join(directory, 'packages')).filter((folder) => existsSync(join(directory, 'packages', folder, 'package.json')));
+  const manifests = new Map(folders.map((folder) => [folder, JSON.parse(readFileSync(join(directory, 'packages', folder, 'package.json'), 'utf8'))]));
+  const folderOf = new Map([...manifests].map(([folder, { name }]) => [name, folder]));
+  const needs = new Map([...manifests].map(([folder, manifest]) => [folder, new Set(['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies'].flatMap((field) => Object.keys(manifest[field] ?? {})).map((name) => folderOf.get(name)).filter((other) => other && other !== folder))]));
+  const scope = new Set(paths.map((path) => path.split('/')[1]).filter((folder) => manifests.has(folder)));
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const [folder, wants] of needs) {
+      if (scope.has(folder) || ![...wants].some((other) => scope.has(other))) continue;
+      scope.add(folder);
+      grew = true;
+    }
+  }
+  const ordered = [], seen = new Set();
+  const visit = (folder) => {
+    if (seen.has(folder)) return; // also ends a cycle in the graph
+    seen.add(folder);
+    for (const other of needs.get(folder)) if (scope.has(other)) visit(other);
+    ordered.push(folder);
+  };
+  for (const folder of [...scope].sort()) visit(folder);
+  return ordered;
+}
+
+/**
  * The change in a prepared copy: its directory, where its packages are installed, and why it can't
  * run there, or null. Its packages are what its own lock installs, as the merge base's are, not the
  * worktree's, which an install from inputs the lock doesn't hold may have re-pointed.
@@ -806,6 +836,7 @@ export function mutation({ root, change }, runs, say, print) {
       say('BLOCKED', 'mutation', `${outside.map(({ path }) => path).join(', ')}: links out of the checkout or to nothing, so the lines added there were not mutated`, MUTATION_FIX);
       return kills;
     }
+    const scope = workspaces(directory) ? mutantScope(directory, typescript.map(({ path }) => path)) : [];
     // A test alone: each runner matches a pattern against its full name, its suites' names and its
     // own joined by a space for node --test and by " > " for vitest.
     // A test alone kills a mutant only by failing at an assertion, judged from its runner's report: a
@@ -819,9 +850,11 @@ export function mutation({ root, change }, runs, say, print) {
         vitest.length && [...test ? ['DEEP_PROOF_VITEST_REPORT="$R"'] : [], quote(process.execPath), 'node_modules/vitest/vitest.mjs', 'run', ...test ? [`--reporter=${quote(VITEST_REPORTER)}`, '-t', pattern(' > ')] : [], ...vitest.map(quote)].join(' ') + (test ? judge : ''),
       ].filter(Boolean).map((run) => (test ? `R=$(mktemp ${quote(reports)}/report.XXXXXX) && { ${run}; }` : run));
       // Mutants reach a package that tests read through its build only once it is rebuilt, and the
-      // rebuild is undone as the first build was, keeping the mutants.
+      // rebuild is undone as the first build was, keeping the mutants. Only the mutated packages and
+      // their dependents are rebuilt: a package's build reads only what it declares it depends on (#1120).
       const undo = `import { undoBuild } from ${JSON.stringify(import.meta.url)}; undoBuild(${JSON.stringify(root)}, process.cwd(), ${JSON.stringify(typescript.map(({ path }) => path))}, ${JSON.stringify(runs.modules ?? root)});`;
-      return [...workspaces(directory) ? ['npm run build --workspaces --if-present >/dev/null', `${quote(process.execPath)} --input-type=module -e ${quote(undo)}`] : [], ...runs].join(' && ');
+      const builds = scope.map((folder) => `npm run build --if-present --workspace=${quote(`packages/${folder}`)} >/dev/null`);
+      return [...workspaces(directory) ? [...builds, `${quote(process.execPath)} --input-type=module -e ${quote(undo)}`] : [], ...runs].join(' && ');
     };
     const reports = temporary('deep-proof-report-');
     const groups = unproven.map((test) => [test, [test.path]]);

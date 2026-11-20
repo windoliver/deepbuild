@@ -1,0 +1,130 @@
+[
+ {
+  "name": "slope",
+  "twin": "controller_without_hold",
+  "steps": [
+   0,
+   1440
+  ],
+  "this_change": {
+   "first": [
+    0,
+    0.7048,
+    -0.2565
+   ],
+   "last": [
+    0,
+    0.6464,
+    -0.246
+   ]
+  },
+  "planted": {
+   "first": [
+    0,
+    0.7048,
+    -0.2565
+   ],
+   "last": [
+    0,
+    0.498,
+    -0.6578
+   ]
+  }
+ },
+ {
+  "name": "sleeping-drive",
+  "twin": "controller_runs_asleep",
+  "steps": [
+   440,
+   720
+  ],
+  "this_change": {
+   "first": [
+    0,
+    0.6889,
+    0
+   ],
+   "last": [
+    0,
+    0.6879,
+    4.0042
+   ]
+  },
+  "planted": {
+   "first": [
+    0,
+    0.6899,
+    0
+   ],
+   "last": [
+    0,
+    0.6893,
+    3.3185
+   ]
+  }
+ },
+ {
+  "name": "hop",
+  "twin": "controller_runs_asleep",
+  "steps": [
+   470,
+   520
+  ],
+  "this_change": {
+   "first": [
+    0,
+    0.6889,
+    0
+   ],
+   "last": [
+    0,
+    0.6876,
+    0.1118
+   ]
+  },
+  "planted": {
+   "first": [
+    0,
+    0.6899,
+    0
+   ],
+   "last": [
+    0,
+    0.6655,
+    0.0268
+   ]
+  }
+ },
+ {
+  "name": "platform",
+  "twin": "leaves_asleep_on_moving_ground",
+  "steps": [
+   560,
+   960
+  ],
+  "this_change": {
+   "first": [
+    0,
+    0.8889,
+    0
+   ],
+   "last": [
+    0,
+    0.8879,
+    4.9935
+   ]
+  },
+  "planted": {
+   "first": [
+    0,
+    0.8889,
+    0
+   ],
+   "last": [
+    0,
+    0.8889,
+    0
+   ]
+  }
+ }
+]

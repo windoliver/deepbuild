@@ -1,0 +1,26 @@
+{
+  "format": 1,
+  "profile": "figure",
+  "title": "Net: a two-player rally",
+  "description": "A net@1 piece at its smallest: two players, a paddle each and a ball, over the relay it declares. The logic item rally keeps its whole state in its write region, and its rules check every entry's player on every copy, writing each step's first refusal to refused as its player and rule. Its program's source is net-rally.wat.",
+  "size": [400, 240],
+  "seed": 7,
+  "camera": "cam",
+  "transport": {"span": "60s", "frame_rate": [60, 1]},
+  "requires": {"modules": {"input": "^1", "logic": "^1", "net": "^1"}},
+  "controls": {
+    "paddle1": {"kind": "slider", "class": "document", "label": "Player 1's paddle", "role": "slider", "range": [-10, 10], "default": 0, "increment": 1},
+    "paddle2": {"kind": "slider", "class": "document", "label": "Player 2's paddle", "role": "slider", "range": [-10, 10], "default": 0, "increment": 1},
+    "serve": {"kind": "slider", "class": "document", "label": "Serve", "role": "slider", "range": [0, 1], "default": 0, "increment": 1}
+  },
+  "items": {
+    "cam": {"id": "cam", "kind": "camera@1", "name": "Camera", "order": "a0", "params": {"projection": "orthographic", "target": [200, 120, 0], "view_width": 400}},
+    "match": {"id": "match", "kind": "net@1", "name": "Match", "order": "a1", "params": {"relay": "https://relay.example", "players": 2, "step_rate": 60, "delay": 2, "window": 0, "hash_every": 60, "timeout": 5}},
+    "rally": {"id": "rally", "kind": "logic@1", "name": "Rally", "order": "a2", "params": {
+      "program": "911b1ff06aeb759f4e1817655ec3b3d4fc86d46f1a867ac6abda8d30358cc4bd",
+      "reads": ["paddle1", "paddle2", "serve"],
+      "writes": {"ball_x": {"type": "f64"}, "ball_y": {"type": "f64"}, "ball_vx": {"type": "f64"}, "ball_vy": {"type": "f64"}, "pad1": {"type": "f64"}, "pad2": {"type": "f64"}, "serving": {"type": "i32"}, "points1": {"type": "i32"}, "points2": {"type": "i32"}, "refused": {"type": "i32", "count": 2}}
+    }}
+  },
+  "assets": {"rally_program": {"sha256": "911b1ff06aeb759f4e1817655ec3b3d4fc86d46f1a867ac6abda8d30358cc4bd", "license": {"id": "CC0-1.0", "terms": "Public domain dedication.", "shareable": true, "credit": "The deep_kinds gallery's net example."}}}
+}
