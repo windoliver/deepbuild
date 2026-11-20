@@ -22,7 +22,7 @@
 // the selection without running it. A test that starts a package's build is selected when the change is in that
 // package or the test is in the changed file's own package; otherwise it is WIDE, and --wide also runs it (select, below). --record, run on main, writes what failed into known-failures.json.
 import { spawn, spawnSync } from 'node:child_process';
-import { closeSync, existsSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync, writeSync } from 'node:fs';
+import { closeSync, existsSync, mkdtempSync, openSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync, writeSync } from 'node:fs';
 import { availableParallelism, constants, loadavg, tmpdir } from 'node:os';
 import { dirname, join, posix, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -347,6 +347,18 @@ const LIGHT = /^lint scripts\/(?:repo-rules|conformance-lint|slots-check|canvas-
 // no job: each reads as run by none.
 const live = new Set();
 let stopped = null;
+// What a stopped run's tests leave in the shared temporary folder, their clean-up skipped (#2857): 605's repo copies
+// and 305's deep-show copies, about 1 GB each. A run removes those a day old before it starts any job: no test of
+// either runs that long, and what other tests keep there on purpose, such as 1455's base trees, stays.
+const LEFTOVER = /^deep-(?:605|305)-/;
+function sweepLeftovers() {
+  for (const name of readdirSync(tmpdir()).filter((entry) => LEFTOVER.test(entry))) {
+    const path = join(tmpdir(), name);
+    try {
+      if (Date.now() - statSync(path).mtimeMs > 86_400_000) rmSync(path, { recursive: true, force: true });
+    } catch {}
+  }
+}
 function run(logs, label, command, args, env = {}, cwd = root) {
   if (stopped) return Promise.resolve({ label, log: null, status: null, output: `stopped by ${stopped}` });
   const log = join(logs, `${label.replace(/\W+/g, '-')}.log`);
@@ -484,6 +496,7 @@ async function main(args) {
     for (const child of live) child.kill(signal === 'SIGINT' ? 'SIGTERM' : signal);
   });
 
+  sweepLeftovers();
   const logs = mkdtempSync(join(tmpdir(), 'deep-affected-'));
   const binaries = new Map(), binRoot = join(logs, 'binaries');
   watchBinaries(binRoot);
