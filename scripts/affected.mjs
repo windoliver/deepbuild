@@ -379,7 +379,8 @@ const SHARDS = Math.min(Number(process.env.DEEP_SHARDS) || Math.max(1, Math.floo
  * they have ended. `close` ends it, before the timed blocks, which compile as before. A cargo killed while it holds
  * tokens never writes them back (#2848), so as each job ends the run fills the pipe to its count again, as the hub's
  * pool does, but only while no process but the run has the pipe open: a live build may hold tokens, and none is added
- * beside them.
+ * beside them. `close` comes after every untimed job has ended, so the pipe should hold its count then; what it lacks
+ * was lost while builds ran, so a build may have had less than its share, and it returns how many.
  */
 function jobserver(shards) {
   const dir = mkdtempSync(join(tmpdir(), 'deep-jobserver-')), fifo = join(dir, 'tokens');
@@ -397,30 +398,38 @@ function jobserver(shards) {
     const pids = seen.status === null ? [] : seen.stdout.split(/\s+/).flatMap((word) => word.match(/^(\d+)\D*$/)?.[1] ?? []);
     return pids.includes(String(process.pid)) && pids.every((pid) => pid === String(process.pid));
   };
-  // No build has started yet, so a run that isn't alone here never can be, and the tokens a killed build held stay lost.
-  if (!alone()) console.log(`JOBSERVER fuser can't see the run's pipe, so tokens a killed build held are not given back (#2848)`);
+  // No build has started yet, so a run that isn't alone here never can be: it never refills, and lost tokens stay lost.
+  const sees = alone();
+  if (!sees) console.log(`JOBSERVER fuser can't see the run's pipe, so tokens a killed build held are not given back (#2848)`);
   const before = process.env.CARGO_MAKEFLAGS;
   process.env.CARGO_MAKEFLAGS = `-j --jobserver-auth=fifo:${fifo}`;
   let open = true;
+  // The free tokens, read out of the pipe.
+  const take = () => {
+    const buffer = Buffer.alloc(4096);
+    let free = 0;
+    for (;;) {
+      try { const read = readSync(fd, buffer, 0, buffer.length, null); if (read <= 0) break; free += read; } catch { break; }
+    }
+    return free;
+  };
   return {
     give,
     refill: () => {
-      if (!open || !alone()) return;
+      if (!open || !sees || !alone()) return;
       // The free tokens are read out first, so a build that opens the pipe meanwhile takes none and is seen.
-      const buffer = Buffer.alloc(4096);
-      let free = 0;
-      for (;;) {
-        try { const read = readSync(fd, buffer, 0, buffer.length, null); if (read <= 0) break; free += read; } catch { break; }
-      }
+      const free = take();
       writeSync(fd, '+'.repeat(alone() ? tokens : free));
     },
     close: () => {
-      if (!open) return;
+      if (!open) return 0;
       open = false;
+      const lost = Math.max(0, tokens - take());
       if (before === undefined) delete process.env.CARGO_MAKEFLAGS;
       else process.env.CARGO_MAKEFLAGS = before;
       closeSync(fd);
       rmSync(dir, { recursive: true, force: true });
+      return lost;
     },
   };
 }
@@ -561,7 +570,7 @@ async function main(args) {
     jobs.push(...(await runGroups([...left, ...groups.exclusive], [root], blocks.alone, vitest, node, 'alone-worktree')).jobs);
     // The untimed jobs have ended, so the run's own grant and its jobserver go back, and each timed block asks for its
     // timed grant as the run's caller would: nested in the caller's grant, or top-level.
-    pool.close();
+    const lost = pool.close();
     const [cls, id] = (process.env.DEEP_THROTTLE ?? '').split(':');
     if (id && process.env.DEEP_THROTTLE !== held.before) release({ class: cls, id });
     const own = { DEEP_THROTTLE: held.before };
@@ -571,6 +580,8 @@ async function main(args) {
 
     if (stopped) return console.log(`BLOCKED affected: stopped by ${stopped}; its jobs were stopped and none of their results is read; logs in ${logs}`), 128 + constants.signals[stopped];
     const failures = [], passed = [], findings = [], skips = [];
+    // A build that ran short of its compile share may have timed out or run slow, so the run can't say it passed (#2848).
+    if (lost) failures.push({ id: 'jobserver', state: 'INCONCLUSIVE', message: `${lost} of the run's compile tokens were missing when its builds had ended, so a build may have had less than its share` });
     for (const job of jobs) {
       const tests = /^(?:vitest|node)/.test(job.label);
       let report = '';
