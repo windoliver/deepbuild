@@ -14,6 +14,11 @@
 // origin's storage persistent, and the player says once when it isn't. The player's own controls open a slot's save,
 // export it to a file and import one, which opens only as any save does.
 //
+// Carry records (issue #189; canvas primitives: Logic: carry records) keep to the same storage as saves do, whole or
+// not at all, by their SHA-256. A piece whose logic gives one exports its newest to a file; a piece whose logic takes
+// one imports a file, held to the SHA-256 its name gives and to the shape and layouts the piece takes, and is then
+// made again with the record's entry at step 0, held from its start. A record it refuses is named, and nothing changes.
+//
 // Beside its canvas it keeps the document's accessibility tree as DOM (issue #1045): the tree the app gives its
 // accessibility seam, read through the core (`tree()`), never written by the piece or a host page. The document's node
 // carries the title and the description; each part, label and readout is one element marked data-deep-id with its
@@ -30,17 +35,23 @@ const hex = (buf) => Array.from(new Uint8Array(buf), (b) => b.toString(16).padSt
 const sha256 = async (bytes) => hex(await crypto.subtle.digest('SHA-256', bytes));
 
 /** The origin's store of saves in the browser's storage: one row a save, `{piece, slot, seq, hash, step, ended,
- * deep_hash, bytes}`, keyed by the piece, its slot and the save's number in it. */
+ * deep_hash, bytes}`, keyed by the piece, its slot and the save's number in it; and of carry records, one row a record,
+ * `{hash, piece, step, layout, at, bytes}`, keyed by its SHA-256. */
 const openStore = () => new Promise((done, fail) => {
-  const open = indexedDB.open('deep-player', 1);
-  open.onupgradeneeded = () => open.result.createObjectStore('saves', { keyPath: ['piece', 'slot', 'seq'] });
+  const open = indexedDB.open('deep-player', 2);
+  open.onupgradeneeded = () => {
+    const names = open.result.objectStoreNames;
+    if (!names.contains('saves')) open.result.createObjectStore('saves', { keyPath: ['piece', 'slot', 'seq'] });
+    if (!names.contains('records')) open.result.createObjectStore('records', { keyPath: 'hash' });
+  };
   open.onsuccess = () => done(open.result);
   open.onerror = () => fail(open.error);
 });
-/** One transaction on the saves, whole or not at all: what `work`'s request read, once it is committed. */
-const inStore = (db, mode, work) => new Promise((done, fail) => {
-  const t = db.transaction('saves', mode);
-  const asked = work(t.objectStore('saves'));
+/** One transaction on a store, the saves unless named, whole or not at all: what `work`'s request read, once it is
+ * committed. */
+const inStore = (db, mode, work, store = 'saves') => new Promise((done, fail) => {
+  const t = db.transaction(store, mode);
+  const asked = work(t.objectStore(store));
   t.oncomplete = () => done(asked?.result);
   t.onabort = () => fail(t.error);
 });
@@ -55,6 +66,16 @@ function refusal(e) {
   if (r.code === 'save_damaged') return `The save ${save} fails its hash, so it isn't opened.`;
   const differs = (r.differs ?? []).map((d) => (d.what === 'play' ? `the state this piece's recorded play holds at step ${d.step}` : `this piece's ${d.what}`));
   return `The save ${save} isn't opened: it doesn't match ${differs.join(', ') || 'this piece'}.`;
+}
+/** Why the player didn't take the carry record `hash`, in words naming it. */
+function recordRefusal(e, hash) {
+  let r;
+  try { r = JSON.parse(String(e)); } catch { r = {}; }
+  const said = (r?.differs ?? []).map((d) => (d.what === 'hash' ? 'its bytes fail the SHA-256 that names it'
+    : d.what === 'array' ? `its ${d.array} isn't the ${d.piece ? `${d.piece.count} ${d.piece.type}` : 'nothing'} this piece takes`
+    : d.what === 'layout' ? `its layout ${d.record} isn't one this piece takes (${(d.accepts ?? []).join(', ')})`
+    : `it doesn't fit this piece's ${d.what}`));
+  return `The record ${hash} isn't taken: ${said.join('; ') || String(e)}.`;
 }
 
 // Issue #1040: whether this browser can run the bundle, asked before anything loads. It needs WebGPU, an adapter,
@@ -181,6 +202,7 @@ class DeepPlayer extends HTMLElement {
     p.first_frame_ms = this.#firstFrameMs;
     p.decoded = { ...this.#decoded };
     p.saves = (await this.#kept()).map(({ slot, step, deep_hash }) => ({ slot, step, deep_hash }));
+    p.records = (await this.#records()).map(({ hash, step, layout }) => ({ hash, step, layout }));
     // The first player's link carries the match in its fragment, which the host serving the piece never sees.
     p.match ??= null;
     if (p.match?.fragment) p.match.link = `${location.href.split('#')[0]}#${p.match.fragment}`;
@@ -196,8 +218,9 @@ class DeepPlayer extends HTMLElement {
     this.appendChild(n);
   }
 
-  /** The piece's saves: the origin's store, each slot's last save number there, and the player's own controls. */
-  async #saves({ piece, slots }) {
+  /** The piece's saves and carry records: the origin's store, each slot's last save number there, and the player's
+   * own controls. */
+  async #saves({ piece, slots, gives, takes }) {
     this.#piece = piece;
     try {
       this.#db = await openStore();
@@ -220,18 +243,25 @@ class DeepPlayer extends HTMLElement {
       pick.addEventListener('change', () => { this.#slot = Number(pick.value); });
       bar.append(pick);
     }
-    const file = document.createElement('input');
-    file.type = 'file';
-    file.hidden = true;
-    file.addEventListener('change', () => { const f = file.files[0]; file.value = ''; if (f) this.#import(f); });
-    for (const [name, act] of [['Open save', () => this.#open()], ['Export save', () => this.#export()], ['Import save', () => file.click()]]) {
+    const chooser = (act) => {
+      const file = document.createElement('input');
+      file.type = 'file';
+      file.hidden = true;
+      file.addEventListener('change', () => { const f = file.files[0]; file.value = ''; if (f) act(f); });
+      bar.append(file);
+      return () => file.click();
+    };
+    const controls = [];
+    if (slots) controls.push(['Open save', () => this.#open()], ['Export save', () => this.#export()], ['Import save', chooser((f) => this.#import(f))]);
+    if (gives) controls.push(['Export record', () => this.#exportRecord()]);
+    if (takes) controls.push(['Import record', chooser((f) => this.#importRecord(f))]);
+    for (const [name, act] of controls) {
       const b = document.createElement('button');
       b.type = 'button';
       b.textContent = name;
       b.addEventListener('click', act);
       bar.append(b);
     }
-    bar.append(file);
     this.append(bar);
   }
 
@@ -248,9 +278,70 @@ class DeepPlayer extends HTMLElement {
     return [...kept.values()].sort((a, b) => a.slot - b.slot);
   }
 
-  /** The saves the steps the clock just reached asked for, each queued for the store as its slot's next save. */
+  /** The saves the steps the clock just reached asked for, each queued for the store as its slot's next save, and the
+   * carry records they wrote. */
   #due() {
     for (const s of JSON.parse(this.#player.saves_due())) this.#queue(s, (seq) => this.#player.save_bytes(s.at, seq));
+    for (const r of JSON.parse(this.#player.records_due())) {
+      const bytes = this.#player.record_bytes(r.at);
+      this.#writes = this.#writes.then(() => this.#keepRecord(r, bytes));
+    }
+  }
+
+  /** The carry records the origin's storage holds that read back whole, in the order they were kept. */
+  async #records() {
+    const rows = this.#db ? await inStore(this.#db, 'readonly', (rows) => rows.getAll(), 'records') : [];
+    const out = [];
+    for (const row of rows) if (await whole(row)) out.push(row);
+    return out.sort((a, b) => a.at - b.at);
+  }
+
+  /** One carry record into the store, whole or not at all: written under its SHA-256 and read back against it. A write
+   * the browser refuses leaves the store as it was. */
+  async #keepRecord({ hash, step, layout }, bytes) {
+    try {
+      if (!this.#asked) await this.#persist();
+      if ((await sha256(bytes)) !== hash) throw Error(`its bytes don't hash to ${hash}`);
+      await inStore(this.#db, 'readwrite', (rows) => rows.put({ hash, piece: this.#piece, step, layout, at: Date.now(), bytes }), 'records');
+      const back = await inStore(this.#db, 'readonly', (rows) => rows.get(hash), 'records');
+      if (!back || !(await whole(back))) {
+        await inStore(this.#db, 'readwrite', (rows) => rows.delete(hash), 'records');
+        throw Error("it didn't read back whole");
+      }
+    } catch (e) {
+      this.#notice(`The record ${hash} of step ${step} wasn't kept: the browser refused it (${[e?.name, e?.message].filter(Boolean).join(': ') || e}).`, 'carry_failed');
+    }
+  }
+
+  /** The piece's newest carry record handed to the browser as a file, named by its SHA-256 as the app names one. */
+  async #exportRecord() {
+    const row = (await this.#records()).filter((r) => r.piece === this.#piece).pop();
+    if (!row) {
+      this.#notice('This piece has written no carry record in this browser.', 'no_record');
+      return;
+    }
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([row.bytes]));
+    a.download = `${row.hash}.carry`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 60_000);
+  }
+
+  /** A carry record from a file, held to the SHA-256 its name gives and to the shape and layouts this piece takes; taken,
+   * it is kept and the piece is made again with its entry at step 0, held from its start. Refused, nothing changes. */
+  async #importRecord(file) {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const hash = /^([0-9a-f]{64})\.carry$/.exec(file.name)?.[1] ?? await sha256(bytes);
+    try {
+      JSON.parse(this.#player.open_record(hash, bytes));
+    } catch (e) {
+      this.#notice(recordRefusal(e, hash), 'carry_refused');
+      return;
+    }
+    const r = JSON.parse(new TextDecoder().decode(bytes));
+    await (this.#writes = this.#writes.then(() => this.#keepRecord({ hash, step: r.step, layout: r.from?.layout }, bytes)));
+    this.#paused = true;
+    this.#seek(0);
   }
 
   /** A save queued for the store as its slot's next number, with the bytes it has under that number. */
@@ -413,7 +504,7 @@ class DeepPlayer extends HTMLElement {
     this.#stages = JSON.parse(player.stages());
     this.#markers = JSON.parse(player.markers());
     const saves = JSON.parse(player.saves());
-    if (saves.slots) await this.#saves(saves);
+    if (saves.slots || saves.gives || saves.takes) await this.#saves(saves);
     this.#seek(0);
     this.#decoded = JSON.parse(player.decoded());
     this.#ready = true;

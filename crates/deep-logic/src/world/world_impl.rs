@@ -97,6 +97,7 @@ impl World {
             planted,
             saves_dir: None,
             held: None,
+            saves_ns: 0,
             saved: Vec::new(),
             seen: 0,
             adapter: String::new(),
@@ -687,6 +688,12 @@ impl World {
                         .is_some_and(|i| matches!(list[i].value, Given::Number(n) if n != 0.0));
                     region[at..at + 4].copy_from_slice(&i32::from(on).to_le_bytes());
                 }
+                Read::Carry => crate::carry::fill(
+                    item,
+                    self.track.get(crate::carry::CARRY),
+                    k,
+                    &mut region[at..at + e.size as usize],
+                ),
                 Read::Mirror(_) | Read::None => {}
             }
         }
@@ -1214,6 +1221,7 @@ impl World {
             planted,
             saves_dir: None,
             held: None,
+            saves_ns: 0,
             saved: Vec::new(),
             seen: 0,
             adapter: String::new(),
@@ -1376,6 +1384,7 @@ impl World {
             planted,
             saves_dir: None,
             held: None,
+            saves_ns: 0,
             saved: Vec::new(),
             seen,
             adapter: String::new(),
@@ -1484,6 +1493,7 @@ impl World {
             planted: self.planted,
             saves_dir: None,
             held: None,
+            saves_ns: 0,
             saved: Vec::new(),
             seen: self.seen,
             adapter: self.adapter.clone(),

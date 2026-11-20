@@ -451,6 +451,8 @@ pub struct World {
     pub saves_dir: Option<std::path::PathBuf>,
     /// With no folder, the saves its steps asked for, held for the host's store (Export: web player).
     pub held: Option<Vec<crate::saves::Held>>,
+    /// #189: the time the saves machinery took since it was last read (a live frame's `saves_ns`).
+    pub saves_ns: u64,
     pub saved: Vec<Value>,
     /// The steps the piece's same-machine counters have seen, and the adapter this run is on.
     pub(crate) seen: u64,

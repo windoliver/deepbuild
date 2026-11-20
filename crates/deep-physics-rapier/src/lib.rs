@@ -238,6 +238,16 @@ pub struct Rapier {
     wheel_rows: Vec<Raw>,
 }
 
+/// #189's test builds of the physics implementation: a document's every world built as if it
+/// declared its gravity this many times over; none in every shipped build.
+pub const GRAVITY_TIMES: Option<f64> = if cfg!(feature = "test-gravity-heavy") {
+    Some(2.0)
+} else if cfg!(feature = "test-gravity-drift") {
+    Some(1.000_001)
+} else {
+    None
+};
+
 fn v3(a: [f64; 3]) -> Vector {
     Vector::new(a[0] as f32, a[1] as f32, a[2] as f32)
 }
