@@ -792,6 +792,8 @@ alone.push('tests/acceptance/549/', 'tests/acceptance/549-oracle/');
 // redraft runs in its place, and the first draft's file, with its other three tests, runs by hand.
 alone.push('tests/acceptance/549-redraft-ac2/');
 byHand.push('tests/acceptance/549/ac2-join-only.test.ts');
+// #297's files each build deep-show and run its scenarios; the Oracle lane runs thousands of frames through it.
+alone.push('tests/acceptance/297/', 'tests/acceptance/297-oracle/');
 timed.push('tests/acceptance/172/budgets.test.ts', 'tests/acceptance/172/images.test.ts');
 // #172's first-draft refusal test shows a device control without the role the document check requires, so that piece is
 // never presented and its export can't refuse it by name (tests/acceptance/172/DISPUTE.md); its blind redraft runs in its
