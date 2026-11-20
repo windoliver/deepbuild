@@ -1178,10 +1178,17 @@ impl Program {
             Kind::Reach2 { bend, cartoon, .. } => {
                 let [lower, end] = c.chain.map(|i| pose(slots, i * TRANSFORM));
                 let length = |p: &cs::Pose| deep_canvas::ops::hypot(p.pos[0], p.pos[1]);
+                // #2500: a text's line or token, its box's centre where the text is now.
+                let target = match (c.aim, c.other) {
+                    (Some(aim), Some((i, None))) => {
+                        crate::anchored::through(&self.world(slots, i), aim)
+                    }
+                    _ => [other.pos[0], other.pos[1]],
+                };
                 let r = cs::reach2(
                     [own.pos[0], own.pos[1]],
                     [length(&lower), length(&end)],
-                    [other.pos[0], other.pos[1]],
+                    target,
                     *bend,
                     *cartoon,
                     &mut ops,

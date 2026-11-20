@@ -13,6 +13,11 @@ publish = false
 # The pinned sRGB transfer the levels average through, in linear light.
 deep-canvas = { path = "../deep-canvas" }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+# #1489: an animated GIF, WebP or APNG composited a frame at a time by the image crate's own
+# decoders, used directly so a frame source can move between the service's workers.
+gif = "0.14"
+image-webp = "0.2"
+png = "0.18"
 sha2 = "0.10"
 # #172: a level's time on the page's clock in the web player, the system's elsewhere.
 web-time = "=1.1.0"

@@ -1,0 +1,96 @@
+The #2457 suite run at base commit 85203f458b85c999ac03a884c837398e56aeac8d ("Merge pull request #2852 …"; no
+implementation of #2457), on November 19, 2026, on macOS 27.2 arm64 (a shared Mac, 1-minute load 210 to 230 on 18
+cores while it ran), Node 24.22.2, vitest 5.0.5, TypeScript 5.9.3, cargo and rustc 1.99.1. The type-check first:
+
+  node node_modules/typescript/bin/tsc -p tests/acceptance/2457/tsconfig.json          (exit 0, no error)
+
+then each test file, one at a time, with
+
+  PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    node node_modules/vitest/vitest.mjs run --root tests/acceptance/2457 --no-file-parallelism --testTimeout=3600000 \
+    --reporter=verbose <file>
+
+The base's debug builds of deep-physics and deep-show were in the target folder before the run. The suite's own cargo
+call brought deep-physics up to date and copied it out (each file under 3 s, all told). No test reaches deep-show
+before its first failure, so the delivered files built and started no deep-show.
+
+Result, over the two files: Test Files 2 failed (2); Tests 4 failed (4); none passes. Every test fails at an assertion
+in its own test file, because the base refuses a soft volume whose source is a mesh asset. None fails in a helper, at
+an import or at a timeout, and none is BLOCKED or INCONCLUSIVE.
+
+Each file was run twice. After the first runs the runners in helpers.ts were reshaped, so that every hook is this
+suite's own with an explicit timeout (the build of deep-physics no longer goes through #2009's `prebuild`), and the
+judges moved from ac1's test file into helpers.ts; nothing a test asserts changed. Each file was then run once more as
+delivered. Both times each test failed at the same assertion, with the same message; the lines below are the
+delivered files'.
+
+ac1-soft-cube-asset.test.ts (#2457.abde2f93)
+ × builds one soft body with one particle per welded vertex of the asset, v{i} in welded order
+   ac1-soft-cube-asset.test.ts:44  AssertionError: a soft volume from the closed cube asset is admitted at check: no
+   error issue: expected [ Array(1) ] to deeply equal []
+     + "physics.unsupported at soft/jelly/from: volume jelly's source cube is a mesh asset, which this backend
+       interface doesn't build a soft volume from yet; #2457 brings it"
+ × once settled it holds 1.2 × its rest volume within 2%
+   ac1-soft-cube-asset.test.ts:65  AssertionError: the soft cube asset bakes 360 steps (3 s), jelly's particles after
+   each: expected 'the bake is refused: physics.unsuppor…' to be ''
+     + the bake is refused: physics.unsupported at soft/jelly/from: volume jelly's source cube is a mesh asset, which
+       this backend interface doesn't build a soft volume from yet; #2457 brings it
+ × its skin draws each vertex at its particle's interpolated position within 1e-6 m at 20 sampled times
+   ac1-soft-cube-asset.test.ts:84  AssertionError: the soft cube asset bakes 200 steps, jelly's particles after each:
+   expected 'the bake is refused: physics.unsuppor…' to be ''
+     + the bake is refused: physics.unsupported at soft/jelly/from: volume jelly's source cube is a mesh asset, which
+       this backend interface doesn't build a soft volume from yet; #2457 brings it
+
+ac2-open-asset.test.ts (#2457.d36df7b1)
+ × is refused at check, naming one of the asset's open edges, as a volume from an open built item is; from the closed
+   asset it is admitted
+   ac2-open-asset.test.ts:33  AssertionError: a soft volume from the closed cube asset is admitted at check: no error
+   issue: expected [ Array(1) ] to deeply equal []
+     + "physics.unsupported at soft/jelly/from: volume jelly's source shut is a mesh asset, which this backend
+       interface doesn't build a soft volume from yet; #2457 brings it"
+
+What passes inside those failing tests, before the failing assertion: each test's checks of its own fixture (the
+closed asset's 24 vertices and 12 triangles weld to 8 vertices with every edge on two triangles and enclose 0.125 m³;
+the open asset's 20 and 10 weld to 8 with 4 open edges), and `deep-physics answers` (it exits 0 with one reply per
+call).
+
+What the base already does, which the tests don't credit. Each line was read from the base's own answers while the
+suite was written, through a scratch test file in this folder that is not delivered:
+
+- `check` of each world whose volume names an asset, closed (`cube`, `shut`) or open (`open`), answers
+  {"ok": true, "issues": [one error]}: physics.unsupported at soft/jelly/from, actual the item's ID, the sentence
+  above. The open asset's issue holds no `edge`. `bake` of such a world answers {"ok": false, "issues": [the same]}.
+  The call field `evidence` is ignored.
+- `check` of the world whose volume names the built open cube `lathe` answers one error, physics.open_mesh at
+  soft/jelly/from, with "edge": ["v5", "v6"] ("volume jelly's source lathe isn't closed: its edge v5 to v6 is on 1
+  triangle, not two"). ac2's last two assertions read this refusal, and it stands at the base.
+- `deep-show run` presents the closed cube asset alone, read from the scenario's `evidence` folder, and `geometry` of
+  it answers its 24 positions as the file holds them, in the file's order, with "world": [[1, 0, 0, 1.5], [0, 1, 0,
+  0.5], [0, 0, 1, 0.75]]. Through this suite's reader each is within 1e-6 m of where the fixture places it, so ac1's
+  third test's check of the asset alone stands at the base. The scene whose world builds a volume from the asset is
+  refused: outcome "refused", physics_refused at worlds/lab, carrying the physics.unsupported issue.
+
+What the scratch file also ran, to see that each judge passes a right answer and fails a wrong one. No expected value
+in the suite comes from any of it; each is the issue's number or a closed form from the fixture:
+
+- The base's world reader takes a soft volume's welded mesh in the body's own `mesh: {vertices, triangles}` field (the
+  field `crates/deep-physics-rapier/src/source.rs` writes for a built item). Handed the closed asset's 8 welded
+  vertices, placed, and its 12 triangles there, in a world document with no scene, the base builds one soft volume of
+  8 particles addressed v0 to v7, each as built at its welded vertex. Over steps 300 to 360 its particles enclose
+  0.149193 m³ by this suite's measure, 1.1935 × the cube's 0.125 m³, inside the band 0.147 to 0.153 m³; as built they
+  enclose 0.125 m³. Earlier runs of the same kind, the cube 3 cm above the ground, read 1.1936 to 1.1938 × the rest
+  volume for cubes of 0.5 m, 1 m, 1.5 m and 2 m, and about 1.182 × by #524's measure (each face as four triangles
+  about its centre), also inside the band. So ac1's first two judges pass on it. The same judges fail on the
+  particles left in the file's own space (8 failures), numbered in the order the indices first name them (7) or
+  sorted by position, and on the same world with `inflate: 1` (61 failures, 0.9997 × the rest volume at step 300).
+- On that bake the 20 sampled frames all have a particle more than 1e-6 m from its rest position, and frames 3, 7,
+  11, 19, 23, 27 and 31 have one more than 1e-6 m from both steps around it. The skin's judge passes replies made
+  from the bake's own interpolated positions as f32, in world metres or in the item's space with its `world` matrix,
+  and fails replies that draw the asset at rest (all 20 frames), hold the step before (frames 3, 7, 11, 19, 23, 27,
+  31 and 39) or the step after, draw the 8 welded vertices in place of the 24 (all 20), or are refused.
+- A built cube of the same size and place (`slab@1`, 0.5 m, its underside 0.5 m up) with the same world: the base
+  bakes it and draws it through its skin, and through this suite's runner, reader and judge every vertex is within
+  1e-6 m of its particle's interpolated position at the 20 times (the farthest 9.9e-8 m).
+
+Not run: `scripts/affected.mjs`, the preflight and every other suite, as the job was told; the public text lane, which
+reads the open issues; and nothing was timed.
