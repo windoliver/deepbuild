@@ -1,7 +1,7 @@
 {
   "core": {
     "version": "0.0.0",
-    "digest": "e4f8e1e312f40a33c9e1c4de41db57944a57afdf7fcf5477b186406dfc0e6bf0",
+    "digest": "775ef21cb57d01ec9f9393695e1d2dd694ba4f102146cfd0460dc27e9685cae4",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -249,7 +249,7 @@
   },
   "physics": {
     "version": "1.0.0",
-    "digest": "f48e8b0d1eb431d5b799b0a2151e6b2e6ec8ab77f7e6454bf5ff479dc1cf5479",
+    "digest": "cb0454f94fd253513335d98d4b8fda5292cd254fe65832b284f5b68e91e3c13d",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
@@ -331,7 +331,7 @@
   },
   "text": {
     "version": "1.0.0",
-    "digest": "adc297495eb1a9be4918d0a7e9620be4f459deb800ea168ecd3ca5a995d98350",
+    "digest": "99d7fa9d2b19eb54c6aa6e5386c05bed652703ec2b08008dbad34248a1acf51e",
     "verdict": "PASS",
     "parts": {
       "fixtures": "PASS",
