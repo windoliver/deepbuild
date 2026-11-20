@@ -1,0 +1,78 @@
+// One section of a design doc by its anchor (#2338), so an agent reads the sections its issue links and not the whole
+// design. A section is the text from its heading, or from the explicit <a id> before it, to the next heading of the
+// same or a higher level, subsections included; a line in fenced code is never a heading. Anchors resolve as the
+// design links lane (#910) resolves them, so a link that lands there prints here.
+//
+//   node scripts/design-section.mjs <doc>#<anchor>   the section's bytes, as the doc holds them
+//   node scripts/design-section.mjs --issue <n>      each section open issue n links, once each, in the order it first
+//                                                    links them, each after a `==> <doc>#<anchor> <==` line
+//
+// The issue comes from the open issues the doc lanes read; without them the run is BLOCKED and prints no section.
+// A section that can't be printed exits 1, naming the doc and the anchor; a wrong command line exits 2.
+import { existsSync, readFileSync } from 'node:fs';
+import { anchors, outline, prose, resolve, targets } from './doc-links.mjs';
+import { openIssues } from './open-issues.mjs';
+
+// The section's bytes, or what stops it.
+function section(file, id) {
+  if (!/^docs\/[^/]+\.md$/.test(file) || !existsSync(file)) return { problem: `${file} is not a doc under docs/` };
+  const { anchors: found, headings, lines } = outline(file);
+  const heading = found.get(id);
+  const at = headings.findIndex((candidate) => candidate.id === heading);
+  if (at === -1) return { problem: `no heading or <a id> in ${file} is #${id}` };
+  const { level, offset } = headings[at];
+  // An <a id> before its heading starts the section at its own line; one inside a section's text belongs to that section.
+  const start = id === heading ? offset : Math.min(offset, lines.get(id) ?? offset);
+  const bytes = readFileSync(file);
+  const end = headings.slice(at + 1).find((next) => next.level <= level)?.offset ?? bytes.length;
+  return { bytes: bytes.subarray(start, end), heading };
+}
+
+const fail = (problem) => {
+  console.error(`no section: ${problem}`);
+  process.exit(1);
+};
+
+const args = process.argv.slice(2);
+if (args[0] === '--issue' && args.length === 2 && /^\d+$/.test(args[1])) {
+  const number = Number(args[1]);
+  const { issues = [], missing } = openIssues();
+  const issue = issues.find((candidate) => candidate.number === number);
+  if (missing || !issue) {
+    console.log(`BLOCKED #${number}'s linked sections: ${missing ?? `#${number} is not among the ${issues.length} open issues read`}`);
+    process.exit(1);
+  }
+  // Each linked section once, keyed by the heading it belongs to, in the order the issue first links it.
+  const printed = new Set();
+  const out = [];
+  const problems = [];
+  for (const { line } of prose(issue.body ?? '')) {
+    for (const target of targets(line)) {
+      const link = resolve(target, null);
+      if (!link?.id) continue;
+      if (existsSync(link.file) && printed.has(`${link.file}#${anchors(link.file).get(link.id)}`)) continue;
+      const { bytes, heading, problem } = section(link.file, link.id);
+      if (problem) {
+        problems.push(problem);
+        continue;
+      }
+      printed.add(`${link.file}#${heading}`);
+      out.push(Buffer.from(`==> ${link.file}#${link.id} <==\n`), bytes);
+    }
+  }
+  // Not process.exit: on macOS a pipe's write finishes after it returns.
+  process.stdout.write(Buffer.concat(out));
+  if (problems.length) {
+    console.error(`no section: #${number} links ${problems.join('; ')}`);
+    process.exitCode = 1;
+  }
+} else if (args.length === 1 && args[0].includes('#') && !args[0].startsWith('-')) {
+  const link = resolve(args[0], null);
+  if (!link) fail(`${args[0]} is not a link into docs/*.md`);
+  const { bytes, problem } = section(link.file, link.id);
+  if (problem) fail(problem);
+  process.stdout.write(bytes);
+} else {
+  console.error('usage: node scripts/design-section.mjs <doc>#<anchor> | --issue <n>');
+  process.exit(2);
+}
