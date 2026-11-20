@@ -1,3 +1,5 @@
+# At 3cf41958f (where the issue was found): git archive of scripts, packages/contracts, docs, package.json and crates/deep-app/panel-catalog.json into a scratch folder, then:
+$ node scripts/guide.mjs --check
 FAIL guide: deep.registerPort: the contract publishes it, and the guide has no entry for it
   Fix: run node scripts/guide.mjs and commit docs/extension-guide.md
 FAIL guide: deep.source.ask: the contract publishes it, and the guide has no entry for it
