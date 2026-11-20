@@ -1181,6 +1181,10 @@ timed.push('tests/acceptance/189/saves/ac11-budgets.test.ts');
 alone.push('tests/acceptance/189/lab-redraft/');
 timed.push('tests/acceptance/189/lab-redraft/ac11-rederive-budget.test.ts');
 byHand.push('tests/acceptance/189/lab/');
+// #851's files start replicas and a hub and play the fixture shell's journeys, levels of 3,700 steps, for minutes.
+alone.push('tests/acceptance/851/');
+// #851's criterion 8 ends INCONCLUSIVE until your taste call on its frames; it runs by hand.
+byHand.push('tests/acceptance/851/ac08-shown.test.ts');
 
 // #2227's files type-check the hub and the CLI (AC1), run the whole workspace build in a copy of the checkout (AC2,
 // 485 s on the base) and a child Vitest of #1409's limit stop (AC3).

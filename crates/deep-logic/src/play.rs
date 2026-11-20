@@ -141,7 +141,7 @@ fn track_hash(entries: &[Value]) -> String {
 }
 
 /// The piece's full state as one hash: each of its items' deep hashes, in piece order.
-fn full(hashes: &Map<String, Value>, ids: &[String]) -> String {
+pub(crate) fn full(hashes: &Map<String, Value>, ids: &[String]) -> String {
     let mut b = Vec::new();
     for id in ids {
         b.extend(id.as_bytes());
