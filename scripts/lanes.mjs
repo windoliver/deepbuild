@@ -259,6 +259,8 @@ timed.push('tests/acceptance/1485/panel.test.ts');
 // #1486's files build deep-canvas-render in release; grid.test.ts times the first screen and the UI thread's frames.
 alone.push('tests/acceptance/1486/');
 timed.push('tests/acceptance/1486/grid.test.ts');
+// #2494's files build deep-show and the app, start a hub each and open the app's window.
+alone.push('tests/acceptance/2494/');
 // #1485's first AC2 draft is kept as written, by hand only: it draws its five pictures in 20 u boxes and needs the
 // fifth refused, where image@1's budget now counts the levels a frame draws (#1486); its blind redraft,
 // 1485-redraft-ac2/, draws them at full size and runs in its place.

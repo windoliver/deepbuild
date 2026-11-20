@@ -64,6 +64,9 @@ pub mod plain;
 pub mod question;
 pub mod record;
 pub mod rules;
+/// #2494: a 3D writer layer in the canvas panel, drawn through a GPU-layer view.
+#[cfg(target_os = "macos")]
+pub mod scene_view;
 // Issue #1498: select and copy the text the window draws.
 pub mod select;
 pub mod setup;

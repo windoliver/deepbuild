@@ -243,11 +243,19 @@
         },
         "deep-scene3d-render": {
           "spec": "* path=../deep-scene3d-render",
-          "why": "Issue #177: the hdr-fixture build (in no shipped build) draws a scene document in a live 3D view in the app's real window, its HDR surface beneath GPUI's layer, for the acceptance tests' live legs."
+          "why": "Issue #2494: scene3d's render module draws a 3D writer layer into the canvas panel's GPU-layer view. Issue #177's hdr-fixture build draws through it too."
         },
         "deep-canvas-scene3d": {
           "spec": "* path=../deep-canvas-scene3d",
-          "why": "Issue #177: the hdr-fixture build (in no shipped build) draws a scene document in a live 3D view in the app's real window, its HDR surface beneath GPUI's layer, for the acceptance tests' live legs."
+          "why": "Issue #2494: the evaluated scene the canvas panel's GPU-layer view draws, and what of a document the view can't draw. Issue #177's hdr-fixture build evaluates with it too."
+        },
+        "deep-canvas-motion": {
+          "spec": "* path=../deep-canvas-motion",
+          "why": "Issue #2494: the motion program's valid_until, which says when the canvas panel's GPU-layer view draws its next frame, so a still document draws once."
+        },
+        "deep-play": {
+          "spec": "* path=../deep-play",
+          "why": "Issue #2494: the canvas panel's GPU-layer view evaluates a 3D document through its `scene`, as render-back does."
         },
         "wgpu-profiler": {
           "spec": "^0.28",
