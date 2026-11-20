@@ -165,7 +165,7 @@ fn run_view(
     // The frames the call draws and how each is reached (#173), the ones logic runs at first.
     let reached = history::order(args.from, args.frames, &args.seeks, &args.history, args.fps);
     let order: Vec<u64> = reached.iter().map(|(n, _)| *n).collect();
-    let mut baked = crate::fed::bake(&args.doc, &args.assets, (&order, args.fps), app.planted)?;
+    let mut baked = crate::fed::bake(&mut args.doc, &args.assets, (&order, args.fps), app.planted)?;
     let packed = args.doc["packs"].as_array().is_some_and(|p| !p.is_empty());
     let mut lowered_doc = if packed {
         Some(lowered(&args.doc, &packs)?)
@@ -382,6 +382,7 @@ fn run_view(
         // The lights the policy last left out: a change is reported once, by ID (#421).
         let mut left_out: Vec<String> = Vec::new();
         let mut dropped: Vec<String> = Vec::new();
+        let mut touched = crate::touches::Started::default();
         // The clusters last reported past their cap (#1634).
         let mut clusters_over: Vec<deep_scene3d_render::fill::Over> = Vec::new();
         // #1640's wrong programs for mesh-edge lines, by their planted names.
@@ -652,14 +653,9 @@ fn run_view(
                     Some((w.material.clone(), f))
                 })
                 .flatten();
-            let rings = (args.rings).then(|| {
-                scene.water.as_ref().map_or(Vec::new(), |w| {
-                    w.rings()
-                        .into_iter()
-                        .map(|r| json!({"part": r.part, "drop": r.drop, "at": r.at, "born": r.born, "radius": r.radius}))
-                        .collect::<Vec<_>>()
-                })
-            });
+            // #2760: the planted rings, then the rings the frame draws, as it lists them.
+            crate::touches::plant(&mut scene, app.planted, t, &mut touched);
+            let rings = (args.rings).then(|| crate::touches::rows(&scene));
             strokes |= scene
                 .layers
                 .iter()

@@ -625,7 +625,9 @@ export class Core {
     if (process.env.DEEP_HUB_TEST_CRASH) this.record = crashing(this.record, process.env.DEEP_HUB_TEST_CRASH);
     if (process.env.DEEP_HUB_TEST_READS) this.record = readsLogged(this.record, process.env.DEEP_HUB_TEST_READS);
     // Every append reaches the stream, whoever appends it: the hub, the asks core, the supervisor or the leases.
-    this.record = streamed(this.record, ({ kind, subject, data }, connection) => {
+    this.record = streamed(this.record, (input, connection) => {
+      const { kind, subject, data } = input;
+      this.canvasSide.appended(input);
       this.log.stream();
       if (kind !== 'session.state' && kind !== 'row.set') {
         // The next state pass reads the sessions appended to since the last; an event of no session, every session.
@@ -2592,7 +2594,9 @@ export class Core {
     const reading = `deep-hook let ${meta.event} ${meta.id} through as late, after the hub's answer missed its deadline; `
       + (matched.length ? `it matched ${matched.join(', ')}` : 'it matched no guard entry');
     // The ID is a ULID (checked before this is called), so it goes into the query as it is.
-    const known = await this.record.raw(`SELECT 1 FROM events WHERE kind = 'session.reading' AND instr(json_extract(data, '$.reading'), ?) > 0 LIMIT 1`, [meta.id]);
+    // The reading is its session's, after the call's own event: found from that event's ID, not among every reading (#1868).
+    const known = await this.record.raw(`SELECT 1 FROM events WHERE session_id = ? AND log_pos > COALESCE((SELECT log_pos FROM events WHERE id = ?), 0)
+      AND kind = 'session.reading' AND instr(json_extract(data, '$.reading'), ?) > 0 LIMIT 1`, [meta.session, meta.id, meta.id]);
     if (known.length) return;
     await this.appendReading(meta.session, meta.agent, reading);
   }

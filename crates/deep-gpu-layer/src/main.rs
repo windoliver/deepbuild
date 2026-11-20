@@ -75,6 +75,7 @@ mod testgpu;
 mod textures;
 mod timing;
 mod tone;
+mod touches;
 mod trails;
 mod validation;
 mod video;
@@ -238,6 +239,10 @@ pub enum Planted {
     ShoreCalmIgnoresField,
     /// #968: the flow's noise moved in one phase, jumping back at every wrap.
     WaterFlowSinglePhase,
+    /// #2760: each touch's ring centred where the rain's hash puts a drop.
+    WaterRingsAtRainHash,
+    /// #2760: a ring started when a drawn frame first passes its occurrence, kept as state.
+    WaterRingsStartOnDrawnFrame,
     /// #971: the local tone map's base brought back up with a range weight of 1 at every tap.
     LocalBaseIgnoresEdges,
     /// #971: the local tone map's pyramid has the look's `levels` at every output size.
@@ -650,6 +655,8 @@ impl Planted {
             "shore_field_from_centre" => Planted::ShoreFieldFromCentre,
             "shore_calm_ignores_field" => Planted::ShoreCalmIgnoresField,
             "water_flow_single_phase" => Planted::WaterFlowSinglePhase,
+            "water_rings_at_rain_hash" => Planted::WaterRingsAtRainHash,
+            "water_rings_start_on_drawn_frame" => Planted::WaterRingsStartOnDrawnFrame,
             "local_base_ignores_edges" => Planted::LocalBaseIgnoresEdges,
             "local_pyramid_fixed_levels" => Planted::LocalPyramidFixedLevels,
             "compiles_on_first_frame" => Planted::CompilesOnFirstFrame,

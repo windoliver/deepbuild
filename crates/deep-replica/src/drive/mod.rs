@@ -308,7 +308,19 @@ impl Replica {
         let dirty = frames == "dirty";
         // #1482: which window, whether each drawn frame is read back, and whether accessibility is active: each needs the
         // mode that draws only the frames GPUI says the window needs.
-        let arm = word("arm", &["app", "blank", "lists"], "app")?;
+        let arm = word("arm", &["app", "blank", "lists", "picture"], "app")?;
+        // #1489: the picture the `picture` arm's image element shows, by its path.
+        let picture = match (&args["picture"], arm.as_str()) {
+            (Value::String(path), "picture") => Some(PathBuf::from(path)),
+            (Value::Null, "picture") => {
+                return Err(fail(
+                    "refused",
+                    "launch.arm \"picture\" names a picture by its path",
+                ))
+            }
+            (Value::Null, _) => None,
+            (_, _) => return Err(fail("refused", "launch.picture goes with arm \"picture\"")),
+        };
         let read_back = word("read_back", &["tiles", "off"], "tiles")?;
         let accessibility = match &args["accessibility"] {
             Value::Null => false,
@@ -612,7 +624,11 @@ impl Replica {
                 return arms::open(
                     &arm,
                     options,
-                    plant == Some(Plant::WheelNotifiesEveryEvent),
+                    (
+                        plant == Some(Plant::WheelNotifiesEveryEvent),
+                        plant == Some(Plant::PictureFrameEachVsync),
+                    ),
+                    picture.clone(),
                     cx,
                 );
             }
