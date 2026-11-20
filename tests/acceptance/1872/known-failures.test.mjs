@@ -1,7 +1,8 @@
 // #1872, criteria 3 and 4: every key of scripts/known-failures.json is guarded. An entry added, or changed in any way
 // but a `lint` count that falls, fails the guard with no signed approval tag naming it; a removed entry or a lowered
 // count passes with none. Reached by running this checkout's real `node scripts/proof.mjs guard` in scratch
-// repositories (README: The guard, and How an approval names an entry).
+// repositories (README: The guard, and How an approval names an entry). Each case is its own top-level test, with no
+// subtests, so each fails at its own assertion (README: Redraft).
 import test from 'node:test';
 import { day, expectPassed, expectRefused, guardRepo, idOf, KNOWN, known, LONG, namesKey, nodeFile, note, sandbox } from './helpers.mjs';
 
@@ -18,18 +19,18 @@ function listsItsOwnFailure(box, before = {}) {
   return { scene, listing };
 }
 
-test('#1872.51c82c1d a planted commit that adds its own failing test\'s ID to failures, naming an open issue and today\'s date, fails the guard with no signed approval tag, naming the entry', LONG, async (t) => {
+test('#1872.28dfb26c a planted commit that adds its own failing test\'s ID to failures, naming an open issue and today\'s date, fails the guard with no signed approval tag, naming the entry', LONG, async (t) => {
   const { scene } = listsItsOwnFailure(sandbox(t));
   expectRefused(await scene.guard(), 'a failures entry for the change\'s own test, with no tag,', [KNOWN, OWN_ID]);
 });
 
-test('#1872.51c82c1d the same commit under an unsigned approval tag naming the entry fails the guard, naming the entry', LONG, async (t) => {
+test('#1872.28dfb26c the same commit under an unsigned approval tag naming the entry fails the guard, naming the entry', LONG, async (t) => {
   const { scene, listing } = listsItsOwnFailure(sandbox(t));
   scene.approve(listing, [`${KNOWN} › ${OWN_ID}`], null);
   expectRefused(await scene.guard(), 'a failures entry under an unsigned tag', [KNOWN, OWN_ID]);
 });
 
-test('#1872.51c82c1d the same commit under a signed approval tag naming the entry passes the guard', LONG, async (t) => {
+test('#1872.28dfb26c the same commit under a signed approval tag naming the entry passes the guard', LONG, async (t) => {
   const { scene, listing } = listsItsOwnFailure(sandbox(t));
   scene.approve(listing, [`${KNOWN} › ${OWN_ID}`]);
   expectPassed(await scene.guard(), 'a failures entry under a signed tag naming it', [KNOWN]);
@@ -48,15 +49,13 @@ const LOOSER = [
   ['a failures entry\'s date moved later', 'failures', { ...ON_MAIN, failures: { [FAILING]: note('fails on main', day(0)) } }],
 ];
 
-test('#1872.938914d1 a planted commit that raises a lint count, adds a timing ID, or moves a failures entry\'s date later fails the guard with no tag, naming the key', LONG, async (t) => {
-  for (const [what, key, after] of LOOSER) {
-    await t.test(what, async (t) => {
-      const scene = guardRepo(sandbox(t), { [KNOWN]: known(ON_MAIN) });
-      scene.commit({ [KNOWN]: known(after) });
-      expectRefused(await scene.guard(), `${what}, with no tag,`, [KNOWN, namesKey(key)]);
-    });
-  }
-});
+for (const [what, key, after] of LOOSER) {
+  test(`#1872.2f12ab89 a planted commit with ${what} fails the guard with no tag, naming the key`, LONG, async (t) => {
+    const scene = guardRepo(sandbox(t), { [KNOWN]: known(ON_MAIN) });
+    scene.commit({ [KNOWN]: known(after) });
+    expectRefused(await scene.guard(), `${what}, with no tag,`, [KNOWN, namesKey(key)]);
+  });
+}
 
 const TIGHTER = [
   ['a failures entry removed', { ...ON_MAIN, failures: {} }],
@@ -65,12 +64,12 @@ const TIGHTER = [
   ['a lint count lowered', { ...ON_MAIN, lint: { [FINDING]: 1 } }],
 ];
 
-test('#1872.938914d1 a planted commit that removes an entry or lowers a count passes the guard with no tag', LONG, async (t) => {
-  for (const [what, after] of TIGHTER) {
-    await t.test(what, async (t) => {
-      const scene = guardRepo(sandbox(t), { [KNOWN]: known(ON_MAIN) });
-      scene.commit({ [KNOWN]: known(after) });
-      expectPassed(await scene.guard(), `${what}, with no tag,`);
-    });
-  }
-});
+// These pass on the base too: the base guard asks no tag of known-failures.json's other keys at all. A planted wrong
+// program that refuses them is what they fail on (README: On the base).
+for (const [what, after] of TIGHTER) {
+  test(`#1872.2f12ab89 a planted commit with ${what} passes the guard with no tag`, LONG, async (t) => {
+    const scene = guardRepo(sandbox(t), { [KNOWN]: known(ON_MAIN) });
+    scene.commit({ [KNOWN]: known(after) });
+    expectPassed(await scene.guard(), `${what}, with no tag,`);
+  });
+}

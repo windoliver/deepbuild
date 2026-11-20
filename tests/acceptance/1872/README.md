@@ -31,13 +31,16 @@ starts gets its own process group, stopped by its PID when the test ends. Nothin
 
 ## Criteria and tags
 
-| Tag | Criterion | File |
-|---|---|---|
-| `#1872.8d212921` | 1. an edit of `scripts/main-watch.mjs`, and one of `scripts/known-failures-check.mjs`, each fail the guard with no signed tag, naming the file | `lanes-code.test.mjs` |
-| `#1872.aa1738ec` | 2. the same edit, as its own commit under a signed tag naming the file, passes | `lanes-code.test.mjs` |
-| `#1872.51c82c1d` | 3. a commit adding its own failing test's ID to `failures` fails with no signed tag, naming the entry; passes under a signed tag naming the entry | `known-failures.test.mjs` |
-| `#1872.938914d1` | 4. raising a `lint` count, adding a `timing` ID, moving a `failures` date later each fail with no tag, naming the key; removing an entry or lowering a count passes with no tag | `known-failures.test.mjs` |
-| `#1872.0de0dcd9` | 5. `node scripts/affected.mjs --record` on a fixture with a failing test leaves `scripts/known-failures.json` byte for byte as it was | `record.test.mjs` |
+Each tag is the criterion's ID as `scripts/proof-change.mjs` computes it: `#1872.` and the first eight hex digits of
+the SHA-256 of the criterion's line after `- [ ] `, trimmed, white space collapsed.
+
+| Tag | Criterion | File | Tests |
+|---|---|---|---|
+| `#1872.d76cf8af` | 1. an edit of `scripts/main-watch.mjs`, and one of `scripts/known-failures-check.mjs`, each fail the guard with no signed tag, naming the file | `lanes-code.test.mjs` | 4: each file, with no tag and under an unsigned tag |
+| `#1872.b7513f90` | 2. the same edit, as its own commit under a signed tag naming the file, passes | `lanes-code.test.mjs` | 2: each file |
+| `#1872.28dfb26c` | 3. a commit adding its own failing test's ID to `failures` fails with no signed tag, naming the entry; passes under a signed tag naming the entry | `known-failures.test.mjs` | 3: no tag, unsigned tag, signed tag |
+| `#1872.2f12ab89` | 4. raising a `lint` count, adding a `timing` ID, moving a `failures` date later each fail with no tag, naming the key; removing an entry or lowering a count passes with no tag | `known-failures.test.mjs` | 8: four loosenings, four tightenings |
+| `#1872.845c651a` | 5. `node scripts/affected.mjs --record` on a fixture with a failing test leaves `scripts/known-failures.json` byte for byte as it was | `record.test.mjs` | 1 |
 
 ## The guard
 
@@ -92,5 +95,25 @@ the criteria say "no signed approval tag".
 
 ## On the base
 
-18 of 23 (tests and subtests together) fail at an assertion; the 5 that pass are criterion 4's removal and lowering
-cases, which pass on the base too. See `BASE-FAILURE.txt`.
+18 top-level tests, no subtests. 14 fail at a `node:assert` assertion thrown under `tests/acceptance/1872/`. The 4
+that pass are criterion 4's removal and lowering cases (`#1872.2f12ab89 a planted commit with a failures entry
+removed / a timing ID removed / a lint entry removed / a lint count lowered passes the guard with no tag`): the base
+guard asks no tag of those keys at all, so they pass on the base as they must after the fix too. They prove their
+half of criterion 4 only through a planted wrong program that refuses them. See `BASE-FAILURE.txt`.
+
+## Redraft
+
+The first draft was disputed by the proof lanes (`node scripts/proof.mjs guard before trace`) on the change:
+
+1. **trace:** every tag named no criterion of #1872. The draft's IDs (`8d212921`, `aa1738ec`, `51c82c1d`, `938914d1`,
+   `0de0dcd9`) were not the hashes `proof-change.mjs` computes from the issue's criterion lines. The tags are now
+   `d76cf8af`, `b7513f90`, `28dfb26c`, `2f12ab89` and `845c651a`, computed from the live issue with
+   `readIssue`'s rule and checked by hand.
+2. **before:** a tagged test must fail on the base at its own assertion. The draft's criterion 1, 2 and 4 tests ran
+   their cases as `t.test` subtests, so on the base each top-level test failed as `ERR_TEST_FAILURE: 2 subtests
+   failed`, which the lane reads as failing before its assertion. Each case is now its own top-level `test(...)`,
+   made in a loop, carrying its criterion's tag, with no subtests.
+
+Nothing else changed: the fixtures, planted edits, expected values, assertions and helpers are as drafted, and the
+surfaces are still `node scripts/proof.mjs guard` in fixture repositories and `node scripts/affected.mjs --record`.
+Test names now carry the case (the file, or the edit) so each top-level name is unique.

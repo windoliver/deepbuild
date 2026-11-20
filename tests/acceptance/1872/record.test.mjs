@@ -8,7 +8,7 @@ import { affected, dump, failIds, idOf, KNOWN, known, LONG, nodeFile, note, read
 const FILE = 'tests/fixture-1872/record.test.mjs';
 const ID = idOf(FILE, 'the failure --record would write');
 
-test('#1872.0de0dcd9 node scripts/affected.mjs --record on a fixture with a failing test leaves scripts/known-failures.json byte for byte as it was', LONG, async (t) => {
+test('#1872.845c651a node scripts/affected.mjs --record on a fixture with a failing test leaves scripts/known-failures.json byte for byte as it was', LONG, async (t) => {
   const box = sandbox(t);
   // A file main already holds, with an entry under each key and a layout of its own, so a rewrite of any of it shows.
   const listed = idOf('tests/fixture-1872/listed.test.mjs', 'a listed test');
