@@ -1,5 +1,5 @@
-// #1115: a change to the `skips` key of known-failures.json needs a signed approval tag, and the rest of the file
-// doesn't, since `affected.mjs --record` rewrites it on main. Reached by running this checkout's real
+// #1115: a change to the `skips` key of known-failures.json needs a signed approval tag naming the file. (#1872 guards
+// every other key too, by entry; its own tests hold that rule.) Reached by running this checkout's real
 // `node scripts/proof.mjs guard` in scratch repositories, with really signed and really unsigned tags made with a
 // throwaway SSH key; the approvers file is named by DEEP_APPROVERS (README: The guard).
 import assert from 'node:assert/strict';
@@ -85,6 +85,7 @@ test('#1115.82b1c824 an uncommitted change to the skips key fails the guard', LO
 /**
  * main and the change each record a failure, so merging main conflicts in known-failures.json; `resolved` is what the
  * merge commit holds there. The guard skips a file git couldn't merge in its ordinary walk over a commit's files.
+ * The change's own entry is approved by a signed tag naming it (#1872), so only the merge's resolution is judged.
  */
 function conflicted(box, resolved) {
   const scene = guardRepo(box, { [KNOWN]: baseline({ skips: [listed] }) });
@@ -93,7 +94,7 @@ function conflicted(box, resolved) {
   scene.commit({ [KNOWN]: baseline({ failures: onMain, skips: [listed] }) });
   scene.git('update-ref', 'refs/remotes/origin/main', 'HEAD');
   scene.git('checkout', '-q', 'change');
-  scene.commit({ [KNOWN]: baseline({ failures: onChange, skips: [listed] }) });
+  scene.approve(scene.commit({ [KNOWN]: baseline({ failures: onChange, skips: [listed] }) }), [`${KNOWN} › b › two`]);
   assert.throws(() => scene.git('merge', '-q', '--no-edit', 'main'), undefined, 'merging main did not conflict, so this scene shows nothing');
   write(scene.cwd, { [KNOWN]: baseline({ failures: { ...onMain, ...onChange }, ...resolved }) });
   scene.git('add', '-A');
