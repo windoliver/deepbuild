@@ -8,8 +8,6 @@
 //! against the last step's poses; and one that lets a walker's approach move a character body
 //! that wants no move.
 
-use std::collections::BTreeMap;
-
 use super::{shape_use, Run};
 use crate::{Rapier, Twin};
 use deep_canvas_physics::backend::{Backend, CharacterState};
@@ -52,12 +50,14 @@ pub fn planted(name: &str, run: &mut Run) -> bool {
     true
 }
 
-/// Each character output's reading after a step into `readings`: grounded, sliding or crouched,
-/// 0 or 1; and the character bodies' states.
+/// Each character output's reading after a step into `t`'s readings: grounded, sliding or
+/// crouched, 0 or 1; (#2248) each valued output's value after it into `t`'s values (reading.rs);
+/// and the character bodies' states.
 pub(super) fn readings(
     b: &Rapier,
     w: &World,
-    readings: &mut BTreeMap<String, (bool, Vec<[f64; 2]>)>,
+    joints: &[deep_canvas_physics::backend::JointState],
+    t: &mut super::Trace,
 ) -> Vec<CharacterState> {
     let walkers = b.characters();
     let own = |o: &deep_canvas_physics::doc::Output| o.read.of_character() && !o.valued();
@@ -68,10 +68,11 @@ pub(super) fn readings(
                 Read::Sliding => c.sliding,
                 _ => c.crouched,
             };
-            let e = readings.entry(id.clone()).or_insert((false, Vec::new()));
+            let e = t.readings.entry(id.clone()).or_insert((false, Vec::new()));
             e.1.push([f64::from(u8::from(on)), 0.0]);
         }
     }
+    deep_canvas_physics::reading::take(b, w, joints, &walkers, &mut t.values);
     walkers
 }
 

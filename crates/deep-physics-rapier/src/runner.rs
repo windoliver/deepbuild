@@ -33,11 +33,13 @@ use serde_json::{json, Map, Value};
 mod audit;
 pub mod centre;
 pub mod contact;
+mod dims;
 pub mod fast;
 mod held;
 pub mod kit;
 #[cfg(not(target_arch = "wasm32"))]
 mod live;
+pub mod net;
 mod replay;
 mod timeline;
 pub mod vehicle;
@@ -504,7 +506,8 @@ impl Run {
                     && !walk::planted(name, &mut run)
                     && !contact::planted(name, &mut run)
                     && !centre::planted(name, &mut run)
-                    && !fast::planted(name, &mut run) =>
+                    && !fast::planted(name, &mut run)
+                    && !dims::planted(name, &mut run) =>
             {
                 return None
             }
@@ -581,7 +584,7 @@ impl Run {
             frame_rate: if self.key_without_rate { "" } else { rate },
             steps,
         };
-        bake::key(&parts, &self.build, target)
+        bake::key(&parts, &self.build_of(world), target)
     }
 
     /// The world `v` holds, built, or the issues that refuse it.
@@ -617,7 +620,7 @@ impl Run {
         let scene = kept.as_deref().unwrap_or(scene);
         let doc = scene.get("worlds")?.get(id)?;
         let read = crate::bound::expand(Some(scene), doc).and_then(|doc| {
-            let w = check(&doc, &self.caps, self.table)?;
+            let w = check(&doc, &self.caps_of(&doc), self.table)?;
             let skins = deep_canvas_physics::skin::check(&w, scene);
             if !skins.is_empty() {
                 return Err(skins);
@@ -642,11 +645,9 @@ impl Run {
             let p = [x.values[at], x.values[at + 1], x.values[at + 2]];
             t.positions.entry(id.clone()).or_default().push(p);
         }
-        let walkers = walk::readings(b, w, &mut t.readings);
-        deep_canvas_physics::reading::take(b, w, &joints, &walkers, &mut t.values);
-        let own = |o: &deep_canvas_physics::doc::Output| o.read.of_joint() && !o.valued();
-        for (id, o) in w.outputs.iter().filter(|(_, o)| own(o)) {
-            if let Some(j) = joints.iter().find(|j| j.id == o.from) {
+        let walkers = walk::readings(b, w, &joints, t);
+        for (id, o) in w.outputs.iter().filter(|(_, o)| o.read.of_joint()) {
+            if let Some(j) = joints.iter().find(|j| j.id == o.from && !o.valued()) {
                 let (pair, v) = match o.read {
                     Read::JointCoordinate => (false, [j.coordinate.unwrap_or(0.0), 0.0]),
                     _ => (true, [j.force, j.torque]),
@@ -795,7 +796,6 @@ impl Run {
         );
         let mut outputs = bake::outputs(&t.positions, &t.readings, rate, frame, w.step_rate, steps);
         vehicle::outputs(&mut outputs, t, frame, w);
-        deep_canvas_physics::reading::series(&mut outputs, w, &t.values, frame);
         let rank = occurrence::ranks(w);
         t.shaped = shape_uses(&t.occurrences, w);
         let record = json!({"key": key, "step_hashes": t.step_hashes, "ring": ring(t),
@@ -1026,7 +1026,7 @@ impl Run {
                         .collect();
                     json!({"ok": true, "golden": {
                         "bake_key": self.key(world, &reads, &track.json(), &rate, plan.steps, None),
-                        "runtime_digest": self.build.runtime_digest(), "machine": replay::machine(&self.build.target),
+                        "runtime_digest": self.build_of(world).runtime_digest(), "machine": replay::machine(&self.build.target),
                         "step_hashes": t.step_hashes, "checkpoint_hashes": hashes,
                         "occurrences_hash": record["occurrences_hash"],
                         "record_on": self.build.target, "verify_on": verify_on}})
@@ -1154,7 +1154,7 @@ impl Run {
             Ok(r) => r,
             Err(e) => return Some(e),
         };
-        let (w, mut b) = match self.build(world) {
+        let (w, mut b) = match self.build(world).and_then(dims::solid("physics.query")) {
             Ok(x) => x,
             Err(e) => return Some(e),
         };
