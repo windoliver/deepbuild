@@ -3,7 +3,7 @@
   "set": "game2d",
   "files": {
     "player.js": "12d17a543da31926e035f0c4cf8bdf0efbc0ecc538584377708b3737a2c9dc09",
-    "player_bg.wasm": "3420d4cca17f38226d95da9c397e5e7889925cf6f868553b30bf9412ae71b7a4"
+    "player_bg.wasm": "067d5b8203434ef5960f82086f58e5db9c07da5bb1fd2021170eddd5ab35f9f0"
   },
   "core_version": "0.0.0",
   "set_digest": "9fb71efa22620783fd3986d83d0d0bbfaddeddbe938e63069309b0163effd48b",

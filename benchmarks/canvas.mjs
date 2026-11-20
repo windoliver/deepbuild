@@ -276,7 +276,8 @@ workloads.costs = () => {
       rmSync(dir, { recursive: true, force: true });
     }
   }
-  const report = { fingerprint: machine, build: measured.build, terms, declared: declared.terms, declaredFingerprint: declared.fingerprint };
+  // #1430: the hits and misses of the text's run and shape caches over the bench.
+  const report = { fingerprint: machine, build: measured.build, terms, caches: measured.caches, declared: declared.terms, declaredFingerprint: declared.fingerprint };
   if (write) {
     if (!references.some((reference) => reference.model === machine.model)) throw Error(`coefficients come from a reference Mac; this is ${machine.model}`);
     const { model, chip, memoryBytes, macosBuild } = machine;
@@ -1378,6 +1379,8 @@ const EFFICIENCY = {
   'logic-world-pages': Object.fromEntries(['moves_8_ms', 'checkpoint_50_ms', 'checkpoint_50_bytes', 'idle_work'].map((k) => [k, (r) => r[k]])),
   // #1968: each reading by its own name (benchmarks/code-film.mjs).
   'canvas-code-film': Object.fromEntries(['tokens_2000_lines_ms', 'diff_400_lines_ms', 'seek_10_min_ms', 'still_code_steps'].map((k) => [k, (r) => r[k]])),
+  // #1430: each reading by its own name (benchmarks/text-reflow.mjs).
+  'canvas-text-reflow': Object.fromEntries(['width_change_50kb_ms', 'typed_char_50kb_ms'].map((k) => [k, (r) => r[k]])),
   // #184: each reading by its own name (benchmarks/playtest.mjs).
   'playtest-maze': { maze_40_runs_s: (r) => r.maze_40_runs_s, idle_work: (r) => r.idle_work },
   'playtest-throughput': { fixture_realtime_x: (r) => r.fixture_realtime_x },
@@ -2057,6 +2060,8 @@ workloads.surface = async () => (await import('./surface.mjs')).surface({ releas
 // #1968's budgets: a long file's tokens mapped to runs, two versions aligned, a seek into a long terminal recording and a
 // still code item's steps per frame (benchmarks/code-film.mjs).
 workloads['code-film'] = async () => (await import('./code-film.mjs')).codeFilm({ release, once, runs });
+// #1430's budgets: a width change and a typed character on a 50 KB text (benchmarks/text-reflow.mjs).
+workloads['text-reflow'] = async () => (await import('./text-reflow.mjs')).textReflow({ release, run, runs });
 // #233's budgets: a math@1 document against its expansion written by hand, and a frame's own expansions (benchmarks/math.mjs).
 workloads.math = async () => (await import('./math.mjs')).math({ root, release, once, runs });
 workloads['between-steps'] = async () => (await import('./between-steps.mjs')).betweenSteps({ root, release, once, runs });

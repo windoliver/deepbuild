@@ -1797,6 +1797,24 @@
       ]
     },
     {
+      "id": "canvas-text-reflow",
+      "command": [
+        "node",
+        "benchmarks/canvas.mjs",
+        "text-reflow"
+      ],
+      "margin": 0.5,
+      "limits": {},
+      "targets": {
+        "width_change_50kb_ms": 5,
+        "typed_char_50kb_ms": 2
+      },
+      "initialReason": "Issue #1430 first measurement (#1430.8a0fdfd2): the merge base keys its one shaped-run cache on the width and shapes a text whole, so a new width or one typed character shapes all of it again. A release deep-text shape lays a 50 KB text of 100 paragraphs out at 640 px, then at five other widths (width_change_50kb_ms) and five times with one more character typed into a paragraph (typed_char_50kb_ms), each the shaper's time for its line and a run's reading the median of its five; one warm-up and five runs, each a fresh process. canvas.mjs judge holds both times to their targets on a reference Mac. p50 and peak memory of the whole command get a 50% margin against the merge base once main has this task.",
+      "criteria": [
+        "#1430.8a0fdfd2"
+      ]
+    },
+    {
       "id": "logic-between-steps",
       "command": [
         "node",

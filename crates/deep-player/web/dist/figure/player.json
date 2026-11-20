@@ -3,7 +3,7 @@
   "set": "figure",
   "files": {
     "player.js": "814af7add0cbd57793894eb86bbd9e0a3a1dcde14696d8530cf83f7f747c09fc",
-    "player_bg.wasm": "0efa9c64c446e731f1e4f6ed6e41c4e41bac0fc82bace2bf865cbec21a36360f"
+    "player_bg.wasm": "87590d49b5901bd80ce00f8f026407b42ab836416c0d671bb0d998ee157bcbca"
   },
   "core_version": "0.0.0",
   "set_digest": "e0d535adac31c58c7a65fae890f5575ca14ffaa5a44cc71d4a5fd148fe14ea47",
