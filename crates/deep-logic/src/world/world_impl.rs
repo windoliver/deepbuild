@@ -815,12 +815,7 @@ impl World {
         if size > 0 {
             touched.extend(from as u64 / PAGE..=(from + size - 1) as u64 / PAGE);
         }
-        let mut at = item.emits_at as usize;
-        for e in &item.emits {
-            memory[at..at + 4].fill(0);
-            touched.push(at as u64 / PAGE);
-            at += e.size() as usize;
-        }
+        crate::piece::fires::clear(item, memory, &mut touched, PAGE);
         let mut words = vec![0u64; l.names.pages.len()];
         for p in touched {
             if let Some(w) = words.get_mut((p / 64) as usize) {
@@ -893,6 +888,7 @@ impl World {
             }
         }
         let memory = l.runner.memory("memory").expect("a memory");
+        let fires = crate::piece::fires::fired(item, memory);
         let mut rows = match emitted(item, memory, &self.planted) {
             Ok(rows) => rows,
             // A count past its kind's max_per_step traps as any trap does: no row is dropped.
@@ -949,6 +945,7 @@ impl World {
         }
         let h = l.step_hash(&rows);
         report(rec, item, k, l, Some(h), fuel, pages, &rows);
+        crate::piece::fires::record(rec, item, k, fires);
     }
 
     /// Runs each item's `preview` (Logic: preview) when the state it would read changed since its

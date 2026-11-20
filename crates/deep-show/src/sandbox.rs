@@ -685,6 +685,10 @@ impl Host {
         }
     }
 
+    /// #194's planted `catalog_validated_per_frame`: `asset`'s verdicts dropped, as if none were kept.
+    pub(crate) fn forget(&mut self, asset: &str) {
+        self.validated.retain(|(a, _), _| a != asset);
+    }
     /// `validate` on bytes at hand, such as a provider's output.
     pub fn validate_bytes(&mut self, sealed: &Sealed, layout: &str, input: &[u8]) -> Value {
         let first = sealed

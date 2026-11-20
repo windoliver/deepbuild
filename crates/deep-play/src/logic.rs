@@ -306,9 +306,11 @@ pub fn logic_piece(
     read: &dyn Fn(&str) -> Option<Vec<u8>>,
     cast_late: bool,
 ) -> Result<Option<Piece>, Box<Issue>> {
-    let Some(piece) = piece_json(form) else {
+    let Some(mut piece) = piece_json(form) else {
         return Ok(None);
     };
+    // #194: each fired input's number fields, from the world that declares it.
+    crate::fires::expand(form, &mut piece)?;
     let piece = check_in(
         &piece,
         &Default::default(),

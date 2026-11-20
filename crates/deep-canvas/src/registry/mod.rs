@@ -730,6 +730,7 @@ const MODULE_CHECK_KINDS: &[(&str, &str)] = &[
     ("logic.determinism", "logic"),
     ("logic.budget", "logic"),
     ("logic.layout", "logic"),
+    ("logic.tuning", "logic"), // #194's tuning rows.
     ("net.rollback", "net"),
     ("net.desync", "net"),
     ("net.budget", "net"),
