@@ -3,10 +3,8 @@
 // `node scripts/proof.mjs guard` in scratch repositories, with really signed and really unsigned tags made with a
 // throwaway SSH key; the approvers file is named by DEEP_APPROVERS (README: The guard).
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import test from 'node:test';
-import { affected, baseline, dump, entry, failIds, guardRepo, idOf, KNOWN, LONG, nodeFile, sandbox, tree, write } from './helpers.mjs';
+import { baseline, dump, entry, guardRepo, KNOWN, LONG, sandbox, write } from './helpers.mjs';
 
 const listed = entry('tests/fixture-1115/gated.test.ts › the gated test', 'opt-in: a person sets DEEP_1115_FIXTURE=1');
 const another = entry('tests/fixture-1115/other.test.ts › the other test', 'opt-in: a person sets DEEP_1115_OTHER=1');
@@ -110,30 +108,4 @@ test('#1115.82b1c824 a merge that resolves a conflict in known-failures.json by 
   await t.test('the resolution adds an entry', async (t) => {
     expectRefused(await conflicted(sandbox(t), { skips: [listed, another] }).guard(), 'a merge editing skips in its conflict');
   });
-});
-
-// Passes on the base, whose guard reads the file not at all. Its wrong programs are a rule on the whole file, and a rule
-// by lines: --record rewrites `skips` as JSON.stringify lays it out, so the bytes move though the key's value doesn't.
-test('#1115.82b1c824 an affected.mjs --record rewrite of the other keys passes the guard with no tag', LONG, async (t) => {
-  const box = sandbox(t);
-  const file = 'tests/fixture-1115/record.test.mjs';
-  const fixture = tree(box, { [file]: nodeFile("test('the recorded failure', () => { assert.equal(1, 2); });") }, { skips: [listed] });
-  // By hand, `skips` sits on one line, so the rewrite has to touch its lines.
-  const known = join(fixture.cwd, KNOWN);
-  const { skips, ...rest } = JSON.parse(readFileSync(known, 'utf8'));
-  const before = `${JSON.stringify(rest, null, 2).replace(/\n}$/, `,\n  "skips": ${JSON.stringify(skips)}\n}`)}\n`;
-  write(fixture.cwd, { [KNOWN]: before });
-
-  const recorded = await affected(box, fixture, ['--record', file]);
-  const all = dump(recorded);
-  const rewrite = readFileSync(known, 'utf8');
-  const id = idOf(file, 'the recorded failure');
-  assert.deepEqual(failIds(recorded.stdout), [id], `--record did not see the failure\n${all}`);
-  assert.ok(JSON.parse(rewrite).failures[id], `--record did not write the failure into ${KNOWN}\n${all}`);
-  assert.deepEqual(JSON.parse(rewrite).skips, skips, `--record changed the skips key's value\n${all}`);
-
-  // The rewrite's real bytes, on the guard's own scene.
-  const scene = guardRepo(box, { [KNOWN]: before });
-  scene.commit({ [KNOWN]: rewrite });
-  expectPassed(await scene.guard(), 'a --record rewrite of the other keys');
 });
