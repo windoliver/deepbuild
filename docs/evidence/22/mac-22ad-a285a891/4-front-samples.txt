@@ -1,0 +1,163 @@
+01:43:51 Google Chrome
+01:43:53 Google Chrome
+01:43:55 Google Chrome
+01:43:57 Google Chrome
+01:43:59 Google Chrome
+01:44:01 Google Chrome
+01:44:03 Google Chrome
+01:44:05 Google Chrome
+01:44:07 Google Chrome
+01:44:09 Google Chrome
+01:44:11 Google Chrome
+01:44:13 Google Chrome
+01:44:15 Google Chrome
+01:44:17 Google Chrome
+01:44:19 Google Chrome
+01:44:21 Google Chrome
+01:44:23 Google Chrome
+01:44:25 Google Chrome
+01:44:27 Windows App
+01:44:29 Windows App
+01:44:32 Windows App
+01:44:34 Windows App
+01:44:36 Windows App
+01:44:38 Windows App
+01:44:40 Windows App
+01:44:42 Windows App
+01:44:44 Windows App
+01:44:46 Windows App
+01:44:48 Windows App
+01:44:50 Windows App
+01:44:52 Windows App
+01:44:54 Windows App
+01:44:56 Windows App
+01:44:58 Windows App
+01:45:00 Windows App
+01:45:02 Windows App
+01:45:04 Windows App
+01:45:06 Windows App
+01:45:08 Windows App
+01:45:10 Windows App
+01:45:12 Windows App
+01:45:14 Windows App
+01:45:17 Windows App
+01:45:19 Windows App
+01:45:21 Windows App
+01:45:23 Windows App
+01:45:25 Windows App
+01:45:27 Windows App
+01:45:29 Windows App
+01:45:31 Windows App
+01:45:33 Windows App
+01:45:35 Windows App
+01:45:37 Windows App
+01:45:39 Windows App
+01:45:41 Windows App
+01:45:43 Windows App
+01:45:45 Windows App
+01:45:47 Windows App
+01:45:49 Windows App
+01:45:51 Windows App
+01:45:53 Windows App
+01:45:55 Windows App
+01:45:57 Windows App
+01:46:00 Windows App
+01:46:02 Windows App
+01:46:04 Windows App
+01:46:06 Windows App
+01:46:08 Windows App
+01:46:10 Windows App
+01:46:12 Windows App
+01:46:14 Windows App
+01:46:16 Windows App
+01:46:18 Windows App
+01:46:20 Windows App
+01:46:22 WeChat
+01:46:24 Claude
+01:46:26 Claude
+01:46:28 Claude
+01:46:30 Claude
+01:46:32 Claude
+01:46:34 Claude
+01:46:36 Claude
+01:46:38 Claude
+01:46:40 Claude
+01:46:42 Claude
+01:46:45 Claude
+01:46:47 Claude
+01:46:49 Claude
+01:46:51 Claude
+01:46:53 Claude
+01:46:55 Claude
+01:46:57 Claude
+01:46:59 Claude
+01:47:01 Claude
+01:47:03 Claude
+01:47:05 Claude
+01:47:07 Claude
+01:47:09 Claude
+01:47:11 Claude
+01:47:13 Claude
+01:47:15 Claude
+01:47:17 Claude
+01:47:19 Claude
+01:47:21 Claude
+01:47:23 Claude
+01:47:26 Claude
+01:47:28 Claude
+01:47:30 Claude
+01:47:32 Claude
+01:47:34 Claude
+01:47:36 Claude
+01:47:38 Claude
+01:47:40 Claude
+01:47:42 Claude
+01:47:44 Claude
+01:47:46 Claude
+01:47:48 Claude
+01:47:50 Claude
+01:47:52 Claude
+01:47:54 Claude
+01:47:56 deep-app-plant-handle-rows
+01:47:58 Claude
+01:48:00 Claude
+01:48:02 Claude
+01:48:04 Claude
+01:48:06 Claude
+01:48:09 Claude
+01:48:11 Claude
+01:48:13 Claude
+01:48:15 loginwindow
+01:48:17 loginwindow
+01:48:19 loginwindow
+01:48:21 loginwindow
+01:48:23 loginwindow
+01:48:25 loginwindow
+01:48:27 loginwindow
+01:48:29 loginwindow
+01:48:31 Claude
+01:48:33 Claude
+01:48:35 Claude
+01:48:37 loginwindow
+01:48:39 loginwindow
+01:48:41 loginwindow
+01:48:43 loginwindow
+01:48:46 loginwindow
+01:48:48 loginwindow
+01:48:50 loginwindow
+01:48:52 loginwindow
+01:48:54 loginwindow
+01:48:56 loginwindow
+01:48:58 Claude
+01:49:00 Claude
+01:49:02 Claude
+01:49:04 Claude
+01:49:06 Claude
+01:49:08 Claude
+01:49:10 deep-app-plain
+01:49:12 deep-app-plain
+01:49:14 Claude
+01:49:16 Claude
+01:49:18 Claude
+01:49:21 Claude
+01:49:23 deep-app-plain
