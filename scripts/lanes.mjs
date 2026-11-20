@@ -1174,6 +1174,11 @@ timed.push('tests/acceptance/1489/ui-thread.test.ts');
 // #2777's files each build deep-show (full, and with the test.tone module), and its preflight file times the lane.
 alone.push('tests/acceptance/2777/');
 
+// #981's files (blind) each build deep-logic and #416's assembler; ac7 starts headless Chrome, ac5 runs eight simulated
+// hours, and ac8 judges a step's and a route search's time on the reference Mac.
+alone.push('tests/acceptance/981/');
+timed.push('tests/acceptance/981/ac8-budget.test.ts');
+
 // #2898's files (blind) each start real hubs, plug-ins and jobs and hold 40 s deep_wait calls; no timing.
 alone.push('tests/acceptance/2898/');
 
