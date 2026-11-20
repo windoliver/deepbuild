@@ -2,7 +2,7 @@
   "uri": "deep://schedule/core@0.0.0",
   "core": "core@0.0.0",
   "build_set": "full",
-  "set_digest": "3fc9deaca5c5b3767c76882d3435451aab21e9d72dd7ff9efc144a9c6d9bc1f1",
+  "set_digest": "4cc812d80382d0e105b38647d63645cdba9c6f43d6a3f2b7e58a511cfcabe31f",
   "runtime_digest": "b0d9637fcffe5b58be4a3025853302613578659fa143fc9ca6bd110364894ab8",
   "interfaces": {
     "building@1": {
@@ -422,7 +422,7 @@
       }
     },
     "physics@1": {
-      "digest": "f48e8b0d1eb431d5b799b0a2151e6b2e6ec8ab77f7e6454bf5ff479dc1cf5479",
+      "digest": "cb0454f94fd253513335d98d4b8fda5292cd254fe65832b284f5b68e91e3c13d",
       "reference": "deep-physics-rapier",
       "kit": [
         "fixtures",
