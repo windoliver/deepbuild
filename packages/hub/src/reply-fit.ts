@@ -81,13 +81,13 @@ export function limitOf(client: unknown): Limit {
 let counter: ((text: string) => number) | undefined;
 /**
  * Tokens of `text` in the tokenizer both facts files pin (o200k_base, gpt-tokenizer 4.0.0), counted in pieces of 2,048
- * characters: a long run of letters costs the counter time in the square of its length (17 s at 100,000), and a cut
- * only ever splits a token in two, so the sum counts a few more, never fewer.
+ * characters: a long run of letters costs the counter time in the square of its length (17 s at 100,000). A cut can
+ * count one token fewer than the whole text does (the most 3,300 random texts showed), so each cut adds one.
  */
 async function tokensOf(text: string): Promise<number> {
   counter ??= (await import('gpt-tokenizer/encoding/o200k_base')).countTokens;
   let n = 0;
-  for (let at = 0; at < text.length; at += 2_048) n += counter(text.slice(at, at + 2_048));
+  for (let at = 0; at < text.length; at += 2_048) n += counter(text.slice(at, at + 2_048)) + (at > 0 ? 1 : 0);
   return n;
 }
 /** How far `text` passes each figure of `cap`: the largest ratio of size to figure, at most 1 when it fits. */
@@ -148,11 +148,17 @@ export async function refusalFits(refusal: Partial<Refusal> & Obj, cap: Figures)
     const all = out.issues as unknown[];
     const was = (typeof out.truncated === 'object' && out.truncated !== null ? out.truncated : {}) as Obj;
     const total = typeof was.total === 'number' ? was.total : all.length;
+    // A list the canvas core cut none of has no `truncated`: its codes are counted here as the core counts them (show.rs).
+    const byCode = was.by_code ?? all.reduce<Record<string, number>>((n, i) => {
+      const code = typeof (i as Obj)?.code === 'string' ? ((i as Obj).code as string) : '';
+      n[code] = (n[code] ?? 0) + 1;
+      return n;
+    }, {});
     let shown = all.length;
     for (let by = await over(JSON.stringify(out), cap); by > 1 && shown > 0; by = await over(JSON.stringify(out), cap)) {
       shown = Math.min(shown - 1, Math.floor((shown / by) * 0.95));
       out.issues = all.slice(0, shown);
-      out.truncated = { ...was, shown, total };
+      out.truncated = { ...was, shown, total, by_code: byCode };
     }
   }
   for (let by = await over(JSON.stringify(out), cap); by > 1 && typeof out.actual === 'string' && out.actual.length; by = await over(JSON.stringify(out), cap)) {

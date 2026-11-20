@@ -35,6 +35,24 @@ describe('refusalFits', () => {
     expect(shown).toBeGreaterThan(0);
     expect(out.truncated).toEqual({ shown, total: 400, by_code: { bad_item: 400 } });
   });
+
+  it('counts each code of the issues it cuts when the canvas core cut none', async () => {
+    const issues = Array.from({ length: 150 }, (_, i) => ({ code: i % 3 ? 'bad_item' : 'unknown_kind', path: `/document/nodes/${i}`, message: 'y'.repeat(40) }));
+    const out = await refusalFits({ outcome: 'refused', code: 'invalid', issues }, { chars: 8_800 });
+    expect(JSON.stringify(out).length).toBeLessThanOrEqual(8_800);
+    expect(out.truncated).toEqual({ shown: (out.issues as unknown[]).length, total: 150, by_code: { bad_item: 100, unknown_kind: 50 } });
+  });
+
+  it('never counts fewer tokens than the whole text has', async () => {
+    // Pieces of this text cut where they are count one token fewer than the whole: a cap one under the whole count must still hold.
+    const unit = '}1} the}}{.b';
+    const text = (unit + 'z'.repeat(2_048 - unit.length)).repeat(4);
+    const { countTokens } = await import('gpt-tokenizer/encoding/o200k_base');
+    const whole = countTokens(JSON.stringify({ text }));
+    const rooms: number[] = [];
+    await fitted({ tokens: whole - 1 }, () => ({ tokens: whole - 1 }), true, async (room) => { rooms.push(room); return rooms.length === 1 ? { text } : {}; });
+    expect(rooms.length).toBe(2);
+  });
 });
 
 describe('limitOf', () => {
