@@ -344,6 +344,23 @@ fn facing(params: &Value, path: &str) -> Result<Facing, Refused> {
     }
 }
 
+/// A label's or an image's quad axes on screen, as `facing` turns it from its `own`.
+pub fn quad_axes(facing: Facing, own: [Vec3; 2], camera: &Camera) -> [Vec3; 2] {
+    match facing {
+        Facing::Camera => [camera.right, camera.up],
+        Facing::Upright => {
+            let r = [camera.right[0], 0.0, camera.right[2]];
+            let r = if dot(r, r) > 1e-12 {
+                normalize(r)
+            } else {
+                [1.0, 0.0, 0.0]
+            };
+            [r, [0.0, 1.0, 0.0]]
+        }
+        Facing::Fixed => own,
+    }
+}
+
 /// A `mark.image@1` at the world `m` (#1992; Marks in 3D): its picture by hash, on one quad of
 /// `size` centred on the item.
 pub(super) fn image(id: &str, params: &Value, path: &str, m: &Affine3) -> Result<Image, Refused> {
@@ -351,6 +368,19 @@ pub(super) fn image(id: &str, params: &Value, path: &str, m: &Affine3) -> Result
         Some(s) if s.len() == 64 && s.bytes().all(|b| b.is_ascii_hexdigit()) => s,
         _ => return refused("out_of_range", format!("{path}/asset")),
     };
+    quad(id, asset, params, path, m)
+}
+
+/// One quad of `size` centred on the world `m`, placed and turned as a label is, for the picture
+/// `asset` names: an image mark's by hash, or a module's mark's by the key its picture takes
+/// once the camera is known (#2450).
+pub(crate) fn quad(
+    id: &str,
+    asset: &str,
+    params: &Value,
+    path: &str,
+    m: &Affine3,
+) -> Result<Image, Refused> {
     let size = match params
         .get("size")
         .and_then(Value::as_array)
@@ -806,7 +836,8 @@ pub(super) fn edge_line(
     let mut mesh = match (item.get("kind").and_then(Value::as_str), assets) {
         // A glTF asset's mesh, read as its solid is (#1640).
         (Some("mesh.asset@1"), Some(read)) => {
-            asset_mesh(read, target, item.get("params").unwrap_or(&Value::Null))?.0
+            let params = item.get("params").unwrap_or(&Value::Null);
+            asset_mesh(read, target, params, item)?.0
         }
         _ => mesh_of(doc, target, item, seconds, outlines)?,
     };

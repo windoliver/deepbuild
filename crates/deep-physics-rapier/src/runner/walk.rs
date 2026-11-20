@@ -4,7 +4,9 @@
 //! character's vertical speed; a kit that passes a fixture its caps exclude; a character stepped
 //! as a plain kinematic body; a place that keeps the vertical speed; a ceiling that keeps the
 //! upward speed; a crouch that stands on release; and a corner whose walls are resolved one at a
-//! time.
+//! time. #2243's (tests/acceptance/2243/README.md): a wrapper that moves every character body
+//! against the last step's poses; and one that lets a walker's approach move a character body
+//! that wants no move.
 
 use std::collections::BTreeMap;
 
@@ -16,7 +18,7 @@ use deep_canvas_physics::kit::Planted;
 use serde_json::{json, Value};
 
 /// The planted programs this file runs.
-pub const PLANTED: [&str; 8] = [
+pub const PLANTED: [&str; 10] = [
     "slope_limit_ignored",
     "checkpoint_drops_vertical",
     "kit_passes_excluded",
@@ -25,6 +27,8 @@ pub const PLANTED: [&str; 8] = [
     "ceiling_keeps_upward",
     "crouch_stands_on_release",
     "corner_one_wall_at_a_time",
+    "characters_against_last_step",
+    "approach_moves_standing",
 ];
 
 /// Plants `name`, one of [`PLANTED`], in `run`; false for another name.
@@ -41,6 +45,8 @@ pub fn planted(name: &str, run: &mut Run) -> bool {
         "ceiling_keeps_upward" => Twin::KeepsUpward,
         "crouch_stands_on_release" => Twin::StandsOnRelease,
         "corner_one_wall_at_a_time" => Twin::EachWallAlone,
+        "characters_against_last_step" => Twin::StalePoses,
+        "approach_moves_standing" => Twin::StandingGivesWay,
         _ => return false,
     };
     true

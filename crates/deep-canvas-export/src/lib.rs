@@ -5,3 +5,4 @@
 pub mod lottie;
 pub mod module;
 pub mod page;
+pub mod pptx;

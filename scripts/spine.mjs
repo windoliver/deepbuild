@@ -25,7 +25,8 @@ const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const SLUG = 'windoliver/deepbuild';
 /** The 25 spine tasks (the `spine` label) and their merged commits, read from GitHub on Nov 7, 2026; #12's is the commit that
  * landed its acceptance tests and fixes after that re-judge reopened it, and #13's is PR #1675's merge, read
- * on Nov 17, which added the third reference Mac (#1831). */
+ * on Nov 17, which added the third reference Mac (#1831); #44's is the main commit judged on Linux and on the reference
+ * Mac on Nov 18, the first to hold the fixes its parts needed (#2766, #2768, #2797). */
 const SPINE = [
   [12, 'c215f37a64ab79109c495269b687fa23b087bb6c'], [13, '96ee0fc4d7b8882145961ca215ad50c3e3d4a1ee'],
   [14, '554bebb6cc8e5693a887bdeac45771e046fcac5e'], [15, 'af779af3c8aed3ecf58690e214c186ff742ae91b'],
@@ -34,7 +35,7 @@ const SPINE = [
   [25, 'debda22a6ef976bd7ce20a92e005272406accf23'], [28, '8592ea38ae565001e7541266fb5e5364ae58d98a'],
   [29, '0966298b7a79e244aa651dfc9aacf1325e04b033'], [30, '2b7f9cddd1511300f93891c262834a99ac0df47b'],
   [31, '42f010f76bed289f711846f18f22f3813d6f5708'], [32, '588627893c214b1831d5054d40127fa737194e87'],
-  [44, '5a6d09a4f83e420fa34a9edf22b5161eda749878'], [47, '3b875bf1cf956ce640f294a615df8721b75437f2'],
+  [44, 'f6ddd396f404cd5538ab7c8026b35838c7bd6cdb'], [47, '3b875bf1cf956ce640f294a615df8721b75437f2'],
   [48, '366942a1507dd371ce60e3e9cf848eb1bceb7bfa'], [56, '3c4dd9d8aed45fcb7d2a0dabbba8b51ab13df9be'],
   [80, 'fcf82f4eeab72f9f271132b1fd13ddc713c366aa'], [83, '427645afc9405279d024e124f166ac96a3044974'],
   [86, '33eaad3375f422a265cd51b246281df3a2a17c74'], [236, '4d42ae41db5390efe7f94010900cb1c17f8dc966'],

@@ -1,0 +1,13 @@
+{
+  "issue": 971,
+  "criterion": "#971.573c2449",
+  "verdict": "looks_right",
+  "who": "This session's agent, on the owner's delegation (\"show me scrresnhot or videos and vlaidte for me?\", then \"close the gaps that we can close the issue\", Nov 18, 2026)",
+  "when": "2026-11-19T15:06:20Z",
+  "screenshots": {
+    "temple-local.png": "e331ae9d40f812c3409bc25af67371e29806bec9d52bd8ee15da1637bc3ba227",
+    "temple-plain.png": "aa25aca3b9001bf75f2e0c288f5bb07eedf20b29fb508addfb19b31af2fbf34c",
+    "walls-edge.png": "61feaa8b72a3a8da045ceb3472e764a66d83d51932c7f77c05053afafd9896ce"
+  },
+  "note": "A third call, on new pictures: the pass was made faster for the budget, which changed the bytes. The first call, on the first pictures, was looks_wrong for an uneven architrave (221 to 248) and door frame (88 to 124); the second, after the smoothing was changed, looks_right. These pictures read as the second's did. Read back from the three PNGs as 8-bit luminance, each part by its value without local: the architrave, flat at 249, reads 221 to 223; the door's frame, flat at 24, reads 69 to 73; a column 219 to 220; the sky 197 everywhere, up to the roof; the ground 205 to 208. The shade opens up: the wall's courses go from 13 and 17 to 50 to 52 and 59 to 61, the doorway from 2 to 28 or 29, and the frieze's shaded squares from 14 to 47 or 48. The two walls meet in one step, their cells beside the edge at the values they have far from it (205 and 237 or 238, 55 and 65). What remains is a spread of 4 levels up the door's frame."
+}

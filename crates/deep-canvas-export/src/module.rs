@@ -12,6 +12,8 @@ use crate::lottie::{self, Frames, Plant, CANT_HOLD};
 
 /// The Lottie target's independent reader: the pinned reference renderer's process.
 pub const READER: &str = "lottie_reader";
+/// The pptx target's independent reader: an Office Open XML reader and the pinned LibreOffice.
+pub const PPTX_READER: &str = "pptx_reader";
 
 fn manifest() -> Manifest {
     let dep = |r: &str| Dependency {
@@ -57,6 +59,14 @@ fn register(r: &mut Registrar) {
         "export.target@1",
         "lottie",
         json!({"writer": "export", "fidelity": ["export.fidelity"], "reader": READER, "hidden": "left_out"}),
+        "R6",
+    );
+    // #732: the editable deck, read back by an Office Open XML reader apart from its writer and
+    // drawn slide by slide by the pinned LibreOffice.
+    r.entry(
+        "export.target@1",
+        "pptx",
+        json!({"writer": "export", "fidelity": ["export.fidelity"], "reader": PPTX_READER, "hidden": "left_out"}),
         "R6",
     );
     r.check("export", "any", &CODES, check);

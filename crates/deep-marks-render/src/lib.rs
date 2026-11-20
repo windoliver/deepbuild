@@ -92,6 +92,8 @@ pub(crate) enum Theme {
 struct View {
     zoom: f64,
     theme: Theme,
+    /// #1489: reduced motion: an animated image holds the frame the view first showed.
+    reduced: bool,
 }
 
 /// One step of a document session: a whole revision (or the last one), the time of its first
@@ -379,6 +381,7 @@ fn view(value: Option<&Value>) -> Option<View> {
         return Some(View {
             zoom: 1.0,
             theme: Theme::Light,
+            reduced: false,
         });
     };
     let map = value.as_object()?;
@@ -393,7 +396,15 @@ fn view(value: Option<&Value>) -> Option<View> {
         Some("dark") => Theme::Dark,
         Some(_) => return None,
     };
-    Some(View { zoom, theme })
+    let reduced = match map.get("reduced_motion") {
+        None => false,
+        Some(r) => r.as_bool()?,
+    };
+    Some(View {
+        zoom,
+        theme,
+        reduced,
+    })
 }
 
 /// The content-addressed store an image is read from by its sha256: a directory whose files are
@@ -689,18 +700,29 @@ fn verdict(checked: &mut Value, accepted: &[(String, String)]) {
     checked["verdict"] = json!({"outcome": outcome, "open": open});
 }
 
-/// #2031 AC6's planted check: it accepts a 17th light on one group.
-const SEVENTEEN: &str = "light_accepts_seventeenth";
-
-/// The planted check's answer: a lit group's light count no longer refused.
-fn accepts_seventeenth(checked: &mut Value) {
-    if let Some(issues) = checked["issues"].as_array_mut() {
-        issues.retain(|i| {
-            !(i["code"] == "out_of_range"
+/// The issues a planted check lets through, by its name. #2031 AC6's accepts a 17th light on one
+/// group; #2032 AC6's two accept an open path that occludes, and a lit group's occluders past
+/// their cap.
+fn let_through(planted: Option<&str>) -> Option<fn(&Value) -> bool> {
+    Some(match planted? {
+        "light_accepts_seventeenth" => |i| {
+            i["code"] == "out_of_range"
                 && i["path"]
                     .as_str()
-                    .is_some_and(|p| p.ends_with("/params/light/lights")))
-        });
+                    .is_some_and(|p| p.ends_with("/params/light/lights"))
+        },
+        "occlude_accepts_open_path" => |i| i["code"] == "occluder_open",
+        "occlude_accepts_past_cap" => {
+            |i| i["code"] == "out_of_range" && i["actual"]["segments"].is_number()
+        }
+        _ => return None,
+    })
+}
+
+/// The planted check's answer: the issues it lets `through` no longer refused.
+fn accepts(checked: &mut Value, through: fn(&Value) -> bool) {
+    if let Some(issues) = checked["issues"].as_array_mut() {
+        issues.retain(|i| !through(i));
         let ok = !issues.iter().any(|i| i["severity"] == "error");
         checked["ok"] = json!(ok);
     }
@@ -866,12 +888,12 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
     // a square grid's sides (`check`).
     let parity = input.get("planted").and_then(Value::as_str) == Some("hex_shifts_other_parity");
     let sides = input.get("planted").and_then(Value::as_str) == Some("terrain_reads_square_sides");
-    // #2031 AC6's wrong check, which lets a 17th light on one group through.
-    let seventeen =
-        command == "check" && input.get("planted").and_then(Value::as_str) == Some(SEVENTEEN);
+    // #2031 AC6's and #2032 AC6's wrong checks, each of which lets one refusal through.
+    let through =
+        let_through(input.get("planted").and_then(Value::as_str)).filter(|_| command == "check");
     if command == "check" || command == "geometry" {
         if input.get("planted").is_some()
-            && !seventeen
+            && through.is_none()
             && skips == Twin::Honest
             && !near
             && !(unwrapped && command == "check")
@@ -893,8 +915,8 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
         let timing = input.get("timing") == Some(&Value::Bool(true));
         if command == "check" {
             let mut checked = checked;
-            if seventeen {
-                accepts_seventeenth(&mut checked);
+            if let Some(through) = through {
+                accepts(&mut checked, through);
             }
             if timing {
                 match raster::rank_ms(&doc) {
@@ -1049,10 +1071,12 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
                     || p == "on_curve_left_edge"
                     || p == "roll_moves_every_grapheme"
                     || p == "weight_snaps_to_static"
+                    || p == "shaper_ignores_opsz"
                     || p == "stops_at_midpoint"
                     || p == "drops_cells_by_corner_signs"
                     || p == "decodes_before_header"
-                    || p == "cap_counts_copies_only" =>
+                    || p == "cap_counts_copies_only"
+                    || vertical_plant(p).is_some() =>
             {
                 (Planted::None, false, false)
             }
@@ -1129,8 +1153,20 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
                 .and_then(Value::as_str)
                 .and_then(asset::Plant::named)
                 .unwrap_or_default(),
+            hit: None,
         };
         let mut request = request;
+        // #1215: the line's planted vertical shaper, for this line alone; its runs are cached apart.
+        let plant = input.get("planted").and_then(Value::as_str);
+        deep_text::vertical::plant(plant.and_then(vertical_plant).unwrap_or_default());
+        request.hit = match input.get("hit") {
+            None => None,
+            Some(v) => Some(point(v)?),
+        };
+        // #1484 AC1's planted shaper, for this line alone.
+        let ignores_opsz =
+            input.get("planted").and_then(Value::as_str) == Some("shaper_ignores_opsz");
+        deep_text_gpui::plant_ignores_opsz(ignores_opsz);
         // #496: the runs this line shapes, its check included, counted from here.
         deep_text::cache::record();
         let _ = deep_text::cache::take_log();
@@ -1144,6 +1180,8 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
         );
         request.vectors = vectors;
         let mut answer = refused_by_check(&checked).unwrap_or_else(|| raster::answer(request));
+        deep_text::vertical::plant(deep_text::vertical::Planted::default());
+        deep_text_gpui::plant_ignores_opsz(false);
         if answer.get("ok") == Some(&Value::Bool(true)) {
             answer["shaped"] = json!(deep_text::cache::take_log().len());
         }
@@ -1161,7 +1199,12 @@ fn parse(command: &str, input: &Map<String, Value>) -> Option<Answer> {
                 Some(Value::String(p)) if p == "arms_only_on_readings" => {
                     (true, asset::Plant::None)
                 }
-                Some(Value::String(p)) if p == "decodes_per_draw" || p == "uploads_per_frame" => {
+                // #1489: an animation's decoder that decodes every frame up front and keeps them all.
+                Some(Value::String(p))
+                    if p == "decodes_per_draw"
+                        || p == "uploads_per_frame"
+                        || p == "decoder_holds_all_frames" =>
+                {
                     (false, asset::Plant::named(p)?)
                 }
                 Some(_) => return None,
@@ -1447,3 +1490,31 @@ mod raster;
 mod status;
 #[cfg(target_os = "macos")]
 mod video;
+
+/// #1215's wrong vertical shapers, by their `raster` `planted` names.
+fn vertical_plant(name: &str) -> Option<deep_text::vertical::Planted> {
+    let none = deep_text::vertical::Planted::default();
+    Some(match name {
+        "vertical_laid_horizontal" => deep_text::vertical::Planted {
+            horizontal: true,
+            ..none
+        },
+        "never_turns" => deep_text::vertical::Planted {
+            never_turns: true,
+            ..none
+        },
+        "skips_vert" => deep_text::vertical::Planted {
+            skips_vert: true,
+            ..none
+        },
+        _ => return None,
+    })
+}
+
+/// #1215: a page point `[x, y]` in document u.
+fn point(v: &Value) -> Option<[f64; 2]> {
+    let [x, y] = v.as_array()?.as_slice() else {
+        return None;
+    };
+    Some([x.as_f64()?, y.as_f64()?]).filter(|p| p.iter().all(|n| n.is_finite()))
+}

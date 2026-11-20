@@ -1,0 +1,54 @@
+$ PATH=/opt/homebrew/bin:$PATH env NO_COLOR=1 node node_modules/vitest/vitest.mjs run --configLoader runner tests/acceptance/2365-redraft-ac5/suite.test.ts
+node: v24.22.2 (/opt/homebrew/bin/node)
+started: 2026-11-18T01:35:25Z; load averages: 20.15 46.80 67.99
+-----
+
+ RUN  v5.0.5 <home>/doneright-2365-repair
+
+stdout | tests/acceptance/2365-redraft-ac5/suite.test.ts > AC5 #2365.c0521de3 for every transcript in #20's suite, the parts joined equal the merge base's one copy, and an unchanged transcript's second pass reads none of it > AC5 #20 AC1 (copies.test.ts): Claude Code and Codex in moved homes, a new adapter in its default home
+#20 AC1 (copies.test.ts): Claude Code and Codex in moved homes, a new adapter in its default home: session:7ce029be9635441e89c07ba676f07270 2184 B, 2 joins, read 0 B; session:bc808b64f6434a909c618185c991dd39 660 B, 2 joins, read 0 B; session:2380646a55f54bf585cf6a44d23a059b 54 B, 2 joins, read 0 B
+
+stdout | tests/acceptance/2365-redraft-ac5/suite.test.ts > AC5 #2365.c0521de3 for every transcript in #20's suite, the parts joined equal the merge base's one copy, and an unchanged transcript's second pass reads none of it > AC5 #20 AC2 (copies.test.ts): two Claude Code sessions, one grown before its first pass, and a Codex rollout
+#20 AC2 (copies.test.ts): two Claude Code sessions, one grown before its first pass, and a Codex rollout: session:e77305c1d2f74c91b7836889d57ba022 1089 B, 2 joins, read 0 B; session:00b625a957f6489ea1a78091ca3e8509 4365 B, 2 joins, read 0 B; session:c68b7617be3c48c0a0866e0b2de9171b 483 B, 2 joins, read 0 B
+
+stdout | tests/acceptance/2365-redraft-ac5/suite.test.ts > AC5 #2365.c0521de3 for every transcript in #20's suite, the parts joined equal the merge base's one copy, and an unchanged transcript's second pass reads none of it > AC5 #20 AC3 (quiet.test.ts): a session captured hourly for three hours
+#20 AC3 (quiet.test.ts): a session captured hourly for three hours: session:4168916e7d2f4879bae85fda79a6817a 4401 B, 8 joins, read 0 B
+
+stdout | tests/acceptance/2365-redraft-ac5/suite.test.ts > AC5 #2365.c0521de3 for every transcript in #20's suite, the parts joined equal the merge base's one copy, and an unchanged transcript's second pass reads none of it > AC5 #20 AC3 (quiet.test.ts): a session captured every hour for 28 hours
+#20 AC3 (quiet.test.ts): a session captured every hour for 28 hours: session:0a7de0483b754f72bb6bdd19d588d7e7 32283 B, 58 joins, read 0 B
+
+stdout | tests/acceptance/2365-redraft-ac5/suite.test.ts > AC5 #2365.c0521de3 for every transcript in #20's suite, the parts joined equal the merge base's one copy, and an unchanged transcript's second pass reads none of it > AC5 #20 AC4 (secrets.test.ts): a key pasted into a user message
+#20 AC4 (secrets.test.ts): a key pasted into a user message: session:3389a395577a47c0b5f6d414f9c16726 1672 B, 2 joins, read 0 B
+
+stdout | tests/acceptance/2365-redraft-ac5/suite.test.ts > AC5 #2365.c0521de3 for every transcript in #20's suite, the parts joined equal the merge base's one copy, and an unchanged transcript's second pass reads none of it > AC5 #20 AC4 (secrets.test.ts): a key pasted first, the session grown after two passes
+#20 AC4 (secrets.test.ts): a key pasted first, the session grown after two passes: session:8d67183f0a52421d9047a18e808a6e3a 3263 B, 4 joins, read 0 B
+
+stdout | tests/acceptance/2365-redraft-ac5/suite.test.ts > AC5 #2365.c0521de3 for every transcript in #20's suite, the parts joined equal the merge base's one copy, and an unchanged transcript's second pass reads none of it > AC5 #20 AC5 (secrets.test.ts): a held value with no pattern pasted into a user message
+#20 AC5 (secrets.test.ts): a held value with no pattern pasted into a user message: session:401444ee42f047e3966e59030ba71d1b 1834 B, 2 joins, read 0 B
+
+stdout | tests/acceptance/2365-redraft-ac5/suite.test.ts > AC5 #2365.c0521de3 for every transcript in #20's suite, the parts joined equal the merge base's one copy, and an unchanged transcript's second pass reads none of it > AC5 #20 AC8 (readback.test.ts): a plain session, a keyed one and a Codex rollout; and the session whose copy the store bent, here unbent
+#20 AC8 (readback.test.ts): a plain session, a keyed one and a Codex rollout; and the session whose copy the store bent, here unbent: session:920398667fad404a8f1346adaee56965 1085 B, 2 joins, read 0 B; session:319ee3d3a6494ec3aa47f23dbdd9e50f 2172 B, 2 joins, read 0 B; session:a7e79c7ed5d848b1871056bddd226fa8 1815 B, 2 joins, read 0 B; session:33bf055eb0aa41138b1c28faf40ac14f 476 B, 2 joins, read 0 B
+
+stdout | tests/acceptance/2365-redraft-ac5/suite.test.ts > AC5 #2365.c0521de3 for every transcript in #20's suite, the parts joined equal the merge base's one copy, and an unchanged transcript's second pass reads none of it > AC5 #20 AC9 (retention.test.ts): a session with a deploy token, in Claude Code's default home
+#20 AC9 (retention.test.ts): a session with a deploy token, in Claude Code's default home: session:f6e379591b6c454cbca6fe8418c55da2 2173 B, 2 joins, read 0 B
+
+stdout | tests/acceptance/2365-redraft-ac5/suite.test.ts > AC5 #2365.c0521de3 for every transcript in #20's suite, the parts joined equal the merge base's one copy, and an unchanged transcript's second pass reads none of it > AC5 #20 AC10 (growth.test.ts): a session archived at 10 lines and again at 50
+#20 AC10 (growth.test.ts): a session archived at 10 lines and again at 50: session:b795278294a9415ebabb401def8c00a5 18263 B, 4 joins, read 0 B
+
+ ✓ tests/acceptance/2365-redraft-ac5/suite.test.ts (12 tests) 6130ms
+   ✓ AC5 #2365.c0521de3 for every transcript in #20's suite, the parts joined equal the merge base's one copy, and an unchanged transcript's second pass reads none of it (10)
+     ✓ AC5 #20 AC1 (copies.test.ts): Claude Code and Codex in moved homes, a new adapter in its default home 1139ms
+     ✓ AC5 #20 AC3 (quiet.test.ts): a session captured every hour for 28 hours 344ms
+     ✓ AC5 #20 AC4 (secrets.test.ts): a key pasted into a user message 325ms
+     ✓ AC5 #20 AC4 (secrets.test.ts): a key pasted first, the session grown after two passes 301ms
+   ✓ AC5 #2365.c0521de3 planted wrong archives fail the criterion's check, naming the session (2)
+     ✓ AC5 (wrong program) an archive that rereads each transcript on every pass reads all of an unchanged one: the check fails naming each session and the bytes it read 1034ms
+     ✓ AC5 (wrong program) an archive that leaves the newline out of each part: its parts joined differ from the merge base's copy, and the check fails naming the session and the first line that differs 1043ms
+
+ Test Files  1 passed (1)
+      Tests  12 passed (12)
+   Start at  17:35:25
+   Duration  6.31s (tests 98%, transform 1%, import 1%)
+
+-----
+EXIT 0; ended: 2026-11-18T01:35:31Z; load averages: 19.90 46.30 67.69

@@ -1,0 +1,9 @@
+$ node --expose-gc -e "globalThis.gc(); setTimeout(() => { globalThis.gc(); console.log((process.memoryUsage.rss()/1e6).toFixed(1), (process.resourceUsage().maxRSS*1024/1e6).toFixed(1)); }, 200)"   (three times under each Node build: rss() MB, then maxRSS MB; no archive, no probe)
+== node v24.22.0 (<home>/.local/share/fnm/node-versions/v24.22.0/installation/bin/node)
+45.5 45.5
+45.6 45.6
+45.5 45.5
+== node v24.22.2 (/opt/homebrew/bin/node)
+13.3 42.6
+13.0 42.3
+13.1 42.4

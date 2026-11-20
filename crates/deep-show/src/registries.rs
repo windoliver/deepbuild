@@ -230,9 +230,73 @@ pub(crate) fn fill_checked(mut e: Value, registry: &Value) -> Value {
     e
 }
 
+/// #2776: the sealed listing the paths lane reads, `packages/contracts/canvas-paths.json`: every
+/// check kind and fixture (`<module>/<fixture>`) the sealed set holds, and each kind it seals that
+/// draws in 3D, with each field of one that carries its own answers, with its module, the reference
+/// section whose Paths row says them and its three answers; test modules left out. The unit test
+/// below prints it when the file drifts.
+#[cfg(test)]
+fn paths_listing(sealed: &deep_canvas::registry::Sealed) -> Value {
+    let shipped = |m: &str| !m.starts_with("test.");
+    let mut checks: Vec<String> = deep_canvas::registry::CORE_CHECK_KINDS
+        .iter()
+        .map(|c| c.to_string())
+        .chain(
+            sealed
+                .modules
+                .iter()
+                .filter(|m| shipped(&m.name))
+                .flat_map(|m| m.shapes.checks.iter().map(|c| c.kind.clone())),
+        )
+        .collect();
+    checks.sort();
+    checks.dedup();
+    let mut fixtures: Vec<String> = (sealed.fixtures.iter())
+        .filter(|(m, _)| shipped(m))
+        .map(|(m, f)| format!("{m}/{}", f.name))
+        .collect();
+    fixtures.sort();
+    fixtures.dedup();
+    let mut entries = Vec::new();
+    for (kind, module, p) in sealed.paths().into_iter().filter(|(_, m, _)| shipped(m)) {
+        entries.push(
+            json!({"entry": kind, "registry": "kind@1", "module": module,
+                            "section": p.own.section, "paths": p.own.to_json()}),
+        );
+        for (field, f) in &p.fields {
+            entries.push(
+                json!({"entry": kind, "registry": "kind@1", "field": field, "module": module,
+                                "section": f.section, "paths": f.to_json()}),
+            );
+        }
+    }
+    json!({"checks": checks, "fixtures": fixtures, "entries": entries})
+}
+
 #[cfg(test)]
 mod tests {
     use serde_json::Value;
+
+    /// #2776: the sealed listing the paths lane reads is what the full set seals, so a change to an
+    /// answer is a reviewed change to the file.
+    #[test]
+    fn the_paths_listing_is_what_the_full_set_seals() {
+        use deep_canvas::registry::BuildSet;
+        let sealed = crate::assemble(BuildSet::Full, crate::modules(BuildSet::Full))
+            .seal()
+            .expect("the shipped set seals");
+        let listed = super::paths_listing(&sealed);
+        let committed: Value = serde_json::from_str(include_str!(
+            "../../../packages/contracts/canvas-paths.json"
+        ))
+        .expect("JSON");
+        assert_eq!(
+            listed,
+            committed,
+            "packages/contracts/canvas-paths.json drifted from the seal:\n{}",
+            serde_json::to_string_pretty(&listed).unwrap_or_default()
+        );
+    }
 
     /// The canvas schema of the core's closed lists says each list as the core holds it, so the
     /// closure lint reads the lists the seal checks.

@@ -1,0 +1,5 @@
+pass | time | longest unserved stretch | peak resident memory | evidence added | outcome
+80 MB, first copy | 36.37 s | 10860 ms | 669 MB (from 38 MB) | 22.00 MB | ok
+90 MB | 31.54 s | 8148 ms | 744 MB (from 37 MB) | 24.75 MB | ok
+100 MB | 18.86 s | 8367 ms | 805 MB (from 37 MB) | 27.50 MB | ok
+540 MB, never archived | 7.88 s | 4688 ms | 578 MB (from 37 MB) | 0.00 MB | the archive pass left 1 copy undone: Cannot create a string longer than 0x1fffffe8 characters

@@ -611,9 +611,23 @@ impl Hub<'_> {
 
     /// `video.codec: web`: the web player's bundle of `doc`, written as a folder at `job.out`.
     pub(super) fn export_web(&mut self, job: &Job, doc: &Value) -> Result<Value, Value> {
+        // #2776: each item's web answer, its entry's or that of a field it turns on, read before the
+        // set is picked: the player draws a stand-in, not its entry, so a module only stand-in
+        // items use (their kinds and params, and `requires.modules` naming it) needn't be in it.
+        let (mut by_answer, stand_ins) = super::paths::web(&self.startup.sealed, doc);
+        let (mut kept, mut stood) = (doc.clone(), Map::new());
+        if let Some(items) = kept.get_mut("items").and_then(Value::as_object_mut) {
+            for id in stand_ins.iter().filter_map(|s| s["item"].as_str()) {
+                if let Some(item) = items.remove(id) {
+                    stood.insert(id.to_string(), item);
+                }
+            }
+        }
+        let stand_modules = modules_used(&json!({"items": stood}), &self.startup.sealed);
         // #1490: the smallest set that holds every canvas module the document uses, read from the
         // check's registry; the largest when none does, which the refusal below then names.
-        let used = modules_used(doc, &self.startup.sealed);
+        let mut used = modules_used(&kept, &self.startup.sealed);
+        used.retain(|m, at| !(stand_modules.contains_key(m) && at.starts_with("requires/")));
         let lacks = |set: &Set| -> BTreeMap<String, String> {
             let held = set.modules();
             used.iter()
@@ -633,7 +647,21 @@ impl Hub<'_> {
                 .unwrap_or(&SETS[SETS.len() - 1])
         };
         let about = set.about();
-        let refused = refusals(doc, &lacks(set), set.name);
+        let mut refused = refusals(doc, &lacks(set), set.name);
+        // #2776: each item whose entry, or a field it turns on, answers the web `refused` is refused
+        // with that answer's code, once per item and code; a `stand_in` is listed in the receipt.
+        if self.planted(Planted::Export(Guard::WebCarriesRefused)) {
+            // Planted (#2776 AC6): the export reads no refused web answer and carries the entry.
+            by_answer.clear();
+        }
+        for r in by_answer {
+            if !refused
+                .iter()
+                .any(|o| o["item"] == r["item"] && o["code"] == r["code"])
+            {
+                refused.push(r);
+            }
+        }
         if !refused.is_empty() {
             let names: Vec<&str> = refused.iter().filter_map(|r| r["item"].as_str()).collect();
             return Err(
@@ -876,6 +904,7 @@ impl Hub<'_> {
             "bytes": all.values().map(Vec::len).sum::<usize>(),
             "refused": ports.iter().map(|n| json!({"item": n, "code": "web.port",
                 "why": format!("the port {n} is the app's own to open; the web player has no plug-in to send to")})).collect::<Vec<_>>(),
+            "stand_in": stand_ins,
             "gpu_needs": needs,
             "files": receipt_files,
         }))

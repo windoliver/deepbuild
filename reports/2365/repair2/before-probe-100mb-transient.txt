@@ -1,0 +1,28 @@
+$ PROBE=repair-evidence/round2/before/probe/pass.mjs repair-evidence/round2/probe-runs.sh repair-evidence/round2/alloc-100mb-transient.mjs   (the probe BEFORE the repair: repair-evidence/round2/before/probe/pass.mjs, sha256 0a7041d3fad45085…, the same bytes as .orig2/tests/acceptance/2365/probe/pass.mjs)
+== node v24.22.0 (<home>/.local/share/fnm/node-versions/v24.22.0/installation/bin/node)
+$ PATH=<home>/.local/share/fnm/node-versions/v24.22.0/installation/bin:/usr/bin:/bin node --expose-gc repair-evidence/round2/before/probe/pass.mjs <temp home> pass 1791190800000 --archive repair-evidence/round2/alloc-100mb-transient.mjs
+   alloc-100mb-transient: rss() 71.8 MB before, 171.9 MB while held, 72.0 MB when the same synchronous step ended
+{"at":"result","ms":109.825292,"maxGapMs":10.049749999999989,"ticks":17,"rssStart":71548928,"peakRss":171999232,"rise":100450304,"evidenceBefore":0,"evidenceAfter":0,"added":0,"error":null}
+   run 1: rssStart 71.5 MB, peakRss 172.0 MB, rise 100.5 MB (peakRss - rssStart = 100.5 MB), error null
+$ PATH=<home>/.local/share/fnm/node-versions/v24.22.0/installation/bin:/usr/bin:/bin node --expose-gc repair-evidence/round2/before/probe/pass.mjs <temp home> pass 1791190800000 --archive repair-evidence/round2/alloc-100mb-transient.mjs
+   alloc-100mb-transient: rss() 72.3 MB before, 172.4 MB while held, 72.5 MB when the same synchronous step ended
+{"at":"result","ms":112.35879100000001,"maxGapMs":10.950083000000006,"ticks":18,"rssStart":72089600,"peakRss":172425216,"rise":100335616,"evidenceBefore":0,"evidenceAfter":0,"added":0,"error":null}
+   run 2: rssStart 72.1 MB, peakRss 172.4 MB, rise 100.3 MB (peakRss - rssStart = 100.3 MB), error null
+$ PATH=<home>/.local/share/fnm/node-versions/v24.22.0/installation/bin:/usr/bin:/bin node --expose-gc repair-evidence/round2/before/probe/pass.mjs <temp home> pass 1791190800000 --archive repair-evidence/round2/alloc-100mb-transient.mjs
+   alloc-100mb-transient: rss() 71.7 MB before, 171.8 MB while held, 71.8 MB when the same synchronous step ended
+{"at":"result","ms":112.16845800000002,"maxGapMs":11.530166000000008,"ticks":18,"rssStart":71417856,"peakRss":171900928,"rise":100483072,"evidenceBefore":0,"evidenceAfter":0,"added":0,"error":null}
+   run 3: rssStart 71.4 MB, peakRss 171.9 MB, rise 100.5 MB (peakRss - rssStart = 100.5 MB), error null
+== node v24.22.2 (/opt/homebrew/bin/node)
+$ PATH=/opt/homebrew/bin:/usr/bin:/bin node --expose-gc repair-evidence/round2/before/probe/pass.mjs <temp home> pass 1791190800000 --archive repair-evidence/round2/alloc-100mb-transient.mjs
+   alloc-100mb-transient: rss() 27.6 MB before, 127.6 MB while held, 27.5 MB when the same synchronous step ended
+{"at":"result","ms":112.30820800000001,"maxGapMs":11.872416000000001,"ticks":17,"rssStart":27512648,"peakRss":166363136,"rise":138850488,"evidenceBefore":0,"evidenceAfter":0,"added":0,"error":null}
+   run 1: rssStart 27.5 MB, peakRss 166.4 MB, rise 138.9 MB (peakRss - rssStart = 138.9 MB), error null
+$ PATH=/opt/homebrew/bin:/usr/bin:/bin node --expose-gc repair-evidence/round2/before/probe/pass.mjs <temp home> pass 1791190800000 --archive repair-evidence/round2/alloc-100mb-transient.mjs
+   alloc-100mb-transient: rss() 28.3 MB before, 128.3 MB while held, 28.4 MB when the same synchronous step ended
+{"at":"result","ms":112.53233300000001,"maxGapMs":12.360499999999988,"ticks":16,"rssStart":28184440,"peakRss":167002112,"rise":138817672,"evidenceBefore":0,"evidenceAfter":0,"added":0,"error":null}
+   run 2: rssStart 28.2 MB, peakRss 167.0 MB, rise 138.8 MB (peakRss - rssStart = 138.8 MB), error null
+$ PATH=/opt/homebrew/bin:/usr/bin:/bin node --expose-gc repair-evidence/round2/before/probe/pass.mjs <temp home> pass 1791190800000 --archive repair-evidence/round2/alloc-100mb-transient.mjs
+   alloc-100mb-transient: rss() 28.1 MB before, 128.1 MB while held, 28.1 MB when the same synchronous step ended
+{"at":"result","ms":116.62787499999999,"maxGapMs":15.775040999999987,"ticks":16,"rssStart":28053416,"peakRss":166985728,"rise":138932312,"evidenceBefore":0,"evidenceAfter":0,"added":0,"error":null}
+   run 3: rssStart 28.1 MB, peakRss 167.0 MB, rise 138.9 MB (peakRss - rssStart = 138.9 MB), error null
+load averages: 80.56 103.10 91.76

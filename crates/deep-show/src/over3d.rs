@@ -31,30 +31,30 @@ fn only(doc: &Value, keep: impl Fn(&str) -> bool) -> Value {
 }
 
 impl Hub<'_> {
-    /// `doc`'s 3D frame at `t` and `size`, each inset's picture rastered into the scene's texels
-    /// first (kept by key between frames); straight RGBA and the scene it drew.
-    pub(crate) fn painted3d(
-        &mut self,
-        doc: &Value,
-        t: i64,
-        size: [u16; 2],
-    ) -> Result<(Vec<u8>, Scene), Unfit> {
-        // Insets and view overlays the check refuses draw nothing (#506), as in view3d.
-        if let Some(issue) = deep_canvas_scene3d::inset::refusals(doc).into_iter().next() {
-            return Err(Unfit {
-                code: "refused",
-                path: issue["path"].as_str().unwrap_or("items").to_string(),
-            });
-        }
-        let posed = crate::film::posed(doc, t);
-        let doc = posed.as_ref().unwrap_or(doc);
-        let (mut scene, look) = self.evaluate3d(doc, t, size)?;
+    /// Each picture `scene` draws (an inset's, or a module's mark's, #2450), rastered into its
+    /// texels under its key and kept by key between frames.
+    pub(crate) fn paint_pictures(&mut self, scene: &mut Scene) -> Result<(), Unfit> {
         let record = self.record();
         let keys: Vec<String> = scene.pictures.iter().map(|p| p.key.clone()).collect();
         self.inset_pictures.retain(|k, _| keys.contains(k));
         for p in &scene.pictures {
             if !self.inset_pictures.contains_key(&p.key) {
-                let map = p.document.as_object().cloned().unwrap_or_default();
+                // #2450: a pictured module's item draws as the core kind its module registered, a
+                // vector's outline imported again at its picture's size.
+                let mut form = (*p.document).clone();
+                self.inline_vectors(&mut form);
+                let sealed = &self.startup.sealed;
+                let items = form.get_mut("items").and_then(Value::as_object_mut);
+                for item in items.into_iter().flat_map(|m| m.values_mut()) {
+                    let kind = item["kind"].as_str().unwrap_or("").to_string();
+                    if let (Some(core), Some(draw)) =
+                        (sealed.draws_as(&kind), sealed.draw_of(&kind))
+                    {
+                        item["params"] = draw(&item["params"]);
+                        item["kind"] = json!(core);
+                    }
+                }
+                let map = form.as_object().cloned().unwrap_or_default();
                 let drawn = self.renderer.prepare(
                     &map,
                     0,
@@ -78,6 +78,27 @@ impl Hub<'_> {
                 .texels
                 .insert(p.key.clone(), self.inset_pictures[&p.key].clone());
         }
+        Ok(())
+    }
+
+    /// `doc`'s 3D frame at `t` and `size`, its pictures in the scene's texels
+    /// ([`Hub::paint_pictures`]); straight RGBA and the scene it drew.
+    pub(crate) fn painted3d(
+        &mut self,
+        doc: &Value,
+        t: i64,
+        size: [u16; 2],
+    ) -> Result<(Vec<u8>, Scene), Unfit> {
+        // Insets and view overlays the check refuses draw nothing (#506), as in view3d.
+        if let Some(issue) = deep_canvas_scene3d::inset::refusals(doc).into_iter().next() {
+            return Err(Unfit {
+                code: "refused",
+                path: issue["path"].as_str().unwrap_or("items").to_string(),
+            });
+        }
+        let posed = crate::film::posed(doc, t);
+        let doc = posed.as_ref().unwrap_or(doc);
+        let (scene, look) = self.evaluate3d(doc, t, size)?;
         let rgba = self
             .gpu3()
             .and_then(|g| g.draw(&scene, &look))

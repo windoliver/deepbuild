@@ -1,0 +1,224 @@
+The #1415 acceptance suite at the base, c21400b43 ("Merge pull request #2828 …"), trimmed (code frames and stack lines left
+out, the checkout's path written <checkout> and the home ~): every test fails, none passes, each at its own assertion or at
+the missing surface. Run once on 2026-11-18 on a Mac shared with other sessions (load average 66 when it started, 93 when it
+ended), after `npm ci --ignore-scripts`, `npm run build --workspaces` and, with CARGO_INCREMENTAL=0
+CARGO_PROFILE_DEV_DEBUG=0, `cargo build --locked -q -p deep-show -p deep-hook`:
+
+  npx vitest run --root tests/acceptance/1415 --no-file-parallelism --testTimeout=600000
+
+Each failure, by criterion:
+
+- AC1: BLOCKED, deep-show has no feature `test-boom` (no frozen session is reachable on `deep-show run`).
+- AC2: the scenario with `{"call": "close"}` is `bad_input`: nothing closes a document session.
+- AC3: `{"call": "session_table"}` is `bad_input`: no state table is served.
+- AC4: `cargo check` stops before compiling: deep-show has no feature `test-session-call-undecided` (no E0004).
+- AC5: each canvas tool refuses its missing required field with `required`, carrying no schema; every default call and
+  every call without one optional field acted.
+- AC6: the patch that changes nothing is applied as rev 2 (same hash), and its undo as rev 3.
+- AC7: the create of `door` is refused `bad_id`, "ID already exists" (hash unchanged).
+- AC8: test/forty installs; restarted, the hub's `deep mcp` hello waits for its core, so the listing asked at 0.5 s answers
+  `unavailable` after 1 s, not `not_ready`.
+- AC9: `deep_show` and `deep_query` bound to no session are refused `no_session` with `isError: false`.
+- The planted programs (AC5 `kinds-op-optional`, AC6 `no_op_commits`, AC7 `create_overwrites`, AC8
+  `kinds-partial-while-loading`, AC9 `kinds-refusal-as-text`) don't exist: the hub refuses the plant at start, and
+  `deep-show run` answers `bad_input` for the planted value.
+
+RUN  v5.0.5 <checkout>/tests/acceptance/1415
+
+ ❯ loading.test.ts (2 tests | 2 failed) 27974ms
+   ❯ #1415: a listing asked while the hub loads (2)
+     × AC8 with test/forty taking 2 s to register 40 kinds, deep_kinds asked at 0.5 s answers not_ready with loaded, total and retry_after_ms, and at 3 s lists all 40 12785ms
+     × AC8 (wrong program kinds-partial-while-loading) a server that returns the partial list while loading fails, naming the first missing kind 153ms
+ ❯ patches.test.ts (4 tests | 4 failed) 3892ms
+   ❯ #1415: a patch that changes nothing, and a create that would replace an item (4)
+     × AC6 a patch whose ops leave every item as it was answers no_change with the current revision's hash, and makes no revision and no undo step 3430ms
+     × AC6 (wrong program no_op_commits) a handler that answers the patch applied with a new revision number fails, naming the revision 159ms
+     × AC7 a create of door in a board that already holds door is refused with id_taken, naming door and bravo's layer, and the hash is unchanged 152ms
+     × AC7 (wrong program create_overwrites) a handler whose create overwrites door fails by hash 147ms
+ ❯ states.test.ts (3 tests | 3 failed) 4334ms
+   ❯ #1415: canvas session states (3)
+     × AC1 a patch to a session an operator panic froze is refused with session_frozen, naming the last good revision (2), and changes no revision 4ms
+     × AC2 a patch to a session closed with `close` is refused with session_closed and changes no revision 3104ms
+     × AC3 the walk: every call in every state of the served state table either acts or answers the code its cell names 154ms
+ ❯ mcp.test.ts (4 tests | 4 failed) 48575ms
+   ❯ #1415: the canvas tools through deep mcp (4)
+     × AC5 every canvas tool refuses a call without one required field with missing_field, naming it and carrying that tool's schema in under 4 KB, and acts without any one optional field 4ms
+     × AC5 (wrong program kinds-op-optional) a deep_kinds whose schema marks op optional while its handler needs it fails the walk, naming deep_kinds and op 110ms
+     × AC9 every refusal in the walk, the canvas core's own included, comes back with the protocol's error flag set 1ms
+     × AC9 (wrong program kinds-refusal-as-text) a deep_kinds that returns its refusal as ordinary text with the flag unset fails, naming deep_kinds 115ms
+ ❯ compile.test.ts (1 test | 1 failed) 24ms
+   ❯ #1415: the state table decides every cell (1)
+     × AC4 deep-show with the planted call undecided for Hidden fails to compile with E0004 naming Hidden; its twin that decides every state compiles 24ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 14 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  compile.test.ts > #1415: the state table decides every cell > AC4 deep-show with the planted call undecided for Hidden fails to compile with E0004 naming Hidden; its twin that decides every state compiles
+AssertionError: cargo check -p deep-show --features test-session-call-undecided fails with error[E0004] (the table's match is no longer exhaustive), not for another reason:
+error: the package 'deep-show' does not contain this feature: test-session-call-undecided
+: expected 0 to be greater than 0
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/14]⎯
+
+ FAIL  loading.test.ts > #1415: a listing asked while the hub loads > AC8 with test/forty taking 2 s to register 40 kinds, deep_kinds asked at 0.5 s answers not_ready with loaded, total and retry_after_ms, and at 3 s lists all 40
+AssertionError: the readings: 501→1510 ms other: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "asked at 501 ms and answered at 1510 ms after the hub's socket appeared, deep_kinds answered {\"code\":\"unavailable\",\"retryable\":true,\"remediation\":\"The DeepBuild hub is unreachable (no answer on its socket); nothing was recorded. Call again once it is back.\",\"path\":\"\",\"actual\":\"\",\"evidence\":[]} (isError true): a listing asked before every registry, pack and plug-in finished loading answers not_ready with loaded, total and a retry time",
++ ]
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/14]⎯
+
+ FAIL  loading.test.ts > #1415: a listing asked while the hub loads > AC8 (wrong program kinds-partial-while-loading) a server that returns the partial list while loading fails, naming the first missing kind
+Error: BLOCKED: the hub exited before its socket appeared (DEEP_HUB_PLANT=kinds-partial-while-loading): file://<checkout>/packages/hub/dist/plant.js:128
+
+Error: DEEP_HUB_PLANT=kinds-partial-while-loading names no planted program
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/14]⎯
+
+ FAIL  mcp.test.ts > #1415: the canvas tools through deep mcp > AC5 every canvas tool refuses a call without one required field with missing_field, naming it and carrying that tool's schema in under 4 KB, and acts without any one optional field
+AssertionError: the walk over deep_show, deep_query, deep_kinds and deep_job (each failure names the tool and the field): expected [ …(8) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deep_show: the call with its required field doc left out isn't refused with missing_field: {\"code\":\"required\",\"retryable\":false,\"remediation\":\"Give doc; it is required.\",\"path\":\"/params/arguments/doc\",\"actual\":\"\",\"evidence\":[]}",
++   "deep_show: the refusal for its missing field doc carries no schema: {\"code\":\"required\",\"retryable\":false,\"remediation\":\"Give doc; it is required.\",\"path\":\"/params/arguments/doc\",\"actual\":\"\",\"evidence\":[]}",
++   "deep_query: the call with its required field doc left out isn't refused with missing_field: {\"code\":\"required\",\"retryable\":false,\"remediation\":\"Give doc; it is required.\",\"path\":\"/params/arguments/doc\",\"actual\":\"\",\"evidence\":[]}",
++   "deep_query: the refusal for its missing field doc carries no schema: {\"code\":\"required\",\"retryable\":false,\"remediation\":\"Give doc; it is required.\",\"path\":\"/params/arguments/doc\",\"actual\":\"\",\"evidence\":[]}",
++   "deep_kinds: the call with its required field op left out isn't refused with missing_field: {\"code\":\"required\",\"retryable\":false,\"remediation\":\"Give op; it is required.\",\"path\":\"/params/arguments/op\",\"actual\":\"\",\"evidence\":[]}",
++   "deep_kinds: the refusal for its missing field op carries no schema: {\"code\":\"required\",\"retryable\":false,\"remediation\":\"Give op; it is required.\",\"path\":\"/params/arguments/op\",\"actual\":\"\",\"evidence\":[]}",
++   "deep_job: the call with its required field op left out isn't refused with missing_field: {\"code\":\"required\",\"retryable\":false,\"remediation\":\"Give op; it is required.\",\"path\":\"/params/arguments/op\",\"actual\":\"\",\"evidence\":[]}",
++   "deep_job: the refusal for its missing field op carries no schema: {\"code\":\"required\",\"retryable\":false,\"remediation\":\"Give op; it is required.\",\"path\":\"/params/arguments/op\",\"actual\":\"\",\"evidence\":[]}",
++ ]
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/14]⎯
+
+ FAIL  mcp.test.ts > #1415: the canvas tools through deep mcp > AC5 (wrong program kinds-op-optional) a deep_kinds whose schema marks op optional while its handler needs it fails the walk, naming deep_kinds and op
+Error: BLOCKED: the hub didn't start with DEEP_HUB_PLANT=kinds-op-optional: file://<checkout>/packages/hub/dist/plant.js:128
+
+Error: DEEP_HUB_PLANT=kinds-op-optional names no planted program
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/14]⎯
+
+ FAIL  mcp.test.ts > #1415: the canvas tools through deep mcp > AC9 every refusal in the walk, the canvas core's own included, comes back with the protocol's error flag set
+AssertionError: every refusal in the walk has isError set (each failure names the tool): expected [ …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "deep_show (unbound): refused with no_session as ordinary text, its error flag (isError) unset: {\"jsonrpc\":\"2.0\",\"id\":\"tools/call#24\",\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"outcome\\\":\\\"refused\\\",\\\"code\\\":\\\"no_session\\\",\\\"issues\\\":[],\\\"snapshots\\\":[]}\"}],\"isError\":false,\"structuredContent\":{\"outcome\":\"refused\",\"code\":\"no_session\",\"issues\":[],\"snapshots\":[]}}}",
++   "deep_query (unbound): refused with no_session as ordinary text, its error flag (isError) unset: {\"jsonrpc\":\"2.0\",\"id\":\"tools/call#39\",\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"code\\\":\\\"no_session\\\",\\\"core\\\":\\\"core@0.0.0\\\",\\\"set_digest\\\":\\\"c866974c68986c4af416d66e56d533c9919cab89d2d810c7257df537bead6509\\\"}\"}],\"isError\":false,\"structuredContent\":{\"code\":\"no_session\",\"core\":\"core@0.0.0\",\"set_digest\":\"c866974c68986c4af416d66e56d533c9919cab89d2d810c7257df537bead6509\"}}}",
++ ]
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/14]⎯
+
+ FAIL  mcp.test.ts > #1415: the canvas tools through deep mcp > AC9 (wrong program kinds-refusal-as-text) a deep_kinds that returns its refusal as ordinary text with the flag unset fails, naming deep_kinds
+Error: BLOCKED: the hub didn't start with DEEP_HUB_PLANT=kinds-refusal-as-text: file://<checkout>/packages/hub/dist/plant.js:128
+
+Error: DEEP_HUB_PLANT=kinds-refusal-as-text names no planted program
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/14]⎯
+
+ FAIL  patches.test.ts > #1415: a patch that changes nothing, and a create that would replace an item > AC6 a patch whose ops leave every item as it was answers no_change with the current revision's hash, and makes no revision and no undo step
+AssertionError: expected [ …(8) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the patch that changes nothing answered applied with a new revision, rev 2, where it answers no_change with the current revision's hash: {\"cost_delta\":{\"cpu_ms\":0,\"gpu_ms\":0,\"vertices\":0,\"lights\":0,\"gpu_mb\":0},\"outcome\":\"applied\",\"rev\":2,\"ids\":{},\"achieved\":{\"created\":{},\"updated\":0,\"deleted\":{},\"unchanged\":true},\"issues\":[],\"undo\":[],\"expansions\":[],\"core\":\"core@0.0.0\",\"set_digest\":\"c866974c68986c4af416d66e56d533c9919cab89d2d810c7257df537bead6509\"}",
++   "the patch that changes nothing doesn't answer no_change: {\"cost_delta\":{\"cpu_ms\":0,\"gpu_ms\":0,\"vertices\":0,\"lights\":0,\"gpu_mb\":0},\"outcome\":\"applied\",\"rev\":2,\"ids\":{},\"achieved\":{\"created\":{},\"updated\":0,\"deleted\":{},\"unchanged\":true},\"issues\":[],\"undo\":[],\"expansions\":[],\"core\":\"core@0.0.0\",\"set_digest\":\"c866974c68986c4af416d66e56d533c9919cab89d2d810c7257df537bead6509\"}",
++   "the patch that changes nothing answers applied, a success for a patch that did nothing: {\"cost_delta\":{\"cpu_ms\":0,\"gpu_ms\":0,\"vertices\":0,\"lights\":0,\"gpu_mb\":0},\"outcome\":\"applied\",\"rev\":2,\"ids\":{},\"achieved\":{\"created\":{},\"updated\":0,\"deleted\":{},\"unchanged\":true},\"issues\":[],\"undo\":[],\"expansions\":[],\"core\":\"core@0.0.0\",\"set_digest\":\"c866974c68986c4af416d66e56d533c9919cab89d2d810c7257df537bead6509\"}",
++   "the no_change answer's hash is undefined, not the current revision's, 85a508b19b0325f381b4526b451b7dd6685d16770848b7cd47562c0c330d733f",
++   "the no_change answer names rev 2, not the current revision, 1",
++   "the patch that changes nothing made a revision, rev 2: before [0:superseded:495a5d92158f, 1:current:85a508b19b03], after [0:superseded:495a5d92158f, 1:superseded:85a508b19b03, 2:current:85a508b19b03]",
++   "an undo of the patch that changed nothing was applied (an undo step exists): {\"cost_delta\":{\"cpu_ms\":0,\"gpu_ms\":0,\"vertices\":0,\"lights\":0,\"gpu_mb\":0},\"outcome\":\"applied\",\"rev\":3,\"ids\":{},\"achieved\":{\"created\":{},\"updated\":0,\"deleted\":{},\"unchanged\":true},\"issues\":[],\"undo\":[],\"expansions\":[],\"core\":\"core@0.0.0\",\"set_digest\":\"c866974c68986c4af416d66e56d533c9919cab89d2d810c7257df537bead6509\"}",
++   "the undo of the patch that changed nothing made a revision: before [0:superseded:495a5d92158f, 1:current:85a508b19b03], after [0:superseded:495a5d92158f, 1:superseded:85a508b19b03, 2:superseded:85a508b19b03, 3:current:85a508b19b03]",
++ ]
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/14]⎯
+
+ FAIL  patches.test.ts > #1415: a patch that changes nothing, and a create that would replace an item > AC6 (wrong program no_op_commits) a handler that answers the patch applied with a new revision number fails, naming the revision
+AssertionError: the planted handler's run fails naming the new revision, rev 2: ["deep-show run answered bad_input for the scenario with planted no_op_commits"]: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/14]⎯
+
+ FAIL  patches.test.ts > #1415: a patch that changes nothing, and a create that would replace an item > AC7 a create of door in a board that already holds door is refused with id_taken, naming door and bravo's layer, and the hash is unchanged
+AssertionError: expected [ Array(1) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "the create of door isn't refused with an id_taken issue (it names [bad_id]): {\"outcome\":\"refused\",\"rev\":1,\"ids\":{},\"achieved\":{\"created\":{},\"updated\":0,\"deleted\":{},\"unchanged\":true},\"issues\":[{\"check\":\"document.validate\",\"code\":\"bad_id\",\"severity\":\"error\",\"ids\":[\"door\"],\"path\":\"items/door\",\"actual\":\"door\",\"what\":\"ID already exists\",\"fix\":\"Write the ID as 1 to 8 segments of [a-z0-9][a-z0-9_-]{0,47} joined by `.`.\"}],\"cost_delta\":{\"cpu_ms\":0,\"gpu_ms\":0,\"vertices\":0,\"lights\":0,\"gpu_mb\":0},\"undo\":[],\"expansions\":[],\"core\":\"core@0.0.0\",\"set_digest\":\"c866974c68986c4af416d66e56d533c9919cab89d2d810c7257df537bead6509\"}",
++ ]
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/14]⎯
+
+ FAIL  patches.test.ts > #1415: a patch that changes nothing, and a create that would replace an item > AC7 (wrong program create_overwrites) a handler whose create overwrites door fails by hash
+AssertionError: the planted handler's run fails by hash, naming both: ["deep-show run answered bad_input for the scenario with planted create_overwrites"]: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/14]⎯
+
+ FAIL  states.test.ts > #1415: canvas session states > AC1 a patch to a session an operator panic froze is refused with session_frozen, naming the last good revision (2), and changes no revision
+AssertionError: BLOCKED: the test build of deep-show with the feature test-boom (README: test-boom), which a frozen session needs, is built: expected 'cargo build --locked -p deep-show -p …' to be '' // Object.is equality
+
+- Expected
++ Received
+
++ cargo build --locked -p deep-show -p deep-hook --features deep-show/test-boom failed (exit 101):
++ error: none of the selected packages contains this feature: deep-show/test-boom
++ selected packages: deep-hook, deep-show
++ help: there are similarly named features: deep-show/test-b, deep-show/test-json, deep-show/test-sim
++
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/14]⎯
+
+ FAIL  states.test.ts > #1415: canvas session states > AC2 a patch to a session closed with `close` is refused with session_closed and changes no revision
+AssertionError: deep-show run answered bad_input for the scenario with {"call": "close", "doc"}: no call closes a document session (README: Surface choices, close): expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/14]⎯
+
+ FAIL  states.test.ts > #1415: canvas session states > AC3 the walk: every call in every state of the served state table either acts or answers the code its cell names
+AssertionError: deep-show run answers {"call": "session_table"}, the state table served (README: The state table); it answered bad_input: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/14]⎯
+
+ Test Files  5 failed (5)
+      Tests  14 failed (14)
+   Start at  19:46:44
+   Duration  85.95s (tests 99%, transform 1%)

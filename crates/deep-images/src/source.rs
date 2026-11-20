@@ -182,6 +182,19 @@ impl Store {
         Ok(bytes)
     }
 
+    /// #1489: the first `n` bytes of the file named `hash`, unchecked, if it is there: enough to
+    /// tell a format by, never enough to refuse it by.
+    pub(crate) fn head(&self, hash: &[u8; 32], n: usize) -> Option<Vec<u8>> {
+        use std::io::Read;
+        if let Some(held) = self.held_bytes(hash) {
+            return held.map(|b| b[..n.min(b.len())].to_vec());
+        }
+        let mut head = Vec::with_capacity(n);
+        let file = File::open(self.path(hash)).ok()?;
+        file.take(n as u64).read_to_end(&mut head).ok()?;
+        Some(head)
+    }
+
     /// Whether the file named `hash` is there and hashes to its name, read in pieces so nothing
     /// as large as the file is allocated.
     fn verify(&self, hash: &[u8; 32]) -> Result<(), Refused> {
