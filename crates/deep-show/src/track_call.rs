@@ -74,11 +74,17 @@ pub(crate) fn entry_of(v: &Value) -> Option<Entry> {
             "you" => Writer::You,
             "tour" => Writer::Tour,
             "agent" => Writer::Agent,
+            "peer" => Writer::Peer,
             _ => return None,
         },
         serial: match v.get("serial") {
             None => None,
             Some(s) => Some(u32::try_from(s.as_u64()?).ok()?),
+        },
+        // #297: a match's record names each entry's player, 1 to 8.
+        player: match v.get("player") {
+            None => None,
+            Some(p) => Some(u8::try_from(p.as_u64().filter(|p| (1..=8).contains(p))?).ok()?),
         },
     })
 }
@@ -97,6 +103,7 @@ mod tests {
             samples: None,
             writer: Writer::You,
             serial: Some(4),
+            player: None,
         };
         assert_eq!(entry_of(&e.to_json()), Some(e));
         assert_eq!(

@@ -322,7 +322,14 @@ impl Hub<'_> {
             shows: m.renders.iter().map(|(p, t)| (*p, flicks(*t))).collect(),
         };
         let (piece, track) = (s.piece.clone(), s.track.clone());
-        let make = &mut |_: u8| Logic::new(piece.clone(), &track, true);
+        // #297: every copy checks each entry to a text control an entry text shows alike.
+        let form = self.forms.get(&m.doc).cloned().unwrap_or_default();
+        let (ty, lax) = (self.entry_type(&form), self.entry_lax());
+        let make = &mut |_: u8| {
+            let mut logic = Logic::new(piece.clone(), &track, true)?;
+            logic.range = deep_play::net::Range::of(&form, ty.clone(), lax);
+            Ok(logic)
+        };
         let run = match m.check.as_deref() {
             None => deep_net::play::play(&s.cfg, &s.card, &ask, make).map(|p| (p, None)),
             Some("net.rollback") => {
@@ -354,6 +361,8 @@ impl Hub<'_> {
                 let mut report = c.report();
                 report.insert("steps".into(), json!(c.sim().rows));
                 report.insert("track".into(), json!(s.track));
+                let refused = c.sim().range.as_ref().map(|r| r.refused.clone());
+                report.insert("refused".into(), json!(refused.unwrap_or_default()));
                 Value::Object(report)
             })
             .collect();
@@ -367,17 +376,36 @@ impl Hub<'_> {
                 // The piece's own layer at the step the copy shows, drawn by render-back: the
                 // app's notice is the app's own and never in it.
                 let at = shown.step.max(0) * s.cfg.step();
-                let sha = match self.piece_layer(&m.doc, at) {
+                // #297: a piece whose texts show entries draws each copy's frame from its own
+                // merged track.
+                let copy = played
+                    .copies
+                    .get(usize::from(shown.player).saturating_sub(1));
+                let mut entries = None;
+                let drawn = match copy.filter(|_| crate::entries::shows_entries(&form)) {
+                    Some(c) => {
+                        let track = c.record()["track"].clone();
+                        self.copy_frame(&form, track, shown.player, at)
+                            .map(|(sha, shown)| {
+                                entries = Some(shown);
+                                sha
+                            })
+                    }
+                    None => self.piece_layer(&m.doc, at),
+                };
+                let sha = match drawn {
                     Ok(sha) => sha,
                     Err(e) => return e,
                 };
                 let notice = shown.notice.map(|(player, waited)| {
                     json!({"player": player, "since": waited as f64 / FLICKS as f64})
                 });
-                renders.push(
-                    json!({"player": shown.player, "t": shown.t as f64 / FLICKS as f64,
-                                    "step": shown.step, "sha256": sha, "notice": notice}),
-                );
+                let mut row = json!({"player": shown.player, "t": shown.t as f64 / FLICKS as f64,
+                                     "step": shown.step, "sha256": sha, "notice": notice});
+                if let Some(e) = entries {
+                    row["shown"] = e;
+                }
+                renders.push(row);
             }
             reply["renders"] = json!(renders);
         }
