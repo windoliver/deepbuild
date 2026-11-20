@@ -15,9 +15,16 @@ use deep_canvas_physics::roles::TABLE;
 use deep_physics_rapier::Rapier;
 use serde_json::{json, Map, Value};
 
+use crate::kinds::Planted;
+
 /// The entry the physics module lists the vehicle body under, and the fixture car's ID.
 const ENTRY: &str = "body@1.vehicle";
 const CAR: &str = "car";
+
+/// The planted program this file runs, by the name a startup argument gives it.
+pub(crate) fn planted(name: &str) -> Option<Planted> {
+    (name == "vehicle_reader_takes_other_defaults").then_some(Planted::VehicleReaderOtherDefaults)
+}
 
 /// What the planted world reader (`vehicle_reader_takes_other_defaults`) takes for each field of
 /// `vehicle` left out, where the listing prints 0.3, 1, false, false, true and 35.
