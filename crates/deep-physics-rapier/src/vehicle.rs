@@ -20,6 +20,15 @@
 //! the contact, to a dynamic body under it, as an impulse over the step, and the wheel spins by
 //! its travel over that body. A static or kinematic body takes nothing, so a car on static ground
 //! moves exactly as before.
+//!
+//! #2307: a parked car stays parked. The brake and the grip above read the chassis's velocity
+//! before the step, and the step then adds gravity and the world's forces, so on a slope a braked
+//! car would gain the slope's pull every step. Each touching wheel therefore also resists its
+//! share of that pull along the ground, as a force the step integrates beside it: along its
+//! heading up to what its brake has left, sideways up to what its grip × its load has left, and
+//! both together within grip × load; a dynamic body under it takes that back too. A sleeping
+//! chassis keeps its wheels as they are and writes no wheel occurrence, and wakes on the step a
+//! body under one of its wheels moves or wakes.
 
 use std::f32::consts::PI;
 
@@ -65,6 +74,16 @@ pub enum Plant {
     GroundTakesNothing,
     /// #2306: each wheel's grip reads the chassis's velocity alone, whatever is under it.
     GripChassisOnly,
+    /// #2307: the backend's controller as it is, with no hold (`Car::as_is`).
+    NoHold,
+    /// #2307: the same, run on a sleeping chassis too, where its pushes pile up as velocity.
+    RunsAsleep,
+    /// #2307: a hold along a wheel's heading whatever its brake has left.
+    HoldPastBrake,
+    /// #2307: a hold that also takes out each wheel's slip across the chassis itself.
+    HoldTakesSlip,
+    /// #2307: a sleeping chassis left asleep when the body under its wheels moves or wakes.
+    StaysAsleep,
 }
 
 /// One vehicle body: its chassis, its wheels as written (by name, the controller's order), the
@@ -237,18 +256,21 @@ fn rays(world: &PhysicsWorld, c: &Car) -> Vec<Option<(Vector, Vector, ColliderHa
 /// `most` (its share of the brake over the step) and never past rest, so it never pushes a wheel
 /// backwards. The impulses change the chassis's velocity before the step, as a contact's do; a
 /// dynamic body under a wheel takes each back at the contact, and its own velocity and give join
-/// the rule's.
-fn hold(world: &mut PhysicsWorld, c: &Car, steer: &[f64], most: f32, plant: Plant) {
+/// the rule's. Returns the size of each wheel's whole impulse, by wheel (#2307: what its brake
+/// has left for the step is its share less this).
+fn hold(world: &mut PhysicsWorld, c: &Car, steer: &[f64], most: f32, plant: Plant) -> Vec<f32> {
     // Each braking wheel on the ground: its contact, heading (its axle turned by its steer, on
     // the ground's plane, crossed into the normal), the velocity there of a static or kinematic
     // body under it, and a dynamic body under it.
     let rot = *world.bodies[c.chassis].rotation();
     let hits = rays(world, c);
-    let wheels: Vec<(Vector, Vector, Vector, Option<RigidBodyHandle>)> = hits
+    let mut used = vec![0.0f32; hits.len()];
+    let wheels: Vec<(Vector, Vector, Vector, Option<RigidBodyHandle>, usize)> = hits
         .iter()
         .zip(c.spec.wheels.values())
         .zip(steer)
-        .filter_map(|((hit, w), s)| {
+        .enumerate()
+        .filter_map(|(i, ((hit, w), s))| {
             let (p, n, g) = (*hit).filter(|_| w.brakes)?;
             let axle =
                 rot * Rotation::from_axis_angle(Vector::Y, s.to_radians() as f32) * -Vector::X;
@@ -268,12 +290,12 @@ fn hold(world: &mut PhysicsWorld, c: &Car, steer: &[f64], most: f32, plant: Plan
                     None,
                 ),
             };
-            Some((p, forward, v, back))
+            Some((p, forward, v, back, i))
         })
         .collect();
     let mut total = vec![0.0f32; wheels.len()];
     for _ in 0..HOLD_PASSES {
-        for ((p, forward, ground, back), sum) in wheels.iter().zip(&mut total) {
+        for ((p, forward, ground, back, _), sum) in wheels.iter().zip(&mut total) {
             let rb = &world.bodies[c.chassis];
             let mut denominator = reach(rb, *p, *forward);
             let mut rel = rb.velocity_at_point(*p) - *ground;
@@ -291,6 +313,10 @@ fn hold(world: &mut PhysicsWorld, c: &Car, steer: &[f64], most: f32, plant: Plan
             *sum = next;
         }
     }
+    for (w, sum) in wheels.iter().zip(total) {
+        used[w.4] = sum.abs();
+    }
+    used
 }
 
 /// A touching wheel's spring push on a chassis `rb` (at the velocities the controller read) with
@@ -430,6 +456,10 @@ impl Vehicles {
         let mut out = Vec::new();
         let plant = self.plant;
         for c in &mut self.cars {
+            // #2307: a sleeping body's wheels keep their contacts, and write nothing.
+            if world.bodies[c.chassis].is_sleeping() {
+                continue;
+            }
             let hits = rays(world, c);
             let now = hits.iter().map(|h| h.map(|h| h.2)).collect();
             let before = std::mem::replace(&mut c.touch, now);
@@ -439,6 +469,37 @@ impl Vehicles {
         out
     }
 
+    /// #2307: each sleeping vehicle body's chassis with a dynamic body asleep under one of its
+    /// wheels, as a step finds them.
+    pub(crate) fn resting(&self, world: &PhysicsWorld) -> Vec<(RigidBodyHandle, RigidBodyHandle)> {
+        let asleep =
+            |h: RigidBodyHandle| world.bodies[h].is_dynamic() && world.bodies[h].is_sleeping();
+        let mut out = Vec::new();
+        for c in self.cars.iter().filter(|c| asleep(c.chassis)) {
+            let under = c.touch.iter().flatten();
+            let under = under.filter_map(|g| world.colliders.get(*g).and_then(|co| co.parent()));
+            out.extend(under.filter(|g| asleep(*g)).map(|g| (c.chassis, g)));
+        }
+        out
+    }
+
+    /// #2307: wakes each chassis of `resting` still asleep whose body under a wheel the step
+    /// that just ran woke, so both wake on that step.
+    pub(crate) fn rouse(
+        &self,
+        world: &mut PhysicsWorld,
+        resting: &[(RigidBodyHandle, RigidBodyHandle)],
+    ) {
+        if self.plant == Plant::StaysAsleep {
+            return;
+        }
+        for (chassis, ground) in resting {
+            if world.bodies[*chassis].is_sleeping() && !world.bodies[*ground].is_sleeping() {
+                world.bodies[*chassis].wake_up(true);
+            }
+        }
+    }
+
     /// Moves body `id` one step through its controller, its pushes handed to the coming step
     /// as forces; `None` for a body that isn't one.
     pub(crate) fn drive(&mut self, id: &str, world: &mut PhysicsWorld) -> Option<()> {
@@ -446,7 +507,19 @@ impl Vehicles {
         let dt = world.integration_parameters.dt;
         let c = self.car(id)?;
         let h = c.chassis;
-        if c.drive != 0.0 {
+        if matches!(plant, Plant::NoHold | Plant::RunsAsleep) {
+            if c.drive != 0.0 {
+                world.bodies[h].wake_up(true);
+            }
+            let rb = &world.bodies[h];
+            let runs = plant == Plant::RunsAsleep || !rb.is_sleeping();
+            if runs && rb.is_enabled() && rb.is_dynamic() {
+                c.as_is(world);
+            }
+            return Some(());
+        }
+        // #2307: as a drive does, a body that moves under one of its wheels wakes it, on that step.
+        if c.drive != 0.0 || (plant != Plant::StaysAsleep && c.stirred(world)) {
             world.bodies[h].wake_up(true);
         }
         let rb = &world.bodies[h];
@@ -465,9 +538,11 @@ impl Vehicles {
         };
         // A brake above 0 keeps every wheel from driving, and holds each touching braking wheel
         // first, so the controller works from the velocities it leaves.
-        if c.brake > 0.0 {
-            hold(world, c, &steer, brake_share * dt, plant);
-        }
+        let braked = if c.brake > 0.0 {
+            hold(world, c, &steer, brake_share * dt, plant)
+        } else {
+            vec![0.0; c.spec.wheels.len()]
+        };
         let rb = &world.bodies[h];
         let (v0, w0) = (rb.linvel(), rb.angvel());
         for (w, s) in c.ctl.wheels_mut().iter_mut().zip(steer) {
@@ -548,10 +623,21 @@ impl Vehicles {
             })
             .collect();
         let mut back = Vec::new();
+        // #2307: the pull gravity and the world's forces (`push`, which ran first) will add to
+        // the chassis over the step, which its touching wheels share: the braking ones along
+        // their headings, all of them sideways.
+        let gravity = world.gravity;
         let rb = &mut world.bodies[h];
+        let pull = rb.user_force() + gravity * (rb.gravity_scale() * rb.mass());
+        let on = |f: fn(&doc::Wheel) -> bool| {
+            let wheels = c.ctl.wheels().iter().zip(c.spec.wheels.values());
+            let n = wheels.filter(|(w, s)| w.raycast_info().is_in_contact && f(s));
+            n.count().max(1) as f32
+        };
+        let (touching, braking) = (on(|_| true), on(|w| w.brakes));
         let (up, com) = (*rb.rotation() * Vector::Y, rb.center_of_mass());
         let wheels = c.ctl.wheels().iter().zip(c.spec.wheels.values());
-        for ((w, spec), (load, side, below)) in wheels.zip(pushes) {
+        for (((w, spec), (load, side, below)), braked) in wheels.zip(pushes).zip(braked) {
             let r = w.raycast_info();
             if !r.is_in_contact {
                 continue;
@@ -568,15 +654,50 @@ impl Vehicles {
                 rb.add_force_at_point(drive, p, false);
                 pushed += drive;
             }
+            // Its grip resists the sideways slip up to grip × the load its spring carries; at
+            // the point the controller applies it, lifted toward the centre of mass by its
+            // roll influence of 0.1.
+            let most = spec.grip as f32 * load;
+            let side = (side / dt).clamp(-most, most);
+            let q = p - up * (up.dot(p - com) * 0.9);
             if side != 0.0 {
-                // Its grip resists the sideways slip up to grip × the load its spring carries; at
-                // the point the controller applies it, lifted toward the centre of mass by its
-                // roll influence of 0.1.
-                let most = spec.grip as f32 * load;
-                let side = (side / dt).clamp(-most, most);
-                let q = p - up * (up.dot(p - com) * 0.9);
                 rb.add_force_at_point(axle * side, q, false);
                 pushed += axle * side;
+            }
+            // #2307: the hold. It also resists its share of the pull along the ground: along
+            // its heading up to what its brake has left of its share, at the contact, as its
+            // brake does; sideways up to what its grip has left of grip × load, level with the
+            // centre of mass, where the pull acts (at the grip's own point, a tenth of the way
+            // down to the contact, a car standing across a 10° slope crept 0.03 m up it in
+            // 10 s); and both together within grip × load.
+            let along = pull - n * n.dot(pull);
+            let left = match plant {
+                _ if !spec.brakes => 0.0,
+                Plant::HoldPastBrake => f32::MAX,
+                _ => (brake_share - braked / dt).max(0.0),
+            };
+            let room = most - side.abs();
+            let ahead = (-forward.dot(along) / braking).clamp(-left, left);
+            let aside = (-axle.dot(along) / touching).clamp(-room, room);
+            let both = ahead.hypot(aside);
+            let within = if both > most { most / both } else { 1.0 };
+            if ahead != 0.0 {
+                rb.add_force_at_point(forward * (ahead * within), p, false);
+                pushed += forward * (ahead * within);
+            }
+            if aside != 0.0 {
+                rb.add_force_at_point(axle * (aside * within), p - up * up.dot(p - com), false);
+                pushed += axle * (aside * within);
+            }
+            // The planted hold also takes out the wheel's slip across the chassis itself, by the
+            // controller's rule in full, where its grip already takes it out across the wheel.
+            if plant == Plant::HoldTakesSlip {
+                let across = *rb.rotation() * -Vector::X;
+                let across = (across - n * across.dot(n)).normalize_or_zero();
+                let stop = grip(rb, p, across, across.dot(rb.velocity_at_point(p))) * 5.0 / dt;
+                let stop = (stop / touching).clamp(-room, room);
+                rb.add_force_at_point(across * stop, q, false);
+                pushed += across * stop;
             }
             back.extend(below.map(|g| (g, pushed, p)));
         }
@@ -731,6 +852,61 @@ impl Vehicles {
 }
 
 impl Car {
+    /// #2307's planted wrappers: the backend's controller as it is. Its springs, its brake, its
+    /// drive and its grip push the chassis as impulses before the step, from the velocities the
+    /// last step left, and the step then adds gravity; a wheel whose spring carries no load
+    /// neither brakes nor drives.
+    fn as_is(&mut self, world: &mut PhysicsWorld) {
+        let dt = world.integration_parameters.dt;
+        let steer = steers(&self.spec, f64::from(self.steer), Plant::None);
+        let share = |f: fn(&doc::Wheel) -> bool| {
+            self.spec.wheels.values().filter(|w| f(w)).count().max(1) as f32
+        };
+        let (drive, brake) = (
+            self.drive / share(|w| w.drives),
+            self.brake / share(|w| w.brakes),
+        );
+        let braked = self.brake > 0.0;
+        let wheels = self.ctl.wheels_mut().iter_mut();
+        for ((w, spec), s) in wheels.zip(self.spec.wheels.values()).zip(steer) {
+            w.steering = s.to_radians() as f32;
+            w.engine_force = if spec.drives && !braked { drive } else { 0.0 };
+            w.brake = if spec.brakes { brake * dt } else { 0.0 };
+        }
+        let spun: Vec<f32> = self.ctl.wheels().iter().map(|w| w.rotation).collect();
+        let filter = meets(world, self.chassis);
+        let queries = world.broad_phase.as_query_pipeline_mut(
+            world.narrow_phase.query_dispatcher(),
+            &mut world.bodies,
+            &mut world.colliders,
+            filter,
+        );
+        self.ctl.update_vehicle(dt, queries);
+        for ((t, w), s) in self.turned.iter_mut().zip(self.ctl.wheels()).zip(spun) {
+            *t = w.rotation - s;
+        }
+    }
+
+    /// #2307: whether a body under one of this body's wheels, as its last step left them, moves:
+    /// a kinematic one set to another pose over the coming step, or a dynamic one awake and
+    /// faster at the wheel's contact than the speed its chassis rests under.
+    fn stirred(&self, world: &PhysicsWorld) -> bool {
+        let rest = world.bodies[self.chassis]
+            .activation()
+            .normalized_linear_threshold;
+        self.touch.iter().zip(self.ctl.wheels()).any(|(g, w)| {
+            let body = g.and_then(|g| world.colliders.get(g)?.parent());
+            body.and_then(|b| world.bodies.get(b)).is_some_and(|b| {
+                if b.is_kinematic() {
+                    b.next_position() != b.position()
+                } else {
+                    let speed = b.velocity_at_point(w.raycast_info().contact_point_ws);
+                    b.is_dynamic() && !b.is_sleeping() && speed.length() > rest
+                }
+            })
+        })
+    }
+
     /// The `contact_begin` and `contact_end` this body's wheels wrote since `before`, each
     /// naming the body's wheel (`<body>#<wheel>`) and the shape use its ray met.
     /// The `contact_end` and `contact_begin` this body's wheels write going from `before` to
@@ -778,5 +954,76 @@ impl Car {
             }
         }
         out
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use deep_canvas_physics::backend::{Backend, Input, Targets};
+    use deep_canvas_physics::caps::RAPIER3D;
+    use deep_canvas_physics::occurrence::code;
+    use deep_canvas_physics::roles::TABLE;
+    use serde_json::json;
+
+    use super::Plant;
+    use crate::Rapier;
+
+    /// #2307: a car left 4 s on a 100 kg slab lying on the floor, the slab then poked at `push`
+    /// m/s: whether the car slept until then (and the slab, when it can sleep), and whether the
+    /// poke's step leaves the car awake with its `wake` row.
+    fn poked(slab_sleeps: bool, push: f64, plant: Plant) -> (bool, bool) {
+        let wheel = |x: f64, z: f64| json!({"at": [x, 0, z], "radius": 0.3, "suspension": {"rest": 0.3, "travel": 0.2, "hz": 2}});
+        let wheels = json!({"fl": wheel(0.8, 1.25), "fr": wheel(-0.8, 1.25),
+                            "rl": wheel(0.8, -1.25), "rr": wheel(-0.8, -1.25)});
+        let doc = json!({
+            "kind": "physics.world@1", "dimensions": 3, "step_rate": 120, "substeps": 4,
+            "gravity": [0, -9.81, 0], "mode": "dynamic",
+            "capacity": {"bodies": 4, "shapes": 4, "joints": 0, "contacts": 64, "particles": 0},
+            "contact_materials": {"m": {"friction": 0.8, "restitution": 0, "density": 1000}},
+            "shapes": {"floor": {"kind": "box", "half": [50, 0.1, 50]},
+                       "slab": {"kind": "box", "half": [4, 0.1, 3]},
+                       "chassis": {"kind": "box", "half": [0.9, 0.25, 2.0]}},
+            "bodies": {
+                "floor": {"kind": "static", "shapes": [{"shape": "floor", "contact_material": "m"}],
+                          "pose": {"pos": [0, -0.1, 0]}},
+                "slab": {"kind": "dynamic", "shapes": [{"shape": "slab", "contact_material": "m"}],
+                         "mass": 100, "sleep": slab_sleeps, "pose": {"pos": [0, 0.1, 0]}},
+                "car": {"kind": "vehicle", "shapes": [{"shape": "chassis", "contact_material": "m"}],
+                        "mass": 1000, "pose": {"pos": [0, 0.8, 0]}, "vehicle": {"wheels": wheels}}}
+        });
+        let w = deep_canvas_physics::check::check(&doc, &RAPIER3D, &TABLE)
+            .unwrap_or_else(|e| panic!("{e:?}"));
+        let mut b = Rapier::default();
+        b.vehicles.plant = plant;
+        b.build(&w).unwrap();
+        for _ in 0..480 {
+            b.step(&[], &Targets::default()).unwrap();
+        }
+        let asleep =
+            |b: &Rapier, id: &str| b.read().bodies.iter().any(|x| x.id == id && x.sleeping);
+        let slept = asleep(&b, "car") && asleep(&b, "slab") == slab_sleeps;
+        let tap = Input {
+            kind: "poke".into(),
+            target: "slab".into(),
+            data: json!({"push": [push, 0, 0]}),
+        };
+        b.step(&[tap], &Targets::default()).unwrap();
+        let wake = code("wake");
+        let row = b
+            .occurrences()
+            .iter()
+            .any(|r| Some(r.kind) == wake && r.a == "car");
+        (slept, row && !asleep(&b, "car"))
+    }
+
+    #[test]
+    fn a_sleeping_car_wakes_on_the_step_the_body_under_it_wakes_or_moves() {
+        // A slab asleep under it that wakes, slower than the world's sleep speed.
+        assert_eq!(poked(true, 0.01, Plant::None), (true, true));
+        // A slab that never sleeps and moves under it.
+        assert_eq!(poked(false, 0.5, Plant::None), (true, true));
+        // The planted wrapper leaves it asleep on both.
+        assert_eq!(poked(true, 0.01, Plant::StaysAsleep), (true, false));
+        assert_eq!(poked(false, 0.5, Plant::StaysAsleep), (true, false));
     }
 }
