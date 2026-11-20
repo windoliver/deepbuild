@@ -1,0 +1,101 @@
+# Base run of tests/acceptance/2500 at 2b36234a7a249b1ff9d8c55bd34e10ae388b7689 (a4d0290b5 with the merge of #2862): all 3 tests fail, each at its own assertion for missing behavior.
+# Before each failure the test read the code's glyphs (raster), checked the boxes geometry gives against them, and ran its planted wrong programs: every box check passed and every plant was rejected.
+# The failures: framing.test.ts:46 (the shot keeping cfg#line:4 is refused, ref_unresolved), framing.test.ts:64 (the twin keeping cfg frames a point, so the whole item's box projects to no finite box), reach.test.ts:42 (the reach2 aiming at cfg#tok:2 is refused, ref_unresolved).
+# Command: PATH=$HOME/.rustup/toolchains/1.99.1-aarch64-apple-darwin/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 scripts/lease npx vitest run --root tests/acceptance/2500 --no-file-parallelism --testTimeout=600000
+
+scripts/lease: no deep on PATH and no built CLI at packages/cli/dist, so `npx vitest run --root tests/acceptance/2500 --no-file-parallelism --testTimeout=600000` runs unleased
+
+ RUN  v5.0.5 ~/dev/claude-worktrees/logical-percolating-orbit/agent-ad79041f74ba05961/tests/acceptance/2500
+
+ ❯ framing.test.ts (2 tests | 2 failed) 4184ms
+   ❯ AC1 #2500.bceb1cbb a shot keeping a code line, and a twin keeping the code (2)
+     × AC1 #2500.bceb1cbb (line) a shot keeping cfg#line:4 frames line 4's box at the shot's fill within the framing's tolerance 2291ms
+     × AC1 #2500.bceb1cbb (twin) a twin keeping cfg frames the whole item at the shot's fill within the framing's tolerance 342ms
+ ❯ reach.test.ts (1 test | 1 failed) 3094ms
+   ❯ AC2 #2500.eb02ef3c a puppet's reach for a code token (1)
+     × AC2 #2500.eb02ef3c a puppet reaching for cfg#tok:2 ends its hand on that token's box within 0.5 u at every time while the code moves 1887ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  framing.test.ts > AC1 #2500.bceb1cbb a shot keeping a code line, and a twin keeping the code > AC1 #2500.bceb1cbb (line) a shot keeping cfg#line:4 frames line 4's box at the shot's fill within the framing's tolerance
+AssertionError: the shot keeping cfg#line:4 is accepted: {"ok":false,"code":"ref_unresolved","path":"shots/s/frame/keep","item":"cfg#line:4","shot":"s"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ accepted ../493/helpers.ts:235:64
+    233| /** An answer that accepted its document, with one frame per time, in …
+    234| export function accepted(answer: JsonObject, times: readonly number[],…
+    235|   expect(answer['ok'], `${what} is accepted: ${show(answer)}`).toBe(tr…
+       |                                                                ^
+    236|   const frames = arr(answer['frames'], `${what}: frames`).map((v, i): …
+    237|     const f = obj(v, `${what}: frames[${i}]`);
+ ❯ helpers.ts:169:32
+ ❯ evaluated helpers.ts:169:18
+ ❯ framing.test.ts:46:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  framing.test.ts > AC1 #2500.bceb1cbb a shot keeping a code line, and a twin keeping the code > AC1 #2500.bceb1cbb (twin) a twin keeping cfg frames the whole item at the shot's fill within the framing's tolerance
+AssertionError: the twin keeping cfg: the whole item's box at the shot's fill, centred on its place:
+  at 0.00 s: the whole item's box projects to the box [null,null,null,null] and centre [null,null] px, not a finite box at the shot's fill
+  at 0.50 s: the whole item's box projects to the box [null,null,null,null] and centre [null,null] px, not a finite box at the shot's fill
+  at 1.00 s: the whole item's box projects to the box [null,null,null,null] and centre [null,null] px, not a finite box at the shot's fill
+  at 1.50 s: the whole item's box projects to the box [null,null,null,null] and centre [null,null] px, not a finite box at the shot's fill
+  at 1.98 s: the whole item's box projects to the box [null,null,null,null] and centre [null,null] px, not a finite box at the shot's fill: expected [ …(5) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "at 0.00 s: the whole item's box projects to the box [null,null,null,null] and centre [null,null] px, not a finite box at the shot's fill",
++   "at 0.50 s: the whole item's box projects to the box [null,null,null,null] and centre [null,null] px, not a finite box at the shot's fill",
++   "at 1.00 s: the whole item's box projects to the box [null,null,null,null] and centre [null,null] px, not a finite box at the shot's fill",
++   "at 1.50 s: the whole item's box projects to the box [null,null,null,null] and centre [null,null] px, not a finite box at the shot's fill",
++   "at 1.98 s: the whole item's box projects to the box [null,null,null,null] and centre [null,null] px, not a finite box at the shot's fill",
++ ]
+
+ ❯ none ../467/helpers.ts:70:73
+     68| /** No failures; the message lists them. */
+     69| export function none(failures: readonly string[], what: string): void {
+     70|   expect(failures, `${what}:\n  ${failures.slice(0, 40).join('\n  ')}`…
+       |                                                                         ^
+     71| }
+     72| /** At least one failure, and one that names `name`: what a planted pr…
+ ❯ framing.test.ts:64:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  reach.test.ts > AC2 #2500.eb02ef3c a puppet's reach for a code token > AC2 #2500.eb02ef3c a puppet reaching for cfg#tok:2 ends its hand on that token's box within 0.5 u at every time while the code moves
+AssertionError: the arm reaching for cfg#tok:2 is accepted: {"ok":false,"code":"ref_unresolved","path":"constraints/reach/target"}: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ accepted ../493/helpers.ts:235:64
+    233| /** An answer that accepted its document, with one frame per time, in …
+    234| export function accepted(answer: JsonObject, times: readonly number[],…
+    235|   expect(answer['ok'], `${what} is accepted: ${show(answer)}`).toBe(tr…
+       |                                                                ^
+    236|   const frames = arr(answer['frames'], `${what}: frames`).map((v, i): …
+    237|     const f = obj(v, `${what}: frames[${i}]`);
+ ❯ helpers.ts:169:32
+ ❯ evaluated helpers.ts:169:18
+ ❯ reach.test.ts:42:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  3 failed (3)
+   Start at  13:05:30
+   Duration  7.59s (tests 98%, transform 1%, import 1%)
+
+exit 1

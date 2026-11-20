@@ -1,0 +1,20 @@
+{
+  "task": "canvas-surface",
+  "fingerprint": {
+    "model": "Mac15,7",
+    "chip": "Apple M3 Pro",
+    "memoryBytes": 38654705664,
+    "power": "ac",
+    "lowPowerMode": false,
+    "thermalState": "nominal",
+    "macosBuild": "25B78",
+    "build": { "profile": "release", "toolchain": "rustc 1.99.1" }
+  },
+  "runs": [
+    { "rebuild_128_ms": 1.214, "loadStart": 0.62, "loadEnd": 0.66 },
+    { "rebuild_128_ms": 1.187, "loadStart": 0.66, "loadEnd": 0.71 },
+    { "rebuild_128_ms": 1.246, "loadStart": 0.71, "loadEnd": 0.69 },
+    { "rebuild_128_ms": 1.221, "loadStart": 0.69, "loadEnd": 0.74 },
+    { "rebuild_128_ms": 1.193, "loadStart": 0.74, "loadEnd": 0.72 }
+  ]
+}

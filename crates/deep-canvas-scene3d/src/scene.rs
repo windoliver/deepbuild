@@ -2863,8 +2863,8 @@ pub(crate) fn evaluate_compiled(
     scene.set_cutaway(cutaway);
     scene.mirror = crate::mirror::find(&scene.layers, scene.camera.eye, |id| items.get(id))?;
     // #166: the water, its wake's path, and its own mirror unless a material names one.
-    let seed = map.get("seed").and_then(Value::as_u64).unwrap_or(0) as u32;
-    if let Some(mut w) = crate::water::find(&scene.layers, |id| items.get(id), seed, seconds)? {
+    let found = crate::water::find(&scene.layers, |id| items.get(id), map, program, t);
+    if let Some(mut w) = found.map_err(|f| f.kept(outlines.memo))? {
         if let Some(wake) = &mut w.wake {
             let step = frame_interval(map);
             wake.step = step as f64 / deep_canvas::camera::FLICKS_PER_SECOND as f64;

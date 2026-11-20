@@ -1,0 +1,20 @@
+{
+  "task": "playtest-throughput",
+  "fingerprint": {
+    "model": "Mac17,10",
+    "chip": "Apple M5 Max",
+    "memoryBytes": 68719476736,
+    "power": "ac",
+    "lowPowerMode": false,
+    "thermalState": "nominal",
+    "macosBuild": "25B78",
+    "build": { "profile": "release", "toolchain": "rustc 1.99.1" }
+  },
+  "runs": [
+    { "fixture_realtime_x": 72.4, "loadStart": 0.71, "loadEnd": 0.84 },
+    { "fixture_realtime_x": 73.9, "loadStart": 0.84, "loadEnd": 0.88 },
+    { "fixture_realtime_x": 71.2, "loadStart": 0.88, "loadEnd": 0.81 },
+    { "fixture_realtime_x": 72.8, "loadStart": 0.81, "loadEnd": 0.86 },
+    { "fixture_realtime_x": 74.3, "loadStart": 0.86, "loadEnd": 0.9 }
+  ]
+}
