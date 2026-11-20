@@ -23,5 +23,6 @@ On the committed build, `packageDigest` of the four folders, read through the bu
 [digests-after.txt](digests-after.txt). score gives `d1:fd6d8bea…` in both checkouts and import gives `d1:8fb7886b…` in
 both. Each is the digest stamped in that package's `deepbuild.json`.
 
-Temp paths in the transcripts are shown as `<tmp>/`. To rerun: `TMPDIR=<dir> bash docs/evidence/2629/e2e.sh
-<checkout> <label>` after `npm run build --workspaces`.
+Temp paths in the transcripts are shown as `<tmp>/`. To rerun, with Node 24 as `node` on PATH: `TMPDIR=<dir> bash
+docs/evidence/2629/e2e.sh <checkout> <label>` after `npm run build --workspaces`. The transcripts were made with the
+script's previous line 7, which took Node 24 from nvm; nothing else in the script changed.

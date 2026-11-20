@@ -4,7 +4,8 @@
 set -u
 WT=$(/usr/bin/git -C "$(dirname "$0")" rev-parse --show-toplevel)
 CO=$1; LABEL=$2
-export PATH="$HOME/.nvm/versions/node/$(ls $HOME/.nvm/versions/node | grep ^v24 | tail -1)/bin:/usr/bin:/bin:/usr/sbin"
+case "$(node -v 2>/dev/null)" in v24.*) ;; *) echo "e2e.sh needs Node 24 as node on PATH" >&2; exit 2;; esac
+export PATH="$(dirname "$(command -v node)"):/usr/bin:/bin:/usr/sbin"
 H=$(mktemp -d "${TMPDIR:-/tmp}/h-XXXX")
 mkdir -p "$H/home"; echo confirmed > "$H/confirm"
 for v in $(env | grep -oE '^(DEEP_|CLAUDE|CODEX|ANTHROPIC_|OPENAI_|GH_|GITHUB_|AI_AGENT|TMUX)[A-Za-z0-9_]*'); do unset "$v"; done
