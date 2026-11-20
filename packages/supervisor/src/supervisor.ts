@@ -71,6 +71,10 @@ interface Run {
   token: string | null;
   tracked: Map<number, Tracked>;
   ended: Set<number>;
+  /** Its first process has exited (#2649 cut B). */
+  exited?: boolean;
+  /** A scan begun after its first process exited found its sandbox empty: none can appear in it again (#2649 cut B). */
+  drained?: boolean;
   /** The process.ended events that prove its processes gone: what its leases' release cites. */
   gone: string[];
   leases: { kind: string; key: string }[];
@@ -336,7 +340,7 @@ class LocalSupervisor implements Supervisor {
 
   /** The runs a scan reads: each in the supervisor's sandbox that is live, or that its cleanup left running. */
   private scanned(): Run[] {
-    return [...this.runs.values()].filter((r) => r.sandboxed && (this.lingering.has(r) || (r.state !== 'cleaned' && r.state !== 'BLOCKED' && r.state !== 'held')));
+    return [...this.runs.values()].filter((r) => r.sandboxed && !r.drained && (this.lingering.has(r) || (r.state !== 'cleaned' && r.state !== 'BLOCKED' && r.state !== 'held')));
   }
   /**
    * The timed scan, running while a run has a sandbox to scan: with none, the timer stops, so a hub with no run
@@ -705,6 +709,7 @@ class LocalSupervisor implements Supervisor {
     child.stderr?.on('data', (chunk: Buffer) => { hashes.stderr.update(chunk); spec.output?.stderr(chunk); });
     const drain = () => setTimeout(() => setImmediate(() => { child.stdout?.destroy(); child.stderr?.destroy(); }), DRAIN_MS).unref();
     child.on('exit', () => {
+      r.exited = true;
       if (r.state === 'running') r.state = 'exited';
       // A background process still holding its output doesn't keep the run open: what came by now is its output.
       // Closed after the loop's next read of the pipes, so a stalled loop doesn't cut what was already written.
@@ -754,7 +759,9 @@ class LocalSupervisor implements Supervisor {
       const live = this.scanned();
       if (!live.length) return;
       const bytes = new Map<number, number>();
+      const after = live.filter((r) => r.exited);
       const found = await scan(live.map((r) => markerOf(r.run)), bytes);
+      for (const r of after) if (!(found.get(markerOf(r.run)) ?? []).length) r.drained = true;
       // A run past its memory is stopped: the sum over every process its sandbox holds, the scan's own reading.
       for (const r of live) {
         const cap = r.limits?.memory_mb;
