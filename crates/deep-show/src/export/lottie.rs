@@ -12,6 +12,7 @@ use std::process::{Command, Stdio};
 
 use deep_canvas::schedule::{Scheduler, Session as DocSession};
 use deep_canvas_export::lottie::{self as writer, Frames, Plant, Refusal, Written};
+use deep_canvas_marks::animated;
 use deep_canvas_marks::path::Verb;
 use deep_canvas_marks::scene::Mark;
 use deep_canvas_media::export_checks as rules;
@@ -444,8 +445,11 @@ impl Hub<'_> {
                             .iter()
                             .enumerate()
                             .map(|(k, g)| {
-                                let [lift, opacity] =
-                                    units.and_then(|u| u.get(k)).copied().unwrap_or([0.0, 1.0]);
+                                let unit = units
+                                    .and_then(|u| u.get(k))
+                                    .copied()
+                                    .unwrap_or(animated::UNIT);
+                                let (lift, opacity) = (unit[0], animated::faded(unit));
                                 writer::text::Glyph {
                                     grapheme: g.grapheme,
                                     outline: outline(g),

@@ -276,7 +276,8 @@ workloads.costs = () => {
       rmSync(dir, { recursive: true, force: true });
     }
   }
-  const report = { fingerprint: machine, build: measured.build, terms, declared: declared.terms, declaredFingerprint: declared.fingerprint };
+  // #1430: the hits and misses of the text's run and shape caches over the bench.
+  const report = { fingerprint: machine, build: measured.build, terms, caches: measured.caches, declared: declared.terms, declaredFingerprint: declared.fingerprint };
   if (write) {
     if (!references.some((reference) => reference.model === machine.model)) throw Error(`coefficients come from a reference Mac; this is ${machine.model}`);
     const { model, chip, memoryBytes, macosBuild } = machine;
@@ -1115,6 +1116,33 @@ workloads['water-flow'] = () => {
   }
 };
 
+// #971: what the look's local tone map adds to a frame's GPU time on a release `deep-gpu`, at 1920 × 1080 and at
+// 3840 × 2160: the difference of two sides' median `gpu_ms` over 300 frames of #465's stage, with
+// `local: {strength: 0.5}` on the look and without; one warm-up run and five, each a fresh process.
+// tests/acceptance/971/budgets.test.ts holds the issue's numbers on its own fixture.
+workloads['local-tone-map'] = () => {
+  const fingerprint = release('deep-gpu-layer', 'deep-gpu');
+  const look2d = JSON.parse(readFileSync(join(root, 'tests', 'acceptance', '465', 'fixtures', 'look.json'), 'utf8'));
+  const look = { ...look2d, id: 'local-971', basis: 'physical', palette: { ...look2d.palette, night: '#101114', graphite: '#1b1d22', slate: '#8b8f97', white: '#ffffff' },
+    roles: { ...look2d.roles, ground: 'night', ink: 'graphite', muted: 'slate' }, tone_map: 'filmic', exposure: 0, finish: [], deband: 'none', bloom: 'none', ao: 'none', ground_3d: { kind: 'none' } };
+  const dir = mkdtempSync(join(tmpdir(), 'deep-canvas-bench-'));
+  try {
+    const doc = join(dir, 'stage.json');
+    writeFileSync(doc, JSON.stringify(flareStage()));
+    const side = (size, local) => ({ call: 'view3d', doc, look: local ? { ...look, local: { strength: 0.5 } } : look, size, frames: 300, fps: 30, timings: true });
+    const median = (xs) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
+    const measured = runs(() => {
+      const answer = once('deep-gpu', ['run'], { out: dir, calls: [[1920, 1080], [3840, 2160]].flatMap((size) => [side(size, true), side(size, false)]) });
+      if (answer.ok !== true || answer.replies.some((r) => r.code)) throw Error(`deep-gpu answered ${JSON.stringify(answer).slice(0, 1500)}`);
+      const [full, fullPlain, uhd, uhdPlain] = answer.replies.map((r) => median(r.frames.map((f) => f.gpu_ms)));
+      return { local_1080p_gpu_ms: Math.max(0, full - fullPlain), local_2160p_gpu_ms: Math.max(0, uhd - uhdPlain), plain_1080p_gpu_ms: fullPlain, plain_2160p_gpu_ms: uhdPlain };
+    });
+    console.log(JSON.stringify({ task: 'canvas-local-tone-map', fingerprint, runs: measured }));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+};
+
 // #2017: the modeling, scatter, terrain and wind task's budgets (#442) on release builds, one warm-up run and five,
 // each a fresh process per binary. `deep-show`'s `geometry` with `timings` reads a bevel with weighted normals on a
 // 10,000-face prop, two levels of subdivision of a 1,000-face mesh, distributing 100,000 points with pruning, and a
@@ -1334,6 +1362,7 @@ const EFFICIENCY = {
   'canvas-water-shore': { shore_lake_gpu_ms: (r) => r.shore_lake_gpu_ms },
   'canvas-water-flow': { flow_sheet_gpu_ms: (r) => r.flow_sheet_gpu_ms },
   'canvas-water-rings': { rings_pond_gpu_ms: (r) => r.rings_pond_gpu_ms },
+  'canvas-local-tone-map': { local_1080p_gpu_ms: (r) => r.local_1080p_gpu_ms, local_2160p_gpu_ms: (r) => r.local_2160p_gpu_ms },
   'canvas-ground': {
     bevel_ms: (r) => r.bevel_ms, subdivide_ms: (r) => r.subdivide_ms, distribute_ms: (r) => r.distribute_ms, arc_length_ms: (r) => r.arc_length_ms,
     still_steps: (r) => r.still_steps, sway_gpu_ms: (r) => r.sway_gpu_ms,
@@ -1349,6 +1378,8 @@ const EFFICIENCY = {
   'canvas-logic-budgets': Object.fromEntries(['occurrences_64_ms', 'linear_1000_vec3_ms', 'preview_4mib_ms', 'checkpoint_3_pages_ms'].map((k) => [k, (r) => r[k]])),
   // #1968: each reading by its own name (benchmarks/code-film.mjs).
   'canvas-code-film': Object.fromEntries(['tokens_2000_lines_ms', 'diff_400_lines_ms', 'seek_10_min_ms', 'still_code_steps'].map((k) => [k, (r) => r[k]])),
+  // #1430: each reading by its own name (benchmarks/text-reflow.mjs).
+  'canvas-text-reflow': Object.fromEntries(['width_change_50kb_ms', 'typed_char_50kb_ms'].map((k) => [k, (r) => r[k]])),
   // #184: each reading by its own name (benchmarks/playtest.mjs).
   'playtest-maze': { maze_40_runs_s: (r) => r.maze_40_runs_s, idle_work: (r) => r.idle_work },
   'playtest-throughput': { fixture_realtime_x: (r) => r.fixture_realtime_x },
@@ -2028,6 +2059,8 @@ workloads.surface = async () => (await import('./surface.mjs')).surface({ releas
 // #1968's budgets: a long file's tokens mapped to runs, two versions aligned, a seek into a long terminal recording and a
 // still code item's steps per frame (benchmarks/code-film.mjs).
 workloads['code-film'] = async () => (await import('./code-film.mjs')).codeFilm({ release, once, runs });
+// #1430's budgets: a width change and a typed character on a 50 KB text (benchmarks/text-reflow.mjs).
+workloads['text-reflow'] = async () => (await import('./text-reflow.mjs')).textReflow({ release, run, runs });
 // #233's budgets: a math@1 document against its expansion written by hand, and a frame's own expansions (benchmarks/math.mjs).
 workloads.math = async () => (await import('./math.mjs')).math({ root, release, once, runs });
 workloads['between-steps'] = async () => (await import('./between-steps.mjs')).betweenSteps({ root, release, once, runs });

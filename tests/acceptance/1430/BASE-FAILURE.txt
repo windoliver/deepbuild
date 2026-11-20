@@ -1,0 +1,47 @@
+Base commit: 7312c66d27204366ada87dad6f6982b60cc40076
+Command: NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 scripts/lease npx vitest run --root tests/acceptance/1430 --no-file-parallelism
+
+NOT RUN. This file notes the first failure each test is expected to give at the base; the drafting job ran neither the
+suite nor a Rust build (the machine is shared and loaded, and the surfaces the tests add don't exist at the base, so a
+base run shows only that). The type-check ran and exits 0:
+  node node_modules/typescript/bin/tsc -p tests/acceptance/1430/tsconfig.json
+
+What the base has: `deep-text shape` (#856) answers every line these tests send, with `glyphs`, `width`, `shown`,
+`shaped` and `cache`; its one cache keys a run on the width beside the text, font, size and features, and it shapes a
+text whole, `\n`s and all. It has no `caches` field, no `run` field (it ignores `run: true`), and no `--planted`
+keyed_on_width, key_without_font or whole_text (an unknown name answers {"ok":false,"code":"bad_input"} and exits 2).
+benchmarks/budgets.json has no task canvas-text-reflow.
+
+ac1-widths.test.ts
+  AC1 #1430.76f8be84 laying a 50 KB text … shapes each paragraph once …
+    Expected to fail on the criterion's assertion, `none(widthFailures(…), 'the shapings over 100 widths')`: line 1's
+    `shaped` lists the whole 51,299-character text once, which is no paragraph of it ("line 1, at 853 px, shaped …
+    which is no paragraph of the text: a long text shapes per paragraph"; "line 1, the text's first layout, shaped
+    paragraph 1 0 times, …"), and each of lines 2 to 100 shapes it again at its new width ("line 2, laid out at 160 px,
+    shaped 1 text again, …"); the last failure: "over 100 widths, the first layout made 1 shaping for the text's 100
+    paragraphs, and the 99 layouts after it made 99 shapings, …". The scope's assertion isn't reached (and would fail:
+    no `caches`).
+  AC1 #1430.76f8be84 the planted cache keyed on width …
+    Expected to fail before its assertion: `deep-text shape --planted keyed_on_width exits 0` (exit 2, bad_input).
+
+ac2-property.test.ts
+  AC2 #1430.c8134c7e over 160 layouts from seed 1430 …
+    The generated cases' meetings hold (checked by the drafting job: 6, 62 and 17 pairs) and `deep-text fonts` answers;
+    expected to fail at the reader of the first case laid out alone: "…, alone: run is an object, got undefined" (the
+    base ignores `run: true`).
+  AC2 #1430.c8134c7e the planted key missing the font …
+    Expected to fail before its assertion: `deep-text shape --planted key_without_font exits 0` (exit 2, bad_input).
+
+ac3-typing.test.ts
+  AC3 #1430.550b2a5e one character typed into a 50 KB text …
+    Expected to fail on the criterion's assertion, `none(typedFailures(…), 'the typed character')`: "the character typed
+    into paragraph 42 of 100 reshaped 1 text, 51,300 characters in all (…), where one paragraph of 513 characters
+    changed".
+  AC3 #1430.550b2a5e the planted program that shapes a long text as one run …
+    Expected to fail before its assertion: `deep-text shape --planted whole_text exits 0` (exit 2, bad_input).
+
+ac4-budgets.test.ts (timed)
+  AC4 #1430.8a0fdfd2 the task canvas-text-reflow records …
+    The record judge's clean twin and its five planted records behave (they are built from the merge base's file in the
+    test); expected to fail on the record's assertion: "benchmarks/budgets.json records canvas-text-reflow for the
+    budget window: benchmarks/budgets.json has no task canvas-text-reflow". The times aren't reached.

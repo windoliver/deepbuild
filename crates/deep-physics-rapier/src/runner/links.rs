@@ -31,10 +31,10 @@ pub fn planted(name: &str, run: &mut Run) -> bool {
     true
 }
 
-/// The world check (contact.rs); under the planted `articulated_tree_counts_only`, a world with
+/// The world check (centre.rs); under the planted `articulated_tree_counts_only`, a world with
 /// no more articulated joints than bodies passes whatever trees they form.
 pub(super) fn check(v: &Value, run: &Run) -> Result<World, Vec<Refusal>> {
-    let checked = contact::check(v, run);
+    let checked = centre::check(v, run);
     let Err(refused) = &checked else {
         return checked;
     };
@@ -55,7 +55,7 @@ pub(super) fn check(v: &Value, run: &Run) -> Result<World, Vec<Refusal>> {
             j.remove("articulated");
         }
     }
-    let mut w = contact::check(&open, run)?;
+    let mut w = centre::check(&open, run)?;
     for id in named {
         if let Some(j) = w.joints.get_mut(id) {
             j.articulated = true;

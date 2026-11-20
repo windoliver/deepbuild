@@ -1,0 +1,14 @@
+== commit 1d626e5d88a76bc9d60f4bdc9ef849b6a2926209
+== command: NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1810 count.test.ts --no-file-parallelism
+== start 2026-11-19 15:10:31 load { 43.35 45.74 43.37 } thermal 1
+
+ RUN  v5.0.5 ~/private/d1810r/tests/acceptance/1810
+
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  15:10:31
+   Duration  17.07s (tests 99%, transform 1%, import 1%)
+
+== end 2026-11-19 15:10:48 load { 34.92 43.76 42.71 } thermal 1
+exit=0
