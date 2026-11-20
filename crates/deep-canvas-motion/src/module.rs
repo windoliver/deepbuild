@@ -8,6 +8,7 @@
 use std::sync::Arc;
 
 use deep_canvas::canon::{canonical_value, NoShape};
+use deep_canvas::refs::{kind as names, Decl, Holds};
 use deep_canvas::registry::{Module, Registrar};
 use deep_canvas::schedule::core_ops::{Datum, Edit, Edits};
 use deep_canvas::schedule::{OpError, Val, View};
@@ -761,7 +762,14 @@ fn register_arrange(r: &mut Registrar) {
         },
         &[],
         "",
-    );
+    )
+    // #1801: the items an arrangement places, and the two each relation ties.
+    .refs(&[
+        Decl::new("params/items", Holds::Item, names::CONSTRAINT),
+        Decl::new("params/relations/*/a", Holds::Item, names::CONSTRAINT),
+        Decl::new("params/relations/*/b", Holds::Item, names::CONSTRAINT),
+        Decl::new("params/broken_out", Holds::Item, names::CONSTRAINT),
+    ]);
     // One solve per revision of every arrangement in the document, at check: the frames read
     // its places and never solve. #504: only a document that holds an arrangement has the node,
     // so a revision of any other one leaves every solid's place, and what reads it, kept (a

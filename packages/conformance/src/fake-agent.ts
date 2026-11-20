@@ -26,6 +26,7 @@ export interface Faults {
   noSign?: boolean;
   contextAsStdout?: boolean;
   contextAsStderr?: boolean;
+  readsAsChange?: boolean;
   // Declared items.
   dropKind?: string;
   unsupportedFlag?: Flag;
@@ -42,7 +43,7 @@ const section = (readBy: string, conformance: string, rest: JsonObject = {}): Js
 const payload = (required: Record<string, string>, optional: Record<string, string> = {}): JsonObject => ({ required: { session_id: 'string', hook_event_name: 'string', ...required }, optional: { prompt_id: 'string', agent_id: 'string', ...optional } });
 
 /** The fake agent's facts (adapter.facts@1): one version, the hooks it fires, and how each maps. */
-function fakeFacts(): JsonValue {
+function fakeFacts(faults: Faults = {}): JsonValue {
   return {
     schema: 'adapter.facts@1',
     versions: [VERSION],
@@ -85,7 +86,7 @@ function fakeFacts(): JsonValue {
       cause: { readBy: 'the payload\'s error names a cause; a value not listed is unknown', payload: { field: 'error', values: { rate_limit: 'rate_limited', signed_out: 'sign_in_required' } }, otherwise: 'unknown' },
       usage: { readBy: 'the turn\'s assistant entries\' usage', covers: 'turn', records: { match: { type: 'assistant' }, has: 'usage' }, take: 'sum', counts: { input: ['usage.input'], cached: ['usage.cached'], output: ['usage.output'] }, exact: true, model: { record: 'model' } },
     }),
-    toolKinds: section('a tool call\'s kind by tool name', 'fake/toolKinds/unknown-otherwise', { tools: { Bash: 'shell', Read: 'read', Edit: 'edit' }, otherwise: 'unknown' }),
+    toolKinds: section('a tool call\'s kind by tool name; the hub\'s deep_query changes nothing, so it is a read (#1801)', 'facts/reads-count-as-read', { tools: { Bash: 'shell', Read: 'read', Edit: 'edit', mcp__deep__deep_query: faults.readsAsChange ? 'mcp' : 'read' }, otherwise: 'unknown' }),
     contextOutput: section('which hook outputs reach the model, and the cap on injected text', 'context/reaches-model', {
       capChars: 10000, previewChars: 2000, versions: [VERSION], source: 'the fake agent\'s own',
       events: {
@@ -113,7 +114,7 @@ type Turn = { id: string; open: boolean; events: AdapterEvent[]; steers: Adapter
 
 /** A fill of the fake agent with the given faults; `revision` is the kit revision it declares. */
 export function fakeFill(revision: number, faults: Faults = {}): Fill {
-  const facts = fakeFacts();
+  const facts = fakeFacts(faults);
   const stopped = new Map<string, Set<string>>();
   const base = factsAdapter(facts, {
     caps: { holdStop: true, wakeIdle: true, steer: true, followUp: true, answerPermission: true, nativeTools: true, mcp: false, rewrite: false, editInput: false, errorTurnHook: false, startTurn: true },

@@ -1,0 +1,9 @@
+parallel vitest: packages/archive/test/stable-scrub-tail.test.ts packages/archive/test/structured-tail.test.ts packages/extension-host/test/update-close.test.ts packages/extension-host/test/update-default.test.ts tests/acceptance/41/rollback/rollback.test.ts tests/acceptance/570/moves.test.ts tests/acceptance/570/replay.test.ts tests/acceptance/570/tables.test.ts tests/acceptance/570/withdrawn.test.ts tests/acceptance/570/world.test.ts
+alone vitest: tests/acceptance/1143/plants.test.ts tests/acceptance/139-redraft-1802/preview.test.ts tests/acceptance/139/classify.test.ts tests/acceptance/139/corpus.test.ts tests/acceptance/139/deprecated.test.ts tests/acceptance/139/history.test.ts tests/acceptance/139/oldload.test.ts tests/acceptance/139/preview.test.ts tests/acceptance/139/prices.test.ts tests/acceptance/139/since.test.ts tests/acceptance/1971/object-path.test.ts tests/acceptance/1971/one-field.test.ts tests/acceptance/1971/refusal.test.ts tests/acceptance/2029/batch.test.ts tests/acceptance/2029/receipt.test.ts tests/acceptance/2029/words.test.ts
+timed vitest: tests/acceptance/139/budgets.test.ts tests/acceptance/1971/budget.test.ts (--timed runs them)
+slow vitest: tests/acceptance/139/apisurface.test.ts (--slow runs them)
+SHARD 21 <home>/deepbuild-shards/21: reused, at tree a5e375b16fd015f404e8a7c285db09030671b30b, node_modules cloned
+SHARD 23 <home>/deepbuild-shards/23: reused, at tree a5e375b16fd015f404e8a7c285db09030671b30b, node_modules cloned
+SHARD 19 <home>/deepbuild-shards/19: reused, at tree a5e375b16fd015f404e8a7c285db09030671b30b, node_modules cloned
+SHARD 22 <home>/deepbuild-shards/22: reused, at tree a5e375b16fd015f404e8a7c285db09030671b30b, node_modules cloned
+SHARD 20 <home>/deepbuild-shards/20: reused, at tree a5e375b16fd015f404e8a7c285db09030671b30b, node_modules cloned

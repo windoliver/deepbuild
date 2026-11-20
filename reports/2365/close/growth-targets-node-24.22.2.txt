@@ -1,0 +1,11 @@
+`node benchmarks/archive-growth.mjs judge`, through scripts/benchmark.mjs's judgeTargets, under Homebrew's Node 24.22.2
+(the login shell's), tree 2710afd87, load 200 to 300 and thermal state fair: every limit reads INCONCLUSIVE.
+One warm-up, then five passes. The limits: 1000 ms, 50 ms, 64.0 MB, 2,000,000 bytes.
+
+status: INCONCLUSIVE
+  ms: INCONCLUSIVE: 1571, 1130, 1107, 1189, 1475
+  maxGapMs: INCONCLUSIVE: 65, 42, 48, 152, 284
+  rise: INCONCLUSIVE: 69.0, 68.9, 68.4, 68.4, 68.8
+  added: PASS: 293019, 293019, 293019, 293019, 293019, 293019
+
+reason: ms: a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state nominal): thermal state is "fair", not "nominal"; load 225.42822265625 at a run's start or end is above the 18 cores; maxGapMs: a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or Mac15,12 (M3, 16 GB) or Mac17,10 (M5 Max, 64 GB); mains power, Low Power Mode off, thermal state nominal): thermal state is "fair", not "nominal"; load 225.42822265625 at a run's start or end is above the 18 cores; rise: a reading, not a budget result: off the reference Macs (Mac15,7 (M3 Pro, 36 GB) or M

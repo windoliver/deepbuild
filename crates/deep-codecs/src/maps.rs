@@ -6,6 +6,8 @@
 //! whole 4 × 4 blocks or it lacks its full mip chain. A PNG or JPEG map decodes to RGBA8 with its
 //! mips made here, base color and emission filtered in linear light. Every map is kept by the hash
 //! of its source, its format and the transcoder's version, so a second load transcodes nothing.
+//! #1040: the web player runs the same code on its one thread, and where its adapter has ASTC but
+//! no BC a KTX2 map transcodes to ASTC 4 × 4 instead, in sRGB for the color roles.
 
 use serde_json::{json, Value};
 
@@ -35,6 +37,16 @@ impl Role {
             _ => return None,
         })
     }
+}
+
+/// The block formats the adapter samples: BC (macOS, and wherever the adapter has
+/// texture-compression-bc), ASTC 4 × 4 (the web where it has only texture-compression-astc), or
+/// neither, where every map is RGBA8.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Blocks {
+    Bc,
+    Astc,
+    None,
 }
 
 /// A map ready to upload: its format's name (as wgpu spells it), size, mip count and every mip's
@@ -69,12 +81,12 @@ pub fn is_ktx2(data: &[u8]) -> bool {
     ])
 }
 
-/// `data` made ready for role `role` on an adapter that has BC formats (`bc`) or not; a PNG or
-/// JPEG decodes as stored, whatever gamma or ICC profile it carries, except under the planted
-/// `gamma` that applies a PNG's gAMA (#423 AC4's wrong program).
-pub fn ready(data: &[u8], role: Role, bc: bool, gamma: bool) -> Result<Ready, String> {
+/// `data` made ready for role `role` on an adapter that samples `blocks`; a PNG or JPEG decodes
+/// as stored, whatever gamma or ICC profile it carries, except under the planted `gamma` that
+/// applies a PNG's gAMA (#423 AC4's wrong program).
+pub fn ready(data: &[u8], role: Role, blocks: Blocks, gamma: bool) -> Result<Ready, String> {
     if is_ktx2(data) {
-        return transcode(data, role, bc);
+        return transcode(data, role, blocks);
     }
     let img = image::load_from_memory(data)
         .map_err(|e| format!("an unreadable image: {e}"))?
@@ -107,7 +119,7 @@ fn png_gamma(data: &[u8]) -> Option<f64> {
     None
 }
 
-fn transcode(data: &[u8], role: Role, bc: bool) -> Result<Ready, String> {
+fn transcode(data: &[u8], role: Role, blocks: Blocks) -> Result<Ready, String> {
     use basisu_c_sys::extra::{
         basisu_transcoder_init, BasisuTranscoder, ChannelType, SupportedTextureCompression,
     };
@@ -116,10 +128,13 @@ fn transcode(data: &[u8], role: Role, bc: bool) -> Result<Ready, String> {
     let t = BasisuTranscoder::new(data, SupportedTextureCompression::all(), ChannelType::Auto)
         .map_err(|e| format!("a KTX2 the transcoder can't read: {e}"))?;
     let info = t.get_info();
-    let blocks = info.width % 4 == 0 && info.height % 4 == 0;
+    let whole = info.width % 4 == 0 && info.height % 4 == 0;
     let chain = info.levels == full_chain(info.width, info.height);
     let srgb = role == Role::Color;
-    if !(bc && blocks && chain) {
+    // ASTC keeps a map's own channels, and no ASTC view swizzles: a normal map whose y is in
+    // alpha decodes, its x and y laid in red and green as RGBA8.
+    let swizzled = blocks == Blocks::Astc && role == Role::Normal && xy_in_red_alpha(data);
+    if blocks == Blocks::None || !(whole && chain) || swizzled {
         let img = t
             .transcode(Some(T::RGBA32), Some(false))
             .map_err(|e| format!("a KTX2 the transcoder can't read: {e}"))?;
@@ -127,7 +142,27 @@ fn transcode(data: &[u8], role: Role, bc: bool) -> Result<Ready, String> {
         let top = (info.width * info.height * 4) as usize;
         let mut px = img.data;
         px.truncate(top);
+        if swizzled {
+            for p in px.as_chunks_mut::<4>().0 {
+                *p = [p[0], p[3], 0, 255];
+            }
+        }
         return Ok(rgba8(info.width, info.height, px, srgb));
+    }
+    if blocks == Blocks::Astc {
+        let img = t
+            .transcode(Some(T::AstcLdr4x4Rgba), Some(srgb))
+            .map_err(|e| format!("a KTX2 the transcoder can't read: {e}"))?;
+        return Ok(Ready {
+            format: if srgb {
+                "astc-4x4-unorm-srgb"
+            } else {
+                "astc-4x4-unorm"
+            },
+            size: [info.width, info.height],
+            mips: info.levels,
+            data: img.data,
+        });
     }
     let (target, format) = match role {
         Role::Color => (T::Bc7Rgba, "bc7-rgba-unorm-srgb"),

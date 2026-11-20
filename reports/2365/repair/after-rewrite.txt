@@ -1,0 +1,15 @@
+
+ RUN  v5.0.5 <home>/doneright-2365-repair
+
+ ✓ tests/acceptance/2365/rewrite.test.ts (3 tests) 6031ms
+   ✓ #2365 AC4 a transcript whose first megabyte was rewritten after its last copy is copied again from its start (3)
+     ✓ #2365 AC4 rewritten and grown: the archived copy equals the rewritten transcript scrubbed, and the session's handles resolve to the rewritten text 2165ms
+     ✓ #2365 AC4 one letter rewritten in the first megabyte, the size unchanged: copied again, and its handle resolves to the new text 2072ms
+     ✓ #2365 AC4 (wrong program) an archive that appends the rewritten file's tail to the old parts fails, naming line 6, the first line that differs 1379ms
+
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Start at  21:47:48
+   Duration  6.85s (tests 92%, transform 6%, import 2%)
+
+EXIT 0

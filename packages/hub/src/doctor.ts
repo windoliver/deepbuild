@@ -22,10 +22,13 @@ import { relationItems } from './setup.js';
 import { describe, unrunnable } from './hook-programs.js';
 import { claudeHomes, denyHolds, homeMods, loginPlan, managedSettings, overrideWords } from './mods.js';
 import { probeSignIn } from './sign-in.js';
+import { lostIn } from './rule-load.js';
+import { readRuleFiles } from './rules.js';
 import { isRecord as isObj } from '@deepbuild/contracts';
+import type { DoctorItem } from '@deepbuild/contracts';
 
 type Obj = Record<string, unknown>;
-export interface Item { item: string; agent: string; code: string; level: 'ok' | 'warn' | 'fail' | 'skip'; evidence: string; fix: string }
+export interface Item { item: string; agent: string; code: DoctorItem['code']; level: 'ok' | 'warn' | 'fail' | 'skip'; evidence: string; fix: string }
 import { hooksDisabled, installedCodex, modified, readTrust, recordedHome, trustProblems } from './codex-settings.js';
 const OURS = /deep-hook|packages\/cli\/dist\/main\.js/;
 
@@ -93,7 +96,7 @@ async function firstFree(from: number, to: number): Promise<number | undefined> 
 export async function doctorItems(env: NodeJS.ProcessEnv, options: { prompt: boolean; cwd: string }): Promise<Item[]> {
   const root = installedRoot();
   const items: Item[] = [];
-  const add = (item: string, agent: string, code: string, level: Item['level'], evidence: string, fix: string) => items.push({ item, agent, code, level, evidence, fix });
+  const add = (item: string, agent: string, code: Item['code'], level: Item['level'], evidence: string, fix: string) => items.push({ item, agent, code, level, evidence, fix });
 
   // The hub and its disk.
   let socket = '';
@@ -179,6 +182,7 @@ export async function doctorItems(env: NodeJS.ProcessEnv, options: { prompt: boo
   const repo = topLevel(options.cwd);
   const shadows = plant() === 'statusline-user-settings-only' ? [] : shadowedBy(repo);
   for (const s of shadows) add('claude.statusline_shadowed', 'claude-code', 'statusline_shadowed', 'warn', `${s.file} sets ${s.key}, which Claude Code runs instead of the forwarder in ${repo}, so no plan window is read there`, `Take ${s.key} out of ${s.file}, or run your status line from statusline.yours in ~/.deepbuild/config.json, which the forwarder runs after it reads the windows.`);
+  items.push(...rulesItems(repo));
 
   // Each agent's binary, version, sign-in and billing; Claude Code's token lifetime, test prompt and jobs' binary.
   const path = env.PATH ?? '';
@@ -191,12 +195,24 @@ export async function doctorItems(env: NodeJS.ProcessEnv, options: { prompt: boo
 }
 
 /**
+ * The rule lines an agent never gets in a repo (#1514), as each agent's facts' rule-load entry predicts them: one failed
+ * item per file an agent loses lines of, naming the file, its first line lost and why, else one item that's ok.
+ */
+function rulesItems(repo: string): Item[] {
+  if (!existsSync(join(repo, '.git'))) return [];
+  const p = plant();
+  const lost = lostIn(repo, readRuleFiles(repo, null).map((f) => dirname(f.path)), { perFile: p === 'doctor-sums-per-file', linesOnly: p === 'doctor-counts-lines-only' });
+  if (!lost.length) return [{ item: 'rules.not_loaded', agent: 'deepbuild', code: 'healthy', level: 'ok', evidence: `every rule line in ${repo} reaches each agent its facts cover, by the agent's own loading`, fix: 'Nothing to do.' }];
+  return lost.map((l) => ({ item: 'rules.not_loaded', agent: l.agent, code: 'not_loaded', level: 'fail', evidence: l.why, fix: `${l.fix} Until then DeepBuild sends these rules to ${l.name}'s sessions itself where they fit.` }));
+}
+
+/**
  * The hub's login service (#1334): it runs a promoted build, ~/.deepbuild/versions/current, never a program in a git
  * worktree, a checkout or a temporary folder, which a merge, a prune or a reboot moves or deletes under the run.
  */
 function serviceItem(root: string): Item {
   const file = serviceFile();
-  const item = (code: string, level: Item['level'], evidence: string, fix: string): Item => ({ item: 'hub.service', agent: 'deepbuild', code, level, evidence, fix });
+  const item = (code: Item['code'], level: Item['level'], evidence: string, fix: string): Item => ({ item: 'hub.service', agent: 'deepbuild', code, level, evidence, fix });
   let text: string;
   try { text = readFileSync(file, 'utf8'); } catch { return item('not_checked', 'skip', `no login service for the hub at ${file}`, 'Run `deep setup`, which installs it.'); }
   const unxml = (v: string) => v.replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
@@ -232,7 +248,7 @@ function serviceItem(root: string): Item {
 export function hookItems(env: NodeJS.ProcessEnv, cwd: string): Item[] {
   const root = installedRoot();
   const items: Item[] = [];
-  const add = (item: string, agent: string, code: string, level: Item['level'], evidence: string, fix: string) => items.push({ item, agent, code, level, evidence, fix });
+  const add = (item: string, agent: string, code: Item['code'], level: Item['level'], evidence: string, fix: string) => items.push({ item, agent, code, level, evidence, fix });
   const file = claudeSettings();
   const settings = readJson(file);
   const record = installed(root);
@@ -268,7 +284,7 @@ export function hookItems(env: NodeJS.ProcessEnv, cwd: string): Item[] {
   return items;
 }
 
-async function claudeItems(claude: string | undefined, loginPath: string | undefined, env: NodeJS.ProcessEnv, prompt: boolean, add: (...a: [string, string, string, Item['level'], string, string]) => void): Promise<void> {
+async function claudeItems(claude: string | undefined, loginPath: string | undefined, env: NodeJS.ProcessEnv, prompt: boolean, add: (...a: [string, string, Item['code'], Item['level'], string, string]) => void): Promise<void> {
   const agent = 'claude-code';
   const range = facts(agent).versions;
   if (!claude) {
@@ -318,7 +334,7 @@ async function claudeItems(claude: string | undefined, loginPath: string | undef
  * each that can approve a call past a PreToolUse deny or submit prompts, unless the setup holds the deny; OK
  * when none can; not checked when the home's plugins can't be read.
  */
-async function modItems(claude: string, env: NodeJS.ProcessEnv, add: (...a: [string, string, string, Item['level'], string, string]) => void): Promise<void> {
+async function modItems(claude: string, env: NodeJS.ProcessEnv, add: (...a: [string, string, Item['code'], Item['level'], string, string]) => void): Promise<void> {
   const agent = 'claude-code';
   for (const [i, home] of claudeHomes(env).entries()) {
     // The first home's plan is the one `claude auth status` reads with this environment.
@@ -336,7 +352,7 @@ async function modItems(claude: string, env: NodeJS.ProcessEnv, add: (...a: [str
     if (!risky.length) add('claude.mods', agent, 'healthy', 'ok', read.mods.length ? `${home} loads ${read.mods.map((m) => m.name).join(', ')}, none of which handles a tool or prompt event` : `${home} loads no mods`, 'Nothing to do.');
   }
 }
-async function codexItems(codex: string | undefined, env: NodeJS.ProcessEnv, add: (...a: [string, string, string, Item['level'], string, string]) => void): Promise<void> {
+async function codexItems(codex: string | undefined, env: NodeJS.ProcessEnv, add: (...a: [string, string, Item['code'], Item['level'], string, string]) => void): Promise<void> {
   const agent = 'codex';
   for (const i of hookItems(env, '').filter((h) => h.agent === agent)) add(i.item, agent, i.code, i.level, i.evidence, i.fix);
   if (!codex) return;
@@ -351,7 +367,7 @@ async function codexItems(codex: string | undefined, env: NodeJS.ProcessEnv, add
   billing(agent, 'Codex', env, add);
 }
 /** A billing key set where your sessions start makes them bill an API account; never shows its value. */
-function billing(agent: string, name: string, env: NodeJS.ProcessEnv, add: (...a: [string, string, string, Item['level'], string, string]) => void): void {
+function billing(agent: string, name: string, env: NodeJS.ProcessEnv, add: (...a: [string, string, Item['code'], Item['level'], string, string]) => void): void {
   const set = (facts(agent).billing?.apiKeyVariables ?? []).filter((k) => env[k]);
   for (const key of set) add(`${agent === 'codex' ? 'codex' : 'claude'}.billing`, agent, 'billing_api_key', 'warn', `${key} is set in the shell your sessions start from, so ${name} sessions bill an API account, not your plan`, `Unset ${key} where you start sessions if you mean to use your plan.`);
   if (!set.length) add(`${agent === 'codex' ? 'codex' : 'claude'}.billing`, agent, 'healthy', 'ok', `no API billing variable is set, so ${name} sessions use your plan`, 'Nothing to do.');
@@ -459,7 +475,8 @@ export async function doctorCommand(args: readonly string[], also: () => Promise
   const next = (i: Item) => (fixes(i) ? `\n  Fix: ${i.fix}` : i.code === 'not_checked' ? `\n  To check: ${i.fix}` : '');
   for (const i of items) {
     const state = i.code === 'not_checked' ? 'not checked' : i.level.toUpperCase();
-    console.log(json ? JSON.stringify(i) : `${agents[i.agent] ?? i.agent} ${i.item}: ${state} (${i.code})\n  ${i.evidence}${next(i)}`);
+    // Its state once, in words; its code name is the JSON's (#1812).
+    console.log(json ? JSON.stringify(i) : `${agents[i.agent] ?? i.agent} ${i.item}: ${state}\n  ${i.evidence}${next(i)}`);
   }
   const failed = items.some((i) => i.level === 'fail');
   // A shadowed status line leaves the plan windows unread, which no item can decide (#1296).

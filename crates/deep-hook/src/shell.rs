@@ -49,6 +49,8 @@ pub struct Run {
     /// The paths the program text it's given inline holds, when it is an interpreter (`python3 -c`, `node -e`, a
     /// heredoc): it may read or write any of them.
     pub held: Vec<PathBuf>,
+    /// What a registry runner (`npx`, `bunx`, `pnpm dlx`, …) fetches to run it, when one runs it (#1509).
+    pub fetched: Option<Fetched>,
 }
 
 /// Why the reader couldn't read a run whole.
@@ -1652,6 +1654,7 @@ impl Reader {
         let mut looked_up = stdin.looked_up;
         let mut unread = None;
         let mut held = Vec::new();
+        let mut fetched = None;
         let mut i = 0;
         loop {
             let Some(first) = argv.get(i) else { return };
@@ -1908,16 +1911,8 @@ impl Reader {
                 if unread.is_some() {
                     break;
                 }
-                // The package's name, past any scope and version, is the program it runs.
-                if let Some(Val { text: Some(t), .. }) = argv.get(i + 1 + k).cloned() {
-                    let base = t.rsplit('/').next().unwrap_or(&t).to_string();
-                    let base = base
-                        .split('@')
-                        .find(|s| !s.is_empty())
-                        .unwrap_or("")
-                        .to_string();
-                    argv[i + 1 + k].text = Some(base);
-                }
+                // What it fetches; the package's name, past any scope and version, is the program it runs.
+                fetched = Fetched::read(&name, &mut argv[i + 1..], k);
                 i += 1 + k;
                 continue;
             }
@@ -2203,6 +2198,7 @@ impl Reader {
                 .or((cfg!(feature = "plant-later-command-unread") && later)
                     .then_some(Unread::Written)),
             held,
+            fetched,
             program,
             glob,
             args,
@@ -2525,6 +2521,9 @@ fn printed(argv: &[Val], stdin: &Stdin, ctx: &Ctx) -> Feed {
     };
     text.map_or(Feed::Unknown, Feed::Text)
 }
+
+mod fetched;
+pub use fetched::Fetched;
 
 #[cfg(test)]
 mod tests;

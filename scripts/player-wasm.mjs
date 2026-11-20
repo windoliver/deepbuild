@@ -10,9 +10,12 @@
 // set's compressed size (Brotli at quality 11 of its WebAssembly and page glue, as the player's budget measures them)
 // in dist/sets.json: the export takes the smallest set that holds a document's modules.
 //
-// The full set reaches the 3D module, whose meshopt C++ the build compiles for wasm32: the compiler's builtins stand in
-// for the float functions wasm32's bare headers don't declare, and LLVM's own archiver (the pinned toolchain's
-// llvm-tools component) packs its objects, since the system archiver drops wasm objects.
+// The full set reaches the 3D module, whose meshopt C++ the build compiles for wasm32, and #1040's KTX2 transcoder,
+// Basis Universal's C and C++ with the musl libc and libc++ basisu_wasm_libcxx vendors. In meshopt's compiles alone, a
+// wrapper of the compiler makes the compiler's builtins stand in for the float functions its bare wasm32 headers don't
+// declare (musl defines those functions itself, so they can't be macros there); every C and C++ compile writes its
+// source paths relative; and LLVM's own archiver (the pinned toolchain's llvm-tools component) packs the objects,
+// since the system archiver drops wasm objects.
 //
 // Usage: node scripts/player-wasm.mjs
 import { spawnSync } from 'node:child_process';
@@ -52,11 +55,16 @@ if (!existsSync(ar)) {
   process.exit(2);
 }
 env.AR_wasm32_unknown_unknown = ar;
-env.CFLAGS_wasm32_unknown_unknown = ['floorf', 'ceilf', 'roundf', 'truncf', 'sqrtf', 'log2f', 'logf', 'expf', 'exp2f', 'powf', 'ldexpf', 'frexpf', 'fmodf', 'sinf', 'cosf', 'tanf', 'asinf', 'acosf', 'atanf', 'atan2f'].map((f) => `-D${f}=__builtin_${f}`).join(' ');
 // No machine's paths in the bytes: the checkout, cargo's home and the toolchain written as fixed names.
 const cargoHome = process.env.CARGO_HOME ?? join(homedir(), '.cargo');
 const remap = [[root.replace(/\/$/, ''), '.'], [cargoHome, '/cargo'], [sysroot, '/rustc']];
 env.CARGO_ENCODED_RUSTFLAGS = remap.map(([from, to]) => `--remap-path-prefix=${from}=${to}`).join('\x1f');
+env.CFLAGS_wasm32_unknown_unknown = env.CXXFLAGS_wasm32_unknown_unknown = remap.map(([from, to]) => `-ffile-prefix-map=${from}=${to}`).join(' ');
+const floats = ['floorf', 'ceilf', 'roundf', 'truncf', 'sqrtf', 'log2f', 'logf', 'expf', 'exp2f', 'powf', 'ldexpf', 'frexpf', 'fmodf', 'sinf', 'cosf', 'tanf', 'asinf', 'acosf', 'atanf', 'atan2f'].map((f) => `-D${f}=__builtin_${f}`).join(' ');
+const cc = join(target, 'player-wasm-cc.sh');
+mkdirSync(target, { recursive: true });
+writeFileSync(cc, `#!/bin/sh\ncase "$*" in\n  */build/meshopt-*) exec clang "$@" ${floats} ;;\n  *) exec clang "$@" ;;\nesac\n`, { mode: 0o755 });
+env.CC_wasm32_unknown_unknown = cc;
 
 // wasm-bindgen at the version the lockfile resolves, or no build.
 const lock = readFileSync(join(root, 'Cargo.lock'), 'utf8');

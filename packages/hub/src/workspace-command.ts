@@ -1,16 +1,18 @@
-// `deep workspace` (#67): a CLI over the running hub, one line of JSON a command, and no command asks a question. A
-// task enters a workspace's record with `task` (#1347), and `revert` with no commit goes back one step.
+// `deep workspace` (#67): a CLI over the running hub, and no command asks a question. Each prints what it did in words,
+// or with `--json` last its result as one line of JSON (#1812). A task enters a workspace's record with `task` (#1347),
+// and `revert` with no commit goes back one step.
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { call } from './client.js';
+import { call, notAnswered } from './client.js';
 import { hubAddress, installedRoot, rootOf } from './paths.js';
+import { visible } from './visible.js';
 
-const USAGE = `Usage: deep workspace new <topic> [--folder <path>]
-       deep workspace task <id> <title> --criterion <text> [--criterion <text>]... [--blocked-by <n>]...
-       deep workspace move <id> <folder | repo checkout>
-       deep workspace revert <id> [<commit>]
-       deep workspace diff <id>
-       deep workspace drift <id>`;
+const USAGE = `Usage: deep workspace new <topic> [--folder <path>] [--json]
+       deep workspace task <id> <title> --criterion <text> [--criterion <text>]... [--blocked-by <n>]... [--json]
+       deep workspace move <id> <folder | repo checkout> [--json]
+       deep workspace revert <id> [<commit>] [--json]
+       deep workspace diff <id> [--json]
+       deep workspace drift <id> [--json]`;
 
 /** The call a command line makes, or undefined when it isn't one. */
 function parsed(args: readonly string[]): { method: string; params: Record<string, unknown> } | undefined {
@@ -40,8 +42,29 @@ function taskOf(id: string, title: string, rest: readonly string[]): { method: s
   return criteria.length ? { method: 'workspace.task', params: { id, title, criteria, blocked_by } } : undefined;
 }
 
+/** What a call did, in words, from its result: one line, or a diff's line per changed item. */
+function said(method: string, params: Record<string, unknown>, r: Record<string, unknown>): string[] {
+  const listed = (values: unknown) => (Array.isArray(values) && values.length ? values.join(', ') : 'none');
+  switch (method) {
+    case 'workspace.new': return [`Made the workspace ${String(r.name)} as ${String(r.id)}, in ${String(r.folder)}.`];
+    case 'workspace.task': return [`Entered task #${String(r.task)} in ${String(params.id)}.`];
+    case 'workspace.move': return [Array.isArray(r.filed)
+      ? `Moved ${String(r.id)} to ${String(r.repo)}, its open tasks filed as ${listed((r.filed as { task: number; issue: number }[]).map((f) => `#${f.task} as issue #${f.issue}`))}.`
+      : `Moved ${String(r.id)} to ${String(r.folder)}.`];
+    case 'workspace.revert': return [r.task === undefined
+      ? `Reverted ${String(params.commit)} in ${String(params.id)}; it is at ${String(r.commit)}.`
+      : `Went back one step in ${String(params.id)}: task #${String(r.task)} undone, at ${String(r.commit)}${Array.isArray(r.undo) && r.undo.length ? `; undone outside git: ${r.undo.join('; ')}` : ''}.`];
+    case 'workspace.diff': {
+      const diffs = (r.diffs ?? []) as { touch: string; item: string; was: unknown; now: unknown }[];
+      return diffs.length ? diffs.map((d) => `${d.touch} ${d.item}: ${JSON.stringify(d.was)} is now ${JSON.stringify(d.now)}`) : [`No item of ${String(params.id)} changed.`];
+    }
+    default: return [`Drifted: ${listed(r.drifted)}. Stale: ${listed(r.stale)}. Ran again: ${listed(r.reran)}.`];
+  }
+}
+
 export async function workspaceCommand(args: readonly string[]): Promise<number> {
-  const asked = parsed(args);
+  const json = args.at(-1) === '--json';
+  const asked = parsed(json ? args.slice(0, -1) : args);
   if (!asked) {
     process.stderr.write(`${USAGE}\n`);
     return 2;
@@ -52,10 +75,9 @@ export async function workspaceCommand(args: readonly string[]): Promise<number>
       process.stderr.write(`${reply.error.remediation}\n`);
       return 1;
     }
-    process.stdout.write(`${JSON.stringify(reply.result)}\n`);
+    process.stdout.write(`${json ? JSON.stringify(reply.result) : said(asked.method, asked.params, reply.result).map(visible).join('\n')}\n`);
     return 0;
   } catch (error) {
-    process.stderr.write(`BLOCKED: ${error instanceof Error ? error.message : String(error)}\n`);
-    return 3;
+    return notAnswered(error);
   }
 }

@@ -11,7 +11,7 @@ use super::{
     kind_text, member, sort_issues, sort_notices, Issue, Notice, ADJUST_FIELDS, AT_RELATIONS,
     AT_VECTORS, BOX_POINTS, ENVELOPE_KEYS, ID_MAPS, ITEM_KEYS, ITEM_OWN_FIELDS, MAX_DESCRIPTION,
 };
-use crate::cost::Coefficients;
+use crate::cost::{Coefficients, Sizes};
 use crate::grammar::{
     forms_for, lower_frame_literals, Handle, Id, Path, Refusal, Section, Time, TimeContext,
     UnitContext, UnitLiteral,
@@ -78,13 +78,28 @@ pub fn check(doc: &Value) -> CheckResult {
 /// build lacks, through `requires.modules`, a kind or a field an absent module evaluates, is
 /// refused with `module_missing` naming the module.
 pub fn check_in(doc: &Value, sealed: &Sealed) -> CheckResult {
-    check_by(doc, sealed, sealed.kinds_ref(), None, &Packs::default())
+    let none = Sizes::new();
+    check_by(
+        doc,
+        sealed,
+        sealed.kinds_ref(),
+        None,
+        &none,
+        &Packs::default(),
+    )
 }
 
 /// [`check_in`] in a build that admitted `packs` (Pack): a document's `packs` resolve through
 /// them, and each recipe instance expands at check into its derived items.
 pub fn check_packed(doc: &Value, sealed: &Sealed, packs: &Packs) -> CheckResult {
-    check_by(doc, sealed, sealed.kinds_ref(), None, packs)
+    check_by(doc, sealed, sealed.kinds_ref(), None, &Sizes::new(), packs)
+}
+
+/// [`check_packed`] with the sizes of the document's assets, read from their files by the
+/// process that holds them (#1801): the budget counts each asset's bytes on the device once and a
+/// mesh's vertices as its item's.
+pub fn check_sized(doc: &Value, sealed: &Sealed, packs: &Packs, sizes: &Sizes) -> CheckResult {
+    check_by(doc, sealed, sealed.kinds_ref(), None, sizes, packs)
 }
 
 /// [`check_in`], estimating a document's cost from `coefficients` rather than the reference
@@ -95,6 +110,7 @@ pub fn check_costed(doc: &Value, sealed: &Sealed, coefficients: &Coefficients) -
         sealed,
         sealed.kinds_ref(),
         Some(coefficients),
+        &Sizes::new(),
         &Packs::default(),
     )
 }
@@ -102,7 +118,15 @@ pub fn check_costed(doc: &Value, sealed: &Sealed, coefficients: &Coefficients) -
 /// Checks `doc` as a build whose kinds are `kinds`, as an earlier release with an older minor
 /// of some kind reads it (Document envelope: `requires`); the core's own canvas modules.
 pub fn check_with(doc: &Value, kinds: &Registry) -> CheckResult {
-    check_by(doc, &registry::core(), kinds, None, &Packs::default())
+    let none = Sizes::new();
+    check_by(
+        doc,
+        &registry::core(),
+        kinds,
+        None,
+        &none,
+        &Packs::default(),
+    )
 }
 
 /// Checks `doc` in the build `sealed` describes, reading kinds by `kinds`, estimating its cost
@@ -112,6 +136,7 @@ fn check_by(
     sealed: &Sealed,
     kinds: &Registry,
     coefficients: Option<&Coefficients>,
+    sizes: &Sizes,
     packs: &Packs,
 ) -> CheckResult {
     let mut issues = Vec::new();
@@ -340,7 +365,7 @@ fn check_by(
         for step in part.iter() {
             match step {
                 Tail::Modules => module_checks(&lowered, sealed, &mut issues, &mut notices),
-                Tail::Budget => budget_check(&lowered, sealed, coefficients, &mut issues),
+                Tail::Budget => budget_check(&lowered, sealed, coefficients, sizes, &mut issues),
                 Tail::Document => {
                     check_id_maps(&lowered, &mut issues);
                     check_controls(&lowered, sealed, &mut issues);
@@ -627,6 +652,7 @@ fn budget_check(
     lowered: &Value,
     sealed: &Sealed,
     coefficients: Option<&Coefficients>,
+    sizes: &Sizes,
     issues: &mut Vec<Issue>,
 ) {
     lights_check(lowered, issues);
@@ -634,7 +660,7 @@ fn budget_check(
         return;
     };
     let coefficients = coefficients.unwrap_or(&sealed.costs);
-    let e = crate::cost::estimate_by(lowered, sealed, coefficients, |entries, work| {
+    let e = crate::cost::estimate_by(lowered, sealed, coefficients, sizes, |entries, work| {
         in_chunks(entries, work)
     });
     let over: Vec<String> = [
@@ -673,7 +699,7 @@ fn budget_check(
         "over_budget",
         "budget".into(),
         json!({
-            "cpu_ms": e.cpu_ms, "gpu_ms": e.gpu_ms, "gpu_mb": e.gpu_mb,
+            "cpu_ms": e.cpu_ms, "gpu_ms": e.gpu_ms, "gpu_mb": e.gpu_mb, "decoded_mb": e.decoded_mb,
             "operators": operators,
             "fingerprint": coefficients.fingerprint,
         }),

@@ -97,7 +97,7 @@ const SCHEMAS: Readonly<Record<string, Schema>> = {
   }),
   deep_query: object({
     doc: str('The document, by its doc ID.', '^[0-9A-Za-z]{26}$'),
-    what: oneOf(['rows', 'summary', 'why'], 'rows for evaluated rows by stable ID with a coverage block; summary for counts by kind, writer layer and canvas module; why for the canvas module, operator and document paths behind the value at path. null for rows.'),
+    what: oneOf(['rows', 'summary', 'why', 'refs_to', 'cost'], 'rows for evaluated rows by stable ID with a coverage block; summary for counts by kind, writer layer and canvas module; why for the canvas module, operator and document paths behind the value at path; refs_to for the rows that name an item, a table row, a pack entry or an asset, each with the naming field\'s path and its kind of reference, before you remove or rename it; cost for the items, assets and passes ranked by the meter\'s CPU time, GPU time, GPU memory and decoded asset MB per frame, each with its share of the total. null for rows.'),
     rev: maybe({ type: 'integer', description: 'The revision read; null for the current one.' }),
     items: maybe({ type: 'array', items: str(), description: 'rows: only these items, by ID; null for every item.' }),
     paths: maybe({ type: 'array', items: str(), description: 'rows: values read at items/<id>/<field>, such as items/door/params/open or items/<id>/modifiers/<k>#out; null for none.' }),
@@ -106,7 +106,9 @@ const SCHEMAS: Readonly<Record<string, Schema>> = {
     cursor: maybe(str('Where an earlier answer cut left off, as its next gave it.')),
     expect: maybe(object({ none: object({ kind: str('The kind no row should be of.') }) })),
     path: maybe(str('why: the value, items/<id>/<field>.')),
-    t: maybe(str('why: the time, in the time grammar; null for 0s.')),
+    t: maybe(str('why and cost: the time, in the time grammar; null for 0s.')),
+    target: maybe(str('refs_to: what the rows name: an item by its ID, a keyed copy\'s table row as <table>[<key>], a pack entry as name@major, or an asset by its SHA-256.')),
+    by: oneOf(['cpu_ms', 'gpu_ms', 'gpu_mb', 'decoded_mb'], 'cost: the column the rows are ranked by, the costliest first. null for gpu_ms.'),
   }),
   deep_drive: object({
     call: { type: 'string', enum: ['launch', 'act', 'open', 'notification', 'wait_for', 'see', 'probe', 'screenshot', 'record', 'expect', 'close'] },

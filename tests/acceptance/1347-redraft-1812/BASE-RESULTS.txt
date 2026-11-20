@@ -1,0 +1,74 @@
+Base c0a9de979eae03d05db91248467e488c89f537b8 (main at 16dc5eab0 plus #1812's blind suite, its design line and the
+lint lane's entry; no implementation of #1812), detached into branch redraft-1347-1812 with nothing changed but this
+folder and its scripts/lanes.mjs line. November 18, 2026, PST. Node 24.22.0, macOS, 18 cores, on a Mac shared with
+other sessions (1-minute load 10, 5-minute 29, when the run started). npm ci and npm run build --workspaces at the base;
+target/debug/deep-hook built at 09:12 (CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 cargo build --locked -p deep-hook)
+and there at 09:14.
+
+Commands, from the checkout's root (<repo> below):
+
+  node node_modules/typescript/bin/tsc -p tests/acceptance/1347-redraft-1812/tsconfig.json     # exit 0
+  NO_COLOR=1 node node_modules/vitest/vitest.mjs run --root tests/acceptance/1347-redraft-1812 --no-file-parallelism --testTimeout=600000
+
+The run, once, 09:14:03: exit 1; 4 files, 5 tests, 5 failed, 0 passed, in 3.08 s. None BLOCKED or INCONCLUSIVE.
+
+Each test failed at the same assertion, the first read #1812 moves: World.open's `must` (helpers.ts:182) on
+`deep workspace new <topic> --json`. Every world had started its hub first (AC5's also its played forge and fixture
+repo). The base's parser takes `new <topic>` with nothing after it but `--folder <path>`, so `--json` gets the usage
+and exit 2. Its stderr, the same in all five (USAGE below):
+
+  Usage: deep workspace new <topic> [--folder <path>]
+         deep workspace task <id> <title> --criterion <text> [--criterion <text>]... [--blocked-by <n>]...
+         deep workspace move <id> <folder | repo checkout>
+         deep workspace revert <id> [<commit>]
+         deep workspace diff <id>
+         deep workspace drift <id>
+
+ FAIL  run.test.ts > AC1 #1347.7361f8e4 A fixture workspace with 6 tasks and 7 blocked-by links runs to the end with
+       no forge configured. A planted run that calls a forge fails, naming the call (redraft 1812)            563 ms
+       AssertionError: #67's `deep workspace new Client report --json` makes the workspace and prints its {"id",
+       "folder"}: exit 2, stdout "", stderr USAGE
+       at must ../1332/helpers.ts:397 < World.open helpers.ts:182 < scene run.test.ts:22 < run.test.ts:50
+
+ FAIL  run.test.ts > AC2 #1347.b6ca1fd3 No task starts before its blockers finish, and a killed session continues as
+       a next attempt, as on a repo (redraft 1812)                                                              0 ms
+       The same error as AC1: both tests read one scene(), whose World.open failed; AC2 awaits it at run.test.ts:75.
+
+ FAIL  verdict.test.ts > AC3 #1347.8994a8fa A task's verdict names its commit and its state digests. When a source
+       drifts, the verdict goes stale and only the checks reading it run again (redraft 1812)                 271 ms
+       AssertionError: #67's `deep workspace new Web fleet --json` makes the workspace and prints its {"id",
+       "folder"}: exit 2, stdout "", stderr USAGE
+       at must ../1332/helpers.ts:397 < World.open helpers.ts:182 < verdict.test.ts:8
+
+ FAIL  back.test.ts > AC4 #1347.841043a4 Going back one step restores the last version byte for byte (redraft 1812)
+                                                                                                              323 ms
+       AssertionError: #67's `deep workspace new Trip plan --json` makes the workspace and prints its {"id",
+       "folder"}: exit 2, stdout "", stderr USAGE
+       at must ../1332/helpers.ts:397 < World.open helpers.ts:182 < back.test.ts:16
+
+ FAIL  move.test.ts > AC5 #1347.8f5ee69e Moving the workspace to a fixture repo files each open task once, with its
+       links (redraft 1812)                                                                                  1035 ms
+       AssertionError: #67's `deep workspace new Shop launch --json` makes the workspace and prints its {"id",
+       "folder"}: exit 2, stdout "", stderr USAGE
+       at must ../1332/helpers.ts:397 < World.open helpers.ts:182 < move.test.ts:9
+
+After the run no /tmp/dh1347-* folder was left and no process named one. Vitest's cache (node_modules/.vite in this
+folder) was deleted.
+
+A scratch probe, not the kept run. Because `new --json` fails first, the second read #1812 moves, `deep workspace task
+... --json` in `enter`, is never reached on the base. To see that it fails for the expected reason and not at a typo,
+helpers.ts was copied aside, its `new` call put back to the base's form (`['workspace', 'new', o.topic]`, one line), and
+the folder run once more, 09:14:30: 5 tests, 5 failed, 3.00 s. Then helpers.ts was copied back and `cmp` found it
+identical to the copy. With that one line changed, every world opened and each test failed at its own "each task
+enters the workspace with `deep workspace task`", the lines the frozen suite's BASE-FAILURE.txt names, on its first
+task, exit 2, stdout "", stderr USAGE:
+
+  AC1 run.test.ts:51      `deep workspace task Clientreport4479e789 "Write part 1 of the client report" --criterion "Part 1 of the client report is written" --json`
+  AC2 run.test.ts:76      the same call (the same scene)
+  AC3 verdict.test.ts:13  `deep workspace task Webfleetb505af27 "Keep both web hosts serving" --criterion "web-1 serves on port 80 and web-2 serves TLS" --json`
+  AC4 back.test.ts:21     `deep workspace task Tripplan70eccc3c "Book the flights" --criterion "The flights are booked" --json`
+  AC5 move.test.ts:16     `deep workspace task Shoplaunch46423f58 "Pick the shop name" --criterion "The shop has a name" --json`
+
+The base's `task` reads its flags in pairs, and a lone `--json` at the end has no value, so it gets the usage.
+
+Not run: the passing side. No implementation of #1812 exists at this base (REDRAFT.md, On the base).

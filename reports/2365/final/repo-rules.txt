@@ -1,0 +1,15 @@
+node scripts/repo-rules.mjs, on 98aea60d9 with the two report edits: every FAIL is in a file this PR does not change.
+   9 FAIL deps: tests/acceptance/12/twins/release-check-local/package.json
+   9 FAIL deps: tests/acceptance/12/twins/no-deep-bin/package.json
+   9 FAIL deps: tests/acceptance/12/twins/build-without-cargo/package.json
+   6 FAIL deps: spikes/2435/Cargo.toml
+   5 FAIL deps: crates/deep-lottie/Cargo.toml
+   5 FAIL deps: crates/deep-canvas-export/Cargo.toml
+   4 FAIL secrets: packages/contracts/fixtures/host.undone@1/01.json
+   3 FAIL secrets: tests/acceptance/1946/BASE-FAILURE.txt
+   3 FAIL deps: crates/deep-show/Cargo.toml
+   2 FAIL deps: tests/acceptance/533/wat/Cargo.toml
+   1 FAIL secrets: packages/contracts/fixtures/staged.undone@1/01.json
+   1 FAIL deps: crates/deep-lottie-reader/Cargo.toml
+   1 FAIL deps: crates/deep-canvas-loop/Cargo.toml
+NOTE size: +7663 -134 handwritten lines against merge base f98921218, lockfiles and binary files excluded; over the guideline of about 400, so the PR says why it can't be split
