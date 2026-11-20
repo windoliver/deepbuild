@@ -175,7 +175,7 @@ function instructions(used) {
         ...groups,
       ].join(' '),
       'deep-actions': 'Actions the plug-ins installed in DeepBuild offer, such as sending a message or changing data outside the repo. Search for find_actions to list them with each one\'s input schema, and for call_action to run one by name, once a task needs a plug-in\'s action.',
-      'deepbuild-reading': 'This reading job\'s only way into the sessions, evidence and wiki pages it was given. Call find first for the message handles that hold your query, then read each handle a slice at a time, continuing with next until the reply has none.',
+      'deepbuild-reading': 'This reading job\'s only way into the sessions, evidence and wiki pages it was given. Read each handle you were given a slice at a time, continuing with next until the reply has none; call find for the message handles of your sessions that hold a query.',
     },
   };
 }

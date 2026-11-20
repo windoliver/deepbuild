@@ -17,9 +17,14 @@ describe('a session start counts what it holds of DeepBuild', () => {
   });
 
   it('says the way the client loads tools at the session\'s version', () => {
-    expect(toolLoad('claude-code', '2.1.304')?.way).toBe('search');
-    expect(toolLoad('claude-code', undefined)?.way).toBe('search');
-    expect(toolLoad('claude-code', '2.1.1')?.way).toBe('unread');
-    expect(toolLoad('codex', '0.160.0')?.way).toBe('unread');
+    const loads = [{ kind: 'mcp', name: 'deepbuild' }];
+    expect(toolLoad('claude-code', loads, '2.1.304')?.way).toBe('search');
+    expect(toolLoad('claude', loads, undefined)?.way).toBe('search');
+    expect(toolLoad('claude-code', loads, '2.1.1')?.way).toBe('unread');
+  });
+
+  it('counts only a Claude Code session whose config loads the deepbuild server', () => {
+    expect(toolLoad('claude-code', [{ kind: 'mcp', name: 'other' }], '2.1.304')).toBeUndefined();
+    expect(toolLoad('codex', [{ kind: 'mcp', name: 'deepbuild' }], '0.160.0')).toBeUndefined();
   });
 });

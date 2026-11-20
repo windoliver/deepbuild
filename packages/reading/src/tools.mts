@@ -7,7 +7,7 @@ import { createInterface } from 'node:readline';
 
 const socket = process.argv[2] ?? '';
 /** What a client that loads tools by search reads at the start in place of the list (#2897). */
-const INSTRUCTIONS = "This reading job's only way into the sessions, evidence and wiki pages it was given. Call find first for the message handles that hold your query, then read each handle a slice at a time, continuing with next until the reply has none."; // scripts/skill.mjs writes this line
+const INSTRUCTIONS = "This reading job's only way into the sessions, evidence and wiki pages it was given. Read each handle you were given a slice at a time, continuing with next until the reply has none; call find for the message handles of your sessions that hold a query."; // scripts/skill.mjs writes this line
 const TOOLS = [
   {
     name: 'read',
