@@ -1190,6 +1190,9 @@ alone.push('tests/acceptance/2898/');
 alone.push('tests/acceptance/2227/');
 slow.push('tests/acceptance/2227/ac2-native-build.test.ts');
 
+// #2109's file (blind) runs #83's AC11 goldens, which start real hubs, in a child vitest; no timing.
+alone.push('tests/acceptance/2109/');
+
 // #1518's files each build deep-show; heard.test.ts and blocked.test.ts start a hub and deepbuild/speech's model host
 // on its fixed port 8720; heard and placement speak their take with macOS say; restore, sync and same make a video
 // with ffmpeg and export it; budget.test.ts times the cut expansion.
