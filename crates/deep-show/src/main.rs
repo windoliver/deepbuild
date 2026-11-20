@@ -1374,7 +1374,7 @@ fn scenario(input: &Map<String, Value>) -> Option<Scenario> {
                 // #548's deep_query region map that lays the reads out by name.
                 || *p == logic::MAP_READS_BY_NAME
                 // #466's boil and blur in deep-show's frames.
-                || films::PLANTED.contains(p) || sandbox::PLANTED.contains(p)
+                || films::PLANTED.contains(p) || sandbox::PLANTED.contains(p) || *p == frames::VALIDATED_PER_FRAME
                 || caption_design::PLANTED.contains(p)
         })
         .map(str::to_string);

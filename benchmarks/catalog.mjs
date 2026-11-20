@@ -1,9 +1,9 @@
-// #194's budgets, the `catalog-checks` mode of benchmarks/canvas.mjs, on a release build of deep-catalog and deep-logic
-// and the catalog plug-in's own runners (packages/checks/catalog):
-//   pack_10000x20_s: deep-catalog's own `ms` packing one table of 10,000 rows and 20 columns, the files' reads left out.
-//   reach_5000_s: catalog.reach's own `catalog.ms` over a chain of 5,000 recipes, every item and recipe reached.
-//   economy_5000_s: catalog.economy's own `catalog.ms` over 2,500 recipe-and-uncraft pairs, no cycle gaining.
-//   frame_work: the steps of a 600-step bake at which a logic item naming the plug-in's clean kit catalog spends other
+// #194's budgets (task `catalog-budgets`), the `catalog` mode of benchmarks/canvas.mjs, on a release build of
+// deep-catalog and deep-logic and the catalog plug-in's own runners (packages/checks/catalog):
+//   pack_10000_rows_ms: deep-catalog's own `ms` packing one table of 10,000 rows and 20 columns, the reads left out.
+//   reach_5000_recipes_ms: catalog.reach's own `catalog.ms` over a chain of 5,000 recipes, every item and recipe reached.
+//   economy_5000_recipes_ms: catalog.economy's own `catalog.ms` over 2,500 recipe-and-uncraft pairs, none gaining.
+//   idle_work: the steps of a 600-step bake at which a logic item naming the plug-in's clean kit catalog spends other
 //     fuel than the same item naming none: the catalog is copied into memory once, before the first step, so a piece
 //     that names one gains no work per step or per frame.
 import { createHash } from 'node:crypto';
@@ -59,7 +59,7 @@ const IDLE = Buffer.from([0, 0x61, 0x73, 0x6d, 1, 0, 0, 0,
   ...section(10, [[2, 0, 0x0b], [2, 0, 0x0b]])]);
 
 /** The steps of a 600-step bake at which the idle item naming `catalog` spends other fuel than naming none. */
-function frameWork(once, catalog) {
+function idleWork(once, catalog) {
   const program = sha256(IDLE);
   const bake = (assets) => {
     const params = { program, step_rate: 120, writes: { k: { type: 'i32' } }, ...(assets ? { assets: [catalog.sha] } : {}) };
@@ -72,7 +72,7 @@ function frameWork(once, catalog) {
   return named.filter((f, k) => f !== none[k]).length + Math.abs(named.length - none.length);
 }
 
-export async function catalogChecks({ root, release, once }) {
+export async function catalogBudgets({ root, release, once }) {
   const fingerprint = release('deep-catalog', 'deep-catalog');
   release('deep-logic', 'deep-logic');
   const [{ runReach }, { runEconomy }] = await Promise.all([
@@ -90,7 +90,7 @@ export async function catalogChecks({ root, release, once }) {
       const paired = packed(once, dir, 'pairs', p);
       const e = runEconomy({ catalog: paired.asset, makes: MAKES }, paired.carried);
       if (r.outcome !== 'passed' || e.outcome !== 'passed') throw Error(`reach ${r.outcome}, economy ${e.outcome}: ${JSON.stringify([...r.failures, ...e.failures].slice(0, 3))}`);
-      return { pack_10000x20_s: pack.ms / 1000, reach_5000_s: r.catalog.ms / 1000, economy_5000_s: e.catalog.ms / 1000, frame_work: frameWork(once, catalog) };
+      return { pack_10000_rows_ms: pack.ms, reach_5000_recipes_ms: r.catalog.ms, economy_5000_recipes_ms: e.catalog.ms, idle_work: idleWork(once, catalog) };
     };
     run();
     const runs = [];
@@ -99,7 +99,7 @@ export async function catalogChecks({ root, release, once }) {
       const loadStart = loadavg()[0];
       runs.push({ ...run(), loadStart, loadEnd: loadavg()[0] });
     }
-    console.log(JSON.stringify({ task: 'catalog-checks', fingerprint, runs }));
+    console.log(JSON.stringify({ task: 'catalog-budgets', fingerprint, runs }));
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
