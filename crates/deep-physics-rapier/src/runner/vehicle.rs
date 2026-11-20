@@ -62,7 +62,7 @@ pub fn planted(name: &str, run: &mut Run) -> bool {
 /// The world check; under the planted `check_counts_wheels_only`, a vehicle body's only refusal
 /// is a wheel too many: not a 2D world, not a follow channel.
 pub(super) fn check(v: &Value, run: &Run) -> Result<World, Vec<Refusal>> {
-    let checked = deep_canvas_physics::check::check(v, &run.caps, run.table);
+    let checked = deep_canvas_physics::check::check(v, &run.caps_of(v), run.table);
     if run.vehicle != VehiclePlant::WheelsOnly {
         return checked;
     }

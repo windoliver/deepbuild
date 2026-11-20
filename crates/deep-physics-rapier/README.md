@@ -9,7 +9,8 @@ physics.world@1's backend (issue #2009): Rapier 0.36.1, pinned with enhanced-det
 - Building, stepping and reading a world, and checkpoints, go in `src/lib.rs`; applying an input in `src/inputs.rs`; anything that names an engine soft-body type in `src/soft.rs` alone (the `test-swap-soft-solver` build swaps that module's solver for a small one of ours, #524 criterion 3).
 - An articulated joint goes in `src/articulated.rs` (issue #2310): the one file that names an engine multibody type but the planted restore in `src/planted.rs`; its coordinates live in the world's bytes, so a checkpoint carries them.
 - A belt's contact hook goes in `src/belt.rs` (issue #2241): a contact material's `tangent_speed` rides in its collider's `user_data`, so the world's bytes carry it, and the hook gives each of its contacts that surface velocity along the shape use's own +X.
-- What the build resolved goes in `build.rs`, read by `build()` in `src/lib.rs`.
+- A `dimensions: 2` world on rapier2d goes in `src/dim2.rs` (issue #2098): `Rapier` builds one there and answers the backend interface from it, and `src/runner/dims.rs` picks the caps a world is held to and the build its key names.
+- What the build resolved goes in `build.rs`, read by `build()` in `src/lib.rs`, and by `build_2d()` for a 2D world's backend and the crates under it.
 - The physics module's manifest is deep-canvas-physics's (`module::module`), built from `build()`: deep-show's full build links this crate for it, so the plan it publishes and a golden recorded here name the same implementation and pins (issue #1920).
 - The control register's guard goes in `src/fp.rs`.
 - What a step wrote (contacts, hits, sensors, rest and wake, breaks) goes in `src/occurrences.rs`; it only reads the world, so a world's bytes and checkpoints are what they were. The `test-reverse-pairs` feature builds #1918's test backend, which reads every pair last to first from its second collider's side.
@@ -31,6 +32,7 @@ physics.world@1's backend (issue #2009): Rapier 0.36.1, pinned with enhanced-det
 ## Deviations
 
 - `src/lib.rs` keeps Rapier's own contact prediction distance and sleep's angular threshold, which no world field sets.
+- `src/dim2.rs` sweeps no body (rapier2d's caps claim no `ccd`), writes no sensor rows and answers no query, character or vehicle call: the check refuses each in a 2D world. The physics module's manifest still names `build()`'s pins alone, so a 3D golden's digest is what it was; a 2D world's key and digest name `build_2d()`'s.
 - `build.rs` runs `cargo tree --locked` for the build's own resolution: the lockfile is never changed, but cargo may fetch a git source the outer build never needed (issue #2012: with `--frozen`, a build in fresh linux containers failed on gpui-shell's quickjs-jit), so an offline build without those sources can't read its pins and fails.
 - `src/main.rs` keeps bakes in a store folder by key as JSON, not yet in the evidence store, which no criterion of #2010 reads.
 - `src/runner/live.rs` reads its threads' CPU time through `clock_gettime`, declared there, as the crate takes no `libc`. A view's worker is a thread of the `deep-physics` process, so its frames' CPU stands for the render worker's; the wasm32 build has no views.

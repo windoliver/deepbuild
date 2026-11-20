@@ -89,6 +89,7 @@ pub fn check(doc: &Value, caps: &Caps, table: &[Row]) -> Result<World, Vec<Refus
             out.extend(springs(&w));
             out.extend(capacity(&w));
             out.extend(belts(&w));
+            out.extend(crate::wind::uncaught(&w));
             out.extend(articulated(&w));
             if out.is_empty() {
                 return Ok(w);
@@ -98,6 +99,7 @@ pub fn check(doc: &Value, caps: &Caps, table: &[Row]) -> Result<World, Vec<Refus
             out.extend(springs(&w));
             out.extend(capacity(&w));
             out.extend(belts(&w));
+            out.extend(crate::wind::uncaught(&w));
             out.extend(articulated(&w));
         }
         Err(e) => out.extend(e),
@@ -124,19 +126,11 @@ fn nonzero(v: Option<&Value>) -> Option<&Value> {
 /// What `caps` refuses in `doc`, read from the document as written.
 fn refused_by(doc: &Value, caps: &Caps) -> Vec<Refusal> {
     let mut out = Vec::new();
-    if let Some(d) = doc
-        .get("dimensions")
-        .filter(|d| d.as_f64() != Some(f64::from(caps.dimensions)))
-    {
-        out.push(cap(
-            "dimensions".into(),
-            d,
-            caps,
-            &format!(
-                "runs only {}D worlds (2D on rapier2d is #2098)",
-                caps.dimensions
-            ),
-        ));
+    // #2098: an unwritten `dimensions` is 3, which a 2D backend refuses as it does a written one.
+    let d = doc.get("dimensions").cloned().unwrap_or(Value::from(3));
+    if d.as_f64() != Some(f64::from(caps.dimensions)) {
+        let what = format!("runs only {}D worlds", caps.dimensions);
+        out.push(cap("dimensions".into(), &d, caps, &what));
     }
     if let Some(b) = doc.get("backend").and_then(Value::as_object) {
         if let Some(n) = b.get("name").filter(|n| n.as_str() != Some(caps.backend)) {
