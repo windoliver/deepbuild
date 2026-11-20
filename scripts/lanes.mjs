@@ -336,6 +336,11 @@ alone.push('tests/acceptance/416/interfaces/');
 // #1477's suite opens real windows and times them against the lane's rule: one file at a time, both files timed.
 alone.push('tests/acceptance/1477/');
 timed.push('tests/acceptance/1477/record.test.ts', 'tests/acceptance/1477/built.test.ts', 'tests/acceptance/1477/redraft/record.test.ts');
+// #1477.e66d9bdb runs as its blind redraft, redraft/record.test.ts, on the owner's ruling ("Yes, swap it", Nov 20): the
+// first draft knows no `missed` arm, which the amended criterion gives a table that can't show its rows, so it fails on
+// the committed record (1477/redraft/DISPUTE.md). The lanes work by file, so record.test.ts is kept by hand, and its
+// four other tests run by hand with it.
+byHand.push('tests/acceptance/1477/record.test.ts');
 // #2569's files run #1477's bench in real windows, cover one and hold it to wall-clock deadlines; main.test.ts runs
 // #1477's three timed files through affected.mjs, well over two minutes.
 alone.push('tests/acceptance/2569/');
@@ -1199,6 +1204,16 @@ slow.push('tests/acceptance/2227/ac2-native-build.test.ts');
 
 // #2109's file (blind) runs #83's AC11 goldens, which start real hubs, in a child vitest; no timing.
 alone.push('tests/acceptance/2109/');
+
+// #1518's files each build deep-show; heard.test.ts and blocked.test.ts start a hub and deepbuild/speech's model host
+// on its fixed port 8720; heard and placement speak their take with macOS say; restore, sync and same make a video
+// with ffmpeg and export it; budget.test.ts times the cut expansion.
+alone.push('tests/acceptance/1518/');
+timed.push('tests/acceptance/1518/budget.test.ts');
+// #1518's first AC1 draft needs the pinned transcriber to add no word to its uncut take, and it adds "you" after the
+// take's last sentence (tests/acceptance/1518-redraft-ac1/DISPUTE.md); its blind redraft runs in its place.
+alone.push('tests/acceptance/1518-redraft-ac1/');
+byHand.push('tests/acceptance/1518/heard.test.ts');
 
 // #953's files (blind) build deep-logic and #416's assembler and bake many pieces in deep-logic processes; ac05 reads fuel, not time.
 alone.push('tests/acceptance/953/', 'tests/acceptance/953-oracle/');

@@ -290,7 +290,9 @@ pub fn kind_meshes(pack: &Pack, sealed: &Sealed, evidence: &Path) -> Vec<Issue> 
 
 /// The pack timings of a checked revision, each part run again and timed here, since the core
 /// reads no clock: `kind_rules_ms` (#202), and `resolve_ms` and `migrate_ms` (#1958), resolving
-/// the document's pack graph and applying pack kinds' data migrations to its items at load.
+/// the document's pack graph and applying pack kinds' data migrations to its items at load; and
+/// `cut_ms` (#1518), placing and expanding the document's cuts again, the recording's decode,
+/// which the check made and the reader keeps, left out.
 pub fn timings(
     doc: &Value,
     checked: &CheckResult,
@@ -317,6 +319,12 @@ pub fn timings(
     );
     out.insert("resolve_ms".into(), json!(resolve_ms));
     out.insert("migrate_ms".into(), json!(migrate_ms));
+    let reads = packs.reads.as_ref().map(|r| r.0.as_ref());
+    let started = std::time::Instant::now();
+    for (id, item) in items.iter().filter(|(_, i)| i["kind"] == "cut.words@1") {
+        let _ = deep_canvas_media::cut::lower(doc, id, item, reads);
+    }
+    out.insert("cut_ms".into(), json!(started.elapsed().as_secs_f64() * 1000.0));
     // #222: each cue list's expansion at check, the expander's own time.
     let entries = deep_canvas::document::expands::Entries::new(sealed, &resolved);
     let verbs = |n: &str| {
