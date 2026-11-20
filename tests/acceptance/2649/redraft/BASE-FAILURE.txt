@@ -1,0 +1,31 @@
+$ node --test tests/acceptance/2649/redraft/ac1.test.mjs  (base b4a2049e8, Node 24)
+✖ AC1 a table lists every process start of one sandboxed command check and of one hour-long idle run, by caller, with count and instructions that the kept counter output recomputes (2.05225ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 85.677
+
+✖ failing tests:
+
+test at tests/acceptance/2649/redraft/ac1.test.mjs:6:1
+✖ AC1 a table lists every process start of one sandboxed command check and of one hour-long idle run, by caller, with count and instructions that the kept counter output recomputes (2.05225ms)
+  AssertionError [ERR_ASSERTION]: 
+  no spike record at docs/spikes/2649/record.json: the spike hasn't been recorded
+  + actual - expected
+  
+  + [
+  +   "no spike record at docs/spikes/2649/record.json: the spike hasn't been recorded"
+  + ]
+  - []
+  
+      at TestContext.<anonymous> (file://<scratchpad>/redraft-base/tests/acceptance/2649/redraft/ac1.test.mjs:8:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',

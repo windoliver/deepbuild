@@ -1,0 +1,1891 @@
+{
+ "spike": 2649,
+ "main": "b4a2049e808c05a4ad0f727bb09c422b545cbb36",
+ "checkout": "72ed0f03eb9726ee149a99479a96f0a7df4cea37",
+ "counter": {
+  "timebase": {
+   "numer": 125,
+   "denom": 3
+  },
+  "command": "DEEP_COUNT_LOG=<log> DEEP_2649_SITES=<sites> DEEP_2649_ROOT=<repo> <count-children run> <count-children dylib> node --import=docs/spikes/2649/sites.mjs docs/spikes/2649/measure.mjs inner command-check <temp dir>",
+  "source": "scripts/count-children.c",
+  "note": "ps is setuid, so the kernel denies its count to the counter: its starts are listed as unread, and psCopy gives a non-setuid copy's reading for scale."
+ },
+ "subjects": {
+  "command-check": {
+   "log": "out/command-check.counter.log",
+   "sha256": "bcdce24e4874b8901f606eabdfedaec309ace126baa114d937c802ab47fb3c75",
+   "totalStarts": 73,
+   "sites": "out/command-check.sites.jsonl",
+   "sitesSha256": "6fc0b61d0f0fda6ba6db5bd2f263239d9eb8b5cdfd8a19368b09daf967c77299",
+   "measured": "2026-11-20T06:03:41.039Z",
+   "load": {
+    "before": [
+     10.41748046875,
+     17.69580078125,
+     18.84619140625
+    ],
+    "after": [
+     11.78759765625,
+     17.5625,
+     18.7724609375
+    ]
+   },
+   "wallSeconds": 12.799
+  },
+  "idle-hour": {
+   "log": "out/idle-hour.counter.log",
+   "sha256": "7f7391e12b9aaaae68f8dfaf1fc47627fcc7fca7dcb22728ce3536bde294db7f",
+   "totalStarts": 70017,
+   "sites": "out/idle-hour.sites.jsonl.gz",
+   "sitesSha256": "48025b2238eaf4a40edd57b66f702262f6b0ec3663d7a6bafa093f8207e52f2c",
+   "measured": "2026-11-20T06:35:40.544Z",
+   "load": {
+    "before": [
+     19.7734375,
+     74.4912109375,
+     90.69140625
+    ],
+    "after": [
+     8.35009765625,
+     10.93505859375,
+     14.37646484375
+    ]
+   },
+   "wallSeconds": 3611.753,
+   "durationSeconds": 3610.612,
+   "startsPerSecond": 19.39
+  }
+ },
+ "rows": [
+  {
+   "subject": "command-check",
+   "caller": "<root>",
+   "program": "helper",
+   "count": 21,
+   "instructions": 732600672,
+   "unread": 1,
+   "verdict": "replaceable",
+   "use": "`scanOnce` (timed, every 100 ms) → `helper scan <marker>`: Every process the run's sandbox holds, with its memory: how a fork is found and tracked, and a memory_mb limit read. `cleanupOnce` and `leftovers` → `scanOnce` → `helper scan <marker>`: Cleanup's scans: before each signal round, after it, and in leftovers' rescan, so a process forked while the others stop is found. `watchDenials`: `helper leash /usr/bin/log stream`: The system log stream that turns a sandbox refusal into a sandbox.denied event, kept for the supervisor's life. `watchDenials` again, on the next filter, after the canary never showed: A second log stream, on the kernel-process filter, because the subsystem filter never showed the canary's report on this macOS.",
+   "replacement": "A kernel event: the helper's `watch` (kqueue NOTE_FORK and NOTE_EXIT, built for file limits) extended to print each fork it attaches to (today it prints only exits and syncs), following every sandboxed run from its first process; the marker scan stays as a slower backstop for a process the watch misses (one reparented, or gone, before it was attached).",
+   "change": "process.tracked would come sooner after a fork than the p50 and p95 below (how much sooner is not measured); an exit is seen at once; a process that escapes the watch is found by the backstop later than today's 100 ms. A memory_mb limit is read at the backstop's pace unless the watch reads it.",
+   "sites": [
+    {
+     "site": "scan-beat",
+     "count": 15,
+     "instructions": 534100470,
+     "unread": 0,
+     "sameAnswer": 12,
+     "phases": {
+      "run": 15
+     },
+     "verdict": "replaceable",
+     "use": "Every process the run's sandbox holds, with its memory: how a fork is found and tracked, and a memory_mb limit read.",
+     "replacement": "A kernel event: the helper's `watch` (kqueue NOTE_FORK and NOTE_EXIT, built for file limits) extended to print each fork it attaches to (today it prints only exits and syncs), following every sandboxed run from its first process; the marker scan stays as a slower backstop for a process the watch misses (one reparented, or gone, before it was attached).",
+     "change": "process.tracked would come sooner after a fork than the p50 and p95 below (how much sooner is not measured); an exit is seen at once; a process that escapes the watch is found by the backstop later than today's 100 ms. A memory_mb limit is read at the backstop's pace unless the watch reads it."
+    },
+    {
+     "site": "scan-cleanup",
+     "count": 4,
+     "instructions": 142577890,
+     "unread": 0,
+     "sameAnswer": 4,
+     "phases": {
+      "cleanup": 4
+     },
+     "verdict": "repeated",
+     "use": "Cleanup's scans: before each signal round, after it, and in leftovers' rescan, so a process forked while the others stop is found.",
+     "heldBy": "The timed scans that began after the run's first process exited and found its sandbox empty. A sandbox gains processes only by a fork inside it; but one scan is not an atomic view (helper scan lists the PIDs once, then checks each in turn), so a member can fork and exit between the list and its check and leave an empty answer while its child lives. Two empty scans in a row, the second begun after the first ended, hold it: the child is in the second scan's list.",
+     "replacement": "A kept answer: a run whose first process has exited and whose sandbox two scans in a row found empty is no longer scanned (cut B as tried stops after one, which has the race above).",
+     "change": "Cleanup of a run that is already over starts no helper (its 3 cleanup scans here, and the beats between its exit and its cleanup); run.cleaned and process.ended are recorded as now. A run that leaves a process behind is scanned as today."
+    },
+    {
+     "site": "leash",
+     "count": 1,
+     "instructions": 55922312,
+     "unread": 0,
+     "sameAnswer": 0,
+     "phases": {
+      "open": 1
+     },
+     "verdict": "needed",
+     "use": "The system log stream that turns a sandbox refusal into a sandbox.denied event, kept for the supervisor's life."
+    },
+    {
+     "site": "leash-again",
+     "count": 1,
+     "instructions": 0,
+     "unread": 1,
+     "sameAnswer": 0,
+     "phases": {
+      "run": 1
+     },
+     "verdict": "replaceable",
+     "use": "A second log stream, on the kernel-process filter, because the subsystem filter never showed the canary's report on this macOS.",
+     "replacement": "A kept answer: the filter that last showed the canary on this macOS build, started first; the warm-up then confirms it with one probe.",
+     "change": "The first sandboxed run after a hub start begins up to 10 s sooner on a macOS whose reports lack the subsystem; a test sees one leash start instead of two. After an OS update the kept answer is for another build and the walk runs once, as today."
+    }
+   ]
+  },
+  {
+   "subject": "command-check",
+   "caller": "<root>",
+   "program": "sandbox-exec",
+   "count": 34,
+   "instructions": 8548712320,
+   "unread": 0,
+   "verdict": "replaceable",
+   "use": "`warm`: `sandbox-exec … helper probe` (the canary): A refused write in a canary sandbox, every ~320 ms, until its report shows through the stream's filter or 10 s pass; the first run waits for it. One probe that shows is needed; the rest are the filter walk. A launch more than WARM_MS (60 s) after the last report seen also warms again for up to 2 s, more probes per such run, which these subjects (one run each, warm from the open) never reach. `launch`: `sandbox-exec -p <profile> <program>` (the run itself): The run's own process, in its sandbox.",
+   "replacement": "The same kept answer: with the filter that works on this build started first, the canary shows on the first probe.",
+   "change": "On this Mac 32 of the 33 probes go and the first sandboxed run starts about 10 s sooner. A denial is seen as soon as now; the reports-other-subsystem plant in supervisor.test.ts must still pass, since a build with no kept answer walks the filters as today.",
+   "sites": [
+    {
+     "site": "canary",
+     "count": 33,
+     "instructions": 5848144989,
+     "unread": 0,
+     "sameAnswer": 0,
+     "phases": {
+      "open": 1,
+      "run": 32
+     },
+     "verdict": "replaceable",
+     "use": "A refused write in a canary sandbox, every ~320 ms, until its report shows through the stream's filter or 10 s pass; the first run waits for it. One probe that shows is needed; the rest are the filter walk. A launch more than WARM_MS (60 s) after the last report seen also warms again for up to 2 s, more probes per such run, which these subjects (one run each, warm from the open) never reach.",
+     "replacement": "The same kept answer: with the filter that works on this build started first, the canary shows on the first probe.",
+     "change": "On this Mac 32 of the 33 probes go and the first sandboxed run starts about 10 s sooner. A denial is seen as soon as now; the reports-other-subsystem plant in supervisor.test.ts must still pass, since a build with no kept answer walks the filters as today."
+    },
+    {
+     "site": "run",
+     "count": 1,
+     "instructions": 2700567331,
+     "unread": 0,
+     "sameAnswer": 0,
+     "phases": {
+      "run": 1
+     },
+     "verdict": "needed",
+     "use": "The run's own process, in its sandbox."
+    }
+   ]
+  },
+  {
+   "subject": "command-check",
+   "caller": "helper",
+   "program": "(forked)",
+   "count": 2,
+   "instructions": 0,
+   "unread": 2,
+   "verdict": "needed",
+   "use": "the leash's own watcher, forked beside `log`: Ends the log stream once the supervisor's process is gone, however it ends.",
+   "sites": [
+    {
+     "site": "watcher",
+     "count": 2,
+     "instructions": 0,
+     "unread": 2,
+     "sameAnswer": 0,
+     "phases": {},
+     "verdict": "needed",
+     "use": "Ends the log stream once the supervisor's process is gone, however it ends."
+    }
+   ]
+  },
+  {
+   "subject": "command-check",
+   "caller": "<root>",
+   "program": "ps",
+   "count": 16,
+   "instructions": 0,
+   "unread": 16,
+   "verdict": "replaceable",
+   "use": "`scanOnce` → `table(held)`: `ps -p <held pids> -o pid=,ppid=,pgid=,lstart=`: The start time of each process the scan just found, to tell a new process from one already tracked under the same PID. `launch` → `table([pid])`: `ps -p <pid> -o lstart=`: The run's first process's start time, for its process.tracked event: the identity a PID is matched by from then on. `scanOnce` → `tokenOf`: `ps -E -ww -o command= -p <pid>`: A newly found process's run token, read once when it is first tracked.",
+   "replacement": "A kept answer of the scan itself: `helper scan` reads each process's proc_bsdinfo already, and prints its start time, formatted as ps does (strftime %c), on the same line (cut A). As tried, only the macOS helper does: native/helper-linux.c's scan prints no start, so on Linux the patched scanOnce would track nothing; Linux needs the same field or a fall back to table().",
+   "change": "Nothing in the record: process.tracked carries the same start text. Each beat starts one process instead of two, so an idle sandboxed run costs 10 starts a second instead of 20.",
+   "sites": [
+    {
+     "site": "beat-ps",
+     "count": 14,
+     "instructions": 0,
+     "unread": 14,
+     "sameAnswer": 12,
+     "phases": {
+      "run": 14
+     },
+     "verdict": "replaceable",
+     "use": "The start time of each process the scan just found, to tell a new process from one already tracked under the same PID.",
+     "replacement": "A kept answer of the scan itself: `helper scan` reads each process's proc_bsdinfo already, and prints its start time, formatted as ps does (strftime %c), on the same line (cut A). As tried, only the macOS helper does: native/helper-linux.c's scan prints no start, so on Linux the patched scanOnce would track nothing; Linux needs the same field or a fall back to table().",
+     "change": "Nothing in the record: process.tracked carries the same start text. Each beat starts one process instead of two, so an idle sandboxed run costs 10 starts a second instead of 20."
+    },
+    {
+     "site": "start-time",
+     "count": 1,
+     "instructions": 0,
+     "unread": 1,
+     "sameAnswer": 0,
+     "phases": {
+      "run": 1
+     },
+     "verdict": "needed",
+     "use": "The run's first process's start time, for its process.tracked event: the identity a PID is matched by from then on."
+    },
+    {
+     "site": "token",
+     "count": 1,
+     "instructions": 0,
+     "unread": 1,
+     "sameAnswer": 0,
+     "phases": {
+      "run": 1
+     },
+     "verdict": "needed",
+     "use": "A newly found process's run token, read once when it is first tracked."
+    }
+   ]
+  },
+  {
+   "subject": "idle-hour",
+   "caller": "<root>",
+   "program": "helper",
+   "count": 34991,
+   "instructions": 1286989524149,
+   "unread": 1,
+   "verdict": "replaceable",
+   "use": "`scanOnce` (timed, every 100 ms) → `helper scan <marker>`: Every process the run's sandbox holds, with its memory: how a fork is found and tracked, and a memory_mb limit read. `cleanupOnce` and `leftovers` → `scanOnce` → `helper scan <marker>`: Cleanup's scans: before each signal round, after it, and in leftovers' rescan, so a process forked while the others stop is found. `watchDenials`: `helper leash /usr/bin/log stream`: The system log stream that turns a sandbox refusal into a sandbox.denied event, kept for the supervisor's life. `watchDenials` again, on the next filter, after the canary never showed: A second log stream, on the kernel-process filter, because the subsystem filter never showed the canary's report on this macOS.",
+   "replacement": "A kernel event: the helper's `watch` (kqueue NOTE_FORK and NOTE_EXIT, built for file limits) extended to print each fork it attaches to (today it prints only exits and syncs), following every sandboxed run from its first process; the marker scan stays as a slower backstop for a process the watch misses (one reparented, or gone, before it was attached).",
+   "change": "process.tracked would come sooner after a fork than the p50 and p95 below (how much sooner is not measured); an exit is seen at once; a process that escapes the watch is found by the backstop later than today's 100 ms. A memory_mb limit is read at the backstop's pace unless the watch reads it.",
+   "sites": [
+    {
+     "site": "scan-beat",
+     "count": 34986,
+     "instructions": 1286826227491,
+     "unread": 0,
+     "sameAnswer": 34983,
+     "phases": {
+      "run": 34986
+     },
+     "verdict": "replaceable",
+     "use": "Every process the run's sandbox holds, with its memory: how a fork is found and tracked, and a memory_mb limit read.",
+     "replacement": "A kernel event: the helper's `watch` (kqueue NOTE_FORK and NOTE_EXIT, built for file limits) extended to print each fork it attaches to (today it prints only exits and syncs), following every sandboxed run from its first process; the marker scan stays as a slower backstop for a process the watch misses (one reparented, or gone, before it was attached).",
+     "change": "process.tracked would come sooner after a fork than the p50 and p95 below (how much sooner is not measured); an exit is seen at once; a process that escapes the watch is found by the backstop later than today's 100 ms. A memory_mb limit is read at the backstop's pace unless the watch reads it."
+    },
+    {
+     "site": "scan-cleanup",
+     "count": 3,
+     "instructions": 109670109,
+     "unread": 0,
+     "sameAnswer": 3,
+     "phases": {
+      "cleanup": 3
+     },
+     "verdict": "repeated",
+     "use": "Cleanup's scans: before each signal round, after it, and in leftovers' rescan, so a process forked while the others stop is found.",
+     "heldBy": "The timed scans that began after the run's first process exited and found its sandbox empty. A sandbox gains processes only by a fork inside it; but one scan is not an atomic view (helper scan lists the PIDs once, then checks each in turn), so a member can fork and exit between the list and its check and leave an empty answer while its child lives. Two empty scans in a row, the second begun after the first ended, hold it: the child is in the second scan's list.",
+     "replacement": "A kept answer: a run whose first process has exited and whose sandbox two scans in a row found empty is no longer scanned (cut B as tried stops after one, which has the race above).",
+     "change": "Cleanup of a run that is already over starts no helper (its 3 cleanup scans here, and the beats between its exit and its cleanup); run.cleaned and process.ended are recorded as now. A run that leaves a process behind is scanned as today."
+    },
+    {
+     "site": "leash",
+     "count": 1,
+     "instructions": 53626549,
+     "unread": 0,
+     "sameAnswer": 0,
+     "phases": {
+      "open": 1
+     },
+     "verdict": "needed",
+     "use": "The system log stream that turns a sandbox refusal into a sandbox.denied event, kept for the supervisor's life."
+    },
+    {
+     "site": "leash-again",
+     "count": 1,
+     "instructions": 0,
+     "unread": 1,
+     "sameAnswer": 0,
+     "phases": {
+      "run": 1
+     },
+     "verdict": "replaceable",
+     "use": "A second log stream, on the kernel-process filter, because the subsystem filter never showed the canary's report on this macOS.",
+     "replacement": "A kept answer: the filter that last showed the canary on this macOS build, started first; the warm-up then confirms it with one probe.",
+     "change": "The first sandboxed run after a hub start begins up to 10 s sooner on a macOS whose reports lack the subsystem; a test sees one leash start instead of two. After an OS update the kept answer is for another build and the walk runs once, as today."
+    }
+   ]
+  },
+  {
+   "subject": "idle-hour",
+   "caller": "<root>",
+   "program": "sandbox-exec",
+   "count": 37,
+   "instructions": 6510891818,
+   "unread": 0,
+   "verdict": "replaceable",
+   "use": "`warm`: `sandbox-exec … helper probe` (the canary): A refused write in a canary sandbox, every ~320 ms, until its report shows through the stream's filter or 10 s pass; the first run waits for it. One probe that shows is needed; the rest are the filter walk. A launch more than WARM_MS (60 s) after the last report seen also warms again for up to 2 s, more probes per such run, which these subjects (one run each, warm from the open) never reach. `launch`: `sandbox-exec -p <profile> <program>` (the run itself): The run's own process, in its sandbox.",
+   "replacement": "The same kept answer: with the filter that works on this build started first, the canary shows on the first probe.",
+   "change": "On this Mac 32 of the 33 probes go and the first sandboxed run starts about 10 s sooner. A denial is seen as soon as now; the reports-other-subsystem plant in supervisor.test.ts must still pass, since a build with no kept answer walks the filters as today.",
+   "sites": [
+    {
+     "site": "canary",
+     "count": 36,
+     "instructions": 6330928755,
+     "unread": 0,
+     "sameAnswer": 0,
+     "phases": {
+      "open": 1,
+      "run": 35
+     },
+     "verdict": "replaceable",
+     "use": "A refused write in a canary sandbox, every ~320 ms, until its report shows through the stream's filter or 10 s pass; the first run waits for it. One probe that shows is needed; the rest are the filter walk. A launch more than WARM_MS (60 s) after the last report seen also warms again for up to 2 s, more probes per such run, which these subjects (one run each, warm from the open) never reach.",
+     "replacement": "The same kept answer: with the filter that works on this build started first, the canary shows on the first probe.",
+     "change": "On this Mac 32 of the 33 probes go and the first sandboxed run starts about 10 s sooner. A denial is seen as soon as now; the reports-other-subsystem plant in supervisor.test.ts must still pass, since a build with no kept answer walks the filters as today."
+    },
+    {
+     "site": "run",
+     "count": 1,
+     "instructions": 179963063,
+     "unread": 0,
+     "sameAnswer": 0,
+     "phases": {
+      "run": 1
+     },
+     "verdict": "needed",
+     "use": "The run's own process, in its sandbox."
+    }
+   ]
+  },
+  {
+   "subject": "idle-hour",
+   "caller": "helper",
+   "program": "(forked)",
+   "count": 2,
+   "instructions": 0,
+   "unread": 2,
+   "verdict": "needed",
+   "use": "the leash's own watcher, forked beside `log`: Ends the log stream once the supervisor's process is gone, however it ends.",
+   "sites": [
+    {
+     "site": "watcher",
+     "count": 2,
+     "instructions": 0,
+     "unread": 2,
+     "sameAnswer": 0,
+     "phases": {},
+     "verdict": "needed",
+     "use": "Ends the log stream once the supervisor's process is gone, however it ends."
+    }
+   ]
+  },
+  {
+   "subject": "idle-hour",
+   "caller": "<root>",
+   "program": "ps",
+   "count": 34987,
+   "instructions": 0,
+   "unread": 34987,
+   "verdict": "replaceable",
+   "use": "`scanOnce` → `table(held)`: `ps -p <held pids> -o pid=,ppid=,pgid=,lstart=`: The start time of each process the scan just found, to tell a new process from one already tracked under the same PID. `launch` → `table([pid])`: `ps -p <pid> -o lstart=`: The run's first process's start time, for its process.tracked event: the identity a PID is matched by from then on. `scanOnce` → `tokenOf`: `ps -E -ww -o command= -p <pid>`: A newly found process's run token, read once when it is first tracked.",
+   "replacement": "A kept answer of the scan itself: `helper scan` reads each process's proc_bsdinfo already, and prints its start time, formatted as ps does (strftime %c), on the same line (cut A). As tried, only the macOS helper does: native/helper-linux.c's scan prints no start, so on Linux the patched scanOnce would track nothing; Linux needs the same field or a fall back to table().",
+   "change": "Nothing in the record: process.tracked carries the same start text. Each beat starts one process instead of two, so an idle sandboxed run costs 10 starts a second instead of 20.",
+   "sites": [
+    {
+     "site": "beat-ps",
+     "count": 34985,
+     "instructions": 0,
+     "unread": 34985,
+     "sameAnswer": 34983,
+     "phases": {
+      "run": 34985
+     },
+     "verdict": "replaceable",
+     "use": "The start time of each process the scan just found, to tell a new process from one already tracked under the same PID.",
+     "replacement": "A kept answer of the scan itself: `helper scan` reads each process's proc_bsdinfo already, and prints its start time, formatted as ps does (strftime %c), on the same line (cut A). As tried, only the macOS helper does: native/helper-linux.c's scan prints no start, so on Linux the patched scanOnce would track nothing; Linux needs the same field or a fall back to table().",
+     "change": "Nothing in the record: process.tracked carries the same start text. Each beat starts one process instead of two, so an idle sandboxed run costs 10 starts a second instead of 20."
+    },
+    {
+     "site": "start-time",
+     "count": 1,
+     "instructions": 0,
+     "unread": 1,
+     "sameAnswer": 0,
+     "phases": {
+      "run": 1
+     },
+     "verdict": "needed",
+     "use": "The run's first process's start time, for its process.tracked event: the identity a PID is matched by from then on."
+    },
+    {
+     "site": "token",
+     "count": 1,
+     "instructions": 0,
+     "unread": 1,
+     "sameAnswer": 0,
+     "phases": {
+      "run": 1
+     },
+     "verdict": "needed",
+     "use": "A newly found process's run token, read once when it is first tracked."
+    }
+   ]
+  }
+ ],
+ "cuts": [
+  {
+   "id": "B",
+   "mergeBase": "b4a2049e808c05a4ad0f727bb09c422b545cbb36",
+   "patch": "cut-B.patch",
+   "patchSha256": "cc49328ad448cc5215460996495a57d091a0bc02daf8bf62a8ef3a57ba62e7bd",
+   "measured": "2026-11-20T06:35:40.625Z",
+   "description": "A kept answer: a run whose first process has exited and whose sandbox two scans in a row found empty is no longer scanned (cut B as tried stops after one, which has the race above).",
+   "change": "1c4dc9f043bd976d6972bb051c1161e0ab10cd51",
+   "tree": "499afc7bda7aeed73ef8a741974e55bd9bcbe5e8",
+   "branch": "spike/2649-cut-B",
+   "seen": "Cleanup of a run that is already over starts no helper (its 3 cleanup scans here, and the beats between its exit and its cleanup); run.cleaned and process.ended are recorded as now. A run that leaves a process behind is scanned as today.",
+   "measurements": {
+    "sandbox-setup": {
+     "command": "node docs/spikes/2649/measure.mjs cut B <copy with the cut>  (each side: node benchmarks/sandbox.mjs, under scripts/count-children.c)",
+     "rounds": [
+      {
+       "first": "base",
+       "base": 14194299686,
+       "change": 12243385522,
+       "baseStarts": 174,
+       "changeStarts": 125,
+       "uncounted": [
+        "(forked)",
+        "helper"
+       ],
+       "load": [
+        14.80859375,
+        13.94091796875
+       ]
+      },
+      {
+       "first": "change",
+       "base": 13894611251,
+       "change": 12261188671,
+       "baseStarts": 170,
+       "changeStarts": 125,
+       "uncounted": [
+        "(forked)",
+        "helper"
+       ],
+       "load": [
+        13.33447265625,
+        13.25732421875
+       ]
+      },
+      {
+       "first": "base",
+       "base": 13863490798,
+       "change": 12241255725,
+       "baseStarts": 168,
+       "changeStarts": 124,
+       "uncounted": [
+        "(forked)",
+        "helper"
+       ],
+       "load": [
+        12.2080078125,
+        11.14599609375
+       ]
+      },
+      {
+       "first": "change",
+       "base": 13996984643,
+       "change": 12220727448,
+       "baseStarts": 171,
+       "changeStarts": 124,
+       "uncounted": [
+        "(forked)",
+        "helper"
+       ],
+       "load": [
+        10.74853515625,
+        10.11083984375
+       ]
+      },
+      {
+       "first": "base",
+       "base": 14018259655,
+       "change": 12448092195,
+       "baseStarts": 170,
+       "changeStarts": 131,
+       "uncounted": [
+        "(forked)",
+        "helper"
+       ],
+       "load": [
+        9.48876953125,
+        9.2529296875
+       ]
+      },
+      {
+       "first": "change",
+       "base": 14369305451,
+       "change": 12442325474,
+       "baseStarts": 173,
+       "changeStarts": 126,
+       "uncounted": [
+        "(forked)",
+        "helper"
+       ],
+       "load": [
+        9.52099609375,
+        9.12646484375
+       ]
+      },
+      {
+       "first": "base",
+       "base": 14363024259,
+       "change": 12531695807,
+       "baseStarts": 172,
+       "changeStarts": 129,
+       "uncounted": [
+        "(forked)",
+        "helper"
+       ],
+       "load": [
+        9.19140625,
+        8.86669921875
+       ]
+      },
+      {
+       "first": "change",
+       "base": 14336849271,
+       "change": 12456456403,
+       "baseStarts": 172,
+       "changeStarts": 126,
+       "uncounted": [
+        "(forked)",
+        "helper"
+       ],
+       "load": [
+        9.72900390625,
+        9.22265625
+       ]
+      },
+      {
+       "first": "base",
+       "base": 14387122922,
+       "change": 12553842876,
+       "baseStarts": 174,
+       "changeStarts": 129,
+       "uncounted": [
+        "(forked)",
+        "helper"
+       ],
+       "load": [
+        9.17529296875,
+        8.84033203125
+       ]
+      },
+      {
+       "first": "change",
+       "base": 14375576979,
+       "change": 12462330357,
+       "baseStarts": 174,
+       "changeStarts": 126,
+       "uncounted": [
+        "(forked)",
+        "helper"
+       ],
+       "load": [
+        8.4833984375,
+        8.46142578125
+       ]
+      },
+      {
+       "first": "base",
+       "base": 14476627935,
+       "change": 12598967670,
+       "baseStarts": 171,
+       "changeStarts": 127,
+       "uncounted": [
+        "(forked)",
+        "helper"
+       ],
+       "load": [
+        8.5439453125,
+        9.0361328125
+       ]
+      },
+      {
+       "first": "change",
+       "base": 15067173108,
+       "change": 12648825896,
+       "baseStarts": 176,
+       "changeStarts": 130,
+       "uncounted": [
+        "(forked)",
+        "helper"
+       ],
+       "load": [
+        8.72900390625,
+        20.58642578125
+       ]
+      },
+      {
+       "first": "base",
+       "base": 14293399384,
+       "change": 12469786408,
+       "baseStarts": 171,
+       "changeStarts": 127,
+       "uncounted": [
+        "(forked)",
+        "helper"
+       ],
+       "load": [
+        18.509765625,
+        16.52587890625
+       ]
+      },
+      {
+       "first": "change",
+       "base": 14447472221,
+       "change": 12504583205,
+       "baseStarts": 175,
+       "changeStarts": 126,
+       "uncounted": [
+        "(forked)",
+        "helper"
+       ],
+       "load": [
+        14.89404296875,
+        13.53271484375
+       ]
+      },
+      {
+       "first": "base",
+       "base": 14218908284,
+       "change": 12431660912,
+       "baseStarts": 174,
+       "changeStarts": 125,
+       "uncounted": [
+        "(forked)",
+        "helper"
+       ],
+       "load": [
+        14.77978515625,
+        27.9521484375
+       ]
+      }
+     ],
+     "medianBase": 14336849271,
+     "medianChange": 12456456403,
+     "medianRatio": 0.8724
+    },
+    "runner-job": {
+     "command": "node docs/spikes/2649/measure.mjs cut B <copy with the cut>  (each side: node benchmarks/runner.mjs, under scripts/count-children.c)",
+     "rounds": [
+      {
+       "first": "base",
+       "base": 12204633724,
+       "change": 11332543188,
+       "baseStarts": 126,
+       "changeStarts": 99,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        20.259765625,
+        20.2353515625
+       ]
+      },
+      {
+       "first": "change",
+       "base": 11427690730,
+       "change": 10815424941,
+       "baseStarts": 121,
+       "changeStarts": 96,
+       "uncounted": [
+        "(forked)",
+        "helper"
+       ],
+       "load": [
+        19.0888671875,
+        21.65966796875
+       ]
+      },
+      {
+       "first": "base",
+       "base": 12295778792,
+       "change": 10314404376,
+       "baseStarts": 122,
+       "changeStarts": 95,
+       "uncounted": [
+        "(forked)",
+        "helper"
+       ],
+       "load": [
+        19.853515625,
+        18.9404296875
+       ]
+      },
+      {
+       "first": "change",
+       "base": 12076156578,
+       "change": 10979729645,
+       "baseStarts": 120,
+       "changeStarts": 93,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        17.55224609375,
+        16.14404296875
+       ]
+      },
+      {
+       "first": "base",
+       "base": 12167600042,
+       "change": 10793517612,
+       "baseStarts": 122,
+       "changeStarts": 90,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        15.34619140625,
+        34.28564453125
+       ]
+      },
+      {
+       "first": "change",
+       "base": 11929557078,
+       "change": 10994708716,
+       "baseStarts": 126,
+       "changeStarts": 99,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        33.1552734375,
+        31.99462890625
+       ]
+      },
+      {
+       "first": "base",
+       "base": 11629060040,
+       "change": 11040150795,
+       "baseStarts": 121,
+       "changeStarts": 93,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        29.775390625,
+        28.416015625
+       ]
+      },
+      {
+       "first": "change",
+       "base": 12164589410,
+       "change": 11054791823,
+       "baseStarts": 126,
+       "changeStarts": 98,
+       "uncounted": [
+        "(forked)",
+        "helper"
+       ],
+       "load": [
+        25.412109375,
+        22.97509765625
+       ]
+      },
+      {
+       "first": "base",
+       "base": 12181668022,
+       "change": 10880048225,
+       "baseStarts": 125,
+       "changeStarts": 92,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        20.9736328125,
+        21.11328125
+       ]
+      },
+      {
+       "first": "change",
+       "base": 12574284332,
+       "change": 10505955941,
+       "baseStarts": 141,
+       "changeStarts": 90,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        19.77880859375,
+        22.19482421875
+       ]
+      },
+      {
+       "first": "base",
+       "base": 11854822588,
+       "change": 11213685354,
+       "baseStarts": 115,
+       "changeStarts": 103,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        20.28759765625,
+        19.14208984375
+       ]
+      },
+      {
+       "first": "change",
+       "base": 12192339217,
+       "change": 10984732262,
+       "baseStarts": 121,
+       "changeStarts": 90,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        17.49560546875,
+        16.47705078125
+       ]
+      },
+      {
+       "first": "base",
+       "base": 12487935818,
+       "change": 11189587098,
+       "baseStarts": 126,
+       "changeStarts": 95,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        14.98046875,
+        13.90673828125
+       ]
+      },
+      {
+       "first": "change",
+       "base": 11714229844,
+       "change": 10844107509,
+       "baseStarts": 123,
+       "changeStarts": 93,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        12.9248046875,
+        14.4599609375
+       ]
+      },
+      {
+       "first": "base",
+       "base": 11956671000,
+       "change": 11196424066,
+       "baseStarts": 118,
+       "changeStarts": 91,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        13.54638671875,
+        12.60009765625
+       ]
+      }
+     ],
+     "medianBase": 12164589410,
+     "medianChange": 10984732262,
+     "medianRatio": 0.9092
+    },
+    "command-check-count": {
+     "command": "node docs/spikes/2649/measure.mjs cut B <copy with the cut>  (each side: node benchmarks/command-check.mjs, under scripts/count-children.c)",
+     "rounds": [
+      {
+       "first": "base",
+       "base": 128798526508,
+       "change": 127566185714,
+       "baseStarts": 437,
+       "changeStarts": 380,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        9.9111328125,
+        9.82568359375
+       ]
+      },
+      {
+       "first": "change",
+       "base": 128818597074,
+       "change": 127367993663,
+       "baseStarts": 454,
+       "changeStarts": 385,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        9.72705078125,
+        9.10595703125
+       ]
+      },
+      {
+       "first": "base",
+       "base": 128932754556,
+       "change": 128151261924,
+       "baseStarts": 454,
+       "changeStarts": 413,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        8.9072265625,
+        11.2333984375
+       ]
+      },
+      {
+       "first": "change",
+       "base": 128409696470,
+       "change": 127352574589,
+       "baseStarts": 414,
+       "changeStarts": 354,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        30.0986328125,
+        22.52734375
+       ]
+      },
+      {
+       "first": "base",
+       "base": 128430762564,
+       "change": 127161832550,
+       "baseStarts": 414,
+       "changeStarts": 349,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        17.80908203125,
+        14.060546875
+       ]
+      },
+      {
+       "first": "change",
+       "base": 128608941361,
+       "change": 127041889896,
+       "baseStarts": 422,
+       "changeStarts": 350,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        11.43896484375,
+        9.73779296875
+       ]
+      },
+      {
+       "first": "base",
+       "base": 128402030651,
+       "change": 127847404347,
+       "baseStarts": 416,
+       "changeStarts": 355,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        8.94189453125,
+        8.953125
+       ]
+      },
+      {
+       "first": "change",
+       "base": 128573347780,
+       "change": 127027720447,
+       "baseStarts": 418,
+       "changeStarts": 352,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        9.38916015625,
+        9.93994140625
+       ]
+      },
+      {
+       "first": "base",
+       "base": 130121875358,
+       "change": 129535351448,
+       "baseStarts": 472,
+       "changeStarts": 467,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        12.23828125,
+        13.03857421875
+       ]
+      },
+      {
+       "first": "change",
+       "base": 130408240854,
+       "change": 128706295717,
+       "baseStarts": 508,
+       "changeStarts": 437,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        13.90625,
+        27.49365234375
+       ]
+      },
+      {
+       "first": "base",
+       "base": 131578784476,
+       "change": 128492894008,
+       "baseStarts": 550,
+       "changeStarts": 405,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        25.71826171875,
+        21.0400390625
+       ]
+      },
+      {
+       "first": "change",
+       "base": 127652581220,
+       "change": 126763520607,
+       "baseStarts": 392,
+       "changeStarts": 326,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        32.275390625,
+        23.38525390625
+       ]
+      },
+      {
+       "first": "base",
+       "base": 128326043210,
+       "change": 128065007695,
+       "baseStarts": 396,
+       "changeStarts": 360,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        17.73681640625,
+        14.06689453125
+       ]
+      },
+      {
+       "first": "change",
+       "base": 130062923801,
+       "change": 127159459626,
+       "baseStarts": 453,
+       "changeStarts": 368,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        11.9384765625,
+        10.990234375
+       ]
+      },
+      {
+       "first": "base",
+       "base": 127577366679,
+       "change": 127928166041,
+       "baseStarts": 408,
+       "changeStarts": 382,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        28.35595703125,
+        22.1962890625
+       ]
+      }
+     ],
+     "medianBase": 128608941361,
+     "medianChange": 127566185714,
+     "medianRatio": 0.9904
+    }
+   }
+  },
+  {
+   "id": "A",
+   "mergeBase": "b4a2049e808c05a4ad0f727bb09c422b545cbb36",
+   "patch": "cut-A.patch",
+   "patchSha256": "1d99fb40e6c90487e2617cfface759fcf01eda019adc95455de57d5b862b39f8",
+   "measured": "2026-11-20T07:04:42.590Z",
+   "description": "A kept answer of the scan itself: `helper scan` reads each process's proc_bsdinfo already, and prints its start time, formatted as ps does (strftime %c), on the same line (cut A). As tried, only the macOS helper does: native/helper-linux.c's scan prints no start, so on Linux the patched scanOnce would track nothing; Linux needs the same field or a fall back to table().",
+   "change": "82bff4e8c56e5e4245b47b389525a87af49ce364",
+   "tree": "b6102eef52c23c1ec9eb3c6e6e0dbfded8bfcd2e",
+   "branch": "spike/2649-cut-A",
+   "seen": "Nothing in the record: process.tracked carries the same start text. Each beat starts one process instead of two, so an idle sandboxed run costs 10 starts a second instead of 20.",
+   "measurements": {
+    "sandbox-setup": {
+     "command": "node docs/spikes/2649/measure.mjs cut A <copy with the cut>  (each side: node benchmarks/sandbox.mjs, under scripts/count-children.c)",
+     "rounds": [
+      {
+       "first": "base",
+       "base": 14115201619,
+       "change": 14096923590,
+       "baseStarts": 169,
+       "changeStarts": 170,
+       "uncounted": [
+        "(forked)",
+        "helper"
+       ],
+       "load": [
+        19.685546875,
+        18.193359375
+       ]
+      },
+      {
+       "first": "change",
+       "base": 14172911165,
+       "change": 14346851663,
+       "baseStarts": 171,
+       "changeStarts": 171,
+       "uncounted": [
+        "(forked)",
+        "helper"
+       ],
+       "load": [
+        16.68017578125,
+        15.921875
+       ]
+      },
+      {
+       "first": "base",
+       "base": 14337994716,
+       "change": 14305303605,
+       "baseStarts": 171,
+       "changeStarts": 173,
+       "uncounted": [
+        "(forked)",
+        "helper"
+       ],
+       "load": [
+        14.486328125,
+        14.23828125
+       ]
+      },
+      {
+       "first": "change",
+       "base": 14148555309,
+       "change": 14287924734,
+       "baseStarts": 175,
+       "changeStarts": 173,
+       "uncounted": [
+        "(forked)",
+        "helper"
+       ],
+       "load": [
+        14.037109375,
+        13.42236328125
+       ]
+      },
+      {
+       "first": "base",
+       "base": 14154974146,
+       "change": 14708728806,
+       "baseStarts": 172,
+       "changeStarts": 176,
+       "uncounted": [
+        "(forked)",
+        "helper"
+       ],
+       "load": [
+        35.9677734375,
+        30.51025390625
+       ]
+      },
+      {
+       "first": "change",
+       "base": 14247863749,
+       "change": 14123465574,
+       "baseStarts": 172,
+       "changeStarts": 169,
+       "uncounted": [
+        "(forked)",
+        "helper"
+       ],
+       "load": [
+        27.50390625,
+        25.02685546875
+       ]
+      },
+      {
+       "first": "base",
+       "base": 14463926768,
+       "change": 14492981345,
+       "baseStarts": 172,
+       "changeStarts": 171,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        21.1015625,
+        18.7119140625
+       ]
+      },
+      {
+       "first": "change",
+       "base": 14282426350,
+       "change": 14277919943,
+       "baseStarts": 172,
+       "changeStarts": 171,
+       "uncounted": [
+        "(forked)",
+        "helper"
+       ],
+       "load": [
+        16.8310546875,
+        15.26171875
+       ]
+      },
+      {
+       "first": "base",
+       "base": 14416577340,
+       "change": 14349550133,
+       "baseStarts": 171,
+       "changeStarts": 172,
+       "uncounted": [
+        "(forked)",
+        "helper"
+       ],
+       "load": [
+        14.06494140625,
+        12.83740234375
+       ]
+      },
+      {
+       "first": "change",
+       "base": 14310125024,
+       "change": 14376781340,
+       "baseStarts": 172,
+       "changeStarts": 173,
+       "uncounted": [
+        "(forked)",
+        "helper"
+       ],
+       "load": [
+        11.70556640625,
+        11.322265625
+       ]
+      },
+      {
+       "first": "base",
+       "base": 14312580896,
+       "change": 14449433736,
+       "baseStarts": 172,
+       "changeStarts": 170,
+       "uncounted": [
+        "(forked)",
+        "helper"
+       ],
+       "load": [
+        10.6640625,
+        10.40771484375
+       ]
+      },
+      {
+       "first": "change",
+       "base": 14411782065,
+       "change": 14357347933,
+       "baseStarts": 171,
+       "changeStarts": 172,
+       "uncounted": [
+        "(forked)",
+        "helper"
+       ],
+       "load": [
+        9.87353515625,
+        9.87939453125
+       ]
+      },
+      {
+       "first": "base",
+       "base": 14191663012,
+       "change": 14190814414,
+       "baseStarts": 171,
+       "changeStarts": 168,
+       "uncounted": [
+        "(forked)",
+        "helper"
+       ],
+       "load": [
+        9.349609375,
+        8.97509765625
+       ]
+      },
+      {
+       "first": "change",
+       "base": 14446032838,
+       "change": 14522190374,
+       "baseStarts": 172,
+       "changeStarts": 172,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        9.0048828125,
+        8.68994140625
+       ]
+      },
+      {
+       "first": "base",
+       "base": 14264989350,
+       "change": 14478158330,
+       "baseStarts": 171,
+       "changeStarts": 171,
+       "uncounted": [
+        "(forked)",
+        "helper"
+       ],
+       "load": [
+        9.3583984375,
+        8.93505859375
+       ]
+      }
+     ],
+     "medianBase": 14282426350,
+     "medianChange": 14349550133,
+     "medianRatio": 1.002
+    },
+    "runner-job": {
+     "command": "node docs/spikes/2649/measure.mjs cut A <copy with the cut>  (each side: node benchmarks/runner.mjs, under scripts/count-children.c)",
+     "rounds": [
+      {
+       "first": "base",
+       "base": 12336917078,
+       "change": 12768184712,
+       "baseStarts": 120,
+       "changeStarts": 126,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        9.47900390625,
+        9.89013671875
+       ]
+      },
+      {
+       "first": "change",
+       "base": 12697738521,
+       "change": 11928239216,
+       "baseStarts": 129,
+       "changeStarts": 115,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        12.19384765625,
+        13.013671875
+       ]
+      },
+      {
+       "first": "base",
+       "base": 12258887186,
+       "change": 12127919063,
+       "baseStarts": 124,
+       "changeStarts": 117,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        13.61962890625,
+        12.57080078125
+       ]
+      },
+      {
+       "first": "change",
+       "base": 12211798616,
+       "change": 12438367252,
+       "baseStarts": 122,
+       "changeStarts": 122,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        12.1015625,
+        11.69140625
+       ]
+      },
+      {
+       "first": "base",
+       "base": 11997182808,
+       "change": 12156687550,
+       "baseStarts": 121,
+       "changeStarts": 122,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        11.61669921875,
+        11.5947265625
+       ]
+      },
+      {
+       "first": "change",
+       "base": 12337146183,
+       "change": 12400142098,
+       "baseStarts": 125,
+       "changeStarts": 122,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        13.0244140625,
+        12.90185546875
+       ]
+      },
+      {
+       "first": "base",
+       "base": 12084268019,
+       "change": 11986332707,
+       "baseStarts": 123,
+       "changeStarts": 122,
+       "uncounted": [
+        "(forked)",
+        "helper"
+       ],
+       "load": [
+        13.31689453125,
+        21.12353515625
+       ]
+      },
+      {
+       "first": "change",
+       "base": 12279852907,
+       "change": 12241462979,
+       "baseStarts": 123,
+       "changeStarts": 120,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        20.4345703125,
+        19.29736328125
+       ]
+      },
+      {
+       "first": "base",
+       "base": 12271099310,
+       "change": 12257121737,
+       "baseStarts": 125,
+       "changeStarts": 120,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        18.5244140625,
+        16.912109375
+       ]
+      },
+      {
+       "first": "change",
+       "base": 12214813719,
+       "change": 12407563722,
+       "baseStarts": 124,
+       "changeStarts": 120,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        15.6630859375,
+        13.669921875
+       ]
+      },
+      {
+       "first": "base",
+       "base": 12210112423,
+       "change": 12198713099,
+       "baseStarts": 126,
+       "changeStarts": 120,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        12.95166015625,
+        11.6376953125
+       ]
+      },
+      {
+       "first": "change",
+       "base": 12122221457,
+       "change": 12208437285,
+       "baseStarts": 120,
+       "changeStarts": 121,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        12.06787109375,
+        12.15625
+       ]
+      },
+      {
+       "first": "base",
+       "base": 12221792876,
+       "change": 12262806722,
+       "baseStarts": 124,
+       "changeStarts": 121,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        12.60791015625,
+        12.31884765625
+       ]
+      },
+      {
+       "first": "change",
+       "base": 12218235223,
+       "change": 12188635166,
+       "baseStarts": 125,
+       "changeStarts": 119,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        12.490234375,
+        12.5234375
+       ]
+      },
+      {
+       "first": "base",
+       "base": 12365222320,
+       "change": 12250699565,
+       "baseStarts": 121,
+       "changeStarts": 120,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        12.26953125,
+        11.2431640625
+       ]
+      }
+     ],
+     "medianBase": 12221792876,
+     "medianChange": 12241462979,
+     "medianRatio": 0.9991
+    },
+    "command-check-count": {
+     "command": "node docs/spikes/2649/measure.mjs cut A <copy with the cut>  (each side: node benchmarks/command-check.mjs, under scripts/count-children.c)",
+     "rounds": [
+      {
+       "first": "base",
+       "base": 131251456316,
+       "change": 130318823521,
+       "baseStarts": 570,
+       "changeStarts": 342,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        16.2822265625,
+        14.5341796875
+       ]
+      },
+      {
+       "first": "change",
+       "base": 130326223264,
+       "change": 130448942762,
+       "baseStarts": 511,
+       "changeStarts": 339,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        13.15966796875,
+        15.953125
+       ]
+      },
+      {
+       "first": "base",
+       "base": 130737298448,
+       "change": 131098427734,
+       "baseStarts": 468,
+       "changeStarts": 325,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        32.02001953125,
+        23.7861328125
+       ]
+      },
+      {
+       "first": "change",
+       "base": 130009671912,
+       "change": 130569577811,
+       "baseStarts": 476,
+       "changeStarts": 339,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        29.751953125,
+        20.7431640625
+       ]
+      },
+      {
+       "first": "base",
+       "base": 130227136806,
+       "change": 130943411837,
+       "baseStarts": 497,
+       "changeStarts": 347,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        16.1357421875,
+        15.8544921875
+       ]
+      },
+      {
+       "first": "change",
+       "base": 130210026375,
+       "change": 131751645680,
+       "baseStarts": 485,
+       "changeStarts": 365,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        16.404296875,
+        13.509765625
+       ]
+      },
+      {
+       "first": "base",
+       "base": 129738482941,
+       "change": 130691401401,
+       "baseStarts": 481,
+       "changeStarts": 339,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        12.6787109375,
+        11.89013671875
+       ]
+      },
+      {
+       "first": "change",
+       "base": 130209973640,
+       "change": 130860815494,
+       "baseStarts": 491,
+       "changeStarts": 342,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        11.87890625,
+        10.82763671875
+       ]
+      },
+      {
+       "first": "base",
+       "base": 129643901770,
+       "change": 130696184002,
+       "baseStarts": 476,
+       "changeStarts": 340,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        10.3046875,
+        9.8232421875
+       ]
+      },
+      {
+       "first": "change",
+       "base": 129598384701,
+       "change": 130762687883,
+       "baseStarts": 475,
+       "changeStarts": 340,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        10.7060546875,
+        11.77587890625
+       ]
+      },
+      {
+       "first": "base",
+       "base": 129705821213,
+       "change": 130969643027,
+       "baseStarts": 480,
+       "changeStarts": 341,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        11.22265625,
+        10.82763671875
+       ]
+      },
+      {
+       "first": "change",
+       "base": 129638166973,
+       "change": 130860497834,
+       "baseStarts": 476,
+       "changeStarts": 342,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        10.1904296875,
+        11.1689453125
+       ]
+      },
+      {
+       "first": "base",
+       "base": 129475686838,
+       "change": 130640149182,
+       "baseStarts": 475,
+       "changeStarts": 337,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        11.7705078125,
+        12.3134765625
+       ]
+      },
+      {
+       "first": "change",
+       "base": 129124219633,
+       "change": 130366239408,
+       "baseStarts": 464,
+       "changeStarts": 332,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        11.15576171875,
+        11.259765625
+       ]
+      },
+      {
+       "first": "base",
+       "base": 129264029193,
+       "change": 130265775908,
+       "baseStarts": 462,
+       "changeStarts": 333,
+       "uncounted": [
+        "(forked)"
+       ],
+       "load": [
+        10.15673828125,
+        10.00439453125
+       ]
+      }
+     ],
+     "medianBase": 129738482941,
+     "medianChange": 130696184002,
+     "medianRatio": 1.0077
+    }
+   }
+  }
+ ],
+ "psCpu": {
+  "ps -p <pid> -o pid=,ppid=,pgid=,lstart= (start-time, beat-ps)": {
+   "command": "/usr/bin/time -p /bin/sh -c 'i=0; while [ $i -lt 200 ]; do /bin/ps -p 14540 -o pid=,ppid=,pgid=,lstart= >/dev/null; i=$((i+1)); done'",
+   "starts": 200,
+   "userSeconds": 0.13,
+   "sysSeconds": 0.24,
+   "cpuMsPerStart": 1.85
+  },
+  "ps -E -ww -o command= -p <pid> (token)": {
+   "command": "/usr/bin/time -p /bin/sh -c 'i=0; while [ $i -lt 200 ]; do /bin/ps -E -ww -o command= -p 14540 >/dev/null; i=$((i+1)); done'",
+   "starts": 200,
+   "userSeconds": 0.16,
+   "sysSeconds": 0.25,
+   "cpuMsPerStart": 2.05
+  },
+  "ps -A -o pid=,ppid=,pgid=,lstart= (provable)": {
+   "command": "/usr/bin/time -p /bin/sh -c 'i=0; while [ $i -lt 200 ]; do /bin/ps -A -o pid=,ppid=,pgid=,lstart= >/dev/null; i=$((i+1)); done'",
+   "starts": 200,
+   "userSeconds": 0.63,
+   "sysSeconds": 2.34,
+   "cpuMsPerStart": 14.85
+  },
+  "helper scan <marker> (scan-beat, scan-cleanup)": {
+   "command": "/usr/bin/time -p /bin/sh -c 'i=0; while [ $i -lt 200 ]; do /Users/<user>/private/deepbuild-core/.claude/worktrees/issue-2649-sandbox-starts-e8d480/packages/supervisor/dist/helper scan dev.deepbuild.run.none >/dev/null; i=$((i+1)); done'",
+   "starts": 200,
+   "userSeconds": 0.22,
+   "sysSeconds": 0.55,
+   "cpuMsPerStart": 3.85
+  },
+  "/usr/bin/true (the floor)": {
+   "command": "/usr/bin/time -p /bin/sh -c 'i=0; while [ $i -lt 200 ]; do /usr/bin/true >/dev/null; i=$((i+1)); done'",
+   "starts": 200,
+   "userSeconds": 0.11,
+   "sysSeconds": 0.2,
+   "cpuMsPerStart": 1.55
+  },
+  "measured": "2026-11-20T07:59:05.037Z",
+  "load": [
+   7.376953125,
+   21.57470703125,
+   41.2041015625
+  ]
+ },
+ "recommendation": {
+  "cuts": [
+   {
+    "cut": "B: a run that is over is scanned no more",
+    "why": "Measured: median instructions fell 12.8% on sandbox-setup, 9.1% on runner-job and 1.0% on command-check-count, lower in 15, 15 and 14 of 15 rounds, with 46 of 172 starts gone from sandbox-setup's 20 runs. It needs no new mechanism and changes no event. As tried it stops after one empty scan, which has a race: helper scan lists PIDs once and checks each in turn, so a member can fork and exit between the two and leave an empty answer while its child lives; the issue's cut needs two empty scans in a row (one more helper start a run, not measured). As tried it fails one existing test, packages/supervisor/src/supervisor.test.ts 'a cleaned run has no scan of its sandbox still running', in 3 of 3 runs alone (main passes 3 of 3; out/tests.txt): that test needs a timed scan to be running while run.cleaned is recorded (its precondition, 'without one the test shows nothing'), and the cut leaves none to run for a run already drained. The test's guarantee (no scan outlives a cleanup) still holds; its precondition has to be rewritten, which needs an approved proposal, so the cut belongs in an issue of its own and not in a quiet follow-up.",
+    "criterion": "A sandboxed run whose first process has exited, and whose sandbox two helper scans in a row found empty (the second begun after the first ended, both begun after that exit), starts no further helper scan, timed or in cleanup: in docs/spikes/2649/measure.mjs starts command-check its cleanup records run.cleaned and process.ended as on main and starts at most 2 helper scans (main: 4), with no timed beat for the run after it; sandbox-setup's median instructions retired over 15 alternated rounds against main (measure.mjs cut) are lower; a run that leaves a forked process behind at its first process's exit is still found, signalled and recorded (tests/acceptance/236's leftover and late-grandchild cases pass unchanged); and supervisor.test.ts's no-scan-after-cleanup case is rewritten, by an approved proposal, to make its timed scan with a run still live, and passes."
+   },
+   {
+    "cut": "A kept answer for the denial stream's filter, per macOS build",
+    "why": "Not tried as a patch. On this Mac (macOS 27.2.1) the subsystem filter never shows the canary, so every supervisor open starts 33 to 36 sandboxed canary probes (about 5.8 G instructions, most of the command check's counted 9.3 G) and a second log stream, and the first sandboxed run waits the warm-up's full 10 s. The first step is finding why the subsystem filter misses here when the Nov 10 audit found it on 27.2. The reports on 27.2.1 carry an empty subsystem (out/hand-e2e.txt, part 3).",
+    "criterion": "On a macOS whose sandbox reports don't carry the subsystem com.apple.sandbox.reporting, the second supervisor opened on the same macOS build starts at most 2 canary probes and one log stream before its first sandboxed run, and that run's start call returns (sup.start resolves `started`) within 1 s of being made (docs/spikes/2649/measure.mjs starts command-check, run twice); a refused write in that run is still recorded as sandbox.denied, and supervisor.test.ts's reports-other-subsystem case passes unchanged."
+   },
+   {
+    "cut": "A: helper scan prints each process's start time, and the beat runs no ps",
+    "why": "Measured: no change in instructions retired on the three tasks (median ratios 1.002, 0.999, 1.008), because the counter cannot read ps (setuid root), so what the cut removes was never in the count; on command-check-count it took the median starts of a run from 476 to 340 (the cut removes only ps starts, by construction). Its gain is a start a beat: an idle sandboxed run would start 10 processes a second instead of 20, for as long as it lives; out/ps.json puts a ps -p at 1.85 ms of CPU a start against 1.55 ms for /usr/bin/true, so most of what it saves (about 1.85 ms a beat) is the cost of starting any process. As tried it is macOS only: native/helper-linux.c prints no start, and the patched scanOnce would track nothing on Linux. Worth an issue only with a measure that reads ps, such as the supervisor's CPU time over an idle hour, and with the Linux helper printing the same field.",
+    "criterion": "An hour-long idle sandboxed run (docs/spikes/2649/measure.mjs starts idle-hour) starts at most 10.5 processes a second and no /bin/ps after its first process is tracked, on macOS; on Linux, where measure.mjs and the counter don't run, the supervisor starts no ps for a tracked process (a Linux test of its own, which doesn't exist yet); process.tracked carries the same start text as ps -o lstart= under LC_ALL=C for every process of tests/acceptance/236's suites; and the fork-to-process.tracked p95 (measure.mjs latency 200, median of 3 runs) is within 10% of main's read the same way on the same machine at a recorded load."
+   },
+   {
+    "cut": "Follow a run's forks by kernel event, the marker scan as a slower backstop",
+    "why": "Not tried. The helper's watch (kqueue NOTE_FORK and NOTE_EXIT) is built and started for runs with a file limit, but prints only exits: it would have to print each fork it attaches to. Following every sandboxed run with it would see a fork sooner than today's p50 of 113 ms and p95 of 174 ms (read at load 12.8 to 18.8 on 8 cores, above the 50 ms the beat alone explains), and would let the marker scan run far less often than every 100 ms; the scan stays for a process the watch misses (reparented or gone before it was attached), which only it can find. This is the design change the issue's three-way question points to, and the one with the most to gain over hours; it needs its own design pass on the backstop's period and on reading memory_mb.",
+    "criterion": "On the same machine and at a recorded load, the fork-to-process.tracked p95 of docs/spikes/2649/measure.mjs latency 200 (median of 3 runs) is at most a quarter of main's read the same way (a target: no watch-based reading exists yet; main read 174 ms on the spike's Mac at load 12.8), an hour-long idle sandboxed run starts at most 1 process a second, and tests/acceptance/236's cases for a grandchild in its own session and group, a process that outlives its parent, and a memory_mb stop pass unchanged."
+   }
+  ]
+ },
+ "latency": {
+  "main": "b4a2049e808c05a4ad0f727bb09c422b545cbb36",
+  "checkout": "72ed0f03eb9726ee149a99479a96f0a7df4cea37",
+  "command": "node docs/spikes/2649/measure.mjs latency 200",
+  "unit": "ms",
+  "samplesFile": "out/latency.samples.jsonl",
+  "samplesSha256": "67e4a42aff6678507c8d68d7e79083aa79372ca7eb4e7c7471c7e6b5d8bcb456",
+  "samples": 200,
+  "p50": 113,
+  "p95": 174,
+  "measured": "2026-11-20T06:04:06.708Z",
+  "load": {
+   "before": [
+    12.84521484375,
+    17.685546875,
+    18.80859375
+   ],
+   "after": [
+    12.259765625,
+    16.93798828125,
+    18.482421875
+   ]
+  }
+ }
+}
