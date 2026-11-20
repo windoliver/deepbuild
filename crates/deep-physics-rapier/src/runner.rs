@@ -31,6 +31,7 @@ use deep_canvas_physics::track::{self, Entry};
 use serde_json::{json, Map, Value};
 
 mod audit;
+pub mod centre;
 pub mod contact;
 pub mod fast;
 mod held;
@@ -89,6 +90,8 @@ pub struct Run {
     ccd_on_kinematic: bool,
     /// #251's planted vehicle controller or check.
     vehicle: crate::VehiclePlant,
+    /// #2240's planted check or output.
+    centre: centre::Plant,
     /// The views this runner holds open, by session (#522).
     #[cfg(not(target_arch = "wasm32"))]
     views: std::cell::RefCell<BTreeMap<String, live::View>>,
@@ -463,6 +466,7 @@ impl Run {
             lint: deep_canvas_physics::fast::Planted::None,
             ccd_on_kinematic: false,
             vehicle: crate::VehiclePlant::None,
+            centre: centre::Plant::None,
             #[cfg(not(target_arch = "wasm32"))]
             views: std::cell::RefCell::default(),
         };
@@ -497,6 +501,7 @@ impl Run {
                     && !vehicle::planted(name, &mut run)
                     && !walk::planted(name, &mut run)
                     && !contact::planted(name, &mut run)
+                    && !centre::planted(name, &mut run)
                     && !fast::planted(name, &mut run) =>
             {
                 return None
@@ -580,7 +585,7 @@ impl Run {
     /// The world `v` holds, built, or the issues that refuse it.
     fn build(&self, v: &Value) -> Result<(World, Rapier), Value> {
         let refused = |e: Vec<Refusal>| refused(&e);
-        let w = contact::check(v, self).map_err(refused)?;
+        let w = centre::check(v, self).map_err(refused)?;
         let mut b = Rapier {
             restore_any_version: self.restore_any_version,
             reverse_pairs: cfg!(feature = "test-reverse-pairs"),
@@ -647,6 +652,7 @@ impl Run {
             }
         }
         vehicle::take(b, w, t, (k, start, plan.every));
+        centre::take(self, b, w, &c, t);
         if (k - start).is_multiple_of(plan.every) {
             let read = b.read();
             for s in read.bodies {

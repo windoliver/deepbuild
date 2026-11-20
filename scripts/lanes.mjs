@@ -932,6 +932,8 @@ timed.push('tests/acceptance/2032/ac8-budget.test.ts', 'tests/acceptance/2032-re
 alone.push('tests/acceptance/182/', 'tests/acceptance/182-oracle/controllers-py-rapier.test.ts', 'tests/acceptance/182-oracle-redraft-climb/');
 timed.push('tests/acceptance/182/ac11-budgets.test.ts');
 byHand.push('tests/acceptance/182-oracle/character-controller-rapier.test.ts');
+// #2240's files build deep-physics (release), and ac5 the merge base's release build in a second checkout.
+alone.push('tests/acceptance/2240/');
 // #2309's files build deep-physics (shipped and release), its wasm32 library and the merge base's release build.
 alone.push('tests/acceptance/2309/', 'tests/acceptance/2243/'); // #2243's build it too, release and test-backends.
 // #2241's files build deep-physics (release and test-backends) and the merge base's release build; the blind redraft of
