@@ -59,7 +59,7 @@ index 68a60b35b..57aea515b 100644
      (pid, start)
  }
 diff --git a/crates/deep-hook/src/main.rs b/crates/deep-hook/src/main.rs
-index 89532b190..a01b560f9 100644
+index 89532b190..0bc3266fa 100644
 --- a/crates/deep-hook/src/main.rs
 +++ b/crates/deep-hook/src/main.rs
 @@ -13,10 +13,11 @@ use std::fs;
@@ -169,7 +169,7 @@ index 89532b190..a01b560f9 100644
          Err(_) => ExitCode::from(1),
      }
  }
-@@ -1939,8 +1940,36 @@ fn clone(from: &Path, to: &Path) -> ExitCode {
+@@ -1939,8 +1940,42 @@ fn clone(from: &Path, to: &Path) -> ExitCode {
      }
  }
  
@@ -181,7 +181,9 @@ index 89532b190..a01b560f9 100644
 +    extern "C" {
 +        fn execv(path: *const std::ffi::c_char, argv: *const *const std::ffi::c_char) -> i32;
 +    }
-+    let hook_call = matches!(args, [agent, _] if !agent.starts_with('-')) || args.first().is_some_and(|a| a == "spool-send");
++    // The forms main() reads as a hook call ([agent, event] and [agent, "waiter"]), and spool-send.
++    let hook_call = matches!(args, [agent, _] if !agent.starts_with('-') && agent != "statusline-send" && agent != "mcp")
++        || matches!(args, [arg, _] if arg == "spool-send");
 +    let joins = fs::read_dir(home().join("hubs"))
 +        .map(|d| d.flatten().any(|e| e.path().extension().is_some_and(|x| x == "json")))
 +        .unwrap_or(false);
@@ -196,6 +198,10 @@ index 89532b190..a01b560f9 100644
 +        argv.push(std::ptr::null());
 +        // SAFETY: path and argv are NUL-terminated and live through the call; execv returns only on failure.
 +        unsafe { execv(path.as_ptr(), argv.as_ptr()) };
++        // This build has no route to a joined hub: carrying on would send a joined project's call to this machine's
++        // hub instead, so the call stops here, as a hook that can't reach its hub at all would.
++        eprintln!("deep-hook: this machine joined a project, and deep-hook-joined beside deep-hook can't start: {}", io::Error::last_os_error());
++        std::process::exit(1);
 +    }
 +}
 +
@@ -353,14 +359,15 @@ index 44d59746d..7539262ce 100644
  
 diff --git a/crates/deep-hook/src/spawn.rs b/crates/deep-hook/src/spawn.rs
 new file mode 100644
-index 000000000..ab83e7748
+index 000000000..c3bd692eb
 --- /dev/null
 +++ b/crates/deep-hook/src/spawn.rs
-@@ -0,0 +1,166 @@
+@@ -0,0 +1,172 @@
 +//! Spike #2175, cut A: deep-hook's children started with posix_spawn directly instead of std's `Command`, so the
 +//! binary no longer links std's fork-and-exec fallback (fork, execvp, setuid, setgid, setgroups, chroot, chdir,
 +//! setsid, setpgid, signal, dlsym, _exit and the rest). A child's SIGPIPE is set back to the default, as `Command`
-+//! does, since Rust's runtime ignores it in deep-hook.
++//! does, since Rust's runtime ignores it in deep-hook, and its signal mask is empty. macOS only as written: sigset_t
++//! is a u32 there, and the environment comes from _NSGetEnviron.
 +
 +use std::ffi::{c_char, c_void, CString, OsStr};
 +use std::fs::File;
@@ -391,6 +398,7 @@ index 000000000..ab83e7748
 +    fn posix_spawnattr_init(attr: *mut *mut c_void) -> i32;
 +    fn posix_spawnattr_setflags(attr: *mut *mut c_void, flags: i16) -> i32;
 +    fn posix_spawnattr_setsigdefault(attr: *mut *mut c_void, set: *const u32) -> i32;
++    fn posix_spawnattr_setsigmask(attr: *mut *mut c_void, set: *const u32) -> i32;
 +    fn posix_spawnattr_destroy(attr: *mut *mut c_void) -> i32;
 +    fn waitpid(pid: i32, status: *mut i32, options: i32) -> i32;
 +    fn pipe(fds: *mut i32) -> i32;
@@ -400,6 +408,7 @@ index 000000000..ab83e7748
 +}
 +
 +const POSIX_SPAWN_SETSIGDEF: i16 = 0x04;
++const POSIX_SPAWN_SETSIGMASK: i16 = 0x08;
 +const SIGPIPE: u32 = 13;
 +const O_RDWR: i32 = 2;
 +const F_SETFD: i32 = 2;
@@ -489,7 +498,10 @@ index 000000000..ab83e7748
 +            }
 +            let sigs: u32 = 1 << (SIGPIPE - 1);
 +            check(posix_spawnattr_setsigdefault(&mut attr, &sigs))?;
-+            check(posix_spawnattr_setflags(&mut attr, POSIX_SPAWN_SETSIGDEF))?;
++            // And an empty signal mask, as std's Command gives its children.
++            let none: u32 = 0;
++            check(posix_spawnattr_setsigmask(&mut attr, &none))?;
++            check(posix_spawnattr_setflags(&mut attr, POSIX_SPAWN_SETSIGDEF | POSIX_SPAWN_SETSIGMASK))?;
 +            let mut pid = 0;
 +            check(posix_spawnp(&mut pid, file.as_ptr(), &actions, &attr, argv.as_ptr(), envp_ptr))?;
 +            Ok(pid)

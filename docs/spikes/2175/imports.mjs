@@ -3,10 +3,12 @@
 // clang on PATH:
 //   node docs/spikes/2175/imports.mjs           prints one JSON object: record.json's `imports`
 //   node docs/spikes/2175/imports.mjs table     prints the README's table rows from docs/spikes/2175/record.json
-// Callers are read from the disassembly (`otool -tV`: each `bl` to a symbol stub, under the function label it sits in).
+// Callers are read from the disassembly (`otool -tV`: each `bl` or `b` to a symbol stub, and each literal pool load of
+// a symbol's address, under the function label it sits in), named by Xcode's llvm-cxxfilt.
 // Paths are traced: a dylib inserted with DYLD_INSERT_LIBRARIES interposes every imported function, logs the first
 // call to each made from deep-hook's own __TEXT (libSystem calling itself isn't counted), and jumps on to the real
-// function with the argument registers and the stack untouched. Each path runs once under it, in every process it
+// function with the argument registers and the stack untouched. A tail call (`b` to a stub) carries its caller's
+// return address, so one made by a function libSystem or dyld entered is missed: the table marks those symbols. Each path runs once under it, in every process it
 // starts: `--version`; a PreToolUse Read a stand-in hub answers (hello, acknowledgement, empty reply on
 // ~/.deepbuild/hub.sock); and the same Read with no hub, which spools. ___stack_chk_guard is data, dyld_stub_binder
 // and __tlv_bootstrap are called by dyld, and _bzero and _strlen crash the process when interposed alone (dyld or
@@ -22,21 +24,19 @@ const REPO = fileURLToPath(new URL('../../../', import.meta.url));
 const NOT_TRACED = ['___stack_chk_guard', 'dyld_stub_binder', '__tlv_bootstrap', '_bzero', '_strlen'];
 const PATHS = ['version', 'hubAnswers', 'hubAway'];
 
-/** A Rust v0 or legacy mangled name as its path of identifiers: `std::sys::process::...::Command::spawn`. */
-export function demangle(name) {
-  let s = name.replace(/^_+/, '');
-  if (!/^R|^ZN/.test(s)) return name;
-  s = s.replace(/Cs[0-9A-Za-z]*_/g, ' ').replace(/^ZN|^R/, '');
-  const parts = [];
-  for (let i = 0; i < s.length;) {
-    const m = /^(\d+)(_?)/.exec(s.slice(i));
-    if (!m) { i++; continue; }
-    const n = Number(m[1]);
-    const id = s.slice(i + m[0].length, i + m[0].length + n);
-    i += m[0].length + Math.max(n, 1);
-    if (/^[A-Za-z_][\w$]*$/.test(id) && !/^h[0-9a-f]{16}$/.test(id)) parts.push(id);
-  }
-  return parts.join('::') || name;
+/** Mangled names as llvm-cxxfilt (Xcode's, which reads Rust v0) prints them, generic arguments dropped, so a rule
+ *  below matches the function's own path: `<std::sys::process::unix::common::Command>::spawn` reads
+ *  `std::sys::process::unix::common::Command::spawn`. */
+export function demangleAll(names) {
+  if (!names.length) return [];
+  // Mach-O adds one underscore to every symbol.
+  const out = execFileSync('xcrun', ['llvm-cxxfilt'], { input: names.map((n) => n.replace(/^_/, '')).join('\n'), encoding: 'utf8', maxBuffer: 1 << 30 }).split('\n');
+  return names.map((n, i) => simplify(out[i] ?? n));
+}
+function simplify(name) {
+  let s = name.replace(/^<([^<>]*?)(?: as [^<>]*)?>::/, '$1::');
+  for (let before = ''; before !== s;) { before = s; s = s.replace(/<[^<>]*>/g, ''); }
+  return s;
 }
 
 /** The part of the program one calling function belongs to, by the first rule its path matches. */
@@ -67,15 +67,22 @@ export function group(callers) {
 const sh = (c, a, opts = {}) => execFileSync(c, a, { encoding: 'utf8', maxBuffer: 1 << 30, ...opts });
 const importsOf = (bin) => sh('nm', ['-u', bin]).split('\n').map((s) => s.trim()).filter(Boolean);
 
+/** Per imported symbol, the functions that call it through its stub (`bl`, or `b` as a tail call) or load its
+ *  address (a literal pool load, as ring's C code loads ___stack_chk_guard), and whether any call is a tail call. */
 function callers(bin, imports) {
-  const found = new Map(imports.map((s) => [s, new Set()]));
+  const found = new Map(imports.map((s) => [s, { fns: new Set(), tail: false }]));
   let fn = '?';
   for (const line of sh('otool', ['-tV', bin]).split('\n')) {
     if (/^\S.*:$/.test(line)) { fn = line.slice(0, -1); continue; }
-    const m = line.match(/symbol stub for: (\S+)/);
-    if (m && found.has(m[1])) found.get(m[1]).add(demangle(fn));
+    const m = line.match(/\t(bl?)\t.*symbol stub for: (\S+)$/) ?? line.match(/()literal pool symbol address: (\S+)$/);
+    if (!m || !found.has(m[2])) continue;
+    found.get(m[2]).fns.add(fn);
+    if (m[1] === 'b') found.get(m[2]).tail = true;
   }
-  return found;
+  const names = [...new Set([...found.values()].flatMap((f) => [...f.fns]))];
+  const readable = demangleAll(names);
+  const plain = new Map(names.map((n, i) => [n, readable[i]]));
+  return new Map([...found].map(([s, f]) => [s, { fns: [...new Set([...f.fns].map((n) => plain.get(n)))].sort(), tail: f.tail }]));
 }
 
 function tracer(imports, dir) {
@@ -145,7 +152,8 @@ async function traced(bin, dylib, path) {
   let answered = 0;
   if (path === 'hubAnswers') {
     server = createServer((sock) => {
-      sock.write('{"v":1}\n');
+      // A hello as a hub of this contract sends one: its ID, writer generation, contract and features.
+      sock.write('{"v":1,"hub":"spike-2175","generation":1,"contract":"1.0","features":[]}\n');
       let buf = '';
       sock.on('error', () => {});
       sock.on('data', (d) => {
@@ -182,18 +190,22 @@ async function traced(bin, dylib, path) {
 }
 
 if (process.argv[1] !== fileURLToPath(import.meta.url)) {
-  // Imported for demangle() and group(): nothing runs.
+  // Imported for demangleAll() and group(): nothing runs.
 } else if (process.argv[2] === 'table') {
   const { imports } = JSON.parse(readFileSync(join(REPO, 'docs/spikes/2175/record.json'), 'utf8'));
   const short = (f) => f.replace(/^deep_hook::/, '').replace(/^std::sys::/, 'std::').replace(/^core::ptr::drop_glue::.*/, 'a drop');
   for (const [sym, s] of Object.entries(imports.symbols)) {
     const code = [...new Set(s.callers.map(short))];
     const shown = code.slice(0, 3).join('; ') + (code.length > 3 ? `; and ${code.length - 3} more` : '') || 'none in the binary\'s code';
-    const on = PATHS.filter((p) => s.paths[p]).map((p) => ({ version: '--version', hubAnswers: 'hub answers', hubAway: 'hub away' })[p]);
-    const reach = s.traced ? (on.length ? on.join(', ') : 'none of the three') : `not traced (${s.untraced})`;
+    const on = PATHS.filter((p) => s.paths?.[p]).map((p) => ({ version: '--version', hubAnswers: 'hub answers', hubAway: 'hub away' })[p]);
+    const missable = s.tailCalled ? ' (tail-called somewhere: the tracer can miss such a call)' : '';
+    const reach = s.traced ? (on.length ? on.join(', ') : `none of the three${missable}`) : `not traced (${s.untraced})`;
     console.log(`| \`${sym}\` | ${s.group} | ${shown.replace(/\|/g, '\\|')} | ${reach} |`);
   }
 } else {
+  // What is traced is the working tree's build, recorded as HEAD: so the crates must be HEAD's.
+  const dirty = execFileSync('git', ['status', '--porcelain', '--', 'crates', 'Cargo.toml', 'Cargo.lock', 'adapters'], { cwd: REPO, encoding: 'utf8' }).trim();
+  if (dirty) throw Error(`the crates differ from HEAD; commit or set aside first:\n${dirty}`);
   const env = { ...process.env, PATH: `${process.env.PATH}:${process.env.HOME}/.cargo/bin` };
   execFileSync('cargo', ['build', '--release', '--locked', '-q', '-p', 'deep-hook'], { cwd: REPO, env, stdio: 'inherit' });
   const work = mkdtempSync(join(tmpdir(), 'deep-2175-imports-'));
@@ -214,11 +226,13 @@ if (process.argv[1] !== fileURLToPath(import.meta.url)) {
       count: imports.length,
       processes: Object.fromEntries(PATHS.map((p) => [p, runs[p].processes])),
       symbols: Object.fromEntries(imports.map((s) => [s, {
-        group: group([...found.get(s)]),
-        callers: [...found.get(s)].sort(),
+        group: group(found.get(s).fns),
+        callers: found.get(s).fns,
+        tailCalled: found.get(s).tail,
         traced: !NOT_TRACED.includes(s),
         ...(NOT_TRACED.includes(s) ? { untraced: why[s] } : {}),
-        paths: Object.fromEntries(PATHS.map((p) => [p, runs[p].called.has(s)])),
+        // null for a symbol the tracer doesn't follow: not traced, not "not called".
+        paths: NOT_TRACED.includes(s) ? null : Object.fromEntries(PATHS.map((p) => [p, runs[p].called.has(s)])),
       }])),
     }, null, 1));
   } finally {

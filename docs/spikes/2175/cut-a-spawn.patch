@@ -184,14 +184,15 @@ index 44d59746d..52999a801 100644
  
 diff --git a/crates/deep-hook/src/spawn.rs b/crates/deep-hook/src/spawn.rs
 new file mode 100644
-index 000000000..ab83e7748
+index 000000000..c3bd692eb
 --- /dev/null
 +++ b/crates/deep-hook/src/spawn.rs
-@@ -0,0 +1,166 @@
+@@ -0,0 +1,172 @@
 +//! Spike #2175, cut A: deep-hook's children started with posix_spawn directly instead of std's `Command`, so the
 +//! binary no longer links std's fork-and-exec fallback (fork, execvp, setuid, setgid, setgroups, chroot, chdir,
 +//! setsid, setpgid, signal, dlsym, _exit and the rest). A child's SIGPIPE is set back to the default, as `Command`
-+//! does, since Rust's runtime ignores it in deep-hook.
++//! does, since Rust's runtime ignores it in deep-hook, and its signal mask is empty. macOS only as written: sigset_t
++//! is a u32 there, and the environment comes from _NSGetEnviron.
 +
 +use std::ffi::{c_char, c_void, CString, OsStr};
 +use std::fs::File;
@@ -222,6 +223,7 @@ index 000000000..ab83e7748
 +    fn posix_spawnattr_init(attr: *mut *mut c_void) -> i32;
 +    fn posix_spawnattr_setflags(attr: *mut *mut c_void, flags: i16) -> i32;
 +    fn posix_spawnattr_setsigdefault(attr: *mut *mut c_void, set: *const u32) -> i32;
++    fn posix_spawnattr_setsigmask(attr: *mut *mut c_void, set: *const u32) -> i32;
 +    fn posix_spawnattr_destroy(attr: *mut *mut c_void) -> i32;
 +    fn waitpid(pid: i32, status: *mut i32, options: i32) -> i32;
 +    fn pipe(fds: *mut i32) -> i32;
@@ -231,6 +233,7 @@ index 000000000..ab83e7748
 +}
 +
 +const POSIX_SPAWN_SETSIGDEF: i16 = 0x04;
++const POSIX_SPAWN_SETSIGMASK: i16 = 0x08;
 +const SIGPIPE: u32 = 13;
 +const O_RDWR: i32 = 2;
 +const F_SETFD: i32 = 2;
@@ -320,7 +323,10 @@ index 000000000..ab83e7748
 +            }
 +            let sigs: u32 = 1 << (SIGPIPE - 1);
 +            check(posix_spawnattr_setsigdefault(&mut attr, &sigs))?;
-+            check(posix_spawnattr_setflags(&mut attr, POSIX_SPAWN_SETSIGDEF))?;
++            // And an empty signal mask, as std's Command gives its children.
++            let none: u32 = 0;
++            check(posix_spawnattr_setsigmask(&mut attr, &none))?;
++            check(posix_spawnattr_setflags(&mut attr, POSIX_SPAWN_SETSIGDEF | POSIX_SPAWN_SETSIGMASK))?;
 +            let mut pid = 0;
 +            check(posix_spawnp(&mut pid, file.as_ptr(), &actions, &attr, argv.as_ptr(), envp_ptr))?;
 +            Ok(pid)

@@ -20,10 +20,10 @@ index 8b75d87b2..a56b09cf7 100644
  # lists it too, and sends it anyway when DEEP_HOOK_FORCE_F_TEST=1.
  plant-f-test = []
 diff --git a/crates/deep-hook/src/main.rs b/crates/deep-hook/src/main.rs
-index 89532b190..cafee2cfb 100644
+index 89532b190..0a475fef5 100644
 --- a/crates/deep-hook/src/main.rs
 +++ b/crates/deep-hook/src/main.rs
-@@ -1939,8 +1939,36 @@ fn clone(from: &Path, to: &Path) -> ExitCode {
+@@ -1939,8 +1939,42 @@ fn clone(from: &Path, to: &Path) -> ExitCode {
      }
  }
  
@@ -35,7 +35,9 @@ index 89532b190..cafee2cfb 100644
 +    extern "C" {
 +        fn execv(path: *const std::ffi::c_char, argv: *const *const std::ffi::c_char) -> i32;
 +    }
-+    let hook_call = matches!(args, [agent, _] if !agent.starts_with('-')) || args.first().is_some_and(|a| a == "spool-send");
++    // The forms main() reads as a hook call ([agent, event] and [agent, "waiter"]), and spool-send.
++    let hook_call = matches!(args, [agent, _] if !agent.starts_with('-') && agent != "statusline-send" && agent != "mcp")
++        || matches!(args, [arg, _] if arg == "spool-send");
 +    let joins = fs::read_dir(home().join("hubs"))
 +        .map(|d| d.flatten().any(|e| e.path().extension().is_some_and(|x| x == "json")))
 +        .unwrap_or(false);
@@ -50,6 +52,10 @@ index 89532b190..cafee2cfb 100644
 +        argv.push(std::ptr::null());
 +        // SAFETY: path and argv are NUL-terminated and live through the call; execv returns only on failure.
 +        unsafe { execv(path.as_ptr(), argv.as_ptr()) };
++        // This build has no route to a joined hub: carrying on would send a joined project's call to this machine's
++        // hub instead, so the call stops here, as a hook that can't reach its hub at all would.
++        eprintln!("deep-hook: this machine joined a project, and deep-hook-joined beside deep-hook can't start: {}", io::Error::last_os_error());
++        std::process::exit(1);
 +    }
 +}
 +
