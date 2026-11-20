@@ -2027,6 +2027,14 @@
         }
       }
     },
+    "packages/pi/package.json": {
+      "devDependencies": {
+        "@deepbuild/hub": {
+          "spec": "0.0.0",
+          "why": "tools.mjs reads the hub's dist at build time, so the workspace graph names the hub and the mutation lane rebuilds pi after it (#1120); never installed with the published package."
+        }
+      }
+    },
     "packages/conformance/package.json": {
       "dependencies": {
         "@deepbuild/adapters": {

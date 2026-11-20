@@ -2,6 +2,8 @@
 // directory of their own that perf keeps between runs, so a second preflight rebuilds no dependency on
 // either side; neither side shares one with the other or with the working tree's target/. Run through
 // scripts/preflight.mjs in the fixture repository, twice.
+// Tagged with criterion 2: the change adds only a dependency the warm-up builds, plus a test file the
+// compared run leaves out, and both preflights must pass with the measured cpuMs within the 50% margin (contract 6).
 import assert from 'node:assert/strict';
 import { existsSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
@@ -10,7 +12,7 @@ import { buildDir, describe, fixture, inside, isDependency, side, tail, verdict 
 
 const sides = ['working tree', 'merge base', 'without own tests'];
 
-test('a second preflight builds no dependency in either copy: each side reuses a build directory of its own, kept between runs, outside the working tree\'s target/', (t) => {
+test('#594.5f88bcfc #594.18edc4ce a second preflight builds no dependency in either copy: each side reuses a build directory of its own, kept between runs, outside the working tree\'s target/', (t) => {
   const repo = fixture(t);
   // The #337 shape: the change adds a dependency (dep-b, about 2 s of CPU to check and as much to
   // build) and a test file of its own, so perf runs both copies.

@@ -1,6 +1,8 @@
 // #594 acceptance: warm() in scripts/benchmark.mjs also warms the lint lane's clippy, so a measured
 // run that lints compares warm with warm. warm() is called in a child process, from the fixture's
 // copy of this checkout's scripts/, with the sandbox's environment.
+// Not tagged with a criterion: it proves the mechanism (clippy warmed), not the measured cpuMs within the margin
+// that criterion 2 names; margin.test.mjs and build-dirs.test.mjs prove that through the whole lane.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
