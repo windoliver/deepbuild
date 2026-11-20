@@ -414,8 +414,9 @@ fn index_html(
     let stamp = stamp
         .map(|s| format!("<meta name=\"exported\" content=\"{s}\">\n"))
         .unwrap_or_default();
-    // #2856: a line the player's element removes as its first act, so only a page whose script never ran shows it;
-    // the script blocks rendering until it has run, so an untouched page never paints the line.
+    // #2856: a line the player's element removes as its first act, so only a page whose script never ran shows it.
+    // The element's script is render-blocking: the page paints nothing until it has arrived, so an untouched page
+    // doesn't flash the line while the script loads.
     let fallback = escape(manifest["fallback"]["index"].as_str().unwrap_or_default());
     format!(
         "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n\
