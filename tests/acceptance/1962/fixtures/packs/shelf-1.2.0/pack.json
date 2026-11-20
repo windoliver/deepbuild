@@ -1,0 +1,77 @@
+{
+  "name": "shelf",
+  "version": "1.2.0",
+  "license": "MIT",
+  "description": "A test pack of the #1962 acceptance suite, by an outside owner: the shelf pack's release that ships its bookcase at its second major.",
+  "requires": {
+    "core": ">=0.0.0",
+    "modules": {
+      "marks2d": ">=0.0.0"
+    }
+  },
+  "recipes": {
+    "shelf.bookcase@2": "shelf.bookcase@2.json"
+  },
+  "kinds": {
+    "shelf.bookcase@2": {
+      "minor": 0,
+      "recipe": "shelf.bookcase@2",
+      "children": [],
+      "capabilities": {
+        "pickable": true,
+        "snap": false
+      },
+      "rules": [],
+      "twins": [],
+      "migrate": {
+        "1": {
+          "rename": {
+            "levels": "shelves"
+          },
+          "set": {
+            "depth": "old.width * 0.25"
+          },
+          "drop": []
+        }
+      },
+      "examples": [],
+      "cost": {
+        "class": "figure",
+        "at_defaults": {
+          "cpu_ms": 0.5,
+          "gpu_ms": 0.2,
+          "items": 7
+        }
+      }
+    }
+  },
+  "corpus": {
+    "1": [
+      "31f37886add6319d537ad6fb0c0a265bf15e1ddb62304ecf92af75aedcdfa97c"
+    ],
+    "2": [
+      "7113cd62dd33f6c9326f540e95def14352b427e83a2c1ae672e1fbedb23e1b3d",
+      "e6fc2ed621db6c0185d389c879f6b411549765f21ef74f60ec98bbd43990eaa6"
+    ]
+  },
+  "assets": [
+    {
+      "path": "corpus/case-1.json",
+      "sha256": "31f37886add6319d537ad6fb0c0a265bf15e1ddb62304ecf92af75aedcdfa97c",
+      "size": 2911,
+      "license": "MIT"
+    },
+    {
+      "path": "corpus/room.json",
+      "sha256": "7113cd62dd33f6c9326f540e95def14352b427e83a2c1ae672e1fbedb23e1b3d",
+      "size": 8664,
+      "license": "MIT"
+    },
+    {
+      "path": "corpus/lift.json",
+      "sha256": "e6fc2ed621db6c0185d389c879f6b411549765f21ef74f60ec98bbd43990eaa6",
+      "size": 7004,
+      "license": "MIT"
+    }
+  ]
+}
