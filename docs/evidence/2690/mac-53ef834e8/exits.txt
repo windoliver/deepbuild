@@ -1,0 +1,22 @@
+start; cc --version exit 0; screen-lock flag 0; Now drawing from 'AC Power' 21:53:23 load { 125.45 133.27 133.55 } thermal 1 free KB 366002216
+BASE clone at a0d3713a74ce38caf4fdb4219cd34a0b971ade0e; origin/claude/fix-2690-ask-row-word 53ef834e811a81574b17fafa079dadf4e4889d30; origin/main b4a2049e808c05a4ad0f727bb09c422b545cbb36 21:53:53 load { 117.05 130.42 132.50 } thermal 1 free KB 363925480
+base copied tests: 5 changed paths (base-copied-tests.txt) 21:53:54 load { 130.34 132.96 133.39 } thermal 1 free KB 363923452
+setup base (npm ci, workspace build, deep-hook, deep-drive) exit=0 22:04:23 load { 63.08 99.71 114.69 } thermal 1 free KB 350626860
+base-2690.txt:  Tests 1 failed | 2 passed (3) exit=1 22:05:45 load { 53.98 90.24 109.82 } thermal 1 free KB 347676168
+clone ~/private/d2690b removed 22:05:53 load { 53.26 89.49 109.44 } thermal 1 free KB 353614456
+FIX clone at 53ef834e811a81574b17fafa079dadf4e4889d30; origin/claude/fix-2690-ask-row-word 53ef834e811a81574b17fafa079dadf4e4889d30; origin/main 825447c41aae6433d6a6c29465f845b437582188 22:06:49 load { 50.48 82.38 105.52 } thermal 1 free KB 350828956
+setup fix (npm ci, workspace build, deep-hook, deep-drive) exit=0 22:16:06 load { 66.33 73.45 88.32 } thermal 1 free KB 335729868
+fix-2690.txt:  Tests 1 failed | 2 passed (3) exit=1 22:16:40 load { 44.43 67.15 85.42 } thermal 1 free KB 333136212
+fix-1461-ac27.txt:  Tests 2 passed | 6 skipped (8) exit=0 22:16:49 load { 41.76 66.22 84.99 } thermal 1 free KB 332374296
+fix-1172-rows.txt:  Tests 2 passed (2) exit=0 22:24:35 load { 12.39 31.79 59.73 } thermal 1 free KB 322055884
+tests/acceptance/1810 copied from origin/claude/fix-1810-needs-you-count-7d090b (4270ff30fb792981e410cde975a0a1835a92025d) 22:24:36 load { 12.60 31.52 59.47 } thermal 1 free KB 321935620
+fix-1810-redraft.txt:  Tests 1 failed | 5 passed (6) exit=1 22:25:09 load { 13.48 29.96 57.94 } thermal 1 free KB 319402500
+tests/acceptance/1810 restored; porcelain lines under it: 15 22:25:09 load { 13.48 29.96 57.94 } thermal 1 free KB 319402484
+fix-1459-ac6-before.txt: test result: FAILED. 0 passed; 1 failed exit=1 22:36:35 load { 99.11 109.56 91.11 } thermal 1 free KB 296237252
+retake: 3/3 views exit 0; files copied: needs-you.json session.json sidebar.json  22:38:18 load { 79.51 101.83 90.39 } thermal 1 free KB 292888488
+live-diff:  3 files changed, 208 insertions(+), 208 deletions(-) 22:38:18 load { 79.51 101.83 90.39 } thermal 1 free KB 292879624
+fix-1459-ac6-after.txt: test result: FAILED. 0 passed; 1 failed exit=1 22:38:24 load { 76.26 100.79 90.09 } thermal 1 free KB 293237684
+fix-1459-parity.txt:  Tests 2 failed | 1 passed (3) exit=1 22:39:52 load { 63.46 91.64 87.72 } thermal 1 free KB 288680120
+fix git status --porcelain lines after (retaken captures included): 18 22:39:52 load { 63.46 91.64 87.72 } thermal 1 free KB 288711488
+clone ~/private/d2690b removed 22:40:07 load { 59.21 89.31 86.96 } thermal 1 free KB 313240132
+secret scan hits=0 22:40:07 load { 59.21 89.31 86.96 } thermal 1 free KB 313220376

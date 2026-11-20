@@ -2391,9 +2391,9 @@ impl RowDrawn {
         // The state word the hub wrote, in the language shown (#2403).
         let word = states::shown(&row.word);
         let name = if ask {
-            // Its state word follows the question, the word deep and the hub's row give it (#1463, #2690); its
-            // state-word slot still draws its kind (#1461 AC27).
-            let named = format!("{title} · {word}");
+            // Its state word follows the question, the word deep and the hub's row give every ask, needs you (#1463,
+            // #2690); its state-word slot, `row.word`, still draws its kind (#1461 AC27).
+            let named = format!("{title} · {}", states::shown(states::State::NeedsYou.word()));
             if reach.not_notified(&row.id) {
                 copy::fill("views.not_notified", &[&named])
             } else {

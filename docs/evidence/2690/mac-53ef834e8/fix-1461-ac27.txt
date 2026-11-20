@@ -1,0 +1,14 @@
+== commit 53ef834e811a81574b17fafa079dadf4e4889d30
+== command: node node_modules/vitest/vitest.mjs run tests/acceptance/1461/rows.test.ts tests/acceptance/1461/redraft/rows.test.ts -t AC27
+== start 2026-11-19 22:16:40 load { 44.43 67.15 85.42 } thermal 1
+
+ RUN  v5.0.5 ~/private/d2690b
+
+
+ Test Files  1 passed | 1 skipped (2)
+      Tests  2 passed | 6 skipped (8)
+   Start at  22:16:41
+   Duration  7.75s (tests 92%, transform 7%, import 1%)
+
+== end 2026-11-19 22:16:49 load { 41.76 66.22 84.99 } thermal 1
+exit=0

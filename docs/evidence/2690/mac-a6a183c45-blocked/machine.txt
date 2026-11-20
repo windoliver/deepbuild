@@ -1,0 +1,13 @@
+Mac15,12
+ProductName:		macOS
+ProductVersion:		27.2.1
+BuildVersion:		26B131
+node v24.22.0
+rustc 1.99.1 (58cf8f9c3 2026-10-13)
+          Resolution: 2560 x 1664 Retina
+          Resolution: 3840 x 2160 (2160p/4K UHD 1 - Ultra High Definition)
+          UI Looks like: 1920 x 1080 @ 30.00Hz
+start: 2026-11-19 15:27:23 load1 9.47 (cores 8); thermalState 1; Now drawing from 'AC Power'; free KB 55439472
+setup base: 2026-11-19 15:27:59 load1 8.24 (cores 8); thermalState 1; Now drawing from 'AC Power'; free KB 54203680
+end: 2026-11-19 15:29:18 load1 9.40 (cores 8); thermalState 1; Now drawing from 'AC Power'; free KB 53886424
+end 2026-11-19 15:29:21 15:29  up 6 days,  8:31, 2 users, load averages: 9.45 25.74 40.02

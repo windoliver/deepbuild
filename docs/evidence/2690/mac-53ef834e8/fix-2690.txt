@@ -1,0 +1,46 @@
+== commit 53ef834e811a81574b17fafa079dadf4e4889d30
+== command: node node_modules/vitest/vitest.mjs run --root tests/acceptance/2690 --no-file-parallelism
+== start 2026-11-19 22:16:06 load { 66.33 73.45 88.32 } thermal 1
+
+ RUN  v5.0.5 ~/private/d2690b/tests/acceptance/2690
+
+stdout | row-word.test.ts > #2690.50174a03 `deep`, the hub's list row and the app's drawn row agree on an open ask's word > #2690.50174a03: each open ask's word in the hub's row.set is the word deep status --json, deep and the app's drawn row give it
+the hub's ask rows: ask:01M7VS92XJ1YRRCR1STHN62N3N "Push release-1.4 to origin?" word "needs you"; ask:01M7VSAXGJX2657HRRS2J7RX78 "Which header colour on the login page?" word "needs you"; ask:01M7VSCR3JVEZQV51W6GPDMEEK "Keep the cart on SQLite or plain files?" word "needs you"
+
+ ❯ row-word.test.ts (3 tests | 1 failed) 33132ms
+   ❯ #2690.50174a03 `deep`, the hub's list row and the app's drawn row agree on an open ask's word (1)
+     × #2690.50174a03: each open ask's word in the hub's row.set is the word deep status --json, deep and the app's drawn row give it 18168ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  row-word.test.ts > #2690.50174a03 `deep`, the hub's list row and the app's drawn row agree on an open ask's word > #2690.50174a03: each open ask's word in the hub's row.set is the word deep status --json, deep and the app's drawn row give it
+AssertionError: the app's drawn ask rows against the hub's rows: each row's node holds the hub's word: expected [ …(3) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "row ask:01M7VS92XJ1YRRCR1STHN62N3N's node reads \"Push release-1.4 to origin? · Approval needs_you ! needs_you Push release-1.4 to origin?  Push release-1.4 to…  Approval\", which lacks its word \"needs you\"",
++   "row ask:01M7VSAXGJX2657HRRS2J7RX78's node reads \"Which header colour on the login page? · How it looks needs_you ! needs_you Which header colour on the login page?  Which header co…  How it looks\", which lacks its word \"needs you\"",
++   "row ask:01M7VSCR3JVEZQV51W6GPDMEEK's node reads \"Keep the cart on SQLite or plain files? · Pick one needs_you ! needs_you Keep the cart on SQLite or plain files?  Keep the cart on SQ…  Pick one\", which lacks its word \"needs you\"",
++ ]
+
+ ❯ row-word.test.ts:117:151
+    115|     // The app's drawn row: the node carrying the ask's id holds the h…
+    116|     const s = await windowOf(w);
+    117|     expect(drawnFailures(s as unknown as Snapshot1463, hub), "the app'…
+       |                                                                                                                                                       ^
+    118|   }, 30 * MIN);
+    119| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 passed (3)
+   Start at  22:16:06
+   Duration  33.76s (tests 98%, transform 1%)
+
+== end 2026-11-19 22:16:40 load { 44.43 67.15 85.42 } thermal 1
+exit=1

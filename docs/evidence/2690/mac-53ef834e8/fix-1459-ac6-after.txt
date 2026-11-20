@@ -1,0 +1,76 @@
+== commit 53ef834e811a81574b17fafa079dadf4e4889d30
+== command: cargo test --locked -p deep-replica --test headless replica_equals_live_tree
+== start 2026-11-19 22:38:18 load { 79.51 101.83 90.39 } thermal 1
+warning: unused variable: `diagnostic_key`
+    --> vendor/quickjs-jit-runtime/src/compiler/optimized.rs:8795:5
+     |
+8795 |     diagnostic_key: Option<crate::runtime::FunctionKey>,
+     |     ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_diagnostic_key`
+     |
+     = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `apply_stress_gc_after_validation` is never used
+    --> vendor/quickjs-jit-runtime/src/lib.rs:1387:4
+     |
+1387 | fn apply_stress_gc_after_validation(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `machine_disassembly` is never read
+    --> vendor/quickjs-jit-runtime/src/compiler/baseline.rs:1985:5
+     |
+1974 | pub struct RelocatableCode {
+     |            --------------- field in this struct
+...
+1985 |     machine_disassembly: Option<String>,
+     |     ^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `RelocatableCode` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+
+warning: `quickjs-jit-runtime` (lib) generated 3 warnings (run `cargo fix --lib -p quickjs-jit-runtime` to apply 1 suggestion)
+warning: unused import: `Fail`
+  --> crates/deep-replica/src/drive/memory.rs:11:13
+   |
+11 | use super::{Fail, Plant};
+   |             ^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: `deep-replica` (lib) generated 1 warning (run `cargo fix --lib -p deep-replica` to apply 1 suggestion)
+warning: linker stderr: ld: __eh_frame section too large (max 16MB) to encode dwarf unwind offsets in compact unwind table, performance of exception handling might be affected
+  |
+  = note: `#[warn(linker_messages)]` on by default
+
+warning: `deep-replica` (bin "deep-drive") generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.55s
+warning: the following packages contain code that will be rejected by a future version of Rust: block v0.1.6
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running headless.rs (target/debug/deps/headless-3687f5c07634ef01)
+
+running 1 tests
+deep-replica: first frame drawn
+deep-replica phases: context and init 122ms, window 434ms, first frame 437ms, frames 566ms, screenshot 584ms, written 857ms
+replica needs-you: 177 nodes, 0 canvas items, 3024x1964 screenshot
+deep-replica: first frame drawn
+deep-replica phases: context and init 115ms, window 280ms, first frame 365ms, frames 369ms, screenshot 446ms, written 607ms
+replica sidebar: 177 nodes, 0 canvas items, 3024x1964 screenshot
+deep-replica: first frame drawn
+deep-replica phases: context and init 85ms, window 492ms, first frame 523ms, frames 528ms, screenshot 633ms, written 805ms
+replica session: 175 nodes, 3 canvas items, 3024x1964 screenshot
+
+thread 'main' (5010848) panicked at crates/deep-replica/headless.rs:533:9:
+the replica differs from the live tree:
+needs-you: node 2 (label Some("Needs you")) has 1 children in the first tree and 2 in the second
+sidebar: node 2 (label Some("Needs you")) has 1 children in the first tree and 2 in the second
+session: node 2 (label Some("Needs you")) has 1 children in the first tree and 2 in the second
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test replica_equals_live_tree ... FAILED
+
+test result: FAILED. 0 passed; 1 failed
+error: test failed, to rerun pass `-p deep-replica --test headless`
+
+Caused by:
+  process didn't exit successfully: `~/private/d2690b/target/debug/deps/headless-3687f5c07634ef01 replica_equals_live_tree` (exit status: 1)
+== end 2026-11-19 22:38:24 load { 76.26 100.79 90.09 } thermal 1
+exit=1
