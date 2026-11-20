@@ -51,7 +51,8 @@ if (args[0] === '--issue' && args.length === 2 && /^\d+$/.test(args[1])) {
     process.exit(1);
   }
   // Each linked section once, in the order the issue first links it: a link to a heading already printed, or to a
-  // subsection inside a section already printed, prints nothing more.
+  // subsection inside a section already printed, prints nothing more. A parent linked after its subsection still
+  // prints whole, since the order is the issue's.
   const printed = new Set();
   const ranges = [];
   const out = [];
