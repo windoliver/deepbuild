@@ -207,13 +207,36 @@ impl Pictures {
         Ok(())
     }
 
+    /// #2450: each vector item of a picture's document as the items its import draws, its SVG the
+    /// one inlined in it (#443) or read from the call's assets.
+    fn lower(&self, doc: &mut Map<String, Value>) {
+        let Some(Value::Object(items)) = doc.get("items") else {
+            return;
+        };
+        let read = |sha: &str| {
+            let inlined = items
+                .values()
+                .find(|i| i.pointer("/params/src").and_then(Value::as_str) == Some(sha))
+                .and_then(|i| i.pointer("/params/outline/svg")?.as_str());
+            match inlined {
+                Some(svg) => Some(svg.as_bytes().to_vec()),
+                None => std::fs::read(self.store()?.join(sha)).ok(),
+            }
+        };
+        let honest = deep_canvas_vector::svg::Twin::Honest;
+        let (_, vectors) = deep_canvas_vector::check(doc, read, honest);
+        let lowered = deep_canvas_vector::lower_items(items, &vectors, Default::default());
+        doc.insert("items".into(), Value::Object(lowered));
+    }
+
     /// Each picture the scene's insets draw, under its key in the scene's texels.
     pub fn paint(&mut self, scene: &mut Scene) -> Result<(), Value> {
         let keys: Vec<String> = scene.pictures.iter().map(|p| p.key.clone()).collect();
         self.kept.retain(|k, _| keys.contains(k));
         for p in &scene.pictures {
             if !self.kept.contains_key(&p.key) {
-                let doc = p.document.as_object().cloned().unwrap_or_default();
+                let mut doc = p.document.as_object().cloned().unwrap_or_default();
+                self.lower(&mut doc);
                 let mut rgba = self.draw(&doc, p.size)?.into_raw();
                 if !self.as_drawn {
                     straight(&mut rgba);

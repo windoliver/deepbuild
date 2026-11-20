@@ -1,0 +1,19 @@
+
+> @deepbuild/evidence@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/adapters@0.0.0 build
+> tsc -b tsconfig.json
+
+
+> @deepbuild/record@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/asks@0.0.0 build
+> tsc -p tsconfig.json
+
+
+> @deepbuild/archive@0.0.0 build
+> tsc -p tsconfig.json

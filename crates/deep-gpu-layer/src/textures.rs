@@ -11,6 +11,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use deep_canvas::gauge::{Gauge, Kept, Place};
 use deep_canvas_scene3d::light::{map_field, map_role, map_uses, Texels, DECODED_CAP};
 use deep_canvas_scene3d::scene::Scene;
 use deep_codecs::{Caps, Helper, DECODE_WORKER};
@@ -18,13 +19,27 @@ use serde_json::{json, Value};
 
 use crate::{refused, App, Planted};
 
+/// #1431: the maps the decode worker made ready (`Made.ready`), their texels in the heap: past
+/// either bound, the maps no document has drawn for longest go first.
+pub static READY: Gauge = Gauge::new("Made::ready", Place::Heap, 512, 512_000_000);
+
 /// What the run's decode worker made, by `<sha>:<role>`.
-#[derive(Default)]
 pub struct Made {
     pub decoder: Option<Helper>,
-    pub ready: BTreeMap<String, (Arc<Texels>, String)>,
+    // cache: entries 512, bytes 512_000_000
+    pub ready: Kept<String, (Arc<Texels>, String)>,
     /// The videos' probes and their latest decoded frames (#503).
     pub videos: crate::video::Cache,
+}
+
+impl Default for Made {
+    fn default() -> Made {
+        Made {
+            decoder: None,
+            ready: Kept::new(&READY),
+            videos: Default::default(),
+        }
+    }
 }
 
 /// The decode worker's planted program, from deep-gpu's.
@@ -66,10 +81,11 @@ pub fn prepare(
     let mut texels = BTreeMap::new();
     let mut receipt = Vec::new();
     let mut decoded = 0u64;
+    app.made.ready.turn();
     for (sha, roles) in map_uses(scene) {
         let role = role(&roles, planted);
         let key = format!("{sha}:{role}");
-        let transcoded = !app.made.ready.contains_key(&key);
+        let transcoded = !app.made.ready.touch(&key);
         if transcoded {
             let Some(path) = paths.get(&sha) else {
                 match map_field(doc, &sha) {
@@ -101,13 +117,17 @@ pub fn prepare(
                 data: Arc::new(data),
             };
             let source = reply["source"].as_str().unwrap_or("png").to_string();
-            app.made.ready.insert(key.clone(), (Arc::new(t), source));
+            let bytes = t.data.len() as u64;
+            app.made
+                .ready
+                .insert(key.clone(), (Arc::new(t), source), bytes);
         }
-        let (t, source) = &app.made.ready[&key];
+        let (t, source) = app.made.ready.peek(&key).expect("made ready above");
         decoded += t.data.len() as u64;
         receipt.push(json!({"sha256": sha, "source": source, "format": t.format, "roles": roles, "transcoded": transcoded}));
         texels.insert(sha, t.clone());
     }
+    app.made.ready.evict();
     if decoded > DECODED_CAP {
         let mut r = refused(
             "over_budget",

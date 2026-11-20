@@ -54,6 +54,11 @@ struct Params {
     flow: array<vec4<f32>, 2>,
     // Its cells along x and z, 1 when the water flows, and the planted single phase.
     flow_dims: vec4<u32>,
+    // #2760: x: how many rings `touches` holds; y: their speed in m/s; z: their span in s; w:
+    // their strength.
+    touch: vec4<f32>,
+    // The grid `touch_cells` lays over them: its origin (x, z) and its cells per m along each.
+    touch_grid: vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> params: Params;
@@ -72,6 +77,13 @@ struct Params {
 @group(0) @binding(9) var field: texture_2d<u32>;
 // #968: the flow's grid, a cell a texel: its velocity in m/s along x and z.
 @group(0) @binding(10) var flow_grid: texture_2d<f32>;
+// #2760: each ring a touch keeps alive: xy: its centre on the water at rest (x, z); z: its age
+// in s.
+@group(0) @binding(11) var<storage, read> touches: array<vec4<f32>>;
+// For each cell of the grid over the rings, row by row along z, a bit for each ring whose crest
+// can reach it, 32 a word.
+@group(0) @binding(12) var<storage, read> touch_cells: array<u32>;
+const TOUCH_GRID: i32 = 16;
 // Each sample's ID and depth, for the pixels on a water edge (water.rs reads them as plain
 // textures at one sample).
 @group(2) @binding(0) var ids_ms: texture_multisampled_2d<u32>;
@@ -314,6 +326,34 @@ fn rain(x: vec2<f32>, t: f32) -> vec2<f32> {
             if abs(e) < 3.0 && r > 1e-5 {
                 // A ring's crest: the slope of a Gaussian bump across its radius, fading with age.
                 g += -2.0 * e * exp(-e * e) * (1.0 - age / RING_LIFE) * 0.2 * v / r;
+            }
+        }
+    }
+    return g;
+}
+
+// #2760: the rings touches started, each the rain's ring at its occurrence's point: a crest at
+// radius speed × age, fading to nothing at span. A point reads the rings of its cell of the grid
+// over them, in their order, and outside the grid none reaches it.
+fn touched(x: vec2<f32>) -> vec2<f32> {
+    let n = u32(params.touch.x);
+    let c = vec2<i32>(floor((x - params.touch_grid.xy) * params.touch_grid.zw));
+    var g = vec2<f32>(0.0);
+    if n == 0u || any(c < vec2<i32>(0)) || any(c >= vec2<i32>(TOUCH_GRID)) {
+        return g;
+    }
+    let words = (n + 31u) / 32u;
+    let cell = u32(c.y * TOUCH_GRID + c.x) * words;
+    for (var w = 0u; w < words; w++) {
+        var bits = touch_cells[cell + w];
+        while bits != 0u {
+            let ring = touches[w * 32u + countTrailingZeros(bits)];
+            bits &= bits - 1u;
+            let v = x - ring.xy;
+            let r = length(v);
+            let e = (r - params.touch.y * ring.z) / RING_WIDTH;
+            if abs(e) < 3.0 && r > 1e-5 {
+                g += -2.0 * e * exp(-e * e) * (1.0 - ring.z / params.touch.z) * params.touch.w * v / r;
             }
         }
     }
@@ -612,7 +652,7 @@ fn shade(xy: vec2<f32>, z: f32, size: vec2<f32>, keep: bool) -> Lit {
     // between five and ten.
     let rainy = clamp((10.0 * RING_WIDTH - foot) / (5.0 * RING_WIDTH), 0.0, 1.0);
     if rainy > 0.0 {
-        slope += rain(rest, t) * rainy;
+        slope += (rain(rest, t) + touched(rest)) * rainy;
     }
     let wk = wake(rest);
     slope += wk.ripple * wk.away;

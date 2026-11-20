@@ -1,0 +1,51 @@
+
+ RUN  v5.0.5 <home>/doneright-2365
+
+ ❯ packages/archive/test/growth-context.test.ts (3 tests | 2 failed | 1 skipped) 60954ms
+   × a folded value whose later lines arrive after a pass is copied as the whole scrub masks it 714ms
+   × a held value on two lines that is all of an unterminated transcript is copied once it stops changing 60008ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/archive/test/growth-context.test.ts > a folded value whose later lines arrive after a pass is copied as the whole scrub masks it
+AssertionError: expected 'public line\nuserPassword:: [REDACTED…' to be 'public line\nuserPassword:: [REDACTED…' // Object.is equality
+
+- Expected
++ Received
+
+  public line
+  userPassword:: [REDACTED]
++  bGRpZi1mb2xkZWQtc2Vjb25k
++  bGRpZi1mb2xkZWQtdGhpcmQ=
+  last public line
+
+
+ ❯ packages/archive/test/growth-context.test.ts:46:89
+     44|     const whole = readFileSync(t.path, 'utf8');
+     45|     const newest = (await archivedOf(w.record, t.id)).at(-1)!;
+     46|     expect(Buffer.from(await w.store.read(String(dataOf(newest).eviden…
+       |                                                                                         ^
+     47|     expect(redacted(whole), 'the whole scrub masks the folded lines').…
+     48|   } finally { await w.close(); }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  packages/archive/test/growth-context.test.ts > a held value on two lines that is all of an unterminated transcript is copied once it stops changing
+Error: Test timed out in 60000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ packages/archive/test/growth-context.test.ts:51:1
+     49| }, 120_000);
+     50|
+     51| test('a held value on two lines that is all of an unterminated transcr…
+       | ^
+     52|   const w = await openWorld();
+     53|   try {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 1 skipped (3)
+   Start at  22:22:46
+   Duration  61.82s (tests 99%, transform 1%)
+

@@ -1,0 +1,6 @@
+HEAD detached at 8f2e51904
+
+It took 2.25 seconds to enumerate untracked files.
+See 'git help status' for information on how to improve this.
+
+nothing to commit, working tree clean

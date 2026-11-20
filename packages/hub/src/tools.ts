@@ -3,7 +3,7 @@
 // ranges), and the hub's strict check of a call's arguments against it. Their descriptions come from tools.json,
 // which scripts/skill.mjs generates from the design's Building blocks table with the skill.
 import { readFileSync } from 'node:fs';
-import { refuse } from './wire.js';
+import { activePlant, refuse, Refused } from './wire.js';
 
 type Obj = Record<string, unknown>;
 type Schema = Obj;
@@ -174,7 +174,7 @@ const SCHEMAS: Readonly<Record<string, Schema>> = {
     })),
   }),
   deep_kinds: object({
-    op: { type: 'string', enum: ['list', 'word', 'search', 'read', 'gallery', 'sheet', 'step_ceilings', 'field', 'bindings', 'assets', 'fetch'], description: 'list the registries and their entries; word for another tool\'s word; search the entries, guides and gallery; read an example by hash or a guide; gallery for the examples and whether each is verified here; sheet for every available name on one page; step_ceilings for the fuel one logic step may use in a live frame, by step rate, budget class and host; field for one line per field of a kind or of a patch, by path; bindings for a logic item\'s typed bindings in Rust, each read, write and emit entry a field at its region map offset, with its layout digest as regions_digest; assets to search the enabled model libraries for models, HDRIs and textures, fetching nothing but thumbnails; fetch to bring one row\'s asset in, with its license, by its library and id.' },
+    op: { type: 'string', enum: ['list', 'word', 'search', 'read', 'gallery', 'sheet', 'step_ceilings', 'field', 'closure', 'bindings', 'assets', 'fetch'], description: 'list the registries and their entries; word for another tool\'s word; search the entries, guides and gallery; read an example by hash or a guide; gallery for the examples and whether each is verified here; sheet for every available name on one page; step_ceilings for the fuel one logic step may use in a live frame, by step rate, budget class and host; field for one line per field of a kind or of a patch, by path; closure for one list of words a document sets, by name: its words and its closure, a registry, open, or closed with its reason, what would reopen it and what to write instead; bindings for a logic item\'s typed bindings in Rust, each read, write and emit entry a field at its region map offset, with its layout digest as regions_digest; assets to search the enabled model libraries for models, HDRIs and textures, fetching nothing but thumbnails; fetch to bring one row\'s asset in, with its license, by its library and id.' },
     registry: maybe(str('list: one registry or hub slot, name@major; null for all.')),
     cursor: maybe(str('The next an earlier page gave; null for the first page.')),
     word: maybe(str('word: the word, as the other tool spells it.')),
@@ -191,6 +191,7 @@ const SCHEMAS: Readonly<Record<string, Schema>> = {
     guide: maybe(str('read: a guide, by the name a hit gave.')),
     offset: maybe({ type: 'integer', description: 'read of a guide: the next a page gave; null for its start.' }),
     path: maybe(str('field: kind@major.field for one field, kind@major for every field of that kind, or patch or patch.<op> for a patch\'s fields.')),
+    list: maybe(str('closure: a field list\'s name, such as camera@1.projection, as a refusal or the listing\'s field_lists names it.')),
     doc: maybe(str('bindings: the document whose logic item they are.')),
     item: maybe(str('bindings: the logic item\'s ID.')),
     language: oneOf(['rust'], 'bindings: the pinned language they are written in.'),
@@ -253,26 +254,40 @@ function descriptions(): Record<string, string> {
   return (described ??= JSON.parse(readFileSync(new URL('../tools.json', import.meta.url), 'utf8')) as Record<string, string>);
 }
 
+/** The schemas this hub publishes and holds calls to: #1415's planted hub marks deep_kinds's op optional though its handler needs one. */
+function published(): Readonly<Record<string, Schema>> {
+  if (activePlant() !== 'kinds-op-optional') return SCHEMAS;
+  const kinds = SCHEMAS.deep_kinds!;
+  const op = (kinds.properties as Record<string, Schema>).op!;
+  return { ...SCHEMAS, deep_kinds: { ...kinds, properties: { ...(kinds.properties as Obj), op: { ...op, type: ['string', 'null'], enum: [...(op.enum as string[]), null] } } } };
+}
+
 /**
  * The tools as deep mcp lists them. A tool tools.json doesn't describe isn't listed: only what the table generates
  * reaches an agent.
  */
 export function toolList(): { name: string; description: string; inputSchema: Schema }[] {
   const text = descriptions();
-  return Object.entries(SCHEMAS).filter(([name]) => text[name]).map(([name, inputSchema]) => ({ name, description: text[name]!, inputSchema }));
+  return Object.entries(published()).filter(([name]) => text[name]).map(([name, inputSchema]) => ({ name, description: text[name]!, inputSchema }));
 }
 
 /**
  * A call's arguments held to its tool's schema, as strictly as the hub holds any request: a field it doesn't list, a
- * missing required one or a wrong type is refused at its path. A nullable field left out reads as null.
+ * missing required one or a wrong type is refused at its path. A nullable field left out reads as null. A required
+ * field left out is `missing_field`, carrying the tool's input schema so the agent reads every field it takes (#1415).
  */
 export function checkArguments(tool: string, args: unknown): Obj {
-  const schema = SCHEMAS[tool] ?? ACTION_SCHEMAS[tool];
+  const schema = published()[tool] ?? ACTION_SCHEMAS[tool];
   if (!schema) {
     const near = nearest(tool, Object.keys(SCHEMAS));
     throw refuse('not_found', '/params/tool', near ? `Call ${near} in place of ${tool}.` : `Call one of the deep_* tools: ${Object.keys(SCHEMAS).join(', ')}.`, tool);
   }
-  return check(schema, args ?? {}, '/params/arguments') as Obj;
+  try {
+    return check(schema, args ?? {}, '/params/arguments') as Obj;
+  } catch (error) {
+    if (error instanceof Refused && error.refusal.code === 'missing_field') error.refusal.schema = schema;
+    throw error;
+  }
 }
 
 /** The edit distance between `a` and `b`, a swap of two neighbours counting as one edit, as the canvas's close names count it (#412). */
@@ -304,7 +319,9 @@ function check(schema: Schema, value: unknown, at: string): unknown {
   const types = Array.isArray(schema.type) ? (schema.type as string[]) : [schema.type as string];
   if (value === null || value === undefined) {
     if (types.includes('null')) return null;
-    throw refuse('required', at, `Give ${at.split('/').pop()}; it is required.`, value);
+    const field = at.split('/').pop();
+    if (value === undefined) throw refuse('missing_field', at, `Give ${field}: the call leaves it out, and the tool requires it. schema is the tool's input schema.`, '');
+    throw refuse('required', at, `Give ${field}; it is required.`, value);
   }
   const type = types.find((t) => t !== 'null')!;
   const wrong = () => refuse('type', at, `Give ${at.split('/').pop()} as ${type === 'array' ? 'a list' : type === 'object' ? 'an object' : `a ${type}`}.`, value);

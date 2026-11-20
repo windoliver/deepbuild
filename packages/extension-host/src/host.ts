@@ -61,6 +61,7 @@ import { actionRules, unchecked, rejected, declaredPath, type Action } from './a
 import { CORE, CALL_MS, HostFiles, Overran, within, stretchable, isPlain, texts, message, trustedPath } from './host-shared.js';
 import { NODE_HOME, NODE_LIBS } from './node-runtime.js';
 import { checkReply, join as joinReplies, type JoinPlant } from './replies.js';
+import { HandlerMisses, type SetAside } from './aside.js';
 import { Schedules, HostSchedules, type Ended, type RunEvent, type ScheduleDecl, type ScheduleRow, type ScheduleRun, type Settings, type Verdict } from './schedules.js';
 import { SeriesStore, type BoundValue, type Rollup, type Span } from './series.js';
 import { Sends, Notices, type SendRow, type SendRule, type NoticeRow } from './sends.js';
@@ -97,7 +98,9 @@ export type Plant = 'hub-unless-agent-built' | 'grants-only-in-record-query' | '
   | 'plays-any-seed'
   // #2650's: a host that keeps every source call's answer, one that keeps every action call's result, a series store
   // that keeps every set of names, and a host that forgets a request ID and runs its call again.
-  | 'churn-keeps-every-answer' | 'churn-keeps-every-result' | 'churn-keeps-every-name-set' | 'forgets-request-runs-again';
+  | 'churn-keeps-every-answer' | 'churn-keeps-every-result' | 'churn-keeps-every-name-set' | 'forgets-request-runs-again'
+  // #2402's: a host that counts a handler's failures and never clears them.
+  | 'failures-never-cleared';
 
 /** One hook request to every loaded handler of its kind (#350). */
 export interface HookRequest {
@@ -109,8 +112,11 @@ export interface HookRequest {
   /** The hook's total context bound, in characters, as hook.joined@1 counts it. */
   bound: number;
 }
-/** The joined reply: hook.joined@1's fields, and the handlers recorded as failed. */
-export interface HookReply extends JoinedHookReply { failed: { extension: string; reason: string }[] }
+/**
+ * The joined reply: hook.joined@1's fields, and the handlers recorded as failed. `aside`, only when there are any, holds
+ * the handlers of the kind set aside (#2402): each one this request didn't ask, and each its failure set aside.
+ */
+export interface HookReply extends JoinedHookReply { failed: { extension: string; reason: string }[]; aside?: SetAside[] }
 /** What an action call targets: the providing piece, `ext:<id>`, and the version of it the caller means. */
 export interface ActionTarget { handle: string; version: string }
 export interface ActionCall {
@@ -280,7 +286,11 @@ export interface ExtensionHost {
   /** Whether a conformance result is kept for this id and version, passed or failed; a load with none is refused. */
   checked(pkg: Installed): boolean;
   load(pkg: Installed): Promise<Load>;
+  /** Stops a loaded package and loads it again, as a new load (#2402). */
+  restart(id: string): Promise<Load>;
   loaded(): Promise<Loaded[]>;
+  /** The installed packages started, their code run and what it fills registered, of those to start; undefined once none is loading (#1415). */
+  loadProgress(): { loaded: number; total: number } | undefined;
   checks(): Promise<{ kind: string; extension: string }[]>;
   /** Select a live environment by its registered name; absence and revoked trust refuse, never fall back. */
   environment(name: string): Promise<RuntimeEnvironment>;
@@ -297,6 +307,8 @@ export interface ExtensionHost {
   hooks(): string[];
   /** Every live handler of the request's kind replies within its deadline; their replies joined in one fixed order. */
   hook(request: HookRequest): Promise<HookReply>;
+  /** The handlers set aside, three failures in a row each (#2402), until their extension loads again. */
+  setAside(): SetAside[];
   /** A hook line, mapped through the adapter `line.agent` names; binds and gates the session it carries (#349). */
   hook(line: HookRequestLine): Promise<{ adapter: string; events: { kind: string }[] }>;
   /**
@@ -610,6 +622,7 @@ class Host implements ExtensionHost {
   /** Conformance runs under way. */
   private readonly checking = new Set<Promise<Conformance>>();
   private isReady = false;
+  private startedAll = false;
   /** What each loaded package's code returned at its load (#139). */
   private readonly loadResults = new Map<string, Record<string, unknown>>();
   /** The published API by method, whose stability each call is held to (#139). */
@@ -643,7 +656,10 @@ class Host implements ExtensionHost {
   /** The hub's series, once it has an evidence store (#262). */
   private readonly series: SeriesStore | undefined;
   private readonly files: HostFiles;
+  /** Each load's hook failures in a row, by hook kind: three set its handler aside (#2402). */
+  private readonly misses: HandlerMisses;
   constructor(private readonly options: ExtensionHostOptions) {
+    this.misses = new HandlerMisses(options.plant === 'failures-never-cleared');
     this.files = new HostFiles(options.home);
     this.entries = this.read('installed.json');
     // An install recorded before #351 holds the check kinds its manifest declares.
@@ -1650,6 +1666,16 @@ class Host implements ExtensionHost {
   async load(pkg: Installed): Promise<Load> {
     return this.serial(pkg.id, () => this.loadNow(pkg));
   }
+  /**
+   * A loaded package restarted (#2402): its code stops and loads again as a new load, so nothing it held carries over,
+   * a hook handler set aside among it. One that isn't loaded is refused.
+   */
+  async restart(id: string): Promise<Load> {
+    const entry = this.entries[id];
+    if (!entry || !this.exts.has(id)) return { status: 'refused', id, version: entry?.version ?? '', reason: `${id} isn't loaded, so there is nothing to restart` };
+    await this.serial(id, async () => { const running = this.exts.get(id); if (running) await this.unload(running); });
+    return this.load(this.installedOf(entry));
+  }
   /** One load or unload of a package at a time, so two callers can't each start a process of it. */
   private serial<T>(id: string, work: () => Promise<T>): Promise<T> {
     const before = this.loading.get(id) ?? Promise.resolve();
@@ -2526,8 +2552,8 @@ class Host implements ExtensionHost {
     let refusal: string | undefined;
     if (m.stability === 'stable') {
       if (this.options.plant !== 'stable-may-call-preview') refusal = `${m.id} declares itself stable and calls ${method}, a preview method; a stable package calls stable methods only`;
-      // A work source's context fetch is part of the deep.registerSource that registered it (#66).
-    } else if (!(m.requires?.preview ?? []).includes(method === 'deep.work.fetch' ? 'deep.registerSource' : method)) refusal = `preview_unrequested: ${m.id} calls ${method}, a preview method its manifest doesn't list in requires.preview`;
+      // A work source's context fetch is part of its deep.registerSource (#66); a run's read, of its deep.schedule (#1887).
+    } else if (!(m.requires?.preview ?? []).includes(method === 'deep.work.fetch' ? 'deep.registerSource' : method === 'deep.schedule.read' ? 'deep.schedule' : method)) refusal = `preview_unrequested: ${m.id} calls ${method}, a preview method its manifest doesn't list in requires.preview`;
     if (!refusal) return;
     // Kept on the run, so a package that never awaits the call is refused all the same.
     ext.refusals.push(refusal);
@@ -2845,10 +2871,20 @@ class Host implements ExtensionHost {
     const bad = badDeadline('deadline', deadline);
     if (bad) throw Error(`a hook request's ${bad}`);
     const failed: HookReply['failed'] = [];
+    const aside: SetAside[] = [];
     const contributions: HookContribution[] = [];
     await Promise.all([...this.exts.values()].filter((ext) => ext.live && ext.subscribed.has(kind)).map(async (ext) => {
       const id = ext.entry.id;
+      // Set aside (#2402): it is asked nothing, so the hook takes a failure's policy at once, with no wait for it.
+      const held = this.misses.aside(ext, id, kind);
+      if (held) return void aside.push(held);
       const fail = (reason: string): void => void failed.push({ extension: id, reason });
+      // A missed deadline or a throw counts toward setting it aside; the third in a row does.
+      const count = (reason: string): void => {
+        const now = this.misses.missed(ext, id, kind, reason, this.options.now());
+        if (now) aside.push(now);
+      };
+      const missed = (reason: string): void => { fail(reason); count(reason); };
       // One clock for all of this extension's part: its trust check, an unload that check may start, and its handler.
       // A slow one fails this extension alone, by the deadline, so its siblings' replies still reach the agent in time.
       const due = performance.now() + deadline + HOOK_GRACE_MS;
@@ -2867,9 +2903,9 @@ class Host implements ExtensionHost {
         // Its own deadline only: a handler that misses it stays loaded, and its late reply goes nowhere.
         replies = await within(left(), `${id}'s ${kind} handler`, ext.ask('hook', { kind, request: { kind, data: request.data }, deadline }));
       } catch (e) {
-        if (e instanceof Overran) return fail(`${id} missed the hook's deadline of ${deadline} ms`);
+        if (e instanceof Overran) return missed(`${id} missed the hook's deadline of ${deadline} ms`);
         // An error's text is the package's own words: only a release package's reaches the reply.
-        return fail(`${id}'s ${kind} handler failed${ext.released ? `: ${message(e)}` : ''}`);
+        return missed(`${id}'s ${kind} handler failed${ext.released ? `: ${message(e)}` : ''}`);
       }
       const replier = { id, firstParty: ext.released, templates: ext.manifest.templates ?? [] };
       const context: string[] = [];
@@ -2877,12 +2913,16 @@ class Host implements ExtensionHost {
       // Late by the host's own clock, whatever the package's said: the grace is for the trip back, so what came after
       // the deadline fails and its context goes, though a deny it carries still stands. The same for a version removed
       // or replaced while its handler ran: its context reaches no one, and its deny still stops the call.
-      let failure: string | undefined = this.exts.get(id) !== ext || !ext.live ? `${id} was removed while its ${kind} handler ran` : performance.now() - asked > deadline ? `${id} missed the hook's deadline of ${deadline} ms` : undefined;
+      const removed = this.exts.get(id) !== ext || !ext.live;
+      // A missed deadline or a throw, of the package or of one of its handlers: what counts toward setting it aside.
+      let miss: string | undefined = !removed && performance.now() - asked > deadline ? `${id} missed the hook's deadline of ${deadline} ms` : undefined;
+      let failure: string | undefined = removed ? `${id} was removed while its ${kind} handler ran` : miss;
       for (const reply of Array.isArray(replies) ? replies : [replies]) {
         // The runtime's marker for one handler that threw or missed the deadline: it fails, its siblings still count.
         const marker = typeof reply === 'object' && reply !== null && Object.keys(reply).length === 1 ? (reply as { $handler?: unknown }).$handler : undefined;
         if (marker === 'threw' || marker === 'late') {
-          failure ??= marker === 'late' ? `${id} missed the hook's deadline of ${deadline} ms` : `${id}'s ${kind} handler failed`;
+          miss ??= marker === 'late' ? `${id} missed the hook's deadline of ${deadline} ms` : `${id}'s ${kind} handler failed`;
+          failure ??= miss;
           continue;
         }
         const checked = checkReply(replier, kind, reply, this.options.plant === 'context-as-text');
@@ -2895,10 +2935,18 @@ class Host implements ExtensionHost {
       }
       // A failed reply takes all its package's context with it, but no handler's failure removes a deny that stands.
       if (failure !== undefined) { fail(failure); context.length = 0; }
+      // A reply in time clears the count, whatever else failed of it.
+      if (miss !== undefined) count(miss);
+      else if (!removed) this.misses.replied(ext, kind);
       if (context.length || deny) contributions.push({ extension: id, firstParty: ext.released, context, ...(deny ? { deny } : {}) });
     }));
     const plant = this.options.plant === 'join-by-id-alone' || this.options.plant === 'cut-in-join-order' ? this.options.plant : undefined;
-    return { ...joinReplies(contributions, request.bound, plant), failed: failed.sort((a, b) => (a.extension < b.extension ? -1 : a.extension > b.extension ? 1 : 0)) };
+    const byId = <T extends { extension: string }>(list: T[]): T[] => list.sort((a, b) => (a.extension < b.extension ? -1 : a.extension > b.extension ? 1 : 0));
+    return { ...joinReplies(contributions, request.bound, plant), failed: byId(failed), ...(aside.length ? { aside: byId(aside) } : {}) };
+  }
+  /** The handlers set aside, of every live extension and hook kind (#2402). */
+  setAside(): SetAside[] {
+    return [...this.exts.values()].filter((ext) => ext.live).flatMap((ext) => [...ext.subscribed].flatMap((kind) => this.misses.aside(ext, ext.entry.id, kind) ?? []));
   }
 
   /**
@@ -3071,6 +3119,11 @@ class Host implements ExtensionHost {
   async loaded(): Promise<Loaded[]> {
     return [...this.exts.values()].map((ext) => this.loadedOf(ext));
   }
+  loadProgress(): { loaded: number; total: number } | undefined {
+    const loaded = [...this.exts.values()].filter((ext) => ext.live).length;
+    const total = Math.max(Object.keys(this.entries).length, loaded + this.loading.size);
+    return (this.startedAll && !this.loading.size) || loaded >= total ? undefined : { loaded, total };
+  }
   async checks(): Promise<{ kind: string; extension: string }[]> {
     return [...this.exts.values()].flatMap((ext) => ext.kinds.map((kind) => ({ kind, extension: ext.entry.id })));
   }
@@ -3242,7 +3295,7 @@ class Host implements ExtensionHost {
       }
       // The rest started; each that didn't is unloaded and named.
       if (failed.length) throw Error(`not every package loaded before ready started: ${failed.join('; ')}`);
-    })();
+    })().finally(() => { this.startedAll = true; });
     return this.starting;
   }
 

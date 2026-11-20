@@ -272,7 +272,7 @@ fn draw_list(
     device: &Device,
     scene: &Scene,
     motion: &Motion,
-    meshes: &std::collections::BTreeMap<Shape, Mesh>,
+    meshes: &deep_canvas::gauge::Kept<Shape, Mesh>,
     skip_elements: bool,
 ) -> (Vec<Draw>, Vec<Instance>) {
     let mut draws = Vec::new();
@@ -282,7 +282,7 @@ fn draw_list(
         if s.cast_only || s.alpha <= 0.0 || skip_elements && s.id.contains('#') {
             continue;
         }
-        let (Some(m), Some(at)) = (meshes.get(&s.shape), motion.solids.get(&s.id)) else {
+        let (Some(m), Some(at)) = (meshes.peek(&s.shape), motion.solids.get(&s.id)) else {
             continue;
         };
         let sides = at
@@ -435,7 +435,7 @@ impl MotionPass {
         device: &Device,
         scene: &Scene,
         wanted: bool,
-        meshes: &std::collections::BTreeMap<Shape, Mesh>,
+        meshes: &deep_canvas::gauge::Kept<Shape, Mesh>,
         size: [u32; 2],
         skip_elements: bool,
     ) -> Option<TargetFrame> {
@@ -545,7 +545,7 @@ impl MotionPass {
         &mut self,
         device: &Device,
         scene: &Scene,
-        meshes: &std::collections::BTreeMap<Shape, Mesh>,
+        meshes: &deep_canvas::gauge::Kept<Shape, Mesh>,
         linear: &wgpu::TextureView,
         size: [u32; 2],
     ) -> Option<Frame> {

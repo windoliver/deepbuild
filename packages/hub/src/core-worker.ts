@@ -14,7 +14,8 @@ export type CoreRequest =
   | { op: 'mcp-hello'; fd?: number | undefined; parent: { pid: number; start: string } | undefined; paseo?: string }
   | { op: 'waiter-hello'; fd?: number | undefined; session: string; at: number }
   | { op: 'health'; role: string }
-  | { op: 'extension-hook'; data: unknown }
+  // The call's event ID, session and agent name it on the record when a handler fails it (#2402).
+  | { op: 'extension-hook'; data: unknown; meta?: { id: string; session: string; agent: string } }
   | { op: 'hook-reply'; meta: HookMeta; until: number }
   // The extensions' context for a call, fitted inside the agent's cap on injected output (#1296).
   | { op: 'context-fit'; meta: HookMeta; parts: Part[]; join: string }
@@ -53,7 +54,7 @@ export async function answer(core: Core | ReadOnlyCore, request: CoreRequest): P
     case 'mcp-hello': return core.mcpHello(request.fd, request.parent, request.paseo);
     case 'waiter-hello': return core.waiterHello(request.fd, request.session, request.at);
     case 'health': return core.health(request.role);
-    case 'extension-hook': return core.extensionHook(request.data);
+    case 'extension-hook': return core.extensionHook(request.data, request.meta);
     case 'hook-reply': return core.hookReply(request.meta, request.until);
     case 'context-fit': return core.fitContext(request.meta, request.parts, request.join);
     case 'tool-gate': return core.toolGate(request.meta, request.call);

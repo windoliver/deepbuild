@@ -4,21 +4,65 @@
 //! t = 0, in world metres. Each is welded as scene3d welds a mesh (positions equal to 1e-6 m are
 //! one particle, numbered in order of first appearance), so a particle `v{i}` is the item's
 //! welded vertex `i`, and written into the soft body as `mesh: {vertices, triangles}` for the
-//! physics module to read, which refuses one that isn't closed. A source the scene can't build,
-//! or a mesh asset, is refused here, naming it.
+//! physics module to read, which refuses one that isn't closed. A source the scene can't build
+//! is refused here, naming it. #2457: a `mesh.asset@1` source's mesh is its glTF node's, as the
+//! scene draws the item. A world reads no store, so the host that holds one keeps each such
+//! asset's bytes in the scene it hands over ([`sourced`]); an asset it doesn't hold is refused.
 
+use std::borrow::Cow;
+
+use base64::engine::general_purpose::STANDARD;
+use base64::Engine;
 use deep_canvas_physics::doc::Refusal;
 #[cfg(not(target_arch = "wasm32"))]
-use deep_canvas_scene3d::{build, geom::Mesh, scene::placed_at, scene::Affine3, stack};
-#[cfg(not(target_arch = "wasm32"))]
-use serde_json::json;
-use serde_json::Value;
-
-/// The issue that brings a soft volume built from a mesh asset.
-pub const ASSET_LATER: &str = "#2457";
+use deep_canvas_scene3d::{build, geom::Mesh, gltf, scene::placed_at, scene::Affine3, stack};
+use serde_json::{json, Map, Value};
 
 /// The issue that brings balloons and soft volumes to the wasm32 build, which links no scene3d.
 pub const WASM_LATER: &str = "#2466";
+
+/// Reads a stored asset's bytes by its SHA-256, as a host's asset store answers.
+pub type Assets<'a> = &'a dyn Fn(&str) -> Option<Vec<u8>>;
+
+/// The scene key that holds, by SHA-256 and as base64, the glTF of each mesh asset a soft volume
+/// is built from.
+const KEPT: &str = "physics.assets";
+
+/// `scene` with the glTF of each `mesh.asset@1` item one of its worlds' soft volumes names as
+/// its source, read by `read` and kept in it for [`expand`]; `scene` itself when `read` holds none.
+pub fn sourced<'a>(scene: &'a Value, read: Assets<'_>) -> Cow<'a, Value> {
+    let worlds = scene.get("worlds").and_then(Value::as_object);
+    let soft = worlds
+        .into_iter()
+        .flatten()
+        .filter_map(|(_, w)| w.get("soft")?.as_object())
+        .flatten();
+    let kept: Map<String, Value> = soft
+        .filter_map(|(_, s)| {
+            let item = scene.get("items")?.get(s.get("from")?.as_str()?)?;
+            let sha = item.pointer("/params/sha256")?.as_str()?;
+            let asset = s["shape"] == "volume" && item["kind"] == "mesh.asset@1";
+            let bytes = asset.then(|| read(sha)).flatten()?;
+            Some((sha.to_string(), json!(STANDARD.encode(bytes))))
+        })
+        .collect();
+    if kept.is_empty() {
+        return Cow::Borrowed(scene);
+    }
+    let mut out = scene.clone();
+    out[KEPT] = Value::Object(kept);
+    Cow::Owned(out)
+}
+
+/// What the evidence store at `root` keeps under `sha` (`<first 2 hex>/<other 62 hex>`), through
+/// the checked read every store file takes (Asset): the name is 64 lowercase hex digits, the file
+/// is inside the store, and its bytes hash to the name.
+pub(crate) fn stored(root: &std::path::Path, sha: &str) -> Option<Vec<u8>> {
+    let named = sha.len() == 64 && sha.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'));
+    let file = named.then(|| root.join(&sha[..2]).join(&sha[2..]))?;
+    let bytes = std::fs::read(file).ok()?;
+    (deep_canvas::canon::sha256_hex(&bytes) == sha).then_some(bytes)
+}
 
 /// The wasm32 build: a balloon's or a volume's mesh is built by scene3d, which it doesn't link, so
 /// each is refused, naming the issue that brings it; ropes and cloth run as natively.
@@ -153,29 +197,36 @@ pub fn expand(scene: Option<&Value>, doc: &Value) -> Result<Value, Vec<Refusal>>
                     ));
                     continue;
                 };
-                if item.get("kind").and_then(Value::as_str) == Some("mesh.asset@1") {
-                    let what = format!("volume {id}'s source {from} is a mesh asset, which this backend interface doesn't build a soft volume from yet; {ASSET_LATER} brings it");
-                    refused.push(refusal(
-                        "physics.unsupported",
-                        format!("{p}/from"),
-                        &s["from"],
-                        what,
-                    ));
-                    continue;
-                }
-                match build::built(scene, from, item, &stack::Run::default(), 0.0) {
-                    Ok(b) if b.mesh.is_some() => b.mesh.map(|m| welded(&m, |q| placed(a, q))),
-                    Ok(_) | Err(_) => {
-                        let what = format!("volume {id}'s source {from} builds no mesh");
+                let built = if item.get("kind").and_then(Value::as_str) == Some("mesh.asset@1") {
+                    let sha = item.pointer("/params/sha256").and_then(Value::as_str);
+                    let kept = sha.and_then(|sha| scene.get(KEPT)?.get(sha)?.as_str());
+                    let Some(bytes) = kept.and_then(|b| STANDARD.decode(b).ok()) else {
+                        let what = format!("volume {id}'s source {from} is the mesh asset {}, which the asset store this world is read with doesn't hold", sha.unwrap_or_default());
                         refused.push(refusal(
-                            "ref_unresolved",
+                            "asset_missing",
                             format!("{p}/from"),
                             &s["from"],
                             what,
                         ));
                         continue;
-                    }
-                }
+                    };
+                    let node = item.pointer("/params/node").cloned().unwrap_or(json!(0));
+                    gltf::mesh(&bytes, &node).ok()
+                } else {
+                    let built = build::built(scene, from, item, &stack::Run::default(), 0.0);
+                    built.ok().and_then(|b| b.mesh)
+                };
+                let Some(m) = built else {
+                    let what = format!("volume {id}'s source {from} builds no mesh");
+                    refused.push(refusal(
+                        "ref_unresolved",
+                        format!("{p}/from"),
+                        &s["from"],
+                        what,
+                    ));
+                    continue;
+                };
+                Some(welded(&m, |q| placed(a, q)))
             }
             _ => None,
         };

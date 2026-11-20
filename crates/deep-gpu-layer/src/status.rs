@@ -305,7 +305,7 @@ impl Text {
         let shaped = self.shaper.shape(&spec);
         let mut glyphs = Vec::new();
         for g in &shaped.glyphs {
-            if let Some(p) = self.atlas.glyph(&g.font, g.id, g.size) {
+            if let Some(p) = self.atlas.glyph(&g.font, g.id, &g.coords, g.size) {
                 glyphs.push((f64::from(g.x), f64::from(g.y), p));
             }
         }

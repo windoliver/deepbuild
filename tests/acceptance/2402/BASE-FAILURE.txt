@@ -1,0 +1,73 @@
+#2402's acceptance suite, run once on the base, 89863843d85271d0aadcd9ca4702e411d67c7613 (origin/main), with no
+implementation of #2402. Built first: npm ci, npm run build --workspaces, cargo build --locked -p deep-hook.
+
+  NO_COLOR=1 node node_modules/vitest/vitest.mjs run tests/acceptance/2402 --no-file-parallelism \
+    --testTimeout=600000 --hookTimeout=180000 --silent=false --reporter=verbose
+
+When:    2026-11-18 22:03:13 to 22:04:34 PST, 79 s of tests (1 min 21 s of wall time)
+Machine: macOS on Apple silicon, 18 cores. scripts/benchmark.mjs's fingerprint matched a reference Mac's hardware
+         (judgeLimit's reason named only the thermal state, "fair", and the load).
+Load:    1-minute load 162 at the start, 160 to 200 through the story, 182 to 187 during AC5's runs.
+Result:  Test Files 2 failed | 1 passed (3); Tests 5 failed | 1 passed | 1 skipped (7). Exit 1.
+
+---- set-aside.test.ts (one story: hub A with the four packages, hub C the control) -----------------------------
+
+x AC1 #2402.b0923c0d  FAILS at its assertion, naming the tenth call's wait (45.8 s, the story included):
+  AssertionError: AC1 #2402.b0923c0d the tenth call waited 517 ms against the control's 15 ms, and the first 516 ms;
+  call 4 waited 513 ms, 501 ms more than the control's, and acme/hang's handler was asked about it; call 5 waited
+  516 ms, 506 ms more ...; call 6 waited 512 ms, 497 ms more ...; call 7 waited 511 ms, 499 ms more ...; call 8 waited
+  511 ms, 501 ms more ...; call 9 waited 511 ms, 499 ms more ...; call 10 waited 517 ms, 502 ms more than the
+  control's, and acme/hang's handler was asked about it; every call from the fourth on took more than 20 ms over the
+  control's, by more than the 47% margin; the record holds no failure of call 1 (toolu_c66a887705c7788b2ec11, its
+  tool.before 01M7S6EPBZZBDQBWQ5RSHDJ9S7) naming acme/hang and tool.before; the record holds no failure of call 2
+  (...); the record holds no failure of call 3 (...); the record holds no set-aside of acme/hang's tool.before
+  handler: no event names it beside its failures.
+  The waits (ms, call / control): 516/16, 511/11, 512/13, 513/12, 516/10, 512/15, 511/12, 511/10, 511/11, 517/15;
+  acme/hang was asked about every one of the ten calls. The failures were named only on the hub's stderr ("deep hub:
+  tool.before handler failed: acme/hang missed the hook's deadline of 500 ms"); no event but acme/hang's own notes
+  named it.
+
+v AC2 #2402.e40df126  PASSES on the base, as it must: the base never sets a handler aside, so acme/flaky is asked
+  about all six calls of its scene. Its wrong program is the planted host (planted.test.ts, below).
+
+x AC3 #2402.afc86da6  BLOCKED, the scene never happening on the base:
+  Error: BLOCKED: AC3 #2402.afc86da6 acme/hang's handler must be set aside after its third failure, which this reads;
+  it was asked about call 4, call 5, call 6, call 7, call 8, call 9, call 10, so the scene never happened (AC1)
+  (The story's later steps ran: `deep doctor --json` showed no item naming acme/hang, no session held a reading
+  naming it, and extension.restart was refused: {"code":"unknown_method", ..., "remediation":"The hub serves no
+  method extension.restart."}. Read from a throwaway debug print of the same story at load 16, then removed.)
+
+x AC4 #2402.43eeba91 (acme/deny's deny)  BLOCKED, for the same reason as AC3:
+  Error: BLOCKED: AC4 #2402.43eeba91 acme/hang's handler must be set aside after its third failure, which this reads;
+  it was asked about call 4, ..., call 10, so the scene never happened (AC1)
+  (Not read in this run. In a harness probe on the base, acme/deny's deny reached the agent on each of four such
+  calls: exit 2, "DeepBuild blocked this: [acme/deny] held until claim:01K74G1Z3X5V7T9R1P3N5M7K9H passes".)
+
+x AC4 #2402.43eeba91 (the done gate's own handler)  BLOCKED: no release file is read at the base:
+  Error: BLOCKED: AC4 #2402.43eeba91 deepbuild/done-gate, listed in the hub's release through DEEP_HUB_TEST_RELEASE,
+  must run in the hub (pid 28498) as the done gate's own handler: it ran in process 29725
+  (The claim itself was made and went back on the base: "DeepBuild sent this claim back before any check ran:
+  - the run `pnpm e2e` it cites was never made in this session", read from the same debug print.)
+
+---- planted.test.ts ------------------------------------------------------------------------------------------
+
+x AC2 #2402.e40df126 (wrong program)  BLOCKED: the base lists no such plant (10.7 s):
+  Error: BLOCKED: the hub with DEEP_HUB_PLANT=failures-never-cleared did not start: ... Error:
+  DEEP_HUB_PLANT=failures-never-cleared names no planted program
+      at plantOf (packages/hub/dist/plant.js:131:15)
+
+---- budget.test.ts --------------------------------------------------------------------------------------------
+
+- AC5 #2402.bd6cb8d9  INCONCLUSIVE (a skip that says so; 20.0 s). The merge base is the base itself here, so both
+  hosts run the same code:
+  hub:     INCONCLUSIVE gains 0.0000, 0.0000, 0.0001, 0.0002, 0.0000 ms against 0.1 ms (medians per request about
+           0.011 to 0.015 ms a side): thermal state is "fair", not "nominal"; load 187 at a run's start or end is
+           above the 18 cores
+  sandbox: INCONCLUSIVE gains 0.0000, 0.0000, 0.0000, 0.0000, 0.0329 ms against 0.1 ms (medians per request about
+           0.27 to 0.37 ms a side): thermal state is "fair", not "nominal"; load 182 at a run's start or end is above
+           the 18 cores
+
+---- Before this run --------------------------------------------------------------------------------------------
+
+set-aside.test.ts was also run once while it was written, at a load of 9 to 16: the same outcomes (AC1 failing with
+the tenth call at 506 ms against the control's 5 ms, the first at 530 ms; AC2 passing; AC3 and AC4 BLOCKED).

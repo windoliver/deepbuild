@@ -1,0 +1,39 @@
+
+ RUN  v5.0.5 <home>/doneright-2365-repair
+
+ ❯ packages/contracts/test/rust-checks.test.ts (307 tests | 1 failed) 68116ms
+   ❯ the Rust types refuse what the schemas refuse (307)
+     × every published pattern was matched and refused in some field 37ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  packages/contracts/test/rust-checks.test.ts > the Rust types refuse what the schemas refuse > every published pattern was matched and refused in some field
+AssertionError: expected [ '^[A-Z][A-Za-z]*$', …(2) ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   "^[A-Z][A-Za-z]*$",
++   "^(day|week|month|year)$",
++   "^[a-z][a-z0-9_-]*(\\.[a-z][a-z0-9_-]*)*(:(shared|exclusive))?$",
++ ]
+
+ ❯ packages/contracts/test/rust-checks.test.ts:163:25
+    161|     for (const { schema } of listSchemas()) walk(schema);
+    162|     const unexercised = [...published].filter((p) => !(patternsSeen.ge…
+    163|     expect(unexercised).toEqual([]);
+       |                         ^
+    164|   });
+    165| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 306 passed (307)
+   Start at  23:34:32
+   Duration  68.61s (tests 99%)
+
+exit=1

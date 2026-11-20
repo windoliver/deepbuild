@@ -11,6 +11,7 @@ pub mod fonts;
 pub mod outlines;
 pub mod shape;
 pub mod unicode;
+pub mod vertical;
 
 pub use atlas::{
     raster_size, Atlas, Page, Placed, Rect, MAX_DEVICE_SIZE, PAGE, PAGES, PHASES, RING,
@@ -23,14 +24,16 @@ pub use fonts::{face_of, Face, Role, FACES};
 pub use parley::FontData;
 pub use shape::{Align, Decoration, Fit, Glyph, Shaped, Shaper, Shift, Span, Spec};
 pub use unicode::{Bidi, Dir};
+pub use vertical::{Columns, Flow, Stand};
 
 /// The fonts seam's backend (issue #140; canvas primitives: Seam and backend): bundled fonts only,
-/// shaped by parley. Its name and version enter every text content key and result it feeds.
+/// shaped by parley. Its name and version enter every text content key and result it feeds. #1484
+/// moved it to 1.1: Inter sets on its variable face, at its optical size, so its runs changed.
 pub const FONTS: deep_canvas_seams::Backend = deep_canvas_seams::Backend {
     name: "fonts.bundled",
     version: if cfg!(feature = "test-fonts-next") {
-        "1.0.1"
+        "1.1.1"
     } else {
-        "1.0.0"
+        "1.1.0"
     },
 };
