@@ -801,6 +801,9 @@ byHand.push('tests/acceptance/172/refusals.test.ts');
 alone.push('tests/acceptance/1041/');
 // #1045's files each build deep-show (full) and drive headless Chrome with WebGPU on.
 alone.push('tests/acceptance/1045/');
+// #2856's files each build deep-show (full) and drive headless Chrome with WebGPU on; unchanged.test.ts also builds
+// the merge base's deep-show when this checkout's code differs from it.
+alone.push('tests/acceptance/2856/');
 // #1490's files each build deep-show (full) and export bundles, and its parity file drives headless Chrome with WebGPU on.
 alone.push('tests/acceptance/1490/');
 // #1969's files each build deep-canvas-render or deep-show and draw typed text through them.
