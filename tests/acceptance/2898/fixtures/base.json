@@ -1,0 +1,2185 @@
+{
+ "tools": {
+  "deep mcp": [
+   {
+    "name": "deep_ask",
+    "description": "Ask the person what only they can answer, a taste call or a choice, or raise a task only a person can do, naming the check that will prove it done. It waits for the answer and returns it, or says it is still waiting, with the ask's deadline and default. An answer does not prove anything about your work, and a task answered as done does not prove it is: only its check passing does. Ask, never: Answered by an agent, or by an extension except by naming a decision, rule, budget or request of yours that the core checks.",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "kind": {
+       "type": "string",
+       "enum": [
+        "taste",
+        "choice",
+        "unblock"
+       ],
+       "description": "taste or choice for a question; unblock for a task only a person can do."
+      },
+      "question": {
+       "type": "string",
+       "description": "The one question, or the task, in a sentence."
+      },
+      "options": {
+       "type": [
+        "array",
+        "null"
+       ],
+       "items": {
+        "type": "object",
+        "properties": {
+         "id": {
+          "type": "string"
+         },
+         "label": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "id",
+         "label"
+        ],
+        "additionalProperties": false
+       },
+       "description": "A question's options; null for a task."
+      },
+      "recommended": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "description": "The option you recommend, by its id."
+      },
+      "steps": {
+       "type": [
+        "array",
+        "null"
+       ],
+       "items": {
+        "type": "string"
+       },
+       "description": "A task's steps, in order; null for a question."
+      },
+      "where": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "description": "Where the person does the task, such as their own terminal."
+      },
+      "why": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "description": "What the task unblocks."
+      },
+      "check": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "description": "The check in the repo's spec that will prove the task done. A task without one is refused, unless thread names its check."
+      },
+      "thread": {
+       "type": [
+        "object",
+        "null"
+       ],
+       "properties": {
+        "link": {
+         "type": "string",
+         "description": "The Slack thread, by its link."
+        },
+        "expect": {
+         "type": "string",
+         "description": "The bot reply the task expects."
+        }
+       },
+       "required": [
+        "link",
+        "expect"
+       ],
+       "additionalProperties": false,
+       "description": "A step in a chat app: the thread whose reply closes the task; null otherwise."
+      },
+      "subject": {
+       "type": [
+        "object",
+        "null"
+       ],
+       "properties": {
+        "point": {
+         "type": [
+          "string",
+          "null"
+         ],
+         "description": "A choice's requirement, by its handle (req:<id>)."
+        },
+        "screen": {
+         "type": [
+          "string",
+          "null"
+         ],
+         "description": "A taste call's screen or journey step."
+        },
+        "element": {
+         "type": [
+          "string",
+          "null"
+         ],
+         "description": "A taste call's element, by its stable name."
+        }
+       },
+       "required": [
+        "point",
+        "screen",
+        "element"
+       ],
+       "additionalProperties": false,
+       "description": "What the question is about, so your saved answer to it is reused whatever its wording; null when it is about none of these."
+      }
+     },
+     "required": [
+      "kind",
+      "question",
+      "options",
+      "recommended",
+      "steps",
+      "where",
+      "why",
+      "check",
+      "thread",
+      "subject"
+     ],
+     "additionalProperties": false
+    }
+   },
+   {
+    "name": "deep_wait",
+    "description": "Keep waiting on an ask you raised, once deep_ask says it is still waiting. Still waiting does not prove the ask was seen; its default applies at its deadline. Ask, never: Answered by an agent, or by an extension except by naming a decision, rule, budget or request of yours that the core checks.",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "ask": {
+       "type": "string",
+       "pattern": "^ask:[0-9A-Za-z]+$",
+       "description": "The ask, as deep_ask returned it."
+      }
+     },
+     "required": [
+      "ask"
+     ],
+     "additionalProperties": false
+    }
+   },
+   {
+    "name": "deep_open_item",
+    "description": "Record what is still open on your task, such as a kind or a field a piece needs that does not exist, instead of working around it. Recording an open item does not prove it matters, and you can't close your own without evidence. Evidence and open item, never: An open item closed by its own agent without evidence.",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "text": {
+       "type": "string",
+       "description": "What is still open, in a sentence."
+      }
+     },
+     "required": [
+      "text"
+     ],
+     "additionalProperties": false
+    }
+   },
+   {
+    "name": "deep_status",
+    "description": "Read where your session stands: the hub's gates; the checks the repo's spec names; your open asks, each with its state, its default and its deadline; your open items; and each of your claims with its runs, its verdict and any run that contradicts what you predicted. Its result does not prove your work is done: only a verdict the checks reached says so, and a claim with no verdict is still open. Check, never: Edited once protected, or the only cover for a claim when that claim's agent wrote it. Verdict, never: Written by an agent or an extension, or a PASS resting on a model's judgment alone: each assertion names its oracle, code, model or person. Ask, never: Answered by an agent, or by an extension except by naming a decision, rule, budget or request of yours that the core checks. Evidence and open item, never: An open item closed by its own agent without evidence. Task definition of done, never: Drafted from the working session's work, or changed by it.",
+    "inputSchema": {
+     "type": "object",
+     "properties": {},
+     "required": [],
+     "additionalProperties": false
+    }
+   },
+   {
+    "name": "deep_search",
+    "description": "Search your wiki, past decisions and the project's spec, and in your own session its open items and verdicts, read only; every hit names its source. A hit does not prove what it quotes still holds: it is what its source said, read through an index that is never the source of truth. Event, never: Written under another writer's name, changed or deleted. Index, never: The source of truth; the wiki's pages are. Source and reading, never: Called from a panel or past its quota, or a reading without its source and as-of time, or a tool not counted as read.",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "query": {
+       "type": "string",
+       "description": "Words every hit must hold."
+      },
+      "file": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "description": "A file, by its path in the repo: only past sessions whose reads and edits touched it."
+      },
+      "cursor": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "description": "Where to continue: the next a cut reply gave."
+      }
+     },
+     "required": [
+      "query",
+      "file",
+      "cursor"
+     ],
+     "additionalProperties": false
+    }
+   },
+   {
+    "name": "deep_claim",
+    "description": "Declare your task done at a commit, with what you expect each check to show before it runs; the checks then decide. A claim does not prove the task is done: the verdict comes from the checks' runs, and a run that disagrees with your prediction shows as a contradiction. Claim, never: Given a verdict by its own agent.",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "task_ref": {
+       "type": "string",
+       "pattern": "^(task:[0-9A-Za-z]+|session:[0-9A-Za-z]+#[A-Za-z0-9][A-Za-z0-9._-]*)$",
+       "description": "The task: task:<id>, or the message that asked for it."
+      },
+      "attempt": {
+       "type": "integer",
+       "description": "Which attempt at the task this is."
+      },
+      "commit": {
+       "type": "string",
+       "pattern": "^[0-9a-f]{40}$",
+       "description": "The commit the work is at, by its full SHA."
+      },
+      "scope": {
+       "type": "string",
+       "enum": [
+        "session",
+        "child",
+        "task"
+       ]
+      },
+      "predictions": {
+       "type": [
+        "array",
+        "null"
+       ],
+       "items": {
+        "type": "object",
+        "properties": {
+         "check": {
+          "type": "string"
+         },
+         "expects": {
+          "type": "string",
+          "enum": [
+           "passed",
+           "failed"
+          ]
+         }
+        },
+        "required": [
+         "check",
+         "expects"
+        ],
+        "additionalProperties": false
+       },
+       "description": "What you expect each check to show, before it runs."
+      }
+     },
+     "required": [
+      "task_ref",
+      "attempt",
+      "commit",
+      "scope",
+      "predictions"
+     ],
+     "additionalProperties": false
+    }
+   },
+   {
+    "name": "deep_evidence",
+    "description": "Attach a file from your working folder as evidence, stored by its hash. Storing a file does not prove what it shows; a path outside your working folder is answered as one that doesn't exist. Evidence and open item, never: An open item closed by its own agent without evidence.",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "path": {
+       "type": "string",
+       "description": "A file in your working folder."
+      },
+      "kind": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "description": "What the file is, such as screenshot."
+      },
+      "origin": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "description": "Leave null: the file is stored with origin agent whatever this says, since origin comes from your connection."
+      }
+     },
+     "required": [
+      "path",
+      "kind",
+      "origin"
+     ],
+     "additionalProperties": false
+    }
+   },
+   {
+    "name": "deep_run",
+    "description": "Run a check the repo's spec names, for your claim at its commit; it answers with the run's outcome and its evidence once the run finishes. One run's outcome does not prove your claim passes: only a verdict over the runs a claim needs says so. Check, never: Edited once protected, or the only cover for a claim when that claim's agent wrote it.",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "check": {
+       "type": "string",
+       "description": "A check the repo's spec names."
+      },
+      "claim": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "pattern": "^claim:[0-9A-Za-z]+$",
+       "description": "The claim the run is for; null for your newest."
+      }
+     },
+     "required": [
+      "check",
+      "claim"
+     ],
+     "additionalProperties": false
+    }
+   },
+   {
+    "name": "deep_show",
+    "description": "Draw a canvas document, a figure, a map, a chart or a sheet, on your own claim, ask or prompt, in your own layer; it answers presented, refused or not presented, with the document's issues and snapshots by hash. A picture does not prove anything: a snapshot is never evidence for a claim, and only check results are. Screen and panel, never: Drawn over the question card, run past its grant, painted in the status colors except through a status binding, pushed to you, or taken as proof. Physics, never: Code run per step, a body created mid-run, a GPU simulation's result used in a check, or a claim passed by a clip. Media, never: Sound that starts without your gesture, a capture without the system picker or the OS permission, or without its indicator, a microphone combined with network access you didn't see, or a voice cloned from evidence.",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "doc": {
+       "type": "string",
+       "pattern": "^[0-9A-Za-z]{26}$",
+       "description": "The document, by the doc ID the hub minted for your claim, ask or prompt."
+      },
+      "document": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "description": "A whole revision, as one string holding its JSON text (serialize the object; an object here is refused): the envelope and its maps keyed by ID, with no id, no layers and no item layer, since your layer comes from your connection. null with patch or for a render-back."
+      },
+      "patch": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "description": "A patch to the document, as one string holding its JSON text, instead of a whole revision; null for none."
+      },
+      "removes": {
+       "type": [
+        "array",
+        "null"
+       ],
+       "items": {
+        "type": "string"
+       },
+       "description": "Each ID the whole revision leaves out on purpose; an ID left out and not named here is refused."
+      },
+      "t": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "description": "The time to render at, in the time grammar, such as 0s or 4.2s; null for 0s."
+      },
+      "size": {
+       "type": [
+        "array",
+        "null"
+       ],
+       "items": {
+        "type": "integer"
+       },
+       "description": "The snapshot's width and height in px; null for the document's size."
+      },
+      "include": {
+       "type": [
+        "array",
+        "null"
+       ],
+       "items": {
+        "type": "string",
+        "enum": [
+         "issues",
+         "audit",
+         "timing",
+         "pixels"
+        ]
+       },
+       "description": "What the reply carries; pixels asks for a snapshot. null for issues."
+      },
+      "rev": {
+       "type": [
+        "integer",
+        "null"
+       ],
+       "description": "With no document or patch, render back this revision of the document; null for the current one."
+      },
+      "camera": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "description": "With no document or patch, render a 3D revision back through this camera@1 item, by its ID; null for its own camera."
+      },
+      "probes": {
+       "type": [
+        "array",
+        "null"
+       ],
+       "items": {
+        "type": "array",
+        "items": {
+         "type": "integer"
+        }
+       },
+       "description": "With no document or patch, up to 64 pixels [x, y] of a 3D snapshot, x right and y down; the reply's hits says what lies under each, nearest first, at most 8 a pixel. Display only, never evidence. null for none."
+      },
+      "sheet": {
+       "type": [
+        "object",
+        "null"
+       ],
+       "properties": {
+        "views": {
+         "type": "array",
+         "items": {
+          "type": "string",
+          "enum": [
+           "front",
+           "back",
+           "left",
+           "right",
+           "top",
+           "three_quarter"
+          ]
+         },
+         "description": "The named views, each framing the whole scene."
+        }
+       },
+       "required": [
+        "views"
+       ],
+       "additionalProperties": false,
+       "description": "With no document or patch, a contact sheet of a 3D revision in one call: one snapshot per view, each with its view and its own visible table. Display only, never evidence. null for one frame through its camera."
+      },
+      "mode": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "enum": [
+        "lighting_only",
+        "overdraw",
+        "normals",
+        "cascade_splits",
+        "shadow_atlas",
+        "luminance_false_color",
+        "lights_per_cluster",
+        "lod_per_item",
+        "receivers_casters",
+        "skeleton",
+        "lights_cameras",
+        "bounds",
+        "physics_shapes",
+        "uv_checker",
+        "deviation",
+        "tangents",
+        "probes",
+        "sound_sources",
+        "motion_paths",
+        "pick_hierarchy",
+        null
+       ],
+       "description": "A diagnostic mode: the same frame at t drawn as a view in place of the look, with what it drew as numbers in drawn; with no document or patch, of the current revision. Display only, never evidence. null for none."
+      },
+      "cursor": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "description": "mode: where the readings an earlier page cut left off, as its next gave it."
+      },
+      "item": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "description": "mode deviation: the item measured, by its ID."
+      },
+      "reference": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "pattern": "^[0-9a-f]{64}$",
+       "description": "mode deviation: the reference asset, by its SHA-256."
+      },
+      "select": {
+       "type": [
+        "array",
+        "null"
+       ],
+       "items": {
+        "type": "string"
+       },
+       "description": "mode motion_paths: the items whose paths it draws, by ID."
+      },
+      "span": {
+       "type": [
+        "array",
+        "null"
+       ],
+       "items": {
+        "type": "string"
+       },
+       "description": "mode motion_paths: [from, to] in the time grammar."
+      },
+      "depth": {
+       "type": [
+        "integer",
+        "null"
+       ],
+       "description": "mode pick_hierarchy: the deepest level drawn, the root's 0."
+      }
+     },
+     "required": [
+      "doc",
+      "document",
+      "patch",
+      "removes",
+      "t",
+      "size",
+      "include",
+      "rev",
+      "camera",
+      "probes",
+      "sheet",
+      "mode",
+      "cursor",
+      "item",
+      "reference",
+      "select",
+      "span",
+      "depth"
+     ],
+     "additionalProperties": false
+    }
+   },
+   {
+    "name": "deep_query",
+    "description": "Read a revision of a document as evaluated data by stable ID instead of as a picture: its rows and the values at items/<id>/<field> at the times you name, each answer with a coverage block that names what it cut; its summary, with counts by kind, writer layer and canvas module; the why behind one value, naming the canvas module, operator and document paths that made it; every row that names an item, a table row, a pack entry or an asset, before you remove or rename it; or what costs most, its items and assets ranked by the meter's own terms. It reads only what your session may read. A reading does not prove your work is right: it is never evidence for a claim, only check results are, and an absence concluded from a cut answer is refused. Canvas, never: Drawn outside its panel or over the question card.",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "doc": {
+       "type": "string",
+       "pattern": "^[0-9A-Za-z]{26}$",
+       "description": "The document, by its doc ID."
+      },
+      "what": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "enum": [
+        "rows",
+        "summary",
+        "why",
+        "refs_to",
+        "cost",
+        null
+       ],
+       "description": "rows for evaluated rows by stable ID with a coverage block; summary for counts by kind, writer layer and canvas module; why for the canvas module, operator and document paths behind the value at path; refs_to for the rows that name an item, a table row, a pack entry or an asset, each with the naming field's path and its kind of reference, before you remove or rename it; cost for the items, assets and passes ranked by the meter's CPU time, GPU time, GPU memory and decoded asset MB per frame, each with its share of the total. null for rows."
+      },
+      "rev": {
+       "type": [
+        "integer",
+        "null"
+       ],
+       "description": "The revision read; null for the current one."
+      },
+      "items": {
+       "type": [
+        "array",
+        "null"
+       ],
+       "items": {
+        "type": "string"
+       },
+       "description": "rows: only these items, by ID; null for every item."
+      },
+      "paths": {
+       "type": [
+        "array",
+        "null"
+       ],
+       "items": {
+        "type": "string"
+       },
+       "description": "rows: values read at items/<id>/<field>, such as items/door/params/open or items/<id>/modifiers/<k>#out; null for none."
+      },
+      "at": {
+       "type": [
+        "array",
+        "null"
+       ],
+       "items": {
+        "type": "string"
+       },
+       "description": "rows: the times paths are read at, in the time grammar, such as 0s or 1.5s; null for 0s."
+      },
+      "cap": {
+       "type": [
+        "integer",
+        "null"
+       ],
+       "description": "rows: at most this many rows, cut depth first; null for 200."
+      },
+      "cursor": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "description": "Where an earlier answer cut left off, as its next gave it."
+      },
+      "expect": {
+       "type": [
+        "object",
+        "null"
+       ],
+       "properties": {
+        "none": {
+         "type": "object",
+         "properties": {
+          "kind": {
+           "type": "string",
+           "description": "The kind no row should be of."
+          }
+         },
+         "required": [
+          "kind"
+         ],
+         "additionalProperties": false
+        }
+       },
+       "required": [
+        "none"
+       ],
+       "additionalProperties": false
+      },
+      "path": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "description": "why: the value, items/<id>/<field>."
+      },
+      "t": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "description": "why and cost: the time, in the time grammar; null for 0s."
+      },
+      "target": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "description": "refs_to: what the rows name: an item by its ID, a keyed copy's table row as <table>[<key>], a pack entry as name@major, or an asset by its SHA-256."
+      },
+      "by": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "enum": [
+        "cpu_ms",
+        "gpu_ms",
+        "gpu_mb",
+        "decoded_mb",
+        null
+       ],
+       "description": "cost: the column the rows are ranked by, the costliest first. null for gpu_ms."
+      }
+     },
+     "required": [
+      "doc",
+      "what",
+      "rev",
+      "items",
+      "paths",
+      "at",
+      "cap",
+      "cursor",
+      "expect",
+      "path",
+      "t",
+      "target",
+      "by"
+     ],
+     "additionalProperties": false
+    }
+   },
+   {
+    "name": "deep_drive",
+    "description": "Drive a replica, a headless copy of the app on a fixture or on a read-only copy of your record. Launch it, act on what you locate by role and name, label or text, open a page by its address, wait for it to settle, see it as text snapshots, screenshots and recordings, and close it to free it. At most two run on a machine, under a lease. Only assertions count: a drive passes on the assertions that passed, and a screenshot, snapshot or recording proves nothing on its own. Screen and panel, never: Drawn over the question card, run past its grant, painted in the status colors except through a status binding, pushed to you, or taken as proof.",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "call": {
+       "type": "string",
+       "enum": [
+        "launch",
+        "act",
+        "open",
+        "notification",
+        "wait_for",
+        "see",
+        "probe",
+        "screenshot",
+        "record",
+        "expect",
+        "close"
+       ]
+      },
+      "replica": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "pattern": "^replica:[0-9A-Za-z]+$",
+       "description": "The replica, as launch answered it; null only for launch."
+      },
+      "launch": {
+       "type": [
+        "object",
+        "null"
+       ],
+       "properties": {
+        "from": {
+         "type": [
+          "string",
+          "null"
+         ],
+         "enum": [
+          "fixture",
+          "record_copy",
+          "empty",
+          null
+         ],
+         "description": "null for fixture."
+        },
+        "fixture": {
+         "type": [
+          "string",
+          "null"
+         ],
+         "description": "A record fixture, by its absolute path, read when from is fixture; null for the default one."
+        },
+        "panel": {
+         "type": [
+          "string",
+          "null"
+         ],
+         "description": "A panel package, by its absolute path, mounted in the sidebar."
+        },
+        "size": {
+         "type": [
+          "array",
+          "null"
+         ],
+         "items": {
+          "type": "integer"
+         }
+        },
+        "scale": {
+         "type": [
+          "integer",
+          "null"
+         ]
+        },
+        "theme": {
+         "type": [
+          "string",
+          "null"
+         ],
+         "enum": [
+          "light",
+          "dark",
+          null
+         ]
+        },
+        "reduced_motion": {
+         "type": [
+          "boolean",
+          "null"
+         ]
+        },
+        "locale": {
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "clock": {
+         "type": [
+          "string",
+          "null"
+         ],
+         "enum": [
+          "virtual",
+          "real",
+          null
+         ]
+        },
+        "packs": {
+         "type": [
+          "array",
+          "null"
+         ],
+         "items": {
+          "type": "string",
+          "description": "name@version"
+         }
+        },
+        "device": {
+         "type": [
+          "object",
+          "null"
+         ],
+         "properties": {
+          "system_bar": {
+           "type": [
+            "integer",
+            "null"
+           ],
+           "description": "Points of system bar over the window's top edge."
+          },
+          "keyboard": {
+           "type": [
+            "integer",
+            "null"
+           ],
+           "description": "Points of on-screen keyboard over the bottom edge while a text input has focus."
+          }
+         },
+         "required": [
+          "system_bar",
+          "keyboard"
+         ],
+         "additionalProperties": false
+        }
+       },
+       "required": [
+        "from",
+        "fixture",
+        "panel",
+        "size",
+        "scale",
+        "theme",
+        "reduced_motion",
+        "locale",
+        "clock",
+        "packs",
+        "device"
+       ],
+       "additionalProperties": false
+      },
+      "locator": {
+       "type": [
+        "object",
+        "null"
+       ],
+       "properties": {
+        "role": {
+         "type": [
+          "string",
+          "null"
+         ],
+         "description": "With name, or alone."
+        },
+        "name": {
+         "type": [
+          "string",
+          "null"
+         ],
+         "description": "The accessible name."
+        },
+        "item": {
+         "type": [
+          "string",
+          "null"
+         ],
+         "description": "A canvas item, ID[#sub]."
+        },
+        "id": {
+         "type": [
+          "string",
+          "null"
+         ],
+         "description": "The element whose id in the snapshot is this; a row's id is its record's, so it holds when the words change."
+        },
+        "handle": {
+         "type": [
+          "string",
+          "null"
+         ],
+         "description": "A record object's row, such as an ask's, by its handle (ask:<id>)."
+        },
+        "text": {
+         "type": [
+          "string",
+          "null"
+         ],
+         "description": "The innermost element whose drawn text is exactly this."
+        },
+        "label": {
+         "type": [
+          "string",
+          "null"
+         ],
+         "description": "The form control whose accessible name, or else visible label, is this."
+        }
+       },
+       "required": [
+        "role",
+        "name",
+        "item",
+        "id",
+        "handle",
+        "text",
+        "label"
+       ],
+       "additionalProperties": false,
+       "description": "The call's target: what act clicks, types into or scrolls, what expect, wait_for and see look at; null to type or press into the focused element. Every other locator in this call takes the same fields."
+      },
+      "act": {
+       "type": [
+        "object",
+        "null"
+       ],
+       "properties": {
+        "kind": {
+         "type": "string",
+         "enum": [
+          "click",
+          "double_click",
+          "type",
+          "press",
+          "drag",
+          "scroll",
+          "hover",
+          "set"
+         ]
+        },
+        "text": {
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "keys": {
+         "type": [
+          "string",
+          "null"
+         ],
+         "description": "Space-separated keystrokes, such as enter, tab or cmd-enter."
+        },
+        "to": {
+         "type": [
+          "object",
+          "null"
+         ],
+         "properties": {
+          "role": {
+           "type": [
+            "string",
+            "null"
+           ]
+          },
+          "name": {
+           "type": [
+            "string",
+            "null"
+           ]
+          },
+          "item": {
+           "type": [
+            "string",
+            "null"
+           ]
+          },
+          "id": {
+           "type": [
+            "string",
+            "null"
+           ]
+          },
+          "handle": {
+           "type": [
+            "string",
+            "null"
+           ]
+          },
+          "text": {
+           "type": [
+            "string",
+            "null"
+           ]
+          },
+          "label": {
+           "type": [
+            "string",
+            "null"
+           ]
+          }
+         },
+         "required": [
+          "role",
+          "name",
+          "item",
+          "id",
+          "handle",
+          "text",
+          "label"
+         ],
+         "additionalProperties": false,
+         "description": "drag only: where it drops. The thing acted on goes in locator."
+        },
+        "to_point": {
+         "type": [
+          "array",
+          "null"
+         ],
+         "items": {
+          "type": "integer"
+         },
+         "description": "drag only: where it drops, [x, y] in device pixels."
+        },
+        "dx": {
+         "type": [
+          "integer",
+          "null"
+         ]
+        },
+        "dy": {
+         "type": [
+          "integer",
+          "null"
+         ]
+        },
+        "control": {
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "value": {
+         "type": [
+          "string",
+          "null"
+         ]
+        }
+       },
+       "required": [
+        "kind",
+        "text",
+        "keys",
+        "to",
+        "to_point",
+        "dx",
+        "dy",
+        "control",
+        "value"
+       ],
+       "additionalProperties": false
+      },
+      "open": {
+       "type": [
+        "object",
+        "null"
+       ],
+       "properties": {
+        "address": {
+         "type": [
+          "string",
+          "null"
+         ],
+         "description": "A page's address, opened as a click, ⌘K or deep open opens it: ask/<id>, session/<id>[/<claim>], project/<id> or page/<name>[/<parameter>]; null with url."
+        },
+        "url": {
+         "type": [
+          "string",
+          "null"
+         ],
+         "description": "A deepbuild:// link, opened as the OS hands it to the app; null with address."
+        }
+       },
+       "required": [
+        "address",
+        "url"
+       ],
+       "additionalProperties": false
+      },
+      "notification": {
+       "type": [
+        "object",
+        "null"
+       ],
+       "properties": {
+        "click": {
+         "type": "integer",
+         "description": "The index of a notification this replica posted, clicked on its body."
+        }
+       },
+       "required": [
+        "click"
+       ],
+       "additionalProperties": false
+      },
+      "wait_for": {
+       "type": [
+        "object",
+        "null"
+       ],
+       "properties": {
+        "state": {
+         "type": [
+          "string",
+          "null"
+         ],
+         "enum": [
+          "visible",
+          "hidden",
+          "enabled",
+          "text",
+          "value",
+          "settled",
+          null
+         ]
+        },
+        "value": {
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "event": {
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "t": {
+         "type": [
+          "integer",
+          "null"
+         ],
+         "description": "Flicks since launch."
+        }
+       },
+       "required": [
+        "state",
+        "value",
+        "event",
+        "t"
+       ],
+       "additionalProperties": false
+      },
+      "timeout": {
+       "type": [
+        "integer",
+        "null"
+       ],
+       "description": "Milliseconds of the replica's clock; null for 5000."
+      },
+      "see": {
+       "type": [
+        "object",
+        "null"
+       ],
+       "properties": {
+        "scope": {
+         "type": [
+          "string",
+          "null"
+         ],
+         "enum": [
+          "window",
+          "panel",
+          "locator",
+          null
+         ]
+        },
+        "include": {
+         "type": [
+          "array",
+          "null"
+         ],
+         "items": {
+          "type": "string",
+          "enum": [
+           "roles",
+           "names",
+           "values",
+           "bounds",
+           "items"
+          ]
+         }
+        }
+       },
+       "required": [
+        "scope",
+        "include"
+       ],
+       "additionalProperties": false
+      },
+      "screenshot": {
+       "type": [
+        "object",
+        "null"
+       ],
+       "properties": {
+        "target": {
+         "type": [
+          "string",
+          "null"
+         ],
+         "enum": [
+          "window",
+          "panel",
+          "locator",
+          null
+         ]
+        },
+        "highlight": {
+         "type": [
+          "array",
+          "null"
+         ],
+         "items": {
+          "type": "object",
+          "properties": {
+           "role": {
+            "type": [
+             "string",
+             "null"
+            ]
+           },
+           "name": {
+            "type": [
+             "string",
+             "null"
+            ]
+           },
+           "item": {
+            "type": [
+             "string",
+             "null"
+            ]
+           },
+           "id": {
+            "type": [
+             "string",
+             "null"
+            ]
+           },
+           "handle": {
+            "type": [
+             "string",
+             "null"
+            ]
+           },
+           "text": {
+            "type": [
+             "string",
+             "null"
+            ]
+           },
+           "label": {
+            "type": [
+             "string",
+             "null"
+            ]
+           }
+          },
+          "required": [
+           "role",
+           "name",
+           "item",
+           "id",
+           "handle",
+           "text",
+           "label"
+          ],
+          "additionalProperties": false
+         }
+        },
+        "mask": {
+         "type": [
+          "array",
+          "null"
+         ],
+         "items": {
+          "type": "object",
+          "properties": {
+           "role": {
+            "type": [
+             "string",
+             "null"
+            ]
+           },
+           "name": {
+            "type": [
+             "string",
+             "null"
+            ]
+           },
+           "item": {
+            "type": [
+             "string",
+             "null"
+            ]
+           },
+           "id": {
+            "type": [
+             "string",
+             "null"
+            ]
+           },
+           "handle": {
+            "type": [
+             "string",
+             "null"
+            ]
+           },
+           "text": {
+            "type": [
+             "string",
+             "null"
+            ]
+           },
+           "label": {
+            "type": [
+             "string",
+             "null"
+            ]
+           }
+          },
+          "required": [
+           "role",
+           "name",
+           "item",
+           "id",
+           "handle",
+           "text",
+           "label"
+          ],
+          "additionalProperties": false
+         }
+        }
+       },
+       "required": [
+        "target",
+        "highlight",
+        "mask"
+       ],
+       "additionalProperties": false
+      },
+      "record": {
+       "type": [
+        "object",
+        "null"
+       ],
+       "properties": {
+        "action": {
+         "type": "string",
+         "enum": [
+          "start",
+          "stop"
+         ]
+        },
+        "fps": {
+         "type": [
+          "integer",
+          "null"
+         ]
+        },
+        "marks": {
+         "type": [
+          "string",
+          "null"
+         ],
+         "enum": [
+          "per_action",
+          null
+         ]
+        },
+        "mask": {
+         "type": [
+          "array",
+          "null"
+         ],
+         "items": {
+          "type": "object",
+          "properties": {
+           "role": {
+            "type": [
+             "string",
+             "null"
+            ]
+           },
+           "name": {
+            "type": [
+             "string",
+             "null"
+            ]
+           },
+           "item": {
+            "type": [
+             "string",
+             "null"
+            ]
+           },
+           "id": {
+            "type": [
+             "string",
+             "null"
+            ]
+           },
+           "handle": {
+            "type": [
+             "string",
+             "null"
+            ]
+           },
+           "text": {
+            "type": [
+             "string",
+             "null"
+            ]
+           },
+           "label": {
+            "type": [
+             "string",
+             "null"
+            ]
+           }
+          },
+          "required": [
+           "role",
+           "name",
+           "item",
+           "id",
+           "handle",
+           "text",
+           "label"
+          ],
+          "additionalProperties": false
+         }
+        },
+        "mask_kind": {
+         "type": [
+          "string",
+          "null"
+         ],
+         "enum": [
+          "fill",
+          "blur",
+          null
+         ]
+        }
+       },
+       "required": [
+        "action",
+        "fps",
+        "marks",
+        "mask",
+        "mask_kind"
+       ],
+       "additionalProperties": false
+      },
+      "expect": {
+       "type": [
+        "object",
+        "null"
+       ],
+       "properties": {
+        "name": {
+         "type": [
+          "string",
+          "null"
+         ],
+         "description": "The assertion's name, which a failure names."
+        },
+        "assert": {
+         "type": "string",
+         "enum": [
+          "visible",
+          "text",
+          "value",
+          "count",
+          "state"
+         ]
+        },
+        "value": {
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "count": {
+         "type": [
+          "integer",
+          "null"
+         ]
+        },
+        "state": {
+         "type": [
+          "string",
+          "null"
+         ],
+         "description": "Such as enabled, disabled, focused or checked."
+        }
+       },
+       "required": [
+        "name",
+        "assert",
+        "value",
+        "count",
+        "state"
+       ],
+       "additionalProperties": false
+      }
+     },
+     "required": [
+      "call",
+      "replica",
+      "launch",
+      "locator",
+      "act",
+      "open",
+      "notification",
+      "wait_for",
+      "timeout",
+      "see",
+      "screenshot",
+      "record",
+      "expect"
+     ],
+     "additionalProperties": false
+    }
+   },
+   {
+    "name": "deep_kinds",
+    "description": "Look up what this core can draw before you write a document, with the kinds, recipes, packs and registries it has, each with its schema, an example by hash, its stability and whether it is available here; the word another tool uses for one, from a familiar-names pack; and the installed guides and gallery, read in pages. A listing does not prove your document is right: only its check and the checks that run on it say so, and an example is read, never run. Canvas, never: Drawn outside its panel or over the question card.",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "op": {
+       "type": "string",
+       "enum": [
+        "list",
+        "word",
+        "search",
+        "read",
+        "gallery",
+        "sheet",
+        "step_ceilings",
+        "field",
+        "closure",
+        "bindings",
+        "assets",
+        "fetch"
+       ],
+       "description": "list the registries and their entries; word for another tool's word; search the entries, guides and gallery; read an example by hash or a guide; gallery for the examples and whether each is verified here; sheet for every available name on one page; step_ceilings for the fuel one logic step may use in a live frame, by step rate, budget class and host; field for one line per field of a kind or of a patch, by path; closure for one list of words a document sets, by name: its words and its closure, a registry, open, or closed with its reason, what would reopen it and what to write instead; bindings for a logic item's typed bindings in Rust, each read, write and emit entry a field at its region map offset, with its layout digest as regions_digest; assets to search the enabled model libraries for models, HDRIs and textures, fetching nothing but thumbnails; fetch to bring one row's asset in, with its license, by its library and id."
+      },
+      "registry": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "description": "list: one registry or hub slot, name@major; null for all."
+      },
+      "cursor": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "description": "The next an earlier page gave; null for the first page."
+      },
+      "word": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "description": "word: the word, as the other tool spells it."
+      },
+      "query": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "description": "search: words every hit must hold; assets: the words to search the libraries for."
+      },
+      "kind": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "enum": [
+        "model",
+        "hdri",
+        "texture",
+        null
+       ],
+       "description": "assets: one kind of asset; null for every kind."
+      },
+      "size_m": {
+       "type": [
+        "array",
+        "null"
+       ],
+       "items": {
+        "type": "number"
+       },
+       "description": "assets: [least, most] size in metres, as the library states it; null for any size."
+      },
+      "license": {
+       "type": [
+        "array",
+        "null"
+       ],
+       "items": {
+        "type": "string"
+       },
+       "description": "assets: the licenses a row may have, by SPDX ID; null for any."
+      },
+      "limit": {
+       "type": [
+        "integer",
+        "null"
+       ],
+       "description": "assets: at most this many rows, up to 50; null for 50."
+      },
+      "library": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "description": "fetch: the library a row came from, as its from names it."
+      },
+      "id": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "description": "fetch: the row's id."
+      },
+      "pack": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "description": "fetch: an installed pack pinned as owner/name@version, instead of library."
+      },
+      "asset": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "description": "fetch: one path in the pinned pack's assets list."
+      },
+      "example": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "pattern": "^[0-9a-f]{64}$",
+       "description": "read: an example, by the hash a listing or a hit gave."
+      },
+      "guide": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "description": "read: a guide, by the name a hit gave."
+      },
+      "offset": {
+       "type": [
+        "integer",
+        "null"
+       ],
+       "description": "read of a guide: the next a page gave; null for its start."
+      },
+      "path": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "description": "field: kind@major.field for one field, kind@major for every field of that kind, or patch or patch.<op> for a patch's fields."
+      },
+      "list": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "description": "closure: a field list's name, such as camera@1.projection, as a refusal or the listing's field_lists names it."
+      },
+      "doc": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "description": "bindings: the document whose logic item they are."
+      },
+      "item": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "description": "bindings: the logic item's ID."
+      },
+      "language": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "enum": [
+        "rust",
+        null
+       ],
+       "description": "bindings: the pinned language they are written in."
+      }
+     },
+     "required": [
+      "op",
+      "registry",
+      "cursor",
+      "word",
+      "query",
+      "kind",
+      "size_m",
+      "license",
+      "limit",
+      "library",
+      "id",
+      "pack",
+      "asset",
+      "example",
+      "guide",
+      "offset",
+      "path",
+      "list",
+      "doc",
+      "item",
+      "language"
+     ],
+     "additionalProperties": false
+    }
+   },
+   {
+    "name": "deep_job",
+    "description": "List the job kinds and the tools that qualified for each, and run a kind on one tool pinned by name@version, outside the hub's process; a rerun with the same tool, params and input bytes is a cache hit that starts no process. A job's outputs are a reading by hash with a receipt, never a verdict: one reaches an item only after the kind's output checks pass, and a job changes no document. Job (R6, with the agent tools for scenes), never: Run in the canvas core or a frame, change a document, count as a verdict, or hand an item an output before the kind's output checks pass.",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "op": {
+       "type": "string",
+       "enum": [
+        "list",
+        "run"
+       ],
+       "description": "list the job kinds, each with its qualified tools, their builds and each one's cost: {usd} a run, 0 when free; run a kind on one pinned tool, returning its outputs by hash with a receipt."
+      },
+      "kind": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "description": "run: the job kind, as the list names it."
+      },
+      "tool": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "description": "run: the tool, pinned by name@version as the list names it."
+      },
+      "params": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "description": "run: the kind's params as JSON text; null for its defaults."
+      },
+      "inputs": {
+       "type": [
+        "array",
+        "null"
+       ],
+       "items": {
+        "type": "object",
+        "properties": {
+         "name": {
+          "type": "string",
+          "description": "The input, as the kind names it."
+         },
+         "sha256": {
+          "type": [
+           "string",
+           "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "The file whose bytes it is, by its SHA-256 in the evidence store; a tool that runs off the machine takes files only this way."
+         },
+         "path": {
+          "type": [
+           "string",
+           "null"
+          ],
+          "description": "The file whose bytes it is, by absolute path, for a tool that runs on this machine; null when sha256 names it."
+         }
+        },
+        "required": [
+         "name",
+         "sha256",
+         "path"
+        ],
+        "additionalProperties": false
+       },
+       "description": "run: each input the kind takes, once."
+      }
+     },
+     "required": [
+      "op",
+      "kind",
+      "tool",
+      "params",
+      "inputs"
+     ],
+     "additionalProperties": false
+    }
+   },
+   {
+    "name": "deep_env",
+    "description": "Bring your worktree's own stack up, on ports leased to that worktree, ready only once its health route answers, or take it down; every process runs through the supervisor. A stack that is up does not prove any check passes, and a port leased to your worktree is never another worktree's: a child session in its own worktree gets its own. Environment and lease, never: A process stopped that DeepBuild can't prove it started.",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "action": {
+       "type": "string",
+       "enum": [
+        "up",
+        "down"
+       ],
+       "description": "up brings your worktree's stack up and answers its leased ports; down takes it down."
+      }
+     },
+     "required": [
+      "action"
+     ],
+     "additionalProperties": false
+    }
+   },
+   {
+    "name": "deep_root_plan",
+    "description": "Propose a root plan for a host, with the script you wrote there, locked by its hash, and each step with its undo or null when it has none. The person reads it, says yes or no, and runs it themselves with deep host run in their own terminal, where sudo asks for their password. A plan proposed has not run: only the run deep host run records, from a copy only root can write, shows what it did. Ask, never: Answered by an agent, or by an extension except by naming a decision, rule, budget or request of yours that the core checks.",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "host": {
+       "type": "string",
+       "description": "A host the person's SSH config names."
+      },
+      "script": {
+       "type": "string",
+       "description": "The script's absolute path on that host, where you wrote it; the plan locks its SHA-256 as it is now, so change nothing there after."
+      },
+      "steps": {
+       "type": "array",
+       "items": {
+        "type": "object",
+        "properties": {
+         "does": {
+          "type": "string",
+          "description": "What the step does, in a sentence."
+         },
+         "changes": {
+          "type": "array",
+          "items": {
+           "type": "string"
+          },
+          "description": "What it changes: packages, files by absolute path, services, firewall rules."
+         },
+         "undo": {
+          "type": [
+           "string",
+           "null"
+          ],
+          "description": "How to undo it; null when it can't be undone."
+         },
+         "package": {
+          "type": [
+           "string",
+           "null"
+          ],
+          "description": "For a step that installs a package file, its absolute path on the host; null otherwise."
+         }
+        },
+        "required": [
+         "does",
+         "changes",
+         "undo",
+         "package"
+        ],
+        "additionalProperties": false
+       },
+       "description": "What the script does, step by step."
+      },
+      "sudo_rule": {
+       "type": [
+        "boolean",
+        "null"
+       ],
+       "description": "true to allow this one script by a sudo rule naming its sha256 digest, so the person's user runs its root-only copy with sudo -n and sudo refuses it once a byte changes; the rule is a host change with its undo. null for none."
+      }
+     },
+     "required": [
+      "host",
+      "script",
+      "steps",
+      "sudo_rule"
+     ],
+     "additionalProperties": false
+    }
+   },
+   {
+    "name": "deep_propose",
+    "description": "Propose a change you may not make yourself, such as to a wiki page, a rule, a check or a spec, with what it rests on; it waits in the person's inbox, and nothing changes until they apply it. A proposal does not prove the change is right, and it is never applied by you or any agent. Check, never: Edited once protected, or the only cover for a claim when that claim's agent wrote it. Decision and rule, never: Applied or widened by an agent. Spec, never: In force before you approve it. Task definition of done, never: Drafted from the working session's work, or changed by it. Screen and panel, never: Drawn over the question card, run past its grant, painted in the status colors except through a status binding, pushed to you, or taken as proof.",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "target": {
+       "type": "string",
+       "description": "What the change is to, such as a wiki claim, wiki:<page>#<claim>, a rule, a check or a spec."
+      },
+      "change": {
+       "type": "string",
+       "description": "The change, in your own words."
+      },
+      "evidence": {
+       "type": [
+        "array",
+        "null"
+       ],
+       "items": {
+        "type": "object",
+        "properties": {
+         "at": {
+          "type": "string",
+          "description": "A record handle, such as session:<id>#<message>."
+         },
+         "quote": {
+          "type": "string",
+          "description": "The exact words there."
+         }
+        },
+        "required": [
+         "at",
+         "quote"
+        ],
+        "additionalProperties": false
+       },
+       "description": "What the change rests on; null for none."
+      }
+     },
+     "required": [
+      "target",
+      "change",
+      "evidence"
+     ],
+     "additionalProperties": false
+    }
+   }
+  ],
+  "deep mcp actions": [
+   {
+    "name": "find_actions",
+    "description": "Finds the actions the installed plug-ins offer agents, each with its plug-in, whether it reads, changes your data or sends, and its input schema. A listed action proves nothing about what calling it will do.",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "query": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "description": "Words an action's name or its plug-in's must hold; null for every action."
+      }
+     },
+     "required": [
+      "query"
+     ],
+     "additionalProperties": false
+    }
+   },
+   {
+    "name": "call_action",
+    "description": "Calls a plug-in action by name with a request ID. A read runs; a change needs your standing rule or an ask, and a send always asks: until you answer, it returns held with the ask, and you call again with the same request ID. A change or send returns the plug-in's report and what the hub recorded it changed; the report is the plug-in's statement, never a check result.",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "action": {
+       "type": "string",
+       "description": "The action, by the name find_actions gave, ext.<plugin>.<name>."
+      },
+      "request": {
+       "type": "string",
+       "description": "A request ID of your own for this call: a retry with the same ID and input runs nothing twice, and the same ID with other input is refused."
+      },
+      "input": {
+       "type": "string",
+       "description": "The action's input as one string holding its JSON text, held to the input schema find_actions gave."
+      }
+     },
+     "required": [
+      "action",
+      "request",
+      "input"
+     ],
+     "additionalProperties": false
+    }
+   }
+  ],
+  "deep-hook mcp actions": [
+   {
+    "name": "find_actions",
+    "description": "Finds the actions the installed plug-ins offer agents, each with its plug-in, whether it reads, changes your data or sends, and its input schema. A listed action proves nothing about what calling it will do.",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "query": {
+       "type": [
+        "string",
+        "null"
+       ],
+       "description": "Words an action's name or its plug-in's must hold; null for every action."
+      }
+     },
+     "required": [
+      "query"
+     ],
+     "additionalProperties": false
+    }
+   },
+   {
+    "name": "call_action",
+    "description": "Calls a plug-in action by name with a request ID. A read runs; a change needs your standing rule or an ask, and a send always asks: until you answer, it returns held with the ask, and you call again with the same request ID. A change or send returns the plug-in's report and what the hub recorded it changed; the report is the plug-in's statement, never a check result.",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "action": {
+       "type": "string",
+       "description": "The action, by the name find_actions gave, ext.<plugin>.<name>."
+      },
+      "request": {
+       "type": "string",
+       "description": "A request ID of your own for this call: a retry with the same ID and input runs nothing twice, and the same ID with other input is refused."
+      },
+      "input": {
+       "type": "string",
+       "description": "The action's input as one string holding its JSON text, held to the input schema find_actions gave."
+      }
+     },
+     "required": [
+      "action",
+      "request",
+      "input"
+     ],
+     "additionalProperties": false
+    }
+   }
+  ],
+  "the reading tools": [
+   {
+    "name": "read",
+    "description": "One slice of what a handle names (session:<id>, session:<id>#<message>, ev:<sha256>, wiki:<page>#<claim>), at most 8,192 characters, as reading.slice@1 JSON. When the reply has `next`, call again with `slice` set to it for the rest.",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "handle": {
+       "type": "string"
+      },
+      "slice": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "handle"
+     ],
+     "additionalProperties": false
+    }
+   },
+   {
+    "name": "find",
+    "description": "Message handles of the sessions this job was given whose text holds the query, ignoring case, with a line of context each; `next` continues a cut reply.",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "query": {
+       "type": "string"
+      },
+      "slice": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "query"
+     ],
+     "additionalProperties": false
+    }
+   }
+  ]
+ },
+ "kinds": {
+  "mcp__deep__deep_ask": "mcp",
+  "mcp__deep__deep_wait": "mcp",
+  "mcp__deep__deep_open_item": "mcp",
+  "mcp__deep__deep_status": "mcp",
+  "mcp__deep__deep_search": "mcp",
+  "mcp__deep__deep_claim": "mcp",
+  "mcp__deep__deep_evidence": "mcp",
+  "mcp__deep__deep_run": "mcp",
+  "mcp__deep__deep_show": "mcp",
+  "mcp__deep__deep_query": "read",
+  "mcp__deep__deep_drive": "mcp",
+  "mcp__deep__deep_kinds": "mcp",
+  "mcp__deep__deep_job": "mcp",
+  "mcp__deep__deep_env": "mcp",
+  "mcp__deep__deep_root_plan": "mcp",
+  "mcp__deep__deep_propose": "mcp",
+  "mcp__deep-actions__find_actions": "mcp",
+  "mcp__deep-actions__call_action": "mcp"
+ }
+}
