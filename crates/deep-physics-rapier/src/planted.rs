@@ -57,6 +57,8 @@ pub enum Restore {
     NoWarmStart,
     /// The whole world but each breakable joint's steps past `breaks_at`, set to zero.
     NoBreakCount,
+    /// #2310: the whole world but its articulated joints' coordinates, which stay as built.
+    NoCoordinates,
 }
 
 impl Rapier {
@@ -87,6 +89,11 @@ impl Rapier {
                             crate::joints::packed(0, crate::joints::turns(j.data.user_data));
                     }
                 }
+            }
+            Restore::NoCoordinates => {
+                let fresh: PhysicsWorld =
+                    bincode::deserialize(&built.state).expect("the built world loads back");
+                self.world.multibody_joints = fresh.multibody_joints;
             }
         }
     }

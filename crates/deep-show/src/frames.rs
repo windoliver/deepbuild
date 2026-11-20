@@ -493,7 +493,7 @@ impl<'a> Hub<'a> {
         reply["position"] = json!(program.as_ref().map_or(t, |p| p.position(t).0));
         // #1968: each text diff's tokens at t, for the film block.
         let diffs = e.film.then(|| diff_report(&self.sched, evaluated));
-        let drawing = if e.pixels || e.film || e.texts {
+        let drawing = if e.pixels || e.film || e.texts || e.shown {
             drawing_of(&self.sched, evaluated).map(|p| match &document {
                 // #466: the look's boil on the frame's lines.
                 Some(d) => self.boiled(d, t, reduced, p),
@@ -540,6 +540,13 @@ impl<'a> Hub<'a> {
                     .map(crate::film_audit::drawn_texts)
                     .unwrap_or_default(),
             );
+        }
+        // #297: what each entry text draws at t.
+        if e.shown {
+            let d = drawing.as_ref().and_then(|d| d.drawing.as_deref());
+            let doc = document.as_ref().unwrap_or(&Value::Null);
+            let shown = crate::entries::shown_of(doc, d.map(|d| &d.frame), d.map(|d| &d.runs));
+            reply["shown"] = Value::Object(shown);
         }
         let drawing = drawing.filter(|_| e.pixels);
         reply["hashes"] = json!(self

@@ -336,6 +336,11 @@ alone.push('tests/acceptance/416/interfaces/');
 // #1477's suite opens real windows and times them against the lane's rule: one file at a time, both files timed.
 alone.push('tests/acceptance/1477/');
 timed.push('tests/acceptance/1477/record.test.ts', 'tests/acceptance/1477/built.test.ts', 'tests/acceptance/1477/redraft/record.test.ts');
+// #1477.e66d9bdb runs as its blind redraft, redraft/record.test.ts, on the owner's ruling ("Yes, swap it", Nov 20): the
+// first draft knows no `missed` arm, which the amended criterion gives a table that can't show its rows, so it fails on
+// the committed record (1477/redraft/DISPUTE.md). The lanes work by file, so record.test.ts is kept by hand, and its
+// four other tests run by hand with it.
+byHand.push('tests/acceptance/1477/record.test.ts');
 // #2569's files run #1477's bench in real windows, cover one and hold it to wall-clock deadlines; main.test.ts runs
 // #1477's three timed files through affected.mjs, well over two minutes.
 alone.push('tests/acceptance/2569/');
@@ -810,6 +815,8 @@ alone.push('tests/acceptance/550/', 'tests/acceptance/550-oracle/');
 // the Oracle lane also play a live match between the app and headless Chrome's web player through the shipped relay.
 alone.push('tests/acceptance/551/', 'tests/acceptance/551-oracle/');
 byHand.push('tests/acceptance/549/ac2-join-only.test.ts');
+// #297's files each build deep-show and run its scenarios; the Oracle lane runs thousands of frames through it.
+alone.push('tests/acceptance/297/', 'tests/acceptance/297-oracle/');
 timed.push('tests/acceptance/172/budgets.test.ts', 'tests/acceptance/172/images.test.ts');
 // #172's first-draft refusal test shows a device control without the role the document check requires, so that piece is
 // never presented and its export can't refuse it by name (tests/acceptance/172/DISPUTE.md); its blind redraft runs in its
@@ -963,11 +970,16 @@ alone.push('tests/acceptance/2241/', 'tests/acceptance/2009-redraft-2241/');
 // #2239's files build deep-physics (release); so do those of its blind redraft, written after the issue's amendment
 // of November 19, 2026: its fourth criterion, rewritten, and the one added last.
 alone.push('tests/acceptance/2239/', 'tests/acceptance/2239-redraft-ac4/');
+// #2248's files build deep-physics (release), and its third criterion's the full deep-show.
+alone.push('tests/acceptance/2248/');
 // #2098's files build deep-physics (release); so do those of its second blind run, which holds its second criterion's
 // closed-form time and gusts to the Force section as the owner's answer of November 19, 2026 amended it.
 alone.push('tests/acceptance/2098/', 'tests/acceptance/2098-redraft-ac2/');
 // #2307's files build deep-physics (release and test-backends).
 alone.push('tests/acceptance/2307/');
+// #2310's files build deep-physics (release and test-backends), its wasm32 library, the lane's linux/amd64 build
+// and the merge base's release build.
+alone.push('tests/acceptance/2310/');
 
 // #2742's files build deep-gpu; ac1 compares two films' GPU time on any Mac, and ac2 runs #417's suite.
 alone.push('tests/acceptance/2742/');
@@ -1193,6 +1205,16 @@ slow.push('tests/acceptance/2227/ac2-native-build.test.ts');
 // #2109's file (blind) runs #83's AC11 goldens, which start real hubs, in a child vitest; no timing.
 alone.push('tests/acceptance/2109/');
 
+// #1518's files each build deep-show; heard.test.ts and blocked.test.ts start a hub and deepbuild/speech's model host
+// on its fixed port 8720; heard and placement speak their take with macOS say; restore, sync and same make a video
+// with ffmpeg and export it; budget.test.ts times the cut expansion.
+alone.push('tests/acceptance/1518/');
+timed.push('tests/acceptance/1518/budget.test.ts');
+// #1518's first AC1 draft needs the pinned transcriber to add no word to its uncut take, and it adds "you" after the
+// take's last sentence (tests/acceptance/1518-redraft-ac1/DISPUTE.md); its blind redraft runs in its place.
+alone.push('tests/acceptance/1518-redraft-ac1/');
+byHand.push('tests/acceptance/1518/heard.test.ts');
+
 /**
  * A suite's own lane file (#1327): `tests/acceptance/<issue>/lane.json` says its folder runs alone, and why, as
  * `{ "alone": true, "why": "<reason>" }` and nothing else. Running alone only makes a run stricter, so a new one lands
@@ -1212,7 +1234,7 @@ for (const folder of existsSync(suites) ? readdirSync(suites, { withFileTypes: t
 
 export const checks = [
   { name: 'typecheck', commands: [[process.execPath, 'node_modules/typescript/bin/tsc', '--noEmit'], ['npm', 'run', 'build', '--workspaces']], fix: 'Correct the TypeScript diagnostic.' },
-  { name: 'lint', commands: [['cargo', 'fmt', '--all', '--', '--check'], [process.execPath, 'scripts/repo-rules.mjs'], ['cargo', 'clippy', '--workspace', '--all-targets', '--locked', '--', '-D', 'warnings'], [process.execPath, 'scripts/vendor-rebase.mjs', 'check'], [process.execPath, 'scripts/canvas-lint.mjs'], [process.execPath, 'scripts/size-ratchet.mjs'], [process.execPath, 'scripts/wait-ratchet.mjs'], [process.execPath, 'scripts/doc-ceilings.mjs'], [process.execPath, 'scripts/reading-rule.mjs'], [process.execPath, 'scripts/conformance-lint.mjs'], [process.execPath, 'scripts/slots-check.mjs'], [process.execPath, 'scripts/canvas-closures.mjs', 'closures'], [process.execPath, 'scripts/canvas-closures.mjs', 'drift'], [process.execPath, 'scripts/canvas-closures.mjs', 'paths'], [process.execPath, 'scripts/record-reader-guard.mjs'], [process.execPath, 'scripts/render-lint.mjs'], [process.execPath, 'scripts/plant-lint.mjs'], [process.execPath, 'scripts/loads-lint.mjs'], [process.execPath, 'scripts/cache-lint.mjs'], [process.execPath, 'scripts/blocking-call-guard.mjs'], [process.execPath, 'scripts/ask-sources-guard.mjs'], [process.execPath, 'scripts/keymap-guard.mjs'], [process.execPath, 'scripts/color-literal-guard.mjs'], [process.execPath, 'scripts/guide.mjs', '--check'], [process.execPath, 'scripts/panel-catalog.mjs'], [process.execPath, 'scripts/known-failures-check.mjs'], [process.execPath, 'scripts/fetch-lock.mjs', 'lint'], [process.execPath, 'scripts/exit-lint.mjs'], [process.execPath, 'scripts/app-copy-lint.mjs']], fix: 'Format Rust with cargo fmt, follow the Fix line under each repo rule above, fix the clippy warnings, follow the Fix line under each canvas-lint finding, each size FAIL line, each waits FAIL line, each doc-ceilings FAIL line and each reading rule FAIL line, or repair the enum closure, code mapping, rule fake or planted code each conformance-lint FAIL line names, declare the slot each slots-check FAIL line names with its interface, kit and planted fill, give each canvas list a closure-lint FAIL line names its closure or make the reference table and packages/contracts/canvas-closures.json agree where a drift FAIL line says they differ, give each holder a paths FAIL line names its line in its section\'s Paths row of docs/canvas-primitives.md saying what packages/contracts/canvas-paths.json holds (the deep-show unit test the_paths_listing_is_what_the_full_set_seals prints that file from the seal), and each same a check kind or fixture that holds it, read the record through the one reader in crates/deep-app/src/record.rs from each module a record-reader FAIL line names, put each plant read a plant FAIL line names under its cargo feature, give each judgeLimit call a loads FAIL line names its loads, move each blocking call a blocking-call FAIL line names off the UI thread or give it its reason, give each source an ask-source FAIL line names its row in packages/asks/sources.json, give each chord a keymap FAIL line names a free key, no ⌃, or the variant_of its ⌥ needs, draw each color a color-literal FAIL line names from the role it names, regenerate the extension guide with node scripts/guide.mjs, follow the Fix line under each panel-catalog FAIL line, or give each known failure a known-failures FAIL line names an open issue and the date it was added, fixing it or taking it out once 14 days have passed, or pin each scripts/fetch-lock.json row a fetch-lock FAIL line names to a commit with its sha256, size and credit, or exit with 0, 1, 2 or 3 where an exits FAIL line names a command that can exit another code, or draw each string a copy FAIL line names from a key of crates/deep-app/copy/en.json through crate::copy, its numbers through the table\'s placeholders and plural forms.' },
+  { name: 'lint', commands: [['cargo', 'fmt', '--all', '--', '--check'], [process.execPath, 'scripts/repo-rules.mjs'], ['cargo', 'clippy', '--workspace', '--all-targets', '--locked', '--', '-D', 'warnings'], [process.execPath, 'scripts/vendor-rebase.mjs', 'check'], [process.execPath, 'scripts/canvas-lint.mjs'], [process.execPath, 'scripts/size-ratchet.mjs'], [process.execPath, 'scripts/wait-ratchet.mjs'], [process.execPath, 'scripts/doc-ceilings.mjs'], [process.execPath, 'scripts/reading-rule.mjs'], [process.execPath, 'scripts/conformance-lint.mjs'], [process.execPath, 'scripts/slots-check.mjs'], [process.execPath, 'scripts/canvas-closures.mjs', 'closures'], [process.execPath, 'scripts/canvas-closures.mjs', 'drift'], [process.execPath, 'scripts/canvas-closures.mjs', 'paths'], [process.execPath, 'scripts/record-reader-guard.mjs'], [process.execPath, 'scripts/render-lint.mjs'], [process.execPath, 'scripts/plant-lint.mjs'], [process.execPath, 'scripts/loads-lint.mjs'], [process.execPath, 'scripts/budget-table.mjs', 'check'], [process.execPath, 'scripts/cache-lint.mjs'], [process.execPath, 'scripts/blocking-call-guard.mjs'], [process.execPath, 'scripts/ask-sources-guard.mjs'], [process.execPath, 'scripts/keymap-guard.mjs'], [process.execPath, 'scripts/color-literal-guard.mjs'], [process.execPath, 'scripts/guide.mjs', '--check'], [process.execPath, 'scripts/panel-catalog.mjs'], [process.execPath, 'scripts/known-failures-check.mjs'], [process.execPath, 'scripts/fetch-lock.mjs', 'lint'], [process.execPath, 'scripts/exit-lint.mjs'], [process.execPath, 'scripts/app-copy-lint.mjs']], fix: 'Format Rust with cargo fmt, follow the Fix line under each repo rule above, fix the clippy warnings, follow the Fix line under each canvas-lint finding, each size FAIL line, each waits FAIL line, each doc-ceilings FAIL line and each reading rule FAIL line, or repair the enum closure, code mapping, rule fake or planted code each conformance-lint FAIL line names, declare the slot each slots-check FAIL line names with its interface, kit and planted fill, give each canvas list a closure-lint FAIL line names its closure or make the reference table and packages/contracts/canvas-closures.json agree where a drift FAIL line says they differ, give each holder a paths FAIL line names its line in its section\'s Paths row of docs/canvas-primitives.md saying what packages/contracts/canvas-paths.json holds (the deep-show unit test the_paths_listing_is_what_the_full_set_seals prints that file from the seal), and each same a check kind or fixture that holds it, read the record through the one reader in crates/deep-app/src/record.rs from each module a record-reader FAIL line names, put each plant read a plant FAIL line names under its cargo feature, give each judgeLimit call a loads FAIL line names its loads, rewrite benchmarks/windows/numbers.md from the window records where a budget-table FAIL line names a row (node scripts/budget-table.mjs write), move each blocking call a blocking-call FAIL line names off the UI thread or give it its reason, give each source an ask-source FAIL line names its row in packages/asks/sources.json, give each chord a keymap FAIL line names a free key, no ⌃, or the variant_of its ⌥ needs, draw each color a color-literal FAIL line names from the role it names, regenerate the extension guide with node scripts/guide.mjs, follow the Fix line under each panel-catalog FAIL line, or give each known failure a known-failures FAIL line names an open issue and the date it was added, fixing it or taking it out once 14 days have passed, or pin each scripts/fetch-lock.json row a fetch-lock FAIL line names to a commit with its sha256, size and credit, or exit with 0, 1, 2 or 3 where an exits FAIL line names a command that can exit another code, or draw each string a copy FAIL line names from a key of crates/deep-app/copy/en.json through crate::copy, its numbers through the table\'s placeholders and plural forms.' },
   { name: 'unit', commands: [
     // The canvas, text and marks acceptance files each build a binary before spawning it, and cargo
     // clones the binary into target/debug anew on every build, fresh or not, so a file spawning it

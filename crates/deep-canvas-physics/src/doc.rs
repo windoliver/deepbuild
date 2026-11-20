@@ -164,6 +164,7 @@ pub struct Joint {
     pub breaks_at: Option<Breaks>,
     pub collide_connected: bool,
     pub active: bool,
+    pub articulated: bool,
     pub coupling: reads::Coupling,
 }
 
@@ -260,6 +261,7 @@ pub use dims::Flat;
 pub use heightfield::HEIGHTFIELD_SAMPLES;
 pub use inputs::{number_fields, resolved, Input, On, INPUTS_LATER};
 pub use reads::{probe_pose, probe_shape, Output, Read, Skin, Solve, READS};
+pub use reads::{Formula, Reduce, Sampled};
 pub use soft::{sides, Pin, Soft, SoftShape, Stiffness, Tear, OPEN_MESH};
 pub use vehicle::{flat, Vehicle, Wheel, MOST_WHEELS};
 pub use wind::{Gust, Velocity, Wind};
@@ -1261,6 +1263,7 @@ impl Reader {
                 "path",
                 "active",
                 "collide_connected",
+                "articulated",
                 "swing",
                 "twist",
             ],
@@ -1351,6 +1354,7 @@ impl Reader {
             breaks_at: self.breaks(j, p),
             collide_connected: self.flag(j, "collide_connected", p, false),
             active: self.flag(j, "active", p, true),
+            articulated: self.flag(j, "articulated", p, false),
             coupling: self.coupling(j, p, kind),
         })
     }

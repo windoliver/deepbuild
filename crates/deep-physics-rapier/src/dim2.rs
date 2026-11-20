@@ -266,6 +266,9 @@ impl World2 {
                 // Its turn about +Z as the quaternion every state carries.
                 let half = Rotation::new(rb.rotation().angle() / 2.0);
                 let mut impulse = Vector::ZERO;
+                let pairs = rb.colliders().iter();
+                let pairs = pairs.flat_map(|c| self.world.contact_pairs_with(*c));
+                let g = self.world.gravity;
                 for c in rb.colliders() {
                     for pair in self.world.contact_pairs_with(*c) {
                         let sign = if pair.collider1 == *c { -1.0 } else { 1.0 };
@@ -280,6 +283,12 @@ impl World2 {
                     angular: [0.0, 0.0, f64::from(rb.angvel() * (180.0 / PI))],
                     contact_impulse: f64::from(impulse.length()),
                     sleeping: rb.is_sleeping(),
+                    // #2248: its mass, its energy and the pairs of shape uses it touches.
+                    mass: f64::from(rb.mass()),
+                    energy: f64::from(
+                        rb.kinetic_energy() + rb.gravitational_potential_energy(0.0, g),
+                    ),
+                    contacts: pairs.filter(|p| p.has_any_active_contact()).count() as u32,
                 }
             })
             .collect();

@@ -447,7 +447,12 @@
         "benchmarks/command-check.mjs"
       ],
       "margin": 0.5,
-      "limits": {},
+      "limits": {
+        "report.overheadPercent": 1
+      },
+      "criteria": [
+        "#1009.542330be"
+      ],
       "initialReason": "Issue #30 first measurement: the merge base has no command check kind. One process opens a record, the asks core and the supervisor in a temp folder and runs a 200-test Vitest project through the platform sandbox 10 times as the command check kind (runCommandCheck, counting from its reporter) and 10 times as a plain run under the same hermetic environment and loaders, interleaved, so p50 includes Node's start and both arms; the issue's 1% for counting tests stays in tests/acceptance/30/budgets.test.ts. p50 and peak memory get a 50% margin against the merge base once main has this task."
     },
     {

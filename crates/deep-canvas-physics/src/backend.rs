@@ -34,7 +34,7 @@ pub struct Input {
 }
 
 /// One body as a step left it.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct BodyState {
     pub id: String,
     pub pos: [f64; 3],
@@ -47,6 +47,12 @@ pub struct BodyState {
     /// here, every substep's.
     pub contact_impulse: f64,
     pub sleeping: bool,
+    /// #2248: kg, as the backend steps it.
+    pub mass: f64,
+    /// #2248: J: its kinetic energy plus its potential where it stands, −m g·p.
+    pub energy: f64,
+    /// #2248: the pairs of shape uses it is one of that touch after the step.
+    pub contacts: u32,
 }
 
 /// The world as the last step left it, bodies in canonical (ID) order.
