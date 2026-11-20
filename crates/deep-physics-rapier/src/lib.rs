@@ -1089,6 +1089,7 @@ impl Backend for Rapier {
 
     fn read(&self) -> State {
         tally("read");
+        let g = self.world.gravity;
         let bodies = self
             .bodies
             .iter()
@@ -1097,10 +1098,12 @@ impl Backend for Rapier {
                 let q = rb.rotation();
                 // Each contact's impulse as it pushed this body, summed over its pairs.
                 let mut impulse = Vector::ZERO;
+                let mut contacts = 0;
                 for c in rb.colliders() {
                     for pair in self.world.contact_pairs_with(*c) {
                         let sign = if pair.collider1 == *c { -1.0 } else { 1.0 };
                         impulse += pair.total_impulse() * sign;
+                        contacts += u32::from(pair.has_any_active_contact());
                     }
                 }
                 BodyState {
@@ -1116,6 +1119,11 @@ impl Backend for Rapier {
                     angular: back(rb.angvel() * (180.0 / PI)),
                     contact_impulse: f64::from(impulse.length()),
                     sleeping: rb.is_sleeping(),
+                    mass: f64::from(rb.mass()),
+                    energy: f64::from(
+                        rb.kinetic_energy() + rb.gravitational_potential_energy(0.0, g),
+                    ),
+                    contacts,
                 }
             })
             .collect();

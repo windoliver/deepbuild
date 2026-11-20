@@ -60,7 +60,8 @@ pub(super) fn readings(
     readings: &mut BTreeMap<String, (bool, Vec<[f64; 2]>)>,
 ) -> Vec<CharacterState> {
     let walkers = b.characters();
-    for (id, o) in w.outputs.iter().filter(|(_, o)| o.read.of_character()) {
+    let own = |o: &deep_canvas_physics::doc::Output| o.read.of_character() && !o.valued();
+    for (id, o) in w.outputs.iter().filter(|(_, o)| own(o)) {
         if let Some(c) = walkers.iter().find(|x| x.id == o.from) {
             let on = match o.read {
                 Read::Grounded => c.grounded,

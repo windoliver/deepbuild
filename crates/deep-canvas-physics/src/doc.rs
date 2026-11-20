@@ -247,6 +247,7 @@ pub use character::{Character, FIELDS as CHARACTER_FIELDS};
 pub use heightfield::HEIGHTFIELD_SAMPLES;
 pub use inputs::{resolved, Input, On, INPUTS_LATER};
 pub use reads::{probe_pose, probe_shape, Output, Read, Skin, Solve, READS};
+pub use reads::{Formula, Reduce, Sampled};
 pub use soft::{sides, Pin, Soft, SoftShape, Stiffness, Tear, OPEN_MESH};
 pub use vehicle::{flat, Vehicle, Wheel, MOST_WHEELS};
 
