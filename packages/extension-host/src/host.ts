@@ -3365,8 +3365,8 @@ class Host implements ExtensionHost {
 }
 
 /**
- * Copies a package's folder with each file's mode as it is: the digest counts modes, and a copy made under a tighter
- * umask (the hub's is 077) would otherwise digest differently from the folder it was checked as.
+ * Copies a package's folder with each file's mode as it is, so a file's execute bit, which the digest counts (#2874),
+ * survives a copy made under the hub's 077 umask.
  */
 function copyPackage(from: string, to: string): void {
   cpSync(from, to, { recursive: true });
