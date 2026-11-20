@@ -1001,6 +1001,8 @@ timed.push(...['103', '365', '262', '761', '1098', '148', '417', '1425', '149', 
 byHand.push('tests/acceptance/124-redraft-1830/ac5-budgets.live.test.ts', 'tests/acceptance/1427-redraft-1830/ac8-budget.live.test.ts');
 // #2444: these two landed calling the reference-Mac timing helpers with no entry here, so #1114's grep failed on main.
 timed.push('tests/acceptance/568-redraft-1830/judge.test.mjs', 'tests/acceptance/903/ac6-export.test.ts', 'tests/acceptance/508/ac6-effects.test.ts');
+// #1838's lane568 runs #568's lane test, whose budgets are judged on the reference Mac, so it is timed as that one is.
+timed.push('tests/acceptance/1838/lane568.test.mjs');
 
 // #1381's files each build deep-gpu and draw 4,097 × 4,097-sample plates on the Metal GPU; ac6-budget judges the
 // horizon's 0.1 ms at 1080p on the reference Mac.
