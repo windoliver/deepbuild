@@ -22,13 +22,15 @@ use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 
 /// A decoded audio asset: its rate, channels, samples and loop points in samples.
-type Decoded = (i64, usize, Vec<f32>, Option<(i64, i64)>);
+pub(crate) type Decoded = (i64, usize, Vec<f32>, Option<(i64, i64)>);
 
 use crate::evidence;
 use crate::hub::{Hub, Planted};
 use crate::refused;
 use crate::spawn;
 
+#[path = "cut.rs"]
+pub(crate) mod cut;
 #[path = "score_plan.rs"]
 pub(crate) mod score_plan;
 #[path = "synth.rs"]
@@ -243,6 +245,55 @@ fn vec3(v: Option<&Value>) -> Option<[f64; 3]> {
     ])
 }
 
+/// The decode worker's job that decodes an asset's sound, every channel, into `out`.
+pub(crate) fn decode_job(path: &std::path::Path, out: &std::path::Path) -> Value {
+    json!({"op": "decode", "path": path, "out": out, "video_frames": 0})
+}
+
+/// A decode reply's sound, read from `out`, which is removed: its rate, channel count, interleaved
+/// f32 frames and loop points; the worker's refusal of the file or its sound, naming the asset.
+pub(crate) fn decoded_from(
+    reply: &Value,
+    out: &std::path::Path,
+    sha: &str,
+) -> Result<Decoded, Value> {
+    let stream = reply["decoded"]["streams"]
+        .as_array()
+        .and_then(|s| s.iter().find(|s| s["type"] == "audio"))
+        .cloned();
+    let result = (|| {
+        // #503: the worker's refusal of the file or of its sound, naming it (its codec).
+        if let Some(r) = reply
+            .get("refused")
+            .or_else(|| stream.as_ref()?.get("refused"))
+        {
+            let mut r = r.clone();
+            r["asset"] = json!(sha);
+            return Err(r);
+        }
+        let s = stream.ok_or_else(|| json!({"code": "not_audio", "asset": sha}))?;
+        let bytes = std::fs::read(out.join(s["file"].as_str().unwrap_or_default()))
+            .map_err(|_| refused("unreadable"))?;
+        let samples = bytes
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|b| f32::from_le_bytes(*b))
+            .collect();
+        let looped = s["loop"]
+            .as_array()
+            .and_then(|l| Some((l.first()?.as_i64()?, l.get(1)?.as_i64()?)));
+        Ok((
+            s["sample_rate"].as_i64().unwrap_or(48_000).max(1),
+            s["channels"].as_u64().unwrap_or(1).max(1) as usize,
+            samples,
+            looped,
+        ))
+    })();
+    let _ = std::fs::remove_dir_all(out);
+    result
+}
+
 impl Hub<'_> {
     /// An asset from the evidence store, decoded in the decode worker, for the mix: interleaved
     /// f32 frames of its first two channels' worth.
@@ -284,45 +335,8 @@ impl Hub<'_> {
             std::process::id(),
             &sha[..sha.len().min(16)]
         ));
-        let (reply, _) = self.media_job(
-            DECODE_WORKER,
-            json!({"op": "decode", "path": path, "out": out, "video_frames": 0}),
-        );
-        let stream = reply["decoded"]["streams"]
-            .as_array()
-            .and_then(|s| s.iter().find(|s| s["type"] == "audio"))
-            .cloned();
-        let result = (|| {
-            // #503: the worker's refusal of the file or of its sound, naming it (its codec).
-            if let Some(r) = reply
-                .get("refused")
-                .or_else(|| stream.as_ref()?.get("refused"))
-            {
-                let mut r = r.clone();
-                r["asset"] = json!(sha);
-                return Err(r);
-            }
-            let s = stream.ok_or_else(|| json!({"code": "not_audio", "asset": sha}))?;
-            let bytes = std::fs::read(out.join(s["file"].as_str().unwrap_or_default()))
-                .map_err(|_| refused("unreadable"))?;
-            let samples = bytes
-                .as_chunks::<4>()
-                .0
-                .iter()
-                .map(|b| f32::from_le_bytes(*b))
-                .collect();
-            let looped = s["loop"]
-                .as_array()
-                .and_then(|l| Some((l.first()?.as_i64()?, l.get(1)?.as_i64()?)));
-            Ok((
-                s["sample_rate"].as_i64().unwrap_or(48_000).max(1),
-                s["channels"].as_u64().unwrap_or(1).max(1) as usize,
-                samples,
-                looped,
-            ))
-        })();
-        let _ = std::fs::remove_dir_all(&out);
-        result
+        let (reply, _) = self.media_job(DECODE_WORKER, decode_job(path, &out));
+        decoded_from(&reply, &out, sha)
     }
 
     /// A media document's mix: its strips, buses, processors and emitters.

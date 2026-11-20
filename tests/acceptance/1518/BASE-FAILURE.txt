@@ -1,0 +1,39 @@
+Base: d19559622 (design only: "design(#1518): name cut.words@1's surface, the cut placement, its strips and pictures,
+and cut.heard"). Every file loads there: `node node_modules/vitest/vitest.mjs list --root tests/acceptance/1518`
+collects all 12 tests, and `node node_modules/typescript/bin/tsc -p tests/acceptance/1518/tsconfig.json` exits 0.
+
+Run there, the one cheap file (deep-show built with --features full, CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0):
+
+  node node_modules/vitest/vitest.mjs run --root tests/acceptance/1518 fragment.test.ts --testTimeout=3600000 --no-file-parallelism
+
+   ❯ fragment.test.ts (2 tests | 2 failed) 5229ms
+     × #1518.57df01e0 the 30 ms kept word between two cuts is listed in fragments with its text and why, never played, the cuts either side joined as one splice 3512ms
+     × #1518.57df01e0 the planted cut_drops_fragments, which drops the fragment and lists nothing, fails the same judgment naming fragments 206ms
+
+   AssertionError: the take with a 30 ms fragment: deep show's `expansions` holds one row for the cut.words@1 item `cut`
+   (design: As built (#1518)); it holds []: expected +0 to be 1
+    ❯ cutRow helpers.ts:377
+   AssertionError: the take with a 30 ms fragment under the planted cut_drops_fragments: deep-show run answers the
+   scenario ok; got {"ok":false,"code":"bad_input"}: expected false to be true
+    ❯ repliesOf ../501/helpers.ts:315
+
+So at the base the film is presented with its unknown cut.words@1 item and no expansion row, and a scenario naming a
+cut_* planted program isn't answered.
+
+Not run there (the kind doesn't exist; the hub files would start the transcriber's host), expected at an assertion,
+never at an import, read from the base's code:
+
+- placement, budget: cutRow fails as above ("it holds []"); the planted leg of placement fails as above (bad_input).
+- restore, sync, same: stageVideo fails first, "the cut.words@1 item is refused with cut.words_unbaked ... : expected
+  0 to be greater than 0", before any patch or export.
+- heard: once its hub starts, the first presentation's cutRow fails ("it holds []"), before the speech host starts.
+- blocked: the first test fails "the verdict holds 0 rows with from: {default: "cut.heard"}, not one", before the
+  speech host starts; the planted leg fails at bad_input.
+
+Expected at the base: 12 tests, 12 failed for the missing surfaces; budget.test.ts fails there before any timing is
+judged, so it never reads INCONCLUSIVE at the base.
+
+Seen on the way, not this issue's: `npm run build --workspaces` exits 2 at the base, packages/hub and packages/cli
+failing tsc with TS2322 ('"footprint_unknown"' in packages/hub/src/footprint-doctor.ts:68); tsc still writes their
+dist/ (so packages/evidence/dist/patterns.json, which every file here needs, and packages/cli/dist/main.js exist), and
+the hub's native step (deep-confirm, which these tests stub with DEEP_HUB_TEST_CONFIRM) is skipped.
