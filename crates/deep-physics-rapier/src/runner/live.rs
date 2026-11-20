@@ -81,6 +81,7 @@ impl Run {
             leave_ccd_off: self.leave_ccd_off,
             lint: self.lint,
             ccd_on_kinematic: self.ccd_on_kinematic,
+            set_applies_both: self.set_applies_both,
             views: std::cell::RefCell::default(),
         }
     }
@@ -191,7 +192,7 @@ impl Session {
         let world = call.get("world").ok_or_else(bad)?.clone();
         let span_s = call.get("span").and_then(Value::as_f64).ok_or_else(bad)?;
         let (w, b) = run.build(&world)?;
-        let track = Track::read(&w, call)?;
+        let track = Track::read(&w, call, run.set_applies_both)?;
         let span = (span_s * w.step_rate).round() as u64;
         let rate = rate(&json!({}))?;
         let store = call.get("store").and_then(Value::as_str).map(String::from);
@@ -270,7 +271,7 @@ impl Session {
                 acts.fork_at = Some(stamp);
             }
             let mut entries = self.track.entries.clone();
-            entries.push(e);
+            track::join(&mut entries, e);
             self.track = Track::of(entries);
             self.resimulate(stamp, &mut acts)?;
         }

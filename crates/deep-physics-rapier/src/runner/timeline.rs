@@ -135,7 +135,7 @@ impl Run {
         let reply = (|| {
             let (rate, _) = rate(call)?;
             let (w, _) = self.build(world)?;
-            let track = Track::read(&w, call)?;
+            let track = Track::read(&w, call, self.set_applies_both)?;
             let reads = scene.as_ref().filter(|s| !s.reads_nothing());
             let key = self.key(
                 world,
@@ -195,7 +195,7 @@ impl Run {
         }
         let ran = (|| {
             let (w, mut b) = self.build(world)?;
-            let track = Track::read(&w, call)?;
+            let track = Track::read(&w, call, self.set_applies_both)?;
             let straight = self.ran(&mut b, &w, steps, (&track, on), None)?;
             let (_, mut b2) = self.build(world)?;
             let twice = self.ran(&mut b2, &w, steps, (&track, on), None)?;

@@ -201,6 +201,10 @@ pub struct Force {
     /// Body IDs, with each named collision group's members expanded.
     pub applies_to: Vec<String>,
     pub strength: f64,
+    /// #2371: the channel path a drag's `medium` or a spring's `point` reads in its place.
+    pub channel: Option<String>,
+    /// #2371: the `set` input its `strength` names, whose `value` it starts at.
+    pub set_by: Option<String>,
 }
 
 /// A world as the backend builds it, in canonical (ID) order.
@@ -245,7 +249,7 @@ mod soft;
 mod vehicle;
 pub use character::{Character, FIELDS as CHARACTER_FIELDS};
 pub use heightfield::HEIGHTFIELD_SAMPLES;
-pub use inputs::{resolved, Input, On, INPUTS_LATER};
+pub use inputs::{addressed, resolved, Input, On};
 pub use reads::{probe_pose, probe_shape, Output, Read, Skin, Solve, READS};
 pub use soft::{sides, Pin, Soft, SoftShape, Stiffness, Tear, OPEN_MESH};
 pub use vehicle::{flat, Vehicle, Wheel, MOST_WHEELS};
@@ -636,7 +640,7 @@ impl Reader {
             }
         }
         let solve = self.solve(m, mode == Mode::Kinematic, &joints);
-        let inputs = self.inputs(m, &bodies);
+        let inputs = self.inputs(m, &bodies, &mut forces);
         let soft = self.softs(m, &bodies, &materials, &groups);
         let mut outputs = BTreeMap::new();
         for (id, v) in self.map(m, "outputs") {
@@ -1369,6 +1373,8 @@ impl Reader {
             _ => ("", &Value::Null),
         };
         let kp = join(p, "kind");
+        // #2371: a medium or a point written as a string is the channel path it reads.
+        let mut channel = None;
         let kind = match name {
             "uniform" => {
                 let m = &self.obj(fields, &kp, &["accel"]);
@@ -1378,9 +1384,7 @@ impl Reader {
             }
             "drag" => {
                 let m = &self.obj(fields, &kp, &["linear", "quadratic", "medium"]);
-                if let Some(x) = m.get("medium").filter(|x| x.is_string()) {
-                    self.refuse("physics.unsupported", join(&kp, "medium"), x, "a drag medium read from a channel isn't run by this backend interface yet; #2371 brings it".into());
-                }
+                channel = m.get("medium").and_then(Value::as_str).map(String::from);
                 ForceKind::Drag {
                     linear: self.num(m, "linear", &kp, 0.0, 0.0, f64::MAX),
                     quadratic: self.num(m, "quadratic", &kp, 0.0, 0.0, f64::MAX),
@@ -1393,9 +1397,7 @@ impl Reader {
             }
             "spring_to_point" => {
                 let m = &self.obj(fields, &kp, &["point", "hz", "damping_ratio", "max_force"]);
-                if let Some(x) = m.get("point").filter(|x| x.is_string()) {
-                    self.refuse("physics.unsupported", join(&kp, "point"), x, "a spring point read from a channel isn't run by this backend interface yet; #2371 brings it".into());
-                }
+                channel = m.get("point").and_then(Value::as_str).map(String::from);
                 ForceKind::SpringToPoint {
                     point: if m.get("point").is_some_and(Value::is_array) {
                         self.vec3(m, "point", &kp, [0.0; 3])
@@ -1447,9 +1449,7 @@ impl Reader {
                 None
             }
         });
-        if f.get("strength").is_some_and(|s| !s.is_number()) {
-            self.refuse("physics.unsupported", join(p, "strength"), &f["strength"], "a strength set by an input isn't run by this backend interface yet; #2371 brings it".into());
-        }
+        let (strength, set_by) = self.strength(f, p);
         let mut applies_to = Vec::new();
         for (i, t) in f
             .get("applies_to")
@@ -1483,7 +1483,9 @@ impl Reader {
             kind,
             region,
             applies_to,
-            strength: self.num(f, "strength", p, 1.0, f64::MIN, f64::MAX),
+            strength,
+            channel,
+            set_by,
         })
     }
 }

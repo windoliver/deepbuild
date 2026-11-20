@@ -1665,7 +1665,7 @@ A canvas module (see [Canvas modules](#canvas-modules)).
 
 **What it is, and its shape:**
 
-- **Inputs:** grab, move, release, poke, set, launch, activate, jump for a character body, and drive, steer and brake for a vehicle body, each stamped with its step. A control's entries can derive them, such as a launch at the angle and speed two sliders set or a throw along the ray a click stored, and a piece's logic can fire them, such as a relaunch after each landing, as derived entries on the core's input track, so physics never names the logic module.
+- **Inputs:** grab, move, release, poke, set, launch, activate, deactivate, blast, jump for a character body, and drive, steer and brake for a vehicle body, each stamped with its step. A control's entries can derive them, such as a launch at the angle and speed two sliders set or a throw along the ray a click stored, and a piece's logic can fire them, such as a relaunch after each landing, as derived entries on the core's input track, so physics never names the logic module.
 - **Occurrences:** contact (impulse, speed, tags, point), sensor, break, rest and crossing. They're sorted per step and baked as occurrence lists. Drivers read their fields, such as where a ball landed, and a chart can take a row per occurrence; every reader outside the physics module, a logic item, a spawn or `nav.reach` among them, reads a world's occurrence list and readings through the core's column view.
 - **Outputs:** bind poses and joint values to canvas items and readouts. A soft body draws through a skin: a plate, tube or ball built on its own lattice, or a soft volume's own source mesh.
 

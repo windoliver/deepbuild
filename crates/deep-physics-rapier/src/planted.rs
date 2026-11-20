@@ -8,7 +8,7 @@ use rapier3d::prelude::*;
 use crate::Rapier;
 
 /// The planted wrong programs, by name.
-pub const PLANTED: [&str; 24] = [
+pub const PLANTED: [&str; 25] = [
     "caps_allow_restitution_threshold",
     "caps_allow_rolling_resistance",
     "caps_allow_dynamic_gear",
@@ -33,6 +33,7 @@ pub const PLANTED: [&str; 24] = [
     "solve_cap_reports_success",
     "mass_ratio_declared_only",
     "volume_without_constraint",
+    "set_applies_both",
 ];
 
 /// What a planted restore leaves out of the checkpoint it loads.

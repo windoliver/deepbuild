@@ -90,6 +90,20 @@ pub fn kept(
             }
         }
     }
+    // #2371: of two sets of one target and path on one step, only the one written later holds
+    // (Input track entries), as when an item fires its input twice in a step.
+    let set = |v: &Value| {
+        let path = v["data"]["path"].to_string();
+        (v["kind"] == "set").then(|| (v["step"].as_u64(), v["target"].to_string(), path))
+    };
+    let mut last = BTreeMap::new();
+    for v in &out {
+        if let Some(k) = set(v) {
+            let n = last.entry(k).or_insert(0);
+            *n = v["written"].as_u64().unwrap_or(0).max(*n);
+        }
+    }
+    out.retain(|v| set(v).is_none_or(|k| last[&k] == v["written"].as_u64().unwrap_or(0)));
     // The order they apply in: by step, then (kind, target ID), then input and data.
     let key = |v: &Value| {
         let s = |k: &str| v[k].as_str().unwrap_or_default().to_string();
@@ -142,4 +156,39 @@ pub fn missing(id: &str, w: &World, held: impl Fn(&str) -> bool) -> Option<Issue
         )),
         _ => None,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// #2371: a logic item that fires its set input twice in one step leaves the set it fired
+    /// second, and its set of another step stays.
+    #[test]
+    fn a_set_fired_twice_in_a_step_keeps_the_second() {
+        let doc = json!({
+            "kind": "physics.world@1",
+            "capacity": {"bodies": 1, "shapes": 1, "joints": 0, "contacts": 0, "particles": 0},
+            "contact_materials": {"m": {"density": 1000}},
+            "shapes": {"ball": {"kind": "sphere", "radius": 0.25}},
+            "bodies": {"puck": {"kind": "dynamic", "shapes": [{"shape": "ball", "contact_material": "m"}]}},
+            "forces": {"push": {"kind": {"uniform": {"accel": [2, 0, 0]}}, "applies_to": ["puck"], "strength": "throttle"}},
+            "inputs": {"throttle": {"kind": "set", "targets": ["push"], "on": {"logic": "coach"}}}
+        });
+        let w = deep_canvas_physics::doc::read(&doc).unwrap_or_else(|e| panic!("{e:?}"));
+        let fire = |step, value: f64| Fired {
+            module: "logic".into(),
+            item: "coach".into(),
+            step,
+            kind: "set".into(),
+            data: json!({"value": value}),
+        };
+        let fired = [fire(40, 9.0), fire(40, 2.0), fire(41, 5.0)];
+        let kept = kept(&json!({}), &w, &[], &fired, false).unwrap();
+        let values: Vec<_> = kept
+            .iter()
+            .map(|k| (k["step"].clone(), k["data"]["value"].clone()))
+            .collect();
+        assert_eq!(values, [(json!(40), json!(2.0)), (json!(41), json!(5.0))]);
+    }
 }

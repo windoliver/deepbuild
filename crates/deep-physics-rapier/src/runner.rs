@@ -89,6 +89,8 @@ pub struct Run {
     ccd_on_kinematic: bool,
     /// #251's planted vehicle controller or check.
     vehicle: crate::VehiclePlant,
+    /// #2371's twin: a track keeps both of two `set`s of one target and path on one step.
+    set_applies_both: bool,
     /// The views this runner holds open, by session (#522).
     #[cfg(not(target_arch = "wasm32"))]
     views: std::cell::RefCell<BTreeMap<String, live::View>>,
@@ -310,13 +312,15 @@ impl Track {
         Value::Array(self.entries.iter().map(Entry::json).collect())
     }
 
-    /// The call's `track` (absent: none), resolved against `w`, or the reply refusing an entry.
-    fn read(w: &World, call: &Value) -> Result<Track, Value> {
+    /// The call's `track` (absent: none), resolved against `w`, or the reply refusing an entry;
+    /// `both`: #2371's planted track, which keeps a `set` the next on its step replaces.
+    fn read(w: &World, call: &Value, both: bool) -> Result<Track, Value> {
         let t = call.get("track").unwrap_or(&Value::Null);
         if t.is_null() {
             return Ok(Track::default());
         }
-        track::read(w, t).map(Track::of).map_err(|r| refused(&[*r]))
+        let read = track::read(w, t, both);
+        read.map(Track::of).map_err(|r| refused(&[*r]))
     }
 }
 
@@ -463,6 +467,7 @@ impl Run {
             lint: deep_canvas_physics::fast::Planted::None,
             ccd_on_kinematic: false,
             vehicle: crate::VehiclePlant::None,
+            set_applies_both: false,
             #[cfg(not(target_arch = "wasm32"))]
             views: std::cell::RefCell::default(),
         };
@@ -492,6 +497,7 @@ impl Run {
             Some("solve_cap_reports_success") => run.twin = Twin::SolveCapSuccess,
             Some("mass_ratio_declared_only") => run.declared_masses_only = true,
             Some("volume_without_constraint") => run.no_volume = true,
+            Some("set_applies_both") => run.set_applies_both = true,
             Some(name)
                 if !kit::planted(name, &mut run)
                     && !vehicle::planted(name, &mut run)
@@ -799,7 +805,7 @@ impl Run {
                 match self
                     .subject(call)?
                     .and_then(|(world, _)| self.build(&world))
-                    .and_then(|(w, b)| Track::read(&w, call).map(|_| (w, b)))
+                    .and_then(|(w, b)| Track::read(&w, call, self.set_applies_both).map(|_| (w, b)))
                 {
                     Ok((w, b)) => {
                         let (soft, backend) = held::held(&w, &b.held());
@@ -823,7 +829,10 @@ impl Run {
                     Ok(x) => x,
                     Err(e) => return Some(e),
                 };
-                let track = match self.build(&world).and_then(|(w, _)| Track::read(&w, call)) {
+                let track = match self
+                    .build(&world)
+                    .and_then(|(w, _)| Track::read(&w, call, self.set_applies_both))
+                {
                     Ok(t) => t,
                     Err(e) => return Some(e),
                 };
@@ -899,7 +908,7 @@ impl Run {
                     Ok(x) => x,
                     Err(e) => return Some(e),
                 };
-                let track = match Track::read(&w, call) {
+                let track = match Track::read(&w, call, self.set_applies_both) {
                     Ok(t) => t,
                     Err(e) => return Some(e),
                 };
@@ -983,7 +992,10 @@ impl Run {
                     .iter()
                     .map(Value::as_str)
                     .collect::<Option<_>>()?;
-                let track = match self.build(world).and_then(|(w, _)| Track::read(&w, call)) {
+                let track = match self
+                    .build(world)
+                    .and_then(|(w, _)| Track::read(&w, call, self.set_applies_both))
+                {
                     Ok(t) => t,
                     Err(e) => return Some(e),
                 };
@@ -1051,7 +1063,7 @@ impl Run {
                     Ok(x) => x,
                     Err(e) => return Some(e),
                 };
-                let track = match Track::read(&w, call) {
+                let track = match Track::read(&w, call, self.set_applies_both) {
                     Ok(t) => t,
                     Err(e) => return Some(e),
                 };

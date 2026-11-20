@@ -177,7 +177,10 @@ pub struct Rapier {
     world: PhysicsWorld,
     /// Each body's handle, in canonical (ID) order.
     bodies: Vec<(String, RigidBodyHandle)>,
-    forces: Vec<Force>,
+    /// Each force by ID, its strength what the last `set` gave it (#2371).
+    forces: Vec<(String, Force)>,
+    /// #2371: each body's anchors by address, `<body>#<anchor>`: the body and its local point.
+    anchors: BTreeMap<String, (RigidBodyHandle, [f64; 3])>,
     /// The fixed body a joint end of `world` holds to.
     world_body: Option<RigidBodyHandle>,
     /// Each collider's shape use.
@@ -680,7 +683,9 @@ impl Rapier {
     }
 
     /// Each force's push on each body it applies to, from the state at t(k), held over the step.
-    fn push(&mut self) {
+    /// A drag's medium or a spring's point that reads a channel is what `t` holds for the force
+    /// at this step's time (#2371), and with nothing read the force pushes nothing.
+    fn push(&mut self, t: &Targets) {
         for (_, h) in &self.bodies {
             self.world.bodies[*h].reset_forces(false);
         }
@@ -689,7 +694,11 @@ impl Rapier {
             .iter()
             .map(|(id, h)| (id.as_str(), *h))
             .collect();
-        for f in &self.forces {
+        for (name, f) in &self.forces {
+            let read = t.forces.get(name);
+            if f.channel.is_some() && read.is_none() {
+                continue;
+            }
             for id in &f.applies_to {
                 let rb = &mut self.world.bodies[ids[id.as_str()]];
                 let p = rb.translation();
@@ -704,7 +713,9 @@ impl Rapier {
                         (p - v3(*center)).length() <= *radius as f32
                     }
                 };
-                if !rb.is_dynamic() || !inside {
+                // #2371: a deactivated body sleeps, and no force wakes it.
+                let deactivated = rb.is_sleeping() && !rb.is_enabled();
+                if !rb.is_dynamic() || deactivated || !inside {
                     continue;
                 }
                 let (m, v) = (rb.mass(), rb.linvel());
@@ -715,7 +726,7 @@ impl Rapier {
                         quadratic,
                         medium,
                     } => {
-                        let rel = v - v3(*medium);
+                        let rel = v - v3(*read.unwrap_or(medium));
                         -rel * (m * *linear as f32) - rel * (rel.length() * *quadratic as f32)
                     }
                     ForceKind::SpringToPoint {
@@ -725,7 +736,7 @@ impl Rapier {
                         max_force,
                     } => {
                         let (k, c) = spring(*hz, *damping_ratio);
-                        let f = ((v3(*point) - p) * k - v * c) * m;
+                        let f = ((v3(*read.unwrap_or(point)) - p) * k - v * c) * m;
                         match max_force {
                             Some(max) if f.length() > *max as f32 => f * (*max as f32 / f.length()),
                             _ => f,
@@ -900,7 +911,11 @@ impl Backend for Rapier {
         p.contact_softness =
             SpringCoefficients::new(w.solver.contact_hz as f32, w.solver.contact_damping as f32);
         // Rapier holds a contact with a fixed body at twice the frequency; the world keeps that.
-        let fixed = if self.twin == Twin::StaticContactSame { 1.0 } else { 2.0 };
+        let fixed = if self.twin == Twin::StaticContactSame {
+            1.0
+        } else {
+            2.0
+        };
         p.static_contact_softness = SpringCoefficients::new(
             fixed * w.solver.contact_hz as f32,
             w.solver.contact_damping as f32,
@@ -997,7 +1012,13 @@ impl Backend for Rapier {
         self.soft.build(w, &mut self.world, &handles);
         self.particle_capacity = w.capacity.get("particles").copied().unwrap_or(u64::MAX);
         self.checkpoint_every = w.checkpoint_every;
-        self.forces = w.forces.values().cloned().collect();
+        self.forces = w.forces.clone().into_iter().collect();
+        let anchors = w.bodies.iter().flat_map(|(id, b)| {
+            let h = handles[id];
+            let named = b.anchors.iter();
+            named.map(move |(name, p)| (format!("{id}#{name}"), (h, *p)))
+        });
+        self.anchors = anchors.collect();
         if out.is_empty() {
             Ok(())
         } else {
@@ -1014,7 +1035,7 @@ impl Backend for Rapier {
         let start = self.start();
         let watched = self.readings();
         self.aim(targets);
-        self.push();
+        self.push(targets);
         let vehicles = self.vehicles.ids();
         let belts = belt::Belts {
             twin: self.twin,
@@ -1172,6 +1193,7 @@ impl Backend for Rapier {
                 self.vehicles.bytes(),
                 self.soft.bytes(),
                 self.character_bytes(),
+                self.strength_bytes(),
                 self.grab_bytes(),
             ]
             .concat(),
@@ -1209,6 +1231,7 @@ impl Backend for Rapier {
         let rest = self.vehicles.restore(rest);
         let rest = self.soft.restore(rest);
         let rest = self.characters_of(rest);
+        let rest = self.strengths_of(rest);
         self.grabs = Rapier::grabs_of(rest);
         self.step = cp.step;
         self.last.clear();
