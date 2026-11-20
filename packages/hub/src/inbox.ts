@@ -28,7 +28,7 @@ interface Step { does: string; changes: string[]; undo: string; cost: number }
 interface Offer { offer: string; session: string; command: string; scope: string }
 
 /** `deep inbox [--json | answer <ask> <option> | undo <ask> | save <offer>]`: exit 0 listed or counted, 2 a usage error, 3 not decided, 1 refused otherwise. */
-export async function inboxCommand(args: readonly string[]): Promise<number> {
+export async function inboxCommand(args: readonly string[], setUp: () => Promise<number> = async () => 0): Promise<number> {
   const json = args.length === 1 && args[0] === '--json';
   if (json) args = [];
   const answering = args[0] === 'answer';
@@ -39,6 +39,8 @@ export async function inboxCommand(args: readonly string[]): Promise<number> {
     process.stderr.write(`${USAGE}\n`);
     return 2;
   }
+  const stopped = await setUp();
+  if (stopped) return stopped;
   const at = rootOf(installedRoot());
   let reply: Reply;
   /** When the hub stopped answering, for a list read from its database. */
