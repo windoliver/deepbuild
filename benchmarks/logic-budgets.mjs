@@ -8,7 +8,7 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { loadavg, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 
@@ -122,7 +122,11 @@ export async function logicBudgets({ root, release }) {
     const bin = join(root, 'target', 'release', 'deep-logic');
     await measure(bin, programs);
     const runs = [];
-    for (let n = 0; n < 5; n++) runs.push(await measure(bin, programs));
+    // Each run carries the one-minute load at its start and end, which canvas.mjs judge gives judgeLimit (#2870).
+    for (let n = 0; n < 5; n++) {
+      const loadStart = loadavg()[0];
+      runs.push({ ...(await measure(bin, programs)), loadStart, loadEnd: loadavg()[0] });
+    }
     console.log(JSON.stringify({ task: 'canvas-logic-budgets', fingerprint, runs }));
   } finally {
     rmSync(dir, { recursive: true, force: true });

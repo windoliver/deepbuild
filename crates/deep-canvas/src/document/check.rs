@@ -2129,7 +2129,10 @@ fn check_params(
             // The forms the kind's reader declares (#1973): a value none takes is refused here,
             // naming the form it expected and the one it got; the reader checks the rest.
             ParamType::Json(declared) => {
-                if let Some(issue) = form_issue(key, name, param.unit, declared, value) {
+                if let Some((mut issue, form)) = form_issue(key, name, param.unit, declared, value)
+                {
+                    let field = format!("{}@{}.{name}", entry.full_name(), version.major);
+                    registry::fields::name_list(&mut issue, sealed, &field, &form, value);
                     issues.push(issue);
                 }
             }
@@ -2212,12 +2215,18 @@ fn check_params(
 /// A structured value no declared form takes, as `out_of_range` at its path: `size takes 3
 /// numbers in m; got 2 numbers`, with the forms it takes. A declaration the form language can't
 /// read refuses nothing here; the kit refuses it (#1973).
-fn form_issue(key: &str, name: &str, unit: &str, declared: &str, value: &Value) -> Option<Issue> {
+fn form_issue(
+    key: &str,
+    name: &str,
+    unit: &str,
+    declared: &str,
+    value: &Value,
+) -> Option<(Issue, crate::form::Form)> {
     let form = crate::form::parse(declared).ok()?;
     let got = form.miss(value)?;
     let gist = form.gist(unit);
     let forms: Vec<String> = form.alternatives().iter().map(|f| f.print()).collect();
-    Some(Issue {
+    let issue = Issue {
         fix: format!("Write {name} as {}: {gist}.", forms.join(" or ")),
         forms,
         ..Issue::error(
@@ -2227,7 +2236,8 @@ fn form_issue(key: &str, name: &str, unit: &str, declared: &str, value: &Value) 
             value.clone(),
             &format!("{name} takes {gist}; got {got}"),
         )
-    })
+    };
+    Some((issue, form))
 }
 
 /// A document's design size, as `fw` and `fh` read it.
