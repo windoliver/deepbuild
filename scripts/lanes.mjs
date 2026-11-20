@@ -806,6 +806,9 @@ alone.push('tests/acceptance/549-redraft-ac2/');
 // play matches in process; ac10 also plays two live matches through the shipped relay. The Oracle lane builds
 // deep-show alone.
 alone.push('tests/acceptance/550/', 'tests/acceptance/550-oracle/');
+// #552's files each build deep-show (ac5 builds deep-drive with env-plants instead) and play matches in process; ac1,
+// ac2, ac6 and ac7 draw on the GPU, ac7 the app's window, and ac7 waits on your taste call in tests/acceptance/552/TASTE.json.
+alone.push('tests/acceptance/552/');
 byHand.push('tests/acceptance/549/ac2-join-only.test.ts');
 timed.push('tests/acceptance/172/budgets.test.ts', 'tests/acceptance/172/images.test.ts');
 // #172's first-draft refusal test shows a device control without the role the document check requires, so that piece is
