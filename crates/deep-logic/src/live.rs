@@ -212,7 +212,7 @@ fn worker(line: Value, planted: Planted, inbox: Receiver<Latched>, outbox: Sende
         }
         // A piece without logic gains no work per frame: nothing steps, nothing is timed.
         if world.lives.is_empty() {
-            let reply = json!({"want": t / len + 1, "at": t / len + 1, "stale": false, "steps": 0, "eval_ns": 0,
+            let reply = json!({"want": t / len + 1, "at": t / len + 1, "stale": false, "steps": 0, "eval_ns": 0, "saves_ns": 0,
                 "deep_hash": world.deep_hashes(), "stamped": null, "fork_at": null});
             if outbox.send(reply).is_err() {
                 return;
@@ -286,7 +286,7 @@ fn worker(line: Value, planted: Planted, inbox: Receiver<Latched>, outbox: Sende
         draws.extend(world.previews());
         let at = world.at().unwrap_or(0);
         let reply = json!({"want": want, "at": at, "stale": at != want, "steps": steps, "eval_ns": eval_ns,
-            "previews": previews, "blends": world.blends(t), "traps": crate::libraries_in(&world.piece, traps),
+            "saves_ns": std::mem::take(&mut world.saves_ns), "previews": previews, "blends": world.blends(t), "traps": crate::libraries_in(&world.piece, traps),
             "deep_hash": world.deep_hashes(), "stamped": stamped, "fork_at": fork_at,
             "draws": draws, "valid_until": if at == want { world.valid_until(t) } else { Some(t + 1) },
             "drawn": hashes(at - 1, &world.arrays())});
@@ -526,7 +526,9 @@ fn front(
         let eval_ns = cpu_ns() - start;
         let reply = json!({"want": due + 1, "at": due + 1, "stale": !ended.contains_key(&due), "steps": steps,
             "eval_ns": eval_ns, "deep_hash": deep, "stamped": stamped, "fork_at": fork_at,
-            // A pipelined item has no preview (budget::pipelined), so it previews nothing.
+            // A pipelined item has no preview (budget::pipelined), so it previews nothing; its logic
+            // thread keeps no saves folder, so the saves machinery never runs there (#189).
+            "saves_ns": 0,
             "previews": 0, "blends": world::blends(&piece, shown.iter().map(|(l, p, _)| (*l, p.is_empty())), t), "traps": [],
             "draws": draws, "valid_until": valid_until, "ended": listed, "drawn": drawn});
         // Steps before the one drawn are done with: a seek back runs them again.

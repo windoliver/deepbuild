@@ -21,6 +21,8 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
             "assets",
             "links",
             "saves",
+            "carry",
+            "carry_in",
             "emits",
             "fires",
             "services",
@@ -237,6 +239,11 @@ pub(super) fn declared(id: &str, params: &Map<String, Value>) -> Result<Declared
         ring,
         assets,
         saves: params.get("saves").cloned(),
+        carry: params.get("carry").cloned(),
+        carry_in: match params.get("carry_in") {
+            None => None,
+            Some(v) => Some(crate::carry::carry_in_of(v).map_err(|r| logic_refused(id, vec![r]))?),
+        },
         emits,
         fires,
         services,
@@ -457,6 +464,17 @@ pub(super) fn region_map(
         ty: "i64".into(),
         read: Read::Seed,
     });
+    // #189: the carry record's entry, after the item's other reads.
+    if let Some(ci) = &d.carry_in {
+        entries.push(Region {
+            region: "reads",
+            name: "carry_in".into(),
+            offset: at + 8,
+            size: ci.size(),
+            ty: "carry".into(),
+            read: Read::Carry,
+        });
+    }
     let mut at = 0u32;
     for w in &d.writes {
         entries.push(Region {
@@ -920,6 +938,18 @@ pub fn check_in(
                 None
             }
         };
+        let carry = match d
+            .carry
+            .as_ref()
+            .map(|v| crate::carry::carry_of(v, &layout, &d.writes))
+        {
+            None => None,
+            Some(Ok(c)) => Some(c),
+            Some(Err(r)) => {
+                refused.push(r);
+                None
+            }
+        };
         if !refused.is_empty() {
             return Err(logic_refused(id, refused));
         }
@@ -969,6 +999,8 @@ pub fn check_in(
             fixtures: BTreeMap::new(),
             interfaces: BTreeMap::new(),
             saves,
+            carry,
+            carry_in: d.carry_in.clone(),
             emits: d.emits.clone(),
             emits_at: emits_at.unwrap_or(0),
             fires: d.fires.clone(),

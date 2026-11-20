@@ -1,0 +1,48 @@
+# #189 lab acceptance suite, redrafted, at the base: this worktree's HEAD 4bf2fc7ad, #2899's merge (moved pack kinds,
+# no save, world, logic or seal code) on top of the named base 531da1ef0, with tests/acceptance/189/lab (the first
+# draft) committed and tests/acceptance/189/lab-redraft added; on macOS arm64 (Mac17,10, Apple M5 Max, 64 GB: one of
+# the reference Macs), cargo 1.99.1, Node 24, vitest 5.0.5, 2026-11-20 UTC.
+# deep-show full was built at the base through the machine's throttle this time (it waited about an hour in the queue).
+# Command (README: Run them), through the build throttle; scripts/lease found no `deep` and ran it unleased:
+#   PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+#     node scripts/throttle.mjs build --wait 30 -- sh scripts/lease \
+#     npx vitest run --root tests/acceptance/189/lab-redraft --testTimeout=600000 --no-file-parallelism
+# Result: exit 1; 6 of 6 tests fail (3 of 3 files), all at their first assertion the base lacks, none in the harness,
+# none BLOCKED; 21 s. In every file the lab is now presented with no error (helpers' `presented`), its layout probe's
+# deep_query answers the region map, and the full build's `logic` call steps it on its track; that call's reply holds
+# no `saves`, as the base writes none, so each test stops there:
+
+ ❯ ac08-rederived.test.ts (3 tests | 3 failed) 8141ms
+     × #189.4e3f31a0 opened in a test build whose physics implementation differs, the save shows one notice naming the implementation, is re-derived and written as a new save beside the old one's unchanged bytes, gives a fresh run's full-state hashes over the next 600 steps, and opened again shows no notice 4298ms
+     × #189.4e3f31a0 a planted restore that loads the old world's bytes into the new build (restore_loads_old_world) fails the comparison with a fresh run, naming the save and the implementation 1049ms
+     × #189.4e3f31a0 a planted build whose physics change kills the hero during the replay shows the notice naming the first array that differs, doesn't open the re-derived save by itself, and leaves the slot's saves in place 1041ms
+ ❯ ac10-world-content.test.ts (2 tests | 2 failed) 6676ms
+     × #189.dfd0da6e after a fix that moves one static wall of its world and keeps its program's layout, the lab's save at step 1800 is refused, naming the world 4596ms
+     × #189.dfd0da6e a planted binding that leaves worlds out of the content (content_leaves_out_worlds) opens the save with the wall where the save had it while the document draws it moved, and fails, naming the world 988ms
+ ❯ ac11-rederive-budget.test.ts (1 test | 1 failed) 5693ms
+     × #189.9badbff7 re-deriving the lab's 1,800-step save takes under 5 s 4385ms
+
+Each of the six fails with the same assertion, from helpers' writeSave (ac08 and ac11: "the lab saved in the full
+build"; ac10: "the lab saved at step 1800"):
+
+AssertionError: the lab saved in the full build: the logic call's saves (README: logic, saves_dir) is an array, got undefined: expected false to be true // Object.is equality
+ ❯ arr helpers.ts:55:67
+ ❯ writeSave helpers.ts:445:17
+ ❯ saved ac08-rederived.test.ts:37:43
+
+Past that point, not reached in this run: ac08's and ac11's drift and heavy builds, which cargo refuses at the base
+("error: the package 'deep-show' does not contain this feature: test-physics-rapier-patch-drift", and -heavy; their
+beforeAll recorded both, observed directly too), `open_save` (the base's call parser doesn't know it: a scenario holding
+it is {"ok":false,"code":"bad_input"}) and both planted names (deep-show run --planted answers bad_input and exits 2),
+read from the base's code.
+
+Also checked at the base, apart from this run (a scratch test, not committed): the lab run through this deep-show
+full build in a `logic` call over its 2,400 steps and a `world` call, with the document's gravity as written, times
+1.000001 and times 2, standing in for the full, drift and heavy builds. Each presents with no error. As written: the
+hero is off the ground steps 88 to 136 (49 steps), is on `far` at x 4.667 by step 140, stands against the wall at x 11.690
+from step 400 through 1,800, walks back after 1,900 and is off the ground from step 2,126 (121 steps); `rules.alive` is 1
+at step 1,799 and 0 from step 2,197; `rules.request` is 1 at step 1,799 alone. Times 1.000001: the same off-ground runs,
+the same `rules` full-state hashes at checkpoints 1,800 and 2,400 (ba9a0a631a7fc232, 467ddeffbf2e645c), and another
+world step hash at 1,800 (4c3569d19ee4366e for 12987966492a3304; the crate rests 6e-8 m lower). Times 2: off the ground
+steps 88 to 186 (99 steps), into the pit; `rules.alive` 0 from step 159, so 0 at step 1,799, and another `rules`
+full-state hash at 1,800 (3a535798406b4ba4). npx tsc -p tests/acceptance/189/lab-redraft/tsconfig.json exits 0.
