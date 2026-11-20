@@ -198,7 +198,8 @@ impl Match {
         let step = self.cfg.step();
         self.next_frame = (self.next_frame + step).max(now - step);
         let frame = copy.tick(now).unwrap_or_default();
-        if let Some(end) = copy.end() {
+        // #550: a desync keeps the connection until the copies have located it.
+        if let (Some(end), true) = (copy.end(), copy.done()) {
             self.state = State::Ended(end.name().to_string());
         }
         frame

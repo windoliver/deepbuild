@@ -409,6 +409,20 @@ impl Live {
         let (a, b) = (cut(m), cut(n));
         m[..a.start] == n[..b.start] && m[a.end..] == n[b.end..]
     }
+    /// #550: the globals as the step and full-state hashes take them.
+    pub(crate) fn encoded_globals(&mut self) -> Vec<u8> {
+        self.encoded()
+    }
+    /// #550: the step hash of the state its last step left, without that step's rows.
+    pub(crate) fn last_step_hash(&mut self) -> u64 {
+        self.step_hash(&Vec::new())
+    }
+    /// #550: writes `bytes` into the program's memory at `at`, marking the page written.
+    pub(crate) fn poke(&mut self, at: usize, bytes: &[u8]) -> Option<()> {
+        self.runner.write("memory", at, bytes).ok()?;
+        self.dirty.insert((at / PAGE as usize) as u32);
+        Some(())
+    }
     /// The step hash: the program's globals, the arrays it wrote and the rows it emitted, each
     /// after its kind's index (none for a step that emitted none, so an item's hash is as before).
     fn step_hash(&mut self, rows: &Rows) -> u64 {
@@ -463,6 +477,7 @@ pub struct World {
 
 pub type Failed = Value;
 
+mod net;
 mod rewind;
 mod world_impl;
 
