@@ -1,0 +1,177 @@
+The #2307 suite run once at base commit 85203f458 ("Merge pull request #2852 …"; no implementation of #2307), on
+macOS 27.2 arm64 (shared), rustc 1.99.1, Node 24.22.2, vitest 5.0.5, each file once, in two commands:
+
+1. ac2 to ac7, six files in one command, by this job's first run. Its log starts at scripts/lease's own line, which
+   gives the command lease ran; the wrapper before scripts/lease is not in the log:
+
+     node node_modules/vitest/vitest.mjs run --root tests/acceptance/2307 --no-file-parallelism --testTimeout=600000 \
+       --reporter=verbose ac2-never-more-than-asked.test.ts ac3-level-ground.test.ts ac4-asleep-on-the-slope.test.ts \
+       ac5-drive-from-sleep.test.ts ac6-platform.test.ts ac7-behavior-kit.test.ts
+
+2. ac1, by this job's finishing run, through the machine's build slot, where it waited a little over 70 minutes
+   (1-minute load 110 to 200 while it waited and ran):
+
+     PATH=/opt/homebrew/opt/rustup/bin:$PATH NO_COLOR=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+       node scripts/throttle.mjs build --wait 240 -- sh scripts/lease \
+       node node_modules/vitest/vitest.mjs run --root tests/acceptance/2307 --no-file-parallelism --testTimeout=600000 \
+       --reporter=verbose ac1-parked-on-a-slope.test.ts
+
+scripts/lease ran both unleased ("no deep on PATH and no built CLI at packages/cli/dist"). The two builds the suite
+reads were already made in this checkout's target folder (the base's release deep-physics and its debug build with
+--features test-backends), so the suite's own cargo calls found them made. The test files, helpers.ts, twins.json and
+tsconfig.json are as they ran. At the base the merge base is 85203f458 itself.
+
+Result: Test Files 7 failed (7); Tests 10 failed | 4 passed (14).
+  command 1: Test Files 6 failed (6); Tests 8 failed | 4 passed (12); 8.4 s with the builds made
+  command 2: Test Files 1 failed (1); Tests 2 failed (2); 4.9 s with the builds made
+
+Passing at the base, as they should (README: What the base already does). Each is a clause the base already meets and
+these tests don't credit to the work: the program each fails on is its criterion's planted wrapper, which the base
+lacks (below).
+- ac2 "brakes of 1,000 N facing up 20° leave it 9.42 m/s at 4 s within 1%; grip 0.3 across 20° lets its speed rise at
+  0.590 m/s² within 2%; brake 0 facing up 10° rolls it back 9.81 × sin 10° × t² ÷ 2 at 4 s within 1%": the base has no
+  hold, so nothing holds more than it is asked. The test printed
+    weak brake, up 20°: 9.42902 m/s at 4 s; grip 0.3, across 20°: 0.590368 m/s²; brake 0, up 10°: 13.635 m back at 4 s
+  beside the worked 9.4209 m/s, 0.5897 m/s² and 13.628 m. Fails on `hold_ignores_brake_limit`.
+- ac3 "from 10 m/s a brake of 4,000 N stops the car in 12.5 m within 3% and it never moves backwards faster than
+  0.05 m/s, a drive of 2,000 N reaches 4.00 m/s at 2 s within 2%, and at 3 m/s with steer 15° the middle of the rear
+  axle circles at 9.330 m within 3%": #251's three fixtures are the base's own and read as they did (the test prints
+  no reading; the kit's rows are under "Probed apart" below). Fails on `hold_takes_out_side_slip`.
+- ac4 "it writes rest and is asleep by step 180, 10 s later has not moved 1 mm, every step hash while it sleeps equals
+  the one before it, and no wheel writes an occurrence": at the base's creep the car is slower than the world's sleep
+  speed, so it falls asleep on the slope, and the base doesn't run the controller on a body asleep (the test prints no
+  reading; its rest row is under "Probed apart" below). Fails on `controller_runs_asleep`.
+- ac5 "asleep on level ground and driven at 2,000 N it wakes on that step, reaches 4.00 m/s at 2 s within 2%, never
+  rises more than 5 mm and no wheel writes contact_end; asleep on the 10° slope and driven at 6,000 N it wakes on that
+  step and climbs at 8.59 m/s at 2 s within 2%": #251's drive already wakes a sleeping car, and nothing was stored in
+  it while it slept. The test printed
+    driven from sleep: on level ground 3.99998 m/s at 2 s, its centre rising 0 m; on the 10° slope 8.59299 m/s at 2 s
+  Fails on `controller_runs_asleep`.
+
+Every other test fails at an assertion in its own file, for the reason the README gives; none fails in a helper, at an
+import or at a timeout, and none is BLOCKED or INCONCLUSIVE:
+- ac1's four slopes fail on the base's creep, 0.144 to 0.293 m in the 10 s where the criterion asks less than 1 mm.
+- ac6's platform test fails on the sleeping car alone: no wake row, and 5 m of platform gone from under it. Its first
+  clause, the braked car awake, adds no failure: the base ends 0.00652409 m from its place, inside 0.02 m.
+- ac7's two tests fail because the kit has none of the three fixtures. The second reaches that assertion past its
+  others: the base's `--backend no_vehicle_controller` runs, lists no `vehicle_controller` and is admitted by the kit.
+- Each of the six twin tests fails at its first assertion: `deep-physics --planted <name>` exits 2 answering
+  {"ok":false,"code":"bad_input"}. The base knows none of this suite's five planted names.
+
+Each test, trimmed to its failing assertion:
+
+ac1-parked-on-a-slope.test.ts
+ × #2307.8ca832fd after 2 s to settle its centre moves less than 1 mm along the slope over the next 10 s, facing up it
+   and standing across it, at 10° and at 20°
+   AssertionError (ac1-parked-on-a-slope.test.ts:48): the car parked on the four slopes:
+     kart: moves 0.14429 m along the 10° slope, facing up it over the 10 s after its 2 s to settle, not less than 1 mm
+     kart: moves 0.284954 m along the 20° slope, facing up it over the 10 s after its 2 s to settle, not less than 1 mm
+     kart: moves 0.148987 m along the 10° slope, standing across it over the 10 s after its 2 s to settle, not less
+     than 1 mm
+     kart: moves 0.292901 m along the 20° slope, standing across it over the 10 s after its 2 s to settle, not less
+     than 1 mm
+   : expected [ …(4) ] to deeply equal []
+ × #2307.8ca832fd (twin: controller_without_hold) a wrapper that leaves the backend's controller as it is moves
+   0.183 m facing up 10° and fails, naming the body and the distance
+   AssertionError (ac1-parked-on-a-slope.test.ts:53): deep-physics --planted controller_without_hold runs and bakes the
+   car braked facing up the 10° slope: expected 'deep-physics --planted controller_wit…' to be ''
+     + deep-physics --planted controller_without_hold exits 2, not 0; stdout: {"ok":false,"code":"bad_input"}
+     + ; stderr:
+
+ac2-never-more-than-asked.test.ts
+ ✓ #2307.3dfea1f1 brakes of 1,000 N facing up 20° leave it 9.42 m/s at 4 s within 1%; … (above)
+ × #2307.3dfea1f1 (twin: hold_ignores_brake_limit) a hold that ignores the brake's limit keeps the first car still and
+   fails, naming the body
+   AssertionError (ac2-never-more-than-asked.test.ts:79): deep-physics --planted hold_ignores_brake_limit runs and
+   bakes the car with brakes of 1,000 N facing up the 20° slope: expected 'deep-physics --planted hold_ignores_b…' to
+   be ''
+     + deep-physics --planted hold_ignores_brake_limit exits 2, not 0; stdout: {"ok":false,"code":"bad_input"}
+     + ; stderr:
+
+ac3-level-ground.test.ts
+ ✓ #2307.536a975c from 10 m/s a brake of 4,000 N stops the car in 12.5 m within 3% … (above)
+ × #2307.536a975c (twin: hold_takes_out_side_slip) a hold that takes out a wheel's sideways slip itself, where the
+   controller's grip already does, stops the turning car and fails, naming the turn fixture
+   AssertionError (ac3-level-ground.test.ts:127): deep-physics --planted hold_takes_out_side_slip runs, answers the
+   kit's calls and bakes #251's three fixtures: expected 'deep-physics --planted hold_takes_out…' to be ''
+     + deep-physics --planted hold_takes_out_side_slip exits 2, not 0; stdout: {"ok":false,"code":"bad_input"}
+     + ; stderr:
+
+ac4-asleep-on-the-slope.test.ts
+ ✓ #2307.9f33326e it writes rest and is asleep by step 180, 10 s later has not moved 1 mm, … (above)
+ × #2307.9f33326e (twin: controller_runs_asleep) a wrapper that runs the controller on the sleeping body stores a
+   velocity in it, so its step hashes change, and fails, naming the first step
+   AssertionError (ac4-asleep-on-the-slope.test.ts:68): deep-physics --planted controller_runs_asleep runs and bakes
+   the car braked on the 10° slope with sleep on: expected 'deep-physics --planted controller_run…' to be ''
+     + deep-physics --planted controller_runs_asleep exits 2, not 0; stdout: {"ok":false,"code":"bad_input"}
+     + ; stderr:
+
+ac5-drive-from-sleep.test.ts
+ ✓ #2307.400e4569 asleep on level ground and driven at 2,000 N it wakes on that step, … (above)
+ × #2307.400e4569 (twin: controller_runs_asleep) the planted wrapper of the last criterion reads 3.62 m/s on level
+   ground, hops 0.079 m and fails, naming the body
+   AssertionError (ac5-drive-from-sleep.test.ts:75): deep-physics --planted controller_runs_asleep runs and bakes the
+   two cars driven from sleep: expected 'deep-physics --planted controller_run…' to be ''
+     + deep-physics --planted controller_runs_asleep exits 2, not 0; stdout: {"ok":false,"code":"bad_input"}
+     + ; stderr:
+
+ac6-platform.test.ts
+ × #2307.fd4b6bbc braked at 4,000 N on a platform that reaches 2 m/s along its heading in 1 s and holds it 2 s, the car
+   ends within 0.02 m of its place; asleep on a platform that starts to move at step 600, it wakes on that step and
+   ends within 0.02 m of its place
+   AssertionError (ac6-platform.test.ts:71): the car on the platform:
+     kart: doesn't wake on step 601, the step the platform under it starts to move: its wake row is on step none
+     kart: asleep until the platform moved, ends 5 m from its place on it at step 960, not within 0.02 m
+   : expected [ …(2) ] to deeply equal []
+   (The test printed: on the platform: awake, the braked car ends 0.00652409 m from its place; asleep until step 600,
+   it ends 5 m from its place)
+ × #2307.fd4b6bbc (twin: leaves_asleep_on_moving_ground) a wrapper that leaves it asleep leaves it behind and fails,
+   naming the body and the step
+   AssertionError (ac6-platform.test.ts:77): deep-physics --planted leaves_asleep_on_moving_ground runs and bakes the
+   car asleep on the platform: expected 'deep-physics --planted leaves_asleep_…' to be ''
+     + deep-physics --planted leaves_asleep_on_moving_ground exits 2, not 0; stdout: {"ok":false,"code":"bad_input"}
+     + ; stderr:
+
+ac7-behavior-kit.test.ts
+ × #2307.ac8e941b the three join the kit's data once each, and Rapier 0.36.1 passes them through the kit
+   AssertionError (ac7-behavior-kit.test.ts:88): the three fixtures in the kit's data and on Rapier:
+     vehicle_slope: the kit's data holds it 0 times, not once
+     vehicle_weak_brake: the kit's data holds it 0 times, not once
+     vehicle_sleeping_drive: the kit's data holds it 0 times, not once
+     vehicle_slope: the kit's report holds it 0 times on Rapier, not once
+     vehicle_weak_brake: the kit's report holds it 0 times on Rapier, not once
+     vehicle_sleeping_drive: the kit's report holds it 0 times on Rapier, not once
+   : expected [ …(6) ] to deeply equal []
+ × #2307.ac8e941b a test backend whose caps() list no vehicle controller reads excluded_by_caps on the three
+   AssertionError (ac7-behavior-kit.test.ts:101): the three fixtures on a backend without a vehicle controller:
+     vehicle_slope reads nothing on no_vehicle_controller, not excluded_by_caps
+     vehicle_weak_brake reads nothing on no_vehicle_controller, not excluded_by_caps
+     vehicle_sleeping_drive reads nothing on no_vehicle_controller, not excluded_by_caps
+   : expected [ …(3) ] to deeply equal []
+
+Probed apart from the suite on the base's release binary (a scratch script of this job's, not delivered), for what the
+README says of the base and the two runs don't print. Every line but the last is one of the suite's own worlds and
+calls; the last is two platforms the suite doesn't use (README: Readings):
+  the kit's rows on Rapier:                     vehicle_brake pass measuring 12.4585 m (answer 12.5), vehicle_drive pass
+                                                3.99998 m/s (4), vehicle_turn pass 9.33646 m (9.3301)
+  vehicle_brake's own run:                      the car's fastest move backwards after the brake's step is 0.03837 m/s
+  the kit's vehicle fixtures:                   vehicle_sag, vehicle_brake, vehicle_drive, vehicle_turn,
+                                                vehicle_contacts (#251's five); vehicle_weight, vehicle_beam,
+                                                vehicle_slab, vehicle_platform (#2306's four)
+  braked facing up 10°, sleep on (ac4's world): rest at step 117 and no wake; 0 m moved from step 180 to 1,380; no
+                                                step hash after its rest differs from the one before it; no wheel row
+                                                after its rest; the first step's hash differs from the built state's
+  level ground, sleep on, driven at step 480:   rest at step 117, wake at step 481; 4.0000 m/s at step 720; rise 0 m;
+                                                no wheel row after step 480
+  facing up 10°, sleep on, 6,000 N at step 480: rest at step 117, wake at step 481; climbs at 8.5930 m/s at step 720
+  the platform, braked, awake (ac6's world):    0.0065 m from its place at step 600 (0.0232 m under #2306's
+                                                `--planted controller_as_is`)
+  the platform, asleep until step 600:          rest at step 117 and no wake; 5.0000 m from its place at step 960,
+                                                0 m moved in the world
+  a platform that jumps to its speed:           1 m in the first second by one key, 0.2254 m short; 2 m/s at once,
+                                                0.4845 m short
+
+What couldn't be run at the base: the passing path of each of the six twin tests, which needs its planted name (the
+0.183 m, 3.62 m/s and 0.079 m the issue prints for two of them are held as the README's Readings say, and none could be
+read here); the passing paths of ac7's two tests, which need the three fixtures; and ac6's first clause against a
+program that fails it, since the base already meets it and the criterion names no planted program for it.
