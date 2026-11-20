@@ -557,6 +557,7 @@ fn decode_all(
             crop: cut,
             flip,
             level: 0,
+            frame: 0,
         };
         let to = fit.fitted(*bounds, key.shown());
         key.level = deep_images::level_for(key.shown(), [to[2], to[3]]);

@@ -355,7 +355,7 @@ pub(crate) fn names(v: Option<&Value>) -> Vec<&str> {
 
 /// The 2D document an inset's content draws in: its entries as items of one layer, in texels
 /// from the texture's top left, y down.
-fn content_doc(id: &str, size: [u32; 2], content: &Map<String, Value>) -> Value {
+pub(crate) fn content_doc(id: &str, size: [u32; 2], content: &Map<String, Value>) -> Value {
     let items: Map<String, Value> = content
         .iter()
         .map(|(eid, e)| {
@@ -374,7 +374,7 @@ fn content_doc(id: &str, size: [u32; 2], content: &Map<String, Value>) -> Value 
 }
 
 /// A picture's key: the inset's ID and a hash of what it draws.
-fn picture_key(id: &str, doc: &Value) -> String {
+pub(crate) fn picture_key(id: &str, doc: &Value) -> String {
     let mut h = deep_canvas::schedule::Hasher::new("scene3d.inset");
     h.text(&doc.to_string());
     let k = h.finish().0;

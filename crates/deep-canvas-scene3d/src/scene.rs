@@ -1792,6 +1792,8 @@ pub(crate) fn evaluate_compiled(
     let mut puffs = 0u64;
     let mut others = Vec::new();
     let mut curves = BTreeMap::new();
+    // #2450: the images a module's marks picture 2D items on, whose pictures wait for the camera.
+    let mut pictured = Vec::new();
     // #226: what a module's deforms and kinds read.
     let lookup = |k: &str| items.get(k);
     let ask = crate::contributed::Ask {
@@ -1965,7 +1967,7 @@ pub(crate) fn evaluate_compiled(
                 {
                     let read = assets.expect("matched above");
                     let model = world(&items, id);
-                    let (solids, file_lights) = asset_scene(read, id, params, &model, look)?;
+                    let (solids, file_lights) = asset_scene(read, id, params, item, &model, look)?;
                     for s in solids {
                         bounds.extend(corners_of(&s));
                         layer.solids.push(s);
@@ -2058,7 +2060,7 @@ pub(crate) fn evaluate_compiled(
                     || k == "fixture.skin@1" =>
                 {
                     let (mesh, shared) = match (k, assets) {
-                        ("mesh.asset@1", Some(read)) => asset_mesh(read, id, params)?,
+                        ("mesh.asset@1", Some(read)) => asset_mesh(read, id, params, item)?,
                         // #419's stand-ins: a pre-skin per time, and a sequence's frame at t.
                         ("fixture.skin@1", _) => (crate::fixtures::skin(params, &path)?, None),
                         ("mesh.sequence@1", Some(read)) => {
@@ -2369,7 +2371,7 @@ pub(crate) fn evaluate_compiled(
                 "sky@1" if sky.is_none() => {
                     sky = Some(crate::sky::parse(id, params, look, assets)?);
                 }
-                "light.sun@1" | "light.point@1" | "light.spot@1" | "light.area@1" => {
+                k if light::KINDS.contains(&k) => {
                     let m = world(&items, id);
                     let dir = normalize(turn(&m, [0.0, 0.0, -1.0]));
                     let flicker = flicker(program, &state, params, &path)?;
@@ -2447,6 +2449,7 @@ pub(crate) fn evaluate_compiled(
                     crate::contributed::Out {
                         layer: &mut layer,
                         bounds: &mut bounds,
+                        pictured: &mut pictured,
                     },
                 )?,
                 _ => others.push(Other {
@@ -2680,7 +2683,7 @@ pub(crate) fn evaluate_compiled(
     // #506: the insets: their windows join the layers; their pictures, views and casts, the scene.
     let get = |k: &str| items.get(k);
     let world_of = |k: &str| world(&items, k);
-    let insets = crate::inset::evaluate(
+    let mut insets = crate::inset::evaluate(
         &crate::inset::Ctx {
             doc: map,
             get: &get,
@@ -2692,6 +2695,9 @@ pub(crate) fn evaluate_compiled(
         look,
         &mut layers,
     )?;
+    insets
+        .pictures
+        .extend(crate::contributed::pictures(pictured, &camera, &mut layers));
 
     // A readout sits in the view's top-left corner, its text the template's (#419), filled from
     // the values that move the parts at t; a figure's card stacks its lines below (#504).
@@ -2857,8 +2863,8 @@ pub(crate) fn evaluate_compiled(
     scene.set_cutaway(cutaway);
     scene.mirror = crate::mirror::find(&scene.layers, scene.camera.eye, |id| items.get(id))?;
     // #166: the water, its wake's path, and its own mirror unless a material names one.
-    let seed = map.get("seed").and_then(Value::as_u64).unwrap_or(0) as u32;
-    if let Some(mut w) = crate::water::find(&scene.layers, |id| items.get(id), seed, seconds)? {
+    let found = crate::water::find(&scene.layers, |id| items.get(id), map, program, t);
+    if let Some(mut w) = found.map_err(|f| f.kept(outlines.memo))? {
         if let Some(wake) = &mut w.wake {
             let step = frame_interval(map);
             wake.step = step as f64 / deep_canvas::camera::FLICKS_PER_SECOND as f64;
@@ -3279,19 +3285,7 @@ fn overlay(
 
 /// A label's quad axes on screen: right and up, in world space, as its facing turns it.
 pub fn label_axes(label: &Label, camera: &Camera) -> [Vec3; 2] {
-    match label.facing {
-        Facing::Camera => [camera.right, camera.up],
-        Facing::Upright => {
-            let r = [camera.right[0], 0.0, camera.right[2]];
-            let r = if dot(r, r) > 1e-12 {
-                normalize(r)
-            } else {
-                [1.0, 0.0, 0.0]
-            };
-            [r, [0.0, 1.0, 0.0]]
-        }
-        Facing::Fixed => label.axes,
-    }
+    quad_axes(label.facing, label.axes, camera)
 }
 
 impl Scene {

@@ -10,7 +10,7 @@
 use std::collections::BTreeMap;
 
 use deep_canvas_scene3d::scene::{Scene, Shape};
-use deep_canvas_scene3d::water::{Water, MAX_WAKE, MAX_WAVES};
+use deep_canvas_scene3d::water::{Water, MAX_RINGS, MAX_WAKE, MAX_WAVES, RING_GRID};
 use deep_gpu::counted::Written;
 use deep_gpu::device::Device;
 use deep_gpu::encode::Job;
@@ -65,6 +65,10 @@ struct Params {
     // none); its cells along x and z, whether the water flows, and the planted single phase.
     flow: [[f32; 4]; 2],
     flow_dims: [u32; 4],
+    // #2760: how many rings touches keep alive, then their speed, span and strength; and the
+    // grid over them: its origin and its cells per m.
+    touch: [f32; 4],
+    touch_grid: [f32; 4],
 }
 
 /// The light the water's foam and its fill read.
@@ -140,6 +144,12 @@ pub struct Waterer {
     /// The wake's path, written where a frame's differs from the last one's.
     path: wgpu::Buffer,
     path_written: Written,
+    /// #2760: the rings touches keep alive and the grid's cells over them, each written where a
+    /// frame's differ from the last one's.
+    touches: wgpu::Buffer,
+    touches_written: Written,
+    cells: wgpu::Buffer,
+    cells_written: Written,
     /// Each part's uniform and bind group, in the order the parts draw.
     parts: Vec<Part>,
     /// This frame's parts: each one's bind group and rest mesh.
@@ -285,6 +295,16 @@ impl Waterer {
                 entry(8, frag, tex(wgpu::TextureSampleType::Depth)),
                 entry(9, both, tex(wgpu::TextureSampleType::Uint)),
                 entry(10, frag, tex(unfiltered)),
+                entry(
+                    11,
+                    frag,
+                    buffer(wgpu::BufferBindingType::Storage { read_only: true }),
+                ),
+                entry(
+                    12,
+                    frag,
+                    buffer(wgpu::BufferBindingType::Storage { read_only: true }),
+                ),
             ],
         });
         // Group 2, the shading pass's alone: the mesh pass writes these targets.
@@ -472,6 +492,17 @@ impl Waterer {
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
+        let ring_buffer = |size: usize| {
+            d.create_buffer(&wgpu::BufferDescriptor {
+                label: Some(WATER_PASS),
+                size: size as u64,
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            })
+        };
+        let touches = ring_buffer(MAX_PARTS * MAX_RINGS * std::mem::size_of::<[f32; 4]>());
+        // A bit a ring for each cell, 32 a word.
+        let cells = ring_buffer(RING_GRID * RING_GRID * MAX_PARTS * MAX_RINGS / 8);
         Waterer {
             layout,
             ids,
@@ -492,6 +523,10 @@ impl Waterer {
             kept,
             path,
             path_written: Written::default(),
+            touches,
+            touches_written: Written::default(),
+            cells,
+            cells_written: Written::default(),
             parts: Vec::new(),
             draws: Vec::new(),
             rect: [0; 4],
@@ -594,6 +629,41 @@ impl Waterer {
             device
                 .queue
                 .write_changed(&self.path, &self.path_written, bytemuck::cast_slice(&path))
+        });
+        // #2760: each ring a touch keeps alive: its centre and its age.
+        let touches: Vec<[f32; 4]> = water
+            .rings
+            .iter()
+            .flat_map(|r| r.alive())
+            .take(MAX_PARTS * MAX_RINGS)
+            .map(|(c, age)| [c.at[0] as f32, c.at[1] as f32, age as f32, 0.0])
+            .collect();
+        let mut touch_grid = [0f32; 4];
+        if let Some(r) = water.rings.as_ref().filter(|_| !touches.is_empty()) {
+            let cells = r.cells(MAX_PARTS * MAX_RINGS);
+            touch_grid = [
+                cells.origin[0] as f32,
+                cells.origin[1] as f32,
+                cells.per_m[0] as f32,
+                cells.per_m[1] as f32,
+            ];
+            deep_gpu::alloc::outside(|| {
+                let (queue, masks) = (&device.queue, bytemuck::cast_slice(&cells.masks));
+                queue.write_changed(&self.cells, &self.cells_written, masks);
+                queue.write_changed(
+                    &self.touches,
+                    &self.touches_written,
+                    bytemuck::cast_slice(&touches),
+                )
+            });
+        }
+        let touch = water.rings.as_ref().map_or([0f32; 4], |r| {
+            [
+                touches.len() as f32,
+                r.speed as f32,
+                r.span as f32,
+                r.strength as f32,
+            ]
         });
         let (cell, slot, back) = water.rain_grid();
         let flip = 2.0 * scene.camera.centre[0] / f64::from(scene.size[0]);
@@ -826,6 +896,8 @@ impl Waterer {
                 shore_dims,
                 flow: flow_params,
                 flow_dims,
+                touch,
+                touch_grid,
             };
             if self.parts.len() == self.draws.len() {
                 self.parts.push(Part {
@@ -885,6 +957,14 @@ impl Waterer {
                         wgpu::BindGroupEntry {
                             binding: 6,
                             resource: self.kept.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 11,
+                            resource: self.touches.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 12,
+                            resource: self.cells.as_entire_binding(),
                         },
                     ]);
                     let bind = d.create_bind_group(&wgpu::BindGroupDescriptor {
