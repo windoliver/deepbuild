@@ -295,8 +295,9 @@ impl View {
                 );
                 let exception = event["writer"] == "core" && event["data"]["kind"] == "exception";
                 let holder = exception && event["data"]["key"] == key.as_str();
-                // A record with no such exception, a fixture's (#338), folds by the count the core raises it at; only
-                // the "keeps asking" exception itself never folds, as in the core. As in the core, a fold is one
+                // A record with no such exception, a fixture's (#338), folds by the count the core raises it at, never
+                // an exception of the core's, which shows on its own card; into an open one, only the "keeps asking"
+                // exception itself never folds, as in the core. As in the core, a fold is one
                 // person's: the thread's asks raised under this actor and scope count (a row from an older hub names
                 // neither); a block someone else owns neither counts nor folds, and an agent's sign-in task, which shows
                 // at once, never folds. The core folds a live ask only into an exception it already raised, so the count
@@ -326,7 +327,7 @@ impl View {
                 let held = !holder
                     && !sign_in
                     && !theirs(&event["data"], &event["data"]["owner"], &event["actor"])
-                    && ((counts && mine.count() >= FOLD_AFTER) || into.is_some());
+                    && ((counts && !exception && mine.count() >= FOLD_AFTER) || into.is_some());
                 let status = if held { "folded" } else { "queued" };
                 let folded = if held { into } else { None };
                 self.inbox.push(json!({
@@ -1235,6 +1236,21 @@ mod tests {
             (&g1["status"], &g1["folded"]),
             (&json!("folded"), &json!("ask:x1"))
         );
+    }
+
+    #[test]
+    fn an_exception_of_the_cores_never_folds_by_count() {
+        // With no "keeps asking" open, the core shows its own exception on a card of its own, however many asks its
+        // session holds: only a fixture's asks fold by count.
+        let mut view = View::default();
+        for id in ["a1", "a2", "a3", "a4", "a5"] {
+            view.apply(json!({"kind": "ask.created", "id": id, "session": "s1", "writer": "mcp:agent", "data": {"kind": "taste"}}));
+        }
+        view.apply(
+            json!({"kind": "ask.created", "id": "g1", "session": "s1", "writer": "core",
+                          "data": {"kind": "exception", "key": "guard.overridden:s1"}}),
+        );
+        assert_eq!(row(&view, "ask:g1").0, "queued");
     }
 
     #[test]
