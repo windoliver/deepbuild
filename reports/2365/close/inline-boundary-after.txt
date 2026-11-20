@@ -1,0 +1,11 @@
+inline change on 29ad4f0ac, load { 80.88 93.90 118.74 }
+
+ RUN  v5.0.5 <home>/doneright-2365
+
+
+ Test Files  2 passed (2)
+      Tests  6 passed (6)
+   Start at  11:04:27
+   Duration  4.54s (tests 77%, transform 16%, import 6%)
+
+exit=0

@@ -5,10 +5,11 @@
 use std::sync::Arc;
 
 use parley::fontique::{Collection, CollectionOptions, SourceCache};
+use parley::setting::Tag;
 use parley::{
     Alignment, AlignmentOptions, FontContext, FontData, FontFamily, FontFamilyName, FontStyle,
-    FontWeight, Language, Layout, LayoutContext, LineHeight, PositionedLayoutItem, StyleProperty,
-    VerticalAlign,
+    FontVariation, FontVariations, FontWeight, Language, Layout, LayoutContext, LineHeight,
+    PositionedLayoutItem, StyleProperty, VerticalAlign,
 };
 use skrifa::raw::TableProvider;
 
@@ -16,6 +17,7 @@ use crate::cache::{self, Key, Planted};
 use crate::fonts::{self, Role, FACES};
 use crate::unicode::is_default_ignorable;
 use crate::unicode::{grapheme_starts, LineBreaks};
+use crate::vertical::{Flow, Stand};
 
 /// Text's horizontal alignment within its box (`align: start | center | end = start`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -34,7 +36,8 @@ pub enum Align {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Spec<'a> {
     pub text: &'a str,
-    /// The bundled family the run is set in: a font role's face, as the look names it.
+    /// The bundled family the run is set in: a font role's face, as the look names it (#1484: set
+    /// in its variable twin where one is bundled, `fonts::shaped_in`).
     pub family: &'a str,
     /// #417: bundled families in order; a grapheme the family lacks is set in the first that has it.
     pub fallback: &'a [&'a str],
@@ -42,7 +45,7 @@ pub struct Spec<'a> {
     pub lang: Option<&'a str>,
     /// Font size in logical pixels (`size: f32, u = 13`).
     pub size: f32,
-    /// `weight: u16 = 400`; the shaper picks the nearest bundled face.
+    /// `weight: u16 = 400`: a variable face's `wght` (#1484), else the nearest bundled face's.
     pub weight: u16,
     /// `line_height = 1.3 × size`, rounded to whole pixels, when `None`.
     pub line_height: Option<f32>,
@@ -61,6 +64,8 @@ pub struct Spec<'a> {
     /// #1966: how far in every line starts, in logical pixels (a list's `indent`): lines break
     /// at `width` less it, so a wrapped line starts under the text, not at the run's edge.
     pub indent: f32,
+    /// #1215: lines across, or columns top to bottom (`flow`, `upright`, `combine_upright`).
+    pub flow: Flow,
 }
 
 /// #1964: a styled span's shift off the baseline (`shift: sub | super | u`).
@@ -146,6 +151,18 @@ fn script_metrics(family: &str, shift: Shift) -> Option<[f32; 2]> {
     (size > 0).then(|| [f32::from(size) / em, f32::from(offset) / em])
 }
 
+/// #1484: the axis values a run at `size` u and `weight` is set at: its optical size follows its
+/// size, which a face's own `opsz` range clamps (Inter's 14 to 32), and its weight draws as asked.
+/// A face without an axis ignores its value. `optical` false is AC1's planted shaper, which leaves
+/// the optical size at the face's default.
+fn axes(size: f32, weight: u16, optical: bool) -> StyleProperty<'static, ()> {
+    let mut axes = vec![FontVariation::new(Tag::new(b"wght"), f32::from(weight))];
+    if optical {
+        axes.push(FontVariation::new(Tag::new(b"opsz"), size));
+    }
+    StyleProperty::FontVariations(FontVariations::List(axes.into()))
+}
+
 impl<'a> Spec<'a> {
     /// A label in the body role at the defaults.
     pub fn label(text: &'a str) -> Self {
@@ -166,6 +183,7 @@ impl<'a> Spec<'a> {
             spans: &[],
             gap: 0.,
             indent: 0.,
+            flow: Flow::Horizontal,
         }
     }
 
@@ -188,11 +206,21 @@ pub struct Glyph {
     /// The grapheme cluster (UAX #29) of the shown text the glyph belongs to.
     pub grapheme: usize,
     /// #496: the face's normalized variation coordinates (F2Dot14 bits) the glyph was shaped at,
-    /// empty for a static face; outlines and rasters read the glyph at them.
+    /// empty for a static face or the default instance; outlines and rasters read the glyph at
+    /// them, and (#1484) the atlas keys it by them.
     pub coords: Arc<[i16]>,
     /// #1964: the slant in degrees an italic span is drawn at where its face has no italic (0:
     /// upright), leaning forward as y rises.
     pub skew: f32,
+    /// #1215: in a vertical run, how the glyph stands in its column; `None` in a horizontal one.
+    pub stand: Option<Stand>,
+    /// #1215: drawn turned 90° clockwise about (x, y), its baseline running down its column.
+    pub turn: bool,
+    /// #1215: where its advance starts on its line: (x, y) in a horizontal run; its column's axis
+    /// at the top of its cell in a vertical one.
+    pub origin: [f32; 2],
+    /// #1215: how far it advances along its line: down its column in a vertical run.
+    pub along: f32,
 }
 
 /// #1964: an underline or a strike of a styled span: `[x, y, w, h]` in logical pixels from the
@@ -222,6 +250,34 @@ pub struct Shaped {
     pub ellipsized: bool,
     /// The text as drawn: the spec's text, or its cut with an ellipsis.
     pub shown: String,
+    /// #1215: a vertical run's lines are columns: `width` is their extent across (one line
+    /// height each) and `height` the longest column's length.
+    pub flow: Flow,
+}
+
+impl Shaped {
+    /// #1215: where a vertical run draws in its own coordinates, `[x, y, w, h]`: its columns
+    /// across, a line height each about its axis, and down from its first cell to its longest
+    /// column's end; `None` for a horizontal run.
+    pub fn columns_box(&self) -> Option<[f32; 4]> {
+        if !matches!(self.flow, Flow::Vertical(_)) {
+            return None;
+        }
+        let half = self.line_height / 2.;
+        let mut b = [f32::MAX, f32::MAX, f32::MIN, f32::MIN];
+        for g in &self.glyphs {
+            b = [
+                b[0].min(g.origin[0] - half),
+                b[1].min(g.origin[1]),
+                b[2].max(g.origin[0] + half),
+                b[3].max(g.origin[1] + g.along),
+            ];
+        }
+        if b[0] > b[2] {
+            return Some([0., 0., 0., 0.]);
+        }
+        Some([b[0], b[1], b[2] - b[0], b[3] - b[1]])
+    }
 }
 
 /// The fit check's reading for a spec against its widest string.
@@ -279,7 +335,21 @@ impl Shaper {
             .collect()
     }
 
-    fn layout(&mut self, spec: &Spec<'_>, text: &str) -> Layout<()> {
+    fn layout(&mut self, spec: &Spec<'_>, text: &str, optical: bool) -> Layout<()> {
+        self.layout_with(spec, text, optical, &[], true)
+    }
+
+    /// The layout of `text` in the spec's style, `vert` applied to the byte ranges `vert` names
+    /// (#1215: the graphemes of a vertical run that stand upright), its lines broken at the
+    /// spec's width when `wrap`, else only at hard breaks.
+    pub(crate) fn layout_with(
+        &mut self,
+        spec: &Spec<'_>,
+        text: &str,
+        optical: bool,
+        vert: &[std::ops::Range<usize>],
+        wrap: bool,
+    ) -> Layout<()> {
         let decide = LineBreaks::new(text).into_override();
         let mut builder = self
             .layout
@@ -287,10 +357,10 @@ impl Shaper {
         // Lines break at UAX #14's opportunities at the pinned Unicode version (17.0.0).
         builder.set_line_break_override(Some(&*decide));
         // The family first, then the fallback families in order: parley sets each cluster in the
-        // first family of the list whose face maps it.
+        // first family of the list whose face maps it. #1484: each in its variable twin.
         let families: Vec<FontFamilyName<'_>> = std::iter::once(spec.family)
             .chain(spec.fallback.iter().copied())
-            .map(FontFamilyName::named)
+            .map(|f| FontFamilyName::named(fonts::shaped_in(f)))
             .collect();
         builder.push_default(StyleProperty::FontFamily(FontFamily::List(families.into())));
         if let Some(lang) = spec.lang {
@@ -300,11 +370,20 @@ impl Shaper {
         builder.push_default(StyleProperty::FontWeight(FontWeight::new(f32::from(
             spec.weight,
         ))));
+        builder.push_default(axes(spec.size, spec.weight, optical));
         builder.push_default(StyleProperty::LineHeight(LineHeight::Absolute(
             spec.line_height(),
         )));
         if spec.tabular {
             builder.push_default(StyleProperty::FontFeatures("\"tnum\" 1".into()));
+        }
+        let features = if spec.tabular {
+            "\"tnum\" 1, \"vert\" 1"
+        } else {
+            "\"vert\" 1"
+        };
+        for range in vert {
+            builder.push(StyleProperty::FontFeatures(features.into()), range.clone());
         }
         // #1964: each span restyles its graphemes' byte range of the one run, so the layout shapes
         // and breaks it with the rest. A span's box adds no height: the item's line height alone
@@ -320,7 +399,7 @@ impl Shaper {
             if span.family.is_some() {
                 let families: Vec<FontFamilyName<'_>> = std::iter::once(family)
                     .chain(spec.fallback.iter().copied())
-                    .map(FontFamilyName::named)
+                    .map(|f| FontFamilyName::named(fonts::shaped_in(f)))
                     .collect();
                 builder.push(
                     StyleProperty::FontFamily(FontFamily::List(families.into())),
@@ -348,6 +427,10 @@ impl Shaper {
             if size != spec.size {
                 builder.push(StyleProperty::FontSize(size), range.clone());
             }
+            let weight = span.weight.unwrap_or(spec.weight);
+            if size != spec.size || weight != spec.weight {
+                builder.push(axes(size, weight, optical), range.clone());
+            }
             if rise != 0. {
                 builder.push(VerticalAlign::length(rise), range.clone());
             }
@@ -370,7 +453,7 @@ impl Shaper {
         let mut layout = builder.build(text);
         // A bound value is never wrapped: it stays on one line, past its box if it must.
         let width = spec.width.map(|w| (w - spec.indent).max(0.));
-        layout.break_all_lines(if spec.bound { None } else { width });
+        layout.break_all_lines(if spec.bound || !wrap { None } else { width });
         let alignment = match spec.align {
             Align::Start => Alignment::Start,
             Align::Center => Alignment::Center,
@@ -465,6 +548,10 @@ impl Shaper {
                         grapheme: grapheme(byte),
                         coords: coords.clone(),
                         skew,
+                        stand: None,
+                        turn: false,
+                        origin: [glyph.x + spec.indent, glyph.y + down],
+                        along: glyph.advance,
                     });
                 }
             }
@@ -485,10 +572,23 @@ impl Shaper {
 
     /// `text` shaped in the spec's style, past the cache, the shaping recorded.
     fn shape_now(&mut self, spec: &Spec<'_>, text: &str, key: &Key) -> Shaped {
-        let layout = self.layout(spec, text);
-        let run = Self::collect(&layout, spec, None, text);
+        let run = match spec.flow {
+            Flow::Vertical(cols) => self.columns(spec, text, cols),
+            Flow::Horizontal => {
+                let layout = self.layout(spec, text, true);
+                Self::collect(&layout, spec, None, text)
+            }
+        };
         cache::shaped(key, run.glyphs.len());
         run
+    }
+
+    /// #1484 AC1's wrong program, the proof binary's planted `shaper_ignores_opsz`: `spec`'s text
+    /// shaped with its weight set and its optical size left at the face's default, as before
+    /// #1484, past the shaped-run cache so no run it shapes is kept or shared.
+    pub fn shape_ignoring_opsz(&mut self, spec: &Spec<'_>) -> Shaped {
+        let layout = self.layout(spec, spec.text, false);
+        Self::collect(&layout, spec, None, spec.text)
     }
 
     /// Whether `spec`'s run is in the shaped-run cache, so shaping it now costs a lookup.
@@ -506,11 +606,7 @@ impl Shaper {
             return run;
         }
         let whole = self.run(spec, spec.text);
-        let overflows = spec.width.is_some_and(|w| whole.width > w + 0.01)
-            || spec
-                .max_lines
-                .is_some_and(|max| whole.lines > usize::from(max));
-        if !overflows || spec.bound || spec.mask {
+        if fits(spec, &whole) || spec.bound || spec.mask {
             return whole;
         }
         let reshaping = cache::planted() == Some(Planted::ReshapingFit);
@@ -529,11 +625,7 @@ impl Shaper {
             let end = chars.get(mid).map_or(spec.text.len(), |(i, _)| *i);
             let candidate = format!("{}…", spec.text[..end].trim_end());
             let shaped = self.run(spec, &candidate);
-            let fits = spec.width.is_none_or(|w| shaped.width <= w + 0.01)
-                && spec
-                    .max_lines
-                    .is_none_or(|max| shaped.lines <= usize::from(max));
-            if fits {
+            if fits(spec, &shaped) {
                 best = Some(shaped);
                 low = mid;
             } else {
@@ -589,12 +681,8 @@ impl Shaper {
     /// reads whether it fits the box and the line limit. A bound value's numerals are tabular.
     pub fn fit(&mut self, spec: &Spec<'_>, widest: Option<&str>) -> Fit {
         let shaped = self.run(spec, widest.unwrap_or(spec.text));
-        let fits = spec.width.is_none_or(|w| shaped.width <= w + 0.01)
-            && spec
-                .max_lines
-                .is_none_or(|max| shaped.lines <= usize::from(max));
         Fit {
-            fits,
+            fits: fits(spec, &shaped),
             width: shaped.width,
             lines: shaped.lines,
             numerals: if spec.tabular {
@@ -611,4 +699,16 @@ impl Shaper {
             },
         }
     }
+}
+
+/// Whether a run fits its spec's line length and line limit: its lines in the box's width, or
+/// (#1215) a vertical run's columns in the box's height, which is their length.
+fn fits(spec: &Spec<'_>, run: &Shaped) -> bool {
+    let long = match spec.flow {
+        Flow::Vertical(cols) => cols.height.is_none_or(|h| run.height <= h + 0.01),
+        Flow::Horizontal => spec.width.is_none_or(|w| run.width <= w + 0.01),
+    };
+    long && spec
+        .max_lines
+        .is_none_or(|max| run.lines <= usize::from(max))
 }

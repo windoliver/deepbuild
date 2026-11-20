@@ -68,6 +68,10 @@ pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
         dof: deep_scene3d_render::dof::Planted {
             linear_coc: p == Some(Planted::CocLinearInDistance),
         },
+        local_tone: deep_scene3d_render::local_tone::Planted {
+            edge_blind: p == Some(Planted::LocalBaseIgnoresEdges),
+            fixed_levels: p == Some(Planted::LocalPyramidFixedLevels),
+        },
         ties_by_submission: p == Some(Planted::TiesBySubmission),
         spot_counts_cone: p == Some(Planted::SpotCountsCone),
         status_before_tone_map: p == Some(Planted::StatusBeforeToneMap),
@@ -100,6 +104,11 @@ pub(crate) fn planted3(p: Option<Planted>) -> Planted3 {
             no_reach: p == Some(Planted::CascadeNoPenumbraReach),
             noise_from_frame: p == Some(Planted::SoftNoiseFromFrame),
             filter_in_texels: p == Some(Planted::CascadeFilterInTexels),
+        },
+        fill: deep_scene3d_render::fill::Planted {
+            top_32: p == Some(Planted::FillTop32),
+            arrival_order: p == Some(Planted::ClusterArrivalOrder),
+            cap_by_list_order: p == Some(Planted::ClusterCapByListOrder),
         },
         cull: deep_scene3d_render::cull::Plants {
             centers: p == Some(Planted::GpuCullByCenter),
@@ -562,6 +571,16 @@ pub fn close_on(worker: &Worker) {
     worker.call(|state| state.scene3d = None);
 }
 
+/// Forces the session's device lost (#1993: view3d's `lose_device_at`); its next frame draws on
+/// the device that replaces it.
+pub fn lose_device(app: &App) {
+    app.worker.call(|state| {
+        if let Some(s) = state.scene3d.as_ref() {
+            s.view.lose_device();
+        }
+    });
+}
+
 /// What the render thread answers for one frame.
 #[derive(Clone)]
 pub struct Drawn {
@@ -575,6 +594,8 @@ pub struct Drawn {
     pub targets: Option<(Vec<u8>, Vec<u8>)>,
     /// The linear image the output pass read, f32 RGBA, read with the targets (#418).
     pub pre_tone: Option<Vec<u8>>,
+    /// #971: that image as the look's local tone map left it, in a frame that has one.
+    pub toned: Option<Vec<u8>>,
     /// The frame's GPU time and each pass's share, ms.
     pub timing: Option<(f64, std::collections::BTreeMap<String, f64>)>,
     /// What the passes' declared costs price this frame at, ms (#1637).
@@ -647,6 +668,22 @@ pub fn view_depth(app: &App) -> Result<Option<Vec<u8>>, Value> {
         .map_err(|e| refused("render_failed", e))
 }
 
+/// #1634: each cluster's fill lights as the frame the session drew last walked them, read back
+/// from the cluster pass's lists: nothing on the noop lane, which runs no pass.
+pub fn clusters(app: &App) -> Vec<([u32; 3], Vec<(String, f32)>)> {
+    if app.backend == Backend::Noop {
+        return Vec::new();
+    }
+    app.worker.call(move |state| {
+        let Some(s) = state.scene3d.as_mut() else {
+            return Vec::new();
+        };
+        let device = s.view.device().clone();
+        let shared = lock(&s.shared);
+        (shared.renderer.as_ref()).map_or_else(Vec::new, |r| r.read_clusters(&device))
+    })
+}
+
 /// [`draw`] on `on`.
 #[allow(clippy::too_many_arguments)]
 pub fn draw_on(
@@ -708,10 +745,12 @@ pub fn draw_on(
                 };
                 s.view.wait_done(drawn.slot);
             }
-            // #485: the light responses that returned a negative or non-finite value.
+            // #485: the light responses that returned a negative or non-finite value; #1634: the
+            // clusters that dropped a fill light.
             if !noop {
                 if let Some(r) = lock(&s.shared).renderer.as_mut() {
                     r.check_responses(&device);
+                    r.check_clusters(&device);
                 }
             }
             // The frame's GPU time, as its passes' timestamp queries measured it.
@@ -746,6 +785,11 @@ pub fn draw_on(
                 },
                 pre_tone: if read_targets && !noop {
                     r.read_pre_tone(&device)
+                } else {
+                    None
+                },
+                toned: if read_targets && !noop {
+                    r.read_toned(&device)
                 } else {
                     None
                 },

@@ -121,6 +121,23 @@ fn blocked_rows(by_kind: BTreeMap<String, Vec<String>>) -> Vec<Value> {
 }
 
 impl<'a> Hub<'a> {
+    /// #2450's planted check, by the scenario's `planted`: `issues` less each refusal of a 3D
+    /// axis's title that names an item of `doc`, which the data module's check refuses for
+    /// every kind but a vector.
+    pub fn plant_axis_titles(&self, doc: &Value, issues: &mut Vec<Issue>) {
+        let name = deep_canvas_marks::axes3d::TAKES_ANY_KIND;
+        if self.scenario.module_planted.as_deref() != Some(name) {
+            return;
+        }
+        let names_item = |path: &str| {
+            let named = doc.pointer(&format!("/{path}")).and_then(Value::as_str);
+            named.is_some_and(|id| doc.get("items").is_some_and(|i| i.get(id).is_some()))
+        };
+        issues.retain(|i| {
+            !(i.code == "bad_axis" && i.path.contains("/params/titles/") && names_item(&i.path))
+        });
+    }
+
     /// What blocks a `deep show --check`'s claim on this revision: the items of a kind the
     /// build doesn't know, when the claim names the document among its deliverables. Outside a
     /// claim they stay notices (#389).

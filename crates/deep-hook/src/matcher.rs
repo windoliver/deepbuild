@@ -26,8 +26,10 @@
 //!   systemd's `deepbuild-hub.service`), or a change to the environment systemd's manager gives it.
 //! - `kill:hub`: a `kill` of the hub's process or its group, its PID read from the hub socket's peer.
 //! - `effect:<class>`: a call with that effect: `cloud-resource` (a command that creates one), `dependency`
-//!   (adds a package), `service` (starts a long-running one), `top-level-folder` (makes a folder at the
-//!   checkout's top), or `unknown-reach-delete` (a delete run from a script file or over a pattern or a value
+//!   (adds a package, runs one straight from a registry unless the lockfile holds that version, or installs what a
+//!   manifest names, which the hub reads through its diff, #1509), `service` (starts a long-running one),
+//!   `top-level-folder` (makes a folder at the checkout's top), or `unknown-reach-delete` (a delete run from a
+//!   script file or over a pattern or a value
 //!   the line can't know, so what it deletes can't be worked out before it runs), `unrestorable-delete` (a delete
 //!   whose known target lies outside the session's worktree and temporary folders or holds the worktree, such as
 //!   `rm -rf ../sibling` or `rm -rf ~/`, or a `git clean` that deletes, #1507), `discard-edits` (git discards
@@ -53,14 +55,15 @@
 //! comes from a pipe the line doesn't say or is a value it computes (`curl … | sh`, `eval "$X"`, #1503). Its hit says
 //! what couldn't be read, so a block entry denies it and a watch or warn entry records it with that reason. An unread run never lowers a match.
 //!
-//! deep-hook reads rules.json as unreadable when an entry's `match` isn't one of these, so an entry newer than
-//! deep-hook never fails open.
+//! An entry whose `match` isn't one of these, or with a field deep-hook doesn't know, meets every call, ruled by its
+//! mode (#2219): an entry newer than deep-hook never fails open, and stops no more than its mode would.
 
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::shell::{self, glob, lexical, real, same_name, Arg, Run, Unread};
 
+mod deps;
 mod paths;
 
 /// What deep-hook reads from one call: the runs of its shell command and the paths it writes.
@@ -691,6 +694,8 @@ impl Call {
                 format!("To run it yourself: {}", command_of(run))
             } else if class == "merge" {
                 merge_read(run)
+            } else if class == "dependency" {
+                deps::added(run).map_or_else(|| command_of(run), |a| a.note())
             } else {
                 format!("It runs: {}", command_of(run))
             };
@@ -847,7 +852,7 @@ fn pgid(pid: i64) -> Option<i64> {
 fn has_effect(run: &Run, class: &str) -> bool {
     match class {
         "cloud-resource" => creates_cloud(run),
-        "dependency" => adds_dependency(run),
+        "dependency" => deps::added(run).is_some(),
         "service" => starts_service(run),
         "unknown-reach-delete" => unknown_reach(run),
         "discard-edits" => discards(run),
@@ -1469,23 +1474,6 @@ fn merge_read(run: &Run) -> String {
         read.push_str(" disable");
     }
     read
-}
-
-/// A command that adds a package: one it names, not a reinstall of the lockfile's.
-fn adds_dependency(run: &Run) -> bool {
-    let words = run.words();
-    let plain = plain(&words);
-    let named =
-        |sub: &[&str]| sub.contains(&plain.first().copied().unwrap_or("")) && plain.len() > 1;
-    ((run.is("npm") || run.is("pnpm") || run.is("bun")) && named(&["install", "i", "add"]))
-        || (run.is("yarn") && named(&["add"]))
-        || ((run.is("pip") || run.is("pip3") || run.is("gem") || run.is("brew"))
-            && named(&["install"]))
-        || (run.is("uv")
-            && (named(&["add"])
-                || (plain.first() == Some(&"pip") && plain.get(1) == Some(&"install"))))
-        || (run.is("cargo") && named(&["add", "install"]))
-        || (run.is("go") && named(&["get", "install"]))
 }
 
 /// A command that starts a long-running service.

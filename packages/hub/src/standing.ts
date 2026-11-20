@@ -5,8 +5,12 @@
 // deep-hook can let a covered one through with the hub down. The account a command names is its `--profile`'s, read
 // from ~/.aws/config.
 import { readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { canonicalize, sha256Hex, type JsonValue } from '@deepbuild/contracts';
+import { addedSince, noteOf, ranReading, readingWords, readRegistry, settled } from './dependencies.js';
+import type { Holds } from './holds.js';
+import type { Gated, HookMeta } from './wire.js';
 
 type Obj = Record<string, unknown>;
 
@@ -83,15 +87,22 @@ export function aboutCall(classes: readonly string[], command: string, home: str
   }
   if (classes.includes('dependency')) {
     const added = packages(command);
-    if (!added) return undefined;
-    return {
-      source: 'effect.dependency',
-      subject: { effect: 'dependency', target: { kind: 'package', ref: added.names.join(' '), owner: added.manager }, change: null },
-      question: `Add the dependency ${added.names.join(', ')} (\`${command}\`)? No plan names it.`,
-      options: ['Add it', "Don't add it"],
-    };
+    return added ? aboutDependency(added.manager, added.names, command, false) : undefined;
   }
   return undefined;
+}
+
+/**
+ * What a call that adds a dependency is about: the packages, keyed by the tool that adds them, so a standing rule for
+ * that tool covers them all; one run straight from a registry is asked as a run (#1509).
+ */
+export function aboutDependency(manager: string, names: readonly string[], command: string, run: boolean): About {
+  return {
+    source: 'effect.dependency',
+    subject: { effect: 'dependency', target: { kind: 'package', ref: names.join(' '), owner: manager }, change: null },
+    question: run ? `Run ${names.join(', ')} straight from its registry (\`${command}\`)? No plan names it.` : `Add the dependency ${names.join(', ')} (\`${command}\`)? No plan names it.`,
+    options: run ? ['Run it', "Don't run it"] : ['Add it', "Don't add it"],
+  };
 }
 
 /**
@@ -120,4 +131,45 @@ export function standingRules(rows: readonly { id: string; answer: string; subje
     const account = /^aws:(\d+)$/.exec(target.owner)?.[1] ?? null;
     return [{ effect: 'cloud-resource', owner: target.owner, account, decision: `decision:${r.id}` }];
   });
+}
+
+/** What the gate's decision on a dependency or a cloud resource uses of the hub. */
+export interface Gate {
+  holds: Pick<Holds, 'decide'>;
+  /** Whether a saved decision covers what a call is about, asked with nothing raised. */
+  covered(session: string, about: About): Promise<boolean>;
+  now(): number;
+  /** Records a reading of the session. */
+  reading(session: string, agent: string, text: string): Promise<void>;
+  /** The registry a test names in place of the public ones (DEEP_HUB_TEST_REGISTRY). */
+  registry: string | undefined;
+  plant: string | undefined;
+}
+
+/**
+ * A call the guards class as a dependency or a cloud resource no plan names (#23, #1509). A bare install that adds no
+ * name since the base runs, and your standing rule answers the rest. Otherwise each package's version is read from its
+ * registry. A package run straight from it, whose version and name are both at least a week old, still runs with no
+ * ask, kept for the return card's what-changed line with their ages; a new version, a new name, one the registry
+ * couldn't say, and every package added to the project is asked, the question carrying the reading.
+ */
+export async function decide(g: Gate, meta: HookMeta, call: Gated): Promise<{ held?: string; allow?: string; deny?: string }> {
+  const note = call.decided?.includes('dependency') && !call.decided.includes('cloud-resource') ? noteOf(meta.notes) : undefined;
+  if (!note) {
+    const about = call.decided?.length && call.command ? aboutCall(call.decided, call.command, homedir()) : undefined;
+    return about ? g.holds.decide(meta, about) : {};
+  }
+  const names = note.form === 'manifest' ? await addedSince(note.items) : note.items;
+  if (!names.length) return {};
+  const command = call.command ?? call.label;
+  const about = aboutDependency(note.manager, names, command, note.form === 'run');
+  if (await g.covered(meta.session, about)) return g.holds.decide(meta, about);
+  const readings = await Promise.all(names.map((n) => readRegistry(note.registry, n, g.registry)));
+  const now = g.now();
+  // The planted wrong program asks for every package run straight from a registry, whatever its age.
+  if (note.form === 'run' && readings.every((r) => settled(r, now)) && g.plant !== 'asks-every-registry-run') {
+    await g.reading(meta.session, meta.agent, ranReading(note, readings, command, now));
+    return {};
+  }
+  return g.holds.decide(meta, { ...about, question: `${about.question} ${readings.map((r) => readingWords(r, note.registry, now)).join(' ')}` });
 }

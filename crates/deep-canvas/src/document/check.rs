@@ -644,6 +644,41 @@ fn lights_check(lowered: &Value, issues: &mut Vec<Issue>) {
     }
 }
 
+/// The class's `fill_shaded` (#1634; Light and the light policy): every `light.*` item with
+/// `fill: true` counts, and a document with more than its class holds is refused, naming the
+/// count and the class. Here and not in the module that reads the lights, since a module's rule
+/// names no count.
+fn fill_check(lowered: &Value, issues: &mut Vec<Issue>) {
+    let Some((class, _)) = crate::budget::of(lowered) else {
+        return;
+    };
+    let fill: Vec<String> = member(lowered, "items")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+        .filter(|(_, item)| {
+            kind_text(item).is_some_and(|k| k.starts_with("light."))
+                && item.pointer("/params/fill") == Some(&Value::Bool(true))
+        })
+        .map(|(id, _)| id.clone())
+        .collect();
+    let cap = class.fill_shaded();
+    if fill.len() > cap {
+        let mut issue = Issue::envelope(
+            "over_budget",
+            "budget/fill_shaded".into(),
+            json!({"fill_lights": fill.len(), "fill_shaded": cap, "class": class.name()}),
+            &format!(
+                "{} fill lights, past the {} class's fill_shaded of {cap}",
+                fill.len(),
+                class.name()
+            ),
+        );
+        issue.ids = fill;
+        issues.push(issue);
+    }
+}
+
 /// The budget estimate (issue #379; canvas primitives: The cost model, "Before it shows"): a
 /// document that names its budget class and whose estimated CPU time, GPU time or GPU memory
 /// per frame passes one of its caps is refused, naming its top three contributors, with the
@@ -656,6 +691,7 @@ fn budget_check(
     issues: &mut Vec<Issue>,
 ) {
     lights_check(lowered, issues);
+    fill_check(lowered, issues);
     let Some((class, limits)) = crate::budget::of(lowered) else {
         return;
     };
@@ -2093,7 +2129,10 @@ fn check_params(
             // The forms the kind's reader declares (#1973): a value none takes is refused here,
             // naming the form it expected and the one it got; the reader checks the rest.
             ParamType::Json(declared) => {
-                if let Some(issue) = form_issue(key, name, param.unit, declared, value) {
+                if let Some((mut issue, form)) = form_issue(key, name, param.unit, declared, value)
+                {
+                    let field = format!("{}@{}.{name}", entry.full_name(), version.major);
+                    registry::fields::name_list(&mut issue, sealed, &field, &form, value);
                     issues.push(issue);
                 }
             }
@@ -2176,12 +2215,18 @@ fn check_params(
 /// A structured value no declared form takes, as `out_of_range` at its path: `size takes 3
 /// numbers in m; got 2 numbers`, with the forms it takes. A declaration the form language can't
 /// read refuses nothing here; the kit refuses it (#1973).
-fn form_issue(key: &str, name: &str, unit: &str, declared: &str, value: &Value) -> Option<Issue> {
+fn form_issue(
+    key: &str,
+    name: &str,
+    unit: &str,
+    declared: &str,
+    value: &Value,
+) -> Option<(Issue, crate::form::Form)> {
     let form = crate::form::parse(declared).ok()?;
     let got = form.miss(value)?;
     let gist = form.gist(unit);
     let forms: Vec<String> = form.alternatives().iter().map(|f| f.print()).collect();
-    Some(Issue {
+    let issue = Issue {
         fix: format!("Write {name} as {}: {gist}.", forms.join(" or ")),
         forms,
         ..Issue::error(
@@ -2191,7 +2236,8 @@ fn form_issue(key: &str, name: &str, unit: &str, declared: &str, value: &Value) 
             value.clone(),
             &format!("{name} takes {gist}; got {got}"),
         )
-    })
+    };
+    Some((issue, form))
 }
 
 /// A document's design size, as `fw` and `fh` read it.

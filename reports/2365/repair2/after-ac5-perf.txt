@@ -1,0 +1,72 @@
+$ PATH=<home>/.local/share/fnm/node-versions/v24.22.0/installation/bin:$PATH env NO_COLOR=1 node node_modules/vitest/vitest.mjs run --configLoader runner tests/acceptance/2365-redraft-ac5/perf.test.ts
+node: v24.22.0 (<home>/.local/share/fnm/node-versions/v24.22.0/installation/bin/node)
+started: 2026-11-18T01:24:43Z; load averages: 122.28 112.16 90.47
+-----
+
+ RUN  v5.0.5 <home>/doneright-2365-repair
+
+stdout | tests/acceptance/2365-redraft-ac5/perf.test.ts > AC5 #2365.c0521de3 for every transcript of #20's perf tasks, the parts joined equal the merge base's one copy, and an unchanged transcript's second pass reads none of it > AC5 perf task archive-live: ten sessions 1 MB in, 12 lines a minute, a pass a minute for five minutes
+perf task archive-live: ten sessions 1 MB in, 12 lines a minute, a pass a minute for five minutes: 10 transcripts, 10568273 bytes; read on the unchanged pass: 0 bytes
+
+stdout | tests/acceptance/2365-redraft-ac5/perf.test.ts > AC5 #2365.c0521de3 for every transcript of #20's perf tasks, the parts joined equal the merge base's one copy, and an unchanged transcript's second pass reads none of it > AC5 perf task archive-month: four 5 MB sessions at half and whole
+perf task archive-month: four 5 MB sessions at half and whole: 4 transcripts, 20004834 bytes; read on the unchanged pass: 0 bytes
+
+stdout | tests/acceptance/2365-redraft-ac5/perf.test.ts > AC5 #2365.c0521de3 for every transcript of #20's perf tasks, the parts joined equal the merge base's one copy, and an unchanged transcript's second pass reads none of it > AC5 perf task archive-backlog: twenty 5 MB sessions in one pass
+perf task archive-backlog: twenty 5 MB sessions in one pass: 20 transcripts, 100016312 bytes; read on the unchanged pass: 0 bytes
+
+stdout | tests/acceptance/2365-redraft-ac5/perf.test.ts > AC5 #2365.c0521de3 for every transcript of #20's budgets (its suite's budgets.test.ts), the same > AC5 #20 AC7 (budgets.test.ts): ten live sessions, 1 MB in, 12 lines a minute for six minutes
+#20 AC7 (budgets.test.ts): ten live sessions, 1 MB in, 12 lines a minute for six minutes: 10 transcripts, 11775016 bytes; read on the unchanged pass: 0 bytes
+
+stdout | tests/acceptance/2365-redraft-ac5/perf.test.ts > AC5 #2365.c0521de3 for every transcript of #20's budgets (its suite's budgets.test.ts), the same > AC5 #20 AC7 (budgets.test.ts): the heavy month, both days, 20 sessions a day at half and whole
+#20 AC7 (budgets.test.ts): day 0 of the heavy month, 20 sessions at half and whole: 20 transcripts, 100127100 bytes; read on the unchanged pass: 0 bytes
+
+stdout | tests/acceptance/2365-redraft-ac5/perf.test.ts > AC5 #2365.c0521de3 for every transcript of #20's budgets (its suite's budgets.test.ts), the same > AC5 #20 AC7 (budgets.test.ts): the heavy month, both days, 20 sessions a day at half and whole
+#20 AC7 (budgets.test.ts): day 1 of the heavy month, 20 sessions at half and whole: 20 transcripts, 100099437 bytes; read on the unchanged pass: 0 bytes
+
+stdout | tests/acceptance/2365-redraft-ac5/perf.test.ts > AC5 #2365.c0521de3 for every transcript of #20's budgets (its suite's budgets.test.ts), the same > AC5 #20 AC7 (budgets.test.ts): the 1 GB backlog, 200 sessions of 5 MB, in batches of 20
+#20 AC7 (budgets.test.ts): backlog sessions 0…19 of 200, 5 MB each, in one pass: 20 transcripts, 100081678 bytes; read on the unchanged pass: 0 bytes
+
+stdout | tests/acceptance/2365-redraft-ac5/perf.test.ts > AC5 #2365.c0521de3 for every transcript of #20's budgets (its suite's budgets.test.ts), the same > AC5 #20 AC7 (budgets.test.ts): the 1 GB backlog, 200 sessions of 5 MB, in batches of 20
+#20 AC7 (budgets.test.ts): backlog sessions 20…39 of 200, 5 MB each, in one pass: 20 transcripts, 100080203 bytes; read on the unchanged pass: 0 bytes
+
+stdout | tests/acceptance/2365-redraft-ac5/perf.test.ts > AC5 #2365.c0521de3 for every transcript of #20's budgets (its suite's budgets.test.ts), the same > AC5 #20 AC7 (budgets.test.ts): the 1 GB backlog, 200 sessions of 5 MB, in batches of 20
+#20 AC7 (budgets.test.ts): backlog sessions 40…59 of 200, 5 MB each, in one pass: 20 transcripts, 100094686 bytes; read on the unchanged pass: 0 bytes
+
+stdout | tests/acceptance/2365-redraft-ac5/perf.test.ts > AC5 #2365.c0521de3 for every transcript of #20's budgets (its suite's budgets.test.ts), the same > AC5 #20 AC7 (budgets.test.ts): the 1 GB backlog, 200 sessions of 5 MB, in batches of 20
+#20 AC7 (budgets.test.ts): backlog sessions 60…79 of 200, 5 MB each, in one pass: 20 transcripts, 100090502 bytes; read on the unchanged pass: 0 bytes
+
+stdout | tests/acceptance/2365-redraft-ac5/perf.test.ts > AC5 #2365.c0521de3 for every transcript of #20's budgets (its suite's budgets.test.ts), the same > AC5 #20 AC7 (budgets.test.ts): the 1 GB backlog, 200 sessions of 5 MB, in batches of 20
+#20 AC7 (budgets.test.ts): backlog sessions 80…99 of 200, 5 MB each, in one pass: 20 transcripts, 100090909 bytes; read on the unchanged pass: 0 bytes
+
+stdout | tests/acceptance/2365-redraft-ac5/perf.test.ts > AC5 #2365.c0521de3 for every transcript of #20's budgets (its suite's budgets.test.ts), the same > AC5 #20 AC7 (budgets.test.ts): the 1 GB backlog, 200 sessions of 5 MB, in batches of 20
+#20 AC7 (budgets.test.ts): backlog sessions 100…119 of 200, 5 MB each, in one pass: 20 transcripts, 100108951 bytes; read on the unchanged pass: 0 bytes
+
+stdout | tests/acceptance/2365-redraft-ac5/perf.test.ts > AC5 #2365.c0521de3 for every transcript of #20's budgets (its suite's budgets.test.ts), the same > AC5 #20 AC7 (budgets.test.ts): the 1 GB backlog, 200 sessions of 5 MB, in batches of 20
+#20 AC7 (budgets.test.ts): backlog sessions 120…139 of 200, 5 MB each, in one pass: 20 transcripts, 100095402 bytes; read on the unchanged pass: 0 bytes
+
+stdout | tests/acceptance/2365-redraft-ac5/perf.test.ts > AC5 #2365.c0521de3 for every transcript of #20's budgets (its suite's budgets.test.ts), the same > AC5 #20 AC7 (budgets.test.ts): the 1 GB backlog, 200 sessions of 5 MB, in batches of 20
+#20 AC7 (budgets.test.ts): backlog sessions 140…159 of 200, 5 MB each, in one pass: 20 transcripts, 100082234 bytes; read on the unchanged pass: 0 bytes
+
+stdout | tests/acceptance/2365-redraft-ac5/perf.test.ts > AC5 #2365.c0521de3 for every transcript of #20's budgets (its suite's budgets.test.ts), the same > AC5 #20 AC7 (budgets.test.ts): the 1 GB backlog, 200 sessions of 5 MB, in batches of 20
+#20 AC7 (budgets.test.ts): backlog sessions 160…179 of 200, 5 MB each, in one pass: 20 transcripts, 100090453 bytes; read on the unchanged pass: 0 bytes
+
+stdout | tests/acceptance/2365-redraft-ac5/perf.test.ts > AC5 #2365.c0521de3 for every transcript of #20's budgets (its suite's budgets.test.ts), the same > AC5 #20 AC7 (budgets.test.ts): the 1 GB backlog, 200 sessions of 5 MB, in batches of 20
+#20 AC7 (budgets.test.ts): backlog sessions 180…199 of 200, 5 MB each, in one pass: 20 transcripts, 100083615 bytes; read on the unchanged pass: 0 bytes
+
+ ✓ tests/acceptance/2365-redraft-ac5/perf.test.ts (6 tests) 446845ms
+   ✓ AC5 #2365.c0521de3 for every transcript of #20's perf tasks, the parts joined equal the merge base's one copy, and an unchanged transcript's second pass reads none of it (3)
+     ✓ AC5 perf task archive-live: ten sessions 1 MB in, 12 lines a minute, a pass a minute for five minutes 9491ms
+     ✓ AC5 perf task archive-month: four 5 MB sessions at half and whole 7710ms
+     ✓ AC5 perf task archive-backlog: twenty 5 MB sessions in one pass 22507ms
+   ✓ AC5 #2365.c0521de3 for every transcript of #20's budgets (its suite's budgets.test.ts), the same (3)
+     ✓ AC5 #20 AC7 (budgets.test.ts): ten live sessions, 1 MB in, 12 lines a minute for six minutes 16418ms
+     ✓ AC5 #20 AC7 (budgets.test.ts): the heavy month, both days, 20 sessions a day at half and whole 132642ms
+     ✓ AC5 #20 AC7 (budgets.test.ts): the 1 GB backlog, 200 sessions of 5 MB, in batches of 20 257669ms
+
+ Test Files  1 passed (1)
+      Tests  6 passed (6)
+   Start at  17:24:43
+   Duration  447.17s (tests 100%)
+
+-----
+EXIT 0; ended: 2026-11-18T01:32:11Z; load averages: 15.97 62.36 77.23

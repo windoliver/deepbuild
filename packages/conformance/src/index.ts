@@ -21,7 +21,7 @@ export type { StateChange, StateDiff, StateFixture, StateItem, StatePlan, StateS
 export type { ChannelAnswer, ChannelCtx, ChannelFill, ChannelItem, ChannelReply, ChannelRequest, Delivered as ChannelDelivered, Received as ChannelReceived } from './slots/channel.js';
 export type { EnvironmentFill, EnvSpec as EnvironmentSpec, Handle as EnvironmentHandle, Lease as EnvironmentLease } from './slots/environment.js';
 export { kitProblems, runKit } from './dispatch.js';
-export { proveFake, replay } from './runner.js';
+export { proveFake, replay, worst } from './runner.js';
 export { seededCases, stalePaths } from './slot-runner.js';
 export { codeFamilies, exitCode, judge, unmappedCodes } from './families.js';
 export { codesPage } from './pages.js';

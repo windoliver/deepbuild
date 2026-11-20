@@ -60,6 +60,15 @@ pub enum Plant {
     /// A play under `piece_seed: run` keeps the document's seed, so every run generates the same floors (#556
     /// criterion 3).
     KeepsDocumentSeed,
+    /// The process's footprint read fails, as the system call does on any error (#1431 criterion 2).
+    FootprintReadFails,
+    /// A reader that gives 0 for a footprint read that failed (#1431 criterion 2).
+    FootprintReadsZero,
+    /// A 1,000,000 B buffer outside the heap that no gauge counts, made at each whole minute since launch (#1431
+    /// criterion 3).
+    LeaksUngaugedBuffer,
+    /// The picture arm's image element asks for a frame at every vsync while it animates (#1489 criterion 3).
+    PictureFrameEachVsync,
 }
 
 impl Plant {
@@ -88,6 +97,10 @@ impl Plant {
             "wheel-notifies-every-event" => Some(Plant::WheelNotifiesEveryEvent),
             "reuse-drops-accessibility" => Some(Plant::ReuseDropsAccessibility),
             "keeps-document-seed" => Some(Plant::KeepsDocumentSeed),
+            "footprint-read-fails" => Some(Plant::FootprintReadFails),
+            "footprint-reads-zero" => Some(Plant::FootprintReadsZero),
+            "leaks-ungauged-buffer" => Some(Plant::LeaksUngaugedBuffer),
+            "picture-frame-each-vsync" => Some(Plant::PictureFrameEachVsync),
             _ => None,
         }
     }

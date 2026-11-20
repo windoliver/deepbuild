@@ -47,6 +47,88 @@ impl Default for Ao {
     }
 }
 
+/// The local tone map (Look `look@1`: tone mapping, `local`; #971): the frame's base, an
+/// edge-aware smoothing of its log2 luminance, compressed toward middle grey and its detail
+/// scaled, in linear light after the exposure and before the tone curve.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Local {
+    /// How far the base moves toward middle grey, 0 to 1.
+    pub strength: f64,
+    /// The detail's scale, 0 to 2.
+    pub detail: f64,
+    /// The range sigma that brings the base back up, in stops.
+    pub sigma: f64,
+    /// The pyramid's levels on a frame whose longer side is 1920 px, 2 to 7.
+    pub levels: u32,
+}
+
+impl Default for Local {
+    fn default() -> Local {
+        Local {
+            strength: 0.0,
+            detail: 1.0,
+            sigma: 0.9,
+            levels: 6,
+        }
+    }
+}
+
+impl Local {
+    /// Strength 0 and detail 1 change no pixel.
+    pub fn is_identity(&self) -> bool {
+        self.strength == 0.0 && self.detail == 1.0
+    }
+
+    /// The pyramid's levels on a frame of `size`: one more for each doubling of its longer side
+    /// from 1920 px and one fewer for each halving, so the coarsest level's cells cover the same
+    /// share of a frame at every output size; never fewer than 2, the first level's 4 px cells.
+    pub fn levels_at(&self, size: [u32; 2]) -> u32 {
+        let long = size[0].max(size[1]).max(1);
+        let doublings = if long >= 1920 {
+            i64::from((long / 1920).ilog2())
+        } else {
+            -i64::from(1920u32.div_ceil(long).next_power_of_two().ilog2())
+        };
+        (i64::from(self.levels) + doublings).max(2) as u32
+    }
+
+    /// A look's `local`: `none`, or an object whose fields default to the identity.
+    fn read(v: Option<&Value>) -> Result<Option<Local>, String> {
+        let o = match v {
+            None | Some(Value::Null) => return Ok(None),
+            Some(Value::String(s)) if s == "none" => return Ok(None),
+            Some(Value::Object(o)) => o,
+            Some(other) => return Err(format!("local: {other} is not none or an object")),
+        };
+        let d = Local::default();
+        let num = |k: &str, d: f64, lo: f64, hi: f64| match o.get(k) {
+            None => Ok(d),
+            Some(v) => v
+                .as_f64()
+                .filter(|x| (lo..=hi).contains(x))
+                .ok_or(format!("local.{k}: {v} is outside [{lo}, {hi}]")),
+        };
+        let sigma = match o.get("sigma") {
+            None => d.sigma,
+            Some(v) => v.as_f64().filter(|s| *s > 0.0).ok_or(format!(
+                "local.sigma: {v} is not a positive number of stops"
+            ))?,
+        };
+        let levels = match o.get("levels") {
+            None => d.levels,
+            Some(v) => v.as_u64().filter(|n| (2..=7).contains(n)).ok_or(format!(
+                "local.levels: {v} is not a whole number from 2 to 7"
+            ))? as u32,
+        };
+        Ok(Some(Local {
+            strength: num("strength", d.strength, 0.0, 1.0)?,
+            detail: num("detail", d.detail, 0.0, 2.0)?,
+            sigma,
+            levels,
+        }))
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Look3 {
     /// Role → its color, sRGB-encoded.
@@ -59,6 +141,8 @@ pub struct Look3 {
     pub materials: serde_json::Map<String, Value>,
     pub basis: Basis,
     pub grade: Grade,
+    /// #971: the local tone map, `None` with it off.
+    pub local: Option<Local>,
     pub ao: Option<Ao>,
     /// The deband's amplitude in 8-bit steps, or `None` with it off.
     pub deband: Option<f64>,
@@ -112,6 +196,7 @@ impl Look3 {
             materials: serde_json::Map::new(),
             basis: Basis::Drawing,
             grade: Grade::default(),
+            local: None,
             ao: None,
             deband: None,
             filter_taps: 8,
@@ -175,6 +260,7 @@ impl Look3 {
             }
         };
         out.grade = read_grade(look.get("grade"))?;
+        out.local = Local::read(look.get("local"))?;
         out.print = std::sync::Arc::new(
             deep_canvas_marks::print::read(look, &out.roles, 1920.0)
                 .map_err(|r| format!("{}: {}", r.code, r.path))?,
@@ -275,5 +361,41 @@ mod tests {
             (ToneMap::None, Basis::Drawing, None)
         );
         assert!(ink.grade.is_identity());
+    }
+
+    /// #971: `local` defaults to the identity and refuses a field outside the design's range;
+    /// its pyramid gains a level for each doubling of the frame's longer side from 1920 px.
+    #[test]
+    fn local_reads_its_fields_and_its_levels_follow_the_size() {
+        let read = |text: &str| Local::read(Some(&serde_json::from_str(text).unwrap()));
+        assert_eq!(read(r#""none""#), Ok(None));
+        let half = read(r#"{"strength": 0.5}"#).unwrap().unwrap();
+        let wanted = Local {
+            strength: 0.5,
+            ..Local::default()
+        };
+        assert_eq!(half, wanted);
+        assert!(Local::default().is_identity() && !half.is_identity());
+        for bad in [
+            r#"{"strength": 1.5}"#,
+            r#"{"detail": 2.5}"#,
+            r#"{"sigma": 0}"#,
+            r#"{"levels": 8}"#,
+            r#"{"levels": 1}"#,
+            "3",
+        ] {
+            assert!(read(bad).is_err(), "{bad} is refused");
+        }
+        let at = |w, h| Local::default().levels_at([w, h]);
+        assert_eq!(
+            [
+                at(1920, 1080),
+                at(3840, 2160),
+                at(3839, 2160),
+                at(1080, 1920)
+            ],
+            [6, 7, 6, 6]
+        );
+        assert_eq!([at(960, 540), at(959, 540), at(1, 1)], [5, 4, 2]);
     }
 }

@@ -1,0 +1,154 @@
+diff -ru .orig/tests/acceptance/2365/README.md tests/acceptance/2365/README.md
+--- .orig/tests/acceptance/2365/README.md	2026-11-15 21:36:24
++++ tests/acceptance/2365/README.md	2026-11-15 21:48:51
+@@ -184,3 +184,17 @@
+   evidence bytes are judged on any machine.
+ - **What a held hook waits during a pass**, which the issue says its probe didn't measure, is not measured here either.
+ - **The Proof's table** (`probe/proof.mjs`) prints the probe's passes for the base and the change; it judges nothing.
++
++## Repair (2026-11-15, owner-approved plumbing repair)
++
++Two defects in how a failure is reported, found on the first run at the base, were repaired by a separate maintenance
++job that saw no implementation of #2365. No oracle, fixture, twin or expected value changed, and no test's name or limit.
++
++- `helpers.ts`, `compareBytes`: it now keeps the `uuid` of the line it is comparing, so the failure names the first
++  differing line and its message. It kept only the line's first 240 bytes and the bytes from the first difference on,
++  so a `uuid` between them was lost: the append-tail twin's failure read `first differs at line 6, byte …` with no
++  `(message <uuid>)`. Every byte is compared as before, a chunk at a time.
++- `identity.test.ts`, `readsNone`: it now throws its own message naming each source read, its path, its bytes and how
++  it was read. It asserted through `expect(list).toEqual([])`, whose message the runner cut to `expected [ …(3) ] to
++  deeply equal []`, so the re-reading twin's test never saw the names. It fails on the same condition as before: a
++  watched source with bytes read.
+diff -ru .orig/tests/acceptance/2365/helpers.ts tests/acceptance/2365/helpers.ts
+--- .orig/tests/acceptance/2365/helpers.ts	2026-11-15 21:36:24
++++ tests/acceptance/2365/helpers.ts	2026-11-15 21:51:32
+@@ -130,6 +130,7 @@
+   ended?: 'actual' | 'expected';
+ }
+ const HEAD = 240;
++const UUID = /"uuid":"([^"]+)"/;
+ /** Compares two byte streams; where they differ, the line and both sides of it. */
+ export async function compareBytes(actual: Bytes, expected: Bytes): Promise<Diff> {
+   const a = new Reader(actual[Symbol.asyncIterator]());
+@@ -137,10 +138,15 @@
+   let matched = 0;
+   let line = 1;
+   let head = Buffer.alloc(0);
++  // The current line's `uuid`, once the bytes matched on it hold one, and the last bytes matched on it until then:
++  // `head` keeps only the line's start, so a `uuid` past it and before the first difference would be lost.
++  let uuid: string | undefined;
++  let tail = Buffer.alloc(0);
+   const differ = async (ended?: 'actual' | 'expected'): Promise<Diff> => {
+-    const exp = Buffer.concat([head, await b.restOfLine()]).toString('utf8');
++    const rest = await b.restOfLine();
++    const exp = Buffer.concat([head, rest]).toString('utf8');
+     const act = Buffer.concat([head, await a.restOfLine()]).toString('utf8');
+-    const uuid = /"uuid":"([^"]+)"/.exec(exp)?.[1];
++    uuid ??= UUID.exec(Buffer.concat([tail, rest]).toString('utf8'))?.[1];
+     return { equal: false, matched, line, expectedLine: exp, actualLine: act, ...(uuid ? { uuid } : {}), ...(ended ? { ended } : {}) };
+   };
+   for (;;) {
+@@ -158,6 +164,12 @@
+     let last = -1;
+     for (let nl = same.indexOf(10); nl >= 0; nl = same.indexOf(10, nl + 1)) { line++; last = nl; }
+     head = last >= 0 ? Buffer.from(same.subarray(last + 1, last + 1 + HEAD)) : head.length < HEAD ? Buffer.concat([head, same.subarray(0, HEAD - head.length)]) : head;
++    if (last >= 0) { uuid = undefined; tail = Buffer.alloc(0); }
++    if (uuid === undefined) {
++      const seen = Buffer.concat([tail, same.subarray(last + 1)]);
++      uuid = UUID.exec(seen.toString('utf8'))?.[1];
++      tail = Buffer.from(seen.subarray(-HEAD));
++    }
+     matched += k;
+     a.pos += k;
+     b.pos += k;
+diff -ru .orig/tests/acceptance/2365/identity.test.ts tests/acceptance/2365/identity.test.ts
+--- .orig/tests/acceptance/2365/identity.test.ts	2026-11-15 21:36:24
++++ tests/acceptance/2365/identity.test.ts	2026-11-15 21:51:32
+@@ -49,8 +49,10 @@
+     watch.stop();
+   }
+   const read = sources.map((s) => ({ s, bytes: watch.bytes(s.path) })).filter((r) => r.bytes > 0);
+-  expect(read.map((r) => `${r.s.what} (${r.s.path}): ${r.bytes} bytes by ${[...new Set(watch.reads.filter((x) => x.path === r.s.path).map((x) => x.how))].join(', ')}`),
+-    `${AC5} a second pass over unchanged transcripts reads none of them`).toEqual([]);
++  // Thrown with each source in full: the runner's own message for a list that should be empty cuts it to `[ …(3) ]`.
++  if (read.length) {
++    throw Error(`${AC5} a second pass over unchanged transcripts reads none of them, but it read ${read.map((r) => `${r.s.what} (${r.s.path}): ${r.bytes} bytes by ${[...new Set(watch.reads.filter((x) => x.path === r.s.path).map((x) => x.how))].join(', ')}`).join('; ')}`);
++  }
+ }
+ 
+ // benchmarks/archive.mjs's transcript(seed, size), reproduced byte for byte: the perf tasks' inputs.
+diff -ru .orig/tests/acceptance/2365-redraft-ac4/README.md tests/acceptance/2365-redraft-ac4/README.md
+--- .orig/tests/acceptance/2365-redraft-ac4/README.md	2026-11-15 21:36:24
++++ tests/acceptance/2365-redraft-ac4/README.md	2026-11-15 21:48:51
+@@ -106,3 +106,13 @@
+ 
+ Temp folders are the `/tmp/dh20-*` ones #20's helpers make and remove; its helpers also clear the agents' variables
+ and point `HOME` at a temp folder. All data is generated; there are no keys and no home data.
++
++## Repair (2026-11-15, owner-approved plumbing repair)
++
++One defect in how a failure is reported, found on the first run at the base, was repaired by a separate maintenance
++job that saw no implementation of #2365. No oracle, fixture, twin or expected value changed, and no test's name or limit.
++
++- `helpers.ts`, `copiedAgainFromStart`: when the archived transcript differs from the rewritten file, it now throws
++  its own message with `firstDifference`'s text in full. It asserted through `expect(…).toBeUndefined()`, whose message
++  the runner cut to `expected 'line 3 (session:…' to be undefined`, so the twin's test never saw `line 3
++  (session:<id>#m3) differs`. `firstDifference`, what it compares and the check's other assertions are unchanged.
+diff -ru .orig/tests/acceptance/2365-redraft-ac4/helpers.ts tests/acceptance/2365-redraft-ac4/helpers.ts
+--- .orig/tests/acceptance/2365-redraft-ac4/helpers.ts	2026-11-15 21:36:24
++++ tests/acceptance/2365-redraft-ac4/helpers.ts	2026-11-15 21:47:35
+@@ -200,7 +200,9 @@
+   const session = handle(r.s.id);
+   expect(r.passError === undefined ? undefined : String((r.passError as Error)?.message ?? r.passError), `${session}: the pass after the rewrite completes`).toBeUndefined();
+   expect(firstDifference(r.firstReading, messagesOf(LINES, () => 'draft'), session), `${session}: before the rewrite, the archived transcript reads as the file first written`).toBeUndefined();
+-  expect(firstDifference(r.reading, messagesOf(TOTAL, versionAfter(r.rewritten)), session), `${session}: after its first megabyte was rewritten, the archived transcript reads as the rewritten file, line for line`).toBeUndefined();
++  // Thrown with the difference in full: the runner's own message for a value that should be undefined cuts it short.
++  const differs = firstDifference(r.reading, messagesOf(TOTAL, versionAfter(r.rewritten)), session);
++  if (differs !== undefined) throw Error(`${session}: after its first megabyte was rewritten, the archived transcript reads as the rewritten file, line for line: ${differs}`);
+   for (const p of r.probes) {
+     expect(p.text, `${p.handle} resolves through the new parts to message ${p.n} of the rewritten file (${versionAfter(r.rewritten)(p.n)})`).toBe(said(p.n, versionAfter(r.rewritten)(p.n)).text);
+   }
+diff -ru .orig/tests/acceptance/2365-redraft-ac5/README.md tests/acceptance/2365-redraft-ac5/README.md
+--- .orig/tests/acceptance/2365-redraft-ac5/README.md	2026-11-15 21:36:24
++++ tests/acceptance/2365-redraft-ac5/README.md	2026-11-15 21:49:17
+@@ -132,3 +132,16 @@
+ - `wrong.ts`: the two twins.
+ - `suite.test.ts`: #20's suite and the twin tests. `perf.test.ts`: #20's perf tasks and budget transcripts.
+ - `tsconfig.json`: the root options with `noEmit` and `allowImportingTsExtensions`.
++
++## Repair (2026-11-15, owner-approved plumbing repair)
++
++One defect in how the merge base is run, found on the first run at the base, was repaired by a separate maintenance
++job that saw no implementation of #2365. No oracle, fixture, twin or expected value changed, and no test's name or limit.
++
++- `base-copy.mjs`: the child now registers a module-resolution hook (`registerHooks`, as `scripts/lifecycle-sim.mjs`
++  does) that resolves a relative `.js` import made from a `.ts` file to the `.ts` beside it. The merge base's sources
++  import their siblings as `.js` (`./intake.js` from `packages/evidence/src/index.ts`), which Node's
++  `--experimental-transform-types` doesn't map to `.ts`, so the child ended with `ERR_MODULE_NOT_FOUND` and every test
++  that needs the merge base's copies was BLOCKED. The child still runs the merge base's exported sources on the same
++  files, the copies are compared byte for byte as before, and a child that doesn't run is still BLOCKED (`base.ts`,
++  unchanged).
+diff -ru .orig/tests/acceptance/2365-redraft-ac5/base-copy.mjs tests/acceptance/2365-redraft-ac5/base-copy.mjs
+--- .orig/tests/acceptance/2365-redraft-ac5/base-copy.mjs	2026-11-15 21:36:24
++++ tests/acceptance/2365-redraft-ac5/base-copy.mjs	2026-11-15 21:47:36
+@@ -5,8 +5,20 @@
+ // pass of its archive over the homes in `env`, and writes each copy every transcript.archived event links, read back
+ // from its store, to `out`, with out/manifest.json naming them in log order. It never writes to the test's world.
+ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
++import { registerHooks } from 'node:module';
+ import { join } from 'node:path';
+ import { pathToFileURL } from 'node:url';
++
++// The merge base's sources import their siblings as .js; the source beside each is .ts, which Node doesn't try
++// (resolved as scripts/lifecycle-sim.mjs resolves them).
++registerHooks({
++  resolve(specifier, context, next) {
++    if (specifier.startsWith('.') && specifier.endsWith('.js') && context.parentURL?.endsWith('.ts')) {
++      try { return next(`${specifier.slice(0, -3)}.ts`, context); } catch { /* a real .js */ }
++    }
++    return next(specifier, context);
++  },
++});
+ 
+ const job = JSON.parse(readFileSync(process.argv[2], 'utf8'));
+ const load = (path) => import(pathToFileURL(join(job.base, path)).href);

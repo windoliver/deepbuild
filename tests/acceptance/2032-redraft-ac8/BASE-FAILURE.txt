@@ -1,0 +1,15 @@
+#2032 criterion 8's blind redraft, run before any implementation.
+
+Run by the implementing session, once, on this Mac (macOS arm64, Metal), not at the redraft's own base e748313c3 but at
+the merge base with main, f6ddd396f, whose tree was exported with `git archive` and its deep-gpu built there (cargo
+build --locked), since e748313c3's built tree was no longer on disk; neither commit has any of #2032. The suite's
+files and tests/acceptance/2032/helpers.ts were copied into that tree, unchanged:
+  PATH=$HOME/.rustup/toolchains/1.99.1-aarch64-apple-darwin/bin:$PATH CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+    node node_modules/vitest/vitest.mjs run --root tests/acceptance/2032-redraft-ac8 --no-file-parallelism \
+    --testTimeout=1800000
+1 test, 1 failed, at its own assertion for missing behavior, before any run is judged.
+
+ac8-budget.test.ts
+  × 16 lights and 4,096 occluder segments at 1920 × 1080 cost under 2 ms of GPU time a frame, on the reference Mac
+      the shadowed side draws its shadows: its first frame hashes apart from the same document with occlude off:
+      expected 'ffa33146c0ce1971…' not to be 'ffa33146c0ce1971…'

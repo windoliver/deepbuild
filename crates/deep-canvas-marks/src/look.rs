@@ -37,6 +37,7 @@ use deep_canvas::color::{oklab_to_srgb, srgb_to_oklab, Oklab, Srgb};
 use deep_canvas::ops;
 use serde_json::{json, Map, Value};
 
+use crate::path;
 use crate::scene::{Palette, Rgb, Type};
 
 /// A color at an alpha: sRGB-encoded bytes, the alpha last.
@@ -204,6 +205,8 @@ pub struct Look {
     pub data_distance: f64,
     /// #1458: the chrome's sizes, when the look gives them.
     pub sizes: Option<Sizes>,
+    /// #1592: the status marks as the chrome draws them, when the look gives them.
+    pub marks: Option<Marks>,
 }
 
 /// The chrome's sizes, roles of the look as its colors are (#1458): `type`'s three text roles, the
@@ -221,6 +224,167 @@ pub struct Sizes {
     /// `text`, the platform's face (`.SystemUIFont`) or a family of the look's fonts, and `code`, a
     /// family of the look's fonts.
     pub face: BTreeMap<String, String>,
+    /// #1592: the chrome's one icon set, at its two sizes and its one stroke.
+    pub icons: Icons,
+}
+
+/// #1592: the chrome's icons (Look `look@1`: `icons`), roles of the look as its text sizes are: the size an icon draws
+/// at in a row and in a page's chrome, and the one stroke every icon's lines draw at, in points.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Icons {
+    pub row: f64,
+    pub page: f64,
+    pub stroke: f64,
+}
+
+/// #1592: one state's status mark as the chrome draws it, a glyph drawn in its slot, never a font's. Its `core`, an SVG
+/// path filled by the even-odd rule, and its `line`, an SVG path stroked at the icons' one stroke with round caps and
+/// joins, take the state's color; its `cut`, stroked the same way, is taken out of both, so the fill under the mark
+/// shows through it. A mark has a core, a line or both.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Drawn {
+    pub core: Option<String>,
+    pub line: Option<String>,
+    pub cut: Option<String>,
+}
+
+/// #1592: the status marks (Look `look@1`: `status_treatment`): each state's drawn glyph, in a square slot `slot` points
+/// on a side, its lines and cut stroked `stroke` wide.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Marks {
+    pub slot: f64,
+    pub stroke: f64,
+    pub drawn: BTreeMap<&'static str, Drawn>,
+}
+
+impl Marks {
+    /// A state's mark as an SVG drawn in one color, the state's: its core and its line, with its cut masked out of both.
+    pub fn svg(&self, state: &str) -> Option<String> {
+        let drawn = self.drawn.get(state)?;
+        let (slot, stroke) = (self.slot, self.stroke);
+        let stroked = |d: &str, ink: &str| {
+            format!(
+                r#"<path d="{d}" fill="none" stroke="{ink}" stroke-width="{stroke}" stroke-linecap="round" stroke-linejoin="round"/>"#
+            )
+        };
+        let mut body = String::new();
+        if let Some(core) = &drawn.core {
+            body.push_str(&format!(r#"<path d="{core}" fill-rule="evenodd"/>"#));
+        }
+        if let Some(line) = &drawn.line {
+            body.push_str(&stroked(line, "black"));
+        }
+        let (defs, group) = match &drawn.cut {
+            None => (String::new(), "<g>"),
+            Some(cut) => (
+                format!(
+                    r#"<defs><mask id="cut" maskUnits="userSpaceOnUse" x="0" y="0" width="{slot}" height="{slot}"><rect width="{slot}" height="{slot}" fill="white"/>{}</mask></defs>"#,
+                    stroked(cut, "black")
+                ),
+                r#"<g mask="url(#cut)">"#,
+            ),
+        };
+        Some(format!(
+            r#"<svg xmlns="http://www.w3.org/2000/svg" width="{slot}" height="{slot}" viewBox="0 0 {slot} {slot}">{defs}{group}{body}</g></svg>"#
+        ))
+    }
+
+    /// Which of a state's samples its mark covers, [`MARK_SAMPLES`] to a side, row by row: inside its core by the
+    /// even-odd rule or within half a stroke of its line, and farther than half a stroke from its cut. The shape alone,
+    /// as with color off.
+    pub fn coverage(&self, state: &str) -> Option<Vec<bool>> {
+        let drawn = self.drawn.get(state)?;
+        let tol = self.slot / 512.0;
+        let read = |d: &Option<String>| -> Option<Vec<path::Polyline>> {
+            match d {
+                Some(d) => Some(path::flatten(&path::parse(d)?, tol)),
+                None => Some(Vec::new()),
+            }
+        };
+        let (core, line, cut) = (read(&drawn.core)?, read(&drawn.line)?, read(&drawn.cut)?);
+        let reach = self.stroke * self.stroke / 4.0;
+        let step = self.slot / MARK_SAMPLES as f64;
+        let mut covered = Vec::with_capacity(MARK_SAMPLES * MARK_SAMPLES);
+        for row in 0..MARK_SAMPLES {
+            for column in 0..MARK_SAMPLES {
+                let p = [(column as f64 + 0.5) * step, (row as f64 + 0.5) * step];
+                let inked = inside(&core, p) || line.iter().any(|l| near(l, p, reach));
+                covered.push(inked && !cut.iter().any(|l| near(l, p, reach)));
+            }
+        }
+        Some(covered)
+    }
+}
+
+/// How many samples a side of a mark's slot is read at to tell two marks apart: two to a point in a 16-point slot.
+pub const MARK_SAMPLES: usize = 32;
+/// How far one mark is moved over another to find where the two are most alike, in samples each way: a shape moved by
+/// a point is still that shape.
+const MARK_SHIFT: i32 = 2;
+/// The least share of what two marks cover that only one of them covers, where the two are most alike, for a person
+/// to tell them apart with color off.
+pub const TOLD_APART: f64 = 0.10;
+
+/// How far apart two marks' coverages are where they're most alike: with one moved over the other by up to
+/// [`MARK_SHIFT`] samples each way, the least share of the samples either covers that only one covers.
+pub fn apart(a: &[bool], b: &[bool]) -> f64 {
+    let n = MARK_SAMPLES as i32;
+    let at = |cover: &[bool], x: i32, y: i32| {
+        (0..n).contains(&x) && (0..n).contains(&y) && cover[(y * n + x) as usize]
+    };
+    let mut least = 1.0_f64;
+    for dy in -MARK_SHIFT..=MARK_SHIFT {
+        for dx in -MARK_SHIFT..=MARK_SHIFT {
+            let (mut either, mut only) = (0_usize, 0_usize);
+            for y in -MARK_SHIFT..n + MARK_SHIFT {
+                for x in -MARK_SHIFT..n + MARK_SHIFT {
+                    let (p, q) = (at(a, x, y), at(b, x - dx, y - dy));
+                    either += usize::from(p || q);
+                    only += usize::from(p != q);
+                }
+            }
+            if either > 0 {
+                least = least.min(only as f64 / either as f64);
+            }
+        }
+    }
+    least
+}
+
+/// Whether `p` is inside the polylines, each closed, by the even-odd rule.
+fn inside(lines: &[path::Polyline], p: [f64; 2]) -> bool {
+    let mut odd = false;
+    for line in lines {
+        let points = &line.points;
+        for (i, a) in points.iter().enumerate() {
+            let b = points[(i + 1) % points.len()];
+            if (a[1] > p[1]) != (b[1] > p[1]) {
+                let x = a[0] + (p[1] - a[1]) / (b[1] - a[1]) * (b[0] - a[0]);
+                if p[0] < x {
+                    odd = !odd;
+                }
+            }
+        }
+    }
+    odd
+}
+
+/// Whether `p` is within `reach`, a squared distance, of the polyline, its closing segment included when it closes.
+fn near(line: &path::Polyline, p: [f64; 2], reach: f64) -> bool {
+    let points = &line.points;
+    let closing = line.closed.then(|| (points[points.len() - 1], points[0]));
+    let mut segments = points.windows(2).map(|w| (w[0], w[1])).chain(closing);
+    segments.any(|(a, b)| {
+        let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
+        let long = dx * dx + dy * dy;
+        let t = if long == 0.0 {
+            0.0
+        } else {
+            (((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / long).clamp(0.0, 1.0)
+        };
+        let (ex, ey) = (a[0] + t * dx - p[0], a[1] + t * dy - p[1]);
+        ex * ex + ey * ey <= reach
+    })
 }
 
 /// One text role: its size and line height in points, and its weight.
@@ -247,6 +411,9 @@ pub const DATA_DISTANCE: f64 = 0.06;
 pub enum Refusal {
     /// The status guard: two states share a glyph.
     GlyphShared([&'static str; 2]),
+    /// #1592: two states' drawn marks that can't be told apart with color off: where they're most alike, only one of
+    /// them covers `share` of what either covers, under [`TOLD_APART`].
+    MarkShared { pair: [&'static str; 2], share: f64 },
     /// A data role within the look's `min_distance` of a status color, in a theme, at `distance`.
     Distance {
         theme: &'static str,
@@ -295,6 +462,13 @@ impl Refusal {
             Refusal::GlyphShared(pair) => {
                 json!({"ok": false, "code": "status_glyph_shared", "pair": pair})
             }
+            Refusal::MarkShared { pair, share } => json!({
+                "ok": false, "code": "status_mark_shared", "pair": pair, "share": share,
+                "message": format!(
+                    "the status marks of {} and {} can't be told apart with color off: only one covers {:.1}% of what either covers, under {}%",
+                    pair[0], pair[1], share * 100.0, TOLD_APART * 100.0
+                ),
+            }),
             Refusal::Distance {
                 theme,
                 role,
@@ -664,18 +838,27 @@ fn fonts(
 /// The chrome's sizes (#1458), `None` for a look that gives none of them. Each text role has a size
 /// of at least 10 pt, a line at least its size and one of three weights; `space` is steps of 4,
 /// smallest first; the radius, every shell size and every stroke are numbers; the chrome's code face is
-/// a family of the look's fonts and its text face the platform's or one of them. A look gives `type`'s three sizes and
-/// `space` as the clean look does, or not at all, so a look pack (#1035) can't change a page's layout.
+/// a family of the look's fonts and its text face the platform's or one of them. A look gives `type`'s three sizes,
+/// `space` and (#1592) `icons` as the clean look does, or not at all, so a look pack (#1035) can't change a page's
+/// layout.
 fn sizes(
     def: &Map<String, Value>,
     fonts: &BTreeMap<String, &'static str>,
 ) -> Result<Option<Sizes>, Refusal> {
-    const KEYS: [&str; 6] = ["type", "space", "radius", "shell", "stroke", "chrome_fonts"];
+    const KEYS: [&str; 7] = [
+        "type",
+        "space",
+        "radius",
+        "shell",
+        "stroke",
+        "chrome_fonts",
+        "icons",
+    ];
     if !KEYS.iter().any(|k| def.contains_key(*k)) {
         return Ok(None);
     }
     let clean = shipped("clean").unwrap_or_default();
-    for key in ["type", "space"] {
+    for key in ["type", "space", "icons"] {
         if def.get(key).is_some_and(|v| Some(v) != clean.get(key)) {
             return Err(Refusal::Bad(key.into()));
         }
@@ -730,6 +913,27 @@ fn sizes(
         for (name, size) in object(def.get(key), key)?.into_iter().flatten() {
             into.insert(name.clone(), number(Some(size), format!("{key}/{name}"))?);
         }
+    }
+    // #1592: one icon set at a row's size and a page's, with one stroke under half the smaller.
+    let icons = object(def.get("icons").or_else(|| clean.get("icons")), "icons")?
+        .ok_or_else(|| bad("icons".into()))?;
+    if icons.len() != 3 {
+        return Err(bad("icons".into()));
+    }
+    let icon = |key: &str| {
+        number(icons.get(key), format!("icons/{key}")).and_then(|n| {
+            (n > 0.0)
+                .then_some(n)
+                .ok_or_else(|| bad(format!("icons/{key}")))
+        })
+    };
+    out.icons = Icons {
+        row: icon("row")?,
+        page: icon("page")?,
+        stroke: icon("stroke")?,
+    };
+    if out.icons.stroke * 2.0 >= out.icons.row.min(out.icons.page) {
+        return Err(bad("icons/stroke".into()));
     }
     for (name, face) in object(def.get("chrome_fonts"), "chrome_fonts")?
         .into_iter()
@@ -890,6 +1094,79 @@ pub fn status_map(def: &Map<String, Value>) -> Result<Status, Refusal> {
     Ok(status)
 }
 
+/// #1592: a look's drawn status marks (`status_treatment.slot` and `.drawn`), none when it draws none. Every state has
+/// one, with a core, a line or both, and a cut if it likes, each a path inside the slot; no key names anything else;
+/// and every two states' marks are told apart with color off ([`TOLD_APART`]), or the pair is refused, named. Lines
+/// and cuts are stroked at the icons' one `stroke`.
+fn marks(def: &Map<String, Value>, stroke: Option<f64>) -> Result<Option<Marks>, Refusal> {
+    let treatment = def.get("status_treatment");
+    let Some(drawn) = object(
+        treatment.and_then(|t| t.get("drawn")),
+        "status_treatment/drawn",
+    )?
+    else {
+        return Ok(None);
+    };
+    let bad = |path: &str| Refusal::Bad(format!("status_treatment/{path}"));
+    let slot = treatment
+        .and_then(|t| t.get("slot"))
+        .and_then(Value::as_f64)
+        .filter(|s| s.is_finite() && *s > 0.0)
+        .ok_or_else(|| bad("slot"))?;
+    let stroke = stroke.ok_or_else(|| Refusal::Bad("icons/stroke".into()))?;
+    if let Some(key) = drawn.keys().find(|k| !STATES.contains(&k.as_str())) {
+        return Err(bad(&format!("drawn/{key}")));
+    }
+    let mut marks = Marks {
+        slot,
+        stroke,
+        drawn: BTreeMap::new(),
+    };
+    for state in STATES {
+        let entry = drawn.get(state);
+        let field = |name: &str| -> Result<Option<String>, Refusal> {
+            let Some(d) = entry.and_then(|e| e.get(name)) else {
+                return Ok(None);
+            };
+            let path = format!("drawn/{state}/{name}");
+            let d = d.as_str().ok_or_else(|| bad(&path))?;
+            let verbs = path::parse(d).ok_or_else(|| bad(&path))?;
+            let within = |p: &[f64; 2]| p.iter().all(|v| (0.0..=slot).contains(v));
+            let held = path::flatten(&verbs, slot / 512.0)
+                .iter()
+                .all(|line| line.points.iter().all(within));
+            held.then(|| Some(d.to_owned())).ok_or_else(|| bad(&path))
+        };
+        let (core, line, cut) = (field("core")?, field("line")?, field("cut")?);
+        if core.is_none() && line.is_none() {
+            return Err(bad(&format!("drawn/{state}")));
+        }
+        if let Some(key) = entry.and_then(Value::as_object).and_then(|e| {
+            e.keys()
+                .find(|k| !["core", "line", "cut"].contains(&k.as_str()))
+        }) {
+            return Err(bad(&format!("drawn/{state}/{key}")));
+        }
+        marks.drawn.insert(state, Drawn { core, line, cut });
+    }
+    let covers: Vec<(&'static str, Vec<bool>)> = STATES
+        .iter()
+        .map(|state| Ok((*state, marks.coverage(state).ok_or_else(|| bad("drawn"))?)))
+        .collect::<Result<_, Refusal>>()?;
+    for (i, (a, cover_a)) in covers.iter().enumerate() {
+        for (b, cover_b) in &covers[i + 1..] {
+            let share = apart(cover_a, cover_b);
+            if share < TOLD_APART {
+                return Err(Refusal::MarkShared {
+                    pair: [a, b],
+                    share,
+                });
+            }
+        }
+    }
+    Ok(Some(marks))
+}
+
 /// Resolves a look@1 definition and holds it to the status guard, the status distance included,
 /// as the app's look, where status always shows; `bundled` lists the font files the build ships.
 pub fn resolve(def: &Value, bundled: &[&str]) -> Result<Look, Refusal> {
@@ -975,6 +1252,8 @@ pub fn resolve_in(def: &Value, bundled: &[&str], at: Distance) -> Result<Look, R
     }
     let code = role_map(def, "code", &crate::code::CLASSES, [&light, &dark])?;
     let diff = role_map(def, "diff", &DIFF_MARKS, [&light, &dark])?;
+    let sizes = sizes(def, &fonts)?;
+    let marks = marks(def, sizes.as_ref().map(|s| s.icons.stroke))?;
     let look = Look {
         light_type: Type {
             code: code.clone(),
@@ -999,7 +1278,8 @@ pub fn resolve_in(def: &Value, bundled: &[&str], at: Distance) -> Result<Look, R
             .get("data_distance")
             .and_then(Value::as_f64)
             .unwrap_or(DATA_DISTANCE),
-        sizes: sizes(def, &fonts)?,
+        sizes,
+        marks,
     };
     // Data colors keep the look's distance from every status color where status shows; the
     // ground sits behind them.
@@ -1396,6 +1676,80 @@ mod tests {
         bare.as_object_mut().unwrap().remove("code");
         bare.as_object_mut().unwrap().remove("diff");
         assert!(resolve(&bare).unwrap().light_type.code.is_empty());
+    }
+
+    #[test]
+    fn the_clean_look_draws_one_icon_set_at_two_sizes_with_one_stroke() {
+        let look = resolve(&shipped("clean").unwrap()).unwrap();
+        let icons = look.sizes.unwrap().icons;
+        assert_eq!((icons.row, icons.page, icons.stroke), (14.0, 16.0, 1.5));
+        // A look pack can't change them, as it can't change type or space (#1458).
+        let mut def = shipped("clean").unwrap();
+        def["icons"]["row"] = json!(18);
+        assert_eq!(resolve(&def).err(), Some(Refusal::Bad("icons".into())));
+    }
+
+    #[test]
+    fn every_state_has_a_drawn_mark_told_apart_from_every_other_with_color_off() {
+        let look = resolve(&shipped("clean").unwrap()).unwrap();
+        let marks = look.marks.expect("the clean look draws its status marks");
+        assert_eq!(marks.slot, 16.0);
+        let covers: Vec<_> = STATES
+            .iter()
+            .map(|s| (*s, marks.coverage(s).unwrap()))
+            .collect();
+        for (i, (a, ca)) in covers.iter().enumerate() {
+            assert!(ca.iter().any(|c| *c), "{a} covers something");
+            for (b, cb) in &covers[i + 1..] {
+                let share = apart(ca, cb);
+                assert!(share >= TOLD_APART, "{a} and {b} differ in {share}");
+            }
+        }
+        // A mark with a cut is its core with the cut masked out; one without is its core alone.
+        assert!(marks.svg("pass").unwrap().contains(r#"mask="url(#cut)""#));
+        assert!(!marks.svg("blocked").unwrap().contains("mask"));
+    }
+
+    #[test]
+    fn two_states_drawn_alike_are_refused_naming_the_pair() {
+        let mut def = shipped("clean").unwrap();
+        def["status_treatment"]["drawn"]["fail"] = def["status_treatment"]["drawn"]["pass"].clone();
+        match resolve(&def) {
+            Err(Refusal::MarkShared { pair, share }) => {
+                assert_eq!(pair, ["pass", "fail"]);
+                assert_eq!(share, 0.0);
+            }
+            other => panic!("not refused as a shared mark: {other:?}"),
+        }
+        // The same shape a point to the right is still the same shape.
+        let mut def = shipped("clean").unwrap();
+        def["status_treatment"]["drawn"]["stale"] = json!({"core": "M5.5 2L12.5 2C13.881 2 15 3.119 15 4.5L15 11.5C15 12.881 13.881 14 12.5 14L5.5 14C4.119 14 3 12.881 3 11.5L3 4.5C3 3.119 4.119 2 5.5 2Z"});
+        assert!(matches!(
+            resolve(&def),
+            Err(Refusal::MarkShared {
+                pair: ["blocked", "stale"],
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn a_mark_past_its_slot_or_missing_is_refused() {
+        let mut def = shipped("clean").unwrap();
+        def["status_treatment"]["drawn"]["idle"]["core"] = json!("M0 0L17 0L17 17Z");
+        assert_eq!(
+            resolve(&def).err(),
+            Some(Refusal::Bad("status_treatment/drawn/idle/core".into()))
+        );
+        let mut def = shipped("clean").unwrap();
+        def["status_treatment"]["drawn"]
+            .as_object_mut()
+            .unwrap()
+            .remove("stale");
+        assert_eq!(
+            resolve(&def).err(),
+            Some(Refusal::Bad("status_treatment/drawn/stale".into()))
+        );
     }
 
     #[test]
