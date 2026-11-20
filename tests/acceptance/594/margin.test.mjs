@@ -7,7 +7,7 @@ import { describe, failedCpuMs, fixture, tail, verdict } from './helpers.mjs';
 
 const report = (run) => `${tail(run.output)}\n--- compiles by side ---\n${run.segments.map((s) => `${s.side}\n  warm: ${describe(s.warm)}\n  measured: ${describe(s.measured)}`).join('\n')}`;
 
-test('criteria 2 and 3: a change that only adds a dependency passes perf within the margin; the same change slowed by 3 s of CPU fails perf on cpuMs', (t) => {
+test('#594.18edc4ce #594.fb185499 criteria 2 and 3: a change that only adds a dependency passes perf within the margin; the same change slowed by 3 s of CPU fails perf on cpuMs', (t) => {
   const repo = fixture(t);
   // Only a dependency: dep-b, built by preflight's own warm-up before the checks are measured.
   repo.change({ addDependency: true });

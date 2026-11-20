@@ -56,3 +56,19 @@ It runs that checkout's `scripts/preflight.mjs` twice and judges the second. Tha
 - **"A change that only adds dependencies already built."** I read "already built" as built by the untimed warm-up before the measured run, which is what preflight does for the working tree. The test's change adds one dependency and nothing else, and its first preflight must pass within the margin.
 - **"Really slows the checks."** This is check work that costs 3 s more CPU per run, ten times the fixture base's few hundred ms. It lives in the check workload, so it shows up in every measured run, not only in an untimed build.
 - **"Each side's builds stay its own."** I read this as no build directory shared by the merge-base copy and the copy without the change's own tests, and neither side using the working tree's `target/`. So the base never gets a cache the change's side made, or the reverse.
+
+## 2026-11-19: criterion tags and twins
+
+The fix landed on main, and the closed-issue sweep reopened #594 because no test named its criteria IDs. The tests now carry them at the start of their names, with nothing else changed:
+
+- `#594.18edc4ce` (criterion 2): `margin.test.mjs` and `build-dirs.test.mjs`. The latter's change adds only a dependency the warm-up builds, plus a test file the compared run leaves out, and it holds the measured `cpuMs` within the margin on both preflights (contract 6).
+- `#594.fb185499` (criterion 3): `margin.test.mjs`.
+- Criterion 1 is untagged on purpose, and open. `reference.live.test.mjs` keeps its name. The proof lanes pick tests by tag alone, so a tagged live test would run in the before lane on every machine, and its `assert.fail('BLOCKED: …')` would read as a failure on the change, not as BLOCKED. It also measures an external checkout, so no planted program could fail it, and a tag would let the closed-issue sweep count criterion 1 held when no run has proven it. Contract 3 is a deterministic part of criterion 1, not a proof of "under 5 minutes on the reference Mac".
+- `warm.test.mjs` is untagged: it proves the mechanism, clippy warmed, but not the measured `cpuMs` within the margin that criterion 2 names.
+
+With the fix on the merge base, the before lane needs planted wrong programs. `twins.json` and `twins/README.md` name them: `warm-skips-clippy` for criterion 2 and `margin-widened-on-lock` for criterion 3. `TWINS-RUN.txt` shows each tagged test failing at an assertion on its criterion's twin.
+
+Two notes on criterion 1:
+
+- `reference.live.test.mjs` (untagged) hard-codes Mac15,7 (M3 Pro, 36 GB). The design now names three reference Macs (Mac15,7; Mac15,12, M3, 16 GB; Mac17,10, M5 Max, 64 GB), and a run on any of them counts, so the test blocks on two machines whose runs should count. Changing that is a change to the test, so it goes through a redraft, not this note.
+- It is probably out of reach as written. `benchmarks/budgets.json`'s `preflight` limit was raised from 300 s to 900 s on 2026-10-22. Its `changeReason` says the checks alone outgrew five minutes on the reference Mac (Mac15,12): the unit lane alone took about 790 s, and with everything that may overlap overlapped the floor is about 450 to 500 s. A whole preflight under 300 s, perf included, can't be met while that holds, with or without warm builds. The criterion stays open until the checks shrink or the issue's owner restates it.

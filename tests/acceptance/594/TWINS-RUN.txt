@@ -1,0 +1,34 @@
+Criterion tags and twins for #594, run on 2026-11-19 on a Mac15,12 (Apple M3, 16 GB), Node 22.22.1, cargo and
+clippy from ~/.cargo/bin, base b4a2049e8 (origin/main, with the #594 fix) plus the renamed tests. Each twin ran in a
+scratch tree (git archive HEAD, this folder laid over it, then the twin's files), one after another:
+
+  node --test tests/acceptance/594/build-dirs.test.mjs tests/acceptance/594/margin.test.mjs tests/acceptance/594/warm.test.mjs
+
+Local paths redacted: <sandbox> is the test's sandbox under the system temporary folder, <tree> the scratch tree.
+Every failure below is an AssertionError [ERR_ASSERTION] whose first stack frame is the test file itself.
+
+Unmodified base (load 4.3)                                                               3 pass, 0 fail
+  ok   #594.18edc4ce a second preflight builds no dependency in either copy ... (build-dirs, 25 s)
+  ok   #594.18edc4ce #594.fb185499 criteria 2 and 3 ... (margin, 31 s)
+  ok   after warm(), the lint lane's cargo clippy ... (warm, untagged, 5 s)
+
+twins/warm-skips-clippy (AC2; load 7.0)                                                  0 pass, 3 fail
+  FAIL build-dirs  at build-dirs.test.mjs:26  "the first preflight failed:"
+                   FAIL perf: preflight: cpuMs 3290 regressed beyond base 570 + 50%, allowing 20 ms for time's truncation
+  FAIL margin      at margin.test.mjs:17  "perf failed a change that only adds a dependency:"
+                   FAIL perf: preflight: cpuMs 4280 regressed beyond base 610 + 50%, allowing 20 ms for time's truncation
+  FAIL warm        at warm.test.mjs:38  "warm() never check-compiled a dependency, as clippy does; it compiled:
+                   dep_a --emit=dep-info,metadata,link -> <sandbox>/repo/target/debug/deps; app ... (link)"
+
+twins/margin-widened-on-lock (AC3; load 7.4)                                             2 pass, 1 fail
+  FAIL margin      at margin.test.mjs:30  "perf passed checks slowed by 3 s of CPU:" (PASS perf (14.78 s); the
+                   first half, a change that only adds a dependency, passed)
+  ok   build-dirs, warm
+
+Per tag: #594.18edc4ce's tests (build-dirs, margin) both fail at an assertion on warm-skips-clippy.
+#594.fb185499's test (margin) fails at an assertion on margin-widened-on-lock.
+Criterion 1 (#594.b71277c1) is untagged on purpose: reference.live.test.mjs keeps its base name, has no twin, and was
+not run (it fails BLOCKED off the reference Mac). It stays open.
+A third twin, one build directory for both sides, was also run (build-dirs failed at build-dirs.test.mjs:44, "the copy
+without the change's own tests did not build dep_a itself on the first run"). It was then dropped: it guards the
+issue's Scope bullet, not criterion 2's cpuMs margin, and build-dirs already fails on warm-skips-clippy.
