@@ -443,8 +443,13 @@ fn script(j: &mut J, journey: &str, spec: &Value, policy: &Policy, extra: &mut M
                 j.activate(&c)?;
             }
             j.enter(0)?;
-            // The carry journey keeps the scene change from level 1 to level 2 as one recording.
-            j.run.record_on_done = journey == "carry";
+            if journey == "carry" {
+                // The carry journey keeps the scene change from level 1 to level 2 as one recording, from 20 steps
+                // before level 1's last press.
+                let last = policy.actions.iter().flat_map(|(_, s)| s.iter().copied()).max().unwrap_or(0);
+                j.play(policy, Some((last - 20).max(0)))?;
+                j.run.keep_frames = true;
+            }
             j.play(policy, None)?;
             if journey == "carry" && j.shell().levels.len() > 1 {
                 j.enter(1)?;

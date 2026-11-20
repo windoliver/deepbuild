@@ -142,9 +142,9 @@ pub struct Run<'a> {
     pub from: Option<String>,
     pub control: Option<String>,
     pub keep_frames: bool,
-    /// Frames start being kept the step a level is completed: a scene change's recording.
-    pub record_on_done: bool,
     pub frames: Vec<String>,
+    /// The document the last frame outside a transition drew, which a fade draws out of.
+    drawn: Option<Value>,
 }
 
 const STEP: i64 = 705_600_000 / 60;
@@ -180,8 +180,8 @@ impl<'a> Run<'a> {
             from: None,
             control: None,
             keep_frames: false,
-            record_on_done: false,
             frames: Vec::new(),
+            drawn: None,
         }
     }
 
@@ -505,9 +505,6 @@ impl<'a> Run<'a> {
             self.state.completed();
             self.level = None;
             self.change();
-            if self.record_on_done {
-                self.keep_frames = true;
-            }
         } else if def.lost.as_ref().is_some_and(|l| level.truthy(l)) {
             self.state.lost();
             self.level = None;
@@ -617,12 +614,24 @@ impl<'a> Run<'a> {
         self.rows.push(row);
     }
 
+    /// This step's frame: what's shown, or during a fade the screen it leaves going out under the look's ground in
+    /// the first half and the one it enters coming in over the second.
     fn keep_frame(&mut self) {
-        let veil = if self.shell.fade && self.shell.transition > 0 { self.transition as f64 / self.shell.transition as f64 } else { 0.0 };
         let doc = match (self.shown(), self.level.as_ref()) {
             (Some(s), _) => self.prompted(s),
             (None, Some(l)) => self.shell.levels[l.index].doc.clone(),
             _ => return,
+        };
+        let total = self.shell.transition as f64;
+        let (doc, veil) = if self.shell.fade && self.transition > 0 && total > 0.0 {
+            let p = 1.0 - self.transition as f64 / total;
+            match self.drawn.clone().filter(|_| p < 0.5) {
+                Some(leaving) => (leaving, p * 2.0),
+                None => (doc, ((1.0 - p) * 2.0).min(1.0)),
+            }
+        } else {
+            self.drawn = Some(doc.clone());
+            (doc, 0.0)
         };
         if let Some(sha) = self.screens.frame(&doc, self.size, veil) {
             self.frames.push(sha);
