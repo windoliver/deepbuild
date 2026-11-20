@@ -156,7 +156,7 @@
         },
         "toolLoad": {
           "type": "object",
-          "description": "What the session holds of DeepBuild's own MCP servers at its start, both ways (#2897): by search, the tools' names, the servers' instructions, the tools marked to load up front and the skill's description; whole, every tool's schema and the skill. The way is its client's, from its agent's facts, and a reader charges that count; unread charges neither. Both counts are of the pair deep setup writes, deepbuild and deep-actions, recorded when the session's config loads deepbuild.",
+          "description": "What the session holds of DeepBuild's own MCP servers at its start, both ways (#2897): by search, the tools' names, the servers' instructions, the tools marked to load up front and the skill's description; whole, every tool's schema and the skill. The way is its client's, from its agent's facts, and a reader charges that count; unread charges neither. Both counts are of the pair deep setup writes, deepbuild and deep-actions, recorded for a Claude Code session whose config loads deepbuild. Before the session's version is read, its facts' newest version gives the way.",
           "properties": {
             "way": {
               "type": "string",

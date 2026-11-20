@@ -1821,9 +1821,10 @@ export class Core {
       if (draft.kind === 'tool.after') await this.delivery.prAfter(meta, data.command);
       if (draft.kind === 'session.start') {
         data.loads = await loadsOf(meta.cwd, live.agent ?? meta.agent).catch(() => []);
-        // What it holds of DeepBuild's servers, both ways, and the way its client loads them (#2897): only a session
-        // whose config loads the deepbuild server holds any.
-        const load = (data.loads as { kind: string; name: string }[]).some((l) => l.kind === 'mcp' && l.name === 'deepbuild') ? toolLoad(live.agent ?? meta.agent, meta.version) : undefined;
+        // What it holds of DeepBuild's servers, both ways, and the way its client loads them (#2897): the loads read
+        // Claude Code's MCP configs, so a Claude Code session whose config loads the deepbuild server.
+        const agent = live.agent ?? meta.agent;
+        const load = agent === 'claude-code' && (data.loads as { kind: string; name: string }[]).some((l) => l.kind === 'mcp' && l.name === 'deepbuild') ? toolLoad(agent, meta.version) : undefined;
         if (load) data.toolLoad = load;
         if (!foreign) void this.control.enteredProject(meta.session, meta.cwd);
         // Each server's tool list, read off this hook's path: recorded after the start, its changes held for you.
