@@ -1,0 +1,31 @@
+== umask 022 checkout, fixed build: <tmp>/e2629/c022 (worktree 36d56fbdd, digest.ts with-fix)
+-- modes in packages/jobs/score:
+-rw-r--r-- ./deepbuild.json
+-rw-r--r-- ./index.ts
+-rw-r--r-- ./tool/flac.mjs
+-rw-r--r-- ./tool/math.mjs
+-rw-r--r-- ./tool/pitch.d.mts
+-rw-r--r-- ./tool/pitch.mjs
+-- modes in packages/jobs/import:
+-rw-r--r-- ./README.md
+-rw-r--r-- ./deepbuild.json
+-rw-r--r-- ./fixtures/loader-clean.document.json
+-rw-r--r-- ./fixtures/loader-clean.look.json
+-rw-r--r-- ./fixtures/loader-clean.report.json
+-rw-r--r-- ./fixtures/loader.document.json
+-- hub (pid 17087): {"v":1,"ready":true,"pid":17087,"socket":"<tmp>/h-QUnC/home/.deepbuild/hub.sock","start":"01M7WDTQ07YNCZ3WWJ1TW5Z3RJ"}
+$ deep install <tmp>/e2629/c022/packages/jobs/score
+Source: <tmp>/e2629/c022/packages/jobs/score
+  deepbuild/score@1.0.0, digest d1:fd6d8beac98c0b0fb915f2d46f54d62f6917e449d696af32ebf23bd71bd313f8, unsigned
+Permissions:
+  check kinds: score.render.pitch
+Installed deepbuild/score@1.0.0
+exit 0
+$ deep install <tmp>/e2629/c022/packages/jobs/import
+Source: <tmp>/e2629/c022/packages/jobs/import
+  deepbuild/import@1.0.0, digest d1:8fb7886bb7379869e52b92cf43fdc0a33c984675ae074a2b8457bb6eeeff8cc9, unsigned
+Permissions:
+  check kinds: import.document, import.colors_mapped, import.no_expression
+Installed deepbuild/import@1.0.0
+exit 0
+-- hub 17087 stopped
