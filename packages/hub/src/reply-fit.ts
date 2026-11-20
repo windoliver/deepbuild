@@ -16,8 +16,8 @@ interface Entry { versions: string[]; result: Figures; error: Figures }
 export interface Limit { client: string | null; client_version: string | null; from: string; result: Figures; error: Figures; cap: Figures; error_cap: Figures }
 
 const UNITS = ['chars', 'tokens', 'bytes'] as const;
-/** Which facts file a client's name belongs to: the names the agents give in their initialize. */
-const AGENTS: [RegExp, string, string][] = [[/codex/i, 'codex', 'codex.facts.json'], [/^claude/i, 'claude-code', 'claude-code.facts.json']];
+/** Which facts file a client's name belongs to: the exact names the agents give in their initialize; any other is unknown. */
+const AGENTS: [string, string, string][] = [['codex-mcp-client', 'codex', 'codex.facts.json'], ['claude-code', 'claude-code', 'claude-code.facts.json']];
 
 const read = new Map<string, Entry[]>();
 /** A facts file's toolResult entries, read once. */
@@ -50,7 +50,7 @@ export function limitOf(client: unknown): Limit {
   const info = (typeof client === 'object' && client !== null ? client : {}) as Obj;
   const name = typeof info.name === 'string' ? info.name : null;
   const version = typeof info.version === 'string' ? info.version : null;
-  const agent = name === null ? undefined : AGENTS.find(([re]) => re.test(name));
+  const agent = name === null ? undefined : AGENTS.find(([n]) => n === name);
   const all = allEntries();
   let from = UNKNOWN;
   let result = smallest(all.map((e) => e.result));
@@ -67,6 +67,8 @@ export function limitOf(client: unknown): Limit {
       error = own.chars === undefined && error.chars !== undefined ? { ...own, chars: error.chars } : own;
     }
   }
+  // With no figure at all a reply would go uncapped: refused, never sent as if every client kept everything.
+  if (!UNITS.some((u) => result[u] !== undefined) || !UNITS.some((u) => error[u] !== undefined)) throw Error('no facts file holds a toolResult limit');
   return { client: name, client_version: version, from, result, error, cap: fifthUnder(result), error_cap: fifthUnder(error) };
 }
 
@@ -86,20 +88,25 @@ async function over(text: string, cap: Figures): Promise<number> {
 }
 
 /** The bytes the canvas core is given for a reply first: JSON rows run about two characters a token, rarely fewer. */
-export const roomOf = (cap: Figures): number => Math.min(cap.chars ?? Infinity, cap.bytes ?? Infinity, (cap.tokens ?? Infinity) * 2);
+const roomOf = (cap: Figures): number => Math.min(cap.chars ?? Infinity, cap.bytes ?? Infinity, (cap.tokens ?? Infinity) * 2);
 
 /**
- * A reply that fits `cap` as its client receives it (the value's JSON, the text deep mcp sends): asked with the room
- * `roomOf` gives, then again with less while it is over and pages (it carries `next`), each time in proportion to how far
- * it passed. A reply that doesn't page, or a call that may change something (`retry` false), is asked once.
+ * A reply that fits its cap as its client receives it (the value's JSON, the text deep mcp sends): `capOf` names the cap
+ * the reply is held to (a reply sent as a refusal is held to the error cap). Asked with the room `roomOf` gives the
+ * result cap, then, while it is over, again with less in proportion to how far it passed, with `again` set so the
+ * canvas core keeps only the last ask for replay. A call that may change something (`retry` false) is asked once, and
+ * the asking stops once a reply stops getting shorter: it doesn't page.
  */
-export async function fitted(cap: Figures, retry: boolean, ask: (room: number) => Promise<Obj>): Promise<Obj> {
+export async function fitted(cap: Figures, capOf: (reply: Obj) => Figures, retry: boolean, ask: (room: number, again: boolean) => Promise<Obj>): Promise<Obj> {
   let room = Math.floor(roomOf(cap));
+  let last = Infinity;
   for (let tries = 0; ; tries++) {
-    const reply = await ask(room);
-    const by = await over(JSON.stringify(reply), cap);
-    if (by <= 1 || !retry || reply.next === undefined || tries >= 6 || room <= 1024) return reply;
-    room = Math.max(1024, Math.floor((room / by) * 0.95));
+    const reply = await ask(room, tries > 0);
+    const text = JSON.stringify(reply);
+    const by = await over(text, capOf(reply));
+    if (by <= 1 || !retry || tries >= 6 || room <= 1024 || text.length >= last) return reply;
+    last = text.length;
+    room = Math.max(1024, Math.floor((Math.min(room, Buffer.byteLength(text)) / by) * 0.95));
   }
 }
 

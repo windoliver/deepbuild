@@ -1951,8 +1951,14 @@ impl CanvasSide {
             .remove("room")
             .and_then(|r| r.as_u64())
             .map(|r| r as usize);
+        // A read the hub asks again with less room replaces its first ask, so replay keeps one.
+        let again = call.remove("again").is_some();
         let doc = call.get("doc").and_then(Value::as_str).map(str::to_string);
-        self.calls.push(Value::Object(call));
+        let call = Value::Object(call);
+        if again && self.calls.last() == Some(&call) {
+            self.calls.pop();
+        }
+        self.calls.push(call);
         let Some(scenario) = self.scenario(true) else {
             self.calls.pop();
             return bad_input();
@@ -1979,8 +1985,9 @@ impl CanvasSide {
                 query::set_room(None);
                 let reply = replies.pop().unwrap_or(Value::Null);
                 // #412: deep_kinds reads and changes nothing, so it leaves no call to replay. Nor does
-                // deep_query (#2896): its cursor carries its revision, and a walk paged to fit its
-                // client would otherwise evaluate every earlier page again on each new one.
+                // deep_query (#2896): it writes no state a later call reads (its cursor is a row index on
+                // the revision it names), and a walk paged to fit its client would otherwise evaluate
+                // every earlier page again on each new one.
                 if matches!(
                     self.calls
                         .last()

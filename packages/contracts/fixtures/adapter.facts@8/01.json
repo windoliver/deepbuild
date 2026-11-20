@@ -968,9 +968,9 @@
     }
   },
   "toolResult": {
-    "readBy": "a deep_* reply's cap (#2896): deep mcp names its client, and a reply in the text that client receives stays a fifth under each figure here, the rest by next; a refusal a fifth under the error figures. DeepBuild never raises the figure with a tool's _meta anthropic/maxResultSizeChars or MAX_MCP_OUTPUT_TOKENS",
+    "readBy": "a deep_* reply's cap (#2896): deep mcp names its client, and a reply in the text that client receives stays a fifth under each figure here, the rest by next; a refusal a fifth under the error figures. DeepBuild never raises the figure with a tool's _meta anthropic/maxResultSizeChars or MAX_MCP_OUTPUT_TOKENS, and doesn't read a MAX_MCP_OUTPUT_TOKENS a person set lower",
     "conformance": "claude-code/toolResult/per-version",
-    "tokenizer": { "name": "o200k_base", "package": "gpt-tokenizer", "version": "4.0.0", "readBy": "what a reply's tokens are counted in: Claude Code counts its own tokens with a tokenizer it doesn't publish, so DeepBuild counts in Codex's pinned one and keeps the fifth spare" },
+    "tokenizer": { "name": "o200k_base", "package": "gpt-tokenizer", "version": "4.0.0", "readBy": "what a reply's tokens are counted in: Claude Code counts its own tokens with a tokenizer it doesn't publish, so DeepBuild counts in Codex's pinned one and keeps the fifth spare; the counter is the one packages/hub/src/reply-fit.ts imports, pinned in packages/hub/package.json, so a change here changes that import and pin with it" },
     "entries": [
       {
         "versions": ["2.1.299", "2.1.304", "2.1.308"],

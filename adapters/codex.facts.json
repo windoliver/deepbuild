@@ -937,7 +937,7 @@
   "toolResult": {
     "readBy": "a deep_* reply's cap (#2896): deep mcp names its client, and a reply in the text that client receives stays a fifth under each figure here, the rest by next; a refusal a fifth under the error figures",
     "conformance": "codex/toolResult/per-version",
-    "tokenizer": { "name": "o200k_base", "package": "gpt-tokenizer", "version": "4.0.0", "readBy": "what a reply's tokens are counted in: Codex's own tokenizer entry, above" },
+    "tokenizer": { "name": "o200k_base", "package": "gpt-tokenizer", "version": "4.0.0", "readBy": "what a reply's tokens are counted in: Codex's own tokenizer entry, above; the counter is the one packages/hub/src/reply-fit.ts imports, pinned in packages/hub/package.json, so a change here changes that import and pin with it" },
     "entries": [
       {
         "versions": ["0.144.0"],
