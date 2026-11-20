@@ -3089,16 +3089,16 @@ pub use canonical::*;
 mod tests {
     use super::*;
 
-    /// #2189: #1903's every-pass scene, which the device held at 659 MB full screen at the
-    /// showpiece's floors on the copy path, is refused at check, naming bytes within 10% of that.
+    /// #2189: #1903's every-pass scene is refused at check, naming bytes within 10% of what the
+    /// device holds for it full screen at the showpiece's floors on the copy path, as amended.
     #[test]
     fn the_check_refuses_the_full_screen_every_pass_scene_naming_what_the_device_held() {
         let evidence: Value =
             serde_json::from_str(include_str!("../../../docs/evidence/1903/envelope.json"))
                 .expect("the #1903 evidence");
-        let held = evidence["reply"]["fixtures"][0]["gpu_memory"]["peak_bytes"]
-            .as_u64()
-            .expect("the device's peak");
+        // The 659 MB it held, less the 101,842,944 B a mirror at half the internal size gave back.
+        let held = evidence["reply"]["fixtures"][0]["gpu_memory"]["peak_bytes"].as_u64();
+        let held = held.expect("the device's peak") - 101_842_944;
         let look: Value = serde_json::from_str(include_str!(
             "../../../tests/acceptance/1903/fixtures/look.json"
         ))
