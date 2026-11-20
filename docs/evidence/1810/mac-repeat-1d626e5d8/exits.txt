@@ -1,0 +1,22 @@
+start; cc --version exit 0; screen-lock flag 0; Now drawing from 'AC Power' 15:01:05 load { 6.31 10.34 38.60 } thermal 1 free KB 55319052
+PR 2590 head now e7dfd929b238c224a8b448c3ff10faa911f1a972 (code head under test 1d626e5d88a76bc9d60f4bdc9ef849b6a2926209) 15:01:06 load { 6.31 10.34 38.60 } thermal 1 free KB 55317376
+HEAD clone at 1d626e5d88a76bc9d60f4bdc9ef849b6a2926209 15:01:34 load { 8.01 10.36 37.63 } thermal 1 free KB 54095676
+setup head (npm ci, workspace build, deep-hook, deep-drive) exit=0 15:10:11 load { 55.25 47.97 44.08 } thermal 1 free KB 50558436
+count-head-1.txt:  Tests 2 passed (2) exit=0;  15:10:31 load { 43.35 45.74 43.37 } thermal 1 free KB 50257176
+count-head-2.txt:  Tests 2 passed (2) exit=0;  15:10:49 load { 34.92 43.76 42.71 } thermal 1 free KB 50256376
+count-head-3.txt:  Tests 2 passed (2) exit=0;  15:11:06 load { 26.48 41.25 41.83 } thermal 1 free KB 50258660
+count-head-4.txt:  Tests 2 passed (2) exit=0;  15:11:23 load { 22.59 39.67 41.26 } thermal 1 free KB 50256720
+count-head-5.txt:  Tests 2 passed (2) exit=0;  15:11:40 load { 18.78 37.69 40.51 } thermal 1 free KB 50255576
+head git status --porcelain lines after: 0 15:11:41 load { 18.78 37.69 40.51 } thermal 1 free KB 50254544
+clone ~/private/d1810r removed 15:11:45 load { 18.16 37.25 40.34 } thermal 1 free KB 56010524
+MAIN clone at 9550dc0f04d45844b5d7bb9ce74d89926c681724 with tests/acceptance/1810 from 1d626e5d88a76bc9d60f4bdc9ef849b6a2926209; changed paths: tests/acceptance/1810  15:12:15 load { 15.51 34.79 39.34 } thermal 1 free KB 54793968
+setup main (npm ci, workspace build, deep-hook, deep-drive) exit=0 15:20:56 load { 144.86 97.92 64.79 } thermal 1 free KB 50238640
+count-main-1.txt:  Tests 2 passed (2) exit=0;  15:21:15 load { 106.54 92.23 63.52 } thermal 1 free KB 50236884
+count-main-2.txt:  Tests 2 passed (2) exit=0;  15:21:32 load { 84.43 88.04 62.53 } thermal 1 free KB 50233604
+count-main-3.txt:  Tests 2 passed (2) exit=0;  15:21:49 load { 67.38 84.09 61.56 } thermal 1 free KB 50232044
+count-main-4.txt:  Tests 2 passed (2) exit=0;  15:22:06 load { 49.94 79.03 60.27 } thermal 1 free KB 50229584
+count-main-5.txt:  Tests 2 passed (2) exit=0;  15:22:22 load { 40.49 75.51 59.35 } thermal 1 free KB 50236804
+redraft-main.txt:  Tests 1 failed | 5 passed (6) exit=1;  15:23:22 load { 21.36 63.80 56.07 } thermal 1 free KB 49318632
+main git status --porcelain lines after (copied tests included): 15 15:23:22 load { 21.36 63.80 56.07 } thermal 1 free KB 49318112
+clone ~/private/d1810r removed 15:23:27 load { 20.13 62.84 55.78 } thermal 1 free KB 55457292
+secret scan hits=0 15:23:27 load { 20.13 62.84 55.78 } thermal 1 free KB 55457212

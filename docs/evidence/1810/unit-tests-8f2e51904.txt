@@ -1,0 +1,11 @@
+# packages/hub/test/verdict-chat.test.ts and packages/verdicts at 8f2e51904 on Linux, unit exit=1 2026-11-18T10:10:41Z free=427G load=88.23
+# The one failure is a verdicts.test.ts timing budget (rerun selection) at load 88; this PR doesn't change that code. Under this load it is INCONCLUSIVE.
+ ✓ packages/verdicts/test/line.test.ts (6 tests) 212ms
+ ✓ packages/hub/test/verdict-chat.test.ts (7 tests) 313ms
+ ❯ packages/verdicts/test/verdicts.test.ts (73 tests | 1 failed) 4108ms
+     × four thousand, each on its own commit, are selected in well under a verdict budget 116ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: expected 109.00770499999999 to be less than 100
+ ❯ packages/verdicts/test/verdicts.test.ts:470:41
+ Test Files  1 failed | 2 passed (3)
+      Tests  1 failed | 85 passed (86)
