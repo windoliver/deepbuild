@@ -939,6 +939,9 @@ alone.push('tests/acceptance/2241/', 'tests/acceptance/2009-redraft-2241/');
 // #2239's files build deep-physics (release); so do those of its blind redraft, written after the issue's amendment
 // of November 19, 2026: its fourth criterion, rewritten, and the one added last.
 alone.push('tests/acceptance/2239/', 'tests/acceptance/2239-redraft-ac4/');
+// #2098's files build deep-physics (release); so do those of its second blind run, which holds its second criterion's
+// closed-form time and gusts to the Force section as the owner's answer of November 19, 2026 amended it.
+alone.push('tests/acceptance/2098/', 'tests/acceptance/2098-redraft-ac2/');
 
 // #2742's files build deep-gpu; ac1 compares two films' GPU time on any Mac, and ac2 runs #417's suite.
 alone.push('tests/acceptance/2742/');

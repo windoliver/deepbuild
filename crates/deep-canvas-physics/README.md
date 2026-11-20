@@ -7,6 +7,7 @@ The physics canvas module (issue #2009, `physics.world@1`, measured, with backen
 ## Where new code goes
 
 - A world, shape, body, joint or force field goes in `src/doc.rs`, with its default and range; #1918's fields and the outputs go in `src/doc/reads.rs`; an input kind or field, or a checkpoint field, in `src/doc/inputs.rs`.
+- What a world's `dimensions` changes in its reading (a 2D world's points, turns, locks and shape kinds, and what it refuses until its backend runs it) and a body's `inertia` go in `src/doc/dims.rs`; a wind's fields in `src/doc/wind.rs` and what it blows, in pinned math, in `src/wind.rs` (issue #2098).
 - A `soft@1` field, an address pattern or a soft lattice goes in `src/doc/soft.rs`; what a skin checks, bakes and writes into a frame in `src/skin.rs`.
 - How a track's entries resolve against the declared inputs, order, fork and join, and the entries a control's entries derive (`from_controls`, which a world's bake, a live play's world and deep-show share), go in `src/track.rs`; the ring's spacing and budget in `src/ring.rs`.
 - The occurrence list's kinds, canonical order, bytes and rows go in `src/occurrence.rs`; the manifest and the `column.source@1` entries in `src/module.rs`.
@@ -15,7 +16,7 @@ The physics canvas module (issue #2009, `physics.world@1`, measured, with backen
 - A part of the bake key or how outputs are sampled goes in `src/bake.rs`; a hash, the comparator or a golden's cross-machine verdict in `src/golden.rs`. What the build resolved reaches them as a `Build` the backend's crate passes in. A golden's runtime digest is the seal's, of the set that holds this module alone (`Build::runtime_digest`, #1920).
 - A role's groups go in `TABLE` in `src/roles.rs`; a rule a role promises, which physics.pairs holds whatever the table says, goes in `src/pairs.rs`.
 - The codes it adds to the check catalog are `CODES` in `src/check.rs`.
-- The acceptance tests are in `tests/acceptance/2009`, `2010`, `2011`, `1918`, `1920`, `522`, `524` and `191`.
+- The acceptance tests are in `tests/acceptance/2009`, `2010`, `2011`, `1918`, `1920`, `522`, `524`, `191` and `2098`.
 
 ## What it may import
 
@@ -28,6 +29,7 @@ A canvas module crate under `scripts/canvas-lint.mjs`. It reaches the core throu
 - `src/doc.rs` refuses by name, with the issue that brings each, the fields no criterion of #2009, #2010, #2011 or #1918 runs: character and vehicle bodies, heightfield shapes and shapes built `from` an item or asset (#927), swing and twist, a drag medium, a spring point or a strength set by input (#2371), the wind, buoyancy, inverse-square, magnetic and Lennard-Jones forces, the input kinds `set`, `activate` and `blast` and a poke's `address`, `radius` and `falloff` (#2371 too), `jump` (#182), `drive`, `steer` and `brake` (#251), `launch.from` and expressions in an input's `data` (#164), and an output's `reduce`, `average`, `sample`, `keep`, `expr` and `unit` (#2248), and character reads; `src/check.rs` refuses a soft body's `pressure` by the caps, and rack and path joints in kinematic mode, which no criterion of #523 runs.
 - `src/bake.rs` keys the scene's channels and drivers a world reads as the values they give at every step (`reads`), and the input track as its entries resolve, defaults merged, so a track written with or without its defaults keys the same bake.
 - `src/doc/inputs.rs` reads a grab's `plane` and keeps it, but no `move` here reads it: a move names the point it pulls to.
+- `src/doc/dims.rs` refuses in a 2D world, each naming #2098's follow-up, what no criterion of #2098 runs there: joints, forces, inputs, outputs, sensors, kinematic bodies, kinematic mode, soft bodies and a body's `inertia`. `src/wind.rs` pushes the faces of a body's boxes only, and refuses a wind on a dynamic body with another shape or on a vehicle body; no wind names a soft body yet.
 - `src/occurrence.rs`'s rows carry no time: a host stamps each with its step's time (`timed`) where a scene's readers read it.
 - `src/doc/soft.rs` builds a balloon's and a volume's lattice only from the `mesh` a host resolves (deep-physics-rapier's `source.rs`), since this crate builds no mesh; a volume from a mesh asset is refused there (#2457). A soft body's `collision_group` makes it a member of that group, colliding with all; its clusters are named address sets, not engine clusters.
 - `src/skin.rs` writes a skin's positions into its item each frame, which scene3d rebuilds on the CPU (a new GPU buffer a frame), not the design's in-place vertex buffer rewrite.

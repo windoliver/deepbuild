@@ -11,7 +11,7 @@ use deep_canvas_physics::backend::{
     State, Targets, VehicleState, FIELDS,
 };
 use deep_canvas_physics::bake::{Build, Pin};
-use deep_canvas_physics::caps::{Caps, RAPIER3D};
+use deep_canvas_physics::caps::{Caps, RAPIER2D, RAPIER3D};
 use deep_canvas_physics::doc::{
     BodyKind, Breaks, End, Force, ForceKind, Joint, JointKind, Material, Mode, Motor,
     Pose as DocPose, Read, Refusal, Region, Rot, Rule, Shape, World,
@@ -37,6 +37,7 @@ pub mod bound;
 pub mod cast;
 pub mod channels;
 mod character;
+mod dim2;
 pub mod fp;
 mod inputs;
 mod joints;
@@ -85,15 +86,24 @@ fn pin(text: &str) -> Pin {
 /// This build as cargo resolved it (build.rs): this crate, rapier3d and the crates under it whose
 /// results it depends on, the target triple and rustc.
 pub fn build() -> Build {
+    built(env!("DEEP_PHYSICS_BACKEND"), env!("DEEP_PHYSICS_PINS"))
+}
+
+/// #2098: this build as a 2D world runs on it: rapier2d and the crates under it, so a 2D world's
+/// bake key and runtime digest name them, and a 3D world's stay what they were.
+pub fn build_2d() -> Build {
+    built(
+        env!("DEEP_PHYSICS_BACKEND_2D"),
+        env!("DEEP_PHYSICS_PINS_2D"),
+    )
+}
+
+fn built(backend: &str, pins: &str) -> Build {
     Build {
         implementation: env!("CARGO_PKG_NAME").into(),
         version: env!("CARGO_PKG_VERSION").into(),
-        backend: pin(env!("DEEP_PHYSICS_BACKEND")),
-        pins: env!("DEEP_PHYSICS_PINS")
-            .split(';')
-            .filter(|s| !s.is_empty())
-            .map(pin)
-            .collect(),
+        backend: pin(backend),
+        pins: pins.split(';').filter(|s| !s.is_empty()).map(pin).collect(),
         target: env!("DEEP_PHYSICS_TARGET").into(),
         rustc: env!("DEEP_PHYSICS_RUSTC").into(),
     }
@@ -169,6 +179,12 @@ pub enum Twin {
     /// then moves out of the way.
     StalePoses,
     StandingGivesWay,
+    /// #2098's: a check that lets a 2D world through to Rapier in 3D, where it goes on to be
+    /// built; a wind whose gusts read the platform's sin, not the integer lattice hash; and a
+    /// wrapper that reads a body's `inertia` and keeps its shapes'.
+    FlatOnRapier3d,
+    WindNoiseFromSin,
+    InertiaIgnored,
 }
 
 /// A Rapier world behind the backend interface.
@@ -231,6 +247,10 @@ pub struct Rapier {
     /// #251: its vehicle bodies, and the wheel contacts this step's places and drives wrote.
     pub(crate) vehicles: vehicle::Vehicles,
     wheel_rows: Vec<Raw>,
+    /// #2098: a 2D world, which rapier2d runs in this one's place.
+    flat: Option<dim2::World2>,
+    /// #2098: the triangles a wind pushes, by body, in the body's frame.
+    aero: BTreeMap<String, Vec<deep_canvas_physics::wind::Triangle>>,
 }
 
 fn v3(a: [f64; 3]) -> Vector {
@@ -336,7 +356,10 @@ fn shared(shapes: &BTreeMap<String, Shape>, shape: &Shape) -> Option<SharedShape
 impl Rapier {
     /// The bodies in the order this world built them (#1921: `check`'s `built`).
     pub fn built(&self) -> Vec<String> {
-        self.bodies.iter().map(|(id, _)| id.clone()).collect()
+        match &self.flat {
+            Some(f) => f.built(),
+            None => self.bodies.iter().map(|(id, _)| id.clone()).collect(),
+        }
     }
 
     /// Moves body `id`'s canonical field `field` (an index of `FIELDS`) by `ulps` f32 values: the
@@ -407,7 +430,20 @@ impl Rapier {
     ) -> Option<ColliderBuilder> {
         let u = &b.shapes[i];
         let path = format!("bodies/{id}/shapes/{i}");
-        let shape = &w.shapes[&u.shape];
+        // #2098: a 2D world's shape, which only rapier2d builds (dim2.rs).
+        let Some(shape) = w.shapes.get(&u.shape) else {
+            let what = format!(
+                "{} is a 2D world's shape, which Rapier in 3D doesn't build",
+                u.shape
+            );
+            out.push(refusal(
+                "out_of_range",
+                format!("shapes/{}", u.shape),
+                Value::Null,
+                what,
+            ));
+            return None;
+        };
         if matches!(
             shape,
             Shape::Plane { .. } | Shape::Mesh { .. } | Shape::Heightfield { .. }
@@ -617,6 +653,14 @@ impl Rapier {
         }
     }
 
+    /// #2098: the backend that runs this world: rapier2d once it has built a 2D one.
+    fn pin(&self) -> &'static Caps {
+        match self.flat {
+            Some(_) => &RAPIER2D,
+            None => &RAPIER3D,
+        }
+    }
+
     fn handle_of(&self, id: &str) -> Option<RigidBodyHandle> {
         self.bodies.iter().find(|(b, _)| b == id).map(|(_, h)| *h)
     }
@@ -629,7 +673,8 @@ impl Rapier {
             .iter()
             .map(|c| self.world.colliders[*c].mass())
             .sum();
-        Some(f64::from(m))
+        // #2098: a body with a written inertia carries its shapes' mass itself.
+        Some(f64::from(if m > 0.0 { m } else { rb.mass() }))
     }
 
     /// Sets what a step reads of its scene (#1918): each kinematic body's next position, keeping
@@ -681,9 +726,18 @@ impl Rapier {
 
     /// Each force's push on each body it applies to, from the state at t(k), held over the step.
     fn push(&mut self) {
-        for (_, h) in &self.bodies {
+        for (id, h) in &self.bodies {
             self.world.bodies[*h].reset_forces(false);
+            // #2098: a wind's torque is this step's alone.
+            if self.aero.contains_key(id) {
+                self.world.bodies[*h].reset_torques(false);
+            }
         }
+        let t = deep_canvas_physics::wind::seconds(self.step, self.step_flicks);
+        let noise = match self.twin {
+            Twin::WindNoiseFromSin => planted::noise_from_sin,
+            _ => deep_canvas_physics::wind::NOISE,
+        };
         let ids: BTreeMap<&str, RigidBodyHandle> = self
             .bodies
             .iter()
@@ -709,6 +763,21 @@ impl Rapier {
                 }
                 let (m, v) = (rb.mass(), rb.linvel());
                 let force = match &f.kind {
+                    ForceKind::Wind(_) => {
+                        let q = rb.rotation();
+                        let seen = deep_canvas_physics::wind::Seen {
+                            pos: back(p),
+                            rot: [q.x, q.y, q.z, q.w].map(f64::from),
+                            com: back(rb.center_of_mass()),
+                            linear: back(v),
+                            angular: back(rb.angvel()),
+                        };
+                        let on = self.aero.get(id).map_or(&[][..], Vec::as_slice);
+                        let (force, torque) =
+                            deep_canvas_physics::wind::push(f, t, &seen, on, noise);
+                        rb.add_torque(v3(torque) * f.strength as f32, true);
+                        v3(force)
+                    }
                     ForceKind::Uniform { accel } => v3(*accel) * m,
                     ForceKind::Drag {
                         linear,
@@ -850,16 +919,21 @@ impl Backend for Rapier {
     fn id(&self) -> String {
         match self.test {
             Some((name, _)) => name.into(),
-            None => format!("{}@{}", RAPIER3D.backend, RAPIER3D.version),
+            None => format!("{}@{}", self.pin().backend, self.pin().version),
         }
     }
 
     fn caps(&self) -> &'static Caps {
-        self.test.map_or(&RAPIER3D, |t| t.1)
+        self.test.map_or(self.pin(), |t| t.1)
     }
 
     fn build(&mut self, w: &World) -> Result<(), Vec<Refusal>> {
         tally("build");
+        self.flat = None;
+        if w.dimensions == 2 && self.twin != Twin::FlatOnRapier3d {
+            self.flat = Some(dim2::World2::build(w)?);
+            return Ok(());
+        }
         let mut out = Vec::new();
         self.world = PhysicsWorld::default();
         self.world_body = None;
@@ -968,13 +1042,28 @@ impl Backend for Rapier {
                 .map(|(_, c)| c.shape.mass_properties(1.0).mass())
                 .collect();
             let total: f32 = volumes.iter().sum();
+            // #2098: a written inertia stands in place of the shapes' at their mass and centre of
+            // mass, so the shapes weigh nothing and the body carries all three itself.
+            let written = b.inertia.filter(|_| {
+                b.kind == BodyKind::Dynamic
+                    && w.mode != Mode::Kinematic
+                    && self.twin != Twin::InertiaIgnored
+            });
+            let mut weighed = MassProperties::default();
             for ((index, c), vol) in colliders.into_iter().zip(volumes) {
-                let c = match b.mass {
+                let mut c = match b.mass {
                     Some(m) if b.kind == BodyKind::Dynamic && total > 0.0 => {
                         c.mass(m as f32 * vol / total)
                     }
                     _ => c,
                 };
+                if written.is_some() {
+                    weighed += c
+                        .mass_properties
+                        .mass_properties(&*c.shape)
+                        .transform_by(&c.position);
+                    c = c.density(0.0);
+                }
                 let ch = self.world.insert_collider(c, Some(h));
                 self.uses.insert(
                     ch,
@@ -984,9 +1073,35 @@ impl Backend for Rapier {
                     },
                 );
             }
+            if let Some(i) = written {
+                let whole = MassProperties::new(weighed.local_com, weighed.mass(), v3(i));
+                let world = &mut self.world;
+                world.bodies[h].set_additional_mass_properties(whole, false);
+                world.bodies[h].recompute_mass_properties_from_colliders(&world.colliders);
+            }
             handles.insert(id.clone(), h);
             self.bodies.push((id.clone(), h));
         }
+        self.aero = w
+            .forces
+            .values()
+            .filter(|f| matches!(f.kind, ForceKind::Wind(_)))
+            .flat_map(|f| &f.applies_to)
+            .map(|id| {
+                // Each box's faces where its collider sits on the body.
+                let solid = w.bodies[id].shapes.iter().filter(|u| !u.sensor);
+                let on = solid.flat_map(|u| {
+                    let (at, half) = (pose(&u.offset), &w.shapes[&u.shape]);
+                    let Shape::Box { half } = half else {
+                        return Vec::new();
+                    };
+                    let q = at.rotation;
+                    let rot = [q.x, q.y, q.z, q.w].map(f64::from);
+                    deep_canvas_physics::wind::faces(*half, back(at.translation), rot)
+                });
+                (id.clone(), on.collect())
+            })
+            .collect();
         for (id, j) in &w.joints {
             self.joint(&handles, id, j, &mut out);
         }
@@ -1007,6 +1122,10 @@ impl Backend for Rapier {
 
     fn step(&mut self, inputs: &[Input], targets: &Targets) -> Result<(), Box<Refusal>> {
         tally("step");
+        if let Some(f) = &mut self.flat {
+            f.step();
+            return Ok(());
+        }
         self.wheel_rows.clear();
         self.apply(inputs)?;
         self.walk();
@@ -1084,11 +1203,17 @@ impl Backend for Rapier {
 
     fn occurrences(&self) -> Vec<Raw> {
         tally("occurrences");
-        self.last.clone()
+        match &self.flat {
+            Some(f) => f.last.clone(),
+            None => self.last.clone(),
+        }
     }
 
     fn read(&self) -> State {
         tally("read");
+        if let Some(f) = &self.flat {
+            return f.read();
+        }
         let bodies = self
             .bodies
             .iter()
@@ -1128,6 +1253,9 @@ impl Backend for Rapier {
 
     fn canonical(&self) -> Vec<Canonical> {
         tally("canonical");
+        if let Some(f) = &self.flat {
+            return f.canonical();
+        }
         self.bodies
             .iter()
             .map(|(id, h)| {
@@ -1148,6 +1276,9 @@ impl Backend for Rapier {
     }
 
     fn held(&self) -> Held {
+        if let Some(f) = &self.flat {
+            return f.held();
+        }
         let (rigid_bodies, joints) = self.rigid_held();
         Held {
             rigid_bodies,
@@ -1157,11 +1288,17 @@ impl Backend for Rapier {
     }
 
     fn joints(&self) -> Vec<JointState> {
-        self.joint_states()
+        match self.flat {
+            Some(_) => Vec::new(),
+            None => self.joint_states(),
+        }
     }
 
     fn checkpoint(&self) -> Checkpoint {
         tally("checkpoint");
+        if let Some(f) = &self.flat {
+            return f.checkpoint();
+        }
         Checkpoint {
             backend: RAPIER3D.backend.into(),
             version: RAPIER3D.version.into(),
@@ -1180,31 +1317,36 @@ impl Backend for Rapier {
 
     fn restore(&mut self, cp: &Checkpoint) -> Result<(), Box<Refusal>> {
         tally("restore");
-        if !self.restore_any_version
-            && (cp.backend != RAPIER3D.backend || cp.version != RAPIER3D.version)
-        {
+        let pin = self.pin();
+        if !self.restore_any_version && (cp.backend != pin.backend || cp.version != pin.version) {
             return Err(Box::new(refusal(
                 CHECKPOINT_REFUSED,
                 "checkpoint/version".into(),
                 json!(format!("{}@{}", cp.backend, cp.version)),
                 format!(
                     "the checkpoint was written by {} {} and this build pins {} {}; checkpoints never mix across backend versions, so it was refused and nothing was loaded",
-                    cp.backend, cp.version, RAPIER3D.backend, RAPIER3D.version
+                    cp.backend, cp.version, pin.backend, pin.version
                 ),
             )));
         }
         let mut rest = &cp.state[..];
-        let world: PhysicsWorld = bincode::deserialize_from(&mut rest).map_err(|e| {
+        let unread = |e: bincode::Error| {
             Box::new(refusal(
                 CHECKPOINT_REFUSED,
                 "checkpoint/state".into(),
                 Value::Null,
                 format!(
                     "the checkpoint's state doesn't load as a {} {} world: {e}; nothing was loaded",
-                    RAPIER3D.backend, RAPIER3D.version
+                    pin.backend, pin.version
                 ),
             ))
-        })?;
+        };
+        if let Some(f) = &mut self.flat {
+            f.world = bincode::deserialize_from(&mut rest).map_err(unread)?;
+            (f.step, f.last) = (cp.step, Vec::new());
+            return Ok(());
+        }
+        let world: PhysicsWorld = bincode::deserialize_from(&mut rest).map_err(unread)?;
         self.world = world;
         let rest = self.vehicles.restore(rest);
         let rest = self.soft.restore(rest);

@@ -136,6 +136,9 @@ impl Run {
             Ok(x) => x,
             Err(e) => return Some(e),
         };
+        if let Some(refused) = dims::unread(&w, "physics.audit") {
+            return Some(refused);
+        }
         let track = match Track::read(&w, call) {
             Ok(t) => t,
             Err(e) => return Some(e),

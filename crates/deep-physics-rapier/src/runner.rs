@@ -32,6 +32,7 @@ use serde_json::{json, Map, Value};
 
 mod audit;
 pub mod contact;
+mod dims;
 pub mod fast;
 mod held;
 pub mod kit;
@@ -492,6 +493,9 @@ impl Run {
             Some("solve_cap_reports_success") => run.twin = Twin::SolveCapSuccess,
             Some("mass_ratio_declared_only") => run.declared_masses_only = true,
             Some("volume_without_constraint") => run.no_volume = true,
+            Some("world_2d_built_on_rapier3d") => run.twin = Twin::FlatOnRapier3d,
+            Some("wind_noise_from_platform_sin") => run.twin = Twin::WindNoiseFromSin,
+            Some("inertia_ignored") => run.twin = Twin::InertiaIgnored,
             Some(name)
                 if !kit::planted(name, &mut run)
                     && !vehicle::planted(name, &mut run)
@@ -574,7 +578,7 @@ impl Run {
             frame_rate: if self.key_without_rate { "" } else { rate },
             steps,
         };
-        bake::key(&parts, &self.build, target)
+        bake::key(&parts, &self.build_of(world), target)
     }
 
     /// The world `v` holds, built, or the issues that refuse it.
@@ -605,7 +609,7 @@ impl Run {
         let id = world.as_str()?;
         let doc = scene.get("worlds")?.get(id)?;
         let read = crate::bound::expand(Some(scene), doc).and_then(|doc| {
-            let w = check(&doc, &self.caps, self.table)?;
+            let w = check(&doc, &self.caps_of(&doc), self.table)?;
             let skins = deep_canvas_physics::skin::check(&w, scene);
             if !skins.is_empty() {
                 return Err(skins);
@@ -1010,7 +1014,7 @@ impl Run {
                         .collect();
                     json!({"ok": true, "golden": {
                         "bake_key": self.key(world, &reads, &track.json(), &rate, plan.steps, None),
-                        "runtime_digest": self.build.runtime_digest(), "machine": replay::machine(&self.build.target),
+                        "runtime_digest": self.build_of(world).runtime_digest(), "machine": replay::machine(&self.build.target),
                         "step_hashes": t.step_hashes, "checkpoint_hashes": hashes,
                         "occurrences_hash": record["occurrences_hash"],
                         "record_on": self.build.target, "verify_on": verify_on}})
@@ -1142,6 +1146,9 @@ impl Run {
             Ok(x) => x,
             Err(e) => return Some(e),
         };
+        if let Some(refused) = dims::unread(&w, "physics.query") {
+            return Some(refused);
+        }
         let key = self.key(
             world,
             &json!([]),
