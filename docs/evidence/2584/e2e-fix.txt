@@ -1,0 +1,24 @@
+== FIX (538c4c23f + -w, uncommitted): repo <repo> at 538c4c23f, dir /private/tmp/claude-501/e2584-RMdp, node v24.22.0
+-- lsof for a free port now:
+lsof: WARNING: can't stat() hfs file system /private/tmp/claude-501/e2584-RMdp/locked/mnt
+      Output information may be incomplete.
+      assuming "dev=1000016" from mount table
+   (lsof exit 1)
+blocker listening on 3000 pid 11332
+-- lsof for 3000 (taken):
+lsof: WARNING: can't stat() hfs file system /private/tmp/claude-501/e2584-RMdp/locked/mnt
+      Output information may be incomplete.
+      assuming "dev=1000016" from mount table
+p11332
+f12
+   (lsof exit 0)
+-- hub (pid 11667): {"v":1,"ready":true,"pid":11667,"socket":"/private/tmp/claude-501/e2584-RMdp/root/hub.sock","start":"01M7W9BPW95DJHT5SVBDQAR4EF"}
+-- deep env up --json in the worktree:
+{"status":"ready","run":"run:01M7W9BQZDEAJZH2DKMJCJX6PZ","worktree":"/private/tmp/claude-501/e2584-RMdp/wt","ports":{"web":3001}}
+   (deep env up exit 0)
+-- deep env down --json:
+{"run":"run:01M7W9BQZDEAJZH2DKMJCJX6PZ","stopped":[19316],"left":[]}
+   (deep env down exit 0)
+-- after cleanup, lsof for a free port:
+   (lsof exit 1)
+-- hub stderr tail:
