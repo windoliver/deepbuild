@@ -2733,13 +2733,28 @@ For: the castle at night (`agx`); figures, the house and 3D charts (`neutral`)
 
 - `tone_map: none | filmic | agx {white: f32 = 16.29, contrast: f32 = 1.25} | neutral = none (agx as an analytic curve between the AgX inset and outset matrices, per channel: below 0.18, x^c ÷ (x^c + a) with a = (1 ÷ 0.18 − 1) × 0.18^c; above it, 0.18 + k·d·(1 + d ÷ w) ÷ (1 + k·d ÷ 0.82) with d = x − 0.18, k the toe's slope at 0.18 and w = k × (white − 0.18)² ÷ 0.82, clamped to 1 above white, so contrast c and white are its only parameters; neutral after Khronos's reference; both analytic: no LUT asset)`
 - `filmic` names the ACES fit the prototype uses
-- `local: {strength: 0..1 = 0, detail: f32 = 1 (0..2), sigma: stops = 0.9, levels: u8 = 6 (≤ 7)} | none = none` (beside `tone_map`): in linear light after exposure and before the tone curve, log2 luminance splits into a base, an edge-aware smoothing on a pyramid down to 1/64 of the frame brought back up by a joint bilateral upsample guided by the full-size log luminance with a range of `sigma` stops, and the detail left over; the base is compressed toward middle gray by `strength` and the detail scaled by `detail`, and color keeps its ratios to luminance, so hue and saturation don't shift. The pyramid's levels follow the output size, one coarser per doubling, so a 4K and a 1080p render of a frame agree. It keeps no history, so seeking equals playing, status colors still draw after it, and at strength 0 and detail 1 it changes no pixel
 
 **Semantics:** `agx` rolls bright lamps off without the hue shift and over-saturation a filmic curve gives. `neutral` keeps base colors, and so the look's roles, recognizable up to bright highlights. Status colors still draw after tone mapping, so no curve can change one.
 
 **Cost:** The same one full-screen pass as now
 
 **It can never:** Be a custom curve; apply to status colors or overlays
+
+**Lands:** R6
+
+#### Look `look@1`: local tone mapping
+
+For: bright outdoor scenes, where a sunlit front and the shade beside it can be eight stops apart
+
+**Fields**
+
+- `local: {strength: 0..1 = 0, detail: f32 = 1 (0..2), sigma: stops = 0.9, levels: u8 = 6 (≤ 7)} | none = none` (beside `tone_map`; strength 0 and detail 1 change nothing)
+
+**Semantics:** In linear light after exposure and before the tone curve, log2 luminance about middle gray (linear 0.18) splits into a base and the detail left over. The base is an edge-aware smoothing on a pyramid down to 1/64 of the frame: each level's cells hold the two levels of the cells under them, those under the middle of their range and the rest, each with its share of the cell; the first level's cells are 4 px, read as the means of their 2 × 2 blocks. Each pixel takes its base from the four coarsest cells about it by a joint bilateral upsample guided by the full-size log luminance with a range of `sigma` stops, read from a grid over those cells a quarter stop apart, in which a level counts once it holds about half its cell. So an edge keeps each side's own base, and a part too small to hold half a cell is compressed by its own level, so a flat part stays flat. The base is compressed toward middle gray by `strength` (base × (1 − strength)) and the detail scaled by `detail`, and color keeps its ratios to luminance, so hue and saturation don't shift. The pyramid has `levels` levels on a frame whose longer side is 1920 px, one more for each doubling of that side and one fewer for each halving but never fewer than 2, so a 4K and a 1080p render of a frame agree; `levels` under 2 is refused. It keeps no history, so seeking equals playing, and status colors still draw after it. A field outside its range is refused, naming the field. A mirror's view and a view inset's view run none of their own: the frame that shows them does.
+
+**Cost:** One compute pass that builds the pyramid, from a first level a sixteenth of the frame, and the grid over its coarsest cells, and one full-screen pass that writes the image the tone-mapping pass reads; at strength 0 and detail 1 no pass runs. #971 holds what it adds to under 0.6 ms of GPU at 1920 × 1080 and under 2 ms at 3840 × 2160 on a reference Mac.
+
+**It can never:** Read an earlier frame; shift hue or saturation; touch status colors; change a pixel at its identity defaults.
 
 **Lands:** R6
 
