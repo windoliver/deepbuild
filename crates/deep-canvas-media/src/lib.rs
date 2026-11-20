@@ -5,6 +5,7 @@
 pub mod analysis;
 pub mod captions;
 pub mod clock;
+pub mod cut;
 pub mod delay;
 pub mod delivery;
 pub mod doc;
@@ -50,8 +51,10 @@ pub const FLICKS: i64 = 705_600_000;
 /// tail stated at half, params or logic read once a frame, an export on another block, a synth
 /// routed around the master's limiter, and a block grid that starts at each seek; and #155's
 /// spawn whose round robin picks by hash alone, and a foley job named by its action alone that
-/// takes the first bound collection's material for every occurrence.
-pub const PLANTED: [&str; 39] = [
+/// takes the first bound collection's material for every occurrence; and #1518's: a cut recipe
+/// that skips the move and cuts at each raw point, one that drops a fragment and lists nothing, and
+/// a `cut.heard` that reads a missing transcript as an empty one and fails no lost word.
+pub const PLANTED: [&str; 42] = [
     "av_link_compares_start_only",
     "av_link_start_only",
     "sample_peak_meter",
@@ -91,6 +94,9 @@ pub const PLANTED: [&str; 39] = [
     "crush_7_bits",
     "round_robin_by_hash_alone",
     "foley_first_collection_material",
+    "cut_on_raw_times",
+    "cut_drops_fragments",
+    "cut_heard_passes_empty",
 ];
 
 static PLANTED_NOW: std::sync::Mutex<Option<&'static str>> = std::sync::Mutex::new(None);

@@ -128,7 +128,7 @@ fn hoist(mut reply: Value) -> Value {
 }
 
 /// The worker-side name of a planted wrong program, if it is one the decode worker runs.
-fn worker_planted(p: Option<Planted>) -> Option<&'static str> {
+pub(crate) fn worker_planted(p: Option<Planted>) -> Option<&'static str> {
     Some(match p? {
         Planted::SkipsCaps => "skips_caps",
         Planted::FollowsUrls => "follows_urls",

@@ -262,6 +262,8 @@ impl<'a> Hub<'a> {
         let flickers = self.film_flicker_runs(c);
         let mut briefed = self.brief_rows(claim, c);
         briefed.extend(self.heard_rows(claim, c));
+        // #1518: each cut recording's result heard back.
+        briefed.extend(self.cut_rows(claim, c));
         let shown = self.first_shown_by_doc(c);
         let mut docs: Vec<(String, Current)> = Vec::new();
         let mut missing = false;

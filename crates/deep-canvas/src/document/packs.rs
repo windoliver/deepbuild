@@ -1565,6 +1565,8 @@ pub struct Packs {
     /// The versions uninstalled while something names them: kept, and taking no new instance.
     retired: BTreeSet<String>,
     pub planted: Planted,
+    /// The host's reader of assets and records, for a module's expansion (#1518).
+    pub reads: Option<super::expands::Reader>,
 }
 
 impl Packs {
@@ -1858,6 +1860,8 @@ pub struct Expansion {
     pub sections: Map<String, Value>,
     /// The items it placed by relation or parent, in order: its parts (#233).
     pub placed: Vec<String>,
+    /// What a module kind's expansion reports beside what it wrote (#1518).
+    pub report: Map<String, Value>,
 }
 
 impl Expansion {
@@ -1877,8 +1881,8 @@ impl Expansion {
             "broken_out": self.broken_out,
             "channels": self.channels,
         });
-        // A module kind's expansion lists its sections beside its derived items (#222).
-        for (section, entries) in &self.sections {
+        // A module kind's expansion lists its sections and report beside its derived items (#222).
+        for (section, entries) in self.sections.iter().chain(&self.report) {
             row[section.as_str()] = entries.clone();
         }
         row
