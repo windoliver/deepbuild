@@ -44,6 +44,52 @@ fn array_column(at: &str) -> [Value; 4] {
     ]
 }
 
+/// The kinds `of` lists fields past their params for, each with the canvas module a build needs
+/// to list it (none: every build lists it).
+const KINDS: [(&str, &str); 6] = [
+    ("cells@1", "cells"),
+    ("marks@1", "data"),
+    ("text@1", ""),
+    ("group@1", ""),
+    ("plate@1", "scene3d"),
+    ("instance@1", "scene3d"),
+];
+
+/// The lists of words those fields offer in a build holding the modules `held` says it holds
+/// (#2777), read from the forms the listing prints, as the seal reads a kind's fields: sealed
+/// beside them with their closures.
+pub fn lists(held: impl Fn(&str) -> bool) -> Vec<deep_canvas::registry::fields::Declared> {
+    let mut out = Vec::new();
+    for (kind, module) in KINDS {
+        if !module.is_empty() && !held(module) {
+            continue;
+        }
+        for f in of(kind) {
+            let name = f["name"].as_str().unwrap_or_default();
+            let forms: Vec<&str> = (f["forms"].as_array().into_iter().flatten())
+                .filter_map(Value::as_str)
+                .collect();
+            let Ok(form) = deep_canvas::form::parse(&forms.join(" | ")) else {
+                continue;
+            };
+            for l in form.word_lists() {
+                out.push(deep_canvas::registry::fields::Declared {
+                    list: [kind, name, &l.path]
+                        .iter()
+                        .filter(|s| !s.is_empty())
+                        .copied()
+                        .collect::<Vec<_>>()
+                        .join("."),
+                    entry: kind.to_string(),
+                    field: name.to_string(),
+                    words: l.words,
+                });
+            }
+        }
+    }
+    out
+}
+
 /// The fields `kind` holds past its params, in the listing's shape; none for any other kind.
 pub fn of(kind: &str) -> Vec<Value> {
     let glyphs = format!("[grapheme] ≤ {}", deep_canvas_cells::logic_grid::MAX_GLYPHS);

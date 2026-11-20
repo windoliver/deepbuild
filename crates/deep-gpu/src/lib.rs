@@ -7,6 +7,7 @@ pub mod compile;
 pub mod counted;
 pub mod device;
 pub mod encode;
+pub mod footprint;
 pub mod frame_budget;
 pub mod frame_checks;
 pub mod guard;

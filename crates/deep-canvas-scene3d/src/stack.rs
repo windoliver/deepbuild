@@ -17,17 +17,21 @@ use crate::poly::{Boundary, Poly, Scheme, UvRule};
 /// The modifier kinds: each one's class, whether it is a GPU kind (a sway moves on the GPU, #2016;
 /// the others are evaluated here on the CPU from their per-instance params) and whether it reads
 /// time by its nature.
-pub const KINDS: [(&str, &str, bool, bool); 18] = [
+pub const KINDS: [(&str, &str, bool, bool); 22] = [
     ("mod.array@1", "generate", false, false),
     ("mod.mirror@1", "generate", false, false),
     ("mod.subdivide@1", "generate", false, false),
     ("mod.bevel@1", "generate", false, false),
+    ("mod.offset_faces@1", "generate", false, false),
+    ("mod.dissolve@1", "generate", false, false),
     ("mod.solidify@1", "generate", false, false),
     ("mod.build@1", "generate", false, false),
     ("mod.store@1", "deform", false, false),
     ("mod.normals@1", "deform", false, false),
     ("mod.curve_deform@1", "deform", false, false),
     ("mod.simple_deform@1", "deform", false, false),
+    (crate::bind::BOX, "deform", false, false),
+    (crate::bind::MESH, "deform", false, false),
     ("mod.displace@1", "deform", false, false),
     ("mod.sway@1", "deform", true, true),
     ("mod.bob@1", "deform", true, true),
@@ -64,6 +68,9 @@ pub struct Run {
     pub clock: Option<fn() -> f64>,
     /// The host's worker threads and the thread count a builder may run its blocks on (#224).
     pub pool: Option<(std::sync::Arc<dyn deep_canvas::schedule::Pool>, usize)>,
+    /// The binds the build's last run kept, by modifier (#1929): a box or mesh deform whose mesh
+    /// and box or control mesh are the ones its bind was made from reads its weights there.
+    pub kept: Vec<Option<crate::bind::Bind>>,
 }
 
 impl Run {
@@ -147,6 +154,9 @@ pub struct Row {
     /// The step's time in milliseconds by the run's clock (0 for a skipped one); none without
     /// one (#2017). `to_json` leaves it out, so a build's key never reads it.
     pub ms: Option<f64>,
+    /// A box or mesh deform's bind (#1929), which the build's next run reads; `to_json` leaves
+    /// it out too.
+    pub bind: Option<crate::bind::Bind>,
 }
 
 impl Row {
@@ -285,7 +295,7 @@ fn axis_of(a: &str) -> Option<usize> {
     }
 }
 
-fn vec3(v: Option<&Value>) -> Option<V3> {
+pub(crate) fn vec3(v: Option<&Value>) -> Option<V3> {
     let a = v?.as_array().filter(|a| a.len() == 3)?;
     Some([a[0].as_f64()?, a[1].as_f64()?, a[2].as_f64()?])
 }
@@ -419,6 +429,7 @@ pub fn apply(
             enabled: on,
             gpu,
             ms: (run.clock.is_some() && !on).then_some(0.0),
+            bind: None,
         });
         if !on {
             continue;
@@ -471,6 +482,16 @@ pub fn apply(
                 subdivide(m, &params, n as u32, run).map_err(|f| at(&f))?
             }
             "mod.bevel@1" => bevel(m, &params, run).map_err(|f| at(&f))?,
+            // A refusal with its own code names its path after it (#1928).
+            "mod.offset_faces@1" => {
+                crate::faces::offset_faces(m, &params, run).map_err(|f| {
+                    match f.split_once(crate::builders::CODED) {
+                        Some((code, found)) => crate::builders::coded(code, &at(found)),
+                        None => at(&f),
+                    }
+                })?
+            }
+            "mod.dissolve@1" => crate::faces::dissolved(m, &params, run).map_err(|f| at(&f))?,
             "mod.normals@1" => normals(m, &params, run).map_err(|f| at(&f))?,
             "mod.solidify@1" => {
                 let h = num("thickness", 0.01)?;
@@ -516,6 +537,18 @@ pub fn apply(
                     }
                     _ => return Err(at("params/mode")),
                 }
+            }
+            crate::bind::BOX | crate::bind::MESH => {
+                let kept = run.kept.get(k).and_then(Option::as_ref);
+                let planted = run.planted.as_deref();
+                // A refusal names the item beside what it found.
+                let (moved, bind) = crate::bind::deform(&m, &only, &kind, &params, kept, planted)
+                    .map_err(|(code, mut found)| {
+                    found["item"] = json!(id);
+                    crate::attrs::coded(code, &format!("modifiers/{k}"), &found)
+                })?;
+                rows[k].bind = Some(bind);
+                mask(&m, faced(moved), &only)
             }
             "mod.displace@1" => {
                 let amount = num("amount", 0.05)?;
@@ -925,7 +958,11 @@ fn simple_deform(m: &Mesh, mode: &str, amount: f64) -> Mesh {
             _ => [p[0], p[1] * (1.0 + amount), p[2]],
         }
     };
-    let mut out = m.mapped(f, |_, n| n);
+    faced(m.mapped(f, |_, n| n))
+}
+
+/// The mesh a deform moved, with its normals from its faces.
+fn faced(mut out: Mesh) -> Mesh {
     // Normals from the moved faces: flat per triangle, accumulated at shared vertices.
     let mut acc = vec![[0.0; 3]; out.positions.len()];
     for t in 0..out.triangles() {
@@ -972,7 +1009,7 @@ fn rotated(m: &Mesh, r: usize) -> Mesh {
 }
 
 /// What a builder annotated that a step leaves standing: anchors, values and the true shape.
-fn keep_annotations(src: &Mesh, out: &mut Mesh) {
+pub(crate) fn keep_annotations(src: &Mesh, out: &mut Mesh) {
     out.anchors = src.anchors.clone();
     out.values = src.values.clone();
     out.true_shape = src.true_shape.clone();
@@ -989,7 +1026,12 @@ fn word<'a>(p: &'a Value, name: &str, default: &'a str, of: &[&str]) -> Result<&
         .ok_or_else(|| format!("params/{name}"))
 }
 
-fn number(p: &Value, name: &str, default: f64, ok: impl Fn(f64) -> bool) -> Result<f64, String> {
+pub(crate) fn number(
+    p: &Value,
+    name: &str,
+    default: f64,
+    ok: impl Fn(f64) -> bool,
+) -> Result<f64, String> {
     match p.get(name) {
         None => Ok(default),
         Some(v) => v
@@ -1308,6 +1350,8 @@ pub fn estimate(
 ) -> Result<Declared, Fault> {
     let (mut v, mut t) = counts;
     let mut topo: Option<(u64, u64, u64, u64)> = None;
+    // What the last dissolve declared, while no step after it has counted anew.
+    let mut most: Option<(u64, u64, u64, u64)> = None;
     let list = list(item);
     for (k, m) in list.iter().enumerate() {
         if !enabled(m) {
@@ -1358,6 +1402,24 @@ pub fn estimate(
                 v = c.3;
                 topo = Some(c);
             }
+            // An offset's counts are exact: each face it takes adds as many as its corners.
+            "mod.offset_faces@1" => {
+                let c = crate::faces::counts(&before(k)?, &params)
+                    .map_err(|f| format!("modifiers/{k}/{f}"))?;
+                (v, t) = (c.3, c.3 - 2 * c.2);
+                topo = Some(c);
+            }
+            // A dissolve only takes points, edges and faces away: it declares its input's, and a
+            // step after it counts on the mesh it leaves.
+            "mod.dissolve@1" => {
+                let c = match topo {
+                    Some(c) => c,
+                    None => view(Scheme::CatmullClark)?,
+                };
+                (v, t) = (c.3, c.3 - 2 * c.2);
+                (topo, most) = (None, Some(c));
+                continue;
+            }
             "mod.build@1" => {
                 t = kept(m, t).ok_or_else(|| at("from"))?.len() as u64;
                 topo = None;
@@ -1367,10 +1429,11 @@ pub fn estimate(
                 (v, t) = (after.positions.len() as u64, after.triangles() as u64);
                 topo = None;
             }
-            _ => {}
+            _ => continue,
         }
+        most = None;
     }
-    let (a, b, c, _) = match topo {
+    let (a, b, c, _) = match most.or(topo) {
         Some(c) => c,
         None => topology(&Poly::of(&before(list.len())?)),
     };

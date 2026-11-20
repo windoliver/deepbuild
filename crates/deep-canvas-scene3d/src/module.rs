@@ -6,11 +6,41 @@
 //! `near` or `far`, which the core's camera entry already names as scene3d's.
 
 use deep_canvas::kinds::{Entry, Param, ParamType, Version};
+use deep_canvas::refs::{kind as names, Decl, Holds};
 use deep_canvas::registry::{Dependency, Manifest, Module, Range, Registrar, Semver};
 use deep_canvas::schedule::{Canonical, OpError, Val, View};
 use serde_json::{json, Value};
 
 use crate::light::{self, Tie};
+
+/// The items a builder reads (#1801): a tube's or a sweep's curve, a hull's item.
+const BUILDER_REFS: &[Decl] = &[
+    Decl::new("params/path", Holds::Item, names::TARGET),
+    Decl::new("params/along/curve", Holds::Item, names::TARGET),
+    Decl::new("params/of", Holds::Item, names::TARGET),
+];
+
+/// The vertices a builder's item builds, counted from its params without building it (#1801:
+/// the meter charges its passes' per-vertex terms on them).
+fn built_vertices(doc: &Value, id: &str, item: &Value) -> Option<f64> {
+    let kind = item.get("kind")?.as_str()?;
+    let ctx = crate::builders::Ctx {
+        doc,
+        id,
+        plants: Default::default(),
+        outlines: &[],
+        planted: None,
+        pool: None,
+    };
+    let n = crate::builders::estimate(kind, item.get("params")?, &ctx).ok()?;
+    Some(n as f64)
+}
+
+/// The maps a material samples, each an asset (#1801; Material: texture maps).
+const MATERIAL_REFS: &[Decl] = &[
+    Decl::new("params/maps/*", Holds::Asset, names::MATERIAL),
+    Decl::new("params/normal_map", Holds::Asset, names::MATERIAL),
+];
 
 /// The pass that draws every 3D writer layer's batches into the linear, object-ID and depth
 /// targets.
@@ -23,6 +53,8 @@ pub const MIRROR_PASS: &str = "scene3d.mirror";
 pub const FLARE_PASS: &str = "scene3d.flare";
 /// #468: depth of field over the linear image, after the geometry and before bloom.
 pub const DOF_PASS: &str = "scene3d.dof";
+/// #971: the look's local tone map over the linear image, just before the output pass reads it.
+pub const LOCAL_TONE_PASS: &str = "scene3d.local_tone";
 /// #166: the water's parts, drawn after the geometry and the mirror's view.
 pub const WATER_PASS: &str = "scene3d.water";
 /// #506: each view inset's own view, drawn whole before the frame's geometry reads its picture: in
@@ -46,6 +78,9 @@ pub const CULL_PASS: &str = "scene3d.cull";
 /// test of the camera's lists against it (#1637; Instance `instance@1`), each frame, from that
 /// frame's depth alone, after the cull and before anything draws.
 pub const PYRAMID_PASS: &str = "scene3d.depth_pyramid";
+/// The fill lights listed cell by cell in the light policy's grid (#1634; Light and the light
+/// policy), when a light or the view changes, before the geometry reads the lists.
+pub const FILL_PASS: &str = "scene3d.light_clusters";
 /// Ambient occlusion (#418; Look `look@1`: ao): the opaque solids' depth and normal prepass, the
 /// occlusion and its blur, before the geometry pass reads it; drawn only while the look has ao on.
 pub const AO_PASS: &str = "scene3d.ao";
@@ -234,6 +269,21 @@ fn lit_by_order(v: &mut View<'_>) -> Result<(), OpError> {
 /// scene3d's registration with its light policy breaking ties by `tie`: by ID in the shipped
 /// module, by registration order in #421's planted implementation of scene3d@1.
 pub fn register_with(r: &mut Registrar, tie: Tie) {
+    // #2777: the lists of words a document sets outside the kinds' params that this module reads,
+    // each with the words its reader takes.
+    let gpu: Vec<&str> = crate::stack::KINDS
+        .iter()
+        .filter(|k| k.2)
+        .map(|k| k.0)
+        .collect();
+    r.word_list(
+        "emitter.distance.model",
+        "emitter",
+        "distance",
+        &crate::emitters::DISTANCE_MODELS,
+    )
+    .word_list("light.kind", "light", "kind", &crate::light::KINDS)
+    .word_list("modifier.gpu", "modifier", "kind", &gpu);
     for solid in ["box", "cylinder", "sphere"] {
         r.kind(
             kind(solid, common(vec![json_param("size", crate::spec::SIZE)])),
@@ -260,7 +310,9 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
         ),
         &[],
         "",
-    );
+    )
+    // #1801: a line's points may be items it runs between.
+    .refs(&[Decl::new("params/points", Holds::Item, names::TARGET)]);
     r.kind(
         kind(
             "point",
@@ -306,7 +358,9 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
         ),
         &[],
         "",
-    );
+    )
+    // #1801: the picture it draws, an asset by its hash.
+    .refs(&[Decl::new("params/asset", Holds::Asset, names::ASSET)]);
     // The key light (Light and the light policy): it shines along its local −Z, shades the solids
     // and, with `shadow`, casts the shadow map.
     r.kind(
@@ -360,14 +414,17 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
     for spec in crate::spec::scene3d() {
         if crate::builders::KINDS.contains(&spec.kind) || spec.kind == "curve@1" {
             let name = &spec.kind[..spec.kind.len() - "@1".len()];
-            r.kind(crate::spec::entry(&spec, "", name), &[], "");
+            r.kind(crate::spec::entry(&spec, "", name), &[], "")
+                .refs(BUILDER_REFS)
+                .vertices(name, built_vertices);
             // A recipe repeats over a builder's elements (Recipe: repeat over elements; #2015).
             if spec.kind != "curve@1" {
                 r.elements(name, crate::measures::elements);
             }
         }
         if spec.kind == "mesh.asset@1" {
-            r.kind(crate::spec::entry(&spec, "mesh", "asset"), &[], "");
+            r.kind(crate::spec::entry(&spec, "mesh", "asset"), &[], "")
+                .refs(&[Decl::new("params/sha256", Holds::Asset, names::ASSET)]);
         }
         if spec.kind == "mesh.sequence@1" {
             r.kind(crate::spec::entry(&spec, "mesh", "sequence"), &[], "");
@@ -384,6 +441,9 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
         ] {
             if spec.kind == kind {
                 r.kind(crate::spec::entry(&spec, family, name), &[], "");
+                if kind == "material@1" {
+                    r.refs(MATERIAL_REFS);
+                }
             }
         }
     }
@@ -395,6 +455,17 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
     ] {
         if let Some(spec) = crate::spec::of(kind) {
             r.kind(crate::spec::entry(&spec, "", name), &[], "");
+            if kind == "instance@1" {
+                r.refs(&[
+                    Decl::new("params/of", Holds::Item, names::INSTANCER),
+                    Decl::new("params/from/distribute/on", Holds::Item, names::INSTANCER),
+                    Decl::new(
+                        "params/from/distribute/avoid",
+                        Holds::Item,
+                        names::INSTANCER,
+                    ),
+                ]);
+            }
         }
     }
     // #419's stand-in for the physics module's baked world, which the scene draws body by body
@@ -458,6 +529,7 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
     });
     r.pass(CULL_PASS, "compute");
     r.pass(PYRAMID_PASS, "compute");
+    r.pass(FILL_PASS, "compute");
     r.pass(AO_PASS, "geometry");
     r.pass(GEOMETRY_PASS, "geometry");
     // #200: the shadow and object-ID passes compile from the core's base steps, which the seal
@@ -475,6 +547,7 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
     r.pass(INSET_VIEW_PASS, "shadows");
     r.pass(INSET_UNLIT_PASS, "upscale");
     r.pass(FLARE_PASS, "bloom");
+    r.pass(LOCAL_TONE_PASS, "tone_mapping");
     r.pass(OUTPUT_PASS, "tone_mapping");
     // Headless, the kit proves what reaches the check: the figure's kinds and fields pass it
     // with no issue. Its pixels need the GPU, and the acceptance suite draws them there.
@@ -530,6 +603,8 @@ pub fn register_with(r: &mut Registrar, tie: Tie) {
         }));
     // #486: the lobe outputs, occlusion and normal in gpu.output@1, core.bump@1 in gpu.function@1.
     crate::gpu::register(r);
+    // #2776: every kind above draws in 3D, and says what each path does with it.
+    r.in_3d(include_str!("paths.json"));
 }
 
 /// A 10 × 10 m plate with bushes and flowers scattered over it at least 0.5 m apart, none in

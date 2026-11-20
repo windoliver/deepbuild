@@ -1,6 +1,7 @@
 //! The UI check (#124): `ui_check` renders each view a change touches at the reference window and a narrow width, in
-//! light and dark, and audits each: text drawn past its frame, cut-off text whose full value isn't in its accessibility
-//! name, a control with no name, and a raw string key. Files the change touches that no rendered view loads are listed
+//! light and dark, in the language its `locale` asks for (#2403), and audits each: text drawn past its frame, cut-off
+//! text whose full value isn't in its accessibility name, two texts drawn over each other, a control with no name, and a
+//! raw string key. Files the change touches that no rendered view loads are listed
 //! as not covered, and the claim can't then pass. With a build of the merge base, each render stands beside the same
 //! view from that build, the proof for a change that promises nothing visible changes. Given a journey instead, it
 //! replays the journey in a fresh replica and audits the screen after every step, adding what covers a control: a
@@ -24,11 +25,11 @@ use super::{
     panel_bounds, sha256, Drive, Fail, Replica,
 };
 
-/// The reference window and the narrow width, in points. The app has no narrower layout of its own to name, so narrow
-/// is the sidebar and a center about as wide again and a half.
+/// The reference window and the narrow width, in points: 360, a phone's width and the narrowest a view is held to
+/// (#2403).
 const SIZES: [[u32; 2]; 2] = [
     [crate::WINDOW.0 as u32, crate::WINDOW.1 as u32],
-    [720, crate::WINDOW.1 as u32],
+    [360, crate::WINDOW.1 as u32],
 ];
 const THEMES: [&str; 2] = ["light", "dark"];
 
@@ -91,7 +92,7 @@ pub fn run(drive: &mut Drive, args: &Value) -> Result<Value, Fail> {
                 };
                 let launch = json!({
                     "from": "fixture", "fixture": args["fixture"], "panel": view.panel, "center": view.center,
-                    "size": size, "theme": theme, "clock": "virtual",
+                    "size": size, "theme": theme, "clock": "virtual", "locale": args["locale"],
                 });
                 let (mut render, found) = render(drive, &place, &launch)?;
                 if let Some(base) = base {
@@ -412,6 +413,32 @@ fn audit(frame: &Frame, place: &Place, slot: Option<[i64; 4]>) -> Vec<Value> {
                 run.drawn,
                 Value::Null,
                 json!(run.text),
+            ));
+        }
+    }
+    // Two texts drawn over each other (#2403): the drawn boxes of two strings the view shows cross by more than a
+    // device pixel each way, the later one named.
+    let shown: Vec<_> = frame
+        .runs
+        .iter()
+        .filter(|run| run.visible)
+        .filter(|run| {
+            let [x, y, _, h] = run.drawn;
+            frame.holder([x, y + h / 2]).is_some_and(ours) || (slot.is_some() && ours(&string(run)))
+        })
+        .collect();
+    for (i, run) in shown.iter().enumerate() {
+        if let Some(under) = shown[..i].iter().find(|other| {
+            overlap(other.drawn, run.drawn).is_some_and(|[_, _, w, h]| w > 1 && h > 1)
+        }) {
+            let [x, y, _, h] = run.drawn;
+            let holder = frame.holder([x, y + h / 2]);
+            found.push(finding(
+                "text_overlap",
+                holder.map_or_else(|| string(run).summary(), |h| h.summary()),
+                run.drawn,
+                json!(under.drawn),
+                json!([under.text, run.text]),
             ));
         }
     }

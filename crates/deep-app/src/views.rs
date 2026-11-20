@@ -24,7 +24,7 @@ use serde_json::{json, Value};
 
 use crate::address::Address;
 use crate::chrome::{sizes, Typed as _};
-use crate::{bound, brand, canvas, cells, chrome, show::CanvasPanel, states, text};
+use crate::{bound, brand, canvas, cells, chrome, copy, show::CanvasPanel, states, text};
 
 pub const SIDEBAR: &str = "deepbuild/sidebar";
 pub const HOME: &str = "deepbuild/home";
@@ -204,13 +204,15 @@ fn placed(area: &str) -> Vec<AnyView> {
     })
 }
 
-/// What the tree names a view an agent wrote, so its words never pass as the app's (#1459): every node it draws sits
-/// under this one.
-pub const AGENT_WROTE: &str = "Written by an agent";
+/// The key of what the tree names a view an agent wrote, so its words never pass as the app's (#1459): every node it
+/// draws sits under this one.
+pub const AGENT_WROTE: &str = "views.agent_wrote";
 
-/// The node an agent's view draws under: a group named [`AGENT_WROTE`].
+/// The node an agent's view draws under: a group named with [`AGENT_WROTE`]'s words.
 fn agents(id: impl Into<ElementId>) -> ObservedElement<Stateful<Div>> {
-    observed(id).role(Role::Group).aria_label(AGENT_WROTE)
+    observed(id)
+        .role(Role::Group)
+        .aria_label(copy::text(AGENT_WROTE))
 }
 
 /// A box a placed view can't draw out of, the `index`th in its area.
@@ -384,7 +386,12 @@ impl Render for RowView {
                         window.refresh();
                     })
                     .when(over, |row| {
-                        row.child(control(control_id, Control::Plain, "Later", chrome))
+                        row.child(control(
+                            control_id,
+                            Control::Plain,
+                            copy::text("views.later"),
+                            chrome,
+                        ))
                     })
                 },
             )
@@ -538,7 +545,7 @@ impl Shipped {
                             crate::actions::hub_write(
                                 "session.rename",
                                 json!({ "session": renaming.session, "name": name }),
-                                "Rename".into(),
+                                copy::text("views.rename").into(),
                                 cx,
                             );
                         }
@@ -672,7 +679,7 @@ impl Shipped {
         } else if !crate::record::read_yet() {
             vec![crate::list::Item::Heading {
                 id: crate::list::HEADING.to_owned(),
-                title: "Needs you".to_owned(),
+                title: copy::text("views.needs_you").to_owned(),
                 count: None,
             }]
         } else {
@@ -706,7 +713,7 @@ impl Shipped {
             items.push(crate::list::Item::Row(Box::new(crate::list::Row {
                 id: "session:claude-code".to_owned(),
                 address: Address::session("claude-code"),
-                title: "Claude Code".to_owned(),
+                title: "Claude Code".to_owned(), // copy-exception: planted wrong program
                 word: "queued".to_owned(),
                 value: "queued".to_owned(),
                 entry: "queued",
@@ -1026,7 +1033,7 @@ impl Shipped {
             .as_ref()
             .and_then(|tab| tab["drawn"][0]["text"].as_str())
             .filter(|_| page.is_some())
-            .map_or("No terminal in this session.".to_owned(), str::to_owned);
+            .map_or(copy::text("views.no_terminal").to_owned(), str::to_owned);
         let poll = cx.spawn(async move |this, cx| loop {
             cx.background_executor().timer(TERMINAL_TICK).await;
             if this.update(cx, |this, cx| this.read_terminal(cx)).is_err() {
@@ -1099,11 +1106,7 @@ pub fn count_line() -> String {
 /// The one count sentence, which Home, the list and the menu bar say (#1455), in words that agree with the number
 /// (#2026).
 pub fn asks_need_you(count: usize) -> String {
-    match count {
-        0 => "Nothing needs you".to_owned(),
-        1 => "1 ask needs you".to_owned(),
-        count => format!("{count} asks need you"),
-    }
+    copy::count("views.asks_need_you", count as u64, &[])
 }
 
 /// Teaches the panel registry every shipped view, so a layout can name them.
@@ -1226,7 +1229,7 @@ pub(crate) fn page_region(page: Option<crate::open::Page>, drawn: impl IntoEleme
     let claim = page.claim.map(|claim| {
         label(
             ElementId::Name(format!("claim:{claim}").into()),
-            format!("Claim {claim}"),
+            copy::fill("views.claim", &[&claim]),
         )
         .px(sizes().space(1))
     });
@@ -1623,7 +1626,7 @@ fn open_context(row: String, at: Point<Pixels>, window: &mut Window, cx: &mut Ap
 fn context_items() -> Vec<&'static str> {
     let mut items = crate::actions::session_items();
     if cfg!(feature = "plant-context-only-action") {
-        items.push("Reveal in Finder");
+        items.push("Reveal in Finder"); // copy-exception: planted wrong program
     }
     items
 }
@@ -1635,7 +1638,7 @@ fn context_menu(window: &Window) -> Option<AnyElement> {
     Some(
         observed("context-menu")
             .role(Role::Menu)
-            .aria_label("Actions")
+            .aria_label(copy::text("views.actions"))
             .absolute()
             .left(at.x)
             .top(at.y)
@@ -1655,14 +1658,14 @@ fn context_menu(window: &Window) -> Option<AnyElement> {
             .children(context_items().into_iter().map(|name| {
                 observed(ElementId::Name(format!("context:{name}").into()))
                     .role(Role::MenuItem)
-                    .aria_label(name)
+                    .aria_label(crate::actions::label(name))
                     .px(sizes().space(1))
                     .h(sizes().space(4))
                     .flex()
                     .items_center()
                     .rounded(sizes().radius)
                     .hover(|style| style.bg(chrome.hover))
-                    .child(name)
+                    .child(crate::actions::label(name))
                     .on_click(move |_, window, cx| {
                         CONTEXT.with(|context| *context.borrow_mut() = None);
                         crate::actions::run(name, window, cx);
@@ -1713,10 +1716,14 @@ pub(crate) fn title(
     text: impl Into<SharedString>,
 ) -> ObservedElement<Stateful<Div>> {
     let s = sizes();
+    // A title longer than its room ends in an ellipsis, its whole text in its accessible name, as a row's does: a page
+    // at 360 pt wide draws nothing past its frame (#2403).
     label(id, text)
         .typed(s.title)
         .h_auto()
         .min_h(s.title.line + s.space(2))
+        .min_w_0()
+        .truncate()
 }
 
 /// A list's heading: the body role at medium weight (#1458).
@@ -1761,17 +1768,20 @@ impl Render for RowTip {
     }
 }
 
-/// A control's kind (#1458): the page's one main action, a plain action, or a switch, on or off.
+/// A control's kind (#1458): the page's one main action, a plain action, a switch, on or off, or (#1592) a plain action
+/// that shows only an icon of the set, at its place's size.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Control {
     Main,
     Plain,
     Switch(bool),
+    Icon(&'static str, crate::icons::Place),
 }
 
 /// The one control builder (#1458): a button or a switch, one accessibility node named by its label, in the body
 /// role at one height. A switch draws its state as a mark beside its label and carries it as the node's value,
-/// `on` or `off`, never as a word in the label. No view styles a control itself.
+/// `on` or `off`, never as a word in the label. A control that shows only an icon keeps its label as its name in the
+/// tree (#1592; #1453 rule 10). No view styles a control itself.
 pub(crate) fn control(
     id: impl Into<ElementId>,
     kind: Control,
@@ -1804,6 +1814,14 @@ pub(crate) fn control(
             .role(Role::Button)
             .hover(move |style| style.bg(hover))
             .child(words),
+        // A target as wide as it's tall, its icon centred, in the secondary ink.
+        Control::Icon(name, place) => control
+            .role(Role::Button)
+            .px_0()
+            .min_w(s.space(4))
+            .justify_center()
+            .hover(move |style| style.bg(hover))
+            .child(crate::icons::icon(name, place, chrome.ink_secondary)),
         Control::Switch(on) => control
             .role(Role::Switch)
             .aria_value(if on { "on" } else { "off" })
@@ -2046,8 +2064,8 @@ pub fn now() -> u64 {
         .map_or(0, |since| since.as_millis() as u64)
 }
 
-/// A session's status mark and words, one accessibility node named by what it shows: the mark's core, a square of
-/// the look's status color with square corners, then its glyph and the words in the text's color.
+/// A session's status mark and words, one accessibility node named by what it shows: the mark, the look's drawn glyph
+/// for its state tinted in its core (#1592), then the words in the text's color.
 fn status(
     id: impl Into<ElementId>,
     state: &states::State,
@@ -2105,13 +2123,8 @@ fn marked(id: impl Into<ElementId>, entry: &str, text: String) -> ObservedElemen
         .flex()
         .items_center()
         .gap(sizes().space(0))
-        .child(
-            div()
-                .size(sizes().space(1))
-                .flex_none()
-                .bg(rgb(states::color(entry))),
-        )
-        .child(glyph);
+        // The mark in its slot, then 8 before the words, as a row's is (#1461).
+        .child(crate::icons::mark(entry, 0).mr(sizes().space(0)));
     if inline {
         row.children(time).child(words.child(said))
     } else {
@@ -2133,7 +2146,7 @@ fn bound_values(
         .map(|(index, b)| {
             let id = ElementId::Name(format!("bound-{}-{index}", surface.name()).into());
             let said = match &b.missing {
-                Some(_) => format!("{} · not reported", b.text),
+                Some(_) => copy::fill("views.not_reported", &[&b.text]),
                 None => b.text.clone(),
             };
             observed(id)
@@ -2282,8 +2295,8 @@ fn drawn_width(window: &Window, text: &str, weight: FontWeight) -> Pixels {
         .width
 }
 
-/// Where a working mark's core sits in its slot at each step, in steps of the look's smallest space: it moves one step
-/// for each event its session's hooks send, and holds still while none comes (#2021).
+/// How far a working mark has turned at each step, in quarter turns: it turns one step for each event its session's
+/// hooks send, and holds still while none comes (#2021).
 const MARK_STEPS: [usize; 4] = [0, 1, 2, 1];
 
 /// One row of the list (#1461) at `now`, drawn as `shape` says.
@@ -2349,9 +2362,10 @@ impl RowDrawn {
         let ask = row.id.starts_with("ask:");
         let working = row.entry == "running" && row.id.starts_with("session:");
         let time = match row.hooks.1 {
-            Some(heard) if still && working => {
-                format!("{} ago", time_of(crate::list::Time::Since(heard), now))
-            }
+            Some(heard) if still && working => copy::fill(
+                "views.ago",
+                &[&time_of(crate::list::Time::Since(heard), now)],
+            ),
             _ => row.time.map(|t| time_of(t, now)).unwrap_or_default(),
         };
         // The working mark's step: one per event, or, in #2021's planted app, one each 300 ms whatever comes.
@@ -2374,9 +2388,11 @@ impl RowDrawn {
         } else {
             row.title.clone()
         };
+        // The state word the hub wrote, in the language shown (#2403).
+        let word = states::shown(&row.word);
         let name = if ask {
             if reach.not_notified(&row.id) {
-                format!("{title} · not notified")
+                copy::fill("views.not_notified", &[&title])
             } else {
                 title.clone()
             }
@@ -2388,19 +2404,14 @@ impl RowDrawn {
             // A verdict that isn't PASS or FAIL never reads as the bare word (#2018): the row is one line, so its name
             // holds whom it waits for and the evidence it leaves open.
             format!(
-                "{} {title} · {} · {}",
+                "{} {title} · {word} · {}",
                 states::glyph(row.entry),
-                row.word,
-                row.why
+                copy::hub(&row.why)
             )
         } else if let Some(line) = &line {
-            format!(
-                "{} {title} · {} · {line}",
-                states::glyph(row.entry),
-                row.word
-            )
+            format!("{} {title} · {word} · {line}", states::glyph(row.entry))
         } else {
-            format!("{} {title} · {}", states::glyph(row.entry), row.word)
+            format!("{} {title} · {word}", states::glyph(row.entry))
         };
         // Its one flag beside its word (#2019), with what it says: the row is one line, so its name holds the rest.
         let name = match &row.flag {
@@ -2426,7 +2437,7 @@ impl RowDrawn {
         let drawn_word = if !ask && row.entry == "needs_you" {
             String::new()
         } else {
-            row.word.clone()
+            word.to_owned()
         };
         // #1461's planted row is 24 tall; #2021's selected row takes a second line, its session's line.
         let second = (selected && crate::plain::planted("selected-second-line") && !ask)
@@ -2491,7 +2502,7 @@ impl RowDrawn {
             step,
             title,
             twin,
-            word: row.word.clone(),
+            word: word.to_owned(),
             drawn_word,
             flag: (row.flag.as_ref()).map(|flag| (flag.code.clone(), flag.text.clone())),
             time,
@@ -2570,22 +2581,18 @@ fn row_element(drawn: &RowDrawn, chrome: &chrome::Chrome) -> ObservedElement<Sta
         )
         .tooltip(move |_, cx| cx.new(|_| RowTip(whole.clone())).into())
         .tooltip_show_delay(ROW_TIP_DELAY)
-        // The mark: its core in the status color, in a slot of 16 with 8 after it.
+        // The mark: its state's drawn glyph tinted in its core, in a slot of 16 with 8 after it (#1592). A working
+        // session's turns a quarter for each event its hooks send (#2021).
         .child(
             row_slot(id, "mark", states::glyph(drawn.entry).to_owned())
                 .aria_value(drawn.entry.to_owned())
                 .flex_none()
-                .w(s.space(3))
+                .w(s.mark)
                 .h_full()
                 .mr(s.space(1))
                 .flex()
                 .items_center()
-                .child(
-                    div()
-                        .size(s.space(1))
-                        .ml(s.space(0) * drawn.step as f32)
-                        .bg(rgb(states::color(drawn.entry))),
-                ),
+                .child(crate::icons::mark(drawn.entry, drawn.step)),
         )
         .child(
             // Each slot the row's full height, so the slots read in the row's order, left to right.
@@ -2730,11 +2737,11 @@ fn needs_you_count(
         // Nothing needs you only once setup finished (#2026): until then, what setup says, and no number.
         Empty::Nothing if count == 0 => match crate::setup::count() {
             Some(setup) => (setup.to_owned(), None, String::new()),
-            None => ("Nothing needs you".to_owned(), None, "0".to_owned()),
+            None => (asks_need_you(0), None, "0".to_owned()),
         },
         // The planted count says "1 asks need you".
         Empty::Nothing if crate::plain::planted("count-one-asks") => (
-            format!("{count} asks need you"),
+            format!("{count} asks need you"), // copy-exception: planted wrong program
             Some(count.to_string()),
             count.to_string(),
         ),
@@ -2744,8 +2751,8 @@ fn needs_you_count(
             count.to_string(),
         ),
         Empty::Reading => (
-            crate::empties::READING.to_owned(),
-            Some(crate::empties::READING.to_owned()),
+            copy::text(crate::empties::READING).to_owned(),
+            Some(copy::text(crate::empties::READING).to_owned()),
             String::new(),
         ),
         // Every count says the hub isn't answering and since when, in place of a number (#2026).
@@ -2766,38 +2773,48 @@ fn needs_you_heading(
     chrome: &chrome::Chrome,
 ) -> ObservedElement<Stateful<Div>> {
     let (name, drawn, value) = needs_you_count(count, empty, now);
-    let shown = chrome.ink_secondary;
-    list_heading(crate::list::HEADING, "Needs you", Some(value))
-        .justify_between()
-        .group("needs-you-heading")
-        .child(
-            div()
-                .flex()
-                .items_center()
-                .gap(sizes().space(1))
-                .text_color(chrome.ink_secondary)
-                .font_weight(FontWeight::NORMAL)
-                .child(
-                    // As tall as the control beside it, so the two sit on one line in reading order.
-                    observed("sidebar-count")
-                        .role(Role::Label)
-                        .aria_label(name)
-                        .aria_value(empty.value())
-                        .min_h(sizes().space(4))
-                        .flex()
-                        .items_center()
-                        .children(drawn),
+    list_heading(
+        crate::list::HEADING,
+        copy::text("views.needs_you"),
+        Some(value),
+    )
+    .justify_between()
+    .group("needs-you-heading")
+    .child(
+        div()
+            .flex()
+            .items_center()
+            .gap(sizes().space(1))
+            .text_color(chrome.ink_secondary)
+            .font_weight(FontWeight::NORMAL)
+            .child(
+                // As tall as the control beside it, so the two sit on one line in reading order.
+                observed("sidebar-count")
+                    .role(Role::Label)
+                    .aria_label(name)
+                    .aria_value(empty.value())
+                    .min_h(sizes().space(4))
+                    .flex()
+                    .items_center()
+                    .children(drawn),
+            )
+            .children((!popped).then(|| {
+                // An icon of the set at a row's size (#1592), drawn on hover and named in the tree at rest.
+                let (icon, place) = crate::icons::POP_OUT;
+                control(
+                    "needs-you-pop-out",
+                    Control::Icon(icon, place),
+                    copy::text("views.pop_out"),
+                    chrome,
                 )
-                .children((!popped).then(|| {
-                    control("needs-you-pop-out", Control::Plain, "Pop out", chrome)
-                        .aria_label("Pop out Needs you")
-                        .text_color(transparent_black())
-                        .group_hover("needs-you-heading", move |style| style.text_color(shown))
-                        .on_click(|_, _, cx| {
-                            crate::open::pop_out(Address::page("needs-you"), Kind::NeedsYou, cx)
-                        })
-                })),
-        )
+                .aria_label(copy::text("views.pop_out_needs_you"))
+                .opacity(0.)
+                .group_hover("needs-you-heading", |style| style.opacity(1.))
+                .on_click(|_, _, cx| {
+                    crate::open::pop_out(Address::page("needs-you"), Kind::NeedsYou, cx)
+                })
+            })),
+    )
 }
 
 /// One of the three empties as a line (#1461), from one table: its mark, which only nothing here goes without, and its
@@ -2823,15 +2840,16 @@ fn empty_line(
         // In the list it sits in from the edge as a row does; on a page, on the lane's edge.
         .when(id == "list-empty", |line| line.px(s.space(1)))
         .text_color(chrome.ink_secondary)
-        // Its mark in a row's mark slot; nothing here has none, and its words keep the page's left edge.
+        // Its mark, the entry's drawn glyph, in a row's mark slot (#1592); nothing here has none, and its words keep
+        // the page's left edge.
         .children(empty.entry().map(|entry| {
             div()
                 .flex_none()
-                .w(s.space(3))
+                .w(s.mark)
                 .mr(s.space(1))
                 .flex()
                 .items_center()
-                .child(div().size(s.space(1)).bg(rgb(states::color(entry))))
+                .child(crate::icons::mark(entry, 0))
         }))
         .child(div().flex_1().min_w_0().truncate().child(words))
 }
@@ -2877,9 +2895,9 @@ pub(crate) fn page_title(
 fn count_back(chrome: &chrome::Chrome) -> ObservedElement<Stateful<Div>> {
     let (name, drawn, value) = needs_you_count(count(), empty_now(), now());
     let shown = match drawn {
-        Some(drawn) if drawn != name => format!("Needs you {drawn}"),
+        Some(drawn) if drawn != name => copy::fill("views.needs_you_drawn", &[&drawn]),
         Some(drawn) => drawn,
-        None => "Needs you".to_owned(),
+        None => copy::text("views.needs_you").to_owned(),
     };
     control("page-count", Control::Plain, shown, chrome)
         .aria_label(name)
@@ -3094,8 +3112,9 @@ impl Render for Shipped {
                                 );
                                 if matches!(empty, crate::empties::Empty::Unreachable { .. }) {
                                     // #2026's planted section says nothing needs you while the hub is down.
+                                    let planted = "Nothing needs you"; // copy-exception: planted wrong program
                                     let (nothing, empty) = if planted_nothing {
-                                        ("Nothing needs you", crate::empties::Empty::Nothing)
+                                        (planted, crate::empties::Empty::Nothing)
                                     } else {
                                         ("", empty)
                                     };
@@ -3200,7 +3219,7 @@ impl Render for Shipped {
                         after.push(
                             label(
                                 ElementId::Name(format!("{name}:planted").into()),
-                                "Test panel",
+                                "Test panel", // copy-exception: planted wrong program
                             )
                             .into_any_element(),
                         );
@@ -3233,7 +3252,7 @@ impl Render for Shipped {
                         // The list's region keeps its accessible name, Tasks (#1348), and draws no title (#1461).
                         observed("list")
                             .role(Role::Group)
-                            .aria_label("Tasks")
+                            .aria_label(copy::text("views.tasks"))
                             .flex_1()
                             .min_h_0()
                             .w_full()
@@ -3244,7 +3263,8 @@ impl Render for Shipped {
                             // #1458's planted list draws an element wider than itself.
                             .when(crate::plain::planted("list-600pt-element"), |list| {
                                 let wide = px(600.); // size-literal-exception: #1458's planted wrong program, in an env-plants build only; review 2027-04-30
-                                list.child(label("planted-wide", "Planted").w(wide).flex_none())
+                                let named = "Planted"; // copy-exception: planted wrong program
+                                list.child(label("planted-wide", named).w(wide).flex_none())
                             })
                             .children(drawn)
                             .child(
@@ -3335,20 +3355,23 @@ impl Render for Shipped {
                     crate::empties::Empty::Nothing if !asks.is_empty() => {
                         label("home-needs-you", asks_need_you(asks.len())).into_any_element()
                     }
-                    _ => empty_line(
-                        "empty",
-                        crate::setup::count().unwrap_or("Nothing needs you"),
-                        empty,
-                        now,
-                        chrome,
-                    )
-                    .into_any_element(),
+                    _ => {
+                        let nothing = asks_need_you(0);
+                        empty_line(
+                            "empty",
+                            crate::setup::count().unwrap_or(&nothing),
+                            empty,
+                            now,
+                            chrome,
+                        )
+                        .into_any_element()
+                    }
                 };
                 let heading = project.clone().unwrap_or_else(|| {
                     if read {
-                        "New task".to_owned()
+                        copy::text("views.new_task").to_owned()
                     } else {
-                        "DeepBuild".to_owned()
+                        "DeepBuild".to_owned() // copy-exception: the product's name stays as written
                     }
                 });
                 // #1461's planted page right after Set up is the box alone.
@@ -3442,9 +3465,9 @@ impl Render for Shipped {
                 // counts what its caption names (#1455).
                 let planted = crate::plain::planted("readout-counts-asks");
                 let (caption, counted) = if planted {
-                    ("Hours to each deadline", mine)
+                    ("Hours to each deadline", mine) // copy-exception: planted wrong program
                 } else {
-                    ("Asks with a deadline", hours.len())
+                    (copy::text("views.asks_with_a_deadline"), hours.len())
                 };
                 let caption = text::Label::new(caption);
                 let readout = text::Label {
@@ -3452,27 +3475,32 @@ impl Render for Shipped {
                     ..text::Label::new(counted.to_string())
                 };
                 // The line's name, from what it draws.
-                let line_name = format!(
-                    "Hours to each deadline: {}",
-                    hours
+                let line_name = copy::fill(
+                    "views.hours_to_each_deadline",
+                    &[&hours
                         .iter()
-                        .map(|h| format!("{h:.0} h"))
+                        .map(|h| copy::fill("views.hours", &[&format!("{h:.0}")]))
                         .collect::<Vec<_>>()
-                        .join(", ")
+                        .join(", ")],
                 );
                 // What a planted page draws beside the chart: the base's label, saying the caption again (#1459).
-                let beside = format!("{}: {} points", caption.text, hours.len());
+                let beside = format!("{}: {} points", caption.text, hours.len()); // copy-exception: planted wrong program
                 let terminal = self.terminal.as_ref().filter(|tab| tab.session == session);
                 let tab = (!session.is_empty()).then(|| {
                     let session = session.clone();
-                    control("session-terminal", Control::Plain, "Terminal", chrome)
-                        .self_start()
-                        .on_click(cx.listener(move |this, _, window, cx| {
-                            this.open_terminal(session.clone(), cx);
-                            if let Some(tab) = &this.terminal {
-                                window.focus(&tab.focus, cx);
-                            }
-                        }))
+                    control(
+                        "session-terminal",
+                        Control::Plain,
+                        copy::text("views.terminal"),
+                        chrome,
+                    )
+                    .self_start()
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        this.open_terminal(session.clone(), cx);
+                        if let Some(tab) = &this.terminal {
+                            window.focus(&tab.focus, cx);
+                        }
+                    }))
                 });
                 let grid = terminal.map(|tab| {
                     div()
@@ -3514,16 +3542,17 @@ impl Render for Shipped {
                 // The page reads as its task's title, and to a screen reader as `Session <title>`. An untitled
                 // session's short name, `Session <ID>`, is only its accessible name: the title draws no ID (#1455).
                 let short = &session[..session.len().min(8)];
-                let untitled = task == format!("Session {short}");
+                // An untitled session's name is the one states.rs gives it, `Session <ID>` in the language shown.
+                let untitled = task == copy::fill("states.untitled", &[&short]);
                 let named = if untitled {
-                    task.clone()
+                    copy::fill("views.session_named", &[&short])
                 } else {
-                    format!("Session {task}")
+                    copy::fill("views.session_named", &[&task])
                 };
                 let shown = if crate::plain::planted("title-draws-id") {
                     short.to_owned()
                 } else if untitled {
-                    "Untitled task".to_owned()
+                    copy::text("views.untitled_task").to_owned()
                 } else {
                     task.clone()
                 };
@@ -3574,15 +3603,17 @@ impl Render for Shipped {
                     })
                     .unwrap_or_default();
                 let reads = |id: &'static str, name: &str| match &listed {
-                    Some([word, entry, _]) => {
-                        marked(id, states::entry_of(entry), format!("{name} · {word}"))
-                    }
+                    Some([word, entry, _]) => marked(
+                        id,
+                        states::entry_of(entry),
+                        format!("{name} · {}", states::shown(word)),
+                    ),
                     None => status(id, &state, format!("{name} · {}", state.text(now))),
                 };
                 let why = listed
                     .as_ref()
                     .filter(|[_, _, why]| !why.is_empty())
-                    .map(|[word, _, why]| format!("{word}: {why}"));
+                    .map(|[word, _, why]| format!("{}: {}", states::shown(word), copy::hub(why)));
                 // The page fills its lane, so its canvas takes the height left under what's above it (#1498).
                 let content = div()
                     .flex()
@@ -3610,7 +3641,9 @@ impl Render for Shipped {
                     },
                     chrome,
                 )
-                .when(session.is_empty(), |heading| heading.invisible());
+                .when(session.is_empty(), |heading| heading.invisible())
+                // #1592's planted page chrome draws an icon at a size no role gives.
+                .children(crate::icons::planted_18(chrome.ink_secondary));
                 let content = content
                     .children(doing.map(|doing| label("session-doing", doing.line(now)).h_auto()))
                     .children(why.map(|line| {
@@ -3721,7 +3754,7 @@ impl Render for Shipped {
             Kind::Agents => {
                 let inner =
                     agents_page(div().id("agents-page").flex().flex_col(), self, chrome, cx);
-                let heading = page_title(title("agents-title", "Agents"), chrome);
+                let heading = page_title(title("agents-title", copy::text("views.agents")), chrome);
                 page.child(in_lane(
                     Some("agents".into()),
                     Some(heading.into_any_element()),
@@ -3734,16 +3767,16 @@ impl Render for Shipped {
                 // it and its size. A rule nothing enforces reads "text only": the list to shrink.
                 let files = crate::rules::read(&crate::hub::root().join("wiki").join("rules.md"));
                 let rules: Vec<&crate::rules::Rule> = files.iter().flat_map(|f| &f.rules).collect();
-                let text_only = rules.iter().filter(|r| r.enforcer == "text only").count();
+                let text_only = rules.iter().filter(|r| r.text_only()).count();
                 let mut row: usize = 0;
-                let heading = page_title(title("rules-title", "Rules"), chrome);
+                let heading = page_title(title("rules-title", copy::text("views.rules")), chrome);
                 let content = div()
                     .flex()
                     .flex_col()
                     .child(
                         label(
                             "rules-count",
-                            format!("{} rules · {text_only} text only", rules.len()),
+                            copy::fill("views.rules_count", &[&rules.len(), &text_only]),
                         )
                         .text_color(chrome.ink_secondary),
                     )
@@ -3760,10 +3793,19 @@ impl Render for Shipped {
                             .mt(sizes().space(1))
                             .text_color(chrome.ink_secondary)
                             .font_weight(FontWeight::MEDIUM)
-                            .child(div().flex_1().min_w_0().child("Rule"))
-                            .child(div().w(relative(0.18)).child("Scope"))
-                            .child(div().w(relative(0.2)).child("Enforced by"))
-                            .child(div().w(relative(0.1)).text_right().child("Tokens")),
+                            .child(div().flex_1().min_w_0().child(copy::text("views.rule")))
+                            .child(div().w(relative(0.18)).child(copy::text("views.scope")))
+                            .child(
+                                div()
+                                    .w(relative(0.2))
+                                    .child(copy::text("views.enforced_by")),
+                            )
+                            .child(
+                                div()
+                                    .w(relative(0.1))
+                                    .text_right()
+                                    .child(copy::text("views.tokens_head")),
+                            ),
                     )
                     .children(files.iter().enumerate().map(|(f, file)| {
                         div()
@@ -3773,21 +3815,26 @@ impl Render for Shipped {
                             .child(
                                 label(
                                     ("rules-file", f),
-                                    format!("{} · whole file {} tokens", file.file, file.tokens),
+                                    copy::fill("views.rules_file", &[&file.file, &file.tokens]),
                                 )
                                 .font_weight(FontWeight::MEDIUM),
                             )
                             .children(file.rules.iter().map(|rule| {
                                 row += 1;
-                                let mut said = format!(
-                                    "{} · {} · {} · {} tokens",
-                                    rule.text, rule.scope, rule.enforcer, rule.tokens
+                                let mut said = copy::fill(
+                                    "views.rule_said",
+                                    &[&rule.text, &rule.scope, &rule.enforcer, &rule.tokens],
                                 );
                                 if rule.yours {
-                                    said.push_str(" · typed by you");
+                                    said = copy::fill("views.rule_typed_by_you", &[&said]);
                                 }
                                 if rule.held {
-                                    said.push_str(" · held: an agent removed its line");
+                                    said = copy::fill("views.rule_held", &[&said]);
+                                }
+                                // The review's send-backs that named it (#1512): a reading, never a verdict.
+                                let sent = rule.sent_back_said();
+                                if let Some(sent) = &sent {
+                                    said = copy::fill("views.rule_sent_back", &[&said, sent]);
                                 }
                                 observed(("rules-row", row))
                                     .role(Role::Label)
@@ -3816,22 +3863,25 @@ impl Render for Shipped {
                                         div()
                                             .w(relative(0.2))
                                             .truncate()
-                                            .text_color(if rule.enforcer == "text only" {
+                                            .text_color(if rule.text_only() {
                                                 chrome.ink_secondary
                                             } else {
                                                 chrome.ink_primary
                                             })
-                                            .when(rule.enforcer != "text only", |e| {
+                                            .when(!rule.text_only(), |e| {
                                                 e.font_weight(FontWeight::MEDIUM)
                                             })
-                                            .child(rule.enforcer.clone()),
+                                            .child(match sent {
+                                                Some(sent) => format!("{} · {sent}", rule.enforcer),
+                                                None => rule.enforcer.clone(),
+                                            }),
                                     )
                                     .child(
                                         div()
                                             .w(relative(0.1))
                                             .text_right()
                                             .text_color(chrome.ink_secondary)
-                                            .child(format!("{} tokens", rule.tokens)),
+                                            .child(copy::fill("views.tokens", &[&rule.tokens])),
                                     )
                             }))
                     }));
@@ -3876,6 +3926,7 @@ impl Render for Shipped {
 /// A path as the Agents page shows it: under your home as `~/...`.
 fn home_path(path: &str) -> String {
     match std::env::var("HOME") {
+        // copy-exception: an environment variable's name
         Ok(home) if !home.is_empty() && path.starts_with(&format!("{home}/")) => {
             format!("~{}", &path[home.len()..])
         }
@@ -3964,20 +4015,20 @@ fn agents_page(
         let scope = spec["scope"]["repos"]
             .as_array()
             .filter(|r| !r.is_empty())
-            .map_or("every repo".to_owned(), |repos| {
+            .map_or(copy::text("views.every_repo").to_owned(), |repos| {
                 let repos: Vec<String> = repos
                     .iter()
                     .filter_map(|r| r.as_str())
                     .map(|r| r.rsplit('/').next().unwrap_or(r).to_owned())
                     .collect();
-                format!("scoped to {}", repos.join(", "))
+                copy::fill("views.scoped_to", &[&repos.join(", ")])
             });
         let secrets = spec["secrets"]
             .as_array()
             .filter(|v| !v.is_empty())
             .map(|v| {
                 let v: Vec<&str> = v.iter().filter_map(|x| x.as_str()).collect();
-                format!(" · {} by handle", v.join(", "))
+                copy::fill("views.by_handle", &[&v.join(", ")])
             })
             .unwrap_or_default();
         let how = format!(
@@ -3989,7 +4040,7 @@ fn agents_page(
             [
                 s["name"].as_str().unwrap_or_default().to_owned(),
                 how,
-                format!("Synced to {}", names(&s["agents"])),
+                copy::fill("views.synced_to", &[&names(&s["agents"])]),
             ],
             chrome,
         )
@@ -3997,23 +4048,25 @@ fn agents_page(
     let skills = list("skills").into_iter().enumerate().map(|(i, k)| {
         let repo = k["repo"].as_str().unwrap_or_default();
         let commit = k["commit"].as_str().unwrap_or_default();
-        let how = format!(
-            "{} at {} · {}",
-            repo.rsplit('/').next().unwrap_or(repo),
-            &commit[..commit.len().min(7)],
-            k["path"].as_str().unwrap_or_default()
+        let how = copy::fill(
+            "views.skill_at",
+            &[
+                &repo.rsplit('/').next().unwrap_or(repo),
+                &&commit[..commit.len().min(7)],
+                &k["path"].as_str().unwrap_or_default(),
+            ],
         );
         let pin = if k["differs"] == true {
-            "differs from its pin: an update waits for you"
+            copy::text("views.pin_differs")
         } else {
-            "matches its pin"
+            copy::text("views.pin_matches")
         };
         agents_row(
             ("agents-skill", i),
             [
                 k["name"].as_str().unwrap_or_default().to_owned(),
                 how,
-                format!("Synced to {} · {pin}", names(&k["agents"])),
+                copy::fill("views.synced_to_pin", &[&names(&k["agents"]), &pin]),
             ],
             chrome,
         )
@@ -4032,11 +4085,11 @@ fn agents_page(
                 [
                     a["name"].as_str().unwrap_or_default().to_owned(),
                     if mine.is_empty() {
-                        "nothing of yours".to_owned()
+                        copy::text("views.nothing_of_yours").to_owned()
                     } else {
                         mine.join(", ")
                     },
-                    "Yours: DeepBuild leaves these alone".to_owned(),
+                    copy::text("views.yours_left_alone").to_owned(),
                 ],
                 chrome,
             )
@@ -4078,7 +4131,7 @@ fn agents_page(
                             s["kind"].as_str().unwrap_or_default(),
                             s["name"].as_str().unwrap_or_default()
                         ),
-                        format!("{files} files · {}", reached.join(", ")),
+                        copy::fill("views.sync_files", &[&files, &reached.join(", ")]),
                         String::new(),
                     ],
                     chrome,
@@ -4087,12 +4140,12 @@ fn agents_page(
                     control(
                         ("agents-review", i),
                         Control::Plain,
-                        "Review the diff",
+                        copy::text("views.review_the_diff"),
                         chrome,
                     )
-                    .aria_label(format!(
-                        "Review the diff of {}",
-                        s["name"].as_str().unwrap_or_default()
+                    .aria_label(copy::fill(
+                        "views.review_the_diff_of",
+                        &[&s["name"].as_str().unwrap_or_default()],
                     ))
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.reviewing = Some(id.clone());
@@ -4114,12 +4167,15 @@ fn agents_page(
         .map(|(agent, r)| {
             let text = |key: &str| r[key].as_str().unwrap_or_default().to_owned();
             let [how, fix] = match r["state"].as_str() {
-                Some("waiting") => ["Waits for its first session".to_owned(), String::new()],
-                Some("unreachable") => [
-                    format!("Its sessions can't reach DeepBuild: {}", text("why")),
-                    text("fix"),
+                Some("waiting") => [
+                    copy::text("views.waits_first_session").to_owned(),
+                    String::new(),
                 ],
-                _ => ["Its sessions reach DeepBuild".to_owned(), String::new()],
+                Some("unreachable") => [
+                    copy::fill("views.cant_reach", &[&copy::hub(&text("why"))]),
+                    copy::hub(&text("fix")),
+                ],
+                _ => [copy::text("views.reaches").to_owned(), String::new()],
             };
             let name = r["name"].as_str().unwrap_or(&agent).to_owned();
             agents_row(
@@ -4136,27 +4192,36 @@ fn agents_page(
     }
     page.child(section(
         "agents-reach-title",
-        "How each agent reaches DeepBuild",
+        copy::text("views.how_each_agent_reaches"),
     ))
     .children(reach)
     .child(label(
         "agents-installed",
-        format!("Installed: {}", named(true)),
+        copy::fill("views.installed", &[&named(true)]),
     ))
     .child(
         label(
             "agents-missing",
-            format!("Not installed here: {}", named(false)),
+            copy::fill("views.not_installed_here", &[&named(false)]),
         )
         .text_color(chrome.ink_secondary),
     )
-    .child(section("agents-servers-title", "MCP servers"))
+    .child(section(
+        "agents-servers-title",
+        copy::text("views.mcp_servers"),
+    ))
     .children(servers)
-    .child(section("agents-skills-title", "Skills"))
+    .child(section("agents-skills-title", copy::text("views.skills")))
     .children(skills)
-    .child(section("agents-yours-title", "Already in each agent"))
+    .child(section(
+        "agents-yours-title",
+        copy::text("views.already_in_each_agent"),
+    ))
     .children(yours)
-    .child(section("agents-waiting-title", "Waiting for you"))
+    .child(section(
+        "agents-waiting-title",
+        copy::text("views.waiting_for_you"),
+    ))
     .children(rows)
     .children(review)
 }
@@ -4185,10 +4250,10 @@ fn review_panel(
             .flatten()
             .filter_map(|a| a.as_str().map(name_of))
             .collect();
-        let read = match readers.len() {
-            0 => String::new(),
-            1 => format!("read by {}", readers[0]),
-            _ => format!("read by {}: one write reaches both", readers.join(" and ")),
+        let read = match readers.as_slice() {
+            [] => String::new(),
+            [one] => copy::fill("views.read_by", &[one]),
+            [first, rest @ ..] => copy::fill("views.read_by_both", &[first, &rest.join(", ")]),
         };
         let lines: Vec<String> = f["diff"]
             .as_str()
@@ -4231,11 +4296,13 @@ fn review_panel(
     let refusals = refused.iter().enumerate().map(|(i, r)| {
         label(
             ("agents-refused", i),
-            format!(
-                "Not for {}: it refuses the field {} ({})",
-                name_of(r["agent"].as_str().unwrap_or_default()),
-                r["field"].as_str().unwrap_or_default(),
-                r["reason"].as_str().unwrap_or_default()
+            copy::fill(
+                "views.refuses_field",
+                &[
+                    &name_of(r["agent"].as_str().unwrap_or_default()),
+                    &r["field"].as_str().unwrap_or_default(),
+                    &r["reason"].as_str().unwrap_or_default(),
+                ],
             ),
         )
         .text_color(chrome.ink_secondary)
@@ -4258,27 +4325,37 @@ fn review_panel(
                 .child(
                     label(
                         "agents-review-title",
-                        format!(
-                            "Approve the sync of {}: DeepBuild writes only its own entries, at user level",
-                            sync["name"].as_str().unwrap_or_default()
+                        copy::fill(
+                            "views.approve_the_sync",
+                            &[&sync["name"].as_str().unwrap_or_default()],
                         ),
                     )
                     .flex_1()
                     .font_weight(FontWeight::MEDIUM),
                 )
                 .child(
-                    control("agents-apply", Control::Main, "Apply", chrome)
-                        .aria_label("Apply the sync")
-                        .on_click(move |_, window, cx| {
-                            crate::open::open(&Address::ask(&ask), window, cx).ok();
-                        }),
+                    control(
+                        "agents-apply",
+                        Control::Main,
+                        copy::text("views.apply"),
+                        chrome,
+                    )
+                    .aria_label(copy::text("views.apply_the_sync"))
+                    .on_click(move |_, window, cx| {
+                        crate::open::open(&Address::ask(&ask), window, cx).ok();
+                    }),
                 )
                 .child(
-                    control("agents-close", Control::Plain, "Close", chrome)
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            this.reviewing = None;
-                            cx.notify();
-                        })),
+                    control(
+                        "agents-close",
+                        Control::Plain,
+                        copy::text("views.close"),
+                        chrome,
+                    )
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.reviewing = None;
+                        cx.notify();
+                    })),
                 ),
         )
         .children(refusals)
@@ -4384,7 +4461,7 @@ impl Layout {
     /// The window's two regions: the list docked left, the pages beside it, and nothing docked anywhere else.
     pub fn state(&self) -> DockAreaState {
         let tabs = |names: &[String], active: usize| PanelState {
-            panel_name: "TabPanel".into(),
+            panel_name: "TabPanel".into(), // copy-exception: the dock's panel name, an identity
             children: names.iter().map(PanelState::new).collect(),
             info: PanelInfo::tabs(active),
         };

@@ -18,6 +18,7 @@ use std::path::PathBuf;
 
 use deep_canvas::canon::sha256_hex;
 use deep_canvas::registry::Sealed;
+use deep_canvas_export::page::write;
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 
@@ -296,8 +297,80 @@ fn refusals(doc: &Value, missing: &BTreeMap<String, String>, set: &str) -> Vec<V
 
 /// What `doc` asks of the browser's GPU, computed from the document and WebGPU's feature table:
 /// the features it needs, the sets of which it needs one, and the limits past WebGPU's defaults.
-fn gpu_needs(_doc: &Value) -> Value {
-    json!({"features": [], "any_of": [], "limits": {}})
+/// A cutaway cuts through WebGPU's clip distances (Cutaway `cutaway@1`), which the table gives no
+/// fallback for; maps that fit the document's decoded-image cap only in block bytes need BC or
+/// ASTC, either one (Material: texture maps). `read` gives a map's bytes by its hash.
+fn gpu_needs(doc: &Value, read: &dyn Fn(&str) -> Option<Vec<u8>>) -> Value {
+    let items = doc["items"].as_object().into_iter().flatten();
+    let cut = items.into_iter().any(|(_, i)| i["kind"] == "cutaway@1");
+    let features: Vec<&str> = if cut { vec!["clip-distances"] } else { vec![] };
+    let (mut decoded, mut blocks) = (0u64, 0u64);
+    for sha in deep_canvas_scene3d::light::material_maps(doc).keys() {
+        let Some((w, h, whole)) = read(sha).as_deref().and_then(map_size) else {
+            continue;
+        };
+        let rgba8 = chain_bytes(w, h, |lw, lh| u64::from(lw) * u64::from(lh) * 4);
+        decoded += rgba8;
+        // 16 bytes a 4 × 4 block in BC7, BC5 and ASTC 4 × 4 alike (BC4's 8 counted as 16, so
+        // the sum fits both block formats).
+        blocks += if whole {
+            chain_bytes(w, h, |lw, lh| {
+                u64::from(lw.div_ceil(4)) * u64::from(lh.div_ceil(4)) * 16
+            })
+        } else {
+            rgba8
+        };
+    }
+    let cap = deep_canvas_scene3d::light::DECODED_CAP;
+    let any_of: Vec<[&str; 2]> = if decoded > cap && blocks <= cap {
+        vec![["texture-compression-bc", "texture-compression-astc"]]
+    } else {
+        vec![]
+    };
+    json!({"features": features, "any_of": any_of, "limits": {}})
+}
+
+/// A map's size and whether it can become a block format: a KTX2 map of whole 4 × 4 blocks with
+/// its full mip chain, read from its header; a PNG's or a JPEG's size, which decodes to RGBA8.
+fn map_size(bytes: &[u8]) -> Option<(u32, u32, bool)> {
+    use deep_codecs::maps::{full_chain, is_ktx2};
+    if is_ktx2(bytes) {
+        let at = |o: usize| Some(u32::from_le_bytes(bytes.get(o..o + 4)?.try_into().ok()?));
+        let (w, h, levels) = (at(20)?, at(24)?.max(1), at(40)?);
+        return Some((w, h, w % 4 == 0 && h % 4 == 0 && levels == full_chain(w, h)));
+    }
+    let reader = image::ImageReader::new(std::io::Cursor::new(bytes)).with_guessed_format();
+    let (w, h) = reader.ok()?.into_dimensions().ok()?;
+    Some((w, h, false))
+}
+
+/// The bytes of a `w` × `h` map's full mip chain, each level's by `level`.
+fn chain_bytes(w: u32, h: u32, level: impl Fn(u32, u32) -> u64) -> u64 {
+    let levels = deep_codecs::maps::full_chain(w, h);
+    (0..levels)
+        .map(|l| level((w >> l).max(1), (h >> l).max(1)))
+        .sum()
+}
+
+/// The page `manifest`'s media paths as the bundle names them, by `names`.
+fn renamed(manifest: &mut Value, names: &BTreeMap<String, String>) {
+    let swap = |v: &mut Value| {
+        if let Some(n) = v.as_str().and_then(|p| names.get(p)) {
+            *v = json!(n);
+        }
+    };
+    for s in manifest["states"].as_array_mut().into_iter().flatten() {
+        swap(&mut s["still"]);
+        swap(&mut s["loop"]);
+        for list in ["samples", "orbit"] {
+            for x in s[list].as_array_mut().into_iter().flatten() {
+                swap(&mut x["still"]);
+            }
+        }
+    }
+    for e in manifest["edges"].as_array_mut().into_iter().flatten() {
+        swap(&mut e["clip"]);
+    }
 }
 
 /// Escapes text for HTML.
@@ -345,7 +418,8 @@ fn index_html(
         "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n\
 <meta http-equiv=\"Content-Security-Policy\" content=\"{policy}\">\n<meta name=\"referrer\" content=\"no-referrer\">\n{stamp}<title>{}</title>\n\
 <style>html,body{{margin:0;background:#101012;color:#e8e8ec;font:14px system-ui,sans-serif}}deep-player{{display:block}}\
-deep-player canvas{{display:block;width:100%;height:auto;max-height:100vh;object-fit:contain}}[data-deep-notice]{{margin:8px 12px}}</style>\n\
+deep-player canvas{{display:block;width:100%;height:auto;max-height:100vh;object-fit:contain}}[data-deep-notice]{{margin:8px 12px}}\
+[data-deep-saves]{{display:flex;gap:8px;margin:8px 12px}}[data-deep-saves] button,[data-deep-saves] select{{font:inherit;color:inherit;background:#232329;border:1px solid #4a4a55;border-radius:6px;padding:4px 10px}}</style>\n\
 <script type=\"importmap\">{map}</script>\n</head>\n<body>\n<deep-player></deep-player>\n\
 <script type=\"application/json\" id=\"deep-bundle\">{data}</script>\n\
 <script type=\"module\" src=\"./{}\" integrity=\"{}\"></script>\n</body>\n</html>\n",
@@ -365,8 +439,28 @@ fn element(guard: Option<Guard>) -> String {
         ),
         // Planted (#172 AC8): the device request asks for the adapter's own limits.
         Some(Guard::WebRequestsAdapterLimits) => ELEMENT.replace(
-            "    const gpu = await glue.open_gpu(this.#canvas, JSON.stringify(bundle.gpu_needs));",
-            "    const a = await navigator.gpu.requestAdapter(); const limits = {}; for (const k in a.limits) limits[k] = a.limits[k];\n    const gpu = await glue.open_gpu(this.#canvas, JSON.stringify({ ...bundle.gpu_needs, limits }));",
+            "    const gpu = await glue.open_gpu(this.#canvas, JSON.stringify(can.request));",
+            "    const a = await navigator.gpu.requestAdapter(); const limits = {}; for (const k in a.limits) limits[k] = a.limits[k];\n    const gpu = await glue.open_gpu(this.#canvas, JSON.stringify({ ...can.request, limits }));",
+        ),
+        // Planted (#1040 AC5): the index page starts the player wherever WebGPU is.
+        Some(Guard::WebIndexChecksWebgpuOnly) => ELEMENT.replace(
+            "    const can = await gate(bundle.gpu_needs);",
+            "    const can = navigator.gpu ? { request: bundle.gpu_needs } : { lacks: 'WebGPU' };",
+        ),
+        // Planted (#1040 AC6): the index page needs every feature of each any_of set.
+        Some(Guard::WebIndexRequiresEveryAnyOf) => ELEMENT.replace(
+            "    const can = await gate(bundle.gpu_needs);",
+            "    const n = bundle.gpu_needs;\n    const can = await gate({ ...n, features: [...n.features, ...n.any_of.flat()], any_of: [] });",
+        ),
+        // Planted (#1041 AC2): saves keyed by the page's origin alone, so every piece there shares its slots.
+        Some(Guard::WebSavesKeyedByOrigin) => ELEMENT.replace(
+            "    this.#piece = piece;",
+            "    this.#piece = location.origin;",
+        ),
+        // Planted (#1041 AC3): the first save never asks the browser to keep the origin's storage persistent.
+        Some(Guard::WebSavesNeverAskPersistence) => ELEMENT.replace(
+            "      if (!this.#asked) await this.#persist();\n",
+            "",
         ),
         // Planted (#1045 AC1): no accessibility tree beside the canvas, and no live region.
         Some(Guard::WebNoTree) => ELEMENT.replace("    this.#keepTree();\n", ""),
@@ -432,6 +526,70 @@ impl Hub<'_> {
         Ok(out)
     }
 
+    /// The bundle's fallback page, its files put in `files` (Export: web player): the full
+    /// playable page of `doc` within the page's caps, and past them a page of one pass of the
+    /// piece's tour, which the receipt marks `tour_only`. Every file is named by its hash, so the
+    /// page's own references are rewritten to those names. What the bundle's manifest says of it:
+    /// its index page and every file it names.
+    fn web_fallback(
+        &mut self,
+        job: &Job,
+        doc: &Value,
+        out: &std::path::Path,
+        files: &mut Files,
+    ) -> Result<Value, Value> {
+        let scratch = temp_of(&out.with_extension("page"));
+        let _ = std::fs::remove_dir_all(&scratch);
+        let full = self.page_built(job, doc, None, &scratch);
+        let past_caps = |r: &Value| r["code"] == "page_states" || r["code"] == "page_edges";
+        let pass: Vec<Value> = (doc.get("tour"))
+            .and_then(|t| deep_canvas_input::tour::Tour::of(t).ok())
+            .map(|t| t.pass().iter().map(|e| e.to_json()).collect())
+            .unwrap_or_default();
+        let (built, tour_only) = match full {
+            Ok(b) => (Ok(b), false),
+            Err(r) if past_caps(&r) => {
+                let _ = std::fs::remove_dir_all(&scratch);
+                (self.page_built(job, doc, Some(&pass[..]), &scratch), true)
+            }
+            Err(r) => (Err(r), false),
+        };
+        let _ = std::fs::remove_dir_all(&scratch);
+        let mut built = built?;
+        if tour_only {
+            // A tour page plays by itself, each edge at its key's own time on the tour's clock.
+            built.manifest["tour"] = json!(true);
+            let edges = built.manifest["edges"].as_array_mut().into_iter().flatten();
+            for (edge, entry) in edges.zip(&pass) {
+                edge["tour_at"] = entry["t"].clone();
+            }
+        }
+        let mut names: BTreeMap<String, String> = BTreeMap::new();
+        let mut named = Vec::new();
+        for (path, bytes) in std::mem::take(&mut built.files) {
+            let ext = path.rsplit('.').next();
+            let (name, sha) = files.put(bytes, ext, Map::new());
+            named.push(json!({"path": name, "sha256": sha}));
+            names.insert(path, name);
+        }
+        let (css, css_sha) = files.put(write::PLAYER_CSS.into(), Some("css"), Map::new());
+        let (js, js_sha) = files.put(write::PLAYER_JS.into(), Some("js"), Map::new());
+        renamed(&mut built.manifest, &names);
+        // The receipt marks the page's index page and its manifest.
+        let role = |r: &str| Map::from_iter([("fallback".to_string(), json!(r))]);
+        let manifest = serde_json::to_vec_pretty(&built.manifest).unwrap_or_default();
+        let (manifest, manifest_sha) = files.put(manifest, Some("json"), role("manifest"));
+        let page = write::index_html_at(doc, &built.manifest, &css, &js);
+        let (index, index_sha) = files.put(page.into_bytes(), Some("html"), role("index"));
+        named.extend([
+            json!({"path": css, "sha256": css_sha}),
+            json!({"path": js, "sha256": js_sha}),
+            json!({"path": manifest, "sha256": manifest_sha}),
+            json!({"path": index, "sha256": index_sha}),
+        ]);
+        Ok(json!({"index": index, "tour_only": tour_only, "files": named}))
+    }
+
     /// The planted web player this run writes, if any.
     fn web_guard(&self) -> Option<Guard> {
         [
@@ -439,6 +597,11 @@ impl Hub<'_> {
             Guard::WebProbeTestVariant,
             Guard::WebRequestsAdapterLimits,
             Guard::WebFragmentWritesEntry,
+            Guard::WebSavesKeyedByOrigin,
+            Guard::WebSavesNeverAskPersistence,
+            Guard::WebLeavesOutFont,
+            Guard::WebIndexChecksWebgpuOnly,
+            Guard::WebIndexRequiresEveryAnyOf,
             Guard::WebNoTree,
             Guard::WebAnnouncesEveryFrame,
         ]
@@ -448,9 +611,23 @@ impl Hub<'_> {
 
     /// `video.codec: web`: the web player's bundle of `doc`, written as a folder at `job.out`.
     pub(super) fn export_web(&mut self, job: &Job, doc: &Value) -> Result<Value, Value> {
+        // #2776: each item's web answer, its entry's or that of a field it turns on, read before the
+        // set is picked: the player draws a stand-in, not its entry, so a module only stand-in
+        // items use (their kinds and params, and `requires.modules` naming it) needn't be in it.
+        let (mut by_answer, stand_ins) = super::paths::web(&self.startup.sealed, doc);
+        let (mut kept, mut stood) = (doc.clone(), Map::new());
+        if let Some(items) = kept.get_mut("items").and_then(Value::as_object_mut) {
+            for id in stand_ins.iter().filter_map(|s| s["item"].as_str()) {
+                if let Some(item) = items.remove(id) {
+                    stood.insert(id.to_string(), item);
+                }
+            }
+        }
+        let stand_modules = modules_used(&json!({"items": stood}), &self.startup.sealed);
         // #1490: the smallest set that holds every canvas module the document uses, read from the
         // check's registry; the largest when none does, which the refusal below then names.
-        let used = modules_used(doc, &self.startup.sealed);
+        let mut used = modules_used(&kept, &self.startup.sealed);
+        used.retain(|m, at| !(stand_modules.contains_key(m) && at.starts_with("requires/")));
         let lacks = |set: &Set| -> BTreeMap<String, String> {
             let held = set.modules();
             used.iter()
@@ -470,7 +647,21 @@ impl Hub<'_> {
                 .unwrap_or(&SETS[SETS.len() - 1])
         };
         let about = set.about();
-        let refused = refusals(doc, &lacks(set), set.name);
+        let mut refused = refusals(doc, &lacks(set), set.name);
+        // #2776: each item whose entry, or a field it turns on, answers the web `refused` is refused
+        // with that answer's code, once per item and code; a `stand_in` is listed in the receipt.
+        if self.planted(Planted::Export(Guard::WebCarriesRefused)) {
+            // Planted (#2776 AC6): the export reads no refused web answer and carries the entry.
+            by_answer.clear();
+        }
+        for r in by_answer {
+            if !refused
+                .iter()
+                .any(|o| o["item"] == r["item"] && o["code"] == r["code"])
+            {
+                refused.push(r);
+            }
+        }
         if !refused.is_empty() {
             let names: Vec<&str> = refused.iter().filter_map(|r| r["item"].as_str()).collect();
             return Err(
@@ -500,12 +691,18 @@ impl Hub<'_> {
         let (glue_path, _) = files.put(set.glue.to_vec(), Some("js"), Map::new());
         let element = element(guard);
         let (element_path, _) = files.put(element.clone().into_bytes(), Some("js"), Map::new());
-        // The document as the app's frames draw it, and the recorded input track.
+        // The document as the app's frames draw it, and the recorded input track as the hub holds
+        // it (#1164's `track` call), its bytes the ones its hash is of, so it is the app's by hash.
         let doc_bytes = serde_json::to_vec(doc).map_err(|_| json!({"code": "bad_input"}))?;
         let (doc_path, doc_sha) = files.put(doc_bytes, Some("json"), Map::new());
-        let track_bytes =
-            serde_json::to_vec(&job.track).map_err(|_| json!({"code": "bad_input"}))?;
-        let (_, track_sha) = files.put(track_bytes, Some("json"), Map::new());
+        let mut held = deep_canvas_input::track::Track::default();
+        for e in &job.track {
+            let e = crate::track_call::entry_of(e).ok_or_else(
+                || json!({"code": "bad_input", "what": "track: each entry is {t, control, value, writer}"}),
+            )?;
+            held.append(e);
+        }
+        let (_, track_sha) = files.put(held.bytes(), Some("json"), Map::new());
         // Everything the document names by hash.
         for (_, path, sha) in crate::extended::hashes(doc, true) {
             let bytes = crate::evidence::read(&root, &sha).ok_or_else(|| {
@@ -556,7 +753,7 @@ impl Hub<'_> {
         for (_, text) in deep_text::LICENSES {
             files.put(text.as_bytes().to_vec(), Some("txt"), Map::new());
         }
-        let needs = gpu_needs(doc);
+        let needs = gpu_needs(doc, &|sha| crate::evidence::read(&root, sha));
         let size = [0, 1].map(|i| doc["size"][i].as_f64().unwrap_or(640.0).round() as i64);
         let listed: Vec<Value> = files
             .by_path
@@ -564,6 +761,10 @@ impl Hub<'_> {
             .filter(|(p, _)| **p != element_path)
             .map(|(p, (b, _))| json!({"path": p, "sha256": sha256_hex(b)}))
             .collect();
+        // The fallback page, whose files the player never fetches.
+        let out = PathBuf::from(&job.out);
+        let mut page = Files::default();
+        let fallback = self.web_fallback(job, doc, &out, &mut page)?;
         let manifest = json!({
             "size": size,
             "player": {"wasm": wasm_sha},
@@ -574,6 +775,7 @@ impl Hub<'_> {
             "logic": logic,
             "images": images,
             "gpu_needs": needs,
+            "fallback": fallback,
         });
         let stamp = (guard == Some(Guard::WebIndexExportTime)).then(|| {
             // Planted (#172 AC6): the export's time written into the index page.
@@ -598,17 +800,55 @@ impl Hub<'_> {
                 .map(|c| c.host.as_str())
                 .filter(|h| !h.is_empty()),
         );
-        // Written whole or not at all: to the temporary name, read back, then renamed.
-        let out = PathBuf::from(&job.out);
+        // Every file the document, the player and the fallback page name, with what it is.
+        let mut named: Vec<(String, String, String)> = Vec::new();
+        let mut name = |path: &str, sha: &str, what: String| {
+            named.push((path.to_string(), sha.to_string(), what))
+        };
+        name(
+            &element_path,
+            &sha256_hex(element.as_bytes()),
+            "the player's element".into(),
+        );
+        for f in &fonts {
+            let (file, sha) = (f["file"].as_str(), f["sha256"].as_str().unwrap_or("-"));
+            let path = files.by_path.keys().find(|p| p.starts_with(sha));
+            if let (Some(file), Some(path)) = (file, path) {
+                name(path, sha, format!("the font {file}"));
+            }
+        }
+        for f in listed
+            .iter()
+            .chain(fallback["files"].as_array().into_iter().flatten())
+        {
+            let (path, sha) = (
+                f["path"].as_str().unwrap_or(""),
+                f["sha256"].as_str().unwrap_or(""),
+            );
+            let what = if sha == track_sha {
+                "the input track".to_string()
+            } else if fallback["files"].as_array().is_some_and(|a| a.contains(f)) {
+                format!("the fallback page's {path}")
+            } else {
+                format!("the file {path}")
+            };
+            name(path, sha, what);
+        }
+        // Written whole or not at all: to the temporary name, read back from its own bytes, then
+        // renamed.
         let temp = temp_of(&out);
         let _ = std::fs::remove_dir_all(&temp);
         std::fs::create_dir_all(&temp).map_err(|_| json!({"code": "export_unwritable"}))?;
-        let mut all: BTreeMap<String, Vec<u8>> = files
-            .by_path
-            .iter()
+        let mut all: BTreeMap<String, Vec<u8>> = (files.by_path.iter())
+            .chain(&page.by_path)
             .map(|(p, (b, _))| (p.clone(), b.clone()))
             .collect();
         all.insert("index.html".into(), index.into_bytes());
+        if guard == Some(Guard::WebLeavesOutFont) {
+            // Planted (#1040 AC3): an export that leaves out one font it names.
+            let font = fonts[0]["sha256"].as_str().unwrap_or_default();
+            all.retain(|p, _| !p.starts_with(font));
+        }
         let written = all
             .iter()
             .try_for_each(|(name, bytes)| std::fs::write(temp.join(name), bytes));
@@ -616,12 +856,17 @@ impl Hub<'_> {
             let _ = std::fs::remove_dir_all(&temp);
             return Err(json!({"code": "export_unwritable"}));
         }
-        for (name, bytes) in &all {
-            if std::fs::read(temp.join(name)).ok().as_ref() != Some(bytes) {
-                let _ = std::fs::remove_dir_all(&temp);
-                return Err(json!({"outcome": "failed", "code": "export.fidelity",
-                    "issues": [{"code": "export.fidelity", "what": format!("{name} doesn't read back as written")}]}));
-            }
+        let read_back = |path: &str| std::fs::read(temp.join(path)).ok().map(|b| sha256_hex(&b));
+        if let Some((path, sha, what)) = named
+            .iter()
+            .find(|(path, sha, _)| read_back(path).as_deref() != Some(sha.as_str()))
+        {
+            let _ = std::fs::remove_dir_all(&temp);
+            let why = format!("{what} ({path}, SHA-256 {sha}) isn't in the bundle as written");
+            return Err(
+                json!({"outcome": "failed", "code": "export.fidelity", "file": path, "why": why,
+                "issues": [{"code": "export.fidelity", "what": why}]}),
+            );
         }
         // The bundle's document carries no port: one it keeps fails the read-back, naming it.
         let kept: Vec<String> = all
@@ -643,10 +888,9 @@ impl Hub<'_> {
             .iter()
             .map(|(p, b)| {
                 let mut f = json!({"path": p, "sha256": sha256_hex(b), "bytes": b.len()});
-                if let Some((_, marks)) = files.by_path.get(p) {
-                    for (k, v) in marks {
-                        f[k] = v.clone();
-                    }
+                let held = files.by_path.get(p).into_iter().chain(page.by_path.get(p));
+                for (k, v) in held.flat_map(|(_, marks)| marks) {
+                    f[k] = v.clone();
                 }
                 f
             })
@@ -655,11 +899,12 @@ impl Hub<'_> {
             "target": "web",
             "player": {"core_version": about["core_version"], "module_set_digest": about["set_digest"], "hash": wasm_sha,
                        "module_set": set.name},
-            "fallback": "page",
+            "fallback": if fallback["tour_only"] == true { "tour_only" } else { "page" },
             "sources": [],
             "bytes": all.values().map(Vec::len).sum::<usize>(),
             "refused": ports.iter().map(|n| json!({"item": n, "code": "web.port",
                 "why": format!("the port {n} is the app's own to open; the web player has no plug-in to send to")})).collect::<Vec<_>>(),
+            "stand_in": stand_ins,
             "gpu_needs": needs,
             "files": receipt_files,
         }))

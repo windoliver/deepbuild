@@ -1,0 +1,93 @@
+# #1509 acceptance tests on the base (c26bdb5be, origin/main "Merge pull request #2786", with no implementation of #1509)
+
+Setup:      node_modules cloned from a sibling checkout with the same package-lock.json (cp -cR), then
+            npm run build --workspaces and CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 cargo build --locked -q -p deep-hook
+            (Rust 1.99.1, the pinned toolchain). The machine's build throttle granted neither build within 4 minutes, so
+            each ran directly under nice -n 10 (about 36 s and 9 s).
+            Node v24.22.2, vitest 5.0.5, macOS (Darwin 27.2.0), 18 cores shared by many sessions.
+Command:    node node_modules/vitest/vitest.mjs run tests/acceptance/1509/ --no-file-parallelism --testTimeout=600000 --hookTimeout=180000 --reporter=verbose
+Type check: node node_modules/typescript/bin/tsc -p tests/acceptance/1509/tsconfig.json  -> exit 0 (8 files)
+Listing:    node node_modules/vitest/vitest.mjs list tests/acceptance/1509/  -> 6 files, 8 tests
+
+Runs.
+  1. 20:25:57, the whole folder: 6 files, 8 tests, 8 failed; 72 s wall; 1-minute load 16.2 before, 140.7 after.
+     It ran before three edits that change no outcome here: package.json lost its `scripts` field, AC4 accepts "newly"
+     as well as "new", and AC5's message says "no entry deep-hook matched" where it said "[]".
+  2. 20:30:21, the whole folder again, the files as committed: 6 files, 8 tests, 8 failed; 76 s wall; 1-minute load
+     137.7 before, 201.2 after. Every test failed at the same assertion with the same reason as in run 1 (AC5's message
+     now ends "its tool.before names no entry deep-hook matched"); times: AC1 5,107 ms and 713 ms, AC2 8,579 ms, AC3
+     11,583 ms, AC4 5,456 ms, AC5 3,482 ms, AC6 38,049 ms, AC6's wrong program 453 ms.
+(Handles: ask:…, claim:… stand for ULID handles. Paths: the checkout reads <repo>. Lines past 1,500 characters cut.)
+
+Result: in both runs 8 of 8 tests fail and none reads INCONCLUSIVE: 7 at an assertion in this folder, and AC6's
+wrong-program test BLOCKED, since the base's hub refuses a plant it doesn't list.
+
+Test                                                    Time (run 1)  First failing assertion (run 1)
+AC1 #1509.a4073779 npx -y some-pkg@latest held            5,534 ms    "AC1 #1509.a4073779 in a session no plan of which names some-pkg, which the
+                                                                      lockfile doesn't hold: `npx -y some-pkg@latest` must be held with an ask
+                                                                      naming some-pkg: its PreToolUse let it run (pass), and no ask names some-pkg
+                                                                      (exit 0 after 42 ms, stdout "", stderr "")"
+AC1 #1509.a4073779 the spellings, deep-hook check           233 ms    "AC1 #1509.a4073779 the dependency effect must read a package run straight
+                                                                      from a registry that the repo's lockfile doesn't hold, however it is
+                                                                      spelled: deep-hook check, with record-new-dependency, reads `npx -y
+                                                                      some-pkg@latest`, `bunx some-pkg@2.0.0`, `pnpm dlx some-pkg@2.0.0`, `yarn dlx
+                                                                      some-pkg@2.0.0`, `uvx some-tool@1.0.0`, `pipx run some-tool`, `pipx install
+                                                                      some-tool`, `python -m pip install some-lib`, `python3 -m pip install
+                                                                      some-lib`, `uv tool run some-tool` as no dependency"
+AC2 #1509.ae8eec29 npx vitest, and its contrast           7,905 ms    "AC2 #1509.ae8eec29 as its contrast, a vitest version the lockfile doesn't
+                                                                      hold: `npx vitest@4.0.0` must be held with an ask naming vitest: its
+                                                                      PreToolUse let it run (pass), and no ask names vitest (exit 0 after 8 ms)"
+                                                                      (`npx vitest` itself ran with no ask, as it does on the base)
+AC3 #1509.a066c839 installs read through the diff        11,310 ms    "AC3 #1509.a066c839 with no manifest change since the base: `pip install -r
+                                                                      requirements.txt` must run with no ask: it was held by ask:… asking "Add the
+                                                                      dependency requirements.txt (`pip install -r requirements.txt`)? No plan
+                                                                      names it." (exit 2 after 61 ms, stderr "DeepBuild is holding this: Add the
+                                                                      dependency requirements.txt (`pip install -r requirements.txt`)? No plan
+                                                                      names it. It waits for your answer to ask:…; once you say yes, run the same
+                                                                      call again.")" (`npm install` and `npm ci` ran with no ask first)
+AC4 #1509.69494a39 the question's registry reading        4,785 ms    "AC4 #1509.69494a39 with the fixture registry up: `npx -y some-pkg@latest`
+                                                                      must be held with an ask naming some-pkg: its PreToolUse let it run (pass),
+                                                                      and no ask names some-pkg (exit 0 after 13 ms)"
+AC5 #1509.6384e10e hub stopped: allowed and recorded      3,726 ms    "AC5 #1509.6384e10e `npx -y some-pkg@latest`, allowed with the hub stopped,
+                                                                      must be recorded as a dependency is today, as `npm install left-pad@1.3.0`
+                                                                      is (matched to ["record-new-dependency"]): its tool.before names []"
+                                                                      (both calls were allowed with the hub stopped and both reached the record)
+AC6 #1509.231f163d three years old runs; the card        36,196 ms    "AC6 #1509.231f163d the return card's what-changed line must name some-pkg
+                                                                      1.0.0, which ran straight from the registry: changes.read's change.sentence
+                                                                      for claim:… reads "Changed no files."" (the call ran with no ask, as the
+                                                                      base reads no npx; the stop made its claim; the line was read for 30 s)
+AC6 #1509.231f163d (wrong program) asks-every-registry-run  291 ms    not an assertion: BLOCKED: the hub with the plant
+                                                                      DEEP_HUB_PLANT=asks-every-registry-run did not start: … Error:
+                                                                      DEEP_HUB_PLANT=asks-every-registry-run names no planted program
+
+Each failure but the last is an AssertionError (node:assert, ERR_ASSERTION) thrown from tests/acceptance/1509/helpers.ts
+(`fail`), under the test paths; none fails at an import, a load error or a timeout.
+
+What the base reads, criterion by criterion, and how each test fails on a wrong program:
+
+- AC1: the base's matcher (`adds_dependency`) reads no `npx`, so the call goes through with no gate and no ask: the
+  test fails naming the call, as the criterion says. deep-hook check reads none of the Scope's spellings either.
+- AC2: `npx vitest` runs with no ask on the base, which reads no npx at all, so the criterion's own words hold there.
+  The test still fails on the base, at its contrast: `npx vitest@4.0.0`, a version the lockfile doesn't hold and the
+  registry says is 2 days old, isn't held. On a program that ignores the lockfile it fails at `npx vitest` (vitest's
+  `latest` in the fixture registry is 2 days old), and on one that exempts a package whatever version is named, at
+  the contrast.
+- AC3: `npm install` and `npm ci` with no change run; `pip install -r requirements.txt` is read as a new dependency
+  named `requirements.txt` (`standing.ts`, `packages`, takes the word after `install`, `-r` dropped) and held, so the
+  test fails naming the pip call, as the criterion says. The left-pad leg isn't reached on the base.
+- AC4: the base holds nothing for npx, so the test fails before reading a question. On a program that holds it, the
+  question is judged: its age or date, "new", "couldn't check", and no old or safe.
+- AC5: with the hub stopped the base allows the npx call and, once the hub is back, records it, as the criterion's
+  "as a dependency is today" says of a dependency; but the npx call's tool.before is matched to no entry, while
+  `npm install left-pad@1.3.0`, checked first, is matched to `record-new-dependency`. So the test fails on the base,
+  naming the call: it isn't recorded as a dependency. On a deep-hook that denies the call with the hub down, it fails
+  at "must be allowed".
+- AC6: the three-year-old call runs with no ask on the base, which reads no npx; the stop of the turn your prompt
+  opened made its claim, and `changes.read` answered for it with "Changed no files.", so the test fails at the return
+  card's line. The wrong-program test is BLOCKED on the base, whose hub refuses a plant its list doesn't name; it
+  fails at its assertion on `plants-ignored`, the twin with every plant off (twins.json), and AC6's own test fails on
+  `always-asks-every-registry-run`. Both twins are the implementer's to build.
+
+Not run: no program with #1509 exists, so no test has passed; no twin exists yet; no live agent, no network, no
+reference Mac. Hook timing is the shared Mac's: on a correct program, at high load, some hub legs may read INCONCLUSIVE
+(README, Late hooks).

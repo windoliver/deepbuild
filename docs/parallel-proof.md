@@ -105,6 +105,8 @@ Once bays exist, most of a proof run's cost is work it repeats:
 
 Test binaries are built once per run into a run-private `bin/`, named by `DEEP_BIN_DIR` (T4). The before lane sets it per side from each bay's own build, so base and change never share binaries. `childEnv` drops an inherited value before it merges its `extra` argument, so a per-side value survives and a shell's value never leaks in. `lanes.mjs` and `affected.mjs` always set it from their own build, never from the shell. This is what lets folders leave the `alone` block (section 7).
 
+A hub finds `deep-hook` and `deep-show` only under its own checkout's `target/`, the newer of `release` and `debug`, and the before lane's copies hold no build (#2817). So when a selected test, or a helper it reaches, names the hub's or the CLI's package, each side also builds those two from its own sources and copies them into its copy's `target/debug/`, stamped newest. A whole command string such as `node packages/cli/dist/main.js hub run` names it too, and so does a test or helper inside either package. The tests that name neither package run first, with no hub binary in the copy, and the hub's tests after them, so a test that names neither never finds them. A bay keeps `target/` between uses, so each use first removes what an earlier one put there. Runs in the checkout itself keep its own `target/` and only read `DEEP_BIN_DIR`.
+
 ## 6. Scheduling: a per-machine throttle table
 
 Budgets refuse to count at a load above the core count, so two sessions proving at once turn each other's budgets INCONCLUSIVE. `scripts/throttle.mjs` (T5) is a host-local, flock-based lock table under `~/.deepbuild/throttle/` with four classes. The folder is the user's home from the password database, never `HOME`, so a run with a `HOME` of its own still shares the machine's table (#2744):
@@ -113,7 +115,7 @@ Budgets refuse to count at a load above the core count, so two sessions proving 
 |---|---|---|---|
 | build | 1 | 2 | Top-level builds outside proofs: cargo build, `cargo test`, `npm run build`, clippy. The default for an unlisted command |
 | bay pair | 1 | 3 | A counting semaphore whose grant index k names `~/deepbuild-bays/<k>/`; `bays.mjs` is its only caller |
-| test | 2 | 4 | The vitest parallel block and `node --test` |
+| test | 2 | 6 | The vitest parallel block and `node --test` |
 | timed | 1 | 1 | Exclusive of every class; waits for load below the core count |
 
 `throttle.mjs <class> [--wait <min>] [--hold <min>] -- <command>` acquires, runs, releases and exits with the child's status, or 128 plus the signal when the child is killed. An importable `acquire(class)` and `release(grant)` serve `proof-runs.mjs`, `preflight.mjs` and `perf.mjs`. `lanes.mjs` wraps each of its commands by this classification, and `affected.mjs` routes its own commands the same way: the workspace build, clippy and `cargo test -p` as build, the vitest block and `node --test` as test.
@@ -299,7 +301,7 @@ What each machine holds at once, with the throttle and the bays in place:
 |---|---|---|
 | Resident sessions | At most 3, one of them proving | One worktree per remote session |
 | build grants | 1 | 2 |
-| test grants | 2 | 4 |
+| test grants | 2 | 6 |
 | Bay pairs | 1, about 40 GB of disk | 3 |
 | timed | 1, exclusive of everything; budgets count only in a budget window on a reference Mac | 1, exclusive of everything; its timings are readings |
 

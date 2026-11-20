@@ -38,6 +38,8 @@ deep-net = { path = "../deep-net", optional = true }
 deep-relay = { path = "../deep-relay", optional = true }
 deep-marks-raster = { path = "../deep-marks-raster" }
 deep-images = { path = "../deep-images" }
+# #1040: KTX2 maps transcoded at load, on the page's one thread, by the decode worker's own code.
+deep-codecs = { path = "../deep-codecs", optional = true }
 deep-gpu = { path = "../deep-gpu", optional = true }
 deep-scene3d-render = { path = "../deep-scene3d-render", optional = true }
 deep-text = { path = "../deep-text" }
@@ -53,7 +55,7 @@ sha2 = "0.10"
 default = ["full"]
 figure = []
 game2d = ["figure", "dep:deep-canvas-physics", "dep:deep-physics-rapier", "dep:deep-canvas-sandbox", "dep:deep-logic", "deep-play/logic"]
-full = ["game2d", "dep:deep-gpu", "dep:deep-canvas-graph", "dep:deep-canvas-record", "dep:deep-canvas-sheet", "dep:deep-canvas-cells", "dep:deep-canvas-vector", "dep:deep-canvas-scene3d", "dep:deep-canvas-effects", "dep:deep-canvas-loop", "dep:deep-scene3d-render", "deep-play/scene3d", "deep-play/cells", "deep-play/vector", "dep:deep-net", "dep:deep-relay", "deep-play/net"]
+full = ["game2d", "dep:deep-gpu", "dep:deep-codecs", "dep:deep-canvas-graph", "dep:deep-canvas-record", "dep:deep-canvas-sheet", "dep:deep-canvas-cells", "dep:deep-canvas-vector", "dep:deep-canvas-scene3d", "dep:deep-canvas-effects", "dep:deep-canvas-loop", "dep:deep-scene3d-render", "deep-play/scene3d", "deep-play/cells", "deep-play/vector", "dep:deep-net", "dep:deep-relay", "deep-play/net"]
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 js-sys = "=0.3.106"

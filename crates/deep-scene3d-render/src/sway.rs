@@ -42,6 +42,11 @@ pub struct Sways {
 }
 
 impl Sways {
+    /// #1431: lets go of `shape`'s sway once its mesh is freed.
+    pub fn remove(&mut self, shape: Shape) {
+        self.movers.remove(&shape);
+    }
+
     /// The swaying mesh `m` of `shape`, whose rest vertices `v` the pass reads and whose drawn
     /// vertices it writes into `drawn`.
     pub fn add(

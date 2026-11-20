@@ -1,0 +1,37 @@
+$ node --expose-gc repair-evidence/round2/three-counters.mjs <temp home>   (twice under each Node build; it does not use the probe, so the repair does not change it)
+== node v24.22.0 (<home>/.local/share/fnm/node-versions/v24.22.0/installation/bin/node), run 1
+loaded, before the collection      rss   70.7  ps   70.8  maxRSS   70.7  maxRSS-rss    0.0
+after gc (where a pass starts)     rss   71.9  ps   71.9  maxRSS   71.9  maxRSS-rss    0.0
+300 ms idle                        rss   71.9  ps   71.9  maxRSS   71.9  maxRSS-rss    0.0
+holding 20 MB                      rss   91.9  ps   91.9  maxRSS   91.9  maxRSS-rss    0.0
+holding 40 MB                      rss  112.0  ps  112.0  maxRSS  112.0  maxRSS-rss    0.0
+holding 60 MB                      rss  132.0  ps  132.0  maxRSS  132.0  maxRSS-rss    0.0
+holding 80 MB                      rss  152.0  ps  152.0  maxRSS  152.0  maxRSS-rss    0.0
+holding 100 MB                     rss  172.1  ps  172.1  maxRSS  172.1  maxRSS-rss    0.0
+== node v24.22.0 (<home>/.local/share/fnm/node-versions/v24.22.0/installation/bin/node), run 2
+loaded, before the collection      rss   70.9  ps   71.0  maxRSS   70.9  maxRSS-rss    0.0
+after gc (where a pass starts)     rss   71.7  ps   71.7  maxRSS   71.7  maxRSS-rss    0.0
+300 ms idle                        rss   71.7  ps   71.7  maxRSS   71.7  maxRSS-rss    0.0
+holding 20 MB                      rss   91.8  ps   91.8  maxRSS   91.8  maxRSS-rss    0.0
+holding 40 MB                      rss  111.9  ps  111.9  maxRSS  111.9  maxRSS-rss    0.0
+holding 60 MB                      rss  131.9  ps  131.9  maxRSS  131.9  maxRSS-rss    0.0
+holding 80 MB                      rss  151.9  ps  152.2  maxRSS  151.9  maxRSS-rss    0.0
+holding 100 MB                     rss  172.2  ps  172.2  maxRSS  172.2  maxRSS-rss    0.0
+== node v24.22.2 (/opt/homebrew/bin/node), run 1
+loaded, before the collection      rss   28.8  ps   67.3  maxRSS   67.2  maxRSS-rss   38.4
+after gc (where a pass starts)     rss   29.4  ps   68.0  maxRSS   68.0  maxRSS-rss   38.5
+300 ms idle                        rss   29.5  ps   68.0  maxRSS   68.0  maxRSS-rss   38.5
+holding 20 MB                      rss   49.5  ps   88.0  maxRSS   88.0  maxRSS-rss   38.5
+holding 40 MB                      rss   69.5  ps  108.1  maxRSS  108.1  maxRSS-rss   38.5
+holding 60 MB                      rss   89.6  ps  128.1  maxRSS  128.1  maxRSS-rss   38.5
+holding 80 MB                      rss  109.6  ps  148.1  maxRSS  148.1  maxRSS-rss   38.5
+holding 100 MB                     rss  129.7  ps  168.2  maxRSS  168.2  maxRSS-rss   38.5
+== node v24.22.2 (/opt/homebrew/bin/node), run 2
+loaded, before the collection      rss   27.5  ps   65.9  maxRSS   65.9  maxRSS-rss   38.4
+after gc (where a pass starts)     rss   28.0  ps   66.5  maxRSS   66.4  maxRSS-rss   38.5
+300 ms idle                        rss   28.1  ps   66.6  maxRSS   66.6  maxRSS-rss   38.5
+holding 20 MB                      rss   48.1  ps   86.6  maxRSS   86.6  maxRSS-rss   38.5
+holding 40 MB                      rss   68.1  ps  106.6  maxRSS  106.6  maxRSS-rss   38.5
+holding 60 MB                      rss   88.2  ps  126.6  maxRSS  126.6  maxRSS-rss   38.4
+holding 80 MB                      rss  108.2  ps  146.7  maxRSS  146.7  maxRSS-rss   38.4
+holding 100 MB                     rss  128.2  ps  166.7  maxRSS  166.7  maxRSS-rss   38.5

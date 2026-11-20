@@ -26,6 +26,8 @@ pub enum Call {
     },
     /// #1901: the machine fingerprint kept output is keyed by.
     Fingerprint,
+    /// #1431: the process's footprint, its heap, every gauge and what's left unaccounted.
+    Footprint,
     /// #1901: a document's frame, capture or final at a time, through the kept-output cache.
     Draw {
         doc: String,
@@ -143,6 +145,10 @@ pub enum Call {
         doc: String,
         set: Option<Value>,
     },
+    /// #1415: a document's session closed, as you closing its panel.
+    Close(String),
+    /// #1415: what each state of a document session does with each call.
+    SessionTable,
     /// #501: the export's GPU hash pass on given BGRA8 frames.
     FrameHash {
         frames: Vec<([u32; 2], String)>,
@@ -425,7 +431,8 @@ pub struct Scenario {
     pub docs_for: BTreeMap<String, String>,
     /// #549: what the scenario gives a match: each document's link and the relay's authority.
     pub net: crate::net::Given,
-    pub record: BTreeMap<String, RecordObject>,
+    /// Shared (#1868): `canvas` reads its world's record once and plays every call on it.
+    pub record: std::sync::Arc<BTreeMap<String, RecordObject>>,
     /// #629: a replay's run record entries, each as a `run` call's reply gave it (`record` as a
     /// list).
     pub runs: Vec<Value>,

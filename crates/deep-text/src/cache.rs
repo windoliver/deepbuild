@@ -17,7 +17,8 @@ use crate::shape::{Glyph, Shaped, Span, Spec};
 pub const BOUND: usize = 32 << 20;
 
 /// A run's key: the text and everything its shape depends on. `fitted` marks a text's run cut to
-/// its box with an ellipsis, kept apart from the run of the whole text.
+/// its box with an ellipsis, kept apart from the run of the whole text. #1484: the variation
+/// coordinates a run is set at follow from its faces, size and weight and its spans', all here.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Key {
     text: Box<str>,
@@ -38,6 +39,9 @@ pub struct Key {
     indent: u32,
     /// Nonzero only under the planted cache per document.
     scope: u64,
+    /// #1215: the flow (0 across, 1 columns right to left, 2 left to right), `upright: all`,
+    /// `combine_upright`, the column's length, and the planted vertical shaper.
+    flow: (u8, bool, u8, Option<u32>, u8),
 }
 
 /// The hash of a run's styled spans (#1964).
@@ -68,6 +72,16 @@ impl Key {
             mask: spec.mask,
             fitted,
             scope: SCOPE.with(Cell::get),
+            flow: match spec.flow {
+                crate::Flow::Horizontal => (0, false, 0, None, 0),
+                crate::Flow::Vertical(c) => (
+                    if c.rl { 1 } else { 2 },
+                    c.upright,
+                    c.combine,
+                    c.height.filter(|_| !spec.bound).map(f32::to_bits),
+                    crate::vertical::planted().bits(),
+                ),
+            },
         }
     }
 
@@ -78,7 +92,8 @@ impl Key {
 }
 
 /// The hash of the bundled faces a run picks from: its family's by weight, then each fallback
-/// family's in order (#417), with the language it is shaped in.
+/// family's in order (#417), each set in its variable twin where one is bundled (#1484), with the
+/// language it is shaped in.
 fn font_hash(family: &str, fallback: &[&str], lang: Option<&str>) -> u64 {
     // Each face's bytes hashed once per process: the CJK face alone is megabytes.
     static FACE_HASHES: LazyLock<Vec<u64>> = LazyLock::new(|| {
@@ -95,8 +110,9 @@ fn font_hash(family: &str, fallback: &[&str], lang: Option<&str>) -> u64 {
     let mut h = DefaultHasher::new();
     for name in std::iter::once(&family).chain(fallback) {
         name.hash(&mut h);
+        let shaped = crate::fonts::shaped_in(name);
         for (face, hash) in FACES.iter().zip(FACE_HASHES.iter()) {
-            if face.family == *name {
+            if face.family == shaped {
                 hash.hash(&mut h);
             }
         }

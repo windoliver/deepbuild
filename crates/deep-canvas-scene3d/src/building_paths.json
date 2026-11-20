@@ -1,0 +1,138 @@
+{
+  "arch.guard_rail@1": {
+    "section": "Building module",
+    "rays": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#475"
+    },
+    "final": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#178"
+    },
+    "web": {
+      "answer": "same",
+      "held_by": "document.determinism"
+    }
+  },
+  "arch.level@1": {
+    "section": "Building module",
+    "rays": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#475"
+    },
+    "final": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#178"
+    },
+    "web": {
+      "answer": "same",
+      "held_by": "document.determinism"
+    }
+  },
+  "arch.opening@1": {
+    "section": "Building module",
+    "rays": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#475"
+    },
+    "final": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#178"
+    },
+    "web": {
+      "answer": "same",
+      "held_by": "document.determinism"
+    }
+  },
+  "arch.roof@1": {
+    "section": "Building module",
+    "rays": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#475"
+    },
+    "final": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#178"
+    },
+    "web": {
+      "answer": "same",
+      "held_by": "document.determinism"
+    }
+  },
+  "arch.slab@1": {
+    "section": "Building module",
+    "rays": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#475"
+    },
+    "final": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#178"
+    },
+    "web": {
+      "answer": "same",
+      "held_by": "document.determinism"
+    }
+  },
+  "arch.stair@1": {
+    "section": "Building module",
+    "rays": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#475"
+    },
+    "final": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#178"
+    },
+    "web": {
+      "answer": "same",
+      "held_by": "document.determinism"
+    }
+  },
+  "arch.wall@1": {
+    "section": "Building module",
+    "rays": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#475"
+    },
+    "final": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#178"
+    },
+    "web": {
+      "answer": "same",
+      "held_by": "document.determinism"
+    }
+  },
+  "arch.zone@1": {
+    "section": "Building module",
+    "rays": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#475"
+    },
+    "final": {
+      "answer": "refused",
+      "code": "path_undefined",
+      "task": "#178"
+    },
+    "web": {
+      "answer": "same",
+      "held_by": "document.determinism"
+    }
+  }
+}

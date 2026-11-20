@@ -12,6 +12,11 @@ export type Plant =
   // #1330's: a start with no approval on the record, a start with no sandbox, a sandbox setting that leaves the agent's
   // way out open, and a sandbox that cuts the hub's socket.
   | 'starts-without-approval' | 'starts-without-sandbox' | 'sandbox-way-out-open' | 'sandbox-cuts-hub-socket'
+  // #1883's: a start that records folder trust by renaming over the config path, which replaces a link with a file.
+  | 'trust-renames-over-link'
+  // #1666's: a started session's sandbox that leaves its worktree's git folder closed, and one that opens the repo's
+  // whole git folder.
+  | 'sandbox-closes-worktree-git' | 'sandbox-opens-whole-git'
   // #1325's: rules that read the status's context alone or let the agents' app merge, push the default branch or push an
   // approval tag, a session's credential that can post a status, and a hub that passes the gate's token to a session.
   | 'rule-reads-context-alone' | 'agent-credential-merges' | 'agent-credential-pushes-default-branch' | 'agent-credential-pushes-approved-tags'
@@ -162,6 +167,8 @@ export type Plant =
   | 'churn-no-full-collection' | 'churn-no-resident-read'
   // #2650's: the four stores the churn benchmark must catch, each kept with nothing let go.
   | 'churn-keeps-every-answer' | 'churn-keeps-every-result' | 'churn-keeps-every-output' | 'churn-keeps-every-name-set'
+  // #2402's: a host that counts a hook handler's failures and never clears them.
+  | 'failures-never-cleared'
   // #824's per-session reading: deep mcp loading the whole hub package, a waiter keeping its session's transcript, and
   // a platform that reads no process's memory.
   | 'mcp-loads-hub' | 'waiter-keeps-transcript' | 'sessions-no-memory-read'
@@ -171,6 +178,9 @@ export type Plant =
   | 'deep-wait-polls' | 'stop-answers-waiting'
   // #806's: a deep_show stamped with the payload's writer, and one that waits for the app instead of rendering headless.
   | 'deep-show-writer-from-payload' | 'deep-show-waits-for-app'
+  // #1415's: deep_kinds publishing op as optional while its handler needs it, returning its refusals as ordinary
+  // results, and answering a listing with what loaded so far while the hub still loads.
+  | 'kinds-op-optional' | 'kinds-refusal-as-text' | 'kinds-partial-while-loading'
   // #139's: a deprecated JSON-RPC method served through its replacement with no notice.
   | 'silent-deprecated'
   // #875's: a fix check's base run counted as its proof whatever way it failed.
@@ -231,6 +241,9 @@ export type Plant =
   // #1016's: a jobserver of its own for each build, a pipe topped up while a build runs, and a runner's share that
   // ignores the builds running beside it.
   | 'jobserver-per-build' | 'refills-while-running' | 'share-ignores-running-build'
+  // #1411's: a pool that gives held-back tokens back only once no leased command runs, one that follows each pressure
+  // reading at once, one that holds back the last token too, and a fixed job count joined to the pool as a build.
+  | 'restores-only-when-idle' | 'no-hysteresis' | 'holds-back-every-token' | 'pool-holds-fixed-count'
   // #65's: channels that take a channel's word, or cross one channel's trouble over to another.
   | 'trusts-channel-proof' | 'last-writer-wins' | 'live-buttons-after-answer' | 'closes-on-failed-send' | 'takes-turns-at-token' | 'reconnects-every-channel' | 'buttons-for-authority' | 'keeps-unpaired-key'
   // #1018's: runs keyed by session too, a key without the files runs read, a shared run counted once per claim that
@@ -250,6 +263,8 @@ export type Plant =
   // #1296's: a doctor that reads only your user settings for a status line, a session with no window reading shown
   // at 0% or with another repo's reading, and a hub that sends a hook's context whole past the cap.
   | 'statusline-user-settings-only' | 'window-unknown-as-zero' | 'window-carried-from-other-repo' | 'sends-block-whole'
+  // #1514's: a doctor that holds each AGENTS.md to the whole budget alone, and one that counts a memory index's lines only.
+  | 'doctor-sums-per-file' | 'doctor-counts-lines-only'
   // #1998's: a box that applies a change in words as it drafts it, and one whose approval applies whatever moved since.
   | 'box-applies-at-once' | 'box-ignores-revision'
   // #1999's: a change whose sentence is the agent's last message, sentences a headless agent call writes, and an open
@@ -293,9 +308,18 @@ export type Plant =
   // leave tool.before out of their kinds.
   | 'pass-skips-due-promise' | 'state-pass-skips-due-promise' | 'asks-without-tool-before'
   // #2655's: a server that hands its parser a view of the socket's chunk in place of the line's own bytes.
-  | 'hands-over-socket-chunk';
+  | 'hands-over-socket-chunk'
+  // #1512's: a review whose rubric holds every rule the hub knows, whatever its scope, how it was known or what enforces
+  // it, with no size bound; and a hub that holds the review kind but adds the review to no claim that opens a PR.
+  | 'rubric-holds-every-rule' | 'review-without-caller'
+  // #1509's: a gate that asks for every package run straight from a registry, whatever its age.
+  | 'asks-every-registry-run'
+  // #1868's: a hub that builds the asks and readings of the canvas core's world once and reads them so ever after.
+  | 'canvas-world-built-once';
 const PLANTS: readonly string[] = [
+  'asks-every-registry-run',
   'statusline-user-settings-only', 'window-unknown-as-zero', 'window-carried-from-other-repo', 'sends-block-whole',
+  'doctor-sums-per-file', 'doctor-counts-lines-only',
   'box-applies-at-once', 'box-ignores-revision',
   'sentence-from-agent-text', 'sentence-from-model', 'open-item-no-sentence',
   'posts-on-head', 'unguarded-marks-every-push', 'unguarded-marks-none',
@@ -344,10 +368,12 @@ const PLANTS: readonly string[] = [
   'churn-keeps-ended-session', 'churn-keeps-reload-listener', 'churn-leaves-socket', 'churn-leaves-timer', 'churn-leaves-child',
   'churn-no-full-collection', 'churn-no-resident-read',
   'churn-keeps-every-answer', 'churn-keeps-every-result', 'churn-keeps-every-output', 'churn-keeps-every-name-set',
+  'failures-never-cleared',
   'mcp-loads-hub', 'waiter-keeps-transcript', 'sessions-no-memory-read',
   'repeat-reaches-you',
   'deep-wait-polls', 'stop-answers-waiting',
   'deep-show-writer-from-payload', 'deep-show-waits-for-app',
+  'kinds-op-optional', 'kinds-refusal-as-text', 'kinds-partial-while-loading',
   'silent-deprecated',
   'deep-drive-no-lease',
   'no-work-never-sent-back', 'skips-prompt-turns',
@@ -374,13 +400,15 @@ const PLANTS: readonly string[] = [
   'reopens-every-item',
   'runner-passes-masked-exit', 'line-pass-without-verdict', 'status-from-model',
   'jobserver-per-build', 'refills-while-running', 'share-ignores-running-build',
+  'restores-only-when-idle', 'no-hysteresis', 'holds-back-every-token', 'pool-holds-fixed-count',
   'ask-covers-every-effect', 'reads-every-from', 'defaults-match-text', 'auto-merge-unpinned', 'holds-every-program',
   'proceed-unrecorded', 'keys-ask-from-words', 'sends-back-held-stop', 'holds-every-ask', 'proceed-alone', 'sends-back-no-tool', 'records-switch-only', 'link-from-agent-url',
   'trusts-channel-proof', 'last-writer-wins', 'live-buttons-after-answer', 'closes-on-failed-send', 'takes-turns-at-token', 'reconnects-every-channel', 'buttons-for-authority', 'keeps-unpaired-key',
   'keys-runs-by-session', 'key-leaves-out-reads', 'counts-shared-run-per-claim', 'keeps-latest-result-per-key', 'carry-copies-evidence',
   'keeps-output-head', 'shares-read-across-runs',
   'append-unknown-kind', 'leak-file-per-session',
-  'starts-without-approval', 'starts-without-sandbox', 'sandbox-way-out-open', 'sandbox-cuts-hub-socket',
+  'starts-without-approval', 'starts-without-sandbox', 'sandbox-way-out-open', 'sandbox-cuts-hub-socket', 'trust-renames-over-link',
+  'sandbox-closes-worktree-git', 'sandbox-opens-whole-git',
   'rule-reads-context-alone', 'agent-credential-merges', 'agent-credential-pushes-default-branch', 'agent-credential-pushes-approved-tags',
   'agent-credential-posts-statuses', 'passes-gate-credential',
   'kind-without-route',
@@ -407,6 +435,8 @@ const PLANTS: readonly string[] = [
   'pending-across-restart', 'applies-stale-undo',
   'pass-skips-due-promise', 'state-pass-skips-due-promise', 'asks-without-tool-before',
   'hands-over-socket-chunk',
+  'rubric-holds-every-rule', 'review-without-caller',
+  'canvas-world-built-once',
 ];
 export function plantOf(value: string | undefined): Plant | undefined {
   if (!value) return undefined;

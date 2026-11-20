@@ -121,6 +121,10 @@ impl Hub<'_> {
         let entry = sealed(&target).ok_or_else(
             || json!({"code": "unknown_target", "target": target, "codec": job.codec}),
         )?;
+        // #732: the pptx deck, a slide per stage, read back apart from its writer.
+        if target == "pptx" {
+            return self.export_pptx(job, &doc);
+        }
         // #162: a Lottie can't keep the status rule: refused before anything is written.
         if let Some(r) = lottie::refused(&doc).filter(|_| target == "lottie") {
             return Err(r);
@@ -221,7 +225,11 @@ impl Hub<'_> {
                     false => job.track.clone(),
                 };
                 let played = crate::played::with_track(&doc, &track);
-                let at = crate::present::path_of(&played).clock_end(m).unwrap_or(m);
+                // The path comes from the form as its frames evaluate it: a driver that reads a
+                // logic item's output compiles only once the item is baked (#1040).
+                let baked = self.baked_once(&played);
+                let path = crate::present::path_of(baked.as_ref().unwrap_or(&played));
+                let at = path.clock_end(m).unwrap_or(m);
                 let k = clock::index(clock::film_time(at, 0, frame), frame);
                 k..k + 1
             }

@@ -1,0 +1,4 @@
+transcript.archived@1 fixtures and frozen digest valid
+transcript.archived@2 fixtures and frozen digest valid
+transcript.archived@3 fixtures and frozen digest valid
+transcript.archived@4 fixtures and frozen digest valid

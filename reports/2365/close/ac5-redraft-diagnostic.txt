@@ -1,0 +1,11 @@
+DIAGNOSTIC: tests/acceptance/2365-redraft-ac5 copied beside itself, with base.ts running the merge base's two build scripts after its export. Not the acceptance harness. at 158291c9c, load { 286.06 162.43 74.32 }
+
+ RUN  v5.0.5 <home>/doneright-2365
+
+
+ Test Files  1 passed (1)
+      Tests  12 passed (12)
+   Start at  09:17:41
+   Duration  59.73s (tests 99%, transform 1%, import 1%)
+
+exit=0

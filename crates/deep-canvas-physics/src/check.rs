@@ -4,7 +4,7 @@
 use serde_json::Value;
 
 use crate::caps::Caps;
-use crate::doc::{read, Refusal, World};
+use crate::doc::{read, BodyKind, Refusal, World};
 use crate::roles::{self, Row};
 
 /// The code of a refusal by a backend's caps.
@@ -19,7 +19,7 @@ pub const CODES: [(&str, &str, &str); 9] = [
     ("physics.no_group", "A shape is a member of no collision group, so physics.pairs can't place it in the matrix.", "Name at least one group in the shape's member, or give it a role."),
     (crate::doc::OPEN_MESH, "A soft volume's source mesh isn't closed: some edge isn't on exactly two triangles; the issue names the first such edge by its two particles.", "Close the source mesh (or build the volume from a closed item), or draw it as cloth instead."),
     (SCALED, "A body is bound to an item, or built per element of an instancer, whose world transform scales it; a body's shapes carry sizes in metres and its pose has no scale.", "Size the shape in metres instead (double a box's half extents rather than scale its item) and draw the item at scale 1."),
-    (crate::fast::FAST_BODY, "A dynamic body with ccd off moves farther in one step than half its thinnest extent, so it can pass through a wall thinner than it; the issue names the body, the step, its move and that half.", "Turn the body's ccd on, or slow it."),
+    (crate::fast::FAST_BODY, "A body's fastest point (its move in a step plus its turn times its farthest extent from its centre of mass) moves farther in one step than half its thinnest extent where the backend's sweep doesn't hold it: a dynamic body with ccd off; a kinematic body, which starts no sweep (kind kinematic, with its own fix); or two bodies whose swept bounds meet where neither a sweep nor a body's contact prediction holds them and ccd on the fast one can't settle it (kind pair, with its own fix). The issue names the body or both, the step, the move and that half.", "Turn the body's ccd on, or slow it."),
     (MASS_RATIO, "A joint's two dynamic bodies' masses, declared or density × volume, differ by more than 10:1, so the chain jitters or blows apart.", "Bring the two masses within 10:1: declare the lighter body's mass, or raise its density."),
 ];
 
@@ -77,6 +77,7 @@ pub fn check(doc: &Value, caps: &Caps, table: &[Row]) -> Result<World, Vec<Refus
         Ok(w) if out.is_empty() => {
             out.extend(springs(&w));
             out.extend(capacity(&w));
+            out.extend(belts(&w));
             if out.is_empty() {
                 return Ok(w);
             }
@@ -84,6 +85,7 @@ pub fn check(doc: &Value, caps: &Caps, table: &[Row]) -> Result<World, Vec<Refus
         Ok(w) => {
             out.extend(springs(&w));
             out.extend(capacity(&w));
+            out.extend(belts(&w));
         }
         Err(e) => out.extend(e),
     }
@@ -166,34 +168,45 @@ fn refused_by(doc: &Value, caps: &Caps) -> Vec<Refusal> {
                 out.push(cap(format!("contact_materials/{id}/rolling_resistance"), v, caps, "has no rolling resistance; it must be 0, and a ball that should roll to rest takes angular damping"));
             }
         }
-        if !caps.tangent_speed {
+        // #2241: a belt on a backend that claims none.
+        if !caps.claims.contains(&"belts") {
             if let Some(v) = nonzero(m.get("tangent_speed")) {
                 out.push(cap(
                     format!("contact_materials/{id}/tangent_speed"),
                     v,
                     caps,
-                    "has no tangent speed; it must be 0",
+                    "claims no belts; a contact material's tangent_speed must be 0",
                 ));
             }
         }
     }
-    // #191: a world needing a feature the backend doesn't claim.
+    // #191: a world needing a feature the backend doesn't claim; and #2239: `ccd` on a kinematic
+    // or a static body, where the backend starts no sweep from one.
     let claims = |c: &str| caps.claims.contains(&c);
-    if !claims("ccd") {
-        for (id, b) in doc
-            .get("bodies")
-            .and_then(Value::as_object)
-            .into_iter()
-            .flatten()
-        {
-            if let Some(v) = b.get("ccd").filter(|v| v.as_bool() == Some(true)) {
-                out.push(cap(
-                    format!("bodies/{id}/ccd"),
-                    v,
-                    caps,
-                    "claims no swept collision (ccd)",
-                ));
-            }
+    for (id, b) in doc
+        .get("bodies")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+    {
+        let Some(v) = b.get("ccd").filter(|v| v.as_bool() == Some(true)) else {
+            continue;
+        };
+        let unswept = b
+            .get("kind")
+            .and_then(Value::as_str)
+            .filter(|k| matches!(*k, "kinematic" | "static") && !caps.sweep.starts.contains(k));
+        if !claims("ccd") {
+            out.push(cap(
+                format!("bodies/{id}/ccd"),
+                v,
+                caps,
+                "claims no swept collision (ccd)",
+            ));
+        } else if let Some(kind) = unswept {
+            let from = caps.sweep.starts.join(" or ");
+            let what = format!("starts no sweep from a {kind} body, only from a {from} one");
+            out.push(cap(format!("bodies/{id}/ccd"), v, caps, &what));
         }
     }
     // #251: a vehicle body on a backend with no vehicle controller, naming the body.
@@ -286,6 +299,30 @@ fn refused_by(doc: &Value, caps: &Caps) -> Vec<Refusal> {
                 actual: j["kind"].clone(),
                 what: format!("a {k} joint isn't run by this backend interface yet"),
             });
+        }
+    }
+    out
+}
+
+/// #2241: a belt is a surface of a static or kinematic body; a shape use of any other body whose
+/// contact material carries a `tangent_speed` is refused, naming the field.
+fn belts(w: &World) -> Vec<Refusal> {
+    let mut out = Vec::new();
+    for (id, b) in &w.bodies {
+        if matches!(b.kind, BodyKind::Static | BodyKind::Kinematic) {
+            continue;
+        }
+        for (i, u) in b.shapes.iter().enumerate() {
+            let Some(m) = &u.material else { continue };
+            let speed = w.contact_materials.get(m).map_or(0.0, |c| c.tangent_speed);
+            if speed != 0.0 {
+                out.push(Refusal {
+                    code: "out_of_range",
+                    path: format!("contact_materials/{m}/tangent_speed"),
+                    actual: speed.into(),
+                    what: format!("contact material {m} carries tangent_speed {speed} m/s, and shape {i} of body {id}, which is neither static nor kinematic, uses it; only a static or kinematic body's shape use carries a tangent_speed"),
+                });
+            }
         }
     }
     out

@@ -742,6 +742,16 @@ pub(crate) fn kind_rows(sealed: &Sealed, planted: Option<Planted>) -> Vec<KindRo
             e["deprecated_since"] = json!(since);
             e["replaced_by"] = json!(by);
         }
+        // #2776: a kind that draws in 3D, with what each path does with it, and each field that
+        // carries answers of its own with them.
+        if let Some((_, p)) = sealed.paths_of(&name) {
+            e["paths"] = p.own.to_json();
+            for f in e["fields"].as_array_mut().into_iter().flatten() {
+                if let Some(own) = f["name"].as_str().and_then(|n| p.fields.get(n)) {
+                    f["paths"] = own.to_json();
+                }
+            }
+        }
         if let Some(entry) = entry {
             let migrations: Vec<Value> = entry
                 .migrations
@@ -1144,8 +1154,10 @@ pub fn dump_value(sealed: &Sealed, planted: Option<Planted>) -> Value {
                     let mut d = json!({"name": e["name"], "registry": r["name"], "origin": e["origin"],
                                        "since": e["since"], "stability": e["stability"], "digest": e["digest"],
                                        "fields": fields});
-                    if let Some(m) = e.get("migrations") {
-                        d["migrations"] = m.clone();
+                    for k in ["migrations", "paths"] {
+                        if let Some(m) = e.get(k) {
+                            d[k] = m.clone();
+                        }
                     }
                     d
                 })
@@ -1156,6 +1168,8 @@ pub fn dump_value(sealed: &Sealed, planted: Option<Planted>) -> Value {
     let mut out = l.header;
     out["format"] = json!("kinds.dump@1");
     out["registries"] = json!(rows);
+    // #2777: every list of words a document sets that the build seals, with its closure.
+    out["field_lists"] = json!(sealed.lists.iter().map(|l| l.to_json()).collect::<Vec<_>>());
     out
 }
 

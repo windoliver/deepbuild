@@ -162,10 +162,14 @@ pub fn inline_logic(
     let span = deep_canvas_media::doc::time(form, form.pointer("/transport/span"))
         .unwrap_or(0)
         .max(0);
+    // A play that waits runs on the clock past the transport's span, the answers it takes
+    // arriving there: the bake reaches as far as the last entry's clock past the span (#1040).
+    let last = entries.iter().map(|e| e.t).max().unwrap_or(0);
+    let reach = if last > span { span + last } else { span };
     let steps = piece
         .items
         .iter()
-        .map(|i| (span + i.step - 1) / i.step.max(1))
+        .map(|i| (reach + i.step - 1) / i.step.max(1))
         .max()
         .unwrap_or(0);
     let piece = Rc::new(piece);
