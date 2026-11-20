@@ -1,0 +1,3 @@
+id,trigger,n,side,kind,shows,allow,deny
+start,time,0,,,,,extractor
+victory,built,3,self,extractor,won,,

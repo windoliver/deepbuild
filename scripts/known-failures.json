@@ -485,6 +485,18 @@
       "note": "",
       "reason": "retired by #1879's owner: 1879-redraft-ac2/start.test.ts is AC2's test (this draft sets no timeout of its own, so the lanes' vitest default of 5 s cuts its wait of up to 60 s short)",
       "approval": "#1879, its owner (the owner's touch-key tag on this commit)"
+    },
+    {
+      "id": "tests/acceptance/1887/slots-parity.test.mjs › #1887.4a851c74 The slot count the check prints is unchanged",
+      "note": "",
+      "reason": "retired by #1887's owner: tests/acceptance/1887/redraft-ac3/slot-count.test.mjs is AC3's test (this draft fixes the count at 16; #210's deep.registerPort made the base's own count 17)",
+      "approval": "#1887, the owner on PR #2537, 2026-11-18 (this commit lands only with the owner's touch-key tag)"
+    },
+    {
+      "id": "tests/acceptance/33/spine.test.ts › AC8 #33.9c912eb7 the 25 spine tasks, each with its merged commit › AC8 #33.9c912eb7 node scripts/spine.mjs list names the 25 spine tasks, each with a merged commit of this checkout's history",
+      "note": "",
+      "reason": "retired by the owner's ruling \"Keep GitHub's hash\": a spine row names the merge commit GitHub records, which for PRs merged before the 2026-11-09 history rewrite is not in main's history (#13's 96ee0fc4d, as #1831 AC2 requires); 33/redraft-ac8/spine-list.test.ts is AC8's offline test",
+      "approval": "#33, the owner's ruling on #13's spine row, 2026-11-19 (the owner's touch-key tag on this commit)"
     }
   ]
 }
