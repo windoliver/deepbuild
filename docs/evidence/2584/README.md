@@ -11,4 +11,4 @@ with only that warning on stderr. Each run detaches the dmg when done.
 | `e2e-fix.txt` | `e2e.sh` at the committed fix after merging main (45a251f47): ready on 3001, 3000 (taken) skipped |
 | `direct.mjs` | `listening` from the supervisor's dist: a free port, a port this process listens on, and two ports real lsof refuses (`NaN`, `1.5`) |
 | `direct-base.txt`, `direct-fix.txt` | `direct.mjs` under the same mount (made as `e2e.sh` makes it), with the supervisor built from `procs.ts` as at eb027b613 and as at the fix |
-| `linux-lsof.txt` | Linux lsof 4.95 on the Spark: `-w` keeps lsof's errors (`unknown service`, `unacceptable port`). No mount there warns now, so the warning itself was not seen on Linux; #2484 (PR #2522) showed `-w` silencing it there |
+| `linux-lsof.txt` | Linux lsof 4.95 on the Spark: `-w` keeps lsof's errors (`unknown service`, `unacceptable port`). No mount there warns now, so the warning itself was not seen on Linux; #2484 (PR #2522) showed `-w` fixing it there (its slots check, FAIL on main, PASS with `-w`) |
