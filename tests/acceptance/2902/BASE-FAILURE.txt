@@ -1,0 +1,48 @@
+✖ #2902.5c1e8a3f an old checkout's waiter at the head of the test queue, with its own 4 grants held, doesn't stop the current code's requests: they are granted up to the current limit, and the one after waits (61032.634336ms)
+✔ #2902.b47d09e2 with no old waiter the order is unchanged: with the test class full a later request waits behind an earlier one, and the earlier one is granted first when a slot frees (2321.748897ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 1
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 64500.020186
+
+✖ failing tests:
+
+test at tests/acceptance/2902/queue.test.mjs:13:1
+✖ #2902.5c1e8a3f an old checkout's waiter at the head of the test queue, with its own 4 grants held, doesn't stop the current code's requests: they are granted up to the current limit, and the one after waits (61032.634336ms)
+  AssertionError [ERR_ASSERTION]: the current code's test request number 5 (current limit 6) wasn't granted within 60 s: it waits behind the old checkout's waiter at the head of the queue
+  events:
+  {"name":"holder-1","event":"start","t":1795149465063,"pid":181777,"ppid":181651,"throttle":"test:4e05d1fb62886b60"}
+  {"name":"holder-2","event":"start","t":1795149465260,"pid":181932,"ppid":181805,"throttle":"test:5ca055967aa2b870"}
+  {"name":"holder-3","event":"start","t":1795149465445,"pid":182052,"ppid":181953,"throttle":"test:db89ae70c6989cc7"}
+  {"name":"holder-4","event":"start","t":1795149465636,"pid":182244,"ppid":182106,"throttle":"test:ec078c5e7e28db86"}
+  log (/tmp/deep-2744-yzHWan/table/log):
+  {"at":"2026-11-20T04:37:45.028Z","event":"granted","class":"test","grant":"top-level","id":"4e05d1fb62886b60","pid":181651,"index":1,"load":117.51,"cores":20,"wait":2}
+  {"at":"2026-11-20T04:37:45.229Z","event":"granted","class":"test","grant":"top-level","id":"5ca055967aa2b870","pid":181805,"index":2,"load":113.47,"cores":20,"wait":2}
+  {"at":"2026-11-20T04:37:45.405Z","event":"granted","class":"test","grant":"top-level","id":"db89ae70c6989cc7","pid":181953,"index":3,"load":113.47,"cores":20,"wait":2}
+  {"at":"2026-11-20T04:37:45.602Z","event":"granted","class":"test","grant":"top-level","id":"ec078c5e7e28db86","pid":182106,"index":4,"load":113.47,"cores":20,"wait":2}
+  holder-1: still running
+  
+  holder-2: still running
+  
+  holder-3: still running
+  
+  holder-4: still running
+  
+  old-waiter: still running
+  
+  current-5: still running
+  
+      at TestContext.<anonymous> (file:///home/jing/deepbuild/.claude/worktrees/agent-a85e9a1aeea5fcede/tests/acceptance/2902/queue.test.mjs:41:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
