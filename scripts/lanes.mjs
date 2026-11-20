@@ -806,6 +806,9 @@ alone.push('tests/acceptance/549-redraft-ac2/');
 // play matches in process; ac10 also plays two live matches through the shipped relay. The Oracle lane builds
 // deep-show alone.
 alone.push('tests/acceptance/550/', 'tests/acceptance/550-oracle/');
+// #551's files each build deep-show (ac1 and the Oracle lane also the shipped relay) and play matches in process; ac1 and
+// the Oracle lane also play a live match between the app and headless Chrome's web player through the shipped relay.
+alone.push('tests/acceptance/551/', 'tests/acceptance/551-oracle/');
 byHand.push('tests/acceptance/549/ac2-join-only.test.ts');
 timed.push('tests/acceptance/172/budgets.test.ts', 'tests/acceptance/172/images.test.ts');
 // #172's first-draft refusal test shows a device control without the role the document check requires, so that piece is
