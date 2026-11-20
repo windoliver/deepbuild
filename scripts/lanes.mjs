@@ -1081,6 +1081,10 @@ timed.push('tests/acceptance/2760-redraft-ac8/budget-timing.test.ts');
 byHand.push('tests/acceptance/2760/budgets.test.ts');
 // #1826's files each build deep-graph, and its taste call deep-canvas-render; CPU only, no GPU and no timing.
 alone.push('tests/acceptance/1826/');
+// #732's files each build deep-show (ac9-atomic.test.ts also with test-export-guards), export decks through the GPU and
+// render slides with LibreOffice; ac10-budgets.test.ts times exports and reads the machine's load.
+alone.push('tests/acceptance/732/');
+timed.push('tests/acceptance/732/ac10-budgets.test.ts');
 
 // #1484's files (blind) each build deep-canvas-render or deep-text and draw with GPUI's offscreen renderer, as #1479's
 // do; warm.test.ts builds deep-text for release here and at the merge base and times warm shaping, with each run's loads.
