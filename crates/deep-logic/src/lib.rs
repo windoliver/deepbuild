@@ -26,6 +26,7 @@ pub mod links;
 pub mod live;
 pub mod mirrors;
 pub mod module;
+pub mod pages;
 pub mod piece;
 pub mod play;
 pub mod point;
@@ -112,6 +113,10 @@ pub struct Planted {
     pub rewind_restores_arrays_only: bool,
     /// #860: a rewind that zeroes the carried seen array instead of keeping it.
     pub rewind_clears_seen: bool,
+    /// #211: the planted pagers and stores (the #211 acceptance README: Planted twins).
+    pub pagers: pages::Pagers,
+    pub page_store: pages::Plants,
+    pub save_drops_page_map: bool,
 }
 
 impl Planted {
@@ -167,6 +172,11 @@ impl Planted {
             "read_region_keeps_last" => p.read_region_keeps_last = true,
             "rewind_restores_arrays_only" => p.rewind_restores_arrays_only = true,
             "rewind_clears_seen" => p.rewind_clears_seen = true,
+            "pager_restores_without_queue" => p.pagers.restores_without_queue = true,
+            "pager_skips_dirty_write_back" => p.pagers.skips_dirty_writeback = true,
+            "pager_applies_moves_as_reads_finish" => p.pagers.applies_in_read_order = true,
+            "store_keeps_one_copy_per_page" => p.page_store.overwrites_by_page = true,
+            "save_drops_page_map" => p.save_drops_page_map = true,
             _ => return None,
         }
         Some(self)
@@ -602,6 +612,8 @@ impl Logic {
     }
 
     pub fn handle(&mut self, line: &Value) -> Value {
+        // #211: the page store this call's items with pages start with.
+        pages::configure(line.get("store"));
         match line.get("call").and_then(Value::as_str) {
             Some("about") => json!({
                 "interface": "logic@1", "sandbox": deep_canvas_sandbox::module::INTERFACE,
@@ -745,6 +757,7 @@ impl Logic {
             "ok": true, "items": items(&piece), "keys": keys, "steps": rec.steps_json(&piece, only), "occurrences": rec.occurrences(&piece), "checkpoints": rec.checkpoints, "ranges": rec.ranges_json(&piece, only), "ring": world.ring(),
             "traps": libraries_in(&piece, rec.traps), "issues": rec.issues, "budgets": budgets, "saves": saves, "frames": frames, "restores": restores_out, "probes": probes_out, "seeks": seeks_out, "peeks": peeks,
             "track": entries.iter().map(Entry::to_json).collect::<Vec<_>>(), "closed": world.branches.closed_json(),
+            "meters": world.meters(),
         }))
     }
 
@@ -830,7 +843,24 @@ impl Logic {
             .map(|t| t.as_f64().map(|t| flicks(t) / len))
             .collect::<Option<_>>()
             .ok_or_else(|| bad("at_times"))?;
-        checks::determinism(&piece, &entries, steps, &at, self.planted)
+        let mut out = checks::determinism(&piece, &entries, steps, &at, self.planted)?;
+        // #211: with `orders`, two or more tracks that move through a world with pages.
+        if let Some(o) = line.get("orders") {
+            let list = o.as_array().filter(|l| l.len() >= 2).ok_or_else(|| bad("orders: two or more input tracks"))?;
+            let tracks = list
+                .iter()
+                .map(|t| track(&piece, &json!({"track": t}), steps))
+                .collect::<Option<Vec<_>>>()
+                .ok_or_else(|| bad("orders"))?;
+            let failures = checks::orders(&piece, &tracks, steps, self.planted)?;
+            if let Some(f) = out["failures"].as_array_mut() {
+                f.extend(failures);
+                if !f.is_empty() {
+                    out["verdict"] = json!("FAIL");
+                }
+            }
+        }
+        Ok(out)
     }
 
     /// A golden of the piece's bake recorded on this host (Golden): the bake keys, the runtime
@@ -1119,7 +1149,7 @@ impl Logic {
                     "reads_at": i.reads_at, "writes_at": i.writes_at, "reads_size": i.layout.size("reads"), "writes_size": i.layout.size("writes"),
                     "regions": regions, "writes": writes, "globals": n.globals, "pages": n.pages,
                     "assets": (!i.assets.is_empty()).then(|| B64.encode(i.asset_bytes())), "assets_at": i.assets_at,
-                    "emits_at": i.emits_at,
+                    "emits_at": i.emits_at, "world_pages": i.pages.as_ref().map(pages::Pages::web),
                     "emits": i.emits.iter().map(|e| json!({"kind": e.kind, "max": e.max, "row": e.row(), "size": e.size(),
                         "fields": e.fields.iter().map(|(n, t)| json!([n, t.name()])).collect::<Vec<_>>()})).collect::<Vec<_>>(),
                 })

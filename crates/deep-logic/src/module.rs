@@ -44,7 +44,7 @@ const STEP: i64 = 11_760_000;
 /// `fires`, each with the form its reader takes (#1973); `wasm` is the program's bytes, which
 /// whoever holds the evidence store inlines by the program's hash before a frame, as a vector's
 /// outline is.
-const PARAMS: [(&str, &str); 18] = [
+const PARAMS: [(&str, &str); 19] = [
     ("program", "asset ID"),
     ("debug", "asset ID"),
     ("step_rate", "Hz"),
@@ -75,6 +75,11 @@ const PARAMS: [(&str, &str); 18] = [
     ),
     ("services", "{service@major → {max_per_step: u16}}"),
     ("mirrors", "[{array: path, at: name}]"),
+    // #211: a world past its memory, in pages it asks for between steps.
+    (
+        "pages",
+        "{max: u32, slots: u16, moves?: u8, lead?: u8, init?: zero | {asset: asset ID} | {gen: <pack>.<provider>, params}, written_max?: integer, web_max?: integer}",
+    ),
     ("wasm", "text (the program's bytes, which the hub inlines)"),
 ];
 

@@ -1375,6 +1375,7 @@ const EFFICIENCY = {
   'canvas-game-state': Object.fromEntries(['compare_ms', 'remap_row_us', 'remap_layer_ms', 'upload_slots_ms', 'overlay_upload_ms', 'fit_check_ms', 'idle_steps'].map((k) => [k, (r) => r[k]])),
   // #548: each reading by its own name (benchmarks/logic-budgets.mjs).
   'canvas-logic-budgets': Object.fromEntries(['occurrences_64_ms', 'linear_1000_vec3_ms', 'preview_4mib_ms', 'checkpoint_3_pages_ms'].map((k) => [k, (r) => r[k]])),
+  'logic-world-pages': Object.fromEntries(['moves_8_ms', 'checkpoint_50_ms', 'checkpoint_50_bytes', 'idle_work'].map((k) => [k, (r) => r[k]])),
   // #1968: each reading by its own name (benchmarks/code-film.mjs).
   'canvas-code-film': Object.fromEntries(['tokens_2000_lines_ms', 'diff_400_lines_ms', 'seek_10_min_ms', 'still_code_steps'].map((k) => [k, (r) => r[k]])),
   // #184: each reading by its own name (benchmarks/playtest.mjs).
@@ -1383,7 +1384,7 @@ const EFFICIENCY = {
   // #556: each reading by its own name (benchmarks/playtest.mjs).
   'playtest-crawler': Object.fromEntries(['crawler_80_runs_s', 'legal_added_s', 'reach_200_floors_s', 'idle_work'].map((k) => [k, (r) => r[k]])),
 };
-const COUNTS = new Set(['summary_tokens', 'page_rows', 'frames', 'upload_bytes_per_item', 'indexed_target_bytes', 'still_steps', 'idle_steps', 'still_maps', 'still_code_steps', 'idle_work', 'frame_expansions', 'forest_draws_per_variant_material', 'light_lists_bytes']);
+const COUNTS = new Set(['summary_tokens', 'page_rows', 'frames', 'upload_bytes_per_item', 'indexed_target_bytes', 'still_steps', 'idle_steps', 'still_maps', 'still_code_steps', 'idle_work', 'frame_expansions', 'forest_draws_per_variant_material', 'light_lists_bytes', 'checkpoint_50_bytes']);
 /** Targets that are floors, each reading at or above its limit (#184's multiple of real time). */
 const FLOORS = new Set(['fixture_realtime_x']);
 /**
@@ -2059,6 +2060,9 @@ workloads['code-film'] = async () => (await import('./code-film.mjs')).codeFilm(
 // #233's budgets: a math@1 document against its expansion written by hand, and a frame's own expansions (benchmarks/math.mjs).
 workloads.math = async () => (await import('./math.mjs')).math({ root, release, once, runs });
 workloads['between-steps'] = async () => (await import('./between-steps.mjs')).betweenSteps({ root, release, once, runs });
+// #211's budgets: 8 moves a step, a checkpoint's 50 changed page map entries, and no work for an item without pages
+// (benchmarks/world-pages.mjs).
+workloads['world-pages'] = async () => (await import('./world-pages.mjs')).worldPages({ root, release, once, runs });
 workloads['water-rings'] = async () => (await import('./water-rings.mjs')).waterRings({ root, release, once, runs });
 // #184's budgets: the maze's 40 runs and replays on two replicas with no work added to a piece played without the
 // plug-in, and 20 runs of the 2-minute maze on four replicas as a multiple of real time (benchmarks/playtest.mjs).

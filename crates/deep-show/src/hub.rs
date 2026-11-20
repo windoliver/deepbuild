@@ -426,6 +426,8 @@ pub enum Planted {
     GateTrustsDocumentSound,
     /// #210: the web export writes a port into its bundle.
     WebExportKeepsPort,
+    /// #211: the web export compares only an init asset's size with `web_max`, never `written_max`.
+    WebExportChecksInitOnly,
     /// #498: the gate trusts a shipped panel: its own request to play sounds.
     ShippedPanelsUngated,
     /// #498: the reserved-sound comparer refuses only an asset whose hash is a reserved sound's.
