@@ -27,6 +27,11 @@ drawn by the app: the change has no app surface, and a scene's world is still he
 - `merged-7615b5d50-cargo.txt`: the second merge (main 54f9bdb94; `scripts/lanes.mjs` alone conflicted). `cargo test`
   of the seven crates the change reaches: 184 pass and 2 fail, deep-show's `recipe_frames` and `render_back_pipeline`,
   which fail the same way in the runs of #2240, #2241, #2243 and #2371 on this machine.
-- Not run on the second merge: the blind suites and the wasm32 build, which waited more than two and a half hours for
-  a build grant another session held; and `node scripts/affected.mjs`, INCONCLUSIVE twice for want of a test grant
-  (0 of 526 files started) and stopped once, void, because the worktree's packages weren't built.
+- `merged-3075f2d75.txt`: the second merge with these evidence files on it and no code since, run once inside one
+  build grant. The two blind suites pass 11 of 11, #2240's suite 14 of 14, the two physics crates' unit tests 21 of
+  21, and clippy on the two crates is clean. `wasm32-same.mjs` bakes the three criteria's worlds on the wasm32 build
+  (`node scripts/physics-wasm32.mjs`) and on the native release build: the 2D drop, the steady and the gusty wind and
+  the two cubes give the same 361 step hashes and occurrence hashes on both.
+- Not run: `node scripts/affected.mjs`, INCONCLUSIVE for want of a test grant on November 19 (0 of 496 files started)
+  and November 20 (0 of 526), and stopped once, void, because the worktree's packages weren't built; only that run's
+  cargo job is read, above.
